@@ -83,7 +83,7 @@ after(closeApp);
 
 const { runIdleRefresh } = await import("../features/tags/production-tags.js");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
+const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 

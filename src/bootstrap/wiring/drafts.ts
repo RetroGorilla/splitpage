@@ -18,7 +18,7 @@ import { applyStashedWork, browserDrafts, captureRestore, desktopDrafts, draftRe
 import type { LegacyDraftPorts } from "./recovery-owners.ts";
 import { saveChanges, unsavedChanges } from "../../legacy/save-bridge.ts";
 import { mergeBase, noteAbsorbedDirty } from "../../legacy/session-bridge.ts";
-import { openDocument } from "../../legacy/transition-bridge.ts";
+import { openDocument } from "./transition-owners.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { place as portPlace } from "./ports/location.ts";

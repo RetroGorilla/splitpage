@@ -32,7 +32,7 @@ const { cellRuns, cellTextCommand } = await import("../application/commands/cell
 const { changeSet } = await import("../application/session/change-set.ts");
 const { scriptCellOf } = await import("../legacy/richtext.ts");
 const { liveSession, runCommand, sessionTextPorts } = await import("../legacy/session-bridge.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

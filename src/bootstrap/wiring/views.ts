@@ -31,7 +31,7 @@ import {
   setPrompterSkipShot,
   voiceIsFollowing
 } from "../../application/prompter-state.ts";
-import { captureOperation, openDocument, stillOwns } from "../../legacy/transition-bridge.ts";
+import { captureOperation, openDocument, stillOwns } from "./transition-owners.ts";
 import { importHome } from "../../legacy/location-bridge.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { promptForName, promptForWpm } from "./title-chrome.ts";

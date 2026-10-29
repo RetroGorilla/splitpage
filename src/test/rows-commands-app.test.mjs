@@ -20,7 +20,7 @@ const { addRow } = await import("../bootstrap/wiring/rows.ts");
 const { cellEditing, rowDrag } = await import("../bootstrap/wiring/editor-owners.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 
