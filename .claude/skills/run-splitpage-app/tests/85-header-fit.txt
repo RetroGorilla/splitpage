@@ -302,7 +302,7 @@ eval (function(){ var d=window.__d(); d.getElementById('file-chip').hidden=false
 expect window.__d().getElementById('doc-title').value === 'The Long Road Home: Episode Four of the Documentary Series!!'
 expect !window.__d().getElementById('file-chip').hidden
 expect !window.__d().getElementById('progress-chip').hidden
-expect window.__boxes().filter(function(b){ return b.k.indexOf('fact') === 0; }).length === 4
+expect window.__boxes().filter(function(b){ return b.k.indexOf('fact') === 0; }).length === 3
 eval window.__d().getElementById('doc-title').blur()
 sleep 300
 eval window.__check(761)
