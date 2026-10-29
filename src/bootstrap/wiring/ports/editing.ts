@@ -1,6 +1,6 @@
 import type { EditorSelection } from "../../../application/editing/selection.ts";
 import type { ProductionSelection } from "../../../application/editing/production-selection.ts";
-import { productionSelection as productionSelectionOwner } from "../../../legacy/production-editing-bridge.ts";
+import { productionSelection as productionSelectionOwner } from "../production-editing-owners.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import type { DocumentEdits } from "../../../application/session/document-edits.ts";
 import { undoOwner } from "../undo.ts";
