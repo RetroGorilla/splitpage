@@ -1,4 +1,5 @@
 import type { ActionDefinition } from "../../application/actions.ts";
+import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { screen as portScreen } from "./ports/screen.ts";
@@ -8,7 +9,6 @@ import type { HelpMount, HelpPorts } from "../../features/help/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { sidePanels } from "./ports/panels.ts";
 import { preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
-import { inDesktopApp } from "../../legacy/screen-state.ts";
 
 const help = owned<HelpMount>();
 
@@ -29,5 +29,5 @@ export function mountHelpFeature(): HelpMount {
 export const stopHelpFeature = help.stop;
 
 export function helpActions(): ActionDefinition[] {
-  return definitions(help.owner, { screen: portScreen, desktop: inDesktopApp });
+  return definitions(help.owner, { screen: portScreen, desktop: runningOnDesktop });
 }
