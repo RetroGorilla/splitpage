@@ -4,7 +4,7 @@ import { screen } from "../../src/bootstrap/wiring/ports/screen.ts";
 import { importActions } from "../../src/bootstrap/wiring/imports.ts";
 import { captureExportDocument } from "../../src/bootstrap/wiring/export-capture.ts";
 import { commandMenuActions, mountCommandMenuFeature, stopCommandMenuFeature } from "../../src/bootstrap/wiring/command-menu.ts";
-import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { startProductionEditing } from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
 import { desktopActions, mountDesktopFeature, stopDesktopFeature } from "../../src/bootstrap/wiring/desktop.ts";
 import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";
@@ -32,7 +32,7 @@ import { historyActions } from "../../src/bootstrap/wiring/history-panel.ts";
 import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { writerActions } from "../../src/features/writer/actions.ts";
-import { viewFlags } from "../../src/legacy/preferences-bridge.ts";
+import { viewFlags } from "../../src/bootstrap/wiring/preferences-owner.ts";
 import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
 import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
 

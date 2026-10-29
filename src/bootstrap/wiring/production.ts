@@ -14,7 +14,7 @@ import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { ids as portIds } from "./ports/identity.ts";
 import { screen as portScreen } from "./ports/screen.ts";
-import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, productionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
+import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, productionSelection, selectedKeys } from "./production-editing-owners.ts";
 import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
@@ -55,7 +55,7 @@ import {
   setTagOwner,
   setTagNotes
 } from "../../features/tags/panels.js";
-import { queueAutoSave } from "../../legacy/save-bridge.ts";
+import { queueAutoSave } from "./save-owners.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";

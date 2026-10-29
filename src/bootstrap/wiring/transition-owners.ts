@@ -7,8 +7,8 @@ import type { Transitions } from "../../application/transitions/transitions.ts";
 import type { DestinationPort, DocumentDestination, HistoryPort, IdentityPort, LiveDocumentPort } from "../../application/transitions/ports.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { migrateRows } from "../document-ports.ts";
-import { currentHome } from "../../legacy/location-bridge.ts";
-import { confirmedGeneration } from "../../legacy/save-bridge.ts";
+import { currentHome } from "./location-owner.ts";
+import { confirmedGeneration } from "./save-owners.ts";
 import { liveSession } from "./session-owner.ts";
 
 export interface LegacyTransitionPorts {

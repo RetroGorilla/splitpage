@@ -55,7 +55,7 @@ import {
   toggleReplyComposer,
   toggleResolve
 } from "../../features/comments/comments.js";
-import { showToast } from "../../legacy/effects-bridge.ts";
+import { showToast } from "./effects-owner.ts";
 import {
   onRootClick,
   onRootFocusOut,

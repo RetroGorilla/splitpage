@@ -2,10 +2,10 @@ import type { SessionMergeOwnerPorts } from "../../../application/session/sessio
 import { heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate } from "../session-owner.ts";
 import { migrateRows, withDocumentPorts } from "../../document-ports.ts";
 import { captureRestore, stillRestoring } from "../recovery-owners.ts";
-import { autoSavePolicy, confirmBaseline, saveChanges } from "../../../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmBaseline, saveChanges } from "../save-owners.ts";
 import { mergeUndo } from "../editor-owners.ts";
-import { setHome } from "../../../legacy/location-bridge.ts";
-import { getEditorName } from "../../../legacy/preferences-bridge.ts";
+import { setHome } from "../location-owner.ts";
+import { getEditorName } from "../preferences-owner.ts";
 import { documentIdentityOwner } from "../document-identity.ts";
 import { adoptRestoredState } from "../../startup/document-entry.js";
 import { historyOwner } from "../history.ts";

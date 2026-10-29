@@ -11,7 +11,7 @@ const { LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.js");
 const { brollShotListForPrint } = await import("../adapters/formats/export-projections.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { captureExportDocument } = await import("../bootstrap/wiring/export-capture.ts");

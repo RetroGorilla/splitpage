@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import zlib from "node:zlib";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldImageDecode } from "./_m4-matrix.mjs";
-import { saveChanges } from "../legacy/save-bridge.ts";
+import { saveChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};

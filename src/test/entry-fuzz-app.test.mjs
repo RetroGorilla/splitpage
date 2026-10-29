@@ -6,7 +6,7 @@ import {
   TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 await bootApp();
 

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import zlib from "node:zlib";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldFetch, createHeldImageDecode, rightToday } from "./_m4-matrix.mjs";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -14,7 +14,7 @@ const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { renderAbsorbed } = await import("../features/rows/render.js");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const lastUndoEntry = () => undoOwner().last();

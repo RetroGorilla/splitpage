@@ -2,7 +2,7 @@ import { brollView as brollViewOwner, useBrollViewStorage } from "../../../appli
 import type { BrollView } from "../../../application/preferences/broll-view.ts";
 import type { CommentFilter, PreferenceChange, PreferenceChanges, Preferences } from "../../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../../application/preferences/view-flags.ts";
-import { PREF_EVENT, preferences, viewFlags, getEditorName } from "../../../legacy/preferences-bridge.ts";
+import { PREF_EVENT, preferences, viewFlags, getEditorName } from "../preferences-owner.ts";
 
 export const historyPreferences: Pick<Preferences, "clock"> & { readonly editorName: () => string } = {
   clock: () => preferences().clock(), editorName: getEditorName

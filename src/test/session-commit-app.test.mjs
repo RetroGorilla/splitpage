@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 await bootApp();
 
@@ -12,13 +12,13 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { render } = await import("../features/rows/render.js");
 const { setSceneLength } = await import("../features/rows/read-time.js");
 const { noteAbsorbedDirty, noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
-const { preferences } = await import("../legacy/preferences-bridge.ts");
+const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
 
 import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
-import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 const flushEdits = () => undoOwner().flush();
 const lastUndoEntry = () => undoOwner().last();
 const undo = () => undoOwner().undo();
