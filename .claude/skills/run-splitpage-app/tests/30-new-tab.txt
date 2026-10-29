@@ -152,10 +152,12 @@ expect document.querySelectorAll('[data-newtab-action="tagging-help"]').length =
 expect document.querySelector('.newtab-foot').textContent.indexOf('cheat sheet') === -1
 # the long demo's link (#215) after the example script's, a separator each
 expect document.querySelectorAll('.newtab-foot > .newtab-foot-sep').length == 2
-expect document.querySelectorAll('.newtab-bar [data-newtab-action="join"], .newtab-bar [data-newtab-action="open"]').length == 2
+expect document.querySelectorAll('.newtab-bar [data-newtab-action="open"]').length == 1
+expect document.querySelectorAll('[data-newtab-action="join"]').length == 0
 # icons are inline SVG, never text (seven since #169: the board's help links
-# are plain text links, so the tour and cheat-sheet icons went)
-expect document.querySelectorAll('#newtab-page svg').length >= 7
+# are plain text links, so the tour and cheat-sheet icons went; six since the
+# server removal took the Join button)
+expect document.querySelectorAll('#newtab-page svg').length >= 6
 expect document.documentElement.scrollWidth <= innerWidth
 
 # A canonical form of a document, keys sorted and its identity left out, to
