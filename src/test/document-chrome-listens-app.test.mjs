@@ -6,7 +6,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { adoptReplacement, noteServerUpdate, runCommand } = await import("../legacy/session-bridge.ts");
+const { adoptReplacement, noteServerUpdate, runCommand } = await import("../bootstrap/wiring/session-owner.ts");
 const { documentLocation, setHome, amendHome, currentHome } = await import("../legacy/location-bridge.ts");
 const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../legacy/save-bridge.ts");

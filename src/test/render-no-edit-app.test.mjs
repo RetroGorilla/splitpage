@@ -15,7 +15,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undoSizes = () => undoOwner().sizes();
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");

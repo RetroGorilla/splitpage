@@ -6,7 +6,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamps, stampDocument } = await import("../legacy/session-bridge.ts");
+const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamps, stampDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { editStamp } = await import("../application/commands/save-stamps.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");

@@ -5,7 +5,7 @@ import "./_hide-shot-mounted.mjs";
 import "./_rows-render-mounted.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { setHideShotScenes } from "../bootstrap/wiring/hide-shot.ts";
 import { shotHiding } from "../bootstrap/wiring/shot-hiding.ts";
 import { paintRowTimes } from "../features/rows/render.js";

@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
@@ -22,7 +22,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undoSizes = () => undoOwner().sizes();
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");

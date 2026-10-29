@@ -1,4 +1,4 @@
-import { onRefresh, onSessionChange, onStamped } from "../../legacy/session-bridge.ts";
+import { onRefresh, onSessionChange, onStamped } from "./session-owner.ts";
 import { documentLocation } from "../../legacy/location-bridge.ts";
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { shotHiding } from "./shot-hiding.ts";

@@ -3,7 +3,7 @@ import { documentIdentityOwner } from "../bootstrap/wiring/document-identity.ts"
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { setHome } from "../legacy/location-bridge.ts";
 import { truncateForPreview } from "../core/document/text-policy.ts";
 

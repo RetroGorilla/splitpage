@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
-import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
 after(closeApp);

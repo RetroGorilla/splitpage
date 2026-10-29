@@ -4,7 +4,7 @@ import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { checksumText } from "../../shared/text.js";
 import { startupReady } from "../application/startup-signal.ts";
-import { currentDocument, onDocumentReplaced } from "../legacy/session-bridge.ts";
+import { currentDocument, onDocumentReplaced } from "../bootstrap/wiring/session-owner.ts";
 
 export const seen = [];
 

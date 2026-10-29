@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import zlib from "node:zlib";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldFetch, createHeldImageDecode, rightToday } from "./_m4-matrix.mjs";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 
@@ -10,7 +10,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { renderAbsorbed } = await import("../features/rows/render.js");

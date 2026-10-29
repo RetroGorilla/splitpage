@@ -43,8 +43,8 @@ import {
   sessionStamps,
   sessionStarted,
   startSessionBridge
-} from "../../src/legacy/session-bridge.ts";
-import type { SessionReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
+} from "../../src/bootstrap/wiring/session-owner.ts";
+import type { SessionReplayRunner, SessionUndoPorts } from "../../src/bootstrap/wiring/session-owner.ts";
 import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
 import { migrateRows } from "../../src/legacy/document-ports.ts";

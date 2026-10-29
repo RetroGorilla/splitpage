@@ -2,7 +2,7 @@ import "../src/test/_dom.mjs";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { currentDocument } from "../src/legacy/session-bridge.ts";
+import { currentDocument } from "../src/bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "../src/test/_document.mjs";
 import { rowSeconds } from "../src/core/production/timing.ts";
 import { productionReaders } from "../src/legacy/document-ports.ts";

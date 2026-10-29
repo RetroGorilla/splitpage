@@ -18,7 +18,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
-import { currentDocument } from "../../src/legacy/session-bridge.ts";
+import { currentDocument } from "../../src/bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
 import { autosaveActions, fileMenuActions, mountFileMenuDropdownFeature, stopFileMenuDropdownFeature } from "../../src/bootstrap/wiring/file-menu.ts";

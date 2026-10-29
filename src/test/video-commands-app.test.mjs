@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
 
 window.Element.prototype.scrollBy = function () {};
@@ -16,7 +16,7 @@ const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.js");
 const { openCommentComposer, closeCommentComposer } = await import("../features/comments/comments.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");

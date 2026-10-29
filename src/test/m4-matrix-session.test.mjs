@@ -12,7 +12,7 @@ import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { documentLocation } from "../legacy/location-bridge.ts";
 
-const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../bootstrap/wiring/session-owner.ts");
 
 const session = liveSession();
 const probe = { epoch: () => (sessionStarted() ? session.epoch() : null), held: () => (sessionStarted() ? session.read((doc) => doc) : null) };
@@ -52,7 +52,7 @@ const { migrateRows } = await import("../legacy/document-ports.ts");
 const { adoptRestoredState, migrateDocument } = await import("../bootstrap/startup/document-entry.js");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { exportMetaLine, toMarkdownDoc } = await import("../adapters/formats/export-text.ts");

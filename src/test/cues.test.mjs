@@ -23,7 +23,7 @@ import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/prod
 import { healTagRegistry, tagsInField } from "../features/tags/production-tags.js";
 
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
 
 const retagText = portText;

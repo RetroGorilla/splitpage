@@ -3,7 +3,7 @@ import "../../../src/test/_preferences-started.mjs";
 import "../../../src/test/_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../../../src/legacy/session-bridge.ts";
+import { currentDocument } from "../../../src/bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../../../src/legacy/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../../../src/bootstrap/wiring/production-tags.ts";
 import { detectTwoColumnFormat, parseImportRows } from "../../../src/adapters/formats/import-text.js";

@@ -17,7 +17,7 @@ const redo = () => undoOwner().redo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();
-const { liveSession, runDocumentEdit, stampDocument } = await import("../legacy/session-bridge.ts");
+const { liveSession, runDocumentEdit, stampDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { setTargetLength } = await import("../features/rundown/target.js");
 const { registerProductionTag, findOrAddPerson } = await import("../features/tags/production-tags.js");
 const { renameTag, removeTag, newBrollRecord, removeBrollProp } = await import("../application/commands/production-actions.ts");
@@ -26,7 +26,7 @@ const { retagRewrites: planRetagRewrites, retagMentions: countRetagMentions } = 
 const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
-const { sessionStamps, readSession } = await import("../legacy/session-bridge.ts");
+const { sessionStamps, readSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { randomIds } = await import("../adapters/identity/ids.ts");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);

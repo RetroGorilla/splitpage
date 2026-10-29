@@ -11,7 +11,7 @@ import { captureExportDocument } from "./export-capture.ts";
 import { amendHome, currentHome, documentLocation, fileHome, setHome } from "../../legacy/location-bridge.ts";
 import { getEditorName, preferences } from "../../legacy/preferences-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "../../legacy/save-bridge.ts";
-import { stampDocument } from "../../legacy/session-bridge.ts";
+import { stampDocument } from "./session-owner.ts";
 import { documentReader } from "./ports/document.ts";
 import { notices } from "./ports/effects.ts";
 import { fileDelivery } from "./ports/files.ts";
