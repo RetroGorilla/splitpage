@@ -21,7 +21,7 @@ const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openProductionPanel } = await import("../features/tags/panels.js");
 const { openBrollPanel } = await import("../features/broll/panel.js");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

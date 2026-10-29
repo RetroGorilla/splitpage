@@ -10,7 +10,7 @@ window.Element.prototype.scrollBy = function () {};
 await bootApp();
 const { commentSortMode } = await import("../application/comment-sort.ts");
 const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts");
-const { documentTransitions } = await import("../legacy/transition-bridge.ts");
+const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.js");
 const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../features/comments/comments.js");
 after(closeApp);

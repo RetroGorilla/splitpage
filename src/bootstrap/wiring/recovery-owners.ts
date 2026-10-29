@@ -18,7 +18,7 @@ import { createDesktopDraftStore } from "../../adapters/storage/draft-store-desk
 import type { DesktopDraftBridge } from "../../adapters/storage/draft-store-desktop.ts";
 import { createIdbDraftStore } from "../../adapters/storage/draft-store-idb.ts";
 import type { OperationContext } from "../../application/session/operation.ts";
-import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { currentDocument, mergeBase, sessionStamps } from "../../legacy/session-bridge.ts";
 import { nowIso } from "../../adapters/identity/ids.ts";
 import { dataUrlForSync, isDurableSync } from "../../adapters/storage/02c-blobs.js";

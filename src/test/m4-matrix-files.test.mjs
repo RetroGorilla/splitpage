@@ -32,7 +32,7 @@ const homeModule = await import("../legacy/location-bridge.ts");
 const { openPrompterInBrowser } = await import("../bootstrap/wiring/desktop-owners.ts");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

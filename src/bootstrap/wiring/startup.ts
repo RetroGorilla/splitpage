@@ -4,7 +4,7 @@ import type { StashResult } from "../startup/initial-document.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
 import { connectStartup } from "../../application/startup-signal.ts";
-import { documentTransitions } from "../../legacy/transition-bridge.ts";
+import { documentTransitions } from "./transition-owners.ts";
 import { suppressUnloadWarning } from "../startup/page-entry.ts";
 import { updateHideShotMenu } from "./hide-shot.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";

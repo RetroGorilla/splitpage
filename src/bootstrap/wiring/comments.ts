@@ -13,7 +13,7 @@ import { screen as portScreen } from "./ports/screen.ts";
 import { startComments as mountCommentState } from "../../features/comments/comments.js";
 import type { CommentStatePorts } from "../../features/comments/ports.ts";
 
-import { keepSnapshot } from "../../legacy/transition-bridge.ts";
+import { keepSnapshot } from "./transition-owners.ts";
 import { personColors as portPersonColors } from "./ports/person-colors.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { resetDraftHistory } from "../../features/editing/draft-edit.js";
