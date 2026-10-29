@@ -77,3 +77,15 @@ test("formatting across a media atom marks the atom too", () => {
   const cell = normalizeCell([T("a"), I(), T("b")]);
   assert.deepEqual(setMark(cell, 0, 3, "b", true), [T("a", { b: true }), I({ b: true }), T("b", { b: true })]);
 });
+
+test("a video run without a host shows its address as the host, and the host is escaped in the card", () => {
+  const [bare] = normalizeCell([{ atom: "video", href: "https://youtu.be/abc" }]);
+  assert.equal((bare as VideoRun).host, "https://youtu.be/abc");
+  const html = toHtml([{ atom: "video", href: "https://youtu.be/abc", host: "a<b>&c", text: "", marks: {} }]);
+  assert.ok(html.endsWith('<span class="vec-host">· a&lt;b&gt;&amp;c</span></a>'), html);
+});
+
+test("a b-roll key id keeps letters, digits, underscore and hyphen, and nothing else", () => {
+  const [key] = normalizeCell([{ atom: "broll", id: "bs-1_a.b c", text: "B-roll:", marks: {} }]);
+  assert.equal((key as { id: string }).id, "bs-1_ab" + "c");
+});

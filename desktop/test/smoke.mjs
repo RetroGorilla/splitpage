@@ -5318,13 +5318,13 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
 }
 
 async function caseWindowCloseCanary() {
-  const tag = "src/js window.close() canary";
-  const srcDir = path.join(DESKTOP_DIR, "..", "src", "js");
+  const tag = "src window.close() canary";
+  const srcDir = path.join(DESKTOP_DIR, "..", "src");
   let files;
   try {
-    files = fs.readdirSync(srcDir).filter((f) => f.endsWith(".js"));
+    files = fs.readdirSync(srcDir, { recursive: true }).map(String).filter((f) => /\.(js|ts)$/.test(f) && !f.split(path.sep).includes("test"));
   } catch (e) {
-    record(tag + ": src/js is readable", false, "exception: " + (e && e.message ? e.message : String(e)));
+    record(tag + ": src is readable", false, "exception: " + (e && e.message ? e.message : String(e)));
     return;
   }
   const offenders = [];
@@ -5332,7 +5332,8 @@ async function caseWindowCloseCanary() {
     const text = fs.readFileSync(path.join(srcDir, f), "utf8");
     if (text.indexOf("window.close(") !== -1) offenders.push(f);
   }
-  record(tag + ": no window.close( call anywhere in src/js", offenders.length === 0, offenders.join(", "));
+  record(tag + ": the app code was scanned", files.length > 0, String(files.length));
+  record(tag + ": no window.close( call anywhere in the app code under src", offenders.length === 0, offenders.join(", "));
 }
 
 async function runTargetSuite(target, groupFilter) {
@@ -5420,7 +5421,7 @@ async function runTargetSuite(target, groupFilter) {
     ["teleprompter: Follow My Voice on desktop (fake listener)", () => caseTeleprompterVoiceDesktop(target, fixturesDir)],
     ["teleprompter: voice relay to Present in Browser (fake listener)", () => caseTeleprompterVoiceRelay(target, fixturesDir)],
     ["teleprompter: present in chromium (Use Chromium Speech Recognition)", () => caseTeleprompterPresentInChromium(target, fixturesDir)],
-    ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
+    ["window.close() canary (src grep)", () => caseWindowCloseCanary()]
   ];
   try {
     groups.forEach(([name]) => groupNames.add(name));

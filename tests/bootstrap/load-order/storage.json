@@ -1,9 +1,7 @@
 {
-  "legacyImports": [
-    "../adapters/storage/02c-blobs.js",
-    "../adapters/storage/02d-gallery.js"
-  ],
   "loadOnly": [
+    "src/adapters/storage/02c-blobs.js",
+    "src/adapters/storage/02d-gallery.js",
     "src/adapters/storage/03c-history-idb.js"
   ],
   "expectedLoads": 3

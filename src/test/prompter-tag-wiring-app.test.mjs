@@ -10,7 +10,7 @@ const { wireTagEntityContainer, openPrompter, closePrompter } = await import("..
 after(closeApp);
 
 test("tag container wiring is installed before the prompter can open and mounts per call", () => {
-  const entry = readFileSync(new URL("../js/_entry.js", import.meta.url), "utf8");
+  const entry = readFileSync(new URL("../bootstrap/main.js", import.meta.url), "utf8");
   assert.ok(entry.indexOf("  mountTagPanelsFeature();") < entry.indexOf("  mountPrompterRuntimeFeature();"));
   assert.equal(document.getElementById("prompter").hidden, true);
   const first = document.createElement("div");
