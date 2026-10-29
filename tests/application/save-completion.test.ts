@@ -57,13 +57,14 @@ test("a confirmed write stamps, sets the baseline, amends the landed home, marks
   assert.deepEqual(h.amended, [{ diskBase: published, lastModified: 77 }]);
 });
 
-test("a write with no landed home, or no modified time, amends less", () => {
+test("a write with no landed home amends nothing, and one with no modified time forgets the old time", () => {
   const h = harness();
   h.completion.confirmWrite({ captured: captured(), published: { rev: 3 }, forkDocId: null, docIdAtSave: OLD_ID, seqAtSave: 4, landed: null });
   assert.equal(h.log.some((l) => l.startsWith("amendHome")), false);
   const g = harness();
   g.completion.confirmWrite({ captured: captured(), published: { rev: 3 }, forkDocId: null, docIdAtSave: OLD_ID, seqAtSave: 4, landed: { home: HOME, lastModified: null } });
-  assert.ok(g.log.includes("amendHome:diskBase"));
+  assert.ok(g.log.includes("amendHome:diskBase,lastModified"));
+  assert.deepEqual(g.amended, [{ diskBase: { rev: 3 }, lastModified: null }]);
 });
 
 test("an edit made during the save leaves the document unconfirmed", () => {
