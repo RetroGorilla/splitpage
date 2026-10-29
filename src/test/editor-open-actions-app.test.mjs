@@ -8,7 +8,7 @@ await bootApp();
 
 const { appActions } = await import("../legacy/app-actions.ts");
 const { currentDocument } = await import("../bootstrap/wiring/session-owner.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { closeAnnotator } = await import("../features/gallery/annotate.js");

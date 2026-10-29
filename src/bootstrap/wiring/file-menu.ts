@@ -17,7 +17,7 @@ import { confirmation, saves } from "./ports/saving.ts";
 import { screen } from "./ports/screen.ts";
 import { history, opening, transitions } from "./ports/transitions.ts";
 import { fileMenu } from "./file-menu-controls.ts";
-import { migrateRows } from "../../legacy/document-ports.ts";
+import { migrateRows } from "../document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
 import { localFilesOwner } from "./local-files.ts";

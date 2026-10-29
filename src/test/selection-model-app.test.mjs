@@ -8,7 +8,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { renderAbsorbed, renderRow } = await import("../features/rows/render.js");
 const { posToDom } = await import("../features/common/cell-dom.ts");

@@ -11,7 +11,7 @@ import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
 await bootApp();
 
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");

@@ -9,7 +9,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { paintingScreen, renderAbsorbed, renderRow } = await import("../features/rows/render.js");
 const { paintGuard } = await import("../bootstrap/wiring/editor-owners.ts");

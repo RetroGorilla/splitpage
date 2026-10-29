@@ -9,7 +9,7 @@ import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-p
 await bootApp();
 
 const { liveSession, noteReload } = await import("../bootstrap/wiring/session-owner.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");

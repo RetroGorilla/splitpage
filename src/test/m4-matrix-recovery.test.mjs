@@ -22,7 +22,7 @@ import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");

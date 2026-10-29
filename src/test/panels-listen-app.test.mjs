@@ -7,7 +7,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { adoptReplacement, runCommand, sessionStamps } = await import("../bootstrap/wiring/session-owner.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { addCommentCommand, toggleResolveCommand } = await import("../application/commands/comments.ts");
 const { addSceneCommand } = await import("../application/commands/rows.ts");
 const { registerTagCommand } = await import("../application/commands/production-records.ts");

@@ -15,7 +15,7 @@ import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildDocx } = await import("../adapters/formats/docx.ts");

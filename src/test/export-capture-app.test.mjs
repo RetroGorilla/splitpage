@@ -8,7 +8,7 @@ after(closeApp);
 
 const { LONG_DEMO } = await import("../starters/index.ts");
 const { setHome } = await import("../legacy/location-bridge.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");

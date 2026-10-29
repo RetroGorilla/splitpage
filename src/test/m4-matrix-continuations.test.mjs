@@ -11,7 +11,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { renderAbsorbed } = await import("../features/rows/render.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");

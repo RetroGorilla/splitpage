@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createUndo } from "../../../../src/application/editing/undo/undo.ts";
 import type { UndoPorts } from "../../../../src/application/editing/undo/undo.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
-import { migrateRows } from "../../../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { cellRuns } from "../../../../src/test/_cell-runs.mjs";
 
 function setup() {
