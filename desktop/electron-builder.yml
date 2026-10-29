@@ -19,6 +19,10 @@ files:
   - voice-helper.js
   - chromium-browsers.js
   - history-fs-backend.js
+  - desktop-state.js
+  - update-release.js
+  - file-service.js
+  - doc-claims.js
   - package.json
 
 extraResources:

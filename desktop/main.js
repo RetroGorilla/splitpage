@@ -9,7 +9,11 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
-const { createDraftStore, restoreDoneAction, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
+const { createDraftStore, restoreDoneAction, MAX_BODY_BYTES } = require("./drafts");
+const {
+  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite
+} = require("./file-service");
+const { createDocClaims } = require("./doc-claims");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -19,6 +23,13 @@ const {
   createBlobStore, imageBlobRefusal, sniffImageMime, isSha256, MAX_MISSING_QUERY
 } = require("./blob-store");
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
+const {
+  DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE, LAST_KNOWN_TITLE_MAX, RECENTS_MAX,
+  mintTabOrWindowId, normalizeBounds, normalizeTabSource, createDesktopStateStore
+} = require("./desktop-state");
+const {
+  DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
+} = require("./update-release");
 const {
   APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin, checkArgs
 } = require("./ipc-channels");
@@ -107,21 +118,6 @@ const STATIC_ALLOWLIST = {
 
 const rawArgv = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
 
-const OPENABLE_EXTENSIONS = [".splitpage", ".md", ".html", ".htm", ".docx", ".txt", ".csv"];
-function filesToOpenFrom(list, baseDir) {
-  const out = [];
-  for (const item of list) {
-    if (item.startsWith("-")) continue;
-    const ext = path.extname(item).toLowerCase();
-    if (!OPENABLE_EXTENSIONS.includes(ext)) continue;
-    try {
-      const abs = path.resolve(baseDir, item);
-      if (fs.statSync(abs).isFile()) out.push(abs);
-    } catch { }
-  }
-  return out;
-}
-
 const argvFilesToOpen = filesToOpenFrom(rawArgv, process.cwd());
 
 const gotLock = app.requestSingleInstanceLock();
@@ -139,12 +135,7 @@ if (TEST_MODE) {
   });
 }
 
-const fileRegistry = new Map();
-function registerPath(absPath) {
-  const id = crypto.randomBytes(16).toString("hex");
-  fileRegistry.set(id, absPath);
-  return id;
-}
+const fileIds = createFileRegistry();
 
 const TITLEBAR_H = 36;
 
@@ -171,11 +162,6 @@ const windowsById = new Map();
 const webContentsIdToTabId = new Map();
 const pathToTabId = new Map();
 
-function pathKey(absPath) {
-  const resolved = path.resolve(absPath);
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-}
-
 let lastFocusedWindowId = null;
 let quitConfirmed = false;
 let quitKeepingDrafts = false;
@@ -193,21 +179,10 @@ let pendingRestoreNotice = null;
 const closeConfirmedWindows = new WeakSet();
 const closeConfirmedTabViews = new WeakSet();
 
-const docClaims = new Map();
-let docClaimSeq = 0;
-const docClaimCleanupRegistered = new WeakSet();
-
 function homeKeyForClaim(tab) {
-  const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
+  const absPath = tab.fileId ? fileIds.pathOf(tab.fileId) : null;
   if (absPath) return "file:" + pathKey(absPath);
   return null;
-}
-
-function replacementDocId(fromId, homeKey) {
-  const digest = crypto.createHash("sha256")
-    .update(duplicateReplacementInput(fromId, homeKey), "utf8")
-    .digest("hex");
-  return docIdFromSha256Hex(digest);
 }
 
 function tabWebContentsForClaim(webContentsId) {
@@ -217,52 +192,12 @@ function tabWebContentsForClaim(webContentsId) {
   return tab.view.webContents;
 }
 
-function checkDuplicateDocId(senderId) {
-  const mine = docClaims.get(senderId);
-  if (!mine) return;
-  for (const [otherId, theirs] of docClaims) {
-    if (otherId === senderId) continue;
-    const loser = chooseDuplicateLoser(mine, theirs);
-    if (!loser) continue;
-    const winner = loser === mine ? theirs : mine;
-    const loserId = loser === mine ? senderId : otherId;
-    const toId = replacementDocId(loser.docId, loser.homeKey);
-    if (loser.pendingToId === toId) continue;
-    const wc = tabWebContentsForClaim(loserId);
-    if (!wc) continue;
-    loser.pendingToId = toId;
-    try {
-      wc.send("splitpage:reassign-doc-id", { fromId: loser.docId, toId, otherTitle: winner.title });
-    } catch { }
-  }
-}
-
-function recordDocClaim(sender, tab) {
-  const webContentsId = sender.id;
-  const docId = typeof tab.docId === "string" && DOC_ID_RE.test(tab.docId) ? tab.docId : null;
-  const homeKey = docId ? homeKeyForClaim(tab) : null;
-  if (!docId || !homeKey) {
-    docClaims.delete(webContentsId);
-    return;
-  }
-  const previous = docClaims.get(webContentsId);
-  if (previous && previous.docId === docId && previous.homeKey === homeKey) {
-    previous.title = tab.title;
-    return;
-  }
-  if (!docClaimCleanupRegistered.has(sender)) {
-    docClaimCleanupRegistered.add(sender);
-    sender.once("destroyed", () => { docClaims.delete(webContentsId); });
-  }
-  docClaims.set(webContentsId, {
-    docId,
-    homeKey,
-    seq: ++docClaimSeq,
-    title: tab.title,
-    pendingToId: null
-  });
-  checkDuplicateDocId(webContentsId);
-}
+const docClaims = createDocClaims({
+  policy: { DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput },
+  homeKeyOf: homeKeyForClaim,
+  contentsFor: tabWebContentsForClaim,
+  askToReassign: (wc, payload) => wc.send("splitpage:reassign-doc-id", payload)
+});
 
 let draftStore = null;
 let draftsPreviousSession = "none";
@@ -372,7 +307,7 @@ function draftFiniteNumber(v) {
 
 function buildDraftHeader(tab, p) {
   const fileId = typeof p.fileId === "string" ? p.fileId : null;
-  const filePath = fileId ? fileRegistry.get(fileId) || null : null;
+  const filePath = fileId ? fileIds.pathOf(fileId) || null : null;
   const w = windowsById.get(tab.windowId);
   const index = w ? w.tabIds.indexOf(tab.id) : -1;
   return {
@@ -420,189 +355,13 @@ function requestDraftFlush(tab, budgetMs, keep) {
   });
 }
 
-const DESKTOP_STATE_VERSION = 2;
-const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
-const LAST_KNOWN_TITLE_MAX = 300;
-const RECENTS_MAX = 20;
-
-function stateFilePath() { return path.join(app.getPath("userData"), "desktop-state.json"); }
-
-function mintTabOrWindowId() { return crypto.randomBytes(16).toString("hex"); }
-
-const DESKTOP_STATE_TMP_RE = /^\.tmp-[0-9a-f]{12}-desktop-state\.json$/;
-function sweepDesktopStateTempFiles() {
-  const dir = path.dirname(stateFilePath());
-  let names;
-  try { names = fs.readdirSync(dir); } catch { return 0; }
-  let removed = 0;
-  for (const name of names) {
-    if (!DESKTOP_STATE_TMP_RE.test(name)) continue;
-    try { fs.unlinkSync(path.join(dir, name)); removed++; } catch { }
+const desktopState = createDesktopStateStore({
+  filePath: () => path.join(app.getPath("userData"), "desktop-state.json"),
+  pathKey,
+  onWriteError: (err) => {
+    if (TEST_MODE) process.stderr.write(`[splitpage] desktop-state write failed: ${err && err.stack || err}\n`);
   }
-  return removed;
-}
-
-function normalizeBounds(b) {
-  if (!b || typeof b !== "object") return null;
-  const ok = ["x", "y", "width", "height"].every((k) => typeof b[k] === "number" && Number.isFinite(b[k]));
-  return ok ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
-}
-
-function normalizeTabSource(src) {
-  if (src && typeof src === "object") {
-    if (src.kind === "file" && typeof src.absPath === "string" && src.absPath && path.isAbsolute(src.absPath)) {
-      return { kind: "file", absPath: src.absPath };
-    }
-  }
-  return { kind: "blank" };
-}
-
-function blankDesktopWindow(extra) {
-  const tabId = mintTabOrWindowId();
-  return {
-    windowId: mintTabOrWindowId(),
-    bounds: null,
-    maximized: false,
-    activeTabId: tabId,
-    tabs: [{ tabId, source: { kind: "blank" }, lastKnownTitle: "" }],
-    ...(extra || {})
-  };
-}
-
-function freshDesktopState() {
-  return { version: DESKTOP_STATE_VERSION, windows: [blankDesktopWindow()], recents: [] };
-}
-
-function migrateDesktopStateV1(v1) {
-  const tabId = mintTabOrWindowId();
-  const source = typeof v1.lastFilePath === "string" && v1.lastFilePath
-    ? { kind: "file", absPath: v1.lastFilePath }
-    : { kind: "blank" };
-  return {
-    version: DESKTOP_STATE_VERSION,
-    windows: [{
-      windowId: mintTabOrWindowId(),
-      bounds: normalizeBounds(v1.windowBounds),
-      maximized: v1.windowMaximized === true,
-      activeTabId: tabId,
-      tabs: [{ tabId, source, lastKnownTitle: "" }]
-    }],
-    recents: []
-  };
-}
-
-function normalizeRecentsList(raw) {
-  const out = [];
-  const seen = new Set();
-  for (const r of Array.isArray(raw) ? raw : []) {
-    if (!r || typeof r !== "object") continue;
-    if (typeof r.absPath !== "string" || !r.absPath || !path.isAbsolute(r.absPath)) continue;
-    const key = pathKey(r.absPath);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      absPath: r.absPath,
-      title: typeof r.title === "string" ? r.title.slice(0, LAST_KNOWN_TITLE_MAX) : "",
-      at: typeof r.at === "number" && Number.isFinite(r.at) ? r.at : 0
-    });
-    if (out.length >= RECENTS_MAX) break;
-  }
-  return out;
-}
-
-function normalizeDesktopStateV2(raw) {
-  const seen = new Set();
-  const uniqueId = (id) => {
-    const v = typeof id === "string" && TAB_OR_WINDOW_ID_RE.test(id) && !seen.has(id) ? id : mintTabOrWindowId();
-    seen.add(v);
-    return v;
-  };
-  const windows = [];
-  for (const w of Array.isArray(raw && raw.windows) ? raw.windows : []) {
-    if (!w || typeof w !== "object") continue;
-    const tabs = [];
-    for (const t of Array.isArray(w.tabs) ? w.tabs : []) {
-      if (!t || typeof t !== "object") continue;
-      tabs.push({
-        tabId: uniqueId(t.tabId),
-        source: normalizeTabSource(t.source),
-        lastKnownTitle: typeof t.lastKnownTitle === "string" ? t.lastKnownTitle.slice(0, LAST_KNOWN_TITLE_MAX) : ""
-      });
-    }
-    if (!tabs.length) continue;
-    windows.push({
-      windowId: uniqueId(w.windowId),
-      bounds: normalizeBounds(w.bounds),
-      maximized: w.maximized === true,
-      activeTabId: tabs.some((t) => t.tabId === w.activeTabId) ? w.activeTabId : tabs[0].tabId,
-      tabs
-    });
-  }
-  const recents = normalizeRecentsList(raw && raw.recents);
-  if (!windows.length) {
-    const fresh = freshDesktopState();
-    fresh.recents = recents;
-    return fresh;
-  }
-  return { version: DESKTOP_STATE_VERSION, windows, recents };
-}
-
-let desktopStateSynthesized = null;
-
-function readDesktopStateV2() {
-  let text;
-  try { text = fs.readFileSync(stateFilePath(), "utf8"); } catch { text = null; }
-  if (desktopStateSynthesized && desktopStateSynthesized.text === text) {
-    return structuredClone(desktopStateSynthesized.state);
-  }
-  let parsed;
-  try { parsed = text === null ? undefined : JSON.parse(text); } catch { parsed = undefined; }
-
-  const isObject = !!parsed && typeof parsed === "object" && !Array.isArray(parsed);
-  const state = isObject && parsed.version === DESKTOP_STATE_VERSION ? normalizeDesktopStateV2(parsed)
-    : isObject && !("version" in parsed) ? migrateDesktopStateV1(parsed)
-    : freshDesktopState();
-  desktopStateSynthesized = { text, state: structuredClone(state) };
-  return state;
-}
-
-const desktopStateQueue = [];
-let desktopStateDraining = false;
-
-function writeDesktopStateV2(mutator) {
-  return new Promise((resolve) => {
-    desktopStateQueue.push({ mutator, resolve });
-    if (!desktopStateDraining) drainDesktopStateQueue();
-  });
-}
-
-function drainDesktopStateQueue() {
-  desktopStateDraining = true;
-  try {
-    while (desktopStateQueue.length) {
-      const job = desktopStateQueue.shift();
-      let written = false;
-      try {
-        const current = readDesktopStateV2();
-        const result = job.mutator(current);
-        if (result !== false) {
-          const next = normalizeDesktopStateV2(result && typeof result === "object" ? result : current);
-          const file = stateFilePath();
-          const text = JSON.stringify(next, null, 2);
-          fs.mkdirSync(path.dirname(file), { recursive: true });
-          writeFileDurableSync(file, text);
-          desktopStateSynthesized = null;
-          written = true;
-        }
-      } catch (err) {
-        if (TEST_MODE) process.stderr.write(`[splitpage] desktop-state write failed: ${err && err.stack || err}\n`);
-      }
-      job.resolve(written);
-    }
-  } finally {
-    desktopStateDraining = false;
-  }
-}
+});
 
 let recentDocuments = [];
 
@@ -610,19 +369,19 @@ const recentFileIdByPath = new Map();
 function fileIdForPath(absPath) {
   const key = pathKey(absPath);
   const existing = recentFileIdByPath.get(key);
-  if (existing && fileRegistry.get(existing) === absPath) return existing;
-  const id = registerPath(absPath);
+  if (existing && fileIds.pathOf(existing) === absPath) return existing;
+  const id = fileIds.register(absPath);
   recentFileIdByPath.set(key, id);
   return id;
 }
 
 function loadRecentsAtLaunch() {
-  recentDocuments = readDesktopStateV2().recents || [];
+  recentDocuments = desktopState.read().recents || [];
 }
 
 function persistRecents() {
   const snapshot = recentDocuments.map((r) => ({ ...r }));
-  return writeDesktopStateV2((current) => { current.recents = snapshot; return current; });
+  return desktopState.write((current) => { current.recents = snapshot; return current; });
 }
 
 function noteRecentDocument(absPath, title) {
@@ -655,7 +414,7 @@ function noteRecentDocumentAndPersist(absPath, title) {
 }
 
 function removeRecentDocumentByFileId(fileId) {
-  const absPath = typeof fileId === "string" ? fileRegistry.get(fileId) : null;
+  const absPath = typeof fileId === "string" ? fileIds.pathOf(fileId) : null;
   if (!absPath) return false;
   const key = pathKey(absPath);
   const before = recentDocuments.length;
@@ -703,38 +462,7 @@ function shellStateAsV2() {
 function persistShellState() {
   if (sessionWritesFrozen || sessionRestoreInProgress) return Promise.resolve(false);
   if (!windowsById.size) return Promise.resolve(false);
-  return writeDesktopStateV2(() => shellStateAsV2());
-}
-
-async function readFileEntry(id, absPath) {
-  const stat = await fsp.stat(absPath);
-  const buf = await fsp.readFile(absPath);
-  return {
-    id,
-    name: path.basename(absPath),
-    lastModified: Math.floor(stat.mtimeMs),
-    size: stat.size,
-    bytes: new Uint8Array(buf)
-  };
-}
-
-function toBuffer(data) {
-  if (typeof data === "string") return Buffer.from(data, "utf8");
-  if (data instanceof Uint8Array) return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-  if (data instanceof ArrayBuffer) return Buffer.from(data);
-  throw new Error("writeFile: unsupported data type");
-}
-
-async function atomicWrite(absPath, buffer) {
-  const dir = path.dirname(absPath);
-  const tmp = path.join(dir, `.${path.basename(absPath)}.tmp-${crypto.randomBytes(6).toString("hex")}`);
-  await fsp.writeFile(tmp, buffer);
-  try {
-    await fsp.rename(tmp, absPath);
-  } catch (err) {
-    await fsp.unlink(tmp).catch(() => {});
-    throw err;
-  }
+  return desktopState.write(() => shellStateAsV2());
 }
 
 const HISTORY_DESKTOP_CAP_BYTES = 500 * 1024 * 1024;
@@ -859,104 +587,17 @@ function readAppVersion() {
   try { return fs.readFileSync(path.join(APP_ROOT, "VERSION"), "utf8").trim(); } catch { return app.getVersion(); }
 }
 
-function compareVersions(a, b) {
-  const va = splitVersion(a), vb = splitVersion(b);
-  for (let i = 0; i < Math.max(va.core.length, vb.core.length); i++) {
-    const na = va.core[i] || 0, nb = vb.core[i] || 0;
-    if (na !== nb) return na < nb ? -1 : 1;
-  }
-  if (!va.pre.length || !vb.pre.length) return va.pre.length === vb.pre.length ? 0 : (va.pre.length ? -1 : 1);
-  for (let i = 0; i < Math.max(va.pre.length, vb.pre.length); i++) {
-    const x = va.pre[i], y = vb.pre[i];
-    if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
-    const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
-    if (nx && ny) { if (+x !== +y) return +x < +y ? -1 : 1; continue; }
-    if (nx !== ny) return nx ? -1 : 1;
-    if (x !== y) return x < y ? -1 : 1;
-  }
-  return 0;
-}
-
-function splitVersion(v) {
-  const s = String(v).trim().replace(/\+.*$/, "");
-  const dash = s.indexOf("-");
-  return {
-    core: (dash === -1 ? s : s.slice(0, dash)).split(".").map((n) => parseInt(n, 10) || 0),
-    pre: dash === -1 ? [] : s.slice(dash + 1).split(".").filter(Boolean)
-  };
-}
-
-const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
-
-const INSTALLER_EXT = { win32: ".exe", darwin: ".dmg", linux: ".appimage" };
-
-const DEFAULT_UPDATE_API =
-  "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
-
 function updateApiUrl() {
   return process.env.SPLITPAGE_UPDATE_API || DEFAULT_UPDATE_API;
 }
 
-function isAllowedDownloadHost(urlString) {
-  let parsed;
-  try { parsed = new URL(urlString); } catch { return false; }
-  let api;
-  try { api = new URL(updateApiUrl()); } catch { api = null; }
-  if (api && parsed.origin === api.origin) return true;
-  if (parsed.protocol !== "https:") return false;
-  const host = parsed.hostname.toLowerCase();
-  return host === "github.com"
-    || host === "api.github.com"
-    || host.endsWith(".githubusercontent.com");
-}
-
-function pickUpdateAsset(assets) {
-  const ext = INSTALLER_EXT[process.platform];
-  if (!ext) return null;
-  const candidates = (assets || []).filter((a) => {
-    const name = String((a && a.name) || "");
-    return SAFE_ASSET_NAME.test(name)
-      && name.toLowerCase().endsWith(ext)
-      && isAllowedDownloadHost(String((a && a.browser_download_url) || ""));
-  });
-  if (!candidates.length) return null;
-
-  const arch = process.arch;
-  const other = ["x64", "arm64", "ia32", "armv7l"].filter((a) => a !== arch);
-  const mentions = (name, token) => new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`, "i").test(name);
-
-  const mine = candidates.filter((a) => mentions(a.name, arch));
-  if (mine.length === 1) return describeAsset(mine[0]);
-  if (mine.length > 1) return null;
-
-  const neutral = candidates.filter((a) => !other.some((o) => mentions(a.name, o)));
-  if (neutral.length === 1) return describeAsset(neutral[0]);
-  return null;
-}
-
-function describeAsset(asset) {
-  return {
-    name: path.basename(String(asset.name)),
-    url: String(asset.browser_download_url),
-    size: Number.isFinite(asset.size) ? asset.size : 0
-  };
-}
-
-const CHECKSUMS_ASSET = /^SHA256SUMS(\.txt)?$/i;
-
 async function fetchPublishedChecksum(assets, assetName) {
-  const entry = (assets || []).find((a) => CHECKSUMS_ASSET.test(String((a && a.name) || ""))
-    && isAllowedDownloadHost(String((a && a.browser_download_url) || "")));
+  const entry = findChecksumsAsset(assets, updateApiUrl());
   if (!entry) return null;
   try {
     const res = await net.fetch(entry.browser_download_url, { headers: { "User-Agent": "splitpage-desktop" } });
     if (!res.ok) return null;
-    const text = await res.text();
-    if (text.length > 200000) return null;
-    for (const line of text.split(/\r?\n/)) {
-      const m = /^([0-9a-f]{64})\s+\*?(.+?)\s*$/i.exec(line);
-      if (m && path.basename(m[2]) === assetName) return m[1].toLowerCase();
-    }
+    return checksumFor(await res.text(), assetName);
   } catch { }
   return null;
 }
@@ -1013,7 +654,7 @@ async function checkForUpdate() {
     const latest = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
     const newer = !!latest && compareVersions(latest, current) > 0;
     updateAssets = Array.isArray(body.assets) ? body.assets : [];
-    updateAsset = newer ? pickUpdateAsset(updateAssets) : null;
+    updateAsset = newer ? pickUpdateAsset(updateAssets, { platform: process.platform, arch: process.arch, apiUrl }) : null;
     setUpdateStatus({
       version: current,
       checkedAt: new Date().toISOString(),
@@ -1041,7 +682,7 @@ function downloadUpdate() {
   }
   const asset = updateAsset;
   if (!asset) return Promise.resolve({ ok: false, error: "no-installer" });
-  if (!isAllowedDownloadHost(asset.url)) return Promise.resolve({ ok: false, error: "bad-url" });
+  if (!isAllowedDownloadHost(asset.url, updateApiUrl())) return Promise.resolve({ ok: false, error: "bad-url" });
 
   updateDownloadPromise = (async () => {
     const dir = updateDir();
@@ -1436,7 +1077,7 @@ function boundsIfVisible(b) {
 }
 
 function savedBoundsIfVisible() {
-  return boundsIfVisible(primaryDesktopWindow(readDesktopStateV2()).bounds);
+  return boundsIfVisible(primaryDesktopWindow(desktopState.read()).bounds);
 }
 
 function titleBarOverlayColors() {
@@ -1949,7 +1590,7 @@ function pushShellState(windowId) {
 }
 
 function deliverOpenFile(tab, absPath) {
-  const id = registerPath(absPath);
+  const id = fileIds.register(absPath);
   readFileEntry(id, absPath).then((entry) => {
     if (tab.view.webContents.isDestroyed()) return;
     tab.fileId = id;
@@ -2245,7 +1886,7 @@ function indexDraftPath(tabId, filePath) {
 }
 
 function restoreSessionAtLaunch(draftInit) {
-  const persisted = readDesktopStateV2();
+  const persisted = desktopState.read();
   const drafts = (draftInit && Array.isArray(draftInit.drafts) ? draftInit.drafts : draftsList())
     .filter((d) => d && d.status !== "unsupported");
   const draftByTab = new Map(drafts.map((d) => [d.tabId, d]));
@@ -2683,7 +2324,7 @@ function registerIpc() {
       chosen = result.canceled || !result.filePaths.length ? null : result.filePaths[0];
     }
     if (!chosen) return null;
-    const id = registerPath(chosen);
+    const id = fileIds.register(chosen);
     return await readFileEntry(id, chosen);
   });
 
@@ -2720,18 +2361,18 @@ function registerIpc() {
       } catch { }
       return null;
     }
-    const id = registerPath(chosen);
+    const id = fileIds.register(chosen);
     return { id, name: path.basename(chosen) };
   });
 
   ipcHandle("splitpage:read-file", async (event, id) => {
-    const absPath = fileRegistry.get(id);
+    const absPath = fileIds.pathOf(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     return await readFileEntry(id, absPath);
   });
 
   ipcHandle("splitpage:write-file", async (event, id, data) => {
-    const absPath = fileRegistry.get(id);
+    const absPath = fileIds.pathOf(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     const buffer = toBuffer(data);
     await atomicWrite(absPath, buffer);
@@ -2740,7 +2381,7 @@ function registerIpc() {
   });
 
   ipcHandle("splitpage:stat-file", async (event, id) => {
-    const absPath = fileRegistry.get(id);
+    const absPath = fileIds.pathOf(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     try {
       const stat = await fsp.stat(absPath);
@@ -2884,7 +2525,7 @@ function registerIpc() {
     if ("docId" in s) tab.docId = typeof s.docId === "string" ? s.docId : null;
 
     const hasFileId = "fileId" in s;
-    const absPath = hasFileId && typeof s.fileId === "string" ? fileRegistry.get(s.fileId) || null : null;
+    const absPath = hasFileId && typeof s.fileId === "string" ? fileIds.pathOf(s.fileId) || null : null;
     if (hasFileId) {
       tab.fileId = absPath ? s.fileId : null;
       unindexTabSource(tab);
@@ -2900,7 +2541,7 @@ function registerIpc() {
       pushShellState(w.id);
     }
     persistShellState();
-    try { recordDocClaim(event.sender, tab); }
+    try { docClaims.record(event.sender, tab); }
     catch (err) { if (TEST_MODE) console.error("[splitpage-test] doc claim failed", err); }
   });
 
@@ -2917,7 +2558,7 @@ function registerIpc() {
     if (!tab) throw new Error("unknown tab");
     const p = payload || {};
     if (p.kind === "file") {
-      const absPath = fileRegistry.get(p.fileId);
+      const absPath = fileIds.pathOf(p.fileId);
       if (!absPath) throw new Error("ENOENT: unknown file id");
       const result = routeOpenPath(absPath, { fromWindowId: tab.windowId, fromTabId: tab.id });
       if (!result) throw new Error("ENOENT: file is not readable");
@@ -2970,7 +2611,7 @@ function registerIpc() {
         if (!stat.isFile()) {
           taken.fileProblem = "unreadable";
         } else {
-          const id = registerPath(filePath);
+          const id = fileIds.register(filePath);
           taken.file = await readFileEntry(id, filePath);
           unindexTabSource(tab);
           tab.fileId = id;
@@ -3290,7 +2931,7 @@ app.setAppUserModelId("com.retrogorilla.splitpage");
 
 app.whenReady().then(() => {
   nativeTheme.themeSource = readThemeChoice();
-  sweepDesktopStateTempFiles();
+  desktopState.sweepTempFiles();
   loadRecentsAtLaunch();
   const draftInit = initDraftStore();
   initBlobStore();
