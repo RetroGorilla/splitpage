@@ -23,6 +23,7 @@ files:
   - update-release.js
   - file-service.js
   - doc-claims.js
+  - recents.js
   - package.json
 
 extraResources:

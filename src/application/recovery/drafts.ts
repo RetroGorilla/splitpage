@@ -1,7 +1,4 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
-import { refsIn } from "../../../shared/blob-policy.js";
 import { NO_DESTINATION } from "../transitions/ports.ts";
-import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { createCaptureSchedule } from "./capture-schedule.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import type { DocumentView } from "../session/document-session.ts";
@@ -12,42 +9,15 @@ import type { CaptureSchedule, CaptureTiming } from "./capture-schedule.ts";
 import type { DraftCapture } from "./draft-writer.ts";
 import type { DraftMeta, StoredDraft } from "./ports.ts";
 import type { StashedWork } from "./conflict-stash.ts";
+import {
+  KEPT_NOTICE, RESTORE_FAILED_NOTICE, alreadySavedNotice, differentScriptCopy, draftMigrate as migrateDraft, draftReasonFor, draftRefId,
+  hasHeader, importCopy, mergedFileNotice, missingFileCopy, missingFileName, restoredFileNotice, sameDocContent as sameDraftContent,
+  serverCopy, takenDraftFate, unreadableFileCopy, untitledRestoredNotice
+} from "./draft-restore.ts";
+import { browserDraftOrigin, desktopDraftOrigin, draftOriginSignature, draftPayloadFor, draftRefsFor, draftRefusal } from "./draft-origin.ts";
+import type { DraftOrigin, DraftPayload, DraftServer } from "./draft-origin.ts";
+import type { DraftCopy, DraftRestoreOutcome, HeaderedDraft, TakenDraft, TakenOrigin } from "./draft-restore.ts";
 import type { DraftFile, DraftFlush, DraftOpening, DraftParsedFile, DraftsMount, DraftsPorts } from "./drafts-ports.ts";
-
-interface DraftServer {
-  readonly base: string;
-  readonly docId: string;
-  readonly rev: number;
-  readonly copy?: boolean;
-}
-
-interface DraftOrigin {
-  kind: "untitled" | "server" | "file" | "import";
-  fileId: unknown;
-  fileKind: unknown;
-  importName: unknown;
-  baseLastModified: unknown;
-  baseSize: number | null;
-  server: DraftServer | null;
-}
-
-interface DraftPayload {
-  seq: number;
-  editSeq: number;
-  title: string;
-  docId: string | null;
-  docIdWrittenOut: boolean;
-  schema: unknown;
-  originKind: DraftOrigin["kind"];
-  fileId: unknown;
-  fileKind: unknown;
-  importName: unknown;
-  baseLastModified: unknown;
-  baseSize: number | null;
-  server: DraftServer | null;
-  stateJson: string;
-  baseJson: string | null;
-}
 
 interface BrowserCapture {
   readonly base: string;
@@ -58,37 +28,6 @@ interface BrowserCopy {
   readonly key: string | undefined;
   readonly docId: string;
   readonly server: DraftServer;
-}
-
-interface TakenOrigin {
-  readonly kind?: string | undefined;
-  readonly fileName?: string | undefined;
-  readonly importName?: string | undefined;
-  readonly server?: DraftServer | undefined;
-}
-
-interface TakenHeader {
-  readonly origin?: TakenOrigin | undefined;
-  readonly writtenAt?: number | undefined;
-  readonly title?: string | undefined;
-  readonly docIdWrittenOut?: boolean | undefined;
-}
-
-interface TakenDraft {
-  readonly header?: TakenHeader | undefined;
-  readonly stateJson?: unknown;
-  readonly baseJson?: unknown;
-  readonly ageMs?: number | null | undefined;
-  readonly previousSession?: string | undefined;
-  readonly browserKey?: string | undefined;
-  readonly unsupported?: boolean | undefined;
-  readonly corrupt?: boolean | undefined;
-  readonly file?: unknown;
-  readonly fileProblem?: string | undefined;
-}
-
-interface HeaderedDraft extends TakenDraft {
-  readonly header: TakenHeader;
 }
 
 interface DraftToast {
@@ -269,51 +208,8 @@ function noteDraftChange(): void {
   schedule().noteChange();
 }
 
-function fieldOf(value: unknown, name: string): unknown {
-  const field: unknown = Reflect.get(Object(value), name);
-  return field;
-}
-
 function draftOriginOf(): DraftOrigin {
-  const origin: DraftOrigin = {
-    kind: "untitled", fileId: null, fileKind: null, importName: null,
-    baseLastModified: null, baseSize: null, server: null
-  };
-  if (!runningOnDesktop()) {
-    const target = browserDraftTarget();
-    if (target) {
-      origin.kind = "server";
-      origin.server = { base: target.base, docId: target.docId, rev: target.rev, copy: target.copy };
-    }
-    return origin;
-  }
-  const file = fileHome();
-  const handle = file && file["handle"];
-  const fileId = (handle && fieldOf(handle, "_desktopId")) || null;
-  if (file && fileId) {
-    origin.kind = "file";
-    origin.fileId = fileId;
-    origin.fileKind = file["format"];
-    origin.baseLastModified = file["lastModified"] || null;
-    return origin;
-  }
-  const imported = importHome();
-  if (imported) {
-    origin.kind = "import";
-    origin.importName = imported["name"];
-    origin.baseLastModified = imported["lastModified"] || null;
-    return origin;
-  }
-  return origin;
-}
-
-function draftOriginSignature(origin: DraftOrigin): string {
-  const doc = currentDocument();
-  return [
-    origin.kind, origin.fileId || "", origin.fileKind || "", origin.importName || "",
-    origin.server ? (origin.server.docId + "@" + origin.server.rev + "@" + origin.server.base) : "",
-    (doc && doc.docId) || "", documentLocation().writtenOut() ? "1" : "0"
-  ].join("|");
+  return runningOnDesktop() ? desktopDraftOrigin(fileHome(), importHome) : browserDraftOrigin(browserDraftTarget());
 }
 
 function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | undefined> {
@@ -347,7 +243,7 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
     schedule().dropPending();
     return Promise.resolve(null);
   }
-  const signature = draftOriginSignature(origin);
+  const signature = draftOriginSignature(origin, currentDocument(), documentLocation().writtenOut());
   if ((draftOnDisk || !keepCleanFile) &&
       saveChanges() === draftSentEditSeq && draftSentBase === mergeBase() && signature === draftSentSignature) {
     schedule().dropPending();
@@ -378,30 +274,19 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
     }
     return baseTextCache;
   }
-  const payload: DraftPayload = {
+  const payload = draftPayloadFor({
     seq: ++draftSeq,
     editSeq: editSeqAtCapture,
-    title: (doc.title || ""),
-    docId: normalizeDocId(doc.docId) || null,
-    docIdWrittenOut: documentLocation().writtenOut(),
-    schema: SCHEMA_VERSION,
-    originKind: origin.kind,
-    fileId: origin.fileId,
-    fileKind: origin.fileKind,
-    importName: origin.importName,
-    baseLastModified: origin.baseLastModified,
-    baseSize: origin.baseSize,
-    server: origin.server,
+    doc: doc,
+    writtenOut: documentLocation().writtenOut(),
+    origin: origin,
     stateJson: stateJson,
     baseJson: sendBase ? baseTextFor() : null
-  };
+  });
 
   const captured = runningOnDesktop() ? null : browserDraftCapture(origin.server);
 
-  const draftRefs: string[] = refsIn(doc);
-  if (sendBase && baseAtCapture) {
-    refsIn(baseAtCapture).forEach(function (sha: string) { if (draftRefs.indexOf(sha) === -1) draftRefs.push(sha); });
-  }
+  const draftRefs = draftRefsFor(doc, baseAtCapture, sendBase);
 
   schedule().dropPending();
   const sent = draftRefs.length
@@ -463,21 +348,6 @@ function sendDraftPayload(payload: DraftPayload, captured: BrowserCapture | null
   });
 }
 
-function draftReasonFor(code: string): string {
-  switch (code) {
-    case "HELD": return "the changes recovered from the last session are being kept";
-    case "ENOSPC": return "this disk is full";
-    case "EACCES":
-    case "EPERM": return "this computer would not let Splitpage write it";
-    case "EBUSY": return "another program is using the file";
-    case "EIO": return "the disk reported an error";
-    case "TOO_LARGE": return "this document is too large to copy";
-    case "QUOTA": return "this browser's storage is full";
-    case "offline": return "the app did not answer";
-    default: return "the copy was refused";
-  }
-}
-
 function isTimingKey(k: string): k is keyof DraftTiming {
   return Object.prototype.hasOwnProperty.call(draftTiming, k);
 }
@@ -514,10 +384,11 @@ function noteDraftWriteRefused(code: string): void {
   draftStats.lastCode = code;
   if (code !== "HELD") draftStats.failures++;
 
-  if (code === "DISCARDED" || code === "NO_TAB") { draftStopped = true; return; }
-  if (code === "UNAVAILABLE" && !runningOnDesktop()) { browserDraftsOff = true; schedule().dropPending(); return; }
+  const refusal = draftRefusal(code, runningOnDesktop());
+  if (refusal === "stop") { draftStopped = true; return; }
+  if (refusal === "browser-off") { browserDraftsOff = true; schedule().dropPending(); return; }
 
-  if (code !== "STALE_SEQ") showDraftPaused(code);
+  if (refusal === "pause") showDraftPaused(code);
 
   schedule().refused();
 }
@@ -537,75 +408,12 @@ function flushDraftNow(opts?: { readonly keep?: boolean } | null): Promise<Draft
   });
 }
 
-function draftParse(json: unknown): unknown {
-  if (typeof json !== "string") return null;
-  try {
-    const parsed: unknown = JSON.parse(json);
-    return parsed;
-  } catch (e) { return null; }
-}
-
 function draftMigrate(json: unknown): ValidatedDocument | null {
-  const raw = draftParse(json);
-  if (!raw || typeof raw !== "object" || !Array.isArray(fieldOf(raw, "rows"))) return null;
-  return migrateRows(raw);
-}
-
-function draftStableJson(v: unknown): string {
-  if (v === null || typeof v !== "object") return JSON.stringify(v === undefined ? null : v);
-  if (Array.isArray(v)) {
-    const items = v.map(function (x: unknown) { return draftStableJson(x); });
-    return "[" + items.join(",") + "]";
-  }
-  const keys = Object.keys(v).sort();
-  const parts = keys.map(function (k) {
-    return JSON.stringify(k) + ":" + draftStableJson(fieldOf(v, k));
-  });
-  return "{" + parts.join(",") + "}";
+  return migrateDraft(json, migrateRows);
 }
 
 function sameDocContent(a: DocumentView | null | undefined, b: DocumentView | null | undefined): boolean {
-  if (!a || !b) return false;
-  function normalized(s: DocumentView): string {
-    const c: Mutable<ValidatedDocument> = migrateRows(cloneState(s));
-    c.rev = 0;
-    c.lastEditedBy = "";
-    c.lastEditedAt = "";
-    c.docId = "";
-    return draftStableJson(c);
-  }
-  try {
-    return normalized(a) === normalized(b);
-  } catch (e) { return false; }
-}
-
-function draftAgeText(ageMs: unknown): string {
-  if (typeof ageMs !== "number" || !isFinite(ageMs) || ageMs < 0) return "";
-  const mins = Math.round(ageMs / 60000);
-  if (mins < 1) return "from a moment ago";
-  if (mins < 60) return "from " + mins + " minute" + (mins === 1 ? "" : "s") + " ago";
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return "from " + hours + " hour" + (hours === 1 ? "" : "s") + " ago";
-  const days = Math.round(hours / 24);
-  return "from " + days + " day" + (days === 1 ? "" : "s") + " ago";
-}
-
-function draftWhenText(t: TakenDraft | null | undefined): string {
-  const age = draftAgeText(t && t.ageMs);
-  let why = "";
-  if (t && t.previousSession === "running") why = "before Splitpage closed unexpectedly";
-  else if (t && t.previousSession === "session-end") why = "before Windows signed you out";
-  else if (t && t.previousSession === "clean-exit") why = "before Splitpage closed";
-  if (age && why) return age + ", " + why;
-  return age || why;
-}
-
-function draftTitleOf(s: DocumentView | null | undefined, fallback?: string): string {
-  return (s && s.title) || fallback || "this script";
-}
-
-function hasHeader(t: TakenDraft): t is HeaderedDraft {
-  return !!t.header;
+  return sameDraftContent(a, b, migrateRows);
 }
 
 function recoverDraftAsUnsavedCopy(t: TakenDraft | null | undefined, reasonText: string, mine?: ValidatedDocument | null): boolean {
@@ -631,54 +439,32 @@ function recoverDraftAsUnsavedCopy(t: TakenDraft | null | undefined, reasonText:
   return true;
 }
 
-function restoreServerDraft(t: HeaderedDraft, mine: ValidatedDocument): string {
-  recoverDraftAsUnsavedCopy(t,
-    "Your unsaved changes to “" + draftTitleOf(mine) + "” were recovered. It was a document on a " +
-    "Splitpage server, which this version no longer opens, so they are open here as an unsaved copy. " +
-    "Save them wherever you want them.", mine);
-  return "untitled-copy";
+function recoverAsCopy(t: HeaderedDraft, copy: DraftCopy, mine: ValidatedDocument): DraftRestoreOutcome {
+  recoverDraftAsUnsavedCopy(t, copy.notice, mine);
+  return copy.outcome;
 }
 
-function keptForNextLaunch(): string {
-  showToast("Another script was opened while the changes from the last session were being restored — " +
-    "they have been kept for the next launch.", "warn", true);
+function keptForNextLaunch(): DraftRestoreOutcome {
+  showToast(KEPT_NOTICE, "warn", true);
   return "kept";
 }
 
-async function restoreFileDraft(t: HeaderedDraft, mine: ValidatedDocument, base: ValidatedDocument | null, origin: TakenOrigin, ctx: OperationContext): Promise<string> {
-  const title = draftTitleOf(mine, origin.fileName);
-  const missingName = origin.fileName || title;
+async function restoreFileDraft(t: HeaderedDraft, mine: ValidatedDocument, base: ValidatedDocument | null, origin: TakenOrigin, ctx: OperationContext): Promise<DraftRestoreOutcome> {
+  const missingName = missingFileName(mine, origin);
 
-  if (!t.file) {
-    const gone = t.fileProblem === "unreadable"
-      ? "couldn't be read"
-      : "isn't where it was";
-    recoverDraftAsUnsavedCopy(t,
-      "The file these recovered changes belong to (" + missingName + ") " + gone +
-      " — they are open here as an unsaved copy.", mine);
-    return t.fileProblem === "unreadable" ? "unreadable" : "untitled-copy";
-  }
+  if (!t.file) return recoverAsCopy(t, missingFileCopy(t, missingName), mine);
 
   const handle = makeDesktopHandle(t.file);
   let file: DraftFile | null;
   try { file = await handle.getFile(); } catch (e) { file = null; }
   const parsed = file ? await parseProjectFileState(file) : null;
   if (!stillRestoring(ctx)) return keptForNextLaunch();
-  if (!file || !parsed || parsed.error) {
-    recoverDraftAsUnsavedCopy(t,
-      "The file these recovered changes belong to (" + missingName + ") could not be read — they " +
-      "are open here as an unsaved copy.", mine);
-    return "unreadable";
-  }
+  if (!file || !parsed || parsed.error) return recoverAsCopy(t, unreadableFileCopy(missingName), mine);
 
   const disk = parsed.state;
-  const refId = normalizeDocId((base && base.docId) || mine.docId);
-  if (parsed.docIdEmbedded && refId && normalizeDocId(disk.docId) !== refId) {
-    recoverDraftAsUnsavedCopy(t,
-      "A different script has been saved as " + missingName + " — the changes recovered from the " +
-      "last session are open here as an unsaved copy.", mine);
-    return "untitled-copy";
-  }
+  const refId = draftRefId(mine, base);
+  const different = differentScriptCopy(parsed, refId, missingName);
+  if (different) return recoverAsCopy(t, different, mine);
   if (refId) disk.docId = refId;
 
   openDocument({ kind: "file", file: file, handle: handle, parsed: { state: disk, kind: parsed.kind }, options: { skipSnapshot: true, silent: true } });
@@ -686,7 +472,7 @@ async function restoreFileDraft(t: HeaderedDraft, mine: ValidatedDocument, base:
 
   if (sameDocContent(mine, disk)) {
     documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
-    showToast("Opened " + (disk.title || file.name) + " — the changes from the last session were already saved", "ok");
+    showToast(alreadySavedNotice(disk, file.name), "ok");
     return "nothing-unsaved";
   }
 
@@ -694,8 +480,7 @@ async function restoreFileDraft(t: HeaderedDraft, mine: ValidatedDocument, base:
     documentTransitions().restore({ from: { document: mine } });
     documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
     noteAbsorbedDirty("recovery");
-    showToast("Restored your unsaved changes to " + (presentDocument().title || file.name) +
-      (draftWhenText(t) ? " " + draftWhenText(t) : ""), "ok", true);
+    showToast(restoredFileNotice(t, presentDocument().title, file.name), "ok", true);
     return "applied";
   }
 
@@ -708,8 +493,7 @@ async function restoreFileDraft(t: HeaderedDraft, mine: ValidatedDocument, base:
     chips: true,
     noAutoSave: true,
     toast: {
-      text: (file.name || "That file") + " had changed since the last session — your recovered " +
-        "changes were merged into it. Nothing has been saved yet.",
+      text: mergedFileNotice(file.name),
       tone: "warn",
       sticky: true
     }
@@ -719,7 +503,7 @@ async function restoreFileDraft(t: HeaderedDraft, mine: ValidatedDocument, base:
   return "merged";
 }
 
-function adoptUntitledDraft(t: HeaderedDraft, mine: ValidatedDocument, base: ValidatedDocument | null): string {
+function adoptUntitledDraft(t: HeaderedDraft, mine: ValidatedDocument, base: ValidatedDocument | null): DraftRestoreOutcome {
   resetProductionPanelState();
   documentTransitions().recover({
     from: { document: mine },
@@ -731,44 +515,23 @@ function adoptUntitledDraft(t: HeaderedDraft, mine: ValidatedDocument, base: Val
   });
   syncDocIdentity();
   noteAbsorbedDirty("recovery");
-  showToast("Restored your unsaved script" + (draftWhenText(t) ? " " + draftWhenText(t) : "") +
-    " — it has never been saved, so save it somewhere.", "warn", true);
+  showToast(untitledRestoredNotice(t), "warn", true);
   return "applied";
 }
 
-async function runDraftRestore(t: TakenDraft | null | undefined): Promise<string> {
-  if (!t) return "nothing-unsaved";
-  if (t.unsupported) {
-    showToast("The changes recovered from the last session were saved by a newer version of " +
-      "Splitpage — they have been kept, untouched.", "warn", true);
-    return "failed";
+async function runDraftRestore(t: TakenDraft | null | undefined): Promise<DraftRestoreOutcome> {
+  const fate = takenDraftFate(t, migrateRows);
+  if (fate.kind === "settled") {
+    if (fate.notice !== null) showToast(fate.notice, "warn", true);
+    return fate.outcome;
   }
-  if (t.corrupt) {
-    showToast("The changes recovered from the last session couldn't be read — they have been kept " +
-      "for the next launch.", "warn", true);
-    return "failed";
-  }
-  if (!hasHeader(t) || typeof t.stateJson !== "string") return "failed";
-
-  const mine = draftMigrate(t.stateJson);
-  if (!mine) {
-    showToast("The changes recovered from the last session couldn't be read — they have been kept " +
-      "for the next launch.", "warn", true);
-    return "failed";
-  }
-  const base = t.baseJson ? draftMigrate(t.baseJson) : null;
-  const origin: TakenOrigin = t.header.origin || { kind: "untitled" };
   const ctx = captureRestore();
+  const { draft, mine, base, origin } = fate;
 
-  if (origin.kind === "server") return restoreServerDraft(t, mine);
-  if (origin.kind === "file") return await restoreFileDraft(t, mine, base, origin, ctx);
-  if (origin.kind === "import") {
-    recoverDraftAsUnsavedCopy(t,
-      "Your unsaved changes to " + (origin.importName || "an imported file") + " were recovered. " +
-      "They are open here as an unsaved copy — save them as a Splitpage script to keep them.", mine);
-    return "untitled-copy";
-  }
-  return adoptUntitledDraft(t, mine, base);
+  if (fate.route === "server") return recoverAsCopy(draft, serverCopy(mine), mine);
+  if (fate.route === "file") return await restoreFileDraft(draft, mine, base, origin, ctx);
+  if (fate.route === "import") return recoverAsCopy(draft, importCopy(origin), mine);
+  return adoptUntitledDraft(draft, mine, base);
 }
 
 function takenFromBrowserDraft(rec: StoredDraft, key: string): HeaderedDraft {
@@ -832,8 +595,7 @@ async function applyTakenDraft(taken: unknown): Promise<string> {
   } catch (e) {
     reportError(e);
     outcome = "failed";
-    showToast("Could not restore the changes from the last session — they have been kept for the " +
-      "next launch.", "warn", true);
+    showToast(RESTORE_FAILED_NOTICE, "warn", true);
   }
   resume.setRestorePending(false);
   if (runningOnDesktop()) {
