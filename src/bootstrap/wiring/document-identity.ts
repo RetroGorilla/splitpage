@@ -27,7 +27,7 @@ export function mountDocumentIdentityOwner(ports: DocumentIdentityPorts = docume
   const dispose = mine.startIdentity(ports);
   const stopHtml = startStandaloneHtml(migrateRows);
   const hooks = {
-    on: function () { return documentGuardOn; },
+    on: function () { return documentGuardOn(); },
     viewed: function () { const doc = heldDocument(); return doc !== null && documentView(doc) !== doc; },
     writes: function () {
       const view = currentDocument();

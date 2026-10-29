@@ -100,13 +100,11 @@ function same<T>(value: T): T {
 }
 
 let started: ReturnType<typeof createDocumentGuard> | null = null;
-export let documentGuardOn = false;
 
 export function startDocumentGuard(enabled: boolean, report: (error: unknown) => void): () => void {
   const mine = createDocumentGuard(enabled, report);
   started = mine;
-  documentGuardOn = mine.documentGuardOn;
-  return () => { if (started === mine) { started = null; documentGuardOn = false; } };
+  return () => { if (started === mine) started = null; };
 }
 
 export function documentGuardStarted(): boolean { return started !== null; }
@@ -116,6 +114,7 @@ function running(): NonNullable<typeof started> {
   return started;
 }
 
+export function documentGuardOn(): boolean { return running().documentGuardOn; }
 export function documentView<T>(doc: T): T { return running().documentView(doc); }
 export function unwrapped<T>(value: T): T { return running().unwrapped(value); }
 export function quietly<T>(run: () => T): T { return running().quietly(run); }
