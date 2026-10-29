@@ -22,6 +22,7 @@ files:
   - desktop-state.js
   - update-release.js
   - file-service.js
+  - doc-claims.js
   - package.json
 
 extraResources:
