@@ -1,13 +1,23 @@
-import { askingFromLauncher as readFromLauncher, launcherShown as isLauncherShown } from "../../../legacy/screen.ts";
+import { dialogShown, launcherShown as launcherBackdropShown } from "../../../adapters/page/overlays.ts";
+import { prompterIsOpen } from "../../../application/prompter-state.ts";
 import type { ScreenState } from "../../../application/screen.ts";
-import { screenNow } from "../../../legacy/screen-state.ts";
+import { createScreenState } from "../../../application/screen-state.ts";
+import { documentReader } from "./document.ts";
+import { screenFlags } from "./preferences.ts";
 
-export const screen = (): ScreenState => screenNow();
+const screenState = createScreenState({
+  document: documentReader,
+  flags: screenFlags,
+  prompterOpen: prompterIsOpen,
+  page: { dialogShown, launcherShown: launcherBackdropShown }
+});
+
+export const screen = (): ScreenState => screenState.screenNow();
 
 export function askingFromLauncher<T>(read: () => T): T {
-  return readFromLauncher(read);
+  return screenState.askingFromLauncher(read);
 }
 
 export function launcherShown(): boolean {
-  return isLauncherShown();
+  return screenState.launcherShown();
 }
