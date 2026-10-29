@@ -4,7 +4,7 @@ import { screen } from "../../src/bootstrap/wiring/ports/screen.ts";
 import { importActions } from "../../src/bootstrap/wiring/imports.ts";
 import { captureExportDocument } from "../../src/bootstrap/wiring/export-capture.ts";
 import { commandMenuActions, mountCommandMenuFeature, stopCommandMenuFeature } from "../../src/bootstrap/wiring/command-menu.ts";
-import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { startProductionEditing } from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
 import { desktopActions, mountDesktopFeature, stopDesktopFeature } from "../../src/bootstrap/wiring/desktop.ts";
 import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";

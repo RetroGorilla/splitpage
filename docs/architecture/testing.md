@@ -88,7 +88,7 @@ all the way down (`Frozen<T>` in `src/core/document/freeze.ts`), so a write
 from TypeScript is a type error. A write from legacy JavaScript is caught only
 under the test-only freeze flag (milestone 3, decisions D2 and D3).
 
-- **The switch.** `src/legacy/cache-freeze.ts` reads the page's query once,
+- **The switch.** `src/bootstrap/cache-freeze.ts` reads the page's query once,
   when the bundle starts: `freeze-caches=1`, and nothing else, makes
   `cacheSeal` core's `deepLock`; otherwise it is `noFreeze`, which hands the
   value back untouched, so a build without the flag behaves and saves exactly

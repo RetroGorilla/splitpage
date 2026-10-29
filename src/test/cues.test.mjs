@@ -7,15 +7,15 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { rowSeconds } from "../core/production/timing.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { productionReaders } from "../bootstrap/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
-import { sanitizeHtml } from "../legacy/richtext.ts";
+import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { breakLine, deleteRange, insertText } from "../core/text/edits.ts";
 import { cellLength, normalizeCell } from "../core/text/runs.ts";
 import { cueShortcut, cuesInCell, editCues, flattenCues, importCues, withoutCues } from "../core/text/cues.ts";
-import { fromHtml } from "../legacy/richtext.ts";
+import { fromHtml } from "../bootstrap/richtext.ts";
 import { mergeCells } from "../core/merge/cells.ts";
 import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { toHtml } from "../core/text/html.ts";
@@ -23,7 +23,7 @@ import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/prod
 import { healTagRegistry, tagsInField } from "../features/tags/production-tags.js";
 
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
 
 const retagText = portText;

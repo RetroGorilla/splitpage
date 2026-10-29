@@ -12,14 +12,14 @@ import { startSceneSelect as mountSceneSelect } from "../../features/clipboard/s
 import { isScriptCell } from "../../features/editing/cell-page.ts";
 import { cellSelection } from "../../features/common/cell-selection.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { migrateRows } from "../../legacy/document-ports.ts";
+import { migrateRows } from "../document-ports.ts";
 import { stampRow } from "./session-merge.ts";
 import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { collectTagsFromRows, scheduleProductionRefresh } from "../../features/tags/production-tags.js";
 import { startNewScript } from "./file-menu-controls.ts";
 import { cellEditing, paintGuard, rowDrag } from "./editor-owners.ts";
-import { viewFlags } from "../../legacy/preferences-bridge.ts";
-import { imageRefOf } from "../../legacy/richtext.ts";
+import { viewFlags } from "./preferences-owner.ts";
+import { imageRefOf } from "../richtext.ts";
 
 const copyPaste = owned<CopyPasteMount>();
 

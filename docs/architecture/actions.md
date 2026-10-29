@@ -89,7 +89,7 @@ and both the menu's painting and the action's availability call it:
 | Save to file, and its label | `saveBackItemState()`, `18-local-files.js` |
 | Export again, and its label | `exportAgainItemState()`, `18c-export-dialog.js` |
 | Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `appDataImportShown()`, `20f-desktop.js` |
-| Autosave's switch | `autoSavePolicy().enabled()`, `src/legacy/save-bridge.ts` |
+| Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
 `itemAvailability()` (`src/features/file-menu/actions.ts`) turns such a state
@@ -139,7 +139,7 @@ threw, is kept from the browser, as 3.1's handlers did by calling
 Until the composition root of 4.x exists, the numbered modules share one
 registry through the facade `appActions` in `src/legacy/app-actions.ts`. Since
 milestone 7.1 the wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called
-by the composition root `src/bootstrap/main.js`) builds the registry with
+by the composition root `src/bootstrap/main.ts`) builds the registry with
 `createAppActions()` and installs it into the facade; before that, and after
 the wiring's `dispose()`, every facade call throws "The action registry is not
 started yet". Its `report` rethrows the error on a microtask, so a failing

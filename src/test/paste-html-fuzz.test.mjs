@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { prng, genPaste } from "./_paste-gen.mjs";
 
 window.Element.prototype.scrollBy = function () {};
@@ -9,11 +9,11 @@ window.Element.prototype.scrollIntoView = function () {};
 window.__splitpageNoRemote = true;
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { cellFromClipboard } = await import("../features/clipboard/cell-clipboard.js");
-const { fromHtml } = await import("../legacy/richtext.ts");
+const { fromHtml } = await import("../bootstrap/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
 const { projection, commentIds } = await import("../core/text/runs.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
@@ -21,7 +21,7 @@ const undo = () => undoOwner().undo();
 const redo = () => undoOwner().redo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

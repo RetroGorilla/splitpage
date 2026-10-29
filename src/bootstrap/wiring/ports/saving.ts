@@ -2,8 +2,8 @@ import type { Operations } from "../../../application/session/operation.ts";
 import type { FileConflicts } from "../../../application/save/file-conflict.ts";
 import type { AutoSaveReads, SaveConfirmation, SaveState } from "../../../application/save/save-state.ts";
 import type { SaveChangeNotes } from "../../../application/save/session-effects.ts";
-import { autoSavePolicy, autoSaveTarget, confirmSavedNow, fileConflicts as liveFileConflicts, noteSaveChange, onSaveChange, resumeAutoSave, saveBusy, scheduleAutoSave, setAutoSaveEnabled, unsavedChanges } from "../../../legacy/save-bridge.ts";
-import { captureOperation, stillOwns } from "../../../legacy/transition-bridge.ts";
+import { autoSavePolicy, autoSaveTarget, confirmSavedNow, fileConflicts as liveFileConflicts, noteSaveChange, onSaveChange, resumeAutoSave, saveBusy, scheduleAutoSave, setAutoSaveEnabled, unsavedChanges } from "../save-owners.ts";
+import { captureOperation, stillOwns } from "../transition-owners.ts";
 
 export const saves: SaveState = {
   unsaved: () => unsavedChanges(),
