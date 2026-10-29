@@ -15,7 +15,7 @@ import {
   stripMediaMarks
 } from "../features/editing/draft-edit.js";
 import { cellLength, projection } from "../core/text/runs.ts";
-import { fromHtml } from "../legacy/richtext.ts";
+import { fromHtml } from "../bootstrap/richtext.ts";
 import { setMark } from "../core/text/edits.ts";
 import { mountDraftEditFeature, stopDraftEditFeature } from "../bootstrap/wiring/draft-edit.ts";
 

@@ -17,7 +17,7 @@ const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const { sanitizeHtml } = await import("../legacy/richtext.ts");
+const { sanitizeHtml } = await import("../bootstrap/richtext.ts");
 const cellText = await import("../application/commands/cell-text.ts");
 const splitJoin = await import("../application/commands/split-join.ts");
 const writer = await import("../features/writer/writer.js");

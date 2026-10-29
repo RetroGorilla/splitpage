@@ -9,7 +9,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeProductionTags } from "../core/merge/lists.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
-import { fromHtml } from "../legacy/richtext.ts";
+import { fromHtml } from "../bootstrap/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
 import { registryEntryById } from "../features/tags/production-tags.js";
 import { ensureTagIds } from "../core/document/tags.ts";

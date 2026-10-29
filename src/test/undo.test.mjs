@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { caretAfterStep as caretAfter } from "../features/undo/caret.ts";
-import { fromHtml } from "../legacy/richtext.ts";
+import { fromHtml } from "../bootstrap/richtext.ts";
 import { applyStepsLive, changedBetween, createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
 

@@ -8,7 +8,7 @@ import type { BrollRecordsPorts } from "../../../src/features/broll/ports.ts";
 import { brollStatus, createBrollRecords } from "../../../src/features/broll/records.ts";
 import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { htmlToPlainText } from "../../../src/bootstrap/plain-text.ts";
-import { cellOf, inertBody, sanitizeHtml } from "../../../src/legacy/richtext.ts";
+import { cellOf, inertBody, sanitizeHtml } from "../../../src/bootstrap/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeEdits } from "../fakes.ts";
 

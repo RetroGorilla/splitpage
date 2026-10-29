@@ -3,7 +3,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cellLength } from "../core/text/runs.ts";
-import { fromHtml } from "../legacy/richtext.ts";
+import { fromHtml } from "../bootstrap/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
 
 const tag = (name, inner) => `<span class="tag-anchor" data-tag-cat="prop" data-tag-name="${name}" contenteditable="false">${inner || name}</span>`;
