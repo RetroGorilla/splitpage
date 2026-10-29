@@ -15,7 +15,10 @@ const { maybeAutoTagShortcut } = await import("../features/tags/production-tags.
 const { maybeOpenPlainTag, closePlainTag, cancelPlainTag } = await import("../features/tags/plain-tags.js");
 const { maybeCaptureBroll } = await import("../bootstrap/wiring/broll.ts");
 const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");
-const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
+const flushEdits = () => undoOwner().flush();
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");

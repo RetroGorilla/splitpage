@@ -7,28 +7,20 @@ import assert from "node:assert/strict";
 import type { UndoControl } from "../../../src/application/editing/undo-control.ts";
 
 import { migrateRows } from "../../../src/legacy/document-ports.ts";
-import {
-  breakUndoCoalescing,
-  flushEdits,
-  lastUndoEntry,
-  noteEdit,
-  legacyUndoPorts,
-  redo,
-  startUndo,
-  undo,
-  undoSizes
-} from "../../../src/legacy/undo-bridge.ts";
+import { undoOwner, undoPorts, startUndo, undoSessionPort, routeUndoReplays } from "../../../src/bootstrap/wiring/undo.ts";
 import { heldDocument, liveSession, startSessionBridge } from "../../../src/legacy/session-bridge.ts";
-import { createUndoAdapter, routeReplays } from "../../../src/legacy/undo-adapter.ts";
+const lastUndoEntry = () => undoOwner().last();
+const noteEdit = () => undoOwner().noteEdit();
+const undoSizes = () => undoOwner().sizes();
 
 const control: UndoControl = portUndo;
 
 function open(t: TestContext) {
   t.after(startDocumentGuard(false, () => {}));
-  t.after(startUndo(legacyUndoPorts()));
+  t.after(startUndo(undoPorts()));
   const stop = startSessionBridge({
     entry: (raw) => migrateRows(raw),
-    undo: { adapter: createUndoAdapter(), route: routeReplays },
+    undo: { adapter: undoSessionPort(), route: routeUndoReplays },
     effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: () => {} },
     capability: { edit: () => ({ allowed: true }) },
     editor: { name: () => "Undo control" },
@@ -49,14 +41,15 @@ function open(t: TestContext) {
   return row;
 }
 
-test("undo control exposes exactly the five legacy functions without wrappers", () => {
+test("undo control exposes exactly five functions that read the running undo owner at call time", (t) => {
   assert.equal(portUndo, control);
   assert.deepEqual(Object.keys(control).sort(), ["breakCoalescing", "flush", "last", "redo", "undo"]);
-  assert.equal(control.breakCoalescing, breakUndoCoalescing);
-  assert.equal(control.flush, flushEdits);
-  assert.equal(control.undo, undo);
-  assert.equal(control.redo, redo);
-  assert.equal(control.last, lastUndoEntry);
+  for (const name of ["breakCoalescing", "flush", "last", "redo", "undo"] as const) {
+    assert.throws(() => control[name](), /Undo is not started yet/, name + " before start");
+  }
+  open(t);
+  assert.equal(control.last(), undoOwner().last());
+  assert.deepEqual(control.undo(), { ok: false, empty: true });
 });
 
 test("flush records pending edits and last returns the original entry without breaking coalescing", (t) => {

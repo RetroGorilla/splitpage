@@ -24,7 +24,7 @@ import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
 import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
 import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/bootstrap/wiring/shot-hiding.ts";
-import { legacyUndoPorts, startUndo, undoStarted } from "../../src/legacy/undo-bridge.ts";
+import { undoPorts, startUndo, undoStarted, undoSessionPort, routeUndoReplays } from "../../src/bootstrap/wiring/undo.ts";
 import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
@@ -46,7 +46,6 @@ import {
 } from "../../src/legacy/session-bridge.ts";
 import type { SessionReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
 import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/legacy/transition-bridge.ts";
-import { createUndoAdapter, routeReplays } from "../../src/legacy/undo-adapter.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
 import { migrateRows } from "../../src/legacy/document-ports.ts";
 import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
@@ -567,7 +566,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "project file services": (f) => ({ deps: { ...f.deps, projectFiles: () => { throw boom; } } }),
     "export registry": (f) => ({ deps: f.deps, cleanup: installExportFormats(createExportRegistry()), cause: false }),
     "built-in exporters": (f) => ({ deps: { ...f.deps, exporters: () => { throw boom; } } }),
-    undo: (f) => ({ deps: f.deps, cleanup: startUndo(legacyUndoPorts()), cause: false }),
+    undo: (f) => ({ deps: f.deps, cleanup: startUndo(undoPorts()), cause: false }),
     session: (f) => ({ deps: { ...f.deps, undo: { ...must(f.deps.undo), route: () => { throw boom; } } } }),
     saves: (f) => ({ deps: { ...f.deps, saves: () => { throw boom; } } }),
     "save destinations": (f) => ({ deps: { ...f.deps, destinations: () => { throw boom; } } }),
@@ -615,16 +614,19 @@ test("undo teardown: callbacks retained from the routing do nothing after dispos
 
 test("undo teardown: an old uninstall run after a newer installation leaves the newer one in place", async () => {
   const stopGuard = startDocumentGuard(false, () => {});
-  const { flushEdits, noteEdit, undo } = await import("../../src/legacy/undo-bridge.ts");
-  const stopUndo = startUndo(legacyUndoPorts());
-  const stopSession = startSessionBridge(legacySessionPorts({ ...fakes().deps, undo: { adapter: createUndoAdapter(), route: () => () => {} } }));
+  const { undoOwner } = await import("../../src/bootstrap/wiring/undo.ts");
+  const flushEdits = () => undoOwner().flush();
+  const noteEdit = () => undoOwner().noteEdit();
+  const undo = () => undoOwner().undo();
+  const stopUndo = startUndo(undoPorts());
+  const stopSession = startSessionBridge(legacySessionPorts({ ...fakes().deps, undo: { adapter: undoSessionPort(), route: () => () => {} } }));
   const doc = migrateRows({ title: "Undo", rows: [{ id: "r1", visualText: "", audioText: "a", status: "todo" }] });
   liveDocumentPort.assign(doc);
   const ran: string[] = [];
   const replay = (who: string): SessionReplayRunner => () => { ran.push(who); return { kind: "noop" }; };
   const stamps = { clock: { now: () => "" }, editor: { name: () => "Ann" } } as unknown as StampPorts;
-  const unrouteOld = routeReplays(replay("old"), stamps, replay("old"));
-  const unrouteNew = routeReplays(replay("new"), stamps, replay("new"));
+  const unrouteOld = routeUndoReplays(replay("old"), stamps, replay("old"));
+  const unrouteNew = routeUndoReplays(replay("new"), stamps, replay("new"));
   unrouteOld();
   Object.assign(must(doc.rows[0]), { audioText: "b" });
   noteEdit();
