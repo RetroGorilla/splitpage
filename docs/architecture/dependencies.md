@@ -50,7 +50,7 @@ Until then it counts as production for the `S` rules below, and core,
 `contracts`, `application`, `adapters`, features, `legacy` and `shared` may
 not import it.
 
-Bootstrap imports of `src/js/_state.js` are `layer` violations, including side-effect imports, re-exports, dynamic imports and type imports. The wiring uses the live-document and save ports, the startup bridge (`src/legacy/startup-bridge.ts`), and the desktop bridge in `20f-desktop.js`. `tools/test-dep-report.mjs` has fail-first cases for this boundary and a positive case for a numbered module supplying a port.
+Bootstrap imports of `src/js/_state.js` are `layer` violations, including side-effect imports, re-exports, dynamic imports and type imports. The wiring uses the live-document and save ports, the startup signal (`src/application/startup-signal.ts`) and the desktop port (`adapters/desktop/desktop-port.ts`, through `src/bootstrap/wiring/ports/desktop.ts`). `tools/test-dep-report.mjs` has fail-first cases for this boundary and a positive case for a numbered module supplying a port.
 
 Core, `contracts`, `application`, `shared` and feature layers may not import a
 Node built-in or a package (`platform-import`). Core, `contracts`,
@@ -355,69 +355,7 @@ L4a PR 3 moves row reconciliation animation from `04a-row-motion.js` to `src/fea
 
 Bootstrap owns the disposable topbar, cell-reach and phone-bar mounts through `mountTopbarFeature`, `mountCellReachFeature` and `mountPhoneBarFeature` in `src/bootstrap/wiring/views.ts`, called by `startApp` in `src/bootstrap/app.ts`. Each mount uses `replaceViewMount`, and app stop disposes its owner. The topbar owner registers and releases its label, resize and passive scroll handlers, disconnects its observer and cancels pending animation frames, animations and timers; a subsequent app start creates a fresh owner. Row motion and busy have no startup work, so their empty initializers are removed. The header and row motion share the CSS duration reader in `src/features/common/css-duration.ts`, without a feature-to-feature dependency outside common. All five modules remain free of legacy state and legacy imports; their presentation behavior and mount lifetimes can be exercised independently of the initializer shim. Rendering, hosted operations and local-file operations now import the owning feature helpers directly. The baseline loses five legacy-file entries and seven numbered-import entries; those imports no longer qualify as numbered-to-numbered dependencies.
 
-The modules it starts, the owner each is expected to move to in 4.x (a planning label: a feature folder, an adapter, or the composition root), and the bridges under `src/legacy/` each imports:
-
-| Module | Owner it waits for in 4.x | Bridges it imports |
-| --- | --- | --- |
-| `00-prelude.js` | composition root | none |
-| `01-scene-status.js` | features/rows | `preferences-bridge`, `session-bridge` |
-| `01b-hide-shot.js` | features/rows | `preferences-bridge` |
-| `02-state.js` | core document entry (composition root) | `document-ports` |
-| `02b-doc-id.js` | composition root (initial load, identity) | `document-ports`, `location-bridge`, `transition-bridge` |
-| `02c-blobs.js` | adapters/storage | none |
-| `02d-gallery.js` | features/gallery | none |
-| `03-sync.js` | composition root (destination, merge) | `document-ports`, `editor-bridge`, `location-bridge`, `preferences-bridge`, `production-editing-bridge`, `recovery-bridge`, `richtext`, `save-bridge`, `session-bridge` |
-| `03a-history-store.js` | features/history | `location-bridge`, `recovery-bridge`, `save-bridge`, `seed-check` |
-| `03b-side-panels.js` | features/panels | `preferences-bridge` |
-| `04-richtext.js` | adapters/richtext | `richtext` |
-| `04c-doc-model.js` | adapters/richtext | `richtext` |
-| `05-render.js` | features/rows | `editor-bridge`, `location-bridge`, `preferences-bridge`, `production-editing-bridge`, `richtext`, `session-bridge` |
-| `05b-cell-edit.js` | features/editing | `richtext`, `session-bridge` |
-| `05c-clipboard.js` | features/clipboard | `richtext`, `session-bridge` |
-| `05d-draft-edit.js` | features/editing | `richtext` |
-| `05e-gallery-overlay.js` | features/overlay | `editor-bridge`, `location-bridge`, `preferences-bridge`, `session-bridge`, `transition-bridge` |
-| `05f-rundown.js` | features/panels | `app-actions`, `cache-freeze`, `editor-bridge`, `location-bridge`, `richtext` |
-| `05g-scene-clip.js` | features/clipboard | `richtext` |
-| `05h-scene-select.js` | features/rows | `editor-bridge`, `location-bridge`, `preferences-bridge`, `review-wording`, `session-bridge` |
-| `05r-read-time.js` | features/rows | `location-bridge`, `session-bridge` |
-| `05s-script-zoom.js` | features/settings | `app-actions`, `preferences-bridge` |
-| `05t-target.js` | features/panels | `location-bridge` |
-| `05v-video.js` | features/video | `preferences-bridge`, `transition-bridge` |
-| `05w-annotate.js` | features/gallery | `location-bridge`, `transition-bridge` |
-| `06-rows.js` | features/rows | `editor-bridge`, `production-editing-bridge`, `review-wording`, `session-bridge`, `transition-bridge` |
-| `07-production-tags.js` | features/tags | `cache-freeze`, `document-ports`, `editor-bridge`, `preferences-bridge`, `richtext`, `session-bridge` |
-| `07b-plain-tags.js` | features/tags | `richtext` |
-| `08-production-panels.js` | features/panels | `document-ports`, `effects-bridge`, `location-bridge`, `production-editing-bridge`, `session-bridge`, `tag-rewrites` |
-| `08c-broll.js` | features/broll | `plain-text`, `richtext`, `session-bridge` |
-| `08d-broll-panel.js` | features/broll | `app-actions`, `location-bridge` |
-| `09-find-replace.js` | features/find | `location-bridge`, `preferences-bridge`, `richtext` |
-| `10-comments.js` | features/comments | `editor-bridge`, `location-bridge`, `preferences-bridge`, `production-editing-bridge`, `transition-bridge` |
-| `11-import.js` | features/imports | `session-bridge`, `transition-bridge` |
-| `12-dirty-toast.js` | features/notices (session effects: composition root) | `location-bridge`, `preferences-bridge`, `save-bridge`, `session-bridge` |
-| `12a-undo.js` | features/undo | `richtext` |
-| `14-export.js` | adapters/files (save writer) | `location-bridge`, `preferences-bridge`, `recovery-bridge`, `save-bridge` |
-| `application/save/export-kit.ts` | application/save | none (session, preferences, clock, ids, export services, document entry and assets arrive as ports; numbered callers use `legacy/export-kit-bridge.ts`) |
-| `docx.ts` | adapters/formats | none (decodes through the export services port) |
-| `csv.ts` | adapters/formats | none (decodes through the export services port) |
-| `xlsx.ts` | adapters/formats | none |
-| `pdf.ts` | adapters/formats | none |
-| `18-local-files.js` | adapters/files | `app-actions`, `export-formats`, `location-bridge`, `production-editing-bridge`, `richtext`, `save-bridge`, `session-bridge`, `transition-bridge` |
-| `18a-local-merge.js` | features/merge | `location-bridge`, `plain-text` |
-| `18b-file-menu.js` | features/file-menu | `location-bridge`, `preferences-bridge`, `production-editing-bridge`, `save-bridge`, `transition-bridge` |
-| `18c-export-dialog.js` | features/file-menu | `export-formats`, `richtext` |
-| `18d-command-menu.js` | features/shortcuts | `app-actions`, `editor-bridge`, `export-formats`, `screen` |
-| `19-writer.js` | features/writer | `document-ports`, `editor-bridge`, `plain-text`, `preferences-bridge`, `review-wording`, `session-bridge` |
-| `20-teleprompter.js` | features/prompter | `editor-bridge`, `location-bridge`, `preferences-bridge`, `richtext`, `startup-bridge` |
-| `20a-update.js` | features/notices | none |
-| `20b-onboarding.js` | composition root (onboarding) | `app-actions`, `location-bridge`, `preferences-bridge`, `recovery-bridge`, `seed-check` |
-| `20c-help.js` | features/settings | `app-actions`, `preferences-bridge` |
-| `20d-formats.js` | adapters/formats | `location-bridge`, `richtext`, `save-bridge` |
-| `20f-desktop.js` | composition root (desktop host) | `location-bridge`, `recovery-bridge`, `save-bridge`, `startup-bridge` |
-| `20g-drafts.js` | adapters/storage (draft recovery) | `location-bridge`, `production-editing-bridge`, `recovery-bridge`, `save-bridge`, `transition-bridge` |
-| `20h-appdata.js` | adapters/storage | `location-bridge`, `preferences-bridge` |
-| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `location-bridge`, `preferences-bridge`, `production-editing-bridge`, `recovery-bridge`, `seed-check`, `startup-bridge`, `transition-bridge` |
-| `20s-settings.js` | features/settings | `app-actions`, `preferences-bridge` |
-
+The numbered modules the shim started are gone: each moved into a feature folder, an owner in `src/application/` or an adapter, or was removed with the server and collaboration features, and `src/js/` is deleted. The bridges they imported from `src/legacy/` were retired as the wiring took the owners from ports; `app-actions.ts`, the action registry facade some wiring modules still import, is the last one.
 
 ## Baseline workflow
 
