@@ -21,7 +21,7 @@ realm.cancelAnimationFrame = (id: number): void => { frames.delete(id); };
 win.document.elementFromPoint = () => null;
 win.document.body.innerHTML = '<div id="root"><div id="rows"></div></div>';
 
-const zoom = await import("../../../src/features/script-zoom/script-zoom.js");
+const zoom = await import("../../../src/features/script-zoom/script-zoom.ts");
 
 function ports() {
   const view = fakeScreen();
