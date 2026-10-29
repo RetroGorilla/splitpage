@@ -9,7 +9,7 @@
     "src/features/rows/scenes.js",
     "src/features/rows/scene-media.js",
     "src/bootstrap/wiring/rows.ts",
-    "src/features/gallery/video-files.js",
+    "src/features/gallery/video-files.ts",
     "src/bootstrap/wiring/video-files.ts",
     "src/features/rows/render.js",
     "src/bootstrap/wiring/render.ts"
