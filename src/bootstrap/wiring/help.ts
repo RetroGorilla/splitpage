@@ -4,11 +4,11 @@ import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { helpActions as definitions } from "../../features/help/actions.ts";
-import { startHelp as mountHelp } from "../../features/help/help.js";
+import { startHelp as mountHelp } from "../../features/help/help.ts";
 import type { HelpMount, HelpPorts } from "../../features/help/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { sidePanels } from "./ports/panels.ts";
-import { preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { preferences, viewFlags } from "./preferences-owner.ts";
 
 const help = owned<HelpMount>();
 

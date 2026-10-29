@@ -4,8 +4,7 @@ import assert from "node:assert/strict";
 import { createDraftResume } from "../../src/application/recovery/draft-resume.ts";
 import "../../src/test/_dom.mjs";
 
-import { draftResume, startRecovery } from "../../src/legacy/recovery-bridge.ts";
-import { DRAFT_LIMITS } from "../../src/adapters/storage/draft-store-idb.ts";
+import { draftResume, startRecovery } from "../../src/bootstrap/wiring/recovery-owners.ts";
 
 test("a new draft resume holds nothing: no restore is pending", () => {
   const resume = createDraftResume();
@@ -17,7 +16,6 @@ test("a new draft resume holds nothing: no restore is pending", () => {
 test("shared draft resume follows recovery restarts without capturing the owner", () => {
   const resume = portDraftResume;
   const start = () => startRecovery({
-    indexedDB: null, limits: DRAFT_LIMITS, now: () => 0, writerId: "test",
     desktop: () => null, sessionStorage: () => null, localStorage: () => null,
     internImage: () => {}, merge: () => { throw new Error("Unexpected merge"); },
     drafts: { flush: () => Promise.resolve({ ok: true }), noteChange: () => {} }

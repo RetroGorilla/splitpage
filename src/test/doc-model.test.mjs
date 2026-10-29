@@ -5,11 +5,11 @@ import { readFileSync } from "node:fs";
 import { addComment, breakLine, commentRange, deleteRange, insertBrollKey, insertText, joinCells, markThroughout, marksAt, removeComment, replaceText, replaceWithBrollKey, replaceWithTag, retag, setMark, sliceCell, splitCell, toggleMark, typingMarks } from "../core/text/edits.ts";
 import { applySteps, invertSteps, touchedCells } from "../core/text/steps.ts";
 import { cellLength, tagNameOf, commentIds, namedTagId, normalizeCell, projection, sameCell, tagIds } from "../core/text/runs.ts";
-import { cellOf, fromHtml } from "../legacy/richtext.ts";
+import { cellOf, fromHtml } from "../bootstrap/richtext.ts";
 import { mergeCells } from "../core/merge/cells.ts";
 import { toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { toHtml } from "../core/text/html.ts";
-import { htmlToMarkdown, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
+import { htmlToMarkdown, inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
 import { htmlToPlainText } from "../bootstrap/plain-text.ts";
 

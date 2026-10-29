@@ -4,17 +4,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { IDBFactory } from "fake-indexeddb";
-import { DRAFT_LIMITS, createIdbDraftStore } from "../adapters/storage/draft-store-idb.ts";
-
-const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 import {
-  createFakeLocks,
-  createFaultyIdbFactory,
   createGates,
   createHeldBlobBackend,
   createHeldDesktop,
-  createHeldDraftStore,
   createHeldFetch,
   createHeldFileHandle,
   createHeldImageDecode,
@@ -303,51 +296,12 @@ test("held desktop: a held call parks before it reaches the backend, and the bac
   assert.equal(held.calls[0].args[0], "f1");
 });
 
-test("held draft store: every store method is gated and logged, and the inner store gets the call on release", async () => {
-  const seen = [];
-  const inner = {
-    put: async (rec) => { seen.push(["put", rec.key]); return { ok: true }; },
-    remove: async (key) => { seen.push(["remove", key]); return true; },
-    notAFunction: 1
-  };
-  const held = createHeldDraftStore(inner);
-  assert.equal("notAFunction" in held.store, false);
-  held.holdOp("put");
-  const writing = held.store.put({ key: "k" });
-  await held.arrivedAt("put");
-  await held.store.remove("other");
-  assert.deepEqual(seen, [["remove", "other"]]);
-  held.releaseOp("put");
-  assert.deepEqual(await writing, { ok: true });
-  assert.deepEqual(seen, [["remove", "other"], ["put", "k"]]);
-  assert.deepEqual(held.calls.map((c) => c.op), ["put", "remove"]);
-});
-
 test("held fetch: a reply with bytes answers the raw bytes and not JSON", async () => {
   const held = createHeldFetch({ answer: (r) => (r.url.endsWith("image") ? { bytes: new Uint8Array([137, 80, 78, 71]), headers: { "content-type": "image/png" } } : { body: { ok: true } }) });
   const image = await held.fetch("https://s.test/image");
   assert.equal(image.headers.get("content-type"), "image/png");
   assert.deepEqual(Array.from(new Uint8Array(await image.arrayBuffer())), [137, 80, 78, 71]);
   assert.deepEqual(await (await held.fetch("https://s.test/json")).json(), { ok: true });
-});
-
-test("faulty indexedDB: a queued fault fails the next transaction of its mode with that error and later ones pass", async () => {
-  const faulty = createFaultyIdbFactory(new IDBFactory());
-  const store = openDraftStore({ indexedDB: faulty });
-  const rec = { key: "k1", base: "https://s.test/", docId: "doc-1", rev: 1, title: "t", writerId: "w1", editSeq: 1, schema: 5, stateJson: "{}", baseJson: "{}" };
-  assert.deepEqual(await store.put(rec), { ok: true, evicted: 0 });
-  faulty.failNext(faulty.quotaError(), { mode: "readwrite" });
-  assert.deepEqual(await store.get("k1") !== null, true, "a read passes a write fault");
-  assert.deepEqual(await store.put(rec), { ok: false, code: "QUOTA" });
-  assert.deepEqual(await store.put(rec), { ok: true, evicted: 0 });
-  faulty.failNext(new Error("EIO"), { times: 2 });
-  assert.deepEqual(await store.put(rec), { ok: false, code: "EIO" });
-  assert.equal(await store.get("k1"), null, "a failed read answers none");
-  assert.deepEqual(await store.put(rec), { ok: true, evicted: 0 });
-  assert.deepEqual(faulty.transactions, ["readwrite", "readonly", "readwrite", "readwrite", "readwrite", "readonly", "readwrite"]);
-  faulty.failNext(new Error("late"));
-  faulty.clearFaults();
-  assert.equal((await store.get("k1")).docId, "doc-1");
 });
 
 test("held blob backend: put, get and missing are gated and logged under their own names, and the inner backend sees the call on release", async () => {
@@ -422,43 +376,6 @@ test("held image decode: an image waits for its decode to be released, the canva
   assert.equal(canvasProto.toDataURL(), "real-url");
   assert.equal(canvasProto.toBlob(), "real-blob");
   assert.throws(() => createHeldImageDecode({}), /data URL/);
-});
-
-test("fake locks: exclusive requests queue, ifAvailable answers null, steal takes over, and the lock goes when the callback settles", async () => {
-  const locks = createFakeLocks();
-  const order = [];
-  let finish;
-  const first = locks.request("w", async (lock) => {
-    order.push("first:" + lock.mode);
-    await new Promise((r) => { finish = r; });
-  });
-  await Promise.resolve();
-  assert.equal(locks.isHeld("w"), true);
-  const second = locks.request("w", async () => { order.push("second"); });
-  const polite = await locks.request("w", { ifAvailable: true }, (lock) => lock);
-  assert.equal(polite, null);
-  assert.deepEqual((await locks.query()).held, [{ name: "w", mode: "exclusive" }]);
-  assert.deepEqual((await locks.query()).pending.length, 1);
-  finish();
-  await first;
-  await second;
-  assert.deepEqual(order, ["first:exclusive", "second"]);
-  assert.equal(locks.isHeld("w"), false);
-  const holder = locks.request("x", () => new Promise(() => {}));
-  holder.catch(() => {});
-  await Promise.resolve();
-  const stolen = await locks.request("x", { steal: true }, (lock) => lock.name);
-  assert.equal(stolen, "x");
-});
-
-test("fake locks: install puts a navigator.locks on the global and the returned function takes it away", () => {
-  const locks = createFakeLocks();
-  const before = globalThis.navigator;
-  const uninstall = locks.install();
-  assert.equal(globalThis.navigator.locks, locks);
-  assert.equal(typeof globalThis.navigator.userAgent, typeof before.userAgent);
-  uninstall();
-  assert.equal(globalThis.navigator, before);
 });
 
 test("mock clock: timers and Date move only when ticked", async (t) => {

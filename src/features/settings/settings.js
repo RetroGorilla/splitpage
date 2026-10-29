@@ -1,4 +1,4 @@
-import { getSavedAuthorName } from "../../application/comment-author.js";
+import { getSavedAuthorName } from "../../application/comment-author.ts";
 import { SCRIPT_SCALE_MAX, SCRIPT_SCALE_MIN, WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
@@ -117,7 +117,7 @@ function bodyHtml() {
       '<div class="settings-actions">' +
         '<button type="button" class="btn-outline" data-settings-action="tagging-help">Show the tagging reference</button>' +
         '<button type="button" class="btn-outline" data-settings-action="tour">Take the tour again</button>' +
-        '<button type="button" class="btn-outline" data-settings-action="desktop-notice">Show the desktop-app notice again</button>' +
+        '<button type="button" class="btn-outline" id="settings-desktop-notice" data-settings-action="desktop-notice">Show the desktop-app notice again</button>' +
       '</div>') +
     section("Data",
       '<div class="settings-actions">' +

@@ -1,11 +1,11 @@
 import "./_production-tags-started.mjs";
-import { productionReaders } from "../legacy/document-ports.ts";
+import { productionReaders } from "../bootstrap/document-ports.ts";
 import assert from "node:assert/strict";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { healTagRegistry, productionIndexStats } from "../features/tags/production-tags.js";
 
 import { productionIndex } from "../application/production/index-owner.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
 import { loadTestDocument } from "./_document.mjs";
 

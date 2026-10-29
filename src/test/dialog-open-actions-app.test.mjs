@@ -8,7 +8,7 @@ localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, 
 await bootApp();
 
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { closeGdocModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();

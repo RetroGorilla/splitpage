@@ -15,10 +15,10 @@ await bootApp();
 after(closeApp);
 
 const { STARTERS, LONG_DEMO } = await import("../starters/index.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { intern } = await import("../adapters/storage/02c-blobs.js");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc } = await import("../adapters/formats/export-text.ts");

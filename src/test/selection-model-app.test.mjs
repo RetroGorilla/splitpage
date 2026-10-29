@@ -2,25 +2,25 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { cloneState } from "../core/document/clone.ts";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
-const { applyMerge } = await import("../legacy/merge-bridge.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
+const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { renderAbsorbed, renderRow } = await import("../features/rows/render.js");
 const { posToDom } = await import("../features/common/cell-dom.ts");
 const { domToPos } = await import("../features/common/cell-dom.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undoSizes = () => undoOwner().sizes();
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { closeCommandMenu, openCommandMenu } = await import("../features/command-menu/command-menu.ts");
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);

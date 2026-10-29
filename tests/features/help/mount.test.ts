@@ -12,7 +12,7 @@ const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
 realm.window = win;
 realm.document = win.document;
-const help = await import("../../../src/features/help/help.js");
+const help = await import("../../../src/features/help/help.ts");
 
 function page() {
   win.document.body.innerHTML = '<button id="outside">Outside</button><div id="rows"><div class="row"><div class="visual-cell"><div class="cell-editable"></div></div></div></div>' +

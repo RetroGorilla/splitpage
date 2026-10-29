@@ -12,7 +12,7 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import {
   editAllowed, liveSession, onSessionChange, readSession, runCommand, runDocumentEdit,
   sessionStamps, sessionTextPorts, startSessionBridge
-} from "../../../src/legacy/session-bridge.ts";
+} from "../../../src/bootstrap/wiring/session-owner.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeClock } from "../session-fakes.ts";
 

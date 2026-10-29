@@ -1,6 +1,6 @@
 import type { DocumentPlace } from "../../../application/location/document-place.ts";
 import type { DocumentLocation } from "../../../application/location/document-location.ts";
-import { amendHome, currentHome, documentLocation, fileHome, importHome } from "../../../legacy/location-bridge.ts";
+import { amendHome, currentHome, documentLocation, fileHome, importHome } from "../location-owner.ts";
 
 export const place: DocumentPlace = {
   home: () => currentHome(),
