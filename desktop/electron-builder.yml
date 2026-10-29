@@ -26,6 +26,7 @@ files:
   - recents.js
   - window-appearance.js
   - tab-registry.js
+  - restore-notice.js
   - package.json
 
 extraResources:
