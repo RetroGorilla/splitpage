@@ -40,7 +40,7 @@ Both move a numbered file into a feature folder, give it a `ports.ts`, and mount
 1. The feature imports no bridge and no numbered file. Only the wiring reaches the bridges, and the dependency baseline gains nothing.
 2. The port interface lives in the feature folder, and the wiring fills it in.
 3. The mount returns `dispose`, and the wiring holds it with `owned()` (`src/features/routing/owned.ts`), so mounting again removes the old listeners. The numbered files never removed theirs.
-4. The file's start slot in `_entry.js` is replaced at the same position, so the start order the load-order probe checks doesn't change.
+4. The file's start slot in the composition root (`src/bootstrap/main.js`, formerly `_entry.js`) is replaced at the same position, so the start order the load-order probe checks doesn't change.
 5. `tests/features/<name>/mount.test.ts` builds the feature with fakes and no app.
 
 **Change:**
@@ -128,8 +128,8 @@ A feature imports from `src/application/` only types and pure functions, such as
   | `identity.ts` | IDs and clock |
 
   The split preserves the existing implementations, including `text.ts`'s tag-body rewriting. Moving that logic to its final owner remains a separate audit follow-up. Port contract types remain with their application or core owners. The remaining `06-rows.js` video-file functions are now owned by the gallery feature and supplied through an explicit bootstrap port; see [rows-video-files.md](rows-video-files.md). The retired `sharedPorts()` references in the original wave schedule below describe how those PRs first landed, rather than an API for new work.
-- **Start position.** A moved file's slot in the `_entry.js` start list is replaced, at the same position, by a call to its wiring's mount. `_entry.js` reaches the mount through one named re-export in `bootstrap/wiring.ts` (`export { mountScriptZoomFeature } from "./wiring/script-zoom.ts"`), because the frozen-shim test allows the entry only `wiring.ts` and `app.ts`. This is the only re-export the pattern allows. A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
-- **Stopping.** Features mounted from the `_entry.js` list are not stopped by `stopApp`, just as the numbered files they replace were not. The last L5 step turns that list into a wiring step, which stops them in reverse order.
+- **Start position.** A moved file's slot in the composition root's start list (`src/bootstrap/main.js`) is replaced, at the same position, by a call to its wiring's mount, imported from that wiring module. `tests/bootstrap/composition-root.test.ts` pins the list. (Until the composition root replaced `_entry.js`, the entry reached each mount through a named re-export in `bootstrap/wiring.ts`; those re-exports are gone.) A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
+- **Stopping.** Features mounted from the composition root's list are not stopped by `stopApp`, just as the numbered files they replace were not. The last L5 step turns that list into a wiring step, which stops them in reverse order.
 
 ### Rule 5. Features reach each other four ways
 
@@ -179,7 +179,7 @@ Both went with the server and collaboration features, so no hand-off bridge is l
 1. Before the move, in its own PR: if other areas read state the file holds, that state moves to an owner (Rule 5). A move PR doesn't create owners.
 2. `git mv` of the file to its destination, kept as JavaScript (with its path added to the browser-globals list in `eslint.config.mjs`). Converting it to TypeScript is a separate PR.
 3. `ports.ts` built per [Rule 2](#rule-2-a-port-is-built-from-shared-ports-owner-types-and-the-features-own-needs), using shared ports that exist, or adding the ones it is the first user of ([catalog](#the-shared-ports)).
-4. The wiring module, the `_entry.js` slot and the action definitions per Rules 4 and 6.
+4. The wiring module, the composition root slot and the action definitions per Rules 4 and 6.
 5. Every numbered importer switched per [Rule 5](#rule-5-features-reach-each-other-four-ways), or listed as moving into the same feature next.
 6. `tests/features/<name>/mount.test.ts`, plus fakes for any new shared port.
 7. `tools/dep-baseline.json`: the file's `legacy-file`, `loop-import` and `cycle-edge` entries pruned; nothing added.

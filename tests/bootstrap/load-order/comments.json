@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/bootstrap/wiring/comments.ts",
     "src/features/comments/comments.js",

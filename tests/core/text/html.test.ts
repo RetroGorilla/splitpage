@@ -77,3 +77,8 @@ test("the tree joins adjacent text and keeps line breaks as their own nodes", ()
   ]);
   assert.deepEqual(t.tagOf("t:prop:X"), { cat: "prop", name: "X" });
 });
+
+test("tags the tree does not know are dropped, and the text around them joins", () => {
+  const t = buildTree([T("a", { tag: "t:prop:X" }), T("b")], { tagOf: () => null });
+  assert.deepEqual(t.root.kids, [{ text: "ab" }]);
+});

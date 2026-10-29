@@ -9,7 +9,6 @@ try {
   esbuild = await import("esbuild");
 } catch {
   console.error("esbuild is not installed — run `npm install` first.");
-  console.error("(src/js has been bundled rather than concatenated since #66.)");
   process.exit(1);
 }
 
@@ -20,7 +19,7 @@ const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
 function appJs() {
   const result = esbuild.buildSync({
-    entryPoints: [join(ROOT, "src", "js", "_entry.js")],
+    entryPoints: [join(ROOT, "src", "bootstrap", "main.js")],
     bundle: true,
     format: "iife",
     minify: true,

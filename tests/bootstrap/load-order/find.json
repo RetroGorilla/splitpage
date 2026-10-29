@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/find/find.js",
     "src/features/find/actions.ts",

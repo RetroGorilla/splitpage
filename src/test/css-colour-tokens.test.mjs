@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { readBuiltCss, repoUrl, cssRules, colourLiterals, resolveTokens, compareCssColours } from "../../tools/css-colours.mjs";
 
 const { css } = readBuiltCss();
@@ -35,19 +35,6 @@ function addRuntimeDefinitions(url, definitions) {
   for (const match of source.matchAll(/\.setProperty\(\s*["'](--[\w-]+)["']\s*,|(--[\w-]+)\s*:/g)) definitions.add(match[1] || match[2]);
 }
 
-function runtimeDefinitions(directory) {
-  const definitions = new Set();
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
-    if (entry.isDirectory()) {
-      for (const name of runtimeDefinitions(url)) definitions.add(name);
-    } else if (/\.(?:js|ts)$/.test(entry.name)) {
-      addRuntimeDefinitions(url, definitions);
-    }
-  }
-  return definitions;
-}
-
 test("the build's CSS has colour literals only in its token definition blocks", () => {
   assert.deepEqual(rawColours(css), []);
 });
@@ -61,7 +48,7 @@ test("the literal guard checks fallbacks, gradients, shadows and media blocks", 
 
 test("every CSS variable has a CSS definition or a runtime assignment", () => {
   const rules = cssRules(css);
-  const definitions = runtimeDefinitions(new URL("src/js/", repoUrl));
+  const definitions = new Set();
   for (const file of [
     "src/features/prompter/prompter.js",
     "src/features/rows/row-motion.js",
