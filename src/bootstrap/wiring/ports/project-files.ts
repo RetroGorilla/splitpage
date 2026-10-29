@@ -2,7 +2,7 @@ import type { ProjectFileOpeningPort, ProjectFileSavePort, ProjectFilesPorts } f
 import { captureExportDocument, exportDocumentOf } from "../export-capture.ts";
 import { amendHome } from "../../../legacy/location-bridge.ts";
 import { stashLocalWork } from "../recovery-owners.ts";
-import { autoSavePolicy, autoSaveTarget, flushAutoSave, saveDoc, toggleAutoSave } from "../../../legacy/save-bridge.ts";
+import { autoSavePolicy, autoSaveTarget, flushAutoSave, saveDoc, toggleAutoSave } from "../save-owners.ts";
 import { heldDocument } from "../session-owner.ts";
 import { openDocument } from "../transition-owners.ts";
 import { migrateRows } from "../../../legacy/document-ports.ts";

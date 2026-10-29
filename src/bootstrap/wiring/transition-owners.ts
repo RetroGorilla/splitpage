@@ -8,7 +8,7 @@ import type { DestinationPort, DocumentDestination, HistoryPort, IdentityPort, L
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { currentHome } from "../../legacy/location-bridge.ts";
-import { confirmedGeneration } from "../../legacy/save-bridge.ts";
+import { confirmedGeneration } from "./save-owners.ts";
 import { liveSession } from "./session-owner.ts";
 
 export interface LegacyTransitionPorts {

@@ -9,7 +9,7 @@ await bootApp();
 const { adoptReplacement, noteServerUpdate, runCommand } = await import("../bootstrap/wiring/session-owner.ts");
 const { documentLocation, setHome, amendHome, currentHome } = await import("../legacy/location-bridge.ts");
 const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../legacy/save-bridge.ts");
+const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../bootstrap/wiring/save-owners.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
