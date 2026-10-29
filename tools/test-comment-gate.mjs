@@ -451,14 +451,22 @@ console.log("\nreason comments:\n");
   const scan = (path, text) => scanFile(path, text, REQUIRED_MARKERS, DIRECTIVES, known).map((c) => c.text);
   eq("a reason comment that names an existing heading passes", scan("src/core/a.ts", "x(); // why: docs/saving.md#4-the-save-coordinator\n"), []);
   eq("it may carry a short reason", scan("src/features/a.js", "// why: docs/saving.md#inv-12 order matters\nx();\n"), []);
+  eq("punctuation after a link is not part of the anchor", scan("src/core/a.ts", "// why: see docs/saving.md#saving.\n"), []);
   eq("a missing heading fails", scan("src/core/a.ts", "// why: docs/saving.md#nope\n"), ["// why: docs/saving.md#nope"]);
   eq("a missing document fails", scan("src/core/a.ts", "// why: docs/other.md#saving\n"), ["// why: docs/other.md#saving"]);
-  eq("a reason without an anchor fails", scan("src/core/a.ts", "// why: the save order\n"), ["// why: the save order"]);
+  eq("a reason without an anchor passes", scan("src/core/a.ts", "// why: the save order matters\n"), []);
   eq("a block comment is never a reason", scan("src/core/a.ts", "/* why: docs/saving.md#saving */\n"), ["/* why: docs/saving.md#saving */"]);
-  eq("a document outside docs/ or the root fails", scan("src/core/a.ts", "// why: src/x.md#saving\n"), ["// why: src/x.md#saving"]);
-  const long = "// why: docs/saving.md#saving " + "x".repeat(120);
-  eq("a reason longer than the limit fails", scan("src/core/a.ts", long + "\n").length, 1);
-  eq("reasons apply only to scripts", scan("a.css", "/* why: docs/saving.md#saving */\n").length, 1);
+  eq("two consecutive lines pass", scan("src/core/a.ts", "// why: order matters\n// because saves can race\n"), []);
+  eq("a third line fails", scan("src/core/a.ts", "// why: order matters\n// because saves can race\n// extra\n"), ["// extra"]);
+  eq("a separated continuation fails", scan("src/core/a.ts", "// why: order matters\n\n// because saves can race\n"), ["// because saves can race"]);
+  const long = "// why: " + "x".repeat(113);
+  eq("a 121-character reason fails", scan("src/core/a.ts", long + "\n").length, 1);
+  eq("a 120-character reason passes", scan("src/core/a.ts", long.slice(0, -1) + "\n"), []);
+  eq("CSS reasons pass", scan("a.css", "/* why: order matters */\n/* because rules cascade */\n"), []);
+  eq("shell and PowerShell reasons pass", [scan("a.sh", "# why: order matters\n# because saves can race\n"), scan("a.ps1", "# why: order matters\n")], [[], []]);
+  eq("a workflow run reason passes", scan(".github/workflows/a.yml", "jobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          # why: order matters\n          # because saves can race\n          make\n"), []);
+  eq("plain comments still fail", scan("src/core/a.ts", "// narration\n"), ["// narration"]);
+  eq("a broken anchor in a continuation fails", scan("a.sh", "# why: order matters\n# see docs/saving.md#nope\n"), ["# see docs/saving.md#nope"]);
   eq("a reason never enters the baseline", checkComments([{ path: "src/js/a.js", text: "// why: docs/saving.md#saving\n" }], { files: {} }, REQUIRED_MARKERS, DIRECTIVES, known).current, {});
 }
 
@@ -528,7 +536,7 @@ function runIn(repo, mode) {
   eq("run() resolves reason comments against the repository", runIn(repo, "check").code, 0);
   writeFileSync(join(repo, "docs/a.md"), "# Renamed\n");
   const broken = runIn(repo, "check");
-  check("a renamed heading fails the reason that named it, and says how to write one", broken.code === 1 && broken.err.includes("src/core/r.ts:1 // why: docs/a.md#order") && broken.err.includes("its heading must exist"), broken.err);
+  check("a renamed heading fails the reason that named it, and says how to write one", broken.code === 1 && broken.err.includes("src/core/r.ts:1 // why: docs/a.md#order") && broken.err.includes("heading must exist"), broken.err);
 }
 
 {

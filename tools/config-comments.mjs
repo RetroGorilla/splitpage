@@ -156,7 +156,7 @@ function runComments(path, doc, text, lineCounter) {
       const key = `${line}\0${c.text}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      found.push({ start: node.range[0], end: node.range[1], text: c.text, line });
+      found.push({ start: node.range[0], end: node.range[1], text: c.text, line, runScript: true });
     }
   };
   const visit = (node, ctx) => {

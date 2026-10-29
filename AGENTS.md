@@ -42,7 +42,7 @@ A moved feature file starts through `start<Name>(ports)`, such as `startFind` in
 
 These come from the maintainer. Each one has been broken by an agent before.
 
-1. **No new comments, except reason comments.** `npm run check:comments` fails on any new comment in authored code, tests, CSS, HTML or config. The one exception is a single line in a script, at most 120 characters: `// why: docs/<file>.md#<heading-anchor> <optional short reason>`. The gate checks that the heading exists. Put the reasoning in the document and point at it from the code: [plan section 2](docs/IMPLEMENTATION-PLAN.md#no-comments-in-authored-code).
+1. **No new comments, except reason comments.** A reason explains why, not what; review judges that. It is at most two consecutive comment lines of at most 120 characters each, beginning `// why: ...`, `# why: ...` in shell, PowerShell or YAML run blocks, or `/* why: ... */` in CSS. A second line is a plain continuation directly below. A `docs/<file>.md#<anchor>` link is optional, but its heading must exist. All other new comments fail; reasons never enter the baseline. See [plan section 2](docs/IMPLEMENTATION-PLAN.md#no-comments-in-authored-code).
 2. **Never skip, disable or loosen a test.** An assertion may be updated when the behaviour is meant to change, never weakened to get green.
 3. **Structural PRs change no behaviour.** A move says which responsibility moves where and which dependency it removes, in a "Structure" section of the PR body.
 4. **No compatibility re-exports.** When something moves, update every importer. Do not leave a file that re-exports the old name. There are no exceptions: the composition root imports each mount from its own wiring module.
