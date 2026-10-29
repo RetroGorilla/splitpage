@@ -1,10 +1,11 @@
 import "../../src/test/_dom.mjs";
+import "../../src/test/_screen-state-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import { mountOnboardingFeature, stopOnboardingFeature, onboardingActions } from "../../src/bootstrap/wiring/onboarding.ts";
 import { startPreferences, preferences } from "../../src/legacy/preferences-bridge.ts";
-import { startSidePanels } from "../../src/legacy/panels-bridge.ts";
+import { startSidePanels } from "../../src/bootstrap/wiring/ports/panels.ts";
 import { localFileMenuControls, mountLocalFilesFeature, stopLocalFilesFeature } from "../../src/bootstrap/wiring/local-files.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 
