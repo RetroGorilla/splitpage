@@ -6,7 +6,7 @@ import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { STATE_FIELDS } from "../core/merge/state-fields.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 
 import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";

@@ -12,7 +12,7 @@ import { intern } from "../adapters/storage/02c-blobs.js";
 import {
   addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../adapters/storage/02d-gallery.js";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";

@@ -14,7 +14,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { htmlToMarkdown, sanitizeHtml } from "../legacy/richtext.ts";
 import { breakLine, insideDirection, joinCells, replaceText, sliceCell, splitCell, typingMarks } from "../core/text/edits.ts";
