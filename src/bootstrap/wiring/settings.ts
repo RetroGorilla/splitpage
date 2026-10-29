@@ -1,13 +1,12 @@
 import { updateControls } from "./update.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
-import { setCommentSort } from "../../application/comment-sort.ts";
 import { appDataActions as appDataDefinitions, settingsActions as settingsDefinitions } from "../../features/settings/actions.ts";
 import { mountAppData } from "../../features/settings/app-data.js";
 import type { AppDataMount, AppDataPorts } from "../../features/settings/ports.ts";
 import { historyOwner } from "./history.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.js";
-import { appDataPreferences } from "./ports/preferences.ts";
+import { appDataPreferences, commentSorting } from "./ports/preferences.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { launch } from "./ports/desktop.ts";
 import { screen } from "./ports/screen.ts";
@@ -113,7 +112,7 @@ export function mountAppDataFeature(): AppDataMount {
       preferences: appDataPreferences,
       desktop: runningOnDesktop,
       launchFacts: launch,
-      commentSorting: { choose: setCommentSort },
+      commentSorting: { choose: commentSorting.choose },
       history: { exportAll: () => historyOwner().exportHistoryAll(), importBundle: (bundle) => historyOwner().importHistoryBundle(bundle), normalizeSnapshots: (raw) => historyOwner().normalizeLegacySnapshots(raw) },
       writer,
       embeddedVersion: () => updateControls()?.readEmbeddedVersion() ?? null,

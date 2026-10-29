@@ -23,14 +23,7 @@ import { mountHistoryGallery } from "../../features/gallery/mount.ts";
 import { mountTopbar } from "../../features/title/topbar.ts";
 import { mountCellReach } from "../../features/editing/cell-reach.js";
 import { mountPhoneBar } from "../../features/notices/phone-bar.ts";
-import { touchImportMode } from "../../application/import-mode.ts";
-import {
-  prompterIsOpen,
-  prompterIsPlaying,
-  prompterSkipsShot,
-  setPrompterSkipShot,
-  voiceIsFollowing
-} from "../../application/prompter-state.ts";
+import { importMode, prompterState } from "./ports/preferences.ts";
 import { captureOperation, openDocument, stillOwns } from "./transition-owners.ts";
 import { importHome } from "./location-owner.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
@@ -126,7 +119,7 @@ export function mountPrompterVisibilityFeature(): ReturnType<typeof mountPrompte
         const ownsDocument = captureViewDocument();
         prompterControls()?.acquireWakeLock(function () { return active() && ownsDocument(); });
       },
-      isOpen: prompterIsOpen
+      isOpen: prompterState.isOpen
     };
     return mountPrompterVisibility({ window: window, ports: ports });
   });
@@ -247,7 +240,7 @@ export function mountImportsFeature(): ReturnType<typeof mountImports> {
       maybeAutoDetectTwoColumn: (value) => { importControls()?.maybeAutoDetectTwoColumn(value); },
       updateImportPreview: () => { importControls()?.updateImportPreview(); },
       handleImportFile: function (file) { void openDocument({ kind: "import", file: file }); },
-      touchMode: touchImportMode,
+      touchMode: importMode.touch,
       capture: function () {
         const ownsDocument = captureViewDocument();
         const ownsModal = importControls()?.captureImportPreview() ?? (() => false);
@@ -289,8 +282,8 @@ export function mountPrompterFeature(): ReturnType<typeof mountPrompter> {
       setPrompterFlip: (value) => { prompterControls()?.setPrompterFlip(value); },
       setPrompterSceneMode: (value) => { prompterControls()?.setPrompterSceneMode(value); },
       stepScene: (value) => { prompterControls()?.stepScene(value); },
-      voiceActive: voiceIsFollowing, playing: prompterIsPlaying, isOpen: prompterIsOpen,
-      skipShot: prompterSkipsShot, setSkipShot: setPrompterSkipShot,
+      voiceActive: prompterState.voiceFollowing, playing: prompterState.isPlaying, isOpen: prompterState.isOpen,
+      skipShot: prompterState.skipsShot, setSkipShot: prompterState.setSkipShot,
       mirror: () => prompterControls()?.mirror() ?? false,
       flip: () => prompterControls()?.flip() ?? false,
       sceneMode: () => prompterControls()?.sceneMode() ?? false

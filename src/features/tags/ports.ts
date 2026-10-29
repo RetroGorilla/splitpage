@@ -16,6 +16,7 @@ import type { IdSource } from "../../core/document/ports.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import type { TagPanelState } from "../../application/tag-panel-state.ts";
 import type { TagPanelCommands } from "../../application/tag-panel-commands.ts";
+import type { BulkTagRows } from "../../application/commands/bulk-tags.ts";
 
 export interface TagPanelMount extends TagPanelCommands {
   readonly openProductionPanel: () => void;
@@ -57,6 +58,7 @@ export interface TagPanelPorts {
   readonly undo: Pick<UndoControl, "breakCoalescing">;
   readonly notices: Pick<NoticePort, "show">;
   readonly ids: IdSource;
+  readonly bulkTag: BulkTagRows;
 }
 
 export interface ProductionTagPorts {

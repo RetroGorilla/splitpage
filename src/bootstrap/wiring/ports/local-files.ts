@@ -13,7 +13,6 @@ import { exportAssetsRequest } from "../../../adapters/formats/export-assets.ts"
 import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.js";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../../../application/desktop-presence.ts";
-import { brollView } from "../../../application/preferences/broll-view.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
 import { unsavedFor, requestSave } from "../save-owners.ts";
@@ -30,7 +29,7 @@ import { place } from "./location.ts";
 import { confirmation, saves, fileConflicts } from "./saving.ts";
 import { transitions, history } from "./transitions.ts";
 import { panelControl } from "./panels.ts";
-import { preferenceValues } from "./preferences.ts";
+import { brollView, preferenceValues } from "./preferences.ts";
 import { resetProductionPanel } from "./production.ts";
 import { text } from "./text.ts";
 import { undoControl } from "./editing.ts";
