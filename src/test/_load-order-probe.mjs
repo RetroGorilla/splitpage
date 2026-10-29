@@ -41,7 +41,7 @@ function started(read) {
 const session = await import("../legacy/session-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const recovery = await import("../legacy/recovery-bridge.ts");
-const merge = await import("../legacy/merge-bridge.ts");
+const merge = await import("../bootstrap/wiring/document-merge.ts");
 const transitions = await import("../legacy/transition-bridge.ts");
 const editor = await import("../bootstrap/wiring/editor-owners.ts");
 const productionEditing = await import("../legacy/production-editing-bridge.ts");

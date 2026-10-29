@@ -39,7 +39,7 @@ import { cycleRowStatus } from "./scene-status.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { restoreMergeSnapshot } from "./session-merge.ts";
-import { installMergeBanner } from "../../legacy/merge-bridge.ts";
+import { installMergeBanner } from "./document-merge.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { safeId } from "../../adapters/identity/safe-id.ts";
 import { sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";

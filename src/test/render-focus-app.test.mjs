@@ -10,7 +10,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { applyMerge } = await import("../legacy/merge-bridge.ts");
+const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { paintingScreen, renderAbsorbed, renderRow } = await import("../features/rows/render.js");
 const { paintGuard } = await import("../bootstrap/wiring/editor-owners.ts");
 const whilePainting = (paint) => paintGuard().whilePainting(paint);
