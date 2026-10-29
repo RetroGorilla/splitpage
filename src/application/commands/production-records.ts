@@ -36,9 +36,13 @@ export interface DeletedTag extends TagRef {
   readonly unlabel: boolean;
 }
 
-export const REGISTRY_CHANGE: ChangeSet = changeSet({ docFields: ["productionTags"], saveNow: true });
+function registryChange(): ChangeSet {
+  return changeSet({ docFields: ["productionTags"], saveNow: true });
+}
 
-const PEOPLE_CHANGE: ChangeSet = changeSet({ docFields: ["people", "productionTags", "brollShots"], saveNow: true });
+function peopleChange(): ChangeSet {
+  return changeSet({ docFields: ["people", "productionTags", "brollShots"], saveNow: true });
+}
 
 const TAGGED_FIELDS: readonly string[] = Object.freeze(["productionTags", "people"]);
 
@@ -68,7 +72,7 @@ export function registerTagCommand(tag: TagRef): Command {
     name: "register-tag",
     needs: "edit",
     plan: function (doc): Plan | null {
-      return planByTrial("register-tag", doc, REGISTRY_CHANGE, function (live) { return !!addRegistryTag(live, tag.cat, tag.name); });
+      return planByTrial("register-tag", doc, registryChange(), function (live) { return !!addRegistryTag(live, tag.cat, tag.name); });
     }
   };
 }
@@ -123,7 +127,7 @@ export function gearQuickAddCommand(planner: (doc: DocumentView) => QuickAddPlan
       const plan = planner(doc);
       if (!plan.added && !plan.removed) return null;
       return {
-        changes: REGISTRY_CHANGE,
+        changes: registryChange(),
         apply: function (live) {
           plan.remove.forEach(function (name) { removeRegistryTag(live, "gear", name); });
           plan.register.forEach(function (rec) { live.productionTags.push(Object.assign({}, rec)); });
@@ -174,7 +178,7 @@ export function deletePersonCommand(personId: string): Command {
     plan: function (doc): Plan | null {
       if (!personById(doc, personId)) return null;
       return {
-        changes: PEOPLE_CHANGE,
+        changes: peopleChange(),
         apply: function (live) { removePerson(live, personId); }
       };
     }

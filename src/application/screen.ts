@@ -6,13 +6,13 @@ export type Blocker = "loading" | Overlay;
 
 export type ScreenState = Readonly<Record<Blocker, boolean>>;
 
-const IN_FRONT_FIRST: readonly Blocker[] = ["loading", "dialog", "launcher", "tour", "prompter", "writer", "shotlist"];
+const IN_FRONT_FIRST: readonly Blocker[] = Object.freeze(["loading", "dialog", "launcher", "tour", "prompter", "writer", "shotlist"]);
 
-export const EVERY_OVERLAY: readonly Overlay[] = ["dialog", "launcher", "tour", "prompter", "writer", "shotlist"];
+export const EVERY_OVERLAY: readonly Overlay[] = Object.freeze(["dialog", "launcher", "tour", "prompter", "writer", "shotlist"]);
 
-export const OPENS_A_DIALOG: readonly Overlay[] = ["dialog", "tour"];
+export const OPENS_A_DIALOG: readonly Overlay[] = Object.freeze(["dialog", "tour"]);
 
-const REASONS: Readonly<Record<Blocker, string>> = {
+const REASONS: Readonly<Record<Blocker, string>> = Object.freeze({
   loading: "Still loading…",
   prompter: "Close Present first",
   writer: "Close the writer first",
@@ -20,7 +20,7 @@ const REASONS: Readonly<Record<Blocker, string>> = {
   dialog: "Close the open dialog first",
   launcher: "Close the open dialog first",
   tour: "Finish or skip the tour first"
-};
+});
 
 export function everyOverlayBut(own: Overlay): readonly Overlay[] {
   return EVERY_OVERLAY.filter((o) => o !== own);

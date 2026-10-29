@@ -12,7 +12,7 @@ import { parseProjectFileState } from "../../../adapters/formats/project-file.ts
 import { exportAssetsRequest } from "../../../adapters/formats/export-assets.ts";
 import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.js";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../../../application/desktop-presence.ts";
+import { presence } from "./desktop-presence.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
 import { unsavedFor, requestSave } from "../save-owners.ts";
@@ -64,7 +64,7 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
     text,
     resumeNeeded: (handle) => { menu().showResumeBanner(handle); },
     desktop: {
-      running: runningOnDesktop,
+      running: presence.running,
       openFileDialog: () => requireDesktop().openFileDialog(),
       routeOpen: (request) => requireDesktop().routeOpen(request as Parameters<NonNullable<ReturnType<typeof desktopPort>>["routeOpen"]>[0])
     },

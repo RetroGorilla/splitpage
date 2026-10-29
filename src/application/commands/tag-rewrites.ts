@@ -15,7 +15,7 @@ interface CellCopy {
   [field: string]: unknown;
 }
 
-const TAGGED_FIELDS = ["visualText", "audioText"] as const;
+const TAGGED_FIELDS = Object.freeze(["visualText", "audioText"] as const);
 
 function htmlOf(value: unknown): string {
   return typeof value === "string" ? value : "";

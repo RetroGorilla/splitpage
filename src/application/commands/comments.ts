@@ -14,9 +14,13 @@ export type ConflictValue =
 
 export const ASSIGNEE_MAX = 80;
 
-const COMMENTS_CHANGE: ChangeSet = changeSet({ docFields: ["comments"], saveNow: true });
+function commentsChange(): ChangeSet {
+  return changeSet({ docFields: ["comments"], saveNow: true });
+}
 
-const POSTED_CHANGE: ChangeSet = changeSet({ docFields: ["comments"] });
+function postedChange(): ChangeSet {
+  return changeSet({ docFields: ["comments"] });
+}
 
 function copied<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -39,7 +43,7 @@ export function addCommentCommand(comment: DocumentComment): Command {
     plan: function (doc): Plan | null {
       if (commentAt(doc, comment.id) !== -1) return null;
       return {
-        changes: POSTED_CHANGE,
+        changes: postedChange(),
         apply: function (live) { live.comments.push(copied(comment)); }
       };
     }
@@ -53,7 +57,7 @@ export function addReplyCommand(commentId: string, reply: DocumentReply, clock: 
     plan: function (doc): Plan | null {
       if (commentAt(doc, commentId) === -1) return null;
       return {
-        changes: POSTED_CHANGE,
+        changes: postedChange(),
         apply: function (live) {
           const c = liveComment(live, commentId);
           if (!Array.isArray(c.replies)) c.replies = [];
@@ -73,7 +77,7 @@ export function setCommentAssigneeCommand(commentId: string, name: string | null
     plan: function (doc): Plan | null {
       if (commentAt(doc, commentId) === -1) return null;
       return {
-        changes: COMMENTS_CHANGE,
+        changes: commentsChange(),
         apply: function (live) {
           const c = liveComment(live, commentId);
           c.assignee = assignee;
@@ -91,7 +95,7 @@ export function toggleResolveCommand(commentId: string, stamps: StampPorts): Com
     plan: function (doc): Plan | null {
       if (commentAt(doc, commentId) === -1) return null;
       return {
-        changes: COMMENTS_CHANGE,
+        changes: commentsChange(),
         apply: function (live) {
           const c = liveComment(live, commentId);
           c.resolved = !c.resolved;

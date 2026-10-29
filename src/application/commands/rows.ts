@@ -7,8 +7,6 @@ import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import type { TextServices } from "../text/services.ts";
 
-export const ROW_ORDER_DERIVES: readonly string[] = CELL_TEXT_DERIVES;
-
 function indexOf(rows: DocumentView["rows"], rowId: string): number {
   return rows.findIndex(function (r) { return r.id === rowId; });
 }
@@ -19,7 +17,9 @@ function liveIndex(rows: DocumentRow[], rowId: string, doing: string): number {
   return at;
 }
 
-const REORDERED: ChangeSet = changeSet({ rowsMoved: true, derive: ROW_ORDER_DERIVES, saveNow: true });
+function reorderedChange(): ChangeSet {
+  return changeSet({ rowsMoved: true, derive: CELL_TEXT_DERIVES, saveNow: true });
+}
 
 export function addSceneCommand(afterId: string | null, createdId: string, ports: StampPorts): Command {
   return {
@@ -95,7 +95,7 @@ export function moveSceneCommand(rowId: string, targetId: string, after: boolean
       const order = orderAfterMove(ids, rowId, targetId, after);
       if (sameOrder(ids, order)) return null;
       return {
-        changes: REORDERED,
+        changes: reorderedChange(),
         apply: function (live) { reorderTo(live.rows, order); }
       };
     }
@@ -115,14 +115,14 @@ export function swapScenesCommand(rowId: string, dir: -1 | 1): Command {
       order[at] = order[other] as string;
       order[other] = moving;
       return {
-        changes: REORDERED,
+        changes: reorderedChange(),
         apply: function (live) { reorderTo(live.rows, order); }
       };
     }
   };
 }
 
-const NBSP_RE = new RegExp(String.fromCharCode(160), "g");
+const NBSP = "\u00a0";
 
 function hasItems(value: unknown): boolean {
   return !!value && !!(value as { readonly length?: unknown }).length;
@@ -134,7 +134,7 @@ export function isBlankScene(
   text: Pick<TextServices, "cellOf">
 ): boolean {
   if (!row) return false;
-  const plainOf = (html: unknown): string => toPlainText(text.cellOf(html || "")).replace(NBSP_RE, " ");
+  const plainOf = (html: unknown): string => toPlainText(text.cellOf(html || "")).replaceAll(NBSP, " ");
   if (plainOf(row.visualText).trim() || plainOf(row.audioText).trim()) return false;
   if (row["imageRef"] || hasItems(row["moreImages"]) || hasItems(row["imageLinks"])) return false;
   if (typeof row["lengthSeconds"] === "number") return false;
