@@ -89,7 +89,7 @@ and both the menu's painting and the action's availability call it:
 | Save to file, and its label | `saveBackItemState()`, `18-local-files.js` |
 | Export again, and its label | `exportAgainItemState()`, `18c-export-dialog.js` |
 | Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `appDataImportShown()`, `20f-desktop.js` |
-| Autosave's switch | `autoSavePolicy().enabled()`, `src/legacy/save-bridge.ts` |
+| Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
 `itemAvailability()` (`src/features/file-menu/actions.ts`) turns such a state
