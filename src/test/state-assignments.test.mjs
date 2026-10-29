@@ -4,11 +4,11 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { cloneState } from "../core/document/clone.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 const atBoot = await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
@@ -16,7 +16,7 @@ const { openLongDemo, startNewScript } = await import("../bootstrap/wiring/file-
 const { seedCheckPasses } = await import("../adapters/page/seed-check.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

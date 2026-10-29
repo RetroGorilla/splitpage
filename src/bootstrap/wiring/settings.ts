@@ -21,11 +21,11 @@ import type { SettingsMount, SettingsPorts } from "../../features/settings/ports
 import { owned } from "../../features/routing/owned.ts";
 import { setHideShotScenes } from "./hide-shot.ts";
 import { personSwatchesHtml } from "./title-chrome.ts";
-import { getSavedAuthorName } from "../../application/comment-author.js";
+import { getSavedAuthorName } from "../../application/comment-author.ts";
 import { connectWriter } from "./writer.ts";
 import { prompterControls } from "./prompter.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
-import { setAutoSaveEnabled } from "../../legacy/save-bridge.ts";
+import { preferences } from "./preferences-owner.ts";
+import { setAutoSaveEnabled } from "./save-owners.ts";
 
 function inactiveWriterSize(): void {}
 function writerSizePreference(): number | null { return preferences().writerSize(); }

@@ -1,20 +1,20 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { flushDraftNow } = await import("../legacy/recovery-bridge.ts");
-const { setHome } = await import("../legacy/location-bridge.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");
+const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

@@ -36,20 +36,20 @@ import { legacyExportServices } from "./export-services.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "./wiring/export-registry.ts";
 import { startEditor } from "./wiring/editor-owners.ts";
-import { startLocation } from "../legacy/location-bridge.ts";
-import { getEditorName, startPreferences } from "../legacy/preferences-bridge.ts";
+import { startLocation } from "./wiring/location-owner.ts";
+import { getEditorName, startPreferences } from "./wiring/preferences-owner.ts";
 import { shotHidingPorts, startShotHiding } from "./wiring/shot-hiding.ts";
 import { startMerge } from "./wiring/document-merge.ts";
 import type { LegacyMergePorts } from "./wiring/document-merge.ts";
-import { startRecovery } from "../legacy/recovery-bridge.ts";
-import type { LegacyDraftPorts, LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
-import { saveDestinations, startSaves } from "../legacy/save-bridge.ts";
-import type { LegacyAutoSavePorts, LegacySaveDestination, LegacySavePorts } from "../legacy/save-bridge.ts";
-import { liveDocumentPort, liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
-import type { SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bridge.ts";
+import { startRecovery } from "./wiring/recovery-owners.ts";
+import type { LegacyDraftPorts, LegacyRecoveryPorts } from "./wiring/recovery-owners.ts";
+import { saveDestinations, startSaves } from "./wiring/save-owners.ts";
+import type { LegacyAutoSavePorts, LegacySaveDestination, LegacySavePorts } from "./wiring/save-owners.ts";
+import { liveDocumentPort, liveSession, startSessionBridge } from "./wiring/session-owner.ts";
+import type { SessionBridgePorts, SessionUndoPorts } from "./wiring/session-owner.ts";
 import type { RecordsReconciler } from "../application/production/broll-records.ts";
-import { captureOperation, documentSources, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
-import type { LegacyDocumentSource, LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
+import { captureOperation, documentSources, startTransitions, stillOwns } from "./wiring/transition-owners.ts";
+import type { LegacyDocumentSource, LegacyTransitionPorts } from "./wiring/transition-owners.ts";
 import { routeUndoReplays, startUndo, undoOwner, undoPorts, undoSessionPort } from "./wiring/undo.ts";
 
 export interface WiringDeps {
@@ -168,7 +168,7 @@ const KEY_TARGET_METHODS: readonly (keyof EventTarget)[] = ["addEventListener", 
 
 const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"];
 
-const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"];
+const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["desktop", "sessionStorage", "localStorage", "internImage", "merge"];
 
 const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "noteChange"];
 

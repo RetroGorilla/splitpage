@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { PREF_EVENT, preferences, startPreferences } from "../legacy/preferences-bridge.ts";
+import { PREF_EVENT, preferences, startPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 import { mountScriptZoomFeature } from "../bootstrap/wiring/script-zoom.ts";
 import { scriptScale, setScriptScale } from "../features/script-zoom/script-zoom.ts";
 

@@ -1,21 +1,21 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 await bootApp();
 
-const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { liveSession, noteReload } = await import("../bootstrap/wiring/session-owner.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../features/tags/production-tags.js");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const lastUndoEntry = () => undoOwner().last();
@@ -25,7 +25,7 @@ const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
+const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

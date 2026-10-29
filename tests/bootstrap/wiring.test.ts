@@ -1,5 +1,5 @@
 import { startDocumentGuard } from "../../src/application/identity/document-guard.ts";
-import { productionEditingStarted, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { productionEditingStarted, startProductionEditing } from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { bootApp, closeApp, rewireApp } from "../../src/test/_app-boot.mjs";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -21,18 +21,18 @@ import type { TransitionDeps, Wiring, WiringDeps } from "../../src/bootstrap/wir
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { editorStarted, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";
-import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
-import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
+import { locationStarted, startLocation } from "../../src/bootstrap/wiring/location-owner.ts";
+import { preferencesStarted, startPreferences } from "../../src/bootstrap/wiring/preferences-owner.ts";
 import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/bootstrap/wiring/shot-hiding.ts";
 import { undoPorts, startUndo, undoStarted, undoSessionPort, routeUndoReplays } from "../../src/bootstrap/wiring/undo.ts";
-import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
+import { effectsStarted, startEffects } from "../../src/bootstrap/wiring/effects-owner.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
-import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
+import { recoveryStarted } from "../../src/bootstrap/wiring/recovery-owners.ts";
 import { mergeStarted } from "../../src/bootstrap/wiring/document-merge.ts";
 import type { LegacyMergePorts } from "../../src/bootstrap/wiring/document-merge.ts";
-import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
+import { requestSave, savesStarted, savesWaiting } from "../../src/bootstrap/wiring/save-owners.ts";
 import { startupReady } from "../../src/application/startup-signal.ts";
-import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
+import type { LegacySaveJob, LegacySavePorts } from "../../src/bootstrap/wiring/save-owners.ts";
 import type { SaveOutcome, WriterResult } from "../../src/application/save/coordinator.ts";
 import {
   liveDocumentPort,
@@ -43,11 +43,11 @@ import {
   sessionStamps,
   sessionStarted,
   startSessionBridge
-} from "../../src/legacy/session-bridge.ts";
-import type { SessionReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
-import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/legacy/transition-bridge.ts";
+} from "../../src/bootstrap/wiring/session-owner.ts";
+import type { SessionReplayRunner, SessionUndoPorts } from "../../src/bootstrap/wiring/session-owner.ts";
+import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
-import { migrateRows } from "../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../../src/application/formats/project-file-services.ts";
 
@@ -141,7 +141,7 @@ function mergePorts(): LegacyMergePorts {
     isDocument: (raw) => !!raw && typeof raw === "object",
     snapshot: () => null,
     current: () => null,
-    adopt: (_kind, next) => next,
+    adopt: (_kind, next) => migrateRows(next),
     documentId: () => null,
     noteHistoryFrom: () => {},
     armUndo: () => {},
@@ -233,7 +233,7 @@ function fakes(): Fakes {
     recovery: () => {
       note("recovery");
       return {
-        indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null,
+        desktop: () => null,
         sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) }),
         drafts: { flush: () => Promise.resolve({ ok: true }), noteChange: () => {} }
       };
@@ -498,7 +498,7 @@ test("failed partial startup: a timers port, undo adapter or key target that lac
 
 test("failed partial startup: an actions, exporters, merge or recovery factory that returns something malformed fails its step, names what is missing and leaves no owner", () => {
   const registryMethods = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"] as const;
-  const recoveryMethods = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"] as const;
+  const recoveryMethods = ["desktop", "sessionStorage", "localStorage", "internImage", "merge"] as const;
   const mergeMethods = ["states", "entry", "isDocument", "snapshot", "current", "adopt", "documentId", "noteHistoryFrom", "armUndo", "setBase", "capture", "stillOwns"] as const;
   type Spoilt = [string, (f: Fakes) => WiringDeps | Record<string, unknown>, string, string];
   const cases: Spoilt[] = [
@@ -1012,7 +1012,7 @@ const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
   "window blur/B": 2, "window click/C": 3, "window compositionstart/C": 1, "window cut/C": 1, "window dragstart/C": 1, "window drop/C": 1,
   "window focus/C": 2, "window focusin/C": 2, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 6,
   "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 1,
-  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window resize/B": 5,
+  "window paste/C": 1, "window pointerdown/C": 1, "window resize/B": 5,
   "window scroll/C": 2, "window storage/B": 2, "window touchmove/B": 1, "window wheel/B": 1
 };
 
