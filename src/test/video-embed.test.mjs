@@ -9,9 +9,17 @@ import { preferences } from "../legacy/preferences-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../adapters/storage/02d-gallery.js";
-import { flushEdits, foldIntoEdit, lastUndoEntry, noteEdit, redo, resetUndo, undo, undoSizes } from "../legacy/undo-bridge.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import videoEmbed from "../../shared/video-embed.js";
 import { loadTestDocument } from "./_document.mjs";
+const flushEdits = () => undoOwner().flush();
+const foldIntoEdit = (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change);
+const lastUndoEntry = () => undoOwner().last();
+const noteEdit = () => undoOwner().noteEdit();
+const redo = () => undoOwner().redo();
+const resetUndo = () => undoOwner().reset();
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
 
 const {
   PLAYER_ORIGINS, THUMB_MAX_BYTES, VIDEO_HOSTS, embeddableVideo, fetchVideoThumbnail, oembedThumbnailUrl, parseStart,

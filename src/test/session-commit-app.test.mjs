@@ -13,12 +13,16 @@ const { render } = await import("../features/rows/render.js");
 const { setSceneLength } = await import("../features/rows/read-time.js");
 const { noteAbsorbedDirty, noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { flushEdits, lastUndoEntry, undo, undoSizes } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 
 import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
 import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+const flushEdits = () => undoOwner().flush();
+const lastUndoEntry = () => undoOwner().last();
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
 function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 const NAME_KEY = "splitpage-comment-author";
 const { loadTestDocument } = await import("./_document.mjs");

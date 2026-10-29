@@ -4,7 +4,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { lastUndoEntry, redo, resetUndo, undo, undoSizes } from "../legacy/undo-bridge.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
+const lastUndoEntry = () => undoOwner().last();
+const redo = () => undoOwner().redo();
+const resetUndo = () => undoOwner().reset();
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
 
 const stubs = await import("./_fanout-stubs.mjs");
 const { createSceneStatus } = await import("../features/rows/scene-status.ts");

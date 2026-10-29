@@ -63,7 +63,8 @@ function clearToasts() {
 }
 
 test("a click on a scene's length opens the editor and shows no toast", async () => {
-  const { flushEdits } = await import("../legacy/undo-bridge.ts");
+  const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+  const flushEdits = () => undoOwner().flush();
   const host = clearToasts();
   flushEdits();
   const target = document.querySelector('#rows .row[data-id="r1"] .row-read');
@@ -77,7 +78,8 @@ test("a click on a scene's length opens the editor and shows no toast", async ()
 });
 
 test("a click on the status button cycles the status and shows no toast", async () => {
-  const { flushEdits } = await import("../legacy/undo-bridge.ts");
+  const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+  const flushEdits = () => undoOwner().flush();
   const host = clearToasts();
   flushEdits();
   const target = document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]');

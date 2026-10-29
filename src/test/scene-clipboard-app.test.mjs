@@ -12,7 +12,10 @@ const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { SCENES_MIME, buildScenePayload } = await import("../features/clipboard/scene-clip.js");
 const { deleteSelectedScenes, newScriptFromSelection, pasteScenesAt } = await import("../features/clipboard/scene-select.js");
-const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
+const flushEdits = () => undoOwner().flush();
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");

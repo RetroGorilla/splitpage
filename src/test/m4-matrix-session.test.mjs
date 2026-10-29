@@ -54,7 +54,7 @@ const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js"
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
-const { flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { exportMetaLine, toMarkdownDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument, exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
@@ -64,6 +64,7 @@ const { preferences } = await import("../legacy/preferences-bridge.ts");
 
 import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
 import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+const flushEdits = () => undoOwner().flush();
 function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");

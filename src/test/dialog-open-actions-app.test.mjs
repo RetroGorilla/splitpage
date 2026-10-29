@@ -9,7 +9,8 @@ await bootApp();
 
 const { appActions } = await import("../legacy/app-actions.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const flushEdits = () => undoOwner().flush();
 const { closeGdocModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
 const { closeSettings, settingsOpen } = await import("../features/settings/settings.js");
 const { fileMenuOpen, toggleFileMenu } = await import("../bootstrap/wiring/file-menu-controls.ts");

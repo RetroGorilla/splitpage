@@ -16,7 +16,10 @@ const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-pa
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../features/tags/production-tags.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { flushEdits, lastUndoEntry, undoSizes } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const flushEdits = () => undoOwner().flush();
+const lastUndoEntry = () => undoOwner().last();
+const undoSizes = () => undoOwner().sizes();
 const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");

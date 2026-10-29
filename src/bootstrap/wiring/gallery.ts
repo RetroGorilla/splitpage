@@ -15,7 +15,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { videoHostLabel } from "../../adapters/formats/video-host.ts";
 import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../features/rows/render.js";
 import { videoFiles } from "./video-files.ts";
-import { foldIntoEdit } from "../../legacy/undo-bridge.ts";
+import { undoOwner } from "./undo.ts";
 import { cellEditing, pickPictureFor } from "../../legacy/editor-bridge.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { desktopVideo } from "./desktop-video.ts";
@@ -78,7 +78,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
       document: portDocument,
       pictures: portPictures,
       ownership: portOwnership,
-      undo: { fold: foldIntoEdit },
+      undo: { fold: (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change) },
       thumbnailsAllowed: () => preferences().videoThumbs(),
       desktop: desktopVideo
     };
