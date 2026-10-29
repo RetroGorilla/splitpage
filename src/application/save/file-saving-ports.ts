@@ -31,7 +31,8 @@ export type FileSaveTarget =
 
 export type FileSaveCheck =
   | { readonly ok: true }
-  | { readonly ok: false; readonly current: { readonly lastModified: number } | null };
+  | { readonly ok: false; readonly current: { readonly lastModified: number } | null }
+  | { readonly ok: false; readonly current: null; readonly denied: true };
 
 export interface FileSaveTargets {
   readonly dialogs: (slug: string) => FileSaveDialogs;

@@ -68,6 +68,10 @@ async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterR
       const check = await checkFileConflict(imported.handle, imported.lastModified);
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
       if (!check.ok) {
+        if ("denied" in check) {
+          showToast("Could not save — permission to change " + (imported.name as string) + " was withdrawn.", "error");
+          return WRITEBACK_FAILED;
+        }
         return { kind: "refused", reason: FILE_CHANGED, conflict: { fileName: imported.name as string, current: check.current, kind: "import" } };
       }
     }
