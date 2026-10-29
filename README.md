@@ -55,10 +55,10 @@ node build.mjs           # write index.html, stamp sw.js with VERSION
 node build.mjs --check   # are both in step with src/ and VERSION?
 ```
 
-The source is `src/` — `page.html` (the shell), `app.css` and `styles/`,
+The source is `src/` — `page.html` (the shell), `styles/`,
 `seed-state.json` (the demo document), the folders that own one job each
-(`core/`, `application/`, `adapters/`, `features/`, `bootstrap/`, and
-`legacy/` for the bridges still standing), with `src/bootstrap/main.ts`, the
+(`core/`, `application/`, `adapters/`, `features/` and `bootstrap/`), with
+`src/bootstrap/main.ts`, the
 entry point esbuild bundles from — plus `VERSION` and
 `docs/help.md`, which is rendered into the in-app Help page. Nothing else
 feeds the build. Which folder may import which is
@@ -176,9 +176,9 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
   Standalone HTML** possible, and what lets the app run straight off a USB
   stick); the only thing it fetches is the Google Fonts stylesheet, loaded so
   that a slow or unreachable font server cannot stop the app starting.
-- `src/` — the source. `page.html` (the shell), `app.css` and `styles/`,
+- `src/` — the source. `page.html` (the shell), `styles/`,
   `seed-state.json` (the demo document), `core/`, `application/`,
-  `adapters/`, `features/`, `bootstrap/` and `legacy/` (see above).
+  `adapters/`, `features/` and `bootstrap/` (see above).
   `bootstrap/main.ts` is the composition root: esbuild bundles it into the
   app's one inline script, and it sets the boot order.
 - `tests/` — unit tests for the owned folders; `src/test/` holds the older
