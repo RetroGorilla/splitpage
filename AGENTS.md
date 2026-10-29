@@ -13,7 +13,7 @@ Read this first. It is the short version of the rules; the linked documents hold
 | Folder | What it holds | May import |
 | --- | --- | --- |
 | `src/core/` | Pure document, text, merge and production logic. No DOM, no timers, no globals | core, `shared/` |
-| `src/application/` | Owners: the one module that holds a piece of state and is the only way to change it (session, preferences, saving, undo) | core, `contracts`, `shared/` |
+| `src/application/` | Owners: the one module that holds a piece of state and is the only way to change it (session, preferences, saving, undo) | core, `shared/` |
 | `src/adapters/` | Files, storage, formats (DOCX, PDF, XLSX), desktop, transport | core, `application`, `shared/` |
 | `src/features/<name>/` | One part of the screen. `ports.ts` lists what it needs, `actions.ts` its actions, `mount.ts` its DOM events | core, `application` (types and pure functions only), `features/common`, `shared/` |
 | `src/features/common/` | Stateless DOM helpers shared by features | as features |
