@@ -4,7 +4,7 @@ import "../../../src/test/_screen-state-started.mjs";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { commandResults } from "../../../src/features/command-menu/command-menu.ts";
-import { appActions } from "../../../src/legacy/app-actions.ts";
+import { appActions } from "../../../src/bootstrap/wiring/ports/actions.ts";
 import { wireRegistries } from "../../../src/test/_registries.mjs";
 import { mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../../src/bootstrap/wiring/file-menu-export.ts";
 

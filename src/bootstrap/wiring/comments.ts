@@ -19,7 +19,7 @@ import { shotHiding } from "./shot-hiding.ts";
 import { resetDraftHistory } from "../../features/editing/draft-edit.js";
 import type { CommentsPorts } from "../../features/comments/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { runFromButton } from "../../legacy/app-actions.ts";
+import { runFromButton } from "./ports/actions.ts";
 import { mountComments } from "../../features/comments/mount.ts";
 import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
 import { storedImageHtml } from "../../core/document/text-policy.ts";

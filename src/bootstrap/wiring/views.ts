@@ -10,7 +10,7 @@ import type { ImportsPorts, GdocPorts } from "../../features/imports/mount.ts";
 import type { WriterOpenPorts, WriterNavigationPorts } from "../../features/writer/mount.ts";
 import type { HistoryGalleryPorts } from "../../features/gallery/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { runFromButton, saveFromButton } from "../../legacy/app-actions.ts";
+import { runFromButton, saveFromButton } from "./ports/actions.ts";
 import { mountNotices } from "../../features/notices/mount.ts";
 import { mountPrompterVisibility, mountPrompterOpen, mountPrompter } from "../../features/prompter/mount.ts";
 import { mountIdentity } from "../../features/settings/mount.ts";

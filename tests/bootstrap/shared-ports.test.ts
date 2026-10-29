@@ -18,7 +18,7 @@ import type { ExportRegistry } from "../../src/application/export/registry.ts";
 import type { PreferenceNotice } from "../../src/application/preferences/preferences.ts";
 
 import { mountScriptZoomFeature, scriptZoomActions, stopScriptZoomFeature } from "../../src/bootstrap/wiring/script-zoom.ts";
-import { installAppActions } from "../../src/legacy/app-actions.ts";
+import { installAppActions } from "../../src/bootstrap/wiring/ports/actions.ts";
 import { PREF_EVENT, preferences, startPreferences, viewFlags } from "../../src/legacy/preferences-bridge.ts";
 import type { SaveChange } from "../../src/application/save/save-state.ts";
 import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSaves } from "../../src/legacy/save-bridge.ts";
