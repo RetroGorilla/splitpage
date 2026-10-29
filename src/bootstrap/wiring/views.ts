@@ -45,7 +45,7 @@ import { sidePanels } from "../../legacy/panels-bridge.ts";
 import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { mountPanels } from "../../features/panels/mount.ts";
 import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
-import { deliverFile } from "../../legacy/file-delivery.ts";
+import { fileDelivery } from "./ports/files.ts";
 import { localFileMenuControls, localFilesOwner, importSavingOwner } from "./local-files.ts";
 import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
@@ -183,7 +183,7 @@ export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
       confirmFileMerge: function () { currentMergeReview()?.confirm(); },
       importHome: importHome as unknown as ConflictsPorts["importHome"],
       buildFileData: (...args: Parameters<ReturnType<typeof localFileMenuControls>["buildFileData"]>) => localFileMenuControls().buildFileData(...args),
-      deliverFile: deliverFile,
+      deliverFile: fileDelivery.deliver,
       conflict: function () { return fileConflicts().current(); },
       capture: captureViewDocument
     };

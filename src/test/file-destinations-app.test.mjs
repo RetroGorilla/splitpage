@@ -7,7 +7,7 @@ await bootApp();
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
-const { deliverFile } = await import("../legacy/file-delivery.ts");
+const { fileDelivery: { deliver: deliverFile } } = await import("../bootstrap/wiring/ports/files.ts");
 const { importHome, setHome } = await import("../legacy/location-bridge.ts");
 const { restoreDesktop, useDesktopForTest } = await import("../adapters/desktop/desktop-port.ts");
 const { runningOnDesktop, setRunningOnDesktop } = await import("../application/desktop-presence.ts");
