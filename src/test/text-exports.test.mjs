@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { withPageHead } from "../core/document/ids.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { toPlainText } from "../core/text/projections.ts";

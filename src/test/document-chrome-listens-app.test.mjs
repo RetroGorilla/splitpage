@@ -10,7 +10,7 @@ const { adoptReplacement, noteServerUpdate, runCommand } = await import("../boot
 const { documentLocation, setHome, amendHome, currentHome } = await import("../bootstrap/wiring/location-owner.ts");
 const { preferences, viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../bootstrap/wiring/save-owners.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { titleCommand } = await import("../application/commands/title.ts");

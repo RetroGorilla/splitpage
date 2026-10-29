@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const saves = await import("../bootstrap/wiring/save-owners.ts");

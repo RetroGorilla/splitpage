@@ -8,7 +8,7 @@ await bootApp();
 after(closeApp);
 
 const { LONG_DEMO } = await import("../starters/index.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.js");
 const { brollShotListForPrint } = await import("../adapters/formats/export-projections.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");

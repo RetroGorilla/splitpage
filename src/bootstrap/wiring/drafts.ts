@@ -8,12 +8,12 @@ import { inlineStateJson, internDataUrl, persist } from "../../adapters/storage/
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../../adapters/storage/draft-store-idb.ts";
 import { browserWriterId, browserWriterIsLive, holdBrowserWriterLock, releaseBrowserWriterLock } from "../../adapters/storage/draft-writer-lock.js";
 import { owned } from "../../features/routing/owned.ts";
-import { migrateRows } from "../../legacy/document-ports.ts";
+import { migrateRows } from "../document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { notifyDesktopDocumentState } from "./desktop-owners.ts";
 import { documentLocation } from "./location-owner.ts";
 import { applyMerge } from "./document-merge.ts";
-import { resetProductionPanelState } from "../../legacy/production-editing-bridge.ts";
+import { resetProductionPanelState } from "./production-editing-owners.ts";
 import { applyStashedWork, browserDrafts, captureRestore, desktopDrafts, draftResume, recoveryStarted, stillRestoring, useBrowserDraftFactory } from "./recovery-owners.ts";
 import type { LegacyDraftPorts } from "./recovery-owners.ts";
 import { saveChanges, unsavedChanges } from "./save-owners.ts";

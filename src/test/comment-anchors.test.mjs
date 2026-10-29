@@ -7,7 +7,7 @@ import { fromHtml, cellOf } from "../legacy/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 
