@@ -6,8 +6,7 @@ are welcome; this page is how to make either easy to act on.
 ## Reporting a bug or asking for something
 
 Open an issue from the templates. For a bug, say what you did, what you
-expected, what happened, and where (browser, desktop app, or a hosted server,
-and the version from **Help ▸ About**). Security problems go through
+expected, what happened, and where (browser or desktop app, and the version from **Help ▸ About**). Security problems go through
 [SECURITY.md](SECURITY.md), not an issue.
 
 Issues carry an `area:` label (`ui`, `editor`, `desktop`, `installer`) and a
