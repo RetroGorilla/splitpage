@@ -24,8 +24,7 @@ breakdown for props/locations/cast/VFX/sound.
 
 - **Edit `src/`, never `index.html`.** Source is `src/page.html` (shell),
   `src/styles/`, `src/seed-state.json` (demo document) and the owned folders
-  (`core/`, `application/`, `adapters/`, `features/`, `bootstrap/`,
-  `legacy/`). `src/bootstrap/main.ts` is the bundle entry, which mounts the
+  (`core/`, `application/`, `adapters/`, `features/`, `bootstrap/`). `src/bootstrap/main.ts` is the bundle entry, which mounts the
   owners and features in a fixed order; `src/js/` is gone.
   `node build.mjs` bundles from `main.ts` with
   esbuild and inlines the result into `index.html`; `node build.mjs --check`
@@ -1787,7 +1786,6 @@ shared ports, actions and tests; [AGENTS.md](AGENTS.md) has the layer rules.
 | `src/application/` (other) | preferences, document location and identity (with the document guard), production index and b-roll records, media and picture store, files and recents, export registry and services, screen and screen state, actions, shortcuts |
 | `src/adapters/` | `richtext/` (HTML in and out of cells), `formats/` (DOCX, PDF, CSV/XLSX, Markdown, the `.splitpage` file), `storage/` (blobs, gallery, history IndexedDB, desktop drafts), `files/`, `desktop/`, `page/`, `identity/`, `production/` |
 | `src/core/` | pure rules: `document/`, `text/` (runs, marks, steps, anchors), `merge/`, `production/`, `migrate.ts` |
-| `src/legacy/app-actions.ts` | the last legacy file: the action registry facade some wiring modules still import |
 | `src/starters/` | the starter scripts and the 30-scene long demo |
 | `src/styles/` | `base.css`, `layout.css`, `components.css` and the `overrides*.css` files that must follow specific feature styles |
 

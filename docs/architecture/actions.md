@@ -142,9 +142,7 @@ by the composition root `src/bootstrap/main.ts`) builds the registry with
 `createAppActions()` and installs it into the facade; before that, and after
 the wiring's `dispose()`, every facade call throws "The action registry is not
 started yet". Its `report` rethrows the error on a microtask, so a failing
-action still reaches the browser as an uncaught error, as it did before. The
-facade retires when those wiring modules take the registry from the actions
-port (`src/bootstrap/wiring/ports/actions.ts`). The export registry behind
+action still reaches the browser as an uncaught error, as it did before. The export registry behind
 `exportFormats` (`src/bootstrap/wiring/export-registry.ts`) is filled by
 `registerBuiltInExporters(registry)` in `src/bootstrap/wiring/exporters.ts`
 from the wiring, not at module evaluation. The load-order check (`tests/bootstrap/module-load.test.ts`, with its spies
