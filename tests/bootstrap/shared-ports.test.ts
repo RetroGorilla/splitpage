@@ -23,7 +23,7 @@ import { PREF_EVENT, preferences, startPreferences, viewFlags } from "../../src/
 import type { SaveChange } from "../../src/application/save/save-state.ts";
 import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSaves } from "../../src/bootstrap/wiring/save-owners.ts";
 import type { LegacySavePorts } from "../../src/bootstrap/wiring/save-owners.ts";
-import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
+import { cacheSeal } from "../../src/bootstrap/cache-freeze.ts";
 import { productionReaders } from "../../src/bootstrap/document-ports.ts";
 import { editorSelection, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";
 import { installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";

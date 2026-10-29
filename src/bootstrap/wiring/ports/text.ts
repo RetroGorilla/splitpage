@@ -1,6 +1,6 @@
 import type { TextServices } from "../../../application/text/services.ts";
 import { retagTagAnchors } from "../../../adapters/richtext/tag-anchors.ts";
-import { cacheSeal } from "../../../legacy/cache-freeze.ts";
+import { cacheSeal } from "../../cache-freeze.ts";
 import { productionReaders } from "../../document-ports.ts";
 import { htmlToPlainText } from "../../../bootstrap/plain-text.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../richtext.ts";

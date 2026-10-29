@@ -12,7 +12,7 @@ const { mintTagId } = await import("../core/document/tags.ts");
 const { productionReaders } = await import("../bootstrap/document-ports.ts");
 const { TAG_CATEGORIES } = await import("../core/production/looks.ts");
 const { cellOf } = await import("../bootstrap/richtext.ts");
-const { cacheSeal, freezeCachesAsked } = await import("../legacy/cache-freeze.ts");
+const { cacheSeal, freezeCachesAsked } = await import("../bootstrap/cache-freeze.ts");
 const { deepLock } = await import("../core/document/freeze.ts");
 const { runInThisContext } = await import("node:vm");
 const sloppyWrite = (body) => runInThisContext("(function (o) { " + body + " })");
