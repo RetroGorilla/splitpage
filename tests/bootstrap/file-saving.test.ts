@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mountFileSavingFeature, stopFileSavingFeature, updateAutoSaveMenu, wireFileSaving } from "../../src/bootstrap/wiring/file-saving.ts";
 import { autoSaveTarget, saveDestinations, setAutoSaveEnabled, startSaves } from "../../src/bootstrap/wiring/save-owners.ts";
-import { setHome } from "../../src/legacy/location-bridge.ts";
+import { setHome } from "../../src/bootstrap/wiring/location-owner.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
 
 test("the file saving wiring fills the owner's ports from the live bridges and keeps the autosave menu in step", () => {

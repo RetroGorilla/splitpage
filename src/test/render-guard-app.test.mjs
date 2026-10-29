@@ -372,7 +372,7 @@ test("a redraw toast still on screen goes away when a later update draws cleanly
 });
 
 test("a desktop file draft over an untouched file whose render throws still restores the changes and marks them unsaved (#418)", async () => {
-  const { setHome } = await import("../legacy/location-bridge.ts");
+  const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
   const seen = await bothWays("file draft", () => {
     fresh("Before the file draft");
     const disk = table304Document("On disk");

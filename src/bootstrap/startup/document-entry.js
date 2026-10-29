@@ -1,4 +1,4 @@
-import { documentLocation } from "../../legacy/location-bridge.ts";
+import { documentLocation } from "../wiring/location-owner.ts";
 import { documentTransitions } from "../wiring/transition-owners.ts";
 import { withDocumentPorts, migrateRows } from "../../legacy/document-ports.ts";
 import { migrateDocument as migrateDocumentWith } from "../../core/migrate.ts";

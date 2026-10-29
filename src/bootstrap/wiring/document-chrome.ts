@@ -1,5 +1,5 @@
 import { onSessionChange } from "./session-owner.ts";
-import { documentLocation } from "../../legacy/location-bridge.ts";
+import { documentLocation } from "./location-owner.ts";
 import { onPreferenceChange, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onSaveChange } from "./save-owners.ts";
 import { identityChipListeners } from "./title-chrome.ts";

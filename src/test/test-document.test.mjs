@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const bridge = await import("../bootstrap/wiring/session-owner.ts");
-const homeMod = await import("../legacy/location-bridge.ts");
+const homeMod = await import("../bootstrap/wiring/location-owner.ts");
 const { baseStateReason } = await import("../bootstrap/wiring/session-merge.ts");
 const documentIdentityPort = { mint: (...args) => documentIdentityOwner().documentIdentityPort.mint(...args), writtenOut: (...args) => documentIdentityOwner().documentIdentityPort.writtenOut(...args), markWrittenOut: (...args) => documentIdentityOwner().documentIdentityPort.markWrittenOut(...args) };
 const { loadTestDocument } = await import("./_document.mjs");

@@ -3,7 +3,7 @@ import { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { rightToday } from "./_m4-matrix.mjs";
-import { documentLocation } from "../legacy/location-bridge.ts";
+import { documentLocation } from "../bootstrap/wiring/location-owner.ts";
 
 const opened = [];
 const factory = globalThis.indexedDB;

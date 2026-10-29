@@ -1,5 +1,5 @@
 import { preferencesStarted, startPreferences } from "../legacy/preferences-bridge.ts";
-import { locationStarted, startLocation } from "../legacy/location-bridge.ts";
+import { locationStarted, startLocation } from "../bootstrap/wiring/location-owner.ts";
 import { liveSession, sessionStarted } from "../bootstrap/wiring/session-owner.ts";
 import { appSessionDeps } from "./_app-session.mjs";
 import { startTestSession } from "./_session.mjs";

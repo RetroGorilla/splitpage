@@ -9,7 +9,7 @@ import {
   mockClock,
   rightToday
 } from "./_m4-matrix.mjs";
-import { documentLocation } from "../legacy/location-bridge.ts";
+import { documentLocation } from "../bootstrap/wiring/location-owner.ts";
 import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
@@ -28,7 +28,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { localFileMenuControls, importSavingOwner } = await import("../bootstrap/wiring/local-files.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { openPrompterInBrowser } = await import("../bootstrap/wiring/desktop-owners.ts");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
