@@ -6,6 +6,7 @@
     {"label":"media-fields-audio","file":"src/core/migrate.ts","find":"= [\"visualText\", \"audioText\"];","replace":"= [\"visualText\"];"},
     {"label":"media-fields-visual","file":"src/core/migrate.ts","find":"= [\"visualText\", \"audioText\"];","replace":"= [\"audioText\"];"},
     {"label":"move-media-keeps-cell","file":"src/core/migrate.ts","find":"  row[field] = toHtml(cell);\n","replace":""},
+    {"label":"cue-key-any-category","file":"src/core/migrate.ts","find":"const key = t.cat === \"sound\" ? nameKey(textOfName(t)) : \"\";","replace":"const key = nameKey(textOfName(t));"},
     {"label":"cue-no-sound-guard","file":"src/core/migrate.ts","find":"  if (!tags.some(function (t) { return t.cat === \"sound\"; })) return undefined;\n","replace":""},
     {"label":"cue-claimed-capped","file":"src/core/migrate.ts","find":"    claimed[nameKey(cappedText(t.name, 80))] = true;\n","replace":""},
     {"label":"cue-claimed-plain","file":"src/core/migrate.ts","find":"    claimed[nameKey(textOfName(t))] = true;\n","replace":""},

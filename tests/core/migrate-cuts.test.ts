@@ -128,7 +128,7 @@ test("a cue shorter than 80 whose tag is a longer broken name finds it by its st
       { id: "t_old2", cat: "sound", name: x(77) + "\uD83D", notes: "two" }
     ]
   });
-  assert.deepEqual(list(out, "productionTags").map((t) => [t.id, t.name, t.notes]), [["t_old1", x(77) + " yy".trimEnd(), "one"], ["t_old2", x(77), "two"]]);
+  assert.deepEqual(list(out, "productionTags").map((t) => [t.id, t.name, t.notes]), [["t_old1", x(77) + " yy", "one"], ["t_old2", x(77), "two"]]);
 });
 
 test("a long cue name finds the broken tag it extends, for the first tag of a name only, and each cue name is used once (#344)", () => {
@@ -317,18 +317,22 @@ test("words of a sound tag whose cue rename was refused never join the tag that 
 });
 
 test("a prop tag with a sound tag's old name keeps its tagged words, and the sound words still follow (#445)", () => {
-  const f = fakeMigration();
-  const out = run(f, {
-    rows: [
-      { id: "r1", status: "todo", audioText: f.cell([cue("SFX: " + GRIN.repeat(50))]), visualText: "" },
-      { id: "r2", status: "todo", audioText: f.cell([tag("prop", GRIN.repeat(40), "a"), T(" b "), tag("sound", GRIN.repeat(40), "c")]), visualText: "" }
-    ],
-    productionTags: [
+  for (const propFirst of [false, true]) {
+    const f = fakeMigration();
+    const registry = [
       { id: "t_old1", cat: "sound", name: GRIN.repeat(40), notes: "cue" },
       { id: "t_old2", cat: "prop", name: GRIN.repeat(40), notes: "prop" }
-    ]
-  });
-  assert.deepEqual(list(out, "productionTags").map((t) => [t.id, t.cat, t.name]), [["t_old1", "sound", GRIN.repeat(50)], ["t_old2", "prop", GRIN.repeat(40)]]);
-  assert.deepEqual([...String((list(out, "rows")[1] as Item).audioText).matchAll(/data-tag-cat="(\w+)" data-tag-name="([^"]*)"/g)].map((m) => [m[1], m[2]]),
-    [["prop", GRIN.repeat(40)], ["sound", GRIN.repeat(50)]]);
+    ];
+    const out = run(f, {
+      rows: [
+        { id: "r1", status: "todo", audioText: f.cell([cue("SFX: " + GRIN.repeat(50))]), visualText: "" },
+        { id: "r2", status: "todo", audioText: f.cell([tag("prop", GRIN.repeat(40), "a"), T(" b "), tag("sound", GRIN.repeat(40), "c")]), visualText: "" }
+      ],
+      productionTags: propFirst ? registry.slice().reverse() : registry
+    });
+    const expected = [["t_old1", "sound", GRIN.repeat(50)], ["t_old2", "prop", GRIN.repeat(40)]];
+    assert.deepEqual(list(out, "productionTags").map((t) => [t.id, t.cat, t.name]), propFirst ? expected.reverse() : expected, String(propFirst));
+    assert.deepEqual([...String((list(out, "rows")[1] as Item).audioText).matchAll(/data-tag-cat="(\w+)" data-tag-name="([^"]*)"/g)].map((m) => [m[1], m[2]]),
+      [["prop", GRIN.repeat(40)], ["sound", GRIN.repeat(50)]], String(propFirst));
+  }
 });
