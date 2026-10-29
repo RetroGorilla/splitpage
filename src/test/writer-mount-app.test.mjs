@@ -9,7 +9,7 @@ await bootApp();
 
 const { mountWriterRuntimeFeature, stopWriterRuntimeFeature, writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { adoptReplacement, currentDocument, onRefresh } = await import("../bootstrap/wiring/session-owner.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();

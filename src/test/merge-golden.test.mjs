@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { STATE_FIELDS } from "../core/merge/state-fields.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";

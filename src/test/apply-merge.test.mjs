@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import { bootApp, clearTimers, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { baseStateReason, setBaseState } from "../bootstrap/wiring/session-merge.ts";
 import { applyMerge, mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import { mergeUndo } from "../bootstrap/wiring/editor-owners.ts";

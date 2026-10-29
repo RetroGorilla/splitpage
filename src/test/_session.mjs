@@ -2,7 +2,7 @@ import "./_session-merge-started.mjs";
 import { documentGuardStarted, startDocumentGuard } from "../application/identity/document-guard.ts";
 import "./_production-tags-started.mjs";
 import { wireProductionIndex } from "../bootstrap/wiring/production-index.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { stampRow } from "../bootstrap/wiring/session-merge.ts";
 import { bulkTagCell } from "../features/tags/production-tags.js";
 

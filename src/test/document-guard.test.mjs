@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 
 globalThis.location = new URL("https://splitpage.test/index.html?document-guard=1");
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 (await import("../application/identity/document-guard.ts")).startDocumentGuard(documentGuardAsked(location.search), console.error);
 
 const { DocumentWriteError, documentGuardOn, isDocumentView, quietly, rawOf } = await import("../application/identity/document-guard.ts");
