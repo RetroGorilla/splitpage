@@ -29,7 +29,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/location-bridge.ts": { functions: ["startLocation"] },
   "src/legacy/effects-bridge.ts": { functions: ["startEffects"] },
   "src/bootstrap/wiring/ports/panels.ts": { functions: ["startSidePanels"] },
-  "src/legacy/desktop-bridge.ts": { functions: ["startDesktopDocumentState", "handDesktopTo"] },
+  "src/bootstrap/wiring/desktop-owners.ts": { functions: ["startDesktopDocumentState", "handDesktopTo"] },
   "src/application/desktop/menu-commands.ts": { functions: ["runMenuCommandsWith"] },
   "src/bootstrap/wiring/script-zoom.ts": { functions: ["mountScriptZoomFeature"] },
   "src/bootstrap/wiring/read-time.ts": { functions: ["mountReadTimeFeature"] },
