@@ -24,21 +24,21 @@ export interface DocumentLocation {
 type Shape = Readonly<Record<string, unknown>>;
 
 const FIELDS: Readonly<Record<HomeKind, Shape>> = Object.freeze({
-  none: {},
-  file: { handle: null, format: null, name: null, lastModified: null, diskBase: null },
-  import: { handle: null, format: null, name: null, lastModified: null, size: null, inPlace: false, dirty: false, diskBase: null }
+  none: Object.freeze({}),
+  file: Object.freeze({ handle: null, format: null, name: null, lastModified: null, diskBase: null }),
+  import: Object.freeze({ handle: null, format: null, name: null, lastModified: null, size: null, inPlace: false, dirty: false, diskBase: null })
 });
 
 const REQUIRED: Readonly<Record<HomeKind, readonly string[]>> = Object.freeze({
-  none: [],
-  file: ["format"],
-  import: ["name"]
+  none: Object.freeze([]),
+  file: Object.freeze(["format"]),
+  import: Object.freeze(["name"])
 });
 
 const AMENDABLE: Readonly<Record<HomeKind, readonly string[]>> = Object.freeze({
-  none: [],
-  file: ["diskBase", "lastModified"],
-  import: ["dirty", "lastModified", "size", "inPlace", "diskBase"]
+  none: Object.freeze([]),
+  file: Object.freeze(["diskBase", "lastModified"]),
+  import: Object.freeze(["dirty", "lastModified", "size", "inPlace", "diskBase"])
 });
 
 export const HOME_KINDS: readonly HomeKind[] = Object.freeze(["none", "file", "import"]);

@@ -10,11 +10,17 @@ import type { OwnerChoice } from "./production-records.ts";
 
 export type ShotFields = Readonly<Record<string, unknown>>;
 
-const SHOTS_CHANGE: ChangeSet = changeSet({ docFields: ["brollShots"], saveNow: true });
+function shotsChange(): ChangeSet {
+  return changeSet({ docFields: ["brollShots"], saveNow: true });
+}
 
-const SHOT_OWNER_CHANGE: ChangeSet = changeSet({ docFields: ["brollShots", "people"], saveNow: true });
+function shotOwnerChange(): ChangeSet {
+  return changeSet({ docFields: ["brollShots", "people"], saveNow: true });
+}
 
-const SHOT_PROPS_CHANGE: ChangeSet = changeSet({ docFields: ["brollShots", "productionTags"], derive: ["production"], saveNow: true });
+function shotPropsChange(): ChangeSet {
+  return changeSet({ docFields: ["brollShots", "productionTags"], derive: ["production"], saveNow: true });
+}
 
 function copied<T>(value: T): T {
   return value === undefined ? value : JSON.parse(JSON.stringify(value)) as T;
@@ -27,7 +33,7 @@ export function addShotCommand(shot: DocumentShot): Command {
     plan: function (doc): Plan | null {
       if (!shot.id || brollRecord(doc, shot.id)) return null;
       return {
-        changes: SHOTS_CHANGE,
+        changes: shotsChange(),
         apply: function (live) { addBrollRecord(live, copied(shot)); }
       };
     }
@@ -35,7 +41,7 @@ export function addShotCommand(shot: DocumentShot): Command {
 }
 
 export function setShotsCommand(shotIds: readonly string[], fields: ShotFields, owner?: OwnerChoice, ids?: IdSource): Command {
-  const changes = owner && "name" in owner ? SHOT_OWNER_CHANGE : SHOTS_CHANGE;
+  const changes = owner && "name" in owner ? shotOwnerChange() : shotsChange();
   return {
     name: "set-broll-shots",
     needs: "edit",
@@ -72,7 +78,7 @@ export function deleteShotCommand(shotId: string): Command {
     plan: function (doc): Plan | null {
       if (!brollRecord(doc, shotId)) return null;
       return {
-        changes: SHOTS_CHANGE,
+        changes: shotsChange(),
         apply: function (live) { removeBrollRecord(live, shotId); }
       };
     }
@@ -84,7 +90,7 @@ export function addShotPropCommand(shotId: string, name: string): Command {
     name: "add-broll-prop",
     needs: "edit",
     plan: function (doc): Plan | null {
-      return planByTrial("add-broll-prop", doc, SHOT_PROPS_CHANGE, function (live) { return addBrollProp(live, shotId, name); });
+      return planByTrial("add-broll-prop", doc, shotPropsChange(), function (live) { return addBrollProp(live, shotId, name); });
     }
   };
 }
@@ -94,7 +100,7 @@ export function removeShotPropCommand(shotId: string, ref: string): Command {
     name: "remove-broll-prop",
     needs: "edit",
     plan: function (doc): Plan | null {
-      return planByTrial("remove-broll-prop", doc, SHOTS_CHANGE, function (live) { return removeBrollProp(live, shotId, ref); });
+      return planByTrial("remove-broll-prop", doc, shotsChange(), function (live) { return removeBrollProp(live, shotId, ref); });
     }
   };
 }
