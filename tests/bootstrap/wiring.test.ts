@@ -1,5 +1,5 @@
 import { startDocumentGuard } from "../../src/application/identity/document-guard.ts";
-import { productionEditingStarted, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { productionEditingStarted, startProductionEditing } from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { bootApp, closeApp, rewireApp } from "../../src/test/_app-boot.mjs";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
