@@ -137,3 +137,42 @@ test("a conflict and a lost document each refuse without creating a writable", a
   assert.deepEqual(h.log, []);
   stop();
 });
+
+test("a writeback whose re-read fails keeps the writer's stamp so the next save is not refused", async () => {
+  const h = harness();
+  let disk = 40;
+  const stop = h.owner.startImportSaving({
+    ...h.ports,
+    files: {
+      ...h.ports.files,
+      checkConflict: async (_handle, lastModified) => (lastModified && lastModified !== disk ? { ok: false, current: { lastModified: disk } } : { ok: true }),
+      createWritable: async () => ({ write: async () => {}, close: async () => { disk = 70; return { lastModified: 70 }; } }),
+      read: async () => { throw new Error("read failed"); }
+    }
+  });
+  h.ports.location.amendHome(h.imported, { lastModified: 40, size: 9 });
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.equal(h.imported["lastModified"], 70);
+  assert.equal(h.imported["size"], null);
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  stop();
+});
+
+test("a writeback whose re-read fails without a stamp clears the old one so the next save is not refused", async () => {
+  const h = harness();
+  let disk = 40;
+  const stop = h.owner.startImportSaving({
+    ...h.ports,
+    files: {
+      ...h.ports.files,
+      checkConflict: async (_handle, lastModified) => (lastModified && lastModified !== disk ? { ok: false, current: { lastModified: disk } } : { ok: true }),
+      createWritable: async () => ({ write: async () => {}, close: async () => { disk = 70; } }),
+      read: async () => { throw new Error("read failed"); }
+    }
+  });
+  h.ports.location.amendHome(h.imported, { lastModified: 40, size: 9 });
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.equal(h.imported["lastModified"], null);
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  stop();
+});
