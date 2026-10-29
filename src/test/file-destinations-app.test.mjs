@@ -11,7 +11,6 @@ const saves = await import("../bootstrap/wiring/save-owners.ts");
 const { fileDelivery: { deliver: deliverFile } } = await import("../bootstrap/wiring/ports/files.ts");
 const { importHome, setHome } = await import("../bootstrap/wiring/location-owner.ts");
 const { restoreDesktop, useDesktopForTest } = await import("../adapters/desktop/desktop-port.ts");
-const { runningOnDesktop, setRunningOnDesktop } = await import("../application/desktop-presence.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
@@ -25,12 +24,9 @@ function clearToasts() {
 }
 
 function onDesktop(fake, run) {
-  const was = runningOnDesktop();
-  setRunningOnDesktop(true);
   useDesktopForTest(fake);
   return Promise.resolve().then(run).finally(() => {
     restoreDesktop();
-    setRunningOnDesktop(was);
   });
 }
 

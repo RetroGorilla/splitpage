@@ -4,6 +4,7 @@ import type { ActionRegistry } from "../../application/actions.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
+import type { DesktopPresence } from "../../application/desktop-presence.ts";
 import type { DesktopVideo } from "../../application/media/desktop-video.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChanges } from "../../application/preferences/preferences.ts";
@@ -59,6 +60,7 @@ export interface GalleryOverlayPorts {
   readonly render: GallerySlotRender;
   readonly video: GalleryVideo;
   readonly sessionVideos: SessionVideos;
+  readonly desktop: DesktopPresence["running"];
 }
 
 export interface GalleryOverlayMount {
