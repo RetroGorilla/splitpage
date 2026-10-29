@@ -34,7 +34,7 @@ export const REQUIRED_MARKERS = {
 
 export const DIRECTIVES = {};
 
-export const REASON = /^\/\/ why: ((?:docs\/[^\s#]+|[A-Z][A-Z0-9-]*)\.md)#([^\s#]+)(?: \S.*)?$/;
+const DOC_LINK = /docs\/[^\s#]+\.md#([\p{L}\p{N}_-]+)/gu;
 export const REASON_MAX = 120;
 
 export function headingAnchors(markdown) {
@@ -66,10 +66,21 @@ export function reasonResolver(repo = REPO) {
   };
 }
 
-export function isReason(path, text, reasons) {
-  if (!isScript(path) || text.length > REASON_MAX) return false;
-  const m = REASON.exec(text);
-  return m !== null && reasons(m[1], m[2]);
+function reasonForm(path, comment) {
+  if (isScript(path) || (comment.runScript && comment.text.startsWith("//"))) return "//";
+  if (/\.(?:sh|ps1)$/.test(path) || (comment.runScript && comment.text.startsWith("#"))) return "#";
+  if (/\.css$/.test(path)) return "/*";
+  return null;
+}
+
+function validReasonLine(text, form, first, reasons) {
+  if (!form || text.length > REASON_MAX || /[\r\n]/.test(text)) return false;
+  const body = form === "/*" && text.endsWith(" */") ? text.slice(0, -3) : text;
+  if (form === "/*" && body === text) return false;
+  const prefix = first ? `${form} why: ` : `${form} `;
+  if (!body.startsWith(prefix) || !body.slice(prefix.length).trim()) return false;
+  if (!first && body.slice(prefix.length).startsWith("why:")) return false;
+  return [...body.matchAll(DOC_LINK)].every((m) => reasons(m[0].slice(0, m[0].lastIndexOf("#")), m[1]));
 }
 
 export function normalize(text) {
@@ -98,13 +109,26 @@ export function scanFile(path, text, markers = REQUIRED_MARKERS, directives = DI
   const allowed = [...(markers[path] ?? [])];
   const allowedDirectives = [...(directives[path] ?? [])];
   const comments = [];
+  const lines = text.split(/\r?\n/);
+  let previousReason = null;
   for (const c of found) {
+    const line = c.line ?? lineOf(text, c.start);
+    const form = reasonForm(path, c);
     const d = c.directive ? allowedDirectives.indexOf(c.text) : -1;
-    if (d !== -1) { allowedDirectives.splice(d, 1); continue; }
+    if (d !== -1) { allowedDirectives.splice(d, 1); previousReason = null; continue; }
     const i = c.directive ? -1 : allowed.indexOf(c.text);
-    if (i !== -1) { allowed.splice(i, 1); continue; }
-    if (!c.directive && isReason(path, c.text, reasons)) continue;
-    comments.push({ text: normalize(c.text), line: c.line ?? lineOf(text, c.start) });
+    if (i !== -1) { allowed.splice(i, 1); previousReason = null; continue; }
+    if (!c.directive && validReasonLine(c.text, form, true, reasons)) {
+      previousReason = { line, form };
+      continue;
+    }
+    if (previousReason && line === previousReason.line + 1 && form === previousReason.form &&
+        lines[line - 1].trim() === c.text && validReasonLine(c.text, form, false, reasons)) {
+      previousReason = null;
+      continue;
+    }
+    previousReason = null;
+    comments.push({ text: normalize(c.text), line });
   }
   return comments;
 }
@@ -186,7 +210,7 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   print(`comment-gate: ${files.length} files scanned, ${total} baselined comments remain`);
   if (added.length) {
     for (const a of added) printError(`  new comment ${a.path}:${a.line} ${short(a.text)}`);
-    if (added.some((a) => a.text.startsWith("// why:"))) printError(`comment-gate: a reason comment is one line of at most ${REASON_MAX} characters in a script, \`// why: docs/<file>.md#<heading-anchor> <optional short reason>\`, and its heading must exist`);
+    printError(`comment-gate: reason comments are at most two consecutive lines of ${REASON_MAX} characters each; any docs/<file>.md#<anchor> heading must exist`);
     printError("comment-gate: FAILED — authored code and configuration carry no comments except reason comments; see docs/IMPLEMENTATION-PLAN.md section 2");
     return 1;
   }
