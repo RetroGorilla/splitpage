@@ -27,7 +27,7 @@ import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/b
 import { undoPorts, startUndo, undoStarted, undoSessionPort, routeUndoReplays } from "../../src/bootstrap/wiring/undo.ts";
 import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
-import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
+import { recoveryStarted } from "../../src/bootstrap/wiring/recovery-owners.ts";
 import { mergeStarted } from "../../src/bootstrap/wiring/document-merge.ts";
 import type { LegacyMergePorts } from "../../src/bootstrap/wiring/document-merge.ts";
 import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";

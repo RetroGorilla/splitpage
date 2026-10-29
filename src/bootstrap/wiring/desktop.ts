@@ -14,7 +14,7 @@ import type { DesktopMount, DesktopPorts } from "../../features/desktop/ports.ts
 import { owned } from "../../features/routing/owned.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { awaitHandedDocument, handDesktopTo, handedDocumentSettled, legacyDesktopDocumentPorts, notifyDesktopDocumentState, startDesktopDocumentState } from "./desktop-owners.ts";
-import { flushDraftNow } from "../../legacy/recovery-bridge.ts";
+import { flushDraftNow } from "./recovery-owners.ts";
 import { saveDoc } from "../../legacy/save-bridge.ts";
 import { noteSessionEdit } from "../../legacy/session-bridge.ts";
 import { openDocument } from "../../legacy/transition-bridge.ts";
