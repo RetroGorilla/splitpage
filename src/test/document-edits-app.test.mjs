@@ -2,13 +2,13 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
@@ -17,7 +17,7 @@ const redo = () => undoOwner().redo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();
-const { liveSession, runDocumentEdit, stampDocument } = await import("../legacy/session-bridge.ts");
+const { liveSession, runDocumentEdit, stampDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { setTargetLength } = await import("../features/rundown/target.js");
 const { registerProductionTag, findOrAddPerson } = await import("../features/tags/production-tags.js");
 const { renameTag, removeTag, newBrollRecord, removeBrollProp } = await import("../application/commands/production-actions.ts");
@@ -26,7 +26,7 @@ const { retagRewrites: planRetagRewrites, retagMentions: countRetagMentions } = 
 const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
-const { sessionStamps, readSession } = await import("../legacy/session-bridge.ts");
+const { sessionStamps, readSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { randomIds } = await import("../adapters/identity/ids.ts");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);
@@ -34,7 +34,7 @@ const { setCommentAssignee, toggleResolve } = await import("../features/comments
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { deletePersonCommand } = await import("../application/commands/production-records.ts");
 const { editStamp, documentIdStamp } = await import("../application/commands/save-stamps.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

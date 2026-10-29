@@ -1,7 +1,7 @@
 import { SEED_TEXT, bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 
 const REDRAW = "Could not draw the script. Nothing was lost — press Redraw before you start editing.";

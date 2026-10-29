@@ -6,7 +6,7 @@ import { analyzeScript, resolveSpecifier } from "../../tools/dep-report.mjs";
 import { REPO, isScript, listRepoFiles } from "../../tools/source-scan.mjs";
 import { COMPOSITION_ROOT } from "./load-manifests.ts";
 
-const OUTSIDE_BOOTSTRAP = ["../legacy/document-ports.ts", "../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js"];
+const OUTSIDE_BOOTSTRAP = ["../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js"];
 
 const MOUNT_ORDER = [
   "mountScreenStateOwner", "mountPageEntry", "mountSceneStatusFeature", "mountHideShotFeature", "mountDocumentIdentityOwner", "startBlobs", "startGalleryStore",
@@ -32,7 +32,7 @@ function importsOf(path: string): readonly Import[] {
 
 function mountCalls(text: string): string[] {
   const body = text.slice(text.indexOf("\nif (wiring) {"));
-  return [...body.matchAll(/^ {2}(?:var \w+ = )?(\w+)\(/gm)].map((m) => m[1] ?? "");
+  return [...body.matchAll(/^ {2}(?:(?:var|const) \w+ = )?(\w+)\(/gm)].map((m) => m[1] ?? "");
 }
 
 test("src/js is gone, so no legacy initializer or numbered module can come back", () => {
@@ -42,7 +42,7 @@ test("src/js is gone, so no legacy initializer or numbered module can come back"
 
 test("the build bundles the composition root", () => {
   const build = readFileSync(join(REPO, "build.mjs"), "utf8");
-  assert.match(build, /entryPoints: \[join\(ROOT, "src", "bootstrap", "main\.js"\)\]/);
+  assert.match(build, /entryPoints: \[join\(ROOT, "src", "bootstrap", "main\.ts"\)\]/);
 });
 
 test("outside src/bootstrap the composition root imports only its frozen set, which may only shrink", () => {
@@ -79,5 +79,5 @@ test("no production module imports the composition root", () => {
 
 test("the resolver used by the scan does find an import of the composition root", () => {
   const fileSet = new Set([COMPOSITION_ROOT, "src/features/probe/view.ts"]);
-  assert.deepEqual(resolveSpecifier("src/features/probe/view.ts", "../../bootstrap/main.js", fileSet), { kind: "file", target: COMPOSITION_ROOT });
+  assert.deepEqual(resolveSpecifier("src/features/probe/view.ts", "../../bootstrap/main.ts", fileSet), { kind: "file", target: COMPOSITION_ROOT });
 });

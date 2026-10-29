@@ -6,7 +6,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { scriptZoomActions as definitions } from "../../features/script-zoom/actions.ts";
 import type { ScriptZoomPorts } from "../../features/script-zoom/ports.ts";
 import { startScriptZoom as mountScriptZoom } from "../../features/script-zoom/script-zoom.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
+import { preferences } from "./preferences-owner.ts";
 
 const scriptZoom = owned<ReturnType<typeof mountScriptZoom>>();
 

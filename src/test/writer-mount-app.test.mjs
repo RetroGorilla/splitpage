@@ -8,12 +8,12 @@ localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, 
 await bootApp();
 
 const { mountWriterRuntimeFeature, stopWriterRuntimeFeature, writerControls } = await import("../bootstrap/wiring/writer.ts");
-const { adoptReplacement, currentDocument, onRefresh } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { adoptReplacement, currentDocument, onRefresh } = await import("../bootstrap/wiring/session-owner.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 
 after(closeApp);

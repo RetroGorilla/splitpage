@@ -3,10 +3,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import "./_location-started.mjs";
 
-const bridge = await import("../legacy/transition-bridge.ts");
+const bridge = await import("../bootstrap/wiring/transition-owners.ts");
 const { NO_DESTINATION } = await import("../application/transitions/ports.ts");
-const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../bootstrap/wiring/session-owner.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
 const unwired = unwiredSessionDeps();
@@ -71,8 +71,8 @@ test("a replacement through the API disposes the old document's session: its arm
 
 test("captureOperation and stillOwns follow the live session, document and destination", async () => {
   const stop = startWith([]);
-  const loc = await import("../legacy/location-bridge.ts");
-  const saves = await import("../legacy/save-bridge.ts");
+  const loc = await import("../bootstrap/wiring/location-owner.ts");
+  const saves = await import("../bootstrap/wiring/save-owners.ts");
   const stopSaves = saves.startSaves({
       destination: () => loc.currentHome(),
     keyOf: (h) => ({ owner: h, name: "" }),
