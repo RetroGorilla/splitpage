@@ -8,7 +8,7 @@ import { launch as portLaunch } from "./ports/desktop.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { onboardingActions as definitions } from "../../features/onboarding/actions.ts";
-import { startOnboarding as mountOnboarding } from "../../features/onboarding/onboarding.js";
+import { startOnboarding as mountOnboarding } from "../../features/onboarding/onboarding.ts";
 import type { OnboardingMount, OnboardingPorts } from "../../features/onboarding/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { localFileMenuControls } from "./local-files.ts";
