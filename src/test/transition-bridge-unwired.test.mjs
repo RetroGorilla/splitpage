@@ -71,7 +71,7 @@ test("a replacement through the API disposes the old document's session: its arm
 
 test("captureOperation and stillOwns follow the live session, document and destination", async () => {
   const stop = startWith([]);
-  const loc = await import("../legacy/location-bridge.ts");
+  const loc = await import("../bootstrap/wiring/location-owner.ts");
   const saves = await import("../bootstrap/wiring/save-owners.ts");
   const stopSaves = saves.startSaves({
       destination: () => loc.currentHome(),

@@ -8,7 +8,7 @@ import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../
 import { owned } from "../../features/routing/owned.ts";
 import { warnImagesLeftOut } from "../../legacy/effects-bridge.ts";
 import { captureExportDocument } from "./export-capture.ts";
-import { amendHome, currentHome, documentLocation, fileHome, setHome } from "../../legacy/location-bridge.ts";
+import { amendHome, currentHome, documentLocation, fileHome, setHome } from "./location-owner.ts";
 import { getEditorName, preferences } from "../../legacy/preferences-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "./save-owners.ts";
 import { stampDocument } from "./session-owner.ts";

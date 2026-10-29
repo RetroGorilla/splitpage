@@ -13,7 +13,7 @@ const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts")
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");
-const { setHome } = await import("../legacy/location-bridge.ts");
+const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);

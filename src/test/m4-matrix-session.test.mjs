@@ -10,7 +10,7 @@ import {
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
-import { documentLocation } from "../legacy/location-bridge.ts";
+import { documentLocation } from "../bootstrap/wiring/location-owner.ts";
 
 const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../bootstrap/wiring/session-owner.ts");
 
@@ -69,7 +69,7 @@ function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); 
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { setHome } = homeModule;
 const { applyTakenDraft, draftTaker } = await import("../bootstrap/wiring/drafts.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
