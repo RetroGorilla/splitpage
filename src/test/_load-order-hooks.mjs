@@ -24,7 +24,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/production-editing-bridge.ts": { functions: ["startProductionEditing"] },
   "src/application/production/index-owner.ts": { functions: ["startProductionIndex"] },
   "src/bootstrap/wiring/editor-owners.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },
-  "src/legacy/preferences-bridge.ts": { functions: ["startPreferences", "onPreferenceChange"] },
+  "src/bootstrap/wiring/preferences-owner.ts": { functions: ["startPreferences", "onPreferenceChange"] },
   "src/bootstrap/wiring/shot-hiding.ts": { functions: ["startShotHiding"] },
   "src/bootstrap/wiring/location-owner.ts": { functions: ["startLocation"] },
   "src/bootstrap/wiring/effects-owner.ts": { functions: ["startEffects"] },

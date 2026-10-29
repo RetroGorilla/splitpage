@@ -60,10 +60,10 @@ const { captureExportDocument, exportDocumentOf } = await import("../bootstrap/w
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
-const { preferences } = await import("../legacy/preferences-bridge.ts");
+const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
 
 import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
-import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 const flushEdits = () => undoOwner().flush();
 function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");

@@ -1,4 +1,4 @@
-import { getEditorName } from "../legacy/preferences-bridge.ts";
+import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -24,7 +24,7 @@ const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo, setVideoThumbnail, videoLinkKey } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const naming = { name: getEditorName };

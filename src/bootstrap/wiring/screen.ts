@@ -1,6 +1,6 @@
 import { onRefresh, onSessionChange, onStamped } from "./session-owner.ts";
 import { documentLocation } from "./location-owner.ts";
-import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { onPreferenceChange, preferences, viewFlags } from "./preferences-owner.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { screenListeners } from "../../features/rows/render.js";
 

@@ -1,7 +1,7 @@
 import { resolvePersonColor } from "../../../core/document/person-colors.ts";
 import type { PersonColorLookup } from "../../../core/document/person-colors.ts";
 import { cleanAuthorName } from "../../../core/document/people.ts";
-import { preferences } from "../../../legacy/preferences-bridge.ts";
+import { preferences } from "../preferences-owner.ts";
 import { currentDocument } from "../session-owner.ts";
 
 export const personColors: PersonColorLookup = {
