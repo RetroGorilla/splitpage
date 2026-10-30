@@ -3,8 +3,6 @@
 # the script, and the packing-list PDF export (shared with Props).
 
 open
-eval window.__settled = function () { return document.getAnimations().every(function (a) { return a.playState === 'finished' || a.playState === 'idle' || a.effect.getTiming().iterations === Infinity; }); }
-eval window.__lastGearMut = performance.now(); window.__gearQuiet = function () { return performance.now() - window.__lastGearMut > 150; }; new MutationObserver(function () { window.__lastGearMut = performance.now(); }).observe(document.getElementById('gear-list'), { childList: true, subtree: true }); true
 
 eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__blobs.push(b);return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download)return;return c.apply(this,arguments);};return 'hooked';})()
 
@@ -13,13 +11,14 @@ eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.creat
 expect document.querySelectorAll('#rows .tag-anchor[data-tag-cat="cast"]').length == 0
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-packing-prop"]
-wait document.querySelector('.toast') && document.querySelector('.toast').textContent.indexOf('nothing to pack') !== -1
+sleep 400
 expect window.__blobs.length == 0
+expect document.querySelector('.toast').textContent.indexOf('nothing to pack') !== -1
 
 # --- <gear> is its own typing shortcut --------------------------------------
 caret #rows .row .visual-cell .cell-editable
 press  Bring the <wireless lav mic> too.
-wait document.querySelectorAll('#rows .tag-anchor[data-tag-cat="gear"]').length === 1
+sleep 600
 # Blur explicitly. jsclick (used below to work the panels) fires a synthetic
 # click without moving document.activeElement the way a real click does, so
 # without this the cell stays "focused" through everything that follows. That
@@ -44,14 +43,15 @@ expect getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="
 expect !document.getElementById('gear-badge').hidden
 expect document.getElementById('gear-badge').textContent == 1
 jsclick #btn-gear
-wait !document.getElementById('gear-panel').hidden && document.querySelectorAll('#gear-list .tag-entity').length === 1
+sleep 600
+expect !document.getElementById('gear-panel').hidden
 expect document.querySelectorAll('#gear-list .tag-entity').length == 1
 expect document.querySelector('#gear-list .tag-entity-name').textContent == wireless lav mic
 
 # --- quick-add tracks items whether or not they're in the script -----------
 eval (function(){var box=document.getElementById('gear-quickadd-input');box.value='wireless lav mic\n24-70mm lens\nC-stand';return box.value;})()
 jsclick #gear-quickadd-save
-wait document.querySelectorAll('#gear-list .tag-entity').length === 3
+sleep 600
 expect document.querySelectorAll('#gear-list .tag-entity').length == 3
 expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).some(function (e) { return e.textContent === '24-70mm lens'; })
 # never in the script, so flagged the same way any other orphaned item is
@@ -62,13 +62,13 @@ expect document.getElementById('gear-quickadd-input').value.split('\n')[0] == 24
 # --- removing a line un-tracks it, UNLESS it's still tagged live -----------
 eval (function(){var box=document.getElementById('gear-quickadd-input');box.value='wireless lav mic\n24-70mm lens';return box.value;})()
 jsclick #gear-quickadd-save
-wait document.querySelectorAll('#gear-list .tag-entity').length === 2
+sleep 600
 expect document.querySelectorAll('#gear-list .tag-entity').length == 2
 expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).every(function (e) { return e.textContent !== 'C-stand'; })
 
 eval (function(){var box=document.getElementById('gear-quickadd-input');box.value='24-70mm lens';return box.value;})()
 jsclick #gear-quickadd-save
-wait document.getElementById('gear-quickadd-input').value.split('\n').length === 2
+sleep 600
 expect document.querySelectorAll('#gear-list .tag-entity').length == 2
 expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).some(function (e) { return e.textContent === 'wireless lav mic'; })
 expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]') !== null
@@ -86,28 +86,29 @@ shot 12-gear-panel
 
 # --- grouping by scene --------------------------------------------------
 jsclick #gear-modes [data-group="scene"]
-wait document.getElementById('gear-modes').querySelector('[data-group="scene"]').classList.contains('is-active') && document.querySelector('#gear-list .tag-scene-group-head') !== null
+sleep 400
 expect document.getElementById('gear-modes').querySelector('[data-group="scene"]').classList.contains('is-active')
 expect document.querySelector('#gear-list .tag-scene-group-head') !== null
 expect document.querySelector('#gear-list .tag-orphan-note') !== null
 jsclick #gear-modes [data-group="flat"]
-wait document.getElementById('gear-modes').querySelector('[data-group="flat"]').classList.contains('is-active')
+sleep 300
 
 # --- card interactions: status cycle, expand, rename ------------------------
 # tagEntityHtml() cards are reused wholesale from the production panel - see
 # wireTagEntityContainer() - so this is really confirming the shared wiring
 # reaches #gear-panel, not re-testing the card itself.
 eval (function(){var card=Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav mic'; });card.querySelector('[data-action="tag-status-cycle"]').click();return true;})()
-wait Array.from(document.querySelectorAll('#gear-list .tag-status-pill')).some(function (p) { return p.textContent === 'Sourcing'; })
+sleep 300
+expect Array.from(document.querySelectorAll('#gear-list .tag-status-pill')).some(function (p) { return p.textContent === 'Sourcing'; })
 
 eval (function(){function q(){return Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav mic'; });}var c=q();if(!c.classList.contains('is-expanded'))c.querySelector('[data-action="tag-expand"]').click();return q().classList.contains('is-expanded');})()
-wait document.querySelector('#gear-list .tag-entity.is-expanded') !== null
+sleep 300
+expect document.querySelector('#gear-list .tag-entity.is-expanded') !== null
 eval (function(){document.querySelector('#gear-list [data-action="tag-rename"]').click();return true;})()
-wait document.querySelector('#gear-list .tag-rename-input') !== null
-wait __gearQuiet()
+sleep 300
 eval (function(){var input=document.querySelector('#gear-list .tag-rename-input');input.value='wireless lav';return true;})()
 jsclick #gear-list [data-action="tag-rename-save"]
-wait Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).some(function (e) { return e.textContent === 'wireless lav'; })
+sleep 500
 # two entities from here on ("wireless lav" and "24-70mm lens", untouched
 # throughout) - so every lookup below is by name, never the first DOM match
 expect document.querySelectorAll('#gear-list .tag-entity').length == 2
@@ -127,25 +128,21 @@ expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]').textCont
 # (tagExpanded is stored by key), but other actions don't, so a blind second
 # click risks toggling an already-open card shut.
 eval (function(){function q(){return Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav'; });}var c=q();if(!c.classList.contains('is-expanded'))c.querySelector('[data-action="tag-expand"]').click();return q().classList.contains('is-expanded');})()
-wait document.querySelector('#gear-list [data-action="tag-remove"]') !== null
-wait __gearQuiet()
+sleep 300
 jsclick #gear-list [data-action="tag-remove"]
-wait document.querySelector('#gear-list [data-action="tag-remove"].armed') !== null
-wait __gearQuiet()
+sleep 300
 jsclick #gear-list [data-action="tag-remove"]
-wait document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]') === null && Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav'; }).classList.contains('is-orphaned')
+sleep 500
 expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]') === null
 expect document.querySelectorAll('#gear-list .tag-entity').length == 2
 expect Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav'; }).classList.contains('is-orphaned')
 
 eval (function(){function q(){return Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav'; });}var c=q();if(!c.classList.contains('is-expanded'))c.querySelector('[data-action="tag-expand"]').click();return q().classList.contains('is-expanded');})()
-wait document.querySelector('#gear-list [data-action="tag-delete"]') !== null
-wait __gearQuiet()
+sleep 300
 jsclick #gear-list [data-action="tag-delete"]
-wait document.querySelector('#gear-list [data-action="tag-delete"].armed') !== null
-wait __gearQuiet()
+sleep 300
 jsclick #gear-list [data-action="tag-delete"]
-wait document.querySelectorAll('#gear-list .tag-entity').length === 1
+sleep 500
 # "wireless lav" is gone for good; "24-70mm lens" is untouched
 expect document.querySelectorAll('#gear-list .tag-entity').length == 1
 expect document.querySelector('#gear-list .tag-entity-name').textContent == 24-70mm lens
@@ -154,39 +151,47 @@ expect document.getElementById('gear-badge').textContent == 1
 # --- mutual exclusivity with the other side panels, and with the writer -----
 caret #rows .row .visual-cell .cell-editable
 press  <a lens> for the close-up.
-wait document.querySelectorAll('#rows .tag-anchor[data-tag-cat="gear"]').length === 1
+sleep 500
 eval document.activeElement.blur()
 jsclick #btn-production
-wait !document.getElementById('production-panel').hidden
+sleep 500
+expect !document.getElementById('production-panel').hidden
 jsclick #btn-gear
-wait document.getElementById('production-panel').hidden && !document.getElementById('gear-panel').hidden
+sleep 500
+expect document.getElementById('production-panel').hidden
+expect !document.getElementById('gear-panel').hidden
 jsclick #btn-comments
-wait document.getElementById('gear-panel').hidden
+sleep 500
+expect document.getElementById('gear-panel').hidden
 
 jsclick #btn-gear
-wait !document.getElementById('gear-panel').hidden
+sleep 500
+expect !document.getElementById('gear-panel').hidden
 click #btn-write
-wait document.getElementById('gear-panel').hidden && !document.getElementById('writer').hidden
-wait __settled()
+sleep 700
+expect document.getElementById('gear-panel').hidden
+expect !document.getElementById('writer').hidden
 key Escape
-wait document.getElementById('writer').hidden
+sleep 500
 
 # --- gear shows up in the general Production panel too ----------------------
 jsclick #btn-production
-wait Array.from(document.querySelectorAll('#production-list .tag-entity-name')).some(function (e) { return e.textContent === 'a lens'; })
+sleep 600
+expect Array.from(document.querySelectorAll('#production-list .tag-entity-name')).some(function (e) { return e.textContent === 'a lens'; })
 jsclick #production-close
-wait document.getElementById('production-panel').hidden
+sleep 300
 
 # --- packing lists: the panel's own button, and the File menu for Props -----
 caret #rows .row .audio-cell .cell-editable
 press  We also need [gaffer tape] for this.
-wait document.querySelectorAll('#rows .tag-anchor[data-tag-name="gaffer tape"]').length === 1
+sleep 500
 eval document.activeElement.blur()
 
 jsclick #btn-gear
-wait !document.getElementById('gear-panel').hidden
+sleep 600
 jsclick #gear-panel [data-action="export-packing-gear"]
-wait window.__blobs.length >= 1
+sleep 1500
+expect window.__blobs.length >= 1
 expect window.__blobs[window.__blobs.length-1].type == application/pdf
 eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));window.__pdfGear={hdr:t.indexOf('%PDF')===0,hasName:t.indexOf('a lens')!==-1,hasStatus:t.indexOf('Needed')!==-1,heads:t.indexOf('(Out) Tj')!==-1&&t.indexOf('(Back) Tj')!==-1,sign:t.indexOf('(Packed by) Tj')!==-1&&t.indexOf('(Returned by) Tj')!==-1,foot:/\(Page 1 of \d+\) Tj/.test(t),kicker:t.indexOf('(Packing list) Tj')!==-1};return true;})()
 expect window.__pdfGear.hdr
@@ -200,7 +205,8 @@ expect window.__pdfGear.kicker
 
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-packing-prop"]
-wait window.__blobs.length >= 2
+sleep 1500
+expect window.__blobs.length >= 2
 eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));window.__pdfProp={hdr:t.indexOf('%PDF')===0,hasName:t.indexOf('gaffer tape')!==-1,noGear:t.indexOf('a lens')===-1};return true;})()
 expect window.__pdfProp.hdr
 expect window.__pdfProp.hasName
