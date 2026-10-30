@@ -19,12 +19,12 @@ import type { TagWrite } from "../../core/production/tags.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { Run } from "../../core/text/runs.ts";
 
-export interface RowDraftMedia {
+interface RowDraftMedia {
   readonly markThroughout: (cell: Run[], from: number, to: number, mark: string) => boolean;
   readonly toggleMark: (cell: Run[], from: number, to: number, mark: string) => Run[];
 }
 
-export interface RowDraftEditing {
+interface RowDraftEditing {
   readonly appendMedia: (cell: Element, html: string) => Element | null;
   readonly model: (cell: Element) => { cell: Run[]; media: RowDraftMedia };
   readonly edit: (cell: Element, change: (cell: Run[], selection: CellRange | null, media: RowDraftMedia) => { cell: Run[]; sel?: CellRange } | null) => Element | null;
@@ -42,7 +42,7 @@ export interface RowsRenderPorts {
   };
   readonly editing: {
     readonly cells: () => Pick<CellEditing<Element>, "edit" | "sync">;
-    readonly selection: () => Pick<EditorSelection<Element, Range, Element>, "remember" | "resolve" | "paintedEpoch" | "notePainted" | "holdLink" | "heldLink" | "dropLink">;
+    readonly selection: () => Pick<EditorSelection<Element, Range, Element>, "remember" | "forget" | "resolve" | "paintedEpoch" | "notePainted" | "holdLink" | "heldLink" | "dropLink">;
     readonly paint: () => Pick<PaintGuard, "whilePainting" | "painting" | "shown" | "afterShown">;
     readonly undo: () => Pick<UndoGuard, "whileApplying">;
   };

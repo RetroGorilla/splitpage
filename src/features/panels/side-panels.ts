@@ -1,6 +1,6 @@
 import type { SidePanels } from "../../application/side-panels.ts";
 
-export interface SidePanelsPorts {
+interface SidePanelsPorts {
   readonly ids: readonly string[];
   readonly buttons: readonly (readonly [panelId: string, buttonId: string])[];
   readonly readWidth: (id: string) => number;

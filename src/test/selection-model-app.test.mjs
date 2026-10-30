@@ -10,7 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
-const { renderAbsorbed, renderRow } = await import("../features/rows/render.js");
+const { renderAbsorbed, renderRow } = await import("../features/rows/render.ts");
 const { posToDom } = await import("../features/common/cell-dom.ts");
 const { domToPos } = await import("../features/common/cell-dom.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");

@@ -10,50 +10,38 @@
 
 open
 viewport 1400 900
-eval (function(){ localStorage.removeItem('splitpage-hide-shot'); window.D = window.__desktopTest; window.C = window.__commandTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__prevented = null; window.addEventListener('keydown', function (e) { window.__prevented = e.defaultPrevented; }); window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__item = function (q, id) { var hit = null; C.results(q).forEach(function (g) { g.items.forEach(function (i) { if (i.id === id) hit = i; }); }); return hit; }; return true; })()
+eval (function(){ localStorage.removeItem('splitpage-hide-shot'); window.D = window.__desktopTest; window.C = window.__commandTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__prevented = null; window.addEventListener('keydown', function (e) { window.__prevented = e.defaultPrevented; }); window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__item = function (q, id) { var hit = null; C.results(q).forEach(function (g) { g.items.forEach(function (i) { if (i.id === id) hit = i; }); }); return hit; }; window.__hideShot = function () { return localStorage.getItem('splitpage-hide-shot'); }; window.__settled = function () { return document.getAnimations().every(function (a) { return a.playState === 'finished' || a.playState === 'idle' || a.effect.getTiming().iterations === Infinity; }); }; return true; })()
 
 # --- Find: Ctrl+F, Ctrl+Shift+F, Ctrl+Alt+F, Ctrl+Shift+Alt+F ---------------
 key ctrl KeyF
-sleep 200
-expect __shown('findbar')
+wait __shown('findbar')
 expect window.__prevented === true
 key Escape
-sleep 200
-expect !__shown('findbar')
+wait !__shown('findbar')
 key ctrl+shift KeyF
-sleep 200
-expect __shown('findbar')
+wait __shown('findbar')
 expect window.__prevented === true
 key Escape
-sleep 200
-expect !__shown('findbar')
+wait !__shown('findbar')
 key ctrl+alt KeyF
-sleep 200
-expect __shown('findbar')
+wait __shown('findbar')
 key Escape
-sleep 200
-expect !__shown('findbar')
+wait !__shown('findbar')
 key ctrl+shift+alt KeyF
-sleep 200
-expect __shown('findbar')
+wait __shown('findbar')
 key Escape
-sleep 200
-expect !__shown('findbar')
+wait !__shown('findbar')
 
 # --- Hide shot scenes: Ctrl+Alt+H and Ctrl+Shift+Alt+H ---------------------
 key ctrl+alt KeyH
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') == 1
+wait __hideShot() === '1'
 key ctrl+shift+alt KeyH
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') == 0
+wait __hideShot() === '0'
 expect window.__prevented === true
 key ctrl+shift+alt KeyH
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') == 1
+wait __hideShot() === '1'
 key ctrl+alt KeyH
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') == 0
+wait __hideShot() === '0'
 
 # --- Ctrl+S and Ctrl+Shift+S close an open File menu -----------------------
 # on a script kept in a file, so Save writes it and Save a copy asks
@@ -61,27 +49,21 @@ eval (function(){ var F = window.__splitpageFormats; var text = JSON.stringify({
 wait window.__splitpageFormats.docFile().name === 'kept.splitpage'
 eval __take()
 click #btn-file
-sleep 200
-expect !document.getElementById('file-menu').hidden
+wait !document.getElementById('file-menu').hidden
 key ctrl+shift KeyS
-sleep 400
-expect document.getElementById('file-menu').hidden
+wait document.getElementById('file-menu').hidden && window.__picked.length > 0
 expect __take() === 'save'
 click #btn-file
-sleep 200
-expect !document.getElementById('file-menu').hidden
+wait !document.getElementById('file-menu').hidden
 key ctrl KeyS
-sleep 400
-expect document.getElementById('file-menu').hidden
+wait document.getElementById('file-menu').hidden && window.__picked.length > 0
 expect __take() === 'write'
 
 # --- with the command menu open ----------------------------------------------
 key ctrl KeyK
-sleep 200
-expect __shown('cmdk')
+wait __shown('cmdk')
 key ctrl+alt KeyH
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') == 1
+wait __hideShot() === '1'
 expect __shown('cmdk')
 key ctrl KeyE
 sleep 200
@@ -98,29 +80,21 @@ expect window.__prevented === true
 expect __take() === ''
 expect __shown('cmdk')
 key ctrl KeyF
-sleep 300
-expect __shown('findbar')
-expect !__shown('cmdk')
-expect document.activeElement.id == find-input
+wait __shown('findbar') && !__shown('cmdk') && document.activeElement.id === 'find-input'
 key Escape
-sleep 200
-expect !__shown('findbar')
+wait !__shown('findbar')
 key ctrl+alt KeyH
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') == 0
+wait __hideShot() === '0'
 
 # --- the command menu open: the native menu and the File menu item ---------
 key ctrl KeyK
-sleep 200
-expect __shown('cmdk')
+wait __shown('cmdk')
 eval __toasts()
 eval D.runMenuCommand('toggle-hide-shot'); true
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') == 1
+wait __hideShot() === '1'
 expect __shown('cmdk')
 jsclick #file-menu [data-file-action="toggle-hide-shot"]
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') == 0
+wait __hideShot() === '0'
 expect __shown('cmdk')
 eval __toasts()
 eval D.runMenuCommand('command-menu'); true
@@ -128,28 +102,21 @@ sleep 300
 expect __shown('cmdk')
 expect __toasts() === ''
 eval D.runMenuCommand('find'); true
-sleep 300
-expect __shown('findbar')
-expect !__shown('cmdk')
+wait __shown('findbar') && !__shown('cmdk')
 key Escape
-sleep 200
-expect !__shown('findbar')
+wait !__shown('findbar')
 key ctrl KeyK
-sleep 200
-expect __shown('cmdk')
+wait __shown('cmdk')
 jsclick #file-menu [data-file-action="find"]
-sleep 300
-expect __shown('findbar')
-expect !__shown('cmdk')
+wait __shown('findbar') && !__shown('cmdk')
 key Escape
-sleep 200
-expect !__shown('findbar')
+wait !__shown('findbar')
 expect __toasts() === ''
 
 # --- the header's Search button where the command menu cannot open ---------
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-sleep 600
+wait __settled()
 eval __toasts()
 jsclick #btn-command
 sleep 300
@@ -157,7 +124,7 @@ expect !__shown('cmdk')
 expect __toasts() === ''
 jsclick #wr-close
 wait document.getElementById('writer').hidden
-sleep 600
+wait __settled()
 
 # nothing here edited the document
 expect document.getElementById('save-status').textContent !== 'Unsaved changes'
