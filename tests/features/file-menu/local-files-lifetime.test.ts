@@ -101,7 +101,7 @@ for (const stage of ["assets", "build", "failed assets"]) {
   });
 }
 
-for (const [count, expected] of [[3, ["3 characters outside Latin can't be shown in PDF"]], [1, ["1 character outside Latin can't be shown in PDF"]], [0, []], [null, []]] as const) {
+for (const [count, expected] of [[3, ["3 characters can't be shown in PDF"]], [1, ["1 character can't be shown in PDF"]], [0, []], [null, []]] as const) {
   test("a build reporting " + String(count) + " characters not shown gives the matching notice", async () => {
     const h = harness("live");
     const formats = createExportRegistry();

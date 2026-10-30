@@ -23,7 +23,7 @@ test("zero counts as plural", () => {
   );
 });
 
-test("characters outside Latin are counted in the singular and the plural", () => {
-  assert.equal(unshownCharactersText(1), "1 character outside Latin can't be shown in PDF");
-  assert.equal(unshownCharactersText(12), "12 characters outside Latin can't be shown in PDF");
+test("characters no font can show are counted in the singular and the plural", () => {
+  assert.equal(unshownCharactersText(1), "1 character can't be shown in PDF");
+  assert.equal(unshownCharactersText(12), "12 characters can't be shown in PDF");
 });
