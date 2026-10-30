@@ -9,11 +9,29 @@ function runIdOf(url) {
   return match ? match[1] : null;
 }
 
+export const PAGE_SIZE = 100;
+export const MAX_PAGES = 30;
+
+export async function listAll(get, path, key) {
+  const items = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const body = await get(`${path}&page=${page}`);
+    const batch = body[key] ?? [];
+    items.push(...batch);
+    if (batch.length < PAGE_SIZE) return items;
+  }
+  throw new Error(`GET ${path}: more than ${MAX_PAGES * PAGE_SIZE} results`);
+}
+
+function allArtifacts(get) {
+  return async (path) => (path.includes("/actions/artifacts?") ? { artifacts: await listAll(get, path, "artifacts") } : get(path));
+}
+
 export async function gateRun({ sha, repository, get }) {
-  const { check_runs: checks = [] } = await get(`/repos/${repository}/commits/${sha}/check-runs?check_name=${GATE}&per_page=100`);
+  const checks = await listAll(get, `/repos/${repository}/commits/${sha}/check-runs?check_name=${GATE}&per_page=${PAGE_SIZE}`, "check_runs");
   let seen = 0;
   for (const check of checks) {
-    if (check.name !== GATE || check.app?.slug !== "github-actions") continue;
+    if (check.name !== GATE || check.app?.slug !== "github-actions" || check.head_sha !== sha) continue;
     seen++;
     if (check.status !== "completed" || check.conclusion !== "success") continue;
     const id = runIdOf(check.details_url);
@@ -33,13 +51,13 @@ export async function checkRelease({ sha, tree, repository, runId, get }) {
     if (run) return { ok: true, via: `the ${GATE} job of ${run.html_url}`, problems };
     problems.push(seen ? `${seen} ${GATE} check run(s) found, none a success of ${WORKFLOW}` : `no ${GATE} check run found`);
   } catch (error) {
-    problems.push(`${GATE} lookup failed: ${error.message}`);
+    return { ok: false, via: null, problems: [`${GATE} lookup failed: ${error.message}`] };
   }
   if (!tree) {
     problems.push("the tree of the commit is unknown, so no passed-tree marker can be looked up");
   } else {
     try {
-      const run = await passedRun({ tree, repository, runId, get });
+      const run = await passedRun({ tree, repository, runId, get: allArtifacts(get) });
       if (run) return { ok: true, via: `a passed-tree marker from ${run.html_url} (tree ${tree})`, problems };
       problems.push(`no unexpired ci-passed-tree-${tree} marker from a successful ${WORKFLOW} run`);
     } catch (error) {
