@@ -138,6 +138,17 @@ test("a conflict and a lost document each refuse without creating a writable", a
   stop();
 });
 
+test("an import whose permission was withdrawn saves a copy to the downloads instead and stops writing in place", async () => {
+  const h = harness();
+  const stop = h.owner.startImportSaving({
+    ...h.ports,
+    files: { ...h.ports.files, checkConflict: async () => { h.log.push("check"); return { ok: false, current: null, denied: true }; } }
+  });
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.deepEqual(h.log, ["build:txt:draft", "check", "deliver"]);
+  assert.equal(h.imported["inPlace"], false);
+  stop();
+});
 test("a writeback whose re-read fails keeps the writer's stamp so the next save is not refused", async () => {
   const h = harness();
   let disk = 40;
