@@ -62,7 +62,7 @@ export function showTaggingHelp() {
   updateTaggingHelpCover();
 }
 
-export function hideTaggingHelp() {
+function hideTaggingHelp() {
   var card = document.getElementById("tagging-help");
   if (!card || card.hidden) return;
   var hadFocus = card.contains(document.activeElement);
@@ -120,7 +120,7 @@ function fitTaggingHelp(card) {
   card.style.setProperty("--header-bottom", bottom + "px");
 }
 
-export function updateTaggingHelpCover() {
+function updateTaggingHelpCover() {
   var card = document.getElementById("tagging-help");
   if (!card) return;
   if (card.hidden) { card.classList.remove("is-covering"); return; }

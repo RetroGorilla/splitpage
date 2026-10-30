@@ -5,7 +5,7 @@ import { createPaintGuard, createUndoGuard } from "../../../src/application/edit
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { RowsRenderPorts } from "../../../src/features/rows/render-ports.ts";
-import { startRowsRender } from "../../../src/features/rows/render.js";
+import { startRowsRender } from "../../../src/features/rows/render.ts";
 import { fakeDocument, fakeNotices, fakePictures, fakeTextServices } from "../fakes.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
