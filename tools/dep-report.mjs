@@ -727,12 +727,7 @@ function describe(v) {
   return `${v.rule}: ${v.source}${v.line ? ":" + v.line : ""} -> ${v.target}${v.detail ? " (" + v.detail + ")" : ""}`;
 }
 
-export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", reason = "", print = console.log, printError = console.error } = {}) {
-  const acceptReason = typeof reason === "string" ? reason.trim() : "";
-  if (mode === "accept" && !acceptReason) {
-    printError('dep-report: --accept needs a reason, e.g. --accept "helper moved between modules"');
-    return 2;
-  }
+export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", print = console.log, printError = console.error } = {}) {
   const modules = loadGraph(repo);
   const violations = findViolations(modules);
   const cycles = migratedCycles(modules);
@@ -760,27 +755,11 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   if (mode === "prune") {
     if (added.length) {
       for (const v of added) printError("  new " + describe(v));
-      printError('dep-report: --prune only removes resolved exceptions; fix the new ones, or record them with --accept "<reason>"');
+      printError("dep-report: baselines only shrink; fix the violation");
       return 1;
     }
     writeBaseline(baselinePath, violations, baseline);
     print(`dep-report: removed ${resolved.length} resolved exceptions`);
-    return 0;
-  }
-
-  if (mode === "accept") {
-    if (cycles.length) {
-      printCycles();
-      printError("dep-report: a cycle through a migrated folder cannot be accepted; nothing was written");
-      return 1;
-    }
-    if (!added.length) {
-      print("dep-report: nothing new to accept");
-      return 0;
-    }
-    writeBaseline(baselinePath, [...recorded, ...added.map((v) => ({ ...v, reason: acceptReason }))], baseline);
-    for (const v of added) print("  + " + describe(v));
-    print(`dep-report: accepted ${added.length} new exceptions with the reason "${acceptReason}"${resolved.length ? `; ${resolved.length} resolved remain, remove them with --prune` : ""}`);
     return 0;
   }
 
@@ -802,9 +781,8 @@ if (isMain(import.meta.url)) {
   let options = null;
   if (args.length === 0) options = { mode: "check" };
   else if (args.length === 1 && modes[args[0]]) options = { mode: modes[args[0]] };
-  else if (args[0] === "--accept" && args.length <= 2) options = { mode: "accept", reason: args[1] ?? "" };
   if (options === null) {
-    console.error(`dep-report: unknown argument ${args.join(" ")}; use --metrics, --prune, --init or --accept "<reason>"`);
+    console.error(`dep-report: unknown argument ${args.join(" ")}; use --metrics, --prune or --init`);
     process.exitCode = 2;
   } else {
     process.exitCode = run(options);

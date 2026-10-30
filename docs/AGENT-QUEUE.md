@@ -179,7 +179,7 @@ Task: docs/architecture/feature-ports.md, docs/architecture/actions.md, docs/arc
 Structure section: "no structural change"; table of file, old statement, new statement, how you checked.
 ```
 
-## AQ-5 [ ] --accept can no longer grow a baseline (R2 leftover)
+## AQ-5 [x] --accept can no longer grow a baseline (R2 leftover)
 
 ```text
 Task: AGENTS.md rule 8 says baselines only shrink, but `--accept` in tools/dep-report.mjs (and the matching flag in tools/comment-gate.mjs, if it has one) can still write new entries. Make the tools refuse.
@@ -368,7 +368,7 @@ STRUCTURE SECTION MUST SAY
 - Font, licence, size added to each artefact, how the font is loaded, what stays on the old path, what is still shown as "?" and the CJK decision needed from Adam.
 ```
 
-## AQ-17 [ ] Tighten RestoreAnswer
+## AQ-17 [x] Tighten RestoreAnswer
 
 Needs: none.
 Files: src/features/merge/banner.ts and callers.
