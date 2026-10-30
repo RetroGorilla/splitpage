@@ -114,8 +114,10 @@ Electron-built installers, which ship instead:
 ## 3. Publishing a release to the mirror
 
 **From CI.** Pushing a `v<version>` tag on the commit that bumped `VERSION`
-runs `.github/workflows/release.yml` on a Windows runner: the two builds
-below, `verify-dist`, and `SHA256SUMS.txt`. With the
+runs `.github/workflows/release.yml`. It first refuses a commit with no passed
+CI run (the `verify-ci` job; see
+[ci.md, Release gate](architecture/ci.md#release-gate)), then on a Windows runner
+does the two builds below, `verify-dist`, and `SHA256SUMS.txt`. With the
 `SPLITPAGE_RELEASES_TOKEN` secret (a fine-grained token with Contents
 read/write on `splitpage-releases` only) it opens a **draft** release there
 with the four files, marked pre-release for a version with a `-` in it;
