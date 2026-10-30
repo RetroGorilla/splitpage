@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { leakedHooks } from "../tools/release-hooks.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
@@ -64,6 +65,11 @@ for (const [from, filename] of files) {
   const data = await fs.readFile(src);
   await fs.writeFile(dst, data);
   console.log(`  ${filename} (${data.length} bytes)`);
+}
+
+const leaked = leakedHooks(await fs.readFile(resolve(STAGE_DIR, "index.html"), "utf8"));
+if (leaked.length) {
+  throw new Error(`The staged index.html exposes test hooks (${leaked.join(", ")}); stage a release build (node build.mjs, no --test).`);
 }
 
 const tabstripDir = resolve(STAGE_DIR, "tabstrip");

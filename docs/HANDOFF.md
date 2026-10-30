@@ -28,7 +28,9 @@ breakdown for props/locations/cast/VFX/sound.
   owners and features in a fixed order; `src/js/` is gone.
   `node build.mjs` bundles from `main.ts` with
   esbuild and inlines the result into `index.html`; `node build.mjs --check`
-  says whether the copy on disk is in step. `index.html` is **not in the
+  says whether the copy on disk is in step. `node build.mjs --test` is the
+  test build, which keeps the `window.__*Test` hooks the suites and the
+  desktop smoke drive; the plain build leaves them out. `index.html` is **not in the
   repository** since #80 — it is generated, it is ignored, and a fresh clone
   has none until you build one. Run `npm install` once first — esbuild is the
   one devDependency the build needs.
@@ -84,7 +86,7 @@ the file you edit as well as the file that ships, and the build only stamps
 its cache name. Rebuild after a version bump and commit `sw.js`; CI fails if
 the committed copy's stamp has drifted from `VERSION`.
 
-Rebuild (`node build.mjs`) before testing any `src/` change; a stale
+Rebuild (`node build.mjs --test`) before testing any `src/` change; a stale
 `index.html` looks exactly like a change that had no effect. Which tests a
 change needs, and when the full browser regression runs (milestone and
 release gates), is the table in
@@ -104,7 +106,7 @@ parallel lanes, selected by a regex over full filenames; `driver.mjs --script`
 runs one:
 
 ```bash
-node build.mjs
+node build.mjs --test
 node tools/run-suites.mjs ../splitpage-runs/latest '^01-core\.txt$'
 node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
 ```
@@ -176,7 +178,7 @@ script selects the machine architecture, including Windows ARM64 with x64
 Node running under emulation:
 
 ```bash
-node build.mjs                           # main.js serves index.html from APP_ROOT
+node build.mjs --test                    # main.js serves index.html from APP_ROOT
 cd desktop
 npm ci
 npm run fetch-electron
