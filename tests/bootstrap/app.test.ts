@@ -8,6 +8,8 @@ import { createExportRegistry } from "../../src/application/export/registry.ts";
 import type { Wiring } from "../../src/bootstrap/wiring.ts";
 import { liveSession } from "../../src/bootstrap/wiring/session-owner.ts";
 
+const failTest = (error: unknown): void => { assert.fail(error instanceof Error ? error : String(error)); };
+
 test("the app module refuses a second start, and a start waiting for DOM ready is cancelled by stop", async () => {
   const app = await import("../../src/bootstrap/app.ts");
   let released = 0;
@@ -20,12 +22,12 @@ test("the app module refuses a second start, and a start waiting for DOM ready i
     dispose: () => { released++; }
   };
   const loading = Object.assign(new EventTarget(), { readyState: "loading" }) as unknown as Document;
-  app.startAppWhenReady(loading, wiring);
-  assert.throws(() => app.startAppWhenReady(loading, wiring), /already started or waiting/);
+  app.startAppWhenReady(loading, wiring, failTest);
+  assert.throws(() => app.startAppWhenReady(loading, wiring, failTest), /already started or waiting/);
   app.stopApp();
   assert.equal(released, 1);
   loading.dispatchEvent(new Event("DOMContentLoaded"));
-  app.startAppWhenReady(loading, wiring);
+  app.startAppWhenReady(loading, wiring, failTest);
   app.stopApp();
   assert.equal(released, 2);
 });
@@ -45,7 +47,7 @@ test("the saved theme and tag icons apply while the page is still loading, befor
   localStorage.setItem("splitpage-tag-icons", "1");
   try {
     const loading = Object.assign(new EventTarget(), { readyState: "loading" }) as unknown as Document;
-    app.startAppWhenReady(loading, wiring);
+    app.startAppWhenReady(loading, wiring, failTest);
     assert.equal(root.getAttribute("data-theme"), "dark", "applied before DOMContentLoaded");
     assert.equal(root.getAttribute("data-tag-icons"), "");
     app.stopApp();

@@ -2,7 +2,6 @@ import { startActions } from "./actions.ts";
 import { beginStartup } from "./startup.ts";
 import type { Wiring } from "./wiring.ts";
 import { whenDocumentReady } from "./startup/dom-ready.ts";
-import { showStartupFailure } from "./startup/failure-screen.ts";
 import { stopBrollPanelFeature as stopBrollFeature } from "./wiring/broll.ts";
 import {
   mountCellEditingFeature,
@@ -79,7 +78,7 @@ function stopAppearance(): void {
   stopViewFeature("mountAppearance");
 }
 
-export function startApp(wiring: Wiring): () => void {
+export function startApp(wiring: Wiring, onFail?: (error: unknown) => void): () => void {
   if (running) throw new Error("the app is already started; stop it first");
   const stops: (() => void)[] = [wiring.dispose];
   const stopAll = (): unknown[] => {
@@ -117,7 +116,7 @@ export function startApp(wiring: Wiring): () => void {
     run(view("mountNotices", mountNoticesFeature));
     run([mountTagsFeature, stopTagsFeature]);
     run(view("mountPrompterVisibility", mountPrompterVisibilityFeature));
-    stops.push(openInitialDocument(startup));
+    stops.push(openInitialDocument(startup, onFail));
     const comments = mountCommentsFeature();
     stops.push(stopCommentsFeature);
     run([mountVideoFeature, stopVideoFeature]);
@@ -185,29 +184,21 @@ export function stopApp(): void {
   running?.();
 }
 
-function startOrShowFailure(wiring: Wiring): void {
-  try {
-    startApp(wiring);
-  } catch (error) {
-    console.error(error);
-    showStartupFailure(error);
-  }
-}
-
-export function startAppWhenReady(doc: Document, wiring: Wiring): void {
+export function startAppWhenReady(doc: Document, wiring: Wiring, onFail: (error: unknown) => void): void {
   if (running || cancelReady) throw new Error("the app is already started or waiting to start; stop it first");
   mountAppearanceFeature();
   appearanceMountedEarly = true;
   let started = false;
-  let deferred = false;
   const cancel = whenDocumentReady(doc, () => {
     started = true;
     cancelReady = null;
-    if (deferred) startOrShowFailure(wiring);
-    else startApp(wiring);
+    try {
+      startApp(wiring, onFail);
+    } catch (error) {
+      onFail(error);
+    }
   });
   if (!started) {
-    deferred = true;
     cancelReady = () => {
       try {
         cancel();
