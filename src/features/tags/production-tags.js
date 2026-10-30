@@ -10,7 +10,6 @@ import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
   isBlankTagName,
-  missingRegistryTags as missingRegistryTagsIn,
   tagFieldOccurrences as tagFieldOccurrencesWith,
   tagOccurrences
 } from "../../core/production/tags.ts";
@@ -109,10 +108,6 @@ export function healTagRegistry() {
   if (plan.apply) stampDocument(registryHealingStamp(plan, function (n) { count = n; }));
   plan.commit();
   return count;
-}
-
-export function missingRegistryTags(rows, registry) {
-  return missingRegistryTagsIn(rows, registry, productionReaders);
 }
 
 export function productionIndexStats() {

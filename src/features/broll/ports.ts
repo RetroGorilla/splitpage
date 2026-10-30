@@ -19,12 +19,12 @@ import type { BrollEntry } from "../../core/production/broll.ts";
 import type { FieldHtml } from "../../core/production/ports.ts";
 import type { Run } from "../../core/text/runs.ts";
 
-export interface BrollHtmlLine {
+interface BrollHtmlLine {
   readonly nodes: Node[];
   readonly br: Node | null;
 }
 
-export interface BrollAnchors {
+interface BrollAnchors {
   readonly inRows: (rows: readonly { readonly id: string; visualText: FieldHtml }[]) => number;
   readonly htmlLines: (body: HTMLElement) => BrollHtmlLine[];
   readonly keyHtml: (id: string, text: string) => string;
@@ -45,7 +45,7 @@ export interface BrollRecordsPorts {
   readonly refresh: (job: string) => void;
 }
 
-export interface BrollRecords {
+interface BrollRecords {
   readonly brollEntries: () => BrollEntry[];
   readonly addBrollProp: (shotId: string, rawName: string) => boolean;
   readonly brollShotsByProp: () => Record<string, string[]>;

@@ -8,9 +8,25 @@ This file is process, not product. Delete it when the queue stays empty.
 
 1. Read `AGENTS.md`, then this file down to the task list.
 2. Run `git fetch origin 4.1-development` and read the **latest** version of this file from there.
+2a. Before claiming a task, handle queue additions (next section): if an open PR titled `AQ-add: ...` exists, review and merge it first.
 3. List PRs (`gh pr list --state all --limit 100`, or the GitHub API) and read the state of every PR whose title starts with `AQ-n`: an **open** PR means the task is claimed; a **merged** PR means it is done; a **closed report-only** PR (AQ-6, AQ-14) means it is done; any other **closed, unmerged** PR means the task is free again.
 4. Pick the lowest-numbered task that is unticked (`[ ]`) and unclaimed, whose "Needs" line is satisfied, and that is not marked `STOPS FOR ADAM` unless nothing else is left. Claim it (next section). Do one task per chat.
 5. Work it under the Autonomous run rules. Repeat from step 2 until the queue is empty.
+
+## Queue additions (`AQ-add:`)
+
+People and coordinating agents add tasks to this file. Such a PR is titled `AQ-add: <what>` and is handled by the queue agents themselves, without a person's merge, when **all** of these hold:
+
+- it changes only `docs/AGENT-QUEUE.md`, and only inside the `## AQ-n` task sections (adding a new task with the next free id and a `[ ]` heading, or editing the text of an unclaimed task) or the one-line status notes in the "Task list" section;
+- it does not change any other section: "Start here", "Claim protocol", "Report-only tasks", "When the queue is empty", "Autonomous run rules", "Common rules", the protected-path list, or this section;
+- it edits only a task that is still `[ ]` and has no open or merged PR claiming it (a task in progress or done is never edited by an addition); it changes a heading to `[x]` or `[!]` only when that task's own PR has merged or stopped;
+- it does not remove or weaken a `STOPS FOR ADAM` marker, a `Needs:` line or a report-only label, and no task text grants itself an exemption from any rule, from the protected-path list or from review (a task that does is protected);
+- the PR comes from a branch in this repository, opened by a collaborator of the repository (not a fork);
+- a new task has: an id, a one-line title, a "Needs" line, the files it touches, a `text` fenced brief, a Structure line, and it does not ask for a change to a protected path (a task may name a protected path only if it says `STOPS FOR ADAM`).
+
+Handling: an agent that finds such a PR before claiming a task reviews it with a separate agent against the list above, posts one review comment, and merges it under the Autonomous run rules (green CI on the exact head, `--match-head-commit`). Later additions need no person's merge.
+
+An `AQ-add:` PR that edits anything outside those limits, or any PR that edits the rules, the protected-path list or the claim protocol, is **protected**: review it, then stop and leave it for Adam.
 
 ## Claim protocol
 
@@ -61,6 +77,7 @@ PROTECTED PATHS (never merge a PR that touches these; stop, leave the PR open an
 - merging and the project file format: src/core/merge/, src/features/merge/, src/adapters/formats/project-file*, src/adapters/formats/splitpage-file*
 - startup: src/bootstrap/main.* and src/bootstrap/wiring/startup*
 - .github/workflows/, release.yml, package.json dependencies, eslint.config.mjs, tools/dep-report.mjs, tools/comment-gate.mjs, AGENTS.md
+- docs/AGENT-QUEUE.md itself, except what "Queue additions" allows (task sections and status notes) and the one-heading tick in your own task PR
 If a task's own brief needs to touch one of these, that is a STOP.
 
 STOP and report (a short note in the PR) when:
@@ -133,7 +150,7 @@ Task: tools/mutants/ has configs for core areas (core-document, core-merge, core
 Structure section: "no structural change"; mutants generated / killed / equivalent per file, before and after.
 ```
 
-## AQ-3 [ ] Unused exports in src/features
+## AQ-3 [x] Unused exports in src/features
 
 ```text
 Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #936), now for src/features/. Remove exports nothing uses.
@@ -147,7 +164,7 @@ Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #
 Structure section: table of symbol, file, action, grep result (as in #936); lines removed; protected files skipped.
 ```
 
-## AQ-4 [ ] Fix drift in four design docs
+## AQ-4 [x] Fix drift in four design docs
 
 ```text
 Task: docs/architecture/feature-ports.md, docs/architecture/actions.md, docs/architecture/session.md and docs/DOCUMENT-MODEL.md describe code that has moved since they were written. Fix statements that are false today. Docs only.

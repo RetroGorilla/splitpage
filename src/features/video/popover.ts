@@ -1,9 +1,9 @@
-export interface VideoPopoverPorts {
+interface VideoPopoverPorts {
   readonly confirm: (wrap: Element | null) => void;
   readonly cancel: (wrap: Element | null) => void;
 }
 
-export interface VideoPopoverMount {
+interface VideoPopoverMount {
   readonly window: Window;
   readonly ports: VideoPopoverPorts;
 }
