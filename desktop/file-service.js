@@ -77,11 +77,23 @@ async function atomicWrite(absPath, buffer, io = fsp) {
   }
 }
 
+async function writeFileEntry(absPath, buffer, io = fsp) {
+  await atomicWrite(absPath, buffer, io);
+  try {
+    const stat = await io.stat(absPath);
+    return { lastModified: Math.floor(stat.mtimeMs), size: stat.size };
+  } catch {
+    // why: the rename already landed, so a failed stat must not report the save as failed
+    return { size: buffer.length };
+  }
+}
+
 module.exports = {
   filesToOpenFrom,
   pathKey,
   createFileRegistry,
   readFileEntry,
   toBuffer,
-  atomicWrite
+  atomicWrite,
+  writeFileEntry
 };

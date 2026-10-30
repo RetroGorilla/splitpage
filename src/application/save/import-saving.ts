@@ -63,14 +63,21 @@ async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterR
   }
   if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
 
-  if (imported.handle && (imported.handle as LocalFileHandle).createWritable) {
-    if (job.request.kind !== "writebackForce") {
-      const check = await checkFileConflict(imported.handle, imported.lastModified);
-      if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
-      if (!check.ok) {
+  const canWriteInPlace = imported.handle && (imported.handle as LocalFileHandle).createWritable;
+  let denied = false;
+  if (canWriteInPlace && job.request.kind !== "writebackForce") {
+    const check = await checkFileConflict(imported.handle, imported.lastModified);
+    if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
+    if (!check.ok) {
+      if (!("denied" in check)) {
         return { kind: "refused", reason: FILE_CHANGED, conflict: { fileName: imported.name as string, current: check.current, kind: "import" } };
       }
+      denied = true;
+      amendHome(imported, { inPlace: false });
     }
+  }
+
+  if (canWriteInPlace && !denied) {
     let writable: LocalFileWritable | undefined;
     try {
       writable = await ports.files.createWritable(imported.handle);
