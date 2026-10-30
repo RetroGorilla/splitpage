@@ -27,7 +27,9 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
    you work, run the focused checks for what you changed: the table in
    [docs/architecture/testing.md](docs/architecture/testing.md#what-to-run-for-which-change)
    says which, and `npm test -- --only <path>` narrows the unit tests.
-   Anything you can see in the app also needs its browser suites:
+   Anything you can see in the app also needs its browser suites. They need
+   the test build, so run `node build.mjs --test` first (`npm run verify`
+   writes the release build, which leaves out the test hooks the suites drive), then
    `node tools/run-suites.mjs <out-dir> '<regex over full filenames>'` on
    Linux/macOS, `run-tests.ps1 -Only <full name>` on Windows (see
    [`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md)).

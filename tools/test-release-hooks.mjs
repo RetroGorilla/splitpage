@@ -1,6 +1,29 @@
 import { appJs } from "../build.mjs";
 import { STILL_IN_RELEASE, hookNames, leakedHooks } from "./release-hooks.mjs";
 
+const APPROVED = Object.freeze([
+  "__annotateTest",
+  "__appDataTest",
+  "__blobsTest",
+  "__brollTest",
+  "__cacheTest",
+  "__commandTest",
+  "__desktopTest",
+  "__documentGuardTest",
+  "__exportTest",
+  "__fileMenuTest",
+  "__prompterTest",
+  "__renderTest",
+  "__rundownTest",
+  "__saveStatusTest",
+  "__sceneSelectTest",
+  "__settingsTest",
+  "__targetTest",
+  "__undoTest",
+  "__updateTest",
+  "__videoTest"
+]);
+
 let passed = 0;
 const failures = [];
 
@@ -20,7 +43,8 @@ eq("names are found once each and sorted", hookNames("window.__bTest=1;a.__aTest
 eq("a longer name is not a hook name", hookNames("__historyTester __history"), []);
 eq("a hook outside the list is leaked", leakedHooks("window.__newThingTest=1;window.__undoTest=1"), ["__newThingTest"]);
 eq("the list is sorted with no repeats", [...new Set(STILL_IN_RELEASE)].sort(), [...STILL_IN_RELEASE]);
-
+eq("the list adds no hook and brings none back: every name is in the approved snapshot", STILL_IN_RELEASE.filter((name) => !APPROVED.includes(name)), []);
+eq("a converted hook leaves the approved snapshot too, so it cannot come back later", APPROVED.filter((name) => !STILL_IN_RELEASE.includes(name)), []);
 console.log("\nthe release build (node build.mjs):\n");
 
 const release = appJs(false);
