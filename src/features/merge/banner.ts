@@ -12,7 +12,7 @@ export interface MergeReport {
   readonly conflicts: readonly { readonly rowId: string }[];
 }
 
-export type RestoreAnswer = "ok" | "busy" | "missing" | "corrupt" | "changed" | "no-backup" | string;
+export type RestoreAnswer = "restored" | "busy" | "missing" | "corrupt" | "changed" | "no-backup";
 
 export interface RestoreRequest {
   readonly force: boolean;
