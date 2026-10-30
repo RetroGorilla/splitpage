@@ -368,7 +368,7 @@ STRUCTURE SECTION MUST SAY
 - Font, licence, size added to each artefact, how the font is loaded, what stays on the old path, what is still shown as "?" and the CJK decision needed from Adam.
 ```
 
-## AQ-17 [ ] Tighten RestoreAnswer
+## AQ-17 [x] Tighten RestoreAnswer
 
 Needs: none.
 Files: src/features/merge/banner.ts and callers.
