@@ -67,7 +67,7 @@ function attachKey(item) {
   return "file:" + item.name + ":" + item.size;
 }
 
-export function addAttachment(list, item) {
+function addAttachment(list, item) {
   var key = attachKey(item);
   if (!list.some(function (x) { return attachKey(x) === key; })) list.push(item);
   return list;
