@@ -1,4 +1,4 @@
-export type SplitpageFile = { rows: unknown[]; [key: string]: unknown };
+type SplitpageFile = { rows: unknown[]; [key: string]: unknown };
 
 export function parseSplitpageFile(text: string): SplitpageFile {
   const parsed = JSON.parse(text) as unknown;

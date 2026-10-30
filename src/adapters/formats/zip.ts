@@ -5,7 +5,7 @@ export interface ZipEntry {
   data: Uint8Array;
 }
 
-export interface ZipReader {
+interface ZipReader {
   get: (name: string) => Promise<Uint8Array | null>;
   names: string[];
 }

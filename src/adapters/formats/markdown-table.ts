@@ -4,7 +4,7 @@ export interface MarkdownTableRow {
   readonly statusText: string;
 }
 
-export interface ColumnIndices {
+interface ColumnIndices {
   readonly visualIdx: number;
   readonly audioIdx: number;
 }
@@ -23,7 +23,7 @@ export function columnIndicesFromHeader(header: readonly string[]): ColumnIndice
   return { visualIdx: visualIdx, audioIdx: audioIdx };
 }
 
-export function splitTableRowCells(line: string): string[] {
+function splitTableRowCells(line: string): string[] {
   const trimmed = line.replace(/^\|/, "").replace(/\|$/, "");
   const cells: string[] = [];
   let current = "";

@@ -11,14 +11,14 @@ export interface VideoLink {
   poster?: boolean;
 }
 
-export interface PenMark {
+interface PenMark {
   kind: "pen" | "highlight";
   color: string;
   width: number;
   points: number[];
 }
 
-export interface TextMark {
+interface TextMark {
   kind: "text";
   color: string;
   size: number;
@@ -29,7 +29,7 @@ export interface TextMark {
 
 export type Mark = PenMark | TextMark;
 
-export interface Annotation {
+interface Annotation {
   imageRef: ImageRef;
   marks: unknown[];
 }
@@ -91,8 +91,6 @@ interface GalleryItemInput {
   links?: unknown;
   annotation?: unknown;
 }
-
-export type GalleryField = "imageLinks" | "moreImages";
 
 const MAX_LINKS = 20;
 const MAX_MORE = 60;

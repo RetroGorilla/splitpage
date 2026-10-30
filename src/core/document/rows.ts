@@ -1,4 +1,4 @@
-export interface RowsHolder {
+interface RowsHolder {
   readonly rows: readonly { readonly id: string }[];
 }
 

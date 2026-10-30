@@ -98,7 +98,7 @@ function keptAsStored(text: string, healed: string, max: number): string {
   return text.slice(0, keep);
 }
 
-export type NameKey = (name: string, at: number) => string;
+type NameKey = (name: string, at: number) => string;
 
 export function settledNames(texts: readonly string[], max: number, keyOf: NameKey, wanted?: readonly (string | undefined)[]): string[] {
   const out: string[] = [], stored: string[] = [];
@@ -176,7 +176,7 @@ export function safeId(id: unknown, prefix: string, ids: IdSource): string {
 
 export type StoredImageRef = Pick<ImageRef, "sha256"> & Partial<Omit<ImageRef, "sha256">>;
 
-export type StoredImageAttribute = readonly [name: string, value: string];
+type StoredImageAttribute = readonly [name: string, value: string];
 
 export function storedImageAttributes(ref: StoredImageRef): StoredImageAttribute[] {
   const attrs: StoredImageAttribute[] = [["class", "comment-img"], ["data-blob", ref.sha256]];

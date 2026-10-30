@@ -3,7 +3,7 @@ import type { RowStatusId } from "../document/timing.ts";
 import { TAG_CATEGORY_IDS, TAG_STATUS_IDS } from "../document/tags.ts";
 import type { TagCategoryId, TagStatusId } from "../document/tags.ts";
 
-export interface RowStatusLook {
+interface RowStatusLook {
   id: RowStatusId;
   label: string;
   cls: string;
@@ -68,7 +68,7 @@ export function tagCategory(id: unknown): TagCategoryLook | null {
   return null;
 }
 
-export interface TagStatusLook {
+interface TagStatusLook {
   id: TagStatusId;
   label: string;
   color: string;
@@ -94,7 +94,7 @@ export function tagStatus(id: unknown): TagStatusLook | null {
   return null;
 }
 
-export interface CategorisedTag {
+interface CategorisedTag {
   cat: { id: string };
   orphaned?: boolean | undefined;
   mentions: readonly unknown[];

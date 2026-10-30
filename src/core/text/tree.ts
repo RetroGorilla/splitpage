@@ -2,17 +2,17 @@ import { FORMAT_MARKS, defaultTagOf, normalizeCell } from "./runs.ts";
 import type { AtomRun, CellInput, FormatMark, Marks } from "./runs.ts";
 import type { TagName } from "../document/tags.ts";
 
-export type TagOf = (id: string) => TagName | null;
+type TagOf = (id: string) => TagName | null;
 
 export type TreeOptions = { tagOf?: TagOf | null | undefined };
 
-export type ElementKey =
+type ElementKey =
   | { k: "cue" | "dir" | FormatMark; v: true }
   | { k: "cmt" | "href" | "tag"; v: string };
 
-export type TreeElement = { el: ElementKey; kids: TreeItem[]; text?: undefined; br?: undefined; atom?: undefined };
+type TreeElement = { el: ElementKey; kids: TreeItem[]; text?: undefined; br?: undefined; atom?: undefined };
 
-export type TreeItem =
+type TreeItem =
   | { text: string; br?: undefined; atom?: undefined; el?: undefined }
   | { br: true; text?: undefined; atom?: undefined; el?: undefined }
   | { atom: AtomRun; text?: undefined; br?: undefined; el?: undefined }
@@ -20,7 +20,7 @@ export type TreeItem =
 
 export type TreeParent = { kids: TreeItem[] };
 
-export type CellTree = { root: TreeParent; tagOf: TagOf };
+type CellTree = { root: TreeParent; tagOf: TagOf };
 
 function elementKeys(marks: Marks, isAtom: boolean): ElementKey[] {
   const keys: ElementKey[] = [];

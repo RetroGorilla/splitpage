@@ -98,15 +98,6 @@ let STYLES_XML: string | undefined;
 
 const EXPORT_TABLE_STYLE_ID = "SplitpageTable";
 
-export function dataUrlToBytes(dataUrl: string): Uint8Array<ArrayBuffer> {
-  const comma = dataUrl.indexOf(",");
-  const b64 = dataUrl.slice(comma + 1);
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 const DOCX_IMAGE_EXT: Record<string, string> = { "image/jpeg": "jpeg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
 
 export function jpegSize(bytes: Uint8Array): { w: number; h: number } {

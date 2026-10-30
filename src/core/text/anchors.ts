@@ -2,7 +2,7 @@ import { commentIds } from "./runs.ts";
 import type { CellDecoder } from "./ports.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 
-export type AnchorRow = { id?: unknown; visualText?: unknown; audioText?: unknown };
+type AnchorRow = { id?: unknown; visualText?: unknown; audioText?: unknown };
 
 export type AnchoredComment = { kind?: unknown; field?: unknown; anchorId?: unknown; id?: unknown; rowId?: unknown };
 

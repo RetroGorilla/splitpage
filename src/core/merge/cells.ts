@@ -3,9 +3,9 @@ import type { CellInput, Marks, Run } from "../text/runs.ts";
 import { explode, implode } from "../text/edits.ts";
 import type { AtomChar, Char, TextChar } from "../text/edits.ts";
 
-export type CellMerge = { cell: Run[]; conflict: boolean; markConflicts: number };
+type CellMerge = { cell: Run[]; conflict: boolean; markConflicts: number };
 
-export type MarksMerge = { marks: Marks; conflict: boolean };
+type MarksMerge = { marks: Marks; conflict: boolean };
 
 type Token = { key: string; chars: Char[] };
 

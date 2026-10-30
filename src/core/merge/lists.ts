@@ -47,7 +47,7 @@ type List<T> = readonly (T | null | undefined)[] | null | undefined;
 
 export type PersonList = List<PersonEntry>;
 export type TagList = List<TagInput>;
-export type ShotList = List<BrollShotEntry>;
+type ShotList = List<BrollShotEntry>;
 
 export type ListMerger = (base: unknown, mine: unknown, theirs: unknown, survives?: PersonSurvives) => unknown[];
 

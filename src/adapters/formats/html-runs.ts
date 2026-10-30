@@ -1,4 +1,4 @@
-export interface HtmlRun {
+interface HtmlRun {
   text: string;
   b?: boolean;
   i?: boolean;
@@ -17,7 +17,7 @@ interface Format {
   href: string | null;
 }
 
-export type InertBody = (html: unknown) => HTMLElement;
+type InertBody = (html: unknown) => HTMLElement;
 
 export function htmlToRuns(html: unknown, inertBody: InertBody): HtmlRun[] {
   const runs: HtmlRun[] = [];
