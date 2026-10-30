@@ -42,7 +42,7 @@ export interface RowsRenderPorts {
   };
   readonly editing: {
     readonly cells: () => Pick<CellEditing<Element>, "edit" | "sync">;
-    readonly selection: () => Pick<EditorSelection<Element, Range, Element>, "remember" | "resolve" | "paintedEpoch" | "notePainted" | "holdLink" | "heldLink" | "dropLink">;
+    readonly selection: () => Pick<EditorSelection<Element, Range, Element>, "remember" | "forget" | "resolve" | "paintedEpoch" | "notePainted" | "holdLink" | "heldLink" | "dropLink">;
     readonly paint: () => Pick<PaintGuard, "whilePainting" | "painting" | "shown" | "afterShown">;
     readonly undo: () => Pick<UndoGuard, "whileApplying">;
   };

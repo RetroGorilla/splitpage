@@ -22,7 +22,7 @@ export interface CommentsPorts {
   readonly isDraft: (box: HTMLElement) => boolean;
   readonly draftUndo: (box: HTMLElement) => void;
   readonly draftRedo: (box: HTMLElement) => void;
-  readonly typeMarks: (box: HTMLElement, data: string) => boolean;
+  readonly typeMarks: (box: HTMLElement, data: string) => unknown;
   readonly beforeInput: (box: HTMLElement, event: CommentEvent) => void;
   readonly focusDraft: (box: HTMLElement) => void;
   readonly composeDraft: (box: HTMLElement, composing: boolean) => void;
