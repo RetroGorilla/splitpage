@@ -257,7 +257,7 @@ Task: find modules under src/features/ (not mount.ts, not ports.ts) that contain
 Structure section: "no structural change"; the tested/untested table before and after.
 ```
 
-## AQ-11 [ ] Delete unreferenced files
+## AQ-11 [x] Delete unreferenced files
 
 ```text
 Task: find files in the repo that nothing references and delete them.
