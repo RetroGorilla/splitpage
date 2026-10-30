@@ -124,7 +124,7 @@ request: lint, types, the dependency and comment gates, the build and its
 (`01-core.txt`, `52-csp.txt`).
 [docs/architecture/testing.md](architecture/testing.md#ci) lists the
 jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs
---only-target dev` against an Xvfb display (#89) on pushes to `main` — that
+--only-target dev` against an Xvfb display (#89) on pull requests and pushes that touch app or desktop code — that
 is where `main.js` and `preload.js` are actually executed, ~600 checks of it.
 It is its own job because it launches ~60 real Electron processes — 6.3
 minutes on a Windows 11 x64 machine, far longer on a slow shared runner —
