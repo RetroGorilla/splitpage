@@ -110,7 +110,7 @@ function pdfEncodeChar(ch: string): number {
   const mapped = WINANSI_MAP[ch];
   if (mapped !== undefined) return mapped;
   const code = ch.charCodeAt(0);
-  if ((code >= 32 && code <= 126) || (code >= 160 && code <= 255)) return code;
+  if (code >= 32 && code <= 255) return code;
   return SUBSTITUTE_CODE;
 }
 
@@ -382,28 +382,45 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
 
 const JPEG_SOF_MARKERS = new Set([0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF]);
 
-function jpegColor(bytes: Uint8Array): { components: number; adobe: boolean } | null {
+interface JpegHeader { w: number; h: number; components: number; adobe: boolean }
+
+function jpegHeader(bytes: Uint8Array): JpegHeader | null {
+  const at = (k: number): number => bytes[k] ?? 0;
+  if (bytes.length < 4 || at(0) !== 0xFF || at(1) !== 0xD8) return null;
+  let frame: Omit<JpegHeader, "adobe"> | null = null;
   let adobe = false;
+  const found = (): JpegHeader | null => (frame ? { ...frame, adobe: adobe } : null);
   let i = 2;
-  while (i + 3 < bytes.length) {
-    if (bytes[i] !== 0xFF) { i++; continue; }
-    const marker = bytes[i + 1] ?? 0;
+  while (i + 1 < bytes.length) {
+    if (at(i) !== 0xFF) return found();
+    const marker = at(i + 1);
     if (marker === 0xFF) { i++; continue; }
-    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD9)) { i += 2; continue; }
-    const len = ((bytes[i + 2] ?? 0) << 8) | (bytes[i + 3] ?? 0);
-    if (marker === 0xEE && len >= 12 && String.fromCharCode(...bytes.subarray(i + 4, i + 9)) === "Adobe") adobe = true;
-    if (JPEG_SOF_MARKERS.has(marker)) return i + 9 < bytes.length ? { components: bytes[i + 9] ?? 0, adobe: adobe } : null;
-    if (marker === 0xDA) return null;
+    if (marker === 0x00 || marker === 0xD9) return found();
+    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD8)) { i += 2; continue; }
+    if (i + 3 >= bytes.length) return found();
+    const len = (at(i + 2) << 8) | at(i + 3);
+    if (len < 2 || i + 2 + len > bytes.length) return found();
+    if (JPEG_SOF_MARKERS.has(marker) && !frame) {
+      const components = at(i + 9);
+      if (len < 8 || components < 1 || len !== 8 + 3 * components) return null;
+      const h = (at(i + 5) << 8) | at(i + 6), w = (at(i + 7) << 8) | at(i + 8);
+      if (w < 1 || h < 1) return null;
+      frame = { w: w, h: h, components: components };
+    } else if (marker === 0xEE && len >= 14 && String.fromCharCode(at(i + 4), at(i + 5), at(i + 6), at(i + 7), at(i + 8)) === "Adobe") {
+      adobe = true;
+    } else if (marker === 0xDA) {
+      return found();
+    }
     i += 2 + len;
   }
-  return null;
+  return found();
 }
 
 function jpegColorEntries(bytes: Uint8Array): string {
-  const color = jpegColor(bytes);
-  if (color && color.components === 1) return " /ColorSpace /DeviceGray";
-  if (color && color.components === 4) {
-    return " /ColorSpace /DeviceCMYK" + (color.adobe ? " /Decode [1 0 1 0 1 0 1 0]" : "");
+  const header = jpegHeader(bytes);
+  if (header && header.components === 1) return " /ColorSpace /DeviceGray";
+  if (header && header.components === 4) {
+    return " /ColorSpace /DeviceCMYK" + (header.adobe ? " /Decode [1 0 1 0 1 0 1 0]" : "");
   }
   return " /ColorSpace /DeviceRGB";
 }
@@ -489,7 +506,8 @@ const PDF_IMAGE_MAX_PX = 2000;
 
 function pdfJpegOf(pic: ExportPicture | null): Promise<Jpeg | null> {
   if (!pic) return Promise.resolve(null);
-  if (pic.mime === "image/jpeg" && jpegColor(pic.bytes)) return Promise.resolve({ bytes: pic.bytes, size: jpegSize(pic.bytes) });
+  const header = pic.mime === "image/jpeg" ? jpegHeader(pic.bytes) : null;
+  if (header) return Promise.resolve({ bytes: pic.bytes, size: { w: header.w, h: header.h } });
   return new Promise<Jpeg | null>(function (resolve) {
     let url: string;
     try { url = URL.createObjectURL(new Blob([new Uint8Array(pic.bytes)], { type: pic.mime || "" })); } catch (e) { resolve(null); return; }
