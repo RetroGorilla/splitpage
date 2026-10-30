@@ -37,6 +37,14 @@ test("removing scenes the document does not hold plans nothing", () => {
   assert.equal(removeScenesCommand([]).plan(doc, MAY_EDIT), null);
 });
 
+test("a removal writes only the scenes it planned, even when a requested one appeared after planning", () => {
+  const planned = planOf(removeScenesCommand(["r1", "r2"]), viewOf({ rows: rowsOf(["r1", "r3"]) }));
+  assert.deepEqual(planned.changes.rowsRemoved, ["r1"]);
+  const live = liveOf({ rows: rowsOf(["r1", "r2", "r3"]) });
+  planned.apply(live);
+  assert.deepEqual(idsIn(live), ["r2", "r3"]);
+});
+
 test("removing neighbouring scenes removes every one of them, and a repeated id counts once", () => {
   const doc = viewOf({ rows: rowsOf(["r1", "r2", "r3", "r4", "r5"]) });
   const planned = planOf(removeScenesCommand(["r2", "r3", "r2", "gone"]), doc);
