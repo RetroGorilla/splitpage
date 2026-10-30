@@ -20,12 +20,12 @@ var menuEl = null;
 var pendingCut = false;
 var clipWritten = null;
 
-export function hasSceneSelection() {
+function hasSceneSelection() {
   if (sel && sel.doc !== ports.document.current()) clearSceneSelection();
   return !!sel;
 }
 
-export function selectedSceneIds() {
+function selectedSceneIds() {
   if (!hasSceneSelection()) return [];
   var rows = ports.document.current().rows;
   var a = -1, b = -1;
@@ -48,7 +48,7 @@ export function selectScenes(anchorId, focusId) {
   paint();
 }
 
-export function clearSceneSelection() {
+function clearSceneSelection() {
   if (!sel && !track) return;
   sel = null;
   if (track && track.scene) endTrack();
@@ -418,7 +418,7 @@ function ensureMenu() {
   return menuEl;
 }
 
-export function openSceneMenu(x, y) {
+function openSceneMenu(x, y) {
   var ids = selectedSceneIds();
   if (!ids.length) return;
   var menu = ensureMenu();
@@ -429,7 +429,7 @@ export function openSceneMenu(x, y) {
   menu.style.top = Math.max(8, Math.min(y, window.innerHeight - h - 8)) + "px";
 }
 
-export function closeSceneMenu() {
+function closeSceneMenu() {
   if (menuEl) menuEl.hidden = true;
 }
 

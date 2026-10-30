@@ -11,7 +11,7 @@ import type { SaveChange, SaveState } from "../../application/save/save-state.ts
 import type { AutoSaveTarget } from "../../application/save/status.ts";
 import type { LocationChange } from "../../application/location/document-location.ts";
 
-export interface SaveStatusAutoSave {
+interface SaveStatusAutoSave {
   readonly policy: () => Pick<AutoSavePolicy, "halted" | "enabled">;
   readonly target: () => AutoSaveTarget;
 }

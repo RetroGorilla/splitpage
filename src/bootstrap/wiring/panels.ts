@@ -6,7 +6,7 @@ import { historyOwner } from "./history.ts";
 import { renderHistory } from "./history-panel.ts";
 import { currentProductionTags } from "./production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
-import { onPainted } from "../../features/rows/render.js";
+import { onPainted } from "../../features/rows/render.ts";
 import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.js";
 import { paintTargetOverlay } from "../../features/rundown/target.js";
