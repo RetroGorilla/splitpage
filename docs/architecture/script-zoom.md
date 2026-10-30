@@ -4,7 +4,7 @@
 
 `src/features/script-zoom/script-zoom.ts` keeps the zoom math, key handling, wheel handling, anchoring and readout in TypeScript. Its mount receives four ports and returns its controls and a disposer. Disposal removes the listeners, preference subscription, animation frames and readout timer, and clears the ports.
 
-The shared ports in `src/bootstrap/wiring/ports/` build the three shared ports once. Every call reaches the current owner through its bridge:
+`src/bootstrap/wiring/ports/` builds the three shared ports once. Every call reaches the current owner through its bridge:
 
 | Feature port | Type | Owner and wiring |
 | --- | --- | --- |
