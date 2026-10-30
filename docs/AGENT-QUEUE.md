@@ -338,7 +338,7 @@ STRUCTURE SECTION MUST SAY
 - Which behaviour changes (more characters encoded; a diagnostic; correct colour space) and what stays the same (unencodable characters still become "?"). Width table source. Where the diagnostic goes.
 ```
 
-## AQ-16 [ ] Embed a Unicode font in PDFs
+## AQ-16 [x] Embed a Unicode font in PDFs
 
 Needs: AQ-15 merged.
 Files: src/adapters/formats/ (new subsetter modules, pdf.ts), tests, licences file.
