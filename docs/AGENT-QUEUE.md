@@ -621,7 +621,7 @@ Follow AQ-25 steps 1 to 5 with rundown in place of prompter.
 Structure section: which variables moved into the state object and which stayed out, and why.
 ```
 
-## AQ-28 [ ] Save button label after a late save (tracker I-20)
+## AQ-28 [x] Save button label after a late save (tracker I-20)
 
 Needs: none.
 Files: src/application/save/ (status.ts, coordinator.ts, or whichever writes the label), src/features/title/save-status.js, their tests, a new browser suite under .claude/skills/run-splitpage-app/tests/.
