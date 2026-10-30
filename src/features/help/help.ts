@@ -21,7 +21,7 @@ function scrollHelpTo(id: string) {
 
 let helpReturnFocus: (Element & { focus?: unknown }) | null = null;
 
-export function openHelp(anchor?: string) {
+function openHelp(anchor?: string) {
   const modal = document.getElementById("help-modal");
   if (!modal) return;
   suspendTourForHelp();
@@ -224,7 +224,7 @@ function renderTourStep() {
   positionTourStep();
 }
 
-export function startTour() {
+function startTour() {
   if (!(ports as HelpPortUse).document.current()) {
     (ports as HelpPortUse).notices.show("Still loading…", "warn");
     return;

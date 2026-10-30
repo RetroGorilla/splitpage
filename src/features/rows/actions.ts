@@ -2,7 +2,7 @@ import type { ActionDefinition } from "../../application/actions.ts";
 import { availableUnless } from "../../application/screen.ts";
 import type { ScreenState } from "../../application/screen.ts";
 
-export interface RowControls {
+interface RowControls {
   readonly reveal: (rowId: string) => void;
 }
 
@@ -21,7 +21,7 @@ export function rowActions(rows: RowControls): ActionDefinition[] {
   ];
 }
 
-export interface HideShotActionPorts {
+interface HideShotActionPorts {
   readonly toggle: () => void;
   readonly hidden: () => boolean;
   readonly screen: () => ScreenState;

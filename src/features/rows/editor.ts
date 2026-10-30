@@ -14,7 +14,7 @@ export interface RowsEditorPorts {
   readonly notMedia: () => void;
 }
 
-export interface RowsEditorMount {
+interface RowsEditorMount {
   readonly window: Window;
   readonly rows: Element;
   readonly addBar: Element | null;

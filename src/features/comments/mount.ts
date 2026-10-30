@@ -1,6 +1,6 @@
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
-export type CommentEvent = Event & {
+type CommentEvent = Event & {
   readonly target: HTMLElement & { value: string; files?: FileList };
   readonly isComposing: boolean;
   readonly inputType: string;
