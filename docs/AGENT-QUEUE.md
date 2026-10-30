@@ -6,7 +6,7 @@ This file is process, not product. Delete it when the queue stays empty.
 
 ## Start here (agent)
 
-1. Read `AGENTS.md`, then this file down to the task list.
+1. Read `AGENTS.md`, then [ROADMAP.md](ROADMAP.md) for where the work is going (this file still decides what you pick), then this file down to the task list.
 2. Run `git fetch origin 4.1-development` and read the **latest** version of this file from there.
 2a. Before claiming a task, handle queue additions (next section): if an open PR titled `AQ-add: ...` exists, review and merge it first.
 3. List PRs (`gh pr list --state all --limit 100`, or the GitHub API) and read the state of every PR whose title starts with `AQ-n`: an **open** PR means the task is claimed; a **merged** PR means it is done; a **closed report-only** PR (AQ-6, AQ-14) means it is done; any other **closed, unmerged** PR means the task is free again.
