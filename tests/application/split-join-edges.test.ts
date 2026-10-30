@@ -42,6 +42,17 @@ test("a join whose scenes changed before the write fails, naming the scene, and 
   assert.equal(alone.rows[1]?.audioText, "One.");
 });
 
+test("a status that is not a string ranks as todo, so a join neither declares nor copies it", () => {
+  const view = viewOf({ rows: [{ id: "r1", visualText: "", audioText: "One.", status: "todo" }, { id: "r2", visualText: "", audioText: "Two.", status: ["shot"] }] });
+  const planned = planOf(joinScenesCommand("r1", ports), view);
+  assert.equal(planned.changes.cells.some(function (c) { return c.field === "status"; }), false);
+  const live = liveOf({ rows: [{ id: "r1", visualText: "", audioText: "One.", status: "todo" }, { id: "r2", visualText: "", audioText: "Two.", status: ["shot"] }] });
+  planned.apply(live);
+  assert.equal(live.rows[0]?.status, "todo");
+  const raised = planOf(joinScenesCommand("r1", ports), viewOf({ rows: rows([["r1", "", "One."], ["r2", "", "Two."]]).map(function (r, i) { return { ...r, status: i ? "shot" : "todo" }; }) }));
+  assert.equal(raised.changes.cells.some(function (c) { return c.field === "status"; }), true);
+});
+
 test("the visual check is false for the last scene, and when only the later scene has a visual", () => {
   const check = bothScenesHaveVisual("r2", ports.plainText);
   assert.equal(check(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""]]) })), false, "r2 has nothing below it");
