@@ -1,5 +1,6 @@
 import { formatTimestamp } from "../common/comment-time.js";
 import { exportToggleOptions } from "../../application/export/registry.ts";
+import { unshownCharactersText } from "../../application/export/diagnostics.ts";
 import { slugify } from "../../../shared/text.js";
 
 var mounted = null;
@@ -129,7 +130,10 @@ async function buildFileData(kind, baseName, opts) {
   var filename = registered
     ? exporter.fileName(baseName, { imageBundle: !!made.imageBundle })
     : baseName + "." + kind;
-  if (made.diagnostics) warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
+  if (made.diagnostics) {
+    warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
+    if (made.diagnostics.unshownCharacters) showToast(unshownCharactersText(made.diagnostics.unshownCharacters), "warn");
+  }
   return { data: made.data, filename: filename };
 }
 
