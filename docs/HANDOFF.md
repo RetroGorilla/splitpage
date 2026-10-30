@@ -261,9 +261,9 @@ bytes instead.
 `#state-data` holds the seed document from `src/seed-state.json`. That's its
 whole job — **documents live in files, not copies of the app**. Save writes
 `.md` (table + fenced `splitpage` data block) or `.splitpage` (that record
-alone). `20d-formats.js` builds/parses both; `openProjectFile()` dispatches
+alone). The format codecs in `src/adapters/formats/` build and parse both; `openProjectFile()` (`src/application/transitions/local-files.js`) dispatches
 into `adoptProjectState()`, the one place a parsed project becomes *the*
-document. `PAGE_SHELL`/`buildPublishHtml()` exist only for Standalone HTML
+document. `PAGE_SHELL`/`buildPublishHtml()` (`src/adapters/page/page-shell.ts`) exist only for Standalone HTML
 export. A server was a second home from 2026-08-28 until the server
 features were removed; the app now saves to files only.
 
@@ -280,7 +280,7 @@ merge (happened to `people` and `productionTags`).
 `.tag-anchor` spans carry `contenteditable="false"` (`walkSanitize()`), so
 the caret can't enter one and typing/backspace can't corrupt its
 `data-tag-name`. Anything mutating text must skip `.tag-anchor` content
-(`editableTextNodes()`).
+(in the document model a tag is one atom, so no DOM walk is needed: [INV-03](architecture/invariants.md)).
 
 ### 3.4 Tags are derived; the *registry* is not
 
@@ -313,8 +313,8 @@ cells — gate script-only behaviour on `isScriptCell(cellEl)`. The writer's
 paragraphs are script cells too (`isScriptCell` accepts `#writer-doc`), which
 is how the writer inherits tagging/Tab/Ctrl+B/sanitising for free (§3.9).
 
-A comment or reply box (`isDraftBox`, `05d-draft-edit.js`) is edited through
-the document model like a script cell — `throughModel` in 05-render.js sends
+A comment or reply box (`isDraftBox`, `src/features/editing/cell-page.ts`) is edited through
+the document model like a script cell — `throughModel` in `src/features/rows/render.js` sends
 a format, a link or Enter to `editCell` or `editDraft` — but it is not the
 document: its pictures and video cards ride through the model as
 placeholder characters, and Ctrl+Z there is the box's own history, never the
@@ -326,7 +326,7 @@ document's and never the browser's (invariant #55). No edit uses
 The merge is three-way: `(baseState, state, theirs)`. **`baseState` must be
 exactly what the other side last confirmed** — any new save path sets it to
 what it successfully wrote, nothing else. Since #72 the
-merge paths do not write it themselves: `applyMerge()` (03-sync.js) is the
+merge paths do not write it themselves: `applyMerge()` (`src/bootstrap/wiring/document-merge.ts`) is the
 one orchestration — snapshot, undo point, `baseState`, autosave, chips,
 toast — and the only writer of `baseState` on a merge; since #96 that
 includes the boot stash and the crash-draft file merge, the latter through
@@ -334,8 +334,7 @@ includes the boot stash and the crash-draft file merge, the latter through
 Every other write is "adopt what the other side just confirmed" after a
 successful write or open (or `null`: no ancestor), and goes through
 `setBaseState(next, why)` next to it, each call with its reason — so
-`grep -rn "S\.baseState *=" src/js/` shows the declaration, `applyMerge` and
-`setBaseState`, and nothing else. `reportMerge(result, {alreadySaved:true})`
+`setBaseState(next, why)` (`src/application/session/session-merge.js`) is the one writer of the base, called through `applyMerge`. `reportMerge(result, {alreadySaved:true})`
 avoids re-queuing an autosave for a mid-save merge.
 
 ### 3.8 Untagged mentions are painted, never wrapped
@@ -386,8 +385,7 @@ model position (`cellSelection`), a selection deleted first, `splitCell`,
 each half written back with `toHtml`, the comments re-pointed by the
 session's reconciliation (invariant #18) — one undo entry, written by
 `splitSceneCommand`, not by the caller. A cell still holding a picture
-(pasted before design D7) is the one case still cut by a DOM range
-(`splitMediaCellInDom`, which hands the two sanitised halves to the command). Alt+Enter never reaches `onRootKeydown` inside the
+(pasted before design D7) is split through the model as well: a picture is one atom, so the split is a text cut (INV-10 in [invariants.md](architecture/invariants.md)). Alt+Enter never reaches `onRootKeydown` inside the
 writer (its capture handler treats every Enter as a split).
 
 `keepCaretInView(cellEl)` is a near-always-no-op scroll (only fires outside a
@@ -442,12 +440,12 @@ tabs**.
   allowlist, no file/draft/history bridge methods (#43).
 - `preload.js` exposes `window.splitpageDesktop` only on `splitpage://app`;
   every `ipcMain` handler re-checks the sender frame (`isTrustedSender`,
-  `main.js:4004` / `isTrustedTabStripSender`, `main.js:4018`). Renderer never
+  `main.js:2052` / `isTrustedTabStripSender`, `main.js:2056`). Renderer never
   sends file paths to main (#34) — main keeps an id → path registry; writes
   are atomic (temp+rename).
-- `createTabWindow` (`main.js:2528`) makes a `BrowserWindow` whose primary
+- `createTabWindow` (`main.js:1015`) makes a `BrowserWindow` whose primary
   view loads the tab strip; each tab is a `WebContentsView` from
-  `createTab(windowId, opts)` (`main.js:2868`). `tabId`/`windowId` are
+  `createTab(windowId, opts)` (`main.js:1190`). `tabId`/`windowId` are
   32-hex, validated at every trust boundary (#42), stable across tear-off
   and relaunch, and double as the crash-draft folder name (§4). A crashed
   tab closes with no prompt, reports `dirty: false` regardless of the
@@ -480,7 +478,7 @@ tabs**.
   (#40): a tab with `hasDraftToRestore` is `hold()`-ed immediately;
   `write()` on a held tab returns `HELD`, touches nothing; released only by
   `splitpage:draft-restore-done` or an explicit user decision — never
-  crash/kill/session-end/quit. `buildDraftHeader` (`main.js:807`) is built
+  crash/kill/session-end/quit. `buildDraftHeader` (`main.js:317`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
 - **The browser keeps no drafts.** Crash-safe drafts are desktop-only. The
   browser draft store, its writer and its Web Lock were removed with the
@@ -554,7 +552,7 @@ tabs**.
   `blob-missing(shas)` → the subset not held, ≤2000 shas per call, anything
   else rejects. A store that could not be created leaves the app running:
   puts answer `UNAVAILABLE`, gets null, every sha is missing. The renderer
-  side is `makeDesktopBlobBackend(bridge)` in `20f-desktop.js` (the page
+  side is `makeDesktopBlobBackend(bridge)` in `src/adapters/desktop/desktop-blobs.js` (the page
   registry's `get`/`put`/`missing` interface; `put` rejects with
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites.
@@ -667,7 +665,7 @@ leaving does not shift the editor under a still-clear layer.
 `.claude/skills/run-splitpage-app/tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
 on the two elements and checks all of it.
 
-**`render()` must stay synchronous.** `04a-row-motion.js` animates scene
+**`render()` must stay synchronous.** `src/features/rows/row-motion.js` animates scene
 reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
 `#rows` (§3.16), measure again, put things back with a transform and animate
 it away. It is FLIP and *not* the View Transitions API for one reason:
@@ -699,7 +697,7 @@ Two traps it already works around:
 
 ### 3.15 One loading indicator, and it waits before showing
 
-`04b-busy.js` owns the only "something is happening" affordance in the app:
+`src/features/notices/busy.js` owns the only "something is happening" affordance in the app:
 a 2px indeterminate bar at the top of the window. `withBusyBar(label, fn)`
 wraps an async operation; the result and any thrown error pass straight
 through. Currently wrapped: every export (they all funnel through
@@ -716,20 +714,6 @@ so the later file simply won. #66 ended that whole class of hazard — modules
 have their own scope and a collision is now an esbuild error rather than a
 silent last-one-wins.
 
-That scan turns up one pre-existing collision worth knowing about, left
-alone here because it is outside a motion change and the suites are green
-on it: **`saveInFlight` is declared three times** — `12-dirty-toast.js:14`
-(the save-state indicator) and `14-export.js:481`, whose comment
-("serialize auto-saves so two quick ones never overlap") plainly intends a
-latch private to `queueAutoSave`. One scope, so it is one bit, and
-`saveDoc()` sets and clears that same bit at `14-export.js:46`/`65`/`132`/
-`166`/`182`/`248`. The effects look accidentally benign today — an autosave
-queues behind a manual save, and the indicator lights during an autosave,
-both arguably wanted — but `queueAutoSave`'s inner `saveDoc()` call clears
-the latch on its own way out, so the serialization is not held by the
-mechanism the comment describes. Anyone touching autosave or the save
-indicator should give the two their own names first.
-
 ### 3.16 `render()` reconciles `#rows`; `renderRow()` repaints one row
 
 Until #84 every `render()` rebuilt all of `#rows` through `innerHTML`, so a
@@ -738,13 +722,13 @@ applied) cost every row, and the focused cell came back with its caret at
 the end. Now:
 
 - **A row is five parts** — its class, gutter, visual media and two fields —
-  built by `rowParts()` in `05-render.js`. The part strings are the change
+  built by `rowParts()` in `src/features/rows/render.js`. The part strings are the change
   detection: each row element carries the parts it was last painted from
   (an expando, never an attribute), and a part whose freshly built string is
-  identical is not touched. `rowHtml()` is those parts joined, byte for byte
+  identical is not touched. `rowHtmlFromParts()` in `src/features/rows/render.js` is those parts joined, byte for byte
   what it always produced.
 - **`render()`** keys `#rows` by row id (a shot strip by the ids it covers —
-  `rowGroupItems()` in `01b-hide-shot.js`, the same key `04a-row-motion.js`
+  `hiddenShotStripHtml()` in `src/features/rows/hide-shot.ts`, the key `rowMotionKey()` in `src/features/rows/row-motion.js`
   uses), reuses every element still wanted, repaints only changed parts,
   creates new rows, drops gone ones, and moves the rest with a
   longest-increasing-run pass that never moves the row holding focus (a
@@ -766,7 +750,7 @@ the end. Now:
   writer's paragraph and the reply box.
 - **One idle refresh.** `scheduleProductionRefresh()`, `scheduleUntaggedScan()`,
   `scheduleBrollRefresh()` and `scheduleWriterStats()` only mark their job
-  pending on `scheduleIdleRefresh()` (`07-production-tags.js`): one 180ms
+  pending on `scheduleIdleRefresh()` (`src/features/tags/production-tags.js`): one 180ms
   debounce, capped at 1s of unbroken typing, runs everything pending against
   one production index (§3.4). They used to be four timers (180/200/220/400ms)
   each deriving the breakdown for itself.
@@ -831,7 +815,7 @@ before #194 reads, merges and saves byte for byte as it did, and an older
 client that meets the key just carries it. Your pick lives in your prefs
 (`splitpage-person-color`) and a session effect writes it under your name
 into each document you edit (`src/application/save/session-effects.ts`). It
-is bookkeeping, not content: `12a-undo.js` keeps it out of
+is bookkeeping, not content: `src/core/document/fields.ts` (`undo: false`) keeps it out of
 the undo stack. `migrateRows()` cleans it (`normalizePersonColors`: garbage
 dropped, names that differ only in case or padding kept once, the key
 deleted when nothing valid is left); `mergeStates()` merges it per name with
@@ -849,7 +833,7 @@ lists as sets, both sides' additions kept, never a conflict, #135); `rows[].stat
 `productionTags[].status` merge by rank (further-along wins);
 `owner`/`notes` merge "filled beats empty".
 
-**A scene's length** (#179) is `rowSeconds(row)` (01-scene-status.js):
+**A scene's length** (#179) is `rowSeconds(row)` (`src/core/production/timing.ts`):
 `rows[].lengthSeconds` when it is set, which replaces the estimate outright,
 otherwise the Audio words at `wordsPerMinute`. Every consumer — the gutter's
 start times, the program clock, the rundown strip, the Production and B-roll
@@ -857,7 +841,7 @@ panels, the CSV, Present's clock — reads `rowSeconds()`, never the words
 directly (Present's *scroll speed* is still words and reading speed).
 `migrateRows()` keeps a whole number 0–86400 and drops anything else, so a
 file from before #179 reads as the estimate. It is set from the rail's Read
-time (05r-read-time.js; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
+time (`src/features/rows/read-time.js`; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
 `parseSceneLength()`). It is not in
 `ROW_FIELDS` (not text): `mergeRow` takes the side that changed it since the
 base, theirs when both did (no conflict card), and with no base a set length
@@ -873,15 +857,15 @@ speed is words at the reading speed.
 seconds 1–86400, and — like `personColors` — has **no default**: no target
 is no key, so a file from before #170 reads, merges and saves byte for
 byte as it did. `migrateRows()` keeps it through `normalizeTargetLength()`
-(01-scene-status.js; 0 and garbage delete the key). `mergeStates()` uses
-the `target-length` strategy, `mergeTargetLength()` (03-sync.js): merged
+(`src/core/document/timing.ts`; 0 and garbage delete the key). `mergeStates()` uses
+the `target-length` strategy, `mergeTargetLength()` (`src/core/merge/scalars.ts`): merged
 like the title — the side that changed it since the base wins, and taking
 it away is a change too (which `changed-side-wins`' `m || fallback` would
 lose) — but both sides changing it keeps theirs with no conflict card, as a
 scene's length does; with no base a set target beats none. Both project
 formats carry it as a plain key; the `.md` table does not show it and no
 export prints it. It is set only through `setTargetLength()`
-(05t-target.js), one `markDirty()`, so undo sees a `docField` step. What reads it:
+(`src/features/rundown/target.js`), one `markDirty()`, so undo sees a `docField` step. What reads it:
 the script's length (`updateScriptStats()`: `1:35 / 2:00` and `0:25 left` /
 `0:05 over` in `#runtime-slot`, via the pure `targetClock()`; since #207 a
 label at the end of the rundown, `#runtime-chip`, placed by
@@ -890,7 +874,7 @@ header's status line — it was the header's program clock before; the
 target is measured against the whole script — with shot scenes hidden the
 remaining-to-shoot figure moves to the tooltip), and the rundown
 strip (`setRundownExtraSeconds(target)`, so the span is
-max(target, total) + 10s; 05t-target.js draws the line, "Target 2:00" and
+max(target, total) + 10s; `src/features/rundown/target.js` draws the line, "Target 2:00" and
 the hatching on `#rundown-overlay` from `rundownLayout().x` — the layout at
 rest, never `rundownX()`, because the overlay is faded while the lens is on
 and must be right when it settles; and never seconds × `pxPerSecond`, since
@@ -900,14 +884,14 @@ Present does not show it.
 
 **Per person, not per document:** the script's zoom (#191) is
 `localStorage["splitpage-script-scale"]` (a number, 1 = 100 %, absent at
-100 %), applied as `--script-scale` on `#root` by 05s-script-zoom.js, which
+100 %), applied as `--script-scale` on `#root` by `src/features/script-zoom/script-zoom.ts`, which
 also re-applies on a `splitpage:pref` event (`detail.key` that key) and on
 another window's `storage` event.
 
 **The two script cells merge a word at a time** (#85,
 `docs/DOCUMENT-MODEL.md` §8). `mergeRow` hands each to `mergeTextField()`
-(03-sync.js), which reads base, mine and theirs into the document model
-(`fromHtml`, 04c-doc-model.js), **each through its own side's registry**
+(`src/core/merge/text-field.ts`), which reads base, mine and theirs into the document model
+(`fromHtml`, `src/bootstrap/richtext.ts`), **each through its own side's registry**
 (`textMergeContext` → `registryTagHooks`), so a tag renamed on one side is
 the same tag id on all three and a rename alone is not a change. Two
 strings that read as the same cell are the same cell (a re-serialisation
@@ -919,7 +903,7 @@ an "Unmerged edit" card (design D3). The result names every tag the way the
 **merged** registry does (the registry is merged before the rows for that),
 so a rename from the other side reaches a cell taken from this one. A cell
 holding a picture or video card (which the model leaves out, D7) is still
-compared as a string, whole. The on-disk merge review (18a-local-merge.js)
+compared as a string, whole. The on-disk merge review (`src/features/merge/local-merge.js`)
 decides each cell with the same `mergeTextField()`, and shows "both sets of
 changes are combined" for an outcome of `merged`.
 
@@ -935,14 +919,14 @@ them out), `toMarkdown` `*(beat)*`, `toDocxRuns` a `(`/`)` run each side with
 which `docxToRows` reads back; the PDF prints them grey italic), and
 `htmlToMarkdown` — the `.md` project's table — `((beat))`, the typing
 notation, so a hand-edited table cell gets them back (`audioDirectionsHtml`,
-15-docx.js, also run on a `.docx`'s and a paste import's Audio). An older
+`src/adapters/formats/docx.ts`, also run on a `.docx`'s and a paste import's Audio). An older
 copy's sanitiser unwraps the span, so there a direction reads as narration;
 its `.md` table shows the `((beat))` literally. `wordCount` (so
 `rowSeconds`) counts `spokenText`; `prompterSceneHtml` leaves a direction's
 words out of the `.w` spans voice follow listens for. Typing: `((words))`
 converts on the second `)` in the Audio column only (`directionShortcut`,
-04c-doc-model.js, where the typing convention Adam signed off is recorded;
-`maybeDirectionShortcut`, 05-render.js), one undo entry of its own; a
+`src/core/text/directions.ts`, where the typing convention Adam signed off is recorded;
+`maybeDirectionShortcut`, `src/features/rows/render.js`), one undo entry of its own; a
 character typed at either edge of one is narration (`typingMarks`,
 `typeAtDirectionEdge`). The narration export's "Include stage directions"
 is `localStorage["splitpage-export-directions"]` (`"0"` off, absent on).
@@ -1001,7 +985,7 @@ expiresAt?, snapshots:[meta + sha]}` per bucket, and a `bodies` store,
 `{sha, stateJson}`, one row per distinct content, shared by every entry
 naming it), or over the shared memory backend when IndexedDB will not open
 (for the rest of that page); on the desktop in main, over its folder
-backend (§3.13), with `03a-history-store.js`'s `desktopHistoryBackend` a
+backend (§3.13), with `src/adapters/storage/history-backends.js`'s `desktopHistoryBackend` a
 thin IPC client. Totals are computed from the index (no stored counters);
 a body goes only in the commit that stops naming it, and is written before
 the commit that names it. Pre-tabs shared history migrated once into a
@@ -1033,7 +1017,7 @@ docIdWrittenOut, bytes}` and `bodies` `{key, stateJson, baseJson}`, `key` =
 windows/bounds/tabs/each tab's *source*/`lastKnownTitle` — a launch recipe,
 not a backup (§3.13).
 
-**The two file formats**, both through `20d-formats.js`, entering state
+**The two file formats**, both through the format codecs in `src/adapters/formats/`, entering state
 only via `migrateRows()` (#2): **`.splitpage`** is
 `JSON.stringify(inlineStateImages(migrateRows(cloneState(state))), null, 2)`,
 no envelope (#31). Files carry their pictures inline, as they always have
@@ -1068,12 +1052,12 @@ in use (`mdSceneCellSource()`, `sceneCellEdits()`).
 not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 `splitpage-tagging-help-dismissed`, `splitpage-files` (IndexedDB,
 `FileSystemFileHandle` for resume-on-launch), `splitpage-history`
-(IndexedDB v2, per-document history: `index` + `bodies`, plus the v1
+(IndexedDB v3, per-document history: `index` + `bodies`, plus the v1
 stores until the one-time move has emptied them — see above), `splitpage-blobs` (IndexedDB, store
 `blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
 bytes, #82 — nothing deletes them yet, D4).
 
-**Per-person settings** (#181, the Settings dialog, `20s-settings.js`), all
+**Per-person settings** (#181, the Settings dialog, `src/features/settings/settings.js`), all
 localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
 absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 `nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
@@ -1253,7 +1237,7 @@ name never does (#183). `#root` spans the window and only the script is
 held to 1800px (#190); the rundown strip runs the window's width, less an
 open panel (#189), below 1100px too. One slim scroll-bar style app-wide,
 and the page's own bar hidden while a panel is open (#187, #188), its
-width handed back (`--page-gutter`, 03b-side-panels.js) so nothing steps
+width handed back (`--page-gutter`, `src/features/panels/script-place.js`) so nothing steps
 sideways; a panel opening or closing keeps the scene at the top of the
 view put (`holdScriptPlace`, as the script zoom does). `.claude/skills/run-splitpage-app/tests/85-header-fit.txt`
 measures all of it by resizing an iframe; 250–251 the rest.

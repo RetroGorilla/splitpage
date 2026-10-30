@@ -16,7 +16,8 @@ export function installSettingsControls(current: SettingsControls): () => void {
 }
 
 export function openSettings(input?: unknown): void {
-  controls?.openSettings(input);
+  if (!controls) throw new Error("The settings controls are not installed yet");
+  controls.openSettings(input);
 }
 
 export function settingsAction(current: () => SettingsControls | null, screen: () => ScreenState): ActionDefinition {

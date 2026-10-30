@@ -82,7 +82,7 @@ test("a boot render that throws still finishes start-up: the document is loaded,
 });
 
 test("Redraw from the start-up message that fails again shows a new message with the same start-up text, and a Redraw that draws takes it away (#442)", async () => {
-  const { renderFirstDraw } = await import("../features/rows/render.js");
+  const { renderFirstDraw } = await import("../features/rows/render.ts");
   const breaking = () => {
     document.querySelectorAll = function (selector) {
       if (String(selector).indexOf("#rows .gutter-btn") === 0) throw new Error(BROKE);
