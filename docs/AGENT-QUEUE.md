@@ -472,7 +472,7 @@ STRUCTURE SECTION MUST SAY
 - What the release job checks, what it does on dispatch, which script holds the logic, which actions were pinned and to which SHAs.
 ```
 
-## AQ-21 [ ] Real-app tests on PRs
+## AQ-21 [x] Real-app tests on PRs
 
 Needs: none.
 Files: .github/workflows/ci.yml, tools/ci-changes.mjs, docs/architecture/ci.md.
