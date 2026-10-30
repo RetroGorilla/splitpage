@@ -19,7 +19,7 @@ eval (function(){ window.F = window.__splitpageFormats; window.body = function()
 
 # ---- the composer, on some words of the first scene ------------------------
 eval (function(){ var c = document.querySelector('#rows .row .audio-cell .cell-editable'); c.focus(); var r = document.createRange(); r.selectNodeContents(c); var s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('delete'); document.execCommand('insertText', false, 'the words to discuss'); return c.textContent; })()
-sleep 200
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent === 'the words to discuss'
 eval selText(document.querySelector('#rows .row .audio-cell .cell-editable'), 4, 9)
 jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="comment"]
 wait !document.getElementById('comment-modal').hidden
@@ -36,19 +36,16 @@ expect plain(body()) === 'first words'
 # ---- 2. bold, then Ctrl+Z ---------------------------------------------------
 eval selText(body(), 0, 5)
 key ctrl KeyB
-sleep 100
-expect body().innerHTML.indexOf('<strong>first</strong> words') === 0
+wait body().innerHTML.indexOf('<strong>first</strong> words') === 0
 expect getSelection().toString() === 'first'
 expect tb('bold').classList.contains('is-active')
 key ctrl KeyZ
-sleep 100
-expect body().innerHTML.indexOf('<strong>') === -1
+wait body().innerHTML.indexOf('<strong>') === -1
 expect plain(body()) === 'first words'
 # the selection comes back with it
 expect getSelection().toString() === 'first'
 key ctrl KeyY
-sleep 100
-expect body().innerHTML.indexOf('<strong>first</strong> words') === 0
+wait body().innerHTML.indexOf('<strong>first</strong> words') === 0
 # the browser's own undo (a menu's Undo) is the box's too
 expect histEv(body(), 'historyUndo') === true
 expect body().innerHTML.indexOf('<strong>') === -1
@@ -57,17 +54,14 @@ expect body().innerHTML.indexOf('<strong>first</strong>') === 0
 # the toolbar's buttons: italic, strike, highlight
 eval selText(body(), 6, 11)
 jsclick #comment-modal .mini-toolbar [data-cmd="italic"]
-sleep 100
-expect body().innerHTML.indexOf('<strong>first</strong> <em>words</em>') === 0
+wait body().innerHTML.indexOf('<strong>first</strong> <em>words</em>') === 0
 jsclick #comment-modal .mini-toolbar [data-cmd="highlight"]
-sleep 100
-expect body().innerHTML.indexOf('<mark><em>words</em></mark>') !== -1
+wait body().innerHTML.indexOf('<mark><em>words</em></mark>') !== -1 && tb('highlight').classList.contains('is-active')
 expect tb('highlight').classList.contains('is-active')
 key ctrl KeyZ
 key ctrl KeyZ
 key ctrl KeyZ
-sleep 100
-expect body().innerHTML.indexOf('<') === -1
+wait body().innerHTML.indexOf('<') === -1
 expect plain(body()) === 'first words'
 
 # ---- 3. typing after an edit comes off on its own ---------------------------
@@ -80,28 +74,23 @@ expect plain(body()) === 'first words'
 # ---- 4. B with nothing selected: what is typed next is bold -----------------
 eval selText(body(), 11, 11)
 key ctrl KeyB
-sleep 100
-expect tb('bold').classList.contains('is-active')
+wait tb('bold').classList.contains('is-active')
 press XY
-sleep 100
-expect body().innerHTML.indexOf('words<strong>XY</strong>') !== -1
+wait body().innerHTML.indexOf('words<strong>XY</strong>') !== -1
 key ctrl KeyZ
 key ctrl KeyZ
-sleep 100
+wait plain(body()) === 'first words'
 expect plain(body()) === 'first words'
 
 # ---- 5. paste, then Ctrl+Z --------------------------------------------------
 eval selText(body(), 11, 11)
 expect clip(body(), {'text/html': ' <b>pasted</b><script>window.__bad = 1</script>', 'text/plain': ' pasted'}) === true
-sleep 100
-expect body().innerHTML.indexOf('first words <strong>pasted</strong>') === 0
+wait body().innerHTML.indexOf('first words <strong>pasted</strong>') === 0
 expect body().innerHTML.indexOf('script') === -1 && !window.__bad
 key ctrl KeyZ
-sleep 100
-expect plain(body()) === 'first words'
+wait plain(body()) === 'first words'
 key ctrl+shift KeyZ
-sleep 100
-expect body().innerHTML.indexOf('<strong>pasted</strong>') !== -1
+wait body().innerHTML.indexOf('<strong>pasted</strong>') !== -1
 key ctrl KeyZ
 # plain text only
 eval selText(body(), 0, 0)
@@ -113,25 +102,20 @@ expect plain(body()) === 'first words'
 # ---- 6. a link, then Ctrl+Z -------------------------------------------------
 eval selText(body(), 6, 11)
 jsclick #comment-modal .mini-toolbar [data-cmd="link"]
-sleep 100
-expect !document.querySelector('#comment-modal .link-popover').hidden
+wait !document.querySelector('#comment-modal .link-popover').hidden
 eval (function(){ document.querySelector('#comment-modal .link-popover input').value = 'example.com/x'; return true; })()
 jsclick #comment-modal [data-action="link-confirm"]
-sleep 100
-expect body().innerHTML.indexOf('first <a href="https://example.com/x" target="_blank" rel="noopener">words</a>') === 0
+wait body().innerHTML.indexOf('first <a href="https://example.com/x" target="_blank" rel="noopener">words</a>') === 0
 expect document.activeElement === body()
 key ctrl KeyZ
-sleep 100
-expect !body().querySelector('a') && plain(body()) === 'first words'
+wait !body().querySelector('a') && plain(body()) === 'first words'
 
 # ---- 7. Enter, then Ctrl+Z --------------------------------------------------
 eval selText(body(), 5, 5)
 key Enter
-sleep 100
-expect body().innerHTML.indexOf('first<br> words') === 0
+wait body().innerHTML.indexOf('first<br> words') === 0
 key ctrl KeyZ
-sleep 100
-expect body().innerHTML.indexOf('<br>') === -1
+wait body().innerHTML.indexOf('<br>') === -1
 
 # ---- 8. a picture survives formatting, and its insertion is undoable -------
 eval attach()
@@ -141,15 +125,13 @@ expect body().innerHTML.indexOf('first words<br><img') === 0
 eval window.SHA = body().querySelector('img[data-blob]').getAttribute('data-blob')
 eval selAll(body())
 key ctrl KeyB
-sleep 100
-expect imgs(body()) === 1 && !!body().querySelector('strong') && !body().querySelector('strong img')
+wait imgs(body()) === 1 && !!body().querySelector('strong') && !body().querySelector('strong img')
 expect tb('bold').classList.contains('is-active')
 eval selAll(body())
 key ctrl KeyI
-sleep 100
+wait body().innerHTML.indexOf('<em>') !== -1
 jsclick #comment-modal .mini-toolbar [data-cmd="highlight"]
-sleep 100
-expect imgs(body()) === 1 && !!body().querySelector('mark') && !body().querySelector('mark img, em img')
+wait imgs(body()) === 1 && !!body().querySelector('mark') && !body().querySelector('mark img, em img')
 wait shown(body().querySelector('img[data-blob]'))
 expect body().querySelector('img[data-blob]').getAttribute('data-blob') === window.SHA
 # the picture inside a selection being linked is never inside the link
@@ -157,13 +139,11 @@ eval selAll(body())
 jsclick #comment-modal .mini-toolbar [data-cmd="link"]
 eval (function(){ document.querySelector('#comment-modal .link-popover input').value = 'https://example.com/y'; return true; })()
 jsclick #comment-modal [data-action="link-confirm"]
-sleep 100
-expect imgs(body()) === 1 && !!body().querySelector('a[href="https://example.com/y"]') && !body().querySelector('a img')
+wait imgs(body()) === 1 && !!body().querySelector('a[href="https://example.com/y"]') && !body().querySelector('a img')
 # a paste next to it, of HTML carrying the same picture: two now
 eval selText(body(), 0, 0)
 expect clip(body(), {'text/html': 'see <img class="comment-img" data-blob="' + window.SHA + '"> ', 'text/plain': 'see'}) === true
-sleep 100
-expect imgs(body()) === 2
+wait imgs(body()) === 2
 # undo it all, one step at a time; the picture is there until its own step
 key ctrl KeyZ
 expect imgs(body()) === 1
@@ -171,38 +151,34 @@ key ctrl KeyZ
 key ctrl KeyZ
 key ctrl KeyZ
 key ctrl KeyZ
-sleep 100
-expect imgs(body()) === 1 && !body().querySelector('strong, em, mark, a')
+wait imgs(body()) === 1 && !body().querySelector('strong, em, mark, a')
 key ctrl KeyZ
-sleep 100
-expect imgs(body()) === 0 && plain(body()) === 'first words'
+wait imgs(body()) === 0 && plain(body()) === 'first words'
 key ctrl+shift KeyZ
-sleep 100
-expect imgs(body()) === 1
+wait imgs(body()) === 1
 wait shown(body().querySelector('img[data-blob]'))
 
 # ---- 9. a video card: in, formatted around, and undone ---------------------
 jsclick #comment-modal .mini-toolbar [data-cmd="video"]
 eval (function(){ document.querySelector('#comment-modal .video-popover input').value = 'youtube.com/watch?v=abc'; return true; })()
 jsclick #comment-modal [data-action="video-confirm"]
-sleep 100
-expect body().querySelectorAll('.video-embed-card').length === 1
+wait body().querySelectorAll('.video-embed-card').length === 1
 eval selAll(body())
 key ctrl KeyB
-sleep 100
+wait body().querySelectorAll('.video-embed-card').length === 1 && imgs(body()) === 1 && !body().querySelector('strong .video-embed-card') && !!body().querySelector('strong')
 expect body().querySelectorAll('.video-embed-card').length === 1 && imgs(body()) === 1 && !body().querySelector('strong .video-embed-card')
 key ctrl KeyZ
 key ctrl KeyZ
-sleep 100
+wait body().querySelectorAll('.video-embed-card').length === 0 && imgs(body()) === 1
 expect body().querySelectorAll('.video-embed-card').length === 0 && imgs(body()) === 1
 
 # ---- 10. posted with its picture; a new draft has no history ---------------
 eval selText(body(), 0, 5)
 key ctrl KeyB
-sleep 100
+wait body().innerHTML.indexOf('<strong>first</strong>') !== -1
 eval window.__nc = F.state().comments.length
 jsclick #comment-post
-sleep 300
+wait F.state().comments.length === window.__nc + 1
 expect F.state().comments.length === window.__nc + 1
 expect (function(){ var b = F.state().comments[F.state().comments.length - 1].body; return b.indexOf('<strong>first</strong> words<br><img') === 0 && b.indexOf('data-blob="' + window.SHA + '"') !== -1 && b.indexOf('src=') === -1; })()
 eval selText(document.querySelector('#rows .row .audio-cell .cell-editable'), 13, 20)
@@ -210,8 +186,7 @@ jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="comment"]
 wait !document.getElementById('comment-modal').hidden
 wait document.activeElement === body()
 key ctrl KeyZ
-sleep 100
-expect body().innerHTML === ''
+wait body().innerHTML === ''
 key Escape
 wait document.getElementById('comment-modal').hidden
 
@@ -225,8 +200,7 @@ type reply text
 eval window.RB = document.querySelector('#comments-list .reply-composer .cell-editable')
 eval selText(RB, 0, 5)
 key ctrl KeyB
-sleep 100
-expect RB.innerHTML.indexOf('<strong>reply</strong> text') === 0
+wait RB.innerHTML.indexOf('<strong>reply</strong> text') === 0
 expect document.querySelector('#comments-list .reply-composer .mini-toolbar [data-cmd="bold"]').classList.contains('is-active')
 eval selText(RB, 5, 5)
 expect clip(RB, {'text/html': '<em>!</em>', 'text/plain': '!'}) === true
