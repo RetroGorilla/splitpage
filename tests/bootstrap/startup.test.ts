@@ -147,6 +147,28 @@ test("in the browser: load, stash adoption, first draw, chrome, editor toast, la
   }
 });
 
+test("the startup reports the document as shown only once the first draw has finished", async () => {
+  const r = rig();
+  const startup = beginStartup(r.ports);
+  try {
+    assert.equal(startup.shown(), false);
+    await startup.openDocument();
+    assert.equal(startup.shown(), true);
+  } finally {
+    startup.dispose();
+  }
+  const boom = new Error("first draw failed");
+  const failing = rig();
+  const ports = { ...failing.ports, document: { ...failing.ports.document, firstDraw: () => { throw boom; } } };
+  const broken = beginStartup(ports);
+  try {
+    await assert.rejects(broken.openDocument(), (error) => error === boom);
+    assert.equal(broken.shown(), false);
+  } finally {
+    broken.dispose();
+  }
+});
+
 test("the initial load is handed the seed check's answer, asked once, when the load starts", async () => {
   for (const pristine of [true, false]) {
     let asked = 0;

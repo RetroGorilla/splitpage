@@ -120,5 +120,5 @@ function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountAppDataFeature();
   mountNewTabFeature();
   mountSettingsFeature();
-  startAppWhenReady(document, wiring);
+  startAppWhenReady(document, wiring, failStartup);
 }
