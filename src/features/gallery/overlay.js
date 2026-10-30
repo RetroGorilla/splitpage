@@ -24,8 +24,6 @@ function shownSlots(slots) {
   return out;
 }
 
-export function galleryOverlayOpen() { return !!view; }
-
 export function openGalleryOverlay(rowId, slot, videosOnly) {
   var got = rowOf(rowId);
   if (!got || !rowSlots(got.row).length) return;

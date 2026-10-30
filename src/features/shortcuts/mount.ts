@@ -1,7 +1,7 @@
 import type { ActionRegistry, InvokeOutcome } from "../../application/actions.ts";
 import { bindShortcuts } from "./bind-shortcuts.ts";
 
-export interface ShortcutsMount {
+interface ShortcutsMount {
   readonly target: EventTarget;
   readonly registry: ActionRegistry;
   readonly onOutcome?: (outcome: InvokeOutcome) => void;

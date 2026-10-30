@@ -13,7 +13,7 @@ import { startGalleryVideo as mountVideo } from "../../features/gallery/video.js
 import type { GalleryMount, GalleryOverlayMount, GalleryOverlayPorts, GalleryPorts, GalleryVideoMount, GalleryVideoPorts } from "../../features/gallery/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { videoHostLabel } from "../../adapters/formats/video-host.ts";
-import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../features/rows/render.js";
+import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../features/rows/render.ts";
 import { videoFiles } from "./video-files.ts";
 import { undoOwner } from "./undo.ts";
 import { cellEditing, pickPictureFor } from "./editor-owners.ts";

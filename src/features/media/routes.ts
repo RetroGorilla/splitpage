@@ -6,7 +6,7 @@ export interface MediaRoutePorts {
   readonly openLink: (rowId: string, slot: number, key: string) => void;
 }
 
-export interface MediaRoutesMount {
+interface MediaRoutesMount {
   readonly window: Window;
   readonly fileInput: HTMLInputElement;
   readonly ports: MediaRoutePorts;
