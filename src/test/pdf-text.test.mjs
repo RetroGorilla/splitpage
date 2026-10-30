@@ -69,6 +69,12 @@ test("characters outside the encoding become ? and are counted once each", () =>
   assert.equal(made.unshown, 6 + 2 + 1 + 1);
 });
 
+test("bytes 0x7F-0x9F that no mapping claims are still written as they were, and not counted", () => {
+  const made = withUnshownCount(() => pdfEscapeText("\u007F\u0081\u0085\u009F"));
+  assert.deepEqual(bytesOf(made.value), [0x7F, 0x81, 0x85, 0x9F]);
+  assert.equal(made.unshown, 0);
+});
+
 test("the count starts again with each build", () => {
   assert.equal(withUnshownCount(() => pdfEscapeText("日本")).unshown, 2);
   assert.equal(withUnshownCount(() => pdfEscapeText("plain")).unshown, 0);
