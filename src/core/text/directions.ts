@@ -3,7 +3,7 @@ import type { CellInput, Run } from "./runs.ts";
 import { clamp, clampRange, deleteRange, explode, isDirChar, markThroughout, setMark } from "./edits.ts";
 import type { EditedCell, TextSpan, Char, TextChar } from "./edits.ts";
 
-export type DirectionToggle = { from: number; to: number; off: boolean };
+type DirectionToggle = { from: number; to: number; off: boolean };
 
 export const DIRECTION_MAX = 200;
 

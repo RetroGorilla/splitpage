@@ -9,7 +9,7 @@ import { hasSetLength } from "../document/timing.ts";
 import { mergeTextField } from "./text-field.ts";
 import type { TextMergeContext } from "./text-field.ts";
 
-export interface Identified {
+interface Identified {
   id: string;
 }
 
@@ -24,7 +24,7 @@ export interface MergeRow extends Identified {
   [key: string]: unknown;
 }
 
-export interface MergeReply extends Identified {
+interface MergeReply extends Identified {
   createdAt?: string | null | undefined;
   [key: string]: unknown;
 }
@@ -60,7 +60,7 @@ export interface MergeStats {
   rowsAddedByThem: number;
 }
 
-export interface RowMergeContext {
+interface RowMergeContext {
   text: TextMergeContext;
   conflicts: MergeConflict[];
   stats: MergeStats;
@@ -68,7 +68,7 @@ export interface RowMergeContext {
   editor: () => string;
 }
 
-export interface CardPorts {
+interface CardPorts {
   ids: IdSource;
   clock: Clock;
   editor: () => string;

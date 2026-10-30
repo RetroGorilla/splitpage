@@ -33,7 +33,7 @@ export type ImageRun = { atom: "image"; ref: StoredImageRef; text: ""; marks: Ma
 
 export type VideoRun = { atom: "video"; href: string; host: string; text: ""; marks: Marks };
 
-export type MediaRun = ImageRun | VideoRun;
+type MediaRun = ImageRun | VideoRun;
 
 export type AtomRun = BrollRun | MediaRun;
 

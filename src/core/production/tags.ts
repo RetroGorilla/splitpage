@@ -22,7 +22,7 @@ import type { FieldHtml, FieldTag, ProductionReaders, ProductionRow } from "./po
 
 export const TAG_FIELDS = Object.freeze(["visualText", "audioText"] as const);
 
-export type TagField = (typeof TAG_FIELDS)[number];
+type TagField = (typeof TAG_FIELDS)[number];
 
 export type RegistryTag = {
   id?: string | undefined;
@@ -37,11 +37,11 @@ export type RegistryList = readonly (RegistryTag | null | undefined)[];
 
 export type NewRegistryTag = { id: string; cat: string; name: string; owner: string; notes: string; status: TagStatusId };
 
-export type MissingRegistryTag = { cat: TagCategoryId; name: string; owner: string; notes: string; status: TagStatusId };
+type MissingRegistryTag = { cat: TagCategoryId; name: string; owner: string; notes: string; status: TagStatusId };
 
-export type TagMention = { rowId: string; rowIndex: number; field: TagField; text: string };
+type TagMention = { rowId: string; rowIndex: number; field: TagField; text: string };
 
-export type TagGroup = { key: string; catId: TagCategoryId; name: string; mentions: TagMention[] };
+type TagGroup = { key: string; catId: TagCategoryId; name: string; mentions: TagMention[] };
 
 export type TagState = { docId?: unknown; rows: readonly ProductionRow[]; productionTags: RegistryList };
 
@@ -57,7 +57,7 @@ export type ProductionEntry = {
   status: TagStatusId;
 };
 
-export type RowSigSlot = FieldHtml | readonly FieldTag[];
+type RowSigSlot = FieldHtml | readonly FieldTag[];
 
 export type ProductionIndex = Frozen<{
   entries: ProductionEntry[];
@@ -69,7 +69,7 @@ export type ProductionIndex = Frozen<{
 
 export type CueSnapshot = { docId: unknown; cells: Record<string, readonly string[]> };
 
-export type CueRetitle = { at: number; from: string; name: string };
+type CueRetitle = { at: number; from: string; name: string };
 
 export type HealingPlan = { cues: CueSnapshot; count: number; retitle: CueRetitle[]; register: NewRegistryTag[] };
 
@@ -153,7 +153,7 @@ export function missingRegistryTags(
   return out;
 }
 
-export type CueCutRenames = { byOldCut: Record<string, string>; long: string[] };
+type CueCutRenames = { byOldCut: Record<string, string>; long: string[] };
 
 export function cueCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): CueCutRenames {
   const byOldCut: Record<string, string> = Object.create(null), long: string[] = [];

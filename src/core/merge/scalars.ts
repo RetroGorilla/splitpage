@@ -3,13 +3,13 @@ import { targetLengthOf } from "../document/timing.ts";
 import type { TargetHolder } from "../document/timing.ts";
 import type { MergeConflict } from "./rows.ts";
 
-export type ScalarSide = Readonly<Record<string, unknown>>;
+type ScalarSide = Readonly<Record<string, unknown>>;
 
 function owned(v: unknown): unknown {
   return v && typeof v === "object" ? JSON.parse(JSON.stringify(v)) as unknown : v;
 }
 
-export interface TitleSide {
+interface TitleSide {
   title?: unknown;
 }
 

@@ -31,7 +31,7 @@ export type DocumentTag = {
   status?: string | undefined;
 };
 
-export type DocumentShotProp = { id?: string | undefined; name?: string | undefined };
+type DocumentShotProp = { id?: string | undefined; name?: string | undefined };
 
 export type DocumentShot = {
   id: string;

@@ -27,7 +27,7 @@ import { pad2 } from "../../core/production/timing.ts";
 import { toMarkdown, toPlainText } from "../../core/text/projections.ts";
 
 type Row = Frozen<DocumentRow>;
-export interface MarkdownOptions {
+interface MarkdownOptions {
   scenes?: number | undefined;
   assets?: ExportAssets | null | undefined;
   export?: boolean | undefined;
@@ -228,7 +228,7 @@ function markdownHasPicture(row: Row, assets: ExportAssets): boolean {
   return !!img && (!!img.dataUrl || !!(img.ref && assets.picture(img.ref.sha256)));
 }
 
-export interface MarkdownImage { path: string; bytes: Uint8Array }
+interface MarkdownImage { path: string; bytes: Uint8Array }
 
 function markdownMorePictures(row: Row, i: number, assets: ExportAssets): MarkdownImage[] {
   const out: MarkdownImage[] = [];

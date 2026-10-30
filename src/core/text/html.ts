@@ -6,9 +6,9 @@ import { storedImageMarkup } from "../document/text-policy.ts";
 
 export type Where = { dir: boolean };
 
-export type TextHtml = (text: string, esc: (t: string) => string, where: Where) => string;
+type TextHtml = (text: string, esc: (t: string) => string, where: Where) => string;
 
-export type HtmlOptions = TreeOptions & { textHtml?: TextHtml | null | undefined };
+type HtmlOptions = TreeOptions & { textHtml?: TextHtml | null | undefined };
 
 function escText(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\u00a0/g, "&nbsp;");

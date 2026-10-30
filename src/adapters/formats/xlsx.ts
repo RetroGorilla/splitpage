@@ -30,7 +30,7 @@ interface Strings {
   id: (text: string) => number;
   xml: () => string;
 }
-export interface WorkbookSheet {
+interface WorkbookSheet {
   name: string;
   head: TableCell[];
   headStyles: number[];
@@ -183,7 +183,7 @@ function sheetXml(sheet: WorkbookSheet, index: number, strings: Strings): string
 
 function sheetRef(name: string): string { return "'" + name.replace(/'/g, "''") + "'"; }
 
-export function buildWorkbook(doc: ExportDocument, sheets: readonly WorkbookSheet[], title: string, styles: Styles): Uint8Array {
+function buildWorkbook(doc: ExportDocument, sheets: readonly WorkbookSheet[], title: string, styles: Styles): Uint8Array {
   const strings = stringTable();
   const parts = sheets.map(function (sh, i) { return sheetXml(sh, i, strings); });
   const names: string[] = [];

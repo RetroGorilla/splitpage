@@ -24,7 +24,7 @@ export interface ShotRecord {
   note: string;
   desc: string;
 }
-export interface BrollGroup {
+interface BrollGroup {
   key: string;
   kind: string;
   label: string;
