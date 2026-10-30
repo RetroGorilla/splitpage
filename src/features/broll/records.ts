@@ -18,7 +18,7 @@ import { projection } from "../../core/text/runs.ts";
 import { isInsideTagOrLink } from "../common/dom.ts";
 import type { BrollRecordsMount, BrollRecordsPorts } from "./ports.ts";
 
-export interface BrollStatusLook {
+interface BrollStatusLook {
   readonly id: BrollStatusId;
   readonly label: string;
   readonly color: string;

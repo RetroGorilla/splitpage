@@ -8,7 +8,7 @@ import { sceneStatus, sceneStatusCommand, shotGrace } from "../../application/co
 import { targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration, rowSeconds, targetClock, totalSeconds } from "../../core/production/timing.ts";
 
-export interface SceneStatusPorts {
+interface SceneStatusPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "run" | "stamps">;
   readonly text: Pick<TextServices, "productionReaders">;

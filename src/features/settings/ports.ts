@@ -53,7 +53,7 @@ export interface AppDataMount {
   readonly dispose: () => void;
 }
 
-export interface AppDataHistoryExport {
+interface AppDataHistoryExport {
   readonly docs: readonly unknown[];
   readonly older: readonly unknown[];
   readonly blobs?: Record<string, unknown>;
@@ -61,7 +61,7 @@ export interface AppDataHistoryExport {
   readonly truncated?: boolean;
 }
 
-export interface AppDataHistoryImport {
+interface AppDataHistoryImport {
   readonly docs: number;
   readonly added: number;
   readonly older: number;
