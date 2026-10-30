@@ -31,6 +31,7 @@ import {
   pdfImagesFor,
   withUnshownCount
 } from "../../adapters/formats/pdf.ts";
+import { loadPdfFonts } from "../../adapters/formats/pdf-unicode.ts";
 
 export interface ExportBuild {
   readonly doc: ExportDocument;
@@ -57,8 +58,8 @@ function product(data: string | Uint8Array): ExportProduct {
   return { data: data };
 }
 
-function pdfProduct(build: () => Uint8Array): ExportProduct {
-  const made = withUnshownCount(build);
+async function pdfProduct(build: () => Uint8Array): Promise<ExportProduct> {
+  const made = withUnshownCount(build, await loadPdfFonts());
   return { data: made.value, diagnostics: { imagesLeftOut: 0, unshownCharacters: made.unshown } };
 }
 
