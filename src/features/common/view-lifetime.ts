@@ -1,3 +1,5 @@
+import { addListener } from "./listeners.ts";
+
 export type ViewEvent = MouseEvent & KeyboardEvent & PointerEvent & InputEvent & ClipboardEvent & {
   readonly target: HTMLInputElement & { readonly files?: FileList };
   readonly currentTarget: HTMLElement;
@@ -21,8 +23,7 @@ export function createViewLifetime(window: Window, guard: (target: EventTarget) 
         if (!guard(target)) return;
         handler(event as ViewEvent);
       };
-      target.addEventListener(type, listener, options);
-      releases.push(() => target.removeEventListener(type, listener, options));
+      releases.push(addListener(target, type, listener, options));
     },
     release: (dispose) => { releases.push(dispose); },
     dispose(): void {

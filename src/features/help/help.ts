@@ -1,4 +1,5 @@
 import type { HelpPorts, HelpMount } from "./ports.ts";
+import { addListener } from "../common/listeners.ts";
 
 interface HelpPortUse extends Omit<HelpPorts, "document"> {
   readonly document: {
@@ -8,11 +9,6 @@ interface HelpPortUse extends Omit<HelpPorts, "document"> {
 
 let ports: HelpPorts | null = null;
 const listeners: Array<() => void> = [];
-
-function listen(target: EventTarget, type: string, handler: EventListener, options?: boolean | AddEventListenerOptions) {
-  target.addEventListener(type, handler, options);
-  listeners.push(function () { target.removeEventListener(type, handler, options); });
-}
 
 function scrollHelpTo(id: string) {
   const body = document.getElementById("help-body");
@@ -88,10 +84,10 @@ function injectTaggingHelpGuideLink() {
   const a = document.createElement("a");
   a.href = "#";
   a.textContent = "Open the full guide";
-  listen(a, "click", function (e) {
+  listeners.push(addListener(a, "click", function (e) {
     e.preventDefault();
     openHelp("help-tagging-and-the-production-breakdown");
-  });
+  }));
   wrap.appendChild(a);
   body.appendChild(wrap);
 }
@@ -248,8 +244,8 @@ export function startTour() {
 
   if (!tourResizeHandler) {
     tourResizeHandler = function () { positionTourStep(); };
-    listen(window, "resize", tourResizeHandler);
-    listen(window, "scroll", tourResizeHandler, true);
+    listeners.push(addListener(window, "resize", tourResizeHandler));
+    listeners.push(addListener(window, "scroll", tourResizeHandler, true));
   }
 }
 
@@ -286,45 +282,45 @@ export function startHelp(given: HelpPorts): HelpMount {
     if (!modal) return;
 
     const closeBtn = document.getElementById("help-close");
-    if (closeBtn) listen(closeBtn, "click", closeHelp);
+    if (closeBtn) listeners.push(addListener(closeBtn, "click", closeHelp));
 
-    listen(modal, "click", function (e) {
+    listeners.push(addListener(modal, "click", function (e) {
       if ((e.target as HTMLElement).id === "help-modal") closeHelp();
-    });
+    }));
 
     if (toc) {
-      listen(toc, "click", function (e) {
+      listeners.push(addListener(toc, "click", function (e) {
         const a = (e.target as HTMLElement).closest('a[href^="#"]');
         if (!a) return;
         e.preventDefault();
         scrollHelpTo((a.getAttribute("href") as string).slice(1));
-      });
+      }));
     }
 
-    listen(window, "keydown", function (e) {
+    listeners.push(addListener(window, "keydown", function (e) {
       if ((e as KeyboardEvent).key === "Escape" && !modal.hidden) { e.preventDefault(); closeHelp(); }
-    });
+    }));
 
-    listen(document, "focusin", function (e) {
+    listeners.push(addListener(document, "focusin", function (e) {
       if (modal.hidden || modal.contains(e.target as Node | null)) return;
       e.stopPropagation();
       const target = document.getElementById("help-close");
       if (target) target.focus();
-    });
+    }));
   })();
 
   (function wireTour() {
     const overlay = document.getElementById("tour-overlay");
     if (!overlay) return;
-    listen(document.getElementById("tour-next") as HTMLElement, "click", tourNext);
-    listen(document.getElementById("tour-back") as HTMLElement, "click", tourBack);
-    listen(document.getElementById("tour-skip") as HTMLElement, "click", function () { endTour(); });
-    listen(window, "keydown", function (e) {
+    listeners.push(addListener(document.getElementById("tour-next") as HTMLElement, "click", tourNext));
+    listeners.push(addListener(document.getElementById("tour-back") as HTMLElement, "click", tourBack));
+    listeners.push(addListener(document.getElementById("tour-skip") as HTMLElement, "click", function () { endTour(); }));
+    listeners.push(addListener(window, "keydown", function (e) {
       if ((e as KeyboardEvent).key === "Escape" && !e.defaultPrevented && !overlay.hidden) {
         e.preventDefault();
         endTour();
       }
-    });
+    }));
   })();
   let disposed = false;
   return {
