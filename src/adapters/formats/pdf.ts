@@ -97,18 +97,34 @@ function required<T>(value: T | undefined): T {
 const HELV_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 const HELVB_W = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
 
-const WINANSI_MAP: Record<string, number> = { "—": 151, "–": 150, "‘": 145, "’": 146, "“": 147, "”": 148, "…": 133, "•": 149, " ": 32 };
+const WINANSI_MAP: Record<string, number> = {
+  "€": 128, "‚": 130, "ƒ": 131, "„": 132, "…": 133, "†": 134, "‡": 135, "ˆ": 136, "‰": 137, "Š": 138,
+  "‹": 139, "Œ": 140, "Ž": 142, "‘": 145, "’": 146, "“": 147, "”": 148, "•": 149, "–": 150, "—": 151,
+  "˜": 152, "™": 153, "š": 154, "›": 155, "œ": 156, "ž": 158, "Ÿ": 159, " ": 32
+};
+
+const SUBSTITUTE_CODE = 63;
+let unshownTally = 0;
 
 function pdfEncodeChar(ch: string): number {
   const mapped = WINANSI_MAP[ch];
   if (mapped !== undefined) return mapped;
   const code = ch.charCodeAt(0);
-  if (code >= 32 && code <= 255) return code;
-  return 63;
+  if ((code >= 32 && code <= 126) || (code >= 160 && code <= 255)) return code;
+  return SUBSTITUTE_CODE;
 }
 
-const HELV_HIGH: Record<number, number> = { 133: 1000, 145: 222, 146: 222, 147: 333, 148: 333, 149: 350, 150: 556, 151: 1000, 183: 278 };
-const HELVB_HIGH: Record<number, number> = { 133: 1000, 145: 278, 146: 278, 147: 500, 148: 500, 149: 350, 150: 556, 151: 1000, 183: 278 };
+// why: widths come from Adobe's Helvetica.afm and Helvetica-Bold.afm (core 14, 1997), looked up by glyph name.
+const HELV_HIGH: Record<number, number> = {
+  128: 556, 130: 222, 131: 556, 132: 333, 133: 1000, 134: 556, 135: 556, 136: 333, 137: 1000, 138: 667,
+  139: 333, 140: 1000, 142: 611, 145: 222, 146: 222, 147: 333, 148: 333, 149: 350, 150: 556, 151: 1000,
+  152: 333, 153: 1000, 154: 500, 155: 333, 156: 944, 158: 500, 159: 667, 183: 278
+};
+const HELVB_HIGH: Record<number, number> = {
+  128: 556, 130: 278, 131: 556, 132: 500, 133: 1000, 134: 556, 135: 556, 136: 333, 137: 1000, 138: 667,
+  139: 333, 140: 1000, 142: 611, 145: 278, 146: 278, 147: 500, 148: 500, 149: 350, 150: 556, 151: 1000,
+  152: 333, 153: 1000, 154: 556, 155: 333, 156: 944, 158: 500, 159: 667, 183: 278
+};
 
 function pdfCharWidth(ch: string, bold?: boolean): number {
   const code = pdfEncodeChar(ch);
@@ -124,10 +140,25 @@ export function pdfTextWidth(text: string, bold: boolean | undefined, size: numb
   return w * size / 1000;
 }
 
+function isUnshown(text: string, at: number, code: number): boolean {
+  if (code !== SUBSTITUTE_CODE) return false;
+  const ch = text.charAt(at), unit = ch.charCodeAt(0);
+  if (ch === "?" || unit < 32 || /\s/.test(ch)) return false;
+  const low = unit >= 0xDC00 && unit <= 0xDFFF, prev = at > 0 ? text.charCodeAt(at - 1) : 0;
+  return !(low && prev >= 0xD800 && prev <= 0xDBFF);
+}
+
+export function withUnshownCount<T>(build: () => T): { value: T; unshown: number } {
+  unshownTally = 0;
+  const value = build();
+  return { value: value, unshown: unshownTally };
+}
+
 export function pdfEscapeText(s: string): string {
   let out = "";
   for (let i = 0; i < s.length; i++) {
     const code = pdfEncodeChar(s.charAt(i));
+    if (isUnshown(s, i, code)) unshownTally++;
     const ch = String.fromCharCode(code);
     if (ch === "(" || ch === ")" || ch === "\\") out += "\\" + ch;
     else out += ch;

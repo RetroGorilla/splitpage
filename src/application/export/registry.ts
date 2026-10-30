@@ -27,6 +27,7 @@ export interface ExportChoice {
 
 export interface ExportDiagnostics {
   readonly imagesLeftOut: number;
+  readonly unshownCharacters?: number;
 }
 
 export interface ExportProduct {
