@@ -122,7 +122,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-6 and AQ-14 are report-only.
 - AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
 - AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
-- AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and run on Opus. AQ-30 changes one suite file and can be merged by queue agents. AQ-28 and AQ-29 both touch saving: merge one, base-merge the other.
+- AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and run on Opus. AQ-30 changes one suite file and can be merged by queue agents. AQ-28 and AQ-29 both touch saving and run in that order (the roadmap's lane 2: I-20, then I-6): AQ-29 starts after AQ-28 has merged.
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -648,7 +648,7 @@ STRUCTURE SECTION MUST SAY
 
 ## AQ-29 [ ] Save-back on desktop reads the file once (tracker I-6)
 
-Needs: none. Merge one of AQ-28 and AQ-29 first, then base-merge the other.
+Needs: AQ-28 merged (both touch saving; the roadmap runs I-20 before I-6).
 Files: src/application/save/import-saving.ts, its tests, docs/architecture/saving.md.
 **STOPS FOR ADAM**: save path. Run on Opus; Opus review; PC smoke.
 
