@@ -1,7 +1,7 @@
 import { normalizeCell } from "../../core/text/runs.ts";
 import type { HtmlRunDecoder } from "../../application/editing/undo/history.ts";
 
-export interface CellStep {
+interface CellStep {
   readonly before?: unknown;
   readonly after?: unknown;
 }

@@ -1,6 +1,6 @@
 import { addListener } from "./listeners.ts";
 
-export type ViewEvent = MouseEvent & KeyboardEvent & PointerEvent & InputEvent & ClipboardEvent & {
+type ViewEvent = MouseEvent & KeyboardEvent & PointerEvent & InputEvent & ClipboardEvent & {
   readonly target: HTMLInputElement & { readonly files?: FileList };
   readonly currentTarget: HTMLElement;
 };

@@ -1,13 +1,13 @@
 import { titleCommand } from "../../application/commands/title.ts";
 import type { Command, CommandOutcome } from "../../application/session/document-session.ts";
 
-export interface TitleRoutePorts {
+interface TitleRoutePorts {
   readonly run: (command: Command) => CommandOutcome;
   readonly current: () => string | null;
   readonly pageTitle: () => void;
 }
 
-export interface TitleRoutesMount {
+interface TitleRoutesMount {
   readonly main: HTMLInputElement;
   readonly writer: HTMLInputElement;
   readonly ports: TitleRoutePorts;

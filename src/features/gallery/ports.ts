@@ -30,12 +30,12 @@ export interface GalleryMount extends GalleryControls {
   readonly dispose: () => void;
 }
 
-export interface GallerySlotRender {
+interface GallerySlotRender {
   readonly slotPictureHtml: (slot: Slot) => string;
   readonly badgeHtml: (big: boolean) => string;
 }
 
-export interface GalleryVideo {
+interface GalleryVideo {
   readonly embedRefusal: (video: unknown) => string;
   readonly playerSrc: (video: unknown) => { readonly src: string; readonly real: string } | null;
   readonly thumbnailsAllowed: () => boolean;
@@ -43,7 +43,7 @@ export interface GalleryVideo {
   readonly hostLabel: (link: VideoLink) => string;
 }
 
-export interface SessionVideos {
+interface SessionVideos {
   readonly has: (link: VideoLink | null | undefined) => boolean;
   readonly url: (link: VideoLink) => string | null;
 }
@@ -67,7 +67,7 @@ export interface GalleryOverlayMount {
   readonly dispose: () => void;
 }
 
-export interface UndoFold {
+interface UndoFold {
   readonly fold: (entry: UndoEntry | null | undefined, touches: (step: Step) => boolean, change: (draft: UndoState) => boolean) => boolean;
 }
 
