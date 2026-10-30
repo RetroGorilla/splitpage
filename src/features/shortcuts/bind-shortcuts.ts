@@ -2,7 +2,7 @@ import type { ActionRegistry, InvokeOutcome } from "../../application/actions.ts
 import type { KeyInput } from "../../application/shortcuts.ts";
 import { canBeShortcut, createChordReader } from "../../application/shortcuts.ts";
 
-export interface ShortcutBindingOptions {
+interface ShortcutBindingOptions {
   readonly onOutcome?: (outcome: InvokeOutcome) => void;
 }
 
