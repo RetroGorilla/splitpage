@@ -101,7 +101,7 @@ test("an import write back records the file's new time and size once it lands, a
   const imported = { kind: "import", name: "notes.docx" } as unknown as Home;
   const completion = createImportCompletion({
     location: { amendHome: (record, fields) => { assert.equal(record, imported); amended.push({ ...fields }); return record; } },
-    saving: { unsavedFor: (target) => { asked.push(target); return true; } }
+    saving: { unsavedFor: (target) => { asked.push(target); return true; }, changes: () => 4, confirmSavedNow: () => { throw new Error("not asked"); } }
   });
   completion.landed(imported, { lastModified: 90, size: 1234 });
   assert.deepEqual(amended, [{ lastModified: 90, size: 1234 }]);
@@ -109,6 +109,20 @@ test("an import write back records the file's new time and size once it lands, a
   completion.acknowledged(imported);
   assert.deepEqual(amended.at(-1), { dirty: true });
   assert.deepEqual(asked, [imported]);
+});
+
+test("an import write back confirms the document saved through confirmSavedNow only when no edit came in after the capture", () => {
+  let changes = 4;
+  const confirmed: number[] = [];
+  const completion = createImportCompletion({
+    location: { amendHome: (record) => record },
+    saving: { unsavedFor: () => false, changes: () => changes, confirmSavedNow: () => { confirmed.push(changes); } }
+  });
+  completion.writtenBack(4);
+  assert.deepEqual(confirmed, [4]);
+  changes = 5;
+  completion.writtenBack(4);
+  assert.deepEqual(confirmed, [4]);
 });
 
 test("opening a project file confirms it clean, and opening an import clears that import's dirty flag", () => {

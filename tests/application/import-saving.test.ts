@@ -10,11 +10,16 @@ function harness() {
   const log: string[] = [];
   const location = createDocumentLocation();
   const imported = location.setHome("import", { name: "draft.txt", handle: { createWritable: true }, format: "txt", inPlace: true });
-  const state = { conflict: false, owns: true };
+  const state = { conflict: false, owns: true, changes: 1, confirmed: 0 };
   const owner: ImportSavingOwner = createImportSavingOwner();
   const ports: ImportSavingPorts = {
     location,
-    saving: { request: async (request) => { assert.equal(request.target, imported); log.push(request.kind); return { kind: "saved", acknowledged: true }; }, unsavedFor: () => true },
+    saving: {
+      request: async (request) => { assert.equal(request.target, imported); log.push(request.kind); return { kind: "saved", acknowledged: true }; },
+      unsavedFor: () => true,
+      changes: () => state.changes,
+      confirmSavedNow: () => { state.confirmed += 1; }
+    },
     buildFileData: async (kind, base) => { log.push("build:" + kind + ":" + base); return { data: "bytes", filename: "draft.txt" }; },
     files: {
       read: async () => { log.push("readAfter"); return { name: "draft.txt", lastModified: 50, size: 100, text: async () => "", arrayBuffer: async () => new ArrayBuffer(0) }; },
@@ -216,6 +221,54 @@ test("a file another program changes after close() stamped the write is refused 
   assert.equal(next.kind, "refused");
   assert.deepEqual("conflict" in next ? next.conflict : null, { fileName: "draft.txt", current: { lastModified: 99 }, kind: "import" });
   stop();
+});
+
+test("a save-back confirms the document saved only when no edit came in after its capture", async () => {
+  const h = harness();
+  const stop = h.owner.startImportSaving(h.ports);
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.equal(h.state.confirmed, 1);
+  h.state.changes = 2;
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.equal(h.state.confirmed, 1);
+  stop();
+});
+
+test("a save-back that falls back to a download confirms the document saved once the copy goes out, and not when it does not", async () => {
+  const h = harness();
+  let delivered = true;
+  const stop = h.owner.startImportSaving({
+    ...h.ports,
+    files: { ...h.ports.files, checkConflict: async () => ({ ok: false, current: null, denied: true }) },
+    delivery: { deliver: async () => delivered }
+  });
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.equal(h.state.confirmed, 1);
+  delivered = false;
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "failed" });
+  assert.equal(h.state.confirmed, 1);
+  stop();
+});
+
+test("a save-back that is refused, loses its document or fails to write confirms nothing", async () => {
+  const h = harness();
+  const stop = h.owner.startImportSaving(h.ports);
+  h.state.conflict = true;
+  assert.equal((await h.owner.writeBackToFile(h.job)).kind, "refused");
+  h.state.conflict = false;
+  h.state.owns = false;
+  assert.equal((await h.owner.writeBackToFile(h.job)).kind, "refused");
+  assert.equal(h.state.confirmed, 0);
+  stop();
+  const g = harness();
+  const stopFailing = g.owner.startImportSaving({
+    ...g.ports,
+    files: { ...g.ports.files, createWritable: async () => ({ write: async () => { throw new Error("disk full"); }, close: async () => {} }) },
+    delivery: { deliver: async () => false }
+  });
+  assert.deepEqual(await g.owner.writeBackToFile(g.job), { kind: "failed" });
+  assert.equal(g.state.confirmed, 0);
+  stopFailing();
 });
 
 test("a writeback whose re-read fails without a stamp clears the old one so the next save is not refused", async () => {

@@ -244,7 +244,7 @@ test("I-20: an import writeback that lands late repaints from the save state", s
   target.releaseOp("close");
   await saving;
   assert.equal(homeModule.currentHome().dirty, false, "the import reads written back");
-  settledAs(UNSAVED);
+  settledAs(SAVED);
 }));
 
 test("I-20: a save from a stopped app that lands after the restart leaves the new app's label alone", scene(async () => {

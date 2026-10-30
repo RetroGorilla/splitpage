@@ -58,12 +58,13 @@ export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion
 
 export interface ImportCompletionPorts {
   readonly location: Pick<DocumentLocation, "amendHome">;
-  readonly saving: { readonly unsavedFor: (target: unknown) => boolean };
+  readonly saving: { readonly unsavedFor: (target: unknown) => boolean } & Pick<SaveCompletionPorts["saves"], "changes" | "confirmSavedNow">;
 }
 
 export interface ImportCompletion {
   readonly landed: (imported: Home, after: Pick<LocalFileData, "lastModified"> & { readonly size: number | null }) => void;
   readonly landedUnread: (imported: Home, closed: unknown) => void;
+  readonly writtenBack: (seqAtSave: number) => void;
   readonly acknowledged: (imported: Home) => void;
 }
 
@@ -80,6 +81,9 @@ export function createImportCompletion(ports: ImportCompletionPorts): ImportComp
     },
     landedUnread: function (imported: Home, closed: unknown): void {
       ports.location.amendHome(imported, { lastModified: closedStamp(closed), size: null });
+    },
+    writtenBack: function (seqAtSave: number): void {
+      if (ports.saving.changes() === seqAtSave) ports.saving.confirmSavedNow();
     },
     acknowledged: function (imported: Home): void {
       ports.location.amendHome(imported, { dirty: ports.saving.unsavedFor(imported) });

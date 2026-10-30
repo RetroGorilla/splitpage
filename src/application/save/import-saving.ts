@@ -100,6 +100,7 @@ async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterR
         }
       }
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
+      completion.writtenBack(job.generation);
       showToast("Saved to " + (imported.name as string), "ok");
       return WRITTEN_BACK;
     } catch (err) {
@@ -114,7 +115,9 @@ async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterR
     savedMsg: "Saved a copy of " + (imported.name as string) + " to your downloads"
   });
   if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
-  return ok ? WRITTEN_BACK : WRITEBACK_FAILED;
+  if (!ok) return WRITEBACK_FAILED;
+  completion.writtenBack(job.generation);
+  return WRITTEN_BACK;
 }
 
 const IMPORT_KINDS: readonly string[] = ["writeback", "writebackForce"];

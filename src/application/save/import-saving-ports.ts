@@ -27,6 +27,8 @@ export interface ImportSavingPorts {
   readonly saving: {
     readonly request: (request: ImportSaveRequest) => Promise<SaveOutcome>;
     readonly unsavedFor: (target: unknown) => boolean;
+    readonly changes: () => number;
+    readonly confirmSavedNow: () => void;
   };
   readonly buildFileData: (kind: string, baseName: string) => Promise<BuiltLocalFile>;
   readonly files: Pick<LocalFileAccess, "read" | "checkConflict" | "createWritable">;

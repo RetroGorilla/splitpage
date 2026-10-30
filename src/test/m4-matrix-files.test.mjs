@@ -531,7 +531,8 @@ rightToday("I2", "import writeback acknowledges only the import home", scene(asy
   assert.equal(target.commits.length, 1, "the file was written");
   assert.equal(imported.dirty, false, "the import home is saved");
   assert.equal(homeModule.currentHome(), before.home.record, "the home is the same record");
-  assert.equal(unsavedChanges(), before.dirty, "the document's dirty state is unchanged");
+  assert.equal(before.dirty, true, "the document had unsaved changes before the write back");
+  assert.equal(unsavedChanges(), false, "the document reads saved once its import is written back with no later edit");
   assert.equal(JSON.stringify(mergeBase()), before.base, "the document's baseline is unchanged");
   assert.equal(currentDocument().rev, before.rev, "the document's rev is unchanged");
   assert.equal(currentDocument().docId, before.docId, "the document's id is unchanged");

@@ -1,0 +1,41 @@
+# "Save to <imported file>" that goes through with nothing typed after it began
+# leaves the header Save, the Writer's Save and the status line saved, as the
+# file chip's "· up to date" says (AQ-29 part B). Before, save-back never
+# confirmed the document as saved, so they kept "Save •" and "Unsaved changes"
+# after the chip read up to date. An edit made while the write is held open
+# leaves all of them unsaved. Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.A = F.autosave; if (A.enabled()) A.toggle(); window.pair = function () { return ['btn-save', 'wr-save'].map(function (id) { var b = document.getElementById(id); return b.textContent + '|' + b.classList.contains('is-dirty') + '|' + b.disabled; }).join(' ~ '); }; window.st = function () { var s = document.getElementById('save-status'); return s.hidden ? 'hidden' : s.textContent; }; window.chip = function () { return document.getElementById('file-chip-state').textContent; }; window.__hold = false; window.__closing = false; window.__closed = 0; window.__release = null; window.__h = { name: 'status.txt', _mtime: 1000, createWritable: async function () { return { write: async function () {}, close: async function () { window.__closing = true; if (window.__hold) { await new Promise(function (r) { window.__release = r; }); } window.__h._mtime = window.__h._mtime + 4000; window.__closed++; } }; }, getFile: async function () { return new File(['one\n\ntwo'], 'status.txt', { type: 'text/plain', lastModified: window.__h._mtime }); } }; return F.openFile(new File(['one\n\ntwo'], 'status.txt', { type: 'text/plain', lastModified: 1000 }), window.__h); })()
+wait !document.getElementById('file-chip').hidden && document.getElementById('file-chip-name').textContent === 'status.txt'
+
+# --- an edit, then a save-back with nothing typed during it --------------------------
+eval (function(){ F.state().rows[0].audioText = 'typed BEFORE the save'; D.markDirtyForTest(); return true; })()
+sleep 200
+expect pair() === 'Save •|true|false ~ Save •|true|false'
+expect st() === 'Unsaved changes'
+expect chip() === '· unsaved changes'
+jsclick #btn-file
+jsclick #menu-save-back
+wait window.__closed === 1
+wait chip() === '· up to date'
+sleep 200
+expect pair() === 'Save|false|false ~ Save|false|false'
+expect st() === 'Saved'
+
+# --- a save-back held open while the user types again --------------------------------
+eval (function(){ F.state().rows[0].audioText = 'typed AFTER the first save'; D.markDirtyForTest(); window.__hold = true; window.__closing = false; return true; })()
+sleep 200
+expect pair() === 'Save •|true|false ~ Save •|true|false'
+jsclick #btn-file
+jsclick #menu-save-back
+wait window.__closing === true
+eval (function(){ F.state().rows[0].audioText = 'typed DURING the write'; D.markDirtyForTest(); window.__release(); return true; })()
+wait window.__closed === 2
+sleep 300
+expect pair() === 'Save •|true|false ~ Save •|true|false'
+expect st() === 'Unsaved changes'
+expect chip() === '· unsaved changes'
+
+quit

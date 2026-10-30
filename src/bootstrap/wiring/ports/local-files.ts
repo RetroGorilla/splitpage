@@ -15,7 +15,7 @@ import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
-import { unsavedFor, requestSave } from "../save-owners.ts";
+import { unsavedFor, requestSave, saveChanges } from "../save-owners.ts";
 import { warnImagesLeftOut } from "../effects-owner.ts";
 import { documentIdentity } from "./document-identity-controls.ts";
 import { stampRow } from "../session-merge.ts";
@@ -76,7 +76,7 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
 export function importSavingPorts(menu: () => LocalFileMenuControls): ImportSavingPorts {
   return {
     location: { importHome, amendHome },
-    saving: { request: (request) => requestSave(request as Parameters<typeof requestSave>[0]), unsavedFor },
+    saving: { request: (request) => requestSave(request as Parameters<typeof requestSave>[0]), unsavedFor, changes: saveChanges, confirmSavedNow: confirmation.confirmSavedNow },
     buildFileData: (kind, base) => menu().buildFileData(kind, base),
     files: localFileAccess(window),
     delivery: fileDelivery,
