@@ -28,6 +28,7 @@ jobs:
       tree: ${{ steps.tested.outputs.tree }}
       tested: ${{ steps.tested.outputs.tested }}
       app: ${{ steps.classify.outputs.app }}
+      desktop: ${{ steps.classify.outputs.desktop }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -120,12 +121,18 @@ jobs:
         if: needs.changes.outputs.app == 'true'
         run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" '^(01-core|52-csp)\.txt$' --lanes 2 --port-base "$PORT_BASE"
 
+      - name: Browser suites for save, typing, undo and export
+        if: needs.changes.outputs.app == 'true'
+        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites-flows" '^(19-save-conflict|28-autosave|185-autosave-every-edit|261-import-save-back-late-edit|270-save-open-every-surface|283-save-status-by-destination|285-save-buttons-one-state|06-writer|81-draft-edit|282-editor-operations|289-script-cell-ime|73-undo|84-undo-caret|267-writer-undo|03-exports|41-export-polish|259-xlsx-export|284-exports-from-a-fixture|98-export-dialog)\.txt$' --lanes 2 --port-base "$PORT_BASE"
+
       - name: Upload the suite logs
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: suite-logs
-          path: ${{ runner.temp }}/suites
+          path: |
+            ${{ runner.temp }}/suites
+            ${{ runner.temp }}/suites-flows
           if-no-files-found: ignore
           retention-days: 7
 
@@ -175,35 +182,39 @@ jobs:
         run: npm run test:all -- --shard "${{ matrix.shard }}/2"
 
   gate:
-    needs: [changes, checks, tests]
+    needs: [changes, checks, tests, desktop-smoke]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE tested=$TESTED checks=$CHECKS tests=$TESTS"
+          echo "changes=$CHANGES code=$CODE tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS smoke=$SMOKE"
           [ "$CHANGES" = success ] || exit 1
           if [ "$CODE" = true ] && [ "$TESTED" != true ]; then
-            [ "$CHECKS" = success ] && [ "$TESTS" = success ]
+            want_smoke=skipped
+            if [ "$DESKTOP" = true ]; then want_smoke=success; fi
+            [ "$CHECKS" = success ] && [ "$TESTS" = success ] && [ "$SMOKE" = "$want_smoke" ]
           else
-            [ "$CHECKS" = skipped ] && [ "$TESTS" = skipped ]
+            [ "$CHECKS" = skipped ] && [ "$TESTS" = skipped ] && [ "$SMOKE" = skipped ]
           fi
         env:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
           TESTED: ${{ needs.changes.outputs.tested }}
+          DESKTOP: ${{ needs.changes.outputs.desktop }}
           CHECKS: ${{ needs.checks.result }}
           TESTS: ${{ needs.tests.result }}
+          SMOKE: ${{ needs.desktop-smoke.result }}
 
       - name: Write the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         run: echo "$TREE" > "$RUNNER_TEMP/passed-tree.txt"
         env:
           TREE: ${{ needs.changes.outputs.tree }}
 
       - name: Upload the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         uses: actions/upload-artifact@v7
         with:
           name: ci-passed-tree-${{ needs.changes.outputs.tree }}
@@ -213,7 +224,7 @@ jobs:
 
   desktop-smoke:
     needs: changes
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.desktop == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
