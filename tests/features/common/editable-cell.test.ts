@@ -1,4 +1,4 @@
-﻿import "../../../src/test/_dom.mjs";
+import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DIRECTION_BUTTON_TITLE, editableCellHtml } from "../../../src/features/common/editable-cell.js";
