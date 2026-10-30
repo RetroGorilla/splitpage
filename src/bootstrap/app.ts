@@ -2,6 +2,7 @@ import { startActions } from "./actions.ts";
 import { beginStartup } from "./startup.ts";
 import type { Wiring } from "./wiring.ts";
 import { whenDocumentReady } from "./startup/dom-ready.ts";
+import { showStartupFailure } from "./startup/failure-screen.ts";
 import { stopBrollPanelFeature as stopBrollFeature } from "./wiring/broll.ts";
 import {
   mountCellEditingFeature,
@@ -184,17 +185,29 @@ export function stopApp(): void {
   running?.();
 }
 
+function startOrShowFailure(wiring: Wiring): void {
+  try {
+    startApp(wiring);
+  } catch (error) {
+    console.error(error);
+    showStartupFailure(error);
+  }
+}
+
 export function startAppWhenReady(doc: Document, wiring: Wiring): void {
   if (running || cancelReady) throw new Error("the app is already started or waiting to start; stop it first");
   mountAppearanceFeature();
   appearanceMountedEarly = true;
   let started = false;
+  let deferred = false;
   const cancel = whenDocumentReady(doc, () => {
     started = true;
     cancelReady = null;
-    startApp(wiring);
+    if (deferred) startOrShowFailure(wiring);
+    else startApp(wiring);
   });
   if (!started) {
+    deferred = true;
     cancelReady = () => {
       try {
         cancel();
