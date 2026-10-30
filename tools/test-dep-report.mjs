@@ -5,8 +5,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import {
-  layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, metrics, run, loadGraph, stronglyConnected,
-  legacyMeasurements, legacyMetrics, legacyViolations, assertLegacyMetrics, loopModel
+  layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, metrics, run, loadGraph, stronglyConnected
 } from "./dep-report.mjs";
 
 const TOOLS = dirname(fileURLToPath(import.meta.url));
@@ -47,7 +46,6 @@ check("a feature may not import starters", !layerAllows("features/newtab", "star
 eq("src/core/document is its own layer", layerOf("src/core/document/ids.ts"), "core/document");
 eq("an unlisted core folder is core", layerOf("src/core/timing/x.ts"), "core");
 eq("a feature folder is named", layerOf("src/features/rows/view.ts"), "features/rows");
-eq("numbered modules are legacy-js", layerOf("src/js/21-events.js"), "legacy-js");
 eq("src/test is tests", layerOf("src/test/undo.test.mjs"), "tests");
 eq("an unknown src folder is src-unknown, not other", layerOf("src/util/helper.js"), "src-unknown");
 eq("the retired contracts folder is an unknown source layer", layerOf("src/contracts/dto.ts"), "src-unknown");
@@ -62,12 +60,10 @@ check("core/text may import core/document", layerAllows("core/text", "core/docum
 check("core/document may not import core/text", !layerAllows("core/document", "core/text"));
 check("core may not import application", !layerAllows("core/text", "application"));
 check("application may not import adapters", !layerAllows("application", "adapters"));
-check("application may not import legacy-js", !layerAllows("application", "legacy-js"));
 check("a feature may not import another feature", !layerAllows("features/rows", "features/find"));
 check("a feature may import application", layerAllows("features/rows", "application"));
-check("legacy may import legacy-js", layerAllows("legacy", "legacy-js"));
 check("bootstrap may import anything", layerAllows("bootstrap", "features/rows") && layerAllows("bootstrap", "adapters"));
-check("production code may not import tests", !layerAllows("legacy-js", "tests") && !layerAllows("server", "tests"));
+check("production code may not import tests", !layerAllows("application", "tests") && !layerAllows("server", "tests"));
 check("tools may import tests", layerAllows("tools", "tests"));
 
 eq("reintroducing the retired folder fails the unknown-layer and import rules", findViolations(graph({
@@ -77,26 +73,6 @@ eq("reintroducing the retired folder fails the unknown-layer and import rules", 
   { rule: "layer", source: "src/application/probe.ts", target: "src/contracts/dto.ts" },
   { rule: "unknown-layer", source: "src/contracts/dto.ts", target: "src/contracts/" }
 ]);
-
-for (const [label, source] of [
-  ["named import", 'import { S } from "../../js/_state.js";'],
-  ["side-effect import", 'import "../../js/_state.js";'],
-  ["re-export", 'export { S } from "../../js/_state.js";'],
-  ["dynamic import", 'export const load = () => import("../../js/_state.js");'],
-  ["type import", 'export type State = typeof import("../../js/_state.js");']
-]) {
-  eq(`bootstrap's ${label} of the state module fails the layer rule`, findViolations(graph({
-    "src/js/_state.js": "export const S = {};\n",
-    "src/bootstrap/wiring/probe.ts": source + "\n"
-  })).filter((v) => v.rule === "layer").map(({ source, target, line }) => ({ source, target, line })), [
-    { source: "src/bootstrap/wiring/probe.ts", target: "src/js/_state.js", line: 1 }
-  ]);
-}
-
-eq("bootstrap may still import a numbered module that supplies a port", findViolations(graph({
-  "src/js/00-port.js": "export const port = {};\n",
-  "src/bootstrap/wiring/probe.ts": 'import { port } from "../../js/00-port.js";\nexport { port };\n'
-})).filter((v) => v.rule === "layer"), []);
 
 console.log("\nanalyzeScript():\n");
 
@@ -134,7 +110,7 @@ console.log("\nanalyzeScript():\n");
 }
 
 {
-  const a = analyzeScript("src/js/x.js", 'function require(n) { return n; }\nrequire("./y.js");\n');
+  const a = analyzeScript("src/bootstrap/x.js", 'function require(n) { return n; }\nrequire("./y.js");\n');
   eq("a locally defined require is not a load", a.imports.length, 0);
 }
 
@@ -497,10 +473,10 @@ for (const [name, lines, expected] of ambientCases) eq(name, ambientsOf("src/cor
     "shared/p.js": '"use strict";\nmodule.exports = { iso: (ms) => new Date(ms).toISOString() };\n',
     "src/application/k.ts": "export const k = Math.random();\n",
     "src/application/a.ts": "export const a = Date.now();\n",
-    "src/js/legacy.js": "export const t = Date.now() + Math.random();\n",
+    "src/bootstrap/clock.js": "export const t = Date.now() + Math.random();\n",
     "src/adapters/identity/i.ts": "export const i = Date.now() + Math.random();\n"
   })).filter((v) => v.rule === "platform-global").map((v) => `${v.source} ${v.target}`);
-  eq("core, shared and application may not read the clock or draw random numbers; legacy and adapters may", rules, [
+  eq("core, shared and application may not read the clock or draw random numbers; bootstrap and adapters may", rules, [
     "shared/h.js global:Date",
     "src/application/a.ts global:Date",
     "src/application/k.ts global:Math.random",
@@ -533,7 +509,7 @@ function htmlCells(files) {
     .map((v) => `${v.source}:${v.line} ${v.target}`);
 }
 
-function htmlSinks(text, path = "src/js/h.js") {
+function htmlSinks(text, path = "src/bootstrap/h.js") {
   return htmlCells({ [path]: text }).map((f) => f.split(" ")[1]);
 }
 
@@ -543,50 +519,50 @@ eq("the adapter itself may parse HTML and import its own modules", htmlCells({
 eq("the bridge may import the adapter and parse", htmlCells({
   "src/bootstrap/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nimport { decode } from "../adapters/richtext/decode.ts";\nexport const r = [createRichText(), decode("")];\n'
 }), []);
-eq("another legacy module importing the adapter is reported", htmlCells({
+eq("another bootstrap module importing the adapter is reported", htmlCells({
   "src/bootstrap/document-ports.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
 }), ["src/bootstrap/document-ports.ts:1 src/adapters/richtext/richtext.ts"]);
-eq("a numbered legacy module importing the decoder is reported", htmlCells({
-  "src/js/05-x.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n'
-}), ["src/js/05-x.js:1 src/adapters/richtext/decode.ts"]);
-eq("bootstrap and numbered files may import a richtext helper that only rewrites an existing body", htmlCells({
+eq("a bootstrap module importing the decoder is reported", htmlCells({
+  "src/bootstrap/05-x.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n'
+}), ["src/bootstrap/05-x.js:1 src/adapters/richtext/decode.ts"]);
+eq("bootstrap modules may import a richtext helper that only rewrites an existing body", htmlCells({
   "src/adapters/richtext/tag-anchors.ts": 'export const retagTagAnchors = (body) => body.innerHTML;\n',
   "src/bootstrap/wiring/ports/text.ts": 'import { retagTagAnchors } from "../../../adapters/richtext/tag-anchors.ts";\nexport const text = { retagBody: retagTagAnchors };\n',
-  "src/js/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = { retagBody: retagTagAnchors };\n'
+  "src/bootstrap/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = { retagBody: retagTagAnchors };\n'
 }), []);
 eq("a richtext helper that reaches the decoder indirectly is reported", htmlCells({
   "src/adapters/richtext/tag-anchors.ts": 'import { helper } from "./helper.ts";\nexport const retagTagAnchors = helper;\n',
   "src/adapters/richtext/helper.ts": 'import { decode } from "./decode.ts";\nexport const helper = decode;\n',
-  "src/js/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = retagTagAnchors;\n'
-}), ["src/js/08-production-panels.js:1 src/adapters/richtext/tag-anchors.ts"]);
+  "src/bootstrap/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = retagTagAnchors;\n'
+}), ["src/bootstrap/08-production-panels.js:1 src/adapters/richtext/tag-anchors.ts"]);
 eq("a richtext helper that parses HTML is reported", htmlCells({
   "src/adapters/richtext/tag-anchors.ts": 'export const retagTagAnchors = (s) => new DOMParser().parseFromString(s, "text/html");\n',
-  "src/js/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = retagTagAnchors;\n'
-}), ["src/js/08-production-panels.js:1 src/adapters/richtext/tag-anchors.ts"]);
+  "src/bootstrap/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = retagTagAnchors;\n'
+}), ["src/bootstrap/08-production-panels.js:1 src/adapters/richtext/tag-anchors.ts"]);
 eq("an unclassified richtext helper assigning detached innerHTML is reported", htmlCells({
   "src/adapters/richtext/detached.ts": 'export const parse = (html) => { const body = document.createElement("div"); body.innerHTML = html; return body; };\n',
-  "src/js/08-production-panels.js": 'import { parse } from "../adapters/richtext/detached.ts";\nexport const body = parse("");\n'
-}), ["src/js/08-production-panels.js:1 src/adapters/richtext/detached.ts"]);
+  "src/bootstrap/08-production-panels.js": 'import { parse } from "../adapters/richtext/detached.ts";\nexport const body = parse("");\n'
+}), ["src/bootstrap/08-production-panels.js:1 src/adapters/richtext/detached.ts"]);
 eq("an unclassified richtext helper calling a bound HTML parser is reported", htmlCells({
   "src/adapters/richtext/bound.ts": 'const parser = new DOMParser();\nconst parse = parser.parseFromString.bind(parser);\nexport const body = (html) => parse(html, "text/html");\n',
-  "src/js/08-production-panels.js": 'import { body } from "../adapters/richtext/bound.ts";\nexport const parsed = body("");\n'
-}), ["src/js/08-production-panels.js:1 src/adapters/richtext/bound.ts"]);
+  "src/bootstrap/08-production-panels.js": 'import { body } from "../adapters/richtext/bound.ts";\nexport const parsed = body("");\n'
+}), ["src/bootstrap/08-production-panels.js:1 src/adapters/richtext/bound.ts"]);
 eq("an unclassified richtext helper with no recognized parsing calls is conservatively reported", htmlCells({
   "src/adapters/richtext/unknown.ts": 'export const helper = (value) => value;\n',
-  "src/js/08-production-panels.js": 'import { helper } from "../adapters/richtext/unknown.ts";\nexport const value = helper("");\n'
-}), ["src/js/08-production-panels.js:1 src/adapters/richtext/unknown.ts"]);
+  "src/bootstrap/08-production-panels.js": 'import { helper } from "../adapters/richtext/unknown.ts";\nexport const value = helper("");\n'
+}), ["src/bootstrap/08-production-panels.js:1 src/adapters/richtext/unknown.ts"]);
 eq("bootstrap importing the adapter is reported", htmlCells({
   "src/bootstrap/main.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
 }), ["src/bootstrap/main.ts:1 src/adapters/richtext/richtext.ts"]);
 eq("a re-export of the decoder is reported", htmlCells({
-  "src/legacy/other.ts": 'export { decode } from "../adapters/richtext/decode.ts";\n'
-}), ["src/legacy/other.ts:1 src/adapters/richtext/decode.ts"]);
+  "src/bootstrap/other.ts": 'export { decode } from "../adapters/richtext/decode.ts";\n'
+}), ["src/bootstrap/other.ts:1 src/adapters/richtext/decode.ts"]);
 eq("a dynamic import and a require of the decoder are reported", htmlCells({
-  "src/js/late.js": 'export const l = () => import("../adapters/richtext/decode.ts");\n',
+  "src/bootstrap/late.js": 'export const l = () => import("../adapters/richtext/decode.ts");\n',
   "server/s.js": '"use strict";\nmodule.exports = require("../src/adapters/richtext/decode.ts");\n'
-}), ["server/s.js:2 src/adapters/richtext/decode.ts", "src/js/late.js:1 src/adapters/richtext/decode.ts"]);
+}), ["server/s.js:2 src/adapters/richtext/decode.ts", "src/bootstrap/late.js:1 src/adapters/richtext/decode.ts"]);
 eq("a type-only import of the adapter is not a decoder", htmlCells({
-  "src/legacy/types.ts": 'import type { RichText } from "../adapters/richtext/richtext.ts";\nexport type T = RichText;\n'
+  "src/bootstrap/types.ts": 'import type { RichText } from "../adapters/richtext/richtext.ts";\nexport type T = RichText;\n'
 }), []);
 eq("tests and tools may import the adapter", htmlCells({
   "src/test/x.test.mjs": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n',
@@ -595,7 +571,7 @@ eq("tests and tools may import the adapter", htmlCells({
 }), []);
 eq("a module that imports the adapter's neighbour is not reported", htmlCells({
   "src/adapters/identity/ids.ts": "export const id = 1;\n",
-  "src/legacy/ids.ts": 'import { id } from "../adapters/identity/ids.ts";\nexport const i = id;\n'
+  "src/bootstrap/ids.ts": 'import { id } from "../adapters/identity/ids.ts";\nexport const i = id;\n'
 }), []);
 
 eq("parseFromString as text/html is a parse", htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");\n'), ["html-parse:parseFromString"]);
@@ -610,20 +586,20 @@ eq("parseFromString with a computed or missing type is a parse", htmlSinks([
   "export const b = (s) => new DOMParser().parseFromString(s);"
 ].join("\n")), ["html-parse:parseFromString"]);
 eq("parseFromString through an element access is a parse", htmlCells({
-  "src/js/element-access.js": 'export const a = (p, s) => p["parseFromString"](s, "text/html");\n'
-}), ["src/js/element-access.js:1 html-parse:parseFromString"]);
+  "src/bootstrap/element-access.js": 'export const a = (p, s) => p["parseFromString"](s, "text/html");\n'
+}), ["src/bootstrap/element-access.js:1 html-parse:parseFromString"]);
 eq("parseFromString through an optional call is a parse", htmlCells({
-  "src/js/optional-call.js": 'export const a = (p, s) => p?.parseFromString(s, "text/html");\n'
-}), ["src/js/optional-call.js:1 html-parse:parseFromString"]);
+  "src/bootstrap/optional-call.js": 'export const a = (p, s) => p?.parseFromString(s, "text/html");\n'
+}), ["src/bootstrap/optional-call.js:1 html-parse:parseFromString"]);
 eq("parseFromString through parentheses is a parse", htmlCells({
-  "src/js/parenthesised.js": 'export const a = (p, s) => (p.parseFromString)(s, "text/html");\n'
-}), ["src/js/parenthesised.js:1 html-parse:parseFromString"]);
+  "src/bootstrap/parenthesised.js": 'export const a = (p, s) => (p.parseFromString)(s, "text/html");\n'
+}), ["src/bootstrap/parenthesised.js:1 html-parse:parseFromString"]);
 eq("parseFromString through a parenthesised element access is a parse", htmlCells({
-  "src/js/wrapped-element-access.js": 'export const a = (p, s) => (p["parseFromString"])(s, "text/html");\n'
-}), ["src/js/wrapped-element-access.js:1 html-parse:parseFromString"]);
+  "src/bootstrap/wrapped-element-access.js": 'export const a = (p, s) => (p["parseFromString"])(s, "text/html");\n'
+}), ["src/bootstrap/wrapped-element-access.js:1 html-parse:parseFromString"]);
 eq("parseFromString through a local alias of the parser is a parse", htmlCells({
-  "src/js/alias.js": 'const p = new DOMParser();\nexport const a = (s) => p.parseFromString(s, "text/html");\n'
-}), ["src/js/alias.js:2 html-parse:parseFromString"]);
+  "src/bootstrap/alias.js": 'const p = new DOMParser();\nexport const a = (s) => p.parseFromString(s, "text/html");\n'
+}), ["src/bootstrap/alias.js:2 html-parse:parseFromString"]);
 eq("createContextualFragment, parseHTMLUnsafe, setHTMLUnsafe and setHTML are parses", htmlSinks([
   "export const a = (r, s) => r.createContextualFragment(s);",
   "export const b = (s) => Document.parseHTMLUnsafe(s);",
@@ -654,232 +630,14 @@ eq("a parse inside the adapter and inside the bridge is not reported", [
   htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/bootstrap/richtext.ts")
 ], [[], []]);
 eq("each sink is reported once, at its first line", htmlCells({
-  "src/js/two.js": 'export const a = (s) => new DOMParser().parseFromString(s, "text/html");\nexport const b = (s) => new DOMParser().parseFromString(s, "text/html");\n'
-}), ["src/js/two.js:1 html-parse:parseFromString"]);
+  "src/bootstrap/two.js": 'export const a = (s) => new DOMParser().parseFromString(s, "text/html");\nexport const b = (s) => new DOMParser().parseFromString(s, "text/html");\n'
+}), ["src/bootstrap/two.js:1 html-parse:parseFromString"]);
 eq("an import and a parse in one module are two findings", htmlCells({
-  "src/js/both.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const a = (s) => new DOMParser().parseFromString(decode(s), "text/html");\n'
-}), ["src/js/both.js:2 html-parse:parseFromString", "src/js/both.js:1 src/adapters/richtext/decode.ts"]);
-
-console.log("\nS importers and writers:\n");
-
-const STATE_FILE = { "src/js/_state.js": "export const S = { state: undefined, dirty: false, editSeq: 0 };\n" };
-
-function stateFindings(files) {
-  return findViolations(graph({ ...STATE_FILE, ...files }))
-    .filter((v) => v.rule === "state-import" || v.rule === "state-write")
-    .map((v) => `${v.rule} ${v.source} ${v.target}`);
-}
-
-function writesOf(text) {
-  return stateFindings({ "src/js/w.js": text }).filter((f) => f.startsWith("state-write ")).map((f) => f.split(" ")[2]);
-}
-
-eq("a named import of S is a state-import", stateFindings({ "src/js/a.js": 'import { S } from "./_state.js";\nexport const r = S.state;\n' }), ["state-import src/js/a.js global:S"]);
-eq("an aliased import of S is a state-import", stateFindings({ "src/js/a.js": 'import { S as T } from "./_state.js";\nexport const r = T.dirty;\n' }), ["state-import src/js/a.js global:S"]);
-eq("a namespace import of the state module is a state-import", stateFindings({ "src/js/a.js": 'import * as G from "./_state.js";\nexport const r = G.S.dirty;\n' }), ["state-import src/js/a.js global:S"]);
-eq("a literal dynamic import of the state module is a state-import", stateFindings({ "src/js/a.js": 'export const p = import("./_state.js").then((m) => m.S);\n' }), ["state-import src/js/a.js global:S"]);
-eq("a side-effect import binds nothing", stateFindings({ "src/js/a.js": 'import "./_state.js";\n' }), []);
-eq("a module in an unknown src folder is production and its folder is reported", findViolations(graph({
-  ...STATE_FILE,
-  "src/util/helper.js": 'import { S } from "../js/_state.js";\nS.state = null;\n',
-  "src/entry.js": 'import { S } from "./js/_state.js";\nS.dirty = true;\n'
-})).map((v) => `${v.rule} ${v.source} ${v.target}`), [
-  "state-import src/entry.js global:S",
-  "state-import src/util/helper.js global:S",
-  "state-module src/entry.js src/js/_state.js",
-  "state-module src/js/_state.js src/js/_state.js",
-  "state-module src/util/helper.js src/js/_state.js",
-  "state-write src/entry.js global:S.dirty",
-  "state-write src/util/helper.js global:S.state",
-  "unknown-layer src/entry.js src/",
-  "unknown-layer src/util/helper.js src/util/"
-]);
-eq("tests and tools are not production importers", stateFindings({
-  "src/test/a.test.mjs": 'import { S } from "../js/_state.js";\nS.state = null;\n',
-  "tools/demo.mjs": 'import { S } from "../src/js/_state.js";\nS.dirty = 1;\n'
-}), []);
-
-function stateModuleFindings(files) {
-  return findViolations(graph(files)).filter((v) => v.rule === "state-module").map((v) => `${v.source}:${v.line} ${v.target}`);
-}
-
-eq("the state module itself fails the state-module rule", stateModuleFindings(STATE_FILE), ["src/js/_state.js:null src/js/_state.js"]);
-eq("an import of the deleted state module fails in app code, tests and tools", stateModuleFindings({
-  "src/js/a.js": 'import { S } from "./_state.js";\nexport const r = S;\n',
-  "src/test/a.test.mjs": 'import "./_dom.mjs";\nconst { S } = await import("../js/_state.js");\nexport const r = S;\n',
-  "tools/demo.mjs": 'import { S } from "../src/js/_state.js";\nexport const r = S;\n'
-}), ["src/js/a.js:1 src/js/_state.js", "src/test/a.test.mjs:2 src/js/_state.js", "tools/demo.mjs:1 src/js/_state.js"]);
-eq("a module that does not import the state module passes the state-module rule", stateModuleFindings({
-  "src/js/a.js": 'import { currentDocument } from "../legacy/session-bridge.ts";\nexport const r = currentDocument;\n',
-  "src/legacy/session-bridge.ts": "export const currentDocument = () => null;\n"
-}), []);
-
-const MUTATORS = ["push", "pop", "splice", "shift", "unshift", "sort", "reverse", "fill", "copyWithin"];
-
-const writeCases = [
-  ["a direct S.state assignment", "S.state = null;", ["global:S.state"]],
-  ["element access with a literal key", 'S["state"] = {};', ["global:S.state"]],
-  ["element access with a computed key", "S[key] = 1;", ["global:S[?]"]],
-  ["compound assignment", "S.editSeq += 1;", ["global:S.editSeq"]],
-  ["logical assignment", "S.dirty ??= true;", ["global:S.dirty"]],
-  ["postfix increment", "S.editSeq++;", ["global:S.editSeq"]],
-  ["prefix decrement", "--S.editSeq;", ["global:S.editSeq"]],
-  ["delete", "delete S.state;", ["global:S.state"]],
-  ["a parenthesised target", "(S.dirty) = true;", ["global:S.dirty"]],
-  ["an array destructuring target", "[S.dirty] = [true];", ["global:S.dirty"]],
-  ["an object destructuring target", "({ d: S.dirty } = o);", ["global:S.dirty"]],
-  ["a for-of target", "for (S.dirty of [1]) void 0;", ["global:S.dirty"]],
-  ["a nested assignment", "S.state.rows = [];", ["global:S.state.*"]],
-  ["a nested length reset", "S.state.rows.length = 0;", ["global:S.state.*"]],
-  ["a nested element write", 'S.state.rows[0].text = "x";', ["global:S.state.*"]],
-  ["a nested delete", "delete S.state.rows[0];", ["global:S.state.*"]],
-  ["Object.assign into a member", "Object.assign(S.state, patch);", ["global:S.state.*"]],
-  ["Object.assign into S itself", "Object.assign(S, patch);", ["global:S.*"]],
-  ["Reflect.set on S itself", 'Reflect.set(S, "dirty", true);', ["global:S.*"]],
-  ["an optional-chain mutating call", "S.state?.rows?.push(1);", ["global:S.state.*"]],
-  ...MUTATORS.map((m) => [`a ${m}() call`, `S.state.rows.${m}(x);`, ["global:S.state.*"]]),
-  ["writes through a const alias", "const st = S.state;\nst.rows.length = 0;", ["global:S.state.*"]],
-  ["writes through a var alias of S", "var s = S;\ns.dirty = true;", ["global:S.dirty"]],
-  ["writes through a destructured alias", "const { state } = S;\nstate.rows.pop();", ["global:S.state.*"]],
-  ["writes through an alias of an alias", "const st = S.state;\nconst rows = st.rows;\nrows.splice(0);", ["global:S.state.*"]],
-  ["writes through an alias from a function declared before it", "function later() { st.x = 1; }\nconst st = S.state;\nlater();", ["global:S.state.*"]],
-  ["writes through an iteration callback parameter", "S.state.rows.forEach(function (r) { r.done = true; });", ["global:S.state.*"]],
-  ["writes through a reduce element parameter", "S.state.rows.reduce(function (acc, r) { r.seen = 1; return acc; }, 0);", ["global:S.state.*"]],
-  ["writes through a for-of binding", "for (const row of S.state.rows) row.done = true;", ["global:S.state.*"]],
-  ["a reduce accumulator", "S.state.rows.reduce(function (acc, r) { acc.push(r.id); return acc; }, []);", []],
-  ["a reassigned callback parameter", "S.state.rows.forEach((r) => { r = { ...r }; r.done = true; });", []],
-  ["reads", "const n = S.state.rows.length;\nconst copy = S.state.rows.slice().sort();\nif (S.dirty) void [n, copy];", []],
-  ["a non-mutating method call", "S.state.rows.map(String);", []],
-  ["mutating a copy", "const rows = S.state.rows.filter(Boolean);\nrows.push(1);", []],
-  ["a reassigned let", "let st = S.state;\nst = {};\nst.rows = [];", []],
-  ["a parameter named S", "export function f(S) { S.state = 1; }", []],
-  ["a block-scoped S", "{ const S = { state: 1 }; S.state = 2; }", []],
-  ["a local that shadows an alias", "const st = S.state;\nexport function g() { const st = {}; st.x = 1; }", []],
-  ["an alias in a sibling function", "export function a() { const st = S.state; return st; }\nexport function b(st) { st.rows = []; }", []]
-];
-
-for (const [name, body, expected] of writeCases) {
-  eq(`${expected.length ? "write" : "not a write"}: ${name}`, writesOf('import { S } from "./_state.js";\n' + body + "\n"), expected);
-}
-
-eq("write: through a namespace import", writesOf('import * as G from "./_state.js";\nG.S.state = {};\nG["S"].dirty = true;\n'), ["global:S.dirty", "global:S.state"]);
-eq("write: through an aliased import with element access", writesOf('import { S as T } from "./_state.js";\nT["state"] = {};\n'), ["global:S.state"]);
-eq("write: through a destructured dynamic import", writesOf('const { S } = await import("./_state.js");\nS.dirty = true;\n'), ["global:S.dirty"]);
-eq("write: through a destructured require", writesOf('const { S } = require("./_state.js");\nS.dirty = true;\n'), ["global:S.dirty"]);
-eq("a require that is a parameter loads nothing", stateFindings({ "src/js/a.js": 'export function f(require) { const { S } = require("./_state.js"); S.dirty = 1; }\n' }), []);
-eq("an import type of S is still a state-import", stateFindings({ "src/js/t.ts": 'import type { S } from "./_state.js";\nexport type T = typeof S;\n' }), ["state-import src/js/t.ts global:S"]);
-
-eq("each write target is described by what it does", findViolations(graph({
-  ...STATE_FILE,
-  "src/js/w.js": 'import { S } from "./_state.js";\nS.dirty = true;\nS.state.rows = [];\nObject.assign(S, patch);\nS[key] = 1;\n'
-})).filter((v) => v.rule === "state-write").map((v) => `${v.target} ${v.detail}`), [
-  "global:S.* changes members of S in place",
-  "global:S.dirty replaces S.dirty",
-  "global:S.state.* changes S.state in place",
-  "global:S[?] replaces S[?]"
-]);
-
-eq("known false positive: an exported snapshot of a primitive member makes a bridge", stateFindings({
-  "src/js/flag.js": 'import { S } from "./_state.js";\nexport const wasDirty = S.dirty;\n',
-  "src/js/use.js": 'import { wasDirty } from "./flag.js";\nexport const w = wasDirty;\n'
-}), ["state-import src/js/flag.js global:S", "state-import src/js/use.js global:S"]);
-
-eq("export type { S } from is a bridge, as import type { S } is an importer", stateFindings({
-  "src/js/types.ts": 'export type { S } from "./_state.js";\n'
-}), ["state-import src/js/types.ts global:S"]);
-
-{
-  const chain = { "src/js/n1.js": 'export * as n1 from "./_state.js";\n' };
-  for (let i = 2; i <= 7; i++) chain[`src/js/n${i}.js`] = `export * as n${i} from "./n${i - 1}.js";\n`;
-  const found = findViolations(graph({ ...STATE_FILE, ...chain })).map((v) => `${v.rule} ${v.source}`);
-  eq("a re-export chain longer than the report follows is reported where it stops", found.filter((f) => f.startsWith("state-bridge-limit")), ["state-bridge-limit src/js/n6.js"]);
-  eq("and every bridge before it is still an importer", found.filter((f) => f.startsWith("state-import")).length, 5);
-  const loop = findViolations(graph({ ...STATE_FILE, "src/js/loop.js": 'export { S } from "./_state.js";\nexport * as again from "./loop.js";\n' })).map((v) => `${v.rule} ${v.source}`);
-  check("a module that re-exports itself under a new name stops and is reported", loop.includes("state-bridge-limit src/js/loop.js"), loop.join("\n"));
-}
-
-eq("export default S is a bridge", stateFindings({
-  "src/js/d.js": 'import { S } from "./_state.js";\nexport default S;\n',
-  "src/js/use.js": 'import St from "./d.js";\nSt.dirty = 1;\n'
-}), [
-  "state-import src/js/d.js global:S",
-  "state-import src/js/use.js global:S",
-  "state-write src/js/use.js global:S.dirty"
-]);
-
-eq("a re-export bridge is an importer, and so is its consumer", stateFindings({
-  "src/js/bridge.js": 'export { S } from "./_state.js";\n',
-  "src/js/use.js": 'import { S } from "./bridge.js";\nS.state = null;\n'
-}), [
-  "state-import src/js/bridge.js global:S",
-  "state-import src/js/use.js global:S",
-  "state-write src/js/use.js global:S.state"
-]);
-
-eq("a local re-export under another name is a bridge", stateFindings({
-  "src/js/bridge.js": 'import { S } from "./_state.js";\nexport { S as State };\n',
-  "src/js/use.js": 'import { State } from "./bridge.js";\nState.dirty = true;\n'
-}), [
-  "state-import src/js/bridge.js global:S",
-  "state-import src/js/use.js global:S",
-  "state-write src/js/use.js global:S.dirty"
-]);
-
-eq("export * and export * as are bridges", stateFindings({
-  "src/js/star.js": 'export * from "./_state.js";\n',
-  "src/js/ns.js": 'export * as all from "./_state.js";\n',
-  "src/js/use.js": 'import { S } from "./star.js";\nimport { all } from "./ns.js";\nS.dirty = 1;\nall.S.state = null;\n'
-}), [
-  "state-import src/js/ns.js global:S",
-  "state-import src/js/star.js global:S",
-  "state-import src/js/use.js global:S",
-  "state-write src/js/use.js global:S.dirty",
-  "state-write src/js/use.js global:S.state"
-]);
-
-eq("an exported alias of an S member is a bridge its consumers write through", stateFindings({
-  "src/js/facade.js": 'import { S } from "./_state.js";\nexport const live = S.state;\n',
-  "src/js/use.js": 'import { live } from "./facade.js";\nlive.rows = [];\n'
-}), [
-  "state-import src/js/facade.js global:S",
-  "state-import src/js/use.js global:S",
-  "state-write src/js/use.js global:S.state.*"
-]);
-
-{
-  const found = findViolations(graph({
-    ...STATE_FILE,
-    "src/legacy/state.ts": 'export { S } from "../js/_state.js";\n',
-    "src/features/rows/view.ts": 'import { S } from "../../legacy/state.ts";\nexport const v = (): unknown => S.state;\n'
-  })).map((v) => `${v.rule} ${v.source} ${v.target}`);
-  check("a legacy re-export of S is a state-import", found.includes("state-import src/legacy/state.ts global:S"), found.join("\n"));
-  check("a feature importing that bridge breaks the layer rule", found.includes("layer src/features/rows/view.ts src/legacy/state.ts"), found.join("\n"));
-  check("and is itself a state-import", found.includes("state-import src/features/rows/view.ts global:S"), found.join("\n"));
-}
+  "src/bootstrap/both.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const a = (s) => new DOMParser().parseFromString(decode(s), "text/html");\n'
+}), ["src/bootstrap/both.js:2 html-parse:parseFromString", "src/bootstrap/both.js:1 src/adapters/richtext/decode.ts"]);
 
 console.log("\nmetrics():\n");
-
-eq("metrics() reports the informational numbers", metrics(graph({
-  ...STATE_FILE,
-  "src/js/a.js": 'import { S } from "./_state.js";\nimport "./b.js";\nS.state = {};\nS.dirty = true;\nexport function n() { return S.editSeq; }\n',
-  "src/js/b.js": 'import { S } from "./_state.js";\nimport "./a.js";\nS.state.rows.push(1);\n',
-  "src/js/bridge.js": 'export { S } from "./_state.js";\n',
-  "src/test/a.test.mjs": 'import "../js/a.js";\n'
-})), {
-  frontendModules: 4,
-  largestFrontendRuntimeCycle: 2,
-  frontendRuntimeCycles: 1,
-  runtimeCycleEdges: 2,
-  stateImporters: ["src/js/a.js", "src/js/b.js", "src/js/bridge.js"],
-  stateBridges: ["src/js/bridge.js"],
-  stateAssigners: ["src/js/a.js"],
-  stateFieldWriters: [{ path: "src/js/a.js", writes: 2, reads: 1 }],
-  stateWriters: [
-    { path: "src/js/a.js", targets: ["global:S.dirty", "global:S.state"] },
-    { path: "src/js/b.js", targets: ["global:S.state.*"] }
-  ],
-  migratedModules: 0
-});
+eq("metrics reports runtime cycle information", metrics(graph({ "src/bootstrap/a.ts": 'import "./b.ts";', "src/bootstrap/b.ts": 'import "./a.ts";' })), { frontendModules: 2, frontendRuntimeCycles: 1, runtimeCycleEdges: 2, migratedModules: 2 });
 
 console.log("\ncycle edges:\n");
 
@@ -887,10 +645,10 @@ function cycleEdges(files) {
   return findViolations(graph(files)).filter((v) => v.rule === "cycle-edge").map((v) => `${v.source} -> ${v.target}`);
 }
 
-eq("both edges of a two-module legacy cycle", cycleEdges({ "src/js/l1.js": 'import "./l2.js";\n', "src/js/l2.js": 'import "./l1.js";\n' }), ["src/js/l1.js -> src/js/l2.js", "src/js/l2.js -> src/js/l1.js"]);
-eq("an edge into a cycle is not part of it", cycleEdges({ "src/js/a.js": 'import "./b.js";\n', "src/js/b.js": 'import "./c.js";\n', "src/js/c.js": 'import "./b.js";\n' }), ["src/js/b.js -> src/js/c.js", "src/js/c.js -> src/js/b.js"]);
-eq("a self-import", cycleEdges({ "src/js/s.js": 'import "./s.js";\n' }), ["src/js/s.js -> src/js/s.js"]);
-eq("a literal dynamic import closes a runtime cycle", cycleEdges({ "src/js/d1.js": 'import "./d2.js";\n', "src/js/d2.js": 'export const load = () => import("./d1.js");\n' }), ["src/js/d1.js -> src/js/d2.js", "src/js/d2.js -> src/js/d1.js"]);
+eq("both edges of a two-module server cycle", cycleEdges({ "server/l1.js": 'import "./l2.js";\n', "server/l2.js": 'import "./l1.js";\n' }), ["server/l1.js -> server/l2.js", "server/l2.js -> server/l1.js"]);
+eq("an edge into a cycle is not part of it", cycleEdges({ "src/bootstrap/a.js": 'import "./b.js";\n', "src/bootstrap/b.js": 'import "./c.js";\n', "src/bootstrap/c.js": 'import "./b.js";\n' }), ["src/bootstrap/b.js -> src/bootstrap/c.js", "src/bootstrap/c.js -> src/bootstrap/b.js"]);
+eq("a self-import", cycleEdges({ "src/bootstrap/s.js": 'import "./s.js";\n' }), ["src/bootstrap/s.js -> src/bootstrap/s.js"]);
+eq("a literal dynamic import closes a runtime cycle", cycleEdges({ "src/bootstrap/d1.js": 'import "./d2.js";\n', "src/bootstrap/d2.js": 'export const load = () => import("./d1.js");\n' }), ["src/bootstrap/d1.js -> src/bootstrap/d2.js", "src/bootstrap/d2.js -> src/bootstrap/d1.js"]);
 eq("type-only references do not make a runtime cycle", cycleEdges({
   "server/a.ts": 'import type { B } from "./b.ts";\nexport type A = B;\n',
   "server/b.ts": 'import type { A } from "./a.ts";\nexport type B = A;\n'
@@ -900,14 +658,14 @@ console.log("\nviolations and baseline:\n");
 
 {
   const g = graph({
-    "src/core/document/a.ts": 'import { b } from "../../js/b.js";\nimport fs from "node:fs";\nexport const a = window;\n',
-    "src/js/b.js": "export const b = 1;\n",
+    "src/core/document/a.ts": 'import { b } from "../../bootstrap/b.js";\nimport fs from "node:fs";\nexport const a = window;\n',
+    "src/bootstrap/b.js": "export const b = 1;\n",
     "src/features/rows/v.ts": 'import { f } from "../find/f.ts";\nexport const v = f;\n',
     "src/features/find/f.ts": "export const f = 1;\n",
     "src/application/s.ts": 'import { m } from "./missing.ts";\nexport const s = m;\n'
   });
   const rules = findViolations(g).map((v) => `${v.rule} ${v.source} ${v.target}`);
-  check("core importing legacy is a layer violation", rules.includes("layer src/core/document/a.ts src/js/b.js"), rules.join("\n"));
+  check("core importing bootstrap is a layer violation", rules.includes("layer src/core/document/a.ts src/bootstrap/b.js"), rules.join("\n"));
   check("core importing a builtin is a platform-import violation", rules.includes("platform-import src/core/document/a.ts builtin:fs"), rules.join("\n"));
   check("core using window is a platform-global violation", rules.includes("platform-global src/core/document/a.ts global:window"), rules.join("\n"));
   check("feature to feature is a layer violation", rules.includes("layer src/features/rows/v.ts src/features/find/f.ts"), rules.join("\n"));
@@ -919,34 +677,34 @@ eq("violations sort by code point, field by field, not by locale", findViolation
 })).map((v) => v.target), ["global:AbortController", "global:TextDecoder", "global:URL", "global:clearTimeout", "global:setTimeout"]);
 
 {
-  const before = findViolations(graph({ "src/core/document/a.ts": 'import { x } from "../../js/x.js";\n', "src/js/x.js": "", "src/js/y.js": "" }));
-  const after = findViolations(graph({ "src/core/document/a.ts": 'import { y } from "../../js/y.js";\n', "src/js/x.js": "", "src/js/y.js": "" }));
+  const before = findViolations(graph({ "src/core/document/a.ts": 'import { x } from "../../bootstrap/x.js";\n', "src/bootstrap/x.js": "", "src/bootstrap/y.js": "" }));
+  const after = findViolations(graph({ "src/core/document/a.ts": 'import { y } from "../../bootstrap/y.js";\n', "src/bootstrap/x.js": "", "src/bootstrap/y.js": "" }));
   eq("the swap keeps the violation count equal", after.length, before.length);
   const { added, resolved } = compareBaseline(after, { exceptions: before });
-  eq("a new forbidden edge fails even when the count does not grow", added.map((v) => v.target), ["src/js/y.js"]);
-  eq("the replaced exception is reported as resolved", resolved.map((v) => v.target), ["src/js/x.js"]);
+  eq("a new forbidden edge fails even when the count does not grow", added.map((v) => v.target), ["src/bootstrap/y.js"]);
+  eq("the replaced exception is reported as resolved", resolved.map((v) => v.target), ["src/bootstrap/x.js"]);
 }
 
 {
   const g = graph({
     "src/core/document/a.ts": 'import type { B } from "./b.ts";\nexport type A = B;\n',
     "src/core/document/b.ts": 'import { a } from "./a.ts";\nexport const b = a;\nexport type B = number;\n',
-    "src/js/l1.js": 'import "./l2.js";\n',
-    "src/js/l2.js": 'import "./l1.js";\n'
+    "server/l1.js": 'import "./l2.js";\n',
+    "server/l2.js": 'import "./l1.js";\n'
   });
   const cycles = migratedCycles(g);
   eq("a type-only cycle in core is caught by the type-inclusive graph", cycles.map((c) => c.graph), ["with-types"]);
-  check("a legacy-only cycle is not a migrated cycle", cycles.every((c) => !c.modules.includes("src/js/l1.js")));
+  check("a server-only cycle is not a migrated cycle", cycles.every((c) => !c.modules.includes("server/l1.js")));
 }
 
 {
   const g = graph({
-    "src/bootstrap/root.ts": 'import "../js/boot.js";\n',
-    "src/js/boot.js": 'import "./mid.js";\n',
-    "src/js/mid.js": 'import "../bootstrap/root.ts";\n'
+    "src/bootstrap/root.ts": 'import "../../server/boot.js";\n',
+    "server/boot.js": 'import "./mid.js";\n',
+    "server/mid.js": 'import "../src/bootstrap/root.ts";\n'
   });
   const cycles = migratedCycles(g);
-  check("a cycle through legacy modules involving migrated code is caught", cycles.some((c) => c.graph === "runtime" && c.modules.length === 3), JSON.stringify(cycles));
+  check("a cycle through server modules involving migrated code is caught", cycles.some((c) => c.graph === "runtime" && c.modules.length === 3), JSON.stringify(cycles));
 }
 
 console.log("\nrun() over a repository:\n");
@@ -970,7 +728,7 @@ function runIn(repo, mode) {
 try {
   const repo = repoWith({
     "shared/p.js": '"use strict";\nmodule.exports = new URL("https://x.test");\n',
-    "src/js/a.js": 'import "../../shared/p.js";\n'
+    "src/bootstrap/a.js": 'import "../../shared/p.js";\n'
   });
   eq("init records the existing exception", runIn(repo, "init").code, 0);
   const baseline = JSON.parse(readFileSync(join(repo, "baseline.json"), "utf8"));
@@ -1012,7 +770,7 @@ try {
   writeFiles(repo, {
     ...ADAPTER_FILES,
     "src/bootstrap/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n',
-    "src/js/old.js": 'export const p = (s) => new DOMParser().parseFromString(s, "text/html");\n'
+    "src/bootstrap/old.js": 'export const p = (s) => new DOMParser().parseFromString(s, "text/html");\n'
   });
   const baselinePath = join(repo, "baseline.json");
   const go = (mode, reason) => {
@@ -1022,22 +780,22 @@ try {
     return { code, out: out.join("\n"), err: err.join("\n") };
   };
   eq("init records the existing HTML parse and not the bridge", (go("init"), JSON.parse(readFileSync(baselinePath, "utf8")).exceptions), [
-    { rule: "html-cells", source: "src/js/old.js", target: "html-parse:parseFromString" }
+    { rule: "html-cells", source: "src/bootstrap/old.js", target: "html-parse:parseFromString" }
   ]);
   eq("the baselined parse passes", go("check").code, 0);
 
-  writeFiles(repo, { "src/js/new.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n' });
+  writeFiles(repo, { "src/bootstrap/new.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n' });
   const added = go("check");
   eq("a new module reaching the decoder fails", added.code, 1);
-  check("the failure names the rule, the line and the adapter file", added.err.includes("new html-cells: src/js/new.js:1 -> src/adapters/richtext/decode.ts"), added.err);
+  check("the failure names the rule, the line and the adapter file", added.err.includes("new html-cells: src/bootstrap/new.js:1 -> src/adapters/richtext/decode.ts"), added.err);
   eq("accept without a reason is refused", go("accept").code, 2);
   const accepted = go("accept", "reads the decoder until the bridge lands");
   eq("accept with a reason records it", accepted.code, 0);
   const rows = JSON.parse(readFileSync(baselinePath, "utf8")).exceptions;
-  eq("the accepted row carries its reason", rows.find((r) => r.source === "src/js/new.js")?.reason, "reads the decoder until the bridge lands");
+  eq("the accepted row carries its reason", rows.find((r) => r.source === "src/bootstrap/new.js")?.reason, "reads the decoder until the bridge lands");
   eq("the check passes after accepting", go("check").code, 0);
 
-  writeFiles(repo, { "src/js/old.js": "export const p = (s) => s;\n" });
+  writeFiles(repo, { "src/bootstrap/old.js": "export const p = (s) => s;\n" });
   const resolved = go("check");
   eq("removing the parse leaves a resolved exception that fails", resolved.code, 1);
   eq("prune clears it", go("prune").code, 0);
@@ -1052,12 +810,11 @@ const cacheDir = join(ROOT, ".cache");
 mkdirSync(cacheDir, { recursive: true });
 const cliWork = mkdtempSync(join(cacheDir, "dep-report-test-"));
 
-const LEGACY = {
-  "src/js/_state.js": "export const S = { state: undefined, dirty: false };\n",
-  "src/js/a.js": 'import { S } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { return S.state ? b() : 0; }\n',
-  "src/js/b.js": 'import { S } from "./_state.js";\nimport { f } from "./f.js";\nexport function b() { S.state = { rows: [] }; return f(); }\n',
-  "src/js/f.js": 'import { a } from "./a.js";\nexport function f() { return a; }\n',
-  "src/js/c.js": "export const c = 1;\n"
+const CYCLE_FIXTURE = {
+  "server/a.js": 'import { b } from "./b.js";\nconst enabled = true;\nexport function a() { return enabled ? b() : 0; }\n',
+  "server/b.js": 'import { f } from "./f.js";\nconst enabled = true;\nexport function b() { return enabled && f(); }\n',
+  "server/f.js": 'import { a } from "./a.js";\nexport function f() { return a; }\n',
+  "server/c.js": "export const c = 1;\n"
 };
 
 function cli(repo, ...args) {
@@ -1090,143 +847,80 @@ function lines(r, prefix) {
 }
 
 try {
-  const repo = cliRepo(LEGACY);
+  const repo = cliRepo(CYCLE_FIXTURE);
   const init = cli(repo, "--init");
-  eq("--init on the legacy fixture exits 0", init.code, 0);
+  eq("--init on the cycle fixture exits 0", init.code, 0);
   const recorded = JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions.map((e) => `${e.rule} ${e.source} ${e.target}`);
-  eq("the baseline records the legacy debt exactly", recorded, [
-    "cycle-edge src/js/a.js src/js/b.js",
-    "cycle-edge src/js/b.js src/js/f.js",
-    "cycle-edge src/js/f.js src/js/a.js",
-    "legacy-state-refs src/js/a.js global:S",
-    "legacy-state-refs src/js/b.js global:S",
-    "state-import src/js/a.js global:S",
-    "state-import src/js/b.js global:S",
-    "state-module src/js/_state.js src/js/_state.js",
-    "state-module src/js/a.js src/js/_state.js",
-    "state-module src/js/b.js src/js/_state.js",
-    "state-write src/js/b.js direct:S.state",
-    "state-write src/js/b.js global:S.state"
+  eq("the baseline records the cycle edges exactly", recorded, [
+    "cycle-edge server/a.js server/b.js",
+    "cycle-edge server/b.js server/f.js",
+    "cycle-edge server/f.js server/a.js"
   ]);
   eq("the unchanged fixture passes", cli(repo).code, 0);
 
-  const bootstrapState = attempt(repo, { "src/bootstrap/probe.ts": 'import "../js/_state.js";\n' });
-  eq("a bootstrap state import fails before any state is read", bootstrapState.code, 1);
-  eq("the bootstrap layer failure names the state module", lines(bootstrapState, "new layer"), ["new layer: src/bootstrap/probe.ts:1 -> src/js/_state.js"]);
+  const twoFile = attempt(repo, { "server/d.js": 'import "./e.js";\n', "server/e.js": 'import "./d.js";\n' });
+  eq("a new two-module server cycle fails", twoFile.code, 1);
+  eq("both of its edges are named", lines(twoFile, "new "), ["new cycle-edge: server/d.js:1 -> server/e.js", "new cycle-edge: server/e.js:1 -> server/d.js"]);
 
-  const swap = attempt(repo, {
-    "src/js/a.js": 'import { b } from "./b.js";\nexport function a() { return b(); }\n',
-    "src/js/c.js": 'import { S } from "./_state.js";\nexport const c = S.dirty;\n'
-  });
-  eq("a new S importer fails even when another importer goes in the same change", swap.code, 1);
-  eq("the new importer is named", lines(swap, "new state-"), ["new state-import: src/js/c.js:1 -> global:S", "new state-module: src/js/c.js:1 -> src/js/_state.js"]);
-  eq("the removed importer is resolved", lines(swap, "resolved state-"), ["resolved state-import: src/js/a.js -> global:S", "resolved state-module: src/js/a.js -> src/js/_state.js"]);
-
-  const writer = attempt(repo, { "src/js/a.js": 'import { S } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { S.state = null; return b(); }\n' });
-  eq("a new S.state writer fails", writer.code, 1);
-  eq("both the count and the field change are reported", lines(writer, ""), ["dep-report: FAILED", "new state-write: src/js/a.js -> direct:S.state", "new state-write: src/js/a.js:3 -> global:S.state"]);
-
-  const namespaced = attempt(repo, { "src/js/a.js": 'import * as G from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { G.S.state.rows = []; return b(); }\n' });
-  eq("a nested write through a namespace import fails", namespaced.code, 1);
-  eq("the namespace import still counts as the same importer", lines(namespaced, ""), ["dep-report: FAILED", "new state-write: src/js/a.js -> direct:S.state", "new state-write: src/js/a.js:3 -> global:S.state.*"]);
-
-  const aliased = attempt(repo, { "src/js/a.js": 'import { S as T } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { T["dirty"] = true; return b(); }\n' });
-  eq("an element-access write through an aliased import fails", aliased.code, 1);
-  eq("it names the member and preserves the aliased reference", lines(aliased, ""), ["dep-report: FAILED", "new state-write: src/js/a.js:3 -> global:S.dirty"]);
-
-  const viaAlias = attempt(repo, { "src/js/a.js": 'import { S } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() {\n  const st = S.state;\n  st.rows.push(1);\n  return b();\n}\n' });
-  eq("a mutating call through a local alias fails", viaAlias.code, 1);
-  eq("it is reported at the call", lines(viaAlias, ""), ["dep-report: FAILED", "new state-write: src/js/a.js:5 -> global:S.state.*"]);
-
-  const bridge = attempt(repo, {
-    "src/legacy/state.ts": 'export { S } from "../js/_state.js";\n',
-    "src/features/rows/view.ts": 'import { S } from "../../legacy/state.ts";\nexport const v = (): unknown => S.state;\n'
-  });
-  eq("a re-export bridge and a feature using it fail", bridge.code, 1);
-  eq("the bridge, the feature's import and its layer breach are all named", lines(bridge, "new "), [
-    "new layer: src/features/rows/view.ts:1 -> src/legacy/state.ts",
-    "new legacy-state-refs: src/features/rows/view.ts -> global:S",
-    "new state-import: src/features/rows/view.ts:1 -> global:S",
-    "new state-import: src/legacy/state.ts:1 -> global:S",
-    "new state-module: src/legacy/state.ts:1 -> src/js/_state.js"
-  ]);
-
-  const outside = attempt(repo, { "src/util/helper.js": 'import { S } from "../js/_state.js";\nS.state = null;\n' });
-  eq("an S writer in a src folder outside the layer table fails", outside.code, 1);
-  eq("its folder, import and write are all named", lines(outside, "new "), [
-    "new legacy-state-refs: src/util/helper.js -> global:S",
-    "new state-import: src/util/helper.js:1 -> global:S",
-    "new state-module: src/util/helper.js:1 -> src/js/_state.js",
-    "new state-write: src/util/helper.js -> direct:S.state",
-    "new state-write: src/util/helper.js:2 -> global:S.state",
-    "new unknown-layer: src/util/helper.js -> src/util/"
-  ]);
-
-  const twoFile = attempt(repo, { "src/js/d.js": 'import "./e.js";\n', "src/js/e.js": 'import "./d.js";\n' });
-  eq("a new two-module legacy cycle fails", twoFile.code, 1);
-  eq("both of its edges are named", lines(twoFile, "new "), ["new cycle-edge: src/js/d.js:1 -> src/js/e.js", "new cycle-edge: src/js/e.js:1 -> src/js/d.js"]);
-
-  const inner = attempt(repo, { "src/js/a.js": LEGACY["src/js/a.js"] + 'import "./f.js";\n' });
+  const inner = attempt(repo, { "server/a.js": CYCLE_FIXTURE["server/a.js"] + 'import "./f.js";\n' });
   eq("a new edge between two modules already in the cycle fails", inner.code, 1);
-  eq("the new edge is named", lines(inner, "new "), ["new cycle-edge: src/js/a.js:4 -> src/js/f.js"]);
+  eq("the new edge is named", lines(inner, "new "), ["new cycle-edge: server/a.js:4 -> server/f.js"]);
 
   const joined = attempt(repo, {
-    "src/js/c.js": 'import { a } from "./a.js";\nexport const c = a;\n',
-    "src/js/f.js": 'import { a } from "./a.js";\nimport "./c.js";\nexport function f() { return a; }\n'
+    "server/c.js": 'import { a } from "./a.js";\nexport const c = a;\n',
+    "server/f.js": 'import { a } from "./a.js";\nimport "./c.js";\nexport function f() { return a; }\n'
   });
   eq("a module joining the existing cycle fails", joined.code, 1);
-  eq("the edges that close the loop are named", lines(joined, "new "), ["new cycle-edge: src/js/c.js:1 -> src/js/a.js", "new cycle-edge: src/js/f.js:2 -> src/js/c.js"]);
+  eq("the edges that close the loop are named", lines(joined, "new "), ["new cycle-edge: server/c.js:1 -> server/a.js", "new cycle-edge: server/f.js:2 -> server/c.js"]);
 
-  const acyclic = attempt(repo, { "src/js/g.js": 'import { a } from "./a.js";\nimport { f } from "./f.js";\nexport const g = [a, f];\n' });
-  eq("a new acyclic legacy module importing cycle members passes", acyclic.code, 0);
+  const acyclic = attempt(repo, { "server/g.js": 'import { a } from "./a.js";\nimport { f } from "./f.js";\nexport const g = [a, f];\n' });
+  eq("a new acyclic server module importing cycle members passes", acyclic.code, 0);
 
   writeFiles(repo, {
-    "src/js/b.js": 'import { S } from "./_state.js";\nimport { f } from "./f.js";\nexport function b() { return S.state && f(); }\n',
-    "src/js/f.js": "export function f() { return 1; }\n"
+    "server/b.js": 'import { f } from "./f.js";\nconst enabled = true;\nexport function b() { return enabled && f(); }\n',
+    "server/f.js": "export function f() { return 1; }\n"
   });
   const paid = cli(repo);
   eq("removing debt without pruning fails", paid.code, 1);
   eq("every resolved entry is listed", lines(paid, "resolved "), [
-    "resolved cycle-edge: src/js/a.js -> src/js/b.js",
-    "resolved cycle-edge: src/js/b.js -> src/js/f.js",
-    "resolved cycle-edge: src/js/f.js -> src/js/a.js",
-    "resolved state-write: src/js/b.js -> direct:S.state",
-    "resolved state-write: src/js/b.js -> global:S.state"
+    "resolved cycle-edge: server/a.js -> server/b.js",
+    "resolved cycle-edge: server/b.js -> server/f.js",
+    "resolved cycle-edge: server/f.js -> server/a.js"
   ]);
   eq("--prune accepts it", cli(repo, "--prune").code, 0);
-  eq("the pruned baseline keeps the importers and reference counts", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions.map((e) => `${e.rule} ${e.source}`), ["legacy-state-refs src/js/a.js", "legacy-state-refs src/js/b.js", "state-import src/js/a.js", "state-import src/js/b.js", "state-module src/js/_state.js", "state-module src/js/a.js", "state-module src/js/b.js"]);
+  eq("the pruned baseline removes resolved cycle edges", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions, []);
   eq("and the check passes", cli(repo).code, 0);
 
   const r = spawnSync(process.execPath, [join(TOOLS, "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
   eq("an unknown argument exits 2", r.status, 2);
 
-  const accepting = cliRepo(LEGACY);
+  const accepting = cliRepo(CYCLE_FIXTURE);
   cli(accepting, "--init");
   const baselineFile = join(accepting, "tools/dep-baseline.json");
   const initial = readFileSync(baselineFile, "utf8");
-  writeFiles(accepting, { "src/js/a.js": LEGACY["src/js/a.js"] + 'import "./f.js";\n' });
+  writeFiles(accepting, { "server/a.js": CYCLE_FIXTURE["server/a.js"] + 'import "./f.js";\n' });
   const moved = cli(accepting);
   eq("moving a helper between two cycle members fails the check", moved.code, 1);
-  check("the summary counts the baseline and the new entries separately", moved.out.includes("12 exceptions in the baseline, 1 new, 0 resolved"), moved.out);
+  check("the summary counts the baseline and the new entries separately", moved.out.includes("3 exceptions in the baseline, 1 new, 0 resolved"), moved.out);
   eq("--accept without a reason exits 2", cli(accepting, "--accept").code, 2);
   eq("--accept with a blank reason exits 2", cli(accepting, "--accept", "  ").code, 2);
   eq("and leaves the baseline alone", readFileSync(baselineFile, "utf8"), initial);
   const accepted = cli(accepting, "--accept", "helper moved from b.js to f.js; a.js now calls it directly");
   eq("--accept with a reason exits 0", accepted.code, 0);
-  check("it prints what it added", accepted.out.includes("+ cycle-edge: src/js/a.js:4 -> src/js/f.js"), accepted.out);
+  check("it prints what it added", accepted.out.includes("+ cycle-edge: server/a.js:4 -> server/f.js"), accepted.out);
   const afterAccept = JSON.parse(readFileSync(baselineFile, "utf8")).exceptions;
   eq("exactly the new entry is added, with the reason", afterAccept.filter((e) => e.reason), [
-    { rule: "cycle-edge", source: "src/js/a.js", target: "src/js/f.js", reason: "helper moved from b.js to f.js; a.js now calls it directly" }
+    { rule: "cycle-edge", source: "server/a.js", target: "server/f.js", reason: "helper moved from b.js to f.js; a.js now calls it directly" }
   ]);
-  eq("the other entries are unchanged", afterAccept.filter((e) => !e.reason).length, 12);
+  eq("the other entries are unchanged", afterAccept.filter((e) => !e.reason).length, 3);
   eq("the check passes after --accept", cli(accepting).code, 0);
 
-  writeFiles(accepting, { "src/js/b.js": 'import { S } from "./_state.js";\nimport { f } from "./f.js";\nexport function b() { S.dirty = true; return f(); }\n' });
-  const mixed = cli(accepting, "--accept", "b.js sets the dirty flag while it waits for the session owner");
-  eq("--accept adds new entries but does not prune", [mixed.code, cli(accepting).code], [0, 1]);
-  check("and says what is left to prune", mixed.out.includes("2 resolved"), mixed.out);
-  eq("--prune then removes the resolved entry and keeps both reasons", [cli(accepting, "--prune").code, JSON.parse(readFileSync(baselineFile, "utf8")).exceptions.filter((e) => e.reason).map((e) => e.target)], [0, ["src/js/f.js", "global:S.dirty"]]);
-  eq("and the check passes", cli(accepting).code, 0);
+  writeFiles(accepting, { "server/f.js": "export function f() { return 1; }\n", "shared/probe.js": '"use strict";\nmodule.exports = URL;\n' });
+  const mixed = cli(accepting, "--accept", "the shared probe still needs its platform port");
+  eq("accept adds a new entry but does not prune resolved entries", [mixed.code, cli(accepting).code], [0, 1]);
+  check("accept reports the resolved entries", mixed.out.includes("resolved remain"), mixed.out);
+  eq("prune removes resolved entries and retains the new reason", [cli(accepting, "--prune").code, JSON.parse(readFileSync(baselineFile, "utf8")).exceptions.filter((e) => e.reason).map((e) => e.target)], [0, ["global:URL"]]);
+  eq("the pruned baseline passes", cli(accepting).code, 0);
 
   writeFiles(accepting, { "src/core/document/a.ts": 'import "./b.ts";\n', "src/core/document/b.ts": 'import "./a.ts";\n' });
   const beforeCycle = readFileSync(baselineFile, "utf8");
@@ -1234,7 +928,7 @@ try {
   eq("--accept refuses while a cycle runs through a migrated folder", refused.code, 1);
   eq("and writes nothing", readFileSync(baselineFile, "utf8"), beforeCycle);
 
-  const linkedRepo = cliRepo({ "src/js/a.js": "export const a = 1;\n" });
+  const linkedRepo = cliRepo({ "server/a.js": "export const a = 1;\n" });
   symlinkSync(join(linkedRepo, "tools"), join(linkedRepo, "linked"), process.platform === "win32" ? "junction" : "dir");
   const viaLink = (...args) => spawnSync(process.execPath, [join("linked", "dep-report.mjs"), ...args], { cwd: linkedRepo, encoding: "utf8" });
   eq("run through a linked folder, an unknown argument still exits 2", viaLink("--bogus").status, 2);
@@ -1246,329 +940,26 @@ try {
   const initText = readFileSync(join(sorted, "tools/dep-baseline.json"), "utf8");
   eq("--init writes the baseline in code-point order", JSON.parse(initText).exceptions.map((e) => e.target), ["global:TextDecoder", "global:URL", "global:clearTimeout", "global:setTimeout"]);
   eq("--prune rewrites the same bytes", [cli(sorted, "--prune").code, readFileSync(join(sorted, "tools/dep-baseline.json"), "utf8") === initText], [0, true]);
-  const numberedFiles = {
-    ...STATE_FILE,
-    "src/js/00-a.js": 'import { S } from "./_state.js";\nimport { b } from "./01-b.js";\nexport function a() { S.state.rows.push(1); return S.dirty ? b() : 0; }\n',
-    "src/js/01-b.js": 'import { a } from "./00-a.js";\nexport function b() { return a; }\nexport function extra() { return 2; }\n',
-    "src/test/a.test.mjs": 'import { S } from "../js/_state.js";\nvoid S.state;\n'
-  };
-  const guarded = cliRepo(numberedFiles);
-  eq("init records the four legacy ratchets", cli(guarded, "--init").code, 0);
-  eq("the numbered fixture starts clean", cli(guarded).code, 0);
-  const newFile = attempt(guarded, { "src/js/02-new.js": "export const leaf = 1;\n" });
-  eq("a new acyclic numbered file fails", newFile.code, 1);
-  eq("the numbered file guard names it", lines(newFile, "new legacy-file"), ["new legacy-file: src/js/02-new.js -> src/js"]);
-  const newTsFile = attempt(guarded, { "src/js/99-growth.ts": "export const leaf = 1;\n" });
-  eq("a new acyclic numbered TypeScript file fails", newTsFile.code, 1);
-  eq("the numbered file guard names the TypeScript file", lines(newTsFile, "new legacy-file"), ["new legacy-file: src/js/99-growth.ts -> src/js"]);
-  const newMjsFile = attempt(guarded, { "src/js/99-growth.mjs": "export const leaf = 1;\n" });
-  eq("a new acyclic numbered mjs file fails", newMjsFile.code, 1);
-  eq("the numbered file guard names the mjs file", lines(newMjsFile, "new legacy-file"), ["new legacy-file: src/js/99-growth.mjs -> src/js"]);
-  const tsFiles = {
-    "src/js/00-a.ts": "export const a = 1;\n",
-    "src/js/01-b.ts": "export const b = 2;\n"
-  };
-  const tsGuarded = cliRepo(tsFiles);
-  eq("init records the numbered TypeScript fixture", cli(tsGuarded, "--init").code, 0);
-  eq("the numbered TypeScript fixture starts clean", cli(tsGuarded).code, 0);
-  const newTsImport = attempt(tsGuarded, { "src/js/00-a.ts": 'import { b } from "./01-b.ts";\n' + tsFiles["src/js/00-a.ts"] });
-  eq("a new acyclic import between numbered TypeScript files fails", newTsImport.code, 1);
-  eq("only the numbered TypeScript import is new", lines(newTsImport, "new "), ["new loop-import: src/js/00-a.ts:1 -> src/js/01-b.ts#b"]);
-  const ctsFiles = {
-    "src/js/00-a.cts": "export const a = 1;\n",
-    "src/js/01-b.cts": "export const b = 2;\n"
-  };
-  const ctsGuarded = cliRepo(ctsFiles);
-  eq("init records the numbered cts fixture", cli(ctsGuarded, "--init").code, 0);
-  const importEquals = attempt(ctsGuarded, { "src/js/00-a.cts": 'import b = require("./01-b.cts");\n' + ctsFiles["src/js/00-a.cts"] });
-  eq("a new import-equals between numbered cts files fails", importEquals.code, 1);
-  eq("import-equals records its binding on the numbered link", lines(importEquals, "new "), ["new loop-import: src/js/00-a.cts:1 -> src/js/01-b.cts#b"]);
-  const missingEquals = attempt(ctsGuarded, { "src/js/00-a.cts": 'import b = require("./missing.cts");\n' });
-  eq("an import-equals with a missing module fails", missingEquals.code, 1);
-  check("the missing import-equals explains resolution failure", missingEquals.err.includes("./missing.cts does not resolve to a file"), missingEquals.err);
-  const computedEquals = attempt(ctsGuarded, { "src/js/00-a.cts": 'import b = require(moduleName);\n' });
-  eq("an import-equals with a computed module fails", computedEquals.code, 1);
-  check("the computed import-equals explains its unresolved name", computedEquals.err.includes("import-equals with a computed specifier"), computedEquals.err);
-  const moreRefs = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "void S.dirty;\n" });
-  eq("one more reference to an existing S field fails", moreRefs.code, 1);
-  eq("the reference count guard names its file", lines(moreRefs, "new legacy-state-refs"), ["new legacy-state-refs: src/js/00-a.js -> global:S"]);
-  for (const [label, declaration, name] of [
-    ["named import", 'import { S as GuardState } from "./_state.js";', "GuardState"],
-    ["namespace import", 'import * as GuardModule from "./_state.js";', "GuardModule.S"],
-    ["import-equals", 'import GuardModule = require("./_state.js");', "GuardModule.S"]
-  ]) {
-    const path = "src/js/alias.cts";
-    const original = `${declaration}\nvoid ${name}.dirty;\n${name}.state.rows.push(1);\n`;
-    const aliasedRepo = cliRepo({ ...STATE_FILE, [path]: original, "src/js/fresh.cts": "export const value = 1;\n" });
-    eq(`init records an existing ${label} alias`, cli(aliasedRepo, "--init").code, 0);
-    eq(`the existing ${label} alias starts clean`, cli(aliasedRepo).code, 0);
-    eq(`the ${label} alias uses the canonical reference and write keys`, JSON.parse(readFileSync(join(aliasedRepo, "tools/dep-baseline.json"), "utf8")).exceptions.filter((e) => e.count !== undefined).map(({ rule, target, count }) => ({ rule, target, count })), [
-      { rule: "legacy-state-refs", target: "global:S", count: 2 },
-      { rule: "state-write", target: "direct:S.state", count: 1 }
-    ]);
-    const growth = attempt(aliasedRepo, { [path]: original + `void ${name}.dirty;\n${name}.state.rows.push(2);\n` });
-    eq(`an existing ${label} alias gaining a read and write fails`, growth.code, 1);
-    eq(`both ratchets catch growth through the ${label} alias`, lines(growth, "new "), [
-      `new legacy-state-refs: ${path} -> global:S`,
-      `new state-write: ${path} -> direct:S.state`
-    ]);
-    const fresh = attempt(aliasedRepo, { "src/js/fresh.cts": `${declaration}\nvoid ${name}.dirty;\n` });
-    eq(`a new ${label} alias in an existing file fails`, fresh.code, 1);
-    eq(`the reference ratchet catches a newly imported ${label} alias`, lines(fresh, "new legacy-state-refs"), ["new legacy-state-refs: src/js/fresh.cts -> global:S"]);
-    const renamed = original.replaceAll("GuardState", "RenamedState").replaceAll("GuardModule", "RenamedModule");
-    eq(`renaming the ${label} alias preserves its allowances`, attempt(aliasedRepo, { [path]: renamed }).code, 0);
-    writeFiles(aliasedRepo, { [path]: renamed });
-    const baselineBeforePrune = readFileSync(join(aliasedRepo, "tools/dep-baseline.json"), "utf8");
-    eq(`pruning a renamed ${label} alias succeeds`, cli(aliasedRepo, "--prune").code, 0);
-    eq(`pruning a renamed ${label} alias keeps every allowance`, readFileSync(join(aliasedRepo, "tools/dep-baseline.json"), "utf8"), baselineBeforePrune);
-  }
-  const unresolvedState = cliRepo({ ...STATE_FILE, "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nvoid GuardModule.S.dirty;\n' });
-  eq("init records a statically resolved state namespace", cli(unresolvedState, "--init").code, 0);
-  for (const [label, text] of [
-    ["computed namespace member", 'import * as GuardModule from "./_state.js";\nvoid GuardModule[key].dirty;\n'],
-    ["escaped namespace", 'import * as GuardModule from "./_state.js";\nconsume(GuardModule);\n'],
-    ["dynamic import callback", 'import("./_state.js").then(({ S: GuardState }) => GuardState.dirty);\n'],
-    ["computed require destructuring", 'const { [key]: GuardState } = require("./_state.js");\nvoid GuardState.dirty;\n']
-  ]) {
-    const unknown = attempt(unresolvedState, { "src/js/alias.cts": text });
-    eq(`an unresolved state ${label} fails`, unknown.code, 1);
-    check(`the state ${label} explains the resolution failure`, unknown.err.includes("cannot be resolved statically"), unknown.err);
-  }
-  const unresolvedBaseline = readFileSync(join(unresolvedState, "tools/dep-baseline.json"), "utf8");
-  writeFiles(unresolvedState, { "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nvoid GuardModule[key].dirty;\n' });
-  for (const args of [["--accept", "unresolved state import"], ["--prune"]]) {
-    eq(`${args[0]} refuses unresolved state imports`, cli(unresolvedState, ...args).code, 1);
-    eq(`${args[0]} preserves unresolved state allowances`, readFileSync(join(unresolvedState, "tools/dep-baseline.json"), "utf8"), unresolvedBaseline);
-  }
-  const unknownStateInit = cliRepo({ ...STATE_FILE, "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nconsume(GuardModule);\n' });
-  eq("init refuses an unresolved state import", cli(unknownStateInit, "--init").code, 1);
-  eq("init writes no baseline for an unresolved state import", existsSync(join(unknownStateInit, "tools/dep-baseline.json")), false);
-  for (const [label, reference] of [
-    ["optional chaining", "S?.dirty"],
-    ["parentheses", "(S).dirty"],
-    ["multiline access", "S\n  .dirty"]
-  ]) {
-    const added = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + `void ${reference};\n` });
-    eq(`one more S reference with ${label} fails`, added.code, 1);
-    eq(`the reference ratchet catches ${label}`, lines(added, "new "), ["new legacy-state-refs: src/js/00-a.js -> global:S"]);
-  }
-  for (const path of ["src/js/00-a.js", "src/test/a.test.mjs", "src/legacy/alias.ts"]) {
-    for (const alias of ["const T = S;", "const T = (S);", "let T; T = S;", "let T; T = (S);"]) {
-      const added = attempt(guarded, { [path]: (numberedFiles[path] ?? "") + alias + "\nT.state.rows.push({});\n" });
-      eq(`a direct alias in ${path} using ${alias} fails`, added.code, 1);
-      eq(`the reference ratchet catches ${alias} in ${path}`, lines(added, "new legacy-state-refs"), [`new legacy-state-refs: ${path} -> global:S`]);
-    }
-  }
-  const moreTestRefs = attempt(guarded, { "src/test/a.test.mjs": numberedFiles["src/test/a.test.mjs"] + "void S.dirty;\n" });
-  eq("one more S reference in tests also fails", moreTestRefs.code, 1);
-  const moreWrites = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "S.state.rows.push(2);\n" });
-  eq("one more write to an already recorded target fails", moreWrites.code, 1);
-  eq("the per-file write count catches it", lines(moreWrites, "new state-write"), ["new state-write: src/js/00-a.js -> direct:S.state"]);
-  const stateRead = numberedFiles["src/js/00-a.js"] + "void S.state.rows.length;\n";
-  const writeGuarded = cliRepo({ ...numberedFiles, "src/js/00-a.js": stateRead });
-  eq("init records an existing write beside a state read", cli(writeGuarded, "--init").code, 0);
-  for (const [label, replacement] of [
-    ["postfix increment", "S.state.rows.length++"],
-    ["delete", "delete S.state.rows.length"],
-    ["multiline compound assignment", "S.state\n  .rows.length\n  += 1"]
-  ]) {
-    const mutation = attempt(writeGuarded, { "src/js/00-a.js": stateRead.replace("void S.state.rows.length", replacement) });
-    eq(`replacing a state read with ${label} fails`, mutation.code, 1);
-    eq(`the write ratchet catches ${label} without reference growth`, lines(mutation, "new "), ["new state-write: src/js/00-a.js -> direct:S.state"]);
-  }
-  eq("prune refuses a rise in a count", (() => {
-    writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "S.state.rows.push(2);\n" });
-    const code = cli(guarded, "--prune").code;
-    writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] });
-    return code;
-  })(), 1);
-  const moreNames = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"].replace("{ b }", "{ b, extra as notify }") });
-  eq("a new name on an existing numbered link fails", moreNames.code, 1);
-  eq("only the imported name is new, not the cycle edge", lines(moreNames, "new "), ["new loop-import: src/js/00-a.js:2 -> src/js/01-b.js#extra"]);
-  for (const [label, load] of [
-    ["dynamic import", 'await import("./01-b.mjs")'],
-    ["require", 'require("./01-b.mjs")']
-  ]) {
-    const loadedFiles = {
-      "src/js/00-a.mjs": `const { b } = ${load};\nexport const a = b;\n`,
-      "src/js/01-b.mjs": "export const b = 1;\nexport const extra = 2;\n"
-    };
-    const loaded = cliRepo(loadedFiles);
-    eq(`init records a numbered ${label}`, cli(loaded, "--init").code, 0);
-    const addedName = attempt(loaded, { "src/js/00-a.mjs": loadedFiles["src/js/00-a.mjs"].replace("{ b }", "{ b, extra: notify }") });
-    eq(`a new destructured name on an existing ${label} fails`, addedName.code, 1);
-    eq(`the ${label} names the imported export`, lines(addedName, "new "), ["new loop-import: src/js/00-a.mjs:1 -> src/js/01-b.mjs#extra"]);
-    for (const binding of ["namespace", "{ b, ...rest }", "{ [key]: b }"]) {
-      const unknown = attempt(loaded, { "src/js/00-a.mjs": `const ${binding} = ${load};\n` });
-      eq(`a numbered ${label} with ${binding} fails`, unknown.code, 1);
-      check(`the ${label} explains the unknown imported names for ${binding}`, unknown.err.includes("imported names cannot be determined statically; use explicit named destructuring"), unknown.err);
-    }
-    const beforeUnknown = readFileSync(join(loaded, "tools/dep-baseline.json"), "utf8");
-    writeFiles(loaded, { "src/js/00-a.mjs": `const namespace = ${load};\nimport * as other from "./01-b.mjs";\n` });
-    eq(`a wildcard cannot mask unknown ${label} names`, cli(loaded).code, 1);
-    eq(`accept refuses unknown ${label} names`, cli(loaded, "--accept", "unknown imported names").code, 1);
-    eq(`refusing unknown ${label} names preserves the baseline`, readFileSync(join(loaded, "tools/dep-baseline.json"), "utf8"), beforeUnknown);
-    const unknownInit = cliRepo({ ...loadedFiles, "src/js/00-a.mjs": `const namespace = ${load};\n` });
-    eq(`init refuses unknown ${label} names`, cli(unknownInit, "--init").code, 1);
-    eq(`init writes no baseline for unknown ${label} names`, existsSync(join(unknownInit, "tools/dep-baseline.json")), false);
-    const wildcard = cliRepo({ ...loadedFiles, "src/js/00-a.mjs": 'import * as known from "./01-b.mjs";\n' });
-    eq(`init records a wildcard before adding a ${label}`, cli(wildcard, "--init").code, 0);
-    writeFiles(wildcard, { "src/js/00-a.mjs": `const namespace = ${load};\nimport * as known from "./01-b.mjs";\n` });
-    const masked = cli(wildcard);
-    eq(`a baselined wildcard cannot accept unknown ${label} names`, masked.code, 1);
-    check(`the baselined wildcard still reports unknown ${label} names`, masked.err.includes("imported names cannot be determined statically"), masked.err);
-  }
-  const measured = cli(guarded, "--legacy-metrics");
-  eq("legacy metrics emits JSON and exits successfully", measured.code, 0);
-  eq("legacy metrics reports the entire numeric exit table", JSON.parse(measured.out), {
-    loopModules: 2, loopLinks: 2, stateModules: 1, stateFields: 3,
-    stateReferences: 2, testStateReferences: 1, stateImporters: 1, testStateImporters: 1,
-    stateAssigners: 0, directWriteLines: 1, numberedFiles: 2, numberedLines: 6
-  });
-  writeFiles(guarded, { "limits.json": measured.out, "steps.json": '[{"label":"moved b","names":["b"]}]\n' });
-  eq("assert accepts values exactly on their thresholds", cli(guarded, "--legacy-metrics", "--assert", "limits.json").code, 0);
-  writeFiles(guarded, { "limits.json": JSON.stringify({ ...JSON.parse(measured.out), numberedFiles: 1 }) });
-  const missed = cli(guarded, "--assert", "limits.json");
-  eq("assert fails a missed closing threshold", missed.code, 1);
-  check("the missed threshold is named", missed.err.includes("numberedFiles: 2 exceeds 1"), missed.err);
-  writeFiles(guarded, { "limits.json": '{"unknown":0}\n' });
-  eq("assert rejects an unknown metric", cli(guarded, "--assert", "limits.json").code, 2);
-  eq("assert rejects a missing threshold file", cli(guarded, "--assert", "missing.json").code, 2);
-  eq("assert needs a filename", cli(guarded, "--assert").code, 2);
-  const modeled = cli(guarded, "--loop-model", "steps.json");
-  eq("the loop steps option runs", modeled.code, 0);
-  eq("moving the last imported name cuts the loop", JSON.parse(modeled.out).steps.map((s) => [s.label, s.loopModules, s.loopLinks]), [["now", 2, 2], ["moved b", 0, 0]]);
-  eq("loop steps needs a filename", cli(guarded, "--loop-model").code, 2);
-  writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"].replace("S.dirty", "true") });
-  eq("a fallen reference count must be pruned", cli(guarded).code, 1);
-  eq("prune lowers the recorded reference count", cli(guarded, "--prune").code, 0);
-  eq("the lower reference count is recorded", JSON.parse(readFileSync(join(guarded, "tools/dep-baseline.json"), "utf8")).exceptions.find((e) => e.rule === "legacy-state-refs" && e.source === "src/js/00-a.js")?.count, 1);
-  eq("the lowered baseline passes", cli(guarded).code, 0);
-  writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] });
-  eq("references cannot grow back after pruning", cli(guarded).code, 1);
-  const deleted = cliRepo({ "src/js/00-leaf.js": "export const leaf = 1;\n" });
-  cli(deleted, "--init");
-  rmSync(join(deleted, "src/js/00-leaf.js"));
-  eq("a deleted numbered file must be pruned", cli(deleted).code, 1);
-  eq("prune removes the deleted numbered file", cli(deleted, "--prune").code, 0);
-  eq("the deleted numbered file leaves no exceptions", JSON.parse(readFileSync(join(deleted, "tools/dep-baseline.json"), "utf8")).exceptions, []);
 } finally {
   rmSync(cliWork, { recursive: true, force: true });
 }
 
-console.log("\nlegacy measurements and loop steps:\n");
-
-eq("the measurement uses appendix matches and counts write lines once", legacyMeasurements("S.state = {}; S.state.rows.push(1);\nS.state == null;\nS.state.rows.splice(0);\n"), { references: 4, directWrites: 2, lines: 3 });
-for (const [label, text, count] of [
-  ["optional property and element chains", 'S?.dirty; S?.["dirty"];', 2],
-  ["wrapped and multiline access", '(S).dirty; S\n.dirty; (S)\n["dirty"];', 3],
-  ["bare direct alias declarations", "const T = S; const U = (S);", 2],
-  ["bare direct alias assignments", "let T, U; T = S; U = (S);", 2],
-  ["type identity wrappers", "const T = (S as State); let U; U = S!;", 2],
-  ["property names", "const S = {}; const obj = { S: 1 };", 0],
-  ["historical references in string contents", 'const text = "S.dirty"; S?.dirty;', 2],
-  ["function call and object property alias limits", "const T = identity(S); const U = holder.S;", 0]
-]) {
-  eq(`the reference measurement counts ${label}`, legacyMeasurements(text, "src/legacy/example.ts").references, count);
-}
+console.log("\nimport-equals and load parsing:\n");
 for (const [text, expected] of [
-  ['import b = require("./01-b.cts");', { spec: "./01-b.cts", names: ["b"], typeOnly: false, kind: "import-equals", line: 1 }],
-  ['import type b = require("./01-b.cts");', { spec: "./01-b.cts", names: ["b"], typeOnly: true, kind: "import-equals", line: 1 }]
-]) {
-  eq(`the import-equals parser handles ${text}`, analyzeScript("src/js/00-a.cts", text).imports, [expected]);
-}
-for (const [label, declaration, name] of [
-  ["named", 'import { S as GuardState } from "./_state.js";', "GuardState"],
-  ["namespace", 'import * as GuardModule from "./_state.js";', "GuardModule.S"],
-  ["namespace bracket", 'import * as GuardModule from "./_state.js";', 'GuardModule["S"]'],
-  ["import-equals", 'import GuardModule = require("./_state.js");', "GuardModule.S"],
-  ["import-equals bracket", 'import GuardModule = require("./_state.js");', 'GuardModule["S"]'],
-  ["namespace named S", 'import * as S from "./_state.js";', "S.S"],
-  ["re-exported", 'import { Stable as GuardState } from "./bridge.js";', "GuardState"],
-  ["default re-exported", 'import GuardState from "./bridge.js";', "GuardState"]
-]) {
-  const files = {
-    ...STATE_FILE,
-    "src/js/bridge.js": 'export { S as Stable, S as default } from "./_state.js";\n',
-    "src/js/alias.cts": `${declaration}\nvoid (${name})?.dirty;\n(${name})["state"]\n.rows.length += 1;\n`
-  };
-  const counts = legacyViolations(graph(files)).filter((e) => e.source === "src/js/alias.cts" && e.count !== undefined).map(({ rule, target, count }) => ({ rule, target, count }));
-  eq(`parsed ${label} aliases count references and multiline writes once`, counts, [
-    { rule: "legacy-state-refs", target: "global:S", count: 2 },
-    { rule: "state-write", target: "direct:S.state", count: 1 }
-  ]);
-  const local = name.split(/[.[]/)[0];
-  files["src/js/alias.cts"] += `function shadow(${local}) { void ${name}.dirty; ${name}.state.x = 1; }\n`;
-  eq(`a shadowed ${label} alias does not grow either count`, legacyViolations(graph(files)).filter((e) => e.source === "src/js/alias.cts" && e.count !== undefined).map(({ rule, target, count }) => ({ rule, target, count })), counts);
-}
-eq("an internal import-equals creates no external dependency", analyzeScript("src/js/00-a.cts", "import b = Namespace.b;").imports, []);
-eq("internal import-equals aliases retain state provenance", legacyViolations(graph({
-  ...STATE_FILE,
-  "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nimport GuardState = GuardModule.S;\nvoid GuardState.dirty;\nGuardState.state.x = 1;\n'
-})).filter((e) => e.count !== undefined).map(({ rule, target, count }) => ({ rule, target, count })), [
-  { rule: "legacy-state-refs", target: "global:S", count: 3 },
-  { rule: "state-write", target: "direct:S.state", count: 1 }
-]);
-eq("internal namespace import-equals aliases retain state provenance", legacyViolations(graph({
-  ...STATE_FILE,
-  "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nimport GuardAlias = GuardModule;\nvoid GuardAlias.S.dirty;\nGuardAlias.S.state.x = 1;\n'
-})).filter((e) => e.count !== undefined || e.unknownNames).map(({ rule, target, count }) => ({ rule, target, count })), [
-  { rule: "legacy-state-refs", target: "global:S", count: 2 },
-  { rule: "state-write", target: "direct:S.state", count: 1 }
-]);
-eq("import-equals contributes an edge to runtime cycles", stronglyConnected(graph({
-  "src/js/00-a.cts": 'import b = require("./01-b.cts");',
-  "src/js/01-b.cts": 'import a = require("./00-a.cts");'
-}), false).map((c) => c.sort()), [["src/js/00-a.cts", "src/js/01-b.cts"]]);
-eq("a fully retired legacy layer meets the committed closing limits", assertLegacyMetrics(legacyMetrics(graph({})), JSON.parse(readFileSync(join(TOOLS, "legacy-exit.json"), "utf8"))), []);
-eq("an unnumbered caller still gets a reference and direct-write ratchet", legacyViolations(graph({ "src/legacy/example.ts": "S.state = {};\n" })).map(({ rule, target, count }) => ({ rule, target, count })), [
-  { rule: "legacy-state-refs", target: "global:S", count: 1 },
-  { rule: "state-write", target: "direct:S.state", count: 1 }
-]);
-
-for (const operator of ["=", "+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", ">>>=", "&=", "^=", "|=", "&&=", "||=", "??="]) {
-  const writes = legacyViolations(graph({ "src/legacy/example.ts": `S.state\n  .rows[0].length\n  ${operator} 1;\n` }));
-  eq(`the direct-write ratchet parses multiline ${operator}`, writes.find((v) => v.target === "direct:S.state")?.count, 1);
-}
-
-for (const [label, text, count] of [
-  ["each write on the same line", "S.state = {}; S.state.rows.push(1); S.state.rows.splice(0);\n", 3],
-  ["prefix and postfix updates", "++S.state.rows.length; --S.state.rows.length; S.state.rows.length++; S.state.rows.length--;\n", 4],
-  ["delete and wrapped element targets", 'delete S.state.rows[0]; (S["state"].rows[0].length) += 1;\n', 2],
-  ["the appendix mutating methods", ["push", "splice", "pop", "shift", "unshift", "sort"].map((m) => `S.state\n.rows\n.${m}\n(1);`).join("\n"), 6],
-  ["reads and methods outside the appendix", "S.state.rows.length; S.state.rows.reverse(); S.state.rows.fill(0); S.state.rows.copyWithin(0);\n", 0],
-  ["source text in strings", 'const example = "S.state.rows.length++";\n', 0]
-]) {
-  const writes = legacyViolations(graph({ "src/legacy/example.ts": text }));
-  eq(`the direct-write ratchet counts ${label}`, writes.find((v) => v.target === "direct:S.state")?.count ?? 0, count);
-}
-
+  ['import b = require("./b.cts");', { spec: "./b.cts", names: ["b"], typeOnly: false, kind: "import-equals", line: 1 }],
+  ['import type b = require("./b.cts");', { spec: "./b.cts", names: ["b"], typeOnly: true, kind: "import-equals", line: 1 }]
+]) eq(`the import-equals parser handles ${text}`, analyzeScript("server/a.cts", text).imports, [expected]);
+eq("an internal import-equals creates no external dependency", analyzeScript("server/a.cts", "import b = Namespace.b;").imports, []);
+eq("import-equals contributes an edge to runtime cycles", stronglyConnected(graph({ "server/a.cts": 'import b = require("./b.cts");', "server/b.cts": 'import a = require("./a.cts");' }), false).map((c) => c.sort()), [["server/a.cts", "server/b.cts"]]);
 for (const [label, text, names] of [
   ["nested dynamic bindings", 'const { b: { value }, default: run } = await import("./b.mjs");', ["b", "default"]],
   ["a wrapped dynamic property", 'export const b = (await (import("./b.mjs"))).b;', ["b"]],
   ["a literal require property", 'const b = require("./b.mjs")["b"];', ["b"]],
   ["a promise callback", 'import("./b.mjs").then(({ b }) => b());', null]
-]) {
-  eq(`the load parser handles ${label}`, analyzeScript("src/js/00-a.mjs", text).imports[0]?.names, names);
-}
-
-{
-  const modelGraph = graph({
-    ...STATE_FILE,
-    "src/js/00-a.js": 'import { call, pure, page, held, moving, fixed, passed } from "./01-b.js";\nexport function a() { return call(); }\n',
-    "src/js/01-b.js": 'import { a } from "./00-a.js";\nimport { S } from "./_state.js";\nexport function call() { return a(); }\nexport function pure() { return 2; }\nexport function page() { return document.title; }\nexport function held() { return S.dirty; }\nexport let moving = 0;\nmoving++;\nexport const fixed = 1;\nexport { S as passed } from "./_state.js";\n'
-  });
-  const model = loopModel(modelGraph, [
-    { label: "rules", kinds: ["rule"], exceptNames: ["pure"] },
-    { label: "one name", names: ["call"] },
-    { label: "rest", kinds: ["rule", "page-helper", "stateful", "changing", "value"] }
-  ]);
-  eq("the loop model classifies all six appendix kinds", model.counts, { "calls-loop": 2, rule: 1, "page-helper": 1, stateful: 1, changing: 1, value: 2 });
-  eq("a link stays until every imported name moves", model.steps.map((s) => [s.label, s.loopModules, s.loopLinks]), [["now", 2, 2], ["rules", 2, 2], ["one name", 2, 2], ["rest", 0, 0]]);
-}
+]) eq(`the load parser handles ${label}`, analyzeScript("server/a.mjs", text).imports[0]?.names, names);
 
 const WRITERS_OUT_OF_THE_CYCLE = [
-  "src/application/save/export-kit.ts", "src/legacy/export-kit-bridge.ts", "src/bootstrap/wiring/export-kit.ts", "src/adapters/formats/export-projections.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/csv.ts",
+  "src/application/save/export-kit.ts", "src/bootstrap/wiring/export-kit.ts", "src/adapters/formats/export-projections.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/csv.ts",
   "src/adapters/formats/xlsx.ts", "src/adapters/formats/pdf.ts", "src/adapters/formats/export-text.ts", "src/bootstrap/wiring/exporters.ts"
 ];
 const repoGraph = loadGraph(ROOT);
