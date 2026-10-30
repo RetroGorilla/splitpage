@@ -5,6 +5,7 @@ import type { HistoryPort } from "../../application/transitions/ports.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { ImportFormats } from "../../application/formats/import-formats.ts";
+import type { ImportMode } from "../../application/import-mode.ts";
 import type { DocumentRow } from "../../core/document/validated.ts";
 import type { mountImportDialog } from "./imports.js";
 
@@ -19,6 +20,7 @@ export interface ImportDialogPorts {
   readonly desktop: { readonly running: () => boolean; readonly openExternal: (url: string) => unknown };
   readonly noteEdit: () => void;
   readonly stampRow: (row: DocumentRow) => void;
+  readonly mode: Pick<ImportMode, "touched" | "reset">;
 }
 
 export type ImportDialogControls = ReturnType<typeof mountImportDialog>;

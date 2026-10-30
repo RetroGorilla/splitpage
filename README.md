@@ -55,13 +55,13 @@ node build.mjs           # write index.html, stamp sw.js with VERSION
 node build.mjs --check   # are both in step with src/ and VERSION?
 ```
 
-The source is `src/` — `page.html` (the shell), `app.css` and `styles/`,
-`seed-state.json` (the demo document), the folders that own one job each
-(`core/`, `application/`, `adapters/`, `features/`, `bootstrap/`, and
-`legacy/` for the bridges still standing), with `src/bootstrap/main.ts`, the
-entry point esbuild bundles from — plus `VERSION` and
-`docs/help.md`, which is rendered into the in-app Help page. Nothing else
-feeds the build. Which folder may import which is
+The source is `src/` — `page.html` (the shell), `styles/`,
+`seed-state.json` (the demo document), `starters/` (the starter documents),
+the folders that own one job each (`core/`, `application/`, `adapters/`,
+`features/` and `bootstrap/`), with `src/bootstrap/main.ts`, the entry point
+esbuild bundles from — plus `shared/` (code shared with the desktop
+app), `VERSION` and `docs/help.md`, which is rendered into the in-app
+Help page. Nothing else feeds the build. Which folder may import which is
 [docs/architecture/dependencies.md](docs/architecture/dependencies.md).
 
 The build inlines everything into one self-contained page, and that is a
@@ -93,7 +93,7 @@ says which, and the same page lists what each script runs.
 drives the browser suites.
 
 CI (`.github/workflows/ci.yml`) runs the same fast gate on every pull
-request, plus the smoke, CSP and persistence browser suites, builds the app,
+request, plus the smoke and CSP browser suites, builds the app,
 and uploads the built files as a `splitpage-app` artifact
 ([RELEASING.md](docs/RELEASING.md) §1).
 
@@ -176,11 +176,14 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
   Standalone HTML** possible, and what lets the app run straight off a USB
   stick); the only thing it fetches is the Google Fonts stylesheet, loaded so
   that a slow or unreachable font server cannot stop the app starting.
-- `src/` — the source. `page.html` (the shell), `app.css` and `styles/`,
-  `seed-state.json` (the demo document), `core/`, `application/`,
-  `adapters/`, `features/`, `bootstrap/` and `legacy/` (see above).
+- `src/` — the source. `page.html` (the shell), `styles/`,
+  `seed-state.json` (the demo document), `starters/` (the starter documents),
+  `core/`, `application/`, `adapters/`, `features/` and `bootstrap/` (see
+  above).
   `bootstrap/main.ts` is the composition root: esbuild bundles it into the
   app's one inline script, and it sets the boot order.
+- `shared/` — code shared by the app and `desktop/` (file names, document
+  ids, history and blob policy), bundled into the app like `src/`.
 - `tests/` — unit tests for the owned folders; `src/test/` holds the older
   ones and the browser suites' helpers. `tools/` — the gates and runners;
   [docs/architecture/testing.md](docs/architecture/testing.md) says which to

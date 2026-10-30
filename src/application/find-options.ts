@@ -1,4 +1,12 @@
-let matchCase = false;
+export interface FindOptions {
+  readonly matchesCase: () => boolean;
+  readonly setMatchCase: (value: boolean) => void;
+}
 
-export const findMatchesCase = (): boolean => matchCase;
-export const setFindMatchCase = (value: boolean): void => { matchCase = value; };
+export function createFindOptions(): FindOptions {
+  let matchCase = false;
+  return Object.freeze({
+    matchesCase: (): boolean => matchCase,
+    setMatchCase: (value: boolean): void => { matchCase = value; }
+  });
+}

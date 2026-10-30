@@ -1,4 +1,3 @@
-import { resetBrollAnchoring } from "../../application/broll-anchoring.ts";
 import { addShotPropCommand } from "../../application/commands/broll-records.ts";
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { rewriteCellsCommand } from "../../application/commands/document-edit.ts";
@@ -61,7 +60,7 @@ function brollAtLineStart(node: Node): boolean {
 }
 
 export function createBrollRecords(ports: BrollRecordsPorts): BrollRecordsMount {
-  resetBrollAnchoring();
+  ports.anchoring.reset();
 
   function brollRow(rowId: string | null) {
     const i = rowId ? ports.document.read(function (doc) { return rowIndexOf(doc, rowId); }) : -1;

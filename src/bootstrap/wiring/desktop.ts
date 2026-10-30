@@ -1,7 +1,7 @@
 import { historyOwner } from "./history.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { runMenuCommand } from "../../application/desktop/menu-commands.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, restoreDesktop, useDesktopForTest } from "../../adapters/desktop/desktop-port.ts";
 import type { DesktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
@@ -31,7 +31,7 @@ const desktop = owned<DesktopMount>();
 
 function desktopPorts(): DesktopPorts {
   return {
-    running: runningOnDesktop,
+    running: presence.running,
     shell: desktopPort,
     canOpenPrompter: canOpenPrompter,
     makeHandle: (entry) => makeDesktopHandle(entry as Parameters<typeof makeDesktopHandle>[0]),
@@ -78,7 +78,7 @@ export function mountDesktopFeature(): DesktopMount {
     const stopState = startDesktopDocumentState(legacyDesktopDocumentPorts({ isPristineSeedDocument: () => historyOwner().isPristineSeedDocument() }));
     let mounted: DesktopMount;
     try {
-      if (runningOnDesktop()) wireDesktopBlobs(desktopPort());
+      if (presence.running()) wireDesktopBlobs(desktopPort());
       mounted = mountDesktop(desktopPorts());
       handDesktopTo({ openPrompterInBrowser: mounted.openPrompterInBrowser });
       installTestHooks(mounted);
@@ -105,5 +105,5 @@ export function startDesktopShell(): void {
 }
 
 export function desktopActions(): ActionDefinition[] {
-  return definitions(desktop.owner, { screen: portScreen, running: runningOnDesktop, canOpenPrompter: canOpenPrompter });
+  return definitions(desktop.owner, { screen: portScreen, running: presence.running, canOpenPrompter: canOpenPrompter });
 }

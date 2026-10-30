@@ -53,14 +53,3 @@ export function createBrollView(storage: BrollViewStorage): BrollView {
     }
   };
 }
-
-let storage: BrollViewStorage = { read: () => null, write: () => {} };
-
-export function useBrollViewStorage(next: BrollViewStorage): void {
-  storage = next;
-}
-
-export const brollView = createBrollView({
-  read: () => storage.read(),
-  write: (value) => { storage.write(value); }
-});

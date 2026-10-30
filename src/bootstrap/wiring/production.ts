@@ -56,10 +56,10 @@ import {
   setTagNotes
 } from "../../features/tags/panels.js";
 import { queueAutoSave } from "./save-owners.ts";
+import { bulkTagRows } from "./production-index.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
-import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";
 
 const tags = owned<ReturnType<typeof mountTags>>();
 
@@ -71,7 +71,7 @@ export function mountTagPanelsFeature(): TagPanelMount {
       view: portView, document: portDocument, edits: portEdits, text: portText,
       production: portProduction, deletion: portDeletion, selection: portSelection,
       panels: portPanels, personColors: portPersonColors, shotHiding: portShotHiding,
-      notices: portNotices, undo: portUndo, ids: portIds
+      notices: portNotices, undo: portUndo, ids: portIds, bulkTag: bulkTagRows
     };
     return mountPanelState(ports);
   }, (owner) => [
@@ -148,14 +148,14 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       setTagNotes: setTagNotes,
       bulkDeleteArmed: bulkDeleteArmed,
       isTouch: function () { return IS_TOUCH as boolean; },
-      addingPerson: function () { return tagAddingPersonKey(); },
-      expanded: function () { return tagExpandedKey(); },
-      productionGroup: function () { return productionGroupBy(); },
-      setAddingPerson: function (value) { setTagAddingPerson(value); },
-      setRenaming: function (value) { setTagRenaming(value); },
-      setExpanded: function (value) { setTagExpanded(value); },
-      setProductionGroup: function (value) { setProductionGroupBy(value as string); },
-      setGearGroup: function (value) { setGearGroupBy(value as string); },
+      addingPerson: function () { return portView.tagAddingPersonKey(); },
+      expanded: function () { return portView.tagExpandedKey(); },
+      productionGroup: function () { return portView.productionGroupBy(); },
+      setAddingPerson: function (value) { portView.setTagAddingPerson(value); },
+      setRenaming: function (value) { portView.setTagRenaming(value); },
+      setExpanded: function (value) { portView.setTagExpanded(value); },
+      setProductionGroup: function (value) { portView.setProductionGroupBy(value as string); },
+      setGearGroup: function (value) { portView.setGearGroupBy(value as string); },
       capture: function () { const context = captureOperation(); return function () { return stillOwns(context); }; },
       installEntity: function (id) { return createTagEntityContainer(id, onRootClick); }
     };
