@@ -14,8 +14,8 @@ comments.
 Both fail on anything new. An entry the baseline lists that has gone only
 warns, naming the entry and the `--prune` command, and the check still passes.
 `--prune` removes gone entries and refuses to add new ones. `--init` writes a
-baseline only when none exists. `node tools/dep-report.mjs --accept "<reason>"`
-records reviewed new dependency exceptions ([Baseline workflow](#baseline-workflow)).
+baseline only when none exists. Neither tool has a flag that records a new
+entry ([Baseline workflow](#baseline-workflow)).
 `node tools/dep-report.mjs --metrics` prints the informational numbers, which
 are not a pass/fail condition.
 
@@ -214,28 +214,17 @@ The numbered modules the shim started are gone: each moved into a feature folder
   about each resolved entry; `node tools/dep-report.mjs --prune` removes them.
   Commit the smaller baseline with the change. The comment gate works the same
   way with `node tools/comment-gate.mjs --prune`. Baselines never grow.
-- **Reviewed new debt.** `--prune` refuses new entries. When one is expected,
-  such as a helper moved between two modules
-  already in a cycle (which adds a `cycle-edge`), run
-  `node tools/dep-report.mjs --accept "<reason>"`:
-  - it adds exactly the current new violations, each with that reason, and
-    lists them;
-  - it refuses a missing or blank reason (exit 2), and refuses while a cycle
-    runs through a migrated folder (exit 1, nothing written);
-  - it does not prune: `--prune` removes the resolved entries afterwards and
-    keeps every reason.
-
-  The reason says why the entry is needed and what removes it; it is reviewed
-  with the change like any other exception.
-- **Changing the rules.** `--accept "<the rule change>"` records the entries a
-  new rule finds, and `--prune` removes those it no longer finds. Removing the
-  baseline and running `--init` records everything without review and drops
-  every `reason`, so it is only for a repository with no baseline.
+- **New violations.** `--prune` refuses while any new violation exists (exit 1,
+  "baselines only shrink; fix the violation", nothing written). There is no
+  flag that records one: fix the violation.
+- **Changing the rules.** Removing the baseline and running `--init` records
+  everything without review and drops every `reason`, so it is only for a
+  repository with no baseline.
 
 The file holds one exception per line, so a diff shows exactly which entries
 came and went. Entries are sorted by rule, then source, then target, comparing
-code points (UTF-8 bytes) rather than locale collation, so `--init`, `--prune`
-and `--accept` write the same bytes on every machine. A check prints the size
+code points (UTF-8 bytes) rather than locale collation, so `--init` and
+`--prune` write the same bytes on every machine. A check prints the size
 of the baseline and the counts of new and resolved entries separately.
 
 `--metrics` reports frontend and migrated module counts, frontend runtime
