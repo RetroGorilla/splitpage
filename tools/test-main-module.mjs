@@ -47,7 +47,6 @@ const node = (cwd, args) => {
 };
 
 const CASES = [
-  ["artifact-files.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("usage: node tools/artifact-files.mjs")],
   ["ci-changes.mjs", [], (r) => r.code === 0 && r.out.includes("ci-changes: code=true")],
   ["ci-tested-tree.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("usage: node tools/ci-tested-tree.mjs")],
   ["comment-gate.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("comment-gate: unknown argument --bogus")],

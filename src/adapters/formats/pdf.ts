@@ -97,18 +97,34 @@ function required<T>(value: T | undefined): T {
 const HELV_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 const HELVB_W = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
 
-const WINANSI_MAP: Record<string, number> = { "—": 151, "–": 150, "‘": 145, "’": 146, "“": 147, "”": 148, "…": 133, "•": 149, " ": 32 };
+const WINANSI_MAP: Record<string, number> = {
+  "€": 128, "‚": 130, "ƒ": 131, "„": 132, "…": 133, "†": 134, "‡": 135, "ˆ": 136, "‰": 137, "Š": 138,
+  "‹": 139, "Œ": 140, "Ž": 142, "‘": 145, "’": 146, "“": 147, "”": 148, "•": 149, "–": 150, "—": 151,
+  "˜": 152, "™": 153, "š": 154, "›": 155, "œ": 156, "ž": 158, "Ÿ": 159, " ": 32
+};
+
+const SUBSTITUTE_CODE = 63;
+let unshownTally = 0;
 
 function pdfEncodeChar(ch: string): number {
   const mapped = WINANSI_MAP[ch];
   if (mapped !== undefined) return mapped;
   const code = ch.charCodeAt(0);
   if (code >= 32 && code <= 255) return code;
-  return 63;
+  return SUBSTITUTE_CODE;
 }
 
-const HELV_HIGH: Record<number, number> = { 133: 1000, 145: 222, 146: 222, 147: 333, 148: 333, 149: 350, 150: 556, 151: 1000, 183: 278 };
-const HELVB_HIGH: Record<number, number> = { 133: 1000, 145: 278, 146: 278, 147: 500, 148: 500, 149: 350, 150: 556, 151: 1000, 183: 278 };
+// why: widths come from Adobe's Helvetica.afm and Helvetica-Bold.afm (core 14, 1997), looked up by glyph name.
+const HELV_HIGH: Record<number, number> = {
+  128: 556, 130: 222, 131: 556, 132: 333, 133: 1000, 134: 556, 135: 556, 136: 333, 137: 1000, 138: 667,
+  139: 333, 140: 1000, 142: 611, 145: 222, 146: 222, 147: 333, 148: 333, 149: 350, 150: 556, 151: 1000,
+  152: 333, 153: 1000, 154: 500, 155: 333, 156: 944, 158: 500, 159: 667, 183: 278
+};
+const HELVB_HIGH: Record<number, number> = {
+  128: 556, 130: 278, 131: 556, 132: 500, 133: 1000, 134: 556, 135: 556, 136: 333, 137: 1000, 138: 667,
+  139: 333, 140: 1000, 142: 611, 145: 278, 146: 278, 147: 500, 148: 500, 149: 350, 150: 556, 151: 1000,
+  152: 333, 153: 1000, 154: 556, 155: 333, 156: 944, 158: 500, 159: 667, 183: 278
+};
 
 function pdfCharWidth(ch: string, bold?: boolean): number {
   const code = pdfEncodeChar(ch);
@@ -124,10 +140,25 @@ export function pdfTextWidth(text: string, bold: boolean | undefined, size: numb
   return w * size / 1000;
 }
 
+function isUnshown(text: string, at: number, code: number): boolean {
+  if (code !== SUBSTITUTE_CODE) return false;
+  const ch = text.charAt(at), unit = ch.charCodeAt(0);
+  if (ch === "?" || unit < 32 || /\s/.test(ch)) return false;
+  const low = unit >= 0xDC00 && unit <= 0xDFFF, prev = at > 0 ? text.charCodeAt(at - 1) : 0;
+  return !(low && prev >= 0xD800 && prev <= 0xDBFF);
+}
+
+export function withUnshownCount<T>(build: () => T): { value: T; unshown: number } {
+  unshownTally = 0;
+  const value = build();
+  return { value: value, unshown: unshownTally };
+}
+
 export function pdfEscapeText(s: string): string {
   let out = "";
   for (let i = 0; i < s.length; i++) {
     const code = pdfEncodeChar(s.charAt(i));
+    if (isUnshown(s, i, code)) unshownTally++;
     const ch = String.fromCharCode(code);
     if (ch === "(" || ch === ")" || ch === "\\") out += "\\" + ch;
     else out += ch;
@@ -311,7 +342,7 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
   images.forEach(function (im, idx) {
     startObj(imageObjBase + idx);
     put("<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h +
-      " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.bytes.length + " >>\nstream\n");
+      jpegColorEntries(im.bytes) + " /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.bytes.length + " >>\nstream\n");
     put(im.bytes);
     put("\nendstream\nendobj\n");
   });
@@ -347,6 +378,51 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
   put("trailer\n<< /Size " + (totalObjs + 1) + " /Root " + OBJ_CATALOG + " 0 R /Info " + OBJ_INFO + " 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF\n");
 
   return concatBytes(chunks);
+}
+
+const JPEG_SOF_MARKERS = new Set([0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF]);
+
+interface JpegHeader { w: number; h: number; components: number; adobe: boolean }
+
+function jpegHeader(bytes: Uint8Array): JpegHeader | null {
+  const at = (k: number): number => bytes[k] ?? 0;
+  if (bytes.length < 4 || at(0) !== 0xFF || at(1) !== 0xD8) return null;
+  let frame: Omit<JpegHeader, "adobe"> | null = null;
+  let adobe = false;
+  const found = (): JpegHeader | null => (frame ? { ...frame, adobe: adobe } : null);
+  let i = 2;
+  while (i + 1 < bytes.length) {
+    if (at(i) !== 0xFF) return found();
+    const marker = at(i + 1);
+    if (marker === 0xFF) { i++; continue; }
+    if (marker === 0x00 || marker === 0xD9) return found();
+    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD8)) { i += 2; continue; }
+    if (i + 3 >= bytes.length) return found();
+    const len = (at(i + 2) << 8) | at(i + 3);
+    if (len < 2 || i + 2 + len > bytes.length) return found();
+    if (JPEG_SOF_MARKERS.has(marker) && !frame) {
+      const components = at(i + 9);
+      if (len < 8 || components < 1 || len !== 8 + 3 * components) return null;
+      const h = (at(i + 5) << 8) | at(i + 6), w = (at(i + 7) << 8) | at(i + 8);
+      if (w < 1 || h < 1) return null;
+      frame = { w: w, h: h, components: components };
+    } else if (marker === 0xEE && len >= 14 && String.fromCharCode(at(i + 4), at(i + 5), at(i + 6), at(i + 7), at(i + 8)) === "Adobe") {
+      adobe = true;
+    } else if (marker === 0xDA) {
+      return found();
+    }
+    i += 2 + len;
+  }
+  return found();
+}
+
+function jpegColorEntries(bytes: Uint8Array): string {
+  const header = jpegHeader(bytes);
+  if (header && header.components === 1) return " /ColorSpace /DeviceGray";
+  if (header && header.components === 4) {
+    return " /ColorSpace /DeviceCMYK" + (header.adobe ? " /Decode [1 0 1 0 1 0 1 0]" : "");
+  }
+  return " /ColorSpace /DeviceRGB";
 }
 
 const CUE_SCALE = 0.85;
@@ -430,7 +506,8 @@ const PDF_IMAGE_MAX_PX = 2000;
 
 function pdfJpegOf(pic: ExportPicture | null): Promise<Jpeg | null> {
   if (!pic) return Promise.resolve(null);
-  if (pic.mime === "image/jpeg") return Promise.resolve({ bytes: pic.bytes, size: jpegSize(pic.bytes) });
+  const header = pic.mime === "image/jpeg" ? jpegHeader(pic.bytes) : null;
+  if (header) return Promise.resolve({ bytes: pic.bytes, size: { w: header.w, h: header.h } });
   return new Promise<Jpeg | null>(function (resolve) {
     let url: string;
     try { url = URL.createObjectURL(new Blob([new Uint8Array(pic.bytes)], { type: pic.mime || "" })); } catch (e) { resolve(null); return; }

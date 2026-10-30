@@ -9,6 +9,23 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
 [desktop app](#desktop-app) for Windows.
 
+## What's new since the 4.0 beta
+
+- **Collaboration and server scripts are gone for now.** Live
+  collaboration, invite and share links, opening and saving scripts on a
+  Splitpage server, hosting from the desktop app, and Google Drive are
+  removed. A draft of a server script opens as an unsaved script with its
+  text intact; save it to a file. Collaboration will come back, rebuilt,
+  in a later release.
+- **Safer saving.** In the desktop app a save reaches the disk before it
+  replaces the old file, so a power cut can no longer leave an empty
+  script. A save that worked is no longer reported as failed, and the next
+  save no longer sees a false "changed on disk". If the browser withdraws
+  permission to a file, saving says so and keeps your work.
+- **Crash recovery starts again** with your next change after it paused.
+- Settings keeps keyboard focus after **Show the desktop-app notice
+  again**, and the rundown's hover lens eases in and out.
+
 ## What's new in the 4.0 beta
 
 - **No new features; sturdier saving.** 4.0 rebuilds the inside of
@@ -668,7 +685,9 @@ time and target at the top (the PDF adds the rundown strip), each scene's
 number, start time, status and read time, tags in their colours, b-roll
 keys, and each open comment's number beside its words. At the end come the
 breakdown by category, the b-roll shot list and the numbered comments. The
-PDF's links can be clicked, and every page says "Page 2 of 8".
+PDF's links can be clicked, and every page says "Page 2 of 8". Characters
+outside Latin, such as Cyrillic, Greek or Chinese, may not appear in the PDF:
+each shows as a "?" and Splitpage tells you how many when it makes the file.
 
 **Markdown** comes in two shapes. **Stacked** reads like a script, one
 heading per scene with its start time, status and read time; with pictures
