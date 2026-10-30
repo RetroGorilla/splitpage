@@ -47,9 +47,7 @@ export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion
     ports.document.stamp(editStamp({ rev: stamp.rev, lastEditedBy: stamp.lastEditedBy, lastEditedAt: stamp.lastEditedAt }));
     ports.deferred.setBaseline(write.published, "saveDoc: the bytes just written");
     if (write.landed) {
-      ports.location.amendHome(write.landed.home, write.landed.lastModified !== null
-        ? { diskBase: write.published, lastModified: write.landed.lastModified }
-        : { diskBase: write.published });
+      ports.location.amendHome(write.landed.home, { diskBase: write.published, lastModified: write.landed.lastModified });
     }
     adoptSavedCopyDocId(write.forkDocId, write.docIdAtSave, true);
     if (ports.saves.changes() === write.seqAtSave) ports.saves.confirmSavedNow();
