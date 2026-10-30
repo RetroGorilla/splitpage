@@ -54,11 +54,44 @@ drafts a release; the `draft` job runs only for a tag.
 
 | Where | Why |
 | --- | --- |
+| every `uses:` | Pinned to a full commit SHA, so a moved or compromised tag cannot change what a release runs. The version is not written beside the SHA, because the comment gate allows no comment in `.github/` outside a `run:` script; it is listed here instead. Looked up with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (dereferencing annotated tags): `actions/checkout` v7 `3d3c42e5aac5ba805825da76410c181273ba90b1`, `actions/setup-node` v7 `949feb2413d6458794dcd2491c4babbbce0c15c1`, `actions/upload-artifact` v7 `cf430e030ddbb5b0abf93d22962f4752f3646cd9`, `actions/download-artifact` v8 `9000827ccba6bdab643e8b6fd33ac0654aef8333`. `ci.yml` keeps its own pins. |
+| `verify-ci` job, `permissions` | The workflow default stays `contents: read`. This job alone adds `actions: read` (artifact and run lookups) and `checks: read` (the `gate` check run). |
+| `build` job, `needs: verify-ci` | Nothing builds, and so `draft` never runs, for a commit with no passed CI run. See [Release gate](#release-gate). |
 | `build` job, `CSC_IDENTITY_AUTO_DISCOVERY: 'false'` | The installers are unsigned (#81). Without this electron-builder looks for a signing certificate in the runner's store. |
 | `build` job, step `Read VERSION and check the tag` | `VERSION` is the single source of truth (`desktop/stage.mjs` checks `desktop/package.json` against it). A tag naming another version would publish files whose names and update checks disagree with it. |
 | `build` job, step `Desktop installers (dist:win, with verify-dist)` | `dist:win` runs `stage.mjs`, electron-builder for x64 and arm64, then `verify-dist.mjs`: the architecture checks and the payload extraction that caught 2.0.1's empty ARM64 installer. A mismatch fails the job there. |
 | `build` job, step `Collect the release files and their checksums` | Only the per-arch installers are published, not the combined one (docs/RELEASING.md §3). The `sha256sum` output format is the one `desktop/main.js` reads to check a downloaded update. |
 | `draft` job, `SPLITPAGE_RELEASES_TOKEN` | A fine-grained personal access token with Contents read and write on `RetroGorilla/splitpage-releases` and nothing else. This repository's own `GITHUB_TOKEN` cannot write to another repository. Without the secret the job leaves the files on the run as an artifact and says so. |
+
+### Release gate
+
+A tag can be pushed on any commit, including one whose CI run failed or never
+ran. The `verify-ci` job runs `tools/release-ci-check.mjs` on the tagged commit
+(`GITHUB_SHA`) before `build`, and passes only if one of these holds:
+
+1. The commit has a completed, successful `gate` check run (checks API,
+   `GET /repos/{owner}/{repo}/commits/{sha}/check-runs?check_name=gate`) from
+   GitHub Actions whose run is of `.github/workflows/ci.yml`, was made for that
+   exact commit and ran on this repository, not a fork. `gate` also succeeds for
+   a change that was prose only, and for a push whose tree an earlier run had
+   already passed, so those commits count too.
+2. The commit's tree has a `ci-passed-tree-<tree>` artifact from a successful
+   `ci.yml` run, found with `passedRun` from `tools/ci-tested-tree.mjs`. This
+   covers a commit that only has a merge-equivalent tree, such as a pull
+   request's own run. The artifact expires with the repository's artifact
+   retention (3 days in October 2026); the `gate` check run does not.
+
+Every lookup error counts as not passed (fail closed): a failed check-run
+listing falls through to the artifact lookup, and if neither proves a pass the
+job fails. A failure is an `::error::` line naming the commit and what was
+missing.
+
+A run started by hand (`workflow_dispatch`) runs the same check on the dispatched
+commit but reports a failure as `::warning::` and succeeds, because it is a dry
+run that drafts nothing (the `draft` job runs only for a tag).
+`tools/test-release-ci-check.mjs` covers gate success, gate failure, no run found,
+the tree artifact, API errors and the tag and dispatch messages. Only the first
+real tag proves the token permissions and the live check-run data.
 
 ## Desktop packaging (`desktop/electron-builder.yml`)
 
