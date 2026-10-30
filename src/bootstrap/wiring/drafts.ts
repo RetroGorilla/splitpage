@@ -1,4 +1,4 @@
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { startDrafts as mountDrafts } from "../../application/recovery/drafts.ts";
 import type { DraftsMount, DraftsPorts } from "../../application/recovery/drafts-ports.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
@@ -26,7 +26,7 @@ const drafts = owned<DraftsMount>();
 
 function draftsPorts(): DraftsPorts {
   return {
-    running: runningOnDesktop,
+    running: presence.running,
     clock: { now: () => Date.now() },
     timers: {
       set: (run, ms) => setTimeout(run, ms),

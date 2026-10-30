@@ -3,13 +3,14 @@ import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
 import { notices as portNotices } from "./ports/effects.ts";
-import { flags as portFlags } from "./ports/preferences.ts";
+import { findOptions, flags as portFlags } from "./ports/preferences.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { findActions as definitions } from "../../features/find/actions.ts";
 import { startFind, mountFindEvents } from "../../features/find/find.js";
 import type { FindControls, FindPorts } from "../../features/find/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { shotHiding } from "./shot-hiding.ts";
+import { bulkTagRows } from "./production-index.ts";
 
 const find = owned<FindControls>();
 const events = owned<ReturnType<typeof mountFindEvents>>();
@@ -23,7 +24,9 @@ export function mountFindFeature(): FindControls {
       shotHiding,
       undo: portUndo,
       notices: portNotices,
-      flags: portFlags
+      flags: portFlags,
+      options: findOptions,
+      bulkTag: bulkTagRows
     };
     const mounted: FindControls = startFind(ports);
     let disposed = false;
@@ -42,7 +45,7 @@ export function mountFindFeature(): FindControls {
 export const stopFindFeature = find.stop;
 
 export function mountFindEventsFeature(): ReturnType<typeof mountFindEvents> {
-  return events.replace(mountFindEvents);
+  return events.replace(() => mountFindEvents(findOptions));
 }
 
 export const stopFindEventsFeature = events.stop;

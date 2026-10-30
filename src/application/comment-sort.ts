@@ -5,10 +5,13 @@ export interface CommentSorting {
   readonly choose: (value: string) => CommentSort;
 }
 
-let mode: CommentSort = "position";
-
-export const commentSortMode = (): CommentSort => mode;
-export const setCommentSort = (value: string): CommentSort => {
-  mode = value === "recent" ? "recent" : "position";
-  return mode;
-};
+export function createCommentSorting(): CommentSorting {
+  let mode: CommentSort = "position";
+  return Object.freeze({
+    current: (): CommentSort => mode,
+    choose: (value: string): CommentSort => {
+      mode = value === "recent" ? "recent" : "position";
+      return mode;
+    }
+  });
+}
