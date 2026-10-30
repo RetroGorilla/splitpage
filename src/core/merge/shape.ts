@@ -38,7 +38,7 @@ function row(r: Bag): Bag { return withLists(withLists(r, ["imageLinks"]), ["mor
 function comment(c: Bag): Bag { return withLists(c, ["replies"]); }
 
 export function listShapedSide<T extends object>(doc: T, fields: readonly StateField[]): T {
-  const d = doc as unknown as Bag;
+  const d = doc as Bag;
   const out = shallowCopy(d);
   out.rows = objectsOf(d.rows).map(row);
   out.comments = objectsOf(d.comments).map(comment);
@@ -46,5 +46,5 @@ export function listShapedSide<T extends object>(doc: T, fields: readonly StateF
   lists.forEach(function (k) {
     if (Object.prototype.hasOwnProperty.call(d, k)) out[k] = cleanList(d[k]);
   });
-  return out as unknown as T;
+  return out as T;
 }
