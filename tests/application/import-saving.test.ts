@@ -138,18 +138,15 @@ test("a conflict and a lost document each refuse without creating a writable", a
   stop();
 });
 
-test("an import whose permission was withdrawn fails with an error, not a conflict, and creates no writable", async () => {
+test("an import whose permission was withdrawn saves a copy to the downloads instead and stops writing in place", async () => {
   const h = harness();
-  const notices = fakeNotices();
   const stop = h.owner.startImportSaving({
     ...h.ports,
-    files: { ...h.ports.files, checkConflict: async () => { h.log.push("check"); return { ok: false, current: null, denied: true }; } },
-    notices: notices.notices
+    files: { ...h.ports.files, checkConflict: async () => { h.log.push("check"); return { ok: false, current: null, denied: true }; } }
   });
-  const result = await h.owner.writeBackToFile(h.job);
-  assert.equal(result.kind, "failed");
-  assert.deepEqual(h.log, ["build:txt:draft", "check"]);
-  assert.deepEqual(notices.shown.map((n) => [n.message, n.kind]), [["Could not save — permission to change draft.txt was withdrawn.", "error"]]);
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.deepEqual(h.log, ["build:txt:draft", "check", "deliver"]);
+  assert.equal(h.imported["inPlace"], false);
   stop();
 });
 test("a writeback whose re-read fails keeps the writer's stamp so the next save is not refused", async () => {

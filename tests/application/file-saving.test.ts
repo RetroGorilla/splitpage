@@ -168,11 +168,13 @@ test("a file whose permission was withdrawn fails the save with an error, not a 
   const manual = harness({ home: FILE_HOME, check: denied });
   const result = await write(manual, "save");
   assert.equal(result.kind, "failed");
-  assert.deepEqual(manual.toasts, ["Could not save — permission to change pilot.md was withdrawn."]);
+  assert.deepEqual(manual.toasts, ["Could not save — permission to change pilot.md was withdrawn, so use Save a copy or open the file again."]);
   assert.ok(!manual.log.some((line) => line.startsWith("write:") || line.startsWith("stamp:") || line === "confirmSavedNow"));
+  assert.ok(!manual.log.some((line) => line.startsWith("halt:")), "a manual save does not halt autosave");
   const auto = harness({ home: FILE_HOME, check: denied });
   assert.equal((await write(auto, "autosave")).kind, "failed");
-  assert.ok(auto.log.includes("halt:Autosave is paused — the last save failed (permission to change pilot.md was withdrawn). Press Save to try again."));
+  assert.ok(!auto.log.some((line) => line.startsWith("write:") || line.startsWith("stamp:")), "nothing was written");
+  assert.ok(auto.log.includes("halt:Autosave is paused — the last save failed (permission to change pilot.md was withdrawn, so use Save a copy or open the file again). Press Save to try again."));
 });
 
 test("a forced save skips the disk check", async () => {
