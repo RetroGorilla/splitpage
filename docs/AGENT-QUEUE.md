@@ -648,7 +648,7 @@ STRUCTURE SECTION MUST SAY
 
 ## AQ-29 [ ] Save-back on desktop reads the file once (tracker I-6)
 
-Needs: AQ-28 merged, or stopped as "does not reproduce". Start from a base that includes it.
+Needs: AQ-28 merged. Start from a base that includes it.
 Files: src/application/save/import-saving.ts, its tests, docs/architecture/saving.md.
 **STOPS FOR ADAM**: save path. Independent review; PC smoke.
 
