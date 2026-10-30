@@ -28,7 +28,8 @@ import {
   buildPdf,
   buildShotListPdf,
   pdfCommentImagesFor,
-  pdfImagesFor
+  pdfImagesFor,
+  withUnshownCount
 } from "../../adapters/formats/pdf.ts";
 
 export interface ExportBuild {
@@ -54,6 +55,11 @@ function suffixed(suffix: string): (base: string) => string {
 
 function product(data: string | Uint8Array): ExportProduct {
   return { data: data };
+}
+
+function pdfProduct(build: () => Uint8Array): ExportProduct {
+  const made = withUnshownCount(build);
+  return { data: made.value, diagnostics: { imagesLeftOut: 0, unshownCharacters: made.unshown } };
 }
 
 function packingLabel(catId: string): string {
@@ -106,7 +112,7 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     build: async (ctx) => {
       const jpegs = await pdfImagesFor(ctx.doc, ctx.assets);
       const commentJpegs = await pdfCommentImagesFor(ctx.doc, ctx.assets);
-      return product(buildPdf(ctx.doc, jpegs, commentJpegs));
+      return pdfProduct(() => buildPdf(ctx.doc, jpegs, commentJpegs));
     } },
   { id: "docx", action: "export-docx", card: "docx", name: "Word", menuLabel: "Word (.docx)",
     words: "word docx document google docs", writeback: true, fileName: suffixed(".docx"),
@@ -176,12 +182,12 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     choice: { value: "gear", label: "Gear" }, name: "Gear packing list", menuLabel: "Gear packing list (.pdf)",
     words: "packing list checklist gear equipment kit pdf", reason: packingReason("gear"),
     fileName: (base) => base + " - " + packingLabel("gear") + " packing list.pdf",
-    build: (ctx) => product(buildPackingListPdf(ctx.doc, "gear")) },
+    build: (ctx) => pdfProduct(() => buildPackingListPdf(ctx.doc, "gear")) },
   { id: "packing-prop", action: "export-packing-prop", card: "packing",
     choice: { value: "prop", label: "Props" }, name: "Props packing list", menuLabel: "Props packing list (.pdf)",
     words: "packing list checklist props prop pdf", reason: packingReason("prop"),
     fileName: (base) => base + " - " + packingLabel("prop") + " packing list.pdf",
-    build: (ctx) => product(buildPackingListPdf(ctx.doc, "prop")) },
+    build: (ctx) => pdfProduct(() => buildPackingListPdf(ctx.doc, "prop")) },
   { id: "b-roll pdf", action: "export-broll-pdf", card: "broll", choice: { value: "pdf", label: "PDF, landscape" },
     name: "B-roll shot list", menuLabel: "B-roll shot list (.pdf)",
     words: "b-roll broll shot list shots second unit print pdf landscape",
@@ -189,7 +195,7 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     defaults: { brollView: { filter: "all", group: "scene" } },
     fileName: suffixed(" - b-roll shot list.pdf"),
     build: (ctx) => {
-      return product(buildShotListPdf(ctx.doc, brollShotListForPrint(ctx.doc, ctx.options.brollView, exportServices())));
+      return pdfProduct(() => buildShotListPdf(ctx.doc, brollShotListForPrint(ctx.doc, ctx.options.brollView, exportServices())));
     } },
   { id: "b-roll xlsx", action: "export-broll-xlsx", card: "broll", choice: { value: "xlsx", label: "Excel (.xlsx)" },
     name: "B-roll shot list (Excel)", menuLabel: "B-roll shot list (.xlsx)",

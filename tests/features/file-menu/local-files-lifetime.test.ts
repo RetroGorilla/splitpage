@@ -101,6 +101,21 @@ for (const stage of ["assets", "build", "failed assets"]) {
   });
 }
 
+for (const [count, expected] of [[3, ["3 characters outside Latin can't be shown in PDF"]], [1, ["1 character outside Latin can't be shown in PDF"]], [0, []], [null, []]] as const) {
+  test("a build reporting " + String(count) + " characters not shown gives the matching notice", async () => {
+    const h = harness("live");
+    const formats = createExportRegistry();
+    const diagnostics = count === null ? { imagesLeftOut: 0 } : { imagesLeftOut: 0, unshownCharacters: count };
+    formats.register({ id: "txt", fileName: (base) => base + ".txt", build: async () => ({ data: "x", diagnostics }) });
+    const mounted: LocalFileMenuControls = startLocalFileMenu({ ...h.ports, formats });
+    try {
+      await mounted.buildFileData("txt", "script");
+      assert.deepEqual(h.notices.shown.map((n) => n.message), expected);
+      assert.deepEqual(h.warnings, [[0, "script.txt"]]);
+    } finally { mounted.dispose(); }
+  });
+}
+
 test("a retired conflict probe cannot reveal the replacement modal", async () => {
   document.body.innerHTML = '<div id="file-conflict-modal" hidden></div><div id="file-conflict-detail"></div>';
   const h = harness("old");
