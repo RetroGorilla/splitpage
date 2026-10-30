@@ -152,7 +152,7 @@ test("Undo merge arms first, disarms after its window, and restores on the secon
   assert.equal(btn.textContent, "Undo merge");
   assert.equal(m.held.length, 1);
   assert.deepEqual(at(m.held, 0).request, { force: false, local: false, restoredText: undefined });
-  at(m.held, 0).answer("ok");
+  at(m.held, 0).answer("restored");
   await settle();
   assert.deepEqual(m.said, []);
   m.banner.dispose();
@@ -195,7 +195,7 @@ test("each refused restore says why; no backup forces the next attempt at the sa
   m.state.undo = { id: "s5", docId: "d1", source: "stash" };
   await twice("no-backup");
   m.state.undo = { id: "s6", docId: "d1", source: "stash" };
-  await twice("ok");
+  await twice("restored");
   assert.equal(at(m.held, -1).request.force, false, "forcing belongs to the undo point that asked");
 
   el(win, "merge-undo").click();
