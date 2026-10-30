@@ -1,6 +1,6 @@
 export type RootRoute<E> = (event: E) => boolean;
 
-export interface RootRouter<Slot extends string, E> {
+interface RootRouter<Slot extends string, E> {
   readonly handle: (event: E) => void;
   readonly route: (slot: Slot, handler: RootRoute<E>) => () => void;
   readonly routed: () => readonly Slot[];

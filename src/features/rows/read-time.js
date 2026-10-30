@@ -19,7 +19,7 @@ export function setSceneLength(rowId, seconds) {
   return applySceneLength(rowId, seconds);
 }
 
-export function openReadTimeEditor(btn) {
+function openReadTimeEditor(btn) {
   if (!btn || !ports) return;
   var rowId = btn.getAttribute("data-id");
   var scene = ports.document.read(sceneAt(rowId));
@@ -53,7 +53,7 @@ export function openReadTimeEditor(btn) {
   input.select();
 }
 
-export function closeReadTimeEditor(commit, fromBlur) {
+function closeReadTimeEditor(commit, fromBlur) {
   if (!editing) return true;
   var ed = editing;
   if (commit) {

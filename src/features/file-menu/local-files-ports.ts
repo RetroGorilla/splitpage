@@ -34,7 +34,7 @@ export interface LocalFileMenuPorts {
   readonly actions: Pick<ActionRegistry, "invoke" | "has">;
 }
 
-export interface LocalFileChipListeners {
+interface LocalFileChipListeners {
   readonly session: (change: SessionChange) => void;
   readonly location: (change: string) => void;
   readonly save: (change: string) => void;
