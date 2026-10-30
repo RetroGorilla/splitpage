@@ -25,11 +25,13 @@ Read this first. It is the short version of the rules; the linked documents hold
 
 The layer table is enforced by `npm run check:deps`: [dependencies.md, Layers](docs/architecture/dependencies.md#layers).
 
+Loading any module under `src/application/` defines functions, types, plain classes and frozen data, and nothing else: no call but `Object.freeze`, no `new`, no statement, no mutable binding except an empty `let x: T | null = null` slot that an explicit start fills from the wiring, and whose accessors throw while it is empty. `tests/application/owners-construct-nothing.test.ts` scans every module in the folder and checks each one's exports.
+
 A feature never imports another feature. To reach one, it runs that feature's action, reads or subscribes to an owner, gets an output callback from the wiring, or shares a stateless helper in `features/common`: [feature-ports.md, Rule 5](docs/architecture/feature-ports.md#rule-5-features-reach-each-other-four-ways).
 
 ## Finding your way for a feature change
 
-Start with [feature-map.md](docs/architecture/feature-map.md). It lists, for every feature folder, its files, its wiring, the shared ports that wiring uses, its actions and its tests. Then, for feature `X`, read in this order and stop when you have enough:
+Start with the feature map: run `node tools/code-map.mjs` (or `node tools/code-map.mjs > /tmp/feature-map.md`) to see, for every feature folder, its files, its wiring, the shared ports that wiring uses, its actions and its tests. Then, for feature `X`, read in this order and stop when you have enough:
 
 1. `src/features/X/` (logic, `ports.ts`, `actions.ts`, `mount.ts`) and its tests (`src/features/X/*.test.ts`, `tests/features/X/`).
 2. `src/bootstrap/wiring/X.ts`: which real owner each port field comes from.
@@ -48,7 +50,7 @@ These come from the maintainer. Each one has been broken by an agent before.
 5. **Features take named ports.** Build ports from `src/bootstrap/wiring/ports/` and owner types narrowed with `Pick`; never copy a file's old import list into a port: [feature-ports.md, Rule 2](docs/architecture/feature-ports.md#rule-2-a-port-is-built-from-shared-ports-owner-types-and-the-features-own-needs).
 6. **Stay in scope.** No features nobody asked for. Side fixes only for data loss, a crash, or something that blocks the task.
 7. **One name per exported type.** Two modules may not export a type or interface with the same name. Import the existing one when it means the same thing, otherwise pick a name that says the difference. `tools/test-code-map.mjs` enforces this.
-8. **Baselines only shrink.** `tools/dep-baseline.json` and `tools/comment-baseline.json` may lose entries (`--prune`), never gain them.
+8. **Baselines never grow.** `tools/dep-baseline.json` and `tools/comment-baseline.json` may lose entries, never gain them. A resolved entry only warns; drop it with `--prune` when you see the warning.
 9. **Read the invariants before touching saving, merging, history, undo or the document format.** [HANDOFF.md](docs/HANDOFF.md) and [invariants.md](docs/architecture/invariants.md). Several tests exist only to hold them in place.
 10. **PR titles and bodies name no AI model or tool.**
 11. **Convert a JS file to TypeScript before changing it substantially.** Before a substantial change (more than a small fix) to a `.js` file under `src/features/`, `src/application/` or `src/adapters/`, convert it to strict TypeScript in its own PR first: types only, no behaviour change, then the change on top. Files nobody is changing stay JavaScript. Files on the typing, undo or save path need the same review and performance check as any change there.
@@ -63,10 +65,8 @@ npm run typecheck                         # about 30 s
 npm run check:deps                        # about 7 s
 npm run check:comments
 npm run lint                              # about 45 s
-node tools/code-map.mjs                   # feature map current, type names unique
+node tools/code-map.mjs                   # prints the feature map; fails on duplicate type names
 ```
-
-When you add, move or delete a file under `src/features/`, a wiring file or an action, run `node tools/code-map.mjs --write` and commit the regenerated `docs/architecture/feature-map.md`.
 
 Before you push, run the full gate once: `npm run verify` (lint, types, both gates, build, every unit test). The unit tests alone take about 10 minutes, so do not run the full suite after every edit.
 

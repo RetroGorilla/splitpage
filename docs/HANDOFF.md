@@ -1106,7 +1106,7 @@ The rules live in [docs/architecture/invariants.md](architecture/invariants.md):
 `src/js/` is gone: every numbered module moved into the owned folders below
 or was removed with the server and collaboration features. The old module
 map is in git history (`git show 84282e24:HANDOFF.md`). For a feature,
-[feature-map.md](architecture/feature-map.md) lists its files, wiring,
+`node tools/code-map.mjs` prints its files, wiring,
 shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 
 | Folder | What is in it |
