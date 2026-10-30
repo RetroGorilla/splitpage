@@ -179,9 +179,30 @@ const LOAD_SCRIPT = "const kinds = (value) => typeof value === \"function\" ? \"
   "}\n" +
   "process.stdout.write(JSON.stringify(result));\n";
 
+const waiting: (() => void)[] = [];
+let running = 0;
+
+async function inPool<T>(task: () => Promise<T>): Promise<T> {
+  while (running >= POOL) await new Promise<void>(function (resolve) { waiting.push(resolve); });
+  running++;
+  try {
+    return await task();
+  } finally {
+    running--;
+    waiting.shift()?.();
+  }
+}
+
+async function allSettledOrThrow<T>(tasks: readonly Promise<T>[]): Promise<T[]> {
+  const settled = await Promise.allSettled(tasks);
+  const failed = settled.find(function (s): s is PromiseRejectedResult { return s.status === "rejected"; });
+  if (failed) throw failed.reason;
+  return settled.map(function (s) { return (s as PromiseFulfilledResult<T>).value; });
+}
+
 async function loadBatch(script: string, paths: readonly string[]): Promise<Record<string, Record<string, ExportKind>>> {
   const urls = paths.map(function (path) { return pathToFileURL(join(REPO, path)).href; });
-  const out = await execFileAsync(process.execPath, [script, ...urls], { cwd: REPO, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  const out = await inPool(function () { return execFileAsync(process.execPath, [script, ...urls], { cwd: REPO, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }); });
   const byUrl = JSON.parse(out.stdout) as Record<string, Record<string, ExportKind>>;
   return Object.fromEntries(paths.map(function (path, i) { return [path, byUrl[urls[i] as string] as Record<string, ExportKind>]; }));
 }
@@ -191,7 +212,7 @@ async function loadBatchNamingFailure(script: string, paths: readonly string[]):
     return await loadBatch(script, paths);
   } catch (error) {
     if (paths.length > 1) {
-      await Promise.all(paths.map(function (path) { return loadBatchNamingFailure(script, [path]); }));
+      await allSettledOrThrow(paths.map(function (path) { return loadBatchNamingFailure(script, [path]); }));
       throw new Error(paths.join(", ") + " load alone but fail together:\n" + String((error as { stderr?: string }).stderr ?? error).split("\n").slice(0, 12).join("\n"), { cause: error });
     }
     const stderr = (error as { stderr?: string }).stderr ?? String(error);
@@ -206,13 +227,8 @@ async function exportKinds(paths: readonly string[]): Promise<Record<string, Rec
     writeFileSync(script, LOAD_SCRIPT);
     const batches: string[][] = [];
     for (let i = 0; i < paths.length; i += BATCH) batches.push(paths.slice(i, i + BATCH));
-    const result: Record<string, Record<string, ExportKind>> = {};
-    let next = 0;
-    const worker = async function (): Promise<void> {
-      while (next < batches.length) Object.assign(result, await loadBatchNamingFailure(script, batches[next++] as string[]));
-    };
-    await Promise.all(Array.from({ length: Math.min(POOL, batches.length) }, worker));
-    return result;
+    const loaded = await allSettledOrThrow(batches.map(function (batch) { return loadBatchNamingFailure(script, batch); }));
+    return Object.assign({}, ...loaded) as Record<string, Record<string, ExportKind>>;
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
