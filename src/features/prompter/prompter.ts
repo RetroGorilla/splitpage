@@ -21,6 +21,11 @@ type VoiceRecognition = PrompterRecognition & {
   ondevice: ((event: { readonly name?: unknown } | null) => void) | null;
 };
 
+type TimerHandle = ReturnType<typeof setTimeout>;
+type PrompterDoc = {
+  readonly rows: readonly (Parameters<typeof rowSeconds>[0] & { readonly id: string; readonly status?: string | undefined })[];
+  readonly wordsPerMinute?: number | null | undefined;
+};
 type PromptWord = { el: HTMLElement; norm: string };
 type SceneView = { html: string; words: number };
 type SceneEntry = { id: string; cell: Run[]; view: SceneView | null };
@@ -35,7 +40,7 @@ type PrompterTestHooks = {
 type PrompterWindow = Window & { __prompterTest?: PrompterTestHooks };
 
 let ports: PrompterFeaturePorts;
-let initialReadyTimer: ReturnType<typeof setTimeout> | null = null;
+let initialReadyTimer: TimerHandle | null = null;
 
 export let prompterMirror: boolean;
 export let prompterFlip: boolean;
@@ -88,8 +93,7 @@ const SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
 export function buildPrompterContent(): void {
   const skippingShot = ports.state.skipsShot() || ports.viewFlags.hideShot();
-  const doc = ports.document.current();
-  if (!doc) throw new TypeError("The prompter needs an open document");
+  const doc = ports.document.current() as PrompterDoc;
   const source = skippingShot
     ? doc.rows.filter(function (row) { return row.status !== "shot"; })
     : doc.rows;
@@ -97,7 +101,7 @@ export function buildPrompterContent(): void {
     const cell = trimPrompterCell(withoutCues(ports.text.cellOf(row.audioText)));
     return { id: row.id, cell: cell, view: cell.length ? prompterSceneHtml(cell) : null };
   });
-  const lines = sceneEntries.filter(function (e): e is SceneLine { return !!e.view; });
+  const lines = sceneEntries.filter(function (e) { return e.view; }) as SceneLine[];
 
   const paragraphs: string[] = [];
   lines.forEach(function (e, i) {
@@ -1087,7 +1091,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     dispose: function () {
       if (ports !== nextPorts) return;
       disposePrompterView();
-      if (initialReadyTimer !== null) clearTimeout(initialReadyTimer);
+      clearTimeout(initialReadyTimer as TimerHandle);
       initialReadyTimer = null;
       delete (window as PrompterWindow).__prompterTest;
       (ports as unknown) = null;
