@@ -1,4 +1,4 @@
-export interface ClipboardRoutePorts<Owner, Place, Extra> {
+interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly scriptCell: (el: Element) => boolean;
   readonly copy: (e: ClipboardEvent, cell: Element, cut: boolean) => boolean;
   readonly afterCut: (cell: Element) => void;
@@ -15,7 +15,7 @@ export interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly insertNow: (cell: Element, html: string, text: string, extra: Extra | null) => void;
 }
 
-export interface ClipboardRoutesMount<Owner, Place, Extra> {
+interface ClipboardRoutesMount<Owner, Place, Extra> {
   readonly window: Window;
   readonly roots: readonly Element[];
   readonly ports: ClipboardRoutePorts<Owner, Place, Extra>;

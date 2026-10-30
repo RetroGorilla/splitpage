@@ -10,7 +10,7 @@ var initialReadyTimer = null;
 
 export var prompterMirror;
 export var prompterFlip;
-export var promptSceneMode;
+var promptSceneMode;
 
 var prompterSpeed = 42;
 var prompterRAF = null;
