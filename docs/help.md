@@ -685,9 +685,11 @@ time and target at the top (the PDF adds the rundown strip), each scene's
 number, start time, status and read time, tags in their colours, b-roll
 keys, and each open comment's number beside its words. At the end come the
 breakdown by category, the b-roll shot list and the numbered comments. The
-PDF's links can be clicked, and every page says "Page 2 of 8". Characters
-outside Latin, such as Cyrillic, Greek or Chinese, may not appear in the PDF:
-each shows as a "?" and Splitpage tells you how many when it makes the file.
+PDF's links can be clicked, and every page says "Page 2 of 8". Greek,
+Cyrillic and accented Latin letters print, and so do emoji, in black and
+white. Chinese, Japanese, Korean, Arabic, Hebrew and Hindi characters can't
+be shown yet: each shows as a "?" and Splitpage tells you how many when it
+makes the file.
 
 **Markdown** comes in two shapes. **Stacked** reads like a script, one
 heading per scene with its start time, status and read time; with pictures
