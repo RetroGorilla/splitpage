@@ -48,7 +48,7 @@ for (const scenario of ["dispose and reopen", "same-ID replacement", "stale comp
     } finally {
       owner.dispose();
       replacement?.dispose();
-      const { disposePrompterView } = await import("../features/prompter/prompter.js");
+      const { disposePrompterView } = await import("../features/prompter/prompter.ts");
       disposePrompterView();
       prompterState.setOpen(false);
       if (prior) Object.defineProperty(navigator, "wakeLock", prior);
