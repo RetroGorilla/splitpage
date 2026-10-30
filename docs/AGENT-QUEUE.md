@@ -139,7 +139,7 @@ Files touched: the three suite files and any test helper they share. Keep it to 
 Validation section: before/after failure counts per suite for both run modes.
 ```
 
-## AQ-2 [ ] Mutation configs for the formats helpers
+## AQ-2 [x] Mutation configs for the formats helpers
 
 ```text
 Task: tools/mutants/ has configs for core areas (core-document, core-merge, core-production, core-text, core-migrate, core-merge-states). The pure helpers in src/adapters/formats/ have none. Add them and close the gaps they show. Tests and config only.
@@ -179,7 +179,7 @@ Task: docs/architecture/feature-ports.md, docs/architecture/actions.md, docs/arc
 Structure section: "no structural change"; table of file, old statement, new statement, how you checked.
 ```
 
-## AQ-5 [ ] --accept can no longer grow a baseline (R2 leftover)
+## AQ-5 [x] --accept can no longer grow a baseline (R2 leftover)
 
 ```text
 Task: AGENTS.md rule 8 says baselines only shrink, but `--accept` in tools/dep-report.mjs (and the matching flag in tools/comment-gate.mjs, if it has one) can still write new entries. Make the tools refuse.
@@ -285,7 +285,7 @@ Task: docs/HANDOFF.md and docs/architecture/invariants.md name files, functions,
 Structure section: "no structural change"; table of file, old statement, new statement, how you checked.
 ```
 
-## AQ-13 [ ] Replace fixed sleeps in browser suites with condition waits
+## AQ-13 [x] Replace fixed sleeps in browser suites with condition waits
 
 ```text
 Task: browser suites that wait a fixed time (a literal `setTimeout`/`sleep`/`waitForTimeout` with a number) are slow and flaky. Replace them with waits on the thing they wait for. Tests only. Maximum 10 suites in this PR (pick the ones with the most fixed sleeps).
