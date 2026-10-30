@@ -133,7 +133,7 @@ Task: tools/mutants/ has configs for core areas (core-document, core-merge, core
 Structure section: "no structural change"; mutants generated / killed / equivalent per file, before and after.
 ```
 
-## AQ-3 [ ] Unused exports in src/features
+## AQ-3 [x] Unused exports in src/features
 
 ```text
 Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #936), now for src/features/. Remove exports nothing uses.

@@ -29,7 +29,7 @@ export interface CellClipboardPorts {
   readonly brollSeed: (row: DeepReadonly<DocumentRow>) => BrollSeedPlace;
 }
 
-export interface SceneTag {
+interface SceneTag {
   readonly cat: { readonly id: string } | null;
   readonly name: string;
 }
