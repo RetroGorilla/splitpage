@@ -22,7 +22,7 @@ export interface NewTabMount {
   readonly dispose: () => void;
 }
 
-export interface StarterChoice {
+interface StarterChoice {
   readonly id: string;
   readonly name: string;
   readonly desc: string;

@@ -43,11 +43,6 @@ function renderKeyChips(root) {
   });
 }
 
-export function menuItemReason(item) {
-  var why = item && item.querySelector(".mi-why");
-  return why && !why.hidden ? why.textContent : "";
-}
-
 var FORMAT_NAMES = {
   md: "Markdown",
   splitpage: "Splitpage file",
@@ -57,7 +52,7 @@ var FORMAT_NAMES = {
   txt: "Plain text"
 };
 
-export function timeAgo(at, now) {
+function timeAgo(at, now) {
   if (!at) return "";
   var secs = Math.max(0, Math.round(((now || Date.now()) - at) / 1000));
   if (secs < 45) return "just now";

@@ -13,7 +13,7 @@ export type DesktopOpening = {
   readonly handle: unknown;
 };
 
-export interface DesktopFileSource {
+interface DesktopFileSource {
   readonly getFile: () => Promise<unknown>;
 }
 

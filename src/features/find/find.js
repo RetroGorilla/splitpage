@@ -130,7 +130,7 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
   return { html: toHtml(cell, hooks), changed: matches.length };
 }
 
-export function refreshFindMatches(keepIndex) {
+function refreshFindMatches(keepIndex) {
   var found = findInRows(ports.document.current()?.rows ?? [], findNeedle(), ports.options.matchesCase());
   findMatches = found.matches;
   findInTags = found.inTags;
@@ -195,14 +195,14 @@ export function findQueryChanged() {
   revealFindMatch();
 }
 
-export function stepFind(dir) {
+function stepFind(dir) {
   if (!findMatches.length) return;
   findIndex = (findIndex + dir + findMatches.length) % findMatches.length;
   updateFindCount();
   revealFindMatch();
 }
 
-export function replaceCurrent() {
+function replaceCurrent() {
   var needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
   var m = findMatches[findIndex];
@@ -266,7 +266,7 @@ function bulkTagNeedle() {
 
 function bulkTagRowEl() { return document.getElementById("find-tag-row"); }
 
-export function bulkTagOpen() {
+function bulkTagOpen() {
   var row = bulkTagRowEl();
   return !!(row && !row.hidden);
 }
@@ -335,7 +335,7 @@ export function openBulkTag() {
   if (active) active.focus();
 }
 
-export function toggleBulkTag() {
+function toggleBulkTag() {
   if (bulkTagOpen()) closeBulkTag();
   else openBulkTag();
 }
@@ -435,7 +435,7 @@ export function closeFindBar() {
   if (highlightsSupported()) CSS.highlights.delete(FIND_HL);
 }
 
-export function leaveFindAtMatch() {
+function leaveFindAtMatch() {
   var hit = currentMatchRange();
   closeFindBar();
   if (!hit) return;

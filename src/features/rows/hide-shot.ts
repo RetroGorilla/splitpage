@@ -2,7 +2,7 @@ import type { NoticePort } from "../../application/effects/ports.ts";
 import type { ShotHiding, ShotRow } from "../../application/shot-hiding.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 
-export interface HideShotPorts {
+interface HideShotPorts {
   readonly shots: Pick<ShotHiding, "on" | "set" | "expand" | "groups">;
   readonly notices: Pick<NoticePort, "show">;
   readonly menuItem: () => Element | null;
