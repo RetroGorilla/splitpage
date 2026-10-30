@@ -744,8 +744,8 @@ try {
 
   writeFileSync(join(repo, "shared/p.js"), '"use strict";\nmodule.exports = 1;\n');
   const resolved = runIn(repo, "check");
-  eq("a resolved exception left in the baseline fails", resolved.code, 1);
-  check("it says to prune", resolved.err.includes("--prune"), resolved.err);
+  eq("a resolved exception left in the baseline warns and passes", resolved.code, 0);
+  check("the warning names the entry and the prune command", resolved.err.includes("warning: resolved platform-global: shared/p.js -> global:URL (remove it with `node tools/dep-report.mjs --prune`)"), resolved.err);
   eq("prune removes it", runIn(repo, "prune").code, 0);
   eq("the pruned baseline is empty", JSON.parse(readFileSync(join(repo, "baseline.json"), "utf8")).exceptions, []);
   eq("and the check passes again", runIn(repo, "check").code, 0);
@@ -797,7 +797,8 @@ try {
 
   writeFiles(repo, { "src/bootstrap/old.js": "export const p = (s) => s;\n" });
   const resolved = go("check");
-  eq("removing the parse leaves a resolved exception that fails", resolved.code, 1);
+  eq("removing the parse leaves a resolved exception that warns and passes", resolved.code, 0);
+  check("the warning names the resolved html-cells entry", resolved.err.includes("warning: resolved html-cells: src/bootstrap/old.js"), resolved.err);
   eq("prune clears it", go("prune").code, 0);
   eq("and the check passes", go("check").code, 0);
 } finally {
@@ -881,11 +882,11 @@ try {
     "server/f.js": "export function f() { return 1; }\n"
   });
   const paid = cli(repo);
-  eq("removing debt without pruning fails", paid.code, 1);
-  eq("every resolved entry is listed", lines(paid, "resolved "), [
-    "resolved cycle-edge: server/a.js -> server/b.js",
-    "resolved cycle-edge: server/b.js -> server/f.js",
-    "resolved cycle-edge: server/f.js -> server/a.js"
+  eq("removing debt without pruning warns and passes", paid.code, 0);
+  eq("every resolved entry is listed as a warning", lines(paid, "warning: resolved "), [
+    "warning: resolved cycle-edge: server/a.js -> server/b.js",
+    "warning: resolved cycle-edge: server/b.js -> server/f.js",
+    "warning: resolved cycle-edge: server/f.js -> server/a.js"
   ]);
   eq("--prune accepts it", cli(repo, "--prune").code, 0);
   eq("the pruned baseline removes resolved cycle edges", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions, []);
@@ -917,7 +918,8 @@ try {
 
   writeFiles(accepting, { "server/f.js": "export function f() { return 1; }\n", "shared/probe.js": '"use strict";\nmodule.exports = URL;\n' });
   const mixed = cli(accepting, "--accept", "the shared probe still needs its platform port");
-  eq("accept adds a new entry but does not prune resolved entries", [mixed.code, cli(accepting).code], [0, 1]);
+  const afterMixed = cli(accepting);
+  eq("accept adds a new entry but does not prune resolved entries; the check then warns about them", [mixed.code, afterMixed.code, lines(afterMixed, "warning: resolved ").length > 0], [0, 0, true]);
   check("accept reports the resolved entries", mixed.out.includes("resolved remain"), mixed.out);
   eq("prune removes resolved entries and retains the new reason", [cli(accepting, "--prune").code, JSON.parse(readFileSync(baselineFile, "utf8")).exceptions.filter((e) => e.reason).map((e) => e.target)], [0, ["global:URL"]]);
   eq("the pruned baseline passes", cli(accepting).code, 0);

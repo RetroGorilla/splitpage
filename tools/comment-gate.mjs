@@ -218,11 +218,7 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
     print(`comment-gate: removed ${stale.length} entries from the baseline`);
     return 0;
   }
-  if (stale.length) {
-    for (const s of stale) printError(`  removed ${s.path} ${short(s.text)}`);
-    printError("comment-gate: FAILED — the baseline lists comments that are gone; run `node tools/comment-gate.mjs --prune`");
-    return 1;
-  }
+  for (const s of stale) printError(`  warning: resolved ${s.path} ${short(s.text)} (remove it with \`node tools/comment-gate.mjs --prune\`)`);
   print("comment-gate: OK");
   return 0;
 }

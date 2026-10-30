@@ -131,7 +131,7 @@ A quick test: if feature B is about to call `a.something()`, then A does somethi
 ### Rule 8. What a move PR contains
 
 1. Before the move, in its own PR: if other areas read state the file holds, that state moves to an owner (Rule 5). A move PR doesn't create owners.
-2. `git mv` of the file to its destination, kept as JavaScript (with its path added to the browser-globals list in `eslint.config.mjs`). Converting it to TypeScript is a separate PR.
+2. `git mv` of the file to its destination, kept as JavaScript (files under `src/features/`, `src/adapters/` and `src/bootstrap/` get browser globals from a folder glob in `eslint.config.mjs`, so no config edit). Converting it to TypeScript is a separate PR.
 3. `ports.ts` built per [Rule 2](#rule-2-a-port-is-built-from-shared-ports-owner-types-and-the-features-own-needs), using shared ports that exist, or adding the ones it is the first user of ([catalog](#the-shared-ports)).
 4. The wiring module, the composition root slot and the action definitions per Rules 4 and 6.
 5. Every importer of the moved code updated in the same PR (no re-exports, AGENTS.md rule 4).
