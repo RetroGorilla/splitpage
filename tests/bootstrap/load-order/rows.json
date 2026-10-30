@@ -11,7 +11,7 @@
     "src/bootstrap/wiring/rows.ts",
     "src/features/gallery/video-files.ts",
     "src/bootstrap/wiring/video-files.ts",
-    "src/features/rows/render.js",
+    "src/features/rows/render.ts",
     "src/bootstrap/wiring/render.ts"
   ],
   "expectedLoads": 13
