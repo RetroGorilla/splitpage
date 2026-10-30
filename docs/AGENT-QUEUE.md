@@ -122,7 +122,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-6 and AQ-14 are report-only.
 - AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
 - AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
-- AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and run on Opus. AQ-30 changes one suite file and can be merged by queue agents. AQ-28 and AQ-29 both touch saving: merge one, base-merge the other.
+- AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and need an independent review. AQ-30 changes one suite file and can be merged by queue agents. AQ-29 needs AQ-28 (both touch saving; I-20 runs before I-6, as in ROADMAP.md).
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -625,7 +625,7 @@ Structure section: which variables moved into the state object and which stayed 
 
 Needs: none.
 Files: src/application/save/ (status.ts, coordinator.ts, or whichever writes the label), src/features/title/save-status.js, their tests, a new browser suite under .claude/skills/run-splitpage-app/tests/.
-**STOPS FOR ADAM**: save path, and it changes what the user sees. Run on Opus; Opus review.
+**STOPS FOR ADAM**: save path, and it changes what the user sees. Independent review.
 
 ```text
 Task: tracker I-20, "Late-save Save button label does not reset". When a save finishes late (after the user has edited again, or after another save started), the Save button label can stay on the old state instead of returning to what the current document state says. Fix it so the label always matches saveStatus() once the save settles. This is a bug fix: the label change is the intended behaviour change; nothing else changes.
@@ -648,9 +648,9 @@ STRUCTURE SECTION MUST SAY
 
 ## AQ-29 [ ] Save-back on desktop reads the file once (tracker I-6)
 
-Needs: none. Merge one of AQ-28 and AQ-29 first, then base-merge the other.
+Needs: AQ-28 merged, or stopped as "does not reproduce". Start from a base that includes it.
 Files: src/application/save/import-saving.ts, its tests, docs/architecture/saving.md.
-**STOPS FOR ADAM**: save path. Run on Opus; Opus review; PC smoke.
+**STOPS FOR ADAM**: save path. Independent review; PC smoke.
 
 ```text
 Task: tracker I-6. After writing an imported file back in place, saveBackToFile (src/application/save/import-saving.ts) calls `writable.close()` and then reads the file again (`ports.files.read`) to record its new lastModified and size. On the desktop, close() already answers the stamp that main took right after its atomic write (docs/architecture/saving.md, "The desktop shim", and the line "It still reads the file a second time after writing ... a one-line change left for later"). A second read can see a later change made by another program and record that as ours, which can hide a real conflict or raise a false one. Use the stamp from close() when it has one; read the file only when it does not (the browser path). Nothing else changes.
@@ -692,7 +692,7 @@ STRUCTURE SECTION MUST SAY
 
 Needs: none.
 Files: desktop/test/smoke.mjs only.
-**STOPS FOR ADAM**: desktop/ is protected. Run on Opus; Opus review; runs on the PC.
+**STOPS FOR ADAM**: desktop/ is protected. Independent review; runs on the PC.
 
 ```text
 Task: tracker I-5. The desktop smoke check "quit asks again when a moved file's copy is late" (#496) fails now and then. Find out whether the test waits on a fixed time or on a condition that can come too early, and make it wait on the real condition. Product code does not change.
