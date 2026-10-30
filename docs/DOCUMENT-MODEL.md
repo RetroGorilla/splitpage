@@ -183,7 +183,7 @@ A comment's anchor is the set of runs whose `cmt` contains its id. There is
 no span to lose. `comment.rowId` / `comment.field` become derived and are
 kept in step by one function, so older readers still get them.
 Invariant #18 goes away.
-**Built:** that function is `syncCommentAnchors(state)` (`src/core/text/anchors.ts`): every
+**Built:** that function is `syncCommentAnchors(state, cellOf)` (`src/core/text/anchors.ts`): every
 comment marked somewhere points at the first cell holding its mark, in
 document order (row by row, visual before audio); one marked nowhere keeps
 what it had. Split, join and a cut-then-paste are session commands whose
@@ -298,9 +298,9 @@ Nothing outside the document model writes a cell. Its pure operations live
 in `src/core/text/` (typed, and unit-tested under `node --test` without a
 DOM): the edits in `edits.ts`, `toHtml` in `html.ts`, the readers in
 `projections.ts`, the steps in `steps.ts`, and `mergeCells` in
-`src/core/merge/cells.ts`. `fromHtml` and `cellOf`, which still decode
-through the sanitiser, are in `src/adapters/richtext/decode.ts` (bound to
-the app's sanitiser in `src/bootstrap/richtext.ts`):
+`src/core/merge/cells.ts`. `cellOf`, which still decodes
+through the sanitiser, is in `src/adapters/richtext/decode.ts`, and `fromHtml` and `cellOf` are bound to
+the app's sanitiser in `src/bootstrap/richtext.ts`:
 
 - **Constructors and converters**
   - `fromHtml(html)` parses a sanitised HTML cell into runs. This is the
@@ -771,8 +771,12 @@ until step 4.
      and nothing edits it instead. The tag and b-roll shortcuts, which
      also fell back when the model did not read the same words at the
      caret, now leave the typed words as they are.
-   - Left: `execCommand("copy")`, the clipboard fallback of three copy
-     buttons (13-hosted, 20b-onboarding, 20e-connect) — not an edit.
+   - Left, two `execCommand("copy")` paths, neither an edit: `copyWithSelection()`
+     in `src/features/clipboard/share-text.ts`, the fallback of the share clipboard's
+     `copyText` (`createShareClipboard`, wired in `src/bootstrap/effects.ts`) when
+     `clipboard.writeText` is missing or rejects; and `execCopy()` in
+     `src/features/clipboard/scene-select.js`, which `runClipboardCommand` tries first for
+     a selected-scene copy or cut, with the Clipboard API as its fallback.
    IME and spellcheck in a draft stay the browser's, as in a script cell
    (§5), and the by-hand check list's Japanese-IME and spellcheck lines
    (§11) cover the comment composer and a reply box too.
