@@ -4,7 +4,7 @@
 
 `src/features/script-zoom/script-zoom.ts` keeps the zoom math, key handling, wheel handling, anchoring and readout in TypeScript. Its mount receives four ports and returns its controls and a disposer. Disposal removes the listeners, preference subscription, animation frames and readout timer, and clears the ports.
 
-`src/bootstrap/wiring/shared-ports.ts` builds the three shared ports once. Every call reaches the current owner through its bridge:
+The shared ports in `src/bootstrap/wiring/ports/` build the three shared ports once. Every call reaches the current owner through its bridge:
 
 | Feature port | Type | Owner and wiring |
 | --- | --- | --- |
@@ -15,7 +15,7 @@
 
 `PreferenceChanges` and `PreferenceNotice` live beside `Preferences`. Notices contain `name`, `value` and `elsewhere`. Script zoom reads the owner again for changes from another window and keeps suppressing its own synchronous persistence notice.
 
-The screen types, constants and pure availability rules move from `src/legacy/screen.ts` to `src/application/screen.ts`. The stateful launcher context and DOM queries stay in legacy. All existing rule importers point to application directly.
+The screen types, constants and pure availability rules move from the former legacy screen module to `src/application/screen.ts`. The stateful launcher context and DOM queries stay in legacy. All existing rule importers point to application directly.
 
 The feature imports no bridge, numbered file, adapter or other feature. Its former preference storage details and separate document, prompter and writer reads are replaced by the ports. There are no numbered importers to convert in this rework; the initial move already removed them.
 

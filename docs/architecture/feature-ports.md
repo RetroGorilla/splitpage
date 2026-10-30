@@ -12,8 +12,8 @@ How a feature folder connects to the rest of the app: the rules for its ports, i
 
 | Word | Meaning |
 | --- | --- |
-| Numbered file | A file in `src/js/` whose name starts with a number, such as `05-render.js`: the old app code |
-| Bridge | A file in `src/legacy/` that handed numbered files an owner through a function call, such as `currentDocument()` or `showToast()`, and threw before the app started. Each went when its last numbered importer did, and the rest when the wiring took the owners from ports (plan §8). One is left: `app-actions.ts` |
+| Numbered file | A file in the former `src/js` folder whose name starts with a number, such as `05-render.js`: the old app code |
+| Bridge | A file in the former `src/legacy` folder that handed numbered files an owner through a function call, such as `currentDocument()` or `showToast()`, and threw before the app started. Each went when its last numbered importer did, and the rest when the wiring took the owners from ports (plan §8). One is left: `app-actions.ts` |
 | Owner | The one module that holds a piece of state and is the only way to change it: the document session, the preferences, the save coordinator, the row drag. Owners live in `src/application/` |
 | Feature | A folder in `src/features/` for one part of the screen. It may import `src/core/`, `shared/`, `src/application/` and `src/features/common/`. It may not import a bridge, a numbered file, an adapter or another feature (`layerAllows` in `tools/dep-report.mjs`) |
 | Port | What a feature needs from outside, written as a TypeScript interface the feature declares. The feature says what it needs and doesn't know who provides it |
@@ -29,7 +29,7 @@ How a feature folder connects to the rest of the app: the rules for its ports, i
 
 A move PR changes how a file is connected, not how it works, so it keeps the diff readable and the behaviour unchanged. A moved file may keep its module variables, but:
 
-- its ports arrive only through its mount (`start<Name>(ports)` in a moved file, where `<Name>` says what it starts, such as `startFind` or `startTagPanels`; never `__init`, which numbered files in `src/js/` still use), and `dispose` removes its listeners and timers and clears the ports;
+- its ports arrive only through its mount (`start<Name>(ports)` in a moved file, where `<Name>` says what it starts, such as `startFind` or `startTagPanels`; never `__init`, which the numbered files used), and `dispose` removes its listeners and timers and clears the ports;
 - every export other than the mount is either a pure helper (no state and no ports; better placed in `src/core/`, `shared/` or `src/features/common/`) or used only by files in the same feature folder and by tests.
 
 Code written new in a feature uses a factory instead: `create<Name>(ports)` returns an object with the feature's methods and `dispose`, and keeps its state inside, as `createSidePanels` does in L3f. Turning a moved 1,000-line file into a factory is its own later PR, not part of the move.

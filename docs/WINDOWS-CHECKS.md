@@ -307,7 +307,7 @@ that proves #76's `shared/` staging and #77's `files` entry.
 
 - **Offline reload** (#79). The driver has no CDP network emulation and the
   server running the suite is the one serving the page, so the network cannot
-  be taken away mid-suite. `tests/53-service-worker.txt` proves the cached
+  be taken away mid-suite. `.claude/skills/run-splitpage-app/tests/53-service-worker.txt` proves the cached
   `index.html` is a whole, real app page — i.e. that the fallback has something
   correct to hand back — and stops there. Load the app, go offline, reload.
 - **A real deploy picking up a new build** (#79). Change `VERSION`, rebuild,

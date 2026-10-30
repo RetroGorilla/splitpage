@@ -599,7 +599,7 @@ tabs**.
   `SPLITPAGE_TEST_DIALOGS` pre-answers dialogs. Test bridge:
   `__testRequestClose/Quit/CloseTab`, `__testShell(op, args)`. A page-run
   `window.close()` never fires the `BrowserWindow`'s `'close'` event —
-  Chromium tears the page down without asking main; nothing in `src/js`
+  Chromium tears the page down without asking main; nothing in `src/`
   calls it.
 - `desktop/test/smoke.mjs`: Node built-ins only, drives real window(s) over
   CDP. Covers boot/security/save/export/update plus the tabs surface,
@@ -664,7 +664,7 @@ Two exceptions to "CSS only": a fullscreen prompter is held opaque
 never run together; and `body.prompter-open` (the page scroll lock) goes on
 when the arrival finishes, not in the frame it starts, so the scrollbar
 leaving does not shift the editor under a still-clear layer.
-`tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
+`.claude/skills/run-splitpage-app/tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
 on the two elements and checks all of it.
 
 **`render()` must stay synchronous.** `04a-row-motion.js` animates scene
@@ -774,7 +774,7 @@ the end. Now:
 What a rebuild used to give for free and a reconcile has to do on purpose:
 `render()` still re-applies `ensureTrailingCaretSpot()` to every field,
 disarms an armed row delete, and drops a saved link-popover Range only
-if its cell is gone. `tests/67-render-perf.txt` holds the numbers: typing in a
+if its cell is gone. `.claude/skills/run-splitpage-app/tests/67-render-perf.txt` holds the numbers: typing in a
 300-scene document renders nothing and derives the breakdown once per idle
 refresh; an insert elsewhere keeps the focused cell's node and caret and
 builds two fields.
@@ -984,7 +984,7 @@ server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
   ref too, and carries `blobs: {sha: data URI}` for any the durable store
   does not hold yet; `acceptStash()` interns them on the way back in.
 
-**`docId`** (`src/js/02b-doc-id.js`, frozen `sha256Hex`/`deriveDocId`) is
+**`docId`** (`src/core/document/ids.ts`, frozen `sha256Hex`/`deriveDocId`) is
 minted by `migrateRows()`, carried through `mergeStates()` via
 `mergedDocId()`, derived deterministically for legacy files with none.
 Never in the seed, `#state-data`, or Standalone HTML export. Join key for
@@ -1255,7 +1255,7 @@ open panel (#189), below 1100px too. One slim scroll-bar style app-wide,
 and the page's own bar hidden while a panel is open (#187, #188), its
 width handed back (`--page-gutter`, 03b-side-panels.js) so nothing steps
 sideways; a panel opening or closing keeps the scene at the top of the
-view put (`holdScriptPlace`, as the script zoom does). `tests/85-header-fit.txt`
+view put (`holdScriptPlace`, as the script zoom does). `.claude/skills/run-splitpage-app/tests/85-header-fit.txt`
 measures all of it by resizing an iframe; 250–251 the rest.
 
 **#83's temporary migration code is gone (#100, after 3.0.0).** Both
@@ -1269,16 +1269,16 @@ recovery tool, if ever wanted, finds it by `docs/`/`older/` with no
 `migratedFrom` in `index.json`, or by v1 stores surviving in v3.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
-starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)
+starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.js`)
 now builds a fresh state through `migrateRows()`, so the document gets a new
 `docId` and empty `productionTags`, `people`, `brollShots` and `comments`,
 and its home becomes the imported file (`setHome("import")`,
-`src/js/_home.js`), which replaces either Save target. It used to replace only `state.rows` and the title and keep the rest, which meant an
+`src/application/location/document-location.ts`), which replaces either Save target. It used to replace only `state.rows` and the title and keep the rest, which meant an
 unrelated Word file inherited the last script's breakdown, cast list and
 review comments, and Save still pointed at the previous project's file.
 
 "Draft 2 of the same script" — the workflow that behaviour was useful for —
-is the **Paste/Import modal** (`openImportModal`, `src/js/11-import.js`),
+is the **Paste/Import modal** (`openImportModal`, `src/features/imports/imports.js`),
 which is unchanged in what it keeps and now takes a picked `.docx`/`.md`/
 `.txt`/`.csv` as well as pasted text. A `.docx` or `.csv` picked there
 bypasses the textarea (`pendingFileRows`) so its columns and formatting
@@ -1303,7 +1303,7 @@ after. The renderer never sees a path (invariant #34): an entry is
 `routeOpen({kind:'file', fileId})` takes. It is deliberately NOT in the
 app-data bundle (§5 #48) and must not be put in a draft header or anything
 a shared session can read — it is a record of what someone has been working
-on. The column itself is in `src/js/20j-newtab.js`.
+on. The recents list itself is in `src/features/newtab/newtab.ts`.
 
 **Server and collaboration features are removed from the app** (Adam's
 decision): live collaboration, server connections, documents on a server,
