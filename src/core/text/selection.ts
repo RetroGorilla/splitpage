@@ -26,7 +26,7 @@ export interface SelectionWorld {
   readonly keys: (rowId: string, field: SelectionField) => readonly string[] | null;
 }
 
-export const MAX_DIFF_STEPS = 500;
+const MAX_DIFF_STEPS = 500;
 
 export function isSelectionField(field: unknown): field is SelectionField {
   return field === "visualText" || field === "audioText";
@@ -59,15 +59,15 @@ export function editorKeys(cell: CellInput): string[] {
   return keysOf(cell, true);
 }
 
-export function isCollapsed(sel: { anchor: number; head: number }): boolean {
+function isCollapsed(sel: { anchor: number; head: number }): boolean {
   return sel.anchor === sel.head;
 }
 
-export function selectionRange(sel: { anchor: number; head: number }): { from: number; to: number } {
+function selectionRange(sel: { anchor: number; head: number }): { from: number; to: number } {
   return sel.anchor <= sel.head ? { from: sel.anchor, to: sel.head } : { from: sel.head, to: sel.anchor };
 }
 
-export function isBackward(sel: { anchor: number; head: number }): boolean {
+function isBackward(sel: { anchor: number; head: number }): boolean {
   return sel.head < sel.anchor;
 }
 
@@ -204,7 +204,7 @@ function firstKeptFrom(kept: Int32Array, pos: number, afterLength: number): numb
   return afterLength;
 }
 
-export function mapPoint(kept: Int32Array, afterLength: number, pos: number, affinity: Affinity): number {
+function mapPoint(kept: Int32Array, afterLength: number, pos: number, affinity: Affinity): number {
   const bound = affinity === "backward" ? kept[pos - 1] : kept[pos];
   if (bound !== undefined && bound !== -1) return affinity === "backward" ? bound + 1 : bound;
   return affinity === "backward" ? firstKeptFrom(kept, pos, afterLength) : lastKeptBefore(kept, pos);
@@ -223,7 +223,7 @@ export interface CellPoints {
   readonly affinity: Affinity;
 }
 
-export function headAffinity(sel: CellPoints): Affinity {
+function headAffinity(sel: CellPoints): Affinity {
   if (isCollapsed(sel)) return sel.affinity;
   return isBackward(sel) ? "forward" : "backward";
 }

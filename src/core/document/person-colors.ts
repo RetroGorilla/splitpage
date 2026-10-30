@@ -1,6 +1,6 @@
 import { cappedName, settledNames } from "./text-policy.ts";
 
-export type PersonColors = Record<string, string>;
+type PersonColors = Record<string, string>;
 
 export interface PersonColorLookup {
   readonly personColor: (seed: unknown) => string;
@@ -80,7 +80,7 @@ export function mergePersonColors(base: unknown, mine: unknown, theirs: unknown)
 
 export const PERSON_COLOR_NAMES: readonly string[] = ["Blue", "Amber", "Violet", "Green", "Pink", "Lime", "Coral", "Teal"];
 
-export interface PersonColorContext {
+interface PersonColorContext {
   readonly self?: unknown;
   readonly selfColor?: unknown;
   readonly live?: Record<string, unknown> | null | undefined;

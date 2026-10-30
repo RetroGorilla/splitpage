@@ -1,12 +1,12 @@
 import type { Frozen } from "../document/freeze.ts";
 import type { NormalizeOptions, Run } from "./runs.ts";
 
-export type DecodedImageRef = {
+type DecodedImageRef = {
   kind: "image";
   ref: { sha256: string | null; width: number | null; height: number | null; mime: string | null };
 };
 
-export type DecodedVideo = { kind: "video"; href: string | null };
+type DecodedVideo = { kind: "video"; href: string | null };
 
 export type DecodedMedia = DecodedImageRef | DecodedVideo;
 

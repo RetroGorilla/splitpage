@@ -1,6 +1,6 @@
 import { normalizeTagName } from "./tags.ts";
 
-export interface FilterableComment {
+interface FilterableComment {
   resolved?: unknown;
   assignee?: string | null | undefined;
 }
@@ -11,11 +11,11 @@ export interface PlacedComment {
   createdAt?: string | null | undefined;
 }
 
-export interface CommentReplyTime {
+interface CommentReplyTime {
   createdAt?: string | null | undefined;
 }
 
-export interface ActiveComment {
+interface ActiveComment {
   createdAt?: string | null | undefined;
   replies?: readonly CommentReplyTime[] | null | undefined;
 }

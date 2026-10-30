@@ -12,11 +12,11 @@ export interface Person {
   name: string;
 }
 
-export interface RegistryHolder {
+interface RegistryHolder {
   readonly productionTags: RegistryList;
 }
 
-export interface PeopleHolder {
+interface PeopleHolder {
   readonly [key: string]: unknown;
 }
 

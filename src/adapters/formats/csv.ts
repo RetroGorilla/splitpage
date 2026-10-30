@@ -17,7 +17,7 @@ export interface ScriptTable {
   comments: { reply: boolean; resolved: boolean; cells: TableCell[] }[];
 }
 
-export function csvEscape(v: unknown): string {
+function csvEscape(v: unknown): string {
   const s = String(v == null ? "" : v);
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
@@ -70,7 +70,7 @@ function sceneBrollLists(doc: ExportDocument, services: ExportServices): Record<
   return byScene;
 }
 
-export const COMMENT_HEAD = ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"];
+const COMMENT_HEAD = ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"];
 
 export function scriptTable(doc: ExportDocument, services: ExportServices = exportServices()): ScriptTable {
   const facts = exportFacts(doc, services);

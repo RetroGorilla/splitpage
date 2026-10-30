@@ -6,15 +6,15 @@ export type RowFieldStep = { op: "rowField"; rowId: string; key: string; before?
 
 export type DocFieldStep = { op: "docField"; key: string; before?: unknown; after?: unknown; owners?: Record<string, string>; ownersOnly?: true };
 
-export type InsertRowStep = { op: "insertRow"; index: number; row: StepRow };
+type InsertRowStep = { op: "insertRow"; index: number; row: StepRow };
 
-export type DeleteRowStep = { op: "deleteRow"; index: number; row: StepRow };
+type DeleteRowStep = { op: "deleteRow"; index: number; row: StepRow };
 
-export type MoveRowStep = { op: "moveRow"; from: number; to: number };
+type MoveRowStep = { op: "moveRow"; from: number; to: number };
 
 export type Step = RowFieldStep | DocFieldStep | InsertRowStep | DeleteRowStep | MoveRowStep;
 
-export type StepRefused = Error & { code: "STEP_REFUSED" };
+type StepRefused = Error & { code: "STEP_REFUSED" };
 
 function clone<T>(v: T): T { return v === undefined ? undefined as T : JSON.parse(JSON.stringify(v)) as T; }
 function keysInOrder(_key: string, v: unknown): unknown {

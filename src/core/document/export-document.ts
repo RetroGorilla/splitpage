@@ -4,9 +4,9 @@ import type { DocumentComment, DocumentRow, DocumentShot, DocumentTag, Validated
 
 export type ExportPerson = { id: string; name: string; [key: string]: unknown };
 
-export type ExportTagMention = { rowId: string; rowIndex: number; field: string; text: string };
+type ExportTagMention = { rowId: string; rowIndex: number; field: string; text: string };
 
-export type ExportTagEntry = {
+type ExportTagEntry = {
   key: string;
   id: string | null;
   catId: string;
@@ -18,7 +18,7 @@ export type ExportTagEntry = {
   status: string;
 };
 
-export type ExportShotProp = { key: string; id: string; name: string; status: string; [key: string]: unknown };
+type ExportShotProp = { key: string; id: string; name: string; status: string; [key: string]: unknown };
 
 export type ExportShotEntry = {
   id: string;
@@ -60,7 +60,7 @@ export type ExportDocument = Frozen<{
   broll: ExportShotEntry[];
 }>;
 
-export interface ExportStamp {
+interface ExportStamp {
   readonly rev: number;
   readonly lastEditedBy: string;
   readonly lastEditedAt: string;

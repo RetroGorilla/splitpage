@@ -21,15 +21,15 @@ import type { BrollItem, FieldHtml, FieldText, ProductionReaders, ProductionRow 
 import { TAG_FIELDS, registryEntry } from "./tags.ts";
 import type { RegistryList, RegistryTag } from "./tags.ts";
 
-export type BrollLineItem = { atom?: BrollRun; text: string; marks: Marks; pos: number };
+type BrollLineItem = { atom?: BrollRun; text: string; marks: Marks; pos: number };
 
-export type BrollLine = { start: number; end: number; items: BrollLineItem[] };
+type BrollLine = { start: number; end: number; items: BrollLineItem[] };
 
-export type BrollMarker = { id: string; key: BrollLineItem | null; rest: BrollLineItem[] | null; strip?: number };
+type BrollMarker = { id: string; key: BrollLineItem | null; rest: BrollLineItem[] | null; strip?: number };
 
-export type BrollMarkerLine = { line: BrollLine; index: number; marker: BrollMarker };
+type BrollMarkerLine = { line: BrollLine; index: number; marker: BrollMarker };
 
-export type BrollFound = {
+type BrollFound = {
   id: string;
   name: string;
   desc: string;
@@ -39,7 +39,7 @@ export type BrollFound = {
   autoProps: readonly string[];
 };
 
-export type BrollPropRef = { id?: string | undefined; name?: string | undefined };
+type BrollPropRef = { id?: string | undefined; name?: string | undefined };
 
 export type BrollShot = {
   id: string;
@@ -55,11 +55,11 @@ export type BrollShot = {
   origin?: string | undefined;
 };
 
-export type BrollSeedFields = { id: string; name: string; desc: string; audioRef: string; location: string };
+type BrollSeedFields = { id: string; name: string; desc: string; audioRef: string; location: string };
 
-export type BrollSeed = { status: BrollStatusId; props: BrollPropRef[]; origin: string } & BrollSeedFields;
+type BrollSeed = { status: BrollStatusId; props: BrollPropRef[]; origin: string } & BrollSeedFields;
 
-export type NewBrollShot = {
+type NewBrollShot = {
   id: string;
   name: string;
   desc: string;
@@ -73,7 +73,7 @@ export type NewBrollShot = {
   origin: string;
 };
 
-export type BrollEntryProp = {
+type BrollEntryProp = {
   key: string;
   id: string;
   name: string;
@@ -104,9 +104,9 @@ export type BrollEntry = {
   origin: string | undefined;
 };
 
-export type BrollRename = { at: number; name: string; desc: string };
+type BrollRename = { at: number; name: string; desc: string };
 
-export type BrollPlan = { create: NewBrollShot[]; rename: BrollRename[] };
+type BrollPlan = { create: NewBrollShot[]; rename: BrollRename[] };
 
 export type UnkeyedScope = ((rowId: string) => boolean) | null;
 
@@ -114,13 +114,13 @@ export type LineShotIds = { readonly held: Map<string, string>; readonly drawn: 
 
 export type BrollState = { rows: readonly ProductionRow[]; brollShots: readonly BrollShot[]; productionTags: RegistryList };
 
-export type BrollAnchorPlan = Record<string, string>;
+type BrollAnchorPlan = Record<string, string>;
 
-export type BrollAnchorTodo = { found: BrollMarkerLine; id: string };
+type BrollAnchorTodo = { found: BrollMarkerLine; id: string };
 
-export type BrollAnchoring = { cell: readonly Run[]; anchored: number };
+type BrollAnchoring = { cell: readonly Run[]; anchored: number };
 
-export type BrollPropsChange = { at: number; props: BrollProp[] };
+type BrollPropsChange = { at: number; props: BrollProp[] };
 
 type BrollDraft = { id: string; name: string; desc: string[] };
 
@@ -244,9 +244,9 @@ export function collectBrollFromRows(rows: readonly ProductionRow[] | null | und
   return out;
 }
 
-export type BrollCutRename = { key: string | null; name: string };
+type BrollCutRename = { key: string | null; name: string };
 
-export type BrollCutRenames = { held: Record<string, boolean>; lines: BrollCutRename[] };
+type BrollCutRenames = { held: Record<string, boolean>; lines: BrollCutRename[] };
 
 export function brollCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders, shotIds: readonly string[]): BrollCutRenames {
   const live = collectBrollFromRows(rows, readers);
@@ -608,7 +608,7 @@ export function brollPropsRenamed(
   return out;
 }
 
-export type BrollListItem = { rowIndex: number; ordinal: number; name?: string | undefined };
+type BrollListItem = { rowIndex: number; ordinal: number; name?: string | undefined };
 
 export function brollSortedForList<T extends BrollListItem>(entries: readonly T[]): T[] {
   return entries.slice().sort(function (a, b) {

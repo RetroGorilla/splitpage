@@ -54,12 +54,12 @@ export interface ExportFacts {
   exportedAt: Date;
   date: string;
 }
-export interface ExportComment extends CommentEntry {
+interface ExportComment extends CommentEntry {
   number: number | null;
   scene: string;
   where: string;
 }
-export interface BrollScene {
+interface BrollScene {
   label: string;
   scene: string;
   start: string;

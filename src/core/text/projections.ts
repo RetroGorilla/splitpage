@@ -7,7 +7,7 @@ import type { TagName } from "../document/tags.ts";
 
 export type PlainTextOptions = { directions?: string | null | undefined; cues?: string | null | undefined };
 
-export type DocxOptions = TreeOptions & { annotate?: boolean | null | undefined };
+type DocxOptions = TreeOptions & { annotate?: boolean | null | undefined };
 
 export type DocxRun = {
   text: string;

@@ -3,12 +3,12 @@ import { mediaCommentId, sha256Bytes } from "./ids.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
 import { safeHref, safeImageSrc, storedImageHtml, storedImageMarkup } from "./text-policy.ts";
 
-export interface RowImage {
+interface RowImage {
   ref: ImageRef | null;
   dataUrl: string | null;
 }
 
-export interface ImageRow {
+interface ImageRow {
   visualImage?: unknown;
   imageRef?: unknown;
 }
