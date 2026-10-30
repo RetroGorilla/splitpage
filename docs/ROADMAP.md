@@ -1,6 +1,6 @@
 # Roadmap
 
-What is left for Splitpage 4.1 now that the restructure is done, and the order it runs in. Checked on 2026-10-30 at `c98f71d1`. Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
+What is left for Splitpage 4.1 now that the restructure is done, and the order it runs in. Checked on 2026-10-30 at `c98f71d1`. "4.1" is the internal name for this work (the `4.1-development` branch); it ships publicly as **4.0.0** (Adam, 2026-10-30). Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
 
 ## Where it stands
 
@@ -66,8 +66,8 @@ Merge order: PRs on different files merge freely; PRs sharing files merge one at
 
 Items without an `AQ-n` id yet (A2, A3, B1, B2, B3's rename and startup slots, C3, C5) are added to [AGENT-QUEUE.md](AGENT-QUEUE.md) with an `AQ-add:` PR when their wave starts, each with its "Needs" line, its model, and `STOPS FOR ADAM` where it is protected.
 
-## Releasing 4.1.0 (last step, when Adam calls it)
+## Releasing 4.0.0 (last step, when Adam calls it)
 
 1. Freeze agent-queue merges, so the checked commit is the tagged one.
-2. Version bump PR: `VERSION`, `desktop/package.json` and its lockfile go to `4.1.0`, plus `sw.js`, the CHANGELOG heading, the Help heading and README. How to release: [RELEASING.md](RELEASING.md).
+2. Version bump PR: `VERSION`, `desktop/package.json` and its lockfile go to `4.0.0`, plus `sw.js`, the CHANGELOG heading, the Help heading and README. How to release: [RELEASING.md](RELEASING.md).
 3. Full browser suites, PC desktop smoke and perf-ab on the bump commit, then tag.
