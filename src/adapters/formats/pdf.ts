@@ -23,6 +23,8 @@ import { tagPrintColor } from "./print-colors.ts";
 import { videoHostLabel } from "./video-host.ts";
 import { unitSafePrefix } from "../../core/document/text-policy.ts";
 import { TAG_STATUSES, tagCategory } from "../../core/production/looks.ts";
+import { unicodeFontObjects } from "./pdf-unicode.ts";
+import type { PdfFontSet, PdfUnicodeFont } from "./pdf-unicode.ts";
 
 interface PdfRun {
   text: string;
@@ -134,10 +136,75 @@ function pdfCharWidth(ch: string, bold?: boolean): number {
   return bold ? 611 : 556;
 }
 
-export function pdfTextWidth(text: string, bold: boolean | undefined, size: number): number {
+function helveticaWidth(text: string, bold: boolean | undefined): number {
   let w = 0;
   for (let i = 0; i < text.length; i++) w += pdfCharWidth(text.charAt(i), bold);
+  return w;
+}
+
+let activeFonts: PdfFontSet | null = null;
+let usedGlyphs = new Map<PdfUnicodeFont, Map<number, string>>();
+
+interface TextPiece { font: PdfUnicodeFont | null; text: string }
+
+function unicodeFontFor(cp: number, bold: boolean | undefined): PdfUnicodeFont | null {
+  if (!activeFonts) return null;
+  const main = bold ? activeFonts.bold : activeFonts.regular;
+  if (main.font.glyphFor(cp)) return main;
+  return activeFonts.emoji.font.glyphFor(cp) ? activeFonts.emoji : null;
+}
+
+// why: selectors, joiners and skin tones only steer emoji shaping, which a PDF without layout tables cannot do;
+// drawn alone they print as stray boxes.
+function isIgnorable(cp: number): boolean {
+  return cp >= 0xFE00 && cp <= 0xFE0F || cp === 0x200D || cp >= 0x1F3FB && cp <= 0x1F3FF;
+}
+
+function textPieces(text: string, bold: boolean | undefined): TextPiece[] {
+  if (!activeFonts) return [{ font: null, text: text }];
+  const out: TextPiece[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const ch = text.charAt(i), cp = text.codePointAt(i) ?? 0;
+    let font: PdfUnicodeFont | null = null, take = 1;
+    if (pdfEncodeChar(ch) === SUBSTITUTE_CODE && ch !== "?") {
+      if (isIgnorable(cp)) { i += cp > 0xFFFF ? 2 : 1; continue; }
+      font = unicodeFontFor(cp, bold);
+      if (font) take = cp > 0xFFFF ? 2 : 1;
+    }
+    const part = text.slice(i, i + take), last = out[out.length - 1];
+    if (last && last.font === font) last.text += part;
+    else out.push({ font: font, text: part });
+    i += take;
+  }
+  return out;
+}
+
+function pieceWidth(piece: TextPiece, bold: boolean | undefined): number {
+  const f = piece.font;
+  if (!f) return helveticaWidth(piece.text, bold);
+  let w = 0;
+  for (const ch of piece.text) w += f.width(f.font.glyphFor(ch.codePointAt(0) ?? 0));
+  return w;
+}
+
+export function pdfTextWidth(text: string, bold: boolean | undefined, size: number): number {
+  let w = 0;
+  textPieces(text, bold).forEach(function (p) { w += pieceWidth(p, bold); });
   return w * size / 1000;
+}
+
+function glyphHex(piece: TextPiece): string {
+  const f = required(piece.font ?? undefined);
+  let used = usedGlyphs.get(f);
+  if (!used) { used = new Map(); usedGlyphs.set(f, used); }
+  let out = "";
+  for (const ch of piece.text) {
+    const gid = f.font.glyphFor(ch.codePointAt(0) ?? 0);
+    if (!used.has(gid)) used.set(gid, ch);
+    out += ("000" + gid.toString(16).toUpperCase()).slice(-4);
+  }
+  return out;
 }
 
 function isUnshown(text: string, at: number, code: number): boolean {
@@ -148,10 +215,16 @@ function isUnshown(text: string, at: number, code: number): boolean {
   return !(low && prev >= 0xD800 && prev <= 0xDBFF);
 }
 
-export function withUnshownCount<T>(build: () => T): { value: T; unshown: number } {
+export function withUnshownCount<T>(build: () => T, fonts?: PdfFontSet | null): { value: T; unshown: number } {
   unshownTally = 0;
-  const value = build();
-  return { value: value, unshown: unshownTally };
+  usedGlyphs = new Map();
+  activeFonts = fonts || null;
+  try {
+    const value = build();
+    return { value: value, unshown: unshownTally };
+  } finally {
+    activeFonts = null;
+  }
 }
 
 export function pdfEscapeText(s: string): string {
@@ -182,9 +255,26 @@ export function pdfCirclePath(cx: number, cy: number, r: number): string {
 
 function n2(v: number): string { return (+v).toFixed(2); }
 
+const OBLIQUE_SKEW = "0.2126";
+
 export function pdfTextOp(str: string, x: number, y: number, font: string, size: number, hex?: string | null): string {
-  const op = "BT /" + font + " " + size + " Tf 1 0 0 1 " + n2(x) + " " + n2(y) +
-    " Tm (" + pdfEscapeText(str) + ") Tj ET";
+  const bold = font === "F2" || font === "F4", italic = font === "F3" || font === "F4";
+  const pieces = textPieces(str, bold);
+  let op: string;
+  if (pieces.length === 1 && !required(pieces[0]).font) {
+    op = "BT /" + font + " " + size + " Tf 1 0 0 1 " + n2(x) + " " + n2(y) +
+      " Tm (" + pdfEscapeText(str) + ") Tj ET";
+  } else {
+    let at = x;
+    op = pieces.map(function (p) {
+      const skew = italic && p.font ? OBLIQUE_SKEW : "0";
+      const shown = p.font ? "<" + glyphHex(p) + ">" : "(" + pdfEscapeText(p.text) + ")";
+      const piece = "BT /" + (p.font ? p.font.resource : font) + " " + size + " Tf 1 0 " + skew + " 1 " + n2(at) + " " + n2(y) +
+        " Tm " + shown + " Tj ET";
+      at += pieceWidth(p, bold) * size / 1000;
+      return piece;
+    }).join(" ");
+  }
   return hex ? "q " + pdfRgb(hex) + " rg " + op + " Q" : op;
 }
 
@@ -290,6 +380,11 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
   const outline = (spec.outline || []).filter(function (o) { return o && o.page >= 0 && o.page < numPages; });
   const outlineRoot = outline.length ? next++ : 0;
   const outlineItems = outline.map(function () { return next++; });
+  const unicodeFonts = Array.from(usedGlyphs.entries()).filter(function (e) { return e[1].size > 0; }).map(function (e) {
+    const base = next;
+    next += 5;
+    return { font: e[0], used: e[1], base: base };
+  });
   const totalObjs = next - 1;
 
   put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
@@ -314,6 +409,7 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
   put("<< " + (info.title ? "/Title " + pdfInfoString(info.title) + " " : "") +
     "/Creator (Splitpage) /Producer (Splitpage) /CreationDate (" + pdfDate(info.date || new Date(1980, 0, 1)) + ") >>\nendobj\n");
 
+  const unicodeResources = unicodeFonts.map(function (u) { return " /" + u.font.resource + " " + u.base + " 0 R"; }).join("");
   pages.forEach(function (pg, idx) {
     startObj(firstPageObj + idx);
     let xobj = "";
@@ -327,7 +423,7 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
     const box = pg.size || [PW, PH];
     put("<< /Type /Page /Parent " + OBJ_PAGES + " 0 R /MediaBox [0 0 " + box[0] + " " + box[1] + "]" +
       " /Resources << /Font << /F1 " + OBJ_F1 + " 0 R /F2 " + OBJ_F2 + " 0 R" +
-      " /F3 " + OBJ_F3 + " 0 R /F4 " + OBJ_F4 + " 0 R >>" + xobj + " >>" + annots +
+      " /F3 " + OBJ_F3 + " 0 R /F4 " + OBJ_F4 + " 0 R" + unicodeResources + " >>" + xobj + " >>" + annots +
       " /Contents " + (contentObjBase + idx) + " 0 R >>\nendobj\n");
   });
 
@@ -367,6 +463,13 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
         " /Dest [" + (firstPageObj + o.page) + " 0 R /XYZ 0 " + n2(o.y == null ? PH : o.y) + " 0] >>\nendobj\n");
     });
   }
+
+  unicodeFonts.forEach(function (u) {
+    unicodeFontObjects(u.font, u.used, u.base).forEach(function (body, k) {
+      startObj(u.base + k);
+      body.forEach(put);
+    });
+  });
 
   const xrefAt = length;
   let xref = "xref\n0 " + (totalObjs + 1) + "\n0000000000 65535 f \n";
@@ -459,13 +562,13 @@ export function pdfWrapRuns(runs: readonly PdfRun[], maxWidth: number, size: num
       if (!isSpace && lineWidth + w > maxWidth && line.length) pushLine();
       if (!isSpace && w > maxWidth) {
         let chunk = "";
-        for (let i = 0; i < word.length; i++) {
-          if (pdfTextWidth(chunk + word[i], run.b, sz) > maxWidth && chunk) {
+        for (const ch of word) {
+          if (pdfTextWidth(chunk + ch, run.b, sz) > maxWidth && chunk) {
             line.push(seg(chunk, pdfTextWidth(chunk, run.b, sz)));
             pushLine();
             chunk = "";
           }
-          chunk += word[i];
+          chunk += ch;
         }
         if (chunk) {
           const cw = pdfTextWidth(chunk, run.b, sz);

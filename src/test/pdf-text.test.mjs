@@ -109,7 +109,7 @@ test("the PDF exporter hands the count on as a diagnostic, and none when it is z
       return registries.exports.byId("pdf").build({ doc: liveDoc(), options: {}, assets, ports: {} }, "script");
     };
     const shown = await build("Price €5", "Привет 你好");
-    assert.deepEqual(shown.diagnostics, { imagesLeftOut: 0, unshownCharacters: 8 });
+    assert.deepEqual(shown.diagnostics, { imagesLeftOut: 0, unshownCharacters: 2 });
     const plain = await build("Price €5", "Hello");
     assert.deepEqual(plain.diagnostics, { imagesLeftOut: 0, unshownCharacters: 0 });
   } finally { registries.dispose(); }

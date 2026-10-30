@@ -4,5 +4,5 @@ export function imagesLeftOutText(count: number, name: string): string {
 }
 
 export function unshownCharactersText(count: number): string {
-  return count + (count === 1 ? " character" : " characters") + " outside Latin can't be shown in PDF";
+  return count + (count === 1 ? " character" : " characters") + " can't be shown in PDF";
 }
