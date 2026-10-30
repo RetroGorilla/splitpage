@@ -3,7 +3,7 @@ import { startBrollPanel as mountPanelState, mountBrollPanel } from "../../featu
 import { brollPanelActions as panelDefinitions } from "../../features/broll/actions.ts";
 import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "../../features/broll/ports.ts";
 import { ids as portIds } from "./ports/identity.ts";
-import { flags as portFlags, brollView as portBrollView } from "./ports/preferences.ts";
+import { brollAnchoring, flags as portFlags, brollView as portBrollView } from "./ports/preferences.ts";
 import { panelControl as portPanels } from "./ports/panels.ts";
 import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
 import { personColors as portPersonColors } from "./ports/person-colors.ts";
@@ -45,10 +45,11 @@ export function mountBrollFeature(): BrollRecordsMount {
       caretSpot: ensureTrailingCaretSpot,
       position: domToPos,
       anchors: {
-        inRows: (rows) => anchorBrollInRows(heldDocument(), rows, { readers: text.productionReaders, ids: randomIds, cellOf: text.cellOf, inertBody: text.inertBody, sanitize: text.sanitizeHtml }),
+        inRows: (rows) => anchorBrollInRows(heldDocument(), rows, { readers: text.productionReaders, ids: randomIds, cellOf: text.cellOf, inertBody: text.inertBody, sanitize: text.sanitizeHtml, declined: brollAnchoring.declined }),
         htmlLines: brollHtmlLines,
         keyHtml: brollKeyHtml
       },
+      anchoring: brollAnchoring,
       refresh: requestRefresh
     });
     return records;

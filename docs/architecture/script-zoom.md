@@ -27,6 +27,6 @@ The feature mount tests use shared fakes and jsdom without starting the app. Exi
 
 ## Rule 8 status
 
-The JavaScript move and its ESLint browser-globals entry were already present. The dependency baseline already contains no script-zoom `legacy-file`, `loop-import` or `cycle-edge` entries, so there is nothing to prune and no exception is added.
+The JavaScript move and its ESLint browser-globals entry were already present. The dependency baseline contains no script-zoom cycle entries, so there is nothing to prune and no exception is added.
 
 The numbered-file count stays at 55. No typing-path or desktop-port call is introduced by this rework.

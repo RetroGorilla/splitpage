@@ -21,7 +21,6 @@ Read this first. It is the short version of the rules; the linked documents hold
 | `src/bootstrap/wiring/ports/` | Shared ports, one module per responsibility (document, editing, text, preferences, screen, effects...) | anything |
 | `src/bootstrap/actions.ts` | The one ordered list of actions. Order is what the command menu shows; `tests/bootstrap/action-order.test.ts` pins it | anything |
 | `src/bootstrap/main.ts` | The composition root and build entry: wires the app, then mounts owners and features in a fixed order. `tests/bootstrap/composition-root.test.ts` pins the order | anything in `src/bootstrap/`; outside it, only its frozen set |
-| `src/legacy/` | Retired; do not add files here | core, `application`, `adapters`, `shared/`; never features or bootstrap |
 | `server/`, `desktop/`, `shared/` | Static file server for `start.mjs`, Electron shell, code shared by all three | see the layer table |
 
 The layer table is enforced by `npm run check:deps`: [dependencies.md, Layers](docs/architecture/dependencies.md#layers).
@@ -43,7 +42,7 @@ A moved feature file starts through `start<Name>(ports)`, such as `startFind` in
 These come from the maintainer. Each one has been broken by an agent before.
 
 1. **No new comments, except reason comments.** A reason explains why, not what; review judges that. It is at most two consecutive comment lines of at most 120 characters each, beginning `// why: ...`, `# why: ...` in shell, PowerShell or YAML run blocks, or `/* why: ... */` in CSS. A second line is a plain continuation directly below. A `docs/<file>.md#<anchor>` link is optional, but its heading must exist. All other new comments fail; reasons never enter the baseline. See [plan section 2](docs/IMPLEMENTATION-PLAN.md#no-comments-in-authored-code).
-2. **Never skip, disable or loosen a test.** An assertion may be updated when the behaviour is meant to change, never weakened to get green.
+2. **Never skip, disable or loosen a product test.** An assertion may be updated when the behaviour is meant to change, never weakened to get green. Tests for deleted tool code may be removed with it.
 3. **Structural PRs change no behaviour.** A move says which responsibility moves where and which dependency it removes, in a "Structure" section of the PR body.
 4. **No compatibility re-exports.** When something moves, update every importer. Do not leave a file that re-exports the old name. There are no exceptions: the composition root imports each mount from its own wiring module.
 5. **Features take named ports.** Build ports from `src/bootstrap/wiring/ports/` and owner types narrowed with `Pick`; never copy a file's old import list into a port: [feature-ports.md, Rule 2](docs/architecture/feature-ports.md#rule-2-a-port-is-built-from-shared-ports-owner-types-and-the-features-own-needs).

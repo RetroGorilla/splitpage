@@ -9,7 +9,7 @@ const { mountImportsFeature } = await import("../bootstrap/wiring/views.ts");
 const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.js");
 const { openImportModal, closeImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
-const { resetImportMode } = await import("../application/import-mode.ts");
+const { importMode } = await import("../bootstrap/wiring/ports/preferences.ts");
 after(closeApp);
 
 function open() {
@@ -20,7 +20,7 @@ function open() {
     } }, reason: "import-lifetime"
   });
   render();
-  resetImportMode();
+  importMode.reset();
   document.querySelector('input[name="import-split"][value="paragraph"]').checked = true;
   document.getElementById("import-preview").textContent = "replacement preview";
 }

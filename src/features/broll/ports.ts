@@ -1,3 +1,4 @@
+import type { BrollAnchorDeclines } from "../../application/broll-anchoring.ts";
 import type { BrollView } from "../../application/preferences/broll-view.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
@@ -40,6 +41,7 @@ export interface BrollRecordsPorts {
   readonly caretSpot: (cell: Element) => void;
   readonly position: (cell: Node, node: Node, offset: number) => number | null;
   readonly anchors: BrollAnchors;
+  readonly anchoring: Pick<BrollAnchorDeclines, "reset">;
   readonly refresh: (job: string) => void;
 }
 

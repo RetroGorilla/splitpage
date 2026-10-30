@@ -20,7 +20,7 @@ console.log("\nneedsChecks():\n");
 
 eq("prose alone skips the checks", needsChecks(["README.md", "docs/architecture/testing.md", ".claude/handoff/x/y.html"]), false);
 eq("docs/help.md is built into the app", needsChecks(["docs/help.md"]), true);
-eq("a source file needs the checks", needsChecks(["README.md", "src/js/05-render.js"]), true);
+eq("a source file needs the checks", needsChecks(["README.md", "src/bootstrap/05-render.js"]), true);
 eq("a new folder needs the checks", needsChecks(["src/core/text/runs.ts"]), true);
 eq("a browser suite needs the checks", needsChecks([".claude/skills/run-splitpage-app/tests/01-core.txt"]), true);
 eq("a workflow change needs the checks", needsChecks([".github/workflows/ci.yml"]), true);
