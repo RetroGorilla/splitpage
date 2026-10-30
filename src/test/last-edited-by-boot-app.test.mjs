@@ -20,7 +20,7 @@ import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/com
 import { getEditorName, preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences()); }
 const { openSettings } = await import("../features/settings/settings.js");
-const { render } = await import("../features/rows/render.js");
+const { render } = await import("../features/rows/render.ts");
 const { toastLastEditor } = await import("../bootstrap/wiring/history-panel.ts");
 import { historyOwner } from "../bootstrap/wiring/history.ts";
 const captureSnapshot = (...args) => historyOwner().captureSnapshot(...args);

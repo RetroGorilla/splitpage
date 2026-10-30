@@ -23,7 +23,7 @@ import { runFromButton } from "./ports/actions.ts";
 import { mountComments } from "../../features/comments/mount.ts";
 import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
 import { storedImageHtml } from "../../core/document/text-policy.ts";
-import { typePendingMarks } from "../../features/rows/render.js";
+import { typePendingMarks } from "../../features/rows/render.ts";
 import {
   appendDraftMedia,
   draftRedo,
