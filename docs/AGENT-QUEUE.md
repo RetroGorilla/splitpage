@@ -578,7 +578,7 @@ Task: improvement plan item 4.3, step 1 for the prompter (AGENTS.md rule 11). Co
 Structure section: "no responsibility moves; types only". Name every file outside prompter.ts that changed and why.
 ```
 
-## AQ-25 [ ] Hold the prompter's state in one object (after AQ-24 merges)
+## AQ-25 [x] Hold the prompter's state in one object (after AQ-24 merges)
 
 Needs: AQ-24. Files: src/features/prompter/prompter.ts only (plus docs that describe its state, if any).
 
