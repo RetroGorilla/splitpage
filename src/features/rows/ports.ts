@@ -20,7 +20,7 @@ export interface ReadTimePorts {
   readonly notices: Pick<NoticePort, "show">;
 }
 
-export interface CellSelectionPort {
+interface CellSelectionPort {
   readonly of: (cell: Element) => CellRange | null;
   readonly set: (cell: Element, from: number, to?: number) => void;
 }
@@ -39,7 +39,7 @@ export interface ScenePorts {
   readonly deletes: Pick<DeleteConfirm, "armedId" | "arm" | "disarm">;
 }
 
-export interface SplitScene {
+interface SplitScene {
   readonly id: string;
   readonly field: string;
 }

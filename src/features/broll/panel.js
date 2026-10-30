@@ -253,7 +253,7 @@ function groupMenuHtml() {
     '</div>';
 }
 
-export function brollGroups(entries, by, from) {
+function brollGroups(entries, by, from) {
   return brollGroupsFrom(entries, by, from || { rows: ports.document.current()?.rows || [], people: ports.document.current()?.people || [] });
 }
 
@@ -641,7 +641,7 @@ function fitTextarea(box) {
   box.style.height = (box.scrollHeight + box.offsetHeight - box.clientHeight) + "px";
 }
 
-export function renderBrollViews() {
+function renderBrollViews() {
   renderBroll();
   renderBrollPage();
 }
@@ -675,7 +675,7 @@ function updateRecord(id, fields) {
   if (writeRecord(id, fields)) renderBrollViews();
 }
 
-export function toggleBrollShot(id) {
+function toggleBrollShot(id) {
   var rec = brollRecord(id);
   if (!rec) return;
   updateRecord(id, { status: rec.status === "shot" ? "unshot" : "shot" });
@@ -783,7 +783,7 @@ function addBrollFromPanel() {
   ports.notices.show("Added to the b-roll list.", "ok");
 }
 
-export function jumpToBrollShot(id) {
+function jumpToBrollShot(id) {
   var e = entryById(id);
   if (!e || !e.rowId) return false;
   ports.shotHiding.reveal(e.rowId);
@@ -1200,7 +1200,7 @@ function pageRowHtml(e) {
   '</tr>';
 }
 
-export function renderBrollPage() {
+function renderBrollPage() {
   var page = brollPageEl();
   if (!page || page.hidden || !ports.document.current()) return;
   keepingFocus(page, function () {

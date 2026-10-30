@@ -7,7 +7,7 @@ export interface WriterRoutePorts {
   readonly exportNarration: () => void;
 }
 
-export interface WriterRoutesMount {
+interface WriterRoutesMount {
   readonly window: Window;
   readonly doc: Element;
   readonly bar: Element;

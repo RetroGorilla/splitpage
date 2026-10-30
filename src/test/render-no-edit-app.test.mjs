@@ -10,7 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
-const { render, renderAbsorbed, screenIsStale } = await import("../features/rows/render.js");
+const { render, renderAbsorbed, screenIsStale } = await import("../features/rows/render.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undoSizes = () => undoOwner().sizes();
