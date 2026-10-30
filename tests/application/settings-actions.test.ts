@@ -4,17 +4,27 @@ import { installSettingsControls, openSettings, settingsAction } from "../../src
 import type { SettingsControls } from "../../src/application/settings-actions.ts";
 import type { ScreenState } from "../../src/application/screen.ts";
 
+test("opening settings throws while no controls are installed, and forwards input to the installed ones", () => {
+  assert.throws(() => openSettings(), /settings controls are not installed/);
+  const calls: unknown[] = [];
+  const first = installSettingsControls({ openSettings: (input) => { calls.push(["first", input]); } });
+  const second = installSettingsControls({ openSettings: (input) => { calls.push(["second", input]); } });
+  first();
+  const input = { focus: "settings-name" };
+  openSettings(input);
+  assert.deepEqual(calls, [["second", input]]);
+  second();
+  assert.throws(() => openSettings(input), /settings controls are not installed/);
+  assert.equal(calls.length, 1);
+});
+
 const CLEAR: ScreenState = { loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false };
 
 function controls(opened: unknown[]): SettingsControls {
   return { openSettings: (input) => { opened.push(input); } };
 }
 
-test("opening settings with nothing installed does nothing", () => {
-  assert.doesNotThrow(() => openSettings("theme"));
-});
-
-test("opening settings reaches the installed controls with the input", () => {
+test("opening settings without an input passes undefined to the installed controls", () => {
   const opened: unknown[] = [];
   const stop = installSettingsControls(controls(opened));
   try {
@@ -24,31 +34,6 @@ test("opening settings reaches the installed controls with the input", () => {
   } finally {
     stop();
   }
-});
-
-test("stopping the installed controls ends delivery", () => {
-  const opened: unknown[] = [];
-  const stop = installSettingsControls(controls(opened));
-  stop();
-  openSettings("theme");
-  assert.deepEqual(opened, []);
-});
-
-test("an old stop does not remove controls installed after it", () => {
-  const first: unknown[] = [];
-  const second: unknown[] = [];
-  const stopFirst = installSettingsControls(controls(first));
-  const stopSecond = installSettingsControls(controls(second));
-  try {
-    stopFirst();
-    openSettings("a");
-    assert.deepEqual(first, []);
-    assert.deepEqual(second, ["a"]);
-  } finally {
-    stopSecond();
-  }
-  openSettings("b");
-  assert.deepEqual(second, ["a"]);
 });
 
 test("the settings action describes itself for the menus", () => {
@@ -87,7 +72,7 @@ test("running the settings action opens the current controls with its input", ()
   assert.deepEqual(opened, ["clock", undefined]);
 });
 
-test("running the settings action with no controls does nothing", () => {
+test("running the settings action with no controls does nothing and does not throw", () => {
   const action = settingsAction(() => null, () => CLEAR);
   assert.doesNotThrow(() => { void action.run("menu", "clock"); });
 });
