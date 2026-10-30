@@ -6,10 +6,15 @@ const TEST_HOOKS: boolean = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLIT
 
 export function exposeTestHook(name: string, make: () => unknown, hold: (withdraw: () => void) => void): void {
   if (!TEST_HOOKS) return;
+  const global = window as unknown as Record<PropertyKey, unknown>;
+  const ownerKey = Symbol.for("splitpage.testHookOwner." + name);
+  const registration = {};
   const value = make();
-  Object.assign(window, { [name]: value });
+  global[name] = value;
+  global[ownerKey] = registration;
   hold(() => {
-    const global = window as unknown as Record<string, unknown>;
+    if (global[ownerKey] !== registration) return;
+    Reflect.deleteProperty(global, ownerKey);
     if (global[name] === value) Reflect.deleteProperty(global, name);
   });
 }
