@@ -6,8 +6,42 @@ appear in the app under **Help**. The format follows
 
 ## Unreleased
 
+This release removes collaboration and server documents and fixes several
+saving bugs. If you open or share scripts on a Splitpage server, read
+**Removed** before you upgrade.
+
 ### Removed
-- Collaboration and server documents are gone for now: live collaboration, presence, invite, share and review links, server bookmarks and PINs, saving and opening documents on a Splitpage server, hosting from the desktop app, and Google Drive. They will come back, rebuilt, later in 4.1. Drafts and sessions that pointed at a server document open as unsaved local documents with their content intact.
+- Collaboration and server documents are gone: live collaboration,
+  presence, invite, share and review links, server bookmarks and PINs,
+  saving and opening documents on a Splitpage server, hosting from the
+  desktop app, and Google Drive. A Splitpage server now only serves the app.
+  It does not read, change or delete the scripts a 3.1 or 4.0 server
+  stored, but this version cannot open them. Before you upgrade, open each
+  server script in your current version and save it to a file. Drafts and
+  sessions that pointed at a server document open as unsaved local
+  documents with their content intact. Collaboration will come back,
+  rebuilt, in a later release.
+
+### Fixed
+- Desktop: a save now reaches the disk before it replaces the old file, so
+  a power cut during a save can no longer leave an empty script.
+- Saving back to a file you imported no longer refuses the next save with
+  "changed on disk" when the file could not be read again after a good
+  write.
+- A save that reached the file is no longer reported as failed when reading
+  the file's time afterwards fails, and the next save no longer sees a
+  false "changed on disk".
+- When the browser withdraws permission to a file, saving it now fails with
+  an error and keeps your work instead of showing a conflict, and saving
+  again once you grant permission works.
+- Crash recovery that paused because the script could not be copied now
+  starts again with your next change, and its notice closes once a copy
+  works.
+- Settings keeps keyboard focus after **Show the desktop-app notice
+  again**, so Escape still closes it.
+
+### Changed
+- The rundown's hover lens eases in and out instead of jumping.
 
 ## 4.0.0-beta.1 — 2026-10-16
 
