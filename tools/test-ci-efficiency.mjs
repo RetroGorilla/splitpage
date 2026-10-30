@@ -9,7 +9,7 @@ import { REPO } from "./source-scan.mjs";
 const readWorkflow = (name) => parse(readFileSync(join(REPO, `.github/workflows/${name}.yml`), "utf8"));
 const ci = readWorkflow("ci");
 const steps = ci.jobs.checks.steps;
-const appSteps = ["Build index.html and stamp sw.js", "sw.js is committed with the current VERSION stamp", "Select persistent Chromium cache", "Install Chromium", "Pick this runner's port block", "Browser suites 01 (core) and 52 (content security policy)", "Upload the built app"];
+const appSteps = ["Build index.html and stamp sw.js", "sw.js is committed with the current VERSION stamp", "Select persistent Chromium cache", "Install Chromium", "Pick this runner's port block", "Browser suites 01 (core) and 52 (content security policy)", "Browser suites for save, typing, undo and export", "Upload the built app"];
 assert.equal(ci.jobs.changes.outputs.app, "${{ steps.classify.outputs.app }}");
 assert.equal(ci.jobs.checks.if, "needs.changes.outputs.code == 'true'" + (ci.jobs.changes.outputs.tested ? " && needs.changes.outputs.tested != 'true'" : ""));
 assert.equal(ci.jobs.tests.if, ci.jobs.checks.if);

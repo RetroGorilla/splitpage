@@ -33,6 +33,11 @@ export function needsAppChecks(files) {
   return files.some((f) => needsChecks([f]) && !NON_APP.some((re) => re.test(f)));
 }
 
+export function needsDesktopChecks(files) {
+  if (files === null || files.length === 0) return true;
+  return needsAppChecks(files) || files.some((f) => needsChecks([f]) && /^desktop\/test\//.test(f));
+}
+
 export function changedFiles(base, head, repo = REPO) {
   if (!base || /^0+$/.test(base) || !head) return null;
   try {
@@ -48,9 +53,11 @@ if (isMain(import.meta.url)) {
   const files = changedFiles(base, head);
   const code = needsChecks(files);
   const app = needsAppChecks(files);
+  const desktop = needsDesktopChecks(files);
   console.log(files === null ? "ci-changes: no usable diff, running every check" : `ci-changes: ${files.length} files changed`);
   for (const f of files ?? []) console.log(`  ${f}`);
   console.log(`ci-changes: code=${code}`);
   console.log(`ci-changes: app=${app}`);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\n`);
+  console.log(`ci-changes: desktop=${desktop}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\n`);
 }
