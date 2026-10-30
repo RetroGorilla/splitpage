@@ -10,5 +10,6 @@ export function runMenuCommandsWith(runner: MenuCommandRunner): () => void {
 }
 
 export function runMenuCommand(command: string): boolean {
-  return !!menuCommandRunner && menuCommandRunner(command);
+  if (!menuCommandRunner) throw new Error("The menu command runner is not installed yet");
+  return menuCommandRunner(command);
 }

@@ -1,5 +1,5 @@
 import { owned } from "../../features/routing/owned.ts";
-import { startRowsRender } from "../../features/rows/render.js";
+import { startRowsRender } from "../../features/rows/render.ts";
 import type { RowsRenderPorts } from "../../features/rows/render-ports.ts";
 import { documentReader } from "./ports/document.ts";
 import { edits, renderEditing, renderDraft, renderUndo } from "./ports/editing.ts";

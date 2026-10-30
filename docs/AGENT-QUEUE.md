@@ -73,7 +73,7 @@ OVERLAP: before merging, list the files changed by every other open PR from this
 PROTECTED PATHS (never merge a PR that touches these; stop, leave the PR open and report to Adam instead):
 - anything for save, close, quit, recovery or drafts: src/application/save/, src/application/session/, src/application/recovery/, src/adapters/files/, src/adapters/storage/, src/adapters/desktop/
 - desktop/ (main process, preload, IPC) and shared/ IPC contracts
-- undo, editing and typing hot path: src/application/editing/, src/features/editing/, src/features/rows/render.js, the whole of src/core/document/ (edit operations, migration, document format)
+- undo, editing and typing hot path: src/application/editing/, src/features/editing/, src/features/rows/render.*, the whole of src/core/document/ (edit operations, migration, document format)
 - merging and the project file format: src/core/merge/, src/features/merge/, src/adapters/formats/project-file*, src/adapters/formats/splitpage-file*
 - startup: src/bootstrap/main.* and src/bootstrap/wiring/startup*
 - .github/workflows/, release.yml, package.json dependencies, eslint.config.mjs, tools/dep-report.mjs, tools/comment-gate.mjs, AGENTS.md
@@ -156,7 +156,7 @@ Structure section: "no structural change"; mutants generated / killed / equivale
 Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #936), now for src/features/. Remove exports nothing uses.
 
 1. For each export in src/features/ (all .ts and .js), grep the whole repo (src/, tests/, tools/, desktop/, shared/, build.mjs, docs/) by whole word. Unused anywhere: delete the code. Used only inside its own file: drop the `export` keyword. Dynamic use (import(), string-built names, namespace imports iterated) counts as use: leave and list.
-2. Skip src/features/rows/render.js, src/features/editing/ and src/features/rows/routes.ts (protected or hot path). List any candidates you skipped there.
+2. Skip src/features/rows/render.ts, src/features/editing/ and src/features/rows/routes.ts (protected or hot path). List any candidates you skipped there.
 3. A test that exists only for a deleted function is deleted with it; name it. No other test is deleted or changed.
 4. start<Name>, mount<Name>, and anything imported from src/bootstrap/ is used. The composition root imports each mount from its own wiring module; check bootstrap before judging.
 5. Run npm run check:deps, node tools/code-map.mjs, lint, typecheck. Prune dep-baseline entries that resolved.
@@ -164,7 +164,7 @@ Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #
 Structure section: table of symbol, file, action, grep result (as in #936); lines removed; protected files skipped.
 ```
 
-## AQ-4 [ ] Fix drift in four design docs
+## AQ-4 [x] Fix drift in four design docs
 
 ```text
 Task: docs/architecture/feature-ports.md, docs/architecture/actions.md, docs/architecture/session.md and docs/DOCUMENT-MODEL.md describe code that has moved since they were written. Fix statements that are false today. Docs only.
@@ -203,7 +203,7 @@ Task: some owners in src/application/ hold an "install slot" (an empty `let x: T
 4. Write the report to the PR body of your claim PR (a report-only PR; see "Report-only tasks"). Keep it under 60 lines.
 ```
 
-## AQ-7 [ ] Export check runs each module in a child process (R2 leftover)
+## AQ-7 [x] Export check runs each module in a child process (R2 leftover)
 
 ```text
 Task: tests/application/owners-construct-nothing.test.ts has a runtime check over the exports of every src/application/ module. Read PRs #920 and #925 and the test itself to see what that check does today. The known gap: it loads every module in one process, so a module that runs code at import time can leave state behind that hides or causes a problem in another module. Today the test writes one script and runs it once in a single child process with `execFileSync(process.execPath, [file])` (around line 178), which loads every module in that one process. Change it to one child process per module, or per small batch of modules, running the same script shape, and assert the same things per module.
@@ -249,7 +249,7 @@ Structure section: "no structural change"; mutants generated / killed / equivale
 Task: find modules under src/features/ (not mount.ts, not ports.ts) that contain pure logic (string, array or DOM-free computation) and have no test, and add tests. Tests only.
 
 1. grep tests/features/ and src/features/**/*.test.ts for each module. Put the tested/untested table in the PR.
-2. Skip src/features/rows/render.js, src/features/editing/ and anything that needs a full app (those are browser-suite territory).
+2. Skip src/features/rows/render.ts, src/features/editing/ and anything that needs a full app (those are browser-suite territory).
 3. Add tests under tests/features/<feature>/ using the existing DOM setup and fakes (tests/features/fakes.ts). Test real behaviour, no mocks of the unit under test.
 4. Do not change src/. If a test exposes a bug, leave that test out and describe it in the PR.
 5. If the AQ-3 PR is still open, skip any module it touches.
@@ -257,7 +257,7 @@ Task: find modules under src/features/ (not mount.ts, not ports.ts) that contain
 Structure section: "no structural change"; the tested/untested table before and after.
 ```
 
-## AQ-11 [ ] Delete unreferenced files
+## AQ-11 [x] Delete unreferenced files
 
 ```text
 Task: find files in the repo that nothing references and delete them.
@@ -270,7 +270,7 @@ Task: find files in the repo that nothing references and delete them.
 Structure section: table of each deleted file, size, and the grep that showed no reference; files kept and why.
 ```
 
-## AQ-12 [ ] Fix drift in HANDOFF.md and invariants.md
+## AQ-12 [x] Fix drift in HANDOFF.md and invariants.md
 
 ```text
 Task: docs/HANDOFF.md and docs/architecture/invariants.md name files, functions, tests and counts that may have changed. Fix statements that are false today. Docs only.
