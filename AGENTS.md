@@ -25,6 +25,8 @@ Read this first. It is the short version of the rules; the linked documents hold
 
 The layer table is enforced by `npm run check:deps`: [dependencies.md, Layers](docs/architecture/dependencies.md#layers).
 
+Loading any module under `src/application/` defines functions, types, plain classes and frozen data, and nothing else: no call but `Object.freeze`, no `new`, no statement, no mutable binding except an empty `let x: T | null = null` slot that an explicit start fills from the wiring, and whose accessors throw while it is empty. `tests/application/owners-construct-nothing.test.ts` scans every module in the folder and checks each one's exports.
+
 A feature never imports another feature. To reach one, it runs that feature's action, reads or subscribes to an owner, gets an output callback from the wiring, or shares a stateless helper in `features/common`: [feature-ports.md, Rule 5](docs/architecture/feature-ports.md#rule-5-features-reach-each-other-four-ways).
 
 ## Finding your way for a feature change
