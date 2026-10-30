@@ -166,7 +166,7 @@ export function refreshPlainTag() {
   paint(o, at);
 }
 
-export function plainTagEmptyAtCaret() {
+function plainTagEmptyAtCaret() {
   var o = open;
   if (!o || !stillThere(o)) return false;
   var at = caretInOpen(o);
@@ -221,7 +221,7 @@ function charBeforeNode(cellEl, node) {
 
 var plainTaggedListeners = [];
 
-export function onPlainTagged(listener) {
+function onPlainTagged(listener) {
   plainTaggedListeners.push(listener);
   return function () {
     var at = plainTaggedListeners.indexOf(listener);
