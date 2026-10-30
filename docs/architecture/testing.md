@@ -12,7 +12,7 @@ runs the fast gates in the order CI does.
 | `node build.mjs` | Builds `index.html` and stamps `sw.js` |
 | `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
-| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list, each tool's entry check) |
+| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, each tool's entry check) |
 | `npm run test:all` | All three sets |
 | `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
 
