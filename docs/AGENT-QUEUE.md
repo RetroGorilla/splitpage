@@ -122,6 +122,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-6 and AQ-14 are report-only.
 - AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
 - AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
+- AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and need an independent review. AQ-30 changes one suite file and can be merged by queue agents. AQ-29 needs AQ-28 (both touch saving; I-20 runs before I-6, as in ROADMAP.md).
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -501,7 +502,7 @@ STRUCTURE SECTION MUST SAY
 - Which suites run on PRs and why, what the smoke covers and when it runs, the measured added minutes, how the gate treats the new jobs.
 ```
 
-## AQ-22 [ ] Visible startup failure screen
+## AQ-22 [x] Visible startup failure screen
 
 Needs: none.
 Files: src/bootstrap/main.ts, src/bootstrap/startup/failure-screen.ts (new), tests/bootstrap/.
@@ -618,4 +619,91 @@ Follow AQ-25 steps 1 to 5 with rundown in place of prompter.
 6. Run `npm run verify`, the rundown suites (node build.mjs, then node tools/run-suites.mjs <out-dir> '^(100|101|102|103|104|105|106|140|141)-' --lanes 6), and the perf-ab comparison with the limits in AQ-26 step 5. STOP if any limit is exceeded.
 
 Structure section: which variables moved into the state object and which stayed out, and why.
+```
+
+## AQ-28 [ ] Save button label after a late save (tracker I-20)
+
+Needs: none.
+Files: src/application/save/ (status.ts, coordinator.ts, or whichever writes the label), src/features/title/save-status.js, their tests, a new browser suite under .claude/skills/run-splitpage-app/tests/.
+**STOPS FOR ADAM**: save path, and it changes what the user sees. Independent review.
+
+```text
+Task: tracker I-20, "Late-save Save button label does not reset". When a save finishes late (after the user has edited again, or after another save started), the Save button label can stay on the old state instead of returning to what the current document state says. Fix it so the label always matches saveStatus() once the save settles. This is a bug fix: the label change is the intended behaviour change; nothing else changes.
+
+FILES TO READ
+- docs/architecture/saving.md ("The Save buttons are a projection", "One status selector"), docs/architecture/invariants.md, docs/HANDOFF.md (AGENTS.md rule 9).
+- src/application/save/status.ts (saveStatus, saveButtonView), coordinator.ts, src/features/title/save-status.js, and setSaveButtons.
+- git log --oneline -i --grep="late" -- src/application/save for earlier late-save fixes (#673 and the commits before it).
+
+DO
+1. STEP 0, before any fix: reproduce it. Write a failing unit test (or browser suite) that starts a save, edits or starts a second save before the first finishes, lets the first finish, and checks the label. If you cannot make it fail on the current 4.1-development, stop: post what you tried in the PR and mark the PR as "does not reproduce". Do not change product code in that case.
+2. Fix at the one place the label is decided (the projection), not by adding a second writer of the label. Keep the save coordinator the owner.
+3. If the file you change is .js and the fix is more than a few lines, convert it to TypeScript in a separate PR first (AGENTS.md rule 11), and stop to report.
+4. `npm run verify`; browser suites: node tools/run-suites.mjs <out> 'save|autosave|title' --lanes 6.
+5. Full Windows Electron smoke on the PC: node desktop/test/smoke.mjs --only-target dev, pass count in the PR.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change", the root cause in one or two sentences, the failing test before the fix and passing after, smoke count.
+```
+
+## AQ-29 [ ] Save-back on desktop reads the file once (tracker I-6)
+
+Needs: AQ-28 merged. Start from a base that includes it.
+Files: src/application/save/import-saving.ts, its tests, docs/architecture/saving.md.
+**STOPS FOR ADAM**: save path. Independent review; PC smoke.
+
+```text
+Task: tracker I-6. After writing an imported file back in place, saveBackToFile (src/application/save/import-saving.ts) calls `writable.close()` and then reads the file again (`ports.files.read`) to record its new lastModified and size. On the desktop, close() already answers the stamp that main took right after its atomic write (docs/architecture/saving.md, "The desktop shim", and the line "It still reads the file a second time after writing ... a one-line change left for later"). A second read can see a later change made by another program and record that as ours, which can hide a real conflict or raise a false one. Use the stamp from close() when it has one; read the file only when it does not (the browser path). Nothing else changes.
+
+FILES TO READ
+- docs/architecture/saving.md (the import save-back section), invariants.md, HANDOFF.md (AGENTS.md rule 9).
+- src/application/save/import-saving.ts (completion.landed and completion.landedUnread), src/adapters/desktop/desktop-handle.ts (what close() answers), the import-saving tests.
+
+DO
+1. STEP 0: confirm the current code still reads after close() on the desktop path. If it no longer does, stop and report "already fixed" with the commit that fixed it.
+2. Change the order so a close() stamp with lastModified is recorded through the same completion step the read path uses; keep the read for a close() that answers nothing. Keep every stillWritingBack check in its place.
+3. Tests: desktop-style handle (close() answers a stamp) records that stamp and does not read; browser-style handle (close() answers nothing) still reads; a file changed by someone else between close() and the old read: record what the next save reports before and after the change, and describe it in the PR. Do not change existing assertions.
+4. Update the saving.md line that calls this "left for later".
+5. `npm run verify`; browser suites: node tools/run-suites.mjs <out> 'import|save|conflict' --lanes 6; full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change", which stamp is now recorded on each platform, the test names, smoke count.
+```
+
+## AQ-30 [ ] Fix the flaky suite 266-header-collab-condense (tracker I-30)
+
+Needs: none.
+Files: .claude/skills/run-splitpage-app/tests/266-header-collab-condense.txt only.
+
+```text
+Task: tracker I-30. Suite 266 fails about 40% of the time, also when run alone. Its 1310px expand check samples the Production label's width every frame and asserts `window.__mid >= 3`, where __mid counts frames with a width between 1 and 70 px. The label's full width is about 70 px, and sometimes the first sampled frame is already at 69.7 to 72.6 px, so only 0 to 2 frames count. The product is fine (the label ends fully expanded and nothing overlaps); the test's timing is wrong.
+
+DO
+1. Run the suite alone 10 times on the current base and record the pass count: node tools/run-suites.mjs <out> '^266-'.
+2. Fix the measurement, not the threshold: start recording before the width change can land (for example, take the first frame's width before setting the new width, then count frames strictly between the start width and the end width), or compare against the label's measured full width instead of the fixed 70. The check must still fail if the label snaps open with no animation. Show that: temporarily disable the transition locally, run the suite, confirm it fails, and put that output in Validation. Do not commit that change.
+3. Never lower `>= 3` or widen the window to make it pass. The 1290px collapse check must keep its meaning; apply the same fix there only if it has the same problem.
+4. Run the suite alone 20 times after the fix; all must pass. Also run node tools/run-suites.mjs <out> 'header|collab' --lanes 6.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; test only", what the old check measured wrong, what it measures now, pass counts before (of 10) and after (of 20), and the snap-open run that fails.
+```
+
+## AQ-31 [ ] Fix the flaky desktop smoke check #496 (tracker I-5)
+
+Needs: none.
+Files: desktop/test/smoke.mjs only.
+**STOPS FOR ADAM**: desktop/ is protected. Independent review; runs on the PC.
+
+```text
+Task: tracker I-5. The desktop smoke check "quit asks again when a moved file's copy is late" (#496) fails now and then. Find out whether the test waits on a fixed time or on a condition that can come too early, and make it wait on the real condition. Product code does not change.
+
+DO
+1. Find the check in desktop/test/smoke.mjs (grep "copy is late"). Read what it does step by step and what it waits for. Read issue #496.
+2. Run that check 20 times on the PC on the current base (node desktop/test/smoke.mjs --only-target dev with the narrowest filter the script offers) and record the pass count and each failure's output.
+3. If the failure is in the test's timing: replace fixed waits with waits on the condition the check needs, with a time limit that fails loudly. Do not remove an expectation or loosen one.
+4. If the failure shows a product bug (quit really does not ask again), stop: do not change product code; describe the evidence in the PR and leave it for Adam.
+5. Run the check 20 times after the fix (all must pass), then the full smoke once, pass count in the PR.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; test only", the cause, what the check waits on now, pass counts before and after.
 ```
