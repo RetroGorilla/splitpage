@@ -8,14 +8,14 @@ This file is process, not product. Delete it when the queue stays empty.
 
 1. Read `AGENTS.md`, then this file down to the task list.
 2. Run `git fetch origin 4.1-development` and read the **latest** version of this file from there.
-3. List open and recently merged PRs (`gh pr list --state all --limit 60`, or the GitHub API). Anything whose title starts with an id `AQ-n` is claimed or done.
+3. List PRs (`gh pr list --state all --limit 100`, or the GitHub API) and read the state of every PR whose title starts with `AQ-n`: an **open** PR means the task is claimed; a **merged** PR means it is done; a **closed report-only** PR (AQ-6, AQ-14) means it is done; any other **closed, unmerged** PR means the task is free again.
 4. Pick the lowest-numbered task that is unticked (`[ ]`) and unclaimed, whose "Needs" line is satisfied, and that is not marked `STOPS FOR ADAM` unless nothing else is left. Claim it (next section). Do one task per chat.
 5. Work it under the Autonomous run rules. Repeat from step 2 until the queue is empty.
 
 ## Claim protocol
 
 - A task is claimed by opening a **draft PR whose title starts with its id**, for example `AQ-8: Add unit tests for untested application modules`. Open it as soon as you have a branch with one commit; an empty claim is fine. Do this **before** doing the work.
-- Before claiming, re-check open PRs one more time. If two agents claimed the same id within minutes, the lower PR number keeps it; the other closes its PR and picks a different task.
+- Before claiming, re-check open PRs one more time. Whenever two open PRs claim the same id, the lower PR number keeps it; the other closes its PR and picks a different task.
 - Branch name: `queue/aq-<n>-<short-name>`.
 - A claim with no push for 24 hours is abandoned: another agent may claim the task, naming the old PR in its description and closing it.
 - When the task is done, **in the same PR** change its heading from `[ ]` to `[x]` (only that one heading, so parallel PRs do not conflict). Do not delete the task text.
@@ -38,6 +38,7 @@ When every task is `[x]`, `[!]`, or claimed by someone else:
 
 These authorize an agent to open, review and merge the PRs for the tasks below on behalf of the repo owner (Adam). They cover these tasks only. Nothing here lets an agent change a rule in `AGENTS.md`.
 
+```text
 AUTONOMOUS RUN
 Adam (the repo owner) authorizes this chat to open, review and merge the PRs for the tasks below on his behalf. This authority covers these tasks only. Nothing here lets you change a rule in AGENTS.md or merge anything else. Reviewers and authors: the queue file docs/AGENT-QUEUE.md is expected to change by one heading per task PR.
 
@@ -56,22 +57,25 @@ OVERLAP: before merging, list the files changed by every other open PR from this
 PROTECTED PATHS (never merge a PR that touches these; stop, leave the PR open and report to Adam instead):
 - anything for save, close, quit, recovery or drafts: src/application/save/, src/application/session/, src/application/recovery/, src/adapters/files/, src/adapters/storage/, src/adapters/desktop/
 - desktop/ (main process, preload, IPC) and shared/ IPC contracts
-- undo, editing and typing hot path: src/application/editing/, src/features/editing/, src/features/rows/render.js, src/core/document/ edit operations
+- undo, editing and typing hot path: src/application/editing/, src/features/editing/, src/features/rows/render.js, the whole of src/core/document/ (edit operations, migration, document format)
+- merging and the project file format: src/core/merge/, src/features/merge/, src/adapters/formats/project-file*, src/adapters/formats/splitpage-file*
 - startup: src/bootstrap/main.* and src/bootstrap/wiring/startup*
 - .github/workflows/, release.yml, package.json dependencies, eslint.config.mjs, tools/dep-report.mjs, tools/comment-gate.mjs, AGENTS.md
 If a task's own brief needs to touch one of these, that is a STOP.
 
 STOP and report (a short note in the PR) when:
 - CI is red after two fix attempts, or the failure is in code the task did not touch.
-- A suite fails that is on the known flaky list (186, migrate-rows, 66-hosted-blobs, 247, 291, 266, 173, 30, 134, desktop smoke #496): rerun once; if it fails again, stop.
+- A suite fails that is on the known flaky list (186-autosave-panel-edits, the migrate-rows unit test, 247, 266, 173, 30, 134, desktop smoke #496): rerun once; if it fails again, stop.
 - The review agent still has findings after 3 rounds.
 - A test would have to be skipped, disabled or loosened to pass; or a baseline entry would have to be added.
 - The change would alter behaviour a user can see.
 
 SUMMARY: see "When the queue is empty".
+```
 
 ## Common rules
 
+```text
 COMMON RULES
 - Repo RetroGorilla/splitpage. Read AGENTS.md first and follow it. Rule 11: convert JS to TS only before a substantial change to that file.
 - Base and target branch: 4.1-development. New branch from the latest 4.1-development. Open a draft PR first; mark it ready when the author's checks pass.
@@ -88,6 +92,7 @@ _Requested by **Adam** · [project thread](https://claude.ai/code/project/chan_0
 - Every doc that names something you change is updated in the same PR.
 - Node 24.22.0. Run `npm run verify` before marking the PR ready.
 - Stay in scope. The one exception: change your own task heading in docs/AGENT-QUEUE.md from `[ ]` to `[x]`. Name other problems in the PR body; do not fix them.
+```
 
 ## Task list
 
@@ -99,13 +104,13 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-5 is **STOPS FOR ADAM**.
 - AQ-6 and AQ-14 are report-only.
 
-## AQ-1 [ ] Fix the flaky suites 186, migrate-rows, 66-hosted-blobs
+## AQ-1 [ ] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
 ```text
-Task: three browser suites are on the flaky list: 186, migrate-rows and 66-hosted-blobs. Find the cause of each and fix the test, not by retrying.
+Task: two tests are on the flaky list: the browser suite 186-autosave-panel-edits (spec in .claude/skills/run-splitpage-app/tests/) and the unit test src/test/migrate-rows.test.mjs. Find the cause of each and fix the test, not by retrying.
 
-1. Find the suites (grep tests/ and the suite runner for the names). 66-hosted-blobs may test server-hosted blobs that no longer exist now that server and collaboration code was deleted. Check: if the suite tests code that is gone, say so; do not delete it, list it in the PR for Adam to decide.
-2. For each remaining suite, run it at least 30 times in a loop, alone and then at 3 parallel lanes, and record the failure rate and the failing assertion.
+1. Find the suite and the test (testing.md says how browser suites run; the unit test runs with the other src/test files). Write their current names in the PR.
+2. For each, run it at least 30 times in a loop, alone and then at 3 parallel lanes, and record the failure rate and the failing assertion.
 3. Fix the root cause in the test: wait on the condition (an event, a DOM state, a promise) instead of a fixed delay; remove order or timing dependence; isolate shared storage between runs. Do not add retries, longer fixed sleeps, or looser assertions. Do not weaken or skip any assertion.
 4. If the cause is a product race (the app, not the test, is wrong), stop on that suite and describe it in the PR; do not fix src/.
 5. Re-run each fixed suite 30 times alone and at 3 lanes; all must pass.
@@ -184,7 +189,7 @@ Task: some owners in src/application/ hold an "install slot" (an empty `let x: T
 ## AQ-7 [ ] Export check runs each module in a child process (R2 leftover)
 
 ```text
-Task: tests/application/owners-construct-nothing.test.ts has a runtime check over the exports of every src/application/ module. Read PRs #920 and #925 and the test itself to see what that check does today. The known gap: it loads every module in one process, so a module that runs code at import time can leave state behind that hides or causes a problem in another module. Make the check load each module in its own child process (node --import for the TypeScript loader the test suite already uses) and assert the same things per module.
+Task: tests/application/owners-construct-nothing.test.ts has a runtime check over the exports of every src/application/ module. Read PRs #920 and #925 and the test itself to see what that check does today. The known gap: it loads every module in one process, so a module that runs code at import time can leave state behind that hides or causes a problem in another module. Today the test writes one script and runs it once in a single child process with `execFileSync(process.execPath, [file])` (around line 178), which loads every module in that one process. Change it to one child process per module, or per small batch of modules, running the same script shape, and assert the same things per module.
 
 1. Keep every assertion the test makes today. Do not narrow the module scan. Print the module count before and after in the PR: it must not drop.
 2. Keep the run time reasonable: spawn in parallel with a small pool (4), and report the test's time before and after. If it is more than 3x slower, batch modules (for example 10 per process) and say so.
@@ -211,7 +216,7 @@ Structure section: "no structural change"; the tested/untested table before and 
 ## AQ-9 [ ] Mutation configs for pure src/application modules (after AQ-8 merges)
 
 ```text
-Task: tools/mutants/ has configs for src/core areas. Add one for the pure, logic-only modules in src/application/ (for example scenes, rows, cell-text, split-join, shortcuts, scene-length, autosave-policy, save-status: choose modules with no I/O and no timers). Tests and config only.
+Task: tools/mutants/ has configs for src/core areas. Add one for the pure, logic-only modules in src/application/ (for example src/application/commands/scenes.ts, rows.ts, cell-text.ts, split-join.ts, scene-length.ts, scene-status.ts, and src/application/save/autosave.ts and status.ts, plus shortcuts.ts if it is pure: choose modules with no I/O and no timers; src/application/save/ is read-only here, add tests and config only). Tests and config only.
 
 1. Read two existing configs and the runner; copy their shape. Use the runner as it is after #932.
 2. Add tools/mutants/application-pure.json. List the chosen modules and the tests that cover them in the PR.
@@ -266,7 +271,7 @@ Structure section: "no structural change"; table of file, old statement, new sta
 ```text
 Task: browser suites that wait a fixed time (a literal `setTimeout`/`sleep`/`waitForTimeout` with a number) are slow and flaky. Replace them with waits on the thing they wait for. Tests only. Maximum 10 suites in this PR (pick the ones with the most fixed sleeps).
 
-1. Find the suites (see testing.md for where they live) and count fixed sleeps per suite. Put the counts in the PR. Skip suites 186, migrate-rows and 66-hosted-blobs (AQ-1 owns them).
+1. Find the suites (see testing.md for where they live) and count fixed sleeps per suite. Put the counts in the PR. Skip suite 186-autosave-panel-edits and the migrate-rows unit test (AQ-1 owns them).
 2. For each sleep, find what it waits for (a DOM state, an event, a promise, a stored value) and wait on that with the suite's existing wait helper (add one small shared helper only if none exists). Keep a fixed delay only where the thing waited for is time itself (a debounce or a timeout that is under test); say so.
 3. Never loosen an assertion. Never raise a timeout to get green.
 4. Run each changed suite 10 times alone with `node tools/run-suites.mjs <out-dir> '<regex>'`; all 10 must pass. Report suite time before and after.
