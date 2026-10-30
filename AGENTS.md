@@ -79,4 +79,5 @@ Typing, editing and undo changes also need a performance comparison (`tools/perf
 - [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md): the plan and its standing rules.
 - [docs/architecture/](docs/architecture/): current design. Start with [feature-ports.md](docs/architecture/feature-ports.md) (ports and wiring for features), [dependencies.md](docs/architecture/dependencies.md) (gates and layers), [saving.md](docs/architecture/saving.md), [session.md](docs/architecture/session.md) and [testing.md](docs/architecture/testing.md).
 - [review.md](docs/architecture/review.md): what review checks before a merge.
+- [ROADMAP.md](docs/ROADMAP.md): what is left before and after the 4.1.0 release, and the order it runs in.
 - Finished milestone plans and gate records were removed from the tree. Read them in git history if you need the record, and do not treat them as current rules.
