@@ -8,7 +8,7 @@ The 4.1 restructure is finished. `src/js/` and `src/legacy/` are gone, there are
 
 ## Still to do for 4.1
 
-Adam (2026-10-30): nothing is tagged yet; A, B and C below go into 4.1. The Unicode font in PDF export (AQ-16) is in 4.1 too. It is not started.
+Adam (2026-10-30): nothing is tagged yet; A, B and C below go into 4.1. The Unicode font in PDF export (AQ-16) merged as #969; C6 below later replaces the whole PDF generator.
 
 "Protected" means the task touches a protected path in [AGENT-QUEUE.md](AGENT-QUEUE.md#autonomous-run-rules) (saving, desktop, undo and editing, startup, the project file format, merge, build rules), so it gets an independent Opus review and the PC checks, then stops for Adam's merge.
 
@@ -37,6 +37,7 @@ Adam (2026-10-30): nothing is tagged yet; A, B and C below go into 4.1. The Unic
 | C3 | CSS by purpose: merge and rename the 59 `styles-*.css` files (39 of them only numbered, such as `styles-3.css`) by feature, with the computed cascade unchanged and the visual suites green | They only work in one fixed load order | Medium, visual |
 | C4 | Files over 1,000 lines and the 58 remaining JavaScript files, only when a change touches them (rule 11); AQ-14 (#950) reports which come next | Upkeep | As touched |
 | C5 | Close stale tracker rows; close or retarget the old PRs on `main` (#547, #488, #489, #382) | Housekeeping | Small; the PRs need Adam |
+| C6 | Rebuild PDF export as a print layout (I-34, Adam 2026-10-30): one HTML print page for the script, packing lists and shot list; the desktop app saves it with Electron's `printToPDF`, the browser opens its print dialog ("Save as PDF"). Then delete the hand-drawn generator in `pdf.ts` (1,786 lines), the font subsetter and the Noto fonts. Five tasks: P1 script print page and P2 list print pages (not wired, queue agents merge); P3 desktop `printToPDF` (protected); P4 browser print dialog; P5 delete the old generator. P3 to P5 stop for Adam | Every language works with the computer's fonts; removes the second-largest file and ~1.2 MB of fonts. Costs: Chromium decides page breaks (no "cont." label on continued rows), bookmarks only on desktop, browser users pick "Save as PDF" | Large; P3 protected |
 
 ### D. New features (not in 4.1 unless Adam says so)
 
@@ -61,10 +62,11 @@ All of A, B and C go through the agent queue, starting now. Lanes in one wave ru
 | 3, one at a time | 1 | B1 desktop split: IPC, then lifecycle, then voice | Opus; protected; PC smoke on every PR | A1 and I-6 merged | Merge approval for each |
 | 3 | 1 | B2 save completion owner, after B1's lifecycle PR | Opus; protected; PC smoke | I-6 merged | Lift or keep the hold |
 | 3 | 2 | C2 fix if over budget; C4 as touched | A C2 fix on Opus with perf-ab | C2 measurement; AQ-14 | none |
+| 3 | 3 | C6 PDF rebuild: P1 and P2, then P3 and P4, then P5 | Any model for P1, P2 and P4; Opus for P3 and its review; PC smoke on P3 | B1's IPC PR before P3 (both add desktop IPC); AQ-19 before P5 (both touch `pdf.ts`) | Merge approval for P3 to P5; check the new PDFs on the PC before P5 |
 
-Merge order: PRs on different files merge freely; PRs sharing files merge one at a time, each taking the base branch first. A1 and C3 both touch the build; AQ-16 and AQ-19 both touch `pdf.ts`; I-6, B2 and B1's lifecycle PR all touch saving or close, which is why they sit in different waves or one after another in the same lane.
+Merge order: PRs on different files merge freely; PRs sharing files merge one at a time, each taking the base branch first. A1 and C3 both touch the build; AQ-16, AQ-19 and C6 all touch `pdf.ts`; B1 and C6's P3 both touch desktop IPC; I-6, B2 and B1's lifecycle PR all touch saving or close, which is why they sit in different waves or one after another in the same lane.
 
-Items without an `AQ-n` id yet (A2, A3, B1, B2, B3's rename and startup slots, C3, C5) are added to [AGENT-QUEUE.md](AGENT-QUEUE.md) with an `AQ-add:` PR when their wave starts, each with its "Needs" line, its model, and `STOPS FOR ADAM` where it is protected.
+Items without an `AQ-n` id yet (A2, A3, B1, B2, B3's rename and startup slots, C3, C5, C6) are added to [AGENT-QUEUE.md](AGENT-QUEUE.md) with an `AQ-add:` PR when their wave starts, each with its "Needs" line, its model, and `STOPS FOR ADAM` where it is protected.
 
 ## Releasing 4.0.0 (last step, when Adam calls it)
 
