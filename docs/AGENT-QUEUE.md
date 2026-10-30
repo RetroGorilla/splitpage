@@ -561,7 +561,7 @@ STRUCTURE SECTION MUST SAY
 - The hook list and where each now lives, the flag name and default, what the release bundle no longer contains (with the grep result), which jobs build the test variant, smoke counts for both variants.
 ```
 
-## AQ-24 [ ] Convert the prompter to strict TypeScript
+## AQ-24 [x] Convert the prompter to strict TypeScript
 
 Needs: none. Files: src/features/prompter/prompter.js -> prompter.ts, its importers (src/bootstrap/wiring/prompter.ts, src/test/*prompter*.test.mjs and the other src/test files that import it, tests/features/prompter/, tests/bootstrap/load-order/prompter.json), docs that name prompter.js.
 

@@ -36,7 +36,7 @@ import {
   audioDirectionsHtml, buildDocx, buildNarrationDocx, buildNarrationText, docxToRows, narrationRows
 } from "../adapters/formats/docx.ts";
 import { buildCsv } from "../adapters/formats/csv.ts";
-import { prompterSceneHtml } from "../features/prompter/prompter.js";
+import { prompterSceneHtml } from "../features/prompter/prompter.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";

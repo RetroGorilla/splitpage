@@ -1,6 +1,5 @@
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
-import type { DocumentOpening } from "../../application/transitions/sources.ts";
 import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
@@ -12,12 +11,20 @@ import type { PrompterDesktop, PrompterVoice } from "../../application/prompter-
 import type { PrompterPorts } from "./mount.ts";
 import type { ScreenState } from "../../application/screen.ts";
 
+interface PrompterOpening {
+  readonly kind: "file";
+  readonly file: unknown;
+  readonly handle: unknown;
+  readonly parsed: unknown;
+  readonly options: { readonly skipSnapshot: boolean; readonly silent: boolean };
+}
+
 export interface PrompterFeaturePorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf"> & {
     readonly productionReaders: Pick<TextServices["productionReaders"], "wordCount">;
   };
-  readonly opening: DocumentOpening;
+  readonly opening: { readonly open: (opening: PrompterOpening) => Promise<unknown> };
   readonly startup: StartupSignal;
   readonly desktop: PrompterDesktop;
   readonly voice: PrompterVoice;
@@ -33,6 +40,7 @@ export interface PrompterFeaturePorts {
 
 export interface PrompterRuntime extends PrompterPorts {
   readonly openPrompter: () => void;
+  readonly startVoiceFollow: () => Promise<void>;
   readonly acquireWakeLock: (owns?: () => boolean) => void;
   readonly wireTagEntityContainer: PrompterFeaturePorts["installTagEntityContainer"];
   readonly dispose: () => void;
