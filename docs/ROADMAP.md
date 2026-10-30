@@ -17,7 +17,7 @@ No item below starts before the tag, except the report-only tasks in wave 0.
 
 ## After 4.1
 
-"Protected" means the task touches a protected path in [AGENT-QUEUE.md](AGENT-QUEUE.md#autonomous-run-rules) (saving, desktop, undo, startup, formats, merge, build rules), so it stops for Adam, an Opus review and the PC checks.
+"Protected" means the task touches a protected path in [AGENT-QUEUE.md](AGENT-QUEUE.md#autonomous-run-rules) (saving, desktop, undo and editing, startup, the project file format, merge, build rules), so it stops for Adam, an Opus review and the PC checks.
 
 ### A. Safety and known bugs
 
@@ -41,7 +41,7 @@ No item below starts before the tag, except the report-only tasks in wave 0.
 | --- | --- | --- | --- |
 | C1 | Rundown to TypeScript (AQ-26), then prompter and rundown state each in one object (AQ-25, AQ-27), as #957 did for the row renderer | About 48 and 38 module-level variables | Medium; AQ-26 and AQ-27 need perf-ab |
 | C2 | Measure re-renders on stamp, hide and display settings (AQ-18). A fix, if one is over 65 ms, is a separate Opus task with perf-ab | Never timed | Small |
-| C3 | CSS by purpose: merge and rename the 59 `styles-N.css` files by feature, with the computed cascade unchanged and the visual suites green | They only work in one fixed load order | Medium, visual |
+| C3 | CSS by purpose: merge and rename the 59 `styles-*.css` files (39 of them only numbered, such as `styles-3.css`) by feature, with the computed cascade unchanged and the visual suites green | They only work in one fixed load order | Medium, visual |
 | C4 | Files over 1,000 lines and the 58 remaining JavaScript files, only when a change touches them (rule 11); AQ-14 (#950) reports which come next | Upkeep | As touched |
 | C5 | Close stale tracker rows; close or retarget the old PRs on `main` (#547, #488, #489, #382) | Housekeeping | Small; the PRs need Adam |
 
