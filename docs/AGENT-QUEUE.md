@@ -219,7 +219,7 @@ Files touched: that test file and a helper beside it if needed.
 Structure section: "no structural change"; modules covered before/after; run time before/after.
 ```
 
-## AQ-8 [ ] Unit tests for src/application modules that have none
+## AQ-8 [x] Unit tests for src/application modules that have none
 
 ```text
 Task: list the modules in src/application/ (not types/ports-only files) that no test imports, and add tests for them. Tests only.
@@ -245,7 +245,7 @@ Task: tools/mutants/ has configs for src/core areas. Add one for the pure, logic
 Structure section: "no structural change"; mutants generated / killed / equivalent per module.
 ```
 
-## AQ-10 [ ] Unit tests for pure logic in src/features without a test
+## AQ-10 [x] Unit tests for pure logic in src/features without a test
 
 ```text
 Task: find modules under src/features/ (not mount.ts, not ports.ts) that contain pure logic (string, array or DOM-free computation) and have no test, and add tests. Tests only.
