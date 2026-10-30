@@ -342,7 +342,7 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
   images.forEach(function (im, idx) {
     startObj(imageObjBase + idx);
     put("<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h +
-      " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.bytes.length + " >>\nstream\n");
+      jpegColorEntries(im.bytes) + " /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.bytes.length + " >>\nstream\n");
     put(im.bytes);
     put("\nendstream\nendobj\n");
   });
@@ -378,6 +378,34 @@ export function assemblePdf(spec: PdfSpec): Uint8Array<ArrayBuffer> {
   put("trailer\n<< /Size " + (totalObjs + 1) + " /Root " + OBJ_CATALOG + " 0 R /Info " + OBJ_INFO + " 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF\n");
 
   return concatBytes(chunks);
+}
+
+const JPEG_SOF_MARKERS = new Set([0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF]);
+
+function jpegColor(bytes: Uint8Array): { components: number; adobe: boolean } | null {
+  let adobe = false;
+  let i = 2;
+  while (i + 3 < bytes.length) {
+    if (bytes[i] !== 0xFF) { i++; continue; }
+    const marker = bytes[i + 1] ?? 0;
+    if (marker === 0xFF) { i++; continue; }
+    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD9)) { i += 2; continue; }
+    const len = ((bytes[i + 2] ?? 0) << 8) | (bytes[i + 3] ?? 0);
+    if (marker === 0xEE && len >= 12 && String.fromCharCode(...bytes.subarray(i + 4, i + 9)) === "Adobe") adobe = true;
+    if (JPEG_SOF_MARKERS.has(marker)) return i + 9 < bytes.length ? { components: bytes[i + 9] ?? 0, adobe: adobe } : null;
+    if (marker === 0xDA) return null;
+    i += 2 + len;
+  }
+  return null;
+}
+
+function jpegColorEntries(bytes: Uint8Array): string {
+  const color = jpegColor(bytes);
+  if (color && color.components === 1) return " /ColorSpace /DeviceGray";
+  if (color && color.components === 4) {
+    return " /ColorSpace /DeviceCMYK" + (color.adobe ? " /Decode [1 0 1 0 1 0 1 0]" : "");
+  }
+  return " /ColorSpace /DeviceRGB";
 }
 
 const CUE_SCALE = 0.85;
@@ -461,7 +489,7 @@ const PDF_IMAGE_MAX_PX = 2000;
 
 function pdfJpegOf(pic: ExportPicture | null): Promise<Jpeg | null> {
   if (!pic) return Promise.resolve(null);
-  if (pic.mime === "image/jpeg") return Promise.resolve({ bytes: pic.bytes, size: jpegSize(pic.bytes) });
+  if (pic.mime === "image/jpeg" && jpegColor(pic.bytes)) return Promise.resolve({ bytes: pic.bytes, size: jpegSize(pic.bytes) });
   return new Promise<Jpeg | null>(function (resolve) {
     let url: string;
     try { url = URL.createObjectURL(new Blob([new Uint8Array(pic.bytes)], { type: pic.mime || "" })); } catch (e) { resolve(null); return; }
