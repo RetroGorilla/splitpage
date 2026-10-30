@@ -70,6 +70,7 @@ interface PrompterState {
   promptSceneGuideOffset: number;
   promptSizeDefaultSet: number | null;
   voiceMicName: string;
+  promptSceneMode: boolean | undefined;
 }
 
 function freshState(): PrompterState {
@@ -103,7 +104,8 @@ function freshState(): PrompterState {
     promptSceneEndWordOffset: null,
     promptSceneGuideOffset: 0,
     promptSizeDefaultSet: null,
-    voiceMicName: ""
+    voiceMicName: "",
+    promptSceneMode: undefined
   };
 }
 
@@ -116,7 +118,6 @@ let prompterLeaveSeq = 0;
 
 export let prompterMirror: boolean;
 export let prompterFlip: boolean;
-let promptSceneMode: boolean;
 
 function normalizeWord(w: unknown): string {
   return String(w || "").toLowerCase().replace(/[^a-z0-9']/g, "");
@@ -383,15 +384,15 @@ function scenePastReadingLine(scrollTop: number, wordTop: number, guideTop: numb
 export function updateSceneReadout(): void {
   const el = document.getElementById("pp-scene-readout");
   if (!el) return;
-  if (!promptSceneMode || state.promptSceneIndex === -1 || !state.sceneRowIds.length) { el.textContent = ""; return; }
+  if (!state.promptSceneMode || state.promptSceneIndex === -1 || !state.sceneRowIds.length) { el.textContent = ""; return; }
   el.textContent = "Scene " + (state.promptSceneIndex + 1) + " of " + state.sceneRowIds.length;
 }
 
 function updatePrompterSceneModeUI(): void {
-  setToggle(document.getElementById("pp-scene-mode"), promptSceneMode);
+  setToggle(document.getElementById("pp-scene-mode"), !!state.promptSceneMode);
   ["pp-scene-step", "pp-scene-prev", "pp-scene-next", "pp-scene-readout"].forEach(function (id) {
     const el = document.getElementById(id);
-    if (el) el.hidden = !promptSceneMode;
+    if (el) el.hidden = !state.promptSceneMode;
   });
   updateSceneReadout();
 }
@@ -419,7 +420,7 @@ function cueScene(idx: number): boolean {
 }
 
 export function stepScene(dir: number): void {
-  if (!promptSceneMode || !state.sceneRowIds.length) return;
+  if (!state.promptSceneMode || !state.sceneRowIds.length) return;
   const next = findNonEmptySceneIndex(state.promptSceneIndex + dir, dir);
   if (next === -1) return;
   setPrompterPlaying(false);
@@ -447,8 +448,8 @@ function advanceSceneAfterAutoPause(): void {
 
 export function setPrompterSceneMode(on: boolean): void {
   on = !!on;
-  if (on === promptSceneMode) return;
-  promptSceneMode = on;
+  if (on === state.promptSceneMode) return;
+  state.promptSceneMode = on;
   ports.preferences.setPrompterFlag("prompterSceneMode", on);
   updatePrompterSceneModeUI();
   if (on) cueSceneForCurrentPosition();
@@ -481,7 +482,7 @@ export function openPrompter(): void {
   applyPrompterSize();
   applyPrompterOrientation();
   updatePrompterSceneModeUI();
-  if (promptSceneMode) cueSceneForCurrentPosition();
+  if (state.promptSceneMode) cueSceneForCurrentPosition();
   updateVoiceAvailability();
   syncSpeedReadout();
   updatePrompterStatus();
@@ -532,7 +533,7 @@ function prompterTick(ts: number): void {
   const dt = (ts - state.prompterLastTs) / 1000;
   state.prompterLastTs = ts;
   scroller.scrollTop += state.prompterSpeed * dt;
-  if (promptSceneMode && state.promptSceneEndWordOffset != null &&
+  if (state.promptSceneMode && state.promptSceneEndWordOffset != null &&
       scenePastReadingLine(scroller.scrollTop, state.promptSceneEndWordOffset, state.promptSceneGuideOffset)) {
     setPrompterPlaying(false);
     advanceSceneAfterAutoPause();
@@ -728,7 +729,7 @@ function onSpeechTranscript(): void {
     state.wordCursor = state.speakable[state.speakCursor] as number;
     applySpokenUpTo(state.wordCursor);
     scrollWordIntoView(state.wordCursor);
-    if (promptSceneMode && state.promptSceneIndex !== -1 && state.wordCursor >= (state.sceneWordEnd[state.promptSceneIndex] as number)) {
+    if (state.promptSceneMode && state.promptSceneIndex !== -1 && state.wordCursor >= (state.sceneWordEnd[state.promptSceneIndex] as number)) {
       stopVoiceFollow();
       advanceSceneAfterAutoPause();
       setVoiceStatus("Scene finished — say it again to keep following, or press Next.", "listening");
@@ -1082,12 +1083,12 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
 
   prompterFlip = ports.preferences.prompterFlag("prompterFlip");
 
-  promptSceneMode = ports.preferences.prompterFlag("prompterSceneMode");
+  state.promptSceneMode = ports.preferences.prompterFlag("prompterSceneMode");
 
   (window as PrompterWindow).__prompterTest = {
     checkSceneBoundaryNow: function () {
       const scroller = document.getElementById("prompter-scroll") as HTMLElement;
-      if (!promptSceneMode || state.promptSceneEndWordOffset == null) return false;
+      if (!state.promptSceneMode || state.promptSceneEndWordOffset == null) return false;
       if (!scenePastReadingLine(scroller.scrollTop, state.promptSceneEndWordOffset, state.promptSceneGuideOffset)) return false;
       setPrompterPlaying(false);
       advanceSceneAfterAutoPause();
@@ -1095,7 +1096,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     },
     simulateVoiceWordCursor: function (idx) {
       state.wordCursor = idx;
-      if (!promptSceneMode || state.promptSceneIndex === -1 || state.wordCursor < (state.sceneWordEnd[state.promptSceneIndex] as number)) return false;
+      if (!state.promptSceneMode || state.promptSceneIndex === -1 || state.wordCursor < (state.sceneWordEnd[state.promptSceneIndex] as number)) return false;
       stopVoiceFollow();
       advanceSceneAfterAutoPause();
       return true;
@@ -1121,7 +1122,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     setSkipShot: function (value) { ports.state.setSkipShot(value); },
     mirror: function () { return prompterMirror; },
     flip: function () { return prompterFlip; },
-    sceneMode: function () { return promptSceneMode; },
+    sceneMode: function () { return !!state.promptSceneMode; },
     dispose: function () {
       if (ports !== nextPorts) return;
       disposePrompterView();
