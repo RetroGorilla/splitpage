@@ -6,7 +6,7 @@ import { lastFile as portLastFile } from "./ports/files.ts";
 import { draftResume as portDraftResume, seedCheck as portSeedCheck } from "./ports/startup.ts";
 import { launch as portLaunch } from "./ports/desktop.ts";
 import { screen as portScreen } from "./ports/screen.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { onboardingActions as definitions } from "../../features/onboarding/actions.ts";
 import { startOnboarding as mountOnboarding } from "../../features/onboarding/onboarding.ts";
 import type { OnboardingMount, OnboardingPorts } from "../../features/onboarding/ports.ts";
@@ -19,7 +19,7 @@ const onboarding = owned<OnboardingMount>();
 export function mountOnboardingFeature(): OnboardingMount {
   return onboarding.replace(() => {
     const ports: OnboardingPorts = {
-      desktop: runningOnDesktop,
+      desktop: presence.running,
       actions: portActions,
       preferences: {
         onboarding: () => preferences().onboarding(),

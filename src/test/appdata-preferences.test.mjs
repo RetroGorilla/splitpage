@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { preferences } from "../bootstrap/wiring/preferences-owner.ts";
-import { commentSortMode } from "../application/comment-sort.ts";
+import { commentSorting } from "../bootstrap/wiring/ports/preferences.ts";
 
 await bootApp();
 after(closeApp);
@@ -21,7 +21,7 @@ test("app data: comments sort round trip keeps the exported and parsed preferenc
   localStorage.clear();
   await window.__appDataTest.importText(text);
   assert.equal(preferences().commentsSort(), "recent");
-  assert.equal(commentSortMode(), "recent");
+  assert.equal(commentSorting.current(), "recent");
   assert.deepEqual(preferences().commentFilter(), { mode: "open", assignee: "" });
   assert.equal(JSON.stringify((await window.__appDataTest.build()).prefs), EXPORTED_PREFS);
 });

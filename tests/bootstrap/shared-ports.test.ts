@@ -29,8 +29,7 @@ import { editorSelection, startEditor } from "../../src/bootstrap/wiring/editor-
 import { installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { productionIndex, startProductionIndex } from "../../src/application/production/index-owner.ts";
 import { liveDocumentPort } from "../../src/bootstrap/wiring/session-owner.ts";
-import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/bootstrap/wiring/production-editing-owners.ts";
-import { productionGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../src/application/tag-panel-state.ts";
+import { deleteConfirmation, productionSelection, startProductionEditing, tagPanelState } from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 
 test("external links check the current desktop capability and forward each address to the current bridge", () => {
@@ -216,20 +215,21 @@ test("new-tab save confirmation reaches the current save owner", () => {
 test("new-tab production reset forwards panel reset, tag disarming and selection clearing in order", () => {
   const stops: unknown[] = [];
   let observing = true;
-  const stop = startProductionEditing({ start: () => null, stop: (timer) => { if (observing) stops.push([timer, tagRenamingKey(), deleteConfirmation().armedId("tag"), productionSelection().selectedKeys()]); } });
+  const stop = startProductionEditing({ start: () => null, stop: (timer) => { if (observing) stops.push([timer, panel.tagRenamingKey(), deleteConfirmation().armedId("tag"), productionSelection().selectedKeys()]); } });
+  const panel = tagPanelState();
   try {
-    setTagRenaming("rename");
-    setTagExpanded("expand");
-    setTagAddingPerson("person");
-    setProductionGroupBy("person");
+    panel.setTagRenaming("rename");
+    panel.setTagExpanded("expand");
+    panel.setTagAddingPerson("person");
+    panel.setProductionGroupBy("person");
     productionSelection().toggle("tag");
     deleteConfirmation().arm("tag", "tag", () => {});
     stops.length = 0;
     resetProductionPanel();
     assert.deepEqual(stops, [[null, null, "tag", ["tag"]], [null, null, null, []]]);
-    assert.equal(tagExpandedKey(), null);
-    assert.equal(tagAddingPersonKey(), null);
-    assert.equal(productionGroupBy(), "cat");
+    assert.equal(panel.tagExpandedKey(), null);
+    assert.equal(panel.tagAddingPersonKey(), null);
+    assert.equal(panel.productionGroupBy(), "cat");
     assert.equal(productionSelection().anchorKey(), null);
   } finally { observing = false; stop(); }
 });

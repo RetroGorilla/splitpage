@@ -209,8 +209,7 @@ under the test-only freeze flag (milestone 3, decisions D2 and D3).
 The document session (`src/application/session/document-session.ts`) is the
 document's only holder (legacy reduction L3d PR 3). The session bridge hands
 it out through `currentDocument()` and `liveDocumentPort`; the old `S` handle
-on it is deleted (L3j), and `check:deps` fails on `src/js/_state.js` or any
-import of it. A write into the document must be a session command
+on it is deleted (L3j). A write into the document must be a session command
 (`runDocumentEdit`, `stampDocument`, an undo replay), so that undo, dirty,
 drafts, saves and displays see it. A write through a read
 (`currentDocument().comments.push(...)`) needs the guard.
@@ -358,7 +357,6 @@ test in one area's folder does not cover another.
 | each `src/features/<folder>` | `tests/features/<folder>` |
 | files directly in `src/features` | directly in `tests/features`, or directly in `src/features` |
 | `src/bootstrap` | `tests/bootstrap` |
-| `src/legacy` | `tests/legacy` |
 
 `node tools/run-tests.mjs --list [unit|desktop|tools|all]` prints discovery
 without running anything.
@@ -454,7 +452,7 @@ Node runs `.ts` files directly by stripping types; it does not read
 | Config | Covers | Environment |
 | --- | --- | --- |
 | `tsconfig.core.json` | `src/core`, `src/application` | ES2023 only: no DOM, no Node |
-| `tsconfig.web.json` | `src/adapters`, `src/features`, `src/bootstrap`, `src/legacy` | ES2023 and DOM |
+| `tsconfig.web.json` | `src/adapters`, `src/features`, `src/bootstrap` | ES2023 and DOM |
 | `tsconfig.test.json` | `src/**/*.test.ts`, `tests/` | ES2023, DOM and Node |
 
 All three extend `tsconfig.base.json`: `strict`, `noUncheckedIndexedAccess`,
