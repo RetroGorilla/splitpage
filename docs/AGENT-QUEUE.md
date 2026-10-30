@@ -200,7 +200,7 @@ Files touched: that test file and a helper beside it if needed.
 Structure section: "no structural change"; modules covered before/after; run time before/after.
 ```
 
-## AQ-8 [ ] Unit tests for src/application modules that have none
+## AQ-8 [x] Unit tests for src/application modules that have none
 
 ```text
 Task: list the modules in src/application/ (not types/ports-only files) that no test imports, and add tests for them. Tests only.
