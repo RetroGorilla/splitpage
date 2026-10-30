@@ -422,7 +422,10 @@ For each mutant the script copies the repository's files (the ones git lists,
 tracked or not ignored, so no `.git` and no nested `node_modules`) into its own
 temporary folder, links the root `node_modules` rather than copying it, applies
 the one edit there, and runs the chosen unit tests through
-`tools/run-tests.mjs`. Your working tree is never touched. A mutant is
+`tools/run-tests.mjs`. The list of copied files is written to a JSON file next
+to each copy and the test process reads it from there, because the list is too
+long for a Windows command line. If the test process cannot be started, the
+mutant is reported as an error. Your working tree is never touched. A mutant is
 **caught** when the tests fail or run past the timeout, and **survived** when
 they pass. A timed-out mutant's whole process tree is killed, and so is every running mutant's (with the scratch copies removed) when you stop the run with Ctrl+C. A mutant whose `find` text
 is missing or ambiguous, or whose `file` is outside the repository or under
