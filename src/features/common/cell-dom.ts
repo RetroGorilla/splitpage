@@ -1,7 +1,7 @@
 import { MEDIA_KEY, atomKey, unitKey } from "../../core/text/selection.ts";
 import type { Affinity, CellPoints } from "../../core/text/selection.ts";
 
-export interface DomPoint {
+interface DomPoint {
   readonly node: Node;
   readonly offset: number;
 }

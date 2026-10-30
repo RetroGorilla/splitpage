@@ -14,15 +14,15 @@ interface ScriptScaleOptions {
   quiet?: boolean;
 }
 
-export interface ScriptZoomMount extends ScriptZoomControls {
+interface ScriptZoomMount extends ScriptZoomControls {
   readonly mounted: () => boolean;
   readonly dispose: () => void;
 }
 
 let ports: ScriptZoomPorts | null = null;
 
-export const SCRIPT_SCALE_MIN = 0.7;
-export const SCRIPT_SCALE_MAX = 2;
+const SCRIPT_SCALE_MIN = 0.7;
+const SCRIPT_SCALE_MAX = 2;
 const KEY_STEPS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
 let scale = 1;
@@ -33,7 +33,7 @@ let readoutTimer: ReturnType<typeof setTimeout> | 0 = 0;
 const settleFrames = new Set<number>();
 let storing = false;
 
-export function clampScriptScale(v: unknown): number {
+function clampScriptScale(v: unknown): number {
   const n = Number(v);
   if (!isFinite(n) || n <= 0) return 1;
   return Math.min(SCRIPT_SCALE_MAX, Math.max(SCRIPT_SCALE_MIN, n));
