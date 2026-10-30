@@ -285,7 +285,7 @@ Task: docs/HANDOFF.md and docs/architecture/invariants.md name files, functions,
 Structure section: "no structural change"; table of file, old statement, new statement, how you checked.
 ```
 
-## AQ-13 [ ] Replace fixed sleeps in browser suites with condition waits
+## AQ-13 [x] Replace fixed sleeps in browser suites with condition waits
 
 ```text
 Task: browser suites that wait a fixed time (a literal `setTimeout`/`sleep`/`waitForTimeout` with a number) are slow and flaky. Replace them with waits on the thing they wait for. Tests only. Maximum 10 suites in this PR (pick the ones with the most fixed sleeps).
