@@ -7,13 +7,14 @@
 # re-parse or merge step in between.
 
 open
+eval window.__settled = function () { return document.getAnimations().every(function (a) { return a.playState === 'finished' || a.playState === 'idle' || a.effect.getTiming().iterations === Infinity; }); }
 
 # --- one paragraph per scene ------------------------------------------------
 # by id, not text=: an id outlives a relabel (until #169 .btn was also
 # uppercased by CSS, and text= matches innerText's rendered casing)
 click #btn-write
-sleep 700
-expect !document.getElementById('writer').hidden
+wait !document.getElementById('writer').hidden
+wait __settled()
 expect document.querySelectorAll('#writer-doc .wr-para').length == 2
 expect document.querySelectorAll('#writer-doc .wr-block').length == 2
 # the tools at the top, under the title row, and Close beside Save in it
@@ -40,17 +41,13 @@ expect document.getElementById('wr-save').textContent == Save
 expect document.getElementById('wr-file-chip').hidden === document.getElementById('file-chip').hidden
 caret #writer-doc .wr-para
 press  Something new.
-sleep 500
-expect document.getElementById('wr-save').textContent.indexOf('•') !== -1
-expect document.getElementById('wr-save').classList.contains('is-dirty')
-expect document.getElementById('wr-save').textContent === document.getElementById('btn-save').textContent
+wait document.getElementById('wr-save').textContent.indexOf('•') !== -1 && document.getElementById('wr-save').classList.contains('is-dirty') && document.getElementById('wr-save').textContent === document.getElementById('btn-save').textContent
 
 # --- Enter splits the scene at the caret ------------------------------------
 # Caret placed explicitly rather than with `caret`, which only does start/end.
 eval (function(){var p=document.querySelector('#writer-doc .wr-para');var t=p.firstChild;var i=t.nodeValue.indexOf('Today');p.focus();var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return i;})()
 key Enter
-sleep 500
-expect document.querySelectorAll('#writer-doc .wr-para').length == 3
+wait document.querySelectorAll('#writer-doc .wr-para').length === 3
 expect document.getElementById('wr-scenes').textContent == 3
 # the tail moved down, and only the tail
 expect document.querySelectorAll('#writer-doc .wr-para')[1].textContent.indexOf('Today I want') === 0
@@ -60,14 +57,12 @@ expect document.querySelectorAll('#writer-doc .wr-visual')[1].textContent.length
 
 # the caret followed the text it moved, so typing continues in the new scene
 press OK.
-sleep 400
-expect document.querySelectorAll('#writer-doc .wr-para')[1].textContent.indexOf('OK.Today') === 0
+wait document.querySelectorAll('#writer-doc .wr-para')[1].textContent.indexOf('OK.Today') === 0
 
 # --- Backspace at the start joins two scenes back together ------------------
 caret #writer-doc .wr-block:nth-child(2) .wr-para start
 key Backspace
-sleep 500
-expect document.querySelectorAll('#writer-doc .wr-para').length == 2
+wait document.querySelectorAll('#writer-doc .wr-para').length === 2
 # the head already ended in a space, so no second one is invented
 expect document.querySelectorAll('#writer-doc .wr-para')[0].textContent.indexOf('in public. OK.Today') !== -1
 
@@ -75,16 +70,13 @@ expect document.querySelectorAll('#writer-doc .wr-para')[0].textContent.indexOf(
 # Both demo scenes have a visual, and only one of them can survive a merge.
 caret #writer-doc .wr-block:nth-child(2) .wr-para start
 key Backspace
-sleep 500
+wait document.querySelector('.toast') && document.querySelector('.toast').textContent.indexOf('Both scenes have a visual') !== -1
 expect document.querySelectorAll('#writer-doc .wr-para').length == 2
-expect document.querySelector('.toast').textContent.indexOf('Both scenes have a visual') !== -1
 
 # --- tagging still works, because these are real script cells ---------------
 caret #writer-doc .wr-para
 press  Grab the [boom pole] now.
-sleep 600
-expect document.querySelectorAll('#writer-doc .tag-anchor').length == 1
-expect document.getElementById('production-badge').textContent == 1
+wait document.querySelectorAll('#writer-doc .tag-anchor').length === 1 && document.getElementById('production-badge').textContent === '1'
 
 # --- rich text, by keyboard and by the bar ----------------------------------
 # Select the last four characters of scene 1 ("now.") - the text node the tag
@@ -97,12 +89,11 @@ expect document.getElementById('production-badge').textContent == 1
 # walk back from the end skips it rather than counting it.
 eval (function(){var p=document.querySelector('#writer-doc .wr-para');var w=document.createTreeWalker(p,NodeFilter.SHOW_TEXT,null);var last=null;while(w.nextNode())last=w.currentNode;var raw=last.nodeValue;var n=4,idx=raw.length;for(var i=raw.length-1;i>=0;i--){if(raw[i]!=='​'){n--;if(n===0){idx=i;break;}}}var r=document.createRange();r.setStart(last,idx);r.setEnd(last,raw.length);var s=getSelection();s.removeAllRanges();s.addRange(r);p.focus();s.removeAllRanges();s.addRange(r);return r.toString();})()
 key ctrl KeyB
-sleep 400
-expect document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]').classList.contains('is-active')
+wait document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]').classList.contains('is-active')
 # the bar's buttons act on the paragraph that had focus, and jsclick keeps the
 # selection they are about to format
 jsclick .writer-bar .wr-fmt[data-cmd="italic"]
-sleep 400
+wait document.querySelector('.writer-bar .wr-fmt[data-cmd="italic"]').classList.contains('is-active') && window.__splitpageFormats.state().rows.find(function(r){return r.id===document.querySelector('#writer-doc .wr-para').getAttribute('data-id');}).audioText.indexOf('<strong><em>now.</em></strong>') !== -1
 # A paragraph formats through the document model (#85), so the canonical
 # markup is in state at once — no blur, no sanitiser catching up (it was
 # execCommand's <span style="font-weight:bold"> until then, and not asserted).
@@ -113,8 +104,8 @@ shot 06-writer
 
 # --- closing hands everything straight to the split view --------------------
 jsclick #wr-close
-sleep 700
-expect document.getElementById('writer').hidden
+wait document.getElementById('writer').hidden
+wait __settled()
 expect document.querySelectorAll('#rows .row').length == 2
 expect document.querySelectorAll('#rows .tag-anchor').length == 1
 expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('boom pole') !== -1
@@ -129,13 +120,15 @@ expect document.querySelectorAll('#rows .row .audio-cell .cell-editable em').len
 # by id, not text=: an id outlives a relabel (until #169 .btn was also
 # uppercased by CSS, and text= matches innerText's rendered casing)
 click #btn-write
-sleep 600
+wait !document.getElementById('writer').hidden
+wait __settled()
 expect document.getElementById('writer').getAttribute('data-gutter') == visuals
 expect document.getElementById('wr-gutter-mode').textContent == Visuals
 
 # numbers: the visual goes, the number stays
 jsclick #wr-gutter-mode
-sleep 300
+wait document.getElementById('writer').getAttribute('data-gutter') === 'numbers'
+wait __settled()
 expect document.getElementById('writer').getAttribute('data-gutter') == numbers
 expect document.getElementById('wr-gutter-mode').textContent == Numbers
 expect getComputedStyle(document.querySelector('#writer-doc .wr-visual')).display == none
@@ -143,7 +136,8 @@ expect getComputedStyle(document.querySelector('#writer-doc .wr-num')).display !
 
 # compact: nothing beside the writing at all
 jsclick #wr-gutter-mode
-sleep 300
+wait document.getElementById('writer').getAttribute('data-gutter') === 'compact'
+wait __settled()
 expect document.getElementById('writer').getAttribute('data-gutter') == compact
 expect document.getElementById('wr-gutter-mode').textContent == Compact
 expect getComputedStyle(document.querySelector('#writer-doc .wr-gutter')).display == none
@@ -171,7 +165,7 @@ expect document.getElementById('writer-scroll').scrollWidth <= document.getEleme
 # --- text size -------------------------------------------------------------
 eval window.__size0 = parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize)
 eval (function(){var s=document.getElementById('wr-size');s.value='30';s.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
-sleep 300
+wait parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize) === 30
 expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize) == 30
 expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize) > window.__size0
 # it is the writer's own setting, not the script's - so it is remembered for
@@ -180,11 +174,12 @@ expect localStorage.getItem('splitpage-writer-size') == 30
 # the chrome does not scale with it; only the writing does
 expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-num')).fontSize) < 16
 eval (function(){var s=document.getElementById('wr-size');s.value='19';s.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
-sleep 200
+wait parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize) === 19
 
 # back round to the start
 jsclick #wr-gutter-mode
-sleep 300
+wait document.getElementById('writer').getAttribute('data-gutter') === 'visuals'
+wait __settled()
 expect document.getElementById('writer').getAttribute('data-gutter') == visuals
 expect document.getElementById('wr-gutter-mode').classList.contains('is-active')
 expect Math.round(document.querySelector('#writer-doc .wr-para').getBoundingClientRect().left) === window.__compactLeft
@@ -199,16 +194,16 @@ expect Math.round(document.querySelector('#writer-doc .wr-para').getBoundingClie
 # from the rich-text section above, and Ctrl+B there would just remove it.
 eval (function(){var p=document.querySelectorAll('#writer-doc .wr-para')[0];var t=p.firstChild;var r=document.createRange();r.setStart(t,10);r.setEnd(t,14);var s=getSelection();p.focus();s.removeAllRanges();s.addRange(r);return r.toString();})()
 key ctrl KeyB
-sleep 300
+wait document.querySelectorAll('#writer-doc .wr-para')[0].querySelectorAll('span[style], strong, b').length >= 2
 # split so the NEW scene begins with that bold run
 eval (function(){var p=document.querySelectorAll('#writer-doc .wr-para')[0];var b=p.querySelector('span[style], strong, b');var r=document.createRange();r.setStartBefore(b);r.collapse(true);var s=getSelection();p.focus();s.removeAllRanges();s.addRange(r);return b.textContent;})()
+eval window.__preSplit = document.querySelectorAll('#writer-doc .wr-para').length
 key Enter
-sleep 600
+wait document.querySelectorAll('#writer-doc .wr-para').length === window.__preSplit + 1
 eval window.__beforeJoin = document.querySelectorAll('#writer-doc .wr-para').length
 # the caret is now at offset 0 of a text node inside the bold wrapper
 key Backspace
-sleep 600
-expect document.querySelectorAll('#writer-doc .wr-para').length === window.__beforeJoin - 1
+wait document.querySelectorAll('#writer-doc .wr-para').length === window.__beforeJoin - 1
 
 # --- the Tab-completion ghost has to be VISIBLE in here ---------------------
 # The class saying is-visible proves nothing: at z-index 60 the ghost was laid
@@ -216,8 +211,7 @@ expect document.querySelectorAll('#writer-doc .wr-para').length === window.__bef
 # 145 background, so Tab silently committed a tag nobody had been shown.
 caret #writer-doc .wr-para
 press  Get the [boom
-sleep 700
-expect document.getElementById('tag-ghost').classList.contains('is-visible')
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
 # elementFromPoint cannot answer this - the ghost is pointer-events:none, so
 # it is never the hit target whether it is on top or not. Both elements are
 # position:fixed children of body with no ancestor making a stacking context,
@@ -227,7 +221,7 @@ expect parseInt(getComputedStyle(document.getElementById('tag-ghost')).zIndex, 1
 expect document.getElementById('tag-ghost').getBoundingClientRect().width > 0
 expect document.getElementById('tag-ghost').getBoundingClientRect().left < window.innerWidth
 key Escape
-sleep 200
+wait !document.getElementById('tag-ghost').classList.contains('is-visible')
 
 # --- a comment's row pointer follows its anchored text ----------------------
 # A comment is anchored twice over: by rowId, and by a .cmt-anchor span inside
@@ -241,18 +235,17 @@ key Enter
 sleep 700
 
 key Escape
-sleep 500
-expect document.getElementById('writer').hidden
+wait document.getElementById('writer').hidden
 
 # where the anchored text actually ended up...
 eval (function(){var a=document.querySelector('#rows .cmt-anchor[data-cmt="c1"]');var rows=Array.from(document.querySelectorAll('#rows .row'));window.__anchorRow = rows.indexOf(a.closest('.row')) + 1;return window.__anchorRow;})()
 expect window.__anchorRow >= 2
 # ...and what the comments panel says about it. These must agree.
 jsclick #btn-comments
-sleep 600
+wait !document.getElementById('comments-panel').hidden && document.querySelector('.comment-loc')
 expect document.querySelector('.comment-loc').textContent.indexOf(String(window.__anchorRow).padStart(2, '0')) !== -1
 jsclick #comments-panel-close
-sleep 300
+wait document.getElementById('comments-panel').hidden
 
 # --- narration exports ------------------------------------------------------
 # Same blob interception as 03-exports: nothing is written to disk.
@@ -260,8 +253,7 @@ eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.creat
 
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-narration-txt"]
-sleep 1400
-expect window.__blobs.length >= 1
+wait window.__blobs.length >= 1
 eval (async function(){window.__nar = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 expect window.__nar.indexOf('boom pole') !== -1
 # the narration and nothing else: no visual column, no breakdown, no comments
@@ -278,8 +270,7 @@ expect window.__nar.split(/\n\s*\n+/)[0] == Untitled Script
 
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-narration-docx"]
-sleep 2200
-expect window.__blobs[window.__blobs.length-1].type.indexOf('wordprocessingml') !== -1
+wait window.__blobs[window.__blobs.length-1].type.indexOf('wordprocessingml') !== -1
 eval (async function(){var buf=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dv=new DataView(buf.buffer);var off=0,files={};while(off+4<=buf.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(buf.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=buf.subarray(d,d+cs);off=d+cs;}var xml=new TextDecoder().decode(files['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');window.__narDocx={parses:!doc.querySelector('parsererror'),hasAudio:xml.indexOf('boom pole')!==-1,flowing:xml.indexOf('<w:tbl>')===-1,noVisual:xml.indexOf('Host on camera')===-1};return true;})()
 expect window.__narDocx.parses
 expect window.__narDocx.hasAudio
@@ -292,25 +283,27 @@ expect window.__narDocx.noVisual
 # mergeStates() already applies when two people edit at once. Joining a To-do
 # scene onto a Shot one used to carry the shot description up and quietly
 # leave the green dot behind with the row it deleted.
+eval window.__rows0 = document.querySelectorAll('#rows .row').length
 jsclick .add-row-bar [data-action="add-row"]
-sleep 500
+wait document.querySelectorAll('#rows .row').length === window.__rows0 + 1
 # the new last scene has no visual, so the join will be allowed
 eval (function(){var r=document.querySelectorAll('#rows .row');window.__lastId=r[r.length-1].getAttribute('data-id');return window.__lastId;})()
 # To do -> Ready -> Shot
+eval window.__st0 = window.__splitpageFormats.state().rows.find(function(r){return r.id===window.__lastId;}).status
 jsclick #rows .row:last-child [data-action="cycle-status"]
-sleep 250
+wait window.__splitpageFormats.state().rows.find(function(r){return r.id===window.__lastId;}).status !== window.__st0
 jsclick #rows .row:last-child [data-action="cycle-status"]
-sleep 400
-expect !document.getElementById('progress-chip').hidden
-expect document.getElementById('progress-text').textContent.indexOf('1/') === 0
+wait !document.getElementById('progress-chip').hidden && document.getElementById('progress-text').textContent.indexOf('1/') === 0
 
 jsclick #btn-write
-sleep 700
+wait !document.getElementById('writer').hidden
+wait __settled()
 caret #writer-doc .wr-block:last-child .wr-para start
 key Backspace
-sleep 600
+wait document.querySelectorAll('#writer-doc .wr-para').length === window.__rows0
 jsclick #wr-close
-sleep 700
+wait document.getElementById('writer').hidden
+wait __settled()
 # the scene it was joined into is now the one that has been shot
 expect !document.getElementById('progress-chip').hidden
 expect document.getElementById('progress-text').textContent.indexOf('1/') === 0
