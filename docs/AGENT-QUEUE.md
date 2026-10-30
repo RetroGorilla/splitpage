@@ -179,7 +179,7 @@ Task: docs/architecture/feature-ports.md, docs/architecture/actions.md, docs/arc
 Structure section: "no structural change"; table of file, old statement, new statement, how you checked.
 ```
 
-## AQ-5 [ ] --accept can no longer grow a baseline (R2 leftover)
+## AQ-5 [x] --accept can no longer grow a baseline (R2 leftover)
 
 ```text
 Task: AGENTS.md rule 8 says baselines only shrink, but `--accept` in tools/dep-report.mjs (and the matching flag in tools/comment-gate.mjs, if it has one) can still write new entries. Make the tools refuse.
