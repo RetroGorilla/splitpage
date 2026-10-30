@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 
@@ -57,12 +57,13 @@ export function formatTable(results) {
 const CHILD = `
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-const [, scratch, filesJson, onlyJson] = process.argv;
+import { readFileSync } from "node:fs";
+const [, scratch, filesPath, onlyJson] = process.argv;
 const { runTests } = await import(pathToFileURL(scratch + "/tools/run-tests.mjs").href);
 const quiet = () => {};
 process.exitCode = runTests({
   repo: scratch,
-  files: JSON.parse(filesJson),
+  files: JSON.parse(readFileSync(filesPath, "utf8")),
   sets: ["unit"],
   only: JSON.parse(onlyJson),
   print: quiet,
@@ -115,13 +116,21 @@ function childEnv() {
   return env;
 }
 
-function runChild(scratch, files, only, timeoutMs, node) {
+export function runChild(scratch, files, only, timeoutMs, node) {
   return new Promise((resolveRun) => {
-    const child = spawn(node, ["--input-type=module", "-e", CHILD, scratch, JSON.stringify(files), JSON.stringify(only)], { cwd: scratch, stdio: "ignore", env: childEnv(), detached: process.platform !== "win32" });
+    let child;
+    try {
+      const filesPath = join(dirname(scratch), `${basename(scratch)}-files.json`);
+      writeFileSync(filesPath, JSON.stringify(files));
+      child = spawn(node, ["--input-type=module", "-e", CHILD, scratch, filesPath, JSON.stringify(only)], { cwd: scratch, stdio: "ignore", env: childEnv(), detached: process.platform !== "win32" });
+    } catch (e) {
+      resolveRun({ code: -1, timedOut: false, error: e.message });
+      return;
+    }
     running.add(child);
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
-    child.on("error", () => { running.delete(child); clearTimeout(timer); resolveRun({ code: -1, timedOut }); });
+    child.on("error", (e) => { running.delete(child); clearTimeout(timer); resolveRun({ code: -1, timedOut, error: e.message }); });
     child.on("close", (code) => { running.delete(child); clearTimeout(timer); resolveRun({ code, timedOut }); });
   });
 }
@@ -139,6 +148,7 @@ export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, 
     scratch = makeScratch(repo, parent, files);
     writeFileSync(join(scratch, mutant.file), edit.text);
     const run = await runChild(scratch, files, mutant.tests, timeoutMs, node);
+    if (run.error) return done("error", `could not start the test run: ${run.error}`);
     if (run.timedOut) return done("caught", "timeout");
     if (run.code === 0) return done("survived", "");
     if (run.code === 1) return done("caught", "");
@@ -154,6 +164,7 @@ export async function baselinePasses({ repo, files, parent, timeoutMs, node, tes
   const scratch = makeScratch(repo, parent, files);
   try {
     const run = await runChild(scratch, files, tests, timeoutMs, node);
+    if (run.error) throw new Error(`could not start the test run: ${run.error}`);
     return run.code === 0 && !run.timedOut;
   } finally {
     rmSync(scratch, { recursive: true, force: true });
@@ -228,7 +239,13 @@ export async function main(args, { repo = REPO, print = console.log, printError 
   try {
     if (opts.baseline) {
       const scope = [...new Set(mutants.flatMap((m) => m.tests))];
-      const ok = await baselinePasses({ ...base, tests: scope });
+      let ok;
+      try {
+        ok = await baselinePasses({ ...base, tests: scope });
+      } catch (e) {
+        printError(`mutants: ${e.message}`);
+        return 2;
+      }
       if (!ok) { printError("mutants: the unmutated copy fails its tests, so every mutant would count as caught; fix that first (or pass --no-baseline)"); return 2; }
     }
     print(`running ${mutants.length} mutants, ${Math.min(opts.concurrency, mutants.length)} at a time`);

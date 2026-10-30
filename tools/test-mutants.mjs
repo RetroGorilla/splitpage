@@ -3,7 +3,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyEdit, confinedPath, formatTable, killTree, loadMutants, makeScratch, parseArgs, summarize } from "./mutants.mjs";
+import { applyEdit, confinedPath, formatTable, killTree, loadMutants, makeScratch, parseArgs, runChild, runMutant, summarize } from "./mutants.mjs";
 
 let passed = 0;
 const failures = [];
@@ -81,6 +81,36 @@ try {
   check("scratch node_modules reaches the dependencies", existsSync(join(copy, "node_modules", "dep", "index.js")));
 } finally {
   rmSync(root, { recursive: true, force: true });
+}
+
+const handoff = mkdtempSync(join(tmpdir(), "mutants-handoff-"));
+try {
+  const scratch = join(handoff, "mutant-x");
+  const seen = join(handoff, "seen.json");
+  mkdirSync(join(scratch, "tools"), { recursive: true });
+  writeFileSync(join(scratch, "tools", "run-tests.mjs"), `import { writeFileSync } from "node:fs";\nexport function runTests(o) { writeFileSync(${JSON.stringify(seen)}, JSON.stringify({ files: o.files, only: o.only })); return 0; }\n`);
+  const many = Array.from({ length: 4000 }, (_, i) => `src/features/some-feature/long-directory-name/file-${i}.ts`);
+  check("the file list is longer than a Windows command line", JSON.stringify(many).length > 200000);
+  const run = await runChild(scratch, many, ["a"], 60000, process.execPath);
+  eq("a very long file list reaches the child", run.code, 0);
+  const got = existsSync(seen) ? JSON.parse(readFileSync(seen, "utf8")) : null;
+  check("the child reads the whole file list", got !== null && got.files.length === many.length && got.files[3999] === many[3999]);
+  check("the child still gets the test filter", got !== null && got.only[0] === "a");
+
+  const missing = await runChild(scratch, many, [], 60000, join(handoff, "no-such-node"));
+  check("a missing node binary is reported, not thrown", missing.code === -1 && typeof missing.error === "string");
+  const refused = await runChild(scratch, many, [], 60000, "bad\0node");
+  check("a spawn that throws is reported, not thrown", refused.code === -1 && typeof refused.error === "string");
+
+  const repo = join(handoff, "repo");
+  mkdirSync(join(repo, "src"), { recursive: true });
+  mkdirSync(join(handoff, "parent"));
+  writeFileSync(join(repo, "src", "a.ts"), "export const a = 1;\n");
+  const outcome = await runMutant({ label: "a", file: "src/a.ts", find: "1", replace: "2", tests: [] }, { repo, files: ["src/a.ts"], parent: join(handoff, "parent"), timeoutMs: 1000, node: "bad\0node", keep: false });
+  eq("a spawn failure makes the mutant an error", outcome.status, "error");
+  check("the error says the test run could not start", outcome.detail.startsWith("could not start the test run"));
+} finally {
+  rmSync(handoff, { recursive: true, force: true });
 }
 
 const work = mkdtempSync(join(tmpdir(), "mutants-kill-"));
