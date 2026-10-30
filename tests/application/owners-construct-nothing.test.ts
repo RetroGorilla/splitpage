@@ -1,160 +1,214 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
-import * as operation from "../../src/application/session/operation.ts";
-import * as transitionPorts from "../../src/application/transitions/ports.ts";
-import * as transitions from "../../src/application/transitions/transitions.ts";
-import * as recoveryPorts from "../../src/application/recovery/ports.ts";
-import * as draftResume from "../../src/application/recovery/draft-resume.ts";
-import * as conflictStash from "../../src/application/recovery/conflict-stash.ts";
-import * as legacySnapshots from "../../src/application/recovery/legacy-snapshots.ts";
-import * as saveCoordinator from "../../src/application/save/coordinator.ts";
-import * as saveStatus from "../../src/application/save/status.ts";
-import * as autoSave from "../../src/application/save/autosave.ts";
-import * as saveDestinations from "../../src/application/save/destinations.ts";
-import * as fileConflict from "../../src/application/save/file-conflict.ts";
-import * as documentSources from "../../src/application/transitions/sources.ts";
-import * as stashedWork from "../../src/application/recovery/stashed-work.ts";
-import * as rowDrag from "../../src/application/editing/row-drag.ts";
-import * as cellEditing from "../../src/application/editing/cell-editing.ts";
-import * as focusMemory from "../../src/application/editing/focus-memory.ts";
-import * as paintGuard from "../../src/application/editing/paint-guard.ts";
-import * as selection from "../../src/application/editing/selection.ts";
-import * as deleteConfirm from "../../src/application/editing/delete-confirm.ts";
-import * as productionSelection from "../../src/application/editing/production-selection.ts";
-import * as mergeUndo from "../../src/application/session/merge-undo.ts";
-import * as preferences from "../../src/application/preferences/preferences.ts";
-import * as viewFlags from "../../src/application/preferences/view-flags.ts";
-import * as panelWidths from "../../src/application/preferences/panel-widths.ts";
-import * as documentLocation from "../../src/application/location/document-location.ts";
-import * as projectFileServices from "../../src/application/formats/project-file-services.ts";
-import * as documentMerge from "../../src/application/session/document-merge.ts";
-import * as shotHiding from "../../src/application/shot-hiding.ts";
-import * as prompterState from "../../src/application/prompter-state.ts";
-import * as tagPanelState from "../../src/application/tag-panel-state.ts";
-import * as commentSort from "../../src/application/comment-sort.ts";
-import * as findOptions from "../../src/application/find-options.ts";
-import * as importMode from "../../src/application/import-mode.ts";
-import * as brollAnchoring from "../../src/application/broll-anchoring.ts";
-import * as bulkTags from "../../src/application/commands/bulk-tags.ts";
-import * as brollView from "../../src/application/preferences/broll-view.ts";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
+const APPLICATION = "src/application";
 
-const OWNERS = [
-  "src/application/session/operation.ts",
-  "src/application/transitions",
-  "src/application/recovery",
-  "src/application/save",
-  "src/application/editing/row-drag.ts",
-  "src/application/editing/cell-editing.ts",
-  "src/application/editing/focus-memory.ts",
-  "src/application/editing/paint-guard.ts",
-  "src/application/editing/selection.ts",
-  "src/application/editing/delete-confirm.ts",
-  "src/application/editing/production-selection.ts",
-  "src/application/session/merge-undo.ts",
-  "src/application/session/document-merge.ts",
-  "src/application/preferences/preferences.ts",
-  "src/application/preferences/view-flags.ts",
-  "src/application/preferences/panel-widths.ts",
-  "src/application/location",
-  "src/application/formats",
-  "src/application/shot-hiding.ts",
-  "src/application/prompter-state.ts",
-  "src/application/tag-panel-state.ts",
-  "src/application/comment-sort.ts",
-  "src/application/find-options.ts",
-  "src/application/import-mode.ts",
-  "src/application/broll-anchoring.ts",
-  "src/application/commands/bulk-tags.ts",
-  "src/application/preferences/broll-view.ts"
-];
-
-function sourcesOf(path: string): string[] {
-  const full = join(REPO, path);
-  if (!statSync(full).isDirectory()) return [full];
-  return readdirSync(full, { withFileTypes: true }).flatMap(function (entry) {
-    const inner = join(path, entry.name);
-    if (entry.isDirectory()) return sourcesOf(inner);
-    return /\.ts$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [join(REPO, inner)] : [];
+function modulesUnder(path: string): string[] {
+  return readdirSync(join(REPO, path), { withFileTypes: true }).flatMap(function (entry) {
+    const inner = path + "/" + entry.name;
+    if (entry.isDirectory()) return modulesUnder(inner);
+    return /\.(?:ts|js)$/.test(entry.name) && !/\.test\.(?:ts|js)$/.test(entry.name) && !/\.d\.ts$/.test(entry.name) ? [inner] : [];
   });
 }
 
-function inert(node: ts.Expression): boolean {
-  if (ts.isStringLiteral(node) || ts.isNumericLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return true;
-  if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) return true;
-  if (ts.isArrayLiteralExpression(node)) return node.elements.every(inert);
-  if (ts.isObjectLiteralExpression(node)) {
-    return node.properties.every(function (p) { return ts.isPropertyAssignment(p) && inert(p.initializer); });
-  }
-  if (ts.isCallExpression(node)) {
-    const callee = node.expression;
-    const freezes = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) &&
-      callee.expression.text === "Object" && callee.name.text === "freeze";
-    return freezes && node.arguments.every(inert);
-  }
-  return false;
+function unwrapped(node: ts.Expression): ts.Expression {
+  let inner = node;
+  while (ts.isAsExpression(inner) || ts.isSatisfiesExpression(inner) || ts.isNonNullExpression(inner) ||
+      ts.isParenthesizedExpression(inner) || ts.isTypeAssertionExpression(inner)) inner = inner.expression;
+  return inner;
 }
 
-function topLevelWork(file: string): string[] {
-  const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+function frozenArgument(node: ts.Expression): ts.Expression | null {
+  if (!ts.isCallExpression(node) || node.arguments.length !== 1) return null;
+  const callee = node.expression;
+  const freezes = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) &&
+    callee.expression.text === "Object" && callee.name.text === "freeze";
+  return freezes ? node.arguments[0] ?? null : null;
+}
+
+function primitive(node: ts.Expression): boolean {
+  if (ts.isStringLiteral(node) || ts.isNumericLiteral(node) || ts.isBigIntLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return true;
+  if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) return true;
+  if (ts.isIdentifier(node) && node.text === "undefined") return true;
+  return ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(node.operand);
+}
+
+function staticClass(node: ts.ClassDeclaration): boolean {
+  if (ts.getDecorators(node)?.length) return false;
+  const heritage = (node.heritageClauses ?? []).every(function (clause) {
+    return clause.types.every(function (type) { return ts.isIdentifier(type.expression) && !type.typeArguments; });
+  });
+  return heritage && node.members.every(function (member) {
+    if (ts.isClassStaticBlockDeclaration(member) || ts.getDecorators(member as ts.HasDecorators)?.length) return false;
+    if (member.name && ts.isComputedPropertyName(member.name)) return false;
+    const isStatic = ts.getModifiers(member as ts.HasModifiers)?.some(function (m) { return m.kind === ts.SyntaxKind.StaticKeyword; });
+    return !(ts.isPropertyDeclaration(member) && isStatic && member.initializer);
+  });
+}
+
+function moduleLoadWork(path: string, text: string): string[] {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+  const frozenHere = new Set<string>();
+  const value = function (node: ts.Expression): boolean {
+    const inner = unwrapped(node);
+    if (primitive(inner)) return true;
+    if (ts.isRegularExpressionLiteral(inner)) return !/[gy]/.test(inner.text.slice(inner.text.lastIndexOf("/") + 1));
+    if (ts.isArrowFunction(inner) || ts.isFunctionExpression(inner)) return true;
+    const argument = frozenArgument(inner);
+    return argument !== null && frozenData(unwrapped(argument));
+  };
+  const spreadsFrozen = function (node: ts.Expression): boolean {
+    return ts.isIdentifier(node) && frozenHere.has(node.text);
+  };
+  const frozenData = function (node: ts.Expression): boolean {
+    if (ts.isArrayLiteralExpression(node)) {
+      return node.elements.every(function (e) { return ts.isSpreadElement(e) ? spreadsFrozen(e.expression) : value(e); });
+    }
+    if (ts.isObjectLiteralExpression(node)) {
+      return node.properties.every(function (p) {
+        if (ts.isSpreadAssignment(p)) return spreadsFrozen(p.expression);
+        return ts.isPropertyAssignment(p) && !ts.isComputedPropertyName(p.name) && value(p.initializer);
+      });
+    }
+    return false;
+  };
   const found: string[] = [];
   for (const statement of source.statements) {
+    let allowed = false;
     if (ts.isImportDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) ||
-        ts.isFunctionDeclaration(statement) || ts.isExportDeclaration(statement)) continue;
-    if (ts.isVariableStatement(statement) &&
-        statement.declarationList.declarations.every(function (d) { return d.initializer !== undefined && inert(d.initializer); })) continue;
-    found.push(relative(REPO, file) + ": " + statement.getText().split("\n")[0]);
+        ts.isFunctionDeclaration(statement) || ts.isExportDeclaration(statement)) allowed = true;
+    else if (ts.isClassDeclaration(statement)) allowed = staticClass(statement);
+    else if (ts.isVariableStatement(statement)) {
+      const constant = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
+      const exported = ts.getModifiers(statement)?.some(function (m) { return m.kind === ts.SyntaxKind.ExportKeyword; }) ?? false;
+      allowed = statement.declarationList.declarations.every(function (d) {
+        if (!ts.isIdentifier(d.name) || d.initializer === undefined) return false;
+        if (!constant) return !exported && d.initializer.kind === ts.SyntaxKind.NullKeyword;
+        if (!value(d.initializer)) return false;
+        if (frozenArgument(unwrapped(d.initializer)) !== null) frozenHere.add(d.name.text);
+        return true;
+      });
+    }
+    if (!allowed) {
+      const line = source.getLineAndCharacterOfPosition(statement.getStart(source)).line + 1;
+      found.push(path + ":" + line + ": " + statement.getText(source).split("\n")[0]);
+    }
   }
   return found;
 }
 
-test("E12: the owners' modules do nothing when they are loaded: only types, functions and frozen constants", () => {
-  const files = OWNERS.flatMap(sourcesOf);
-  assert.ok(files.length >= 5, "found the owners' sources: " + files.join(", "));
-  const work = files.flatMap(topLevelWork);
+const MODULES = modulesUnder(APPLICATION).sort();
+
+test("E12: the application scan finds every module under src/application", () => {
+  assert.ok(MODULES.length > 0, "found no modules under " + APPLICATION);
+  for (const path of MODULES) assert.ok(path.startsWith(APPLICATION + "/") && !/\.test\./.test(path), path);
+});
+
+test("E12: the load check accepts only types, functions, plain classes, frozen constants and empty started slots", () => {
+  const accepted = [
+    "import { a } from \"./a.ts\";\nimport type { B } from \"./b.ts\";\nexport type { B };\nexport { a };",
+    "export interface Shape { readonly a: number }\nexport type Kind = \"a\" | \"b\";",
+    "export function make(): number { return 1; }",
+    "export const read = (): number => 1;\nconst write = function (): void {};",
+    "export class Refused extends TypeError {\n  readonly code = \"refused\";\n  method(): void {}\n}",
+    "class Plain {}",
+    "const NAME = \"x\";\nconst COUNT = -1;\nconst ON = true;\nconst NONE = null;\nconst NOTHING = undefined;",
+    "const SPACE_END = /\\s$/;\nconst KEY = /^f[1-9]$/i;",
+    "const FIELDS = Object.freeze([\"a\", \"b\"]) as readonly string[];\nconst LIMIT = (5 satisfies number);",
+    "const LIST = Object.freeze([\"a\", Object.freeze({ b: 1 })]);",
+    "const BASE = Object.freeze({ a: false, list: Object.freeze([]) });\nexport const MORE = Object.freeze({ ...BASE, a: true });",
+    "let started: { stop(): void } | null = null;"
+  ];
+  for (const text of accepted) assert.deepEqual(moduleLoadWork("x.ts", text), [], text);
+  const refused: [string, string][] = [
+    ["mutable default", "let mode = \"position\";"],
+    ["mutable false default", "let open = false;"],
+    ["uninitialized binding", "let declined: Record<string, boolean>;"],
+    ["exported slot", "export let started: object | null = null;"],
+    ["var", "var count = 0;"],
+    ["call", "const changes = changeSet({ docFields: [\"title\"] });"],
+    ["owner constructed at load", "export const view = createView({ read: () => null });"],
+    ["new", "const MODIFIERS = new Set([\"mod\"]);"],
+    ["new regex", "const NBSP = new RegExp(\"a\", \"g\");"],
+    ["global regex literal", "const ALL = /a/g;"],
+    ["sticky regex literal", "const AT = /a/y;"],
+    ["statement", "FIELDS.forEach(function (f) { SKIP[f] = true; });"],
+    ["unfrozen array", "const LIST = [\"a\", \"b\"];"],
+    ["unfrozen array under as const", "const LIST = [\"a\", \"b\"] as const;"],
+    ["unfrozen object", "const STATS = { writes: 0 };"],
+    ["unfrozen nested array", "const SHAPE = Object.freeze({ list: [\"a\"] });"],
+    ["imported alias", "export const DERIVES = CELL_TEXT_DERIVES;"],
+    ["spread of an import", "const ALL = Object.freeze({ ...NO_CHANGES, whole: true });"],
+    ["freeze of a call", "const CACHE = Object.freeze(build());"],
+    ["computed key", "const KEYED = Object.freeze({ [name]: 1 });"],
+    ["class with a computed heritage", "class Wrapped extends mixin(Base) {}"],
+    ["class with a static initializer", "class Counter { static count = start(); }"],
+    ["class with a static block", "class Setup { static { run(); } }"],
+    ["destructured binding", "const { a } = Object.freeze({ a: 1 });"],
+    ["enum", "enum Mode { A, B }"],
+    ["export default expression", "export default createThing();"]
+  ];
+  for (const [name, text] of refused) assert.equal(moduleLoadWork("x.ts", text).length, 1, name + ": " + text);
+});
+
+test("E12: the application's modules do nothing when they are loaded: only types, functions and frozen constants", () => {
+  const work = MODULES.flatMap(function (path) { return moduleLoadWork(path, readFileSync(join(REPO, path), "utf8")); });
   assert.deepEqual(work, []);
 });
 
-test("E12: importing the owners constructs nothing: each export is a constructor function or frozen data", () => {
-  const loaded: Record<string, Record<string, unknown>> = {
-    operation: operation, transitionPorts: transitionPorts, transitions: transitions, recoveryPorts: recoveryPorts,
-    draftResume: draftResume, conflictStash: conflictStash, legacySnapshots: legacySnapshots, stashedWork: stashedWork, documentSources: documentSources,
-    saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave, saveDestinations: saveDestinations, fileConflict: fileConflict,
-    rowDrag: rowDrag, cellEditing: cellEditing, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, deleteConfirm: deleteConfirm, productionSelection: productionSelection, mergeUndo: mergeUndo,
-    preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths,
-    documentLocation: documentLocation, projectFileServices: projectFileServices, documentMerge: documentMerge,
-    shotHiding: shotHiding,
-    prompterState: prompterState, tagPanelState: tagPanelState, commentSort: commentSort, findOptions: findOptions,
-    importMode: importMode, brollAnchoring: brollAnchoring, bulkTags: bulkTags, brollView: brollView
-  };
-  for (const [module, exports] of Object.entries(loaded)) {
-    for (const [name, value] of Object.entries(exports)) {
-      const ok = typeof value === "function" || typeof value !== "object" || value === null || Object.isFrozen(value);
-      assert.ok(ok, module + " exports " + name + ", which is neither a function nor frozen data");
+type ExportKind = "function" | "primitive" | "frozen" | "mutable";
+
+function exportKinds(paths: readonly string[]): Record<string, Record<string, ExportKind>> {
+  const imports = paths.map(function (path, i) { return "import * as m" + i + " from " + JSON.stringify(pathToFileURL(join(REPO, path)).href) + ";"; });
+  const table = paths.map(function (path, i) { return JSON.stringify(path) + ": m" + i; }).join(", ");
+  const script = imports.join("\n") + "\nconst kinds = (value) => typeof value === \"function\" ? \"function\" : typeof value !== \"object\" || value === null ? \"primitive\" : Object.isFrozen(value) ? \"frozen\" : \"mutable\";\n" +
+    "const modules = { " + table + " };\n" +
+    "process.stdout.write(JSON.stringify(Object.fromEntries(Object.entries(modules).map(([path, exports]) => [path, Object.fromEntries(Object.entries(exports).map(([name, value]) => [name, kinds(value)]))]))));\n";
+  const folder = mkdtempSync(join(tmpdir(), "owners-load-"));
+  try {
+    const file = join(folder, "load.mjs");
+    writeFileSync(file, script);
+    return JSON.parse(execFileSync(process.execPath, [file], { cwd: REPO, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })) as Record<string, Record<string, ExportKind>>;
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+}
+
+test("E12: importing the application's modules constructs nothing: each export is a function, a primitive or frozen data", () => {
+  const loaded = exportKinds(MODULES);
+  assert.deepEqual(Object.keys(loaded).sort(), MODULES);
+  for (const [path, exports] of Object.entries(loaded)) {
+    for (const [name, kind] of Object.entries(exports)) {
+      assert.notEqual(kind, "mutable", path + " exports " + name + ", which is neither a function nor frozen data");
     }
   }
-  assert.equal(typeof transitions.createTransitions, "function");
-  assert.equal(typeof operation.createOperations, "function");
-  assert.equal(typeof draftResume.createDraftResume, "function");
-  assert.equal(typeof conflictStash.createConflictStash, "function");
-  assert.equal(typeof legacySnapshots.createLegacySnapshots, "function");
-  assert.equal(typeof saveCoordinator.createSaveCoordinator, "function");
-  assert.equal(typeof saveDestinations.createSaveDestinations, "function");
-  assert.equal(typeof documentSources.createDocumentSources, "function");
-  assert.equal(typeof stashedWork.createStashedWork, "function");
-  assert.equal(typeof cellEditing.createCellEditing, "function");
-  assert.equal(typeof shotHiding.createShotHiding, "function");
-  assert.equal(typeof prompterState.createPrompterState, "function");
-  assert.equal(typeof tagPanelState.createTagPanelState, "function");
-  assert.equal(typeof commentSort.createCommentSorting, "function");
-  assert.equal(typeof findOptions.createFindOptions, "function");
-  assert.equal(typeof importMode.createImportMode, "function");
-  assert.equal(typeof brollAnchoring.createBrollAnchoring, "function");
-  assert.equal(typeof bulkTags.createBulkTagRows, "function");
-  assert.equal(typeof brollView.createBrollView, "function");
+  const constructors: [string, string][] = [
+    ["transitions/transitions.ts", "createTransitions"],
+    ["session/operation.ts", "createOperations"],
+    ["recovery/draft-resume.ts", "createDraftResume"],
+    ["recovery/conflict-stash.ts", "createConflictStash"],
+    ["recovery/legacy-snapshots.ts", "createLegacySnapshots"],
+    ["save/coordinator.ts", "createSaveCoordinator"],
+    ["save/destinations.ts", "createSaveDestinations"],
+    ["transitions/sources.ts", "createDocumentSources"],
+    ["recovery/stashed-work.ts", "createStashedWork"],
+    ["editing/cell-editing.ts", "createCellEditing"],
+    ["shot-hiding.ts", "createShotHiding"],
+    ["prompter-state.ts", "createPrompterState"],
+    ["tag-panel-state.ts", "createTagPanelState"],
+    ["comment-sort.ts", "createCommentSorting"],
+    ["find-options.ts", "createFindOptions"],
+    ["import-mode.ts", "createImportMode"],
+    ["broll-anchoring.ts", "createBrollAnchoring"],
+    ["commands/bulk-tags.ts", "createBulkTagRows"],
+    ["preferences/broll-view.ts", "createBrollView"]
+  ];
+  for (const [path, name] of constructors) assert.equal(loaded[APPLICATION + "/" + path]?.[name], "function", path + " " + name);
 });
