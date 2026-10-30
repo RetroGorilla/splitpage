@@ -11,7 +11,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { cellEditing } = await import("../bootstrap/wiring/editor-owners.ts");
-const { toggleCellFormat, maybeCueShortcut } = await import("../features/rows/render.js");
+const { toggleCellFormat, maybeCueShortcut } = await import("../features/rows/render.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();

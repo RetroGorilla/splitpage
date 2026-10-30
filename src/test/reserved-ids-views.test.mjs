@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { setHideShotScenes } from "../bootstrap/wiring/hide-shot.ts";
 import { shotHiding } from "../bootstrap/wiring/shot-hiding.ts";
-import { paintRowTimes } from "../features/rows/render.js";
+import { paintRowTimes } from "../features/rows/render.ts";
 import { syncAnchorResolvedClasses } from "../features/common/comment-anchors.js";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 import { loadTestDocument } from "./_document.mjs";

@@ -13,7 +13,7 @@ await bootApp();
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { renderAbsorbed } = await import("../features/rows/render.js");
+const { renderAbsorbed } = await import("../features/rows/render.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
