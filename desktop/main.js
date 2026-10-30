@@ -11,7 +11,7 @@ const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { createDraftStore, restoreDoneAction, MAX_BODY_BYTES } = require("./drafts");
 const {
-  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite
+  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, writeFileEntry
 } = require("./file-service");
 const { createDocClaims } = require("./doc-claims");
 const { createRecents } = require("./recents");
@@ -2210,9 +2210,7 @@ function registerIpc() {
     const absPath = fileIds.pathOf(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     const buffer = toBuffer(data);
-    await atomicWrite(absPath, buffer);
-    const stat = await fsp.stat(absPath);
-    return { lastModified: Math.floor(stat.mtimeMs), size: stat.size };
+    return await writeFileEntry(absPath, buffer);
   });
 
   ipcHandle("splitpage:stat-file", async (event, id) => {

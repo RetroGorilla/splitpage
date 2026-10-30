@@ -69,14 +69,21 @@ export async function writeToHandle(handle: FileHandle, body: unknown): Promise<
 
 export type FileCheck =
   | { readonly ok: true }
-  | { readonly ok: false; readonly current: { readonly lastModified: number } | null };
+  | { readonly ok: false; readonly current: { readonly lastModified: number } | null }
+  | { readonly ok: false; readonly current: null; readonly denied: true };
+
+function permissionRefused(error: unknown): boolean {
+  const name = !!error && typeof error === "object" ? (error as { name?: unknown }).name : null;
+  return name === "NotAllowedError" || name === "SecurityError";
+}
 
 export async function checkFileConflict(handle: Pick<FileHandle, "getFile">, lastModified: number | null | undefined): Promise<FileCheck> {
   if (!lastModified) return { ok: true };
   let current: { readonly lastModified: number };
   try {
     current = await handle.getFile();
-  } catch {
+  } catch (error) {
+    if (permissionRefused(error)) return { ok: false, current: null, denied: true };
     return { ok: false, current: null };
   }
   if (current.lastModified && current.lastModified !== lastModified) {

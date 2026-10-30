@@ -163,6 +163,34 @@ for (const fault of FAULTS) {
   }));
 }
 
+test("a handle whose permission is withdrawn fails the save with an error, not a conflict, keeps the work, and saving again once it is granted completes", scene(async () => {
+  const target = createHeldFileHandle({
+    name: "revoked.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Revoked", { docId: ID("2") }))), lastModified: 1000
+  });
+  await openFrom(target.handle);
+  edit("Typed before the save.");
+  const before = observed();
+
+  target.setPermission("prompt");
+  await saveDoc();
+  assert.equal(target.commits.length, 0, "nothing was committed while permission was withdrawn");
+  assertUnchangedByFailure(before, "after the refused save");
+  assert.equal(unsavedChanges(), true, "the document is still dirty");
+  assert.match(saveStatus(), /Unsaved changes/, "the status line still says there are unsaved changes");
+  assert.equal(fileConflicts().current(), null, "no conflict view is opened for a permission problem");
+  assert.equal(toasts("error").length, 1, "one error is shown");
+  assert.match(toasts("error")[0], /^Could not save — permission to change revoked\.splitpage was withdrawn/, "and it says permission was withdrawn");
+  assert.equal(currentDocument().rows[0].audioText, "Typed before the save.", "the typed text is still in the document");
+  assert.equal(closeWouldWarn(), true, "closing still warns");
+
+  target.setPermission("granted");
+  clearToasts();
+  await saveDoc();
+  assert.equal(target.commits.length, 1, "the save after the permission came back wrote the file");
+  assert.ok(target.text().includes("Typed before the save."), "the file holds the work kept through the failure");
+  assert.equal(homeModule.currentHome().lastModified, target.lastModified(), "the home holds the stamp of that write");
+  assertSavedCleanly("after the retry");
+}));
 test("a failed automatic save pauses autosave and keeps the work, and a manual save writes, clears the pause and the dirty state", scene(async (t, clock) => {
   const target = createHeldFileHandle({
     name: "auto.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Automatic", { docId: ID("3") }))), lastModified: 1000

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const {
-  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite
+  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite, writeFileEntry
 } = require(path.join(here, "..", "file-service.js"));
 
 const cases = [];
@@ -98,7 +98,7 @@ function recordingIo(log, fail) {
         close: async () => { log.push("close"); return fh.close(); }
       };
     },
-    rename: async (from, to) => { log.push("rename"); return fsp.rename(from, to); },
+    rename: async (from, to) => { log.push("rename"); if (fail === "rename") throw new Error("rename refused"); return fsp.rename(from, to); },
     unlink: async (p) => { log.push("unlink"); return fsp.unlink(p); }
   };
 }
@@ -134,6 +134,36 @@ test("an atomic write into a missing folder throws and creates nothing", async (
   assert.equal(fs.existsSync(dir), false);
 });
 
+test("a write answers the stamp and size of the file it just replaced", async () => {
+  const dir = fs.mkdtempSync(path.join(root, "stamp-"));
+  const file = path.join(dir, "doc.splitpage");
+  fs.writeFileSync(file, "old");
+  const answer = await writeFileEntry(file, Buffer.from("newer"));
+  const stat = fs.statSync(file);
+  assert.deepEqual(answer, { lastModified: Math.floor(stat.mtimeMs), size: 5 });
+  assert.equal(fs.readFileSync(file, "utf8"), "newer");
+});
+
+test("a write whose stat fails after the rename still answers that it landed, without a stamp", async () => {
+  const dir = fs.mkdtempSync(path.join(root, "nostat-"));
+  const file = path.join(dir, "doc.splitpage");
+  fs.writeFileSync(file, "old");
+  const io = { ...fsp, stat: async () => { throw Object.assign(new Error("EPERM: stat refused"), { code: "EPERM" }); } };
+  assert.deepEqual(await writeFileEntry(file, Buffer.from("newer"), io), { size: 5 });
+  assert.equal(fs.readFileSync(file, "utf8"), "newer");
+  assert.deepEqual(fs.readdirSync(dir), ["doc.splitpage"]);
+});
+
+for (const [stage, reason] of [["write", /disk full/], ["rename", /rename refused/]]) {
+  test("a write that fails at " + stage + " still throws, keeps the old document and leaves no temp file", async () => {
+    const dir = fs.mkdtempSync(path.join(root, "nowrite-"));
+    const file = path.join(dir, "doc.splitpage");
+    fs.writeFileSync(file, "old");
+    await assert.rejects(writeFileEntry(file, Buffer.from("new"), recordingIo([], stage)), reason);
+    assert.equal(fs.readFileSync(file, "utf8"), "old");
+    assert.deepEqual(fs.readdirSync(dir), ["doc.splitpage"]);
+  });
+}
 let failed = 0;
 for (const c of cases) {
   try { await c.fn(); console.log("ok   " + c.name); } catch (e) { failed++; console.log("FAIL " + c.name + "\n     " + (e && e.stack || e)); }

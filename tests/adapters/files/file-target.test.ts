@@ -110,3 +110,12 @@ test("the file-change check passes with no recorded time, passes when the file s
 test("the file-change check reports a file it cannot read as changed, with nothing to compare", async () => {
   assert.deepEqual(await checkFileConflict(fakeHandle("gone.md", { stat: new Error("not found") }), 42), { ok: false, current: null });
 });
+
+test("the file-change check tells a refused permission from a file it cannot find", async () => {
+  for (const name of ["NotAllowedError", "SecurityError"]) {
+    const refused = Object.assign(new Error("not allowed"), { name });
+    assert.deepEqual(await checkFileConflict(fakeHandle("locked.md", { stat: refused }), 42), { ok: false, current: null, denied: true }, name);
+  }
+  const missing = Object.assign(new Error("gone"), { name: "NotFoundError" });
+  assert.deepEqual(await checkFileConflict(fakeHandle("gone.md", { stat: missing }), 42), { ok: false, current: null });
+});
