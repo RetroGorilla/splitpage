@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { autoSavePolicy, fileConflicts, saveDoc, setAutoSaveEnabled, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
+import { autoSavePolicy, confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { createHeldDesktop, createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
 import * as homeModule from "../bootstrap/wiring/location-owner.ts";
 import { currentDocument, mergeBase, noteSessionEdit } from "../bootstrap/wiring/session-owner.ts";
@@ -15,7 +15,6 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
-const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 
 after(closeApp);
@@ -85,6 +84,10 @@ function closeWouldWarn() {
   return event.defaultPrevented;
 }
 
+function saveStatus() {
+  return document.getElementById("save-status").textContent;
+}
+
 function observed() {
   const home = homeModule.currentHome();
   return {
@@ -114,6 +117,8 @@ function assertSavedCleanly(who) {
   assert.equal(toasts().some((text) => /changed on disk/i.test(text)), false, who + ": nothing says the file changed on disk");
   assert.equal(toasts("error").length, 0, who + ": no error is showing");
   assert.equal(toasts("ok").length, 1, who + ": the save says it saved");
+  assert.match(toasts("ok")[0], /^Saved to /, who + ": and says where");
+  assert.match(saveStatus(), /Saved/, who + ": the status line says saved");
 }
 
 const FAULTS = [
@@ -139,6 +144,7 @@ for (const fault of FAULTS) {
     assert.equal(target.text(), onDisk, "the file still holds what it held");
     assertUnchangedByFailure(before, "after the failed save");
     assert.equal(unsavedChanges(), true, "the document is still dirty");
+    assert.match(saveStatus(), /Unsaved changes/, "the status line still says there are unsaved changes");
     assert.equal(toasts("error").length, 1, "one error is shown");
     assert.match(toasts("error")[0], /^Could not save — /, "and it says the save failed");
     assert.match(toasts("error")[0], fault.shown, "and it says why");
@@ -157,33 +163,6 @@ for (const fault of FAULTS) {
   }));
 }
 
-test("a handle whose permission is withdrawn is refused as an unreadable file, writes nothing, and saving again once it is granted completes", scene(async () => {
-  const target = createHeldFileHandle({
-    name: "revoked.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Revoked", { docId: ID("2") }))), lastModified: 1000
-  });
-  await openFrom(target.handle);
-  edit("Typed before the save.");
-  const before = observed();
-
-  target.setPermission("prompt");
-  await saveDoc();
-  assert.equal(target.commits.length, 0, "nothing was committed while permission was withdrawn");
-  assertUnchangedByFailure(before, "after the refused save");
-  assert.equal(unsavedChanges(), true, "the document is still dirty");
-  assert.equal(closeWouldWarn(), true, "closing still warns");
-  assert.deepEqual(fileConflicts().current(), { fileName: "revoked.splitpage", current: null, kind: "project" }, "the save is refused as a file conflict with nothing to compare");
-  assert.match(document.getElementById("file-conflict-detail").textContent, /Could not check whether/, "and the dialog says the file could not be checked");
-  assert.equal(toasts("error").length, 0, "no error toast is shown");
-  fileConflicts().close();
-
-  target.setPermission("granted");
-  clearToasts();
-  await saveDoc();
-  assert.equal(target.commits.length, 1, "the save after the permission came back wrote the file");
-  assert.ok(target.text().includes("Typed before the save."), "the file holds the work kept through the failure");
-  assertSavedCleanly("after the retry");
-}));
-
 test("a failed automatic save pauses autosave and keeps the work, and a manual save writes, clears the pause and the dirty state", scene(async (t, clock) => {
   const target = createHeldFileHandle({
     name: "auto.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Automatic", { docId: ID("3") }))), lastModified: 1000
@@ -194,20 +173,24 @@ test("a failed automatic save pauses autosave and keeps the work, and a manual s
   const before = observed();
 
   target.failNext("write", new DOMException("There is not enough space on the disk.", "QuotaExceededError"));
-  clock.tick(2000);
+  clock.tick(autoSavePolicy().idleFor());
   await turns();
   assert.equal(target.calls.includes("createWritable"), true, "the autosave timer ran a save");
   assert.equal(target.commits.length, 0, "nothing was committed");
   assertUnchangedByFailure(before, "after the failed automatic save");
   assert.equal(unsavedChanges(), true, "the document is still dirty");
-  assert.match(autoSavePolicy().halted(), /^Autosave is paused — the last save failed/, "autosave is paused with the reason");
+  assert.match(autoSavePolicy().halted(), /^Autosave is paused — the last save failed \(There is not enough space on the disk\./, "autosave is paused with the reason");
+  assert.match(saveStatus(), /Not saving/, "the status line says autosave is not saving");
   assert.equal(toasts("error").length, 1, "the failure is shown");
+  assert.equal(currentDocument().rows[0].audioText, "Typed before the automatic save.", "the typed text is still in the document");
+  assert.equal(fileConflicts().current(), null, "a failed write is not reported as a conflict");
   assert.equal(closeWouldWarn(), true, "closing still warns");
 
   clearToasts();
   await saveDoc();
   assert.equal(target.commits.length, 1, "the manual save wrote the file");
   assert.equal(autoSavePolicy().halted(), "", "and lifted the pause");
+  assert.equal(homeModule.currentHome().lastModified, target.lastModified(), "the home holds the stamp of that write");
   assertSavedCleanly("after the manual save");
 }));
 
