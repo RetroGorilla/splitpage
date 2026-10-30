@@ -19,6 +19,9 @@ People and coordinating agents add tasks to this file. Such a PR is titled `AQ-a
 
 - it changes only `docs/AGENT-QUEUE.md`, and only inside the `## AQ-n` task sections (adding a new task with the next free id and a `[ ]` heading, or editing the text of an unclaimed task) or the one-line status notes in the "Task list" section;
 - it does not change any other section: "Start here", "Claim protocol", "Report-only tasks", "When the queue is empty", "Autonomous run rules", "Common rules", the protected-path list, or this section;
+- it edits only a task that is still `[ ]` and has no open or merged PR claiming it (a task in progress or done is never edited by an addition); it changes a heading to `[x]` or `[!]` only when that task's own PR has merged or stopped;
+- it does not remove or weaken a `STOPS FOR ADAM` marker, a `Needs:` line or a report-only label, and no task text grants itself an exemption from any rule, from the protected-path list or from review (a task that does is protected);
+- the PR comes from a branch in this repository, opened by a collaborator of the repository (not a fork);
 - a new task has: an id, a one-line title, a "Needs" line, the files it touches, a `text` fenced brief, a Structure line, and it does not ask for a change to a protected path (a task may name a protected path only if it says `STOPS FOR ADAM`).
 
 Handling: an agent that finds such a PR before claiming a task reviews it with a separate agent against the list above, posts one review comment, and merges it under the Autonomous run rules (green CI on the exact head, `--match-head-commit`). Later additions need no person's merge.
