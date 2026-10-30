@@ -10,7 +10,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { render } = await import("../features/rows/render.js");
+const { render } = await import("../features/rows/render.ts");
 const { updateTagBadges } = await import("../bootstrap/wiring/panels.ts");
 const { productionIndex } = await import("../application/production/index-owner.ts");
 const { currentDocument } = await import("../bootstrap/wiring/session-owner.ts");
