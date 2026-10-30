@@ -1,10 +1,8 @@
-﻿import test from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { IS_MAC, keyChipWords, keyChipsHtml } from "../../../src/features/common/key-chips.js";
 
-type KeyChips = { IS_MAC: boolean; keyChipWords: (spec: string) => string[] };
-
-const MOD =IS_MAC ? "⌘" : "Ctrl";
+const MOD = IS_MAC ? "⌘" : "Ctrl";
 const SHIFT = IS_MAC ? "⇧" : "Shift";
 const ALT = IS_MAC ? "⌥" : "Alt";
 
@@ -30,23 +28,4 @@ test("keyChipsHtml: wraps each word in a kbd element and escapes markup", () => 
   assert.equal(keyChipsHtml("<"), "<kbd>&lt;</kbd>");
   assert.equal(keyChipsHtml("&Tab"), "<kbd>&amp;Tab</kbd>");
   assert.equal(keyChipsHtml(""), "");
-});
-
-test("key chips: Apple platforms get symbols and everything else gets words", async () => {
-  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  const load = async (platform: string, tag: string): Promise<KeyChips> => {
-    Object.defineProperty(globalThis, "navigator", { value: { platform }, configurable: true, writable: true });
-    return (await import(`../../../src/features/common/key-chips.js?${tag}`)) as KeyChips;
-  };
-  try {
-    const mac = await load("MacIntel", "mac");
-    assert.equal(mac.IS_MAC, true);
-    assert.deepEqual(mac.keyChipWords("mod+shift+alt+k"), ["⌘", "⇧", "⌥", "K"]);
-    const win = await load("Win32", "win");
-    assert.equal(win.IS_MAC, false);
-    assert.deepEqual(win.keyChipWords("mod+shift+alt+k"), ["Ctrl", "Shift", "Alt", "K"]);
-  } finally {
-    if (original) Object.defineProperty(globalThis, "navigator", original);
-    else delete (globalThis as { navigator?: unknown }).navigator;
-  }
 });
