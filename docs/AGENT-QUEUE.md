@@ -120,7 +120,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-2 and AQ-3 touch different folders. AQ-4 and AQ-12 edit different docs.
 - AQ-5 is **STOPS FOR ADAM**.
 - AQ-6 and AQ-14 are report-only.
-- AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. AQ-15, AQ-16 and AQ-18 can be merged by queue agents (AQ-16 needs AQ-15). AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM**. AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
+- AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
 
 ## AQ-1 [ ] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -313,6 +313,7 @@ Task: AGENTS.md rule 11 says a JS file under src/features/, src/application/ or 
 
 Needs: none.
 Files: src/adapters/formats/pdf.ts, its tests, PDF help text.
+**STOPS FOR ADAM**: user-visible PDF change (output, a new export diagnostic and help text). Author, review, leave unmerged.
 
 
 ```text
@@ -340,7 +341,7 @@ STRUCTURE SECTION MUST SAY
 
 Needs: AQ-15 merged.
 Files: src/adapters/formats/ (new subsetter modules, pdf.ts), tests, licences file.
-Stops for Adam if the font cannot stay within +1.5 MB on index.html without changing sw.js, packaging or tools/package.mjs, and for the CJK decision.
+**STOPS FOR ADAM**: user-visible PDF change (embedded font). Author, review, leave unmerged. Also stop if the font cannot stay within +1.5 MB on index.html without changing sw.js, packaging or tools/package.mjs, and for the CJK decision.
 
 
 ```text
@@ -482,7 +483,7 @@ Task: PRs to 4.1-development run only browser suites 01-core and 52-csp (ci.yml,
 
 FILES TO READ
 - .github/workflows/ci.yml, tools/ci-changes.mjs (how `code` and `app` are classified), tools/run-suites.mjs and the suite list it reads, desktop/test/smoke.mjs and its group filters.
-- docs/architecture/ci.md and docs/architecture/testing.md, including the known-flaky suite list (247/291 under load, 134, 266, 173/30 at 3 lanes). Do not put a known-flaky suite in the PR subset.
+- docs/architecture/ci.md and docs/architecture/testing.md, including the known-flaky suite list (247 under load, 134, 266, 173/30 at 3 lanes). Do not put a known-flaky suite in the PR subset.
 
 DO
 1. Browser subset: add a step (or a second job) to PR CI that runs a tagged subset covering save, typing, undo and export. Pick the suites by name from the real suite list; list the chosen suites and the reason for each in the PR. Run them with `--lanes 2 --port-base "$PORT_BASE"` like the existing step, on the same self-hosted runner expression the `checks` job uses.
