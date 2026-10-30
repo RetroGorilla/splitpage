@@ -1,10 +1,22 @@
+import { createBrollAnchoring } from "../../application/broll-anchoring.ts";
+import type { BrollAnchorDeclines } from "../../application/broll-anchoring.ts";
 import { getSavedAuthorName } from "../../application/comment-author.ts";
+import { createCommentSorting } from "../../application/comment-sort.ts";
+import type { CommentSorting } from "../../application/comment-sort.ts";
+import { createFindOptions } from "../../application/find-options.ts";
+import type { FindOptions } from "../../application/find-options.ts";
+import { createImportMode } from "../../application/import-mode.ts";
+import type { ImportMode } from "../../application/import-mode.ts";
+import { createBrollView } from "../../application/preferences/broll-view.ts";
+import type { BrollView } from "../../application/preferences/broll-view.ts";
 import { createPanelWidths } from "../../application/preferences/panel-widths.ts";
 import type { PanelWidths } from "../../application/preferences/panel-widths.ts";
 import { createPreferences } from "../../application/preferences/preferences.ts";
 import type { PreferenceChange, PreferencePorts, Preferences } from "../../application/preferences/preferences.ts";
 import { createViewFlags } from "../../application/preferences/view-flags.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
+import { createPrompterState } from "../../application/prompter-state.ts";
+import type { PrompterState } from "../../application/prompter-state.ts";
 
 export const PREF_EVENT = "splitpage:pref";
 
@@ -12,7 +24,15 @@ interface Started {
   readonly preferences: Preferences;
   readonly flags: ViewFlags;
   readonly panels: PanelWidths;
+  readonly brollView: BrollView;
+  readonly prompter: PrompterState;
+  readonly find: FindOptions;
+  readonly commentSort: CommentSorting;
+  readonly importMode: ImportMode;
+  readonly brollAnchoring: BrollAnchorDeclines;
 }
+
+const BROLL_VIEW_KEY = "splitpage-broll-view";
 
 let started: Started | null = null;
 
@@ -69,7 +89,16 @@ export function startPreferences(ports: PreferencePorts = browserPreferencePorts
   const mine: Started = {
     preferences: preferences,
     flags: createViewFlags({ hideShot: preferences.hideShot }),
-    panels: createPanelWidths({ storage: ports.storage })
+    panels: createPanelWidths({ storage: ports.storage }),
+    brollView: createBrollView({
+      read: () => localStorage.getItem(BROLL_VIEW_KEY),
+      write: (value) => { localStorage.setItem(BROLL_VIEW_KEY, value); }
+    }),
+    prompter: createPrompterState(),
+    find: createFindOptions(),
+    commentSort: createCommentSorting(),
+    importMode: createImportMode(),
+    brollAnchoring: createBrollAnchoring()
   };
   started = mine;
   return function () {
@@ -95,4 +124,28 @@ export function viewFlags(): ViewFlags {
 
 export function panelWidths(): PanelWidths {
   return running().panels;
+}
+
+export function brollView(): BrollView {
+  return running().brollView;
+}
+
+export function prompterState(): PrompterState {
+  return running().prompter;
+}
+
+export function findOptions(): FindOptions {
+  return running().find;
+}
+
+export function commentSorting(): CommentSorting {
+  return running().commentSort;
+}
+
+export function importMode(): ImportMode {
+  return running().importMode;
+}
+
+export function brollAnchoring(): BrollAnchorDeclines {
+  return running().brollAnchoring;
 }

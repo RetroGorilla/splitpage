@@ -83,8 +83,8 @@ console.log("\nevery migrated area has a test:\n");
   eq("or directly under tests/core", untested(["src/core/a.ts", "tests/core/a.test.ts"]), []);
   eq("and that root test covers no core folder", untested(["src/core/a.ts", "src/core/text/b.ts", "tests/core/a.test.ts"]), ["src/core/text tests/core/text/"]);
   eq("nested folders belong to their top-level area", untested(["src/bootstrap/start/a.ts", "src/application/x/c.mts", "src/adapters/idb/a.cts", "tests/application/c.test.ts"]), ["src/adapters tests/adapters/", "src/bootstrap tests/bootstrap/"]);
-  eq("a test in the wrong tests/ folder does not count", untested(["src/legacy/a.ts", "tests/legacy-old/a.test.ts", "tests/application/a.test.ts"]), ["src/legacy tests/legacy/"]);
-  eq("JavaScript and test files alone do not make an area", untested(["src/legacy/a.js", "src/core/text/a.test.ts"]), []);
+  eq("a test in the wrong tests/ folder does not count", untested(["src/application/a.ts", "tests/application-old/a.test.ts", "tests/features/a.test.ts"]), ["src/application tests/application/"]);
+  eq("JavaScript and test files alone do not make an area", untested(["src/application/a.js", "src/core/text/a.test.ts"]), []);
 
   const files = ["src/test/a.test.mjs", "src/core/text/runs.ts", "src/core/text/runs.test.ts", "src/application/a.ts", "tests/core/x.test.ts"];
   const err = [];

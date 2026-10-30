@@ -11,7 +11,6 @@ import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf }
 import { retagMentions, retagRewrites } from "../../application/commands/tag-rewrites.ts";
 
 import { removeTag, renameTag } from "../../application/commands/production-actions.ts";
-import { bulkTagRows } from "../../application/commands/bulk-tags.ts";
 import { rewrittenCopies } from "../../application/commands/document-edit.ts";
 
 
@@ -239,7 +238,7 @@ function iconHtml(id, cls) {
 
 function untaggedMentionCount(item) {
   if (!ports.document.current() || !item.name) return 0;
-  return bulkTagRows(ports.document.current().rows, item.name, item.cat.id, item.name, false, true).hits;
+  return ports.bulkTag(ports.document.current().rows, item.name, item.cat.id, item.name, false, true).hits;
 }
 
 function untaggedMentionsHtml(item) {
@@ -255,8 +254,8 @@ export function tagAllMentions(key) {
   var item = findTagByKey(key);
   if (!item) return;
   ports.undo.breakCoalescing();
-  var done = bulkTagRows(jsonRows(), item.name, item.cat.id, item.name, false, true);
-  var tagged = rewrittenCopies(["visualText"], function (rows) { bulkTagRows(rows, item.name, item.cat.id, item.name, false, false); });
+  var done = ports.bulkTag(jsonRows(), item.name, item.cat.id, item.name, false, true);
+  var tagged = rewrittenCopies(["visualText"], function (rows) { ports.bulkTag(rows, item.name, item.cat.id, item.name, false, false); });
   if (!done.hits || !ports.edits.edit(tagCellsCommand("tag-all-mentions", tagged, tagRef(item), ports.edits.stamps))) {
     ports.notices.show("No untagged mentions of " + item.name + " left.", "warn");
     return;

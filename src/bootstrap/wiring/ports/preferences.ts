@@ -1,8 +1,15 @@
-import { brollView as brollViewOwner, useBrollViewStorage } from "../../../application/preferences/broll-view.ts";
 import type { BrollView } from "../../../application/preferences/broll-view.ts";
 import type { CommentFilter, PreferenceChange, PreferenceChanges, Preferences } from "../../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../../application/preferences/view-flags.ts";
-import { PREF_EVENT, preferences, viewFlags, getEditorName } from "../preferences-owner.ts";
+import type { BrollAnchorDeclines } from "../../../application/broll-anchoring.ts";
+import type { CommentSorting } from "../../../application/comment-sort.ts";
+import type { FindOptions } from "../../../application/find-options.ts";
+import type { ImportMode } from "../../../application/import-mode.ts";
+import type { PrompterState } from "../../../application/prompter-state.ts";
+import {
+  PREF_EVENT, brollAnchoring as brollAnchoringOwner, brollView as brollViewOwner, commentSorting as commentSortingOwner,
+  findOptions as findOptionsOwner, importMode as importModeOwner, preferences, prompterState as prompterStateOwner, viewFlags, getEditorName
+} from "../preferences-owner.ts";
 
 export const historyPreferences: Pick<Preferences, "clock"> & { readonly editorName: () => string } = {
   clock: () => preferences().clock(), editorName: getEditorName
@@ -60,18 +67,12 @@ export const preferenceValues = {
 };
 
 export const brollView: BrollView = {
-  load: () => {
-    useBrollViewStorage({
-      read: () => localStorage.getItem("splitpage-broll-view"),
-      write: (value) => { localStorage.setItem("splitpage-broll-view", value); }
-    });
-    brollViewOwner.load();
-  },
-  current: () => brollViewOwner.current(),
-  setFilter: (value) => brollViewOwner.setFilter(value),
-  setGroup: (value) => brollViewOwner.setGroup(value),
-  setPageGroup: (value) => brollViewOwner.setPageGroup(value),
-  printView: (overrides) => brollViewOwner.printView(overrides)
+  load: () => { brollViewOwner().load(); },
+  current: () => brollViewOwner().current(),
+  setFilter: (value) => brollViewOwner().setFilter(value),
+  setGroup: (value) => brollViewOwner().setGroup(value),
+  setPageGroup: (value) => brollViewOwner().setPageGroup(value),
+  printView: (overrides) => brollViewOwner().printView(overrides)
 };
 
 export const appDataPreferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort"> = {
@@ -108,3 +109,36 @@ export const renderPreferences: () => Pick<Preferences, "clock"> = preferences;
 
 export const writerPreferences: () => Pick<Preferences, "writerSize" | "setWriterSize"> = preferences;
 export const writerView: () => Pick<ViewFlags, "writerOpen" | "setWriterOpen" | "findOpen"> = viewFlags;
+
+export const prompterState: PrompterState = {
+  isOpen: () => prompterStateOwner().isOpen(),
+  isPlaying: () => prompterStateOwner().isPlaying(),
+  skipsShot: () => prompterStateOwner().skipsShot(),
+  voiceFollowing: () => prompterStateOwner().voiceFollowing(),
+  setOpen: (value) => { prompterStateOwner().setOpen(value); },
+  setPlaying: (value) => { prompterStateOwner().setPlaying(value); },
+  setSkipShot: (value) => { prompterStateOwner().setSkipShot(value); },
+  setVoiceFollowing: (value) => { prompterStateOwner().setVoiceFollowing(value); }
+};
+
+export const findOptions: FindOptions = {
+  matchesCase: () => findOptionsOwner().matchesCase(),
+  setMatchCase: (value) => { findOptionsOwner().setMatchCase(value); }
+};
+
+export const commentSorting: CommentSorting = {
+  current: () => commentSortingOwner().current(),
+  choose: (value) => commentSortingOwner().choose(value)
+};
+
+export const importMode: ImportMode = {
+  touched: () => importModeOwner().touched(),
+  touch: () => { importModeOwner().touch(); },
+  reset: () => { importModeOwner().reset(); }
+};
+
+export const brollAnchoring: BrollAnchorDeclines = {
+  reset: () => { brollAnchoringOwner().reset(); },
+  decline: (rows) => { brollAnchoringOwner().decline(rows); },
+  declined: (id) => brollAnchoringOwner().declined(id)
+};

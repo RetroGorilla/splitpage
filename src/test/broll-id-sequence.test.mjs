@@ -40,7 +40,7 @@ test("entry creates a record for each b-roll line, one draw per line in line ord
   load([row("r1", "Kettle on.", "B-roll: Steam<br>B-roll: Hands")]);
   assert.deepEqual(shots(), [["Steam", "bsf3o9g5mo5vwtxke"], ["Hands", "bszjm9vjpo5vwtxke"]]);
   assert.deepEqual(brollEntries().map((e) => e.id), ["bsf3o9g5mo5vwtxke", "bszjm9vjpo5vwtxke"]);
-  anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml });
+  anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false });
   assert.deepEqual(shots(), [["Steam", "bsf3o9g5mo5vwtxke"], ["Hands", "bszjm9vjpo5vwtxke"]]);
   assert.equal(currentDocument().rows[0].visualText,
     key("bsf3o9g5mo5vwtxke", "B-roll:") + " Steam<br>" + key("bszjm9vjpo5vwtxke", "B-roll:") + " Hands");
