@@ -121,42 +121,38 @@ interface ScreenListeners {
   readonly flag: (change: ViewFlagChange) => void;
 }
 
+interface RenderState {
+  redrawToast: RedrawToast | null;
+  screenStale: boolean;
+  staleFocus: StalePlace | null;
+  pendingMarks: PendingMarks | null;
+  partTemplate: HTMLTemplateElement | null;
+  paintBroke: boolean;
+  screen: { drawn: boolean; edit: boolean };
+  renderCalls: number;
+  rowsPainted: number;
+  cellsPainted: number;
+}
+
 type RenderWindow = Window & { __renderTest?: RenderTest };
 
-let currentDocument: Ports["document"]["current"];
-let readSession: Ports["document"]["read"];
-let editAllowed: Ports["edits"]["allowed"];
-let sanitizeHtml: Ports["text"]["sanitizeHtml"];
-let storedHtmlFromDom: Ports["text"]["storedHtmlFromDom"];
-let fromHtml: Ports["text"]["fromHtml"];
-let productionReaders: Ports["text"]["productionReaders"];
-let buildVideoCardEl: Ports["video"]["card"];
-let videoHostLabel: Ports["video"]["hostLabel"];
-let cellEditing: Ports["editing"]["cells"];
-let editorSelection: Ports["editing"]["selection"];
-let paintGuard: Ports["editing"]["paint"];
-let undoGuard: Ports["editing"]["undo"];
-let appendDraftMedia: Ports["draft"]["appendMedia"];
-let draftModel: Ports["draft"]["model"];
-let editDraft: Ports["draft"]["edit"];
-let isDraftBox: Ports["draft"]["isDraft"];
-let isScriptCell: Ports["draft"]["isScript"];
-let trackDocument: Ports["undo"]["track"];
-let shotHiding: Ports["hiding"];
-let blobImgHtml: Ports["pictures"]["imgHtml"];
-let personColors: Ports["personColors"];
-let preferences: Ports["preferences"];
-let viewFlags: Ports["view"];
-let showToast: Ports["notices"]["show"];
-let showActionToast: Ports["notices"]["showAction"];
-let appActions: Ports["actions"];
-let deleteConfirmation: Ports["deletes"];
-let setTagAddingPerson: Ports["tagPanel"]["setTagAddingPerson"];
-let makeId: Ports["ids"]["id"];
-let productionIndexStats: Ports["production"]["stats"];
-let resetProductionIndexStats: Ports["production"]["resetStats"];
-let scheduleUntaggedScan: Ports["production"]["scan"];
-let tagFieldOccurrences: Ports["production"]["occurrences"];
+let ports: Ports;
+let state = freshState();
+
+function freshState(): RenderState {
+  return {
+    redrawToast: null,
+    screenStale: false,
+    staleFocus: null,
+    pendingMarks: null,
+    partTemplate: null,
+    paintBroke: false,
+    screen: { drawn: false, edit: true },
+    renderCalls: 0,
+    rowsPainted: 0,
+    cellsPainted: 0
+  };
+}
 let activeRender: object | null = null;
 
 const FIELD_PLACEHOLDERS: Record<TextField, string> = {
@@ -216,9 +212,9 @@ function rowGutterHtml(row: Row, index: number): string {
       '<div class="row-controls">' + controls + '</div>' +
       (row.updatedBy
         ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
-            '<span class="row-meta-who"><span class="person-dot" style="--person:' + personColors.personColor(row.updatedBy) +
+            '<span class="row-meta-who"><span class="person-dot" style="--person:' + ports.personColors.personColor(row.updatedBy) +
               '" aria-hidden="true"></span>' + escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '</span><br>' +
-            formatTimestamp(row.updatedAt, preferences().clock()) + '</div>'
+            formatTimestamp(row.updatedAt, ports.preferences().clock()) + '</div>'
         : '') +
     '</div>'
   );
@@ -226,7 +222,7 @@ function rowGutterHtml(row: Row, index: number): string {
 
 export function paintRowTimes() {
   const rowsEl = document.getElementById("rows");
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!rowsEl || !doc) return;
   const byId = idMap<Element>();
   for (let c = rowsEl.firstElementChild; c; c = c.nextElementSibling) {
@@ -234,7 +230,7 @@ export function paintRowTimes() {
   }
   let t = 0;
   doc.rows.forEach(function (row) {
-    const secs = rowSeconds(row, doc, productionReaders);
+    const secs = rowSeconds(row, doc, ports.text.productionReaders);
     const el = byId[row.id];
     if (el) {
       setTextIfChanged(el.querySelector(".row-start"), formatTimecode(t));
@@ -247,7 +243,7 @@ export function paintRowTimes() {
 function paintReadTime(btn: HTMLElement | null, row: Row, secs: number, doc: DocumentView): void {
   if (!btn) return;
   const set = hasSetLength(row as LengthHolder);
-  const est = set ? estimatedSeconds(row, doc, productionReaders) : secs;
+  const est = set ? estimatedSeconds(row, doc, ports.text.productionReaders) : secs;
   const over = set && Math.round(est) > Math.round(secs);
   setTextIfChanged(btn, set || secs >= 0.5 ? formatDuration(secs) : "");
   btn.classList.toggle("is-set", set);
@@ -268,7 +264,7 @@ const GALLERY_CELL_MAX = 4;
 const GALLERY_CAPTION_MAX = 3;
 
 export function gallerySlotPictureHtml(slot: Slot): string {
-  if (slot.ref) return blobImgHtml(slot.ref);
+  if (slot.ref) return ports.pictures.imgHtml(slot.ref);
   if (slot.dataUrl) return '<img src="' + escapeHtml(slot.dataUrl) + '" alt="">';
   return '<span class="scene-gallery-placeholder" aria-hidden="true"></span>';
 }
@@ -307,7 +303,7 @@ function galleryLinkHtml(row: Row, slotIdx: number, l: VideoLink): string {
   const link = href
     ? '<a class="scene-gallery-link" href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer"' + attrs + '>' + label + '</a>'
     : '<button type="button" class="scene-gallery-link is-file"' + attrs + '>' + label + '</button>';
-  return '<div class="scene-gallery-line"><span class="scene-gallery-host">' + escapeHtml(videoHostLabel(l)) + '</span>' + link +
+  return '<div class="scene-gallery-line"><span class="scene-gallery-host">' + escapeHtml(ports.video.hostLabel(l)) + '</span>' + link +
     '<button type="button" class="scene-gallery-link-remove" data-action="gallery-link-remove" data-id="' + row.id +
       '" data-slot="' + slotIdx + '" data-key="' + key + '" title="Take this link off" aria-label="Take ' + label + ' off">×</button>' +
     '</div>';
@@ -401,11 +397,10 @@ function rowPartEl(rowEl: Element, part: PatchedPart): Element | null {
   return childWithClass(childWithClass(rowEl, "audio-cell"), "field-wrap");
 }
 
-let partTemplate: HTMLTemplateElement | null = null;
 function nodeFromHtml(html: string): Element {
-  if (!partTemplate) partTemplate = document.createElement("template");
-  partTemplate.innerHTML = html;
-  return partTemplate.content.firstElementChild as Element;
+  if (!state.partTemplate) state.partTemplate = document.createElement("template");
+  state.partTemplate.innerHTML = html;
+  return state.partTemplate.content.firstElementChild as Element;
 }
 
 function newRowEl(row: Row, index: number): SignedRow {
@@ -453,25 +448,25 @@ function commitRowPatch(rowEl: SignedRow, patch: RowPatch): boolean {
       active.getAttribute && active.getAttribute("data-action");
     (part.el.parentNode as ParentNode & Node).replaceChild(part.fresh, part.el);
     if (part.key === "visualText" || part.key === "audioText") {
-      cellsPainted++;
-    } else if (action && !viewFlags().writerOpen()) {
+      state.cellsPainted++;
+    } else if (action && !ports.view().writerOpen()) {
       const again = part.fresh.querySelector('[data-action="' + cssAttr(action) + '"]');
       if (again) (again as HTMLElement).focus({ preventScroll: true });
     }
   });
   rowEl[ROW_SIG] = patch.p;
-  if (patch.parts.length) rowsPainted++;
+  if (patch.parts.length) state.rowsPainted++;
   return patch.parts.length > 0;
 }
 
 export function renderRow(rowId: string): boolean {
-  return paintGuard().whilePainting(function () { return paintOneRow(rowId); });
+  return ports.editing.paint().whilePainting(function () { return paintOneRow(rowId); });
 }
 
 function paintOneRow(rowId: string): boolean {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return false;
-  const idx = readSession(function (held) { return rowIndexOf(held, rowId); });
+  const idx = ports.document.read(function (held) { return rowIndexOf(held, rowId); });
   const rowsEl = document.getElementById("rows");
   if (idx === -1 || !rowsEl) return false;
   const rowEl = rowsEl.querySelector(':scope > .row[data-id="' + cssAttr(rowId) + '"]');
@@ -481,15 +476,15 @@ function paintOneRow(rowId: string): boolean {
   const whole = patch ? null : newRowEl(shown, idx);
   const active = document.activeElement;
   const heldCell = active && active.classList && active.classList.contains("cell-editable") && rowEl.contains(active) &&
-    rememberCellSelection(editorSelection(), active) ? active : null;
+    rememberCellSelection(ports.editing.selection(), active) ? active : null;
   let touched = true;
   if (patch) touched = commitRowPatch(rowEl, patch);
   else {
     rowsEl.replaceChild(whole as SignedRow, rowEl);
-    rowsPainted++;
-    cellsPainted += 2;
+    state.rowsPainted++;
+    state.cellsPainted += 2;
   }
-  if (heldCell && !heldCell.isConnected) placeEditorSelection(editorSelection(), rowsEl);
+  if (heldCell && !heldCell.isConnected) placeEditorSelection(ports.editing.selection(), rowsEl);
   if (touched) {
     paintRowTimes();
     announcePainted("row");
@@ -540,7 +535,7 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     else drop.push(el);
   });
 
-  const steps = shotHiding().groups(doc.rows).map(function (item): RowsStep {
+  const steps = ports.hiding().groups(doc.rows).map(function (item): RowsStep {
     const strip = (item as Partial<ShotStrip>).strip;
     const entry = item as ShotRowEntry<Row>;
     const key = strip ? "strip:" + strip.join(",") : "row:" + entry.row.id;
@@ -568,8 +563,8 @@ function commitRows(rowsEl: Element, plan: RowsPlan, pinned: Element | null | un
   const nodes = plan.steps.map(function (step) {
     if (step.patch) commitRowPatch(step.node as SignedRow, step.patch);
     if (step.added) {
-      rowsPainted++;
-      cellsPainted += 2;
+      state.rowsPainted++;
+      state.cellsPainted += 2;
     }
     return step.node;
   });
@@ -639,40 +634,34 @@ function restoreRenderFocus(rowsEl: Element, f: RenderFocus | null): void {
     }
     return;
   }
-  placeEditorSelection(editorSelection(), rowsEl);
+  placeEditorSelection(ports.editing.selection(), rowsEl);
 }
 
 function resetTransientUiState(): void {
-  deleteConfirmation().disarm("row");
+  ports.deletes().disarm("row");
   document.querySelectorAll("#rows .gutter-btn.danger.armed").forEach(disarmDeleteButton);
-  deleteConfirmation().disarm("comment");
-  deleteConfirmation().disarm("tag");
-  setTagAddingPerson(null);
+  ports.deletes().disarm("comment");
+  ports.deletes().disarm("tag");
+  ports.tagPanel.setTagAddingPerson(null);
 }
 
-let renderCalls = 0;
-let rowsPainted = 0;
-let cellsPainted = 0;
-
 export function syncPageTitle(): void {
-  const name = (currentDocument()?.title || "").trim();
+  const name = (ports.document.current()?.title || "").trim();
   document.title = !name || name === "Untitled Script" ? "Splitpage" : name + " — Splitpage";
 }
 
-let paintBroke = false;
-
 export function render(): void {
   try {
-    paintGuard().whilePainting(function () {
+    ports.editing.paint().whilePainting(function () {
       try {
         paintAll();
       } catch (e) {
-        paintBroke = true;
+        state.paintBroke = true;
         throw e;
       }
     });
   } finally {
-    paintBroke = false;
+    state.paintBroke = false;
   }
 }
 
@@ -695,55 +684,52 @@ function announcePainted(kind: PaintKind): void {
 }
 
 export function paintingScreen(): boolean {
-  return paintGuard().painting();
+  return ports.editing.paint().painting();
 }
 
 function paintAll(): void {
-  trackDocument();
-  const doc = currentDocument();
+  ports.undo.track();
+  const doc = ports.document.current();
   if (!doc) return;
-  renderCalls++;
+  state.renderCalls++;
   const rowsEl = document.getElementById("rows") as HTMLElement;
   const plan = planRows(rowsEl, doc);
   const title = doc.title || "";
 
   resetTransientUiState();
   const focus = captureRenderFocus(rowsEl);
-  if (focus && focus.cell) rememberCellSelection(editorSelection(), focus.cell);
+  if (focus && focus.cell) rememberCellSelection(ports.editing.selection(), focus.cell);
   withRowMotion(rowsEl, function () {
     commitRows(rowsEl, plan, focus && focus.rowEl);
     announcePainted("rows");
   });
-  editorSelection().notePainted(rowsEl);
-  if (!viewFlags().writerOpen()) restoreRenderFocus(rowsEl, focus);
+  ports.editing.selection().notePainted(rowsEl);
+  if (!ports.view().writerOpen()) restoreRenderFocus(rowsEl, focus);
 
   const titleInput = document.getElementById("doc-title") as HTMLInputElement;
   if (document.activeElement !== titleInput) titleInput.value = title;
   syncPageTitle();
   paintRowTimes();
   announcePainted("screen");
-  scheduleUntaggedScan();
-  const link = editorSelection().heldLink();
-  if (link && !link.cell.isConnected) editorSelection().dropLink();
-  screen.drawn = true;
-  screen.edit = editAllowed();
+  ports.production.scan();
+  const link = ports.editing.selection().heldLink();
+  if (link && !link.cell.isConnected) ports.editing.selection().dropLink();
+  state.screen.drawn = true;
+  state.screen.edit = ports.edits.allowed();
 }
 
 const REDRAW_FAILED = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 const FIRST_DRAW_FAILED = "Could not draw the script. Nothing was lost — press Redraw before you start editing.";
-let redrawToast: RedrawToast | null = null;
-let screenStale = false;
-let staleFocus: StalePlace | null = null;
 const STALE_PARTS = "#rows, .add-row-bar, #doc-title, #writer-title, #writer-doc, #writer .wr-fmt, " +
   "#replace-input, #find-replace, #find-replace-all, #find-tag-go, #tag-ghost, #tag-suggest";
 const STALE_EVENTS: readonly string[] = ["keydown", "beforeinput", "input", "paste", "cut", "drop", "dragstart",
   "compositionstart", "pointerdown", "mousedown", "click"];
 
 function offerRedraw(failed: string): void {
-  if (redrawToast && redrawToast.isConnected && !redrawToast.classList.contains("is-leaving")) return;
+  if (state.redrawToast && state.redrawToast.isConnected && !state.redrawToast.classList.contains("is-leaving")) return;
   const lifetime = activeRender;
-  const toast = showActionToast(failed, "error", "Redraw", function () { if (activeRender === lifetime) absorbRender(failed); }, true) as RedrawToast;
-  redrawToast = toast;
+  const toast = ports.notices.showAction(failed, "error", "Redraw", function () { if (activeRender === lifetime) absorbRender(failed); }, true) as RedrawToast;
+  state.redrawToast = toast;
   toast.removeEventListener("click", toast.dismiss);
   toast.removeAttribute("title");
   toast.classList.add("is-held");
@@ -766,24 +752,24 @@ function markStaleParts(on: boolean): void {
 function holdStaleScreen(failed: string): void {
   const active = document.activeElement;
   const inPart = !!(active && active.closest && active.closest(STALE_PARTS));
-  const onRedraw = !!(redrawToast && active && redrawToast.contains(active));
-  if (!screenStale && inPart) staleFocus = focusPlace(active as Element);
-  screenStale = true;
+  const onRedraw = !!(state.redrawToast && active && state.redrawToast.contains(active));
+  if (!state.screenStale && inPart) state.staleFocus = focusPlace(active as Element);
+  state.screenStale = true;
   document.body.classList.add("is-stale-screen");
   markStaleParts(true);
   offerRedraw(failed);
-  if (inPart || onRedraw) ((redrawToast as RedrawToast).querySelector(".toast-action") as HTMLElement).focus();
+  if (inPart || onRedraw) ((state.redrawToast as RedrawToast).querySelector(".toast-action") as HTMLElement).focus();
 }
 
 function releaseStaleScreen(): void {
-  if (!screenStale) return;
-  screenStale = false;
+  if (!state.screenStale) return;
+  state.screenStale = false;
   document.body.classList.remove("is-stale-screen");
   markStaleParts(false);
-  const place = staleFocus;
-  staleFocus = null;
+  const place = state.staleFocus;
+  state.staleFocus = null;
   const active = document.activeElement;
-  if (!place || (active && active !== document.body && !(redrawToast && redrawToast.contains(active)))) return;
+  if (!place || (active && active !== document.body && !(state.redrawToast && state.redrawToast.contains(active)))) return;
   const target = place.id ? document.getElementById(place.id) : document.querySelector<HTMLElement>(
     '#rows .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
   if (!target) return;
@@ -798,7 +784,7 @@ function releaseStaleScreen(): void {
 }
 
 function refuseOnStaleScreen(e: Event): void {
-  if (!screenStale) return;
+  if (!state.screenStale) return;
   const t = e.target as Element | null;
   if (!(t && t.closest && t.closest(STALE_PARTS))) return;
   e.preventDefault();
@@ -806,14 +792,14 @@ function refuseOnStaleScreen(e: Event): void {
 }
 
 export function screenIsStale(): boolean {
-  return screenStale;
+  return state.screenStale;
 }
 
 function absorbRender(failed: string): boolean {
   try {
     render();
     releaseStaleScreen();
-    if (redrawToast && redrawToast.isConnected) redrawToast.dismiss();
+    if (state.redrawToast && state.redrawToast.isConnected) state.redrawToast.dismiss();
     return true;
   } catch (e) {
     if (window.console) console.error(e);
@@ -827,11 +813,9 @@ export function renderAbsorbed(): boolean {
 }
 
 export function renderFirstDraw(): boolean {
-  screen.drawn = true;
+  state.screen.drawn = true;
   return absorbRender(FIRST_DRAW_FAILED);
 }
-
-let screen = { drawn: false, edit: true };
 
 const ABSORBED: Readonly<Record<string, true>> = { adopt: true, server: true, recovery: true, reload: true };
 
@@ -868,19 +852,19 @@ function paintsWhole(change: ScreenChange): boolean {
 }
 
 function paintSessionChange(change: ScreenChange): void {
-  if (!screen.drawn) return;
+  if (!state.screen.drawn) return;
   if (ABSORBED[change.kind]) { absorbRender(REDRAW_FAILED); return; }
-  if (screenStale || paintBroke) return;
+  if (state.screenStale || state.paintBroke) return;
   const c = change.changes;
-  if (paintGuard().shown()) {
+  if (ports.editing.paint().shown()) {
     const left = rowsTouched(c.cells, ON_SCREEN_ALREADY);
     if (left.length) {
       const lifetime = activeRender;
-      paintGuard().afterShown(function () { if (activeRender === lifetime) paintRows(left); });
+      ports.editing.paint().afterShown(function () { if (activeRender === lifetime) paintRows(left); });
     }
     return;
   }
-  if (change.kind === "replay") { undoGuard().whileApplying(render); return; }
+  if (change.kind === "replay") { ports.editing.undo().whileApplying(render); return; }
   if (paintsWhole(change)) { render(); return; }
   const rows = rowsTouched(c.cells, null);
   if (rows.length) paintRows(rows);
@@ -892,27 +876,27 @@ function paintProductionViews(): void {
 }
 
 export function screenListeners(): ScreenListeners {
-  screen.drawn = false;
+  state.screen.drawn = false;
   return {
     session: paintSessionChange,
     stamped: function (changes: ChangeSet) {
-      if (!screen.drawn || screenStale || paintBroke) return;
+      if (!state.screen.drawn || state.screenStale || state.paintBroke) return;
       if (changes.docFields.indexOf("comments") !== -1 || changes.cells.some(function (cell) { return TEXT_FIELDS[cell.field]; })) render();
     },
     refresh: function (jobs: ReadonlySet<string>) {
-      if (screen.drawn && jobs.has("production")) paintRowTimes();
+      if (state.screen.drawn && jobs.has("production")) paintRowTimes();
     },
     hiding: function () {
-      if (screen.drawn) render();
+      if (state.screen.drawn) render();
     },
     preference: function (name: string) {
-      if (screen.drawn && SHOWN_PREFERENCES[name]) render();
+      if (state.screen.drawn && SHOWN_PREFERENCES[name]) render();
     },
     location: function () {
-      if (screen.drawn && editAllowed() !== screen.edit) render();
+      if (state.screen.drawn && ports.edits.allowed() !== state.screen.edit) render();
     },
     flag: function (change: ViewFlagChange) {
-      if (screen.drawn && change.flag === "writerOpen" && !change.value) absorbRender(REDRAW_FAILED);
+      if (state.screen.drawn && change.flag === "writerOpen" && !change.value) absorbRender(REDRAW_FAILED);
     }
   };
 }
@@ -925,14 +909,12 @@ function throughModel(cellEl: Element, fn: ModelEdit): Element | null {
     ran = true;
     return fn(cell, sel, media);
   }
-  const fresh = isScriptCell(cellEl) ? cellEditing().edit(cellEl, run) : isDraftBox(cellEl) ? editDraft(cellEl, run) : null;
+  const fresh = ports.draft.isScript(cellEl) ? ports.editing.cells().edit(cellEl, run) : ports.draft.isDraft(cellEl) ? ports.draft.edit(cellEl, run) : null;
   return ran ? (fresh || cellEl) : null;
 }
 
-let pendingMarks: PendingMarks | null = null;
-
 function pendingAt(cellEl: Element, pos: number): PendingMarks["marks"] | null {
-  return pendingMarks && pendingMarks.cell === cellEl && pendingMarks.pos === pos ? pendingMarks.marks : null;
+  return state.pendingMarks && state.pendingMarks.cell === cellEl && state.pendingMarks.pos === pos ? state.pendingMarks.marks : null;
 }
 
 function marksForTyping(cellEl: Element, cell: Run[], pos: number): Marks {
@@ -946,18 +928,18 @@ function togglePendingMark(cellEl: Element, cell: Run[], pos: number, mark: Form
   const p = pendingAt(cellEl, pos) || {};
   const on = !marksForTyping(cellEl, cell, pos)[mark];
   if (on === !!typingMarks(cell, pos)[mark]) Reflect.deleteProperty(p, mark); else p[mark] = on;
-  pendingMarks = Object.keys(p).length ? { cell: cellEl, pos: pos, marks: p } : null;
+  state.pendingMarks = Object.keys(p).length ? { cell: cellEl, pos: pos, marks: p } : null;
 }
 
 export function forgetStalePendingMarks(): void {
-  if (!pendingMarks) return;
-  const c = pendingMarks.cell;
+  if (!state.pendingMarks) return;
+  const c = state.pendingMarks.cell;
   const sel = c.isConnected && document.activeElement === c ? cellSelection(c) : null;
-  if (!sel || sel.from !== sel.to || sel.from !== pendingMarks.pos) pendingMarks = null;
+  if (!sel || sel.from !== sel.to || sel.from !== state.pendingMarks.pos) state.pendingMarks = null;
 }
 
 export function typePendingMarks(cellEl: Element, text: string): Element | null {
-  if (!pendingMarks || pendingMarks.cell !== cellEl || !text) return null;
+  if (!state.pendingMarks || state.pendingMarks.cell !== cellEl || !text) return null;
   let typed = false;
   const fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || !pendingAt(cellEl, sel.from)) return null;
@@ -969,7 +951,7 @@ export function typePendingMarks(cellEl: Element, text: string): Element | null 
     typed = true;
     return { cell: next, sel: { from: at, to: at } };
   });
-  pendingMarks = null;
+  state.pendingMarks = null;
   return typed ? fresh : null;
 }
 
@@ -982,14 +964,14 @@ export function toggleCellFormat(cellEl: Element, cmd: string): Element | null {
       togglePendingMark(cellEl, cell, sel.from, mark);
       return null;
     }
-    pendingMarks = null;
+    state.pendingMarks = null;
     const next = media ? media.toggleMark(cell, sel.from, sel.to, mark) : toggleMark(cell, sel.from, sel.to, mark);
     return { cell: next, sel: sel };
   });
 }
 
 export function isDirectionCell(cellEl: Element): boolean {
-  return isScriptCell(cellEl) && cellEl.getAttribute("data-field") === "audioText";
+  return ports.draft.isScript(cellEl) && cellEl.getAttribute("data-field") === "audioText";
 }
 
 export function toggleCellDirection(cellEl: Element): Element | null {
@@ -1002,12 +984,12 @@ export function toggleCellDirection(cellEl: Element): Element | null {
       if (!r) { said = true; return null; }
       return { cell: setMark(cell, r.from, r.to, "dir", false), sel: sel };
     }
-    pendingMarks = null;
+    state.pendingMarks = null;
     const span = directionToggleRange(cell, sel.from, sel.to);
     return { cell: toggleDirection(cell, sel.from, sel.to), sel: span.off || span.from === span.to ? sel : span };
   });
   if (said || !fresh) {
-    showToast("Select the words of a stage direction first — or type ((like this)).", "warn");
+    ports.notices.show("Select the words of a stage direction first — or type ((like this)).", "warn");
     return null;
   }
   return fresh;
@@ -1022,7 +1004,7 @@ export function maybeDirectionShortcut(e: InputEvent, cellEl: Element): void {
   const node = r.startContainer, offset = r.startOffset;
   if (node.nodeType !== 3 || offset < 2 || (node as Text).data.slice(offset - 2, offset) !== "))") return;
   if ((cellEl.textContent as string).indexOf("((") === -1) return;
-  cellEditing().edit(cellEl, function (cell, sel) {
+  ports.editing.cells().edit(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to) return null;
     const got = directionShortcut(cell, sel.from);
     return got ? { cell: got.cell, sel: { from: got.end, to: got.end } } : null;
@@ -1039,7 +1021,7 @@ export function maybeCueShortcut(e: InputEvent, cellEl: Element): void {
   const r = s.getRangeAt(0);
   const node = r.startContainer, offset = r.startOffset;
   if (node.nodeType !== 3 || !CUE_HINT_RE.test((node as Text).data.slice(0, offset).replace(/\u200B/g, ""))) return;
-  cellEditing().edit(cellEl, function (cell, sel) {
+  ports.editing.cells().edit(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to) return null;
     const next = cueShortcut(cell, sel.from);
     return next ? { cell: next, sel: sel } : null;
@@ -1062,7 +1044,7 @@ export function typeAtDirectionEdge(cellEl: Element, text: string): Element | nu
   const between = node.nodeType === 1 && (holdsDirection(node.childNodes[offset - 1]) || holdsDirection(node.childNodes[offset]));
   if (!inSpan && !between) return null;
   const at0 = cellSelection(cellEl);
-  if (!at0 || at0.from !== at0.to || insideDirection(fromHtml(storedHtmlFromDom(cellEl.innerHTML)), at0.from)) return null;
+  if (!at0 || at0.from !== at0.to || insideDirection(ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML)), at0.from)) return null;
   let typed = false;
   const fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || insideDirection(cell, sel.from)) return null;
@@ -1074,18 +1056,18 @@ export function typeAtDirectionEdge(cellEl: Element, text: string): Element | nu
     typed = true;
     return { cell: next, sel: { from: at, to: at } };
   });
-  pendingMarks = null;
+  state.pendingMarks = null;
   return typed ? fresh : null;
 }
 
 export function cellFormatState(cellEl: Element): Record<string, boolean> | null {
   let read: () => { cell: Run[]; media: DraftMedia | null };
-  if (isScriptCell(cellEl)) {
-    const html = storedHtmlFromDom(cellEl.innerHTML);
+  if (ports.draft.isScript(cellEl)) {
+    const html = ports.text.storedHtmlFromDom(cellEl.innerHTML);
     if (/<img|video-embed-card/.test(html)) return null;
-    read = function () { return { cell: fromHtml(html), media: null }; };
-  } else if (isDraftBox(cellEl)) {
-    read = function () { return draftModel(cellEl); };
+    read = function () { return { cell: ports.text.fromHtml(html), media: null }; };
+  } else if (ports.draft.isDraft(cellEl)) {
+    read = function () { return ports.draft.model(cellEl); };
   } else {
     return null;
   }
@@ -1146,10 +1128,10 @@ export function handleToolbarCmd(btn: Element): void {
   if (cmd === "link") {
     const sel = window.getSelection() as Selection;
     if (!sel.rangeCount || sel.isCollapsed || !rangeInside(sel.getRangeAt(0), cellEl)) {
-      showToast("Select some text inside one cell, then add a link.", "warn");
+      ports.notices.show("Select some text inside one cell, then add a link.", "warn");
       return;
     }
-    editorSelection().holdLink(sel.getRangeAt(0).cloneRange(), cellEl);
+    ports.editing.selection().holdLink(sel.getRangeAt(0).cloneRange(), cellEl);
     const popover = wrap.querySelector(".link-popover") as HTMLElement;
     popover.hidden = false;
     const input = popover.querySelector("input") as HTMLInputElement;
@@ -1160,17 +1142,17 @@ export function handleToolbarCmd(btn: Element): void {
   if (cmd === "comment") {
     const csel = window.getSelection() as Selection;
     if (!csel.rangeCount || csel.isCollapsed || !rangeInside(csel.getRangeAt(0), cellEl)) {
-      showToast("Select some text inside one cell, then add a comment.", "warn");
+      ports.notices.show("Select some text inside one cell, then add a comment.", "warn");
       return;
     }
     const quotedText = csel.toString();
     const cRange = csel.getRangeAt(0);
-    const cmtId = makeId("c");
+    const cmtId = ports.ids.id("c");
     let anchorSpanEl: HTMLElement;
     try {
       anchorSpanEl = wrapRangeInComment(cRange, cmtId);
     } catch (e) {
-      showToast("Could not anchor a comment to that selection.", "error");
+      ports.notices.show("Could not anchor a comment to that selection.", "error");
       return;
     }
     csel.removeAllRanges();
@@ -1178,8 +1160,8 @@ export function handleToolbarCmd(btn: Element): void {
     afterC.setStartAfter(anchorSpanEl);
     afterC.collapse(true);
     csel.addRange(afterC);
-    cellEditing().sync(cellEl);
-    appActions.invoke("comment-on-selection", "button", {
+    ports.editing.cells().sync(cellEl);
+    ports.actions.invoke("comment-on-selection", "button", {
       id: cmtId,
       rowId: cellEl.getAttribute("data-id"),
       field: cellEl.getAttribute("data-field"),
@@ -1190,7 +1172,7 @@ export function handleToolbarCmd(btn: Element): void {
   if (cmd === "tag") {
     const tsel = window.getSelection() as Selection;
     if (!tsel.rangeCount || tsel.isCollapsed || !rangeInside(tsel.getRangeAt(0), cellEl)) {
-      showToast("Select the words you want to label first.", "warn");
+      ports.notices.show("Select the words you want to label first.", "warn");
       return;
     }
     const tagQuoted = tsel.toString().trim();
@@ -1201,9 +1183,9 @@ export function handleToolbarCmd(btn: Element): void {
     const beforeDiv = document.createElement("div");
     beforeDiv.appendChild(beforeRange.cloneContents());
     const tagOccurrenceIndex = tagQuoted
-      ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
+      ? ports.production.occurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
       : 0;
-    appActions.invoke("tag-selection", "button", {
+    ports.actions.invoke("tag-selection", "button", {
       rowId: cellEl.getAttribute("data-id"),
       field: cellEl.getAttribute("data-field"),
       quotedText: tagQuoted,
@@ -1239,17 +1221,17 @@ export function confirmLink(wrap: Element | null): void {
   const input = popover.querySelector("input") as HTMLInputElement;
   let url = (input.value || "").trim();
   const owner = wrap.querySelector(".cell-editable");
-  const link = editorSelection().heldLink();
+  const link = ports.editing.selection().heldLink();
   if (!url || !link || link.cell !== owner || !document.contains(link.cell)) {
     popover.hidden = true;
-    editorSelection().dropLink();
+    ports.editing.selection().dropLink();
     return;
   }
   if (!/^https?:\/\//i.test(url) && url.indexOf("mailto:") !== 0) url = "https://" + url;
   const cellEl = link.cell as HTMLElement;
   const saved = link.range;
   popover.hidden = true;
-  editorSelection().dropLink();
+  ports.editing.selection().dropLink();
   cellEl.focus();
   const sel = window.getSelection() as Selection;
   sel.removeAllRanges();
@@ -1282,7 +1264,7 @@ function caretOutOfLinkEnd(cellEl: Element): void {
 export function cancelLink(wrap: Element | null): void {
   if (!wrap) return;
   (wrap.querySelector(".link-popover") as HTMLElement).hidden = true;
-  editorSelection().dropLink();
+  ports.editing.selection().dropLink();
 }
 
 function wrapRangeInComment(range: Range, cmtId: string): HTMLElement {
@@ -1303,8 +1285,8 @@ export function confirmVideo(wrap: Element | null): void {
   popover.hidden = true;
   if (!url) return;
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-  const card = sanitizeHtml(buildVideoCardEl(url).outerHTML);
-  if (card) appendDraftMedia(wrap.querySelector(".cell-editable") as Element, card);
+  const card = ports.text.sanitizeHtml(ports.video.card(url).outerHTML);
+  if (card) ports.draft.appendMedia(wrap.querySelector(".cell-editable") as Element, card);
 }
 
 export function cancelVideo(wrap: Element | null): void {
@@ -1312,41 +1294,8 @@ export function cancelVideo(wrap: Element | null): void {
   (wrap.querySelector(".video-popover") as HTMLElement).hidden = true;
 }
 
-export function startRowsRender(ports: Ports) {
-  currentDocument = ports.document.current;
-  readSession = ports.document.read;
-  editAllowed = ports.edits.allowed;
-  sanitizeHtml = ports.text.sanitizeHtml;
-  storedHtmlFromDom = ports.text.storedHtmlFromDom;
-  fromHtml = ports.text.fromHtml;
-  productionReaders = ports.text.productionReaders;
-  buildVideoCardEl = ports.video.card;
-  videoHostLabel = ports.video.hostLabel;
-  cellEditing = ports.editing.cells;
-  editorSelection = ports.editing.selection;
-  paintGuard = ports.editing.paint;
-  undoGuard = ports.editing.undo;
-  appendDraftMedia = ports.draft.appendMedia;
-  draftModel = ports.draft.model;
-  editDraft = ports.draft.edit;
-  isDraftBox = ports.draft.isDraft;
-  isScriptCell = ports.draft.isScript;
-  trackDocument = ports.undo.track;
-  shotHiding = ports.hiding;
-  blobImgHtml = ports.pictures.imgHtml;
-  personColors = ports.personColors;
-  preferences = ports.preferences;
-  viewFlags = ports.view;
-  showToast = ports.notices.show;
-  showActionToast = ports.notices.showAction;
-  appActions = ports.actions;
-  deleteConfirmation = ports.deletes;
-  setTagAddingPerson = ports.tagPanel.setTagAddingPerson;
-  makeId = ports.ids.id;
-  productionIndexStats = ports.production.stats;
-  resetProductionIndexStats = ports.production.resetStats;
-  scheduleUntaggedScan = ports.production.scan;
-  tagFieldOccurrences = ports.production.occurrences;
+export function startRowsRender(given: Ports) {
+  ports = given;
   let disposed = false;
   const mine = {};
   activeRender = mine;
@@ -1354,16 +1303,16 @@ export function startRowsRender(ports: Ports) {
     render: render,
     counts: function () {
       if (disposed) return null;
-      const p = productionIndexStats();
-      return { render: renderCalls, rowsPainted: rowsPainted, cellsPainted: cellsPainted,
+      const p = ports.production.stats();
+      return { render: state.renderCalls, rowsPainted: state.rowsPainted, cellsPainted: state.cellsPainted,
                productionDerived: p.derived, idleFlushes: p.flushes };
     },
     reset: function () {
       if (disposed) return;
-      renderCalls = 0;
-      rowsPainted = 0;
-      cellsPainted = 0;
-      resetProductionIndexStats();
+      state.renderCalls = 0;
+      state.rowsPainted = 0;
+      state.cellsPainted = 0;
+      ports.production.resetStats();
     }
   };
   STALE_EVENTS.forEach(function (type) { window.addEventListener(type, refuseOnStaleScreen, true); });
@@ -1405,52 +1354,12 @@ export function startRowsRender(ports: Ports) {
       if (activeRender !== mine) return;
       activeRender = null;
       STALE_EVENTS.forEach(function (type) { window.removeEventListener(type, refuseOnStaleScreen, true); });
-      if (redrawToast) redrawToast.dismiss();
-      redrawToast = null;
-      screenStale = false;
-      staleFocus = null;
+      if (state.redrawToast) state.redrawToast.dismiss();
+      state = freshState();
       document.body.classList.remove("is-stale-screen");
       markStaleParts(false);
-      pendingMarks = null;
-      partTemplate = null;
-      paintBroke = false;
-      screen = { drawn: false, edit: true };
-      renderCalls = rowsPainted = cellsPainted = 0;
       if ((window as RenderWindow).__renderTest === renderTest) delete (window as RenderWindow).__renderTest;
-      (currentDocument as unknown) = null;
-      (readSession as unknown) = null;
-      (editAllowed as unknown) = null;
-      (sanitizeHtml as unknown) = null;
-      (storedHtmlFromDom as unknown) = null;
-      (fromHtml as unknown) = null;
-      (productionReaders as unknown) = null;
-      (buildVideoCardEl as unknown) = null;
-      (videoHostLabel as unknown) = null;
-      (cellEditing as unknown) = null;
-      (editorSelection as unknown) = null;
-      (paintGuard as unknown) = null;
-      (undoGuard as unknown) = null;
-      (appendDraftMedia as unknown) = null;
-      (draftModel as unknown) = null;
-      (editDraft as unknown) = null;
-      (isDraftBox as unknown) = null;
-      (isScriptCell as unknown) = null;
-      (trackDocument as unknown) = null;
-      (shotHiding as unknown) = null;
-      (blobImgHtml as unknown) = null;
-      (personColors as unknown) = null;
-      (preferences as unknown) = null;
-      (viewFlags as unknown) = null;
-      (showToast as unknown) = null;
-      (showActionToast as unknown) = null;
-      (appActions as unknown) = null;
-      (deleteConfirmation as unknown) = null;
-      (setTagAddingPerson as unknown) = null;
-      (makeId as unknown) = null;
-      (productionIndexStats as unknown) = null;
-      (resetProductionIndexStats as unknown) = null;
-      (scheduleUntaggedScan as unknown) = null;
-      (tagFieldOccurrences as unknown) = null;
+      (ports as unknown) = null;
     }
   };
 }
