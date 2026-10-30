@@ -12,7 +12,7 @@ The document guard is a small owner beside identity in `src/application/identity
 
 ## Remaining numbered callers
 
-None. `src/legacy/document-identity-bridge.ts` went with `13-hosted.js`, its last numbered caller, when the server features were removed. The old `src/legacy/document-guard.ts` bridge is deleted. No compatibility re-exports remain.
+None. The document-identity bridge went with `13-hosted.js`, its last numbered caller, when the server features were removed. The old document-guard bridge is deleted. No compatibility re-exports remain.
 
 The 02b numbered-file exception, 03 → 02b, 13 → 02b, 18 → 02b and bootstrap → 02b dependencies are removed.
 
