@@ -5,11 +5,14 @@
 open
 
 eval (function(){window.__rowsBefore = document.getElementById('rows').innerHTML; return window.__rowsBefore.length > 0;})()
+eval window.__settled = function () { return document.getAnimations().every(function (a) { return a.playState === 'finished' || a.playState === 'idle' || a.effect.getTiming().iterations === Infinity; }); }
+eval window.__step = function (n) { return document.getElementById('tour-step').textContent.indexOf(n + ' of 5') !== -1; }
 
 # --- starts from the File menu, 5 steps, Next advances ----------------------
 jsclick #btn-file
 jsclick #file-menu [data-file-action="tour"]
-sleep 400
+wait document.getElementById('tour-overlay').hidden == false && __step(1)
+wait __settled()
 expect document.getElementById('tour-overlay').hidden == false
 expect document.getElementById('tour-step').textContent.indexOf('1 of 5') !== -1
 expect document.getElementById('tour-back').disabled == true
@@ -19,32 +22,32 @@ expect document.getElementById('tour-card').getBoundingClientRect().width > 0
 expect document.getElementById('tour-card').offsetParent !== null
 
 jsclick #tour-next
-sleep 300
+wait __step(2) && document.getElementById('tagging-help').hidden == false
 expect document.getElementById('tour-step').textContent.indexOf('2 of 5') !== -1
 expect document.getElementById('tagging-help').hidden == false
 
 # --- Back returns -------------------------------------------------------
 jsclick #tour-back
-sleep 300
+wait __step(1) && document.getElementById('tour-back').disabled == true
 expect document.getElementById('tour-step').textContent.indexOf('1 of 5') !== -1
 expect document.getElementById('tour-back').disabled == true
 
 jsclick #tour-next
-sleep 200
+wait __step(2)
 jsclick #tour-next
-sleep 200
+wait __step(3)
 expect document.getElementById('tour-step').textContent.indexOf('3 of 5') !== -1
 jsclick #tour-next
-sleep 200
+wait __step(4)
 expect document.getElementById('tour-step').textContent.indexOf('4 of 5') !== -1
 jsclick #tour-next
-sleep 300
+wait __step(5) && document.getElementById('tour-next').textContent == 'Finish'
 expect document.getElementById('tour-step').textContent.indexOf('5 of 5') !== -1
 expect document.getElementById('tour-next').textContent == Finish
 
 # --- Finish (Next on the last step) closes it and marks it done ------------
 jsclick #tour-next
-sleep 300
+wait document.getElementById('tour-overlay').hidden == true && localStorage.getItem('splitpage-tour-done') == 1
 expect document.getElementById('tour-overlay').hidden == true
 expect localStorage.getItem('splitpage-tour-done') == 1
 expect document.getElementById('rows').innerHTML === window.__rowsBefore
@@ -52,85 +55,86 @@ expect document.getElementById('rows').innerHTML === window.__rowsBefore
 # --- Skip exits at every step, and never touches the document --------------
 jsclick #btn-file
 jsclick #file-menu [data-file-action="tour"]
-sleep 300
+wait document.getElementById('tour-overlay').hidden == false
 expect document.getElementById('tour-overlay').hidden == false
 jsclick #tour-skip
-sleep 300
+wait document.getElementById('tour-overlay').hidden == true
 expect document.getElementById('tour-overlay').hidden == true
 expect document.getElementById('rows').innerHTML === window.__rowsBefore
 
 jsclick #btn-file
 jsclick #file-menu [data-file-action="tour"]
-sleep 300
+wait document.getElementById('tour-overlay').hidden == false
 jsclick #tour-next
-sleep 200
+wait __step(2)
 jsclick #tour-next
-sleep 200
+wait __step(3)
 expect document.getElementById('tour-step').textContent.indexOf('3 of 5') !== -1
 jsclick #tour-skip
-sleep 300
+wait document.getElementById('tour-overlay').hidden == true
 expect document.getElementById('tour-overlay').hidden == true
 expect document.getElementById('rows').innerHTML === window.__rowsBefore
 
 jsclick #btn-file
 jsclick #file-menu [data-file-action="tour"]
-sleep 300
+wait document.getElementById('tour-overlay').hidden == false
 jsclick #tour-next
-sleep 200
+wait __step(2)
 jsclick #tour-next
-sleep 200
+wait __step(3)
 jsclick #tour-next
-sleep 200
+wait __step(4)
 jsclick #tour-next
-sleep 200
+wait __step(5)
 expect document.getElementById('tour-step').textContent.indexOf('5 of 5') !== -1
 jsclick #tour-skip
-sleep 300
+wait document.getElementById('tour-overlay').hidden == true
 expect document.getElementById('tour-overlay').hidden == true
 expect document.getElementById('rows').innerHTML === window.__rowsBefore
 
 # --- a "Read more" link opens Help at the step's own section ----------------
 jsclick #btn-file
 jsclick #file-menu [data-file-action="tour"]
-sleep 300
+wait document.getElementById('tour-overlay').hidden == false
 jsclick #tour-readmore
-sleep 300
+wait document.getElementById('help-modal').hidden == false && document.getElementById('tour-overlay').hidden == true
 expect document.getElementById('help-modal').hidden == false
 expect document.getElementById('tour-overlay').hidden == true
 key Escape
-sleep 300
+wait document.getElementById('help-modal').hidden == true
 
 # --- fits at the phone layout: the card stays inside the viewport ----------
 viewport 375 812 mobile
-sleep 300
+wait innerWidth === 375
 jsclick #btn-file
 jsclick #file-menu [data-file-action="tour"]
-sleep 400
+wait document.getElementById('tour-overlay').hidden == false
+wait __settled()
 expect document.getElementById('tour-overlay').hidden == false
 eval (function(){var r=document.getElementById('tour-card').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};})()
 expect document.getElementById('tour-card').getBoundingClientRect().left >= 0
 expect document.getElementById('tour-card').getBoundingClientRect().right <= innerWidth
 jsclick #tour-skip
-sleep 300
+wait document.getElementById('tour-overlay').hidden == true
 
 # --- "Read more" pauses the tour, it does not end it ------------------------
 # Reading the section a step points at is part of taking the tour. The guide
 # opens over it, the tour waits, and closing the guide puts the reader back
 # on the same step with the tour still unfinished.
 viewport reset
-sleep 300
+wait innerWidth > 375
 eval localStorage.removeItem('splitpage-tour-done')
 jsclick #btn-file
 jsclick #file-menu [data-file-action="tour"]
-sleep 400
+wait document.getElementById('tour-overlay').hidden == false
 jsclick #tour-next
-sleep 250
+wait __step(2)
 jsclick #tour-next
-sleep 250
+wait __step(3)
 eval window.__tourLeftAt = document.getElementById('tour-step').textContent
 eval window.__rowsBeforeReadMore = document.getElementById('rows').innerHTML
 jsclick #tour-readmore
-sleep 500
+wait document.getElementById('help-modal').hidden == false && document.getElementById('tour-overlay').hidden == true && document.getElementById('help-body').scrollTop > 0
 expect document.getElementById('help-modal').hidden == false
 expect document.getElementById('tour-overlay').hidden == true
 expect localStorage.getItem('splitpage-tour-done') === null
@@ -138,7 +142,7 @@ expect document.getElementById('help-body').scrollTop > 0
 
 # closing the guide brings the tour back, on the step it was left on
 jsclick #help-close
-sleep 400
+wait document.getElementById('help-modal').hidden == true && document.getElementById('tour-overlay').hidden == false
 expect document.getElementById('help-modal').hidden == true
 expect document.getElementById('tour-overlay').hidden == false
 expect document.getElementById('tour-step').textContent === window.__tourLeftAt
@@ -147,7 +151,7 @@ expect document.getElementById('tour-card').getBoundingClientRect().width > 0
 
 # and the tour carries on from there
 jsclick #tour-next
-sleep 300
+wait document.getElementById('tour-step').textContent !== window.__tourLeftAt
 expect document.getElementById('tour-step').textContent !== window.__tourLeftAt
 expect document.getElementById('rows').innerHTML === window.__rowsBeforeReadMore
 
@@ -155,17 +159,18 @@ expect document.getElementById('rows').innerHTML === window.__rowsBeforeReadMore
 # handler and the tour's both listen on window, and the tour's must not skip
 # the tour that the guide's just put back.
 jsclick #tour-readmore
-sleep 500
+wait document.getElementById('help-modal').hidden == false
 expect document.getElementById('help-modal').hidden == false
 key Escape
-sleep 400
+wait document.getElementById('help-modal').hidden == true
+wait __settled()
 expect document.getElementById('help-modal').hidden == true
 expect document.getElementById('tour-overlay').hidden == false
 expect localStorage.getItem('splitpage-tour-done') === null
 
 # with no guide open, Escape still skips the tour
 key Escape
-sleep 300
+wait document.getElementById('tour-overlay').hidden == true && localStorage.getItem('splitpage-tour-done') == 1
 expect document.getElementById('tour-overlay').hidden == true
 expect localStorage.getItem('splitpage-tour-done') == 1
 
