@@ -6,19 +6,19 @@ import { rowContentEqual } from "./rows.ts";
 
 type ReviewRow = Readonly<Record<string, unknown>> | null | undefined;
 
-export type FieldOutcome = "theirs" | "mine" | "conflict";
+type FieldOutcome = "theirs" | "mine" | "conflict";
 
-export interface DiffOp {
+interface DiffOp {
   op: "same" | "del" | "add";
   text: string;
 }
 
-export interface DiffPair {
+interface DiffPair {
   mine: string;
   theirs: string;
 }
 
-export interface ReviewEntry {
+interface ReviewEntry {
   label: string;
   outcome: string;
   mineHtml: string;

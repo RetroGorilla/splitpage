@@ -42,11 +42,11 @@ export interface BreakdownRow {
   scenes: string[];
   broll: string[];
 }
-export interface BreakdownTable {
+interface BreakdownTable {
   head: string[];
   rows: { catId: string; status: string; cells: TableCell[] }[];
 }
-export interface BrollTable {
+interface BrollTable {
   head: string[];
   rows: { shot: boolean; flagged: boolean; cells: TableCell[] }[];
 }
@@ -55,7 +55,7 @@ export interface CommentBody {
   body: string;
   pieces?: BodyPiece[];
 }
-export interface CommentReply extends CommentBody {
+interface CommentReply extends CommentBody {
   author: string;
   when: string;
 }
@@ -74,7 +74,7 @@ export interface CommentOptions {
   pieces?: boolean;
   clockMode?: ClockMode | undefined;
 }
-export interface CommentInput {
+interface CommentInput {
   kind?: unknown;
   field?: unknown;
   imageValue?: unknown;
@@ -192,7 +192,7 @@ export function breakdownTable(doc: ExportDocument, services: ExportServices = e
   return out;
 }
 
-export function capturedStarts(doc: ExportDocument, services: ExportServices = exportServices()): Record<string, number> {
+function capturedStarts(doc: ExportDocument, services: ExportServices = exportServices()): Record<string, number> {
   let t = 0;
   const out: Record<string, number> = {};
   Object.setPrototypeOf(out, null);
@@ -296,7 +296,7 @@ export function commentEntries(doc: ExportDocument, opts?: CommentOptions | null
   });
 }
 
-export function bodyPieces(html: unknown, services: ExportServices = exportServices()): BodyPiece[] {
+function bodyPieces(html: unknown, services: ExportServices = exportServices()): BodyPiece[] {
   const out: BodyPiece[] = [];
   if (!html) return out;
   const root = services.inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
@@ -328,7 +328,7 @@ export function bodyPieces(html: unknown, services: ExportServices = exportServi
   return out;
 }
 
-export function commentBodyPieces(c: CommentInput, services: ExportServices = exportServices()): BodyPiece[] {
+function commentBodyPieces(c: CommentInput, services: ExportServices = exportServices()): BodyPiece[] {
   if (c.kind === "conflict" && c.field === "visualImage") {
     const ref = normalizeImageRef(c.imageValue);
     return ref ? [{ image: ref.sha256 }] : [];
@@ -336,7 +336,7 @@ export function commentBodyPieces(c: CommentInput, services: ExportServices = ex
   return bodyPieces(c.body, services);
 }
 
-export const COMMENT_IMAGE_TEXT = "[image]";
+const COMMENT_IMAGE_TEXT = "[image]";
 
 export function commentBodyText(entry: CommentBody): string {
   const pieces = (entry && entry.pieces) || [];

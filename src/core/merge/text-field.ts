@@ -30,9 +30,9 @@ export interface TextMergeContext {
   decode: MergeDecoder;
 }
 
-export type TextOutcome = "same" | "mine" | "theirs" | "merged" | "conflict";
+type TextOutcome = "same" | "mine" | "theirs" | "merged" | "conflict";
 
-export interface TextMerge {
+interface TextMerge {
   html: string;
   outcome: TextOutcome;
   marks?: boolean;

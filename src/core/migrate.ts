@@ -38,7 +38,7 @@ import { toPlainText } from "./text/projections.ts";
 import type { DecodeOptions } from "./text/ports.ts";
 import type { Run } from "./text/runs.ts";
 
-export type MigrateDecoder = (html: string, opts: DecodeOptions) => readonly Run[];
+type MigrateDecoder = (html: string, opts: DecodeOptions) => readonly Run[];
 
 export interface MigratePorts {
   images: ImageSource;

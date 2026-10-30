@@ -6,7 +6,7 @@ export const TAG_STATUS_IDS = ["needed", "sourcing", "have", "returned"] as cons
 
 export type TagStatusId = (typeof TAG_STATUS_IDS)[number];
 
-export interface TagIdHolder {
+interface TagIdHolder {
   id?: string | undefined;
 }
 

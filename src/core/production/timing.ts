@@ -2,11 +2,11 @@ import { DEFAULT_WPM, hasSetLength } from "../document/timing.ts";
 import type { LengthHolder } from "../document/timing.ts";
 import type { FieldHtml, ProductionReaders } from "./ports.ts";
 
-export type TimedRow = LengthHolder & { audioText?: FieldHtml };
+type TimedRow = LengthHolder & { audioText?: FieldHtml };
 
-export type TimingState = { wordsPerMinute?: number | null | undefined; rows: readonly TimedRow[] };
+type TimingState = { wordsPerMinute?: number | null | undefined; rows: readonly TimedRow[] };
 
-export type TargetClock = { target: string; delta: string; over: boolean };
+type TargetClock = { target: string; delta: string; over: boolean };
 
 type WordCounter = Pick<ProductionReaders, "wordCount">;
 

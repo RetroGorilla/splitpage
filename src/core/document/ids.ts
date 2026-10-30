@@ -1,11 +1,11 @@
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import { escapeHtml } from "./text-policy.ts";
 
-export interface DocIdHolder {
+interface DocIdHolder {
   docId?: unknown;
 }
 
-export interface PageHead {
+interface PageHead {
   title?: unknown;
   description?: unknown;
 }

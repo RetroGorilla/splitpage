@@ -23,13 +23,13 @@ export interface MarkdownProject {
   readonly title: string | null;
 }
 
-export type ProjectFileKind = "splitpage" | "html" | "md";
+type ProjectFileKind = "splitpage" | "html" | "md";
 
-export type ParsedProjectFile =
+type ParsedProjectFile =
   | { readonly state: ValidatedDocument; readonly kind: ProjectFileKind; readonly docIdEmbedded: boolean }
   | { readonly error: "unreadable" | "not-splitpage" };
 
-export interface ProjectFileOptions {
+interface ProjectFileOptions {
   readonly noAsk?: boolean | undefined;
 }
 

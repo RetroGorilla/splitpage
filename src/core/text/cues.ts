@@ -3,7 +3,7 @@ import type { CellInput, Run } from "./runs.ts";
 import { clamp, deleteRange, insertText, replaceText, setMark } from "./edits.ts";
 import type { TextSpan } from "./edits.ts";
 
-export type CueLine = { from: number; to: number; cue: boolean };
+type CueLine = { from: number; to: number; cue: boolean };
 
 export type Cue = { kind: string; name: string; text: string };
 
