@@ -16,7 +16,7 @@ export interface UndoRoutePorts {
   readonly install: (hooks: UndoRouteHooks) => () => void;
 }
 
-export interface UndoRoutesMount {
+interface UndoRoutesMount {
   readonly window: Window;
   readonly roots: readonly Element[];
   readonly ports: UndoRoutePorts;

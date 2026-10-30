@@ -46,16 +46,16 @@ function dialogFormat(card) {
   return out;
 }
 
-export function exportFormatList() {
+function exportFormatList() {
   return exportFormats.cards().map(dialogFormat);
 }
 
-export function exportActionName(action) {
+function exportActionName(action) {
   var exporter = exportFormats.byAction(action);
   return exporter ? exporter.name : "";
 }
 
-export function isExportAction(action) {
+function isExportAction(action) {
   return exportFormats.isAction(action);
 }
 
@@ -74,7 +74,7 @@ function exportOptionsFor(action) {
   return exportToggleOptions(exportFormats, exportFormats.byAction(action));
 }
 
-export function exportActionReason(action) {
+function exportActionReason(action) {
   if (!currentDocument()) return "Still loading…";
   var exporter = exportFormats.byAction(action);
   return exporter && exporter.reason ? exporter.reason(captureExportDocument()) : "";
@@ -412,7 +412,7 @@ function tailSummary(doc) {
   return parts.length ? listed(parts) + " at the end" : "";
 }
 
-export function exportSummary(action) {
+function exportSummary(action) {
   var f = formatForAction(action);
   if (!f || !currentDocument()) return "";
   var rows = currentDocument().rows;
@@ -468,7 +468,7 @@ export function exportSummary(action) {
   return bits.join(" · ");
 }
 
-export function exportFileNameFor(action) {
+function exportFileNameFor(action) {
   var exporter = exportFormats.byAction(action);
   if (!exporter || !currentDocument()) return "";
   var bundle = !!exporter.bundlesPictures && currentDocument().rows.some(function (r) { return !!rowImage(r); });
@@ -534,7 +534,7 @@ export function openExportDialog(opts) {
   return true;
 }
 
-export function closeExportDialog() {
+function closeExportDialog() {
   var modal = el("export-modal");
   if (!modal || modal.hidden) return;
   modal.hidden = true;
@@ -550,7 +550,7 @@ function exportChosen() {
   runExportAction(action);
 }
 
-export function exportAgain() {
+function exportAgain() {
   var action = lastExportAction();
   if (!action) { openExportDialog(); return; }
   var why = exportActionReason(action);

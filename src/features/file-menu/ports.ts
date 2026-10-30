@@ -16,7 +16,7 @@ import type { ExportCaptureOptions, ExportDocument } from "../../core/document/e
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { DocxRun } from "../../core/text/projections.ts";
 
-export interface ExportPreviewPort {
+interface ExportPreviewPort {
   readonly facts: (doc: ExportDocument) => {
     seconds: number; runtime: string; words: number; date: string;
     target: { seconds: number } | null;
@@ -72,7 +72,7 @@ export interface FileMenuExportControls {
   readonly exportAgainItemState: () => ExportAgainState;
 }
 
-export interface ExportDialogFormat extends ExportCardDecl {
+interface ExportDialogFormat extends ExportCardDecl {
   readonly action?: string;
   readonly choices?: readonly (ExportChoice & { readonly action: string })[];
 }
