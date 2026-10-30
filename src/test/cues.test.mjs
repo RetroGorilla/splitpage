@@ -32,7 +32,7 @@ const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 import { productionIndex } from "../application/production/index-owner.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
-import { prompterSceneHtml, trimPrompterCell } from "../features/prompter/prompter.js";
+import { prompterSceneHtml, trimPrompterCell } from "../features/prompter/prompter.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

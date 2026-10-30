@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/prompter/prompter.js",
+    "src/features/prompter/prompter.ts",
     "src/bootstrap/wiring/prompter.ts"
   ],
   "expectedLoads": 2
