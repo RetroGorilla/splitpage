@@ -169,6 +169,55 @@ test("a writeback whose re-read fails keeps the writer's stamp so the next save 
   stop();
 });
 
+test("a desktop-style close() that answers a stamp records that stamp and does not read the file again", async () => {
+  const h = harness();
+  const stop = h.owner.startImportSaving({
+    ...h.ports,
+    files: { ...h.ports.files, createWritable: async () => ({ write: async () => { h.log.push("write"); }, close: async () => { h.log.push("close"); return { lastModified: 70 }; } }) }
+  });
+  h.ports.location.amendHome(h.imported, { lastModified: 40, size: 9 });
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.deepEqual(h.log, ["build:txt:draft", "check", "write", "close"]);
+  assert.equal(h.imported["lastModified"], 70);
+  assert.equal(h.imported["size"], null);
+  stop();
+});
+
+test("a close() whose answer has no usable stamp reads the file once, as the browser path does", async () => {
+  for (const answer of [undefined, null, {}, { lastModified: Number.NaN }, { lastModified: "70" }]) {
+    const h = harness();
+    const stop = h.owner.startImportSaving({
+      ...h.ports,
+      files: { ...h.ports.files, createWritable: async () => ({ write: async () => {}, close: async () => { h.log.push("close"); return answer; } }) }
+    });
+    assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+    assert.deepEqual(h.log.slice(-2), ["close", "readAfter"], JSON.stringify(answer));
+    assert.equal(h.imported["lastModified"], 50);
+    assert.equal(h.imported["size"], 100);
+    stop();
+  }
+});
+
+test("a file another program changes after close() stamped the write is refused as a conflict on the next save-back", async () => {
+  const h = harness();
+  let disk = 40;
+  const stop = h.owner.startImportSaving({
+    ...h.ports,
+    files: {
+      checkConflict: async (_handle, lastModified) => (lastModified && lastModified !== disk ? { ok: false, current: { lastModified: disk } } : { ok: true }),
+      createWritable: async () => ({ write: async () => {}, close: async () => { disk = 99; return { lastModified: 70 }; } }),
+      read: async () => ({ name: "draft.txt", lastModified: disk, size: 100, text: async () => "", arrayBuffer: async () => new ArrayBuffer(0) })
+    }
+  });
+  h.ports.location.amendHome(h.imported, { lastModified: 40, size: 9 });
+  assert.deepEqual(await h.owner.writeBackToFile(h.job), { kind: "saved" });
+  assert.equal(h.imported["lastModified"], 70);
+  const next = await h.owner.writeBackToFile(h.job);
+  assert.equal(next.kind, "refused");
+  assert.deepEqual("conflict" in next ? next.conflict : null, { fileName: "draft.txt", current: { lastModified: 99 }, kind: "import" });
+  stop();
+});
+
 test("a writeback whose re-read fails without a stamp clears the old one so the next save is not refused", async () => {
   const h = harness();
   let disk = 40;

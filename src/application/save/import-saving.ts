@@ -1,4 +1,4 @@
-import { createImportCompletion } from "./save-completion.ts";
+import { closedStamp, createImportCompletion } from "./save-completion.ts";
 import type { LocalFileHandle, LocalFileWritable } from "../files/local-file-access.ts";
 import type { Home } from "../location/document-location.ts";
 import type { SaveJob, WriterResult } from "./coordinator.ts";
@@ -86,13 +86,18 @@ async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterR
       if (!stillWritingBack(job, imported)) { await discardWritable(writable); return IMPORT_REPLACED; }
       const closed = await writable.close();
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
-      try {
-        const after = await ports.files.read(imported.handle);
-        if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
-        completion.landed(imported, after);
-      } catch (e) {
-        if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
-        completion.landedUnread(imported, closed);
+      const stamped = closedStamp(closed);
+      if (stamped !== null) {
+        completion.landed(imported, { lastModified: stamped, size: null });
+      } else {
+        try {
+          const after = await ports.files.read(imported.handle);
+          if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
+          completion.landed(imported, after);
+        } catch (e) {
+          if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
+          completion.landedUnread(imported, closed);
+        }
       }
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
       showToast("Saved to " + (imported.name as string), "ok");
