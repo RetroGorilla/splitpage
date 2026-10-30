@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import "../../src/test/_dom.mjs";
+import "../../../src/test/_dom.mjs";
 
-import { exposeTestHook, withdrawTestHook } from "../../src/bootstrap/test-hooks.ts";
+import { exposeTestHook, withdrawTestHook } from "../../../src/features/common/test-hooks.ts";
 
 const read = (name: string): unknown => (window as unknown as Record<string, unknown>)[name];
 
