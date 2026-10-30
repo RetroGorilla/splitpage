@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { needsChecks, needsAppChecks, changedFiles } from "./ci-changes.mjs";
+import { needsChecks, needsAppChecks, needsDesktopChecks, changedFiles } from "./ci-changes.mjs";
 import { isScanned, canScan } from "./comment-gate.mjs";
 import { listRepoFiles } from "./source-scan.mjs";
 
@@ -49,6 +49,16 @@ for (const files of [["README.md"], ["tests/application/session.test.ts"], ["src
 }
 eq("mixed app and metadata changes run app checks", needsAppChecks([".github/dependabot.yml", "src/page.html"]), true);
 eq("mixed prose and test-only changes skip app checks", needsAppChecks(["README.md", "tests/core/a.test.ts"]), false);
+
+console.log("\nneedsDesktopChecks():\n");
+
+for (const files of [null, [], ["desktop/main.js"], ["src/bootstrap/main.ts"], ["desktop/test/smoke.mjs"], ["package.json"], [".github/workflows/ci.yml"], ["unknown/new.file"], ["README.md", "desktop/test/smoke.mjs"]]) {
+  eq(`the desktop smoke runs for ${JSON.stringify(files)}`, needsDesktopChecks(files), true);
+}
+for (const files of [["README.md"], ["tests/application/session.test.ts"], ["src/test/a.test.mjs"], ["tools/test-run-suites.mjs"], ["tools/ci-changes.mjs"], [".github/dependabot.yml"], [".github/workflows/release.yml"], ["desktop/test/notes.md"]]) {
+  eq(`the desktop smoke skips ${JSON.stringify(files)}`, needsDesktopChecks(files), false);
+}
+eq("a smoke change that is not prose runs the smoke although app checks skip it", [needsAppChecks(["desktop/test/smoke.mjs"]), needsDesktopChecks(["desktop/test/smoke.mjs"])], [false, true]);
 
 const repo = mkdtempSync(join(tmpdir(), "splitpage-ci-changes-"));
 const git = (...args) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo, encoding: "utf8" }).stdout.trim();
