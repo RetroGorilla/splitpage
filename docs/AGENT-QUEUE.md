@@ -139,7 +139,7 @@ Files touched: the three suite files and any test helper they share. Keep it to 
 Validation section: before/after failure counts per suite for both run modes.
 ```
 
-## AQ-2 [ ] Mutation configs for the formats helpers
+## AQ-2 [x] Mutation configs for the formats helpers
 
 ```text
 Task: tools/mutants/ has configs for core areas (core-document, core-merge, core-production, core-text, core-migrate, core-merge-states). The pure helpers in src/adapters/formats/ have none. Add them and close the gaps they show. Tests and config only.
