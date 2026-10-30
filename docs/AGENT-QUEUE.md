@@ -243,7 +243,7 @@ Task: tools/mutants/ has configs for src/core areas. Add one for the pure, logic
 Structure section: "no structural change"; mutants generated / killed / equivalent per module.
 ```
 
-## AQ-10 [ ] Unit tests for pure logic in src/features without a test
+## AQ-10 [x] Unit tests for pure logic in src/features without a test
 
 ```text
 Task: find modules under src/features/ (not mount.ts, not ports.ts) that contain pure logic (string, array or DOM-free computation) and have no test, and add tests. Tests only.
