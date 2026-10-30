@@ -1,8 +1,7 @@
-import { deleteConfirmation, resetProductionPanelState } from "../production-editing-owners.ts";
+import { deleteConfirmation, resetProductionPanelState, tagPanelState as tagPanelStateOwner } from "../production-editing-owners.ts";
 import type { ProductionIndexOwner } from "../../../core/production/index.ts";
 import { productionIndex } from "../../../application/production/index-owner.ts";
 import type { TagPanelState } from "../../../application/tag-panel-state.ts";
-import * as tagPanelStateOwner from "../../../application/tag-panel-state.ts";
 import { productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences } from "../../../features/tags/production-tags.js";
 
 export const renderDeletes = deleteConfirmation;
@@ -12,17 +11,17 @@ export const renderProduction = {
 };
 
 export const tagPanelState: TagPanelState = {
-  tagRenamingKey: () => tagPanelStateOwner.tagRenamingKey(),
-  setTagRenaming: (key) => { tagPanelStateOwner.setTagRenaming(key); },
-  tagExpandedKey: () => tagPanelStateOwner.tagExpandedKey(),
-  setTagExpanded: (key) => { tagPanelStateOwner.setTagExpanded(key); },
-  tagAddingPersonKey: () => tagPanelStateOwner.tagAddingPersonKey(),
-  setTagAddingPerson: (key) => { tagPanelStateOwner.setTagAddingPerson(key); },
-  productionGroupBy: () => tagPanelStateOwner.productionGroupBy(),
-  setProductionGroupBy: (group) => { tagPanelStateOwner.setProductionGroupBy(group); },
-  gearGroupBy: () => tagPanelStateOwner.gearGroupBy(),
-  setGearGroupBy: (group) => { tagPanelStateOwner.setGearGroupBy(group); },
-  resetTagPanel: () => { tagPanelStateOwner.resetTagPanel(); }
+  tagRenamingKey: () => tagPanelStateOwner().tagRenamingKey(),
+  setTagRenaming: (key) => { tagPanelStateOwner().setTagRenaming(key); },
+  tagExpandedKey: () => tagPanelStateOwner().tagExpandedKey(),
+  setTagExpanded: (key) => { tagPanelStateOwner().setTagExpanded(key); },
+  tagAddingPersonKey: () => tagPanelStateOwner().tagAddingPersonKey(),
+  setTagAddingPerson: (key) => { tagPanelStateOwner().setTagAddingPerson(key); },
+  productionGroupBy: () => tagPanelStateOwner().productionGroupBy(),
+  setProductionGroupBy: (group) => { tagPanelStateOwner().setProductionGroupBy(group); },
+  gearGroupBy: () => tagPanelStateOwner().gearGroupBy(),
+  setGearGroupBy: (group) => { tagPanelStateOwner().setGearGroupBy(group); },
+  resetTagPanel: () => { tagPanelStateOwner().resetTagPanel(); }
 };
 
 export const production: ProductionIndexOwner = {
