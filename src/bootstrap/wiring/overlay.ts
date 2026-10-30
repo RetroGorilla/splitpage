@@ -1,7 +1,7 @@
 import type { OverlayPorts } from "../../features/overlay/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { mountOverlay } from "../../features/overlay/mount.ts";
-import { paintingScreen } from "../../features/rows/render.js";
+import { paintingScreen } from "../../features/rows/render.ts";
 import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { hideTagGhost, tagGhost } from "../../features/tags/production-tags.js";
 import { clearProductionSelection, selectedKeys } from "./production-editing-owners.ts";

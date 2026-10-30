@@ -380,7 +380,7 @@ selection kept:
 - `toggleMark` (`src/core/text/edits.ts`): every visible character of the selection already
   has the mark (line breaks and b-roll keys aside, `markThroughout`) → off,
   else on over all of it. The toolbars' lit state is the same question
-  (`cellFormatState`, `src/features/rows/render.js`), so a lit button always means
+  (`cellFormatState`, `src/features/rows/render.ts`), so a lit button always means
   "pressing this removes it".
 - A link is `setMark(…, "href", url)`; the caret goes just past it.
 - `breakLine` (`src/core/text/edits.ts`) replaces the selection with `"\n"`, or `"\n\n"` with
@@ -611,7 +611,7 @@ changes are combined"). What building it settled:
 | `02-state.js` `migrateRows` | `src/core/migrate.ts` | resolves tag ids and heals the registry; `fromHtml` into a memo |
 | `03-sync.js` | `src/core/merge/`, `src/application/session/` | `mergeRow` per §8; conflict cards unchanged in shape |
 | `04-richtext.js` | `src/adapters/richtext/` | `sanitizeHtml` stays for comment bodies and paste input; cells go through `fromHtml` |
-| `05-render.js` | `src/features/rows/render.js`, `src/application/editing/cell-editing.ts` | cells render from `toHtml(runs)`; `syncFieldFromDom` becomes read back plus diff; toolbar actions become steps |
+| `05-render.js` | `src/features/rows/render.ts`, `src/application/editing/cell-editing.ts` | cells render from `toHtml(runs)`; `syncFieldFromDom` becomes read back plus diff; toolbar actions become steps |
 | `06-rows.js`, `19-writer.js` | `src/application/commands/`, `src/features/rows/`, `src/features/writer/` | split, join, move and delete become steps; `repointCommentsForRows` is deleted |
 | `07-production-tags.js` | `src/features/tags/` | tag shortcut, completion and untagged accept become steps; `eachTagSpan` becomes a run walk; rename touches the registry only |
 | `08c-broll.js` | `src/features/broll/`, `src/application/production/` | capture and rename become steps; the marker is an atom |
