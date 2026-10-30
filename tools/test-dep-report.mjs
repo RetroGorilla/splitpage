@@ -773,10 +773,10 @@ try {
     "src/bootstrap/old.js": 'export const p = (s) => new DOMParser().parseFromString(s, "text/html");\n'
   });
   const baselinePath = join(repo, "baseline.json");
-  const go = (mode, reason) => {
+  const go = (mode) => {
     const out = [];
     const err = [];
-    const code = run({ repo, baselinePath, mode, reason, print: (l) => out.push(l), printError: (l) => err.push(l) });
+    const code = run({ repo, baselinePath, mode, print: (l) => out.push(l), printError: (l) => err.push(l) });
     return { code, out: out.join("\n"), err: err.join("\n") };
   };
   eq("init records the existing HTML parse and not the bridge", (go("init"), JSON.parse(readFileSync(baselinePath, "utf8")).exceptions), [
@@ -788,12 +788,12 @@ try {
   const added = go("check");
   eq("a new module reaching the decoder fails", added.code, 1);
   check("the failure names the rule, the line and the adapter file", added.err.includes("new html-cells: src/bootstrap/new.js:1 -> src/adapters/richtext/decode.ts"), added.err);
-  eq("accept without a reason is refused", go("accept").code, 2);
-  const accepted = go("accept", "reads the decoder until the bridge lands");
-  eq("accept with a reason records it", accepted.code, 0);
-  const rows = JSON.parse(readFileSync(baselinePath, "utf8")).exceptions;
-  eq("the accepted row carries its reason", rows.find((r) => r.source === "src/bootstrap/new.js")?.reason, "reads the decoder until the bridge lands");
-  eq("the check passes after accepting", go("check").code, 0);
+  const beforePrune = readFileSync(baselinePath, "utf8");
+  const refusedPrune = go("prune");
+  eq("prune refuses to record the new exception", refusedPrune.code, 1);
+  check("it says baselines only shrink", refusedPrune.err.includes("baselines only shrink; fix the violation"), refusedPrune.err);
+  eq("and leaves the baseline alone", readFileSync(baselinePath, "utf8"), beforePrune);
+  rmSync(join(repo, "src/bootstrap/new.js"));
 
   writeFiles(repo, { "src/bootstrap/old.js": "export const p = (s) => s;\n" });
   const resolved = go("check");
@@ -903,32 +903,15 @@ try {
   const moved = cli(accepting);
   eq("moving a helper between two cycle members fails the check", moved.code, 1);
   check("the summary counts the baseline and the new entries separately", moved.out.includes("3 exceptions in the baseline, 1 new, 0 resolved"), moved.out);
+  const accept = cli(accepting, "--accept", "helper moved from b.js to f.js; a.js now calls it directly");
+  eq("--accept no longer exists and exits 2", accept.code, 2);
+  check("it lists the flags that remain", accept.err.includes("use --metrics, --prune or --init"), accept.err);
   eq("--accept without a reason exits 2", cli(accepting, "--accept").code, 2);
-  eq("--accept with a blank reason exits 2", cli(accepting, "--accept", "  ").code, 2);
   eq("and leaves the baseline alone", readFileSync(baselineFile, "utf8"), initial);
-  const accepted = cli(accepting, "--accept", "helper moved from b.js to f.js; a.js now calls it directly");
-  eq("--accept with a reason exits 0", accepted.code, 0);
-  check("it prints what it added", accepted.out.includes("+ cycle-edge: server/a.js:4 -> server/f.js"), accepted.out);
-  const afterAccept = JSON.parse(readFileSync(baselineFile, "utf8")).exceptions;
-  eq("exactly the new entry is added, with the reason", afterAccept.filter((e) => e.reason), [
-    { rule: "cycle-edge", source: "server/a.js", target: "server/f.js", reason: "helper moved from b.js to f.js; a.js now calls it directly" }
-  ]);
-  eq("the other entries are unchanged", afterAccept.filter((e) => !e.reason).length, 3);
-  eq("the check passes after --accept", cli(accepting).code, 0);
-
-  writeFiles(accepting, { "server/f.js": "export function f() { return 1; }\n", "shared/probe.js": '"use strict";\nmodule.exports = URL;\n' });
-  const mixed = cli(accepting, "--accept", "the shared probe still needs its platform port");
-  const afterMixed = cli(accepting);
-  eq("accept adds a new entry but does not prune resolved entries; the check then warns about them", [mixed.code, afterMixed.code, lines(afterMixed, "warning: resolved ").length > 0], [0, 0, true]);
-  check("accept reports the resolved entries", mixed.out.includes("resolved remain"), mixed.out);
-  eq("prune removes resolved entries and retains the new reason", [cli(accepting, "--prune").code, JSON.parse(readFileSync(baselineFile, "utf8")).exceptions.filter((e) => e.reason).map((e) => e.target)], [0, ["global:URL"]]);
-  eq("the pruned baseline passes", cli(accepting).code, 0);
-
-  writeFiles(accepting, { "src/core/document/a.ts": 'import "./b.ts";\n', "src/core/document/b.ts": 'import "./a.ts";\n' });
-  const beforeCycle = readFileSync(baselineFile, "utf8");
-  const refused = cli(accepting, "--accept", "trying to accept a cycle in core");
-  eq("--accept refuses while a cycle runs through a migrated folder", refused.code, 1);
-  eq("and writes nothing", readFileSync(baselineFile, "utf8"), beforeCycle);
+  const refusedPrune = cli(accepting, "--prune");
+  eq("--prune refuses to add the new entry", refusedPrune.code, 1);
+  check("it says baselines only shrink", refusedPrune.err.includes("baselines only shrink; fix the violation"), refusedPrune.err);
+  eq("and leaves the baseline alone after --prune", readFileSync(baselineFile, "utf8"), initial);
 
   const linkedRepo = cliRepo({ "server/a.js": "export const a = 1;\n" });
   symlinkSync(join(linkedRepo, "tools"), join(linkedRepo, "linked"), process.platform === "win32" ? "junction" : "dir");
