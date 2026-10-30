@@ -4,6 +4,13 @@ import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { startExportDialog } from "../../../src/features/file-menu/export-dialog.js";
 import { createExportRegistry } from "../../../src/application/export/registry.ts";
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
+import { fakeDocument, fakeNotices } from "../fakes.ts";
+
+function scriptDoc() {
+  return migrateRows({ title: "Export", rows: [{ id: "r1", visualText: "One", audioText: "" }] }, fakeMigration().ports);
+}
 
 interface Listed {
   readonly id: string;
@@ -30,9 +37,9 @@ function mount(t: TestContext, options: { loaded?: boolean; reasons?: Reasons } 
   registry.register({ ...base, id: "sheet-b", action: "export-sheet-b", card: "sheet", name: "Sheet B", menuLabel: "Sheet B", choice: { value: "b", label: "B" } });
   registry.register({ ...base, id: "hidden-helper" });
   const ports = {
-    document: { current: () => (options.loaded === false ? null : {}) },
+    document: fakeDocument(options.loaded === false ? null : scriptDoc()).document,
     capture: () => ({}),
-    notices: { show: () => undefined },
+    notices: fakeNotices().notices,
     exports: registry,
     exportAction: () => true,
     onMenuRefresh: () => () => undefined,
