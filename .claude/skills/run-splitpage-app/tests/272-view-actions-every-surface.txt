@@ -5,108 +5,96 @@
 
 open
 viewport 1400 900
-eval (function(){ window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__run = function (id) { var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); if (it) it.click(); return !!it; }; return true; })()
+eval (function(){ window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__run = function (id) { var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); if (it) it.click(); return !!it; }; window.__item = function (id) { return !!document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); }; window.__settled = function () { return document.getAnimations().every(function (a) { return a.playState === 'finished' || a.playState === 'idle' || a.effect.getTiming().iterations === Infinity; }); }; return true; })()
 
 # --- each panel: its button opens and closes it; the command menu toggles it -
 jsclick #btn-production
-sleep 300
-expect __shown('production-panel')
+wait __shown('production-panel') && document.getElementById('btn-production').getAttribute('aria-pressed') === 'true'
 expect document.getElementById('btn-production').getAttribute('aria-pressed') == true
 jsclick #btn-production
-sleep 300
-expect !__shown('production-panel')
+wait !__shown('production-panel')
 key ctrl KeyK
-sleep 200
+wait document.getElementById('cmdk').contains(document.activeElement)
 type production panel
-sleep 200
+wait __item('panel-production')
 eval __run('panel-production')
-sleep 300
-expect __shown('production-panel')
+wait __shown('production-panel')
 jsclick #production-close
-sleep 300
+wait !__shown('production-panel')
 
 jsclick #btn-gear
-sleep 300
-expect __shown('gear-panel')
+wait __shown('gear-panel')
 jsclick #btn-gear
-sleep 300
-expect !__shown('gear-panel')
+wait !__shown('gear-panel')
 key ctrl KeyK
-sleep 200
+wait document.getElementById('cmdk').contains(document.activeElement)
 type gear panel
-sleep 200
+wait __item('panel-gear')
 eval __run('panel-gear')
-sleep 300
-expect __shown('gear-panel')
+wait __shown('gear-panel')
 jsclick #gear-close
-sleep 300
+wait !__shown('gear-panel')
 
 jsclick #btn-broll
-sleep 300
-expect __shown('broll-panel')
+wait __shown('broll-panel')
 jsclick #btn-broll
-sleep 300
-expect !__shown('broll-panel')
+wait !__shown('broll-panel')
 key ctrl KeyK
-sleep 200
+wait document.getElementById('cmdk').contains(document.activeElement)
 type b-roll panel
-sleep 200
+wait __item('panel-broll')
 eval __run('panel-broll')
-sleep 300
-expect __shown('broll-panel')
+wait __shown('broll-panel')
 jsclick #broll-close
-sleep 300
+wait !__shown('broll-panel')
 
 jsclick #btn-comments
-sleep 300
-expect __shown('comments-panel')
+wait __shown('comments-panel')
 jsclick #btn-comments
-sleep 300
-expect !__shown('comments-panel')
+wait !__shown('comments-panel')
 key ctrl KeyK
-sleep 200
+wait document.getElementById('cmdk').contains(document.activeElement)
 type comments panel
-sleep 200
+wait __item('panel-comments')
 eval __run('panel-comments')
-sleep 300
-expect __shown('comments-panel')
+wait __shown('comments-panel')
 jsclick #comments-panel-close
-sleep 300
+wait !__shown('comments-panel')
 
 # --- Write: button and command menu ------------------------------------------
 jsclick #btn-write
 wait __shown('writer')
-sleep 600
+wait __settled()
 jsclick #wr-close
 wait !__shown('writer')
-sleep 600
+wait __settled()
 key ctrl KeyK
-sleep 200
+wait document.getElementById('cmdk').contains(document.activeElement)
 type write
-sleep 200
+wait __item('write')
 eval __run('write')
 wait __shown('writer')
-sleep 600
+wait __settled()
 jsclick #wr-close
 wait !__shown('writer')
-sleep 600
+wait __settled()
 
 # --- Present: button and command menu ----------------------------------------
 jsclick #btn-present
 wait __shown('prompter')
-sleep 600
+wait __settled()
 jsclick #pp-close
 wait !__shown('prompter')
-sleep 600
+wait __settled()
 key ctrl KeyK
-sleep 200
+wait document.getElementById('cmdk').contains(document.activeElement)
 type present
-sleep 200
+wait __item('present')
 eval __run('present')
 wait __shown('prompter')
-sleep 600
+wait __settled()
 jsclick #pp-close
 wait !__shown('prompter')
-sleep 600
+wait __settled()
 
 expect document.getElementById('btn-save').textContent == Save
