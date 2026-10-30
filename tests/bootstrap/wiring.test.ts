@@ -936,7 +936,7 @@ test("lifecycle: a stop before DOM ready means nothing mounts afterwards, no act
   const baseline = listenerCount();
   const probe = probeActions();
   const loading = Object.assign(new window.EventTarget(), { readyState: "loading" }) as unknown as Document;
-  app.startAppWhenReady(loading, await wireReal(probe));
+  app.startAppWhenReady(loading, await wireReal(probe), (error) => { assert.fail(error instanceof Error ? error : String(error)); });
   assert.deepEqual(started(), EVERYTHING, "wired while waiting");
   app.stopApp();
   assert.deepEqual(started(), NOTHING);
@@ -944,6 +944,22 @@ test("lifecycle: a stop before DOM ready means nothing mounts afterwards, no act
   assert.deepEqual(probe.events, []);
   assert.equal(listenerCount(), baseline);
   assert.deepEqual(started(), NOTHING);
+});
+
+test("lifecycle: a start at DOM ready that throws rolls back and hands the error to the failure handler", async () => {
+  const app = await import("../../src/bootstrap/app.ts");
+  const baseline = listenerCount();
+  const boom = new Error("action start failed");
+  const probe = probeActions(boom);
+  const loading = Object.assign(new window.EventTarget(), { readyState: "loading" }) as unknown as Document;
+  const failures: unknown[] = [];
+  app.startAppWhenReady(loading, await wireReal(probe), (error) => { failures.push(error); });
+  assert.deepEqual(failures, [], "nothing fails before DOM ready");
+  assert.doesNotThrow(() => loading.dispatchEvent(new window.Event("DOMContentLoaded")));
+  assert.deepEqual(failures, [boom]);
+  assert.equal(listenerCount(), baseline);
+  assert.deepEqual(started(), NOTHING);
+  app.stopApp();
 });
 
 test("lifecycle: an action start that throws rolls back and releases the wiring", async () => {

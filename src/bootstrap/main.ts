@@ -44,6 +44,12 @@ import { mountDesktopFeature } from "./wiring/desktop.ts";
 import { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";
 import { mountSettingsFeature, mountAppDataFeature } from "./wiring/settings.ts";
 import { mountNewTabFeature } from "./wiring/newtab.ts";
+import { showStartupFailure } from "./startup/failure-screen.ts";
+
+function failStartup(error: unknown): void {
+  console.error(error);
+  showStartupFailure(error);
+}
 
 let wiring: ReturnType<typeof wireLegacyApp> | null = null;
 try {
@@ -54,9 +60,17 @@ try {
     keyTarget: window
   });
 } catch (error) {
-  console.error(error);
+  failStartup(error);
 }
 if (wiring) {
+  try {
+    mountAndStart(wiring);
+  } catch (error) {
+    failStartup(error);
+  }
+}
+
+function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountScreenStateOwner();
   mountPageEntry();
   mountSceneStatusFeature();
@@ -106,5 +120,5 @@ if (wiring) {
   mountAppDataFeature();
   mountNewTabFeature();
   mountSettingsFeature();
-  startAppWhenReady(document, wiring);
+  startAppWhenReady(document, wiring, failStartup);
 }
