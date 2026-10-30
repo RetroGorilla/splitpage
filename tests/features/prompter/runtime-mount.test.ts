@@ -2,7 +2,7 @@ import { dom } from "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { startPrompter } from "../../../src/features/prompter/prompter.js";
+import { startPrompter } from "../../../src/features/prompter/prompter.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakePrompterPorts } from "../fakes.ts";
@@ -142,11 +142,11 @@ test("disposing the runtime invalidates pending startup and desktop voice discov
   const startup = new Promise<void>(resolve => { finishStartup = resolve; });
   let finishVoice: () => void = () => {};
   const voice = new Promise<void>(resolve => { finishVoice = resolve; });
-  let serverReads = 0;
+  const serverReads = 0;
   let recognitions = 0;
   let desktop = false;
   const runtime = startPrompter({
-    ...h.ports, startup: { ready: () => startup }, place: { serverHomeId: () => { serverReads++; return "server"; } },
+    ...h.ports, startup: { ready: () => startup },
     desktop: { ...h.ports.desktop, running: () => desktop },
     voice: { ...h.ports.voice, known: () => false, load: () => voice, createDesktop: () => { recognitions++; return { start() {}, stop() {} }; } }
   });

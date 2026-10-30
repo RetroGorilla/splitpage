@@ -4,37 +4,71 @@ import { sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import { projection } from "../../core/text/runs.ts";
+import type { CellInput, Run } from "../../core/text/runs.ts";
+import type { PrompterRecognition } from "../../application/prompter-services.ts";
+import type { PrompterFeaturePorts, PrompterRuntime } from "./ports.ts";
 
-var ports = null;
-var initialReadyTimer = null;
+type PrompterSpeechResult = { readonly isFinal: boolean; readonly 0: { readonly transcript: string } };
+type VoiceRecognition = PrompterRecognition & {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: { readonly resultIndex: number; readonly results: { readonly length: number; readonly [index: number]: PrompterSpeechResult } }) => void) | null;
+  onerror: ((event: { readonly error: string }) => void) | null;
+  onend: (() => void) | null;
+  onwarning: ((event: { readonly warning?: string } | null) => void) | null;
+  ondevice: ((event: { readonly name?: unknown } | null) => void) | null;
+};
 
-export var prompterMirror;
-export var prompterFlip;
-var promptSceneMode;
+type TimerHandle = ReturnType<typeof setTimeout>;
+type PrompterDoc = {
+  readonly rows: readonly (Parameters<typeof rowSeconds>[0] & { readonly id: string; readonly status?: string | undefined })[];
+  readonly wordsPerMinute?: number | null | undefined;
+};
+type PromptWord = { el: HTMLElement; norm: string };
+type SceneView = { html: string; words: number };
+type SceneEntry = { id: string; cell: Run[]; view: SceneView | null };
+type SceneLine = SceneEntry & { view: SceneView };
+type PrompterLaunch = { token?: string; hosted?: boolean };
+type PrompterTestHooks = {
+  checkSceneBoundaryNow: () => boolean;
+  simulateVoiceWordCursor: (idx: number) => boolean;
+  launchFromScript: (token: string) => Promise<boolean>;
+  updateStatus: () => void;
+};
+type PrompterWindow = Window & { __prompterTest?: PrompterTestHooks };
 
-var prompterSpeed = 42;
-var prompterRAF = null;
-var prompterLastTs = null;
-var recognition = null;
-var voiceStarting = false;
-var promptWords = [];
-var wordCursor = -1;
-var speakable = [];
-var speakNorms = [];
-var speakCursor = -1;
-var voiceRestarts = 0;
-var voiceSession = 0;
-var voiceStream = null;
-var finalTranscript = "";
-var interimTranscript = "";
+let ports: PrompterFeaturePorts;
+let initialReadyTimer: TimerHandle | null = null;
 
-function normalizeWord(w) {
+export let prompterMirror: boolean;
+export let prompterFlip: boolean;
+let promptSceneMode: boolean;
+
+let prompterSpeed = 42;
+let prompterRAF: number | null = null;
+let prompterLastTs: number | null = null;
+let recognition: VoiceRecognition | null = null;
+let voiceStarting = false;
+let promptWords: PromptWord[] = [];
+let wordCursor = -1;
+let speakable: number[] = [];
+let speakNorms: string[] = [];
+let speakCursor = -1;
+let voiceRestarts = 0;
+let voiceSession = 0;
+let voiceStream: MediaStream | null = null;
+let finalTranscript = "";
+let interimTranscript = "";
+
+function normalizeWord(w: unknown): string {
   return String(w || "").toLowerCase().replace(/[^a-z0-9']/g, "");
 }
 
-export function prompterSceneHtml(cell) {
-  var words = 0;
-  var html = toHtml(cell, {
+export function prompterSceneHtml(cell: CellInput): SceneView {
+  let words = 0;
+  const html = toHtml(cell, {
     textHtml: function (text, esc, where) {
       if (where && where.dir) return esc(text);
       return text.split(/(\s+)/).map(function (part) {
@@ -48,35 +82,35 @@ export function prompterSceneHtml(cell) {
   return { html: html, words: words };
 }
 
-export function trimPrompterCell(cell) {
-  var p = projection(cell);
-  var lead = p.length - p.replace(/^[^\S\u00a0]+/, "").length;
-  var tail = p.length - p.replace(/[^\S\u00a0]+$/, "").length;
+export function trimPrompterCell(cell: CellInput): Run[] {
+  const p = projection(cell);
+  const lead = p.length - p.replace(/^[^\S\u00a0]+/, "").length;
+  const tail = p.length - p.replace(/[^\S\u00a0]+$/, "").length;
   return lead + tail >= p.length ? [] : sliceCell(cell, lead, p.length - tail);
 }
 
-var SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
+const SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
-export function buildPrompterContent() {
-  var skippingShot = ports.state.skipsShot() || ports.viewFlags.hideShot();
-  var doc = ports.document.current();
-  var source = skippingShot
+export function buildPrompterContent(): void {
+  const skippingShot = ports.state.skipsShot() || ports.viewFlags.hideShot();
+  const doc = ports.document.current() as PrompterDoc;
+  const source = skippingShot
     ? doc.rows.filter(function (row) { return row.status !== "shot"; })
     : doc.rows;
-  var sceneEntries = source.map(function (row) {
-    var cell = trimPrompterCell(withoutCues(ports.text.cellOf(row.audioText)));
+  const sceneEntries = source.map(function (row): SceneEntry {
+    const cell = trimPrompterCell(withoutCues(ports.text.cellOf(row.audioText)));
     return { id: row.id, cell: cell, view: cell.length ? prompterSceneHtml(cell) : null };
   });
-  var lines = sceneEntries.filter(function (e) { return e.view; });
+  const lines = sceneEntries.filter(function (e) { return e.view; }) as SceneLine[];
 
-  var paragraphs = [];
+  const paragraphs: string[] = [];
   lines.forEach(function (e, i) {
-    var prevEndsSentence = i === 0 || SENTENCE_END_RE.test(toPlainText(lines[i - 1].cell));
+    const prevEndsSentence = i === 0 || SENTENCE_END_RE.test(toPlainText((lines[i - 1] as SceneLine).cell));
     if (prevEndsSentence) paragraphs.push(e.view.html);
     else paragraphs[paragraphs.length - 1] += " " + e.view.html;
   });
 
-  var content = document.getElementById("prompter-content");
+  const content = document.getElementById("prompter-content") as HTMLElement;
   if (!paragraphs.length) {
     content.innerHTML = '<div class="prompter-empty">' + (skippingShot
       ? "Every scene is marked Shot — switch off Skip shot (or Hide shot scenes) to read them again."
@@ -86,9 +120,9 @@ export function buildPrompterContent() {
     content.innerHTML = paragraphs.map(function (html) {
       return '<div class="prompter-line">' + html + '</div>';
     }).join("");
-    promptWords = Array.prototype.map.call(content.querySelectorAll(".w"), function (el) {
+    promptWords = Array.prototype.map.call(content.querySelectorAll(".w"), function (el: HTMLElement): PromptWord {
       return { el: el, norm: normalizeWord(el.textContent) };
-    });
+    }) as PromptWord[];
   }
   speakable = [];
   speakNorms = [];
@@ -103,9 +137,9 @@ export function buildPrompterContent() {
   sceneRowIds = [];
   sceneWordStart = [];
   sceneWordEnd = [];
-  var cursor = 0;
+  let cursor = 0;
   sceneEntries.forEach(function (e) {
-    var n = e.view ? e.view.words : 0;
+    const n = e.view ? e.view.words : 0;
     sceneRowIds.push(e.id);
     sceneWordStart.push(cursor);
     cursor += n;
@@ -116,34 +150,34 @@ export function buildPrompterContent() {
 
   sceneSeconds = [];
   sceneStartSec = [];
-  var t = 0;
+  let t = 0;
   source.forEach(function (row) {
-    var secs = rowSeconds(row, doc, ports.text.productionReaders);
+    const secs = rowSeconds(row, doc, ports.text.productionReaders);
     sceneStartSec.push(t);
     sceneSeconds.push(secs);
     t += secs;
   });
   promptTotalSec = t;
   renderPrompterRundown();
-  var skip = document.getElementById("pp-skip-shot");
+  const skip = document.getElementById("pp-skip-shot");
   if (skip) skip.setAttribute("aria-pressed", ports.state.skipsShot() ? "true" : "false");
 }
 
-var sceneSeconds = [];
-var sceneStartSec = [];
-var promptTotalSec = 0;
-var rundownBlockEls = [];
-var rundownBlockIndex = [];
-var paintedScene = -2;
-var promptLinePx = 60 * 1.42;
+let sceneSeconds: number[] = [];
+let sceneStartSec: number[] = [];
+let promptTotalSec = 0;
+let rundownBlockEls: (HTMLElement | null)[] = [];
+let rundownBlockIndex: number[] = [];
+let paintedScene = -2;
+let promptLinePx = 60 * 1.42;
 
-function renderPrompterRundown() {
-  var track = document.getElementById("pp-rd-track");
+function renderPrompterRundown(): void {
+  const track = document.getElementById("pp-rd-track");
   if (!track) return;
-  var html = "";
-  var count = 0;
+  let html = "";
+  let count = 0;
   rundownBlockIndex = sceneSeconds.map(function (secs) {
-    var before = count;
+    const before = count;
     if (secs > 0) {
       html += '<span class="pp-rd-block" style="flex-grow:' + Math.round(secs * 1000) / 1000 + '"></span>';
       count++;
@@ -152,82 +186,82 @@ function renderPrompterRundown() {
   });
   track.innerHTML = count ? html + '<span class="pp-rd-head" aria-hidden="true"></span>' : "";
   track.style.setProperty("--pp-blocks", String(count));
-  var els = track.querySelectorAll(".pp-rd-block");
+  const els = track.querySelectorAll<HTMLElement>(".pp-rd-block");
   rundownBlockEls = sceneSeconds.map(function (secs, i) {
-    return secs > 0 ? els[rundownBlockIndex[i]] : null;
+    return secs > 0 ? els[rundownBlockIndex[i] as number] as HTMLElement : null;
   });
   paintedScene = -2;
 }
 
-function readingPosition(scroller) {
-  var words = promptWords;
-  var n = words.length;
+function readingPosition(scroller: HTMLElement): number {
+  const words = promptWords;
+  const n = words.length;
   if (!n) return 0;
-  var guide = scroller.scrollTop + scroller.clientHeight / 2;
-  var lo = 0, hi = n - 1, last = -1, mid;
+  const guide = scroller.scrollTop + scroller.clientHeight / 2;
+  let lo = 0, hi = n - 1, last = -1, mid: number;
   while (lo <= hi) {
     mid = (lo + hi) >> 1;
-    if (words[mid].el.offsetTop <= guide + 0.5) { last = mid; lo = mid + 1; } else hi = mid - 1;
+    if ((words[mid] as PromptWord).el.offsetTop <= guide + 0.5) { last = mid; lo = mid + 1; } else hi = mid - 1;
   }
   if (last === -1) return 0;
-  var top = words[last].el.offsetTop;
+  const top = (words[last] as PromptWord).el.offsetTop;
   lo = 0; hi = last;
   while (lo < hi) {
     mid = (lo + hi) >> 1;
-    if (words[mid].el.offsetTop >= top - promptLinePx / 2) hi = mid; else lo = mid + 1;
+    if ((words[mid] as PromptWord).el.offsetTop >= top - promptLinePx / 2) hi = mid; else lo = mid + 1;
   }
-  var next = last + 1;
-  var nextTop = next < n ? words[next].el.offsetTop : top + promptLinePx;
-  var frac = nextTop > top ? Math.min(1, Math.max(0, (guide - top) / (nextTop - top))) : 0;
+  const next = last + 1;
+  const nextTop = next < n ? (words[next] as PromptWord).el.offsetTop : top + promptLinePx;
+  const frac = nextTop > top ? Math.min(1, Math.max(0, (guide - top) / (nextTop - top))) : 0;
   return lo + frac * (next - lo);
 }
 
-function sceneAtWord(pos) {
-  var w = Math.min(Math.floor(pos), promptWords.length - 1);
-  var lo = 0, hi = sceneWordEnd.length - 1;
+function sceneAtWord(pos: number): number {
+  const w = Math.min(Math.floor(pos), promptWords.length - 1);
+  let lo = 0, hi = sceneWordEnd.length - 1;
   while (lo < hi) {
-    var mid = (lo + hi) >> 1;
-    if (sceneWordEnd[mid] > w) hi = mid; else lo = mid + 1;
+    const mid = (lo + hi) >> 1;
+    if ((sceneWordEnd[mid] as number) > w) hi = mid; else lo = mid + 1;
   }
   return lo;
 }
 
-function setText(el, text) {
+function setText(el: HTMLElement | null, text: string): void {
   if (el && el.textContent !== text) el.textContent = text;
 }
 
-export function updatePrompterStatus() {
+export function updatePrompterStatus(): void {
   if (!ports.state.isOpen()) return;
-  var scroller = document.getElementById("prompter-scroll");
-  var scene = -1, elapsed = 0;
+  const scroller = document.getElementById("prompter-scroll") as HTMLElement;
+  let scene = -1, elapsed = 0;
   if (promptWords.length && sceneRowIds.length) {
-    var pos = readingPosition(scroller);
+    const pos = readingPosition(scroller);
     scene = sceneAtWord(pos);
-    var span = sceneWordEnd[scene] - sceneWordStart[scene];
-    var into = span > 0 ? Math.min(1, Math.max(0, (pos - sceneWordStart[scene]) / span)) : 0;
-    elapsed = sceneStartSec[scene] + sceneSeconds[scene] * into;
+    const span = (sceneWordEnd[scene] as number) - (sceneWordStart[scene] as number);
+    const into = span > 0 ? Math.min(1, Math.max(0, (pos - (sceneWordStart[scene] as number)) / span)) : 0;
+    elapsed = (sceneStartSec[scene] as number) + (sceneSeconds[scene] as number) * into;
   }
 
-  var posEl = document.getElementById("pp-scene-pos");
+  const posEl = document.getElementById("pp-scene-pos");
   setText(posEl, scene === -1 ? "" : pad2(scene + 1) + " / " + pad2(sceneRowIds.length));
   setText(document.getElementById("pp-scene-pos-sr"), scene === -1 ? "" : "Scene " + (scene + 1) + " of " + sceneRowIds.length);
-  setText(document.getElementById("pp-scene-start"), scene === -1 ? "" : formatTimecode(sceneStartSec[scene]));
-  var read = Math.round(elapsed);
-  var total = Math.round(promptTotalSec);
-  var readText = formatTimecode(read);
-  var leftText = formatTimecode(Math.max(0, total - read));
+  setText(document.getElementById("pp-scene-start"), scene === -1 ? "" : formatTimecode(sceneStartSec[scene] as number));
+  const read = Math.round(elapsed);
+  const total = Math.round(promptTotalSec);
+  const readText = formatTimecode(read);
+  const leftText = formatTimecode(Math.max(0, total - read));
   setText(document.getElementById("pp-elapsed"), readText);
   setText(document.getElementById("pp-remaining"), "−" + leftText);
-  var clock = document.getElementById("pp-clock");
+  const clock = document.getElementById("pp-clock");
   if (clock) clock.setAttribute("aria-label", "Elapsed " + readText + ", " + leftText + " left");
-  var bar = document.getElementById("pp-rundown");
+  const bar = document.getElementById("pp-rundown");
   if (bar) {
     bar.setAttribute("aria-valuemax", String(total));
     bar.setAttribute("aria-valuenow", String(Math.min(read, total)));
     bar.setAttribute("aria-valuetext", readText + " of " + formatTimecode(total));
   }
 
-  var track = document.getElementById("pp-rd-track");
+  const track = document.getElementById("pp-rd-track");
   if (!track || !promptTotalSec) return;
   if (scene !== paintedScene) {
     rundownBlockEls.forEach(function (el, i) {
@@ -237,25 +271,25 @@ export function updatePrompterStatus() {
     });
     paintedScene = scene;
   }
-  var cur = scene === -1 ? null : rundownBlockEls[scene];
-  if (cur) cur.style.setProperty("--p", (sceneSeconds[scene] ? (elapsed - sceneStartSec[scene]) / sceneSeconds[scene] * 100 : 0) + "%");
+  const cur = scene === -1 ? null : rundownBlockEls[scene];
+  if (cur) cur.style.setProperty("--p", ((sceneSeconds[scene] as number) ? (elapsed - (sceneStartSec[scene] as number)) / (sceneSeconds[scene] as number) * 100 : 0) + "%");
   track.style.setProperty("--pp-at", String(Math.min(1, elapsed / promptTotalSec)));
   track.style.setProperty("--pp-i", String(scene === -1 ? 0 : rundownBlockIndex[scene]));
 }
 
-var prompterWakeLock = null;
-var wakeLockGen = 0;
+let prompterWakeLock: WakeLockSentinel | null = null;
+let wakeLockGen = 0;
 
-export function acquireWakeLock(owns) {
+export function acquireWakeLock(owns?: () => boolean): void {
   if (!navigator.wakeLock || !navigator.wakeLock.request) return;
-  var gen = ++wakeLockGen;
+  const gen = ++wakeLockGen;
   navigator.wakeLock.request("screen").then(function (lock) {
     if (gen !== wakeLockGen || !ports.state.isOpen() || (owns && !owns())) { lock.release().catch(function () {}); return; }
     prompterWakeLock = lock;
   }).catch(function () { });
 }
 
-function releaseWakeLock() {
+function releaseWakeLock(): void {
   wakeLockGen++;
   if (prompterWakeLock) {
     prompterWakeLock.release().catch(function () {});
@@ -263,80 +297,80 @@ function releaseWakeLock() {
   }
 }
 
-export function disposePrompterView() {
+export function disposePrompterView(): void {
   setPrompterPlaying(false);
   stopVoiceFollow();
   releaseWakeLock();
 }
 
-function applyPrompterOrientation() {
-  var scroller = document.getElementById("prompter-scroll");
+function applyPrompterOrientation(): void {
+  const scroller = document.getElementById("prompter-scroll") as HTMLElement;
   scroller.classList.toggle("mirror", prompterMirror);
   scroller.classList.toggle("flip", prompterFlip);
-  var prompter = document.getElementById("prompter");
+  const prompter = document.getElementById("prompter") as HTMLElement;
   prompter.classList.toggle("pp-mirrored", prompterMirror);
   prompter.classList.toggle("pp-flipped", prompterFlip);
   setToggle(document.getElementById("pp-mirror"), prompterMirror);
   setToggle(document.getElementById("pp-flip"), prompterFlip);
 }
 
-function setToggle(btn, on) {
+function setToggle(btn: HTMLElement | null, on: boolean): void {
   if (!btn) return;
   btn.classList.toggle("is-active", on);
   btn.setAttribute("aria-pressed", on ? "true" : "false");
 }
 
-export function setPrompterMirror(on) {
+export function setPrompterMirror(on: boolean): void {
   prompterMirror = on;
   ports.preferences.setPrompterFlag("prompterMirror", on);
   applyPrompterOrientation();
 }
-export function setPrompterFlip(on) {
+export function setPrompterFlip(on: boolean): void {
   prompterFlip = on;
   ports.preferences.setPrompterFlag("prompterFlip", on);
   applyPrompterOrientation();
 }
 
-var sceneRowIds = [];
-var sceneWordStart = [];
-var sceneWordEnd = [];
-var promptSceneIndex = -1;
-var promptSceneEndWordOffset = null;
-var promptSceneGuideOffset = 0;
+let sceneRowIds: string[] = [];
+let sceneWordStart: number[] = [];
+let sceneWordEnd: number[] = [];
+let promptSceneIndex = -1;
+let promptSceneEndWordOffset: number | null = null;
+let promptSceneGuideOffset = 0;
 
-function scenePastReadingLine(scrollTop, wordTop, guideTop) {
+function scenePastReadingLine(scrollTop: number, wordTop: number, guideTop: number): boolean {
   return (wordTop - scrollTop) <= guideTop;
 }
 
-export function updateSceneReadout() {
-  var el = document.getElementById("pp-scene-readout");
+export function updateSceneReadout(): void {
+  const el = document.getElementById("pp-scene-readout");
   if (!el) return;
   if (!promptSceneMode || promptSceneIndex === -1 || !sceneRowIds.length) { el.textContent = ""; return; }
   el.textContent = "Scene " + (promptSceneIndex + 1) + " of " + sceneRowIds.length;
 }
 
-function updatePrompterSceneModeUI() {
+function updatePrompterSceneModeUI(): void {
   setToggle(document.getElementById("pp-scene-mode"), promptSceneMode);
   ["pp-scene-step", "pp-scene-prev", "pp-scene-next", "pp-scene-readout"].forEach(function (id) {
-    var el = document.getElementById(id);
+    const el = document.getElementById(id);
     if (el) el.hidden = !promptSceneMode;
   });
   updateSceneReadout();
 }
 
-function findNonEmptySceneIndex(from, dir) {
-  for (var i = from; i >= 0 && i < sceneRowIds.length; i += dir) {
-    if (sceneWordEnd[i] > sceneWordStart[i]) return i;
+function findNonEmptySceneIndex(from: number, dir: number): number {
+  for (let i = from; i >= 0 && i < sceneRowIds.length; i += dir) {
+    if ((sceneWordEnd[i] as number) > (sceneWordStart[i] as number)) return i;
   }
   return -1;
 }
 
-function cueScene(idx) {
+function cueScene(idx: number): boolean {
   if (idx < 0 || idx >= sceneRowIds.length) return false;
-  if (sceneWordEnd[idx] <= sceneWordStart[idx]) return false;
-  var scroller = document.getElementById("prompter-scroll");
-  var firstWord = promptWords[sceneWordStart[idx]].el;
-  var lastWord = promptWords[sceneWordEnd[idx] - 1].el;
+  if ((sceneWordEnd[idx] as number) <= (sceneWordStart[idx] as number)) return false;
+  const scroller = document.getElementById("prompter-scroll") as HTMLElement;
+  const firstWord = (promptWords[sceneWordStart[idx] as number] as PromptWord).el;
+  const lastWord = (promptWords[(sceneWordEnd[idx] as number) - 1] as PromptWord).el;
   promptSceneIndex = idx;
   promptSceneGuideOffset = scroller.clientHeight / 2;
   scroller.scrollTop = Math.max(0, firstWord.offsetTop - promptSceneGuideOffset);
@@ -346,34 +380,34 @@ function cueScene(idx) {
   return true;
 }
 
-export function stepScene(dir) {
+export function stepScene(dir: number): void {
   if (!promptSceneMode || !sceneRowIds.length) return;
-  var next = findNonEmptySceneIndex(promptSceneIndex + dir, dir);
+  const next = findNonEmptySceneIndex(promptSceneIndex + dir, dir);
   if (next === -1) return;
   setPrompterPlaying(false);
   cueScene(next);
 }
 
-export function cueSceneForCurrentPosition() {
+export function cueSceneForCurrentPosition(): void {
   if (!sceneRowIds.length) { promptSceneIndex = -1; promptSceneEndWordOffset = null; updateSceneReadout(); return; }
-  var lastRow = ports.focus.lastRow();
-  var idx = lastRow ? sceneRowIds.indexOf(lastRow) : -1;
+  const lastRow = ports.focus.lastRow();
+  let idx = lastRow ? sceneRowIds.indexOf(lastRow) : -1;
   if (idx === -1) idx = 0;
-  var resolved = findNonEmptySceneIndex(idx, 1);
+  let resolved = findNonEmptySceneIndex(idx, 1);
   if (resolved === -1) resolved = findNonEmptySceneIndex(idx, -1);
   if (resolved === -1) { promptSceneIndex = -1; promptSceneEndWordOffset = null; updateSceneReadout(); return; }
   cueScene(resolved);
 }
 
-function advanceSceneAfterAutoPause() {
-  var next = findNonEmptySceneIndex(promptSceneIndex + 1, 1);
+function advanceSceneAfterAutoPause(): void {
+  const next = findNonEmptySceneIndex(promptSceneIndex + 1, 1);
   if (next === -1) { promptSceneEndWordOffset = null; return; }
   promptSceneIndex = next;
-  promptSceneEndWordOffset = promptWords[sceneWordEnd[next] - 1].el.offsetTop;
+  promptSceneEndWordOffset = (promptWords[(sceneWordEnd[next] as number) - 1] as PromptWord).el.offsetTop;
   updateSceneReadout();
 }
 
-export function setPrompterSceneMode(on) {
+export function setPrompterSceneMode(on: boolean): void {
   on = !!on;
   if (on === promptSceneMode) return;
   promptSceneMode = on;
@@ -383,29 +417,29 @@ export function setPrompterSceneMode(on) {
   else { promptSceneIndex = -1; promptSceneEndWordOffset = null; }
 }
 
-var prompterLeaveSeq = 0;
+let prompterLeaveSeq = 0;
 
-function lockPageScrollWhenArrived(el) {
-  var owner = ports;
-  var lock = function () { if (ports === owner && ports.state.isOpen()) document.body.classList.add("prompter-open"); };
-  var arriving = el.getAnimations ? el.getAnimations().filter(function (a) {
-    return a.effect && a.effect.target === el;
+function lockPageScrollWhenArrived(el: HTMLElement): void {
+  const owner = ports;
+  const lock = function () { if (ports === owner && ports.state.isOpen()) document.body.classList.add("prompter-open"); };
+  const arriving = el.getAnimations ? el.getAnimations().filter(function (a) {
+    return a.effect && (a.effect as KeyframeEffect).target === el;
   }) : [];
   if (!arriving.length) { lock(); return; }
   Promise.all(arriving.map(function (a) { return a.finished; })).then(lock, function () {});
 }
 
-export function openPrompter() {
+export function openPrompter(): void {
   ports.panels.closeAll();
   buildPrompterContent();
-  var el = document.getElementById("prompter");
+  const el = document.getElementById("prompter") as HTMLElement;
   prompterLeaveSeq++;
   el.classList.remove("is-holding");
   el.inert = false;
   el.hidden = false;
   ports.state.setOpen(true);
   lockPageScrollWhenArrived(el);
-  document.getElementById("prompter-scroll").scrollTop = 0;
+  (document.getElementById("prompter-scroll") as HTMLElement).scrollTop = 0;
   setPrompterPlaying(false);
   applyPrompterDefaultSize();
   applyPrompterSize();
@@ -418,18 +452,18 @@ export function openPrompter() {
   acquireWakeLock();
 }
 
-export function closePrompter() {
+export function closePrompter(): void {
   setPrompterPlaying(false);
   stopVoiceFollow();
   ports.state.setOpen(false);
   releaseWakeLock();
-  var el = document.getElementById("prompter");
-  if (el.contains(document.activeElement)) document.activeElement.blur();
+  const el = document.getElementById("prompter") as HTMLElement;
+  if (el.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   el.inert = true;
-  var seq = ++prompterLeaveSeq;
+  const seq = ++prompterLeaveSeq;
   if (document.fullscreenElement) {
     el.classList.add("is-holding");
-    var fade = function () { if (seq === prompterLeaveSeq) el.classList.remove("is-holding"); };
+    const fade = function () { if (seq === prompterLeaveSeq) el.classList.remove("is-holding"); };
     document.exitFullscreen().then(fade, fade);
     setTimeout(fade, 1000);
   }
@@ -437,12 +471,12 @@ export function closePrompter() {
   document.body.classList.remove("prompter-open");
 }
 
-export function setPrompterPlaying(on) {
+export function setPrompterPlaying(on: boolean): void {
   if (on && ports.state.voiceFollowing()) stopVoiceFollow();
   ports.state.setPlaying(on);
-  var btn = document.getElementById("pp-play");
-  var icon = btn.querySelector("use");
-  var label = btn.querySelector(".pp-sr");
+  const btn = document.getElementById("pp-play") as HTMLElement;
+  const icon = btn.querySelector("use");
+  const label = btn.querySelector(".pp-sr");
   if (icon) icon.setAttribute("href", on ? "#i-pause" : "#i-play");
   if (label) label.textContent = on ? "Pause" : "Play";
   else btn.textContent = on ? "Pause" : "Play";
@@ -456,10 +490,10 @@ export function setPrompterPlaying(on) {
   }
 }
 
-function prompterTick(ts) {
-  var scroller = document.getElementById("prompter-scroll");
+function prompterTick(ts: number): void {
+  const scroller = document.getElementById("prompter-scroll") as HTMLElement;
   if (prompterLastTs == null) prompterLastTs = ts;
-  var dt = (ts - prompterLastTs) / 1000;
+  const dt = (ts - prompterLastTs) / 1000;
   prompterLastTs = ts;
   scroller.scrollTop += prompterSpeed * dt;
   if (promptSceneMode && promptSceneEndWordOffset != null &&
@@ -475,99 +509,99 @@ function prompterTick(ts) {
   prompterRAF = requestAnimationFrame(prompterTick);
 }
 
-export function applyPrompterSize() {
-  var size = Number(document.getElementById("pp-size").value);
-  document.getElementById("prompter").style.setProperty("--pp-size", size + "px");
+export function applyPrompterSize(): void {
+  const size = Number((document.getElementById("pp-size") as HTMLInputElement).value);
+  (document.getElementById("prompter") as HTMLElement).style.setProperty("--pp-size", size + "px");
   promptLinePx = size * 1.42;
   setText(document.getElementById("pp-size-value"), String(size));
   updatePrompterStatus();
 }
 
-var PROMPTER_SIZE_DEFAULT = 60;
-var PROMPTER_SIZE_PHONE = 36;
-var promptSizeDefaultSet = null;
+const PROMPTER_SIZE_DEFAULT = 60;
+const PROMPTER_SIZE_PHONE = 36;
+let promptSizeDefaultSet: number | null = null;
 
-function applyPrompterDefaultSize() {
-  var input = document.getElementById("pp-size");
+function applyPrompterDefaultSize(): void {
+  const input = document.getElementById("pp-size") as HTMLInputElement;
   if (promptSizeDefaultSet !== null && Number(input.value) !== promptSizeDefaultSet) return;
-  var phone = window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
+  const phone = window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
   promptSizeDefaultSet = phone ? PROMPTER_SIZE_PHONE : PROMPTER_SIZE_DEFAULT;
   input.value = String(promptSizeDefaultSet);
 }
 
-var PROMPTER_SIZE_STEP = 4;
+const PROMPTER_SIZE_STEP = 4;
 
-export function stepPrompterSize(dir) {
-  var input = document.getElementById("pp-size");
-  var next = Math.max(Number(input.min), Math.min(Number(input.max), Number(input.value) + dir * PROMPTER_SIZE_STEP));
+export function stepPrompterSize(dir: number): void {
+  const input = document.getElementById("pp-size") as HTMLInputElement;
+  const next = Math.max(Number(input.min), Math.min(Number(input.max), Number(input.value) + dir * PROMPTER_SIZE_STEP));
   input.value = String(next);
   applyPrompterSize();
 }
 
-var PROMPTER_SPEED_STEP = 6;
-var PROMPTER_SPEED_BASE = 42;
+const PROMPTER_SPEED_STEP = 6;
+const PROMPTER_SPEED_BASE = 42;
 
-export function setPrompterSpeed(value) {
-  var input = document.getElementById("pp-speed");
+export function setPrompterSpeed(value: number): void {
+  const input = document.getElementById("pp-speed") as HTMLInputElement;
   prompterSpeed = Math.max(Number(input.min), Math.min(Number(input.max), Math.round(value)));
   input.value = String(prompterSpeed);
   syncSpeedReadout();
 }
 
-export function stepPrompterSpeed(dir) {
+export function stepPrompterSpeed(dir: number): void {
   setPrompterSpeed(prompterSpeed + dir * PROMPTER_SPEED_STEP);
 }
 
-function syncSpeedReadout() {
+function syncSpeedReadout(): void {
   setText(document.getElementById("pp-speed-value"), (prompterSpeed / PROMPTER_SPEED_BASE).toFixed(1) + "×");
 }
 
-function setVoiceStatus(msg, kind) {
-  var el = document.getElementById("pp-voice-status");
+function setVoiceStatus(msg: string, kind: string): void {
+  const el = document.getElementById("pp-voice-status");
   if (!el) return;
   el.textContent = msg || "";
   el.className = "pp-voice-status" + (kind ? " " + kind : "");
   syncVoiceState();
 }
 
-function syncVoiceState() {
-  var group = document.getElementById("pp-voice-state");
-  var el = document.getElementById("pp-voice-status");
+function syncVoiceState(): void {
+  const group = document.getElementById("pp-voice-state");
+  const el = document.getElementById("pp-voice-status");
   if (!group || !el) return;
   group.classList.toggle("is-live", !!ports.state.voiceFollowing());
   group.classList.toggle("has-msg", !!el.textContent);
 }
 
-function setVoiceLabel(btn, text) {
-  var label = btn.querySelector(".pp-voice-label");
+function setVoiceLabel(btn: HTMLElement, text: string): void {
+  const label = btn.querySelector(".pp-voice-label");
   if (label) label.textContent = text;
   else btn.textContent = text;
 }
 
-var voiceMicName = "";
-function listeningStatus(fallback) {
+let voiceMicName = "";
+function listeningStatus(fallback: string): string {
   return voiceMicName ? "Listening — " + voiceMicName : fallback;
 }
 
-var VOICE_IDLE_LABEL = "Follow My Voice";
-var VOICE_BROWSER_LABEL = "Open in browser to use Follow My Voice";
-var VOICE_DESKTOP_UNAVAILABLE = "Follow My Voice isn't available in this desktop app — it works in the browser version.";
+const VOICE_IDLE_LABEL = "Follow My Voice";
+const VOICE_BROWSER_LABEL = "Open in browser to use Follow My Voice";
+const VOICE_DESKTOP_UNAVAILABLE = "Follow My Voice isn't available in this desktop app — it works in the browser version.";
 
-function desktopListens() {
+function desktopListens(): boolean {
   return ports.desktop.running() && ports.voice.available();
 }
 
-function voiceIdleLabel() {
+function voiceIdleLabel(): string {
   if (ports.desktop.running() && !desktopListens() && ports.desktop.canOpen()) return VOICE_BROWSER_LABEL;
   return VOICE_IDLE_LABEL;
 }
 
-export function updateVoiceAvailability() {
-  var btn = document.getElementById("pp-voice");
+export function updateVoiceAvailability(): void {
+  const btn = document.getElementById("pp-voice") as HTMLButtonElement | null;
   if (!btn) return;
   if (ports.desktop.running() && !ports.voice.known()) {
     btn.disabled = true;
-    var owner = ports;
+    const owner = ports;
     ports.voice.load().then(function () { if (ports === owner) updateVoiceAvailability(); });
     return;
   }
@@ -598,44 +632,44 @@ export function updateVoiceAvailability() {
   }
 }
 
-function updateVoiceButtonUI() {
-  var btn = document.getElementById("pp-voice");
+function updateVoiceButtonUI(): void {
+  const btn = document.getElementById("pp-voice");
   if (!btn) return;
   btn.classList.toggle("is-active", ports.state.voiceFollowing());
   setVoiceLabel(btn, ports.state.voiceFollowing() ? "Stop Following" : voiceIdleLabel());
-  var scroller = document.getElementById("prompter-scroll");
+  const scroller = document.getElementById("prompter-scroll");
   if (scroller) scroller.classList.toggle("is-following", !!ports.state.voiceFollowing());
   syncVoiceState();
 }
 
-function applySpokenUpTo(idx) {
-  for (var i = 0; i < promptWords.length; i++) {
-    var el = promptWords[i].el;
+function applySpokenUpTo(idx: number): void {
+  for (let i = 0; i < promptWords.length; i++) {
+    const el = (promptWords[i] as PromptWord).el;
     el.classList.toggle("spoken", i < idx);
     el.classList.toggle("current-word", i === idx);
   }
 }
 
-function clearSpokenHighlights() {
+function clearSpokenHighlights(): void {
   promptWords.forEach(function (w) {
     w.el.classList.remove("spoken");
     w.el.classList.remove("current-word");
   });
 }
 
-function scrollWordIntoView(idx) {
-  var w = promptWords[idx];
+function scrollWordIntoView(idx: number): void {
+  const w = promptWords[idx];
   if (!w) return;
-  var scroller = document.getElementById("prompter-scroll");
+  const scroller = document.getElementById("prompter-scroll") as HTMLElement;
   scroller.scrollTo({ top: Math.max(0, w.el.offsetTop - scroller.clientHeight / 2), behavior: "smooth" });
 }
 
-function findBestMatch(recentWords, scriptNorms, searchStart, searchEnd) {
-  var n = recentWords.length;
-  var bestScore = 0, bestIndex = -1;
-  for (var end = searchStart; end <= searchEnd; end++) {
-    var score = 0;
-    for (var k = 1; k <= n && (end - k + 1) >= 0; k++) {
+function findBestMatch(recentWords: string[], scriptNorms: string[], searchStart: number, searchEnd: number): { index: number; score: number } {
+  const n = recentWords.length;
+  let bestScore = 0, bestIndex = -1;
+  for (let end = searchStart; end <= searchEnd; end++) {
+    let score = 0;
+    for (let k = 1; k <= n && (end - k + 1) >= 0; k++) {
       if (scriptNorms[end - k + 1] === recentWords[n - k]) score++;
       else break;
     }
@@ -644,23 +678,23 @@ function findBestMatch(recentWords, scriptNorms, searchStart, searchEnd) {
   return { index: bestIndex, score: bestScore };
 }
 
-function onSpeechTranscript() {
-  var combined = (finalTranscript + " " + interimTranscript).trim();
-  var words = combined.split(/\s+/).map(normalizeWord).filter(Boolean);
-  var recent = words.slice(-8);
+function onSpeechTranscript(): void {
+  const combined = (finalTranscript + " " + interimTranscript).trim();
+  const words = combined.split(/\s+/).map(normalizeWord).filter(Boolean);
+  const recent = words.slice(-8);
   if (!recent.length || !speakNorms.length) return;
 
-  var searchStart = Math.max(0, speakCursor - 40);
-  var searchEnd = Math.min(speakNorms.length - 1, speakCursor + 80);
-  var best = findBestMatch(recent, speakNorms, searchStart, searchEnd);
+  const searchStart = Math.max(0, speakCursor - 40);
+  const searchEnd = Math.min(speakNorms.length - 1, speakCursor + 80);
+  const best = findBestMatch(recent, speakNorms, searchStart, searchEnd);
 
   if (best.index !== -1 && best.index !== speakCursor &&
       best.score >= (best.index > speakCursor ? 2 : 3)) {
     speakCursor = best.index;
-    wordCursor = speakable[speakCursor];
+    wordCursor = speakable[speakCursor] as number;
     applySpokenUpTo(wordCursor);
     scrollWordIntoView(wordCursor);
-    if (promptSceneMode && promptSceneIndex !== -1 && wordCursor >= sceneWordEnd[promptSceneIndex]) {
+    if (promptSceneMode && promptSceneIndex !== -1 && wordCursor >= (sceneWordEnd[promptSceneIndex] as number)) {
       stopVoiceFollow();
       advanceSceneAfterAutoPause();
       setVoiceStatus("Scene finished — say it again to keep following, or press Next.", "listening");
@@ -676,13 +710,13 @@ function onSpeechTranscript() {
   }
 }
 
-function releaseVoiceStream() {
+function releaseVoiceStream(): void {
   if (!voiceStream) return;
   try { voiceStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
   voiceStream = null;
 }
 
-var DESKTOP_VOICE_WARNINGS = {
+const DESKTOP_VOICE_WARNINGS: Record<string, () => string> = {
   "no-signal": function () {
     return "Windows isn't hearing " + (voiceMicName || "the microphone") +
       " — check it's plugged in, and that Settings › Privacy & security › Microphone lets desktop apps use it.";
@@ -700,12 +734,12 @@ var DESKTOP_VOICE_WARNINGS = {
     return "Windows is blocking desktop apps from using the microphone — turn on Settings › Privacy & security › Microphone › Let desktop apps access your microphone.";
   }
 };
-var CLEARABLE_VOICE_WARNINGS = ["no-signal", "too-quiet", "blocked-all", "blocked-desktop"];
+const CLEARABLE_VOICE_WARNINGS = ["no-signal", "too-quiet", "blocked-all", "blocked-desktop"];
 
-export async function startVoiceFollow() {
-  var owner = ports;
-  var requestedSession = voiceSession;
-  var desktop = ports.desktop.running();
+export async function startVoiceFollow(): Promise<void> {
+  const owner = ports;
+  const requestedSession = voiceSession;
+  const desktop = ports.desktop.running();
   if (desktop && !ports.voice.known()) {
     try { await ports.voice.load(); }
     catch (error) {
@@ -723,7 +757,7 @@ export async function startVoiceFollow() {
     });
     return;
   }
-  var relayed = !desktop && ports.voice.hasRelay();
+  const relayed = !desktop && ports.voice.hasRelay();
   if (!desktop && !relayed && !ports.voice.browserRecognition()) return;
   if (ports.state.voiceFollowing() || voiceStarting) return;
   if (!speakNorms.length) {
@@ -731,7 +765,7 @@ export async function startVoiceFollow() {
     return;
   }
   voiceStarting = true;
-  var mySession = ++voiceSession;
+  const mySession = ++voiceSession;
   setPrompterPlaying(false);
   finalTranscript = "";
   interimTranscript = "";
@@ -743,13 +777,13 @@ export async function startVoiceFollow() {
 
   if (!desktop && !relayed && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     setVoiceStatus("Asking for the microphone…", "");
-    var receivedStream;
+    let receivedStream: MediaStream;
     try {
       receivedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
       if (ports !== owner || mySession !== voiceSession) return;
       voiceStarting = false;
-      var name = err && err.name;
+      const name = err && (err as { name?: unknown }).name;
       setVoiceStatus(
         name === "NotFoundError" || name === "DevicesNotFoundError"
           ? "No microphone was found."
@@ -763,15 +797,15 @@ export async function startVoiceFollow() {
     }
     voiceStream = receivedStream;
     try {
-      var track = voiceStream.getAudioTracks()[0];
+      const track = voiceStream.getAudioTracks()[0];
       voiceMicName = (track && track.label) || "";
     } catch (e) {}
   }
 
   try {
-    recognition = desktop ? ports.voice.createDesktop()
+    recognition = (desktop ? ports.voice.createDesktop()
       : relayed ? ports.voice.createRelay()
-      : new (ports.voice.browserRecognition())();
+      : new (ports.voice.browserRecognition() as new () => PrompterRecognition)()) as VoiceRecognition;
   } catch (e) {
     voiceStarting = false;
     releaseVoiceStream();
@@ -787,10 +821,10 @@ export async function startVoiceFollow() {
     recognition.onwarning = function (e) {
       if (ports !== owner || mySession !== voiceSession) return;
       if (e && e.warning === "clear") {
-        var el = document.getElementById("pp-voice-status");
+        const el = document.getElementById("pp-voice-status");
         if (ports.state.voiceFollowing() && el) {
-          for (var i = 0; i < CLEARABLE_VOICE_WARNINGS.length; i++) {
-            if (el.textContent === DESKTOP_VOICE_WARNINGS[CLEARABLE_VOICE_WARNINGS[i]]()) {
+          for (let i = 0; i < CLEARABLE_VOICE_WARNINGS.length; i++) {
+            if (el.textContent === (DESKTOP_VOICE_WARNINGS[CLEARABLE_VOICE_WARNINGS[i] as string] as () => string)()) {
               setVoiceStatus(listeningStatus("Listening…"), "listening");
               break;
             }
@@ -798,7 +832,7 @@ export async function startVoiceFollow() {
         }
         return;
       }
-      var warn = DESKTOP_VOICE_WARNINGS[e && e.warning];
+      const warn = DESKTOP_VOICE_WARNINGS[(e && e.warning) as string];
       if (warn && ports.state.voiceFollowing()) setVoiceStatus(warn(), "error");
     };
     recognition.ondevice = function (e) {
@@ -815,9 +849,9 @@ export async function startVoiceFollow() {
   };
   recognition.onresult = function (e) {
     if (ports !== owner || mySession !== voiceSession) return;
-    var finalChunk = "", interimChunk = "";
-    for (var i = e.resultIndex; i < e.results.length; i++) {
-      var r = e.results[i];
+    let finalChunk = "", interimChunk = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i] as PrompterSpeechResult;
       if (r.isFinal) finalChunk += r[0].transcript + " ";
       else interimChunk += r[0].transcript + " ";
     }
@@ -892,8 +926,8 @@ export async function startVoiceFollow() {
   }
 }
 
-export function stopVoiceFollow() {
-  var wasActive = ports.state.voiceFollowing();
+export function stopVoiceFollow(): void {
+  const wasActive = ports.state.voiceFollowing();
   voiceSession++;
   ports.state.setVoiceFollowing(false);
   voiceStarting = false;
@@ -914,23 +948,23 @@ export function stopVoiceFollow() {
   if (wasActive) setVoiceStatus("", "");
 }
 
-var PROMPTER_LAUNCH_KEY = "splitpage-prompter-launch";
-var PROMPTER_TOKEN_RE = /^[0-9a-f]{64}$/;
+const PROMPTER_LAUNCH_KEY = "splitpage-prompter-launch";
+const PROMPTER_TOKEN_RE = /^[0-9a-f]{64}$/;
 
-function readPrompterLaunch() {
+function readPrompterLaunch(): PrompterLaunch | null {
   if (ports.desktop.running()) return null;
-  var wanted;
+  let wanted: boolean;
   try { wanted = new URLSearchParams(location.search).get("teleprompter") === "1"; } catch (e) { wanted = false; }
-  var m = /(?:^#|&)script=([0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
-  var token = m ? m[1] : "";
-  var v = /(?:^#|&)voice=(\d{1,5}-[0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
-  if (wanted || token) ports.voice.setRelay(v ? v[1] : "");
+  const m = /(?:^#|&)script=([0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
+  const token = m ? m[1] as string : "";
+  const v = /(?:^#|&)voice=(\d{1,5}-[0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
+  if (wanted || token) ports.voice.setRelay(v ? v[1] as string : "");
   else ports.voice.setRelay(null);
   if (wanted || token) {
     try {
-      var url = new URL(location.href);
+      const url = new URL(location.href);
       url.searchParams.delete("teleprompter");
-      var rest = (url.hash || "").replace(/(^#|&)script=[0-9a-f]{64}/, "$1").replace(/^#&/, "#")
+      let rest = (url.hash || "").replace(/(^#|&)script=[0-9a-f]{64}/, "$1").replace(/^#&/, "#")
         .replace(/(^#|&)voice=\d{1,5}-[0-9a-f]{64}/, "$1").replace(/^#&/, "#");
       if (rest === "#") rest = "";
       history.replaceState(null, "", url.pathname + url.search + rest);
@@ -941,34 +975,34 @@ function readPrompterLaunch() {
     return { token: token };
   }
   if (wanted) return { hosted: true };
-  var kept;
+  let kept: string;
   try { kept = sessionStorage.getItem(PROMPTER_LAUNCH_KEY) || ""; } catch (e) { kept = ""; }
   return PROMPTER_TOKEN_RE.test(kept) ? { token: kept } : null;
 }
 
-function whenInitialStateReady() {
-  var owner = ports;
+function whenInitialStateReady(): Promise<unknown> {
+  const owner = ports;
   return new Promise(function (resolve) {
     (function check() {
       if (ports !== owner) return;
-      var ready = ports.startup.ready();
+      const ready = ports.startup.ready();
       if (ready) ready.then(resolve, resolve);
       else initialReadyTimer = setTimeout(check, 50);
     })();
   });
 }
 
-function showPrompterForLaunch() {
+function showPrompterForLaunch(): void {
   ports.panels.close("newtab-page");
   if (!ports.state.isOpen()) openPrompter();
 }
 
-async function launchPrompterFromScript(token) {
-  var owner = ports;
-  var body = null;
+async function launchPrompterFromScript(token: string): Promise<boolean> {
+  const owner = ports;
+  let body: { name?: unknown; text?: unknown } | null = null;
   try {
-    var res = await fetch("prompter-script/" + token, { cache: "no-store", credentials: "same-origin" });
-    if (res.ok) body = await res.json();
+    const res = await fetch("prompter-script/" + token, { cache: "no-store", credentials: "same-origin" });
+    if (res.ok) body = await res.json() as { name?: unknown; text?: unknown };
   } catch (e) { body = null; }
   if (ports !== owner) return false;
   if (!body || typeof body.name !== "string" || typeof body.text !== "string") {
@@ -977,15 +1011,15 @@ async function launchPrompterFromScript(token) {
               "(File ▸ Present in browser).", "warn", true);
     return false;
   }
-  var file = new File([body.text], body.name, { type: "text/plain" });
-  var parsed;
+  const file = new File([body.text], body.name, { type: "text/plain" });
+  let parsed: unknown;
   try { parsed = await ports.files.parse(file); }
   catch (error) {
     if (ports !== owner) return false;
     throw error;
   }
   if (ports !== owner) return false;
-  if (!parsed || parsed.error) {
+  if (!parsed || (parsed as { error?: unknown }).error) {
     ports.notices.show("Could not read the script the desktop app sent.", "error", true);
     return false;
   }
@@ -995,8 +1029,8 @@ async function launchPrompterFromScript(token) {
   return true;
 }
 
-function startPrompterLaunch(launch) {
-  var owner = ports;
+function startPrompterLaunch(launch: PrompterLaunch): void {
+  const owner = ports;
   ports.preferences.skipOnboardingForPrompter();
   whenInitialStateReady().then(function () {
     if (ports !== owner) return;
@@ -1004,11 +1038,11 @@ function startPrompterLaunch(launch) {
   });
 }
 
-export function wireTagEntityContainer(id, rootClick) {
+export function wireTagEntityContainer(id: string, rootClick: (event: MouseEvent) => void): () => void {
   return ports.installTagEntityContainer(id, rootClick);
 }
 
-export function startPrompter(nextPorts) {
+export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime {
   ports = nextPorts;
   prompterMirror = ports.preferences.prompterFlag("prompterMirror");
 
@@ -1016,9 +1050,9 @@ export function startPrompter(nextPorts) {
 
   promptSceneMode = ports.preferences.prompterFlag("prompterSceneMode");
 
-  window.__prompterTest = {
+  (window as PrompterWindow).__prompterTest = {
     checkSceneBoundaryNow: function () {
-      var scroller = document.getElementById("prompter-scroll");
+      const scroller = document.getElementById("prompter-scroll") as HTMLElement;
       if (!promptSceneMode || promptSceneEndWordOffset == null) return false;
       if (!scenePastReadingLine(scroller.scrollTop, promptSceneEndWordOffset, promptSceneGuideOffset)) return false;
       setPrompterPlaying(false);
@@ -1027,7 +1061,7 @@ export function startPrompter(nextPorts) {
     },
     simulateVoiceWordCursor: function (idx) {
       wordCursor = idx;
-      if (!promptSceneMode || promptSceneIndex === -1 || wordCursor < sceneWordEnd[promptSceneIndex]) return false;
+      if (!promptSceneMode || promptSceneIndex === -1 || wordCursor < (sceneWordEnd[promptSceneIndex] as number)) return false;
       stopVoiceFollow();
       advanceSceneAfterAutoPause();
       return true;
@@ -1036,7 +1070,7 @@ export function startPrompter(nextPorts) {
     updateStatus: updatePrompterStatus
   };
 
-  var launch = readPrompterLaunch();
+  const launch = readPrompterLaunch();
   if (launch) startPrompterLaunch(launch);
 
   return {
@@ -1057,10 +1091,10 @@ export function startPrompter(nextPorts) {
     dispose: function () {
       if (ports !== nextPorts) return;
       disposePrompterView();
-      clearTimeout(initialReadyTimer);
+      clearTimeout(initialReadyTimer as TimerHandle);
       initialReadyTimer = null;
-      delete window.__prompterTest;
-      ports = null;
+      delete (window as PrompterWindow).__prompterTest;
+      (ports as unknown) = null;
     }
   };
 }

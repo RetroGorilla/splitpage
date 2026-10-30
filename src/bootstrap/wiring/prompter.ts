@@ -1,6 +1,6 @@
 import type { ActionDefinition } from "../../application/actions.ts";
 import type { PrompterFeaturePorts, PrompterRuntime } from "../../features/prompter/ports.ts";
-import { startPrompter } from "../../features/prompter/prompter.js";
+import { startPrompter } from "../../features/prompter/prompter.ts";
 import { prompterActions as definitions } from "../../features/prompter/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { documentReader } from "./ports/document.ts";

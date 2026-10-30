@@ -6,7 +6,7 @@ import { createTagEntityContainer } from "../bootstrap/wiring/production.ts";
 
 assert.throws(() => createTagEntityContainer("production-panel", () => {}), /not installed yet/);
 await bootApp();
-const { wireTagEntityContainer, openPrompter, closePrompter } = await import("../features/prompter/prompter.js");
+const { wireTagEntityContainer, openPrompter, closePrompter } = await import("../features/prompter/prompter.ts");
 after(closeApp);
 
 test("tag container wiring is installed before the prompter can open and mounts per call", () => {
