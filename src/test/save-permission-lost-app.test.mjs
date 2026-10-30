@@ -26,6 +26,12 @@ function script(title) {
   });
 }
 
+function closeWouldWarn() {
+  const event = new window.Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 const toasts = (kind) => [...document.querySelectorAll("#toast-host .toast" + (kind ? "." + kind : ""))].map((node) => node.textContent);
 
 test("a handle whose permission was withdrawn fails the save with an error and no conflict dialog, and saves once it is granted again", async (t) => {
@@ -45,9 +51,10 @@ test("a handle whose permission was withdrawn fails the save with an error and n
     await saveDoc();
     assert.equal(fileConflicts().current(), null, "no file conflict is opened for a permission problem");
     assert.equal(toasts("error").length, 1, "an error is shown");
-    assert.match(toasts("error")[0], /^Could not save — permission to change locked\.splitpage was withdrawn\./);
+    assert.match(toasts("error")[0], /^Could not save — permission to change locked\.splitpage was withdrawn, so use Save a copy or open the file again\./);
     assert.equal(target.commits.length, 0, "nothing was written");
     assert.equal(unsavedChanges(), true, "the document is still unsaved");
+    assert.equal(closeWouldWarn(), true, "closing still warns about the unsaved work");
     assert.equal(homeModule.currentHome(), home, "the home is the same record");
     assert.equal(currentDocument().rows[0].audioText, "Typed before the save.", "the work is still in the document");
 
