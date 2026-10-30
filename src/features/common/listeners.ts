@@ -4,9 +4,9 @@ export function addListener<K extends keyof HTMLElementEventMap>(
   handler: (event: HTMLElementEventMap[K]) => void,
   options?: boolean | AddEventListenerOptions
 ): () => void;
-export function addListener(
-  target: EventTarget,
-  type: string,
+export function addListener<T extends EventTarget>(
+  target: T,
+  type: T extends HTMLElement ? never : string,
   handler: EventListener,
   options?: boolean | AddEventListenerOptions
 ): () => void;
