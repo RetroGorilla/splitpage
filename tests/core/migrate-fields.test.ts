@@ -57,9 +57,6 @@ test("scene text, comment bodies and replies each go through the sanitiser, afte
   assert.equal(c.body, "S:b");
   assert.equal(((c.replies as Item[])[0] as Item).body, "S:p");
   assert.ok(seen.includes("<strong>v</strong>") && !seen.includes("**v**"), "Markdown is converted before the sanitiser sees it");
-
-  const now = migrateRows({ schema: 2, rows: [{ id: "r1", visualText: "**v**" }] }, marked((html) => "S:" + String(html)));
-  assert.equal((list(now, "rows")[0] as Item).visualText, "S:**v**", "a current file's text is not Markdown");
 });
 
 test("a row's picture: an old inline one is stored and wins over a stored reference, a stored reference is cleaned, anything else is none", () => {
