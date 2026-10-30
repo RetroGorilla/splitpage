@@ -186,7 +186,7 @@ Task: some owners in src/application/ hold an "install slot" (an empty `let x: T
 4. Write the report to the PR body of your claim PR (a report-only PR; see "Report-only tasks"). Keep it under 60 lines.
 ```
 
-## AQ-7 [ ] Export check runs each module in a child process (R2 leftover)
+## AQ-7 [x] Export check runs each module in a child process (R2 leftover)
 
 ```text
 Task: tests/application/owners-construct-nothing.test.ts has a runtime check over the exports of every src/application/ module. Read PRs #920 and #925 and the test itself to see what that check does today. The known gap: it loads every module in one process, so a module that runs code at import time can leave state behind that hides or causes a problem in another module. Today the test writes one script and runs it once in a single child process with `execFileSync(process.execPath, [file])` (around line 178), which loads every module in that one process. Change it to one child process per module, or per small batch of modules, running the same script shape, and assert the same things per module.
