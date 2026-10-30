@@ -63,7 +63,7 @@ import {
   typeAtDirectionEdge,
   typePendingMarks,
   updateToolbarState
-} from "../../features/rows/render.js";
+} from "../../features/rows/render.ts";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.js";
 import { pasteScenesAt } from "../../features/clipboard/scene-select.js";
 import { thumbnailsAfterPaste } from "./gallery.ts";
@@ -483,8 +483,8 @@ export function onRootInput(e: RootInput): void {
   if (!cellEl) return;
   if (!isScriptCell(cellEl)) { noteDraftInput(cellEl); return; }
   maybeAutoTagShortcut(e, cellEl);
-  maybeDirectionShortcut(e, cellEl);
-  maybeCueShortcut(e, cellEl);
+  maybeDirectionShortcut(e as InputEvent, cellEl);
+  maybeCueShortcut(e as InputEvent, cellEl);
   maybeCaptureBroll(e, cellEl);
   currentPlainTags()?.maybeOpen(e, cellEl);
   cellEditing().sync(cellEl);
