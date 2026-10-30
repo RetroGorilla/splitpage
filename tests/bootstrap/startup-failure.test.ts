@@ -13,6 +13,7 @@ interface Probe {
   readonly calls: string[];
   readonly throwAt: string | null;
   readonly error: Error;
+  readonly args: Map<string, unknown[]>;
 }
 
 const PANEL = "#startup-failure";
@@ -34,6 +35,7 @@ function stubSource(names: readonly string[]): string {
     "  return function () {",
     "    const probe = globalThis.__bootProbe;",
     "    probe.calls.push(name);",
+    "    probe.args.set(name, [...arguments]);",
     "    if (probe.throwAt === name) throw probe.error;",
     "    return {};",
     "  };",
@@ -63,8 +65,8 @@ function bundle(): Promise<string> {
   return bundled;
 }
 
-async function boot(throwAt: string | null, error = new TypeError("boom")): Promise<{ calls: string[]; logged: unknown[] }> {
-  const probe: Probe = { calls: [], throwAt, error };
+async function boot(throwAt: string | null, error = new TypeError("boom")): Promise<{ calls: string[]; logged: unknown[]; args: Map<string, unknown[]> }> {
+  const probe: Probe = { calls: [], throwAt, error, args: new Map() };
   holder.__bootProbe = probe;
   const logged = mock.method(console, "error", () => {});
   try {
@@ -73,7 +75,7 @@ async function boot(throwAt: string | null, error = new TypeError("boom")): Prom
     logged.mock.restore();
     delete holder.__bootProbe;
   }
-  return { calls: probe.calls, logged: logged.mock.calls.map((call): unknown => call.arguments[0]) };
+  return { calls: probe.calls, logged: logged.mock.calls.map((call): unknown => call.arguments[0]), args: probe.args };
 }
 
 function panel(): HTMLElement | null {
@@ -131,6 +133,41 @@ test("the success path runs every call, logs nothing and leaves no panel", async
   assert.ok(calls.includes("mountSettingsFeature"));
   assert.deepEqual(logged, []);
   assert.equal(panel(), null);
+});
+
+test("the failure handler handed to the DOM-ready start shows the panel and logs the error", async () => {
+  const { args } = await boot(null);
+  const onFail = args.get("startAppWhenReady")?.[2];
+  assert.equal(typeof onFail, "function", "startAppWhenReady gets the failure handler");
+  const error = new Error("startApp broke");
+  const logged = mock.method(console, "error", () => {});
+  try {
+    (onFail as (error: unknown) => void)(error);
+  } finally {
+    logged.mock.restore();
+  }
+  assert.deepEqual(logged.mock.calls.map((call): unknown => call.arguments[0]), [error]);
+  assert.equal(panel()?.querySelector("pre > code")?.textContent, "Error: startApp broke");
+});
+
+test("opening the first document: a failure before it is drawn goes to the failure handler, one after is only logged", async () => {
+  const { openInitialDocument } = await import("../../src/bootstrap/wiring/startup.ts");
+  for (const shown of [false, true]) {
+    const error = new Error("open failed");
+    const failures: unknown[] = [];
+    const opening = Promise.reject(error);
+    const startup = { openDocument: () => opening, ready: () => opening, shown: () => shown, finish: () => {}, dispose: () => {} };
+    const logged = mock.method(console, "error", () => {});
+    try {
+      const disconnect = openInitialDocument(startup, (failure) => { failures.push(failure); });
+      await new Promise((resolve) => setImmediate(resolve));
+      disconnect();
+    } finally {
+      logged.mock.restore();
+    }
+    assert.deepEqual(failures, shown ? [] : [error], String(shown));
+    assert.deepEqual(logged.mock.calls.map((call): unknown => call.arguments[0]), shown ? [error] : [], String(shown));
+  }
 });
 
 test("Copy details copies the message, the stack and the app version", async () => {
