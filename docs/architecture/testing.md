@@ -9,7 +9,8 @@ runs the fast gates in the order CI does.
 | `npm run typecheck` | `tsc` rules for each `tsconfig.*.json`; fails on a `.ts` file no config covers, and on a cast to the validated document brand ([below](#the-validated-document-brand)) |
 | `npm run check:deps` | Layer, platform and cycle rules ([dependencies.md](dependencies.md)) |
 | `npm run check:comments` | The no-comment gate ([dependencies.md](dependencies.md#comment-gate)) |
-| `node build.mjs` | Builds `index.html` and stamps `sw.js` |
+| `node build.mjs` | Builds the release `index.html` and stamps `sw.js`; fails if the bundle exposes a test hook not listed in `tools/release-hooks.mjs` |
+| `node build.mjs --test` | The test build: the same, but keeps the `window.__*Test` hooks. The browser suites, the desktop smoke and CI's browser jobs use it; `sw.js` is stamped the same either way |
 | `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
 | `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, each tool's entry check) |
@@ -17,7 +18,7 @@ runs the fast gates in the order CI does.
 | `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
 
 The full browser regression and the desktop smoke run by hand at milestone
-and release gates: `node tools/run-suites.mjs <out-dir> [regex]` on
+and release gates, after `node build.mjs --test`: `node tools/run-suites.mjs <out-dir> [regex]` on
 Linux/macOS, `run-tests.ps1` on Windows, `node desktop/test/smoke.mjs` for
 Electron. How to drive the browser suites is in
 [the run-splitpage-app skill](../../.claude/skills/run-splitpage-app/SKILL.md).
