@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { imagesLeftOutText } from "../../../src/application/export/diagnostics.ts";
+import { imagesLeftOutText, unshownCharactersText } from "../../../src/application/export/diagnostics.ts";
 
 test("one missing picture is reported in the singular", () => {
   assert.equal(
@@ -21,4 +21,9 @@ test("zero counts as plural", () => {
     imagesLeftOutText(0, "the PDF"),
     "0 images could not be included in the PDF — the pictures were not available on this computer."
   );
+});
+
+test("characters outside Latin are counted in the singular and the plural", () => {
+  assert.equal(unshownCharactersText(1), "1 character outside Latin can't be shown in PDF");
+  assert.equal(unshownCharactersText(12), "12 characters outside Latin can't be shown in PDF");
 });
