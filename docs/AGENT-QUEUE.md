@@ -649,11 +649,13 @@ STRUCTURE SECTION MUST SAY
 ## AQ-29 [ ] Save-back on desktop reads the file once (tracker I-6)
 
 Needs: AQ-28 merged. Start from a base that includes it.
-Files: src/application/save/import-saving.ts, its tests, docs/architecture/saving.md.
-**STOPS FOR ADAM**: save path. Independent review; PC smoke.
+Files: src/application/save/import-saving.ts, its tests, docs/architecture/saving.md; for part B also the save coordinator's confirm step it calls (src/application/save/) and a browser suite.
+**STOPS FOR ADAM**: save path, and part B changes what the user sees. Independent review; PC smoke.
 
 ```text
-Task: tracker I-6. After writing an imported file back in place, saveBackToFile (src/application/save/import-saving.ts) calls `writable.close()` and then reads the file again (`ports.files.read`) to record its new lastModified and size. On the desktop, close() already answers the stamp that main took right after its atomic write (docs/architecture/saving.md, "The desktop shim", and the line "It still reads the file a second time after writing ... a one-line change left for later"). A second read can see a later change made by another program and record that as ours, which can hide a real conflict or raise a false one. Use the stamp from close() when it has one; read the file only when it does not (the browser path). Nothing else changes.
+Task: tracker I-6. After writing an imported file back in place, saveBackToFile (src/application/save/import-saving.ts) calls `writable.close()` and then reads the file again (`ports.files.read`) to record its new lastModified and size. On the desktop, close() already answers the stamp that main took right after its atomic write (docs/architecture/saving.md, "The desktop shim", and the line "It still reads the file a second time after writing ... a one-line change left for later"). A second read can see a later change made by another program and record that as ours, which can hide a real conflict or raise a false one. Use the stamp from close() when it has one; read the file only when it does not (the browser path). That is part A.
+
+Part B (found while working AQ-28, PR #976; Adam folded it into this task on 2026-10-30): after an import save-back succeeds, the import home reads written back (`dirty: false`, file menu "Up to date"), but the Save button and status line still show `Save •` / "Unsaved changes", because save-back never confirms the document as saved (it never reaches `confirmSavedNow`). It does not depend on timing. After a successful save-back, confirm the document as saved through the coordinator's existing confirm step, with the same guard a normal save uses (only when no edit came in after the capture, `changes() === seqAtSave`), so the Save button, the status line and the file menu agree. Nothing else changes.
 
 FILES TO READ
 - docs/architecture/saving.md (the import save-back section), invariants.md, HANDOFF.md (AGENTS.md rule 9).
@@ -664,10 +666,11 @@ DO
 2. Change the order so a close() stamp with lastModified is recorded through the same completion step the read path uses; keep the read for a close() that answers nothing. Keep every stillWritingBack check in its place.
 3. Tests: desktop-style handle (close() answers a stamp) records that stamp and does not read; browser-style handle (close() answers nothing) still reads; a file changed by someone else between close() and the old read: record what the next save reports before and after the change, and describe it in the PR. Do not change existing assertions.
 4. Update the saving.md line that calls this "left for later".
-5. `npm run verify`; browser suites: node tools/run-suites.mjs <out> 'import|save|conflict' --lanes 6; full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR.
+5. Part B, STEP 0: reproduce it with a failing test (save-back succeeds, no edit after the capture, then check saveStatus() and the Save button). Read saving.md section 4, which says the unsaved flag and a destination's dirty can differ: if it says this case is intended, stop part B and describe it in the PR for Adam; part A continues on its own. Otherwise fix it at the confirm step (one writer of the saved state; do not add a second one), and add tests: save-back with no later edit reads saved; save-back with an edit after the capture still reads unsaved. Make part B its own commit.
+6. `npm run verify`; browser suites: node tools/run-suites.mjs <out> 'import|save|conflict|title' --lanes 6; full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR.
 
 STRUCTURE SECTION MUST SAY
-- "no structural change", which stamp is now recorded on each platform, the test names, smoke count.
+- "no structural change", which stamp is now recorded on each platform, what part B changes for the user (or why it stopped), the test names, smoke count.
 ```
 
 ## AQ-30 [ ] Fix the flaky suite 266-header-collab-condense (tracker I-30)
