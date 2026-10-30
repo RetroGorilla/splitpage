@@ -1,0 +1,13 @@
+{
+  "tests": ["tests/core/merge-states.test.ts"],
+  "mutants": [
+    {"label":"merged-not-migrated","file":"src/core/merge-states.ts","find":"merged: migrateRows(r.merged, migrate),","replace":"merged: r.merged as ValidatedDocument,"},
+    {"label":"migrate-fields-merge-table-dropped","file":"src/core/merge-states.ts","find":"Object.assign({}, ports.migrate, { fields: ports.fields })","replace":"Object.assign({}, ports.migrate)"},
+    {"label":"migrate-fields-from-ports","file":"src/core/merge-states.ts","find":"{ fields: ports.fields }","replace":"{ fields: ports.migrate.fields }"},
+    {"label":"migrate-ports-shared","file":"src/core/merge-states.ts","find":"Object.assign({}, ports.migrate, { fields: ports.fields })","replace":"Object.assign(ports.migrate, { fields: ports.fields })"},
+    {"label":"conflicts-dropped","file":"src/core/merge-states.ts","find":"conflicts: r.conflicts,","replace":"conflicts: [],"},
+    {"label":"stats-dropped","file":"src/core/merge-states.ts","find":"stats: r.stats","replace":"stats: undefined as never"},
+    {"label":"sides-swapped","file":"src/core/merge-states.ts","find":"mergeStateFields(base, mine, theirs, ports)","replace":"mergeStateFields(base, theirs, mine, ports)"},
+    {"label":"base-dropped","file":"src/core/merge-states.ts","find":"mergeStateFields(base, mine, theirs, ports)","replace":"mergeStateFields(null, mine, theirs, ports)"}
+  ]
+}
