@@ -49,12 +49,17 @@ test("cells are escaped for the document, not passed through as markup", () => {
 test("a byte order mark at the start is dropped and one in the middle is kept", () => {
   assert.deepEqual(rows("﻿Visual,Audio\nA,B"), [["A", "B"]]);
   assert.deepEqual(rows("a﻿b,c"), [["a﻿b", "c"]]);
+  assert.deepEqual(rows("﻿x,y"), [["x", "y"]]);
 });
 
 test("control characters are dropped, tabs and line breaks stay", () => {
   assert.deepEqual(rows("a\u0000b\u0008c\u001Fd,e"), [["abcd", "e"]]);
   assert.deepEqual(rows("a\tb,c"), [["a\tb", "c"]]);
   assert.deepEqual(rows('"a\r\nb",c'), [["a\r<br>b", "c"]]);
+});
+
+test("a carriage return outside quotes is dropped, wherever it is", () => {
+  assert.deepEqual(rows("a\rb,c"), [["ab", "c"]]);
 });
 
 test("Windows line endings read the same as Unix ones", () => {
