@@ -310,7 +310,7 @@ Task: AGENTS.md rule 11 says a JS file under src/features/, src/application/ or 
 4. Write it to the PR body of your claim PR (a report-only PR; see "Report-only tasks"). Under 80 lines.
 ```
 
-## AQ-15 [ ] PDF text and JPEG fixes
+## AQ-15 [x] PDF text and JPEG fixes
 
 Needs: none.
 Files: src/adapters/formats/pdf.ts, its tests, PDF help text.
