@@ -1,4 +1,3 @@
-import { importModeTouched, resetImportMode } from "../../application/import-mode.ts";
 import { importRowsCommand } from "../../application/commands/import-rows.ts";
 import { escapeHtml, truncateForPreview } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
@@ -101,7 +100,7 @@ function getImportMode() {
 }
 
 function maybeAutoDetectTwoColumn(text) {
-  if (importModeTouched()) return;
+  if (ports.mode.touched()) return;
   if (detectTwoColumnFormat(text)) {
     var radio = document.querySelector('input[name="import-split"][value="twocolumn"]');
     if (radio) radio.checked = true;
@@ -163,7 +162,7 @@ function openImportModal(opts) {
   document.getElementById("import-modal").classList.toggle("is-new-document", !!importIntoNewDocument);
   document.getElementById("import-textarea").value = "";
   document.getElementById("import-replace").checked = false;
-  resetImportMode();
+  ports.mode.reset();
   pendingFileRows = null;
   pendingFileName = "";
   var paragraphRadio = document.querySelector('input[name="import-split"][value="paragraph"]');

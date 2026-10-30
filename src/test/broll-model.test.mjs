@@ -283,12 +283,12 @@ test("anchoring: a key a comment covers keeps its id and its comment, and a repe
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
+  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false }), 1);
   assert.equal(currentDocument().rows[0].visualText, commented);
   assert.match(currentDocument().rows[1].visualText, /^<span class="broll-key"/);
 
   currentDocument().rows.push({ id: "r2", visualText: commented, audioText: "" });
-  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
+  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false }), 1);
   assert.equal(currentDocument().rows[0].visualText, commented);
   const after = currentDocument().rows[2].visualText;
   assert.match(after, /data-cmt="c1"/);
@@ -319,7 +319,7 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
     if (!before.some((b) => !b.id)) continue;
     if (repeatsAnId(before) || commentsAKeyOrBlank(html)) continue;
     const after = withRow(html, (row, doc) => {
-      const n = anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml });
+      const n = anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false });
       assert.equal(n, before.filter((b) => !b.id).length, html);
       return row.visualText;
     });
@@ -361,7 +361,7 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
       if (b.id) seen.add(b.id);
     });
     const after = withRow(html, (row, doc) => {
-      assert.equal(anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), repeats.length + before.filter((b) => !b.id).length, html);
+      assert.equal(anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false }), repeats.length + before.filter((b) => !b.id).length, html);
       return row.visualText;
     });
     const read = brollInCell(cellOf(after));
@@ -395,14 +395,14 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
+  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false }), 1);
   const ids = currentDocument().rows.map((r) => brollInCell(cellOf(r.visualText))[0].id);
   assert.equal(ids[0], "bsA");
   assert.ok(ids[1] && ids[1] !== "bsA");
   assert.equal(currentDocument().rows[1].visualText, "intro<br>" + KEY(ids[1]) + " the gulls");
   const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
   currentDocument().rows[1].visualText = sanitizeHtml(card + "<br>" + KEY("bsA") + " the gulls");
-  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
+  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false }), 1);
   assert.match(currentDocument().rows[1].visualText, /video-embed-card/);
   const moved = brollInCell(cellOf(currentDocument().rows[1].visualText));
   assert.deepEqual(moved.map((b) => b.name), ["the gulls"]);
@@ -418,7 +418,7 @@ test("anchoring: an unanchored line never takes the record a keyed line further 
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
+  assert.equal(anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false }), 1);
   const id = brollInCell(cellOf(currentDocument().rows[0].visualText))[0].id;
   assert.ok(id && id !== "bsA", "a new id, not the keyed line's: " + id);
   assert.equal(currentDocument().rows[1].visualText, KEY("bsA") + " the gulls");
@@ -453,7 +453,7 @@ test("anchoring and renaming in a cell still holding a video card keep the card"
   const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
   const html = sanitizeHtml("intro " + card + "<br><strong>B-roll:</strong> the gulls<br>" + KEY("b9") + " drone");
   withRow(html, (row, doc) => {
-    assert.equal(anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
+    assert.equal(anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false }), 1);
     assert.match(row.visualText, /video-embed-card/);
     const read = brollInCell(cellOf(row.visualText));
     assert.deepEqual(read.map((b) => b.name), ["the gulls", "drone"]);

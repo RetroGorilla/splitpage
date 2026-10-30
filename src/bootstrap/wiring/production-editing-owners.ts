@@ -1,12 +1,14 @@
-import { resetTagPanel } from "../../application/tag-panel-state.ts";
 import { createDeleteConfirm } from "../../application/editing/delete-confirm.ts";
 import type { DeleteConfirm, DeleteTimerPort } from "../../application/editing/delete-confirm.ts";
 import { createProductionSelection } from "../../application/editing/production-selection.ts";
 import type { ProductionSelection } from "../../application/editing/production-selection.ts";
+import { createTagPanelState } from "../../application/tag-panel-state.ts";
+import type { TagPanelState } from "../../application/tag-panel-state.ts";
 
 interface Started {
   readonly confirmation: DeleteConfirm;
   readonly selection: ProductionSelection;
+  readonly tagPanel: TagPanelState;
 }
 
 let started: Started | null = null;
@@ -20,7 +22,8 @@ export function startProductionEditing(timers: DeleteTimerPort): () => void {
   if (started) throw new Error("The production editing owners are already started; stop them first");
   const mine: Started = {
     confirmation: createDeleteConfirm(timers),
-    selection: createProductionSelection(timers)
+    selection: createProductionSelection(timers),
+    tagPanel: createTagPanelState()
   };
   started = mine;
   return () => {
@@ -46,6 +49,10 @@ export function productionSelection(): ProductionSelection {
   return running().selection;
 }
 
+export function tagPanelState(): TagPanelState {
+  return running().tagPanel;
+}
+
 export function selectedKeys(): string[] {
   return productionSelection().selectedKeys();
 }
@@ -66,7 +73,7 @@ export function pruneProductionSelection(entries: readonly { readonly key: strin
   productionSelection().prune(entries);
 }
 export function resetProductionPanelState(): void {
-  resetTagPanel();
+  tagPanelState().resetTagPanel();
   deleteConfirmation().disarm("tag");
   clearProductionSelection();
 }

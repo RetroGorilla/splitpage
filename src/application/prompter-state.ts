@@ -1,24 +1,27 @@
-let open = false;
-let playing = false;
-let skipShot = false;
-let voiceFollowing = false;
-
-export const prompterIsOpen = (): boolean => open;
-export const setPrompterOpen = (value: boolean): void => { open = value; };
-export const prompterIsPlaying = (): boolean => playing;
-export const setPrompterPlayingFlag = (value: boolean): void => { playing = value; };
-export const prompterSkipsShot = (): boolean => skipShot;
-export const setPrompterSkipShot = (value: boolean): void => { skipShot = value; };
-export const voiceIsFollowing = (): boolean => voiceFollowing;
-export const setVoiceFollowing = (value: boolean): void => { voiceFollowing = value; };
-
 export interface PrompterState {
-  readonly isOpen: typeof prompterIsOpen;
-  readonly isPlaying: typeof prompterIsPlaying;
-  readonly skipsShot: typeof prompterSkipsShot;
-  readonly voiceFollowing: typeof voiceIsFollowing;
-  readonly setOpen: typeof setPrompterOpen;
-  readonly setPlaying: typeof setPrompterPlayingFlag;
-  readonly setSkipShot: typeof setPrompterSkipShot;
-  readonly setVoiceFollowing: typeof setVoiceFollowing;
+  readonly isOpen: () => boolean;
+  readonly isPlaying: () => boolean;
+  readonly skipsShot: () => boolean;
+  readonly voiceFollowing: () => boolean;
+  readonly setOpen: (value: boolean) => void;
+  readonly setPlaying: (value: boolean) => void;
+  readonly setSkipShot: (value: boolean) => void;
+  readonly setVoiceFollowing: (value: boolean) => void;
+}
+
+export function createPrompterState(): PrompterState {
+  let open = false;
+  let playing = false;
+  let skipShot = false;
+  let voiceFollowing = false;
+  return Object.freeze({
+    isOpen: (): boolean => open,
+    isPlaying: (): boolean => playing,
+    skipsShot: (): boolean => skipShot,
+    voiceFollowing: (): boolean => voiceFollowing,
+    setOpen: (value: boolean): void => { open = value; },
+    setPlaying: (value: boolean): void => { playing = value; },
+    setSkipShot: (value: boolean): void => { skipShot = value; },
+    setVoiceFollowing: (value: boolean): void => { voiceFollowing = value; }
+  });
 }

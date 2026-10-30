@@ -8,7 +8,7 @@ import { createHeldImageDecode } from "./_m4-matrix.mjs";
 window.Element.prototype.scrollIntoView = function () {};
 window.Element.prototype.scrollBy = function () {};
 await bootApp();
-const { commentSortMode } = await import("../application/comment-sort.ts");
+const { commentSorting } = await import("../bootstrap/wiring/ports/preferences.ts");
 const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts");
 const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.js");
@@ -68,7 +68,7 @@ test("comments app: panel sort and filter changes announce to another preference
     sort.value = "recent";
     fire(sort, "change");
     fire(document.querySelector('#comments-filter-seg [data-filter="all"]'), "click");
-    assert.equal(commentSortMode(), "recent");
+    assert.equal(commentSorting.current(), "recent");
     assert.equal(localStorage.getItem("splitpage-comments-sort"), "recent");
     assert.equal(localStorage.getItem("splitpage-comments-filter"), '{"mode":"all","assignee":""}');
     assert.deepEqual(announced, [
@@ -97,7 +97,7 @@ test("comments app: every document, root and control registration is removed and
     target.addEventListener = function (type, fn, options) {
       assert.equal(phase(options), false, id + ":" + type);
       added.push(type); active.push({ type, fn, capture: phase(options) }); order.push(id + ":" + type);
-      if (id === "comments-sort") assert.equal(this.value, commentSortMode());
+      if (id === "comments-sort") assert.equal(this.value, commentSorting.current());
       return add.call(this, type, fn, options);
     };
     target.removeEventListener = function (type, fn, options) {
