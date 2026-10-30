@@ -1,6 +1,6 @@
 # Splitpage review policy
 
-This applies to every PR into `4.1-development`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on 4.0 under §2.
+This applies to every PR into `4.1-development`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on `4.1-development` under §2.
 
 **Fast path.** Two kinds of PR get the automated checks and a quick read instead of the full process:
 - docs-only PRs (CI's change classifier marks them as prose)
@@ -23,14 +23,14 @@ Every other PR goes through the full process below.
 | The bug… | Fix it |
 |---|---|
 | was introduced by the current PR | inside that PR, before merge |
-| already existed, in code a pending PR or milestone step is moving | after the move lands, in its own PR on 4.0, in the module that now owns the code, with a regression test written to fail first |
-| already existed, in code nothing is moving | in its own PR on 4.0, with a regression test written to fail first |
+| already existed, in code a pending PR or milestone step is moving | after the move lands, in its own PR on 4.1-development, in the module that now owns the code, with a regression test written to fail first |
+| already existed, in code nothing is moving | in its own PR on 4.1-development, with a regression test written to fail first |
 
 A PR that moves code keeps the bugs it moves. Each one is filed as an issue and fixed by a later PR, never folded into the move.
 
 ## 3. Automated checks
 
-- **CI on PRs into 4.0 and main** (the `gate` job): lint, type check, dependency gate, comment gate, the build with its `sw.js` stamp check, `test:all`, the core, content-security-policy and persistence browser suites.
+- **CI on PRs into 4.1-development and main** (the `gate` job): lint, type check, dependency gate, comment gate, the build with its `sw.js` stamp check, `test:all`, the core and content-security-policy browser suites.
 - **Locally before review:** the browser suites for the affected areas, chosen with the change table in [testing.md](testing.md#what-to-run-for-which-change).
 - **Full browser run before merge** for:
   - changes to `02-state.js` or its shim, `build.mjs`, or the test harness or driver

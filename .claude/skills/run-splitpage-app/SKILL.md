@@ -8,7 +8,7 @@ description: Run, drive and test the Splitpage app in a real headless browser. U
 Splitpage ships as one self-contained `index.html`, but **that file is
 generated, and it is not in the repository** (#80) — do not edit it, and
 expect a fresh clone not to have one until you build it. The source is
-`src/` (`page.html`, `app.css`, `seed-state.json`, and the ES modules in
+`src/` (`page.html`, `styles/`, `seed-state.json`, and the ES modules in
 `src/js/`) plus `docs/help.md` (rendered into the in-app Help page) and
 `VERSION`, and `node build.mjs` bundles them with esbuild and inlines the
 result back into `index.html`. Run `npm install` once first — esbuild builds
