@@ -1,4 +1,4 @@
-﻿import test from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { formatClock, formatDateClock } from "../../../shared/clock.js";
 import { formatTimestamp } from "../../../src/features/common/comment-time.js";
