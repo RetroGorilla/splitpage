@@ -163,9 +163,9 @@ export function rundownLengthPlace(totalSeconds, extraSeconds, widthPx, widths) 
 
 export var LENS_MIN_PX = 96;
 export var LENS_REACH_SCENES = 3;
-export var LENS_RECENTER_MS = 400;
+var LENS_RECENTER_MS = 400;
 export var LENS_SLOW_PX_MS = 0.12;
-export var LENS_FAST_PX_MS = 0.6;
+var LENS_FAST_PX_MS = 0.6;
 var LENS_GLIDE_MS = 60;
 var LENS_EASE_MS = 90;
 var LENS_EASE_FLOOR = 0.08;
@@ -212,7 +212,7 @@ function anchorFor(slots, focus, u, x, opts) {
   return knotMap(slots, rundownLens(slots, focus, (lo + hi) / 2, opts), focus);
 }
 
-export var LENS_SPEED_MAG_MAX = 64;
+var LENS_SPEED_MAG_MAX = 64;
 
 function lensSpeedScale(slots, focus, opts) {
   var minW = opts && opts.minWidth > 0 ? opts.minWidth : LENS_MIN_PX;
@@ -314,7 +314,7 @@ export function setRundownExtraSeconds(seconds) {
   renderRundown();
 }
 
-export function rundownX(seconds) {
+function rundownX(seconds) {
   var px = lastLayout.x(seconds || 0);
   if (lens.Z && base.X && lens.Z.length === base.X.length) return tenth(knotMap(base.X, lens.Z, px));
   return tenth(px);
@@ -531,7 +531,7 @@ var lens = {
 };
 var noHover = false;
 
-export var LENS_HOLD_MS = 950;
+var LENS_HOLD_MS = 950;
 export var LENS_HOLD_PX = 240;
 
 function lensOpts() {

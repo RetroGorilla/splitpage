@@ -15,13 +15,12 @@ export var SCENES_ATTR = "data-splitpage-scenes";
 var FORMAT = "splitpage-scenes";
 var VERSION = 1;
 
-export var SCENE_BLOB_CAP = 16 * 1024 * 1024;
+var SCENE_BLOB_CAP = 16 * 1024 * 1024;
 
 var ports = null;
 var liveCut = null;
 
 export function setLiveCut(nonce, docId) { liveCut = nonce ? { nonce: String(nonce), docId: docId || null } : null; }
-export function liveCutNonce() { return liveCut ? liveCut.nonce : null; }
 
 export function isMove(clip, state) {
   return !!(liveCut && clip && clip.cut && clip.cut === liveCut.nonce && state && state.docId === liveCut.docId) &&
@@ -111,7 +110,7 @@ function plainOf(html) {
   return toPlainText(ports.text.cellOf(html || "")).replace(NBSP_RE, " ");
 }
 
-export function scenesPlainText(rows) {
+function scenesPlainText(rows) {
   return rows.map(function (r) {
     return "Visual: " + plainOf(r.visualText) + "\nAudio: " + plainOf(r.audioText);
   }).join("\n\n");
@@ -121,7 +120,7 @@ function escAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function scenesTableHtml(rows, payload) {
+function scenesTableHtml(rows, payload) {
   var marker = "";
   if (payload) {
     var lean = Object.assign({}, payload, {

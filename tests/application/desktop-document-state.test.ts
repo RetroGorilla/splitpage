@@ -96,14 +96,14 @@ test("listeners publish only changes, except a save change, which always publish
   assert.equal(h.sent[2]?.title, "Renamed");
 });
 
-test("the menu command runner answers only while it is the one installed", () => {
+test("the menu command runner answers only while it is the one installed, and throws while none is", () => {
   const ran: string[] = [];
-  assert.equal(runMenuCommand("save"), false);
+  assert.throws(() => runMenuCommand("save"), /menu command runner is not installed/);
   const first = runMenuCommandsWith((command) => { ran.push("first:" + command); return true; });
   const second = runMenuCommandsWith((command) => { ran.push("second:" + command); return false; });
   first();
   assert.equal(runMenuCommand("save"), false);
   second();
-  assert.equal(runMenuCommand("save"), false);
+  assert.throws(() => runMenuCommand("save"), /menu command runner is not installed/);
   assert.deepEqual(ran, ["second:save"]);
 });
