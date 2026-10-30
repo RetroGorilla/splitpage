@@ -441,7 +441,7 @@ STRUCTURE SECTION MUST SAY
 - Each removed re-export and where each importer now imports from, the removed layer, dep-baseline count before/after.
 ```
 
-## AQ-20 [ ] Release needs a green CI run
+## AQ-20 [x] Release needs a green CI run
 
 Needs: none.
 Files: .github/workflows/release.yml, tools/release-ci-check.mjs (new), docs/architecture/ci.md.
