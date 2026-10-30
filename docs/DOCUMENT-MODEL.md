@@ -12,7 +12,7 @@ the by-hand pass in `docs/WINDOWS-CHECKS.md` covers it with the rest.
 #85 ships in the 3.0 pre-releases (from 3.0.0-beta.1) and in 3.0.0.
 
 Line numbers and `NN-name.js` file names in the design text are from `main`
-at `53eb67d`, when the code lived in numbered fragments under `src/js/`.
+at `53eb67d`, when the code lived in numbered fragments under the former `src/js` folder.
 That folder is gone; where the design says what is built, it names today's
 files. `node tools/code-map.mjs` prints a map of the rest.
 

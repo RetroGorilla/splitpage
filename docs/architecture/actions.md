@@ -60,7 +60,7 @@ a refusal as a toast through `showRefusal()` (`features/title/refusal.ts`), endi
 the reason with a full stop (a reason is written as a menu line, "Close the
 open dialog first", and a toast is a sentence), for every surface but a
 shortcut, which leaves the key to the browser. A refusal without a reason
-shows nothing. So every caller in `src/js` just calls `appActions.invoke()`
+shows nothing. So every caller in the former numbered modules just calls `appActions.invoke()`
 and none of them imports the toast module for it, and no refusal is dropped:
 the File menu, the header and Writer buttons, the rundown's button, the
 Settings and wizard buttons, the native menu and a command run from the command menu all show theirs. The
@@ -113,7 +113,7 @@ order. An action it does not name is listed after the named ones, in the
 order it was registered, under its own `group`; a group the command menu does
 not know is listed after the known groups. So an action registered anywhere
 shows up in the command menu with no edit to it. The command menu never lists
-its own action, `command-menu`. `tests/legacy/command-palette.test.ts` checks
+its own action, `command-menu`. `tests/features/command-menu/results.test.ts` checks
 this against the real registry instance; `279-command-menu-listing.txt` pins
 the whole listing, key chips, switch states and icons in the browser and the
 desktop app, and passes against the code before the
@@ -268,7 +268,7 @@ starts, stops and starts again on the real definitions and finds one listener
 and no leftover action each time; `tests/features/shortcuts/mount-shortcuts.test.ts`
 does the same for the feature alone.
 
-No listener left in `src/js` handles a chord the shortcuts feature binds:
+No listener left in the former numbered modules handles a chord the shortcuts feature binds:
 the old Ctrl+S, Ctrl+Shift+S, Ctrl+O (`18b`), Ctrl+E (`18c`), Ctrl+K (`18d`),
 Ctrl+F and Ctrl+Alt+H (`21-events.js`) listeners are gone, and a search of
 every `keydown` listener finds no other one for those keys. In Present, the
@@ -437,10 +437,10 @@ Files the move touched:
 
 | File | Change |
 | --- | --- |
-| `src/legacy/zoom-actions.ts` (new) | The three definitions. Availability: the keys act only in the editor view (`scriptViewActive()`, as their listener checked); the View menu acts anywhere, as before. `visible: false`, as 3.1's command menu did not list them |
+| `src/features/script-zoom/actions.ts` | The three definitions. Availability: the keys act only in the editor view (`scriptViewActive()`, as their listener checked); the View menu acts anywhere, as before. `visible: false`, as 3.1's command menu did not list them |
 | `src/bootstrap/actions.ts` | One line: `registerZoomActions(registry)` |
-| `src/js/05s-script-zoom.js` | Its keydown listener stays where it is (a document capture listener that matches `+`, `=`, `-`, `0` and their key codes, which a chord cannot express) but invokes the action by id and keeps the key only when it ran; `scriptViewActive()` is exported for the definitions; `runScriptZoomCommand()` is gone |
-| `src/js/20f-desktop.js` | The special case and its import are gone; the generic path runs the id |
+| `src/features/script-zoom/script-zoom.ts` (the former `05s-script-zoom.js`) | Its keydown listener stays where it is (a document capture listener that matches `+`, `=`, `-`, `0` and their key codes, which a chord cannot express) but invokes the action by id and keeps the key only when it ran; `scriptViewActive()` is exported for the definitions; `runScriptZoomCommand()` is gone |
+| The former `20f-desktop.js` (removed) | The special case and its import are gone; the generic path runs the id |
 
 No other surface, feature or the command menu changed. The one change made
 for it outside those files, in its own commit before the move, taught the
