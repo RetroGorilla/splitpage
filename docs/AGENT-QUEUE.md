@@ -270,7 +270,7 @@ Task: find files in the repo that nothing references and delete them.
 Structure section: table of each deleted file, size, and the grep that showed no reference; files kept and why.
 ```
 
-## AQ-12 [ ] Fix drift in HANDOFF.md and invariants.md
+## AQ-12 [x] Fix drift in HANDOFF.md and invariants.md
 
 ```text
 Task: docs/HANDOFF.md and docs/architecture/invariants.md name files, functions, tests and counts that may have changed. Fix statements that are false today. Docs only.
