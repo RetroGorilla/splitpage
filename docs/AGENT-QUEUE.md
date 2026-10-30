@@ -121,6 +121,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-5 is **STOPS FOR ADAM**.
 - AQ-6 and AQ-14 are report-only.
 - AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
+- AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
 
 ## AQ-1 [ ] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -558,4 +559,63 @@ Do not touch: eslint.config.mjs; unrelated wiring; the history storage logic its
 
 STRUCTURE SECTION MUST SAY
 - The hook list and where each now lives, the flag name and default, what the release bundle no longer contains (with the grep result), which jobs build the test variant, smoke counts for both variants.
+```
+
+## AQ-24 [ ] Convert the prompter to strict TypeScript
+
+Needs: none. Files: src/features/prompter/prompter.js -> prompter.ts, its importers (src/bootstrap/wiring/prompter.ts, src/test/*prompter*.test.mjs and the other src/test files that import it, tests/features/prompter/, tests/bootstrap/load-order/prompter.json), docs that name prompter.js.
+
+```text
+Task: improvement plan item 4.3, step 1 for the prompter (AGENTS.md rule 11). Convert src/features/prompter/prompter.js to strict TypeScript: types only, no behaviour change. Model: #955, which did the same for src/features/rows/render.js; read its diff and PR body first.
+
+1. git mv the file to prompter.ts. Update every importer to the .ts path (git grep "prompter/prompter.js"), including src/test/*.mjs, tests/, tests/bootstrap/load-order/prompter.json and docs. Leave no file that re-exports the old path.
+2. Type every function, parameter and module-level variable. Use types from ports.ts and from the owners it names; narrow with Pick. If a port type in ports.ts is missing a field the code already calls, add it there (type-only) and say so in the PR body.
+3. Allowed mechanical changes, each listed in the PR body: var -> let/const (TypeScript checks the block scoping), `delete obj[key]` -> Reflect.deleteProperty (lint no-dynamic-delete), a local variable to narrow a value instead of a cast. Nothing else may change what runs or in what order.
+4. Known traps: the lint config is typescript-eslint strict, so `!` non-null assertions are banned and inline eslint-disable comments are off in src/features. `npm run typecheck` (not plain tsc) also runs the brand check, which refuses any `as` cast to a type that reaches the validated document (for example `x as DocumentView`, or `null as unknown as` a function type that returns one). Declare a slot `let x: T;` with no initializer and clear it with `(x as unknown) = null`, as newtab.ts does.
+5. Run `npm run verify`, then `node build.mjs` and the prompter browser suites: node tools/run-suites.mjs <out-dir> '^(04|32|49|58|71|88|142|156|309)-' --lanes 6. Put the results in Validation.
+
+Structure section: "no responsibility moves; types only". Name every file outside prompter.ts that changed and why.
+```
+
+## AQ-25 [ ] Hold the prompter's state in one object (after AQ-24 merges)
+
+Needs: AQ-24. Files: src/features/prompter/prompter.ts only (plus docs that describe its state, if any).
+
+```text
+Task: improvement plan item 4.3, step 2 for the prompter. prompter.ts keeps about 48 module-level variables of state next to its one `ports` variable. Group the mutable state into one object built from a `freshState()` function, the way #957 did for src/features/rows/render.ts; read its diff and PR body first. No behaviour change.
+
+1. List every module-level let/var. Constants that never change stay constants. Each mutable one becomes a field of an interface `PrompterState` and of the object freshState() returns, with the same starting value it had.
+2. Wherever the old code reset a variable to its starting value (stop, dispose, close), check that the reset list equals the starting values field for field. Only then replace it with `state = freshState()`. Otherwise keep the individual resets. Keep the order relative to any DOM cleanup or callback that runs next to it.
+3. Leave anything that must outlive one start (listener lists the tests pin, lifetime tokens) as its own variable, and say why in the PR body.
+4. Do not change importers, exported names or what start returns. Do not make the prompter a per-instance owner; name that as a possible later step in the PR body.
+5. Watch for word-boundary replacements inside strings (#957 hit "on screen" in a placeholder). Review your own diff for changed string literals.
+6. Run `npm run verify`, then `node build.mjs` and the prompter suites: node tools/run-suites.mjs <out-dir> '^(04|32|49|58|71|88|142|156|309)-' --lanes 6.
+
+Structure section: which variables moved into the state object and which stayed out, and why.
+```
+
+## AQ-26 [ ] Convert the rundown to strict TypeScript
+
+Needs: none. Files: src/features/rundown/rundown.js -> rundown.ts, its importers (src/bootstrap/wiring/rundown.ts and panels.ts, src/test/rundown.test.mjs and the other src/test files that import it, tests/features/rundown/, tests/bootstrap/load-order/rundown.json), docs that name rundown.js. Leave target.js alone.
+
+```text
+Task: improvement plan item 4.3, step 1 for the rundown (AGENTS.md rule 11). Same task as AQ-24, for src/features/rundown/rundown.js. Model: #955.
+
+Follow AQ-24 steps 1 to 4 with rundown in place of prompter.
+5. renderRundown runs after every screen paint (panels.ts, onScriptStats), so this file is near the typing path. Besides `npm run verify` and the rundown browser suites (node build.mjs, then node tools/run-suites.mjs <out-dir> '^(100|101|102|103|104|105|106|140|141)-' --lanes 6), run the performance comparison on the PC: node tools/perf-ab.mjs against 4.1-development, 15 rounds (see docs/architecture/performance-record.md). STOP if typing > 8 ms, a new scene > 65 ms, or undo > 45 ms short / 70 ms long. Put the numbers in Validation and in a PR comment.
+
+Structure section: "no responsibility moves; types only". Name every file outside rundown.ts that changed and why.
+```
+
+## AQ-27 [ ] Hold the rundown's state in one object (after AQ-26 merges)
+
+Needs: AQ-26. Files: src/features/rundown/rundown.ts only.
+
+```text
+Task: improvement plan item 4.3, step 2 for the rundown. Same task as AQ-25, for src/features/rundown/rundown.ts (about 38 module-level variables). Model: #957.
+
+Follow AQ-25 steps 1 to 5 with rundown in place of prompter.
+6. Run `npm run verify`, the rundown suites (node build.mjs, then node tools/run-suites.mjs <out-dir> '^(100|101|102|103|104|105|106|140|141)-' --lanes 6), and the perf-ab comparison with the limits in AQ-26 step 5. STOP if any limit is exceeded.
+
+Structure section: which variables moved into the state object and which stayed out, and why.
 ```
