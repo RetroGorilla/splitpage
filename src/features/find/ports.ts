@@ -1,5 +1,7 @@
 import type { UndoControl } from "../../application/editing/undo-control.ts";
+import type { BulkTagRows } from "../../application/commands/bulk-tags.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
+import type { FindOptions } from "../../application/find-options.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
@@ -15,6 +17,8 @@ export interface FindPorts {
   readonly undo: Pick<UndoControl, "breakCoalescing">;
   readonly notices: Pick<NoticePort, "show">;
   readonly flags: Pick<ViewFlags, "setFindOpen">;
+  readonly options: Pick<FindOptions, "matchesCase">;
+  readonly bulkTag: BulkTagRows;
 }
 
 export interface FindControls {

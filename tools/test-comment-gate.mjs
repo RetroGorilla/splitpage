@@ -467,21 +467,21 @@ console.log("\nreason comments:\n");
   eq("a workflow run reason passes", scan(".github/workflows/a.yml", "jobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          # why: order matters\n          # because saves can race\n          make\n"), []);
   eq("plain comments still fail", scan("src/core/a.ts", "// narration\n"), ["// narration"]);
   eq("a broken anchor in a continuation fails", scan("a.sh", "# why: order matters\n# see docs/saving.md#nope\n"), ["# see docs/saving.md#nope"]);
-  eq("a reason never enters the baseline", checkComments([{ path: "src/js/a.js", text: "// why: docs/saving.md#saving\n" }], { files: {} }, REQUIRED_MARKERS, DIRECTIVES, known).current, {});
+  eq("a reason never enters the baseline", checkComments([{ path: "src/test/a.js", text: "// why: docs/saving.md#saving\n" }], { files: {} }, REQUIRED_MARKERS, DIRECTIVES, known).current, {});
 }
 
 console.log("\ncheckComments():\n");
 
 {
-  const baseline = { files: { "src/js/a.js": ["// kept"] } };
-  eq("a baselined comment passes wherever it moved", checkComments([{ path: "src/js/a.js", text: "\n\n\nx(); // kept\n" }], baseline).added, []);
-  const swapped = checkComments([{ path: "src/js/a.js", text: "// other\n" }], baseline);
+  const baseline = { files: { "src/test/a.js": ["// kept"] } };
+  eq("a baselined comment passes wherever it moved", checkComments([{ path: "src/test/a.js", text: "\n\n\nx(); // kept\n" }], baseline).added, []);
+  const swapped = checkComments([{ path: "src/test/a.js", text: "// other\n" }], baseline);
   eq("a replaced comment is new even though the count is equal", swapped.added.map((a) => a.text), ["// other"]);
   eq("and the replaced one is stale", swapped.stale.map((s) => s.text), ["// kept"]);
-  const doubled = checkComments([{ path: "src/js/a.js", text: "// kept\n// kept\n" }], baseline);
+  const doubled = checkComments([{ path: "src/test/a.js", text: "// kept\n// kept\n" }], baseline);
   eq("a duplicated baselined comment is new", doubled.added.length, 1);
-  eq("whitespace changes do not matter", checkComments([{ path: "src/js/a.js", text: "//   kept\n" }], baseline).added, []);
-  eq("a comment in a new file fails", checkComments([{ path: "src/js/new.js", text: "/* x */\n" }], baseline).added.length, 1);
+  eq("whitespace changes do not matter", checkComments([{ path: "src/test/a.js", text: "//   kept\n" }], baseline).added, []);
+  eq("a comment in a new file fails", checkComments([{ path: "src/test/new.js", text: "/* x */\n" }], baseline).added.length, 1);
   const free = checkComments([{ path: "src/core/text/a.ts", text: "// kept\n" }], { files: { "src/core/text/a.ts": ["// kept"] } });
   eq("a comment-free folder ignores its baseline", free.added.length, 1);
   eq("and reports the entry as stale", free.stale.length, 1);
@@ -509,26 +509,26 @@ function runIn(repo, mode) {
 }
 
 {
-  const repo = repoWith({ "src/js/a.js": "// old\nx();\n", "README.md": "<!-- prose is not scanned -->\n", "node_modules/p/i.js": "// vendor\n" });
+  const repo = repoWith({ "src/test/a.js": "// old\nx();\n", "README.md": "<!-- prose is not scanned -->\n", "node_modules/p/i.js": "// vendor\n" });
   eq("init writes the existing comments", runIn(repo, "init").code, 0);
-  eq("the baseline holds only authored source", Object.keys(JSON.parse(readFileSync(join(repo, "baseline.json"), "utf8")).files), ["src/js/a.js"]);
+  eq("the baseline holds only authored source", Object.keys(JSON.parse(readFileSync(join(repo, "baseline.json"), "utf8")).files), ["src/test/a.js"]);
   eq("an unchanged tree passes", runIn(repo, "check").code, 0);
 
-  writeFileSync(join(repo, "src/js/a.js"), "// old\nx(); // new\n");
+  writeFileSync(join(repo, "src/test/a.js"), "// old\nx(); // new\n");
   const added = runIn(repo, "check");
   eq("a new comment fails", added.code, 1);
-  check("the new comment is located", added.err.includes("src/js/a.js:2 // new"), added.err);
+  check("the new comment is located", added.err.includes("src/test/a.js:2 // new"), added.err);
   eq("prune will not absorb a new comment", runIn(repo, "prune").code, 1);
 
-  writeFileSync(join(repo, "src/js/a.js"), "x(); // swapped\n");
+  writeFileSync(join(repo, "src/test/a.js"), "x(); // swapped\n");
   const swapped = runIn(repo, "check");
   eq("a new comment fails even when it replaces a baselined one", swapped.code, 1);
-  check("the new comment is named", swapped.err.includes("new comment src/js/a.js:1 // swapped"), swapped.err);
+  check("the new comment is named", swapped.err.includes("new comment src/test/a.js:1 // swapped"), swapped.err);
 
-  writeFileSync(join(repo, "src/js/a.js"), "x();\n");
+  writeFileSync(join(repo, "src/test/a.js"), "x();\n");
   const stale = runIn(repo, "check");
   eq("a removed comment left in the baseline warns and passes", stale.code, 0);
-  check("the warning names the entry and the prune command", stale.err.includes("warning: resolved src/js/a.js // old (remove it with `node tools/comment-gate.mjs --prune`)"), stale.err);
+  check("the warning names the entry and the prune command", stale.err.includes("warning: resolved src/test/a.js // old (remove it with `node tools/comment-gate.mjs --prune`)"), stale.err);
   eq("prune removes it", runIn(repo, "prune").code, 0);
   eq("the check then passes", runIn(repo, "check").code, 0);
 

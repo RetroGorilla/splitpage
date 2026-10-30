@@ -3,7 +3,6 @@ import { escapeHtml } from "../../core/document/text-policy.ts";
 import { anchorBrollCell, brollAnchorTodo, planBrollAnchors } from "../../core/production/broll.ts";
 import { holdsMedia } from "../../core/production/tags.ts";
 import { toHtml } from "../../core/text/html.ts";
-import { brollAnchoringDeclined } from "../../application/broll-anchoring.ts";
 
 import type { IdSource } from "../../core/document/ports.ts";
 import type { DocumentRow, ValidatedDocument } from "../../core/document/validated.ts";
@@ -22,6 +21,7 @@ interface BrollAnchorPorts {
   cellOf: (html: FieldHtml) => Frozen<Run[]>;
   inertBody: (html: FieldHtml) => HTMLElement;
   sanitize: (html: string) => string;
+  declined: (id: string) => boolean;
 }
 export function brollHtmlLines(body: HTMLElement): HtmlLine[] {
   hoistNestedBrs(body);
@@ -135,7 +135,7 @@ export function anchorBrollInRows(doc: ValidatedDocument | null | undefined, onl
   const plan = planBrollAnchors(doc, ports.readers, ports.ids);
   let total = 0;
   rows.forEach(function (row) {
-    if (brollAnchoringDeclined(row.id)) return;
+    if (ports.declined(row.id)) return;
     const html = row.visualText;
     const cell = ports.cellOf(html);
     const todo = brollAnchorTodo(cell, row.id, plan);

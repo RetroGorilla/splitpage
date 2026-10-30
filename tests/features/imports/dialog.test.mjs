@@ -40,7 +40,8 @@ function harness(storageDisabled = false) {
     },
     desktop: { running: () => true, openExternal: (url) => calls.push(url) },
     noteEdit: () => calls.push("noteEdit"),
-    stampRow: (row) => { row.updatedBy = "Adam"; calls.push("stamp"); }
+    stampRow: (row) => { row.updatedBy = "Adam"; calls.push("stamp"); },
+    mode: { touched: () => false, reset: () => {} }
   };
   const controls = mountImportDialog(ports, realm);
   const el = (id) => realm.document.getElementById(id);

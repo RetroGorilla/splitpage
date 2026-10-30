@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
-const { setPrompterOpen } = await import("../application/prompter-state.ts");
+const { prompterState } = await import("../bootstrap/wiring/ports/preferences.ts");
 const { mountPrompterVisibilityFeature } = await import("../bootstrap/wiring/views.ts");
 const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 after(closeApp);
@@ -14,7 +14,7 @@ function open() {
     schema: 2, docId: "deeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", title: "Wake lock lifetime",
     rows: [{ id: "r1", status: "todo", visualText: "Scene", audioText: "One" }]
   } }, reason: "wake-lock-lifetime" });
-  setPrompterOpen(true);
+  prompterState.setOpen(true);
 }
 
 for (const scenario of ["dispose and reopen", "same-ID replacement", "stale completion after remount", "normal completion"]) {
@@ -50,7 +50,7 @@ for (const scenario of ["dispose and reopen", "same-ID replacement", "stale comp
       replacement?.dispose();
       const { disposePrompterView } = await import("../features/prompter/prompter.js");
       disposePrompterView();
-      setPrompterOpen(false);
+      prompterState.setOpen(false);
       if (prior) Object.defineProperty(navigator, "wakeLock", prior);
       else delete navigator.wakeLock;
       if (visibility) Object.defineProperty(document, "visibilityState", visibility);

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
-const { findMatchesCase, setFindMatchCase } = await import("../application/find-options.ts");
+const { findOptions } = await import("../bootstrap/wiring/ports/preferences.ts");
 const { mountFindEventsFeature: mountFindFeature } = await import("../bootstrap/wiring/find.ts");
 after(closeApp);
 
@@ -41,7 +41,7 @@ test("find app: all 12 listeners retain order and bubble phase, dispose fully an
     return { id, target, expected, added, active, add, remove };
   });
   let owner;
-  const priorCase = findMatchesCase();
+  const priorCase = findOptions.matchesCase();
   const caseButton = document.getElementById("find-case");
   const priorClass = caseButton.className;
   const priorAria = caseButton.getAttribute("aria-pressed");
@@ -57,17 +57,17 @@ test("find app: all 12 listeners retain order and bubble phase, dispose fully an
     assert.deepEqual(order, [...expectedOrder, ...expectedOrder]);
     for (const r of records) { assert.deepEqual(r.added, [r.expected, r.expected], r.id); assert.equal(r.active.length, 1, r.id); }
     caseButton.click();
-    assert.equal(findMatchesCase(), !priorCase);
+    assert.equal(findOptions.matchesCase(), !priorCase);
     assert.equal(caseButton.classList.contains("is-active"), !priorCase);
     assert.equal(caseButton.getAttribute("aria-pressed"), priorCase ? "false" : "true");
     owner.dispose();
     for (const r of records) assert.equal(r.active.length, 0, r.id);
     caseButton.click();
-    assert.equal(findMatchesCase(), !priorCase);
+    assert.equal(findOptions.matchesCase(), !priorCase);
   } finally {
     owner?.dispose();
     for (const r of records) { r.target.addEventListener = r.add; r.target.removeEventListener = r.remove; }
-    setFindMatchCase(priorCase);
+    findOptions.setMatchCase(priorCase);
     caseButton.className = priorClass;
     if (priorAria === null) caseButton.removeAttribute("aria-pressed");
     else caseButton.setAttribute("aria-pressed", priorAria);

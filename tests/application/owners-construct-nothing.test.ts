@@ -33,6 +33,14 @@ import * as documentLocation from "../../src/application/location/document-locat
 import * as projectFileServices from "../../src/application/formats/project-file-services.ts";
 import * as documentMerge from "../../src/application/session/document-merge.ts";
 import * as shotHiding from "../../src/application/shot-hiding.ts";
+import * as prompterState from "../../src/application/prompter-state.ts";
+import * as tagPanelState from "../../src/application/tag-panel-state.ts";
+import * as commentSort from "../../src/application/comment-sort.ts";
+import * as findOptions from "../../src/application/find-options.ts";
+import * as importMode from "../../src/application/import-mode.ts";
+import * as brollAnchoring from "../../src/application/broll-anchoring.ts";
+import * as bulkTags from "../../src/application/commands/bulk-tags.ts";
+import * as brollView from "../../src/application/preferences/broll-view.ts";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -55,7 +63,15 @@ const OWNERS = [
   "src/application/preferences/panel-widths.ts",
   "src/application/location",
   "src/application/formats",
-  "src/application/shot-hiding.ts"
+  "src/application/shot-hiding.ts",
+  "src/application/prompter-state.ts",
+  "src/application/tag-panel-state.ts",
+  "src/application/comment-sort.ts",
+  "src/application/find-options.ts",
+  "src/application/import-mode.ts",
+  "src/application/broll-anchoring.ts",
+  "src/application/commands/bulk-tags.ts",
+  "src/application/preferences/broll-view.ts"
 ];
 
 function sourcesOf(path: string): string[] {
@@ -112,7 +128,9 @@ test("E12: importing the owners constructs nothing: each export is a constructor
     rowDrag: rowDrag, cellEditing: cellEditing, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, deleteConfirm: deleteConfirm, productionSelection: productionSelection, mergeUndo: mergeUndo,
     preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths,
     documentLocation: documentLocation, projectFileServices: projectFileServices, documentMerge: documentMerge,
-    shotHiding: shotHiding
+    shotHiding: shotHiding,
+    prompterState: prompterState, tagPanelState: tagPanelState, commentSort: commentSort, findOptions: findOptions,
+    importMode: importMode, brollAnchoring: brollAnchoring, bulkTags: bulkTags, brollView: brollView
   };
   for (const [module, exports] of Object.entries(loaded)) {
     for (const [name, value] of Object.entries(exports)) {
@@ -131,4 +149,12 @@ test("E12: importing the owners constructs nothing: each export is a constructor
   assert.equal(typeof stashedWork.createStashedWork, "function");
   assert.equal(typeof cellEditing.createCellEditing, "function");
   assert.equal(typeof shotHiding.createShotHiding, "function");
+  assert.equal(typeof prompterState.createPrompterState, "function");
+  assert.equal(typeof tagPanelState.createTagPanelState, "function");
+  assert.equal(typeof commentSort.createCommentSorting, "function");
+  assert.equal(typeof findOptions.createFindOptions, "function");
+  assert.equal(typeof importMode.createImportMode, "function");
+  assert.equal(typeof brollAnchoring.createBrollAnchoring, "function");
+  assert.equal(typeof bulkTags.createBulkTagRows, "function");
+  assert.equal(typeof brollView.createBrollView, "function");
 });
