@@ -172,10 +172,10 @@ reads it. It reads state, not what the page last painted:
 | `loading` | Still loading… | `S.state` |
 | `dialog` | Close the open dialog first | any `.modal-backdrop` not `hidden` (`page.dialogShown()`, `src/adapters/page/overlays.ts`, read in `screen-state.ts`) |
 | `launcher` | Close the open dialog first | the command menu not `hidden`, unless it is the one asking (`launcherOpen()`, `screen-state.ts`) |
-| `tour` | Finish or skip the tour first | `tourShowing()`, `src/features/help/help.ts` (a tour suspended for Help is not showing) |
+| `tour` | Finish or skip the tour first | `ports.flags().tourOpen()`, `screen-state.ts`, `screenFlags` in `wiring/ports/preferences.ts` (a tour suspended for Help is not showing) |
 | `prompter` | Close Present first | `prompterState.isOpen()` (the prompter state owner, through `wiring/ports/preferences.ts`) |
-| `writer` | Close the writer first | `viewFlags().writerOpen()`, `wiring/ports/preferences.ts` |
-| `shotlist` | Close the shot list first | `brollPageOpen()`, `src/features/broll/panel.js` |
+| `writer` | Close the writer first | `ports.flags().writerOpen()`, `screen-state.ts`, `screenFlags` in `wiring/ports/preferences.ts` |
+| `shotlist` | Close the shot list first | `ports.flags().brollPageOpen()`, `screen-state.ts`, `screenFlags` in `wiring/ports/preferences.ts` |
 
 An action names the blockers it is refused under, and `inFront()` picks the
 one in front, in the order of this table: still loading first, then a dialog,

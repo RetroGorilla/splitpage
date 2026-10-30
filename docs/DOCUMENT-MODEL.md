@@ -771,8 +771,12 @@ until step 4.
      and nothing edits it instead. The tag and b-roll shortcuts, which
      also fell back when the model did not read the same words at the
      caret, now leave the typed words as they are.
-   - Left: `execCommand("copy")`, in `execCopy()` (`src/features/clipboard/scene-select.js`),
-     the clipboard fallback of the copy buttons — not an edit.
+   - Left, two `execCommand("copy")` paths, neither an edit: `copyWithSelection()`
+     in `src/features/clipboard/share-text.ts`, the fallback of the share clipboard's
+     `copyText` (`createShareClipboard`, wired in `src/bootstrap/effects.ts`) when
+     `clipboard.writeText` is missing or rejects; and `execCopy()` in
+     `src/features/clipboard/scene-select.js`, which `runClipboardCommand` tries first for
+     a selected-scene copy or cut, with the Clipboard API as its fallback.
    IME and spellcheck in a draft stay the browser's, as in a script cell
    (§5), and the by-hand check list's Japanese-IME and spellcheck lines
    (§11) cover the comment composer and a reply box too.
