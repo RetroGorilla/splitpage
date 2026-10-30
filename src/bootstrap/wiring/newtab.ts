@@ -2,7 +2,7 @@ import { updateControls } from "./update.ts";
 import { startNewTab as mountNewTab } from "../../features/newtab/newtab.ts";
 import type { NewTabMount, NewTabPorts } from "../../features/newtab/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { actions } from "./ports/actions.ts";
 import { documentReader } from "./ports/document.ts";
@@ -30,7 +30,7 @@ export function mountNewTabFeature(): NewTabMount {
     const ports: NewTabPorts = {
       document: documentReader,
       place,
-      desktop: runningOnDesktop,
+      desktop: presence.running,
       recents,
       launch,
       lastFile,

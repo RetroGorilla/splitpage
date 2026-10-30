@@ -121,3 +121,29 @@ test("a comment both sides hold gets copies of their replies, so migrateRows wri
   assert.equal("author" in mineReply, false);
   assert.equal("author" in theirReply, false);
 });
+
+test("mergeStates hands back the merge's conflicts and counts as they are, each side's text on its own side", () => {
+  const ports = portsFor();
+  const base = migrated({ docId: "d" + "1".repeat(32), rows: [{ id: "r1", audioText: "hello" }] });
+  const mine = jsonCopy(base);
+  const theirs = jsonCopy(base);
+  ((mine.rows as Item[])[0] as Item).audioText = "hello there";
+  ((theirs.rows as Item[])[0] as Item).audioText = "hello you";
+  (mine.rows as Item[]).push({ id: "r2", audioText: "m" });
+  (theirs.rows as Item[]).push({ id: "r3", audioText: "t" });
+  const r = mergeStates(base, mine, theirs, ports);
+  assert.deepEqual(r.conflicts, [{ rowId: "r1", field: "audioText", mine: "hello there", theirs: "hello you" }]);
+  assert.deepEqual(r.stats, { rowsFromThem: 1, rowsFromMe: 0, rowsAddedByMe: 1, rowsAddedByThem: 1 });
+});
+
+test("mergeStates with no base merges the two as new, and its migrate ports are left as they were", () => {
+  const ports = portsFor(WITH_PROBE);
+  const before = Object.assign({}, ports.migrate);
+  const mine = migrated({ docId: "d" + "1".repeat(32), rows: [{ id: "r1", audioText: "hello" }] }, WITH_PROBE);
+  const theirs = migrated({ docId: "d" + "1".repeat(32), rows: [{ id: "r2", audioText: "hello" }] }, WITH_PROBE);
+  const r = mergeStates(null, mine, theirs, ports);
+  assert.deepEqual((r.merged.rows as Item[]).map((x) => x.id), ["r1", "r2"]);
+  assert.deepEqual(Object.assign({}, ports.migrate), before);
+  assert.equal((ports.migrate as { fields?: unknown }).fields, undefined, "the table the merge ran with is not left on the caller's migrate ports");
+  assert.equal(r.merged.probe, "start");
+});

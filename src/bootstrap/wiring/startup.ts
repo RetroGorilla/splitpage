@@ -24,12 +24,12 @@ import { localFilesOwner } from "./local-files.ts";
 import { seedCheckPasses } from "../../adapters/page/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
 import { notifyDesktopDocumentState } from "./desktop-owners.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { applyTakenDraft, draftTaker } from "./drafts.ts";
 
 export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument | null, MergedStates> {
   return {
-    desktop: runningOnDesktop(),
+    desktop: presence.running(),
     draft: {
       taker: draftTaker(),
       applyDraft: applyTakenDraft

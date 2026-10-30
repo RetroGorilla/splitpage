@@ -1,4 +1,3 @@
-import { productionGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../src/application/tag-panel-state.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -10,6 +9,7 @@ import {
   productionSelection,
   pruneProductionSelection,
   resetProductionPanelState,
+  tagPanelState,
   selectedKeys,
   startProductionEditing
 } from "../../src/bootstrap/wiring/production-editing-owners.ts";
@@ -94,29 +94,30 @@ test("panel reset clears tag UI, tag confirmation and production selection in or
   let serial = 0;
   const stop = startProductionEditing({
     start() { return ++serial; },
-    stop(handle) { seen.push([handle, tagRenamingKey(), selection.selectedKeys()]); }
+    stop(handle) { seen.push([handle, panel.tagRenamingKey(), selection.selectedKeys()]); }
   });
   const selection = productionSelection();
+  const panel = tagPanelState();
   try {
     deleteConfirmation().arm("row", "r1", () => {});
     deleteConfirmation().arm("comment", "c1", () => {});
     deleteConfirmation().arm("tag", "t1", () => {});
     productionSelection().toggle("hat");
     productionSelection().arm(() => {});
-    setTagRenaming("hat");
-    setTagAddingPerson("hat");
-    setTagExpanded("hat");
-    setProductionGroupBy("person");
+    panel.setTagRenaming("hat");
+    panel.setTagAddingPerson("hat");
+    panel.setTagExpanded("hat");
+    panel.setProductionGroupBy("person");
     seen.length = 0;
     resetProductionPanelState();
     assert.deepEqual(seen, [[3, null, ["hat"]], [4, null, []]]);
     assert.equal(deleteConfirmation().armedId("tag"), null);
     assert.equal(deleteConfirmation().armedId("row"), "r1");
     assert.equal(deleteConfirmation().armedId("comment"), "c1");
-    assert.equal(tagRenamingKey(), null);
-    assert.equal(tagAddingPersonKey(), null);
-    assert.equal(tagExpandedKey(), null);
-    assert.equal(productionGroupBy(), "cat");
+    assert.equal(panel.tagRenamingKey(), null);
+    assert.equal(panel.tagAddingPersonKey(), null);
+    assert.equal(panel.tagExpandedKey(), null);
+    assert.equal(panel.productionGroupBy(), "cat");
     assert.deepEqual(selectedKeys(), []);
     assert.equal(productionSelection().anchorKey(), null);
     assert.equal(bulkDeleteArmed(), false);

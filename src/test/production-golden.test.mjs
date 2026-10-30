@@ -14,7 +14,7 @@ import { bulkTagCell, healTagRegistry, tagsInField } from "../features/tags/prod
 import { tagKey } from "../core/document/tags.ts";
 import { tagOccurrences } from "../core/production/tags.ts";
 import { tagStatusRank } from "../core/document/tags.ts";
-import { bulkTagRows } from "../application/commands/bulk-tags.ts";
+import { bulkTagRows } from "../bootstrap/wiring/production-index.ts";
 import { productionIndex } from "../application/production/index-owner.ts";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { productionReaders } from "../bootstrap/document-ports.ts";
@@ -135,7 +135,7 @@ function repairAll(out) {
   out.brollRepair = sameAsOr("brollRead", out.brollRead, repair);
   out.shotsAfterRepair = unchangedOr(shotsBefore, currentDocument().brollShots);
   const rowsBefore = jsonCopy(currentDocument().rows.map((r) => r.visualText));
-  out.anchored = anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml });
+  out.anchored = anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false });
   out.visualAfterAnchoring = unchangedOr(rowsBefore, currentDocument().rows.map((r) => r.visualText));
   out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(brollEntries()));
   return out;

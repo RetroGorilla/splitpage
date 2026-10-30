@@ -1,7 +1,6 @@
 import { mimeForFilename } from "../../../shared/file-names.js";
 import { strBytes } from "../formats/bytes.ts";
-import { desktopPort } from "../desktop/desktop-port.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { desktopPort, runningOnDesktop } from "../desktop/desktop-port.ts";
 
 export type Delivered = "saved" | "cancelled" | "failed";
 

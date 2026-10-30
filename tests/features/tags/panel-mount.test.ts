@@ -66,7 +66,8 @@ function fixture() {
     personColors: { personColor: () => "blue" },
     undo: { breakCoalescing: () => { calls.push("undo"); } },
     notices: fakeNotices().notices,
-    ids: migration.ids
+    ids: migration.ids,
+    bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 })
   };
   return { ports, calls, edits, doc, pending, deletion, selection };
 }

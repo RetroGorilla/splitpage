@@ -29,6 +29,7 @@ function setup(doc: ValidatedDocument | null) {
     caretSpot: () => {},
     position: () => 0,
     anchors: { inRows: (rows) => { anchored.push(...rows.map((r) => r.id)); return 0; }, htmlLines: () => [], keyHtml: (id, text) => id + text },
+    anchoring: { reset: () => {} },
     refresh: (job) => { refreshes.push(job); }
   };
   return { edits, cellEdits, refreshes, anchored, owner: createBrollRecords(ports) };
