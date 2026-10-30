@@ -86,9 +86,9 @@ and both the menu's painting and the action's availability call it:
 
 | State | Function |
 | --- | --- |
-| Save to file, and its label | `saveBackItemState()`, `18-local-files.js` |
-| Export again, and its label | `exportAgainItemState()`, `18c-export-dialog.js` |
-| Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `appDataImportShown()`, `20f-desktop.js` |
+| Save to file, and its label | `saveBackItemState()`, `src/application/save/import-saving.ts` |
+| Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.js` |
+| Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `src/adapters/desktop/desktop-port.ts`; `appDataImportShown()`, `src/features/desktop/desktop.js` |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
@@ -106,10 +106,10 @@ says `visible: false`), because the 3.1 command menu did not offer it.
 
 ## The command menu
 
-`18d-command-menu.js` lists `appActions.list()` each time it renders, with
+`src/features/command-menu/command-menu.ts` lists `appActions.list()` each time it renders, with
 nothing cached between openings, plus the export formats, which are not
-actions until milestone 5's format registry. `LIST_ORDER` there keeps the 3.1
-order. An action it does not name is listed after the named ones, in the
+actions until milestone 5's format registry. `LIST_BEFORE_EXPORTS` and
+`LIST_AFTER_EXPORTS` there keep the 3.1 order. An action it does not name is listed after the named ones, in the
 order it was registered, under its own `group`; a group the command menu does
 not know is listed after the known groups. So an action registered anywhere
 shows up in the command menu with no edit to it. The command menu never lists
@@ -170,12 +170,12 @@ reads it. It reads state, not what the page last painted:
 | Blocker | Reason | Read from |
 | --- | --- | --- |
 | `loading` | Still loading… | `S.state` |
-| `dialog` | Close the open dialog first | any `.modal-backdrop` not `hidden` (`dialogOpen()`, `screen.ts`) |
-| `launcher` | Close the open dialog first | the command menu not `hidden`, unless it is the one asking (`launcherOpen()`, `screen.ts`) |
-| `tour` | Finish or skip the tour first | `tourShowing()`, `20c-help.js` (a tour suspended for Help is not showing) |
+| `dialog` | Close the open dialog first | any `.modal-backdrop` not `hidden` (`page.dialogShown()`, `src/adapters/page/overlays.ts`, read in `screen-state.ts`) |
+| `launcher` | Close the open dialog first | the command menu not `hidden`, unless it is the one asking (`launcherOpen()`, `screen-state.ts`) |
+| `tour` | Finish or skip the tour first | `tourShowing()`, `src/features/help/help.ts` (a tour suspended for Help is not showing) |
 | `prompter` | Close Present first | `prompterState.isOpen()` (the prompter state owner, through `wiring/ports/preferences.ts`) |
-| `writer` | Close the writer first | `writerOpen`, `19-writer.js` |
-| `shotlist` | Close the shot list first | `brollPageOpen()`, `08d-broll-panel.js` |
+| `writer` | Close the writer first | `viewFlags().writerOpen()`, `wiring/ports/preferences.ts` |
+| `shotlist` | Close the shot list first | `brollPageOpen()`, `src/features/broll/panel.js` |
 
 An action names the blockers it is refused under, and `inFront()` picks the
 one in front, in the order of this table: still loading first, then a dialog,
@@ -250,7 +250,7 @@ reaches the registry as its presenter, and the native menu's routing (which
 needs the File menu's close and `handleFileMenuAction`) reaches `20f-desktop.js`
 as a runner. Two more rules follow the same principle. The setup wizard closes
 when a File menu item is chosen by registering with `onFileMenuChoice()` in
-`18-local-files.js`, which it already imported. The Settings dialog shows
+`src/features/file-menu/local-files.js`, which it already imported. The Settings dialog shows
 Import app data when the `import-app-data` action is visible, asking the
 registry rather than `20f-desktop.js`.
 `startApp(wiring)` in `src/bootstrap/app.ts` calls
@@ -313,7 +313,7 @@ these overlays, and the command menu cannot open over them.
 
 One order from 3.1 is kept against the rule, for the setup wizard. Choosing
 a File menu item, from the File menu or from the desktop app's native menu,
-runs the `onFileMenuChoice()` listeners (`18-local-files.js`) before the
+runs the `onFileMenuChoice()` listeners (`src/features/file-menu/local-files.js`) before the
 action is asked whether it can run, and the wizard's listener closes the
 wizard. So with the wizard open, the native menu's Open (or any other File
 menu item, Save a copy and Export among them) closes the wizard and runs,
@@ -347,7 +347,7 @@ formats are not actions yet (milestone 5) and keep the File menu item's own
 dispatch, but the runner refuses one under a dialog or the command menu
 first, through the presenter the bootstrap gives it, so a refused format is
 neither run nor remembered for Export again. Before that check it runs the
-`onFileMenuChoice()` listeners (`noteFileMenuChoice()`, `18-local-files.js`),
+`onFileMenuChoice()` listeners (`noteFileMenuChoice()`, `src/features/file-menu/local-files.js`),
 as choosing any File menu item does, so a format chosen over the setup
 wizard closes the wizard and exports (`275-menu-refused-under-overlay.txt`).
 
@@ -399,7 +399,7 @@ Browser suites `268-actions-every-surface.txt`,
 `272-view-actions-every-surface.txt`, `273-help-actions-every-surface.txt`,
 `274-more-actions-every-surface.txt` and `286-find-from-every-surface.txt`
 check each surface, and the shortcut refused under a dialog.
-`276-availability-follows-state.txt`, `277-refusals-say-why.txt`,
+`276-availability-follows-state.txt`,
 `278-commands-as-before.txt`, `279-command-menu-listing.txt`,
 `280-other-surfaces.txt` and `281-script-zoom-commands.txt` check the rules
 above; all but 276 pass against the code before the registry
@@ -438,7 +438,7 @@ Files the move touched:
 | File | Change |
 | --- | --- |
 | `src/features/script-zoom/actions.ts` | The three definitions. Availability: the keys act only in the editor view (`scriptViewActive()`, as their listener checked); the View menu acts anywhere, as before. `visible: false`, as 3.1's command menu did not list them |
-| `src/bootstrap/actions.ts` | One line: `registerZoomActions(registry)` |
+| `src/bootstrap/actions.ts` | One line: `registerAll(registry, scriptZoomActions())` |
 | `src/features/script-zoom/script-zoom.ts` (the former `05s-script-zoom.js`) | Its keydown listener stays where it is (a document capture listener that matches `+`, `=`, `-`, `0` and their key codes, which a chord cannot express) but invokes the action by id and keeps the key only when it ran; `scriptViewActive()` is exported for the definitions; `runScriptZoomCommand()` is gone |
 | The former `20f-desktop.js` (removed) | The special case and its import are gone; the generic path runs the id |
 

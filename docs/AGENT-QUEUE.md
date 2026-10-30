@@ -147,7 +147,7 @@ Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #
 Structure section: table of symbol, file, action, grep result (as in #936); lines removed; protected files skipped.
 ```
 
-## AQ-4 [ ] Fix drift in four design docs
+## AQ-4 [x] Fix drift in four design docs
 
 ```text
 Task: docs/architecture/feature-ports.md, docs/architecture/actions.md, docs/architecture/session.md and docs/DOCUMENT-MODEL.md describe code that has moved since they were written. Fix statements that are false today. Docs only.
