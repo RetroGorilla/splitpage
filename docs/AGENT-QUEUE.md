@@ -670,7 +670,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change", which stamp is now recorded on each platform, the test names, smoke count.
 ```
 
-## AQ-30 [ ] Fix the flaky suite 266-header-collab-condense (tracker I-30)
+## AQ-30 [x] Fix the flaky suite 266-header-collab-condense (tracker I-30)
 
 Needs: none.
 Files: .claude/skills/run-splitpage-app/tests/266-header-collab-condense.txt only.
