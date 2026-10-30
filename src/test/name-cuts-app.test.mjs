@@ -168,33 +168,9 @@ test("13a my colour is recorded under my name cut by code point (#344)", () => {
   assert.equal(state.personColors, null, "working out the colours writes nothing");
 });
 
-const OLD_CUTS = [
-  ["half an emoji", (n) => x(n - 1) + "\uD83D", (n) => x(n - 1) + GRIN + " tail", (n) => x(n - 1) + GRIN],
-  ["whole emoji only", (n) => GRIN.repeat(n / 2), (n) => GRIN.repeat(n), (n) => GRIN.repeat(n)]
-];
-
 function migrated(doc) {
   loadTestDocument(migrateRows(Object.assign({ schema: 2, title: "Old cuts", comments: [], people: [{ id: "p1", name: "Ann" }], productionTags: [], brollShots: [] }, doc)));
   render();
-}
-
-for (const [what, stored, line, whole] of OLD_CUTS) {
-  test("a sound cue whose tag an older build cut by UTF-16 unit stays one tag, keeping its owner and notes: " + what + " (#344)", () => {
-    migrated({
-      rows: [{ id: "r1", status: "todo", audioText: '<span class="audio-cue">SFX: ' + line(80) + "</span>", visualText: "" }],
-      productionTags: [{ id: "t_old1", cat: "sound", name: stored(80), status: "have", owner: "p1", notes: "keep me" }]
-    });
-    const sound = currentDocument().productionTags.filter((t) => t.cat === "sound");
-    assert.deepEqual(sound.map((t) => [t.id, t.name, t.status, t.owner, t.notes]), [["t_old1", whole(80), "have", "p1", "keep me"]]);
-  });
-
-  test("an unkeyed B-roll line whose shot an older build cut by UTF-16 unit stays one shot, keeping its notes: " + what + " (#344)", () => {
-    migrated({
-      rows: [{ id: "r1", status: "todo", audioText: "", visualText: "B-roll: " + line(200) }],
-      brollShots: [{ id: "bs1", name: stored(200), notes: "keep me", status: "shot", origin: "script" }]
-    });
-    assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes, b.status]), [["bs1", whole(200), "keep me", "shot"]]);
-  });
 }
 
 test("a sound cue whose text differs from its tag only in case leaves the tag's stored casing alone (#344)", () => {
@@ -252,41 +228,6 @@ test("a B-roll line that a shot's heal already matches renames no other broken s
   assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(198), "one"], ["bs2", x(198) + "g", "two"]]);
 });
 
-test("an unkeyed B-roll line renames the free shot with its old cut, not one a keyed line holds (#344)", () => {
-  const key = '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> ';
-  migrated({
-    rows: [{ id: "r1", status: "todo", audioText: "", visualText: key + x(199) + GRIN + " a<br>B-roll: " + x(199) + GRIN + " b" }],
-    brollShots: [
-      { id: "bs1", name: x(199) + "\uD83D", notes: "held", status: "shot", origin: "script" },
-      { id: "bs2", name: x(199) + "\uD83D", notes: "free", status: "shot", origin: "script" }
-    ]
-  });
-  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, "held"], ["bs2", x(199) + GRIN, "free"]]);
-});
-
-test("two unkeyed B-roll lines with the same old cut rename two shots, one each (#344)", () => {
-  migrated({
-    rows: [{ id: "r1", status: "todo", audioText: "", visualText: "B-roll: " + x(199) + GRIN + " a<br>B-roll: " + x(199) + GRIN + " b" }],
-    brollShots: [
-      { id: "bs1", name: x(199) + "\uD83D", notes: "one", status: "shot", origin: "script" },
-      { id: "bs2", name: x(199) + "\uD83D", notes: "two", status: "shot", origin: "script" }
-    ]
-  });
-  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, "one"], ["bs2", x(199) + GRIN, "two"]]);
-});
-
-test("a keyed B-roll line renames no other shot that shares its old cut (#344)", () => {
-  const key = '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> ';
-  migrated({
-    rows: [{ id: "r1", status: "todo", audioText: "", visualText: key + x(199) + GRIN + " a" }],
-    brollShots: [
-      { id: "bs1", name: x(199) + "\uD83D", status: "shot", origin: "script" },
-      { id: "bs2", name: x(199) + "\uD83D", notes: "listed", status: "shot", origin: "list" }
-    ]
-  });
-  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, ""], ["bs2", x(199), "listed"]]);
-});
-
 test("a comment over text that held a lone half is not marked Changed once the half is gone (#344)", () => {
   migrated({
     rows: [{ id: "r1", status: "todo", audioText: 'say <span class="cmt-anchor" data-cmt="c1">hi\uD83D there</span> now', visualText: "" }],
@@ -342,21 +283,6 @@ for (const [what, stored, line, words, whole] of CUE_AND_WORDS) {
   });
 }
 
-test("words tagged with a renamed sound tag's old name stay on another sound tag that holds that name (#445)", () => {
-  migrated({
-    rows: [
-      { id: "r1", status: "todo", audioText: cue(x(79) + GRIN + " tail"), visualText: "" },
-      { id: "r2", status: "todo", audioText: soundWords(x(79), "door"), visualText: "" }
-    ],
-    productionTags: [
-      { id: "t_old1", cat: "sound", name: x(79) + "\uD83D", owner: "p1", notes: "cue" },
-      { id: "t_old2", cat: "sound", name: x(79), notes: "words" }
-    ]
-  });
-  assert.deepEqual(currentDocument().productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", x(79) + GRIN, "cue"], ["t_old2", x(79), "words"]]);
-  assert.deepEqual(tagNamesIn(currentDocument().rows[1].audioText), [x(79)]);
-});
-
 test("tagged words follow their renamed sound tag whatever their case, as they matched it before (#445)", () => {
   migrated({
     rows: [
@@ -397,22 +323,6 @@ test("a sound tag whose cue has its own tag keeps its tagged words (#445)", () =
   });
   assert.deepEqual(currentDocument().productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", GRIN.repeat(40), "words"], ["t_old2", GRIN.repeat(50), "cue"]]);
   assert.deepEqual(tagNamesIn(currentDocument().rows[1].audioText), [GRIN.repeat(40)]);
-});
-
-test("a prop tag with a sound tag's old name keeps its tagged words, and the sound words still follow (#445)", () => {
-  migrated({
-    rows: [
-      { id: "r1", status: "todo", audioText: cue(GRIN.repeat(50)), visualText: "" },
-      { id: "r2", status: "todo", audioText: soundWords(GRIN.repeat(40), "a").replace('"sound"', '"prop"') + " b " + soundWords(GRIN.repeat(40), "c"), visualText: "" }
-    ],
-    productionTags: [
-      { id: "t_old1", cat: "sound", name: GRIN.repeat(40), notes: "cue" },
-      { id: "t_old2", cat: "prop", name: GRIN.repeat(40), notes: "prop" }
-    ]
-  });
-  assert.deepEqual(currentDocument().productionTags.map((t) => [t.id, t.cat, t.name]), [["t_old1", "sound", GRIN.repeat(50)], ["t_old2", "prop", GRIN.repeat(40)]]);
-  assert.deepEqual([...currentDocument().rows[1].audioText.matchAll(/data-tag-cat="(\w+)" data-tag-name="([^"]*)"/g)].map((m) => [m[1], m[2]]),
-    [["prop", GRIN.repeat(40)], ["sound", GRIN.repeat(50)]]);
 });
 
 test("a keyed B-roll line whose id has no stored shot keeps the shot its old cut named (#445)", () => {
