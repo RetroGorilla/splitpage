@@ -10,7 +10,6 @@ const TEST_FILE = /\.test\.(?:ts|mts|cts|js|mjs|cjs)$/;
 const AREAS = [
   { root: "core", perFolder: true },
   { root: "application", perFolder: false },
-  { root: "contracts", perFolder: false },
   { root: "adapters", perFolder: false },
   { root: "features", perFolder: true },
   { root: "bootstrap", perFolder: false },

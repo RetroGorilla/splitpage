@@ -17,7 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ActionRegistry } from "../../src/application/actions.ts";
-import { actionForKey } from "../../src/application/shortcuts.ts";
+import { createChordReader } from "../../src/application/shortcuts.ts";
 import { autosaveActions, fileMenuActions, mountFileMenuDropdownFeature, stopFileMenuDropdownFeature } from "../../src/bootstrap/wiring/file-menu.ts";
 import { settingsActions } from "../../src/bootstrap/wiring/settings.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
@@ -72,7 +72,7 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
 
 function pressed(registry: ActionRegistry, key: string, mods: { shift?: boolean; alt?: boolean; meta?: boolean } = {}): string | null {
   const input = { key, ctrlKey: !mods.meta, metaKey: Boolean(mods.meta), shiftKey: Boolean(mods.shift), altKey: Boolean(mods.alt) };
-  return actionForKey(registry.shortcuts(), input)?.id ?? null;
+  return createChordReader().actionForKey(registry.shortcuts(), input)?.id ?? null;
 }
 
 test("each action declares the chords its menu item shows", () => {

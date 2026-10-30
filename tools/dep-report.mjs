@@ -13,7 +13,7 @@ const EXCLUDED = [/^node_modules\//, /\/node_modules\//, /^\.claude\/handoff\//,
 const RESOLVE_SUFFIXES = ["", ".ts", ".js", ".mjs", ".cjs", ".mts", ".cts", ".json", "/index.ts", "/index.js", "/index.mjs"];
 const BUILTINS = new Set(builtinModules.flatMap((m) => [m, m.replace(/^node:/, "")]));
 
-export const MIGRATED_LAYERS = ["core", "contracts", "application", "adapters", "features", "bootstrap", "legacy"];
+export const MIGRATED_LAYERS = ["core", "application", "adapters", "features", "bootstrap", "legacy"];
 const NON_PRODUCTION = ["tests", "tools", "other"];
 
 const CORE_DEPENDENCIES = {
@@ -83,7 +83,7 @@ export function layerOf(path) {
   if (/^src\/core\//.test(path)) return "core";
   const feature = /^src\/features\/([^/]+)\//.exec(path);
   if (feature) return `features/${feature[1]}`;
-  const top = /^src\/(application|contracts|adapters|bootstrap|legacy|starters)\//.exec(path);
+  const top = /^src\/(application|adapters|bootstrap|legacy|starters)\//.exec(path);
   if (top) return top[1];
   if (path.startsWith("src/js/")) return "legacy-js";
   if (path.startsWith("src/")) return "src-unknown";
@@ -117,23 +117,22 @@ export function layerAllows(source, target) {
   switch (source) {
     case "shared": return false;
     case "starters": return false;
-    case "contracts": return target === "shared";
-    case "application": return isCore(target) || target === "contracts" || target === "shared";
-    case "adapters": return isCore(target) || ["application", "contracts", "shared"].includes(target);
-    case "legacy": return isCore(target) || ["legacy-js", "application", "contracts", "adapters", "shared"].includes(target);
+    case "application": return isCore(target) || target === "shared";
+    case "adapters": return isCore(target) || ["application", "shared"].includes(target);
+    case "legacy": return isCore(target) || ["legacy-js", "application", "adapters", "shared"].includes(target);
     case "bootstrap": return true;
     default:
-      if (source.startsWith("features/")) return isCore(target) || target === "features/common" || ["application", "contracts", "shared"].includes(target);
+      if (source.startsWith("features/")) return isCore(target) || target === "features/common" || ["application", "shared"].includes(target);
       return true;
   }
 }
 
 export function platformImportAllowed(layer) {
-  return !(isCore(layer) || layer.startsWith("features/") || ["shared", "contracts", "application"].includes(layer));
+  return !(isCore(layer) || layer.startsWith("features/") || ["shared", "application"].includes(layer));
 }
 
 export function platformGlobalsBanned(layer) {
-  return isCore(layer) || ["shared", "contracts", "application"].includes(layer);
+  return isCore(layer) || ["shared", "application"].includes(layer);
 }
 
 function packageName(spec) {
