@@ -73,7 +73,7 @@ OVERLAP: before merging, list the files changed by every other open PR from this
 PROTECTED PATHS (never merge a PR that touches these; stop, leave the PR open and report to Adam instead):
 - anything for save, close, quit, recovery or drafts: src/application/save/, src/application/session/, src/application/recovery/, src/adapters/files/, src/adapters/storage/, src/adapters/desktop/
 - desktop/ (main process, preload, IPC) and shared/ IPC contracts
-- undo, editing and typing hot path: src/application/editing/, src/features/editing/, src/features/rows/render.js, the whole of src/core/document/ (edit operations, migration, document format)
+- undo, editing and typing hot path: src/application/editing/, src/features/editing/, src/features/rows/render.*, the whole of src/core/document/ (edit operations, migration, document format)
 - merging and the project file format: src/core/merge/, src/features/merge/, src/adapters/formats/project-file*, src/adapters/formats/splitpage-file*
 - startup: src/bootstrap/main.* and src/bootstrap/wiring/startup*
 - .github/workflows/, release.yml, package.json dependencies, eslint.config.mjs, tools/dep-report.mjs, tools/comment-gate.mjs, AGENTS.md
@@ -156,7 +156,7 @@ Structure section: "no structural change"; mutants generated / killed / equivale
 Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #936), now for src/features/. Remove exports nothing uses.
 
 1. For each export in src/features/ (all .ts and .js), grep the whole repo (src/, tests/, tools/, desktop/, shared/, build.mjs, docs/) by whole word. Unused anywhere: delete the code. Used only inside its own file: drop the `export` keyword. Dynamic use (import(), string-built names, namespace imports iterated) counts as use: leave and list.
-2. Skip src/features/rows/render.js, src/features/editing/ and src/features/rows/routes.ts (protected or hot path). List any candidates you skipped there.
+2. Skip src/features/rows/render.ts, src/features/editing/ and src/features/rows/routes.ts (protected or hot path). List any candidates you skipped there.
 3. A test that exists only for a deleted function is deleted with it; name it. No other test is deleted or changed.
 4. start<Name>, mount<Name>, and anything imported from src/bootstrap/ is used. The composition root imports each mount from its own wiring module; check bootstrap before judging.
 5. Run npm run check:deps, node tools/code-map.mjs, lint, typecheck. Prune dep-baseline entries that resolved.
@@ -249,7 +249,7 @@ Structure section: "no structural change"; mutants generated / killed / equivale
 Task: find modules under src/features/ (not mount.ts, not ports.ts) that contain pure logic (string, array or DOM-free computation) and have no test, and add tests. Tests only.
 
 1. grep tests/features/ and src/features/**/*.test.ts for each module. Put the tested/untested table in the PR.
-2. Skip src/features/rows/render.js, src/features/editing/ and anything that needs a full app (those are browser-suite territory).
+2. Skip src/features/rows/render.ts, src/features/editing/ and anything that needs a full app (those are browser-suite territory).
 3. Add tests under tests/features/<feature>/ using the existing DOM setup and fakes (tests/features/fakes.ts). Test real behaviour, no mocks of the unit under test.
 4. Do not change src/. If a test exposes a bug, leave that test out and describe it in the PR.
 5. If the AQ-3 PR is still open, skip any module it touches.
