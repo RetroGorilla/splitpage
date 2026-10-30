@@ -1,6 +1,6 @@
 import { createHistoryOwner } from "../../application/recovery/history.js";
 import type { HistoryOwner, HistoryOwnerPorts } from "../../application/recovery/history-ports.ts";
-import { exposeTestHook, withdrawTestHook } from "../../features/common/test-hooks.ts";
+import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { historyPorts } from "./ports/history.ts";
 
 let started: HistoryOwner | null = null;
@@ -15,11 +15,12 @@ export function mountHistoryOwner(ports: HistoryOwnerPorts = historyPorts()): Hi
   stopHistoryOwner();
   const mine: HistoryOwner = createHistoryOwner();
   const dispose = mine.startHistory(ports);
-  exposeTestHook("__historyTest", mine, () => mine.testControls());
+  let withdrawHook: (() => void) | null = null;
+  exposeTestHook("__historyTest", () => mine.testControls(), (withdraw) => { withdrawHook = withdraw; });
   started = mine;
   stop = () => {
     started = null;
-    withdrawTestHook("__historyTest", mine);
+    withdrawHook?.();
     void dispose();
   };
   return mine;
