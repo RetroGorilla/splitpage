@@ -1,11 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import ts from "typescript";
+
+const execFileAsync = promisify(execFile);
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 const APPLICATION = "src/application";
@@ -165,24 +168,74 @@ test("E12: the application's modules do nothing when they are loaded: only types
 
 type ExportKind = "function" | "primitive" | "frozen" | "mutable";
 
-function exportKinds(paths: readonly string[]): Record<string, Record<string, ExportKind>> {
-  const imports = paths.map(function (path, i) { return "import * as m" + i + " from " + JSON.stringify(pathToFileURL(join(REPO, path)).href) + ";"; });
-  const table = paths.map(function (path, i) { return JSON.stringify(path) + ": m" + i; }).join(", ");
-  const script = imports.join("\n") + "\nconst kinds = (value) => typeof value === \"function\" ? \"function\" : typeof value !== \"object\" || value === null ? \"primitive\" : Object.isFrozen(value) ? \"frozen\" : \"mutable\";\n" +
-    "const modules = { " + table + " };\n" +
-    "process.stdout.write(JSON.stringify(Object.fromEntries(Object.entries(modules).map(([path, exports]) => [path, Object.fromEntries(Object.entries(exports).map(([name, value]) => [name, kinds(value)]))]))));\n";
+const POOL = 4;
+const BATCH = 10;
+
+const LOAD_SCRIPT = "const kinds = (value) => typeof value === \"function\" ? \"function\" : typeof value !== \"object\" || value === null ? \"primitive\" : Object.isFrozen(value) ? \"frozen\" : \"mutable\";\n" +
+  "const result = {};\n" +
+  "for (const url of process.argv.slice(2)) {\n" +
+  "  const exports = await import(url);\n" +
+  "  result[url] = Object.fromEntries(Object.entries(exports).map(([name, value]) => [name, kinds(value)]));\n" +
+  "}\n" +
+  "process.stdout.write(JSON.stringify(result));\n";
+
+const waiting: (() => void)[] = [];
+let running = 0;
+
+async function inPool<T>(task: () => Promise<T>): Promise<T> {
+  while (running >= POOL) await new Promise<void>(function (resolve) { waiting.push(resolve); });
+  running++;
+  try {
+    return await task();
+  } finally {
+    running--;
+    waiting.shift()?.();
+  }
+}
+
+async function allSettledOrThrow<T>(tasks: readonly Promise<T>[]): Promise<T[]> {
+  const settled = await Promise.allSettled(tasks);
+  const failed = settled.find(function (s): s is PromiseRejectedResult { return s.status === "rejected"; });
+  if (failed) throw failed.reason;
+  return settled.map(function (s) { return (s as PromiseFulfilledResult<T>).value; });
+}
+
+async function loadBatch(script: string, paths: readonly string[]): Promise<Record<string, Record<string, ExportKind>>> {
+  const urls = paths.map(function (path) { return pathToFileURL(join(REPO, path)).href; });
+  const out = await inPool(function () { return execFileAsync(process.execPath, [script, ...urls], { cwd: REPO, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }); });
+  const byUrl = JSON.parse(out.stdout) as Record<string, Record<string, ExportKind>>;
+  return Object.fromEntries(paths.map(function (path, i) { return [path, byUrl[urls[i] as string] as Record<string, ExportKind>]; }));
+}
+
+async function loadBatchNamingFailure(script: string, paths: readonly string[]): Promise<Record<string, Record<string, ExportKind>>> {
+  try {
+    return await loadBatch(script, paths);
+  } catch (error) {
+    if (paths.length > 1) {
+      await allSettledOrThrow(paths.map(function (path) { return loadBatchNamingFailure(script, [path]); }));
+      throw new Error(paths.join(", ") + " load alone but fail together:\n" + String((error as { stderr?: string }).stderr ?? error).split("\n").slice(0, 12).join("\n"), { cause: error });
+    }
+    const stderr = (error as { stderr?: string }).stderr ?? String(error);
+    throw new Error(paths[0] + " fails when it is loaded on its own:\n" + stderr.split("\n").slice(0, 12).join("\n"), { cause: error });
+  }
+}
+
+async function exportKinds(paths: readonly string[]): Promise<Record<string, Record<string, ExportKind>>> {
   const folder = mkdtempSync(join(tmpdir(), "owners-load-"));
   try {
-    const file = join(folder, "load.mjs");
-    writeFileSync(file, script);
-    return JSON.parse(execFileSync(process.execPath, [file], { cwd: REPO, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })) as Record<string, Record<string, ExportKind>>;
+    const script = join(folder, "load.mjs");
+    writeFileSync(script, LOAD_SCRIPT);
+    const batches: string[][] = [];
+    for (let i = 0; i < paths.length; i += BATCH) batches.push(paths.slice(i, i + BATCH));
+    const loaded = await allSettledOrThrow(batches.map(function (batch) { return loadBatchNamingFailure(script, batch); }));
+    return Object.assign({}, ...loaded) as Record<string, Record<string, ExportKind>>;
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
 }
 
-test("E12: importing the application's modules constructs nothing: each export is a function, a primitive or frozen data", () => {
-  const loaded = exportKinds(MODULES);
+test("E12: importing the application's modules constructs nothing: each export is a function, a primitive or frozen data", async () => {
+  const loaded = await exportKinds(MODULES);
   assert.deepEqual(Object.keys(loaded).sort(), MODULES);
   for (const [path, exports] of Object.entries(loaded)) {
     for (const [name, kind] of Object.entries(exports)) {

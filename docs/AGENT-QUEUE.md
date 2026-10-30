@@ -8,9 +8,25 @@ This file is process, not product. Delete it when the queue stays empty.
 
 1. Read `AGENTS.md`, then this file down to the task list.
 2. Run `git fetch origin 4.1-development` and read the **latest** version of this file from there.
+2a. Before claiming a task, handle queue additions (next section): if an open PR titled `AQ-add: ...` exists, review and merge it first.
 3. List PRs (`gh pr list --state all --limit 100`, or the GitHub API) and read the state of every PR whose title starts with `AQ-n`: an **open** PR means the task is claimed; a **merged** PR means it is done; a **closed report-only** PR (AQ-6, AQ-14) means it is done; any other **closed, unmerged** PR means the task is free again.
 4. Pick the lowest-numbered task that is unticked (`[ ]`) and unclaimed, whose "Needs" line is satisfied, and that is not marked `STOPS FOR ADAM` unless nothing else is left. Claim it (next section). Do one task per chat.
 5. Work it under the Autonomous run rules. Repeat from step 2 until the queue is empty.
+
+## Queue additions (`AQ-add:`)
+
+People and coordinating agents add tasks to this file. Such a PR is titled `AQ-add: <what>` and is handled by the queue agents themselves, without a person's merge, when **all** of these hold:
+
+- it changes only `docs/AGENT-QUEUE.md`, and only inside the `## AQ-n` task sections (adding a new task with the next free id and a `[ ]` heading, or editing the text of an unclaimed task) or the one-line status notes in the "Task list" section;
+- it does not change any other section: "Start here", "Claim protocol", "Report-only tasks", "When the queue is empty", "Autonomous run rules", "Common rules", the protected-path list, or this section;
+- it edits only a task that is still `[ ]` and has no open or merged PR claiming it (a task in progress or done is never edited by an addition); it changes a heading to `[x]` or `[!]` only when that task's own PR has merged or stopped;
+- it does not remove or weaken a `STOPS FOR ADAM` marker, a `Needs:` line or a report-only label, and no task text grants itself an exemption from any rule, from the protected-path list or from review (a task that does is protected);
+- the PR comes from a branch in this repository, opened by a collaborator of the repository (not a fork);
+- a new task has: an id, a one-line title, a "Needs" line, the files it touches, a `text` fenced brief, a Structure line, and it does not ask for a change to a protected path (a task may name a protected path only if it says `STOPS FOR ADAM`).
+
+Handling: an agent that finds such a PR before claiming a task reviews it with a separate agent against the list above, posts one review comment, and merges it under the Autonomous run rules (green CI on the exact head, `--match-head-commit`). Later additions need no person's merge.
+
+An `AQ-add:` PR that edits anything outside those limits, or any PR that edits the rules, the protected-path list or the claim protocol, is **protected**: review it, then stop and leave it for Adam.
 
 ## Claim protocol
 
@@ -57,10 +73,11 @@ OVERLAP: before merging, list the files changed by every other open PR from this
 PROTECTED PATHS (never merge a PR that touches these; stop, leave the PR open and report to Adam instead):
 - anything for save, close, quit, recovery or drafts: src/application/save/, src/application/session/, src/application/recovery/, src/adapters/files/, src/adapters/storage/, src/adapters/desktop/
 - desktop/ (main process, preload, IPC) and shared/ IPC contracts
-- undo, editing and typing hot path: src/application/editing/, src/features/editing/, src/features/rows/render.js, the whole of src/core/document/ (edit operations, migration, document format)
+- undo, editing and typing hot path: src/application/editing/, src/features/editing/, src/features/rows/render.*, the whole of src/core/document/ (edit operations, migration, document format)
 - merging and the project file format: src/core/merge/, src/features/merge/, src/adapters/formats/project-file*, src/adapters/formats/splitpage-file*
 - startup: src/bootstrap/main.* and src/bootstrap/wiring/startup*
 - .github/workflows/, release.yml, package.json dependencies, eslint.config.mjs, tools/dep-report.mjs, tools/comment-gate.mjs, AGENTS.md
+- docs/AGENT-QUEUE.md itself, except what "Queue additions" allows (task sections and status notes) and the one-heading tick in your own task PR
 If a task's own brief needs to touch one of these, that is a STOP.
 
 STOP and report (a short note in the PR) when:
@@ -103,6 +120,8 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-2 and AQ-3 touch different folders. AQ-4 and AQ-12 edit different docs.
 - AQ-5 is **STOPS FOR ADAM**.
 - AQ-6 and AQ-14 are report-only.
+- AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
+- AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
 
 ## AQ-1 [ ] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -120,7 +139,7 @@ Files touched: the three suite files and any test helper they share. Keep it to 
 Validation section: before/after failure counts per suite for both run modes.
 ```
 
-## AQ-2 [ ] Mutation configs for the formats helpers
+## AQ-2 [x] Mutation configs for the formats helpers
 
 ```text
 Task: tools/mutants/ has configs for core areas (core-document, core-merge, core-production, core-text, core-migrate, core-merge-states). The pure helpers in src/adapters/formats/ have none. Add them and close the gaps they show. Tests and config only.
@@ -133,13 +152,13 @@ Task: tools/mutants/ has configs for core areas (core-document, core-merge, core
 Structure section: "no structural change"; mutants generated / killed / equivalent per file, before and after.
 ```
 
-## AQ-3 [ ] Unused exports in src/features
+## AQ-3 [x] Unused exports in src/features
 
 ```text
 Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #936), now for src/features/. Remove exports nothing uses.
 
 1. For each export in src/features/ (all .ts and .js), grep the whole repo (src/, tests/, tools/, desktop/, shared/, build.mjs, docs/) by whole word. Unused anywhere: delete the code. Used only inside its own file: drop the `export` keyword. Dynamic use (import(), string-built names, namespace imports iterated) counts as use: leave and list.
-2. Skip src/features/rows/render.js, src/features/editing/ and src/features/rows/routes.ts (protected or hot path). List any candidates you skipped there.
+2. Skip src/features/rows/render.ts, src/features/editing/ and src/features/rows/routes.ts (protected or hot path). List any candidates you skipped there.
 3. A test that exists only for a deleted function is deleted with it; name it. No other test is deleted or changed.
 4. start<Name>, mount<Name>, and anything imported from src/bootstrap/ is used. The composition root imports each mount from its own wiring module; check bootstrap before judging.
 5. Run npm run check:deps, node tools/code-map.mjs, lint, typecheck. Prune dep-baseline entries that resolved.
@@ -147,7 +166,7 @@ Task: same job as the earlier cleanup of src/core and src/adapters/formats (PR #
 Structure section: table of symbol, file, action, grep result (as in #936); lines removed; protected files skipped.
 ```
 
-## AQ-4 [ ] Fix drift in four design docs
+## AQ-4 [x] Fix drift in four design docs
 
 ```text
 Task: docs/architecture/feature-ports.md, docs/architecture/actions.md, docs/architecture/session.md and docs/DOCUMENT-MODEL.md describe code that has moved since they were written. Fix statements that are false today. Docs only.
@@ -186,7 +205,7 @@ Task: some owners in src/application/ hold an "install slot" (an empty `let x: T
 4. Write the report to the PR body of your claim PR (a report-only PR; see "Report-only tasks"). Keep it under 60 lines.
 ```
 
-## AQ-7 [ ] Export check runs each module in a child process (R2 leftover)
+## AQ-7 [x] Export check runs each module in a child process (R2 leftover)
 
 ```text
 Task: tests/application/owners-construct-nothing.test.ts has a runtime check over the exports of every src/application/ module. Read PRs #920 and #925 and the test itself to see what that check does today. The known gap: it loads every module in one process, so a module that runs code at import time can leave state behind that hides or causes a problem in another module. Today the test writes one script and runs it once in a single child process with `execFileSync(process.execPath, [file])` (around line 178), which loads every module in that one process. Change it to one child process per module, or per small batch of modules, running the same script shape, and assert the same things per module.
@@ -200,7 +219,7 @@ Files touched: that test file and a helper beside it if needed.
 Structure section: "no structural change"; modules covered before/after; run time before/after.
 ```
 
-## AQ-8 [ ] Unit tests for src/application modules that have none
+## AQ-8 [x] Unit tests for src/application modules that have none
 
 ```text
 Task: list the modules in src/application/ (not types/ports-only files) that no test imports, and add tests for them. Tests only.
@@ -226,13 +245,13 @@ Task: tools/mutants/ has configs for src/core areas. Add one for the pure, logic
 Structure section: "no structural change"; mutants generated / killed / equivalent per module.
 ```
 
-## AQ-10 [ ] Unit tests for pure logic in src/features without a test
+## AQ-10 [x] Unit tests for pure logic in src/features without a test
 
 ```text
 Task: find modules under src/features/ (not mount.ts, not ports.ts) that contain pure logic (string, array or DOM-free computation) and have no test, and add tests. Tests only.
 
 1. grep tests/features/ and src/features/**/*.test.ts for each module. Put the tested/untested table in the PR.
-2. Skip src/features/rows/render.js, src/features/editing/ and anything that needs a full app (those are browser-suite territory).
+2. Skip src/features/rows/render.ts, src/features/editing/ and anything that needs a full app (those are browser-suite territory).
 3. Add tests under tests/features/<feature>/ using the existing DOM setup and fakes (tests/features/fakes.ts). Test real behaviour, no mocks of the unit under test.
 4. Do not change src/. If a test exposes a bug, leave that test out and describe it in the PR.
 5. If the AQ-3 PR is still open, skip any module it touches.
@@ -240,7 +259,7 @@ Task: find modules under src/features/ (not mount.ts, not ports.ts) that contain
 Structure section: "no structural change"; the tested/untested table before and after.
 ```
 
-## AQ-11 [ ] Delete unreferenced files
+## AQ-11 [x] Delete unreferenced files
 
 ```text
 Task: find files in the repo that nothing references and delete them.
@@ -253,7 +272,7 @@ Task: find files in the repo that nothing references and delete them.
 Structure section: table of each deleted file, size, and the grep that showed no reference; files kept and why.
 ```
 
-## AQ-12 [ ] Fix drift in HANDOFF.md and invariants.md
+## AQ-12 [x] Fix drift in HANDOFF.md and invariants.md
 
 ```text
 Task: docs/HANDOFF.md and docs/architecture/invariants.md name files, functions, tests and counts that may have changed. Fix statements that are false today. Docs only.
@@ -266,7 +285,7 @@ Task: docs/HANDOFF.md and docs/architecture/invariants.md name files, functions,
 Structure section: "no structural change"; table of file, old statement, new statement, how you checked.
 ```
 
-## AQ-13 [ ] Replace fixed sleeps in browser suites with condition waits
+## AQ-13 [x] Replace fixed sleeps in browser suites with condition waits
 
 ```text
 Task: browser suites that wait a fixed time (a literal `setTimeout`/`sleep`/`waitForTimeout` with a number) are slow and flaky. Replace them with waits on the thing they wait for. Tests only. Maximum 10 suites in this PR (pick the ones with the most fixed sleeps).
@@ -291,3 +310,312 @@ Task: AGENTS.md rule 11 says a JS file under src/features/, src/application/ or 
 4. Write it to the PR body of your claim PR (a report-only PR; see "Report-only tasks"). Under 80 lines.
 ```
 
+## AQ-15 [ ] PDF text and JPEG fixes
+
+Needs: none.
+Files: src/adapters/formats/pdf.ts, its tests, PDF help text.
+**STOPS FOR ADAM**: user-visible PDF change (output, a new export diagnostic and help text). Author, review, leave unmerged.
+
+
+```text
+Task: fix two PDF export bugs in src/adapters/formats/pdf.ts. Two commits in one PR: (1) text, (2) JPEG. Export only; nothing on the typing, undo or save path.
+
+BUG 1 (text). Characters outside the PDF's single-byte encoding are written as "?" with no notice. Even the euro sign comes out as "?" because it is missing from WINANSI_MAP. See pdf.ts around lines 102-108 (WINANSI_MAP and the HELV_HIGH width table). Confirm with `grep -n "WINANSI_MAP\|HELV_HIGH" src/adapters/formats/pdf.ts`.
+
+BUG 2 (JPEG). The image dictionary hard-codes /ColorSpace /DeviceRGB (around line 313) and stored JPEGs pass through unconverted (around line 433), so greyscale and CMYK JPEGs render wrong or fail. When the JPEG size cannot be read, the code falls back to a fixed 800x450 (docx.ts:123 has the same fallback; leave docx.ts alone).
+
+DO
+1. Map every Windows-1252 character in the 0x80-0x9F block: € ‚ ƒ „ … † ‡ ˆ ‰ Š ‹ Œ Ž ‘ ’ “ ” • – — ˜ ™ š › œ ž Ÿ. Add the matching entries to HELV_HIGH using the standard Helvetica widths (check each against the Adobe Helvetica AFM; do not guess). Add a test that every mapped character has a width and that text width calculation matches the bytes written.
+2. Count the characters that still cannot be encoded. Report the count through the existing export diagnostics (find how docx/pdf export report problems today with `grep -rn "diagnostic" src/adapters/formats src/features | head`; reuse that path, do not invent a second one). Message shape: "N characters outside Latin can't be shown in PDF". Zero count = no message. The "?" substitution stays as it is.
+3. Add one sentence to the PDF export section of the help text (find it under src/features/help or the help content source) saying that characters outside Latin may not appear in PDF.
+4. JPEG: read the SOF marker's component count. 1 -> /DeviceGray, 3 -> /DeviceRGB, 4 -> /DeviceCMYK with /Decode [1 0 1 0 1 0 1 0] when the JPEG has an Adobe APP14 marker (inverted CMYK). If no SOF is found, keep today's behaviour for the colour space. When width/height cannot be read, use the decoded image size from the same canvas path the PNG branch uses instead of 800x450; if that path is not available at that point, leave the fallback and say so in the PR.
+5. Tests (tests/ next to the existing pdf tests; find them with `grep -rln "pdf" tests | head`): golden-style fixtures for € , Cyrillic text and CJK text (assert "?" bytes plus the diagnostic count), and tiny hand-built JPEG byte fixtures for greyscale, RGB and CMYK (assert the /ColorSpace and /Decode entries). Do not change existing expectations.
+6. Browser suites: node tools/run-suites.mjs <out> 'pdf|export'.
+
+Do not touch other tasks' files: .github/, tools/ci-*.mjs, src/bootstrap/main.ts, src/bootstrap/startup/, build.mjs, tools/dep-report.mjs, src/adapters/storage/ (AQ-19 owns the pdf.ts import line near the top; leave line ~5 alone).
+
+STRUCTURE SECTION MUST SAY
+- Which behaviour changes (more characters encoded; a diagnostic; correct colour space) and what stays the same (unencodable characters still become "?"). Width table source. Where the diagnostic goes.
+```
+
+## AQ-16 [ ] Embed a Unicode font in PDFs
+
+Needs: AQ-15 merged.
+Files: src/adapters/formats/ (new subsetter modules, pdf.ts), tests, licences file.
+**STOPS FOR ADAM**: user-visible PDF change (embedded font). Author, review, leave unmerged. Also stop if the font cannot stay within +1.5 MB on index.html without changing sw.js, packaging or tools/package.mjs, and for the CJK decision.
+
+
+```text
+Task: PDF export should show non-Latin text (Cyrillic, Greek, accented Latin outside Windows-1252, and CJK where feasible) instead of "?". Adam approved this for 4.1. Build it on top of AQ-15: start from the AQ-15 branch (or from 4.1-development once AQ-15 is merged). AQ-15's Windows-1252 path stays as the fallback for characters the embedded font lacks, and AQ-15's diagnostic keeps counting what is still not shown.
+
+Design target: subset a TrueType font at export time into a Type0 / CIDFontType2 font with Identity-H encoding, a CIDToGIDMap, a /W widths array and a /ToUnicode CMap, so the PDF text can be selected and searched. Only glyphs used in the document go in the file.
+
+STEP 0 (do this first and write it in the PR body before building the rest):
+- Font choice: an OFL-licensed font such as Noto Sans. Put the licence text in the repo where AGENTS.md says third-party notices go (search for an existing THIRD-PARTY or licenses file; if there is none, add `licenses/` with the OFL text and mention it in the PR).
+- Size: how many bytes the font adds to (a) the built index.html, (b) the portable zip, (c) the desktop installer. The limit for this PR is +1.5 MB on index.html. If the Latin/Cyrillic/Greek font exceeds it when inlined, load it lazily from a separate file next to index.html (and make sw.js cache it and the desktop package include it), and say how. CJK: a CJK font is many megabytes. Do NOT bundle one. Report the options and sizes in the PR (lazy-loaded file, user-supplied font, leave CJK as a warning) and stop for Adam's decision on CJK; ship Latin/Cyrillic/Greek first.
+- If the lazy-loading route needs a change to the service worker, the desktop packaging or tools/package.mjs, stop and say so before editing them: that is a bigger change than this task.
+
+DO
+1. TTF parser and subsetter in src/adapters/formats/ as new TypeScript modules (cmap format 4/12, glyf, loca, hmtx, head, hhea, maxp; composite glyph references included). No new npm runtime dependency unless AGENTS.md allows one; say in the PR if you wanted one.
+2. pdf.ts uses the embedded font for runs that contain any character the font covers beyond Windows-1252, per text run or per character, whichever keeps widths and line wrapping correct. Text that is entirely Windows-1252 keeps using the built-in Helvetica path, so existing PDFs do not change byte for byte (assert this with an existing golden test).
+3. Line breaking and width measurement use the font's real advance widths for those characters.
+4. Tests: subsetter unit tests on a tiny test font committed under tests/ (or generated in the test), golden test for a Cyrillic line and a Greek line (assert Type0 font object, ToUnicode, widths), a regression test that Latin-only output is unchanged, and a test that a character missing from the font still falls back to "?" plus the diagnostic. Open the produced PDF in the Playwright Chromium PDF viewer or with a PDF parser available in the repo's tools to confirm it parses; say what you ran.
+5. Browser suites: node tools/run-suites.mjs <out> 'pdf|export'.
+
+Do not touch other tasks' files: .github/, tools/ci-*.mjs, src/bootstrap/main.ts, src/bootstrap/startup/, tools/dep-report.mjs. The import line in pdf.ts that AQ-19 changes: if AQ-19 has merged, use its version.
+
+STRUCTURE SECTION MUST SAY
+- Font, licence, size added to each artefact, how the font is loaded, what stays on the old path, what is still shown as "?" and the CJK decision needed from Adam.
+```
+
+## AQ-17 [ ] Tighten RestoreAnswer
+
+Needs: none.
+Files: src/features/merge/banner.ts and callers.
+**STOPS FOR ADAM**: src/features/merge/ is a protected path. Author it, review it, leave it unmerged.
+
+
+```text
+Task: src/features/merge/banner.ts declares `export type RestoreAnswer = "ok" | "busy" | "missing" | "corrupt" | "changed" | "no-backup" | string;`. The `| string` makes the listed values catch no typos. Remove it and fix what the compiler then reports. No behaviour change.
+
+DO
+1. Remove `| string`. Run npm run typecheck. Fix each reported caller by making the value it returns one of the listed members, by widening the union with a member that caller really returns (add it to the list and say so in the PR), or by narrowing at the boundary with the existing runtime check. Do not add casts to `string`, `any` or `as RestoreAnswer`; if one is unavoidable, list it in the PR with the reason.
+2. Find the producers and consumers: `grep -rn "RestoreAnswer\|RestoreRequest" src tests`. The port that answers restore requests is built in src/bootstrap/ or src/application/session/; check what strings it can return today and make the type say exactly that.
+3. Tests: tests/features/merge/banner.test.ts changes only if types force it (type annotations, not assertions). Add one type-level test or a typed fixture if the repo has a pattern for it; skip otherwise.
+4. Browser suites: node tools/run-suites.mjs <out> 'merge|banner|restore|undo'.
+
+Do not touch: pdf, CI, startup, build files.
+
+STRUCTURE SECTION MUST SAY
+- "Types only." The final member list, any member added and why, any cast left and why.
+```
+
+## AQ-18 [ ] Measure full render() on stamp and hide
+
+Needs: none.
+Files: tools/perf-record.mjs, docs/architecture/testing.md.
+
+
+```text
+Task: measurement first. The review said the full render() runs on stamp and hide; nobody has timed it. Add scenarios to tools/perf-record.mjs (and tools/perf-ab if that is the A/B entry point; read docs/architecture/testing.md and docs/architecture/performance-record.md for how perf runs are recorded) on the long demo script, and record the numbers. Fix only if a scenario is over budget.
+
+DO
+1. Add three scenarios on the long script: stamp a row, hide a row (and unhide), and change a display preference that re-renders rows. Reuse the harness's existing scene/typing/undo scenario code for setup and timing; do not invent a second timing method.
+2. Run them on the current 4.1-development, at least 5 runs each, and report median and worst. Budget: 65 ms (the new-scene limit) for each scenario. Also report the existing typing (8 ms limit), new scene (65 ms) and undo (45 ms short / 70 ms long) numbers from the same run so the machine's speed is visible.
+3. Put the results table in the PR body (Validation section), in the style of docs/architecture/performance-record.md. The PR contains only the harness change, plus a docs note in docs/architecture/testing.md naming the new scenarios.
+4. If every scenario is under budget: the PR is done; say so. If one is over: do NOT fix it in this PR. State which scenario, the numbers, and where the time goes (use a profile; name the function). A fix is a separate Opus task with perf-ab.
+5. Existing perf scenarios and their results must not change.
+
+Do not touch: src/ (unless the harness needs a stable hook that already exists), CI, pdf, startup, build files.
+
+STRUCTURE SECTION MUST SAY
+- The new scenarios, how setup is shared with the existing ones, the measured median/worst per scenario against the 65 ms budget, and a clear verdict: fine, or over budget with the cause.
+```
+
+## AQ-19 [ ] Drop the storage re-exports
+
+Needs: AQ-15 merged.
+Files: src/adapters/storage/02d-gallery.js, 02c-blobs.js, importers, tools/dep-report.mjs.
+**STOPS FOR ADAM**: src/adapters/storage/ and tools/dep-report.mjs are protected. The contracts-layer half already landed in #916; only the storage re-exports remain (check first).
+
+
+```text
+Task: two small structural clean-ups in one PR (two commits). Start after AQ-15 is merged (AQ-15 edits pdf.ts). The contracts-layer half already landed (#916): check first and do only the storage re-exports. No behaviour change.
+
+3.2 STORAGE RE-EXPORTS. The storage adapter re-exports functions that belong to core: src/adapters/storage/02d-gallery.js (around lines 27-50) and src/adapters/storage/02c-blobs.js (around line 13). Because of that, src/adapters/formats/pdf.ts (around line 5) reaches core code through storage, which AGENTS.md rule 4 forbids. Point every consumer directly at its real home under src/core/document/, delete the re-export blocks, and update every importer.
+- Find the names: read the re-export blocks; for each name find its defining file under src/core/ and every importer: `grep -rn "02d-gallery\|02c-blobs" src tests tools docs`.
+- Importers include pdf.ts, docx.ts and export-text.ts under src/adapters/formats/; there may be others (features, tests, wiring). Update all of them, including tests (import paths only).
+- If an importer is a feature, it must get the function through its named port, not by importing core directly if the layer rules forbid that; check docs/architecture/dependencies.md#layers and follow it. Say in the PR what you did for each importer.
+- Do not move or rename any function. Do not leave a re-export behind.
+
+3.3 `contracts` LAYER. tools/dep-report.mjs (around line 16) lists a `contracts` layer, but there is no src/contracts directory. Remove the layer from dep-report.mjs and from any test that mentions it (`grep -rn "contracts" tools tests docs/architecture AGENTS.md`). Leave AGENTS.md and README text alone: the docs scrub is a separate task. The dep-report output for the existing code must not change except for the removed empty layer; show before/after of `node tools/dep-report.mjs`.
+
+DO
+1. Both changes, then `node tools/dep-report.mjs --prune` and `node tools/code-map.mjs`.
+2. Existing tests pass with import paths changed only.
+3. Browser suites: node tools/run-suites.mjs <out> 'export|pdf|docx|gallery|blob|media'.
+
+Do not touch other tasks' files: .github/, src/bootstrap/main.ts, src/bootstrap/startup/, build.mjs, and any PDF behaviour in pdf.ts beyond the import line.
+
+STRUCTURE SECTION MUST SAY
+- Each removed re-export and where each importer now imports from, the removed layer, dep-baseline count before/after.
+```
+
+## AQ-20 [ ] Release needs a green CI run
+
+Needs: none.
+Files: .github/workflows/release.yml, tools/release-ci-check.mjs (new), docs/architecture/ci.md.
+**STOPS FOR ADAM**: workflow file.
+
+
+```text
+Task: .github/workflows/release.yml builds and drafts a release for any pushed v* tag with no check that CI passed on that commit. Make the release refuse a commit without a passed CI run, and pin the actions to commit SHAs. Workflow and tooling only; no app code.
+
+FILES TO READ
+- .github/workflows/release.yml (jobs: build, draft).
+- .github/workflows/ci.yml (the `gate` job writes an artifact `ci-passed-tree-<tree>` when a tree passes) and tools/ci-tested-tree.mjs (how the passed-tree lookup works, including docs-only changes that skip the test jobs).
+- docs/architecture/ci.md.
+
+DO
+1. Add a first job `verify-ci` that the `build` job needs. For a tag push it must succeed only if the tagged commit has a successful run of the CI workflow's `gate` job (checks API: `GET /repos/{owner}/{repo}/commits/{sha}/check-runs`, conclusion success for the check named `gate`), or the commit's tree has a `ci-passed-tree-<tree>` artifact (reuse tools/ci-tested-tree.mjs rather than reimplementing the tree lookup). Fail with an `::error::` message that says which commit and what was missing.
+2. Put the logic in a script under tools/ (for example tools/release-ci-check.mjs) with unit tests under the same test runner the other tools use (`npm run test:all` must pick them up). Tests cover: gate success, gate failure, no run found, tree artifact found, API error (fail closed).
+3. workflow_dispatch runs: run the same check against the dispatched commit but only warn (`::warning::`) on failure, since a dispatch is a dry run that drafts nothing (the `draft` job only runs for tags). State this in the PR.
+4. Workflow permissions: add `actions: read` and `checks: read` to the verify job only; keep the workflow default at `contents: read`.
+5. Pin every `uses:` in release.yml to a full commit SHA with the version as a trailing YAML comment (`# v7`). Look up the real SHAs from the actions' repositories; do not guess. Do not touch ci.yml pins (AQ-21 edits that file).
+6. Run `npm run check:comments` and `actionlint` if available; say if it was not.
+7. Update docs/architecture/ci.md with a short "Release gate" section (take the incoming version if AQ-21 edited the file and add your section).
+8. You cannot push a tag. Say in the PR how it was validated (script tests, workflow syntax) and what only the first real tag will prove.
+
+Do not touch other tasks' files: .github/workflows/ci.yml, src/, build.mjs, tools/ci-changes.mjs.
+
+STRUCTURE SECTION MUST SAY
+- What the release job checks, what it does on dispatch, which script holds the logic, which actions were pinned and to which SHAs.
+```
+
+## AQ-21 [ ] Real-app tests on PRs
+
+Needs: none.
+Files: .github/workflows/ci.yml, tools/ci-changes.mjs, docs/architecture/ci.md.
+**STOPS FOR ADAM**: workflow file.
+
+
+```text
+Task: PRs to 4.1-development run only browser suites 01-core and 52-csp (ci.yml, "Browser suites 01 (core) and 52" step). The Electron smoke (job `desktop-smoke`) runs only on pushes to main, so 4.1-development never gets it in CI. Adam OK'd more runner time. Add the desktop smoke and a fast subset of browser suites to PR CI.
+
+FILES TO READ
+- .github/workflows/ci.yml, tools/ci-changes.mjs (how `code` and `app` are classified), tools/run-suites.mjs and the suite list it reads, desktop/test/smoke.mjs and its group filters.
+- docs/architecture/ci.md and docs/architecture/testing.md, including the known-flaky suite list (247 under load, 134, 266, 173/30 at 3 lanes). Do not put a known-flaky suite in the PR subset.
+
+DO
+1. Browser subset: add a step (or a second job) to PR CI that runs a tagged subset covering save, typing, undo and export. Pick the suites by name from the real suite list; list the chosen suites and the reason for each in the PR. Run them with `--lanes 2 --port-base "$PORT_BASE"` like the existing step, on the same self-hosted runner expression the `checks` job uses.
+2. Time budget: measure the added time on the runners (run the workflow on your PR at least twice) and report the numbers. Target: the browser subset adds no more than 6 minutes to the `checks` job. If it needs more, trim the subset, not the timeout.
+3. Desktop smoke: run `desktop-smoke` on pull_request and on pushes to 4.1-development and main, when tools/ci-changes.mjs says the change touches app or desktop code (add a `desktop` output if `app` is too broad; add tests for any classifier change in the existing ci-changes tests). Keep it on `ubuntu-latest` with Xvfb as it is now (the self-hosted Unraid runners should not need sudo/apt). Keep the 90-minute timeout; report the real duration.
+4. The `gate` job must require the new jobs when they ran, and must not write the `ci-passed-tree` marker unless they passed. Skipped-because-not-needed stays acceptable the same way the existing jobs are.
+5. A PR carrying the existing `ci-github` label keeps using GitHub-hosted runners for all jobs.
+6. Update docs/architecture/ci.md (what runs when, expected times). If AQ-20 edited the file too, take the incoming version and re-add your lines.
+7. Never skip or relax a test to make the new jobs green. If a suite in the subset is flaky, remove it from the subset and say so; do not add retries to the suite.
+
+Do not touch other tasks' files: .github/workflows/release.yml, src/, tools/release-ci-check.mjs.
+
+STRUCTURE SECTION MUST SAY
+- Which suites run on PRs and why, what the smoke covers and when it runs, the measured added minutes, how the gate treats the new jobs.
+```
+
+## AQ-22 [ ] Visible startup failure screen
+
+Needs: none.
+Files: src/bootstrap/main.ts, src/bootstrap/startup/failure-screen.ts (new), tests/bootstrap/.
+**STOPS FOR ADAM**: startup path; needs the full Windows Electron smoke.
+
+
+```text
+Task: if the app fails to start, the user gets a blank page. src/bootstrap/main.ts wraps only the `wireLegacyApp(...)` call in try/catch and only calls `console.error`; any later `mount*` call that throws is uncaught, and the page stays empty. Show a plain "Splitpage couldn't start" panel instead. Success-path behaviour does not change.
+
+FILES TO READ
+- src/bootstrap/main.ts (the wiring call, then about 45 mount calls in a fixed order, then startAppWhenReady), src/bootstrap/startup/page-entry.ts, src/bootstrap/app.ts.
+- tests/bootstrap/composition-root.test.ts (pins the mount order; it must pass unchanged), tests/bootstrap/ for how startup is tested.
+- desktop/ smoke test (what it expects on screen at startup).
+
+DO
+1. New module src/bootstrap/startup/failure-screen.ts exporting one function that renders the panel into document.body. It has no imports from features, legacy or wiring. Style it with inline styles so it works when the app CSS never loaded. Content: the title "Splitpage couldn't start", one sentence saying the document data on disk is not touched, the error name and message in a code block, a "Copy details" button (error text + stack + app version if readable without importing anything heavy), and a "Reload" button.
+2. In main.ts, run the whole boot sequence (wiring, every mount, startAppWhenReady) inside one try/catch so a throw anywhere shows the panel. Keep every call and its order exactly as it is. Also handle a rejected promise if startAppWhenReady returns one (check its return type first). Keep `console.error(error)`.
+3. Hide or remove any half-built app UI shell elements only if they would overlap the panel; use the least invasive way and describe it in the PR.
+4. Do not attempt a recovery UI. If a plain way exists to keep export or draft recovery reachable without new code paths, describe it in the PR as a follow-up idea; do not build it.
+5. Tests: (a) a bootstrap test that makes wiring throw and checks the panel text, the buttons and that no further mount runs; (b) one that makes a late mount throw; (c) the success path leaves no panel. composition-root.test.ts passes unchanged. Use the same test harness style as the other tests/bootstrap tests.
+6. Full Windows Electron smoke: node desktop/test/smoke.mjs --only-target dev, pass count in the PR.
+7. Browser suites: node tools/run-suites.mjs <out> '01-core|startup|boot'.
+
+Do not touch other tasks' files: .github/, src/adapters/formats/, src/adapters/storage/, build.mjs, tools/dep-report.mjs.
+
+STRUCTURE SECTION MUST SAY
+- Where the panel lives, that main.ts call order is unchanged, which failures are now caught, what the user sees, smoke count.
+```
+
+## AQ-23 [ ] Test hooks only in test builds
+
+Needs: AQ-21 and AQ-22 merged.
+Files: build.mjs, tools/, wiring files, CI.
+**STOPS FOR ADAM**: touches history storage and CI; requires Opus review.
+
+
+```text
+Task: about 13 `window.__*Test` objects ship in the production app. The worst is `__historyTest` (src/bootstrap/wiring/history.ts around line 18), which can wipe the history database (adapters/storage history-backends.js around lines 458-466). Add a build flag so release builds leave out the test hooks and storage fault injection; the browser suites and the desktop smoke build the test variant. Do not weaken any test. Run after AQ-21 and AQ-22 have merged. An Opus review is required before merge because this touches history storage.
+
+FILES TO READ
+- build.mjs (how index.html is built, and how sw.js is stamped), tools/package.mjs, desktop/ packaging (dist:win and verify-dist), tools/run-suites.mjs, .github/workflows/ci.yml (which jobs build and which use the built page), desktop/test/smoke.mjs.
+- `grep -rn "window\.__[A-Za-z]*Test\|__[A-Za-z]*Test\b" src desktop tools tests | head -80` for the full list; also search for storage fault-injection switches (`grep -rniE "inject|failNext|faultOnce" src/adapters | head`).
+
+DO
+1. STEP 0 in the PR body: the full list of hooks and fault-injection points found, which suites/smoke use each, and the plan for each. Do __historyTest first.
+2. A build-time flag (for example `SPLITPAGE_BUILD=test` or `node build.mjs --test`) that is false by default. Hooks are registered through one small helper in src/bootstrap/ (for example `exposeTestHook(name, value)`) that is compiled to nothing in the default build; do not scatter `if (flag)` checks. The flag must be a build-time constant so the unused code is removed from the output, not just skipped at run time.
+3. The default `node build.mjs` output (the release build, used by tools/package.mjs and desktop dist:win) contains none of the hook names or fault-injection code. Add a test that builds the default variant and asserts that no `__*Test` name appears in the output, and run the same check inside verify-dist or tools/package.mjs so a release cannot ship with a hook.
+4. The test variant is what tools/run-suites.mjs, the CI browser suites, the desktop smoke and the PC smoke use. Update those to build the test variant. The committed sw.js cache stamp must be identical for both variants, so the "sw.js is committed with the current VERSION stamp" CI step still passes; do not make the two variants write different sw.js files.
+5. If converting all ~13 hooks makes one PR too large to review, ship it as: this PR = flag + helper + __historyTest + the release-build assertion, and list the remaining hooks in the PR as a numbered follow-up list; the same chat continues with follow-up PRs. Stop and describe the proposed split in the PR before splitting.
+6. Existing suites must keep passing unchanged. Never relax an assertion. If a suite loses its hook because it ran against the release build, switch the suite to the test build.
+7. Full Windows Electron smoke: node desktop/test/smoke.mjs --only-target dev, using the test variant; plus run it against the release variant to show the app starts (pass count and the group you ran).
+8. Browser suites: the full set the PR CI runs, plus node tools/run-suites.mjs <out> 'history|undo|storage|recovery'.
+
+Do not touch: eslint.config.mjs; unrelated wiring; the history storage logic itself (only how the hook is exposed).
+
+STRUCTURE SECTION MUST SAY
+- The hook list and where each now lives, the flag name and default, what the release bundle no longer contains (with the grep result), which jobs build the test variant, smoke counts for both variants.
+```
+
+## AQ-24 [ ] Convert the prompter to strict TypeScript
+
+Needs: none. Files: src/features/prompter/prompter.js -> prompter.ts, its importers (src/bootstrap/wiring/prompter.ts, src/test/*prompter*.test.mjs and the other src/test files that import it, tests/features/prompter/, tests/bootstrap/load-order/prompter.json), docs that name prompter.js.
+
+```text
+Task: improvement plan item 4.3, step 1 for the prompter (AGENTS.md rule 11). Convert src/features/prompter/prompter.js to strict TypeScript: types only, no behaviour change. Model: #955, which did the same for src/features/rows/render.js; read its diff and PR body first.
+
+1. git mv the file to prompter.ts. Update every importer to the .ts path (git grep "prompter/prompter.js"), including src/test/*.mjs, tests/, tests/bootstrap/load-order/prompter.json and docs. Leave no file that re-exports the old path.
+2. Type every function, parameter and module-level variable. Use types from ports.ts and from the owners it names; narrow with Pick. If a port type in ports.ts is missing a field the code already calls, add it there (type-only) and say so in the PR body.
+3. Allowed mechanical changes, each listed in the PR body: var -> let/const (TypeScript checks the block scoping), `delete obj[key]` -> Reflect.deleteProperty (lint no-dynamic-delete), a local variable to narrow a value instead of a cast. Nothing else may change what runs or in what order.
+4. Known traps: the lint config is typescript-eslint strict, so `!` non-null assertions are banned and inline eslint-disable comments are off in src/features. `npm run typecheck` (not plain tsc) also runs the brand check, which refuses any `as` cast to a type that reaches the validated document (for example `x as DocumentView`, or `null as unknown as` a function type that returns one). Declare a slot `let x: T;` with no initializer and clear it with `(x as unknown) = null`, as newtab.ts does.
+5. Run `npm run verify`, then `node build.mjs` and the prompter browser suites: node tools/run-suites.mjs <out-dir> '^(04|32|49|58|71|88|142|156|309)-' --lanes 6. Put the results in Validation.
+
+Structure section: "no responsibility moves; types only". Name every file outside prompter.ts that changed and why.
+```
+
+## AQ-25 [ ] Hold the prompter's state in one object (after AQ-24 merges)
+
+Needs: AQ-24. Files: src/features/prompter/prompter.ts only (plus docs that describe its state, if any).
+
+```text
+Task: improvement plan item 4.3, step 2 for the prompter. prompter.ts keeps about 48 module-level variables of state next to its one `ports` variable. Group the mutable state into one object built from a `freshState()` function, the way #957 did for src/features/rows/render.ts; read its diff and PR body first. No behaviour change.
+
+1. List every module-level let/var. Constants that never change stay constants. Each mutable one becomes a field of an interface `PrompterState` and of the object freshState() returns, with the same starting value it had.
+2. Wherever the old code reset a variable to its starting value (stop, dispose, close), check that the reset list equals the starting values field for field. Only then replace it with `state = freshState()`. Otherwise keep the individual resets. Keep the order relative to any DOM cleanup or callback that runs next to it.
+3. Leave anything that must outlive one start (listener lists the tests pin, lifetime tokens) as its own variable, and say why in the PR body.
+4. Do not change importers, exported names or what start returns. Do not make the prompter a per-instance owner; name that as a possible later step in the PR body.
+5. Watch for word-boundary replacements inside strings (#957 hit "on screen" in a placeholder). Review your own diff for changed string literals.
+6. Run `npm run verify`, then `node build.mjs` and the prompter suites: node tools/run-suites.mjs <out-dir> '^(04|32|49|58|71|88|142|156|309)-' --lanes 6.
+
+Structure section: which variables moved into the state object and which stayed out, and why.
+```
+
+## AQ-26 [ ] Convert the rundown to strict TypeScript
+
+Needs: none. Files: src/features/rundown/rundown.js -> rundown.ts, its importers (src/bootstrap/wiring/rundown.ts and panels.ts, src/test/rundown.test.mjs and the other src/test files that import it, tests/features/rundown/, tests/bootstrap/load-order/rundown.json), docs that name rundown.js. Leave target.js alone.
+
+```text
+Task: improvement plan item 4.3, step 1 for the rundown (AGENTS.md rule 11). Same task as AQ-24, for src/features/rundown/rundown.js. Model: #955.
+
+Follow AQ-24 steps 1 to 4 with rundown in place of prompter.
+5. renderRundown runs after every screen paint (panels.ts, onScriptStats), so this file is near the typing path. Besides `npm run verify` and the rundown browser suites (node build.mjs, then node tools/run-suites.mjs <out-dir> '^(100|101|102|103|104|105|106|140|141)-' --lanes 6), run the performance comparison on the PC: node tools/perf-ab.mjs against 4.1-development, 15 rounds (see docs/architecture/performance-record.md). STOP if typing > 8 ms, a new scene > 65 ms, or undo > 45 ms short / 70 ms long. Put the numbers in Validation and in a PR comment.
+
+Structure section: "no responsibility moves; types only". Name every file outside rundown.ts that changed and why.
+```
+
+## AQ-27 [ ] Hold the rundown's state in one object (after AQ-26 merges)
+
+Needs: AQ-26. Files: src/features/rundown/rundown.ts only.
+
+```text
+Task: improvement plan item 4.3, step 2 for the rundown. Same task as AQ-25, for src/features/rundown/rundown.ts (about 38 module-level variables). Model: #957.
+
+Follow AQ-25 steps 1 to 5 with rundown in place of prompter.
+6. Run `npm run verify`, the rundown suites (node build.mjs, then node tools/run-suites.mjs <out-dir> '^(100|101|102|103|104|105|106|140|141)-' --lanes 6), and the perf-ab comparison with the limits in AQ-26 step 5. STOP if any limit is exceeded.
+
+Structure section: which variables moved into the state object and which stayed out, and why.
+```
