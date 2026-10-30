@@ -17,7 +17,7 @@ No item below starts before the tag, except the report-only tasks in wave 0.
 
 ## After 4.1
 
-"Protected" means the task touches a protected path in [AGENT-QUEUE.md](AGENT-QUEUE.md#autonomous-run-rules) (saving, desktop, undo and editing, startup, the project file format, merge, build rules), so it stops for Adam, an Opus review and the PC checks.
+"Protected" means the task touches a protected path in [AGENT-QUEUE.md](AGENT-QUEUE.md#autonomous-run-rules) (saving, desktop, undo and editing, startup, the project file format, merge, build rules), so it gets an independent Opus review and the PC checks, then stops for Adam's merge.
 
 ### A. Safety and known bugs
 
@@ -54,22 +54,22 @@ No item below starts before the tag, except the report-only tasks in wave 0.
 
 ## Game plan for A, B and C
 
-Three waves after the tag. Lanes in one wave run at the same time because they do not share files. **T3** is the agent queue (unprotected work it merges itself). **Opus** is an Opus thread (protected paths, every protected review, the typing and undo path). **PC** is a check only Adam's PC runs: desktop smoke (794 checks) or perf-ab.
+All of A, B and C go through the agent queue. Three waves after the tag. Lanes in one wave run at the same time because they do not share files. Each lane is one queue agent working its items in order. **Opus** means the agent runs on Opus: required for protected paths, the typing and undo path, and every review of that work. The protected-path rules still hold: a protected PR gets an independent review, then stops for Adam's merge. **PC** is a check only Adam's PC runs: desktop smoke (794 checks) or perf-ab.
 
 **Wave 0, now (during the freeze):** report-only tasks AQ-6 (startup slots) and AQ-14 (#950). They change no code. Their reports feed B3 and C4.
 
-| Wave | Lane | Work | Who | Needs first | Adam's input |
+| Wave | Lane | Work | Model and checks | Needs first | Adam's input |
 | --- | --- | --- | --- | --- | --- |
-| 1, after the tag | Opus 1 | A1: step 0 lists every hook, then PR 1 (flag, `__historyTest`, release-build check), then follow-ups | Opus; PC smoke on test and release builds | 4.1 tagged | Merge approval; the PR split after step 0 |
-| 1 | Opus 2 | A2: I-20, then I-6; I-1 only if Adam wants it | Opus; I-6 PC smoke; I-1 perf-ab | none | Fix or close I-1; merge approval for I-6 |
-| 1 | T3 | A3 suite 266; C2 measure (AQ-18); C1 AQ-26 then AQ-25; C5 tracker | T3; AQ-26 perf-ab on the PC | none | Close or retarget the old `main` PRs |
-| 2, after wave 1 | Opus 1 | B3 rename `"server"` to `"disk"`; then startup slots per AQ-6 | Opus | I-6 merged; AQ-6 report | `startupReady`: leave it, or change the prompter launch |
-| 2 | T3 + Opus review | B3 storage re-exports (AQ-19) | T3 writes, Opus reviews | none | Merge approval |
-| 2 | T3 | C1 AQ-27; C3 CSS by purpose | T3; AQ-27 perf-ab; CSS visual suites | AQ-26; A1 merged (test-build switch) | none |
-| 3, one at a time | Opus | B1 desktop split: IPC, then lifecycle, then voice | Opus; PC smoke on every PR | A1 and I-6 merged | Merge approval for each |
-| 3 | Opus | B2 save completion owner | Opus; PC smoke | I-6 merged; not alongside B1's lifecycle PR | Lift or keep the hold |
-| 3 | any | C2 fix if over budget; C4 as touched | Opus + perf-ab for a C2 fix | C2 measurement; AQ-14 | none |
+| 1, after the tag | 1 | A1: step 0 lists every hook, then PR 1 (flag, `__historyTest`, release-build check), then follow-ups | Opus; protected; PC smoke on test and release builds | 4.1 tagged | Merge approval; the PR split after step 0 |
+| 1 | 2 | A2: I-20, then I-6; I-1 only if Adam wants it | Opus; I-6 protected with PC smoke; I-1 perf-ab | none | Fix or close I-1; merge approval for I-6 |
+| 1 | 3 | A3 suite 266; C2 measure (AQ-18); C1 AQ-26 then AQ-25; C5 tracker | Any model; AQ-26 on Opus with perf-ab on the PC | none | Close or retarget the old `main` PRs |
+| 2, after wave 1 | 1 | B3 rename `"server"` to `"disk"`; then startup slots per AQ-6 | Opus (session and undo) | I-6 merged; AQ-6 report | `startupReady`: leave it, or change the prompter launch |
+| 2 | 2 | B3 storage re-exports (AQ-19) | Any model; protected, Opus review | none | Merge approval |
+| 2 | 3 | C1 AQ-27; C3 CSS by purpose | AQ-27 on Opus with perf-ab; CSS visual suites | AQ-26; A1 merged (test-build switch) | none |
+| 3, one at a time | 1 | B1 desktop split: IPC, then lifecycle, then voice | Opus; protected; PC smoke on every PR | A1 and I-6 merged | Merge approval for each |
+| 3 | 1 | B2 save completion owner, after B1's lifecycle PR | Opus; protected; PC smoke | I-6 merged | Lift or keep the hold |
+| 3 | 2 | C2 fix if over budget; C4 as touched | A C2 fix on Opus with perf-ab | C2 measurement; AQ-14 | none |
 
-Merge order: PRs on different files merge freely; PRs sharing files merge one at a time, each taking the base branch first. A1 and C3 both touch the build; I-6, B2 and B1's lifecycle PR all touch saving or close, which is why they sit in different waves.
+Merge order: PRs on different files merge freely; PRs sharing files merge one at a time, each taking the base branch first. A1 and C3 both touch the build; I-6, B2 and B1's lifecycle PR all touch saving or close, which is why they sit in different waves or one after another in the same lane.
 
-Tasks in this plan that have no `AQ-n` id yet (A2, A3, B3's rename and startup slots, C3, C5, B1, B2) are added to the queue with an `AQ-add:` PR when their wave starts, or given to an Opus thread.
+Items without an `AQ-n` id yet (A2, A3, B1, B2, B3's rename and startup slots, C3, C5) are added to [AGENT-QUEUE.md](AGENT-QUEUE.md) with an `AQ-add:` PR when their wave starts, each with its "Needs" line, its model, and `STOPS FOR ADAM` where it is protected.
