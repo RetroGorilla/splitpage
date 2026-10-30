@@ -1,0 +1,55 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { bothScenesHaveVisual, joinScenesCommand, splitSceneCommand, textCut } from "../../src/application/commands/split-join.ts";
+import type { JoinPorts } from "../../src/application/commands/split-join.ts";
+import { deepFreeze } from "../../src/core/document/freeze.ts";
+import type { Run } from "../../src/core/text/runs.ts";
+import { idsIn, liveOf, planOf, viewOf } from "./plan-views.ts";
+
+const ports: JoinPorts = {
+  clock: { nowIso: function () { return "2026-10-30T10:00:00.000Z"; } },
+  editor: { name: function () { return "Adam"; } },
+  cells: function (html: string) { return deepFreeze([{ text: html, marks: {} } as Run]); },
+  plainText: function (html: string | null | undefined) { return html || ""; }
+};
+
+function rows(spec: readonly [string, string, string][]): Record<string, unknown>[] {
+  return spec.map(function ([id, visual, audio]) { return { id: id, visualText: visual, audioText: audio, status: "todo" }; });
+}
+
+test("split and join are named and need edit capability", () => {
+  const split = splitSceneCommand("r1", "audioText", textCut(0, 0), "n1", ports);
+  const join = joinScenesCommand("r1", ports);
+  assert.deepEqual([split.name, split.needs], ["split-scene", "edit"]);
+  assert.deepEqual([join.name, join.needs], ["join-scenes", "edit"]);
+});
+
+test("a split whose scene left before the write fails, naming the scene, and adds nothing", () => {
+  const planned = planOf(splitSceneCommand("r1", "audioText", textCut(2, 2), "n1", ports), viewOf({ rows: rows([["r1", "V", "Hello"]]) }));
+  const live = liveOf({ rows: rows([["r2", "V", "Hello"]]) });
+  assert.throws(() => planned.apply(live), { message: "scene r1 left the document before it was split" });
+  assert.deepEqual(idsIn(live), ["r2"]);
+});
+
+test("a join whose scenes changed before the write fails, naming the scene, and removes nothing", () => {
+  const planned = planOf(joinScenesCommand("r1", ports), viewOf({ rows: rows([["r1", "", "One."], ["r2", "", "Two."]]) }));
+  const gone = liveOf({ rows: rows([["r0", "", "Zero."]]) });
+  assert.throws(() => planned.apply(gone), { message: "scenes r1 changed before they were joined" });
+  assert.deepEqual(idsIn(gone), ["r0"]);
+  const alone = liveOf({ rows: rows([["r0", "", "Zero."], ["r1", "", "One."]]) });
+  assert.throws(() => planned.apply(alone), { message: "scenes r1 changed before they were joined" });
+  assert.deepEqual(idsIn(alone), ["r0", "r1"]);
+  assert.equal(alone.rows[1]?.audioText, "One.");
+});
+
+test("the visual check is false for the last scene, and when only the later scene has a visual", () => {
+  const check = bothScenesHaveVisual("r2", ports.plainText);
+  assert.equal(check(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""]]) })), false, "r2 has nothing below it");
+  assert.equal(check(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""], ["r3", "", ""]]) })), false);
+  assert.equal(check(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""], ["r3", "Far", ""]]) })), true);
+  const later = bothScenesHaveVisual("r1", ports.plainText);
+  assert.equal(later(viewOf({ rows: rows([["r1", "", ""], ["r2", "Close", ""]]) })), false, "the scene above has no visual");
+  assert.equal(later(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "", ""]]) })), false, "the scene below has no visual");
+  assert.equal(later(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""]]) })), true);
+  assert.equal(later(null), false);
+});
