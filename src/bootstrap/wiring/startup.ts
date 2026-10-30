@@ -72,8 +72,15 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
   };
 }
 
-export function openInitialDocument(startup: Startup): () => void {
+// why: once the document is on screen, a later startup step failing should not hide a working editor
+export function openInitialDocument(startup: Startup, onFail?: (error: unknown) => void): () => void {
   const disconnect = connectStartup(startup);
-  void startup.openDocument();
+  const opening = startup.openDocument();
+  if (onFail) {
+    opening.catch((error: unknown) => {
+      if (startup.shown()) console.error(error);
+      else onFail(error);
+    });
+  }
   return disconnect;
 }
