@@ -11,7 +11,7 @@ await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
-const { paintingScreen, renderAbsorbed, renderRow } = await import("../features/rows/render.js");
+const { paintingScreen, renderAbsorbed, renderRow } = await import("../features/rows/render.ts");
 const { paintGuard } = await import("../bootstrap/wiring/editor-owners.ts");
 const whilePainting = (paint) => paintGuard().whilePainting(paint);
 const afterThisPaint = (work) => paintGuard().afterThisPaint(work);

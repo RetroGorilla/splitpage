@@ -15,7 +15,7 @@ const initDocIdentityChannel = (...args) => documentIdentityOwner().initDocIdent
 const reassignDocId = (...args) => documentIdentityOwner().reassignDocId(...args);
 const syncDocIdentity = (...args) => documentIdentityOwner().syncDocIdentity(...args);
 const { videoLinkLabel } = await import("../core/document/gallery.ts");
-const { render } = await import("../features/rows/render.js");
+const { render } = await import("../features/rows/render.ts");
 const { renderRundown } = await import("../features/rundown/rundown.js");
 const { buildScenePayload, parseScenePayload } = await import("../features/clipboard/scene-clip.js");
 const { newScriptFromSelection, selectScenes } = await import("../features/clipboard/scene-select.js");

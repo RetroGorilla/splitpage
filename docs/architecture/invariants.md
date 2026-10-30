@@ -15,7 +15,7 @@ This ledger holds the 62 invariants, `INV-01` to `INV-62`, under the numbers the
 
 Classes: keep 42, absorb 18, practice 2. Milestones: 2 → 9, 3 → 3, 4 → 9, 5 → 9, 6 → 18, 7 → 1, 4.x → 11, — → 2 (none at 0 or 1).
 
-No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12, INV-13, INV-19, INV-24, INV-28, INV-29, INV-39, INV-44.
+No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12, INV-13, INV-19, INV-24, INV-28, INV-29, INV-39, INV-44.
 
 ## Ledger
 
@@ -29,11 +29,11 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-02 — Script cells change only through the document model
 
-- **Behaviour:** Every change to a script cell is a document-model edit (`editCell()` at the selection, or the edits in `src/core/text/edits.ts`, which `04c-doc-model.js` re-exports), written back with `toHtml()`. No path edits cell HTML with a regex, and nothing uses `execCommand`, in script cells or in comment and reply boxes.
+- **Behaviour:** Every change to a script cell is a document-model edit (`editCell()` at the selection, or the edits in `src/core/text/edits.ts`), written back with `toHtml()`. No path edits cell HTML with a regex, and nothing uses `execCommand`, in script cells or in comment and reply boxes.
 - **Tests:** `src/test/doc-model.test.mjs`, `src/test/cell-edit.test.mjs`; browser `75-format-model.txt`, `76-tags-model.txt`, `77-clipboard-model.txt`, `78-split-join-model.txt`, `81-draft-edit.txt`; for the commands, `tests/application/cell-text.test.ts`, `split-join.test.ts` and `clipboard.test.ts` (every command test through `runConfined`, which fails on a write outside the declared change set). No test asserts that `execCommand` is absent from the source.
 - **Owner:** `src/core/text` (edits), `src/application` (commands), `src/features/editing` (bindings) · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** DocumentSession commands become the only write path (M3). Migrated editor features receive named operations and no writable document (M6; plan §6: "a view or selector never changes document content").
-- **As built (M3, part):** typing, split, join, paste and cut write the cell only through `cellTextCommand`, `splitSceneCommand`, `joinScenesCommand`, `pasteCommand` and `cutCommand` ([session.md](session.md#the-text-commands)). `editCell()` (formatting, shortcuts, tags, b-roll keys, Enter) still writes `row[field]`, stamps and calls `markDirty` itself (#452), and the scene paste and drop in `05g-scene-clip.js` is out of M3 (D10). The row stays open until M6.
+- **As built (M3, part):** typing, split, join, paste and cut write the cell only through `cellTextCommand`, `splitSceneCommand`, `joinScenesCommand`, `pasteCommand` and `cutCommand` ([session.md](session.md#the-text-commands)). `editCell()` (formatting, shortcuts, tags, b-roll keys, Enter) still writes `row[field]`, stamps and calls `markDirty` itself (#452), and the scene paste and drop in `src/features/clipboard/scene-clip.js` is out of M3 (D10). The row stays open until M6.
 - **Acceptance:** the five suites pass on the migrated editor. A new architecture check finds no `document.execCommand` call and no `innerHTML` assignment to a `.cell-editable` under `src/features/`.
 
 ### INV-03 — Text inside a tag is never touched
@@ -47,22 +47,22 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-04 — Every top-level field survives migration and merge
 
 - **Behaviour:** `migrateRows()` and `mergeStates()` both keep every top-level state field. A field that one of them misses is silently dropped on load or merge.
-- **Tests:** `src/test/state-fields.test.mjs` (all tests, among them "INV-04: a field added to STATE_FIELDS survives migrateRows, mergeStates and a .splitpage save, with no other edit", through `02-state.js`'s table and the real `.splitpage` codec), `src/test/migrate-rows.test.mjs`, `src/test/merge-states.test.mjs`; `tests/core/merge-states.test.ts` ("INV-04: a field added to the table survives migrateRows, mergeStates and a .splitpage round trip, with no other edit"); `tests/core/merge/states.test.ts` (the merge alone); `tests/core/migrate.test.ts` ("normalize comes from the table…").
+- **Tests:** `src/test/state-fields.test.mjs` (all tests, among them "INV-04: a field added to STATE_FIELDS survives migrateRows, mergeStates and a .splitpage save, with no other edit", through the `STATE_FIELDS` table and the real `.splitpage` codec), `src/test/migrate-rows.test.mjs`, `src/test/merge-states.test.mjs`; `tests/core/merge-states.test.ts` ("INV-04: a field added to the table survives migrateRows, mergeStates and a .splitpage round trip, with no other edit"); `tests/core/merge/states.test.ts` (the merge alone); `tests/core/migrate.test.ts` ("normalize comes from the table…").
 - **Owner:** `src/core/document` · **Milestone:** 2 · **Class:** absorb
-- **Replacement:** a single `STATE_FIELDS` policy in `src/core/document/fields.ts`, with no callbacks into UI modules: each entry's default, `normalize` and merge strategy are data that `migrateRows` (`src/core/migrate.ts`) and `mergeStates` (`src/core/merge-states.ts`) both read (M2 gate: "a new field policy does not require duplicating merge/schema field lists"). Done in milestone 2.5; `02-state.js` keeps a thawed copy of the table with `mergeList` attached, and passes it to both.
+- **Replacement:** a single `STATE_FIELDS` policy in `src/core/document/fields.ts`, with no callbacks into UI modules: each entry's default, `normalize` and merge strategy are data that `migrateRows` (`src/core/migrate.ts`) and `mergeStates` (`src/core/merge-states.ts`) both read (M2 gate: "a new field policy does not require duplicating merge/schema field lists"). Done in milestone 2.5; `src/core/merge/state-fields.ts` keeps the table with `mergeList` attached, and the session and document ports import it.
 - **Acceptance:** met in 2.5 by the two INV-04 tests above: a field added to `STATE_FIELDS` round-trips through `migrateRows`, `mergeStates` and a `.splitpage` save without edits to either function. `state-fields.test.mjs` stays.
 
 ### INV-05 — Script-only behaviour stays out of comment boxes
 
 - **Behaviour:** Handlers shared by script cells and comment or reply boxes apply script-only behaviour (tag completion, row splitting, script shortcuts) only to script cells, which include the Writer's paragraphs. A comment box never triggers them.
-- **Tests:** none found. `81-draft-edit.txt` and `10-comments-panel.txt` exercise comment boxes under the shared handlers but assert nothing about the gate.
+- **Tests:** partial. `tests/features/editing/cell-page.test.ts` asserts the gate: `isScriptCell` is false for a comment box and true for a script cell and a Writer paragraph. `81-draft-edit.txt` and `10-comments-panel.txt` exercise comment boxes under the shared handlers but assert nothing about the gate.
 - **Owner:** `src/features/editing`, `src/features/comments` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** per-feature bindings with mount and dispose (M6). The script editor binds its handlers to its own cells and the comment composer binds its own, so no shared delegation has to check which kind of box it is in.
 - **Acceptance:** browser: script-only shortcuts in a comment box (Alt+Enter, Tab on a completion) leave rows, script and registry unchanged. `81-draft-edit.txt` passes.
 
 ### INV-06 — No document-wide work per keystroke
 
-- **Behaviour:** Typing triggers no document-wide derivation. Expensive refreshes run through one debounced idle refresh (180 ms), memoised derivations are keyed on their own inputs, and the production index is derived at most once per change. One document-wide scan is retained on purpose: 12a's `flushEdits` diffs the whole document against its base after each edit to record undo (`diffStates`, then `applySteps` on the base), measured at 0.58 ms median and 1.32 ms p95 per edit on the 30-scene demo in jsdom on `2b3aa86`, and included in the performance record's browser typing times. It goes with milestone 6's undo transaction (milestone 3 external review, E8).
+- **Behaviour:** Typing triggers no document-wide derivation. Expensive refreshes run through one debounced idle refresh (180 ms), memoised derivations are keyed on their own inputs, and the production index is derived at most once per change. One document-wide scan is retained on purpose: the undo owner's `flush` (`src/application/editing/undo/`) diffs the whole document against its base after each edit to record undo (`diffStates`, then `applySteps` on the base), measured at 0.58 ms median and 1.32 ms p95 per edit on the 30-scene demo in jsdom on `2b3aa86`, and included in the performance record's browser typing times. It goes with milestone 6's undo transaction (milestone 3 external review, E8).
 - **Tests:** browser `67-render-perf.txt` (counts renders, repaints, idle refreshes and index derivations on a 300-scene document); `src/test/production-index.test.mjs` ("the index is kept through prose edits and re-derived by any change to what it reads"); `tests/application/cell-text.test.ts` ("INV-06: a burst of keystrokes through the typing command runs each derivation once per idle window"); `tests/application/session-effects.test.ts` (the scheduler's windows); `tests/application/session-anchors.test.ts` (a one-cell edit skips the document-wide reconciliation unless its comment ids change).
 - **Owner:** `src/application` (effect scheduler) · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** an application effect scheduler coalesces autosave, draft capture, history and expensive derivations (M3). Cached derivations use precise changed inputs (M6).
@@ -82,14 +82,14 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** Every value placed in a CSS attribute selector is escaped with `cssAttr()`, so quotes, backslashes or control characters in an id or name cannot break or redirect the selector.
 - **Tests:** none found for `cssAttr`. `src/test/migrate-rows.test.mjs` ("rows: an id that could escape a selector is replaced") covers row ids at ingestion only.
-- **Owner:** presentation utility used across `src/features/` (now in `04-richtext.js`) · **Milestone:** 6 · **Class:** keep
+- **Owner:** presentation utility used across `src/features/` (now in `src/features/common/dom.ts`) · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** new unit test: for values containing `"`, `'`, `\`, a newline and `]`, `cssAttr` produces a selector that matches exactly the element holding that value.
 
 ### INV-09 — Markdown table cells are escaped
 
 - **Behaviour:** Text written into a Markdown table cell goes through `mdCell()`, so a `|` or a line break in the text cannot split the row.
-- **Tests:** `src/test/formats.test.mjs` (".md round-trips the whole document…", whose fixture has a `|` in a cell; "a saved .md project is byte for byte what it was before the exports changed", with pipes and line breaks); `src/test/markdown-table.test.mjs` ("an escaped pipe stays inside its cell", reader side).
+- **Tests:** `src/test/formats.test.mjs` (".md round-trips the whole document…", whose fixture has a `|` in a cell; "a saved .md project is byte for byte what it was before the exports changed", with pipes and line breaks); `tests/adapters/formats/markdown-table.test.mjs` ("an escaped pipe stays inside its cell", reader side).
 - **Owner:** `src/adapters/formats` · **Milestone:** 5 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the named tests pass against the Markdown codec in the format registry.
@@ -97,11 +97,11 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-10 — Content enters a script cell only in canonical, sanitised form
 
 - **Behaviour:** Content reaches a script cell only through `fromHtml()` or a model edit, both of which produce canonical, sanitised cells. `syncFieldFromDom()` stores each keystroke that way: it decodes the cell through the adapter and hands the runs to the typing command (`src/application/commands/cell-text.ts`, M3 3.12), which stores `toHtml(runs)`. Anything else rebuilt from HTML, such as a comment body, passes `sanitizeHtml()` before it re-enters state.
-- **Media (milestone 6, 6.4):** runs carry pictures and video cards as `image` and `video` atoms (`src/core/text/runs.ts`), so a cell holding media is stored as `toHtml(runs)` like any other cell. The script-cell decoder (`decode(html, { media: true })`, `scriptCellOf` in `src/bootstrap/richtext.ts`, the session's `CellTextPorts.cells`) keeps them; the plain decoder (`fromHtml`, `cellOf`) still drops them for its readers. Undo (the cosmetic test, the three-way cell merge and the typing projection in `src/js/12a-undo.js`) and the editor's selection keys (`editorKeys`, which names a media atom `#media` as the DOM does) read with media kept, so a media-only change is an undo step and an undo or redo over a media cell keeps its media. `toHtml` writes a picture as the stored image markup and a card as the sanitiser's card, so the stored form is still the sanitiser's fixed point. A media cell's split is a text cut (an atom is one place) and its join joins the runs. The former named exception (`SanitisedMediaHtml`, `mediaHalves`) is gone: no typed HTML cell value can be produced.
+- **Media (milestone 6, 6.4):** runs carry pictures and video cards as `image` and `video` atoms (`src/core/text/runs.ts`), so a cell holding media is stored as `toHtml(runs)` like any other cell. The script-cell decoder (`decode(html, { media: true })`, `scriptCellOf` in `src/bootstrap/richtext.ts`, the session's `CellTextPorts.cells`) keeps them; the plain decoder (`fromHtml`, `cellOf`) still drops them for its readers. Undo (the cosmetic test, the three-way cell merge and the typing projection in `src/application/editing/undo/`) and the editor's selection keys (`editorKeys`, which names a media atom `#media` as the DOM does) read with media kept, so a media-only change is an undo step and an undo or redo over a media cell keeps its media. `toHtml` writes a picture as the stored image markup and a card as the sanitiser's card, so the stored form is still the sanitiser's fixed point. A media cell's split is a text cut (an atom is one place) and its join joins the runs. The former named exception (`SanitisedMediaHtml`, `mediaHalves`) is gone: no typed HTML cell value can be produced.
 - **Paste and cut (M3 3.14):** a paste is cleaned by `cellFromClipboard` (05c), inserted as runs or text by `pasteCommand`, and stored as `toHtml(runs)`; a cut stores `toHtml(deleteRange(...))`. `src/test/paste-html-fuzz.test.mjs` (seeded) checks the paste path for clean, canonical cells within the output bound.
 - **Tests:** `src/test/doc-model.test.mjs` ("toHtml writes the sanitiser's own markup: a fixed point of sanitizeHtml", "round trip: fromHtml(toHtml(c)) is normalizeCell(c)"); `src/test/clipboard.test.mjs` ("a paste is sanitised, keeps formatting and tags, and drops pictures and video cards"); `src/test/migrate-rows.test.mjs` ("comments: bodies and replies are sanitised, authors are plain text"); `tests/adapters/richtext/golden.test.ts` ("INV-10: the sanitiser's output is its own fixed point over the corpus", "toHtml(decode(x)) is already in stored form over the corpus", through the adapter on jsdom's parser with no DOM globals); `tools/test-dep-report.mjs` ("INV-10, HTML into cells"); `tests/application/cell-text.test.ts` ("the stored form is exactly toHtml of the runs…", "a cell holding media is runs like any other…"); `tests/adapters/richtext/media-runs.test.ts` (the media runs over the corpus: the sanitiser's fixed point, round trip, media kept in order); `tests/core/text/media-runs.test.ts`; `src/test/media-cell-app.test.mjs` ("no typed HTML cell value can be produced…"); `src/test/cell-text-app.test.mjs` (the seeded differential against the base's `syncFieldFromDom`); browser `52-csp.txt`.
 - **Owner:** `src/adapters/richtext` · **Milestone:** 2 · **Class:** absorb
-- **Replacement:** the HTML adapter in `src/adapters/richtext/` becomes the only decoder from HTML to cells (M2), and DocumentSession commands accept normalised runs, not HTML (M3). Done in 2.4: `fromHtml`, `cellOf`, `sanitizeHtml` and `storedHtmlFromDom` in `04c-doc-model.js` and `04-richtext.js` are the adapter's functions, handed out through `src/legacy/richtext.ts`.
+- **Replacement:** the HTML adapter in `src/adapters/richtext/` becomes the only decoder from HTML to cells (M2), and DocumentSession commands accept normalised runs, not HTML (M3). Done in 2.4: `fromHtml`, `cellOf`, `sanitizeHtml` and `storedHtmlFromDom` are the adapter's functions, handed out through `src/bootstrap/richtext.ts`.
 - **Acceptance:** HTML adapter tests on a real parser (M2 gate) show every decoded cell is a fixed point of the sanitiser; met in 2.4. A dependency check finds no module outside `src/adapters/richtext/` that builds cells from HTML; met by the `html-cells` rule of `tools/dep-report.mjs` (#327, defined in [dependencies.md](dependencies.md#html-into-cells-inv-10)), which allows only the adapter and its shared reader `src/bootstrap/richtext.ts` (formerly the bridge `src/legacy/richtext.ts`) to import the adapter or parse HTML, with two recorded legacy exceptions.
 
 ### INV-11 — Controls in a tag card head take precedence over expand
@@ -138,7 +138,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
   Its hues keep clear of the Visual blue and the Audio amber and meet contrast.
 - **Tests:** `src/test/palette.test.mjs` (all tests), `src/test/export-colours.test.mjs`; browser `217-tag-icons.txt`, `217b-tag-icons-boot.txt`, `145-export-colours.txt`.
-- **Owner:** `src/core/document` (category ids, in `tags.ts`), `07-production-tags.js` (`TAG_CATEGORIES`: labels, colours and icons, keyed by id), with tokens in feature styles · **Milestone:** 2 · **Class:** keep
+- **Owner:** `src/core/document` (category ids, in `tags.ts`), `src/core/production/looks.ts` (`TAG_CATEGORIES`: labels, colours and icons, keyed by id), with tokens in feature styles · **Milestone:** 2 · **Class:** keep
 - **Replacement:** — (`TAG_PRINT_COLORS` stays a deliberate second copy, held to `:root` by `palette.test.mjs`).
 - **Acceptance:** `palette.test.mjs` passes, reading the token files produced when CSS is split (M6).
 
@@ -162,7 +162,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** The untagged-mention highlight, the tour and the tutorial only paint the page (for example with `CSS.highlights`). Until the user accepts an offer they wrap no span, leave the document clean and add no undo entry.
 - **Tests:** browser `07-untagged.txt` ("no wrapped span, no dirty flag"); `13-onboarding.txt` and `15-tutorial.txt` (both cite "invariant #17" and compare `#rows` byte for byte).
-- **Owner:** `src/features/tags` (the untagged prompt) and the tour and onboarding modules under `src/js/` · **Milestone:** 6 · **Class:** absorb
+- **Owner:** `src/features/tags` (the untagged prompt) and the tour (`startTour()` in `src/features/help/help.ts`) and onboarding (`src/features/onboarding/`, which invokes the tour) · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** views and selectors receive read-only snapshots and named operations (M3; plan §6: "a view or selector never changes document content"). Accepting a hint is a command.
 - **Acceptance:** application test: running the untagged scan and the tour against a session leaves the edit generation, dirty state and undo stack unchanged. The three suites pass.
 - **As built (M3, part):** the session hands a view the live document only through `read(select)`, typed as a deep-readonly `DocumentView` ([session.md](session.md#1-purpose)); the compiler, not the runtime, stops a write. The untagged scan and the tour still run in legacy modules and do not go through a session, and the acceptance test above is not written. The row stays open until M6.
@@ -174,7 +174,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (transaction), with `syncCommentAnchors` in `src/core/text` · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** every accepted DocumentSession transaction reconciles dependent anchors (M3; plan §6: "every accepted user transaction includes its dependent anchor/record reconciliation").
 - **Acceptance:** application test: split, join and cut-then-paste commands that do not call `syncCommentAnchors` themselves still leave every anchored comment's `rowId` and `field` equal to what reconciliation computes, in one undo entry. `comment-anchors.test.mjs` stays. Met in 3.13 (#447) and 3.14 (#455).
-- **As built (M3):** `ReconcilePort.anchors` runs after `apply` when a change set inserts, removes or moves rows or sets `runsMoved` ([session.md](session.md#when-reconciliation-runs)). Split declares the inserted scene and join the removed one. The typing command sets `runsMoved` when a cell's ordered comment ids change, and a paste sets it when it is a cut's own and carries comments. A cut never reconciles: its comment keeps its place until its words land again. No command calls `syncCommentAnchors` itself. The scene-level paths still do: `deleteRow` in `features/rows/scenes.js`, the selected-scene delete and paste in `05h-scene-select.js`, and the scene paste in `05g-scene-clip.js` (D10; M3 took cell-level cut-paste only). Known gap: cut, Ctrl+Z, then paste leaves the anchor in two scenes, because `cutNonce` outlives an undo of the cut (#460, the same on the base). `editCell`'s model edits, which move no words between rows, do not reconcile.
+- **As built (M3):** `ReconcilePort.anchors` runs after `apply` when a change set inserts, removes or moves rows or sets `runsMoved` ([session.md](session.md#when-reconciliation-runs)). Split declares the inserted scene and join the removed one. The typing command sets `runsMoved` when a cell's ordered comment ids change, and a paste sets it when it is a cut's own and carries comments. A cut never reconciles: its comment keeps its place until its words land again. No command calls `syncCommentAnchors` itself. The scene-level paths reach reconciliation through commands: `deleteRow` (`features/rows/scenes.js`, `deleteSceneCommand`) and the selected-scene delete and paste (`src/features/clipboard/scene-select.js`, `removeScenesCommand` and `pasteScenesCommand`), reconciled by `src/application/session/document-session.ts`. The scene paste in `src/features/clipboard/scene-clip.js` (D10; M3 took cell-level cut-paste only) still calls `syncCommentAnchors` directly. Known gap: cut, Ctrl+Z, then paste leaves the anchor in two scenes, because `cutNonce` outlives an undo of the cut (#460, the same on the base). `editCell`'s model edits, which move no words between rows, do not reconcile.
 
 ### INV-19 — A full-screen overlay owns focus and stacking
 
@@ -219,7 +219,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-24 — Export comment order ignores the panel's sort
 
-- **Behaviour:** Exports always order comments by `commentPositionCompare()` in `10-comments.js`, which passes `findRowIndex` to `compareCommentPositions` in `src/core/document/comments.ts`: row, then Visual before Audio, then post time. The panel's sort mode is a reader preference kept in `localStorage`, not document data, and never changes an export.
+- **Behaviour:** Exports always order comments by `commentPositionCompare()` in `src/features/comments/comments.js`, which passes a row-index lookup (`rowIndexOf`) to `compareCommentPositions` in `src/core/document/comments.ts`: row, then Visual before Audio, then post time. The panel's sort mode is a reader preference kept in `localStorage`, not document data, and never changes an export.
 - **Tests:** partial. Browser `11-comments-sort-persist.txt` (the sort is a reader preference). No test checks export order under a non-default panel sort.
 - **Owner:** `src/core/document` (comment read model), consumed by `src/adapters/formats` · **Milestone:** 5 · **Class:** absorb
 - **Replacement:** one frozen `ExportDocument` projection built from the session and the export options. Writers cannot read live UI state such as the panel's sort (M5).
@@ -237,7 +237,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** A quick-add box that tracks items whether or not the script mentions them adds a registry entry for each new line. When a line is removed, it deletes that entry only if the item is orphaned; an item still tagged in the script stays.
 - **Tests:** `tests/core/production/tags.test.ts` ("INV-26: the quick-add plan deletes an orphaned entry whose line went and keeps one still tagged in the script"); `tests/core/production/golden.test.ts` (the Gear quick add against `production-gear-quick-add`); browser `12-gear.txt` ("removing a line un-tracks it, UNLESS it's still tagged live").
-- **Owner:** `src/core/production` (reconciliation plan, `planQuickAdd`), `src/js/08-production-panels.js` (the caller) · **Milestone:** 2 · **Class:** keep
+- **Owner:** `src/core/production` (reconciliation plan, `planQuickAdd`), `src/features/tags/panels.js` (the caller) · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** new unit test: for a removed line, the quick-add reconciliation plan deletes an orphaned entry and keeps a live-tagged one. `12-gear.txt` passes.
 
@@ -388,7 +388,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (restore and adoption policy), `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: restoration does not silently save a user file).
 - **Acceptance:** application test: adopting a restored draft leaves the destination's confirmed generation and baseline unchanged and schedules no save.
-- **Milestone 4 (4.22):** held, and now an application rule. A recovery settle arms no autosave (`12-dirty-toast.js`), and the restores go through `transitions.restore` and `transitions.recover`, which leave the destination's confirmed generation and baseline as they were. Tests: matrix T5, T5-merge, T6, B8, B11 and K1 (`src/test/m4-matrix-*.test.mjs`), `tests/application/restore-policy.test.ts`. One behaviour change to know: "Undo merge" after a server conflict no longer autosaves a couple of seconds later. `docs/HANDOFF.md` §5.41 points here.
+- **Milestone 4 (4.22):** held, and now an application rule. A recovery settle arms no autosave (`createSessionEffects().save` in `src/application/save/session-effects.ts`, which skips `recovery` changes; the draft merge path also sets `noAutoSave` in `src/application/recovery/drafts.ts`), and the restores go through `transitions.restore` and `transitions.recover`, which leave the destination's confirmed generation and baseline as they were. Tests: matrix T5, T5-merge, T6, B8, B11 and K1 (`src/test/m4-matrix-*.test.mjs`), `tests/application/restore-policy.test.ts`. One behaviour change to know: "Undo merge" after a server conflict no longer autosaves a couple of seconds later. `docs/HANDOFF.md` §5.41 points here.
 
 ### INV-42 — Main is the authority on tabs
 
@@ -442,7 +442,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** Before any byte of an app-data export is written, the bundle is checked for keys matching `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, and it must contain none. An import carrying such a key is refused. Image bytes count toward the 200 MB export cap. Images whose bytes could not be read are listed in `missingBlobs`, and the export warns about them.
 - **Tests:** browser `27-app-data.txt` (case 2, the "invariant #48" key walk; case 7, a bundle carrying `apiKey`; cases 14, 15 and 19); `34-desktop-app-data-export.txt`.
-- **Owner:** app-data bundle codec under `src/adapters/` (now `20h-appdata.js`) · **Milestone:** 6 · **Class:** keep
+- **Owner:** app-data bundle codec under `src/features/settings/app-data.js` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** both suites pass. New unit test: the codec refuses to write, and refuses to import, a bundle with a credential-shaped key at any depth.
 
@@ -450,7 +450,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** Import writes through the history store's public write path and never deletes. Existing preferences are never overwritten. Each image is verified and stored durably before the first snapshot that names it. A bad image is dropped and reported, and its snapshots still import. A bundle without `blobs` imports exactly as before.
 - **Tests:** browser `27-app-data.txt` (cases 4 and 5: idempotence, preferences; cases 16–18: images first, a tampered image, an old bundle).
-- **Owner:** app-data bundle codec under `src/adapters/` · **Milestone:** 6 · **Class:** keep
+- **Owner:** app-data bundle codec under `src/features/settings/app-data.js` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the suite passes. New unit test: importing into a store that already holds newer snapshots and preferences leaves all of them unchanged.
 
@@ -476,7 +476,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (save coordinator) · **Milestone:** 4 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the suites pass. Application test with a fake clock: after a recovery adoption or a `noAutoSave` merge, no automatic write is scheduled until an explicit Save; with autosave off, none is scheduled at all.
-- **Milestone 4 (4.22):** held. `autoSaveWhere` and `autoSaveMay` (`src/application/save/autosave.ts`) are pure and tested (`tests/application/save-status.test.ts`, "INV-51 where…"), and a restore schedules no automatic write (T5). The timers and the halt state stay in `14-export.js` (saving.md §8). `docs/HANDOFF.md` §5.51 points here.
+- **Milestone 4 (4.22):** held. `autoSaveWhere` and `autoSaveMay` (`src/application/save/autosave.ts`) are pure and tested (`tests/application/save-status.test.ts`, "INV-51 where…"), and a restore schedules no automatic write (T5). The halt state and the idle and max timers are in `createAutoSavePolicy()` (`src/application/save/autosave.ts`, `schedule()` at line 114); `src/bootstrap/wiring/save-owners.ts` builds it with its timer port (saving.md §8). `docs/HANDOFF.md` §5.51 points here.
 
 ### INV-52 — No durable record names a blob its store lacks
 
@@ -515,7 +515,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/core/production` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the named tests pass against `src/core/production` and the migrated clipboard path.
-- **As built (M3 3.14):** the cell-level paste is `pasteCommand` in `src/application/commands/clipboard.ts`, which owns `takenBrollIds`, `freshBrollIds` and `pastedShots` (05c keeps thin wrappers). `tests/application/clipboard.test.ts` pins it: "a copied b-roll key whose id is taken gets a fresh id and a shot record seeded from the scene…", "a cut b-roll key pasted back keeps its id and makes no second record…", and "seeded: a pasted copy never leaves two keys with one id in the script". The scene paste in `05g-scene-clip.js` still uses `freshBrollIds` and `recordPastedBroll` (D10).
+- **As built (M3 3.14):** the cell-level paste is `pasteCommand` in `src/application/commands/clipboard.ts`, which owns `takenBrollIds`, `freshBrollIds` and `pastedShots` (`src/features/clipboard/cell-clipboard.js` keeps thin wrappers). `tests/application/clipboard.test.ts` pins it: "a copied b-roll key whose id is taken gets a fresh id and a shot record seeded from the scene…", "a cut b-roll key pasted back keeps its id and makes no second record…", and "seeded: a pasted copy never leaves two keys with one id in the script". The scene paste in `src/features/clipboard/scene-clip.js` still uses `freshBrollIds` and `recordPastedBroll` (D10).
 
 ### INV-55 — A comment or reply draft owns its undo
 
@@ -548,7 +548,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - the breakdown by category and the b-roll by scene.
 
   No format works these out for itself. The print colours are a second copy of `:root`, held to it by `palette.test.mjs`.
-- **Tests:** `src/test/export-kit.test.mjs`; `src/test/m4-matrix-exports.test.mjs` (X6–X18: every writer and every `buildFileData` kind gives the captured bytes with the live document changed after capture; 5.1); `src/test/palette.test.mjs` ("the exports' print palette is the light theme's :root values"); `src/test/pdf-script.test.mjs`; `src/test/export-colours.test.mjs`; `src/test/xlsx-export.test.mjs`; `src/test/markdown-table.test.mjs` (the stacked-export cases); browser `41-export-polish.txt`.
+- **Tests:** `src/test/export-kit.test.mjs`; `src/test/m4-matrix-exports.test.mjs` (X6–X18: every writer and every `buildFileData` kind gives the captured bytes with the live document changed after capture; 5.1); `src/test/palette.test.mjs` ("the exports' print palette is the light theme's :root values"); `src/test/pdf-script.test.mjs`; `src/test/export-colours.test.mjs`; `src/test/xlsx-export.test.mjs`; `tests/adapters/formats/markdown-table.test.mjs` (the stacked-export cases); browser `41-export-polish.txt`.
 - **Owner:** `src/application` (`ExportDocument`), consumed by `src/adapters/formats` · **Milestone:** 5 · **Class:** absorb
 - **Replacement:** one frozen `ExportDocument` projection, captured from the session and the options, plus a format registry whose writers read only that projection (M5).
 - **Acceptance:**
@@ -564,7 +564,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - **CSV:** its own header, a cut at its own Comments line, and empty Total and Target rows.
 
   The `.docx` fixtures are the old writer's output and are never regenerated.
-- **Tests:** `src/test/docx-reimport.test.mjs`, with `src/test/fixtures/splitpage-3.0.0-beta.8.docx` and `src/test/fixtures/splitpage-3.0.0-beta.8-narration.docx`; `src/test/markdown-table.test.mjs` ("the new stacked export reads back as exactly its scenes, and nothing round them", "a stacked export written before #169's look still reads back as its scenes"); `src/test/text-exports.test.mjs` ("the new sheet reopens as exactly its scenes: no totals, no comments", "a sheet exported before #169's columns reopens as its scenes…"); browser `41-export-polish.txt`.
+- **Tests:** `src/test/docx-reimport.test.mjs`, with `src/test/fixtures/splitpage-3.0.0-beta.8.docx` and `src/test/fixtures/splitpage-3.0.0-beta.8-narration.docx`; `tests/adapters/formats/markdown-table.test.mjs` ("the new stacked export reads back as exactly its scenes, and nothing round them", "a stacked export written before #169's look still reads back as its scenes"); `src/test/text-exports.test.mjs` ("the new sheet reopens as exactly its scenes: no totals, no comments", "a sheet exported before #169's columns reopens as its scenes…"); browser `41-export-polish.txt`.
 - **Owner:** `src/adapters/formats` (import readers) · **Milestone:** 5 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the named tests and fixtures pass unchanged against the registry's import readers.
