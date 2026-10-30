@@ -1,17 +1,23 @@
 import { test } from "node:test";
 import { launch as portLaunch } from "../../src/bootstrap/wiring/ports/desktop.ts";
 import assert from "node:assert/strict";
-import { runningOnDesktop, setRunningOnDesktop } from "../../src/application/desktop-presence.ts";
+import { presence } from "../../src/bootstrap/wiring/ports/desktop-presence.ts";
 import "../../src/test/_dom.mjs";
 
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
 
-test("running on desktop starts false and follows what it is told", () => {
-  assert.equal(runningOnDesktop(), false);
-  setRunningOnDesktop(true);
-  assert.equal(runningOnDesktop(), true);
-  setRunningOnDesktop(false);
-  assert.equal(runningOnDesktop(), false);
+test("desktop presence is off with no bridge and follows the current desktop bridge at call time", () => {
+  const running = presence.running;
+  assert.equal(running(), false);
+  try {
+    useDesktopForTest({});
+    assert.equal(running(), true);
+    useDesktopForTest(null);
+    assert.equal(running(), false);
+  } finally {
+    restoreDesktop();
+  }
+  assert.equal(running(), false);
 });
 
 test("launch facts read each current desktop bridge at call time", () => {

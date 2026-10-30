@@ -2,7 +2,7 @@ import { commentsPanelActions as panelDefinitions, commentsHelpActions as helpDe
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, selection as portSelection } from "./ports/editing.ts";
 import { notices as portNotices } from "./ports/effects.ts";
-import { preferenceValues as portPreferences } from "./ports/preferences.ts";
+import { commentSorting, preferenceValues as portPreferences } from "./ports/preferences.ts";
 import { panelControl as portSidePanels, sidePanels } from "./ports/panels.ts";
 import { text as portText } from "./ports/text.ts";
 import { ids as portIds, clock as portClock } from "./ports/identity.ts";
@@ -65,7 +65,6 @@ import {
   onRootPaste,
   routeRootClick
 } from "./editor.ts";
-import { commentSortMode, setCommentSort } from "../../application/comment-sort.ts";
 
 const comments = owned<ReturnType<typeof mountComments>>();
 
@@ -100,7 +99,7 @@ export function mountCommentsFeature(): ReturnType<typeof mountComments> {
       closePanel: () => { sidePanels().close("comments-panel"); },
       assigneeFilter: setCommentAssigneeFilter,
       assignee: setCommentAssignee,
-      sortMode: function () { return commentSortMode(); },
+      sortMode: function () { return commentSorting.current(); },
       captureReplies: captureReplyDrafts,
       sort: setCommentSortMode,
       closeComposer: closeCommentComposer,
@@ -132,7 +131,7 @@ const state = owned<ReturnType<typeof mountCommentState>>();
 export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState> {
   return state.replace(() => {
     const ports: CommentStatePorts = {
-      sort: { current: commentSortMode, choose: setCommentSort },
+      sort: commentSorting,
       document: portDocument,
       edits: portEdits,
       notices: portNotices,

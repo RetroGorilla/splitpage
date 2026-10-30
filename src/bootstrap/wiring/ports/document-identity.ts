@@ -3,7 +3,7 @@ import { currentDocument, stampDocument } from "../session-owner.ts";
 import { currentHome, documentLocation } from "../location-owner.ts";
 import { historyOwner } from "../history.ts";
 import { notices } from "./effects.ts";
-import { runningOnDesktop } from "../../../application/desktop-presence.ts";
+import { presence } from "./desktop-presence.ts";
 import { mintDocId, randomHexBytes } from "../../../adapters/identity/ids.ts";
 
 export function documentIdentityPorts(): DocumentIdentityPorts {
@@ -12,7 +12,7 @@ export function documentIdentityPorts(): DocumentIdentityPorts {
     location: { home: currentHome, writtenOut: () => documentLocation().writtenOut(), markWrittenOut: (value) => documentLocation().markWrittenOut(value) },
     history: { copyHistory: (from, to) => historyOwner().copyHistory(from, to), historyDocumentChanged: () => historyOwner().historyDocumentChanged() },
     effects: notices,
-    desktop: { running: runningOnDesktop },
+    desktop: { running: presence.running },
     ids: { docId: mintDocId, randomHexBytes },
     now: () => Date.now(),
     logger: { error: (error) => { if (window.console) console.error(error); } },

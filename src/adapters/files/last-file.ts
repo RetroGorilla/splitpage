@@ -1,4 +1,4 @@
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { runningOnDesktop } from "../desktop/desktop-port.ts";
 
 const LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";
 

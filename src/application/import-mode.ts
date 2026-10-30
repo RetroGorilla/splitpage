@@ -1,5 +1,14 @@
-let touched = false;
+export interface ImportMode {
+  readonly touched: () => boolean;
+  readonly touch: () => void;
+  readonly reset: () => void;
+}
 
-export const importModeTouched = (): boolean => touched;
-export const touchImportMode = (): void => { touched = true; };
-export const resetImportMode = (): void => { touched = false; };
+export function createImportMode(): ImportMode {
+  let touched = false;
+  return Object.freeze({
+    touched: (): boolean => touched,
+    touch: (): void => { touched = true; },
+    reset: (): void => { touched = false; }
+  });
+}

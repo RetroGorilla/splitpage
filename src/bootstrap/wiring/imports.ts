@@ -9,6 +9,7 @@ import { documentReader } from "./ports/document.ts";
 import { edits } from "./ports/editing.ts";
 import { notices } from "./ports/effects.ts";
 import { importFormats } from "./ports/imports.ts";
+import { importMode } from "./ports/preferences.ts";
 import { ownership } from "./ports/saving.ts";
 import { history } from "./ports/transitions.ts";
 import { text } from "./ports/text.ts";
@@ -28,7 +29,8 @@ export function mountImportDialogFeature(deferred: Pick<ImportDialogPorts, "stam
       formats: importFormats,
       desktop: importDesktop,
       noteEdit: noteSessionEdit,
-      stampRow: deferred.stampRow
+      stampRow: deferred.stampRow,
+      mode: importMode
     };
     return mountImportDialog(ports);
   });

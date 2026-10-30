@@ -7,13 +7,11 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { rewriteCellsCommand, rewrittenCopies } from "../../application/commands/document-edit.ts";
 import { tagCellsCommand } from "../../application/commands/production-records.ts";
 import { cssAttr } from "../common/dom.ts";
-import { bulkTagRows } from "../../application/commands/bulk-tags.ts";
 import { idMap } from "../../core/document/id-map.ts";
 import { escapeHtml, withoutLoneSurrogates } from "../../core/document/text-policy.ts";
 import { replaceText } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
-import { findMatchesCase, setFindMatchCase } from "../../application/find-options.ts";
 
 var ports = null;
 
@@ -133,7 +131,7 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
 }
 
 export function refreshFindMatches(keepIndex) {
-  var found = findInRows(ports.document.current()?.rows ?? [], findNeedle(), findMatchesCase());
+  var found = findInRows(ports.document.current()?.rows ?? [], findNeedle(), ports.options.matchesCase());
   findMatches = found.matches;
   findInTags = found.inTags;
   if (!findMatches.length) findIndex = -1;
@@ -167,7 +165,7 @@ function currentMatchRange() {
   var idx = ports.document.read(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return null;
   var model = ports.text.cellOf(ports.document.current().rows[idx][m.field]);
-  var hit = findInCell(model, findNeedle(), findMatchesCase())[m.nth];
+  var hit = findInCell(model, findNeedle(), ports.options.matchesCase())[m.nth];
   if (!hit) return null;
   var range = domRangeFor(cell, hit.from, hit.to, projection(model));
   return range ? { cell: cell, range: range } : null;
@@ -211,7 +209,7 @@ export function replaceCurrent() {
   var idx = ports.document.read(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return;
   var replacement = document.getElementById("replace-input").value || "";
-  var matchCase = findMatchesCase();
+  var matchCase = ports.options.matchesCase();
   function replaced(doc) {
     var row = doc.rows[rowIndexOf(doc, m.rowId)];
     if (!row) return [];
@@ -227,7 +225,7 @@ export function replaceAll() {
   var needle = findNeedle();
   if (!needle) return;
   var replacement = document.getElementById("replace-input").value || "";
-  var matchCase = findMatchesCase();
+  var matchCase = ports.options.matchesCase();
   function replacedAll(doc) {
     var hooks = registryTagHooks(doc.productionTags);
     var out = { total: 0, rewrites: [] };
@@ -243,8 +241,8 @@ export function replaceAll() {
   }
   var total = ports.document.read(replacedAll).total;
   var inTags = ports.document.current().rows.reduce(function (n, row) {
-    return n + countInTags(ports.text.cellOf(row.visualText), needle, findMatchesCase()) +
-               countInTags(ports.text.cellOf(row.audioText), needle, findMatchesCase());
+    return n + countInTags(ports.text.cellOf(row.visualText), needle, ports.options.matchesCase()) +
+               countInTags(ports.text.cellOf(row.audioText), needle, ports.options.matchesCase());
   }, 0);
   var tagNote = inTags
     ? " · " + inTags + " left inside tag" + (inTags === 1 ? "" : "s") + " — rename those in Production"
@@ -291,7 +289,7 @@ function bulkTagRefusal(needle, plan) {
 
 function renderBulkTagRow() {
   var needle = bulkTagNeedle();
-  var plan = bulkTagRows(ports.document.current()?.rows ?? [], needle, bulkTagCat, needle, findMatchesCase(), true);
+  var plan = ports.bulkTag(ports.document.current()?.rows ?? [], needle, bulkTagCat, needle, ports.options.matchesCase(), true);
   var why = bulkTagRefusal(needle, plan);
   var ask = document.getElementById("find-tag-ask");
   var go = document.getElementById("find-tag-go");
@@ -359,13 +357,13 @@ export function runBulkTag() {
   if (!doc) return;
   var needle = bulkTagNeedle();
   var cat = tagCategory(bulkTagCat) || TAG_CATEGORIES[0];
-  var plan = bulkTagRows(doc.rows, needle, cat.id, needle, findMatchesCase(), true);
+  var plan = ports.bulkTag(doc.rows, needle, cat.id, needle, ports.options.matchesCase(), true);
   var why = bulkTagRefusal(needle, plan);
   if (why) { ports.notices.show(why, "warn"); return; }
   ports.undo.breakCoalescing();
   var done = plan;
-  var matchCase = findMatchesCase();
-  var tagged = rewrittenCopies(["visualText"], function (rows) { bulkTagRows(rows, needle, cat.id, needle, matchCase, false); });
+  var matchCase = ports.options.matchesCase();
+  var tagged = rewrittenCopies(["visualText"], function (rows) { ports.bulkTag(rows, needle, cat.id, needle, matchCase, false); });
   if (!done.hits || !ports.edits.edit(tagCellsCommand("bulk-tag", tagged, { cat: cat.id, name: needle }, ports.edits.stamps))) {
     ports.notices.show(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn");
     return;
@@ -410,7 +408,7 @@ function firstMatchFrom(range) {
   var rows = ports.document.current().rows;
   var model = ports.text.cellOf(rows[rowIdx][field]);
   var expect = projection(model);
-  var hits = findInCell(model, findNeedle(), findMatchesCase());
+  var hits = findInCell(model, findNeedle(), ports.options.matchesCase());
   var nth = 0;
   while (nth < hits.length) {
     var r = domRangeFor(cell, hits[nth].from, hits[nth].to, expect);
@@ -470,11 +468,11 @@ export function startFind(given) {
   };
 }
 
-export function mountFindEvents() {
+export function mountFindEvents(options) {
   return mountFind({ window: window, ports: {
     closeFindBar, stepFind, replaceCurrent, replaceAll, toggleBulkTag, runBulkTag,
     closeBulkTag, pickBulkTagCat, findQueryChanged, leaveFindAtMatch, bulkTagOpen,
-    getFindMatchCase: findMatchesCase,
-    setFindMatchCase: setFindMatchCase
+    getFindMatchCase: options.matchesCase,
+    setFindMatchCase: options.setMatchCase
   } });
 }
