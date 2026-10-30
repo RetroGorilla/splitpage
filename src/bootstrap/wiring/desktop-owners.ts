@@ -1,7 +1,7 @@
 import { createDesktopDocumentState } from "../../application/desktop/document-state.ts";
 import type { DesktopDocumentListeners, DesktopDocumentState, DesktopDocumentStateOwner, DesktopDocumentStatePorts } from "../../application/desktop/document-state.ts";
 import type { DesktopHandOff, PrompterElsewhere } from "../../application/desktop/shell.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
 import { draftResume, recoveryStarted } from "./recovery-owners.ts";
@@ -15,7 +15,7 @@ let handOff: DesktopHandOff | null = null;
 export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristineSeedDocument">): DesktopDocumentStatePorts {
   return Object.freeze({
     facts: Object.freeze({
-      running: runningOnDesktop,
+      running: presence.running,
       document: function () { return currentDocument(); },
       restoring: function () { return recoveryStarted() && draftResume().restorePending(); },
       unsaved: function () { return unsavedChanges(); },

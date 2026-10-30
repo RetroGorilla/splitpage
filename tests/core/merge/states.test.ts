@@ -5,7 +5,7 @@ import type { StateField } from "../../../src/core/document/fields.ts";
 import type { MergeComment, MergeRow } from "../../../src/core/merge/rows.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { LIST_MERGERS } from "../../../src/core/merge/lists.ts";
-import { STATE_FIELDS as MERGE_FIELDS } from "../../../src/core/merge/state-fields.ts";
+import { FIELD_LIST_MERGERS, STATE_FIELDS as MERGE_FIELDS } from "../../../src/core/merge/state-fields.ts";
 import { mergeStateFields } from "../../../src/core/merge/states.ts";
 import type { MergeDoc } from "../../../src/core/merge/states.ts";
 import { migratedThenSet } from "../migrate-ports.ts";
@@ -271,4 +271,13 @@ test("the merge table carries a list merger on the fields merged as lists, and o
   assert.equal(MERGE_FIELDS.length, STATE_FIELDS.length);
   assert.deepEqual(MERGE_FIELDS.filter((f) => f.mergeList).map((f) => f.key).sort(), ["brollShots", "people", "productionTags"]);
   for (const f of MERGE_FIELDS) assert.equal(f.mergeList, f.merge === "list-union-with-base" ? LIST_MERGERS[f.key] : undefined, f.key);
+});
+
+test("the per-field list merger table is frozen, prototype-free, and lists each state field's merger", () => {
+  assert.ok(Object.isFrozen(FIELD_LIST_MERGERS));
+  assert.equal(Object.getPrototypeOf(FIELD_LIST_MERGERS), null);
+  const expected = STATE_FIELDS.filter((f) => LIST_MERGERS[f.key]).map((f) => [f.key, LIST_MERGERS[f.key]]);
+  assert.deepEqual(Object.entries(FIELD_LIST_MERGERS), expected);
+  assert.deepEqual(Object.keys(FIELD_LIST_MERGERS), ["people", "productionTags", "brollShots"]);
+  assert.equal(FIELD_LIST_MERGERS["toString"], undefined);
 });

@@ -1,5 +1,5 @@
-import { chordKey } from "./shortcuts.ts";
-import type { KeyedAction } from "./shortcuts.ts";
+import { createChordReader } from "./shortcuts.ts";
+import type { ChordReader, KeyedAction } from "./shortcuts.ts";
 
 export type { KeyedAction } from "./shortcuts.ts";
 
@@ -70,7 +70,7 @@ export interface RegistryOptions {
   readonly report?: (error: unknown, id: string) => void;
 }
 
-const ALWAYS: Availability = { enabled: true };
+const ALWAYS: Availability = Object.freeze({ enabled: true });
 
 const LISTING: ActionSource = "command-menu";
 
@@ -105,13 +105,13 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
   return typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
 }
 
-function claimChords(definitions: ReadonlyMap<string, ActionDefinition>, definition: ActionDefinition): void {
+function claimChords(chords: ChordReader, definitions: ReadonlyMap<string, ActionDefinition>, definition: ActionDefinition): void {
   const owners = new Map<string, string>();
   for (const other of definitions.values()) {
-    for (const k of keysOf(other)) owners.set(chordKey(k), other.id);
+    for (const k of keysOf(other)) owners.set(chords.chordKey(k), other.id);
   }
   for (const k of keysOf(definition)) {
-    const chord = chordKey(k);
+    const chord = chords.chordKey(k);
     const owner = owners.get(chord);
     if (owner !== undefined) throw new Error(`shortcut ${chord} is already bound to ${owner}`);
     owners.set(chord, definition.id);
@@ -134,13 +134,14 @@ export function registerAll(registry: ActionRegistry, definitions: readonly Acti
 
 export function createActionRegistry(options: RegistryOptions = {}): ActionRegistry {
   const definitions = new Map<string, ActionDefinition>();
+  const chords = createChordReader();
   const report = (error: unknown, id: string): void => { options.report?.(error, id); };
   let presenter: RefusalPresenter | null = null;
 
   return {
     register(definition) {
       if (definitions.has(definition.id)) throw new Error(`action ${definition.id} is already registered`);
-      claimChords(definitions, definition);
+      claimChords(chords, definitions, definition);
       definitions.set(definition.id, definition);
       return () => {
         if (definitions.get(definition.id) === definition) definitions.delete(definition.id);

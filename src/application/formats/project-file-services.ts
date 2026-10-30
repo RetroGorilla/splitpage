@@ -20,7 +20,7 @@ export interface ProjectFileServices {
   readonly askMarkdownRows: (blockRows: number, tableRows: number) => Promise<MarkdownRowChoice>;
 }
 
-const SERVICES: readonly (keyof ProjectFileServices)[] = ["migrateRows", "migrateDocument", "sanitizeHtml", "tagFieldOccurrences", "inertBody", "askMarkdownRows"];
+const SERVICES: readonly (keyof ProjectFileServices)[] = Object.freeze(["migrateRows", "migrateDocument", "sanitizeHtml", "tagFieldOccurrences", "inertBody", "askMarkdownRows"]);
 
 let installed: ProjectFileServices | null = null;
 

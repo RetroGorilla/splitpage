@@ -53,6 +53,14 @@ const FIELDS: StateField[] = [
 
 export const STATE_FIELDS: readonly StateField[] = Object.freeze(FIELDS.map(function (f) { return Object.freeze(f); }));
 
+export const NO_UNDO_KEYS: Readonly<Record<string, true>> = Object.freeze(noUndoKeys());
+
+function noUndoKeys(): Record<string, true> {
+  const out: Record<string, true> = {};
+  STATE_FIELDS.forEach(function (f) { if (!f.undo) out[f.key] = true; });
+  return out;
+}
+
 export const ROW_FIELDS: readonly string[] = Object.freeze(["visualText", "imageRef", "audioText", "imageLinks", "moreImages"]);
 
 export const GALLERY_FIELDS: Readonly<Record<string, boolean>> = Object.freeze({ imageLinks: true, moreImages: true });
