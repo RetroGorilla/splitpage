@@ -71,20 +71,27 @@ ran. The `verify-ci` job runs `tools/release-ci-check.mjs` on the tagged commit
 
 1. The commit has a completed, successful `gate` check run (checks API,
    `GET /repos/{owner}/{repo}/commits/{sha}/check-runs?check_name=gate`) from
-   GitHub Actions whose run is of `.github/workflows/ci.yml`, was made for that
-   exact commit and ran on this repository, not a fork. `gate` also succeeds for
-   a change that was prose only, and for a push whose tree an earlier run had
-   already passed, so those commits count too.
+   GitHub Actions. The check run's own `head_sha` and its linked workflow run's
+   `head_sha` must both be that commit, and the run must be of
+   `.github/workflows/ci.yml` on this repository, not a fork. `gate` also
+   succeeds for a change that was prose only, and for a push whose tree an
+   earlier run had already passed, so those commits count too.
 2. The commit's tree has a `ci-passed-tree-<tree>` artifact from a successful
    `ci.yml` run, found with `passedRun` from `tools/ci-tested-tree.mjs`. This
    covers a commit that only has a merge-equivalent tree, such as a pull
    request's own run. The artifact expires with the repository's artifact
    retention (3 days in October 2026); the `gate` check run does not.
 
-Every lookup error counts as not passed (fail closed): a failed check-run
-listing falls through to the artifact lookup, and if neither proves a pass the
-job fails. A failure is an `::error::` line naming the commit and what was
-missing.
+Both listings are read page by page (100 per page, at most 30 pages, a longer
+listing fails), and the artifact lookup still goes through `passedRun`, which
+`tools/release-ci-check.mjs` hands a listing that has already been read in full,
+so `tools/ci-tested-tree.mjs` and CI's own use of it are unchanged.
+
+Every lookup error fails the check (fail closed), including one on a later page.
+An error on the check listing or the gate run's lookup fails the job even if a
+marker exists, and the artifact lookup is not tried; only "no `gate` check run
+found" or "found, none a success" falls through to the artifact lookup. A
+failure is an `::error::` line naming the commit and what was missing.
 
 A run started by hand (`workflow_dispatch`) runs the same check on the dispatched
 commit but reports a failure as `::warning::` and succeeds, because it is a dry
