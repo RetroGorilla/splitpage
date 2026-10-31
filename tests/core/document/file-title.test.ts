@@ -26,6 +26,12 @@ for (const title of ["Rev2", "Dev3", "TV3", "Cv3", "Café Rv2", "Headsetv3"]) {
   });
 }
 
+for (const filename of ["_v3.md", "-v3.md", "__v3.md"]) {
+  test("Save As to only a separated version token makes no change: " + filename, () => {
+    assert.equal(fileTitleChange({ title: "Headset", titleOrigin: "file", titleVersion: "v2" }, filename, false), null);
+  });
+}
+
 test("only untouched default titles are eligible on first save", () => {
   for (const title of ["", "Untitled Script", "Untitled"]) {
     assert.equal(fileTitleChange({ title }, "Headset.md", true)?.title, "Headset");
