@@ -275,8 +275,8 @@ bytes (smoke, and `tests/adapters/print/desktop-print.test.mjs`). The editor,
 document identity, dirty state, save confirmation, autosave and history are
 untouched: the route only captures, prints and delivers a file.
 
-P3 validation on Node 24.22.1: `npm run verify` passed all 576 discovered
-files (195 frontend, 11 source, 322 tests, 26 desktop, 22 tools), lint, types,
+P3 validation on Node 24.22.1: `npm run verify` passed all 578 discovered
+files (195 frontend, 11 source, 323 tests, 27 desktop, 22 tools), lint, types,
 dependency/comment gates and build. The desktop unit tests passed 20 files,
 including the print view's 12 and the IPC table's 32. The full PC smoke on the
 dev target passed 813/813 checks, 18 of them in the desktop PDF group. Fifteen
@@ -287,8 +287,10 @@ passed its 15/15 architecture checks, and both `app.asar` files list
 fixture pages in Electron in 188–489 ms each (long script 24 pages, long shot
 list 12, long packing lists 4 and 7) with no missing glyph and no line outside
 its page; rasterized pages showed pictures, Unicode, repeated table heads,
-split long rows, landscape pages and footers. A heading still ends a page
-alone when the row after it is taller than a page, as in the browser.
+split long rows, landscape pages and footers. After the printed-layout rules
+merged, the same 18 pages printed by `print-pdf.js` passed `checkPrintedLayout`
+rules a–g against the inspector's page models, with five oversized rows split
+as permitted.
 
 ## Fixtures and validation
 
