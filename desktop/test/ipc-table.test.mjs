@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -103,8 +105,63 @@ function setupWith(ipcMain, windowsById = new Map()) {
 function directionOf(entry) {
   if (entry.method === "handle") return "invoke";
   const event = { senderFrame: { url: "https://evil.example/" }, sender: {} };
-  entry.listener(event);
+  const logError = console.error;
+  console.error = () => {};
+  try { entry.listener(event); } finally { console.error = logError; }
   return "returnValue" in event ? "sendSync" : "send";
+}
+
+function fakeElectron(ipcMain, userData) {
+  const noop = () => {};
+  const loose = (base) => new Proxy(base, { get: (t, k) => (k in t ? t[k] : noop) });
+  const app = loose({
+    isPackaged: false,
+    getPath: () => userData,
+    getVersion: () => "9.9.9",
+    isReady: () => false,
+    requestSingleInstanceLock: () => true,
+    whenReady: () => new Promise(() => {})
+  });
+  return loose({
+    app, ipcMain,
+    BrowserWindow: loose(function BrowserWindow() {}),
+    WebContentsView: loose(function WebContentsView() {}),
+    Menu: loose({}), protocol: loose({}), net: loose({}), dialog: loose({}), shell: loose({}),
+    session: loose({}), nativeTheme: loose({}), screen: loose({})
+  });
+}
+
+const REGISTER_IPC_CALL = /\n {2}registerIpc\(\{([^}]*)\}\);/.exec(MAIN);
+const GROUPS_PASSED = REGISTER_IPC_CALL ? REGISTER_IPC_CALL[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+function registerThroughMain({ testMode }) {
+  const ipcMain = fakeIpcMain();
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "ipc-table-"));
+  const electron = fakeElectron(ipcMain, userData);
+  const mainPath = path.join(desktop, "main.js");
+  const lockElseEnd = MAIN.lastIndexOf("\n}");
+  assert.ok(/\n\} else \{\n/.test(MAIN) && MAIN.slice(lockElseEnd).trim() === "}", "main.js ends with its single-instance else block");
+  const body = MAIN.slice(0, lockElseEnd) + `\nreturn { registerIpc, ${GROUPS_PASSED.join(", ")} };` + MAIN.slice(lockElseEnd);
+  const load = vm.runInThisContext(
+    `(function (exports, require, module, __filename, __dirname) {${body}\n})`,
+    { filename: mainPath }
+  );
+  const fakeRequire = (id) => (id === "electron" ? electron : require(id.startsWith(".") ? path.join(desktop, id) : id));
+  const saved = { test: process.env.SPLITPAGE_TEST, noUpdate: process.env.SPLITPAGE_NO_UPDATE_CHECK, userData: process.env.SPLITPAGE_USER_DATA };
+  const restore = (name, value) => { if (value === undefined) delete process.env[name]; else process.env[name] = value; };
+  process.env.SPLITPAGE_TEST = testMode ? "1" : "0";
+  process.env.SPLITPAGE_NO_UPDATE_CHECK = "1";
+  process.env.SPLITPAGE_USER_DATA = userData;
+  try {
+    const main = load({}, fakeRequire, { exports: {} }, mainPath, desktop);
+    main.registerIpc(Object.fromEntries(GROUPS_PASSED.map((name) => [name, main[name]])));
+  } finally {
+    restore("SPLITPAGE_TEST", saved.test);
+    restore("SPLITPAGE_NO_UPDATE_CHECK", saved.noUpdate);
+    restore("SPLITPAGE_USER_DATA", saved.userData);
+    fs.rmSync(userData, { recursive: true, force: true });
+  }
+  return ipcMain.registered.map((e) => `${e.name} ${directionOf(e)}`);
 }
 
 const cases = [];
@@ -224,17 +281,24 @@ test("every registration in main.js sits in a handler group that ipc-setup.js ca
   }
 });
 
-test("registration order and directions are the same as before the split, against a fake ipcMain", () => {
-  const ipcMain = fakeIpcMain();
-  const groups = {};
-  for (const g of mainHandlerGroups()) {
-    groups[g.name] = (wrappers) => {
-      for (const r of g.registrations) wrappers[r.registrar](r.name, () => "handled");
-    };
+test("main.js passes registerIpc every handler group it defines", () => {
+  assert.ok(REGISTER_IPC_CALL, "main.js calls registerIpc({ ...groups })");
+  assert.deepEqual([...GROUPS_PASSED].sort(), mainHandlerGroups().map((g) => g.name).sort());
+});
+
+test("in test mode, main.js's real groups register the 59 pairs in the order they had before the split", () => {
+  assert.deepEqual(registerThroughMain({ testMode: true }), REGISTERED_BEFORE_SPLIT);
+});
+
+test("outside test mode, main.js's real groups register the same pairs in order, minus every test-only channel", () => {
+  const seen = registerThroughMain({ testMode: false });
+  const expected = REGISTERED_BEFORE_SPLIT.filter((pair) => !pair.startsWith("splitpage:test-"));
+  assert.equal(expected.length, 52);
+  assert.deepEqual(seen, expected);
+  for (const pair of seen) {
+    const [name, direction] = pair.split(" ");
+    assert.equal(!!channelFor(name, direction).testOnly, false, `${pair} is test-only and registered outside test mode`);
   }
-  setupWith(ipcMain).registerIpc(groups);
-  const seen = ipcMain.registered.map((e) => `${e.name} ${directionOf(e)}`);
-  assert.deepEqual(seen, REGISTERED_BEFORE_SPLIT);
 });
 
 test("the wrappers refuse untrusted senders and bad arguments, and run trusted calls", async () => {
