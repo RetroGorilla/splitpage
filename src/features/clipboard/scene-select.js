@@ -1,4 +1,5 @@
 import { refsIn } from "../../../shared/blob-policy.js";
+import { exposeTestHook } from "../common/test-hooks.ts";
 import { cssAttr } from "../common/dom.ts";
 import {
   SCENES_MIME, buildScenePayload, parseScenePayload, scenePaste, scenesOnClipboard, setLiveCut
@@ -481,13 +482,13 @@ export function startSceneSelect(given) {
   listen(document, "contextmenu", onContextMenu);
   listen(window, "resize", closeSceneMenu);
   listen(window, "scroll", closeSceneMenu, true);
-  window.__sceneSelectTest = {
+  exposeTestHook("__sceneSelectTest", function () { return {
     select: selectScenes,
     clear: clearSceneSelection,
     ids: selectedSceneIds,
     openMenu: openSceneMenu,
     tracking: function () { return track ? { rowId: track.rowId, scene: track.scene } : null; }
-  };
+  }; }, function (withdraw) { offs.push(withdraw); });
   var disposed = false;
   return { dispose: function () {
     if (disposed) return;

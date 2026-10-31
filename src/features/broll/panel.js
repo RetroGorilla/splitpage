@@ -1,4 +1,5 @@
 import { brollSortedForList } from "../../core/production/broll.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 import { BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../../core/document/broll.ts";
 import { tagCategory, tagStatus } from "../../core/production/looks.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
@@ -1240,16 +1241,17 @@ function onBrollPageAction(action, btn, exportAs) {
 export function startBrollPanel(nextPorts) {
   ports = nextPorts;
   ports.view.load();
-  window.__brollTest = {
+  var withdrawHook = null;
+  exposeTestHook("__brollTest", function () { return {
     view: function () { return ports.view.current(); },
     selected: function () { return Object.keys(selection); }
-  };
+  }; }, function (withdraw) { withdrawHook = withdraw; });
   var active = true;
   return { openBrollPanel: function () { if (active) openBrollPanel(); }, dispose: function () {
     if (!active) return;
     active = false;
     stopBrollFeature();
     ports = null;
-    delete window.__brollTest;
+    if (withdrawHook) withdrawHook();
   } };
 }
