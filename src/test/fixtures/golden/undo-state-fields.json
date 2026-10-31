@@ -1,6 +1,8 @@
 {
   "undone": [
     "title",
+    "titleOrigin",
+    "titleVersion",
     "rows",
     "comments",
     "people",
@@ -31,6 +33,42 @@
       "changedBetween": {
         "doc": [
           "title"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "titleOrigin",
+      "edit": "added",
+      "undoEntries": 1,
+      "steps": [
+        "docField:titleOrigin"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "restamped": false,
+      "changedBetween": {
+        "doc": [
+          "titleOrigin"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "titleVersion",
+      "edit": "added",
+      "undoEntries": 1,
+      "steps": [
+        "docField:titleVersion"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "restamped": false,
+      "changedBetween": {
+        "doc": [
+          "titleVersion"
         ],
         "rowFields": [],
         "structure": false
