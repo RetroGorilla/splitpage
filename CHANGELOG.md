@@ -30,9 +30,6 @@ saving bugs. If you open or share scripts on a Splitpage server, read
 ### Fixed
 - Desktop: a save now reaches the disk before it replaces the old file, so
   a power cut during a save can no longer leave an empty script.
-- Saving back to a file you imported no longer refuses the next save with
-  "changed on disk" when the file could not be read again after a good
-  write.
 - A save that reached the file is no longer reported as failed when reading
   the file's time afterwards fails, and the next save no longer sees a
   false "changed on disk".
