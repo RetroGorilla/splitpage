@@ -1,8 +1,9 @@
 # Captured HTML print layout
 
 AQ-40 and AQ-41 implement roadmap C6 P1 and P2. AQ-43 wires these layouts to
-browser PDF actions through a separate print-dialog adapter. The desktop
-export path still calls the old PDF builders; that generator and its unit
+browser PDF actions through a separate print-dialog adapter, and AQ-42 (P3)
+prints the same pages to PDF files on desktop with Electron's `printToPDF`.
+No live path calls the old PDF builders any more; that generator and its unit
 tests remain until P5. The layout modules themselves do not open a window,
 print, register an exporter, resolve assets, or read a session or preference.
 
@@ -101,9 +102,9 @@ so each remains legible. The rundown target remains in the facts line instead
 of a hand-positioned vertical rule. Footer titles can ellipsize; the full title
 remains in the heading and document title.
 
-Bookmarks are desktop-only work for P3. Browser users choose “Save as PDF”
-from their print dialog through P4. The old desktop writer stays until P3
-replaces that path; the old generator stays until P5 and the PC PDF check.
+Bookmarks are desktop-only (P3, from the page's headings). Browser users choose
+“Save as PDF” from their print dialog through P4. The old generator stays until
+P5 and the PC PDF check.
 
 P2 preserves portrait packing/breakdown and landscape Letter shot pages through
 a named CSS page. The shared 0.6-inch margins replace the old packing 0.75-inch
@@ -136,8 +137,9 @@ dialog button, the hidden File menu actions, the command menu and Export again.
 The Gear panel's packing button runs the gear action; the B-roll full page's
 Print button calls `exportAs("b-roll pdf")` with its current filter/page group.
 The two added routing lines delegate to `browser-pdf.ts` through the named
-`pdfPrint` port. Other exports and the desktop branch retain `buildFileData`
-and the existing file-delivery path. The shared registry's optional
+`pdfPrint` port. Other exports retain `buildFileData` and the existing
+file-delivery path; since P3 the desktop branch of the same port prints
+through `desktop-pdf.ts` (below). The shared registry's optional
 `printPage(request)` accepts the captured document, held assets and options;
 AQ-42 can consume the same providers without changing the browser adapter.
 
@@ -177,9 +179,12 @@ checks, assert cleanup and no PDF download, and leave non-PDF checks intact.
 Suites 12/96 retain the Gear-panel and B-roll-page routes, checklist/signature
 and shot/person/flag details. Suite 96 checks the named shot's Scene cell and
 start directly. Suite 65 verifies the held PNG/WebP/legacy images decode at
-their captured dimensions, then forces the unchanged desktop PDF route and
-checks the PDF header, three JPEG image-stream signatures and exact dimensions.
-That real-browser conversion check remains until P5 removes the old writer.
+their captured dimensions. P4 then forced the old desktop PDF route there and
+checked three JPEG image streams; since P3 that step forces the desktop
+`printToPDF` route instead and checks that the printed page carries the same
+three safe picture data URLs as the browser page, that the PDF written through
+the save dialog has its date pinned to the captured day, and that no print
+dialog opened. The real Chromium conversion is checked by the desktop smoke.
 Old manual pagination geometry in suite 41 is replaced by loaded-image aspect
 ratios, bounds, non-overlap, complete text and print CSS checks; the actual
 page-break checks belong to print fixtures 382/383 and Adam's saved PDFs.
@@ -199,6 +204,93 @@ tested on the old generator, without being claimed for browser output. Adam
 must check real dialog cancellation, saved PDFs, fonts, page breaks and footers
 on his PC before merging P4 or removing the old writer in P5. That check and
 independent review are pending; this PR must not be merged by a queue agent.
+
+## Desktop printToPDF (P3)
+
+On desktop every PDF action still meets at `exportAs`. The `pdfPrint` port's
+browser branch answers `null` there, and `desktop-pdf.ts` takes it instead.
+
+| Action | Captured input/options | Old desktop result | P3 result |
+| --- | --- | --- | --- |
+| `export-pdf` (File menu, export dialog, command menu, native menu) | One capture and its picture request, resolved assets | Old writer's script `.pdf` through the save dialog | Composed script/list/comment print page, printed by Electron, through the same save dialog |
+| `export-packing-gear` / `export-packing-prop` (also the Gear panel) | One capture, the category | Old packing `.pdf` | Packing print page as PDF |
+| `export-broll-pdf` and the B-roll page's Print | One capture, `brollView` frozen before assets load | Old landscape shot-list `.pdf` | Landscape shot print page as PDF |
+| Export again | The remembered action, a fresh capture | Repeat that file | Repeat that print |
+
+The capture, the frozen options and the base file name are taken
+synchronously in the user's action; a later edit, document switch or
+preference change does not reach the page. The busy bar, the error notice
+("Could not build the … file."), the suggested file name, the save dialog and
+"Exported …" are the old path's. A retired mount prints and delivers nothing.
+
+Contract and trust boundary. `PdfPrinter.print(html, doc)` (application type)
+is built by `desktopPdfPrinter` (`src/adapters/print/desktop-print.ts`), which
+calls the bridge's `printToPdf(html)` and pins the PDF's dates to
+`exportDay(doc)`. The bridge crosses `splitpage:print-to-pdf`: app origin
+only, one string argument, checked by `ipc-setup.js` like every channel. The
+request carries no path, options or URL. Main refuses an empty string or one
+over 256 Mi characters, and answers bytes; the renderer saves them through the
+existing `saveFileDialog` and `writeFile` (file ids, never paths), so a
+cancelled dialog is reported exactly as before.
+
+Main (`desktop/print-pdf.js`) owns the print view. Each request gets a new
+sandboxed, context-isolated `WebContentsView` with no preload and no window, in
+the in-memory `splitpage-print` partition. That partition serves the page from
+memory at a one-time `splitpage://print/<random>.html` with the print CSP as a
+response header, refuses every other request except `data:` pictures, grants
+no permission, denies new windows and blocks navigation. Its origin is not
+`splitpage://app`, so it cannot use any IPC channel. Main waits for the load
+event, then for `document.fonts.ready` and for every picture to be complete
+with a width; a picture that failed fails the print. `img.decode()` never
+settles in a view no window shows, so it is not used. Then `printToPDF` runs
+with `preferCSSPageSize`, `printBackground`, `generateTaggedPDF` and
+`generateDocumentOutline`. The view is closed and the page forgotten on
+success, failure, a crashed print renderer, a 60-second deadline, the asking
+tab closing, and `will-quit`, after which new prints are refused. Nothing is
+written to a temporary file.
+
+Bookmarks come from the page's headings: the script title, "Production
+breakdown", "B-roll shot list", "Comments" and one per comment thread; a
+packing list has its heading and category, a shot list its heading. The old
+writer named its first bookmark "Script" and had none per comment. The
+desktop smoke reads the outline of each product.
+
+Output differences from the old desktop writer, beyond the Chromium layout
+differences above, which now apply to desktop too:
+
+- `/Creator (Chromium)` and `/Producer (Skia/PDF …)` replace `Splitpage`.
+  Dates are midnight of the captured day with its offset, not a date only.
+  The PDF is tagged.
+- The computer's fonts replace the bundled Noto fonts, so the old warning
+  about characters the PDF could not show is not raised for PDFs. Chromium
+  falls back through system fonts instead.
+- The footer is not an `/Artifact` (INV-61 desktop scope, awaiting Adam's
+  decision).
+- A picture whose bytes do not decode fails the export with the build error;
+  the old writer left it out. Missing pictures still print the placeholder and
+  raise no images-left-out warning, as before.
+
+INV-60 holds on desktop: one capture printed twice on one day is the same
+bytes (smoke, and `tests/adapters/print/desktop-print.test.mjs`). The editor,
+document identity, dirty state, save confirmation, autosave and history are
+untouched: the route only captures, prints and delivers a file.
+
+P3 validation on Node 24.22.1: `npm run verify` passed all 578 discovered
+files (195 frontend, 11 source, 323 tests, 27 desktop, 22 tools), lint, types,
+dependency/comment gates and build. The desktop unit tests passed 20 files,
+including the print view's 12 and the IPC table's 32. The full PC smoke on the
+dev target passed 813/813 checks, 18 of them in the desktop PDF group. Fifteen
+`print|export|desktop` suites passed 994/994 checks on the test build with
+three lanes, including 65 (55/55) and 384 (36/36). The fresh `dist:win` build
+passed its 15/15 architecture checks, and both `app.asar` files list
+`print-pdf.js` and `ipc-print.js`. The real `print-pdf.js` printed all 18 P1/P2
+fixture pages in Electron in 188–489 ms each (long script 24 pages, long shot
+list 12, long packing lists 4 and 7) with no missing glyph and no line outside
+its page; rasterized pages showed pictures, Unicode, repeated table heads,
+split long rows, landscape pages and footers. After the printed-layout rules
+merged, the same 18 pages printed by `print-pdf.js` passed `checkPrintedLayout`
+rules a–g against the inspector's page models, with five oversized rows split
+as permitted.
 
 ## Fixtures and validation
 

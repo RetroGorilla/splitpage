@@ -34,8 +34,9 @@ import { resetProductionPanel } from "./production.ts";
 import { text } from "./text.ts";
 import { undoControl } from "./editing.ts";
 import { actions } from "./actions.ts";
-import { printDialog } from "./printing.ts";
+import { pdfPrinter, printDialog } from "./printing.ts";
 import { exportBrowserPdf } from "../../../features/file-menu/browser-pdf.ts";
+import { exportDesktopPdf } from "../../../features/file-menu/desktop-pdf.ts";
 
 export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
   const files: LocalFileAccess = localFileAccess(window);
@@ -86,7 +87,7 @@ export function importSavingPorts(menu: () => LocalFileMenuControls): ImportSavi
   };
 }
 
-export function localFileMenuPorts(): LocalFileMenuPorts {
+export function localFileMenuPorts(menu: () => LocalFileMenuControls): LocalFileMenuPorts {
   return {
     document: documentReader,
     preferences: preferenceValues,
@@ -103,6 +104,10 @@ export function localFileMenuPorts(): LocalFileMenuPorts {
     pdfPrint: { export: (kind, options, alive) => exportBrowserPdf({
       exports: { captureExportDocument, loadExportAssets }, formats, assets: { request: exportAssetsRequest },
       brollView, notices, desktop: presence.running, printDialog
+    }, kind, options, alive) ?? exportDesktopPdf({
+      exports: { captureExportDocument, loadExportAssets }, formats, assets: { request: exportAssetsRequest },
+      brollView, notices, delivery: fileDelivery, desktop: presence.running, pdfPrinter,
+      baseName: () => menu().exportBaseName()
     }, kind, options, alive) },
     exportControls: { isExportAction, rememberExport },
     actions

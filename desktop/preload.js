@@ -216,6 +216,10 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:blob-missing", shas);
     },
 
+    printToPdf(html) {
+      return invoke("splitpage:print-to-pdf", html).then((bytes) => new Uint8Array(bytes));
+    },
+
     getSessionInfo() {
       return invoke("splitpage:get-session-info");
     },

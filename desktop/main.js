@@ -39,6 +39,8 @@ const { createDocumentIpc } = require("./ipc-document");
 const { createHistoryBlobIpc } = require("./ipc-history-blob");
 const { createTabStripIpc } = require("./ipc-tabstrip");
 const { createTestModeIpc } = require("./ipc-test-mode");
+const { createPrintIpc } = require("./ipc-print");
+const { createPdfPrinter } = require("./print-pdf");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -1731,6 +1733,8 @@ const { registerTestModeIpc } = createTestModeIpc({
   voiceHelperInstance: voice.voiceHelperInstance
 });
 
+const { registerPrintIpc } = createPrintIpc({ pdfPrinter: createPdfPrinter({ app, session, WebContentsView }) });
+
 app.on("second-instance", (_event, argv, cwd) => {
   const files = filesToOpenFrom(app.isPackaged ? argv.slice(1) : argv.slice(2), cwd);
   for (const f of files) routeOpenPath(f, { fromWindowId: lastFocusedWindowId });
@@ -1759,7 +1763,7 @@ app.whenReady().then(() => {
   registerProtocol();
   registerIpc({
     registerFileIpc, registerShellIpc, registerDocumentIpc,
-    registerHistoryBlobIpc, registerTabStripIpc, registerTestModeIpc
+    registerHistoryBlobIpc, registerTabStripIpc, registerTestModeIpc, registerPrintIpc
   });
   buildMenu();
 

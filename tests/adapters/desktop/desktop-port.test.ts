@@ -133,6 +133,7 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   blobPut: { args: ["sha", new Uint8Array([2])], direction: "invoke", channel: "splitpage:blob-put" },
   blobGet: { args: ["sha"], direction: "invoke", channel: "splitpage:blob-get" },
   blobMissing: { args: [["a", "b"]], direction: "invoke", channel: "splitpage:blob-missing" },
+  printToPdf: { args: ["<!doctype html>"], direction: "invoke", channel: "splitpage:print-to-pdf" },
   getSessionInfo: { args: [], direction: "invoke", channel: "splitpage:get-session-info" },
   openExternal: { args: ["https://example.com/"], direction: "send", channel: "splitpage:open-external" },
   setTheme: { args: ["dark"], direction: "send", channel: "splitpage:set-theme" },
@@ -193,14 +194,18 @@ for (const [name, listener] of Object.entries(LISTENERS) as [DesktopMember, { ch
   });
 }
 
-test("readFile, takeDraft, blobGet and videoThumbnail hand back bytes as a Uint8Array", async () => {
+test("readFile, takeDraft, blobGet, videoThumbnail and printToPdf hand back bytes as a Uint8Array", async () => {
   const { bridge } = loadPreload(false, {
     "splitpage:read-file": { id: "f1", name: "a", bytes: [1, 2] },
     "splitpage:draft-take": { file: { id: "f1", name: "a", bytes: [3] } },
     "splitpage:blob-get": { bytes: [4] },
-    "splitpage:video-thumbnail": { ok: true, bytes: [5] }
+    "splitpage:video-thumbnail": { ok: true, bytes: [5] },
+    "splitpage:print-to-pdf": [37, 80, 68, 70]
   });
   const port = bridge as unknown as DesktopPort;
+  const pdf = await port.printToPdf("<!doctype html>");
+  assert.ok(pdf instanceof Uint8Array);
+  assert.deepEqual([...pdf], [37, 80, 68, 70]);
   assert.ok((await port.readFile("f1")).bytes instanceof Uint8Array);
   assert.ok((await port.takeDraft())?.file?.bytes instanceof Uint8Array);
   assert.ok((await port.blobGet("sha"))?.bytes instanceof Uint8Array);

@@ -19,6 +19,8 @@ files:
   - ipc-history-blob.js
   - ipc-tabstrip.js
   - ipc-test-mode.js
+  - ipc-print.js
+  - print-pdf.js
   - prompter-share.js
   - close-quit.js
   - session-restore.js
