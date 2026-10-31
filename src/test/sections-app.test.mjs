@@ -82,6 +82,7 @@ test("section dividers count all scenes, fold without an edit and reset when ano
   assert.match(header.querySelector(".section-stats").textContent, /2 scenes/);
   assert.equal(header.querySelector("[data-section-total]").textContent, "0:30");
   header.querySelector(".section-fold").click();
+  assert.equal(document.activeElement, document.querySelector('#rows [data-section-id="s1"] .section-fold'));
   assert.equal(document.querySelectorAll("#rows .row").length, 2);
   assert.equal(state(), before);
   assert.equal(undoOwner().sizes().undo, undo);

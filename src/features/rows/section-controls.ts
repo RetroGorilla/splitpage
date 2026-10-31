@@ -96,7 +96,11 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     const divider = button.closest<HTMLElement>(".section-header");
     const id = divider?.getAttribute("data-section-id");
     const action = button.getAttribute("data-section-action");
-    if (action === "fold" && id) { ports.sections.toggle(id); return; }
+    if (action === "fold" && id) {
+      ports.sections.toggle(id);
+      header(id)?.querySelector<HTMLButtonElement>(".section-fold")?.focus();
+      return;
+    }
     if (!ports.edits.allowed()) return;
     if (add) {
       const row = state.rows.find(item => item.id === ports.focus.lastRow()) ?? state.rows[0];
