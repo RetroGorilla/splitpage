@@ -176,7 +176,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
       return result.conflict ? { kind: "refused", reason: result.reason, conflict: result.conflict } : { kind: "refused", reason: result.reason };
     }
     if (stopped) return { kind: "obsolete", here: false };
-    if (!decide(null)) {
+    if (!decide(null) || !ports.ownership.stillOwns(operation)) {
       const here = result.kind === "saved" && sameKey(ports.destination.keyOf(operation.destination), keyNow());
       ports.report.obsolete(entry.request, here);
       return { kind: "obsolete", here: here };

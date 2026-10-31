@@ -71,9 +71,12 @@ const FAILED: WriterResult = Object.freeze({ kind: "failed" });
 const FILE_CHANGED = "The file changed on disk since it was opened";
 const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 
-function landedSave(captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite | null): SaveLanding {
+function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite | null): SaveLanding {
   return {
-    current: function () { mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed() }); },
+    current: function () {
+      mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed() });
+      if (forkDocId) job.moved();
+    },
     obsolete: function () { adoptSavedCopyDocId(forkDocId, docIdAtSave, false); }
   };
 }
@@ -157,7 +160,7 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
       const handle = target.handle;
       const landedOn = await writeToHandle(handle, body);
       wrote = true;
-      job.landed(landedSave(captured, published, forkDocId, docIdAtSave, seqAtSave, function () {
+      job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () {
         const landedHome = fileHome() && (fileHome() as Home).handle === handle ? currentHome() : null;
         return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
       }));
@@ -169,7 +172,7 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
       const ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
       if (!ok) return CANCELLED;
       wrote = true;
-      job.landed(landedSave(captured, published, forkDocId, docIdAtSave, seqAtSave, function () { return null; }));
+      job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () { return null; }));
       warnImagesLeftOut(imagesLeftOut, filename);
       written = SAVED;
     }

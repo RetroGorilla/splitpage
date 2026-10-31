@@ -210,7 +210,7 @@ test("Save As of a written-out script forks its id, retargets to the picked file
     "remember:copy.splitpage",
     "imagesLeftOut:0:copy.splitpage"
   ]);
-  assert.deepEqual(saveAs.moves, ["moved"], "only the retarget moves the job; the forked id is applied after the coordinator decided");
+  assert.deepEqual(saveAs.moves, ["moved", "moved"]);
   assert.deepEqual(h.toasts, ["Saved a new copy: copy.splitpage"]);
 });
 
