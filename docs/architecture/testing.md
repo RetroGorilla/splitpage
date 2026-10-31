@@ -61,6 +61,11 @@ the browser suites. Its `sw.js`
 check compares the stamped file with the one git has, so an edit to `sw.js`
 you have not staged or committed fails it; `git add sw.js` settles that.
 
+After AQ-23 PR 4b, only `__blobsTest` and `__renderTest` remain in the release
+allowlist (`tools/release-hooks.mjs`), for PR 5. Video, annotation, target,
+rundown, scene-selection and b-roll suites require the test build; the converted
+names are pinned in `tools/test-release-hooks.mjs`.
+
 `node tools/perf-record.mjs [report.md]` builds the test variant with `node build.mjs --test` and drives it in headless
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
 the seed and the long demo, with the machine, browser and font it ran under.
