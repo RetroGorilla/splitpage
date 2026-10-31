@@ -11,7 +11,7 @@ import type { Home, HomeFields } from "../location/document-location.ts";
 import type { DocumentView } from "../session/document-session.ts";
 import type { Operations } from "../session/operation.ts";
 import type { AutoSaveChange } from "./autosave.ts";
-import type { DestinationKey, SaveJob, WriterResult } from "./coordinator.ts";
+import type { DestinationKey, SaveJob, SaveLanding, WriterResult } from "./coordinator.ts";
 import type { SaveDestination } from "./destinations.ts";
 import type { LandedWrite, SaveCompletion } from "./save-completion.ts";
 import type { FileSaveDialogs, FileSaveHandle, FileSavePorts, FileSaveRequest, FileSaveTarget, FileSavingMount, FileSavingPorts } from "./file-saving-ports.ts";
@@ -71,8 +71,14 @@ const FAILED: WriterResult = Object.freeze({ kind: "failed" });
 const FILE_CHANGED = "The file changed on disk since it was opened";
 const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 
-function confirmWrite(captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: LandedWrite | null): void {
-  mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed });
+function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite | null): SaveLanding {
+  return {
+    current: function () {
+      mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed() });
+      if (forkDocId) job.moved();
+    },
+    obsolete: function () { adoptSavedCopyDocId(forkDocId, docIdAtSave, false); }
+  };
 }
 
 async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<FileSaveRequest>): Promise<WriterResult> {
@@ -154,12 +160,10 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
       const handle = target.handle;
       const landedOn = await writeToHandle(handle, body);
       wrote = true;
-      if (job.owns()) {
+      job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () {
         const landedHome = fileHome() && (fileHome() as Home).handle === handle ? currentHome() : null;
-        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave,
-          landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null);
-        if (forkDocId) job.moved();
-      } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
+        return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
+      }));
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);
@@ -168,10 +172,7 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
       const ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
       if (!ok) return CANCELLED;
       wrote = true;
-      if (job.owns()) {
-        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, null);
-        if (forkDocId) job.moved();
-      } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
+      job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () { return null; }));
       warnImagesLeftOut(imagesLeftOut, filename);
       written = SAVED;
     }

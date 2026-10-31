@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NEVER_CONFIRMED, createSaveCoordinator } from "../../src/application/save/coordinator.ts";
-import type { DestinationKey, SaveCoordinator, SaveJob, WriterResult } from "../../src/application/save/coordinator.ts";
+import type { DestinationKey, SaveCoordinator, SaveJob, SaveLanding, WriterResult } from "../../src/application/save/coordinator.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
 
 interface Request {
@@ -188,6 +188,67 @@ test("obsolete elsewhere: a write for a document that was replaced by one saving
   nth(w, 0).answer(SAVED);
   assert.deepEqual(await done, { kind: "obsolete", here: false });
   assert.equal(w.coordinator.confirmed(place("file-a")).generation, NEVER_CONFIRMED);
+});
+
+function steps(log: string[]): SaveLanding {
+  return { current: function () { log.push("current"); }, obsolete: function () { log.push("obsolete"); } };
+}
+
+test("one decision: a landing reported while the save owns its place is acknowledged there and runs the current steps once; a later move is still reported", async () => {
+  const w = world();
+  w.coordinator.noteChange();
+  const done = w.coordinator.request({ kind: "save" });
+  const job = nth(w, 0).job;
+  const log: string[] = [];
+  job.landed({
+    current: function () { log.push("current:" + w.coordinator.confirmed().generation); },
+    obsolete: function () { log.push("obsolete"); }
+  });
+  assert.deepEqual(log, ["current:1"], "the generation is acknowledged before the steps run");
+  job.landed(steps(log));
+  assert.deepEqual(log, ["current:1"], "a second report runs nothing");
+  w.epoch++;
+  nth(w, 0).answer(SAVED);
+  assert.deepEqual(await done, { kind: "obsolete", here: true }, "a reopen before the writer answers is still a late save");
+  assert.deepEqual(w.obsolete.map(function (o) { return o.here; }), [true]);
+  assert.equal(w.coordinator.confirmed().generation, 1, "the acknowledgement decided at the landing stands");
+  assert.deepEqual(log, ["current:1"], "and no other step runs");
+});
+
+test("one decision: a landing reported after the save lost its place runs only the obsolete steps and is reported once", async () => {
+  const w = world();
+  w.coordinator.noteChange();
+  const done = w.coordinator.request({ kind: "save" });
+  const log: string[] = [];
+  w.epoch++;
+  nth(w, 0).job.landed(steps(log));
+  assert.deepEqual(log, ["obsolete"]);
+  assert.equal(w.coordinator.confirmed().generation, NEVER_CONFIRMED);
+  nth(w, 0).answer(SAVED);
+  assert.deepEqual(await done, { kind: "obsolete", here: true });
+  assert.deepEqual(w.obsolete.map(function (o) { return o.here; }), [true]);
+  assert.deepEqual(log, ["obsolete"]);
+});
+
+test("one decision: a stopped coordinator decides a landing obsolete, and a failure after a landing is still a failure", async () => {
+  const w = world();
+  w.coordinator.noteChange();
+  const stopped = w.coordinator.request({ kind: "save" });
+  const log: string[] = [];
+  w.coordinator.stop();
+  nth(w, 0).job.landed(steps(log));
+  assert.deepEqual(log, ["obsolete"]);
+  nth(w, 0).answer(SAVED);
+  assert.deepEqual(await stopped, { kind: "obsolete", here: false });
+  const v = world();
+  v.coordinator.noteChange();
+  const failed = v.coordinator.request({ kind: "save" });
+  const later: string[] = [];
+  nth(v, 0).job.landed(steps(later));
+  const boom = new Error("after the write");
+  nth(v, 0).answer({ kind: "failed", error: boom });
+  assert.deepEqual(await failed, { kind: "failed", error: boom });
+  assert.deepEqual(later, ["current"]);
 });
 
 test("cancelled and failed: neither acknowledges; a cancellation is its own outcome, and a writer that throws fails", async () => {

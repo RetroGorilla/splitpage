@@ -113,7 +113,8 @@ function job(kind: string, owns = true) {
     operation: () => ({}) as OperationContext,
     owns: () => owns,
     alive: () => true,
-    moved: () => { moves.push("moved"); }
+    moved: () => { moves.push("moved"); },
+    landed: (steps) => { if (owns) steps.current(); else steps.obsolete(); }
   };
   return { value, moves };
 }

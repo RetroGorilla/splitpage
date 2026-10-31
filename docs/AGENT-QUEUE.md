@@ -887,7 +887,7 @@ STRUCTURE SECTION MUST SAY
 - "no behaviour change", what moved and which dependency it removes from main, the named dependencies and voice lifetime owner, main.js line counts, unchanged script paths and routing, package evidence, suite and smoke counts, and the real-microphone check status.
 ```
 
-## AQ-38 [ ] One owner decides when a save is complete
+## AQ-38 [x] One owner decides when a save is complete
 
 Needs: AQ-36 merged. Adam lifted the B2 hold on 2026-10-30. Do not overlap lifecycle work on close or saving.
 Files: src/application/save/, src/bootstrap/wiring/save-owners.ts and file-saving.ts, callers found in step 0, their tests and save race suites, docs/architecture/saving.md and docs that describe completion.

@@ -19,6 +19,11 @@ export type WriterResult =
   | { readonly kind: "cancelled" }
   | { readonly kind: "refused"; readonly reason: string; readonly conflict?: FileConflict };
 
+export interface SaveLanding {
+  readonly current: () => void;
+  readonly obsolete: () => void;
+}
+
 export interface SaveJob<R> {
   readonly request: R;
   readonly generation: number;
@@ -26,6 +31,7 @@ export interface SaveJob<R> {
   readonly owns: () => boolean;
   readonly alive: () => boolean;
   readonly moved: () => void;
+  readonly landed: (steps: SaveLanding) => void;
 }
 
 export interface SaveDestinationPort {
@@ -163,20 +169,18 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     if (record && generation > record.generation) record.generation = generation;
   }
 
-  function judge(entry: Entry<R>, result: WriterResult, operation: OperationContext, generation: number): SaveOutcome {
+  function judge(entry: Entry<R>, result: WriterResult, operation: OperationContext, decide: (steps: SaveLanding | null) => boolean): SaveOutcome {
     if (result.kind === "failed") return "error" in result ? { kind: "failed", error: result.error } : { kind: "failed" };
     if (result.kind === "cancelled") return { kind: "cancelled" };
     if (result.kind === "refused") {
       return result.conflict ? { kind: "refused", reason: result.reason, conflict: result.conflict } : { kind: "refused", reason: result.reason };
     }
     if (stopped) return { kind: "obsolete", here: false };
-    const landed = ports.destination.keyOf(operation.destination);
-    if (!ports.ownership.stillOwns(operation)) {
-      const here = result.kind === "saved" && sameKey(landed, keyNow());
+    if (!decide(null) || !ports.ownership.stillOwns(operation)) {
+      const here = result.kind === "saved" && sameKey(ports.destination.keyOf(operation.destination), keyNow());
       ports.report.obsolete(entry.request, here);
       return { kind: "obsolete", here: here };
     }
-    acknowledge(landed, generation);
     return { kind: "saved", acknowledged: true };
   }
 
@@ -205,6 +209,18 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     setRunning(1);
     const generation = changes;
     let operation = ports.ownership.capture();
+    let decided: boolean | null = null;
+    const decide = function (steps: SaveLanding | null): boolean {
+      if (decided !== null) return decided;
+      decided = !stopped && ports.ownership.stillOwns(operation);
+      if (!decided) {
+        if (steps) steps.obsolete();
+        return false;
+      }
+      acknowledge(ports.destination.keyOf(operation.destination), generation);
+      if (steps) steps.current();
+      return true;
+    };
     const job: SaveJob<R> = Object.freeze({
       request: current.request,
       generation: generation,
@@ -215,7 +231,8 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
         if (stopped) return;
         operation = ports.ownership.capture();
         follow(queue);
-      }
+      },
+      landed: function (steps: SaveLanding) { decide(steps); }
     });
     let written: Promise<WriterResult>;
     try {
@@ -224,7 +241,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
       written = Promise.resolve({ kind: "failed", error: error });
     }
     written
-      .then(function (result) { return judge(current, ofWriter(result), operation, generation); },
+      .then(function (result) { return judge(current, ofWriter(result), operation, decide); },
         function (error: unknown): SaveOutcome { return { kind: "failed", error: error }; })
       .then(function (outcome) {
         queue.active = false;
