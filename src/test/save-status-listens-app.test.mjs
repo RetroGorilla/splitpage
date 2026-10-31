@@ -72,7 +72,7 @@ test("a legacy edit and an absorbed change refresh the buttons through the save 
   assert.equal(button().textContent, "Save •");
   confirmSavedNow();
   assert.equal(button().textContent, "Save");
-  noteAbsorbedDirty("server");
+  noteAbsorbedDirty("disk");
   assert.equal(unsavedChanges(), true);
   assert.equal(button().textContent, "Save •");
 });
