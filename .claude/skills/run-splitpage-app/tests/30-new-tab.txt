@@ -172,8 +172,14 @@ expect document.documentElement.scrollWidth <= innerWidth
 eval (function(){ window.__canon = function (o) { return JSON.stringify(o, function (k, v) { if (v && typeof v === 'object' && !Array.isArray(v)) { var out = {}; Object.keys(v).sort().forEach(function (key) { if (key !== 'docId') out[key] = v[key]; }); return out; } return v; }); }; window.__ids = [window.__splitpageFormats.state().docId]; return true; })()
 
 # --- To-camera video --------------------------------------------------------
-# picked.md is open (dirty, with no file since import save-back was switched off) under the page
-expect window.__splitpageFormats.state().title === 'Picked' && window.__splitpageFormats.docFile().kind === null
+# picked.md has no file since import save-back was switched off (2026-10-30),
+# so it is reopened as a project file first: the starter then has a real file
+# home to let go of
+eval (async function(){ var S = window.__splitpageFormats; var body = S.buildSplitpage(); window.__projH = { name: 'picked.splitpage', getFile: async function(){ return new File([body], 'picked.splitpage', { lastModified: 1000 }); }, createWritable: async function(){ return { write: async function(){}, close: async function(){} }; } }; await S.openFile(new File([body], 'picked.splitpage', { lastModified: 1000 }), window.__projH); return S.docFile().kind; })()
+wait window.__splitpageFormats.docFile().kind === 'splitpage'
+eval window.__newTab.open()
+wait document.getElementById('newtab-page').hidden == false
+expect window.__splitpageFormats.state().title === 'Picked' && window.__splitpageFormats.docFile().name === 'picked.splitpage'
 click [data-starter="to-camera"]
 wait document.getElementById('newtab-page').hidden == true
 expect document.querySelectorAll('#rows .row').length == 6

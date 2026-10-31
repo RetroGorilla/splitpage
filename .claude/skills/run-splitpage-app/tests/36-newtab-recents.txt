@@ -104,14 +104,18 @@ eval (async function(){ window.__cleared = await window.fake.listRecents(); retu
 expect window.__cleared.length == 0
 
 # --- a starter on desktop: a new document that never touches a file -----
-# Script A is open under the page (a foreign .md, so with no file since
-# import save-back was switched off on 2026-10-30). Every file call the bridge
-# has is counted from here: opening a starter must make none of them, and
-# must tell main it is a document with no file, nothing unsaved, and an id
-# of its own.
+# Script A is open under the page. A foreign .md has no file since import
+# save-back was switched off on 2026-10-30, so it is saved to a project file
+# first: the starter then has a real file home to let go of. Every file call
+# the bridge has is counted from after that save: opening a starter must make
+# none of them, and must tell main it is a document with no file, nothing
+# unsaved, and an id of its own.
+eval (async function(){ await window.__splitpageFormats.save({}); return window.__splitpageFormats.docFile().kind; })()
+wait window.__splitpageFormats.docFile().kind === 'md'
+wait !!(window.fake._lastDocState && window.fake._lastDocState.fileId)
 eval (function(){ window.__fileCalls = []; ['openFileDialog', 'saveFileDialog', 'writeFile', 'readFile', 'statFile', 'routeOpen'].forEach(function (n) { var f = window.fake[n]; window.fake[n] = function () { window.__fileCalls.push(n); return f.apply(this, arguments); }; }); window.__idWas = window.__splitpageFormats.state().docId; window.__newTab.open(); return true; })()
 wait document.getElementById('newtab-page').hidden == false
-expect window.__splitpageFormats.state().title === 'Script A' && window.__splitpageFormats.docFile().kind === null
+expect window.__splitpageFormats.state().title === 'Script A' && window.__splitpageFormats.docFile().kind === 'md'
 click [data-starter="to-camera"]
 wait document.getElementById('newtab-page').hidden == true
 expect document.querySelectorAll('#rows .row').length == 6
