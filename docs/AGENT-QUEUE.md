@@ -911,7 +911,7 @@ STRUCTURE SECTION MUST SAY
 - "no user-visible behaviour change", the step 0 path/confirmation table, which decision moved from the writers to which owner and which dependency it removes, the completion contract and exact order before/after, the race tests pinning it, the deprecated paths left unreachable, suite and full smoke counts.
 ```
 
-## AQ-39 [ ] Close stale tracker rows and list old main PRs for Adam
+## AQ-39 [x] Close stale tracker rows and list old main PRs for Adam
 
 Needs: none. Check the latest merged base and tracker state before closing any row.
 Files: no product files; GitHub tracker rows and the evidence table in the PR body; docs/AGENT-QUEUE.md only for this task's completion heading.
