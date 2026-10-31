@@ -26,6 +26,7 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
+const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
 
 after(closeApp);
 
@@ -152,6 +153,7 @@ test("a reload in place is its own kind: same epoch, no generation, saveChanges(
   let disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   const handle = { kind: "file", name: "reload.txt", getFile: async () => disk };
   await openDocument({ kind: "file", file: disk, handle: handle, options: { skipSnapshot: true } });
+  setHome("import", { name: "reload.txt", handle: handle, format: "txt", dirty: false, lastModified: 1 });
   const doc = currentDocument();
   const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();

@@ -1,4 +1,4 @@
-import { mountLocalFilesFeature, stopLocalFilesFeature, fileWritebackActions } from "../../src/bootstrap/wiring/local-files.ts";
+import { mountLocalFilesFeature, stopLocalFilesFeature } from "../../src/bootstrap/wiring/local-files.ts";
 import { prompterActions } from "../../src/features/prompter/actions.ts";
 import { screen } from "../../src/bootstrap/wiring/ports/screen.ts";
 import { importActions } from "../../src/bootstrap/wiring/imports.ts";
@@ -101,7 +101,7 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountFindFeature();
   const file = fileMenuActions();
   const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, stopFindFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(() => ({ openWriter() {} }), { screen }), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
-    registerAll(registry, [...fileWritebackActions(), ...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]), stopDesktopFeature, stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature];
+    registerAll(registry, [...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]), stopDesktopFeature, stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterState.isOpen() };
   loadTestDocument({ rows: [] });
   prompterState.setOpen(false);
@@ -129,7 +129,7 @@ function refusal(registry: ActionRegistry, id: string, source: ActionSource = "n
   return view.enabled ? null : view.reason;
 }
 
-const NO_DIALOG_COMMANDS = ["save-back", "prompter-open-in-browser", "prompter-open-in-chromium"];
+const NO_DIALOG_COMMANDS = ["prompter-open-in-browser", "prompter-open-in-chromium"];
 
 const PAGE_COMMANDS =["open", "export", "command-menu", "find", "history", "panel-production", "panel-gear", "panel-comments"];
 

@@ -9,19 +9,18 @@ import { createDocumentLocation } from "../../../src/application/location/docume
 import { fakeDocument, fakeNotices } from "../fakes.ts";
 
 test("local file menu mounts with named fakes, paints the chip, announces choices and manages resume", () => {
-  document.body.innerHTML = '<button id="menu-save-back"></button><div id="file-chip"><span id="file-chip-name"></span><span id="file-chip-state"></span></div><div id="readonly-banner"></div><div id="resume-banner" hidden><span id="resume-banner-text"></span></div>';
+  document.body.innerHTML = '<div id="file-chip"><span id="file-chip-name"></span><span id="file-chip-state"></span></div><div id="readonly-banner"></div><div id="resume-banner" hidden><span id="resume-banner-text"></span></div>';
   const location = createDocumentLocation();
   location.setHome("import", { name: "draft.txt", dirty: true });
   const ports: LocalFileMenuPorts = {
     document: fakeDocument(null).document,
     preferences: { clock: () => "24h" }, place: location,
-    writeback: { saveBackItemState: () => ({ hidden: false, disabled: false, reason: "", label: "Save to draft.txt" }) },
     exports: { captureExportDocument: () => { throw new Error("unused"); }, loadExportAssets: async () => { throw new Error("unused"); } },
     formats: createExportRegistry(),
     assets: { request: () => ({ shas: [] }) }, standaloneHtml: () => "",
     imagesLeftOut: () => {}, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
     notices: { ...fakeNotices().notices, busy: { withBar: async (_label, work) => work() } },
-    delivery: { deliver: async () => true }, menuItems: { setLabel: (item, label) => { if (item) item.textContent = label; } },
+    delivery: { deliver: async () => true },
     merge: { offer: async () => {}, reset: () => {} },
     exportControls: { isExportAction: () => false, rememberExport: () => {} }, actions: createActionRegistry()
   };

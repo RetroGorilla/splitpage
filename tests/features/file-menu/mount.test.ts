@@ -128,7 +128,6 @@ export function setup() {
     reloadProjectFromDisk: h.log("reloadProjectFromDisk"),
     reloadFileFromDisk: h.log("reloadFileFromDisk"),
     saveDoc: h.log("saveDoc"),
-    saveBackToFile: h.log("saveBackToFile"),
     openMergeReview: h.log("openMergeReview"),
     cancelMergeReview: h.log("cancelMergeReview"),
     confirmFileMerge: h.log("confirmFileMerge"),
@@ -216,7 +215,7 @@ test("file-menu: captured project context survives closing and routes force, rel
   assert.deepEqual(h.calls, [
     { name: "reloadProjectFromDisk", args: [] }, { name: "close", args: [] }, { name: "saveDoc", args: [{ force: true }] },
     { name: "close", args: [] }, { name: "saveDoc", args: [{ saveAs: true }] },
-    { name: "reloadFileFromDisk", args: [] }, { name: "close", args: [] }, { name: "saveBackToFile", args: [{ force: true }] }
+    { name: "reloadFileFromDisk", args: [] }, { name: "close", args: [] }
   ]);
   owner.dispose();
   h.window.close();
