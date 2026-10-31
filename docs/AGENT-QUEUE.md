@@ -770,7 +770,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change; names only", every renamed identifier and value, every "server" left and why, how old saved data loads (no persisted copy, with the grep, or the one reader), the tests changed, smoke count.
 ```
 
-## AQ-34 [ ] CSS by purpose
+## AQ-34 [x] CSS by purpose
 
 Needs: AQ-23's first PR merged (flag, helper, `__historyTest`, release-build check; both touch the build).
 Files: src/styles/, the `styles-*.css` files under src/features/, tools/css-inputs.json, the tests that pin the CSS list (src/test/css-aggregation.test.mjs, src/test/css-feature-balance.test.mjs, tools/css-colours.mjs), docs that name the files.
