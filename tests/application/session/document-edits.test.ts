@@ -31,7 +31,7 @@ function start(editor: string, record: () => void = () => {}) {
       adapter: {
         adopt: () => {},
         record: (changes) => { log.push("undo"); recorded.push(changes); record(); },
-        absorbServer: () => {},
+        absorbDisk: () => {},
         absorbReload: () => {}
       },
       route: () => () => {}

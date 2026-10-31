@@ -37,7 +37,7 @@ export function createDocumentMerge<Ctx>(ports: DocumentMergePorts<Ctx>): Docume
     const o = opts || {};
     ports.view.banner(result, o.undo);
     if (o.alreadySaved) return;
-    ports.view.absorbed(o.kind || "server");
+    ports.view.absorbed(o.kind || "disk");
     ports.view.autoSave(!!o.noAutoSave);
   }
 

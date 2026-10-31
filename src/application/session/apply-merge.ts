@@ -3,7 +3,7 @@ import type { MergedStates } from "../../core/merge-states.ts";
 import type { MergeInput } from "./merge-incoming.ts";
 import type { NoticeKind } from "../effects/ports.ts";
 
-export type MergeKind = "server" | "recovery";
+export type MergeKind = "disk" | "recovery";
 
 export interface MergeToast {
   readonly text: string | (() => string);
@@ -76,7 +76,7 @@ export const UNDO_LABELS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 export function mergeKind(opts: ApplyMergeOptions): MergeKind {
-  return opts.recovery ? "recovery" : "server";
+  return opts.recovery ? "recovery" : "disk";
 }
 
 export function applyIncomingMerge<Ctx, D, T>(opts: ApplyMergeOptions<T>, ports: ApplyMergePorts<Ctx, D>): MergeOutcome<D | T | ValidatedDocument> | Promise<MergeOutcome<D | T | ValidatedDocument>> {

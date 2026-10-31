@@ -85,7 +85,7 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
     undo: {
       adopt: function (doc) { nested(); log.push("undo.adopt:" + (doc ? doc.title : "none")); },
       record: function () { log.push("undo.record"); if (hooks.record) hooks.record(); },
-      absorbServer: function (doc) { nested(); log.push("undo.server:" + (doc ? doc.title : "none")); },
+      absorbDisk: function (doc) { nested(); log.push("undo.disk:" + (doc ? doc.title : "none")); },
       absorbReload: function () { log.push("undo.reload"); }
     },
     effects: {

@@ -40,7 +40,7 @@ function fileChipListeners(refresh) {
   return {
     session: function (change) {
       if (!active) return;
-      if (change.kind === "adopt" || change.kind === "server" || change.kind === "recovery" || change.kind === "reload") refresh();
+      if (change.kind === "adopt" || change.kind === "disk" || change.kind === "recovery" || change.kind === "reload") refresh();
     },
     location: function (change) {
       if (!active) return;

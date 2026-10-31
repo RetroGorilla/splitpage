@@ -745,7 +745,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change; save-back switched off, code kept", every entry point found and how each is now unreachable, that ordinary Save is unchanged, what the user sees now, the old-data handling, every test or suite whose expectation changed, smoke count.
 ```
 
-## AQ-33 [ ] Rename the "server" merge kind to "disk"
+## AQ-33 [x] Rename the "server" merge kind to "disk"
 
 Needs: AQ-32 merged (both touch src/application/session/). Start from a base that includes it.
 Files: src/application/session/ (apply-merge.ts, change-set.ts, document-session.ts, document-merge.ts, ports.ts, session-merge-ports.ts, session-merge.js), src/bootstrap/wiring/ (session-owner.ts, undo.ts, ports/session-merge.ts), src/bootstrap/wiring.ts, src/features/file-menu/local-files.js, the tests and docs that name the kind (found in step 0).

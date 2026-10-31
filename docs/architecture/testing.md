@@ -239,7 +239,7 @@ drafts, saves and displays see it. A write through a read
   view and identity comparisons among views behave as among raw objects. A
   view is a `Proxy`, so `structuredClone` and `postMessage` refuse it.
 - **No view reaches the session.** The bridge unwraps what it is handed
-  (a replacement through `liveDocumentPort`, a server, recovery, merged or
+  (a replacement through `liveDocumentPort`, a disk, recovery, merged or
   reloaded document, a merge base) and, after each command, stamp, replay or
   noted edit, replaces any view left in the document with its raw object.
   Commands change the session's own object. `heldDocument()` gives the raw

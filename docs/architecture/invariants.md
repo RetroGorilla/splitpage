@@ -497,7 +497,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Replacement:** DocumentSession transactions (M3; plan §6):
   - an accepted change advances the edit generation once and is recorded under the existing undo grouping;
   - a no-op or rejected command has no effects;
-  - user edits, server updates and recovery adoption are distinct transaction kinds.
+  - user edits, disk updates and recovery adoption are distinct transaction kinds.
 - **Acceptance:** application tests:
   - A user command advances the generation once and adds one undo entry.
   - A merge, a reload or a recovery adoption adds none.
