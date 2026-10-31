@@ -82,7 +82,7 @@ jobs:
 
       - name: Build index.html and stamp sw.js
         if: needs.changes.outputs.app == 'true'
-        run: node build.mjs
+        run: node build.mjs --test
 
       - name: sw.js is committed with the current VERSION stamp
         if: needs.changes.outputs.app == 'true'
@@ -238,7 +238,7 @@ jobs:
         run: npm ci
 
       - name: Build index.html and stamp sw.js
-        run: node build.mjs
+        run: node build.mjs --test
 
       - name: Install desktop dependencies
         run: npm ci
