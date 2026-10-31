@@ -418,7 +418,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 ### INV-45 — The voice listener starts and stops only for its own tab
 
 - **Behaviour:** The page can ask the voice listener only to start, stop or report status, and only for itself; these channels take no argument. Main alone builds the command line (Windows `powershell.exe` running `voice/listen.ps1`, which reads only stdin). Under `SPLITPAGE_TEST=1` only the named fake helper runs.
-- **Tests:** `desktop/test/ipc-table.test.mjs` ("Follow My Voice takes no argument, from the app page only"); `desktop/test/voice-helper.test.mjs` ("only the owning tab can stop a session", "no command means unavailable, and start refuses"); `desktop/test/smoke.mjs` (runs with `SPLITPAGE_TEST_VOICE_HELPER`); browser `72-desktop-voice.txt`.
+- **Tests:** `desktop/test/ipc-table.test.mjs` ("Follow My Voice takes no argument, from the app page only"); `desktop/test/voice-helper.test.mjs` ("only the owning tab can stop a session", "no command means unavailable, and start refuses"); `desktop/test/voice-composition.test.mjs` ("in test mode without a fake helper, voice is unavailable and start refuses", "outside test mode: the PowerShell listener in development, resources/splitpage/voice when packaged"); `desktop/test/smoke.mjs` (runs with `SPLITPAGE_TEST_VOICE_HELPER`); browser `72-desktop-voice.txt`.
 - **Owner:** `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the checks pass after voice is extracted as a desktop service.
@@ -426,7 +426,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 ### INV-46 — Listener output is rebuilt before the page sees it
 
 - **Behaviour:** `parseHelperLine` keeps only known message types. It keeps a capped `text`, a short `code`, a culture name, or a capped microphone `name` without control characters, and drops everything else. Main sends the result only to the owning tab. The page uses `text` as words to match and `name` as status text, never as markup.
-- **Tests:** `desktop/test/voice-helper.test.mjs` ("parseHelperLine keeps the known shapes…", "parseHelperLine drops anything else", "…a microphone's name as plain, capped text (#118)", "junk from the helper never reaches the page"); browser `83-voice-mic-name.txt`.
+- **Tests:** `desktop/test/voice-helper.test.mjs` ("parseHelperLine keeps the known shapes…", "parseHelperLine drops anything else", "…a microphone's name as plain, capped text (#118)", "junk from the helper never reaches the page"); `desktop/test/voice-composition.test.mjs` ("an ordinary tab's events reach only that tab…", "a relay session's events reach only the share…"); browser `83-voice-mic-name.txt`.
 - **Owner:** `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the named tests pass unchanged.
@@ -434,7 +434,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 ### INV-47 — One listener, which never outlives its tab or the app
 
 - **Behaviour:** Only one voice session runs at a time. When a second tab starts, it takes the microphone over and the first tab is told (`end`, reason `taken`). Closing the tab or quitting ends the session. The helper exits when its stdin closes, so even a main-process crash stops it listening.
-- **Tests:** `desktop/test/voice-helper.test.mjs` ("a second tab takes the microphone over; the first is told", "a tab closing ends its session without an event", "a helper that ignores its stdin closing is killed").
+- **Tests:** `desktop/test/voice-helper.test.mjs` ("a second tab takes the microphone over; the first is told", "a tab closing ends its session without an event", "a helper that ignores its stdin closing is killed"); `desktop/test/voice-composition.test.mjs` ("closing a tab revokes its share, then forgets the tab and its relay, silently", "quitting, through close-quit's will-quit, closes the share and then stops the helper").
 - **Owner:** `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** — (plan §6: closing an owner releases its resources).
 - **Acceptance:** the named tests pass, and a real-Electron smoke run shows no listener process after the tab closes.

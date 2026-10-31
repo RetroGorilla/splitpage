@@ -860,7 +860,7 @@ STRUCTURE SECTION MUST SAY
 - "no behaviour change", which lifecycle responsibility moved where, which dependencies main no longer owns, the dependency object, main.js line counts before/after, the pinned close/quit order before/after (equal), lists updated, fresh package evidence and full smoke count. Name any lifecycle code left behind and why.
 ```
 
-## AQ-37 [ ] Desktop split, step 3: voice out of desktop/main.js
+## AQ-37 [x] Desktop split, step 3: voice out of desktop/main.js
 
 Needs: AQ-36 merged. Start from a base that includes it.
 Files: desktop/main.js, new CommonJS voice composition module(s) under desktop/, desktop/test/ voice tests, desktop/electron-builder.yml, desktop/package.json, docs/architecture/desktop-build.md and docs that name the moved code.
