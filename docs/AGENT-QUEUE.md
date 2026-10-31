@@ -693,7 +693,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change; test only", what the old check measured wrong, what it measures now, pass counts before (of 10) and after (of 20), and the snap-open run that fails.
 ```
 
-## AQ-31 [ ] Fix the flaky desktop smoke check #496 (tracker I-5)
+## AQ-31 [x] Fix the flaky desktop smoke check #496 (tracker I-5)
 
 Needs: none.
 Files: desktop/test/smoke.mjs only.
