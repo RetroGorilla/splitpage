@@ -3,7 +3,9 @@ import type { Availability, ActionDefinition } from "../../application/actions.t
 import type { ScreenState } from "../../application/screen.ts";
 import { EVERY_OVERLAY, availableUnless, firstRefusal } from "../../application/screen.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
-import type { TagPanelMount } from "./ports.ts";
+import type { PlainTagControl, TagPanelMount } from "./ports.ts";
+import type { NoticePort } from "../../application/effects/ports.ts";
+import { cleanMarks } from "../../core/text/runs.ts";
 
 export function tagPanelActions(current: () => TagPanelMount | null, screen: () => ScreenState, panels: Pick<SidePanels, "close">): ActionDefinition[] {
   function panel(id: string, label: string, buttonId: string, panelId: string, words: string, open: (owner: TagPanelMount) => void): ActionDefinition {
@@ -62,8 +64,14 @@ function opener(id: string, label: string, run: (input: unknown) => void): Actio
   };
 }
 
-export function tagComposerActions(): ActionDefinition[] {
+export function tagComposerActions(current: () => PlainTagControl | null, notices: Pick<NoticePort, "show">): ActionDefinition[] {
   return [opener("tag-selection", "Tag selection", (input) => {
+    if (typeof input === "object" && input !== null && "caret" in input) {
+      if (!(input.caret instanceof HTMLElement)) throw new TypeError("tag-selection needs a caret cell");
+      const marks = cleanMarks("marks" in input ? input.marks : {}, false);
+      if (!current()?.openCategoryAtCaret(input.caret, marks)) notices.show("Select the words you want to label first.", "warn");
+      return;
+    }
     openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]));
   })];
 }
