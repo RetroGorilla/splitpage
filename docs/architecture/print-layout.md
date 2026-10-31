@@ -12,7 +12,7 @@ print, register an exporter, resolve assets, or read a session or preference.
 | Output in `buildPdf` | Captured input and existing projection | P1 destination |
 | --- | --- | --- |
 | Title, scene count, runtime, target/delta, shot count, calendar date | `ExportDocument`, `exportFacts`, `exportSummaryParts` | Script heading and facts line |
-| Rundown and status legend | `sceneFacts` durations/statuses, `exportFacts` status counts and target | Proportional scene strip, status counts, target in facts line |
+| Shot state and status legend | `sceneFacts` statuses, `exportFacts` status counts and target | Grey shot-scene rows, written status and counts, grey-row key; target in facts line; no scene strip |
 | Scene number, start, status, read time and explicit-duration border | `sceneFacts` | Scene and Read columns |
 | Visual/audio words, bold, italic, underline, strike, highlight, links | Captured scene HTML decoded by `ExportServices`, `exportRuns` | Escaped semantic HTML in fixed-width columns |
 | Tags, B-roll keys, stage directions, audio cues, thread anchors/numbers | `exportRuns`, captured `commentNumbers`, print palette | Category underline, chip, brackets, cue styling and numbered markers |
@@ -75,7 +75,7 @@ headers, section page breaks, image bounds, list marks and wrapping.
 | `buildPackingListPdf(doc, "gear")` | Gear only, alphabetical by item name, including orphaned tags | Out, Back, Item, Status, Owner, Scenes; item notes and associated B-roll names; orphan label "Not in script" | Two empty boxes per item; four cumulative status steps, Needed/Sourcing/Have it/Returned key and fill-in hint; item count and nonzero status counts in have/sourcing/needed/returned order; category color; captured title/day; Packed by/Returned by and date lines | Standalone gear packing section/page |
 | `buildPackingListPdf(doc, "prop")` | Props only, same ordering and orphan handling | Same six columns and details | Same marks, counts, signatures and captured facts; empty message "Nothing tagged Prop yet." (Gear for gear), with no table/signatures | Standalone prop packing section/page |
 | `buildPdf` production breakdown | All nonempty tag categories in `breakdownGroups` order, including categories outside gear/prop and orphaned items | Item, Status, Scenes, Assigned to; notes and associated B-roll names; missing owner em dash | Per-category color/count; status marks/labels; total item and nonzero status counts in category-status order; title/day supplied by script | `productionBreakdownPrintSection`, omitted when empty; not replaced by packing checklists |
-| `buildShotListPdf` | `all`, `unshot`, `flagged`, `shot`; group by `scene`, `location`, `person`; invalid values fall back to all/scene; added shots and missing location/person groups retained | Done, Scene/start, B-roll shot/name/description/audio reference, Location, Props with status, Assigned, Flagged/note, Notes; grouping field omitted from redundant cells | Done checkbox and dimmed shot names; flag mark; ruled notes space; whole-capture shot/flag summary even when filtered; projected scope and group counts; captured title/day | Standalone landscape shot section/page, including "No shots to list." for empty/filtered-empty results |
+| `buildShotListPdf` | `all`, `unshot`, `flagged`, `shot`; group by `scene`, `location`, `person`; invalid values fall back to all/scene; added shots and missing location/person groups retained | Done, Scene/start, B-roll shot/name/description/audio reference, Location, Props with status, Assigned, Flagged/note, Notes; grouping field omitted from redundant cells | Grey completed rows, Done checkbox and dimmed shot names; flag mark; ruled notes space; whole-capture shot/flag summary even when filtered; projected scope and group counts; captured title/day | Standalone landscape shot section/page, including "No shots to list." for empty/filtered-empty results |
 | `shotListAppendixPages` from `buildPdf` | All shots by scene, regardless of panel settings; omitted when empty | Same eight columns and row details as standalone shot list | Same marks, counts and notes space; no repeated title/date at appendix heading, since script supplies them | Landscape shot appendix between production breakdown and comments |
 
 No old list output is removed or modified. Standalone packing pages retain
@@ -98,8 +98,40 @@ can span pages without a hand-drawn pagination algorithm or a `cont.` label.
 Long words wrap within their column; text and scene content are not clipped.
 Pictures retain their aspect ratio within column and page-height bounds.
 Gallery pictures flow vertically rather than the old three-thumbnail strip,
-so each remains legible. The rundown target remains in the facts line instead
-of a hand-positioned vertical rule. Footer titles can ellipsize; the full title
+so each remains legible. The target remains in the facts line. The scene-number
+strip is omitted from every print page. Shot script scenes and completed B-roll
+rows have a `#e6e6e6` cell background; written scene status and ticked Done boxes
+remain. Inside shot rows only, comment numbers use the darker amber `#985500`
+and flagged-shot text uses the darker red `#BE2F29`; their original colours
+remain elsewhere. Every print text colour that can appear in a shot row meets
+AA's 4.5:1 minimum against `#e6e6e6`, measured with WCAG relative luminance:
+
+| Text | Colour | Contrast on grey |
+| --- | --- | --- |
+| Main text, scene numbers and read times | `#171613` | 14.50:1 |
+| Scene metadata and list details | `#4E4D48` | 6.79:1 |
+| Dimmed shot names, directions and unavailable images | `#64635E` | 4.82:1 |
+| Links | `#2863AB` | 4.86:1 |
+| B-roll keys and checked boxes | `#00717F` | 4.59:1 |
+| Audio cues and sound tags | `#AB413E` | 4.73:1 |
+| Prop tags | `#764AA2` | 5.14:1 |
+| Location tags | `#2A7449` | 4.56:1 |
+| Cast tags | `#A53C75` | 4.80:1 |
+| VFX tags | `#5E6C00` | 4.65:1 |
+| Gear tags | `#44693C` | 5.05:1 |
+| Comment-number superscripts in shot rows | `#985500` | 4.63:1 |
+| Flagged-shot labels in shot rows | `#BE2F29` | 4.64:1 |
+| Native highlighted text | `#000000` | 16.83:1 |
+
+Native highlights paint their own yellow (`#FFFF00`) backdrop, giving black
+text 19.56:1 contrast there. Tag text uses only the fixed print palette above;
+unknown categories inherit the surrounding text colour. The dotted comment
+underline is decoration, not an additional text colour.
+
+Both `print-color-adjust: exact` and
+`-webkit-print-color-adjust: exact` preserve the grey when browser Background
+graphics is off; desktop `PDF_OPTIONS` already sets `printBackground: true`.
+The script status-count key explains the grey rows. Footer titles can ellipsize; the full title
 remains in the heading and document title.
 
 Bookmarks are desktop-only (P3, from the page's headings). Browser users choose
@@ -119,11 +151,13 @@ old list PDFs are:
   uses individually outlined status labels instead of a single empty pill.
 - Notes and descriptions retain captured line breaks; packing notes previously
   collapsed whitespace. Associated B-roll names share a wrapped line in breakdowns
-  instead of separate chips. Status marks use CSS circles/half fills/rings, and
+  instead of separate chips. Status marks use CSS circles/solid half fills/rings, and
   flags use colored text rather than PDF drawing operations.
 - Chromium repeats column heads and splits oversized rows, with no continued
   group labels or `cont.` markers. Signatures stay together. Notes space uses
-  CSS rules with a minimum height rather than manually drawn rows of rules.
+  two 12-point blocks with 0.5-point bottom borders in a 24-point notes space.
+  Borders and the clipped solid sourcing half-fill replace print gradients so
+  Chromium emits vector rules and solid fills without gradient smearing.
 
 These differences now apply to browser PDF exports. Text is escaped at
 every insertion, including unknown category fallbacks, group labels, owners,
