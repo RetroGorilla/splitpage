@@ -213,7 +213,7 @@ test("6.2: a refused replay changes nothing in the document, keeps the refusal's
   edit("r1", "Hello again");
   const next = JSON.parse(JSON.stringify(currentDocument()));
   next.rows = next.rows.filter((r) => r.id !== "r1");
-  loadTestDocument(liveSession().absorbServer(next));
+  loadTestDocument(liveSession().absorbDisk(next));
   const text = docText();
   const generation = liveSession().generation();
   const sizes = undoSizes();
@@ -289,7 +289,7 @@ test("6.2: owner cleanup by a replay is in its change set, including lists the e
   assert.deepEqual(lastUndoEntry().steps.map((s) => s.key), ["people"], "the entry carries the crew only");
   const next = JSON.parse(JSON.stringify(currentDocument()));
   next.brollShots.find((b) => b.id === "bs_pier").owner = "pC";
-  loadTestDocument(liveSession().absorbServer(next));
+  loadTestDocument(liveSession().absorbDisk(next));
   const w = watch();
   let r;
   try {

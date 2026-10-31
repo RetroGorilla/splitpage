@@ -8,7 +8,6 @@ const APPROVED = Object.freeze([
   "__brollTest",
   "__cacheTest",
   "__commandTest",
-  "__desktopTest",
   "__exportTest",
   "__fileMenuTest",
   "__prompterTest",
@@ -22,7 +21,9 @@ const APPROVED = Object.freeze([
   "__videoTest"
 ]);
 
-const CONVERTED = Object.freeze(["__documentGuardTest", "__historyTest", "__splitpageFormats", "__undoTest"]);
+const CONVERTED = Object.freeze(["__desktopTest", "__documentGuardTest", "__historyTest", "__splitpageFormats", "__undoTest"]);
+
+const FAKE_DESKTOP = Object.freeze(["_failNextDraftWrites", "_blobFailNext", "0.0.0-test"]);
 
 let passed = 0;
 const failures = [];
@@ -52,12 +53,14 @@ const release = appJs(false);
 eq("it exposes exactly the hooks still on the list, so a converted hook leaves the list", hookNames(release), [...STILL_IN_RELEASE]);
 eq("no converted hook name is left in it", CONVERTED.filter((name) => release.includes(name)), []);
 check("the build flag is replaced, not left as a name", !release.includes("SPLITPAGE_TEST_HOOKS"), null);
+eq("the fake desktop backend and its fault switches are left out", FAKE_DESKTOP.filter((marker) => release.includes(marker)), []);
 
 console.log("\nthe test build (node build.mjs --test):\n");
 
 const testBuild = appJs(true);
 eq("it exposes every hook, the converted ones included", hookNames(testBuild), [...STILL_IN_RELEASE, ...CONVERTED].sort());
 eq("a converted hook is never also on the list", CONVERTED.filter((name) => STILL_IN_RELEASE.includes(name)), []);
+eq("it keeps the fake desktop backend and its fault switches", FAKE_DESKTOP.filter((marker) => !testBuild.includes(marker)), []);
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {

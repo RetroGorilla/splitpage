@@ -24,7 +24,7 @@ export type DocumentEntry = (raw: unknown) => ValidatedDocument;
 export interface UndoPort {
   adopt: (doc: ValidatedDocument | null) => void;
   record: (changes: ChangeSet) => void;
-  absorbServer: (doc: ValidatedDocument | null) => void;
+  absorbDisk: (doc: ValidatedDocument | null) => void;
   absorbReload: () => void;
 }
 

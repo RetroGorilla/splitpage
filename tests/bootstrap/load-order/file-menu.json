@@ -1,5 +1,8 @@
 {
   "loadOnly": [
+    "src/features/file-menu/browser-pdf.ts",
+    "src/adapters/print/browser-print.ts",
+    "src/bootstrap/wiring/ports/printing.ts",
     "src/features/file-menu/export-dialog.js",
     "src/features/file-menu/file-menu.js",
     "src/features/file-menu/actions.ts",
@@ -9,5 +12,5 @@
     "src/bootstrap/wiring/file-menu.ts",
     "src/bootstrap/wiring/file-menu-controls.ts"
   ],
-  "expectedLoads": 8
+  "expectedLoads": 11
 }

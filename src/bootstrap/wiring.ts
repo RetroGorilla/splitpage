@@ -163,7 +163,7 @@ const SESSION_EFFECTS: readonly (keyof SessionEffects)[] = ["dirty", "draft", "s
 
 const TIMER_METHODS: readonly (keyof TimerPort)[] = ["now", "start", "stop"];
 
-const UNDO_ADAPTER_METHODS: readonly (keyof UndoPort)[] = ["adopt", "record", "absorbServer", "absorbReload"];
+const UNDO_ADAPTER_METHODS: readonly (keyof UndoPort)[] = ["adopt", "record", "absorbDisk", "absorbReload"];
 
 const KEY_TARGET_METHODS: readonly (keyof EventTarget)[] = ["addEventListener", "removeEventListener"];
 
