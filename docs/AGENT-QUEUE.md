@@ -597,7 +597,7 @@ Task: improvement plan item 4.3, step 2 for the prompter. prompter.ts keeps abou
 Structure section: which variables moved into the state object and which stayed out, and why.
 ```
 
-## AQ-26 [ ] Convert the rundown to strict TypeScript
+## AQ-26 [x] Convert the rundown to strict TypeScript
 
 Needs: none. Files: src/features/rundown/rundown.js -> rundown.ts, its importers (src/bootstrap/wiring/rundown.ts and panels.ts, src/test/rundown.test.mjs and the other src/test files that import it, tests/features/rundown/, tests/bootstrap/load-order/rundown.json), docs that name rundown.js. Leave target.js alone.
 
