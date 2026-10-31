@@ -445,9 +445,9 @@ tabs**.
   `isTrustedTabStripSender` in `ipc-setup.js`). Renderer never
   sends file paths to main (#34) — main keeps an id → path registry; writes
   are atomic (temp+rename).
-- `createTabWindow` (`main.js:1013`) makes a `BrowserWindow` whose primary
+- `createTabWindow` (`main.js:1014`) makes a `BrowserWindow` whose primary
   view loads the tab strip; each tab is a `WebContentsView` from
-  `createTab(windowId, opts)` (`main.js:1188`). `tabId`/`windowId` are
+  `createTab(windowId, opts)` (`main.js:1189`). `tabId`/`windowId` are
   32-hex, validated at every trust boundary (#42), stable across tear-off
   and relaunch, and double as the crash-draft folder name (§4). A crashed
   tab closes with no prompt, reports `dirty: false` regardless of the
@@ -480,7 +480,7 @@ tabs**.
   (#40): a tab with `hasDraftToRestore` is `hold()`-ed immediately;
   `write()` on a held tab returns `HELD`, touches nothing; released only by
   `splitpage:draft-restore-done` or an explicit user decision — never
-  crash/kill/session-end/quit. `buildDraftHeader` (`main.js:315`) is built
+  crash/kill/session-end/quit. `buildDraftHeader` (`main.js:316`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
 - **The browser keeps no drafts.** Crash-safe drafts are desktop-only. The
   browser draft store, its writer and its Web Lock were removed with the
