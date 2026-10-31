@@ -96,7 +96,7 @@ test("sections: scene positions inside their destination do not compete with a s
   const edited = { rows: ["a", "c", "b", "d", "e"].map(id => ({ id })), sections: [
     base.sections[0], { id: "B", name: "B", firstSceneId: "d" }
   ] };
-  for (const [mine, theirs] of [[moved, edited], [edited, moved]]) {
+  for (const [mine, theirs] of [[moved, edited], [edited, moved]] as const) {
     const result = mergeSectionLayout(base, mine, theirs, edited.rows);
     assert.deepEqual(result.rows.map(row => row.id), ["d", "e", "a", "c", "b"]);
     assert.equal(sectionForScene(result, "c")?.id, "A");
@@ -109,7 +109,7 @@ test("sections: an emptied moved section cannot reorder its scenes inside the de
   ] };
   const moved = { ...base, rows: ["d", "a", "b", "c"].map(id => ({ id })) };
   const edited = { rows: ["a", "b", "d", "x", "c"].map(id => ({ id })), sections: [base.sections[0]] };
-  for (const [mine, theirs] of [[moved, edited], [edited, moved]]) {
+  for (const [mine, theirs] of [[moved, edited], [edited, moved]] as const) {
     const result = mergeSectionLayout(base, mine, theirs, edited.rows);
     assert.deepEqual(result.rows.map(row => row.id), ["a", "b", "d", "x", "c"]);
     assert.deepEqual(result.sections, [base.sections[0]]);
