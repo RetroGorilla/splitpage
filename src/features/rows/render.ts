@@ -863,7 +863,7 @@ function paintSessionChange(change: ScreenChange): void {
   if (ABSORBED[change.kind]) { absorbRender(REDRAW_FAILED); return; }
   if (state.screenStale || state.paintBroke) return;
   const c = change.changes;
-  if (c.docFields.includes("title") && c.docFields.includes("titleVersion")) {
+  if (c.docFields.includes("title") && (c.docFields.includes("titleVersion") || change.kind === "replay")) {
     const title = ports.document.current()?.title || "";
     ["doc-title", "writer-title"].forEach(function (id) {
       const input = document.getElementById(id) as HTMLInputElement | null;

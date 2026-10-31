@@ -70,6 +70,19 @@ test("a replacement while the first save writes receives neither the earlier tit
   assert.equal(undoOwner().sizes().undo, 0);
 });
 
+test("undo of an unversioned first-save title updates a focused title input", async () => {
+  fresh();
+  target("Headset ad.md");
+  const input = document.getElementById("doc-title");
+  input.focus();
+  await saveDoc();
+  undoOwner().flush();
+  assert.equal(input.value, "Headset ad");
+  undoOwner().undo();
+  assert.equal(currentDocument().title, "Untitled Script");
+  assert.equal(input.value, "Untitled Script");
+});
+
 test("both project formats reopen with the file provenance and tag; Save As only changes the tag", async () => {
   for (const ext of ["md", "splitpage"]) {
     fresh();
