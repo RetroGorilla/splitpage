@@ -1,0 +1,25 @@
+open /tests/adapters/formats/fixtures/.generated-script-print-rich.html
+expect document.title === 'Captured <script> 中文 😀'
+expect document.querySelectorAll('script,iframe,object,embed,link,base').length === 0
+wait Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)
+expect document.querySelectorAll('img').length === 3
+expect document.querySelectorAll('.image-unavailable').length === 2
+expect document.querySelector('.tag').textContent === 'Camera'
+expect document.querySelector('.broll').textContent === 'B-roll'
+expect Array.from(document.querySelectorAll('.direction')).map(e => e.textContent).join('') === '(whisper)'
+expect document.querySelector('.cue').textContent === 'MUSIC: theme'
+expect document.querySelector('#comments').textContent.includes('Resolved by Sam')
+expect document.querySelector('.reply').textContent.includes('End reply')
+expect document.querySelectorAll('a').length === 2
+goto /tests/adapters/formats/fixtures/.generated-script-print-long.html
+wait Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)
+expect document.querySelectorAll('tbody tr').length === 18
+expect document.querySelector('main').textContent.includes('Visual line 179')
+expect document.querySelector('main').textContent.includes('Audio line 159')
+expect document.documentElement.scrollWidth === document.documentElement.clientWidth
+expect Array.from(document.querySelectorAll('td')).every(e => e.scrollWidth <= e.clientWidth + 1)
+expect Array.from(document.querySelectorAll('img')).every(e => e.getBoundingClientRect().width <= e.parentElement.getBoundingClientRect().width)
+goto /tests/adapters/formats/fixtures/.generated-script-print-empty.html
+expect document.querySelector('main').textContent.includes('No scenes yet.')
+expect document.querySelectorAll('table,#comments,.rundown').length === 0
+quit
