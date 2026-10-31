@@ -141,7 +141,7 @@ const throughSession = {
     const out = session.run({ name: p.name, needs: "edit", plan: () => ({ changes: p.changes, apply: p.apply }) });
     assert.equal(out.kind, "applied", p.name);
   },
-  remote: (next) => { assert.equal(session.absorbServer(next), next); }
+  remote: (next) => { assert.equal(session.absorbDisk(next), next); }
 };
 
 test("differential: the session's commands through the undo adapter leave 12a's stacks and the document exactly as the legacy noteEdit path does (seeded)", async () => {
@@ -163,5 +163,5 @@ test("differential: the session's commands through the undo adapter leave 12a's 
   }
   assert.ok(coalesced > 20, "typing groups were exercised: " + coalesced);
   assert.ok(refused > 5, "empty or refused undo and redo were exercised: " + refused);
-  assert.ok(forgotten > 5, "server updates forgot entries through the adapter: " + forgotten);
+  assert.ok(forgotten > 5, "disk updates forgot entries through the adapter: " + forgotten);
 });

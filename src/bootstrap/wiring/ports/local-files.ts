@@ -34,6 +34,8 @@ import { resetProductionPanel } from "./production.ts";
 import { text } from "./text.ts";
 import { undoControl } from "./editing.ts";
 import { actions } from "./actions.ts";
+import { printDialog } from "./printing.ts";
+import { exportBrowserPdf } from "../../../features/file-menu/browser-pdf.ts";
 
 export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
   const files: LocalFileAccess = localFileAccess(window);
@@ -98,6 +100,10 @@ export function localFileMenuPorts(): LocalFileMenuPorts {
     notices,
     delivery: fileDelivery,
     merge: { offer: offerFileMerge, reset: resetMergeOffer },
+    pdfPrint: { export: (kind, options, alive) => exportBrowserPdf({
+      exports: { captureExportDocument, loadExportAssets }, formats, assets: { request: exportAssetsRequest },
+      brollView, notices, desktop: presence.running, printDialog
+    }, kind, options, alive) },
     exportControls: { isExportAction, rememberExport },
     actions
   };

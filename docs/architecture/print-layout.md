@@ -1,9 +1,10 @@
 # Captured HTML print layout
 
-AQ-40 and AQ-41 implement roadmap C6 P1 and P2. **Not wired; no user-visible change.** The
-registered PDF exporter still calls `buildPdf`; that generator and its tests
-remain unchanged until P5. These modules do not open a window, print, register
-an exporter, resolve assets, or read a session or preference.
+AQ-40 and AQ-41 implement roadmap C6 P1 and P2. AQ-43 wires these layouts to
+browser PDF actions through a separate print-dialog adapter. The desktop
+export path still calls the old PDF builders; that generator and its unit
+tests remain until P5. The layout modules themselves do not open a window,
+print, register an exporter, resolve assets, or read a session or preference.
 
 ## Existing PDF content inventory
 
@@ -61,8 +62,9 @@ wrap their respective sections with `buildPrintPage`. `listPrintSections(input)`
 returns the nonempty all-category production breakdown and all-shots, by-scene
 appendix. `buildScriptWithListsPrintPage(input)` accepts `ScriptPrintInput`
 including held assets and composes `[script, ...listSections, ...comments]`.
-`buildScriptPrintPage` remains the P1 script/comments builder. None is registered
-as a production exporter. The shell supplies fixed-layout tables, repeating
+`buildScriptPrintPage` remains the P1 script/comments builder. The composed
+and standalone pages are registered as captured `printPage` providers for
+browser PDF exports. The shell supplies fixed-layout tables, repeating
 headers, section page breaks, image bounds, list marks and wrapping.
 
 ## Existing list content inventory (P2 step 0)
@@ -89,6 +91,7 @@ stylesheet or script. A restrictive CSP permits only inline CSS and raster
 data images. Links preserve safe HTTP(S)/mailto destinations without fetching
 them during rendering. There is no printable-document script.
 
+Table rows use `break-inside: avoid`; a row taller than a page may still split.
 Chromium decides page breaks and repeats table headers. Oversized scene rows
 can span pages without a hand-drawn pagination algorithm or a `cont.` label.
 Long words wrap within their column; text and scene content are not clipped.
@@ -98,9 +101,9 @@ so each remains legible. The rundown target remains in the facts line instead
 of a hand-positioned vertical rule. Footer titles can ellipsize; the full title
 remains in the heading and document title.
 
-Bookmarks are desktop-only work for P3. Browser users will choose “Save as
-PDF” from their print dialog in P4. P1 creates neither a desktop print window
-nor a browser print dialog. The old writer stays until P5 and the PC PDF check.
+Bookmarks are desktop-only work for P3. Browser users choose “Save as PDF”
+from their print dialog through P4. The old desktop writer stays until P3
+replaces that path; the old generator stays until P5 and the PC PDF check.
 
 P2 preserves portrait packing/breakdown and landscape Letter shot pages through
 a named CSS page. The shared 0.6-inch margins replace the old packing 0.75-inch
@@ -121,12 +124,101 @@ old list PDFs are:
   group labels or `cont.` markers. Signatures stay together. Notes space uses
   CSS rules with a minimum height rather than manually drawn rows of rules.
 
-These differences affect only the unwired print builders. Text is escaped at
+These differences now apply to browser PDF exports. Text is escaped at
 every insertion, including unknown category fallbacks, group labels, owners,
 notes, prop statuses and audio references. The composed script continues to use
 P1's `videoHostLabel` and `videoLinkText` helpers for video references.
 
+## Browser print workflow (P4)
+
+The browser entry points all meet at `local-files.js`'s `exportAs`: the export
+dialog button, the hidden File menu actions, the command menu and Export again.
+The Gear panel's packing button runs the gear action; the B-roll full page's
+Print button calls `exportAs("b-roll pdf")` with its current filter/page group.
+The two added routing lines delegate to `browser-pdf.ts` through the named
+`pdfPrint` port. Other exports and the desktop branch retain `buildFileData`
+and the existing file-delivery path. The shared registry's optional
+`printPage(request)` accepts the captured document, held assets and options;
+AQ-42 can consume the same providers without changing the browser adapter.
+
+| Action | Captured input/options | Previous browser result | P4 result |
+| --- | --- | --- | --- |
+| `export-pdf` | One `ExportDocument`, clock/day, picture-hash request and resolved assets; script always includes directions, all production groups, all shots by scene, comments/replies | Download script `.pdf` bytes | Composed script/list/comment print page |
+| `export-packing-gear` | One capture, gear category | Download Gear packing `.pdf` | Gear packing print page |
+| `export-packing-prop` | One capture, prop category | Download Prop packing `.pdf` | Prop packing print page |
+| `export-broll-pdf` | One capture, frozen `brollView`; action defaults to all/scene, explicit filter/group resolved before awaiting assets | Download landscape shot-list `.pdf` | Named landscape shot print page |
+| B-roll full page Print | One capture, current filter and page group frozen before awaiting assets | Download the visible scope's shot-list `.pdf` | Captured filtered/grouped landscape print page |
+| Export again | Remembered action, fresh capture and resolved options | Repeat that PDF download | Repeat that action's print flow |
+
+`PrintDialogPort.reserve(alive)` opens a blank window synchronously in the user
+action. A blocked popup reports that pop-ups must be allowed for Splitpage.
+The capture and option resolution happen before loading assets. A later edit
+or document switch cannot change the page; rendering reads no live editor or
+preferences. The originating mount's lifetime remains authoritative.
+
+`src/adapters/print/browser-print.ts` writes the standalone page, waits for
+its font readiness and image decoding, focuses it and calls `print()`. It
+answers `opened` or `closed`, never `saved`. The export UI says to choose Save as PDF;
+it cannot know whether the user saved, printed or cancelled. No save owner,
+dirty flag, merge baseline, identity, history or project Save is changed.
+Failures close the preparation window and show an error. A 60-second
+preparation deadline, manual window close, mount retirement and parent page
+exit release resources. The deadline is cleared before invoking print, so
+it cannot close an active dialog. `afterprint` closes the window for both
+printing and cancellation; browsers without that event leave it for the user
+to close. No object URLs or printable-document scripts are created.
+The completion notice says only that the print request was sent to the browser:
+Chromium's print call can return after saving or cancellation closes the dialog.
+
+The intended workflow replaces the browser download expectations in suites
+03, 12, 41, 65, 96, 98, 145 and 284. They capture the page at print invocation, compare
+the same captured HTML by both routes, retain content/colour/picture-order
+checks, assert cleanup and no PDF download, and leave non-PDF checks intact.
+Suites 12/96 retain the Gear-panel and B-roll-page routes, checklist/signature
+and shot/person/flag details. Suite 96 checks the named shot's Scene cell and
+start directly. Suite 65 verifies the held PNG/WebP/legacy images decode at
+their captured dimensions, then forces the unchanged desktop PDF route and
+checks the PDF header, three JPEG image-stream signatures and exact dimensions.
+That real-browser conversion check remains until P5 removes the old writer.
+Old manual pagination geometry in suite 41 is replaced by loaded-image aspect
+ratios, bounds, non-overlap, complete text and print CSS checks; the actual
+page-break checks belong to print fixtures 382/383 and Adam's saved PDFs.
+Suite 384 covers all four actions, Export again, blocked popups, font delay,
+document switch, image failure, cancellation and cleanup. Its final probe
+opens a real headless popup, verifies image decoding and intercepts print
+invocation before checking `afterprint` cleanup. Adapter, workflow
+and booted-app tests cover lifecycle, captured options and unchanged save
+state/baseline/identity.
+
+Roadmap C6 explicitly authorizes the browser workflow and Chromium pagination
+differences. INV-57's shared facts and capture rules remain. For INV-60,
+Splitpage's browser HTML remains deterministic for a captured day; the browser
+controls saved-PDF metadata and bytes, so byte equality is no longer promised
+for its PDF file. INV-61's exact artifact syntax and old PDF bookmarks remain
+tested on the old generator, without being claimed for browser output. Adam
+must check real dialog cancellation, saved PDFs, fonts, page breaks and footers
+on his PC before merging P4 or removing the old writer in P5. That check and
+independent review are pending; this PR must not be merged by a queue agent.
+
 ## Fixtures and validation
+
+Initial P4 validation on Node 24.22.0: the full verification gate passed all 571
+discovered test files (195 frontend, 11 source, 320 tests, 23 desktop, 22 tools),
+plus lint, types, dependency/comment gates and build. Final focused lifecycle
+and app tests passed 11/11. Fourteen browser suites passed 957/957 checks on
+the test build with at most three lanes: 03, 12, 34, 41, 60, 65, 96, 98, 145,
+259, 284, 384 and fixtures 382/383. The last 384 run includes a real headless
+popup and passed 36/36; 382/383 passed 23/23 and 60/60. Free RAM exceeded
+10 GB before final browser runs. Native dialog and saved-PDF checks remain
+for Adam; no desktop PDF branch changed, so no Electron smoke was required.
+
+Review round 1 repeated the full gate with all 571 files passing. The focused
+adapter/workflow/app tests passed 12/12, including a print call returning after
+cancellation. Changed suites 65, 96 and 384 passed 55/55, 81/81 and 36/36
+checks on a fresh test build with three lanes and 12.7 GB free RAM beforehand.
+The latest counts across the fourteen suites total 962/962. Browser PDF scope
+is now also recorded in INV-60/61, awaiting Adam's decision; desktop PDF keeps
+both rules. Delta review and Adam's real-dialog/PDF checks remain pending.
 
 The six tests in `tests/adapters/formats/script-print.test.mjs` cover rich text,
 tags/keys/directions/cues, facts, comments/replies, raster/gallery/legacy images,

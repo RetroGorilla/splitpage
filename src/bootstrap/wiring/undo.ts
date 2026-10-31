@@ -53,7 +53,7 @@ export function undoSessionPort(): UndoPort {
   return {
     adopt: function (doc) { undoOwner().adopt(doc); },
     record: function () { undoOwner().noteEdit(); },
-    absorbServer: function (doc) { undoOwner().noteRemote(doc); },
+    absorbDisk: function (doc) { undoOwner().noteRemote(doc); },
     absorbReload: function () { undoOwner().absorbRemote(); }
   };
 }

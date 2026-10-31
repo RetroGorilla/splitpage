@@ -7,6 +7,7 @@ import { projection } from "../../core/text/runs.ts";
 import type { CellInput, Run } from "../../core/text/runs.ts";
 import type { PrompterRecognition } from "../../application/prompter-services.ts";
 import type { PrompterFeaturePorts, PrompterRuntime } from "./ports.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 type PrompterSpeechResult = { readonly isFinal: boolean; readonly 0: { readonly transcript: string } };
 type VoiceRecognition = PrompterRecognition & {
@@ -37,7 +38,6 @@ type PrompterTestHooks = {
   launchFromScript: (token: string) => Promise<boolean>;
   updateStatus: () => void;
 };
-type PrompterWindow = Window & { __prompterTest?: PrompterTestHooks };
 
 interface PrompterState {
   prompterSpeed: number;
@@ -1085,7 +1085,8 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
 
   state.promptSceneMode = ports.preferences.prompterFlag("prompterSceneMode");
 
-  (window as PrompterWindow).__prompterTest = {
+  let withdrawHook: (() => void) | null = null;
+  exposeTestHook("__prompterTest", (): PrompterTestHooks => ({
     checkSceneBoundaryNow: function () {
       const scroller = document.getElementById("prompter-scroll") as HTMLElement;
       if (!state.promptSceneMode || state.promptSceneEndWordOffset == null) return false;
@@ -1103,7 +1104,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     },
     launchFromScript: launchPrompterFromScript,
     updateStatus: updatePrompterStatus
-  };
+  }), (withdraw) => { withdrawHook = withdraw; });
 
   const launch = readPrompterLaunch();
   if (launch) startPrompterLaunch(launch);
@@ -1128,7 +1129,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
       disposePrompterView();
       clearTimeout(initialReadyTimer as TimerHandle);
       initialReadyTimer = null;
-      delete (window as PrompterWindow).__prompterTest;
+      withdrawHook?.();
       (ports as unknown) = null;
     }
   };

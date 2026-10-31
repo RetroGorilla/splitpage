@@ -8,7 +8,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import {
   ANNOTATION_COLORS, annotateGallerySlot, moveGallerySlot, normalizeMarks, removeGallerySlot, replaceGalleryPicture, rowSlots, slotOriginal
-} from "../adapters/storage/02d-gallery.js";
+} from "../core/document/gallery.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";

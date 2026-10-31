@@ -5,6 +5,7 @@ import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.js";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { addListener } from "../common/listeners.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 let ports: CommandMenuPorts = null as unknown as CommandMenuPorts;
 const listeners: (() => void)[] = [];
@@ -323,15 +324,15 @@ export function startCommandMenu(given: CommandMenuPorts) {
     }
   }
 
-  const test = {
+  let withdrawHook: (() => void) | null = null;
+  exposeTestHook("__commandTest", () => ({
     results: function (q: unknown) {
       return commandResults(q).map(function (g) {
         return { group: g.group, items: g.items.map(function (it) { return { id: it.cmd.id, label: it.view.label, disabled: !!it.view.disabled, why: it.view.why }; }) };
       });
     },
     recent: recentIds
-  };
-  (window as Window & { __commandTest?: typeof test }).__commandTest = test;
+  }), (withdraw) => { withdrawHook = withdraw; });
   let disposed = false;
   return {
     openCommandMenu: openCommandMenu,
@@ -342,7 +343,7 @@ export function startCommandMenu(given: CommandMenuPorts) {
       disposed = true;
       closeCommandMenu(false);
       while (listeners.length) (listeners.pop() as () => void)();
-      if ((window as Window & { __commandTest?: typeof test }).__commandTest === test) delete (window as Window & { __commandTest?: typeof test }).__commandTest;
+      withdrawHook?.();
       shown = [];
       active = -1;
       returnFocus = null;

@@ -451,7 +451,7 @@ function anchorUnwrapped(rowId, field, cmtId) {
   };
 }
 
-var COUNTED_KINDS = { adopt: true, server: true, recovery: true, reload: true };
+var COUNTED_KINDS = { adopt: true, disk: true, recovery: true, reload: true };
 
 export function commentsChanged(change) {
   if (COUNTED_KINDS[change.kind] || change.changes.whole || change.changes.docFields.indexOf("comments") !== -1) updateCommentsCount();

@@ -5,12 +5,9 @@ import {
 } from "./blob-store.ts";
 import {
   forgivingBase64Decode,
-  rowImage,
-  rowImageKey,
-  rowImageShas
+  rowImage
 } from "../../core/document/media.ts";
 import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
-export { rowImage, rowImageKey, rowImageShas };
 
 var idbBlobs = createIdbBlobBackend(function () {
   return typeof window !== "undefined" && "indexedDB" in window && window.indexedDB ? window.indexedDB : null;

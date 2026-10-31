@@ -48,6 +48,7 @@ p { margin: 0 0 8pt; }
 section + section { break-before: page; }
 section, article, td, p { overflow-wrap: anywhere; }
 table { border-collapse: collapse; table-layout: fixed; width: 100%; }
+tr { break-inside: avoid; }
 thead { display: table-header-group; }
 th { text-align: start; color: #${c.dim}; font-size: 8pt; }
 th, td { vertical-align: top; padding: 8pt 5pt; border-bottom: 0.5pt solid #${c.border}; }
