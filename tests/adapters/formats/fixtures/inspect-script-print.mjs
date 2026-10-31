@@ -436,8 +436,22 @@ try {
       if (match) { clearTimeout(timer); resolve(match[1]); }
     });
   });
-  const targets = await (await globalThis.fetch(endpoint.replace(/^ws:/, "http:").replace(/\/devtools\/browser\/.*/, "/json/list"))).json();
-  const page = targets.find((target) => target.type === "page");
+  const targetList = endpoint.replace(/^ws:/, "http:").replace(/\/devtools\/browser\/.*/, "/json/list");
+  const deadline = Date.now() + 10000;
+  let page;
+  while (!page && Date.now() < deadline) {
+    let targets;
+    try {
+      targets = await (await globalThis.fetch(targetList, {
+        signal:globalThis.AbortSignal.timeout(Math.max(1, deadline - Date.now()))
+      })).json();
+    } catch (error) {
+      if (error.name === "TimeoutError") break;
+      throw error;
+    }
+    page = targets.find((target) => target.type === "page");
+    if (!page) await new Promise((resolve) => setTimeout(resolve, Math.min(100, Math.max(0, deadline - Date.now()))));
+  }
   assert.ok(page, "No Chromium page target");
   ws = new globalThis.WebSocket(page.webSocketDebuggerUrl);
   await once(ws, "open");

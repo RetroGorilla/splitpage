@@ -45,9 +45,14 @@ through `npm test`, `test:all` and `verify`; a focused run is
 It requires at least 4 GB free RAM and uses an installed browser from
 `SPLITPAGE_CHROME`, Windows Edge, the existing runner cache or PATH. It does
 not skip when a browser is missing. Local test runtime was 9.2 seconds plus
-startup. Failures preserve PDFs, screenshots, page records and `summary.txt`
+startup. Successful runs delete their TEMP directory. Failures preserve
+PDFs, screenshots, page records and `summary.txt`
 in a unique `splitpage-print-layout-*` TEMP directory. The standalone
 inspector still accepts `<out> --lists --probes` after fixture generation.
+
+On Unraid, Tests uses `/opt/hostedtoolcache/splitpage-playwright/1.63.0`,
+filled only by `checks`; a new or recreated runner needs one `checks` run
+first, or Chromium in its image.
 
 While a pull request is being written, run the focused checks for what it
 touches. CI then runs every fast gate on every pull request: lint, types, the
