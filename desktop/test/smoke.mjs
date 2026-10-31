@@ -5361,7 +5361,7 @@ function casePackageVariant(target) {
   if (target.variant === "release") {
     record(target.name + ": the package is a release build (no hook outside the release list)", leaked.length === 0, leaked.join(", "));
   } else {
-    record(target.name + ": the package is a test build (it has the hooks a release build leaves out)", leaked.length > 0, "none found");
+    record(target.name + ": the package is a test build (it has the hooks a release build leaves out)", leaked.length > 0, leaked.length ? leaked.join(", ") : "none found");
   }
 }
 
