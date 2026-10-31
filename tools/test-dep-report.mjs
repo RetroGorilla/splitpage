@@ -945,7 +945,7 @@ for (const [label, text, names] of [
 
 const WRITERS_OUT_OF_THE_CYCLE = [
   "src/application/save/export-kit.ts", "src/bootstrap/wiring/export-kit.ts", "src/adapters/formats/export-projections.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/csv.ts",
-  "src/adapters/formats/xlsx.ts", "src/adapters/formats/pdf.ts", "src/adapters/formats/export-text.ts", "src/bootstrap/wiring/exporters.ts"
+  "src/adapters/formats/xlsx.ts", "src/adapters/formats/export-text.ts", "src/bootstrap/wiring/exporters.ts"
 ];
 const repoGraph = loadGraph(ROOT);
 const inCycle = new Set(stronglyConnected(repoGraph, false).flat());
