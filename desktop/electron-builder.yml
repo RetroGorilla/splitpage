@@ -14,6 +14,9 @@ files:
   - ipc-channels.js
   - ipc-setup.js
   - ipc-files.js
+  - ipc-shell.js
+  - ipc-document.js
+  - ipc-history-blob.js
   - prompter-share.js
   - close-keep.js
   - quit-watchdog.js
