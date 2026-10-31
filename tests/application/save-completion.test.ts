@@ -18,13 +18,15 @@ function captured(): ExportDocument {
   return buildExportDocument(doc, "2026-10-29T00:00:00.000Z", NO_MODELS, { stamp: { rev: 3, lastEditedBy: "Adam", lastEditedAt: "2026-10-29T00:00:00.000Z" } });
 }
 
-function harness(changes = 4, editsDuringNaming = 0) {
+function harness(changes = 4, editsDuringNaming = 0, throwDuringNaming = false) {
   const log: string[] = [];
   const amended: Record<string, unknown>[] = [];
   const ports: SaveCompletionPorts = {
     edits: { edit: () => {
       if (!editsDuringNaming) throw new Error("unexpected title change");
       changes += editsDuringNaming;
+      log.push("naming");
+      if (throwDuringNaming) throw new Error("paint failed");
       return true;
     } },
     document: { stamp: (stamp) => { log.push("stamp:" + stamp.name); return null; } },
@@ -46,6 +48,23 @@ function harness(changes = 4, editsDuringNaming = 0) {
 }
 
 const HOME = { kind: "file", name: "pilot.md" } as unknown as Home;
+
+test("landed metadata and copy identity are recorded before naming, even when its paint listener throws", () => {
+  for (const throws of [true, false]) {
+    const h = harness(4, 1, throws);
+    const naming = fileTitleChange({ title: "Untitled Script" }, "Pilot v3.md", true);
+    const complete = () => h.completion.confirmWrite({ naming, captured: captured(), published: { rev: 3 },
+      forkDocId: NEW_ID, docIdAtSave: OLD_ID, seqAtSave: 4, landed: { home: HOME, lastModified: 77 } });
+    if (throws) assert.throws(complete, /paint failed/);
+    else complete();
+    assert.deepEqual(h.log, [
+      "stamp:stamp-edit", "setBaseline:3:saveDoc: the bytes just written", "amendHome:diskBase,lastModified",
+      "copyHistory:" + OLD_ID + ">" + NEW_ID, "stamp:stamp-document-id", "markWrittenOut:true", "syncIdentity",
+      "naming", ...(!throws ? ["confirmSavedNow"] : [])
+    ]);
+    assert.deepEqual(h.amended, [{ diskBase: { rev: 3 }, lastModified: 77 }]);
+  }
+});
 
 test("naming confirms its own edit, but never confirms an extra edit made by a completion listener", () => {
   const naming = fileTitleChange({ title: "Untitled Script" }, "Pilot v3.md", true);

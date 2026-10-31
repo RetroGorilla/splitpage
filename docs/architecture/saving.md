@@ -198,8 +198,9 @@ The file check is `checkFileConflict(handle, lastModified)` in `src/adapters/fil
 `core/document/file-title.ts` derives naming only for a picked handle. An
 unwritten document with an empty, Untitled or Untitled Script title and no
 `user` provenance can take the filename stem as its title. A terminal
-case-insensitive `v` plus digits becomes `titleVersion`, with a preceding
-space, underscore or hyphen removed from the title. A filename consisting
+case-insensitive `v` plus digits becomes `titleVersion` only after a space,
+underscore or hyphen, which is removed from the title. Glued endings such as
+`Rev2` and `Headsetv3` stay in the title without a tag. A filename consisting
 only of a version supplies no title and makes no naming change.
 
 `writeDoc` still captures the document before its first await. After a
@@ -208,7 +209,9 @@ naming fields; assets and content remain the initial snapshot. The same
 capture feeds the serialized bytes and saved baseline. Download-only
 browsers make no naming change: the app never sees the final name.
 
-The accepted landing in `createSaveCompletion` runs `fileTitleCommand` to
+The accepted landing in `createSaveCompletion` records the baseline, landed
+file metadata and saved-copy identity before running `fileTitleCommand`, so
+a throwing naming listener cannot leave a stale disk timestamp. It runs the command to
 apply title, tag and provenance as one undoable edit, provided those fields
 still match the initial capture. An intervening title edit wins. Failed,
 cancelled and obsolete saves run no naming command. Completion confirms only

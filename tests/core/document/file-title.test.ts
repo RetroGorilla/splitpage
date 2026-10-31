@@ -6,7 +6,7 @@ import { fakeMigration } from "../migrate-ports.ts";
 import { diffStates } from "../../../src/application/editing/undo/history.ts";
 
 test("filename versions are terminal, case insensitive, and never incremented", () => {
-  for (const suffix of ["v3", "V3", "_v3", "-v3", " v3"]) {
+  for (const suffix of [" v3", " V3", "_v3", "-v3"]) {
     const got = fileTitleChange({ title: "Untitled Script" }, "Headset ad" + suffix + ".md", true);
     assert.equal(got?.title, "Headset ad");
     assert.equal(got?.titleVersion, "v3");
@@ -15,7 +15,16 @@ test("filename versions are terminal, case insensitive, and never incremented", 
   assert.equal(fileTitleChange({ title: "" }, "Headset v3 draft.md", true)?.title, "Headset v3 draft");
   assert.equal(fileTitleChange({ title: "" }, "Headset ad.md", true)?.titleVersion, undefined);
   assert.equal(fileTitleChange({ title: "" }, "v3.md", true), null);
+  assert.equal(fileTitleChange({ title: "Headset", titleOrigin: "file", titleVersion: "v2" }, "V3.md", false), null);
 });
+
+for (const title of ["Rev2", "Dev3", "TV3", "Cv3", "Café Rv2", "Headsetv3"]) {
+  test("a glued ending stays in the title without a version: " + title, () => {
+    const naming = fileTitleChange({ title: "Untitled Script" }, title + ".md", true);
+    assert.equal(naming?.title, title);
+    assert.equal(naming?.titleVersion, undefined);
+  });
+}
 
 test("only untouched default titles are eligible on first save", () => {
   for (const title of ["", "Untitled Script", "Untitled"]) {
@@ -30,7 +39,7 @@ test("seeded filename variants preserve the chosen title and version digits", ()
   let seed = 32;
   const choose = (count: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % count; };
   const names = ["Headset ad", "Scene 12", "Café", "Headset.ad"];
-  const separators = ["", " ", "_", "-"];
+  const separators = [" ", "_", "-"];
   for (let i = 0; i < 500; i++) {
     const title = names[choose(names.length)] as string;
     const number = String(choose(100000)).padStart(choose(25) + 1, "0");
