@@ -12,6 +12,7 @@ files:
   - tabstrip-preload.js
   - drafts.js
   - ipc-channels.js
+  - ipc-setup.js
   - prompter-share.js
   - close-keep.js
   - quit-watchdog.js
