@@ -210,7 +210,7 @@ moves the whole row to page 6. Original PDF/screenshots remain in
 outside the current source tree. This check changes no product code or CSS.
 
 `tests/adapters/formats/printed-layout.test.mjs` is discovered by `test:all`
-and runs all 18 fixtures plus nine fail-first probes. It uses the existing
+and runs all 18 fixtures plus eleven fail-first probes. It uses the existing
 Linux `tests` matrix job, without changing a workflow or adding a dependency.
 The `checks` browser step selects exact existing suite filenames, so the new
 check uses normal test discovery instead. Browser selection honors
@@ -236,16 +236,19 @@ It retains all fixture text, including the non-Latin and emoji samples.
 | Rule | Check | Scratch fail-first probe |
 | --- | --- | --- |
 | a | Section/comment, scene and list-group headings share a page with the first line they introduce | Force the first paragraph after a heading onto the next page |
-| b | Each script/list/table row occupies one physical page; oversized rows are measured at their printable width and reported | Remove row avoidance in composed `script-long`; `Spare 050` splits again |
+| b | Each script/list/table row occupies one physical page; oversized rows are measured at their printable width and reported | Remove row avoidance from a controlled short row positioned across a page break, independent of system-font pagination |
 | c | Every page carrying table body text has its complete column header | Render `gear-long` with a non-repeating header group |
-| d | Text bounds stay inside the printable rectangle, with footer text in its margin box | Translate `prop-rich` 60 pt left |
+| d, layout | Advance-width/ascent/descent boxes stay inside the body content area or footer margin box with 1 pt tolerance (about 0.35 mm), below visible differences while rejecting real overflow; ink may overhang its box by side bearing | Translate `prop-rich` 60 pt left; separately widen the footer beyond its margin box |
+| d, ink | Real glyph bounds stay inside a 12 pt paper-safe border on all four sides (1/6 in, about 4.2 mm), calibrated to office-printer unprintable margins; the paper-safe border is what printers clip | Bottom-align footer text into the outer 12 pt |
 | e | No missing glyphs; complete normalized fixture text matches tagged PDF text | Replace the title; separately insert an unsupported character |
 | f | Running title and `Page n of N` match on every page | Replace the counter; separately remove the title |
 | g | Existing media/clipping/wrapping/image/page-count assertions remain; every page has the correct Letter size/orientation | Print a Letter fixture on A4 |
 
 Each probe edits only the loaded scratch document. It must fail its named
 assertion, then reload and reprint the original fixture and pass all rules.
-The run records 265 checks: the original 130, 126 layout-rule groups and nine
+The inspector logs the closest ink to each paper edge and largest layout
+overhang across unmodified fixtures; probe mutations are excluded.
+The run records 267 checks: the original 130, 126 layout-rule groups and eleven
 fail-first/restoration checks. PDFs, viewport screenshots, decoded page JSON
 and `summary.txt` go to the output/TEMP directory, never the source tree.
 
