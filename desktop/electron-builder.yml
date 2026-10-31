@@ -15,6 +15,7 @@ files:
   - ipc-setup.js
   - ipc-files.js
   - ipc-shell.js
+  - ipc-document.js
   - prompter-share.js
   - close-keep.js
   - quit-watchdog.js
