@@ -8,7 +8,7 @@ function startSessionMerge(ports) {
   var active = true;
   var currentDocument = ports.document.current;
   var heldDocument = ports.session.held;
-  var { holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate } = ports.session;
+  var { holdMergeBase, noteAbsorbedDirty, noteDiskUpdate, noteMerged, noteRecovery } = ports.session;
   var migrateRows = ports.entry.migrate;
   var withDocumentPorts = ports.entry.withPorts;
   var fromHtml = ports.text.fromHtml;
@@ -110,7 +110,7 @@ function sessionMergePorts() {
     current: function () { return heldDocument(); },
     adopt: function (kind, next, merged) {
       if (merged) next = noteMerged(kind, next);
-      else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
+      else next = kind === "recovery" ? noteRecovery(next) : noteDiskUpdate(next);
       return next;
     },
     documentId: function (doc) { return doc.docId; },

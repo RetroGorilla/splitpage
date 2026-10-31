@@ -22,9 +22,9 @@ import { harness, runConfined } from "./session-fakes.ts";
 const SEEDS = Number(process.env.SPLITPAGE_FUZZ_SEEDS) || 150;
 const STEPS = 8;
 
-type Kind = "adopt" | "server" | "merge" | "recovery" | "reload" | "edit" | "insert";
+type Kind = "adopt" | "disk" | "merge" | "recovery" | "reload" | "edit" | "insert";
 
-const KINDS: readonly Kind[] = ["adopt", "server", "merge", "recovery", "reload", "edit", "insert"];
+const KINDS: readonly Kind[] = ["adopt", "disk", "merge", "recovery", "reload", "edit", "insert"];
 
 const Parser: new () => DOMParser = jsdomParser();
 
@@ -100,14 +100,14 @@ function insertRow(id: string): Command {
 }
 
 function plain(log: readonly string[]): string[] {
-  return log.map(function (e) { return e.replace(/^(undo\.(?:adopt|server)):.*$/s, "$1"); });
+  return log.map(function (e) { return e.replace(/^(undo\.(?:adopt|disk)):.*$/s, "$1"); });
 }
 
 function expectedLog(kind: Kind, migrated: boolean, outcome: CommandOutcome | null, generation: number): string[] {
   const entered = migrated ? ["entry"] : [];
   if (kind === "adopt") return entered.concat(["undo.adopt", "publish:adopt"]);
-  if (kind === "server" || kind === "merge") return entered.concat(["undo.server", "publish:server"]);
-  if (kind === "recovery") return entered.concat(["undo.server", "publish:recovery"]);
+  if (kind === "disk" || kind === "merge") return entered.concat(["undo.disk", "publish:disk"]);
+  if (kind === "recovery") return entered.concat(["undo.disk", "publish:recovery"]);
   if (kind === "reload") return ["entry", "undo.reload", "publish:reload"];
   if (!outcome || outcome.kind !== "applied") return [];
   const effects = ["undo.record", "dirty:" + generation, "draft:" + generation, "save:" + generation, "publish:edit"];
@@ -161,9 +161,9 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
     let returned: ValidatedDocument | null | undefined;
     let outcome: CommandOutcome | null = null;
     try {
-      if (kind === "adopt" || kind === "server" || kind === "recovery") {
+      if (kind === "adopt" || kind === "disk" || kind === "recovery") {
         raw = rawDocument(r);
-        returned = kind === "adopt" ? session.adopt(raw) : kind === "server" ? session.absorbServer(raw) : session.absorbRecovery(raw);
+        returned = kind === "adopt" ? session.adopt(raw) : kind === "disk" ? session.absorbDisk(raw) : session.absorbRecovery(raw);
       } else if (kind === "merge") {
         const theirs = rawObject(r);
         const mine = migrate(jsonCopy(held));
@@ -171,7 +171,7 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
         const inputs = JSON.stringify([ancestor, mine, theirs]);
         const result = mergeStates(ancestor, mine, migrate(jsonCopy(theirs)), mergePorts());
         assert.equal(JSON.stringify([ancestor, mine, theirs]), inputs, where + ": the merge wrote into an input");
-        returned = session.absorbServer(result.merged);
+        returned = session.absorbDisk(result.merged);
       } else if (kind === "reload") {
         const file = rawObject(seeded(0x4110000 + seed * STEPS + step));
         reloaded = { title: Reflect.get(file, "title"), rows: Reflect.get(file, "rows") };
@@ -231,7 +231,7 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
   return tally;
 }
 
-test("seeded raw inputs through adoption, server updates, merges, recoveries, reloads and commands end in a valid fixed point, with the epoch and generation exact", (t) => {
+test("seeded raw inputs through adoption, disk updates, merges, recoveries, reloads and commands end in a valid fixed point, with the epoch and generation exact", (t) => {
   const tally = newTally();
   for (let seed = 1; seed <= SEEDS; seed++) runSeed(seed, tally);
   t.diagnostic(JSON.stringify(tally));
@@ -248,7 +248,7 @@ function spoiledPair(spoil: (d: { [key: string]: Json }) => void): { mine: Json;
 }
 
 TABLE_304.forEach(function (row304) {
-  test("#304's table, " + row304.label + ": adoption, a server update, a merge and a recovery each end in a valid fixed point", () => {
+  test("#304's table, " + row304.label + ": adoption, a disk update, a merge and a recovery each end in a valid fixed point", () => {
     const h = fuzzHarness();
     const pair = spoiledPair(row304.spoil);
     const mineRaw = row304.bothSides ? jsonCopy(pair.theirs) : pair.mine;
@@ -260,15 +260,15 @@ TABLE_304.forEach(function (row304) {
     const theirsText = JSON.stringify(theirs);
     const result = mergeStates(migrate(table304Document("Base")), mine, migrate(jsonCopy(theirs)), mergePorts());
     assert.equal(JSON.stringify(theirs), theirsText, "the merge wrote into the raw theirs");
-    const merged = h.session.absorbServer(result.merged);
+    const merged = h.session.absorbDisk(result.merged);
     assert.deepEqual(judge(merged, migrate).problems, [], "merged");
-    const served = h.session.absorbServer(jsonCopy(pair.theirs));
-    assert.deepEqual(judge(served, migrate).problems, [], "server update");
+    const served = h.session.absorbDisk(jsonCopy(pair.theirs));
+    assert.deepEqual(judge(served, migrate).problems, [], "disk update");
     const recovered = h.session.absorbRecovery(jsonCopy(pair.theirs));
     assert.deepEqual(judge(recovered, migrate).problems, [], "recovery");
     assert.equal(h.session.read(function (d) { return d; }), recovered);
     assert.deepEqual([h.session.epoch(), h.session.generation()], [2, 0]);
-    assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["adopt", "server", "server", "recovery"]);
+    assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["adopt", "disk", "disk", "recovery"]);
     const edited = runConfined(h.session, setAudio(function (d) { return d.rows[0] ? d.rows[0].id : null; }, "After #304."));
     assert.equal(edited.kind, recovered && recovered.rows.length ? "applied" : "rejected");
   });
@@ -314,7 +314,7 @@ test("migrateRows trims what the cut at a name's cap leaves, so the name ends in
 test("a JSON object whose toString is not a function is no text: each of the session's entries takes the document, and nothing throws (#408)", () => {
   const h = fuzzHarness();
   assert.ok(h.session.adopt(table304Document("Kept")));
-  const served = h.session.absorbServer(JSON.parse('{"title":{"toString":1},"rows":[]}'));
+  const served = h.session.absorbDisk(JSON.parse('{"title":{"toString":1},"rows":[]}'));
   const recovered = h.session.absorbRecovery(JSON.parse('{"rows":[],"comments":[{"rowId":{"valueOf":null,"toString":null}}]}'));
   const adopted = h.session.adopt(JSON.parse('{"rows":[{"id":{"toString":"r1"}}]}'));
   assert.ok(served && recovered && adopted);
@@ -324,7 +324,7 @@ test("a JSON object whose toString is not a function is no text: each of the ses
   for (const doc of [served, recovered, adopted]) assert.deepEqual(judge(doc, migrate), { problems: [], known: [] });
   assert.equal(h.session.read(function (d) { return d; }), adopted);
   assert.deepEqual([h.session.epoch(), h.session.generation()], [3, 0]);
-  assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["adopt", "server", "recovery", "adopt"]);
+  assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["adopt", "disk", "recovery", "adopt"]);
 });
 
 test("a reply whose createdAt is a number migrates to null, and merging a comment both sides hold sorts its replies (#409)", () => {
@@ -339,7 +339,7 @@ test("a reply whose createdAt is a number migrates to null, and merging a commen
   if (theirs.comments[0]) theirs.comments[0].body = "Theirs";
   const result = mergeStates(migrate(jsonCopy(raw)), migrate(jsonCopy(mine)), theirs, mergePorts());
   assert.deepEqual(result.merged.comments[0]?.replies?.map(function (rep) { return rep.id; }), ["rp2", "rp1"]);
-  const merged = h.session.absorbServer(result.merged);
+  const merged = h.session.absorbDisk(result.merged);
   assert.equal(h.session.read(function (d) { return d; }), merged);
   assert.deepEqual(judge(merged, migrate), { problems: [], known: [] });
 });
@@ -347,7 +347,7 @@ test("a reply whose createdAt is a number migrates to null, and merging a commen
 test("a rev that is not a finite number enters the session as 0, so the session never holds a rev that JSON saves as null (#412)", () => {
   const h = fuzzHarness();
   for (const rev of [NaN, Infinity, "seven"]) {
-    const held = h.session.absorbServer({ ...table304Document("Rev"), rev: rev });
+    const held = h.session.absorbDisk({ ...table304Document("Rev"), rev: rev });
     assert.ok(held);
     assert.equal(held.rev, 0, String(rev));
     assert.deepEqual(judge(held, migrate), { problems: [], known: [] });
@@ -370,12 +370,12 @@ FOUND.forEach(function ([seed, issue]) {
   });
 });
 
-test("an array, or any value that is not an object, is no document: adoption, a server update and a recovery each refuse it and change nothing (#407)", () => {
+test("an array, or any value that is not an object, is no document: adoption, a disk update and a recovery each refuse it and change nothing (#407)", () => {
   const h = fuzzHarness();
   const values: readonly unknown[] = [[{ id: "r1", audioText: "x" }], [], 0, 7, "doc", true, false];
   const entries = [
     function (raw: unknown) { return h.session.adopt(raw); },
-    function (raw: unknown) { return h.session.absorbServer(raw); },
+    function (raw: unknown) { return h.session.absorbDisk(raw); },
     function (raw: unknown) { return h.session.absorbRecovery(raw); }
   ];
   for (const raw of values) for (const take of entries) assert.equal(take(raw), null, "no document held: " + JSON.stringify(raw));
@@ -394,7 +394,7 @@ test("an array, or any value that is not an object, is no document: adoption, a 
 
 test("an array scene is dropped (#407)", () => {
   const h = fuzzHarness();
-  const scene = h.session.absorbServer({ rows: [[], { id: "r2" }] });
+  const scene = h.session.absorbDisk({ rows: [[], { id: "r2" }] });
   assert.ok(scene);
   assert.equal(JSON.stringify(scene.rows), '[{"id":"r2","status":"todo","visualText":"","audioText":"","imageRef":null,"updatedAt":"","updatedBy":null}]');
   assert.deepEqual(judge(scene, migrate), { problems: [], known: [] });

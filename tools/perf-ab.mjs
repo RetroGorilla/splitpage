@@ -1,9 +1,10 @@
 import { execFile, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, mkdtempSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
+import { buildArgs } from "./perf-record.mjs";
 
 export function parseArgs(argv) {
   const refs = [];
@@ -125,7 +126,9 @@ export async function main(argv, repo = REPO) {
       console.error(`perf-ab: preparing ${side} ${sha}`);
       await run("git", ["worktree", "add", "--detach", dir, sha]);
       symlinkSync(join(repo, "node_modules"), join(dir, "node_modules"), process.platform === "win32" ? "junction" : "dir");
-      await run(process.execPath, ["build.mjs"], dir);
+      const build = buildArgs(readFileSync(join(dir, "build.mjs"), "utf8"));
+      console.error(`perf-ab: ${side} building with node ${build.join(" ")}${build.length === 1 ? " (legacy build; --test unavailable)" : ""}`);
+      await run(process.execPath, build, dir);
     }
     const [baseTree, headTree] = trees;
     for (const path of ["tools", ".claude/skills/run-splitpage-app"]) {
@@ -135,7 +138,7 @@ export async function main(argv, repo = REPO) {
     for (let round = 1; round <= args.rounds; round++) {
       for (const [side, dir] of [["base", baseTree], ["head", headTree]]) {
         console.error(`perf-ab: round ${round}/${args.rounds} ${side}`);
-        runs[side].push(measurements(await run(process.execPath, ["tools/perf-record.mjs", "--only", args.only], dir)));
+        runs[side].push(measurements(await run(process.execPath, ["tools/perf-record.mjs", "--built", "--only", args.only], dir)));
       }
     }
     console.log(report(base, head, runs));

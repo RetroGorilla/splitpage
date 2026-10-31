@@ -212,6 +212,13 @@ The autosave entry points are in `save-owners.ts`: `autoSaveTarget()` asks the d
 
 ## 6. Capture (4.6)
 
+Browser PDF actions use the same capture and held-asset contract through
+`features/file-menu/browser-pdf.ts` and the registry's `printPage` providers.
+They open a print dialog, whose result is never a file-save acknowledgement.
+Desktop PDF and all non-PDF exports retain byte building and file delivery.
+See [print-layout.md](print-layout.md#browser-print-workflow-p4) for capture,
+cleanup and browser PDF metadata limits.
+
 `captureExportDocument(opts)` (`application/save/export-kit.ts`, over `application/save/capture.ts`) reads the session once, synchronously, and returns a frozen `ExportDocument`: the document, the capture time, and core's production index, comment numbers and b-roll entries. It carries no handle or path, and no picture bytes: pictures are content hashes. `opts.docId` stamps a different id on the capture, which is how Save As writes a forked id without changing the live document yet. It throws when there is no document. The wiring supplies its typed ports (`src/bootstrap/wiring/export-capture.ts`), and callers reach the owner through it.
 
 The exporters take it: `buildSplitpageFile` and `buildMarkdownProject` (`src/adapters/formats/project-file.ts`, over the project file services the wiring installs; L3h PR 4), `standaloneHtmlFor`, the CSV, DOCX, PDF and XLSX builders and the export dialog, and `exportFacts`. `exportDocumentOf(state)` builds the same shape from a given state; the project file services (`application/save/project-files.ts`) use it when asked to build a file from a state they are given.
