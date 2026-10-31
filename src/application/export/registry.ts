@@ -1,3 +1,5 @@
+import type { ExportPrintRequest } from "./print-dialog.ts";
+
 export type ExportGroup = "whole" | "part";
 
 export interface ExportToggle {
@@ -46,6 +48,7 @@ export interface ExporterDecl<Request = unknown, Doc = unknown> {
   readonly bundlesPictures?: boolean;
   readonly fileName: (baseName: string, opts: FileNameOptions) => string;
   readonly build: (request: Request, baseName: string) => ExportProduct | Promise<ExportProduct>;
+  readonly printPage?: (request: ExportPrintRequest) => string;
   readonly defaults?: Readonly<Record<string, unknown>>;
   readonly action?: string;
   readonly card?: string;

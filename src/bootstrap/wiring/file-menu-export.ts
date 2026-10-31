@@ -15,6 +15,7 @@ import type { FileMenuExportMount, FileMenuExportPorts } from "../../features/fi
 import { localFileMenuControls } from "./local-files.ts";
 import { fileMenuOpen, onFileMenuRefresh, toggleFileMenu } from "./file-menu-controls.ts";
 import { fileMenuExport as dialog } from "./file-menu-export-controls.ts";
+import { presence } from "./ports/desktop-presence.ts";
 
 export function mountFileMenuExportFeature(capture: FileMenuExportPorts["capture"]): FileMenuExportMount {
   return dialog.replace(() => {
@@ -40,6 +41,7 @@ export function mountFileMenuExportFeature(capture: FileMenuExportPorts["capture
         tagColor: tagPrintColor
       },
       fileName: (format, options) => localFileMenuControls().exportFileName(format, localFileMenuControls().exportBaseName(), options),
+      printWorkflow: (action) => !presence.running() && !!portExports.byAction(action)?.printPage,
       exportAction: (...args: Parameters<ReturnType<typeof localFileMenuControls>["runExportAction"]>) => localFileMenuControls().runExportAction(...args),
       onMenuRefresh: onFileMenuRefresh
     };
