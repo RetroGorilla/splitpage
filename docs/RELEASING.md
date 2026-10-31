@@ -70,6 +70,28 @@ The same trap shipped 1.0.1's IExpress `SplitpageSetup-x64.exe` as an ARM64
 binary that no x64 PC could start: IExpress stamps the architecture of the
 `iexpress.exe` that built it.
 
+`verify-dist.mjs` also fails a package whose `resources/splitpage/index.html`
+exposes a test hook outside the release list in `tools/release-hooks.mjs`, so
+a test build cannot be published by mistake.
+
+### The packaged smoke at a release gate
+
+The release package has no test hooks, and most smoke groups drive one. So
+the packaged check runs twice (Adam, on #974):
+
+- **The test package, every group.** `npm run dist:win:test` stages the test
+  build (`stage.mjs --test`, which runs `node build.mjs --test`) and packages
+  it, unpacked only, into `dist-test/win-unpacked/` and
+  `dist-test/win-arm64-unpacked/`. It is never published: no installer, not
+  built by `release.yml`, and `verify-dist.mjs` refuses it.
+- **The release package, the hook-free groups.** `desktop/test/smoke.mjs`
+  runs the groups marked `hookFree` against `dist/win-unpacked/` and
+  `dist/win-arm64-unpacked/`, checks that their `index.html` exposes no hook
+  outside the release list, and lists every other group as a skip.
+
+The commands, and the rebuild of the dev target that follows `dist:win`, are
+in [WINDOWS-CHECKS.md, Before you start](WINDOWS-CHECKS.md#before-you-start).
+
 ### What's NOT verified
 
 - **The installers are unsigned.** They land in `dist/` unsigned; Windows SmartScreen

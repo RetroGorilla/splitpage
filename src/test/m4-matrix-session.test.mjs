@@ -28,7 +28,7 @@ function noteHeld() {
 
 function followAbsorbs() {
   if (unfollow) unfollow();
-  unfollow = sessionStarted() ? session.subscribe((change) => { if (change.kind === "server" || change.kind === "recovery") noteHeld(); }) : null;
+  unfollow = sessionStarted() ? session.subscribe((change) => { if (change.kind === "disk" || change.kind === "recovery") noteHeld(); }) : null;
 }
 
 onDocumentReplaced(function () {

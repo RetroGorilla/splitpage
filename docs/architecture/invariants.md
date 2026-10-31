@@ -497,7 +497,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Replacement:** DocumentSession transactions (M3; plan §6):
   - an accepted change advances the edit generation once and is recorded under the existing undo grouping;
   - a no-op or rejected command has no effects;
-  - user edits, server updates and recovery adoption are distinct transaction kinds.
+  - user edits, disk updates and recovery adoption are distinct transaction kinds.
 - **Acceptance:** application tests:
   - A user command advances the generation once and adds one undo entry.
   - A merge, a reload or a recovery adoption adds none.
@@ -579,14 +579,16 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-60 — An export is the same bytes all day
 
+- **Browser PDF scope — awaiting Adam's decision:** Captured print HTML is deterministic for the captured day. The browser owns the PDF bytes and metadata; desktop PDF and non-PDF exports keep the byte rule below.
 - **Behaviour:** The same document exported twice on the same day gives identical bytes in every format. A PDF's `/CreationDate` and a .docx's `docProps` dates carry the day, not the time. Nothing prints the time of export; comments' own timestamps are data and are allowed.
-- **Tests:** browser `98-export-dialog.txt` (every format exported twice by two routes and the bytes compared); `src/test/m4-matrix-exports.test.mjs` (X22: every kind `buildFileData` writes, captured at two times on one day and serialized after midnight; 5.1); `src/test/xlsx-export.test.mjs` ("exports captured either side of a two-second boundary are the same bytes; the zip carries the captured day", which until 5.1 pinned bytes that differed because the ZIP read the clock); `src/test/list-pdfs.test.mjs` ("the packing list's file: its title for a viewer, and the same bytes built twice"); `src/test/export-kit.test.mjs` (`/CreationDate` is a date only).
+- **Tests:** browser `98-export-dialog.txt` (every format exported twice by two routes: captured print HTML compared for the four PDF actions, file bytes compared for non-PDF actions); `src/test/m4-matrix-exports.test.mjs` (X22: every kind `buildFileData` writes, captured at two times on one day and serialized after midnight; 5.1); `src/test/xlsx-export.test.mjs` ("exports captured either side of a two-second boundary are the same bytes; the zip carries the captured day", which until 5.1 pinned bytes that differed because the ZIP read the clock); `src/test/list-pdfs.test.mjs` ("the packing list's file: its title for a viewer, and the same bytes built twice"); `src/test/export-kit.test.mjs` (`/CreationDate` is a date only).
 - **Owner:** `src/adapters/formats` · **Milestone:** 5 · **Class:** keep
 - **Replacement:** — (the `ExportDocument` captures the date; since 5.1 every date and ZIP timestamp is `exportDay` of it, [saving.md](saving.md#6-capture-46)).
 - **Acceptance:** suite 98 and the unit checks pass. New unit test: two `ExportDocument`s captured at different times on the same day give identical bytes for every registered format.
 
 ### INV-61 — The PDF footer is a pagination artifact
 
+- **Browser PDF scope — awaiting Adam's decision:** The browser owns its PDF footer encoding. Desktop PDF keeps the artifact rule below; deterministic captured print HTML does not guarantee browser PDF bytes or artifact encoding. See [print-layout.md](print-layout.md#browser-print-workflow-p4).
 - **Behaviour:** The PDF footer is marked `/Artifact << /Type /Pagination /Subtype /Footer >> BDC … EMC` (`pdfFooterOps`), so text extraction skips it. Tests that read content streams skip it too, because its hairline uses the same operator as a scene rule.
 - **Tests:** `src/test/pdf-script.test.mjs` and `src/test/pdf-layout.test.mjs` (both skip `/Artifact … BDC` spans; "a running footer on every page, bookmarks to each part, and the title the viewer shows").
 - **Owner:** `src/adapters/formats` · **Milestone:** 5 · **Class:** keep

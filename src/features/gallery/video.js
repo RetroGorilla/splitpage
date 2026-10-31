@@ -1,6 +1,7 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../../shared/video-embed.js";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../../core/document/gallery.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 function noRemote() {
   return !!window.__splitpageNoRemote;
@@ -117,15 +118,14 @@ export function startGalleryVideo(ports) {
     });
   }
 
-  var previousTest = window.__videoTest;
-  var hook = {
+  var withdrawHook = null;
+  exposeTestHook("__videoTest", function () { return {
     setFetch: function (fn) { testHooks.fetch = typeof fn === "function" ? fn : null; },
     setBases: function (b) { testHooks.bases = b && typeof b === "object" ? b : null; },
     setProtocol: function (p) { testHooks.protocol = typeof p === "string" ? p : null; },
     fetchThumbnail: fetchThumbnailRecord,
     parse: parseVideoLink
-  };
-  window.__videoTest = hook;
+  }; }, function (withdraw) { withdrawHook = withdraw; });
 
   return {
     embedRefusal: embedRefusal,
@@ -134,9 +134,7 @@ export function startGalleryVideo(ports) {
     fetchThumbnail: fetchThumbnailRecord,
     thumbnailsAfterPaste: thumbnailsAfterPaste,
     dispose: function () {
-      if (window.__videoTest !== hook) return;
-      if (previousTest === undefined) delete window.__videoTest;
-      else window.__videoTest = previousTest;
+      if (withdrawHook) withdrawHook();
     }
   };
 }

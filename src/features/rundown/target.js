@@ -2,6 +2,7 @@ import { targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { onRundownPaint, rundownLayout } from "./rundown.ts";
 import { targetLengthCommand } from "../../application/commands/document-settings.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 var ports = null;
 
@@ -69,12 +70,14 @@ export function startTarget(given) {
   lastOverlayHtml = "";
   var disposed = false;
   var off = onRundownPaint(function () { paintTargetOverlay(); });
-  window.__targetTest = { parts: targetOverlayParts, set: setTargetLength, layout: rundownLayout };
+  var withdrawHook = null;
+  exposeTestHook("__targetTest", function () { return { parts: targetOverlayParts, set: setTargetLength, layout: rundownLayout }; }, function (withdraw) { withdrawHook = withdraw; });
   return {
     dispose: function () {
       if (disposed) return;
       disposed = true;
       off();
+      if (withdrawHook) withdrawHook();
       ports = null;
     }
   };

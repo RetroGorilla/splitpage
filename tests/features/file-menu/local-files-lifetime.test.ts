@@ -38,6 +38,7 @@ function harness(label: string) {
     imagesLeftOut: (...args) => { warnings.push(args); }, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
     notices: { ...notices.notices, busy: { withBar: async (_label, work) => work() } },
     delivery: { deliver: async (...args) => { deliveries.push(args); return true; } },
+    pdfPrint: { export: () => null },
     merge: { offer: async () => {}, reset: () => {} },
     exportControls: { isExportAction: () => false, rememberExport: () => {} }, actions: createActionRegistry()
   };
