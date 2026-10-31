@@ -66,7 +66,7 @@ test("document merge: apply merges through entry and states, adopts, and reports
   const out = merge.apply({ base: doc("base"), mine: doc("mine"), theirs: doc("theirs"), toast: { text: "done", tone: "warn" } });
   assert.ok(!(out instanceof Promise));
   assert.equal((out.state as { readonly title: string }).title, "merged");
-  assert.deepEqual(w.seen, ["states base mine theirs", "adopt server", "banner merged undefined", "absorbed server", "autosave due", "toast done warn"]);
+  assert.deepEqual(w.seen, ["states base mine theirs", "adopt disk", "banner merged undefined", "absorbed disk", "autosave due", "toast done warn"]);
 });
 
 test("document merge: apply with nothing to merge leaves the document alone, and an unchanged apply only absorbs", () => {
@@ -94,5 +94,5 @@ test("document merge: report shows the banner, and only an unsaved merge marks t
   assert.deepEqual(w.seen, ["banner merged undefined", "absorbed recovery", "autosave paused"]);
   w.seen.length = 0;
   merge.report(result);
-  assert.deepEqual(w.seen, ["banner merged undefined", "absorbed server", "autosave due"]);
+  assert.deepEqual(w.seen, ["banner merged undefined", "absorbed disk", "autosave due"]);
 });

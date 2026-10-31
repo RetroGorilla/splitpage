@@ -167,9 +167,13 @@ app directly.
 
 ```powershell
 $env:PATH = "...\.cache\node-win-x64;" + $env:PATH
-node test/smoke.mjs                    # dev + every packaged exe in dist/
+node test/smoke.mjs                    # dev + every packaged exe in dist/ and dist-test/
 node test/smoke.mjs --only-target dev  # dev only, fastest loop
 ```
+
+The release packages in `dist/` run only the hook-free groups; the full
+smoke runs on the test package in `dist-test/` (`npm run dist:win:test`,
+never published). See [WINDOWS-CHECKS.md, Before you start](WINDOWS-CHECKS.md#before-you-start).
 
 On Linux (#89) the same dev target runs, and CI runs it on every pull
 request. It needs a display of its own and, on a first checkout, an explicit

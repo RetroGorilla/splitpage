@@ -1,53 +1,5 @@
 import { bytesForSync, registryImages } from "./02c-blobs.js";
-import {
-  ANNOTATION_COLORS,
-  addGalleryPicture,
-  addGalleryVideo,
-  annotateGallerySlot,
-  galleryFieldKey,
-  gallerySize,
-  mergeGalleryField,
-  migrateGallery as migrateGalleryWith,
-  morePictureRefs,
-  moveGallerySlot,
-  normalizeMarks,
-  normalizePictureName,
-  normalizeVideoLink,
-  normalizeVideoLinks,
-  removeGalleryLink,
-  removeGallerySlot,
-  replaceGalleryPicture,
-  rowSlots,
-  rowVideoLinks,
-  setRowSlots,
-  setVideoThumbnail,
-  slotOriginal,
-  videoLinkKey
-} from "../../core/document/gallery.ts";
-export {
-  ANNOTATION_COLORS,
-  addGalleryPicture,
-  addGalleryVideo,
-  annotateGallerySlot,
-  galleryFieldKey,
-  gallerySize,
-  mergeGalleryField,
-  morePictureRefs,
-  moveGallerySlot,
-  normalizeMarks,
-  normalizePictureName,
-  normalizeVideoLink,
-  normalizeVideoLinks,
-  removeGalleryLink,
-  removeGallerySlot,
-  replaceGalleryPicture,
-  rowSlots,
-  rowVideoLinks,
-  setRowSlots,
-  setVideoThumbnail,
-  slotOriginal,
-  videoLinkKey
-};
+import { migrateGallery as migrateGalleryWith } from "../../core/document/gallery.ts";
 
 export function migrateGallery(r) {
   migrateGalleryWith(r, registryImages);

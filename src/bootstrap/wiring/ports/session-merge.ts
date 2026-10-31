@@ -1,5 +1,5 @@
 import type { SessionMergeOwnerPorts } from "../../../application/session/session-merge-ports.ts";
-import { heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate } from "../session-owner.ts";
+import { heldDocument, holdMergeBase, noteAbsorbedDirty, noteDiskUpdate, noteMerged, noteRecovery } from "../session-owner.ts";
 import { migrateRows, withDocumentPorts } from "../../document-ports.ts";
 import { captureRestore, stillRestoring } from "../recovery-owners.ts";
 import { autoSavePolicy, confirmBaseline, saveChanges } from "../save-owners.ts";
@@ -17,7 +17,7 @@ import { resetProductionPanel } from "./production.ts";
 export function sessionMergeOwnerPorts(onRestored: SessionMergeOwnerPorts["onRestored"]): SessionMergeOwnerPorts {
   return {
     document: documentReader,
-    session: { held: heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate },
+    session: { held: heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteDiskUpdate },
     entry: { migrate: migrateRows, withPorts: withDocumentPorts },
     text, ids, clock,
     preferences: { editorName: getEditorName },

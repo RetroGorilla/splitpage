@@ -106,10 +106,7 @@ node build.mjs --test
 That writes both `index.html` and `sw.js`'s stamped cache name. The smoke
 needs the test build: it drives the `window.__*Test` hooks and `window.__splitpageFormats`, which plain
 `node build.mjs` (the release build) leaves out. `node build.mjs --test --check`
-reports on both, separately. The packaged targets in `dist/` are release
-builds, so the groups that drive a hook the release build leaves out
-(`__historyTest`, `__undoTest`, `__documentGuardTest`, `__splitpageFormats`)
-fail there.
+reports on both, separately.
 
 Then, for the desktop shell:
 
@@ -117,9 +114,39 @@ Then, for the desktop shell:
 cd desktop
 npm ci
 npm run fetch-electron
-node test/smoke.mjs                    # dev + every packaged exe in dist/
+node test/smoke.mjs                    # dev + every packaged exe in dist/ and dist-test/
 node test/smoke.mjs --only-target dev   # dev only, fastest loop
 ```
+
+**Packaged targets come in two variants** (Adam, on #974). The real release
+package in `dist/` (`npm run dist:win`) is a release build: it has none of the
+hooks the release build leaves out (the `CONVERTED` list in
+`tools/test-release-hooks.mjs`, among them `__historyTest`, `__desktopTest`
+with its fake backend and `__splitpageFormats`). The smoke treats `packaged-x64` and `packaged-arm64` as
+release packages: it checks that their `index.html` exposes no hook outside the
+release list, runs only the groups marked `hookFree` in `runTargetSuite`, and
+lists every other group as a `SKIP`. The full smoke runs on a test package
+instead: `npm run dist:win:test` stages `node build.mjs --test` and packages it,
+unpacked only, into `dist-test/` (`test-packaged-x64`, `test-packaged-arm64`).
+That package is never published: it has no installer, `release.yml` never
+builds it, and `verify-dist.mjs` fails any package whose `index.html` exposes a
+hook outside the release list. A packaged check builds both, then restores the
+test build at the root for the dev target:
+
+```
+cd desktop
+npm run dist:win:test                  # test package in dist-test/
+npm run dist:win                       # release package in dist/, with verify-dist
+cd ..
+node build.mjs --test                  # dist:win left the release build at the root
+cd desktop
+node test/smoke.mjs                    # dev and test packages: every group; release packages: the hook-free groups
+```
+
+`--hook-free` runs only the hook-free groups on every target, for example a
+release `index.html` on the dev target or a release exe through `--exe`. In a
+hook-free run, any page evaluation that names a hook fails at once, so a group
+marked `hookFree` that starts driving a hook shows up on the dev target too.
 
 Electron 44 has no postinstall. Run `npm run fetch-electron` after `npm ci`
 on both x64 and ARM64 Windows. The script detects native ARM64 even when
@@ -303,10 +330,11 @@ again, and arm64 has not been built at all.
   saving. Setup must wait the whole time and must not close the app until
   you answer.
 
-Once a build exists, `node test/smoke.mjs` (no `--only-target`) runs the whole
-suite against each unpacked exe as well as dev, with nothing skipped (the
-`MainWindowHandle` probe runs on Windows). That is the only thing
-that proves #76's `shared/` staging and #77's `files` entry.
+Once both packages exist, `node test/smoke.mjs` (no `--only-target`) runs the
+whole suite against dev and each test package, and the hook-free groups against
+each release package (the `MainWindowHandle` probe runs on Windows; the release
+packages list the other groups as skips, see [Before you start](#before-you-start)).
+That is the only thing that proves #76's `shared/` staging and #77's `files` entry.
 
 ## 3. Things no automated test can reach
 

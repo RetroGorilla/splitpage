@@ -55,6 +55,7 @@ export interface FileMenuExportPorts {
   readonly capture: (options?: ExportCaptureOptions) => ExportDocument;
   readonly preview: ExportPreviewPort;
   readonly fileName: (format: string, options: FileNameOptions) => string;
+  readonly printWorkflow: (action: string) => boolean;
   readonly exportAction: (action: string) => boolean;
   readonly onMenuRefresh: (listener: () => void) => () => void;
 }

@@ -2,6 +2,7 @@ import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.js";
 import { savedStatusText, savedWhenText } from "../../../shared/clock.js";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { NO_DESTINATION } from "../../application/transitions/ports.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 var ports = null;
 var activeMount = null;
@@ -354,7 +355,7 @@ function onMenuKeydown(e) {
   }
 }
 
-function wireMenu() {
+function wireMenu(holdTestHook) {
   var menu = el("file-menu");
   var btn = el("btn-file");
   if (!menu || !btn) return;
@@ -380,20 +381,22 @@ function wireMenu() {
   var search = el("btn-command");
   if (search && search.parentElement) renderKeyChips(search.parentElement);
 
-  window.__fileMenuTest = {
-    cardView: fileCardView,
-    timeAgo: timeAgo,
-    keyChipWords: keyChipWords,
-    navigable: function () { return navigableItems().map(function (b) { return b.getAttribute("data-file-action") || b.getAttribute("data-submenu") || b.getAttribute("data-recent-id") || ""; }); }
-  };
+  exposeTestHook("__fileMenuTest", function () {
+    return {
+      cardView: fileCardView,
+      timeAgo: timeAgo,
+      keyChipWords: keyChipWords,
+      navigable: function () { return navigableItems().map(function (b) { return b.getAttribute("data-file-action") || b.getAttribute("data-submenu") || b.getAttribute("data-recent-id") || ""; }); }
+    };
+  }, holdTestHook);
 }
 
 export function startFileMenu(given) {
   ports = given;
   var mounted = {};
   activeMount = mounted;
-  wireMenu();
-  var probe = window.__fileMenuTest;
+  var withdrawHook = null;
+  wireMenu(function (withdraw) { withdrawHook = withdraw; });
   var disposed = false;
   function live(fn) {
     return function () { return disposed ? undefined : fn.apply(null, arguments); };
@@ -411,7 +414,7 @@ export function startFileMenu(given) {
       if (disposed) return;
       disposed = true;
       while (listeners.length) listeners.pop()();
-      if (probe && window.__fileMenuTest === probe) delete window.__fileMenuTest;
+      if (withdrawHook) withdrawHook();
       if (activeMount === mounted) {
         activeMount = null;
         ports = null;
