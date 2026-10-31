@@ -10,7 +10,7 @@ runs the fast gates in the order CI does.
 | `npm run check:deps` | Layer, platform and cycle rules ([dependencies.md](dependencies.md)) |
 | `npm run check:comments` | The no-comment gate ([dependencies.md](dependencies.md#comment-gate)) |
 | `node build.mjs` | Builds the release `index.html` and stamps `sw.js`; fails if the bundle exposes a test hook not listed in `tools/release-hooks.mjs` |
-| `node build.mjs --test` | The test build: the same, but keeps the `window.__*Test` hooks and `window.__splitpageFormats` (registered through `exposeTestHook` in `src/features/common/test-hooks.ts`, which the release build compiles away). The browser suites, the desktop smoke and CI's browser jobs use it; `sw.js` is stamped the same either way |
+| `node build.mjs --test` | The test build: the same, but keeps the `window.__*Test` hooks and `window.__splitpageFormats` (registered through `exposeTestHook` in `src/features/common/test-hooks.ts`, which the release build compiles away). The browser suites, the desktop smoke, performance tools and CI's browser jobs use it; `sw.js` is stamped the same either way |
 | `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
 | `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, each tool's entry check) |
@@ -61,15 +61,15 @@ the browser suites. Its `sw.js`
 check compares the stamped file with the one git has, so an edit to `sw.js`
 you have not staged or committed fails it; `git add sw.js` settles that.
 
-`node tools/perf-record.mjs [report.md]` drives the built app in headless
+`node tools/perf-record.mjs [report.md]` builds the test variant with `node build.mjs --test` and drives it in headless
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
 the seed and the long demo, with the machine, browser and font it ran under.
 It also times an image-heavy case (ten fresh 1 MiB pictures in comment bodies:
 open, load from IndexedDB, and a hosted merge of two sides that each add ten);
 `--only short,long,images` picks fixtures, and `PERF_PORT_BASE` moves its two
 ports. The tool measures the build of the repo it lives in, so a run on an
-older commit copies `tools/perf-record.mjs` into a checkout of it and builds
-there. [performance-record.md](performance-record.md) is the 4.0 starting
+older commit copies the recorder and its helpers into a checkout of it and builds
+there; builds predating the `--test` flag use the plain build, as reported by the tool. [performance-record.md](performance-record.md) is the 4.0 starting
 point; compare a later run only under the same conditions.
 
 The long fixture ends with three redraw scenes, timed the way typing is (start of

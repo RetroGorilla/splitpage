@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { cpus, totalmem, platform, release, arch, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
@@ -484,15 +484,21 @@ export function report(results, env, when) {
   return lines.join("\n");
 }
 
+export function buildArgs(source) {
+  return /process\.argv\.includes\(\s*["']--test["']\s*\)/.test(source) ? ["build.mjs", "--test"] : ["build.mjs"];
+}
+
 export function parseArgs(argv) {
   const rest = [];
+  let built = false;
   let only = FIXTURES;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--only") only = (argv[++i] ?? "").split(",").filter(Boolean);
+    if (argv[i] === "--built") built = true;
+    else if (argv[i] === "--only") only = (argv[++i] ?? "").split(",").filter(Boolean);
     else rest.push(argv[i]);
   }
   const unknown = only.filter((f) => !FIXTURES.includes(f));
-  return { out: rest[0] ? resolve(rest[0]) : null, only, error: unknown.length || !only.length ? `unknown fixture ${unknown.join(", ") || "(none given)"}; use ${FIXTURES.join(", ")}` : null };
+  return { out: rest[0] ? resolve(rest[0]) : null, only, built, error: unknown.length || !only.length ? `unknown fixture ${unknown.join(", ") || "(none given)"}; use ${FIXTURES.join(", ")}` : null };
 }
 
 export function main(argv) {
@@ -507,9 +513,14 @@ export function main(argv) {
     return 2;
   }
   const out = args.out;
-  if (!existsSync(join(REPO, "index.html"))) {
-    console.error("perf-record: index.html is not built; run `node build.mjs` first");
-    return 2;
+  if (!args.built) {
+    const build = buildArgs(readFileSync(join(REPO, "build.mjs"), "utf8"));
+    console.error(`perf-record: building with node ${build.join(" ")}${build.length === 1 ? " (legacy build; --test unavailable)" : ""}`);
+    const result = spawnSync(process.execPath, build, { cwd: REPO, encoding: "utf8" });
+    if (result.status !== 0) {
+      console.error(result.stdout ?? "", result.stderr ?? "", result.error ?? "");
+      return 1;
+    }
   }
   const work = mkdtempSync(join(tmpdir(), "splitpage-perf-"));
   const results = [];
