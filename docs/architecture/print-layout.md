@@ -1,6 +1,6 @@
 # Captured HTML print layout
 
-AQ-40 implements roadmap C6 P1. **Not wired; no user-visible change.** The
+AQ-40 and AQ-41 implement roadmap C6 P1 and P2. **Not wired; no user-visible change.** The
 registered PDF exporter still calls `buildPdf`; that generator and its tests
 remain unchanged until P5. These modules do not open a window, print, register
 an exporter, resolve assets, or read a session or preference.
@@ -48,12 +48,38 @@ attributes and document titles; renderers must escape every content value.
 `printPicture` inspects the held bytes and permits PNG, JPEG, WebP and GIF;
 SVG, arbitrary MIME values and missing bytes produce a placeholder.
 
-AQ-41 can compose `[script, ...listSections, ...comments]` through this shell,
-or pass only list sections for a standalone document. The shell already
-provides fixed-layout tables, repeating headers, section page breaks, image
-bounds and wrapping. A later list renderer can add its own scoped layout
-rules within its renderer-owned section. No list fact calculation belongs in
-the shell. P1 makes no production wiring change.
+`src/adapters/formats/list-print.ts` accepts `ListPrintInput`: the captured
+`ExportDocument` and existing `ExportServices`. No list needs assets. The
+renderer uses `breakdownGroups`, `brollShotListForPrint`, the category/status
+looks and print palette; it does not derive tags, B-roll references, owners,
+scene times or shot status from live state. Summary counts only aggregate the
+projected rows, as in the old writer. No list fact calculation belongs in the shell.
+
+`packingPrintSection(input, catId)` and `shotListPrintSection(input, options)`
+return `PrintSection`s. `buildPackingListPrintPage` and `buildShotListPrintPage`
+wrap their respective sections with `buildPrintPage`. `listPrintSections(input)`
+returns the nonempty all-category production breakdown and all-shots, by-scene
+appendix. `buildScriptWithListsPrintPage(input)` accepts `ScriptPrintInput`
+including held assets and composes `[script, ...listSections, ...comments]`.
+`buildScriptPrintPage` remains the P1 script/comments builder. None is registered
+as a production exporter. The shell supplies fixed-layout tables, repeating
+headers, section page breaks, image bounds, list marks and wrapping.
+
+## Existing list content inventory (P2 step 0)
+
+| Old output | Options, filters and grouping | Columns and detail | Marks, counts and captured facts | P2 destination |
+| --- | --- | --- | --- | --- |
+| `buildPackingListPdf(doc, "gear")` | Gear only, alphabetical by item name, including orphaned tags | Out, Back, Item, Status, Owner, Scenes; item notes and associated B-roll names; orphan label "Not in script" | Two empty boxes per item; four cumulative status steps, Needed/Sourcing/Have it/Returned key and fill-in hint; item count and nonzero status counts in have/sourcing/needed/returned order; category color; captured title/day; Packed by/Returned by and date lines | Standalone gear packing section/page |
+| `buildPackingListPdf(doc, "prop")` | Props only, same ordering and orphan handling | Same six columns and details | Same marks, counts, signatures and captured facts; empty message "Nothing tagged Prop yet." (Gear for gear), with no table/signatures | Standalone prop packing section/page |
+| `buildPdf` production breakdown | All nonempty tag categories in `breakdownGroups` order, including categories outside gear/prop and orphaned items | Item, Status, Scenes, Assigned to; notes and associated B-roll names; missing owner em dash | Per-category color/count; status marks/labels; total item and nonzero status counts in category-status order; title/day supplied by script | `productionBreakdownPrintSection`, omitted when empty; not replaced by packing checklists |
+| `buildShotListPdf` | `all`, `unshot`, `flagged`, `shot`; group by `scene`, `location`, `person`; invalid values fall back to all/scene; added shots and missing location/person groups retained | Done, Scene/start, B-roll shot/name/description/audio reference, Location, Props with status, Assigned, Flagged/note, Notes; grouping field omitted from redundant cells | Done checkbox and dimmed shot names; flag mark; ruled notes space; whole-capture shot/flag summary even when filtered; projected scope and group counts; captured title/day | Standalone landscape shot section/page, including "No shots to list." for empty/filtered-empty results |
+| `shotListAppendixPages` from `buildPdf` | All shots by scene, regardless of panel settings; omitted when empty | Same eight columns and row details as standalone shot list | Same marks, counts and notes space; no repeated title/date at appendix heading, since script supplies them | Landscape shot appendix between production breakdown and comments |
+
+No old list output is removed or modified. Standalone packing pages retain
+their signatures; the script retains its all-category breakdown rather than
+adding standalone-only packing signatures. The standalone shot page preserves
+the captured calendar date through `exportDateText(exportDay(doc))`, including
+serialization after midnight. There is no clock or preference read.
 
 ## Print behavior and deliberate differences
 
@@ -76,6 +102,30 @@ Bookmarks are desktop-only work for P3. Browser users will choose “Save as
 PDF” from their print dialog in P4. P1 creates neither a desktop print window
 nor a browser print dialog. The old writer stays until P5 and the PC PDF check.
 
+P2 preserves portrait packing/breakdown and landscape Letter shot pages through
+a named CSS page. The shared 0.6-inch margins replace the old packing 0.75-inch
+and shot 0.5-inch margins. Deliberate content/presentation differences from the
+old list PDFs are:
+
+- Full audio references replace the old 84-character opening excerpt and ellipsis.
+- Group labels wrap completely instead of keeping only the old first wrapped line.
+- Scene groups show their label and done/total count, and every shot repeats its
+  scene/start; the old table suppressed duplicate scene cells and scene bands.
+- Packing status labels accompany the four filled progress segments. The legend
+  uses individually outlined status labels instead of a single empty pill.
+- Notes and descriptions retain captured line breaks; packing notes previously
+  collapsed whitespace. Associated B-roll names share a wrapped line in breakdowns
+  instead of separate chips. Status marks use CSS circles/half fills/rings, and
+  flags use colored text rather than PDF drawing operations.
+- Chromium repeats column heads and splits oversized rows, with no continued
+  group labels or `cont.` markers. Signatures stay together. Notes space uses
+  CSS rules with a minimum height rather than manually drawn rows of rules.
+
+These differences affect only the unwired print builders. Text is escaped at
+every insertion, including unknown category fallbacks, group labels, owners,
+notes, prop statuses and audio references. The composed script continues to use
+P1's `videoHostLabel` and `videoLinkText` helpers for video references.
+
 ## Fixtures and validation
 
 The six tests in `tests/adapters/formats/script-print.test.mjs` cover rich text,
@@ -92,6 +142,9 @@ node build.mjs --test
 node tools/run-suites.mjs <out> 'print|export' --lanes 3 --port-base <offset>
 node tools/run-suites.mjs <fixture-out> 'print|export' --lanes 3 --port-base <offset> --suites tests/adapters/formats/fixtures/suites
 node tests/adapters/formats/fixtures/inspect-script-print.mjs <inspection-out>
+node tests/adapters/formats/fixtures/write-list-print-fixtures.mjs
+node tools/run-suites.mjs <list-out> 'print|export' --lanes 3 --port-base <offset> --suites tests/adapters/formats/fixtures/suites
+node tests/adapters/formats/fixtures/inspect-script-print.mjs <list-inspection-out> --lists
 ```
 
 The suite runner's `--port-base` is an offset: HTTP starts at `18100 + offset`,
@@ -109,6 +162,39 @@ by the existing root `_*.html` ignore rule. Remove these temporary test artifact
 after the run; never commit them.
 They are not built into the release app. No desktop smoke or editing/undo
 performance run is needed for this unwired adapter.
+
+P2 adds seven content tests in `tests/adapters/formats/list-print.test.mjs`,
+covering both packing categories, all twelve shot filter/group combinations,
+invalid-option defaults, all-category script composition, empty/filtered-empty
+states, hostile text, capture-after-edit stability, same-day determinism, long
+labels, oversized rows and non-Latin text. Suite `383-list-print.txt` exercises
+standalone and composed pages plus selected filters/groups. The inspector's
+`--lists` mode checks actual print media for fifteen fixtures, repeating header
+styles, bounds, complete long-row tails, mixed page orientations, and PDF page
+counts. Generated `_list-print-*.html` files use the existing `_*.html` ignore
+rule and must be removed after validation.
+
+P2 validation on Node 24.22.0 and Windows Edge: `npm run verify` passed all
+568 discovered files (194 frontend, 11 source, 318 tests, 23 desktop, 22 tools),
+lint, types, dependency/comment gates and build. Thirteen combined P1/P2 unit
+tests passed. The test-build `print|export` run passed nine suites and 605/605
+checks on three lanes, including 23/23 in suite 382 and 60/60 in suite 383.
+Free RAM exceeded 4 GB before every browser run. The list inspector passed
+112/112 checks; the unchanged P1 cases passed 18/18 with 1/2/7 pages.
+
+| P2 fixture | Rich pages | Empty pages | Long pages |
+| --- | ---: | ---: | ---: |
+| Prop packing | 1 | 1 | 6 |
+| Gear packing | 1 | 1 | 4 |
+| Standalone shot list | 1 | 1 | 11 |
+| Script with breakdown, shots and comments | 4 | 1 | 22 |
+
+Each filtered/grouped fixture (flagged/location, shot/person, unshot/scene)
+printed one page. Raster review of all 57 P2 fixture pages confirmed wrapping,
+repeating table heads, status/checkbox marks, signatures, notes space, page
+footers and portrait/landscape transitions without clipping. PDF text extraction
+retained packing note line 99, shot description line 109, final notes 64 and
+the final comment reply.
 
 Initial P1 validation on Windows Edge: six content tests passed; `npm run verify`
 passed all 567 discovered files (194 frontend, 11 source, 317 tests, 23 desktop,
