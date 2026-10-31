@@ -119,11 +119,11 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-7 and AQ-8 both add files under `tests/application/`: merge one, merge the base into the other, wait for green CI, merge.
 - AQ-2 and AQ-3 touch different folders. AQ-4 and AQ-12 edit different docs.
 - AQ-5 is **STOPS FOR ADAM**.
-- AQ-6 and AQ-14 are report-only.
+- AQ-6 and AQ-14 are report-only. Adam read both reports and closed them on 2026-10-31 (#1001, #950).
 - AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
 - AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
 - AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and need an independent review. AQ-30 changes one suite file and can be merged by queue agents. AQ-29 needs AQ-28 (both touch saving; I-20 runs before I-6, as in ROADMAP.md).
-- AQ-32 switches import save-back off and marks it deprecated; the code stays (Adam, 2026-10-30). It is **STOPS FOR ADAM** and runs on Opus with an independent review. It supersedes AQ-29: AQ-29's PR is not merged. Do not run it alongside B1's lifecycle PR or B2 (all touch saving or close).
+- AQ-32 switches import save-back off and marks it deprecated; the code stays (Adam, 2026-10-30). It is **STOPS FOR ADAM** and runs on Opus with an independent review. It supersedes AQ-29: AQ-29's PR (#979) is closed unmerged, and AQ-29 is marked `[!]`. With save-back off, both of its parts are moot: part A's second read and part B's Save label only happen after a save-back. Do not run it alongside B1's lifecycle PR or B2 (all touch saving or close).
 - AQ-33 to AQ-35 are wave 2 and the first wave 3 step of [ROADMAP.md](ROADMAP.md). AQ-33 and AQ-35 are **STOPS FOR ADAM** (Opus, independent review): AQ-33 needs AQ-32 merged; AQ-35 needs AQ-32 and the first PR of AQ-23 merged. AQ-34 needs the first PR of AQ-23 merged (both touch the build) and can be merged by queue agents unless it touches a protected path.
 - AQ-36 to AQ-44 cover wave 3: B1 lifecycle (AQ-36, after AQ-35) then voice (AQ-37); B2 save completion (AQ-38, after AQ-36; Adam lifted the hold 2026-10-30); C5 housekeeping (AQ-39); C6 PDF P1 to P5 (AQ-40 to AQ-44). AQ-36 to AQ-38 and AQ-42 to AQ-44 are **STOPS FOR ADAM**; AQ-36 to AQ-38, AQ-42 and AQ-44 run on Opus with independent review and PC smoke. AQ-40 and AQ-41 are not wired and may be merged by queue agents. AQ-42 needs AQ-35; AQ-44 needs AQ-19 and Adam's PC PDF check. The four old `main` PRs in AQ-39 are for Adam's decision only.
 - AQ-45 (automatic PDF layout rules, Adam 2026-10-31) needs AQ-43 merged; test-only, stops for Adam only if it would need a workflow or dependency change.
@@ -200,7 +200,7 @@ THIS PR IS ON THE PROTECTED PATH LIST. Open it, run the review loop, get CI gree
 Structure section: "no structural change"; before/after behaviour with one example run of each.
 ```
 
-## AQ-6 [ ] Audit: install slots that do nothing before setup (report only)
+## AQ-6 [x] Audit: install slots that do nothing before setup (report only)
 
 ```text
 Task: some owners in src/application/ hold an "install slot" (an empty `let x: T | null = null` filled later by wiring). While empty, most throw; three are known to do nothing instead: desktop menu-commands (`runMenuCommand` returns false), settings-actions (`openSettings` does nothing), startup-signal (`startupReady` returns null). Find out whether that matters. Report only: change no code.
@@ -305,7 +305,7 @@ Task: browser suites that wait a fixed time (a literal `setTimeout`/`sleep`/`wai
 Structure section: "no structural change"; table of suite, sleeps before/after, run time before/after.
 ```
 
-## AQ-14 [ ] Report: JS files that rule 11 will force to TypeScript next (report only)
+## AQ-14 [x] Report: JS files that rule 11 will force to TypeScript next (report only)
 
 ```text
 Task: AGENTS.md rule 11 says a JS file under src/features/, src/application/ or src/adapters/ is converted to TypeScript before any substantial change. Produce a short report so Adam can see what that will cost. Report only: change no code.
@@ -651,7 +651,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change", the root cause in one or two sentences, the failing test before the fix and passing after, smoke count.
 ```
 
-## AQ-29 [ ] Save-back on desktop reads the file once (tracker I-6)
+## AQ-29 [!] Save-back on desktop reads the file once (tracker I-6)
 
 Needs: AQ-28 merged. Start from a base that includes it.
 Files: src/application/save/import-saving.ts, its tests, docs/architecture/saving.md; for part B also the save coordinator's confirm step it calls (src/application/save/) and a browser suite.
