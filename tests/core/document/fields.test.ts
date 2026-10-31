@@ -22,7 +22,7 @@ interface UndoGolden {
 const UNDO_GOLDEN = JSON.parse(readFileSync(new URL("../../../src/test/fixtures/golden/undo-state-fields.json", import.meta.url), "utf8")) as UndoGolden;
 
 const KEYS = [
-  "title", "docId", "rows", "comments", "people", "productionTags", "brollShots",
+  "title", "titleOrigin", "titleVersion", "docId", "rows", "comments", "people", "productionTags", "brollShots",
   "wordsPerMinute", "rev", "lastEditedBy", "lastEditedAt", "personColors", "targetSeconds", "schema"
 ];
 
@@ -49,7 +49,8 @@ test("every field names a merge strategy from the closed list", () => {
   assert.equal(new Set(STRATEGY_IDS).size, STRATEGY_IDS.length);
   for (const f of STATE_FIELDS) assert.ok((STRATEGY_IDS as readonly string[]).includes(f.merge), f.key);
   assert.deepEqual(Object.fromEntries(STATE_FIELDS.map((f) => [f.key, f.merge])), {
-    title: "title", docId: "doc-id", rows: "rows", comments: "comments",
+    title: "title", titleOrigin: "optional-changed-side-wins", titleVersion: "optional-changed-side-wins",
+    docId: "doc-id", rows: "rows", comments: "comments",
     people: "list-union-with-base", productionTags: "list-union-with-base", brollShots: "list-union-with-base",
     wordsPerMinute: "changed-side-wins", rev: "max-plus-one", lastEditedBy: "theirs-wins", lastEditedAt: "theirs-wins",
     personColors: "person-colors", targetSeconds: "target-length", schema: "constant"
@@ -66,8 +67,9 @@ test("defaults are fresh values, and only the fields a document always has carry
   assert.notEqual(rows?.def?.(), rows?.def?.());
 });
 
-test("normalize: four fields carry one, and undefined from it means the field goes", () => {
-  assert.deepEqual(STATE_FIELDS.filter((f) => f.normalize).map((f) => f.key), ["wordsPerMinute", "lastEditedBy", "personColors", "targetSeconds"]);
+test("normalize: six fields carry one, and undefined from it means the field goes", () => {
+  assert.deepEqual(STATE_FIELDS.filter((f) => f.normalize).map((f) => f.key),
+    ["titleOrigin", "titleVersion", "wordsPerMinute", "lastEditedBy", "personColors", "targetSeconds"]);
   const norm = (key: string, v: unknown) => (STATE_FIELDS.find((f) => f.key === key)?.normalize as (v: unknown) => unknown)(v);
   assert.equal(norm("wordsPerMinute", "212.5"), 213);
   assert.equal(norm("wordsPerMinute", undefined), DEFAULT_WPM);
