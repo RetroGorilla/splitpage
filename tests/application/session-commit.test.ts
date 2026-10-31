@@ -142,7 +142,7 @@ test("a legacy edit whose undo recording or effect throws is reported, not throw
 
 test("settling an absorbed change whose undo recording throws still runs its effect pass and reports", () => {
   const h = opened({ record: throwing("undo broke") });
-  assert.doesNotThrow(function () { h.session.settle("server"); });
+  assert.doesNotThrow(function () { h.session.settle("disk"); });
   assert.deepEqual(h.log, ["undo.record", "dirty:0", "draft:0", "save:0", "report"]);
   assert.deepEqual(messages(h.reported), ["undo broke"]);
 });
@@ -303,9 +303,9 @@ test("after dispose the session refuses commands and every entry does nothing, w
   h.session.dispose();
   assert.deepEqual(h.session.run(setAudio("r1", "Every evening.")), { kind: "rejected", reason: DISPOSED });
   h.session.noteEdit();
-  h.session.settle("server");
+  h.session.settle("disk");
   assert.equal(h.session.adopt(rawScript("Another")), null);
-  assert.equal(h.session.absorbServer(rawScript("Theirs")), null);
+  assert.equal(h.session.absorbDisk(rawScript("Theirs")), null);
   assert.equal(h.session.absorbRecovery(rawScript("Recovered")), null);
   assert.equal(h.session.absorbReload({ title: "Reloaded", rows: [] }), null);
   assert.deepEqual(h.log, []);

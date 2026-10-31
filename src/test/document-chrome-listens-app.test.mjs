@@ -6,7 +6,8 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { adoptReplacement, noteServerUpdate, runCommand } = await import("../bootstrap/wiring/session-owner.ts");
+const { adoptReplacement, liveSession, noteDiskUpdate, runCommand } = await import("../bootstrap/wiring/session-owner.ts");
+const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { documentLocation, setHome, amendHome, currentHome } = await import("../bootstrap/wiring/location-owner.ts");
 const { preferences, viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../bootstrap/wiring/save-owners.ts");
@@ -85,7 +86,7 @@ test("a session arrival refreshes both file chips, identity and desktop state be
   el("file-chip-name").textContent = "Stale file";
   el("wr-file-chip-name").textContent = "Stale mirror";
   el("identity-name").textContent = "Stale identity";
-  noteServerUpdate(script("Arrived", "#73D4AC"));
+  noteDiskUpdate(script("Arrived", "#73D4AC"));
   assert.equal(el("file-chip-name").textContent, "listening.txt");
   assertMirror();
   assert.equal(el("identity-name").textContent, "Rae");
@@ -94,6 +95,19 @@ test("a session arrival refreshes both file chips, identity and desktop state be
   adoptReplacement(script("Replacement", "#F9B64F"));
   assert.equal(identityColour(), "#F9B64F");
   assert.equal(desktop._lastDocState.title, "Replacement");
+});
+
+test("a merge publishes the disk kind to a session subscriber, and the file chips refresh on it", () => {
+  open();
+  const heard = [];
+  const stop = liveSession().subscribe((change) => heard.push(change.kind));
+  el("file-chip-name").textContent = "Stale file";
+  el("wr-file-chip-name").textContent = "Stale mirror";
+  applyMerge({ theirs: script("Merged"), source: "stash", unchanged: true, report: false });
+  stop();
+  assert.deepEqual(heard, ["disk"]);
+  assert.equal(el("file-chip-name").textContent, "listening.txt");
+  assertMirror();
 });
 
 test("the location owner refreshes the file chips and desktop state synchronously", () => {
