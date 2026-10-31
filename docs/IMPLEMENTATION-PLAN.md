@@ -208,7 +208,7 @@ In this order (Adam, 2026-10-07):
 
 From the external review of milestone 5's plan (Codex, 2026-10-14). Neither is a prerequisite of milestone 5 or 6.
 
-- **One owner for save completion.** Consolidate completion decisions and projection updates behind one application owner, preserving destination-specific acknowledgment. Today the file writer's `confirmWrite`, whose steps are the save completion owner's (`application/save/save-completion.ts`), and the coordinator acknowledge the same save in separate steps ([saving.md](architecture/saving.md) section 8). The work crosses file saves, import writeback and adoption, so it is its own 4.x piece; a concrete regression can bring a focused fix forward.
+- **One owner for save completion.** Consolidate completion decisions and projection updates behind one application owner, preserving destination-specific acknowledgment. Since AQ-38 the coordinator makes the one decision for a file save, when the writer reports the landed write, and then runs the save completion owner's steps (`application/save/save-completion.ts`); the deprecated import writeback keeps its own timing ([saving.md](architecture/saving.md) sections 4 and 8).
 - **Remaining recovery extraction.** Done: `20g-drafts.js` became `src/application/recovery/drafts.ts`, with the capture plan in `capture-schedule.ts` and the restore decisions in `draft-restore.ts` and `draft-resume.ts`. Server-draft restore and the browser draft store were removed with the server features (#905).
 
 ### Server services
