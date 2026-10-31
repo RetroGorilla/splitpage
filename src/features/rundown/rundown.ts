@@ -6,6 +6,7 @@ import { pad2, formatDuration, rowSeconds } from "../../core/production/timing.t
 import { toPlainText } from "../../core/text/projections.ts";
 import { brollCountIn } from "../../core/production/broll.ts";
 import { cssAttr } from "../common/dom.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { RundownControls } from "./actions.ts";
 import type { RundownPorts } from "./ports.ts";
@@ -95,7 +96,6 @@ type RundownTestHooks = {
   setMinimized: (on: boolean, persist?: boolean) => void;
   x: (seconds: number) => number;
 };
-type RundownWindow = Window & { __rundownTest?: RundownTestHooks };
 type RundownOwner = RundownControls & {
   readonly mounted: () => boolean;
   readonly dispose: () => void;
@@ -1208,6 +1208,6 @@ export function startRundown(given: RundownPorts): RundownOwner {
     resized.observe(strip);
     offs.push(function () { resized.disconnect(); });
   }
-  (window as RundownWindow).__rundownTest = { lens: lensDebug, setMinimized: setRundownMinimized, x: rundownX };
+  exposeTestHook("__rundownTest", (): RundownTestHooks => ({ lens: lensDebug, setMinimized: setRundownMinimized, x: rundownX }), (withdraw) => { offs.push(withdraw); });
   return owner;
 }

@@ -2,6 +2,7 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { slotPoster } from "../common/gallery.ts";
 import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../../core/document/gallery.ts";
 import { cappedLongText, codePointPrefix } from "../../core/document/text-policy.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 var ports = null;
 
@@ -814,7 +815,7 @@ export function startAnnotate(given) {
   var f = frameEl();
   var observer = null;
   var resize = function () { if (ed) layout(); };
-  var previousTest = window.__annotateTest;
+  var withdrawHook = null;
   var swatches = [];
   if (m) {
     buildSwatches();
@@ -833,13 +834,12 @@ export function startAnnotate(given) {
       window.addEventListener("resize", resize);
     }
   }
-  var hook = {
+  if (m) exposeTestHook("__annotateTest", function () { return {
     state: function () {
       return ed ? { tool: memory.tool, marks: copy(ed.marks), undo: ed.undo.length, redo: ed.redo.length,
         text: ed.text ? copy(ed.text.mark) : null, ready: ed.ready, at: ed.at, w: ed.w, h: ed.h } : null;
     }
-  };
-  if (m) window.__annotateTest = hook;
+  }; }, function (withdraw) { withdrawHook = withdraw; });
   var disposed = false;
   return {
     openAnnotator: openAnnotator,
@@ -867,10 +867,7 @@ export function startAnnotate(given) {
       fontTimers.clear();
       measureCtx = null;
       fontFamily = "";
-      if (window.__annotateTest === hook) {
-        if (previousTest === undefined) delete window.__annotateTest;
-        else window.__annotateTest = previousTest;
-      }
+      if (withdrawHook) withdrawHook();
       ports = null;
     }
   };
