@@ -1056,7 +1056,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change beyond removal of the replaced PDF path", every deleted module/asset/tool and its audited consumers, the test inventory awaiting Adam's decision and product coverage retained/replaced (no test deleted by the agent), licence disposition, code and bundle bytes removed, AQ-19 merge evidence, Adam's prior PC PDF approval, suite and full smoke results. Stop for Adam; do not merge.
 ```
 
-## AQ-45 [ ] Automatic layout rules for printed PDFs
+## AQ-45 [x] Automatic layout rules for printed PDFs
 
 Needs: AQ-43 merged (the browser print path and its fixtures). Adam asked for this on 2026-10-31 after checking exported PDFs by eye.
 Files: tests/adapters/formats/fixtures/inspect-script-print.mjs and its print fixtures, one new test or browser suite that an existing CI job already runs, docs/architecture/print-layout.md and docs/architecture/testing.md.
