@@ -124,6 +124,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
 - AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and need an independent review. AQ-30 changes one suite file and can be merged by queue agents. AQ-29 needs AQ-28 (both touch saving; I-20 runs before I-6, as in ROADMAP.md).
 - AQ-32 switches import save-back off and marks it deprecated; the code stays (Adam, 2026-10-30). It is **STOPS FOR ADAM** and runs on Opus with an independent review. It supersedes AQ-29: AQ-29's PR is not merged. Do not run it alongside B1's lifecycle PR or B2 (all touch saving or close).
+- AQ-33 to AQ-35 are wave 2 and the first wave 3 step of [ROADMAP.md](ROADMAP.md). AQ-33 and AQ-35 are **STOPS FOR ADAM** (Opus, independent review): AQ-33 needs AQ-32 merged; AQ-35 needs AQ-32 and the first PR of AQ-23 merged. AQ-34 needs the first PR of AQ-23 merged (both touch the build) and can be merged by queue agents unless it touches a protected path.
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -740,4 +741,92 @@ DO
 
 STRUCTURE SECTION MUST SAY
 - "no structural change; save-back switched off, code kept", every entry point found and how each is now unreachable, that ordinary Save is unchanged, what the user sees now, the old-data handling, every test or suite whose expectation changed, smoke count.
+```
+
+## AQ-33 [ ] Rename the "server" merge kind to "disk"
+
+Needs: AQ-32 merged (both touch src/application/session/). Start from a base that includes it.
+Files: src/application/session/ (apply-merge.ts, change-set.ts, document-session.ts, document-merge.ts, ports.ts, session-merge-ports.ts, session-merge.js), src/bootstrap/wiring/ (session-owner.ts, undo.ts, ports/session-merge.ts), src/bootstrap/wiring.ts, src/features/file-menu/local-files.js, the tests and docs that name the kind (found in step 0).
+**STOPS FOR ADAM**: session and undo are protected paths. Run on Opus; independent review; PC smoke.
+
+```text
+Task: roadmap B3. Collaboration was removed, so "server" no longer names anything. The word still labels how a merge of a changed document lands in the session: the transaction kind `"server"` that subscribers see, `MergeKind`, `AbsorbedKind`, and the functions named after it (`absorbServer`, `noteServerUpdate`). Rename it to "disk". Names and strings only: no behaviour, order or logic changes.
+
+FILES TO READ
+- docs/HANDOFF.md, docs/architecture/invariants.md and docs/architecture/session.md (AGENTS.md rule 9). Every invariant holds unchanged.
+- Where the kind lives today: src/application/session/change-set.ts (TransactionKind), apply-merge.ts (MergeKind, mergeKind), document-session.ts (AbsorbedKind, absorb, take, absorbMerged, absorbServer), document-merge.ts (`ports.view.absorbed(o.kind || "server")`), ports.ts (UndoPort.absorbServer), session-merge-ports.ts and session-merge.js (noteServerUpdate); src/bootstrap/wiring/session-owner.ts, undo.ts, ports/session-merge.ts and wiring.ts (UNDO_ADAPTER_METHODS); the subscriber src/features/file-menu/local-files.js (`change.kind === "server"`). Start from `grep -rn '"server"\|absorbServer\|noteServerUpdate\|publish:server\|undo.server' src tests desktop tools docs`.
+
+DO
+1. STEP 0, before any change, in the PR body: sort every hit of that grep into (a) the merge kind itself (the value in change.kind, the type unions, the `absorbed(kind)` and `noteMerged`/`absorbMerged` parameters, every subscriber that compares it), (b) names built on it (absorbServer, noteServerUpdate, test log labels such as `undo.server` and `publish:server`), (c) unrelated "server" that stays. Known (c), leave each unchanged and say why: the migration source `{ kind: "server", serverId }` in src/core/migrate.ts (it derives a document id from "splitpage-server-doc", so renaming it would change ids of old documents); the stored `server` origin and source shapes used as old-data fixtures (tests/application/recovery/, desktop/test/desktop-state.test.mjs, desktop/test/smoke.mjs); the `setHome("server", ...)` unknown-kind refusal in the location tests; the `server/` layer name in tools/dep-report.mjs. Anything else in (c) is listed with its reason. If a rename needs more than identifiers and string values, stop and reply with what it needs.
+2. Rename (a) to "disk" and (b) to match (absorbServer to absorbDisk, noteServerUpdate to noteDiskUpdate), in one pass; list every renamed identifier and value in the PR. No alias for the old name and no re-export (AGENTS.md rule 4). One name per exported type.
+3. OLD SAVED DATA, answered in step 0 with evidence: the kind is a value that lives inside one running session (change events, merge options). Show by grep and by reading the draft, history, storage and desktop-state writers that it is never written to a draft, history record, local storage, desktop state or file. If that holds, say "no persisted copy" and show the grep; nothing needs migrating, and nothing in saved projects, drafts or recents can carry the old name. If any writer does persist it: stop and reply with that list before changing code; the fix then is one reader that accepts the old "server" and maps it to "disk", with a test that loads old-name data.
+4. Tests: update the strings and identifiers in existing tests and browser suites to the new names (AGENTS.md rule 2: the name is meant to change; no assertion is weakened, removed or skipped). Add one test that a merge publishes kind "disk" to a session subscriber and that the file-menu subscriber still refreshes on it.
+5. Docs: update every doc that names the kind or the functions: docs/architecture/session.md (transaction kinds, the absorbServer rows, UndoPort, the undo adapter) and the "server updates" line in docs/architecture/invariants.md. Check with `grep -rn 'absorbServer\|noteServerUpdate\|"server"' docs`.
+6. `npm run verify`; browser suites: node tools/run-suites.mjs <out> 'undo|merge|session|recovery|save|import|history|file-menu' --lanes 3 (build with `node build.mjs --test` once the base has that flag); full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR. If the diff changes anything but names, also run node tools/perf-ab.mjs and stop if a limit is exceeded; otherwise say that only names changed.
+
+Do not touch: behaviour, call order, src/core/migrate.ts, the stored-shape fixtures in (c), desktop/ beyond the tests named above.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; names only", every renamed identifier and value, every "server" left and why, how old saved data loads (no persisted copy, with the grep, or the one reader), the tests changed, smoke count.
+```
+
+## AQ-34 [ ] CSS by purpose
+
+Needs: AQ-23's first PR merged (flag, helper, `__historyTest`, release-build check; both touch the build).
+Files: src/styles/, the `styles-*.css` files under src/features/, tools/css-inputs.json, the tests that pin the CSS list (src/test/css-aggregation.test.mjs, src/test/css-feature-balance.test.mjs, tools/css-colours.mjs), docs that name the files.
+Not protected: none of these paths is on the protected list (no file under src/features/merge/, src/features/editing/ or src/features/rows/render.* holds a stylesheet). If the work needs a protected path, stop and say so. Split it into several PRs if one is too large to review; each PR keeps the proof below.
+
+```text
+Task: roadmap C3. The app's CSS is 59 `styles-*.css` files under src/features/ (39 are only numbered, such as src/features/file-menu/styles-3.css) plus src/styles/, concatenated in one fixed order. Merge and rename them by feature and purpose (for example `styles-badge.css` stays a name; `styles-3.css` becomes a name that says what is in it), with the computed cascade unchanged. This changes no visible pixel. The proof is the point of the task.
+
+FILES TO READ
+- build.mjs (`appCss` from tools/css-inputs.mjs fills the `/*{{APP_CSS}}*/` placeholder in src/page.html; the --check mode) and tools/css-inputs.mjs (it reads each file and joins them with a single "\n").
+- tools/css-inputs.json: the 84 ordered inputs. Order is the cascade: a later rule wins on equal specificity.
+- src/test/css-aggregation.test.mjs (pins the exact list and order), src/test/css-feature-balance.test.mjs, tools/css-colours.mjs, docs/architecture/dependencies.md and docs/architecture/testing.md where they name CSS files.
+- tools/comment-gate.mjs: CSS comments are checked. A merged file may keep only reason comments of the `/* why: ... */` form; moving a comment must not add a baseline entry.
+
+DO
+1. STEP 0 in the PR body: the table of all 59 files with lines, what each holds, and the proposed new name and group. Mark every merge that joins files which are NOT adjacent in tools/css-inputs.json: those can change the cascade and need extra proof (step 3). Prefer groupings that keep the order, so a merge joins neighbours only.
+2. Rename and merge with git mv and concatenation, so history follows. A merge of neighbours is the first file's text, a "\n", then the second file's text, exactly what the build does today, so the built CSS stays byte for byte the same. Update tools/css-inputs.json (same order), the pinned list in src/test/css-aggregation.test.mjs (the list changes because the names change; the order check stays as strict) and every doc that names a renamed file. Leave no old file behind and no re-export.
+3. PROOF that the computed cascade is unchanged, in the Validation section, with the command output:
+   a. Before changing anything, build on the base (`node build.mjs`) and save the CSS that goes into the page: `node -e "import('./tools/css-inputs.mjs').then(m => process.stdout.write(m.appCss()))" > <out>/css-before.css`. After the change, save css-after.css the same way. For merges of neighbours and pure renames the two files must be identical (`git diff --no-index --stat` shows nothing; also print their SHA-256). That alone proves the cascade, because the page receives the same bytes.
+   b. For any merge that joins non-adjacent files, so the bytes differ: say exactly which rules moved and why the order between conflicting rules is kept (same specificity, same selector overlap), and then prove it with a computed-style comparison: with the harness, load the built page in the states the visual suites reach and dump `getComputedStyle` for every element for the properties the stylesheets set, before and after, and show they are equal. Keep that script out of the repository and put its output summary in the PR. If you cannot show equality for a move, do not make the move.
+   c. The visual browser suites pass. Take the list for style changes from docs/architecture/testing.md ("What to run for which change") and run it with node tools/run-suites.mjs <out> '<regex>' --lanes 3, adding the suites of every feature whose stylesheet you touched (settings, file menu, comments, panels, prompter, gallery, tags, find, overlay, history, imports, writer), in light and dark mode as those suites do. Build with `node build.mjs --test` once the base has that flag. A suite that fails on the base too is on the flaky list: rerun once, then stop.
+4. `npm run verify` (it runs the CSS tests, including the colour checks that read the built CSS), `npm run check:comments`, and `git diff --exit-code -- sw.js` (the committed cache stamp must not change; if the built file list changes it, regenerate with the build and say so).
+5. Do not change a selector, a declaration, a value, a media query or a comment's meaning. No clean-up of unused rules in this task (name them in the PR for a later one).
+
+Do not touch: src/ outside the stylesheets and the tests named above, build.mjs beyond what the file renames force (it should need nothing), .github/, tools/dep-report.mjs.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; stylesheets renamed and merged", the table of old file to new file, which merges joined neighbours and which did not, the SHA-256 of the CSS before and after (equal), the computed-style comparison for any non-adjacent merge, the suites run, and that no rule was added, removed or reordered (or exactly which moved).
+```
+
+## AQ-35 [ ] Desktop split, step 1: IPC setup out of desktop/main.js
+
+Needs: AQ-23's first PR and AQ-32 merged. Start from a base that includes both.
+Files: desktop/main.js, desktop/ipc-setup.js (new), desktop/electron-builder.yml and desktop/package.json (file and test lists), desktop/test/ipc-table.test.mjs, docs/architecture/desktop-build.md.
+**STOPS FOR ADAM**: desktop/ is protected. Run on Opus; independent review; full PC Electron smoke.
+
+```text
+Task: roadmap B1, step 1. desktop/main.js is over 2,500 lines. Its IPC setup is one block: the registration wrappers `ipcHandle`, `ipcOn` and `ipcOnSync` (about line 2084, with `ipcChannelRow`, `ipcRefusalReason` and `logIpcRefusal` just above) and `registerIpc()` (about line 2143 to the call near line 2770). Move the IPC setup into its own module. One PR, no behaviour change. Process lifecycle (start, close, quit) and voice follow as later tasks; do not start them here.
+
+FILES TO READ
+- docs/architecture/desktop-build.md: why each module is listed in `files`, and the rule that every `./module` main.js requires must be added to the list (desktop/test/ipc-table.test.mjs fails if one is missing).
+- desktop/main.js: the IPC block above, and what each handler uses from main.js (tabs, windows, drafts, recents, state, dialogs). The earlier extractions are the pattern: desktop/recents.js, tab-registry.js, restore-notice.js and unsaved-dialog.js each take what they need as arguments and return functions; main.js keeps the state.
+- desktop/ipc-channels.js (the channel table), desktop/preload.js, desktop/tabstrip-preload.js, desktop/test/ipc-table.test.mjs (it reads main.js as text and checks that nothing registers through ipcMain directly, that every registered channel is in the table with its direction, that every inbound row is registered exactly once).
+- desktop/electron-builder.yml (the `files` list) and desktop/package.json (the `test` script, which lists each desktop test), desktop/verify-dist.mjs.
+- docs/HANDOFF.md and docs/architecture/invariants.md for anything the handlers touch (saving, closing).
+
+DO
+1. STEP 0 in the PR body: before any change, print the list of (channel, direction) pairs main.js registers today, in registration order, with their count by direction. Then list what the handlers use from main.js and choose the cut. The module takes those dependencies as one object argument; main.js builds it. If the dependency object would need more than about 30 members, stop and reply with a proposed split by handler group, before changing code. Handler bodies move as they are, or stay in main.js as functions passed in; this task moves the registration and the wrappers, not the logic of a handler.
+2. Create desktop/ipc-setup.js (plain CommonJS like its neighbours) holding the wrappers and registerIpc. Same channels, same registration order, same origin and argument checks, same refusal results, same log lines. main.js requires it and calls it where it calls registerIpc() today. Leave no wrapper copy and no re-export in main.js (AGENTS.md rule 4).
+3. Update every list that names modules: the `files` list in desktop/electron-builder.yml, desktop/package.json's test script if a test file is added, docs/architecture/desktop-build.md (a row for the new module: what it holds and what stays in main.js), and desktop/test/ipc-table.test.mjs so that it reads the new module where it read main.js. Its assertions keep their meaning (no direct ipcMain registration, every channel in the table with that direction, every inbound row exactly once); none is weakened.
+4. Test: record the step 0 list of (channel, direction) pairs, in order, as a test that compares it to what the new module registers against a fake ipcMain. It must pass on the moved code and would fail on a missing, extra or reordered channel.
+5. `npm run verify`; `npm run test:desktop`; `node build.mjs`; the packaged payload check: from desktop/, build a fresh package with `npm run dist:win`, then list the new package's app.asar (for example `npx @electron/asar list <path to the new app.asar>`) and show that `ipc-setup.js` is in it; put that output in the PR. If a fresh package cannot be built on this machine, stop and report; do not accept `node stage.mjs` or `node verify-dist.mjs` on existing artifacts instead, because they do not prove the new module ships. Full Windows Electron smoke on the PC: node desktop/test/smoke.mjs --only-target dev, pass count in the PR (all checks, not a group). Browser suites are not needed because no renderer code changes; say so.
+6. If a handler can only move by changing what it does, leave that handler in main.js and name it in the PR.
+
+Do not touch: renderer code, preload files, desktop/ipc-channels.js (the table stays as it is), the process lifecycle and voice code, and any other desktop module.
+
+STRUCTURE SECTION MUST SAY
+- "no behaviour change", what moved from main.js to desktop/ipc-setup.js and what the module needs from main.js (the dependency list), the line count of main.js before and after, the (channel, direction) list before and after (equal), the lists updated, smoke count. Name lifecycle and voice as the later steps.
 ```
