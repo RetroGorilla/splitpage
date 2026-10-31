@@ -240,7 +240,7 @@ Splitpage's browser HTML remains deterministic for a captured day; the browser
 controls saved-PDF metadata and bytes, so byte equality is no longer promised
 for its PDF file. INV-61's exact artifact syntax and old PDF bookmarks were
 tested on the old generator, without being claimed for browser output; P5
-deleted that generator, and its tests wait for Adam's decision. Adam checked
+deleted that generator; Adam approved its test disposition on 2026-10-31. Adam checked
 real dialog cancellation, saved PDFs, fonts, page breaks and footers on his PC
 before P5 (browser and desktop, 2026-10-31).
 
@@ -351,9 +351,12 @@ PDF", the desktop shows the file name it saves. The unshown-character
 diagnostic (`ExportDiagnostics.unshownCharacters`) stays in the registry and
 `buildFileData`, but no built-in exporter reports it any more.
 
-The old generator's unit tests stay in the tree, unchanged, until Adam
-decides on each one; they fail at import. The AQ-44 PR lists every one and
-where the print path covers the same behaviour.
+Adam approved the AQ-44 test inventory on 2026-10-31: 43 cases deleted with
+replacement coverage, 49 deleted because they no longer apply, three mixed
+cases kept with their non-PDF assertions, and 49 cases kept unchanged.
+The PR records each case and its print-path coverage. Five files with no
+remaining cases were deleted; the surviving mixed files no longer import
+the old generator.
 `src/test/print-capture-app.test.mjs` checks that the four products build no
 file bytes, and that a script print whose picture reads are held keeps the
 captured pictures in their places when the document and its pictures change.

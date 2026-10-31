@@ -616,10 +616,10 @@ Supported Node versions are 22 (from 22.22.2), 24 (from 24.15.0) and 26 and late
 `package.json`'s `engines`; `.nvmrc` pins Node 24.22.0, the one used locally and in CI.
 Run `nvm use` before `npm run verify`: on Node 22.22.0, `TextDecoder("latin1")`
 decodes bytes `0x85`, `0x93` and `0x94` as C1 control characters instead of
-`…`, `“` and `”`, so `list-pdfs.test.mjs` and `pdf-script.test.mjs` fail there
-and pass on 22.22.2 and later and on Node 24. Since AQ-44 deleted the old PDF
-generator those two files fail at import on every version, until Adam decides
-on them. `tools/run-tests.mjs` prints a warning,
+`…`, `“` and `”`, so the former generator cases in `list-pdfs.test.mjs` and `pdf-script.test.mjs` failed there
+and passed on 22.22.2 and later and on Node 24. AQ-44 removed those old-generator
+cases after Adam approved their disposition on 2026-10-31; the runtime
+requirement remains. `tools/run-tests.mjs` prints a warning,
 and still runs, when `process.version` differs from `.nvmrc` but is inside `engines`.
 Outside `engines` it lists the tests but refuses to run them, exiting 2 with the
 range and the pinned version, so an unsupported runtime is not reported as failing
