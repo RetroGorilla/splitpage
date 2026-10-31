@@ -933,7 +933,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change; tracker housekeeping only", each closed row and its evidence, each row kept open and why, and the four old main PRs listed for Adam with no action taken on them.
 ```
 
-## AQ-40 [ ] PDF rebuild P1: script HTML print page, not wired
+## AQ-40 [x] PDF rebuild P1: script HTML print page, not wired
 
 Needs: none. Coordinate shared print files with AQ-41; P3 and P4 wire the output later.
 Files: new TypeScript print-layout modules under src/adapters/formats/, their tests and test-only fixtures/suites, docs describing the new layout. No production export wiring changes.
