@@ -74,7 +74,8 @@ function createPdfPrinter({ app, session, WebContentsView, timeoutMs = PRINT_TIM
         if (error) reject(error); else resolve(pdf);
       };
       const ownerGone = () => finish(new Error("The page that asked to print has closed"));
-      const job = { cancel: () => finish(new Error("Printing was cancelled")) };
+      // why: a WebContentsView in no window is garbage once unreferenced, and collecting it stops the page mid-load
+      const job = { view, cancel: () => finish(new Error("Printing was cancelled")) };
       const timer = setTimeout(() => finish(new Error("The print page took too long to prepare")), timeoutMs);
       jobs.add(job);
       owner.once("destroyed", ownerGone);

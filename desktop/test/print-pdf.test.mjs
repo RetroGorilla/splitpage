@@ -3,6 +3,8 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import v8 from "node:v8";
+import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -176,6 +178,30 @@ test("quitting cancels every open print and refuses new ones", async () => {
   assert.equal(w.printer.openJobs(), 0);
   await assert.rejects(w.printer.print(w.owner, PAGE), /quitting/);
   assert.equal(w.views.length, 2);
+});
+
+test("an open print holds its view, so collecting garbage cannot stop the page mid-load", async () => {
+  v8.setFlagsFromString("--expose-gc");
+  const collect = vm.runInNewContext("gc");
+  const app = new EventEmitter();
+  const refs = [];
+  const ses = { protocol: { handle() {} }, webRequest: { onBeforeRequest() {} }, setPermissionRequestHandler() {}, setPermissionCheckHandler() {} };
+  function WebContentsView() {
+    const contents = new EventEmitter();
+    contents.isDestroyed = () => false;
+    contents.close = () => {};
+    contents.setWindowOpenHandler = () => {};
+    contents.loadURL = () => new Promise(() => {});
+    const view = { webContents: contents };
+    refs.push(new WeakRef(view));
+    return view;
+  }
+  const printer = createPdfPrinter({ app, session: { fromPartition: () => ses }, WebContentsView, timeoutMs: 60000 });
+  const pending = printer.print(new EventEmitter(), PAGE);
+  for (let i = 0; i < 3; i++) { await new Promise((resolve) => setImmediate(resolve)); collect(); }
+  assert.ok(refs[0].deref(), "the view is still alive while its print is open");
+  app.emit("will-quit");
+  await assert.rejects(pending, /cancelled/);
 });
 
 test("two prints at once each get their own view and page address", async () => {
