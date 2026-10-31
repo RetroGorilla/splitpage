@@ -127,6 +127,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-33 to AQ-35 are wave 2 and the first wave 3 step of [ROADMAP.md](ROADMAP.md). AQ-33 and AQ-35 are **STOPS FOR ADAM** (Opus, independent review): AQ-33 needs AQ-32 merged; AQ-35 needs AQ-32 and the first PR of AQ-23 merged. AQ-34 needs the first PR of AQ-23 merged (both touch the build) and can be merged by queue agents unless it touches a protected path.
 - AQ-36 to AQ-44 cover wave 3: B1 lifecycle (AQ-36, after AQ-35) then voice (AQ-37); B2 save completion (AQ-38, after AQ-36; Adam lifted the hold 2026-10-30); C5 housekeeping (AQ-39); C6 PDF P1 to P5 (AQ-40 to AQ-44). AQ-36 to AQ-38 and AQ-42 to AQ-44 are **STOPS FOR ADAM**; AQ-36 to AQ-38, AQ-42 and AQ-44 run on Opus with independent review and PC smoke. AQ-40 and AQ-41 are not wired and may be merged by queue agents. AQ-42 needs AQ-35; AQ-44 needs AQ-19 and Adam's PC PDF check. The four old `main` PRs in AQ-39 are for Adam's decision only.
 - AQ-45 (automatic PDF layout rules, Adam 2026-10-31) needs AQ-43 merged; test-only, stops for Adam only if it would need a workflow or dependency change.
+- AQ-23 is done through PR 5 (#1014): release builds expose no test hook. Its PR 6 (#1017) stopped on rule 11 and became AQ-46, which Adam placed last in line on 2026-10-31: run it only when no other task is open.
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -536,7 +537,7 @@ STRUCTURE SECTION MUST SAY
 - Where the panel lives, that main.ts call order is unchanged, which failures are now caught, what the user sees, smoke count.
 ```
 
-## AQ-23 [ ] Test hooks only in test builds
+## AQ-23 [x] Test hooks only in test builds
 
 Needs: AQ-21 and AQ-22 merged.
 Files: build.mjs, tools/, wiring files, CI.
@@ -1086,4 +1087,28 @@ DO
 
 STRUCTURE SECTION MUST SAY
 - "test-only, no product change", how the PDF pages are read, each rule and its fail-first probe, which CI job runs it and its run time, any rule failing on today's output (reported, not fixed).
+```
+
+## AQ-46 [ ] History fault injection out of release builds (last in line)
+
+Needs: every other open task done or stopped (Adam, 2026-10-31: last in line). AQ-23 PR 5 (#1014) merged. Read the "Stopped:" comment on #1017 first.
+Files: src/adapters/storage/history-backends.js, src/adapters/storage/03c-history-idb.js, shared/history-store.js (its memory backend's fault queue), src/application/recovery/history.js, their tests, src/bootstrap/wiring/history.ts, tools/release-hooks.mjs, docs/architecture/testing.md and the docs naming the moved code.
+**STOPS FOR ADAM**: history storage and recovery are protected. Run on Opus; independent review for each PR; history, recovery and draft suites.
+
+```text
+Task: AQ-23's last step. Release builds no longer expose any test hook, but history's fault-injection code (historyFault and controls in history-backends.js, the faults queue in 03c-history-idb.js and in shared/history-store.js's memory backend, testControls in application/recovery/history.js) still ships in the bundle, unreachable. Move it into modules only the test build imports. History behaviour in both builds must not change, and the test build's faults must behave exactly as before.
+
+DO, as three PRs in this order (AGENTS.md rule 11):
+1. Types-only strict TypeScript conversion of history-backends.js and 03c-history-idb.js. No behaviour change; tests unchanged and passing.
+2. Types-only strict TypeScript conversion of application/recovery/history.js. No behaviour change.
+3. On top: no-op default fault ports in the release path, the test-build-only fault modules wired in src/bootstrap/wiring/history.ts behind the folded flag constant Adam approved on #990, and testControls reached through an injected factory (application/ cannot read a build constant). Tick AQ-46.
+
+FILES TO READ
+- docs/HANDOFF.md, docs/architecture/invariants.md (INV-38, INV-39 and the recovery rules), saving.md where it names history; #974's split and #1017's "Stopped:" comment.
+
+CHECKS FOR EACH PR
+- npm run verify; node build.mjs and node build.mjs --test; node tools/run-suites.mjs <out> 'history|recovery|draft|undo|storage' --lanes 3; src/test/m4-matrix-recovery.test.mjs; tools/test-release-hooks.mjs. PR 3 also: the release index.html has 0 matches for every fault and test-control member name.
+
+STRUCTURE SECTION MUST SAY
+- PRs 1 and 2: "types only, no behaviour change". PR 3: which fault code moved where, the release-scan result, and that history behaviour is unchanged in both builds.
 ```
