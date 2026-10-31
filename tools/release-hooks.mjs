@@ -1,4 +1,4 @@
-const HOOK_NAME = /__[A-Za-z]+Test\b/g;
+const HOOK_NAME = /__(?:[A-Za-z]+Test|splitpageFormats)\b/g;
 
 export const STILL_IN_RELEASE = Object.freeze([
   "__annotateTest",
@@ -8,7 +8,6 @@ export const STILL_IN_RELEASE = Object.freeze([
   "__cacheTest",
   "__commandTest",
   "__desktopTest",
-  "__documentGuardTest",
   "__exportTest",
   "__fileMenuTest",
   "__prompterTest",
@@ -18,7 +17,6 @@ export const STILL_IN_RELEASE = Object.freeze([
   "__sceneSelectTest",
   "__settingsTest",
   "__targetTest",
-  "__undoTest",
   "__updateTest",
   "__videoTest"
 ]);

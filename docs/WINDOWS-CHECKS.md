@@ -104,11 +104,12 @@ node build.mjs --test
 ```
 
 That writes both `index.html` and `sw.js`'s stamped cache name. The smoke
-needs the test build: it drives the `window.__*Test` hooks, which plain
+needs the test build: it drives the `window.__*Test` hooks and `window.__splitpageFormats`, which plain
 `node build.mjs` (the release build) leaves out. `node build.mjs --test --check`
 reports on both, separately. The packaged targets in `dist/` are release
-builds, so the groups that drive a hook the release build leaves out (the
-history group's `__historyTest`) fail there.
+builds, so the groups that drive a hook the release build leaves out
+(`__historyTest`, `__undoTest`, `__documentGuardTest`, `__splitpageFormats`)
+fail there.
 
 Then, for the desktop shell:
 
