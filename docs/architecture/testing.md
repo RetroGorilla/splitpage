@@ -38,7 +38,7 @@ Run the four suites with `node --test tests/bootstrap/legacy-shim.test.ts tests/
 The printed-PDF check is documented in
 [print-layout.md](print-layout.md#fixtures-and-validation). The discovered
 `tests/adapters/formats/printed-layout.test.mjs` runs all 18 fixtures, seven
-rule groups per fixture and nine fail-first/restoration probes (265 checks).
+rule groups per fixture and eleven fail-first/restoration probes (267 checks).
 It runs automatically in the existing Linux `tests` matrix job and locally
 through `npm test`, `test:all` and `verify`; a focused run is
 `npm test -- --only tests/adapters/formats/printed-layout.test.mjs`.

@@ -10,6 +10,29 @@ import { log } from "node:console";
 import assert from "node:assert/strict";
 import { inflateSync } from "node:zlib";
 
+const LAYOUT_TOLERANCE_PT = 1;
+const PAPER_SAFE_BORDER_PT = 12;
+
+function emptyHeadroom() {
+  return {ink:{left:Infinity,right:Infinity,top:Infinity,bottom:Infinity},layoutOverhang:0};
+}
+
+function measureHeadroom(report) {
+  const result = emptyHeadroom();
+  for (const page of report.pages) for (const line of page.lines.filter((entry) => entry.text.trim())) {
+    if (line.ink) {
+      result.ink.left = Math.min(result.ink.left,line.ink.left);
+      result.ink.right = Math.min(result.ink.right,page.width-line.ink.right);
+      result.ink.top = Math.min(result.ink.top,line.ink.top);
+      result.ink.bottom = Math.min(result.ink.bottom,page.height-line.ink.bottom);
+    }
+    const footer = line.mcid === null;
+    result.layoutOverhang = Math.max(result.layoutOverhang,43.2-line.layout.left,line.layout.right-(page.width-43.2),
+      (footer ? page.height-43.2 : 43.2)-line.layout.top,line.layout.bottom-(footer ? page.height : page.height-43.2));
+  }
+  return result;
+}
+
 function pdfTokens(source) {
   return Array.from(source.matchAll(/%[^\r\n]*|\((?:\\[\s\S]|[^\\()])*\)|<[\da-fA-F\s]*>|<<|>>|\[|\]|\/[^\s<>[\]()]+|[^\s<>[\]()]+/g), (match) => match[0])
     .filter((token) => !token.startsWith("%"));
@@ -51,6 +74,16 @@ function unicodeHex(hex) {
   const bytes = Buffer.from(hex.replace(/[<>\s]/g, ""), "hex");
   assert.equal(bytes.length % 2, 0, "Expected UTF-16BE text");
   return bytes.swap16().toString("utf16le").replace(/^\uFEFF/, "");
+}
+
+function actualText(value) {
+  if (value.startsWith("<")) return unicodeHex(value);
+  const text = value.slice(1,-1).replace(/\\([0-7]{1,3}|\r\n|[\s\S])/g, (_, escaped) => {
+    if (/^[0-7]+$/.test(escaped)) return String.fromCharCode(parseInt(escaped,8));
+    if (/^[\r\n]/.test(escaped)) return "";
+    return ({n:"\n",r:"\r",t:"\t",b:"\b",f:"\f"})[escaped] ?? escaped;
+  });
+  return text.startsWith("\xFE\xFF") ? unicodeHex(Buffer.from(text,"latin1").toString("hex")) : text;
 }
 
 function multiply(a, b) {
@@ -136,7 +169,12 @@ export function readPrintedPages(bytes) {
       const box = font.FontBBox, matrix = font.FontMatrix;
       return [box[0] * matrix[0], box[3] * matrix[3], box[2] * matrix[0], box[1] * matrix[3]];
     }
-    fonts.set(id, { chars, widths, codeBytes, glyphBounds, defaultWidth: descendant.DW ?? 1000 });
+    fonts.set(id, { chars, widths, codeBytes, glyphBounds, defaultWidth: descendant.DW ?? 1000,
+      name:font.BaseFont || descriptor?.FontName || "unnamed",
+      metricSource:fontBytes ? "glyf" : font.Subtype === "/Type3" ? "font bbox fallback (Type3)" : "CFF advance/ascent/descent",
+      ascent:typeof descriptor.Ascent === "number" ? descriptor.Ascent / 1000 : Math.max(font.FontBBox[1]*font.FontMatrix[3],font.FontBBox[3]*font.FontMatrix[3]),
+      descent:typeof descriptor.Descent === "number" ? descriptor.Descent / 1000 : Math.min(font.FontBBox[1]*font.FontMatrix[3],font.FontBBox[3]*font.FontMatrix[3]),
+      layoutMetricSource:typeof descriptor.Ascent === "number" ? "advance/ascent/descent" : "advance/font bbox vertical fallback (Type3)" });
   }
   const catalog = Array.from(objects.values()).find((object) => object.value.Type === "/Catalog").value;
   const pageIds = [];
@@ -182,10 +220,13 @@ export function readPrintedPages(bytes) {
           const codes = [];
           for (let offset = 0; offset < glyphs.length; offset += state.font.codeBytes) codes.push(glyphs.readUIntBE(offset, state.font.codeBytes));
           const actual = marked.findLast((item) => item.ActualText);
-          const text = actual ? (actual.emitted ? "" : unicodeHex(actual.ActualText)) : codes.map((code) => state.font.chars.get(code) ?? "\uFFFD").join("");
+          const text = actual ? (actual.emitted ? "" : actualText(actual.ActualText)) : codes.map((code) => state.font.chars.get(code) ?? "\uFFFD").join("");
           if (actual) actual.emitted = true;
           const matrix = multiply(state.matrix, textMatrix);
           const width = codes.reduce((sum, code) => sum + (state.font.widths.get(code) ?? state.font.defaultWidth), 0) * state.size / 1000;
+          const layout = [[0,state.font.descent*state.size], [width,state.font.descent*state.size],
+            [0,state.font.ascent*state.size], [width,state.font.ascent*state.size]].map(([x,y]) =>
+            [matrix[0]*x+matrix[2]*y+matrix[4], page.MediaBox[3]-(matrix[1]*x+matrix[3]*y+matrix[5])]);
           let advance = 0;
           const corners = codes.flatMap((code) => {
             const box = state.font.glyphBounds(code);
@@ -199,7 +240,10 @@ export function readPrintedPages(bytes) {
             return points;
           });
           lines.push({ text, x: matrix[4], y: page.MediaBox[3] - matrix[5],
+            font:state.font.name, metricSource:state.font.metricSource, layoutMetricSource:state.font.layoutMetricSource,
             width: Math.abs(matrix[0] * width), height: Math.abs(matrix[3] * state.size),
+            layout: {left:Math.min(...layout.map((point) => point[0])), right:Math.max(...layout.map((point) => point[0])),
+              top:Math.min(...layout.map((point) => point[1])), bottom:Math.max(...layout.map((point) => point[1]))},
             ink: corners.length ? {left:Math.min(...corners.map((point) => point[0])), right:Math.max(...corners.map((point) => point[0])),
               top:Math.min(...corners.map((point) => point[1])), bottom:Math.max(...corners.map((point) => point[1]))} : null,
             mcid: marked.findLast((item) => item.MCID !== undefined)?.MCID ?? null, notdef: codes.includes(0) });
@@ -288,7 +332,7 @@ export function checkPrintedLayout(report, model, only = null) {
   const rows = report.elements.filter((element) => element.role === "/TR");
   const parents = new Set(report.elements.flatMap((element) => element.ancestors));
   const leaves = report.elements.filter((element) => !parents.has(element.id));
-  const check = (rule, operation) => { if (!only || only === rule) operation(); };
+  const check = (rule, operation) => { if (!only || only.split("-")[0] === rule) operation(); };
   let oversized = [];
   check("a", () => {
     const headings = report.elements.filter((element) => /^\/H[1-6]$/.test(element.role));
@@ -332,9 +376,19 @@ export function checkPrintedLayout(report, model, only = null) {
       const footer = line.mcid === null;
       const top = footer ? page.height - 43.2 : 43.2;
       const bottom = footer ? page.height : page.height - 43.2;
-      assert.ok(!line.ink || line.ink.left >= 43.1 && line.ink.right <= page.width - 43.1 &&
-        line.ink.top >= top - 0.1 && line.ink.bottom <= bottom + 0.1,
-      `d: clipped text ${JSON.stringify(line.text)} on page ${page.number} at ${line.x.toFixed(2)},${line.y.toFixed(2)}`);
+      function inside(box, rect, tolerance) {
+        return !box || box.left >= rect[0]-tolerance && box.right <= rect[1]+tolerance && box.top >= rect[2]-tolerance && box.bottom <= rect[3]+tolerance;
+      }
+      function diagnostic(half, box, rect, metrics) {
+        return `d: ${half} overflow; text=${JSON.stringify(line.text)}; fixture=${model.fixture || "unknown"}; page=${page.number}; ` +
+          `box(x0,x1,y0,y1)=${JSON.stringify(box && [box.left,box.right,box.top,box.bottom])}; ` +
+          `allowed ${half === "ink" ? "paper-safe border" : footer ? "footer margin box" : "content area"}(x0,x1,y0,y1)=${JSON.stringify(rect)}; ` +
+          `tolerance=${half === "layout" ? LAYOUT_TOLERANCE_PT : 0}pt; font=${line.font}; metrics=${metrics}`;
+      }
+      const content = [43.2,page.width-43.2,top,bottom];
+      const paper = [PAPER_SAFE_BORDER_PT,page.width-PAPER_SAFE_BORDER_PT,PAPER_SAFE_BORDER_PT,page.height-PAPER_SAFE_BORDER_PT];
+      if (only !== "d-ink") assert.ok(inside(line.layout, content, LAYOUT_TOLERANCE_PT), diagnostic("layout", line.layout, content, line.layoutMetricSource));
+      if (only !== "d-layout") assert.ok(inside(line.ink, paper, 0), diagnostic("ink", line.ink, paper, line.metricSource));
     }
   });
   check("e", () => {
@@ -482,6 +536,7 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: 701, height: 940, deviceScaleFactor: 1, mobile: false });
   let checks = 0;
   const records = [];
+  const headroom = emptyHeadroom();
   const cases = lists ? ["prop-rich", "gear-rich", "shots-rich", "script-rich", "prop-empty", "gear-empty", "shots-empty", "script-empty",
     "prop-long", "gear-long", "shots-long", "script-long", "flagged-location", "shot-person", "unshot-scene"] : ["rich", "empty", "long"];
   async function captureModel() {
@@ -551,7 +606,11 @@ try {
     const report = readPrintedPages(bytes);
     writeFileSync(join(out, kind + "-pages.json"), JSON.stringify(report, null, 2));
     const model = await captureModel();
+    model.fixture = `${lists ? "list" : "script"}/${kind}`;
     writeFileSync(join(out, kind + "-model.json"), JSON.stringify(model, null, 2));
+    const measured = measureHeadroom(report);
+    for (const edge of ["left","right","top","bottom"]) headroom.ink[edge] = Math.min(headroom.ink[edge],measured.ink[edge]);
+    headroom.layoutOverhang = Math.max(headroom.layoutOverhang,measured.layoutOverhang);
     let oversized;
     try {
       oversized = checkPrintedLayout(report, model); checks += 7;
@@ -566,9 +625,11 @@ try {
   if (options.probes || process.argv.includes("--probes")) {
     const probes = [
       {rule:"a", kind:lists ? "prop-empty" : "empty", css:"main > section > h1 { break-after:auto; } main > section > h1 + p { break-before:page; }"},
-      ...(lists ? [{rule:"b", kind:"script-long", css:"tr { break-inside:auto; }"},
+      ...(lists ? [{rule:"b", kind:"prop-rich", splitRow:true, css:"tr { break-inside:auto; }"},
         {rule:"c", kind:"gear-long", css:"thead { display:table-row-group; }"}] : []),
       {rule:"d", kind:lists ? "prop-rich" : "rich", css:"main { transform:translateX(-60pt); }"},
+      {rule:"d", part:"d-layout", kind:lists ? "prop-rich" : "rich", css:`@page { @bottom-right { content:"${"W".repeat(200)}"; } }`},
+      {rule:"d", part:"d-ink", kind:lists ? "prop-rich" : "rich", css:'@page { @bottom-right { content:"X"; vertical-align:bottom; } }'},
       {rule:"e", kind:lists ? "prop-rich" : "rich", remove:true},
       {rule:"e", kind:lists ? "prop-rich" : "rich", missingGlyph:true},
       {rule:"f", kind:lists ? "prop-rich" : "rich", css:'@page { @bottom-right { content:"Page 9 of 9"; } }'},
@@ -577,7 +638,12 @@ try {
     ];
     for (const [index, probe] of probes.entries()) {
       await load(probe.kind);
+      if (probe.splitRow) await evaluate(`(() => {
+        document.querySelector('main').innerHTML = '<section><p style="height:400pt;margin:0">Row split spacer</p><table><thead><tr><th>Probe header</th></tr></thead><tbody><tr><td><div class="print-text">' + Array.from({length:30},(_,i)=>'Probe line '+i).join('<br>') + '</div></td></tr></tbody></table></section>';
+        return true;
+      })()`);
       const model = await captureModel();
+      model.fixture = `probe-${probe.rule}/${probe.kind}`;
       if (probe.css) await evaluate(`(() => {const style=document.createElement('style');style.textContent=${JSON.stringify(probe.css)};document.head.append(style);return true;})()`);
       if (probe.remove) await evaluate("document.querySelector('h1').textContent = 'Missing fixture title'");
       if (probe.missingGlyph) await evaluate("document.querySelector('h1').append(String.fromCodePoint(0x10ffff))");
@@ -587,20 +653,23 @@ try {
       writeFileSync(join(out, `probe-${probe.rule}-${index}.pdf`), bytes);
       let failure;
       assert.throws(() => {
-        try { checkPrintedLayout(report, model, probe.rule); }
+        try { checkPrintedLayout(report, model, probe.part || probe.rule); }
         catch (error) { failure = error.message.replace(/\s+/g, " ").slice(0, 300); throw error; }
-      }, {message:new RegExp(`^${probe.rule === "b" ? "No split rows:" : probe.rule + ":"}`)}, `Probe ${probe.rule} must fail its own rule`);
+      }, {message:new RegExp(`^${probe.rule === "b" ? "No split rows:" : probe.rule + ":"}${probe.part ? " " + probe.part.split("-")[1] : ""}`)}, `Probe ${probe.part || probe.rule} must fail its own rule`);
       await load(probe.kind);
       const restored = await send("Page.printToPDF", {preferCSSPageSize:true, printBackground:true, generateTaggedPDF:true});
-      checkPrintedLayout(readPrintedPages(Buffer.from(restored.data, "base64")), await captureModel());
-      records.push(`probe ${probe.rule}: ${probe.kind}; ${probe.css || (probe.remove ? "remove title text" : "insert unsupported glyph")}; ${failure}; restored fixture passed`);
+      const restoredModel = await captureModel();
+      restoredModel.fixture = `restored/${probe.kind}`;
+      checkPrintedLayout(readPrintedPages(Buffer.from(restored.data, "base64")), restoredModel);
+      records.push(`probe ${probe.part || probe.rule}: ${probe.kind}; ${probe.css || (probe.remove ? "remove title text" : "insert unsupported glyph")}; ${failure}; restored fixture passed`);
       checks++;
     }
   }
   writeFileSync(join(out, "summary.txt"), records.join("\n") + `\n${checks}/${checks} checks passed\n`);
   log(records.join("\n"));
   log(`${checks}/${checks} checks passed`);
-  return {checks, fixtures:cases.length, records};
+  log("Printed PDF headroom: " + JSON.stringify(headroom));
+  return {checks, fixtures:cases.length, records, headroom};
 } finally {
   ws?.close();
   for (const request of pending.values()) clearTimeout(request.timer);

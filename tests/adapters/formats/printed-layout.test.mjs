@@ -25,8 +25,8 @@ test("printed PDF pages obey the layout rules and reject each deliberate break",
   remainingEmptyLists = 2;
   const lists = await inspectPrintedFixtures({out:join(out, "lists"), lists:true, probes:true});
   assert.equal(script.fixtures + lists.fixtures, 18);
-  assert.equal(script.checks + lists.checks, 265);
-  assert.equal(lists.records.filter((record) => record.startsWith("probe ")).length, 9);
+  assert.equal(script.checks + lists.checks, 267);
+  assert.equal(lists.records.filter((record) => record.startsWith("probe ")).length, 11);
   assert.equal(emptyLists, 4);
   rmSync(out, {recursive:true, force:true});
 });
