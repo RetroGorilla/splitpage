@@ -611,7 +611,7 @@ Follow AQ-24 steps 1 to 4 with rundown in place of prompter.
 Structure section: "no responsibility moves; types only". Name every file outside rundown.ts that changed and why.
 ```
 
-## AQ-27 [ ] Hold the rundown's state in one object (after AQ-26 merges)
+## AQ-27 [x] Hold the rundown's state in one object (after AQ-26 merges)
 
 Needs: AQ-26. Files: src/features/rundown/rundown.ts only.
 

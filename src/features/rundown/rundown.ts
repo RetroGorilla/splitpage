@@ -420,26 +420,69 @@ function gapX(knots: readonly number[], g: number): number {
   return g === 0 ? knots[0] as number : (knots[g] as number) - BLOCK_GAP_PX / 2;
 }
 
-let extraSeconds = 0;
-let currentRowId: string | null = null;
-let lastBlocksHtml = "";
-let lastRulerHtml = "";
-let lastLayout: LayoutView = { pxPerSecond: 0, spanSeconds: 0, totalSeconds: 0, width: 0, x: function () { return 0; } };
-let lastKnotsKey = "";
+interface RundownState {
+  extraSeconds: number;
+  currentRowId: string | null;
+  lastBlocksHtml: string;
+  lastRulerHtml: string;
+  lastLayout: LayoutView;
+  lastKnotsKey: string;
+  minimized: boolean;
+  readonly base: StripBase;
+  snippetOf: ((html: string | null | undefined) => string) | null;
+  lengthAt: LengthAt;
+  readonly lens: LensState;
+  noHover: boolean;
+  readonly drop: DropState;
+}
+
+function freshState(): RundownState {
+  return {
+    extraSeconds: 0,
+    currentRowId: null,
+    lastBlocksHtml: "",
+    lastRulerHtml: "",
+    lastLayout: { pxPerSecond: 0, spanSeconds: 0, totalSeconds: 0, width: 0, x: function () { return 0; } },
+    lastKnotsKey: "",
+    minimized: false,
+    base: { blocks: [], X: null, n: 0, W: 0, pps: 0, els: [], lefts: [], widths: [], keep: [], shot: [], current: -1 },
+    snippetOf: null,
+    lengthAt: { left: null, width: 0, fit: -1 },
+    lens: {
+      on: false,
+      src: null,
+      p: 0,
+      a: 0,
+      x: null,
+      t: 0,
+      Z: null,
+      raf: 0,
+      last: 0,
+      hold: false,
+      holdAt: -1,
+      holdTimer: 0,
+      easeAt: -1,
+      easeNext: false
+    },
+    noHover: false,
+    drop: { x: null, gap: -1 }
+  };
+}
+
+const state = freshState();
+
 const paintListeners: PaintListener[] = [];
-let minimized = false;
-const base: StripBase = { blocks: [], X: null, n: 0, W: 0, pps: 0, els: [], lefts: [], widths: [], keep: [], shot: [], current: -1 };
 
 export function setRundownExtraSeconds(seconds: number | null | undefined): void {
   const next = Math.max(0, Number(seconds) || 0);
-  if (next === extraSeconds) return;
-  extraSeconds = next;
+  if (next === state.extraSeconds) return;
+  state.extraSeconds = next;
   renderRundown();
 }
 
 function rundownX(seconds: number): number {
-  const px = lastLayout.x(seconds || 0);
-  if (lens.Z && base.X && lens.Z.length === base.X.length) return tenth(knotMap(base.X, lens.Z, px));
+  const px = state.lastLayout.x(seconds || 0);
+  if (state.lens.Z && state.base.X && state.lens.Z.length === state.base.X.length) return tenth(knotMap(state.base.X, state.lens.Z, px));
   return tenth(px);
 }
 
@@ -454,26 +497,24 @@ export function onRundownPaint(fn: PaintListener): () => void {
 
 export function rundownLayout(): LayoutView {
   return {
-    pxPerSecond: lastLayout.pxPerSecond,
-    spanSeconds: lastLayout.spanSeconds,
-    totalSeconds: lastLayout.totalSeconds,
-    width: lastLayout.width,
-    x: lastLayout.x
+    pxPerSecond: state.lastLayout.pxPerSecond,
+    spanSeconds: state.lastLayout.spanSeconds,
+    totalSeconds: state.lastLayout.totalSeconds,
+    width: state.lastLayout.width,
+    x: state.lastLayout.x
   };
 }
 
 const CHECK_SVG = '<svg class="rd-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
-let snippetOf: ((html: string | null | undefined) => string) | null = null;
-
 function sceneSnippet(row: SceneRow): string {
-  if (!snippetOf) {
-    snippetOf = contentMemo(function (html) {
+  if (!state.snippetOf) {
+    state.snippetOf = contentMemo(function (html) {
       const text = toPlainText(ports.text.cellOf(html)).replace(/\s+/g, " ").trim();
       return unitSafePrefix(text, 90);
     }, ports.text.cacheSeal);
   }
-  return snippetOf(row.audioText || "") || snippetOf(row.visualText || "");
+  return state.snippetOf(row.audioText || "") || state.snippetOf(row.visualText || "");
 }
 
 function brollTicksHtml(row: SceneRow): string {
@@ -505,11 +546,9 @@ function blockHtml(row: SceneRow, b: RundownBlock, isCurrent: boolean, focusable
     '</button>';
 }
 
-let lengthAt: LengthAt = { left: null, width: 0, fit: -1 };
-
 function placeLength(strip: HTMLElement, total: number, trackWidth: number): number {
   const el = strip.querySelector<HTMLElement>(".rd-length");
-  lengthAt = { left: null, width: 0, fit: -1 };
+  state.lengthAt = { left: null, width: 0, fit: -1 };
   if (!el) return trackWidth;
   const all = el.offsetWidth;
   if (!all) return trackWidth;
@@ -519,25 +558,25 @@ function placeLength(strip: HTMLElement, total: number, trackWidth: number): num
   const sw = slotEl && slotEl.textContent ? slotEl.offsetWidth : 0;
   const pad = all - tw - (el.classList.contains("is-short") ? 0 : sw);
   const widths = sw ? [pad + tw + sw, pad + tw] : [pad + tw];
-  const p = rundownLengthPlace(total, extraSeconds, trackWidth, widths);
+  const p = rundownLengthPlace(total, state.extraSeconds, trackWidth, widths);
   el.classList.toggle("is-short", p.fit === 1);
   el.classList.toggle("is-none", p.fit === -1);
   el.classList.remove("is-covered");
   if (p.left !== null) el.style.left = p.left + "px";
   strip.classList.toggle("has-length-delta", p.fit === 0 && sw > 0);
-  lengthAt = { left: p.left, width: p.fit === -1 ? 0 : widths[p.fit] as number, fit: p.fit, pinned: p.pinned };
+  state.lengthAt = { left: p.left, width: p.fit === -1 ? 0 : widths[p.fit] as number, fit: p.fit, pinned: p.pinned };
   return p.width;
 }
 
 function lengthCovered(Z: readonly number[] | null): void {
-  if (lengthAt.left === null || lengthAt.pinned) return;
+  if (state.lengthAt.left === null || state.lengthAt.pinned) return;
   const strip = stripEl();
   const el = strip && strip.querySelector(".rd-length");
-  if (el) el.classList.toggle("is-covered", !!Z && (Z[base.n] as number) + 1 > lengthAt.left);
+  if (el) el.classList.toggle("is-covered", !!Z && (Z[state.base.n] as number) + 1 > state.lengthAt.left);
 }
 
 function overLength(x: number): boolean {
-  return lengthAt.left !== null && x >= lengthAt.left - 2 && x <= lengthAt.left + lengthAt.width + 2;
+  return state.lengthAt.left !== null && x >= state.lengthAt.left - 2 && x <= state.lengthAt.left + state.lengthAt.width + 2;
 }
 
 function segmentHtml(row: SceneRow, b: RundownBlock, isCurrent: boolean): string {
@@ -564,26 +603,26 @@ export function renderRundown(): void {
   const scenes = rows.map(function (r) { return { seconds: rowSeconds(r, doc, ports.text.productionReaders), status: r.status }; });
   const total = scenes.reduce(function (n, sc) { return n + sc.seconds; }, 0);
   const width = placeLength(strip, total, trackWidth);
-  const lay = rundownRestLayout(scenes, total, extraSeconds, width, REST_MIN_PX);
+  const lay = rundownRestLayout(scenes, total, state.extraSeconds, width, REST_MIN_PX);
   const span = lay.spanSeconds;
   const s = lay.pxPerSecond;
   const blocks = lay.blocks;
   const right = Math.max(0, tenth(trackWidth - width)) + "px";
   if (blocksEl.style.right !== right) blocksEl.style.right = right;
 
-  const current = currentRowId && rows.some(function (r) { return r.id === currentRowId; }) ? currentRowId : null;
+  const current = state.currentRowId && rows.some(function (r) { return r.id === state.currentRowId; }) ? state.currentRowId : null;
   const tabRow = current || (rows[0] as SceneRow).id;
   let html = "";
   blocks.forEach(function (b, i) {
-    html += minimized
+    html += state.minimized
       ? segmentHtml(rows[i] as SceneRow, b, (rows[i] as SceneRow).id === current)
       : blockHtml(rows[i] as SceneRow, b, (rows[i] as SceneRow).id === current, (rows[i] as SceneRow).id === tabRow);
   });
   let rewritten = false;
-  if (html !== lastBlocksHtml) {
+  if (html !== state.lastBlocksHtml) {
     const hadFocus = blocksEl.contains(document.activeElement) ? (document.activeElement as Element).getAttribute("data-row") : null;
     blocksEl.innerHTML = html;
-    lastBlocksHtml = html;
+    state.lastBlocksHtml = html;
     rewritten = true;
     if (hadFocus) {
       const again = blocksEl.querySelector<HTMLElement>('.rd-block[data-row="' + cssAttr(hadFocus) + '"]');
@@ -591,95 +630,78 @@ export function renderRundown(): void {
     }
   }
 
-  if (!minimized) {
+  if (!state.minimized) {
     const ruler = rundownTicks(span, s, width, lay.x).map(function (t) {
       return '<span class="rd-tick' + (t.major ? ' is-major' : '') + '" style="left:' + t.x + 'px"></span>' +
         (t.label ? '<span class="rd-label" style="left:' + (t.x + 4) + 'px">' + t.label + '</span>' : '');
     }).join("");
-    if (ruler !== lastRulerHtml) {
+    if (ruler !== state.lastRulerHtml) {
       rulerEl.innerHTML = ruler;
-      lastRulerHtml = ruler;
+      state.lastRulerHtml = ruler;
     }
   }
 
   let at = -1;
   for (let j = 0; j < rows.length; j++) if ((rows[j] as SceneRow).id === current) at = j;
 
-  const countChanged = rows.length !== base.n;
-  base.blocks = blocks;
-  base.n = rows.length;
-  base.W = width;
-  base.pps = s;
-  base.X = lay.knots;
-  base.current = at;
+  const countChanged = rows.length !== state.base.n;
+  state.base.blocks = blocks;
+  state.base.n = rows.length;
+  state.base.W = width;
+  state.base.pps = s;
+  state.base.X = lay.knots;
+  state.base.current = at;
   if (rewritten || countChanged) {
-    base.els = minimized ? [] : Array.prototype.slice.call(blocksEl.querySelectorAll(".rd-block"));
-    base.lefts = blocks.map(function (b) { return b.left; });
-    base.widths = blocks.map(function (b) { return b.width; });
-    base.keep = [];
+    state.base.els = state.minimized ? [] : Array.prototype.slice.call(blocksEl.querySelectorAll(".rd-block"));
+    state.base.lefts = blocks.map(function (b) { return b.left; });
+    state.base.widths = blocks.map(function (b) { return b.width; });
+    state.base.keep = [];
   }
-  base.shot = rows.map(function (r) { const st = rowStatus(r.status); return !!st && st.id === "shot"; });
+  state.base.shot = rows.map(function (r) { const st = rowStatus(r.status); return !!st && st.id === "shot"; });
 
   if (playhead) {
     playhead.hidden = at === -1;
     if (at !== -1) playhead.style.left = tenth((blocks[at] as RundownBlock).left - 1) + "px";
   }
 
-  if (minimized) lensReset();
-  else if (lens.Z) lensRepainted(countChanged);
+  if (state.minimized) lensReset();
+  else if (state.lens.Z) lensRepainted(countChanged);
 
-  const knotsKey = base.X.join(",");
-  const moved = s !== lastLayout.pxPerSecond || width !== lastLayout.width || knotsKey !== lastKnotsKey;
-  lastKnotsKey = knotsKey;
-  lastLayout = { pxPerSecond: s, spanSeconds: span, totalSeconds: total, width: width, x: lay.x };
+  const knotsKey = state.base.X.join(",");
+  const moved = s !== state.lastLayout.pxPerSecond || width !== state.lastLayout.width || knotsKey !== state.lastKnotsKey;
+  state.lastKnotsKey = knotsKey;
+  state.lastLayout = { pxPerSecond: s, spanSeconds: span, totalSeconds: total, width: width, x: lay.x };
   if (moved) paintListeners.forEach(function (fn) { try { fn(rundownLayout()); } catch (e) { } });
 }
 
 const DROP_HIT_PX = 20;
-const lens: LensState = {
-  on: false,
-  src: null,
-  p: 0,
-  a: 0,
-  x: null,
-  t: 0,
-  Z: null,
-  raf: 0,
-  last: 0,
-  hold: false,
-  holdAt: -1,
-  holdTimer: 0,
-  easeAt: -1,
-  easeNext: false
-};
-let noHover = false;
 
 const LENS_HOLD_MS = 950;
 export const LENS_HOLD_PX = 240;
 
 function lensOpts(): LensOpts | undefined {
-  return lens.hold ? { minWidth: LENS_HOLD_PX } : undefined;
+  return state.lens.hold ? { minWidth: LENS_HOLD_PX } : undefined;
 }
 
 function holdClear(): void {
-  if (lens.holdTimer) { clearTimeout(lens.holdTimer); lens.holdTimer = 0; }
-  lens.holdAt = -1;
-  if (lens.hold) {
-    lens.hold = false;
+  if (state.lens.holdTimer) { clearTimeout(state.lens.holdTimer); state.lens.holdTimer = 0; }
+  state.lens.holdAt = -1;
+  if (state.lens.hold) {
+    state.lens.hold = false;
     const strip = stripEl();
     if (strip) strip.classList.remove("is-held");
   }
 }
 
 function holdTrack(i: number): void {
-  if (i === lens.holdAt) return;
+  if (i === state.lens.holdAt) return;
   holdClear();
   if (i < 0) return;
-  lens.holdAt = i;
-  lens.holdTimer = setTimeout(function () {
-    lens.holdTimer = 0;
-    if (!lens.on || lens.src !== "pointer" || lens.holdAt !== i) return;
-    lens.hold = true;
+  state.lens.holdAt = i;
+  state.lens.holdTimer = setTimeout(function () {
+    state.lens.holdTimer = 0;
+    if (!state.lens.on || state.lens.src !== "pointer" || state.lens.holdAt !== i) return;
+    state.lens.hold = true;
     const strip = stripEl();
     if (strip) strip.classList.add("is-held");
     lensKick();
@@ -687,10 +709,9 @@ function holdTrack(i: number): void {
 }
 
 function sceneAt(Z: readonly number[], x: number): number {
-  for (let i = 0; i < base.n; i++) if (x >= (Z[i] as number) && x < (Z[i + 1] as number)) return i;
+  for (let i = 0; i < state.base.n; i++) if (x >= (Z[i] as number) && x < (Z[i + 1] as number)) return i;
   return -1;
 }
-const drop: DropState = { x: null, gap: -1 };
 
 function prefersReducedMotion(): boolean {
   try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { return false; }
@@ -700,119 +721,119 @@ function stripEl(): HTMLElement | null { return document.getElementById("rundown
 
 function lensAllowed(): boolean {
   const strip = stripEl();
-  return !minimized && !!strip && !strip.hidden && base.n > 0 && base.W > 0 && !!base.X;
+  return !state.minimized && !!strip && !strip.hidden && state.base.n > 0 && state.base.W > 0 && !!state.base.X;
 }
 
 function slots(): number[] {
-  return base.X as number[];
+  return state.base.X as number[];
 }
 
 function lensTarget(): number[] {
-  return lens.on ? rundownLens(slots(), lens.p, lens.a, lensOpts()) : base.X as number[];
+  return state.lens.on ? rundownLens(slots(), state.lens.p, state.lens.a, lensOpts()) : state.base.X as number[];
 }
 
 function applyKnots(Z: readonly number[]): void {
-  const els = base.els;
-  for (let i = 0; i < base.n && i < els.length; i++) {
+  const els = state.base.els;
+  for (let i = 0; i < state.base.n && i < els.length; i++) {
     const left = tenth(Z[i] as number);
     const width = Math.max(BLOCK_MIN_PX, tenth((Z[i + 1] as number) - (Z[i] as number) - BLOCK_GAP_PX));
-    if (left !== base.lefts[i]) { (els[i] as HTMLElement).style.left = left + "px"; base.lefts[i] = left; }
-    if (width !== base.widths[i]) { (els[i] as HTMLElement).style.width = width + "px"; base.widths[i] = width; }
-    const rest = base.blocks[i];
+    if (left !== state.base.lefts[i]) { (els[i] as HTMLElement).style.left = left + "px"; state.base.lefts[i] = left; }
+    if (width !== state.base.widths[i]) { (els[i] as HTMLElement).style.width = width + "px"; state.base.widths[i] = width; }
+    const rest = state.base.blocks[i];
     if (rest) {
-      const k = rundownKeepLabels(rest, width, base.shot && base.shot[i]);
+      const k = rundownKeepLabels(rest, width, state.base.shot && state.base.shot[i]);
       const key = (k.number ? "n" : "") + (k.length ? "l" : "");
-      if (key !== base.keep[i]) {
+      if (key !== state.base.keep[i]) {
         (els[i] as HTMLElement).classList.toggle("keep-num", k.number);
         (els[i] as HTMLElement).classList.toggle("keep-len", k.length);
-        base.keep[i] = key;
+        state.base.keep[i] = key;
       }
     }
   }
   const strip = stripEl();
   const playhead = strip && strip.querySelector<HTMLElement>(".rundown-playhead");
-  if (playhead && base.current !== -1) {
-    const ph = tenth((Z[base.current] as number) - 1);
+  if (playhead && state.base.current !== -1) {
+    const ph = tenth((Z[state.base.current] as number) - 1);
     playhead.style.left = ph + "px";
-    playhead.hidden = ph < -1 || ph > base.W;
+    playhead.hidden = ph < -1 || ph > state.base.W;
   }
   const blocksEl = strip && strip.querySelector(".rundown-blocks");
   if (blocksEl) {
     blocksEl.classList.toggle("over-l", (Z[0] as number) < -0.5);
-    blocksEl.classList.toggle("over-r", (Z[Z.length - 1] as number) > base.W + 0.5);
+    blocksEl.classList.toggle("over-r", (Z[Z.length - 1] as number) > state.base.W + 0.5);
   }
-  if (drop.x !== null) showDrop(drop.x);
+  if (state.drop.x !== null) showDrop(state.drop.x);
   lengthCovered(Z);
 }
 
 function lensFrame(now: number): void {
-  lens.raf = 0;
-  if (!lens.Z || !base.X || lens.Z.length !== base.X.length) { lensSettle(); return; }
-  const dt = lens.last ? Math.min(64, Math.max(1, now - lens.last)) : 16;
-  lens.last = now;
+  state.lens.raf = 0;
+  if (!state.lens.Z || !state.base.X || state.lens.Z.length !== state.base.X.length) { lensSettle(); return; }
+  const dt = state.lens.last ? Math.min(64, Math.max(1, now - state.lens.last)) : 16;
+  state.lens.last = now;
   let recentring = false;
-  if (lens.on && lens.x !== null && (lens.src === "pointer" || lens.src === "drag")) {
-    const next = rundownLensRecenter(slots(), lens.Z, lens.p, lens.a, lens.x, dt, lensOpts());
-    recentring = Math.abs(next.focus - lens.p) > 0.002 || Math.abs(next.anchor - lens.a) > 0.02;
-    lens.p = next.focus;
-    lens.a = next.anchor;
+  if (state.lens.on && state.lens.x !== null && (state.lens.src === "pointer" || state.lens.src === "drag")) {
+    const next = rundownLensRecenter(slots(), state.lens.Z, state.lens.p, state.lens.a, state.lens.x, dt, lensOpts());
+    recentring = Math.abs(next.focus - state.lens.p) > 0.002 || Math.abs(next.anchor - state.lens.a) > 0.02;
+    state.lens.p = next.focus;
+    state.lens.a = next.anchor;
   }
   const T = lensTarget();
-  if (lens.easeNext) { lens.easeAt = now; lens.easeNext = false; }
+  if (state.lens.easeNext) { state.lens.easeAt = now; state.lens.easeNext = false; }
   let alpha = 1 - Math.exp(-dt / LENS_GLIDE_MS);
   if (prefersReducedMotion()) alpha = 1;
-  else if (lens.easeAt >= 0) {
-    const u = (now - lens.easeAt) / LENS_EASE_MS;
-    if (u >= 1) lens.easeAt = -1;
+  else if (state.lens.easeAt >= 0) {
+    const u = (now - state.lens.easeAt) / LENS_EASE_MS;
+    if (u >= 1) state.lens.easeAt = -1;
     else alpha *= Math.max(LENS_EASE_FLOOR, u * u * (3 - 2 * u));
   }
   let moving = false;
   for (let i = 0; i < T.length; i++) {
-    const d = (T[i] as number) - (lens.Z[i] as number);
-    if (Math.abs(d) > 0.05) { (lens.Z[i] as number) += d * alpha; moving = true; }
-    else lens.Z[i] = T[i] as number;
+    const d = (T[i] as number) - (state.lens.Z[i] as number);
+    if (Math.abs(d) > 0.05) { (state.lens.Z[i] as number) += d * alpha; moving = true; }
+    else state.lens.Z[i] = T[i] as number;
   }
-  applyKnots(lens.Z);
+  applyKnots(state.lens.Z);
   if (!moving && !recentring) {
-    lens.last = 0;
-    if (!lens.on) lensSettle();
+    state.lens.last = 0;
+    if (!state.lens.on) lensSettle();
     return;
   }
-  lens.raf = requestAnimationFrame(lensFrame);
+  state.lens.raf = requestAnimationFrame(lensFrame);
 }
 
 function lensKick(): void {
-  if (!lens.raf) lens.raf = requestAnimationFrame(lensFrame);
+  if (!state.lens.raf) state.lens.raf = requestAnimationFrame(lensFrame);
 }
 
 function lensStart(): void {
-  if (!lens.Z) {
-    lens.Z = (base.X as number[]).slice();
-    lens.last = 0;
-    lens.easeNext = true;
+  if (!state.lens.Z) {
+    state.lens.Z = (state.base.X as number[]).slice();
+    state.lens.last = 0;
+    state.lens.easeNext = true;
   }
   const strip = stripEl();
   if (strip) strip.classList.add("is-lensed");
 }
 
 function lensSettle(): void {
-  if (lens.raf) { cancelAnimationFrame(lens.raf); lens.raf = 0; }
-  const had = !!lens.Z;
-  lens.Z = null;
-  lens.last = 0;
+  if (state.lens.raf) { cancelAnimationFrame(state.lens.raf); state.lens.raf = 0; }
+  const had = !!state.lens.Z;
+  state.lens.Z = null;
+  state.lens.last = 0;
   const strip = stripEl();
   if (!strip) return;
   if (had) {
-    for (let i = 0; i < base.els.length && i < base.blocks.length; i++) {
-      const b = base.blocks[i] as RundownBlock;
-      (base.els[i] as HTMLElement).style.left = b.left + "px";
-      (base.els[i] as HTMLElement).style.width = b.width + "px";
-      base.lefts[i] = b.left;
-      base.widths[i] = b.width;
+    for (let i = 0; i < state.base.els.length && i < state.base.blocks.length; i++) {
+      const b = state.base.blocks[i] as RundownBlock;
+      (state.base.els[i] as HTMLElement).style.left = b.left + "px";
+      (state.base.els[i] as HTMLElement).style.width = b.width + "px";
+      state.base.lefts[i] = b.left;
+      state.base.widths[i] = b.width;
     }
     const playhead = strip.querySelector<HTMLElement>(".rundown-playhead");
-    if (playhead && base.current !== -1 && base.blocks[base.current]) {
-      playhead.style.left = tenth((base.blocks[base.current] as RundownBlock).left - 1) + "px";
+    if (playhead && state.base.current !== -1 && state.base.blocks[state.base.current]) {
+      playhead.style.left = tenth((state.base.blocks[state.base.current] as RundownBlock).left - 1) + "px";
       playhead.hidden = false;
     }
     lengthCovered(null);
@@ -834,77 +855,77 @@ function lensSettle(): void {
 
 function lensReset(): void {
   holdClear();
-  lens.on = false;
-  lens.src = null;
-  lens.x = null;
+  state.lens.on = false;
+  state.lens.src = null;
+  state.lens.x = null;
   lensSettle();
 }
 
 function lensRepainted(countChanged: boolean): void {
   if (!lensAllowed()) { lensReset(); return; }
-  if (countChanged || (lens.Z as number[]).length !== (base.X as number[]).length) {
+  if (countChanged || (state.lens.Z as number[]).length !== (state.base.X as number[]).length) {
     holdClear();
-    lens.Z = (base.X as number[]).slice();
-    if (lens.x !== null) { lens.p = knotMap(lens.Z, slots(), lens.x); lens.a = lens.x; }
-    else if (lens.src === "focus") lensOff();
+    state.lens.Z = (state.base.X as number[]).slice();
+    if (state.lens.x !== null) { state.lens.p = knotMap(state.lens.Z, slots(), state.lens.x); state.lens.a = state.lens.x; }
+    else if (state.lens.src === "focus") lensOff();
   }
-  applyKnots(lens.Z as number[]);
+  applyKnots(state.lens.Z as number[]);
   lensKick();
 }
 
 function lensAt(x: number, src: LensSource, t: number): void {
   if (!lensAllowed()) return;
-  x = clamp(x, 0, base.W);
+  x = clamp(x, 0, state.base.W);
   lensStart();
   const U = slots();
-  if (!lens.on || lens.x === null || (lens.src !== src && lens.src !== "focus")) {
-    lens.p = knotMap(lens.Z as number[], U, x);
-    lens.a = x;
-  } else if (x !== lens.x) {
-    const next = rundownLensFollow(U, base.X as number[], lens.Z as number[], lens.p, lens.a, x, x - lens.x, t - lens.t, lensOpts());
-    lens.p = next.focus;
-    lens.a = next.anchor;
+  if (!state.lens.on || state.lens.x === null || (state.lens.src !== src && state.lens.src !== "focus")) {
+    state.lens.p = knotMap(state.lens.Z as number[], U, x);
+    state.lens.a = x;
+  } else if (x !== state.lens.x) {
+    const next = rundownLensFollow(U, state.base.X as number[], state.lens.Z as number[], state.lens.p, state.lens.a, x, x - state.lens.x, t - state.lens.t, lensOpts());
+    state.lens.p = next.focus;
+    state.lens.a = next.anchor;
   }
-  lens.on = true;
-  lens.src = src;
-  lens.x = x;
-  lens.t = t;
-  if (src === "pointer") holdTrack(sceneAt(lens.Z as number[], x)); else holdClear();
+  state.lens.on = true;
+  state.lens.src = src;
+  state.lens.x = x;
+  state.lens.t = t;
+  if (src === "pointer") holdTrack(sceneAt(state.lens.Z as number[], x)); else holdClear();
   lensKick();
 }
 
 function lensFocus(i: number): void {
-  if (!lensAllowed() || noHover || i < 0 || i >= base.n) return;
-  if (lens.on && (lens.src === "pointer" || lens.src === "drag")) return;
+  if (!lensAllowed() || state.noHover || i < 0 || i >= state.base.n) return;
+  if (state.lens.on && (state.lens.src === "pointer" || state.lens.src === "drag")) return;
   lensStart();
   const U = slots();
-  lens.on = true;
-  lens.src = "focus";
-  lens.x = null;
-  lens.p = ((U[i] as number) + (U[i + 1] as number)) / 2;
-  lens.a = clamp((((lens.Z as number[])[i] as number) + ((lens.Z as number[])[i + 1] as number)) / 2, 0, base.W);
+  state.lens.on = true;
+  state.lens.src = "focus";
+  state.lens.x = null;
+  state.lens.p = ((U[i] as number) + (U[i + 1] as number)) / 2;
+  state.lens.a = clamp((((state.lens.Z as number[])[i] as number) + ((state.lens.Z as number[])[i + 1] as number)) / 2, 0, state.base.W);
   lensKick();
 }
 
 function lensOff(src?: LensSource): void {
-  if (src && lens.src !== src) return;
+  if (src && state.lens.src !== src) return;
   holdClear();
-  lens.on = false;
-  lens.src = null;
-  lens.x = null;
-  if (lens.Z) { lens.easeNext = true; lensKick(); }
+  state.lens.on = false;
+  state.lens.src = null;
+  state.lens.x = null;
+  if (state.lens.Z) { state.lens.easeNext = true; lensKick(); }
 }
 
 function updateRundownMinControls(): void {
   const item = document.getElementById("menu-rundown-min");
-  if (item) item.setAttribute("aria-checked", minimized ? "true" : "false");
+  if (item) item.setAttribute("aria-checked", state.minimized ? "true" : "false");
   const strip = stripEl();
   if (!strip) return;
-  strip.classList.toggle("is-min", minimized);
+  strip.classList.toggle("is-min", state.minimized);
   const toggle = strip.querySelector<HTMLElement>(".rundown-toggle");
   if (toggle) {
-    toggle.setAttribute("aria-expanded", minimized ? "false" : "true");
-    const words = minimized ? "Show the rundown" : "Minimise the rundown";
+    toggle.setAttribute("aria-expanded", state.minimized ? "false" : "true");
+    const words = state.minimized ? "Show the rundown" : "Minimise the rundown";
     toggle.setAttribute("aria-label", words);
     toggle.title = words;
   }
@@ -913,18 +934,18 @@ function updateRundownMinControls(): void {
 function setRundownMinimized(on: boolean, persist?: boolean): void {
   on = !!on;
   if (persist !== false) ports.minimized.setRundownMin(on);
-  if (on === minimized) { updateRundownMinControls(); return; }
-  minimized = on;
+  if (on === state.minimized) { updateRundownMinControls(); return; }
+  state.minimized = on;
   lensReset();
   hideDrop();
   updateRundownMinControls();
   renderRundown();
 }
 
-export function isRundownMinimized(): boolean { return minimized; }
+export function isRundownMinimized(): boolean { return state.minimized; }
 
 export function toggleRundownMinimized(): void {
-  setRundownMinimized(!minimized);
+  setRundownMinimized(!state.minimized);
 }
 
 function dragIndex(): number {
@@ -933,7 +954,7 @@ function dragIndex(): number {
 }
 
 function dropAllowed(): boolean {
-  return !!ports.rowDrag.dragging() && !minimized && base.n > 0 && !!base.X && !!ports.document.current();
+  return !!ports.rowDrag.dragging() && !state.minimized && state.base.n > 0 && !!state.base.X && !!ports.document.current();
 }
 
 function ensureDropEls(track: Element): DropEls {
@@ -960,11 +981,11 @@ function showDrop(x: number): void {
   const strip = stripEl();
   const track = strip && strip.querySelector(".rundown-track");
   if (!track || !dropAllowed()) { hideDrop(); return; }
-  drop.x = x;
-  const K = lens.Z && lens.Z.length === (base.X as number[]).length ? lens.Z : base.X as number[];
+  state.drop.x = x;
+  const K = state.lens.Z && state.lens.Z.length === (state.base.X as number[]).length ? state.lens.Z : state.base.X as number[];
   let g = rundownDropGap(K, x, dragIndex(), DROP_HIT_PX);
-  if (g !== -1 && (gapX(K, g) < -0.5 || gapX(K, g) > base.W + 0.5)) g = -1;
-  drop.gap = g;
+  if (g !== -1 && (gapX(K, g) < -0.5 || gapX(K, g) > state.base.W + 0.5)) g = -1;
+  state.drop.gap = g;
   const els = ensureDropEls(track);
   if (g === -1) {
     els.marker.hidden = true;
@@ -978,12 +999,12 @@ function showDrop(x: number): void {
   if (els.label.textContent !== words) els.label.textContent = words;
   els.label.hidden = false;
   const half = (els.label.offsetWidth || 0) / 2;
-  els.label.style.left = tenth(clamp(gx, half, Math.max(half, base.W - half))) + "px";
+  els.label.style.left = tenth(clamp(gx, half, Math.max(half, state.base.W - half))) + "px";
 }
 
 function hideDrop(): void {
-  drop.x = null;
-  drop.gap = -1;
+  state.drop.x = null;
+  state.drop.gap = -1;
   const strip = stripEl();
   if (!strip) return;
   const marker = strip.querySelector<HTMLElement>(".rundown-drop");
@@ -993,7 +1014,7 @@ function hideDrop(): void {
 }
 
 function endDragOver(): void {
-  if (drop.x !== null) hideDrop();
+  if (state.drop.x !== null) hideDrop();
   lensOff("drag");
 }
 
@@ -1042,7 +1063,7 @@ function onStripDrop(e: DragEvent): void {
   e.preventDefault();
   const allowed = dropAllowed();
   if (allowed) showDrop(trackX(e));
-  const g = allowed ? drop.gap : -1;
+  const g = allowed ? state.drop.gap : -1;
   ports.rowDrag.end();
   hideDrop();
   lensOff();
@@ -1066,8 +1087,8 @@ export function goToScene(rowId: string | null): void {
 function noteCurrentRow(el: Element | null): void {
   const rowEl = el && el.closest ? el.closest("#rows .row") : null;
   const id = rowEl ? rowEl.getAttribute("data-id") : null;
-  if (!id || id === currentRowId) return;
-  currentRowId = id;
+  if (!id || id === state.currentRowId) return;
+  state.currentRowId = id;
   renderRundown();
 }
 
@@ -1085,11 +1106,11 @@ function ensureToggle(strip: HTMLElement): HTMLButtonElement {
 
 function lensDebug(): LensDebug {
   return {
-    on: lens.on, src: lens.src, p: lens.p, a: lens.a, hold: lens.hold, holdAt: lens.holdAt,
-    Z: lens.Z ? lens.Z.slice() : null, X: base.X ? base.X.slice() : null,
-    starts: base.blocks.map(function (b) { return b.start; }),
-    dropGap: drop.gap, minimized: minimized,
-    W: base.W, length: { left: lengthAt.left, width: lengthAt.width, fit: lengthAt.fit, pinned: !!lengthAt.pinned }
+    on: state.lens.on, src: state.lens.src, p: state.lens.p, a: state.lens.a, hold: state.lens.hold, holdAt: state.lens.holdAt,
+    Z: state.lens.Z ? state.lens.Z.slice() : null, X: state.base.X ? state.base.X.slice() : null,
+    starts: state.base.blocks.map(function (b) { return b.start; }),
+    dropGap: state.drop.gap, minimized: state.minimized,
+    W: state.base.W, length: { left: state.lengthAt.left, width: state.lengthAt.width, fit: state.lengthAt.fit, pinned: !!state.lengthAt.pinned }
   };
 }
 
@@ -1104,7 +1125,7 @@ export function startRundown(given: RundownPorts): RundownOwner {
     disposed = true;
     while (offs.length) (offs.pop() as () => void)();
     holdClear();
-    if (lens.raf) { cancelAnimationFrame(lens.raf); lens.raf = 0; }
+    if (state.lens.raf) { cancelAnimationFrame(state.lens.raf); state.lens.raf = 0; }
     (ports as unknown) = null;
   } };
   if (!strip) return owner;
@@ -1112,8 +1133,8 @@ export function startRundown(given: RundownPorts): RundownOwner {
     target.addEventListener(type, fn as EventListener);
     offs.push(function () { target.removeEventListener(type, fn as EventListener); });
   }
-  try { noHover = !!(window.matchMedia && window.matchMedia("(hover: none)").matches); } catch (e) {}
-  minimized = ports.minimized.rundownMin();
+  try { state.noHover = !!(window.matchMedia && window.matchMedia("(hover: none)").matches); } catch (e) {}
+  state.minimized = ports.minimized.rundownMin();
   const toggle = ensureToggle(strip);
   updateRundownMinControls();
   listen(toggle, "click", function () { ports.actions.invoke("toggle-rundown-min", "button"); });
@@ -1172,7 +1193,7 @@ export function startRundown(given: RundownPorts): RundownOwner {
   listen(strip, "dragover", onStripDragOver);
   listen(strip, "drop", onStripDrop);
   listen(document, "dragover", function (e) {
-    if (drop.x === null && lens.src !== "drag") return;
+    if (state.drop.x === null && state.lens.src !== "drag") return;
     if (e.target && (e.target as Element).closest && (e.target as Element).closest("#rundown")) return;
     endDragOver();
   });
