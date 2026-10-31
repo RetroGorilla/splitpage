@@ -72,6 +72,14 @@ older commit copies `tools/perf-record.mjs` into a checkout of it and builds
 there. [performance-record.md](performance-record.md) is the 4.0 starting
 point; compare a later run only under the same conditions.
 
+The long fixture ends with three redraw scenes, timed the way typing is (start of
+the input to the frame after it) with one click per sample and 500 ms between
+samples: `long stamp a scene` (cycles the status of scenes 3 to 8 twice, which
+stamps each row), `long hide shot scenes` (toggles Hide shot scenes eight times)
+and `long display preference` (switches the clock between 24 and 12 hours eight
+times, from the open Settings dialog). Their budget is the new-scene limit of
+65 ms. They run after the export timing, so the older cases are unchanged.
+
 Every `run-tests.ps1` run ends by writing `digest.txt` beside the suite logs
 and printing its path as the last line. Read the digest before any log: it has
 the overall result, then for each failing suite the failing checks with 5 lines

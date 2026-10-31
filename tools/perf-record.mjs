@@ -14,7 +14,12 @@ const PICTURES = 10;
 const PICTURE_BYTES = 1024 * 1024;
 const IMAGE_TRIALS = 3;
 const FIXTURES = ["short", "long", "images"];
-const EXPECTED_PERF = { short: 6, long: 6, images: 1 };
+const EXPECTED_PERF = { short: 6, long: 9, images: 1 };
+const SETTLE_MS = 500;
+const STAMP_ROWS = [3, 4, 5, 6, 7, 8];
+const STAMP_PASSES = 2;
+const HIDE_TOGGLES = 8;
+const PREFERENCE_CHANGES = 8;
 const MERGE_WAIT_MS = 25000;
 const DEFAULT_PORT_BASE = 18990;
 const CDP_PORT_OFFSET = 1000;
@@ -59,6 +64,64 @@ const ENVIRONMENT = `(function () {
   return 'PERF ' + JSON.stringify({ label: 'environment', userAgent: navigator.userAgent, viewport: innerWidth + 'x' + innerHeight,
     devicePixelRatio: devicePixelRatio, cellFont: family, firstFont: first, firstFontRendered: rendered,
     scenes: document.querySelectorAll('#rows .row').length });
+})()`;
+
+export const SCENES = `(function () {
+  if (window.__perfScene) return 'ready';
+  var perf = window.__perf, F = window.__splitpageFormats;
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var need = function (ok, what) { if (!ok) throw new Error('perf scenes: ' + what); };
+  var measure = async function (selector) {
+    var el = document.querySelector(selector);
+    need(el, 'no element for ' + selector);
+    var t0 = performance.now();
+    el.click();
+    await new Promise(function (r) { requestAnimationFrame(function () { setTimeout(function () { perf.lat.push(performance.now() - t0); r(); }, 0); }); });
+    await wait(${SETTLE_MS});
+  };
+  var strips = function () { return document.querySelectorAll('#rows .hidden-shot-strip').length; };
+  window.__perfScene = {
+    stamp: async function () {
+      var rows = ${JSON.stringify(STAMP_ROWS)};
+      var next = { todo: 'ready', ready: 'shot', shot: 'todo' };
+      var find = function (id) { return F.state().rows.filter(function (r) { return r.id === id; })[0]; };
+      perf.reset();
+      for (var pass = 0; pass < ${STAMP_PASSES}; pass++) {
+        for (var i = 0; i < rows.length; i++) {
+          var selector = '#rows .row:nth-child(' + rows[i] + ') [data-action="cycle-status"]';
+          var button = document.querySelector(selector);
+          need(button, 'no element for ' + selector);
+          var id = button.getAttribute('data-id');
+          var before = find(id);
+          need(before, 'no scene ' + id);
+          before = { status: before.status, updatedAt: before.updatedAt };
+          await measure(selector);
+          var after = find(id);
+          need(after && after.status === next[before.status] && after.updatedAt !== before.updatedAt, 'scene ' + id + ' was not stamped');
+        }
+      }
+      return perf.take('long stamp a scene');
+    },
+    hide: async function () {
+      perf.reset();
+      need(strips() === 0, 'shot scenes were already hidden');
+      for (var i = 0; i < ${HIDE_TOGGLES}; i++) {
+        await measure('#file-menu [data-file-action="toggle-hide-shot"]');
+        need((strips() > 0) === (i % 2 === 0), 'toggle ' + i + ' left ' + strips() + ' strips');
+      }
+      return perf.take('long hide shot scenes');
+    },
+    preference: async function () {
+      perf.reset();
+      for (var i = 0; i < ${PREFERENCE_CHANGES}; i++) {
+        var value = i % 2 === 0 ? '24' : '12';
+        await measure('#settings-modal input[name="settings-clock"][value="' + value + '"]');
+        need(localStorage.getItem('splitpage-clock') === value, 'the clock did not change to ' + value);
+      }
+      return perf.take('long display preference');
+    }
+  };
+  return 'ready';
 })()`;
 
 const EXPORTS = `(function () {
@@ -250,6 +313,18 @@ function bulk(fixture) {
   ];
 }
 
+function redraws() {
+  return [
+    `eval ${oneLine(SCENES)}`,
+    "eval window.__perfScene.stamp()",
+    "eval window.__perfScene.hide()",
+    "eval window.__settingsTest.open()",
+    "wait window.__settingsTest.isOpen()",
+    "eval window.__perfScene.preference()",
+    "key Escape"
+  ];
+}
+
 function imageSuite() {
   const inject = ["goto /index.html", "sleep 2500", `eval ${oneLine(IMAGES)}`];
   const lines = ["open", "viewport 1400 900", "sleep 2000", `eval ${oneLine(IMAGES)}`, "eval window.__perfImg.quiet()", `eval ${oneLine(ENVIRONMENT)}`];
@@ -274,6 +349,7 @@ export function suiteText(fixture) {
     : ["open", "viewport 1400 900"];
   lines.push(`eval ${oneLine(PROBE)}`, "sleep 2000", `eval ${oneLine(ENVIRONMENT)}`);
   lines.push(...typing(fixture), ...rowEdits(fixture), ...bulk(fixture), `eval ${oneLine(EXPORTS).replace("'export'", `'${fixture} export'`)}`);
+  if (fixture === "long") lines.push(...redraws());
   return lines.join("\n") + "\n";
 }
 
@@ -374,6 +450,7 @@ export function report(results, env, when) {
     ...(env.busy ? [`- Machine load: ${env.busy.before}% of the CPU busy in the second before the run and ${env.busy.after}% in the second after it`] : []),
     `- Fixtures: ${fixtureLines.join("; ")}`,
     ...(rows.length ? [`- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms, into scene 2's audio cell; latency is key-down to the frame after it`] : []),
+    ...(rows.some((r) => r.label.endsWith("display preference")) ? [`- Redraw scenes (long script): one click per sample, measured from the click to the frame after it, ${SETTLE_MS} ms apart; stamp cycles the status of scenes ${STAMP_ROWS.join(", ")} twice, hide toggles Hide shot scenes ${HIDE_TOGGLES} times, display preference switches the clock between 24 and 12 hours ${PREFERENCE_CHANGES} times`] : []),
     "",
     ...(rows.length ? [
       "## Input latency (ms)",
