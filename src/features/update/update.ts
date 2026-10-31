@@ -1,5 +1,6 @@
 import type { UpdateFeaturePorts, UpdateMount, UpdateStatus } from "./ports.ts";
 import { addListener } from "../common/listeners.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 type UpdateProbe = { applyStatus: (status: UpdateStatus | null) => void; pushStatus: typeof applyUpdateStatus; bar: () => { hidden: boolean | "until-found"; text: string; buttonHidden: boolean | "until-found"; buttonLabel: string | null }; clickAction: () => boolean; dismiss: () => void; dismissed: () => boolean };
 
@@ -365,7 +366,8 @@ function readEmbeddedVersion() {
 export function mountUpdate(nextPorts: UpdateFeaturePorts): UpdateMount {
   if (activeMount) activeMount.dispose();
   ports = nextPorts;
-  (window as Window & { __updateTest?: UpdateProbe }).__updateTest = {
+  let withdrawHook: (() => void) | null = null;
+  exposeTestHook("__updateTest", (): UpdateProbe => ({
     applyStatus: function (status: UpdateStatus | null) {
       updateDismissed = false;
       updateBusy = false;
@@ -391,8 +393,7 @@ export function mountUpdate(nextPorts: UpdateFeaturePorts): UpdateMount {
     },
     dismiss: dismissUpdateNotice,
     dismissed: function () { return updateDismissed; }
-  };
-  const probe = (window as Window & { __updateTest?: UpdateProbe }).__updateTest;
+  }), (withdraw) => { withdrawHook = withdraw; });
   let disposed = false;
   const mounted = {
     loadUpdateStatus,
@@ -415,7 +416,7 @@ export function mountUpdate(nextPorts: UpdateFeaturePorts): UpdateMount {
       updateNotice = null;
       updateBusy = false;
       updateDismissed = false;
-      if ((window as Window & { __updateTest?: UpdateProbe }).__updateTest === probe) delete (window as Window & { __updateTest?: UpdateProbe }).__updateTest;
+      withdrawHook?.();
       activeMount = null;
       ports = null as unknown as UpdateFeaturePorts;
     }

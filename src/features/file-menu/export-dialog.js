@@ -4,6 +4,7 @@ import { tagCategory } from "../../core/production/looks.ts";
 import { escapeHtml, unitSafePrefix } from "../../core/document/text-policy.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 var ports = null;
 
@@ -623,14 +624,14 @@ export function startExportDialog(given) {
       closeExportDialog();
       var host = el("export-formats");
       if (host) host.removeAttribute("data-built");
-      if (window.__exportTest === testApi) delete window.__exportTest;
+      if (withdrawHook) withdrawHook();
       chosenFormat = null;
       chosenChoice = {};
       returnFocusTo = null;
       ports = null;
     }
   };
-  var testApi;
+  var withdrawHook = null;
   var modal = el("export-modal");
   if (!modal) return controls;
   life.listen(modal, "change", function (e) {
@@ -663,13 +664,15 @@ export function startExportDialog(given) {
     refreshExportDialog();
   }));
 
-  testApi = window.__exportTest = {
-    formats: exportFormatList,
-    name: exportActionName,
-    last: lastExportAction,
-    reason: exportActionReason,
-    fileName: exportFileNameFor,
-    chosen: chosenAction
-  };
+  exposeTestHook("__exportTest", function () {
+    return {
+      formats: exportFormatList,
+      name: exportActionName,
+      last: lastExportAction,
+      reason: exportActionReason,
+      fileName: exportFileNameFor,
+      chosen: chosenAction
+    };
+  }, function (withdraw) { withdrawHook = withdraw; });
   return controls;
 }
