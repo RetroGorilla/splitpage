@@ -188,6 +188,8 @@ function hideFileConflictView() {
 }
 
 async function exportAs(kind, more) {
+  var printing = running().pdfPrint.export(kind, more, function () { return active; });
+  if (printing) return printing;
   var base = exportBaseName();
   var built;
   try {
