@@ -15,13 +15,35 @@ splitting a scene inherits membership from its position. Moving a header moves
 every scene in its group. Removing it joins its scenes to the preceding group,
 or makes them unsectioned at the top.
 
-Three-way merge combines records by stable ID. A one-sided property change
-wins; conflicting edits to the same property retain the incoming value.
-Deletion beats an unchanged record, while an edited record survives deletion.
-An anchor deleted in the merged scene set advances within its original group.
-A one-sided reorder survives; competing reorders retain incoming order. These
-order rules apply only to documents with sections. Undo uses the existing
-document-field and row-order steps; one command is one entry.
+## Merge invariant
+
+A section keeps its stable identity across scene replacement and movement;
+merge orders those identities separately from their scenes, and anchors each
+nonempty identity to its first resulting scene. Every scene retained by the
+existing row-content merge occurs exactly once in that layout.
+
+Three-way merge first reconciles section existence and names by stable ID.
+A one-sided change wins; competing names retain the incoming value. Deletion
+beats an unchanged record, while a renamed or reanchored record survives
+concurrent header removal. An empty resulting group has no header.
+
+Section order is compared by section IDs, even when none of a group's original
+scenes survives. Scene membership is compared independently against the base:
+a changed side wins over an unchanged side, and competing assignments retain
+the incoming assignment. Removing a header projects its membership onto the
+nearest surviving predecessor in the base, or the unsectioned prefix. A
+concurrent scene move still applies to that projected membership. If an edited
+header survives a removal that left scene order unchanged, that removal does
+not erase its original membership.
+
+Within each resulting group, a one-sided scene reorder survives; competing
+reorders retain incoming order. New scenes keep their side's neighbouring
+scenes. The internal order of collapsed groups follows base group order, so a
+section move cannot masquerade as a competing scene reorder. A new boundary
+and a concurrent scene reassignment use the same membership conflict rule.
+These layout rules apply only to documents with sections. Sectionless merge
+retains the existing row ordering. Undo uses the existing document-field and
+row-order steps; one command is one entry.
 
 ## Boundary deletion decision
 

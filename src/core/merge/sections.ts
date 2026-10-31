@@ -1,92 +1,111 @@
-import { normalizeSections, sectionGroups, sectionsInOrder } from "../document/sections.ts";
+import { normalizeSections, sectionGroups } from "../document/sections.ts";
 import type { DocumentSection, SectionDocument } from "../document/sections.ts";
 
 function same(a: DocumentSection | undefined, b: DocumentSection | undefined): boolean {
   return a?.name === b?.name && a?.firstSceneId === b?.firstSceneId;
 }
 
-function property(base: string | undefined, mine: string, theirs: string): string {
-  return base !== undefined && theirs === base ? mine : theirs;
-}
-
-function survivingAnchor(section: DocumentSection, side: SectionDocument, surviving: ReadonlySet<string>): string | undefined {
-  if (surviving.has(section.firstSceneId)) return section.firstSceneId;
-  const group = sectionGroups(side).find(item => item.section.id === section.id);
-  return group ? side.rows.slice(group.start, group.end).find(row => surviving.has(row.id))?.id : undefined;
-}
-
-export function mergeSections(
-  base: SectionDocument | null | undefined, mine: SectionDocument, theirs: SectionDocument,
-  rows: SectionDocument["rows"]
-): DocumentSection[] | undefined {
+function identities(base: SectionDocument | null | undefined, mine: SectionDocument, theirs: SectionDocument): Map<string, string> {
   const b = new Map((normalizeSections(base?.sections) ?? []).map(section => [section.id, section]));
   const m = new Map((normalizeSections(mine.sections) ?? []).map(section => [section.id, section]));
   const t = new Map((normalizeSections(theirs.sections) ?? []).map(section => [section.id, section]));
-  const surviving = new Set(rows.map(row => row.id));
-  const merged: DocumentSection[] = [];
+  const merged = new Map<string, string>();
   for (const id of new Set([...t.keys(), ...m.keys()])) {
     const bs = b.get(id), ms = m.get(id), ts = t.get(id);
     if (!ms && bs && same(bs, ts)) continue;
     if (!ts && bs && same(bs, ms)) continue;
-    const picked = ms && ts ? {
-      id,
-      name: property(bs?.name, ms.name, ts.name),
-      firstSceneId: property(bs?.firstSceneId, ms.firstSceneId, ts.firstSceneId)
-    } : ms ?? ts;
-    if (!picked) continue;
-    const side = picked.firstSceneId === ts?.firstSceneId ? theirs : mine;
-    const anchor = survivingAnchor(picked, side, surviving);
-    if (anchor) merged.push({ ...picked, firstSceneId: anchor });
+    const name = ms && ts ? bs && ts.name === bs.name ? ms.name : ts.name : (ms ?? ts)?.name;
+    if (name) merged.set(id, name);
   }
-  return sectionsInOrder({ rows, sections: merged });
+  return merged;
 }
 
-export function sectionMergeOrder<T extends { readonly id: string }>(
-  base: SectionDocument | null | undefined, mine: SectionDocument, theirs: SectionDocument, rows: T[]
-): T[] {
-  if (!base || !(base.sections || mine.sections || theirs.sections)) return rows;
-  const baseIds = new Set(base.rows.map(row => row.id));
-  const mineIds = new Set(mine.rows.map(row => row.id));
-  const theirIds = new Set(theirs.rows.map(row => row.id));
-  const common = (side: SectionDocument): string => side.rows
-    .filter(row => baseIds.has(row.id) && mineIds.has(row.id) && theirIds.has(row.id)).map(row => row.id).join("\n");
-  const baseOrder = common(base);
-  const theirOrder = common(theirs), mineOrder = common(mine);
-  if (theirOrder === baseOrder && mineOrder === baseOrder) return rows;
-  const preferred = theirOrder === baseOrder ? mine : theirs;
+function membership(doc: SectionDocument): Map<string, string> {
+  const out = new Map(doc.rows.map(row => [row.id, ""]));
+  for (const group of sectionGroups(doc)) {
+    for (let i = group.start; i < group.end; i++) {
+      const row = doc.rows[i];
+      if (row) out.set(row.id, group.section.id);
+    }
+  }
+  return out;
+}
+
+function mergeOrder(base: readonly string[], mine: readonly string[], theirs: readonly string[], all: readonly string[]): string[] {
+  const allowed = new Set(all), b = new Set(base), m = new Set(mine), t = new Set(theirs);
+  const common = (ids: readonly string[]): string => ids.filter(id => b.has(id) && m.has(id) && t.has(id)).join("\n");
+  const preferred = common(theirs) === common(base) && common(mine) !== common(base) ? mine : theirs;
   const additions = preferred === mine ? theirs : mine;
-  const byId = new Map(rows.map(row => [row.id, row]));
-  const ordered = preferred.rows.flatMap(row => {
-    const found = byId.get(row.id);
-    return found ? [found] : [];
-  });
-  const placed = new Set(ordered.map(row => row.id));
-  const incomingGroups = sectionGroups(additions);
-  const incomingPosition = new Map(additions.rows.map((row, i) => [row.id, i]));
-  rows.forEach((row, i) => {
-    if (placed.has(row.id)) return;
-    const position = incomingPosition.get(row.id);
-    const group = position === undefined ? undefined : incomingGroups.find(item => position >= item.start && position < item.end);
-    if (group && position !== undefined) {
-      const members = additions.rows.slice(group.start, group.end);
-      const memberAt = position - group.start;
-      const preceding = members.slice(0, memberAt).reverse().find(member => placed.has(member.id));
-      const following = members.slice(memberAt + 1).find(member => placed.has(member.id));
-      const anchor = preceding ?? following;
-      if (anchor) {
-        const at = ordered.findIndex(item => item.id === anchor.id) + (preceding ? 1 : 0);
-        ordered.splice(at, 0, row);
-        placed.add(row.id);
-        return;
-      }
-    }
-    let at = 0;
-    for (let prev = i - 1; prev >= 0; prev--) {
-      const anchor = ordered.findIndex(item => item.id === rows[prev]?.id);
-      if (anchor !== -1) { at = anchor + 1; break; }
-    }
-    ordered.splice(at, 0, row);
-    placed.add(row.id);
-  });
+  const ordered = preferred.filter(id => allowed.has(id));
+  const placed = new Set(ordered);
+  for (const source of [additions, all]) {
+    source.forEach((id, i) => {
+      if (!allowed.has(id) || placed.has(id)) return;
+      const preceding = source.slice(0, i).reverse().find(item => placed.has(item));
+      const following = source.slice(i + 1).find(item => placed.has(item));
+      const at = preceding !== undefined ? ordered.indexOf(preceding) + 1 : following !== undefined ? ordered.indexOf(following) : ordered.length;
+      ordered.splice(at, 0, id);
+      placed.add(id);
+    });
+  }
   return ordered;
+}
+
+export function mergeSectionLayout<T extends { readonly id: string }>(
+  base: SectionDocument | null | undefined, mine: SectionDocument, theirs: SectionDocument, rows: T[]
+): { rows: T[]; sections: DocumentSection[] | undefined } {
+  if (!(base?.sections || mine.sections || theirs.sections)) return { rows, sections: undefined };
+  const empty: SectionDocument = { rows: [] };
+  const original = base ?? empty;
+  const names = identities(base, mine, theirs);
+  const sectionIds = (doc: SectionDocument): string[] => sectionGroups(doc).map(group => group.section.id);
+  const baseOrder = sectionIds(original), mineOrder = sectionIds(mine), theirOrder = sectionIds(theirs);
+  const order = mergeOrder(baseOrder, mineOrder, theirOrder, [...names.keys()]);
+  const b = membership(original), m = membership(mine), t = membership(theirs);
+  const sameRows = (side: SectionDocument): boolean => side.rows.length === original.rows.length &&
+    side.rows.every((row, i) => row.id === original.rows[i]?.id);
+  for (const [side, members, ids] of [[mine, m, mineOrder], [theirs, t, theirOrder]] as const) {
+    if (!sameRows(side)) continue;
+    for (const [rowId, sectionId] of b) {
+      if (sectionId && names.has(sectionId) && !ids.includes(sectionId)) members.set(rowId, sectionId);
+    }
+  }
+  const survivingGroup = (id: string, sideOrder: readonly string[]): string => {
+    if (!id || names.has(id)) return id;
+    const source = baseOrder.includes(id) ? baseOrder : sideOrder;
+    const before = source.slice(0, source.indexOf(id));
+    return before.reverse().find(item => names.has(item)) ?? "";
+  };
+  const bucket = new Map<string, T[]>();
+  for (const row of rows) {
+    const projected = (members: ReadonlyMap<string, string>, sideOrder: readonly string[]): string | undefined => {
+      const member = members.get(row.id);
+      return member === undefined ? undefined : survivingGroup(member, sideOrder);
+    };
+    const bm = projected(b, baseOrder), mm = projected(m, mineOrder), tm = projected(t, theirOrder);
+    const chosen = mm === undefined ? tm : tm === undefined ? mm : tm === bm ? mm : tm;
+    const id = chosen ?? "";
+    const group = bucket.get(id) ?? [];
+    group.push(row);
+    bucket.set(id, group);
+  }
+  const ordered: T[] = [], sections: DocumentSection[] = [];
+  const canonicalGroups = ["", ...baseOrder, ...order.filter(id => !baseOrder.includes(id))];
+  for (const id of ["", ...order]) {
+    const group = bucket.get(id);
+    if (!group?.length) continue;
+    const byId = new Map(group.map(row => [row.id, row]));
+    const ids = (doc: SectionDocument, members: ReadonlyMap<string, string>, sideOrder: readonly string[]): string[] =>
+      doc.rows.filter(row => byId.has(row.id) && survivingGroup(members.get(row.id) ?? "", sideOrder) === id)
+        .sort((a, z) => canonicalGroups.indexOf(members.get(a.id) ?? "") - canonicalGroups.indexOf(members.get(z.id) ?? ""))
+        .map(row => row.id);
+    const groupOrder = mergeOrder(ids(original, b, baseOrder), ids(mine, m, mineOrder), ids(theirs, t, theirOrder), group.map(row => row.id));
+    for (const rowId of groupOrder) {
+      const row = byId.get(rowId);
+      if (row) ordered.push(row);
+    }
+    const firstSceneId = groupOrder[0], name = names.get(id);
+    if (id && name && firstSceneId) sections.push({ id, name, firstSceneId });
+  }
+  return { rows: ordered, sections: sections.length ? sections : undefined };
 }

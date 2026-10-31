@@ -9,7 +9,8 @@ import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats, RowSide } from "./rows.ts";
 import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWins, mergeTitle } from "./scalars.ts";
 import { listShapedSide } from "./shape.ts";
-import { mergeSections, sectionMergeOrder } from "./sections.ts";
+import { mergeSectionLayout } from "./sections.ts";
+import type { DocumentSection } from "../document/sections.ts";
 import { textMergeContext } from "./text-field.ts";
 import type { MergeDecoder } from "./text-field.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
@@ -47,6 +48,7 @@ interface FieldRun {
   people: unknown[] | undefined;
   survives: PersonSurvives | undefined;
   rows: MergeRow[];
+  sections: DocumentSection[] | undefined;
   comments: MergeComment[];
   title: unknown;
 }
@@ -79,8 +81,7 @@ const STRATEGY_TABLE: Record<StrategyId, FieldStrategy> = {
     if (tl !== null) run.out[f.key] = tl;
   },
   "sections": function (f, run) {
-    const sections = mergeSections(run.base, run.mine, run.theirs, run.rows);
-    if (sections) run.out[f.key] = sections;
+    if (run.sections) run.out[f.key] = run.sections;
   },
   "constant": function (f, run) { run.out[f.key] = SCHEMA_VERSION; }
 };
@@ -107,7 +108,7 @@ export function mergeStateFields(baseSide: ValidatedDocument | null | undefined,
   const mergedTags = listMerger(tagField)(base && base.productionTags, mine.productionTags, theirs.productionTags, survives);
   const textCtx = textMergeContext(ports.decode, base, mine, theirs, mergedTags as TagEntry[]);
 
-  const rows = sectionMergeOrder(base, mine, theirs,
+  const layout = mergeSectionLayout(base, mine, theirs,
     mergeRows(base, mine, theirs, { text: textCtx, conflicts: conflicts, stats: stats, clock: ports.clock, editor: ports.editor }));
   const comments = mergeComments(base, mine, theirs);
   const title = mergeTitle(base, mine, theirs, conflicts);
@@ -116,7 +117,7 @@ export function mergeStateFields(baseSide: ValidatedDocument | null | undefined,
   const run: FieldRun = {
     base: base, mine: mine, theirs: theirs, out: {},
     tagField: tagField, tags: mergedTags, peopleField: peopleField, people: mergedPeople, survives: survives,
-    rows: rows, comments: comments, title: title
+    rows: layout.rows, sections: layout.sections, comments: comments, title: title
   };
   fields.forEach(function (f) { strategyFor(f)(f, run); });
   repointOwners([run.out.productionTags, run.out.brollShots], personIdRemap(sidePeople, run.out.people as PersonList));
