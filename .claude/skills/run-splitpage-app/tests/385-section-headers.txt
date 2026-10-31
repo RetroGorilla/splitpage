@@ -8,6 +8,7 @@ expect document.querySelector('#rows [data-section-id="s1"] .section-stats').tex
 expect document.querySelector('#rows [data-section-id="s1"] [data-section-total]').textContent === '0:30'
 eval window.beforeFold=JSON.stringify(F.state()); document.querySelector('#rows [data-section-id="s1"] .section-fold').click(); true
 wait document.querySelectorAll('#rows .row').length === 2
+expect document.activeElement === document.querySelector('#rows [data-section-id="s1"] .section-fold')
 expect JSON.stringify(F.state()) === beforeFold
 eval document.querySelector('#rows [data-section-id="s1"] .section-fold').click(); true
 wait document.querySelectorAll('#rows .row').length === 4
