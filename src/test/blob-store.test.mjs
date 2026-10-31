@@ -18,13 +18,11 @@ import {
   urlForSync,
   backendInfo,
   blobImgHtml,
-  rowImage,
   rowImageBytes,
   rowImageDataUrl,
-  rowImageKey,
-  rowImageShas,
   rowImageUrl
 } from "../adapters/storage/02c-blobs.js";
+import { rowImage, rowImageKey, rowImageShas } from "../core/document/media.ts";
 
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
 const png = (w, h) => new Uint8Array([
