@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { cpus, totalmem, platform, release, arch, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
@@ -513,6 +513,10 @@ export function main(argv) {
     return 2;
   }
   const out = args.out;
+  if (args.built && !existsSync(join(REPO, "index.html"))) {
+    console.error("perf-record: index.html is not built; run `node build.mjs --test` first");
+    return 2;
+  }
   if (!args.built) {
     const build = buildArgs(readFileSync(join(REPO, "build.mjs"), "utf8"));
     console.error(`perf-record: building with node ${build.join(" ")}${build.length === 1 ? " (legacy build; --test unavailable)" : ""}`);

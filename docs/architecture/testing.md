@@ -67,7 +67,9 @@ the seed and the long demo, with the machine, browser and font it ran under.
 It also times an image-heavy case (ten fresh 1 MiB pictures in comment bodies:
 open, load from IndexedDB, and a hosted merge of two sides that each add ten);
 `--only short,long,images` picks fixtures, and `PERF_PORT_BASE` moves its two
-ports. The tool measures the build of the repo it lives in, so a run on an
+ports. `--built` skips the build and requires an existing test build; `perf-ab`
+uses it after building each side (or the plain build on older commits without
+`--test`). The tool measures the build of the repo it lives in, so a run on an
 older commit copies the recorder and its helpers into a checkout of it and builds
 there; builds predating the `--test` flag use the plain build, as reported by the tool. [performance-record.md](performance-record.md) is the 4.0 starting
 point; compare a later run only under the same conditions.
