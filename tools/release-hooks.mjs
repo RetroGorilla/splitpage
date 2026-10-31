@@ -7,7 +7,6 @@ export const STILL_IN_RELEASE = Object.freeze([
   "__brollTest",
   "__cacheTest",
   "__commandTest",
-  "__desktopTest",
   "__exportTest",
   "__fileMenuTest",
   "__prompterTest",

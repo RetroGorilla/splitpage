@@ -10,7 +10,7 @@ runs the fast gates in the order CI does.
 | `npm run check:deps` | Layer, platform and cycle rules ([dependencies.md](dependencies.md)) |
 | `npm run check:comments` | The no-comment gate ([dependencies.md](dependencies.md#comment-gate)) |
 | `node build.mjs` | Builds the release `index.html` and stamps `sw.js`; fails if the bundle exposes a test hook not listed in `tools/release-hooks.mjs` |
-| `node build.mjs --test` | The test build: the same, but keeps the `window.__*Test` hooks and `window.__splitpageFormats` (registered through `exposeTestHook` in `src/features/common/test-hooks.ts`, which the release build compiles away). The browser suites, the desktop smoke, performance tools and CI's browser jobs use it; `sw.js` is stamped the same either way |
+| `node build.mjs --test` | The test build: the same, but keeps the `window.__*Test` hooks, `window.__splitpageFormats` and the fake desktop backend behind `__desktopTest` (registered through `exposeTestHook` in `src/features/common/test-hooks.ts`, which the release build compiles away). The browser suites, the desktop smoke, performance tools and CI's browser jobs use it; `sw.js` is stamped the same either way |
 | `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
 | `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, each tool's entry check) |
