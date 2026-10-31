@@ -128,7 +128,7 @@ test("a command changes the session's own object, and values read through views 
   assert.deepEqual(viewsIn(heldDocument()), []);
 });
 
-test("a view handed to the session is unwrapped: a replacement and a server update hold raw objects", () => {
+test("a view handed to the session is unwrapped: a replacement and a disk update hold raw objects", () => {
   loadTestDocument(script("Before"));
   const next = script("Next");
   next.people.push(shown().people[0]);
@@ -137,7 +137,7 @@ test("a view handed to the session is unwrapped: a replacement and a server upda
   assert.deepEqual(viewsIn(heldDocument()), []);
   const theirs = script("Theirs");
   theirs.rows.push(shown().rows[1]);
-  liveSession().absorbServer(theirs);
+  liveSession().absorbDisk(theirs);
   assert.equal(heldDocument(), theirs);
   assert.deepEqual(viewsIn(heldDocument()), []);
 });

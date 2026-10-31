@@ -482,13 +482,15 @@ function renderSide() {
   el("export-preview").innerHTML = previewHtml(action);
   el("export-preview").classList.toggle("is-landscape", action === "export-broll-pdf");
   el("export-summary").textContent = exportSummary(action);
-  el("export-filename").textContent = exportFileNameFor(action);
+  var fileLabel = el("export-filename").parentElement.querySelector(".export-field-label");
+  if (fileLabel) fileLabel.textContent = ports.printWorkflow(action) ? "Next step" : "File name";
+  el("export-filename").textContent = ports.printWorkflow(action) ? "Print dialog · choose Save as PDF" : exportFileNameFor(action);
   var why = exportActionReason(action);
   var whyEl = el("export-why");
   whyEl.textContent = why;
   whyEl.hidden = !why;
   var go = el("export-go");
-  go.textContent = "Export " + exportActionName(action);
+  go.textContent = (ports.printWorkflow(action) ? "Print " : "Export ") + exportActionName(action);
   go.disabled = !!why;
   go.setAttribute("data-export-action", action);
   exportFormatList().forEach(function (f) {

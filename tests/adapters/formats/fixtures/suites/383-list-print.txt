@@ -1,0 +1,74 @@
+open /tests/adapters/formats/fixtures/_list-print-prop-rich.html
+expect document.title.includes('Props & set dressing packing list')
+expect document.querySelector('h1').textContent === 'Props & set dressing'
+expect document.querySelectorAll('tbody tr').length === 2
+expect document.querySelectorAll('.list-checkbox').length === 4
+expect document.querySelectorAll('.signature-line').length === 4
+expect document.querySelector('tbody tr').textContent.includes('Kettle 中文')
+expect document.querySelector('tbody tr').textContent.includes('Sam <img src=x> 中文')
+expect document.querySelector('tbody tr').textContent.includes('Steam 中文')
+expect document.querySelector('tbody tr').textContent.includes('Handle carefully')
+expect document.querySelectorAll('script,iframe,object,embed,link,base,[onerror]').length === 0
+goto /tests/adapters/formats/fixtures/_list-print-gear-rich.html
+expect document.querySelectorAll('tbody tr').length === 2
+expect document.querySelector('main').textContent.includes('Camera العربية')
+expect document.querySelector('main').textContent.includes('Battery हिन्दी')
+expect document.querySelector('main').textContent.includes('Not in script')
+expect document.querySelectorAll('.packing-status.returned .filled').length === 4
+goto /tests/adapters/formats/fixtures/_list-print-shots-rich.html
+expect document.querySelectorAll('.list-checkbox').length === 3
+expect document.querySelectorAll('.list-checkbox.checked').length === 1
+expect document.querySelectorAll('.writing-lines').length === 3
+expect document.querySelector('.shot-flag').textContent === 'Flagged'
+expect document.querySelector('main').textContent.includes('Kettle 中文 (sourcing)')
+expect document.querySelector('main').textContent.includes('1 of 3 shot · 1 flagged · by scene')
+expect document.querySelector('main').textContent.includes('Added here')
+expect document.querySelector('main').textContent.includes('Keep this take')
+goto /tests/adapters/formats/fixtures/_list-print-flagged-location.html
+expect document.querySelectorAll('.list-checkbox').length === 1
+expect document.querySelector('main').textContent.includes('Flagged, by location')
+expect document.querySelector('.list-group').textContent.includes('Kitchen')
+expect document.querySelector('tbody tr:not(.list-group) td:nth-child(4)').textContent === ''
+goto /tests/adapters/formats/fixtures/_list-print-shot-person.html
+expect document.querySelectorAll('.list-checkbox.checked').length === 1
+expect document.querySelector('.list-group').textContent.includes('Jo العربية')
+expect document.querySelector('tbody tr:not(.list-group) td:nth-child(6)').textContent === ''
+goto /tests/adapters/formats/fixtures/_list-print-unshot-scene.html
+expect document.querySelectorAll('.list-checkbox').length === 2
+expect document.querySelectorAll('.list-checkbox.checked').length === 0
+expect document.querySelector('main').textContent.includes('To shoot, by scene')
+goto /tests/adapters/formats/fixtures/_list-print-script-rich.html
+wait Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)
+expect Array.from(document.querySelectorAll('section'), e => e.id).join(',') === 'script,production-breakdown,broll-shot-list,comments'
+expect document.querySelectorAll('.breakdown-table .list-group').length === 4
+expect document.querySelectorAll('.shot-table .list-checkbox').length === 3
+expect document.querySelector('#comments').textContent.includes('End reply')
+expect document.querySelector('td p').textContent === 'YouTube https://www.youtube.com/watch?v=aqz-KE-bpKQ'
+goto /tests/adapters/formats/fixtures/_list-print-prop-long.html
+expect document.querySelector('main').textContent.includes('Packing note line 99')
+expect document.querySelector('main').textContent.includes('Spare 088')
+expect document.documentElement.scrollWidth === document.documentElement.clientWidth
+expect Array.from(document.querySelectorAll('td')).every(e => e.scrollWidth <= e.clientWidth + 1)
+goto /tests/adapters/formats/fixtures/_list-print-shots-long.html
+expect document.querySelector('main').textContent.includes('Shot description line 109')
+expect document.querySelector('main').textContent.includes('Final notes 64')
+expect document.querySelectorAll('.list-checkbox').length === 68
+expect document.documentElement.scrollWidth === document.documentElement.clientWidth
+expect Array.from(document.querySelectorAll('td')).every(e => e.scrollWidth <= e.clientWidth + 1)
+goto /tests/adapters/formats/fixtures/_list-print-script-long.html
+wait Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)
+expect document.querySelector('#production-breakdown').textContent.includes('Packing note line 99')
+expect document.querySelector('#broll-shot-list').textContent.includes('Shot description line 109')
+expect document.querySelector('#comments').textContent.includes('End reply')
+expect document.documentElement.scrollWidth === document.documentElement.clientWidth
+expect Array.from(document.querySelectorAll('td')).every(e => e.scrollWidth <= e.clientWidth + 1)
+goto /tests/adapters/formats/fixtures/_list-print-prop-empty.html
+expect document.querySelector('main').textContent.includes('Nothing tagged Prop yet.')
+expect document.querySelectorAll('table,.packing-signatures').length === 0
+goto /tests/adapters/formats/fixtures/_list-print-shots-empty.html
+expect document.querySelector('main').textContent.includes('No shots to list.')
+expect document.querySelectorAll('table').length === 0
+goto /tests/adapters/formats/fixtures/_list-print-script-empty.html
+expect document.querySelectorAll('section').length === 1
+expect document.querySelector('main').textContent.includes('No scenes yet.')
+quit

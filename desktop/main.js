@@ -11,7 +11,7 @@ const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { createDraftStore, restoreDoneAction, MAX_BODY_BYTES } = require("./drafts");
 const {
-  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, writeFileEntry
+  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer
 } = require("./file-service");
 const { createDocClaims } = require("./doc-claims");
 const { createRecents } = require("./recents");
@@ -35,9 +35,8 @@ const {
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
 } = require("./update-release");
-const {
-  APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin, checkArgs
-} = require("./ipc-channels");
+const { createIpcSetup } = require("./ipc-setup");
+const { createFileIpc } = require("./ipc-files");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -2040,77 +2039,7 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function senderOriginOf(event) {
-  const url = event.senderFrame && event.senderFrame.url;
-  if (typeof url !== "string") return null;
-  if (url.startsWith(APP_ORIGIN + "/")) return APP_ORIGIN;
-  if (url.startsWith(TABSTRIP_ORIGIN + "/")) return TABSTRIP_ORIGIN;
-  return null;
-}
-
-function isTrustedSender(event) {
-  return senderOriginOf(event) === APP_ORIGIN;
-}
-
-function isTrustedTabStripSender(event) {
-  if (senderOriginOf(event) !== TABSTRIP_ORIGIN) return false;
-  for (const w of windowsById.values()) {
-    if (!w.win.isDestroyed() && w.win.webContents === event.sender) return true;
-  }
-  return false;
-}
-
-function ipcRefusalReason(channel, event, args) {
-  if (!channel) return "unknown channel";
-  const origin = senderOriginOf(event);
-  if (!origin || !channel.allowedOrigins.includes(origin)) return "untrusted sender";
-  const trusted = origin === APP_ORIGIN ? isTrustedSender(event) : isTrustedTabStripSender(event);
-  if (!trusted) return "untrusted sender";
-  const bad = checkArgs(channel.argsSchema, args);
-  return bad ? channel.name + ": " + bad : null;
-}
-
-function logIpcRefusal(name, reason) {
-  if (TEST_MODE) console.error("[splitpage-test] ipc refused " + name + ": " + reason);
-}
-
-function ipcChannelRow(name, direction) {
-  const channel = channelFor(name, direction);
-  if (!channel) throw new Error(`ipc: ${name} (${direction}) is not in desktop/ipc-channels.js`);
-  return channel;
-}
-
-function ipcHandle(name, fn) {
-  const channel = ipcChannelRow(name, "invoke");
-  ipcMain.handle(name, (event, ...args) => {
-    const reason = ipcRefusalReason(channel, event, args);
-    if (reason) { logIpcRefusal(name, reason); throw new Error(reason); }
-    return fn(event, ...args);
-  });
-}
-
-function ipcOn(name, fn) {
-  const channel = ipcChannelRow(name, "send");
-  ipcMain.on(name, (event, ...args) => {
-    const reason = ipcRefusalReason(channel, event, args);
-    if (reason) { logIpcRefusal(name, reason); return; }
-    fn(event, ...args);
-  });
-}
-
-function ipcOnSync(name, fn) {
-  const channel = ipcChannelRow(name, "sendSync");
-  ipcMain.on(name, (event, ...args) => {
-    const reason = ipcRefusalReason(channel, event, args);
-    if (reason) { logIpcRefusal(name, reason); event.returnValue = channel.refusal; return; }
-    try {
-      event.returnValue = fn(event, ...args);
-    } catch (err) {
-      logIpcRefusal(name, (err && err.message) || "handler failed");
-      event.returnValue = channel.refusal;
-    }
-  });
-}
+const { registerIpc } = createIpcSetup({ ipcMain, app, testMode: TEST_MODE, windowsById });
 
 function tabStripWindowOf(event) {
   for (const w of windowsById.values()) {
@@ -2139,112 +2068,12 @@ function launchIntentFor(tab) {
   return { type: "blank" };
 }
 
-function registerIpc() {
-  ipcOnSync("splitpage:ipc-table-sync", (event) => channelsForOrigin(senderOriginOf(event)));
+const { registerFileIpc } = createFileIpc({
+  dialog, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
+  consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, testMode: TEST_MODE
+});
 
-  ipcHandle("splitpage:open-file-dialog", async (event) => {
-    const answer = consumeTestDialogAnswer();
-    let chosen;
-    if (answer !== undefined) {
-      chosen = answer;
-    } else {
-      const win = dialogParentFor(event);
-      const result = await dialog.showOpenDialog(win, {
-        properties: ["openFile"],
-        filters: [
-          { name: "Scripts and documents", extensions: ["splitpage", "md", "html", "htm", "docx", "txt", "csv"] }
-        ]
-      });
-      chosen = result.canceled || !result.filePaths.length ? null : result.filePaths[0];
-    }
-    if (!chosen) return null;
-    const id = fileIds.register(chosen);
-    return await readFileEntry(id, chosen);
-  });
-
-  ipcHandle("splitpage:save-file-dialog", async (event, options) => {
-    const opts = options || {};
-    const answer = consumeTestDialogAnswer();
-    let chosen;
-    if (answer !== undefined) {
-      chosen = answer;
-    } else {
-      const win = dialogParentFor(event);
-      const result = await dialog.showSaveDialog(win, {
-        defaultPath: opts.suggestedName,
-        filters: Array.isArray(opts.filters) && opts.filters.length ? opts.filters : undefined
-      });
-      chosen = result.canceled || !result.filePath ? null : result.filePath;
-    }
-    if (!chosen) return null;
-    const holderId = pathToTabId.get(pathKey(path.resolve(chosen)));
-    const holder = holderId ? tabs.get(holderId) : null;
-    const me = tabOf(event);
-    if (holder && (!me || holder.id !== me.id)) {
-      try {
-        dialog.showMessageBoxSync(dialogParentFor(event), {
-          type: "warning",
-          buttons: ["OK"],
-          defaultId: 0,
-          cancelId: 0,
-          message: `${path.basename(chosen)} is already open in another tab.`,
-          detail: "Saving over it from here would leave two tabs editing one file, " +
-            "and each save would overwrite the other. Close that tab first, or save this " +
-            "document under a different name."
-        });
-      } catch { }
-      return null;
-    }
-    const id = fileIds.register(chosen);
-    return { id, name: path.basename(chosen) };
-  });
-
-  ipcHandle("splitpage:read-file", async (event, id) => {
-    const absPath = fileIds.pathOf(id);
-    if (!absPath) throw new Error("ENOENT: unknown file id");
-    return await readFileEntry(id, absPath);
-  });
-
-  ipcHandle("splitpage:write-file", async (event, id, data) => {
-    const absPath = fileIds.pathOf(id);
-    if (!absPath) throw new Error("ENOENT: unknown file id");
-    const buffer = toBuffer(data);
-    return await writeFileEntry(absPath, buffer);
-  });
-
-  ipcHandle("splitpage:stat-file", async (event, id) => {
-    const absPath = fileIds.pathOf(id);
-    if (!absPath) throw new Error("ENOENT: unknown file id");
-    try {
-      const stat = await fsp.stat(absPath);
-      return { lastModified: Math.floor(stat.mtimeMs), size: stat.size };
-    } catch {
-      return null;
-    }
-  });
-
-  ipcHandle("splitpage:recents-list", async () => {
-    return recents.forRenderer();
-  });
-
-  ipcHandle("splitpage:recents-remove", async (event, fileId) => {
-    if (recents.removeByFileId(fileId)) await recents.persist();
-    return recents.forRenderer();
-  });
-
-  ipcHandle("splitpage:recents-clear", async () => {
-    if (recents.clear()) await recents.persist();
-    return recents.forRenderer();
-  });
-
-  ipcHandle("splitpage:get-session-info", async () => {
-    return {
-      testDialogsSeen: TEST_MODE ? testDialogsSeen : undefined
-    };
-  });
-
-  ipcOnSync("splitpage:get-app-version-sync", () => app.getVersion());
-
+function registerShellIpc({ ipcHandle, ipcOn, ipcOnSync }) {
   ipcOnSync("splitpage:tab-boot-sync", (event) => {
     const tab = tabOf(event);
     if (!tab) return null;
@@ -2342,7 +2171,9 @@ function registerIpc() {
     if (!tab) return { ok: true };
     return voiceHelperInstance().stop(tab.id);
   });
+}
 
+function registerDocumentIpc({ ipcHandle, ipcOn }) {
   ipcOn("splitpage:set-document-state", (event, docState) => {
     const tab = tabOf(event);
     if (!tab) return;
@@ -2478,7 +2309,9 @@ function registerIpc() {
     pendingDraftFlushes.delete(reqId);
     resolve(result && typeof result === "object" ? result : { ok: false });
   });
+}
 
+function registerHistoryBlobIpc({ ipcHandle }) {
   const historyDocIdArg = (v) => {
     if (typeof v !== "string" || !DOC_ID_RE.test(v)) throw new Error("history: invalid document id");
     return v;
@@ -2577,7 +2410,9 @@ function registerIpc() {
     if (!blobStore) return [...new Set(shas)];
     return blobStore.missing(shas);
   });
+}
 
+function registerTabStripIpc({ ipcHandle, ipcOn, ipcOnSync }) {
   ipcOnSync("splitpage:tabstrip-window-id-sync", (event) => {
     const w = tabStripWindowOf(event);
     return w ? w.id : null;
@@ -2620,9 +2455,9 @@ function registerIpc() {
     const tab = stripTab(event, tabId);
     if (tab) tearOffToNewWindow(tab.id, Number(screenX), Number(screenY));
   });
+}
 
-  ipcOnSync("splitpage:is-test-mode-sync", () => TEST_MODE);
-
+function registerTestModeIpc({ ipcHandle, ipcOn }) {
   if (TEST_MODE) {
     ipcOn("splitpage:test-request-close", (event) => {
       const tab = tabOf(event);
@@ -2766,7 +2601,10 @@ app.whenReady().then(() => {
   initBlobStore();
   initHistoryStore();
   registerProtocol();
-  registerIpc();
+  registerIpc({
+    registerFileIpc, registerShellIpc, registerDocumentIpc,
+    registerHistoryBlobIpc, registerTabStripIpc, registerTestModeIpc
+  });
   buildMenu();
 
   nativeTheme.on("updated", () => {

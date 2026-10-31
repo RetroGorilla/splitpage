@@ -180,43 +180,43 @@ test("E4: adoption migrates the raw input, opens a new epoch and records nothing
   assert.deepEqual(h.log, ["undo.adopt:none", "publish:adopt"], "closing the document migrates nothing");
 });
 
-test("E4: a server update and a reload keep the epoch, add no generation, record no undo and run no effects", () => {
+test("E4: a disk update and a reload keep the epoch, add no generation, record no undo and run no effects", () => {
   const h = opened();
   runConfined(h.session,setAudio("r1", "Mine."));
   h.clock.advance(1000);
   h.log.length = 0;
   h.published.length = 0;
-  const merged = h.session.absorbServer(rawScript("Merged"));
+  const merged = h.session.absorbDisk(rawScript("Merged"));
   assert.equal(merged?.title, "Merged");
   assert.equal(h.session.read(function (doc) { return doc && doc.title; }), "Merged");
   assert.equal(h.session.absorbReload({ title: "Reloaded", rows: [{ id: "f1", visualText: "Wide", audioText: "Again." }] }), merged);
   assert.equal(h.session.epoch(), 1);
   assert.equal(h.session.generation(), 1);
-  assert.deepEqual(h.log, ["entry", "undo.server:Merged", "publish:server", "entry", "undo.reload", "publish:reload"]);
-  assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["server", "reload"]);
+  assert.deepEqual(h.log, ["entry", "undo.disk:Merged", "publish:disk", "entry", "undo.reload", "publish:reload"]);
+  assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["disk", "reload"]);
   assert.equal(h.clock.armed(), 0);
 });
 
-test("E4: user edits, server updates, reloads, recoveries and adoptions are published as distinct kinds", () => {
+test("E4: user edits, disk updates, reloads, recoveries and adoptions are published as distinct kinds", () => {
   const h = harness();
   h.session.adopt(rawScript("A"));
   runConfined(h.session,setAudio("r1", "x"));
   h.session.noteEdit();
-  h.session.absorbServer(rawScript("B"));
+  h.session.absorbDisk(rawScript("B"));
   h.session.absorbReload({ title: "B", rows: [] });
   h.session.absorbRecovery(rawScript("C"));
   assert.deepEqual(h.published.map(function (c) { return c.kind + ":" + c.epoch + ":" + c.generation; }),
-    ["adopt:1:0", "edit:1:1", "edit:1:2", "server:1:2", "reload:1:2", "recovery:2:2"]);
+    ["adopt:1:0", "edit:1:1", "edit:1:2", "disk:1:2", "reload:1:2", "recovery:2:2"]);
 });
 
-test("E4: a recovery migrates the raw input, opens a new epoch, keeps the undo stack through the server path, and records and runs nothing", () => {
+test("E4: a recovery migrates the raw input, opens a new epoch, keeps the undo stack through the disk path, and records and runs nothing", () => {
   const h = opened();
   const doc = h.session.absorbRecovery(rawScript("Recovered"));
   assert.equal(doc?.rows[1]?.status, "todo");
   assert.equal(h.session.epoch(), 2);
   assert.equal(h.session.generation(), 0);
   assert.equal(h.session.read(function (d) { return d; }), doc);
-  assert.deepEqual(h.log, ["entry", "undo.server:Recovered", "publish:recovery"]);
+  assert.deepEqual(h.log, ["entry", "undo.disk:Recovered", "publish:recovery"]);
   assert.equal(h.clock.armed(), 0);
   const first = harness();
   first.session.absorbRecovery(rawScript("At boot"));
@@ -294,10 +294,10 @@ test("E4: a reload with no document held changes nothing and publishes nothing",
 
 test("settling after a merge, reload or recovery runs the edit's effects and undo flush, adds no generation and publishes nothing", () => {
   const h = opened();
-  h.session.absorbServer(rawScript("Merged"));
+  h.session.absorbDisk(rawScript("Merged"));
   h.log.length = 0;
   h.published.length = 0;
-  h.session.settle("server");
+  h.session.settle("disk");
   h.session.settle("reload");
   h.session.settle("recovery");
   assert.equal(h.session.generation(), 0);
@@ -309,13 +309,13 @@ test("settling after a merge, reload or recovery runs the edit's effects and und
   ]);
 });
 
-test("an adoption the undo port starts inside a server update or recovery does not leave the session holding the older document", () => {
-  ["absorbServer", "absorbRecovery"].forEach(function (entry) {
+test("an adoption the undo port starts inside a disk update or recovery does not leave the session holding the older document", () => {
+  ["absorbDisk", "absorbRecovery"].forEach(function (entry) {
     const h = harness(undefined, { beforeUndo: function (s) { s.adopt(rawScript("Before the merge")); } });
-    const merged = entry === "absorbServer" ? h.session.absorbServer(rawScript("Merged")) : h.session.absorbRecovery(rawScript("Merged"));
+    const merged = entry === "absorbDisk" ? h.session.absorbDisk(rawScript("Merged")) : h.session.absorbRecovery(rawScript("Merged"));
     assert.equal(h.session.read(function (d) { return d; }), merged, entry);
     assert.equal(h.session.read(function (d) { return d && d.title; }), "Merged", entry);
-    assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["adopt", entry === "absorbServer" ? "server" : "recovery"], entry);
+    assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["adopt", entry === "absorbDisk" ? "disk" : "recovery"], entry);
   });
   const h = harness(undefined, { beforeUndo: function (s) { s.adopt(rawScript("Inner")); } });
   const outer = h.session.adopt(rawScript("Outer"));
@@ -520,14 +520,14 @@ test("an unsubscribed listener hears nothing more", () => {
   assert.equal(h.published.length, 2, "other listeners still hear");
 });
 
-test("#415: a merged document enters as it is, without a second migration, through the server or the recovery path", () => {
+test("#415: a merged document enters as it is, without a second migration, through the disk or the recovery path", () => {
   const h = opened();
   const merged = migrateFake(rawScript("Merged"));
-  assert.equal(h.session.absorbMerged("server", merged), merged);
+  assert.equal(h.session.absorbMerged("disk", merged), merged);
   assert.equal(h.session.read(function (d) { return d; }), merged);
   assert.equal(h.session.epoch(), 1);
   const recovered = migrateFake(rawScript("Recovered"));
   assert.equal(h.session.absorbMerged("recovery", recovered), recovered);
   assert.equal(h.session.epoch(), 2);
-  assert.deepEqual(h.log, ["undo.server:Merged", "publish:server", "undo.server:Recovered", "publish:recovery"]);
+  assert.deepEqual(h.log, ["undo.disk:Merged", "publish:disk", "undo.disk:Recovered", "publish:recovery"]);
 });

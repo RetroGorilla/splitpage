@@ -2,7 +2,8 @@ import type { ExportAssets, ExportPicture } from "../../application/export/asset
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { ExportRun } from "./export-kit.ts";
 import type { BreakdownRow, CommentBody, CommentEntry, BodyPiece, SceneFacts } from "./export-projections.ts";
-import { morePictureRefs, rowVideoLinks, videoLinkText } from "../storage/02d-gallery.js";
+import { morePictureRefs, rowVideoLinks } from "../../core/document/gallery.ts";
+import { videoLinkText } from "../storage/02d-gallery.js";
 import {
   PRINT_COLORS,
   STATUS_PRINT,

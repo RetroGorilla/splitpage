@@ -1,6 +1,6 @@
 import { targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
-import { onRundownPaint, rundownLayout } from "./rundown.js";
+import { onRundownPaint, rundownLayout } from "./rundown.ts";
 import { targetLengthCommand } from "../../application/commands/document-settings.ts";
 
 var ports = null;
