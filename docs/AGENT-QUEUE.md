@@ -123,6 +123,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
 - AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
 - AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and need an independent review. AQ-30 changes one suite file and can be merged by queue agents. AQ-29 needs AQ-28 (both touch saving; I-20 runs before I-6, as in ROADMAP.md).
+- AQ-32 removes import save-back (Adam, 2026-10-30). It is **STOPS FOR ADAM**, runs on Opus with an independent review, and ships as several PRs after a STEP 0 plan. It supersedes AQ-29: AQ-29's PR is not merged. Run it before ROADMAP.md's B3 rename of the `"server"` merge kind, and not alongside B1's lifecycle PR or B2 (all touch saving or close).
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -709,4 +710,33 @@ DO
 
 STRUCTURE SECTION MUST SAY
 - "no structural change; test only", the cause, what the check waits on now, pass counts before and after.
+```
+
+## AQ-32 [ ] Remove import save-back
+
+Needs: none. Supersedes AQ-29 (its PR stays unmerged and is closed when this task's last PR merges).
+Files: the import save-back owner and its ports (src/application/save/import-saving*.ts), the save-completion and save-kind code that knows `writeback`, the import home in src/application/location/ and src/application/recovery/, the file menu (src/features/file-menu/), src/bootstrap/actions.ts and the wiring that builds these, the `writeback` exporter flag, desktop/main.js where it serves save-back, their tests and browser suites, and the docs that describe save-back.
+**STOPS FOR ADAM**: saving, recovery, desktop and the file menu are protected, and it changes what the user sees. Run on Opus; independent review on every PR; PC smoke.
+
+```text
+Task: remove import save-back entirely (Adam, 2026-10-30). Today, after a user imports a .docx, .csv or .txt and presses Save, Splitpage writes the script back into that original file (the "import home"; exporters marked `writeback: true` in src/bootstrap/wiring/exporters.ts). From now on an import starts a separate Splitpage script and Splitpage never writes to the imported file. A user who wants a .docx, .csv or .txt makes a new one with Export.
+
+WHAT THE USER SEES AFTER
+- Importing a file opens its content as a script that has no Splitpage file yet, like a new untitled script, with the imported file's name as the suggested name.
+- Save on that script works like Save on any script that has no file yet (it asks where to save the .splitpage file). No Save, menu item, shortcut, command-menu entry, toast or status line mentions writing back to the imported file.
+- Export (including "Export again") is unchanged and always writes a file the user picks.
+- The unsaved warning on close, the leave-page warning and the crash-recovery draft behave as for any unsaved script.
+
+OLD DATA
+- A stored location, recent-file entry or recovery draft that still records an import home must load without an error and without losing the document: drop the import home, keep everything else, and treat the script as one with no Splitpage file unless it also has one. Never write to the old imported file.
+
+DO
+1. STEP 0, before any code change, in the PR body of your first PR: the full inventory (every file, function, type field, save kind, action, menu item, IPC channel, test and browser suite that exists only for save-back, and every one that also serves something else), the old-data cases you found, and the proposed PR split (for example: 1. the user-facing entry points and the Save routing; 2. the save-back owner, save kinds and location/recovery fields with the old-data handling; 3. desktop IPC; 4. docs). Then stop and reply with the inventory and the split; Adam approves the split before the removal starts.
+2. Read docs/HANDOFF.md, docs/architecture/invariants.md and docs/architecture/saving.md first (AGENTS.md rule 9). Invariants and race-matrix cases that exist only for save-back (for example milestone 4's E5 and case I2 in src/test/m4-matrix-files.test.mjs) are removed with it, and the PR lists each one; every other invariant holds unchanged.
+3. Tests: delete only tests and suites that cover save-back alone, and list every deleted test and suite in the PR. A test that also covers something kept is changed to keep that coverage. Add tests for the new behaviour: an import opens as a script with no Splitpage file; Save asks for a .splitpage destination; the imported file is never written (assert no write to its handle or path); a location or draft with an old import home loads and drops it.
+4. Each PR: `npm run verify`; browser suites node tools/run-suites.mjs <out> 'import|save|file-menu|home|conflict|export|title' --lanes 3 (build with `node build.mjs --test` once the base has that flag); full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR.
+5. Update every doc that describes save-back (saving.md, HANDOFF.md, invariants.md, actions.md, testing.md, pinned-defects.md, the Help text, the run-splitpage-app skill) and add a CHANGELOG line.
+
+STRUCTURE SECTION MUST SAY
+- Per PR: what was removed, what the user sees now, the old-data handling, every deleted test and suite and why it covered save-back alone, smoke count.
 ```
