@@ -266,7 +266,10 @@ function startBlobHydrator() {
 
 export function startBlobs() {
   startBlobHydrator();
-  window.__blobsTest = {
+}
+
+export function blobsTestControls() {
+  return {
     intern: function (bytes) { return intern(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])); },
     internDataUrl: internDataUrl,
     has: has,
