@@ -219,6 +219,11 @@ browser cache, then `google-chrome`/`chrome` on PATH. Missing browsers fail
 the check; no rule or fixture is skipped. Local runtime was 9.2 seconds for
 the check, 10.0 seconds including test startup.
 
+On Unraid, Tests uses `/opt/hostedtoolcache/splitpage-playwright/1.63.0`,
+filled only by `checks`; a new or recreated runner needs one `checks` run
+first, or Chromium in its image. The automatic test deletes its TEMP
+directory only after every assertion passes, retaining artifacts on failure.
+
 The inspector inflates PDF streams with `node:zlib`, decodes ToUnicode and
 ActualText, applies text matrices, and follows tagged structure MCIDs to
 associate text with physical pages, headings, rows and tables. Embedded
