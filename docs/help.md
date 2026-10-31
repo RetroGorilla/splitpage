@@ -603,9 +603,10 @@ first Save asks where, and in which format:
 
 On the first save through the desktop dialog or a browser file picker, an
 untouched untitled script takes its title from the chosen filename without
-the extension. A trailing `v3`, `V3`, `_v3`, `-v3` or ` v3` (any number)
-becomes a small `v3` tag beside the title, leaving the separator out of the
-title. Splitpage never invents or increments a version. Both the title and
+the extension. A trailing `v3` or `V3` (any number), separated by a space,
+underscore or hyphen, becomes a small `v3` tag beside the title, leaving the
+separator out of the title. Names such as `Rev2` and `Headsetv3` stay whole
+without a tag. Splitpage never invents or increments a version. Both the title and
 tag survive reopening a `.md` or `.splitpage` project.
 
 A title you typed is never replaced. While the title still comes from a

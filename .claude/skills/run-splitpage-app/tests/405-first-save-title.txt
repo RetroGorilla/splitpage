@@ -2,7 +2,7 @@ open
 eval window.F=window.__splitpageFormats; if(F.autosave.enabled()) F.autosave.toggle(); document.querySelector('[data-newtab-action="new"]').click(); true
 wait F.state().title === 'Untitled Script'
 expect !F.writtenOut()
-eval window.__name='Headset ad V3.md'; window.__files={}; window.showSaveFilePicker=async function(){var name=window.__name; return {name:name,createWritable:async function(){return {write:async function(body){window.__files[name]=body;},close:async function(){return {lastModified:1000};}};},getFile:async function(){return new File([window.__files[name]||''],name,{lastModified:1000});}};}; true
+eval window.__name='Headset ad V3.md'; window.__files={}; window.__picker=window.showSaveFilePicker=async function(){var name=window.__name; return {name:name,createWritable:async function(){return {write:async function(body){window.__files[name]=body;},close:async function(){return {lastModified:1000};}};},getFile:async function(){return new File([window.__files[name]||''],name,{lastModified:1000});}};}; true
 click #btn-save
 wait F.state().title === 'Headset ad'
 wait !document.getElementById('btn-save').classList.contains('is-dirty')
@@ -39,3 +39,14 @@ expect window.__downloadName === 'untitled-script.md'
 expect F.state().title === 'Untitled Script'
 expect !F.state().titleVersion && !F.state().titleOrigin
 eval HTMLAnchorElement.prototype.click=window.__downloadClick; true
+
+eval window.showSaveFilePicker=window.__picker; document.querySelector('[data-newtab-action="new"]').click(); true
+wait F.state().title === 'Untitled Script'
+eval window.__name='Rev2.md'; F.save()
+expect F.state().title === 'Rev2' && !F.state().titleVersion
+expect document.getElementById('doc-version').hidden === true
+
+eval document.querySelector('[data-newtab-action="new"]').click(); true
+wait F.state().title === 'Untitled Script'
+eval window.__name='Headsetv3.md'; F.save()
+expect F.state().title === 'Headsetv3' && !F.state().titleVersion

@@ -47,7 +47,6 @@ export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion
   }
 
   function confirmWrite(write: CompletedWrite): void {
-    const named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
     const stamp = write.captured.document;
     ports.document.stamp(editStamp({ rev: stamp.rev, lastEditedBy: stamp.lastEditedBy, lastEditedAt: stamp.lastEditedAt }));
     ports.deferred.setBaseline(write.published, "saveDoc: the bytes just written");
@@ -55,6 +54,7 @@ export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion
       ports.location.amendHome(write.landed.home, { diskBase: write.published, lastModified: write.landed.lastModified });
     }
     adoptSavedCopyDocId(write.forkDocId, write.docIdAtSave, true);
+    const named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
     const savedChanges = write.seqAtSave + (write.naming ? 1 : 0);
     if (named && ports.saves.changes() === savedChanges) ports.saves.confirmSavedNow();
   }
