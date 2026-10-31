@@ -2,7 +2,7 @@ import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentPlainTags, mountPlainTagsFeature, stopPlainTagsFeature } from "../../src/bootstrap/wiring/plain-tags.ts";
-import { plainTagOpen } from "../../src/features/tags/plain-tags.js";
+import { plainTagOpen } from "../../src/features/tags/plain-tags.ts";
 
 (globalThis as unknown as Record<string, unknown>).CSS = window.CSS;
 
@@ -21,7 +21,7 @@ test("plain-tag wiring exposes its open check, replaces its mount and clears bot
     const sel = window.getSelection() as Selection;
     sel.removeAllRanges();
     sel.addRange(range);
-    first.maybeOpen({ inputType: "insertText", data: ":" } as unknown as Pick<Event, "target">, cell);
+    first.maybeOpen({ inputType: "insertText", data: ":" }, cell);
     assert.equal(plainTagOpen(cell), true);
     assert.equal(plainTagOpen(document.body), false);
     const next = mountPlainTagsFeature();

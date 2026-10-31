@@ -1,4 +1,4 @@
-import { startPlainTags as mountPlainTags } from "../../features/tags/plain-tags.js";
+import { startPlainTags as mountPlainTags } from "../../features/tags/plain-tags.ts";
 import type { PlainTagControl, PlainTagMount, PlainTagPorts } from "../../features/tags/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { documentReader as portDocument } from "./ports/document.ts";

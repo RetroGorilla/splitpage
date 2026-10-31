@@ -31,7 +31,7 @@ export interface PlainTagPorts {
 }
 
 export interface PlainTagControl {
-  readonly maybeOpen: (e: Pick<Event, "target">, cellEl: Element) => void;
+  readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
   readonly refresh: () => void;
   readonly cancel: () => void;
   readonly close: () => boolean;
