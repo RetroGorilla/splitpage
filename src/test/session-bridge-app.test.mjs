@@ -101,7 +101,7 @@ test("a merge right after a document was swapped in, with no flush between, leav
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Theirs.";
   applyMerge({ base: base, mine: cloneState(base), theirs: theirs, source: "stash", report: false });
-  assert.deepEqual(heard, ["adopt", "server"], "the session adopts the swapped-in document as it is handed over, then the merge lands");
+  assert.deepEqual(heard, ["adopt", "disk"], "the session adopts the swapped-in document as it is handed over, then the merge lands");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
   assert.equal(held(), currentDocument());
@@ -110,7 +110,7 @@ test("a merge right after a document was swapped in, with no flush between, leav
   assert.equal(undoSizes().undo, 0);
 });
 
-test("a server update over undo entries forgets the ones on a field their side changed and keeps the rest", () => {
+test("a disk update over undo entries forgets the ones on a field their side changed and keeps the rest", () => {
   loadTestDocument(cloneState(script("Forget")));
   flushEdits();
   currentDocument().rows[0].audioText = "Mine, one.";
@@ -125,7 +125,7 @@ test("a server update over undo entries forgets the ones on a field their side c
   theirs.rows[1].visualText = "Their close.";
   listen();
   applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false });
-  assert.deepEqual(heard, ["server"]);
+  assert.deepEqual(heard, ["disk"]);
   assert.equal(session.epoch(), epoch);
   assert.equal(held(), currentDocument());
   assert.equal(undoSizes().undo, 1);
@@ -143,7 +143,7 @@ test("a reported merge marks the document dirty and advances saveChanges() as be
   const gen = session.generation(), seq = saveChanges();
   listen();
   applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash" });
-  assert.deepEqual(heard, ["server"]);
+  assert.deepEqual(heard, ["disk"]);
   assert.equal(session.generation(), gen);
   assert.equal(saveChanges(), seq + 1);
   assert.equal(unsavedChanges(), true);

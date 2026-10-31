@@ -78,7 +78,7 @@ test("save does not schedule the autosave for a recovery", () => {
 test("save marks an import home dirty with the home it read, then asks for an autosave now when the change says so", () => {
   const home: Home = { kind: "import", name: "notes.md" };
   const { log, effects } = fakes({ home });
-  effects.save(change("server", true));
+  effects.save(change("disk", true));
   assert.deepEqual(log, [["scheduleAutoSave"], ["home"], ["home"], ["amendHome", home, { dirty: true }], ["dueNow"]]);
   assert.equal(log[3]?.[1], home);
 });

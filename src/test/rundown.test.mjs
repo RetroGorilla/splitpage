@@ -22,7 +22,7 @@ import {
   rundownScale,
   rundownSpan,
   rundownTicks
-} from "../features/rundown/rundown.js";
+} from "../features/rundown/rundown.ts";
 import { targetOverlayParts } from "../features/rundown/target.js";
 
 const BOARD = [

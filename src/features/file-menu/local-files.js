@@ -40,7 +40,7 @@ function fileChipListeners(refresh) {
   return {
     session: function (change) {
       if (!active) return;
-      if (change.kind === "adopt" || change.kind === "server" || change.kind === "recovery" || change.kind === "reload") refresh();
+      if (change.kind === "adopt" || change.kind === "disk" || change.kind === "recovery" || change.kind === "reload") refresh();
     },
     location: function (change) {
       if (!active) return;
@@ -188,6 +188,8 @@ function hideFileConflictView() {
 }
 
 async function exportAs(kind, more) {
+  var printing = running().pdfPrint.export(kind, more, function () { return active; });
+  if (printing) return printing;
   var base = exportBaseName();
   var built;
   try {

@@ -23,6 +23,18 @@ import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts"
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
+import type { PrintDialogPort } from "../../src/application/export/print-dialog.ts";
+
+export function fakePrintDialog() {
+  const pages: string[] = [];
+  let closed = 0;
+  const printDialog: PrintDialogPort = { reserve: () => ({
+    ended: new Promise(() => {}),
+    print: async (html) => { pages.push(html); return "opened"; },
+    close: () => { closed++; }
+  }) };
+  return { printDialog, pages, closed: () => closed };
+}
 
 export function fakeWriterPorts(initial: DocumentView) {
   const reader = fakeDocument(initial);

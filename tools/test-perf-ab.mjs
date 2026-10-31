@@ -44,6 +44,7 @@ test("scratch comparisons use head helpers, alternate and clean up after success
     symlinkSync(join(REPO, "node_modules"), join(repo, "node_modules"), process.platform === "win32" ? "junction" : "dir");
     writeFileSync(join(repo, ".gitignore"), "node_modules\nbuilt\n");
     writeFileSync(join(repo, "build.mjs"), `import { appendFileSync, copyFileSync } from "node:fs"; if (process.env.PERF_AB_TEST_FAIL === "build") throw new Error("build failure"); if (process.env.PERF_AB_TEST_FAIL === "cancel") { appendFileSync(${JSON.stringify(log)}, "cancel\\n"); await new Promise((resolve) => setTimeout(resolve, 30000)); } copyFileSync("version", "built");`);
+    writeFileSync(join(repo, "build.mjs"), readFileSync(join(repo, "build.mjs"), "utf8") + '\nif (process.argv.length !== 2) throw new Error("legacy build got an argument");');
     writeFileSync(join(repo, "version"), "base");
     writeFileSync(join(repo, "tools/helper.mjs"), 'export const value = "base";');
     writeFileSync(join(repo, "tools/perf-record.mjs"), 'throw new Error("base recorder must never run");');
@@ -51,10 +52,11 @@ test("scratch comparisons use head helpers, alternate and clean up after success
     git("add", ".");
     git("commit", "-qm", "Base fixture");
     const base = git("rev-parse", "HEAD");
+    writeFileSync(join(repo, "build.mjs"), readFileSync(join(repo, "build.mjs"), "utf8").replace('if (process.argv.length !== 2)', 'if (process.argv.length !== 3)') + '\nif (!process.argv.includes("--test")) throw new Error("test build required");');
     writeFileSync(join(repo, "version"), "head");
     writeFileSync(join(repo, "tools/helper.mjs"), 'export const value = "head";');
     writeFileSync(join(repo, ".claude/skills/run-splitpage-app/helper.mjs"), 'export const driver = "head";');
-    writeFileSync(join(repo, "tools/perf-record.mjs"), `import { appendFileSync, readFileSync } from "node:fs"; import { value } from "./helper.mjs"; import { driver } from "../.claude/skills/run-splitpage-app/helper.mjs"; if (value !== "head" || driver !== "head" || process.argv.slice(2).join(" ") !== "--only short" || process.env.PERF_AB_TEST_FAIL === "perf") throw new Error("perf failure"); appendFileSync(${JSON.stringify(log)}, readFileSync("built", "utf8") + "\\n"); console.log("## Input latency (ms)\\n| short typing | 1 | 2 | 3 |");`);
+    writeFileSync(join(repo, "tools/perf-record.mjs"), `import { appendFileSync, readFileSync } from "node:fs"; import { value } from "./helper.mjs"; import { driver } from "../.claude/skills/run-splitpage-app/helper.mjs"; if (value !== "head" || driver !== "head" || process.argv.slice(2).join(" ") !== "--built --only short" || process.env.PERF_AB_TEST_FAIL === "perf") throw new Error("perf failure"); appendFileSync(${JSON.stringify(log)}, readFileSync("built", "utf8") + "\\n"); console.log("## Input latency (ms)\\n| short typing | 1 | 2 | 3 |");`);
     git("add", ".");
     git("commit", "-qm", "Head fixture");
     assert.equal(await main([base, "--only", "short", "--rounds", "2"], repo), 0);
