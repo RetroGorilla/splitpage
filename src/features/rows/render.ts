@@ -817,7 +817,7 @@ export function renderFirstDraw(): boolean {
   return absorbRender(FIRST_DRAW_FAILED);
 }
 
-const ABSORBED: Readonly<Record<string, true>> = { adopt: true, server: true, recovery: true, reload: true };
+const ABSORBED: Readonly<Record<string, true>> = { adopt: true, disk: true, recovery: true, reload: true };
 
 const ON_SCREEN_ALREADY: Readonly<Record<string, true>> = { visualText: true, audioText: true, updatedAt: true, updatedBy: true };
 

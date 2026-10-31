@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, cl
 import { join, dirname, relative, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyInstallerPayload } from "./verify-dist-payload.mjs";
+import { leakedHooks } from "../tools/release-hooks.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -88,6 +89,11 @@ for (const arch of ARCHS) {
     const voiceScript = join(unpacked, "resources", "splitpage", "voice", "listen.ps1");
     check(existsSync(voiceScript), `${arch}: the Follow My Voice listener ships outside the asar`,
       existsSync(voiceScript) ? "" : "resources/splitpage/voice/listen.ps1 missing — stage.mjs");
+
+    const appIndex = join(unpacked, "resources", "splitpage", "index.html");
+    const leaked = existsSync(appIndex) ? leakedHooks(readFileSync(appIndex, "utf8")) : null;
+    check(leaked !== null && leaked.length === 0, `${arch}: the packaged app is a release build, with no test hook outside the release list`,
+      leaked === null ? "resources/splitpage/index.html missing" : leaked.join(", "));
   }
 
   const setup = join(DIST, `SplitpageDesktopSetup-${VERSION}-${arch}.exe`);

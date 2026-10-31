@@ -125,16 +125,16 @@ test("unchanged adopts theirs with no merge and no undo point; reporting marks i
   assert.equal(out.result, null);
   assert.equal(out.snapshot, null);
   assert.equal(h.merges, 0);
-  assert.deepEqual(h.calls, ["adopt:server:false", "armUndo", "dirty:server"]);
+  assert.deepEqual(h.calls, ["adopt:disk:false", "armUndo", "dirty:disk"]);
   assert.equal(h.undo, null, "an undo point asked for and not taken is cleared, as before");
 });
 
 test("report: false neither reports nor marks unsaved; the kind follows recovery", () => {
   const h = harness();
   sync(applyIncomingMerge({ mine: doc("m"), theirs: doc("t"), report: false, noAutoSave: true }, h.ports));
-  assert.deepEqual(h.calls, ["merge", "adopt:server:true"]);
+  assert.deepEqual(h.calls, ["merge", "adopt:disk:true"]);
   assert.equal(mergeKind({ theirs: null, recovery: true }), "recovery");
-  assert.equal(mergeKind({ theirs: null, source: "stash" }), "server");
+  assert.equal(mergeKind({ theirs: null, source: "stash" }), "disk");
 });
 
 test("newBase: a function is read once at adoption; undefined leaves the baseline; null is a value", () => {

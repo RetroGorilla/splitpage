@@ -179,7 +179,7 @@ function fakes(): Fakes {
   const refreshed: string[] = [];
   const note = (what: string): void => { log.push([what, started()]); };
   const undo: SessionUndoPorts = {
-    adapter: { adopt: () => {}, record: () => {}, absorbServer: () => {}, absorbReload: () => {} },
+    adapter: { adopt: () => {}, record: () => {}, absorbDisk: () => {}, absorbReload: () => {} },
     route: (run: SessionReplayRunner) => {
       note("undo route");
       counts.undo++;
@@ -473,7 +473,7 @@ test("failed partial startup: a timers port, undo adapter or key target that lac
     cases.push(["timers." + method + " not a function", (f) => ({ ...f.deps, timers: { ...spoil(f), [method]: 7 } }), "timers", "Wiring: the timers dependency has no " + method + " function"]);
   }
   cases.push(["timers {}", (f) => ({ ...f.deps, timers: {} }), "timers", "Wiring: the timers dependency has no now function"]);
-  for (const method of ["adopt", "record", "absorbServer", "absorbReload"] as const) {
+  for (const method of ["adopt", "record", "absorbDisk", "absorbReload"] as const) {
     const undo = (f: Fakes): SessionUndoPorts => must(f.deps.undo);
     cases.push(["undo.adapter." + method, (f) => ({ ...f.deps, undo: { ...undo(f), adapter: without(undo(f).adapter, method) } }), "undo", "Wiring: the undo dependency's adapter port has no " + method + " function"]);
     cases.push(["undo.adapter." + method + " not a function", (f) => ({ ...f.deps, undo: { ...undo(f), adapter: { ...undo(f).adapter, [method]: 7 } } }), "undo", "Wiring: the undo dependency's adapter port has no " + method + " function"]);

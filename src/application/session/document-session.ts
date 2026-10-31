@@ -74,7 +74,7 @@ export interface SessionCounters {
   readonly generation: number;
 }
 
-export type AbsorbedKind = "server" | "reload" | "recovery" | "adopt";
+export type AbsorbedKind = "disk" |"reload" | "recovery" | "adopt";
 
 export type SessionListener = (change: SessionChange) => void;
 
@@ -89,9 +89,9 @@ export interface DocumentSession {
   read: <T>(select: (doc: DocumentView | null) => T) => T;
   held: () => ValidatedDocument | null;
   adopt: (raw: unknown) => ValidatedDocument | null;
-  absorbServer: (raw: unknown) => ValidatedDocument | null;
+  absorbDisk: (raw: unknown) => ValidatedDocument | null;
   absorbRecovery: (raw: unknown) => ValidatedDocument | null;
-  absorbMerged: (kind: "server" | "recovery", merged: ValidatedDocument) => ValidatedDocument | null;
+  absorbMerged: (kind: "disk" | "recovery", merged: ValidatedDocument) => ValidatedDocument | null;
   absorbReload: (content: ReloadedContent) => ValidatedDocument | null;
   settle: (kind: AbsorbedKind) => void;
   run: (command: Command) => CommandOutcome;
@@ -261,14 +261,14 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     return doc;
   }
 
-  function absorb(kind: "server" | "recovery", raw: unknown): ValidatedDocument | null {
+  function absorb(kind: "disk" | "recovery", raw: unknown): ValidatedDocument | null {
     if (disposed) return null;
     if (refuses(raw)) return document;
     return take(kind, enter(raw));
   }
 
-  function take(kind: "server" | "recovery", doc: ValidatedDocument | null): ValidatedDocument | null {
-    ports.undo.absorbServer(doc);
+  function take(kind: "disk" | "recovery", doc: ValidatedDocument | null): ValidatedDocument | null {
+    ports.undo.absorbDisk(doc);
     if (kind === "recovery") epoch++;
     document = doc;
     announce(changeOf(kind, WHOLE_DOCUMENT));
@@ -406,7 +406,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     read: function (select) { return select(document); },
     held: function () { return document; },
     adopt: adopt,
-    absorbServer: function (raw) { return absorb("server", raw); },
+    absorbDisk: function (raw) { return absorb("disk", raw); },
     absorbRecovery: function (raw) { return absorb("recovery", raw); },
     absorbMerged: function (kind, merged) {
       if (disposed) return null;
