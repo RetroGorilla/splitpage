@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +15,8 @@ const { IPC_CHANNELS, APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin
 
 const read = (name) => fs.readFileSync(path.join(desktop, name), "utf8");
 const MAIN = read("main.js");
+const SETUP = read("ipc-setup.js");
+const { createIpcSetup } = require(path.join(desktop, "ipc-setup.js"));
 const PRELOADS = [
   { file: "preload.js", origin: APP_ORIGIN, src: read("preload.js") },
   { file: "tabstrip-preload.js", origin: TABSTRIP_ORIGIN, src: read("tabstrip-preload.js") }
@@ -38,11 +42,127 @@ function literalsIn(src) {
 }
 
 const REGISTRAR_DIRECTION = { ipcHandle: "invoke", ipcOn: "send", ipcOnSync: "sendSync" };
-const registrations = [...MAIN.matchAll(/\b(ipcHandle|ipcOnSync|ipcOn)\(\s*"(splitpage:[^"]+)"/g)]
-  .map((m) => ({ name: m[2], direction: REGISTRAR_DIRECTION[m[1]], at: m.index }));
+const registrationsIn = (file, src) => [...src.matchAll(/\b(ipcHandle|ipcOnSync|ipcOn)\(\s*"(splitpage:[^"]+)"/g)]
+  .map((m) => ({ file, registrar: m[1], name: m[2], direction: REGISTRAR_DIRECTION[m[1]], at: m.index }));
+const registrations = [...registrationsIn("main.js", MAIN), ...registrationsIn("ipc-setup.js", SETUP)];
 
-const registerIpcAt = MAIN.indexOf("function registerIpc() {");
-const testModeAt = MAIN.indexOf("\n  if (TEST_MODE) {", registerIpcAt);
+const registerTestModeAt = MAIN.indexOf("function registerTestModeIpc(");
+const testModeAt = MAIN.indexOf("\n  if (TEST_MODE) {", registerTestModeAt);
+
+const REGISTERED_BEFORE_SPLIT = [
+  "splitpage:ipc-table-sync sendSync", "splitpage:open-file-dialog invoke", "splitpage:save-file-dialog invoke",
+  "splitpage:read-file invoke", "splitpage:write-file invoke", "splitpage:stat-file invoke",
+  "splitpage:recents-list invoke", "splitpage:recents-remove invoke", "splitpage:recents-clear invoke",
+  "splitpage:get-session-info invoke", "splitpage:get-app-version-sync sendSync", "splitpage:tab-boot-sync sendSync",
+  "splitpage:open-external send", "splitpage:set-theme send", "splitpage:video-file-grant invoke",
+  "splitpage:video-file-open invoke", "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
+  "splitpage:update-check invoke", "splitpage:update-download invoke", "splitpage:update-install invoke",
+  "splitpage:prompter-open-in-browser invoke", "splitpage:prompter-open-in-chromium invoke",
+  "splitpage:voice-status invoke", "splitpage:voice-start invoke", "splitpage:voice-stop invoke",
+  "splitpage:set-document-state send", "splitpage:renderer-ready send", "splitpage:route-open invoke",
+  "splitpage:draft-write invoke", "splitpage:draft-discard invoke", "splitpage:draft-take invoke",
+  "splitpage:draft-restore-done send", "splitpage:draft-flushed send", "splitpage:history-put invoke",
+  "splitpage:history-list invoke", "splitpage:history-get invoke", "splitpage:history-copy invoke",
+  "splitpage:history-touch invoke", "splitpage:history-list-docs invoke", "splitpage:blob-put invoke",
+  "splitpage:blob-get invoke", "splitpage:blob-missing invoke", "splitpage:tabstrip-window-id-sync sendSync",
+  "splitpage:tabstrip-get-state invoke", "splitpage:tabstrip-new-tab send", "splitpage:tabstrip-activate send",
+  "splitpage:tabstrip-close send", "splitpage:tabstrip-reorder send", "splitpage:tabstrip-move-here send",
+  "splitpage:tabstrip-tear-off send", "splitpage:is-test-mode-sync sendSync", "splitpage:test-request-close send",
+  "splitpage:test-request-close-tab send", "splitpage:test-request-quit send", "splitpage:test-draft-status invoke",
+  "splitpage:test-crash-renderer send", "splitpage:test-dup-loser invoke", "splitpage:test-shell invoke"
+];
+
+function mainHandlerGroups() {
+  const groups = [];
+  for (const m of MAIN.matchAll(/^function (register\w+Ipc)\(\{[^}]*\}\) \{$/gm)) {
+    const end = MAIN.indexOf("\n}\n", m.index);
+    groups.push({
+      name: m[1],
+      start: m.index,
+      end,
+      registrations: registrations.filter((r) => r.file === "main.js" && r.at > m.index && r.at < end)
+    });
+  }
+  return groups;
+}
+
+function fakeIpcMain() {
+  const registered = [];
+  return {
+    registered,
+    handle(name, listener) { registered.push({ name, method: "handle", listener }); },
+    on(name, listener) { registered.push({ name, method: "on", listener }); }
+  };
+}
+
+const APP_FRAME = { url: APP_ORIGIN + "/index.html" };
+const STRIP_FRAME = { url: TABSTRIP_ORIGIN + "/index.html" };
+
+function setupWith(ipcMain, windowsById = new Map()) {
+  return createIpcSetup({ ipcMain, app: { getVersion: () => "9.9.9" }, testMode: false, windowsById });
+}
+
+function directionOf(entry) {
+  if (entry.method === "handle") return "invoke";
+  const event = { senderFrame: { url: "https://evil.example/" }, sender: {} };
+  const logError = console.error;
+  console.error = () => {};
+  try { entry.listener(event); } finally { console.error = logError; }
+  return "returnValue" in event ? "sendSync" : "send";
+}
+
+function fakeElectron(ipcMain, userData) {
+  const noop = () => {};
+  const loose = (base) => new Proxy(base, { get: (t, k) => (k in t ? t[k] : noop) });
+  const app = loose({
+    isPackaged: false,
+    getPath: () => userData,
+    getVersion: () => "9.9.9",
+    isReady: () => false,
+    requestSingleInstanceLock: () => true,
+    whenReady: () => new Promise(() => {})
+  });
+  return loose({
+    app, ipcMain,
+    BrowserWindow: loose(function BrowserWindow() {}),
+    WebContentsView: loose(function WebContentsView() {}),
+    Menu: loose({}), protocol: loose({}), net: loose({}), dialog: loose({}), shell: loose({}),
+    session: loose({}), nativeTheme: loose({}), screen: loose({})
+  });
+}
+
+const REGISTER_IPC_CALL = /\n {2}registerIpc\(\{([^}]*)\}\);/.exec(MAIN);
+const GROUPS_PASSED = REGISTER_IPC_CALL ? REGISTER_IPC_CALL[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+function registerThroughMain({ testMode }) {
+  const ipcMain = fakeIpcMain();
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "ipc-table-"));
+  const electron = fakeElectron(ipcMain, userData);
+  const mainPath = path.join(desktop, "main.js");
+  const lockElseEnd = MAIN.lastIndexOf("\n}");
+  assert.ok(/\n\} else \{\n/.test(MAIN) && MAIN.slice(lockElseEnd).trim() === "}", "main.js ends with its single-instance else block");
+  const body = MAIN.slice(0, lockElseEnd) + `\nreturn { registerIpc, ${GROUPS_PASSED.join(", ")} };` + MAIN.slice(lockElseEnd);
+  const load = vm.runInThisContext(
+    `(function (exports, require, module, __filename, __dirname) {${body}\n})`,
+    { filename: mainPath }
+  );
+  const fakeRequire = (id) => (id === "electron" ? electron : require(id.startsWith(".") ? path.join(desktop, id) : id));
+  const saved = { test: process.env.SPLITPAGE_TEST, noUpdate: process.env.SPLITPAGE_NO_UPDATE_CHECK, userData: process.env.SPLITPAGE_USER_DATA };
+  const restore = (name, value) => { if (value === undefined) delete process.env[name]; else process.env[name] = value; };
+  process.env.SPLITPAGE_TEST = testMode ? "1" : "0";
+  process.env.SPLITPAGE_NO_UPDATE_CHECK = "1";
+  process.env.SPLITPAGE_USER_DATA = userData;
+  try {
+    const main = load({}, fakeRequire, { exports: {} }, mainPath, desktop);
+    main.registerIpc(Object.fromEntries(GROUPS_PASSED.map((name) => [name, main[name]])));
+  } finally {
+    restore("SPLITPAGE_TEST", saved.test);
+    restore("SPLITPAGE_NO_UPDATE_CHECK", saved.noUpdate);
+    restore("SPLITPAGE_USER_DATA", saved.userData);
+    fs.rmSync(userData, { recursive: true, force: true });
+  }
+  return ipcMain.registered.map((e) => `${e.name} ${directionOf(e)}`);
+}
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -126,25 +246,96 @@ test("neither preload can reach the other's channels", () => {
   }
 });
 
-test("main.js registers nothing through ipcMain directly", () => {
-  const direct = [...MAIN.matchAll(/ipcMain\.(handle|on)\(\s*"/g)];
-  assert.deepEqual(direct.map((m) => m[0]), [], "every registration goes through ipcHandle/ipcOn/ipcOnSync");
+test("main.js and ipc-setup.js register nothing through ipcMain directly", () => {
+  for (const [file, src] of [["main.js", MAIN], ["ipc-setup.js", SETUP]]) {
+    const direct = [...src.matchAll(/ipcMain\.(handle|on)\(\s*"/g)];
+    assert.deepEqual(direct.map((m) => m[0]), [], `${file}: every registration goes through ipcHandle/ipcOn/ipcOnSync`);
+  }
+  assert.equal(/ipcMain\.(handle|on)\(/.test(MAIN), false, "main.js calls ipcMain only through ipc-setup.js");
 });
 
-test("every channel main.js registers is in the table, with that direction", () => {
+test("every channel main.js and ipc-setup.js register is in the table, with that direction", () => {
   for (const r of registrations) {
     const row = channelFor(r.name, r.direction);
-    assert.ok(row, `main.js registers ${key(r.name, r.direction)}, which is not in the table`);
+    assert.ok(row, `${r.file} registers ${key(r.name, r.direction)}, which is not in the table`);
     assert.ok(row.allowedOrigins.length > 0, `${r.name} has no origin`);
   }
 });
 
-test("main.js registers a handler for every inbound row, exactly once", () => {
+test("main.js and ipc-setup.js register a handler for every inbound row, exactly once", () => {
   for (const row of IPC_CHANNELS) {
     if (row.direction === "receive") continue;
     const hits = registrations.filter((r) => r.name === row.name && r.direction === row.direction);
-    assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.js`);
+    assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.js and ipc-setup.js`);
   }
+});
+
+test("every registration in main.js sits in a handler group that ipc-setup.js calls", () => {
+  const groups = mainHandlerGroups();
+  for (const r of registrations.filter((x) => x.file === "main.js")) {
+    assert.ok(groups.some((g) => r.at > g.start && r.at < g.end), `${r.name} is registered outside a register*Ipc group`);
+  }
+  for (const g of groups) {
+    assert.ok(g.registrations.length > 0, `${g.name} registers nothing`);
+    assert.ok(SETUP.includes(`groups.${g.name}(wrappers);`), `ipc-setup.js never calls ${g.name}`);
+  }
+});
+
+test("main.js passes registerIpc every handler group it defines", () => {
+  assert.ok(REGISTER_IPC_CALL, "main.js calls registerIpc({ ...groups })");
+  assert.deepEqual([...GROUPS_PASSED].sort(), mainHandlerGroups().map((g) => g.name).sort());
+});
+
+test("in test mode, main.js's real groups register the 59 pairs in the order they had before the split", () => {
+  assert.deepEqual(registerThroughMain({ testMode: true }), REGISTERED_BEFORE_SPLIT);
+});
+
+test("outside test mode, main.js's real groups register the same pairs in order, minus every test-only channel", () => {
+  const seen = registerThroughMain({ testMode: false });
+  const expected = REGISTERED_BEFORE_SPLIT.filter((pair) => !pair.startsWith("splitpage:test-"));
+  assert.equal(expected.length, 52);
+  assert.deepEqual(seen, expected);
+  for (const pair of seen) {
+    const [name, direction] = pair.split(" ");
+    assert.equal(!!channelFor(name, direction).testOnly, false, `${pair} is test-only and registered outside test mode`);
+  }
+});
+
+test("the wrappers refuse untrusted senders and bad arguments, and run trusted calls", async () => {
+  const stripContents = {};
+  const windowsById = new Map([["w1", { win: { isDestroyed: () => false, webContents: stripContents } }]]);
+  const ipcMain = fakeIpcMain();
+  setupWith(ipcMain, windowsById).registerIpc({
+    registerFileIpc: ({ ipcHandle }) => ipcHandle("splitpage:read-file", (_e, id) => "read " + id),
+    registerShellIpc: ({ ipcOnSync }) => ipcOnSync("splitpage:tab-boot-sync", () => { throw new Error("boom"); }),
+    registerDocumentIpc: () => {},
+    registerHistoryBlobIpc: () => {},
+    registerTabStripIpc: ({ ipcOn }) => ipcOn("splitpage:tabstrip-new-tab", (e) => { e.ran = true; }),
+    registerTestModeIpc: () => {}
+  });
+  const entry = (name) => ipcMain.registered.find((e) => e.name === name).listener;
+
+  assert.equal(await entry("splitpage:read-file")({ senderFrame: APP_FRAME, sender: {} }, "f1"), "read f1");
+  assert.throws(() => entry("splitpage:read-file")({ senderFrame: STRIP_FRAME, sender: stripContents }, "f1"), /untrusted sender/);
+  assert.throws(() => entry("splitpage:read-file")({ senderFrame: APP_FRAME, sender: {} }, "a", "b"), /splitpage:read-file: /);
+
+  const fromStrip = { senderFrame: STRIP_FRAME, sender: stripContents };
+  entry("splitpage:tabstrip-new-tab")(fromStrip);
+  assert.equal(fromStrip.ran, true, "a strip sender in a live window runs");
+  const strayStrip = { senderFrame: STRIP_FRAME, sender: {} };
+  entry("splitpage:tabstrip-new-tab")(strayStrip);
+  assert.equal(strayStrip.ran, undefined, "a strip sender in no window is refused");
+
+  const boot = { senderFrame: APP_FRAME, sender: {} };
+  entry("splitpage:tab-boot-sync")(boot);
+  assert.equal(boot.returnValue, channelFor("splitpage:tab-boot-sync", "sendSync").refusal, "a throwing sync handler answers its refusal");
+
+  const version = { senderFrame: APP_FRAME, sender: {} };
+  entry("splitpage:get-app-version-sync")(version);
+  assert.equal(version.returnValue, "9.9.9");
+  const tableRead = { senderFrame: STRIP_FRAME, sender: stripContents };
+  entry("splitpage:ipc-table-sync")(tableRead);
+  assert.deepEqual(tableRead.returnValue, channelsForOrigin(TABSTRIP_ORIGIN));
 });
 
 test("main.js sends every main -> renderer row and registers none of them", () => {
@@ -164,14 +355,15 @@ test("main.js sends every main -> renderer row and registers none of them", () =
 });
 
 test("a TEST_MODE-only row is registered inside the TEST_MODE block, and nothing else is", () => {
-  assert.ok(registerIpcAt > 0, "registerIpc() found");
-  assert.ok(testModeAt > registerIpcAt, "the TEST_MODE block inside registerIpc() found");
+  assert.ok(registerTestModeAt > 0, "registerTestModeIpc() found");
+  assert.ok(testModeAt > registerTestModeAt, "the TEST_MODE block inside registerTestModeIpc() found");
   for (const r of registrations) {
     const row = channelFor(r.name, r.direction);
+    const inTestBlock = r.file === "main.js" && r.at > testModeAt;
     if (row.testOnly) {
-      assert.ok(r.at > testModeAt, `${r.name} is testOnly and is registered outside the TEST_MODE block`);
+      assert.ok(inTestBlock, `${r.name} is testOnly and is registered outside the TEST_MODE block`);
     } else {
-      assert.ok(r.at < testModeAt, `${r.name} is not testOnly and is registered inside the TEST_MODE block`);
+      assert.ok(!inTestBlock, `${r.name} is not testOnly and is registered inside the TEST_MODE block`);
     }
   }
 });
@@ -278,12 +470,15 @@ test("Follow My Voice takes no argument, from the app page only", () => {
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
 });
 
-test("packaging: every ./module main.js requires is in electron-builder.yml's files", () => {
+test("packaging: every ./module main.js or ipc-setup.js requires is in electron-builder.yml's files", () => {
   const yml = read("electron-builder.yml");
   const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.js)\s*$/gm)].map((m) => m[1]));
-  const required = [...MAIN.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(?:\.js)?"\)/g)].map((m) => m[1] + ".js");
+  const requiredBy = (src) => [...src.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(?:\.js)?"\)/g)].map((m) => m[1] + ".js");
+  const required = [...requiredBy(MAIN), ...requiredBy(SETUP)];
   assert.ok(required.includes("drafts.js"), "main.js requires ./drafts");
-  for (const f of required) assert.ok(listed.has(f), f + " is required by main.js but not in electron-builder.yml files");
+  assert.ok(required.includes("ipc-setup.js"), "main.js requires ./ipc-setup");
+  assert.ok(required.includes("ipc-channels.js"), "ipc-setup.js requires ./ipc-channels");
+  for (const f of required) assert.ok(listed.has(f), f + " is required by main.js or ipc-setup.js but not in electron-builder.yml files");
 });
 
 test("the blob channels: a typed sha256, app page only", () => {
