@@ -18,6 +18,7 @@ const MAIN = read("main.js");
 const SETUP = read("ipc-setup.js");
 const IPC_MODULES = fs.readdirSync(desktop).filter((f) => /^ipc-[a-z-]+\.js$/.test(f) && f !== "ipc-channels.js").sort();
 const SOURCES = [["main.js", MAIN], ...IPC_MODULES.map((f) => [f, read(f)])];
+const SENDERS = [...SOURCES, ["voice-composition.js", read("voice-composition.js")]];
 const { createIpcSetup } = require(path.join(desktop, "ipc-setup.js"));
 const PRELOADS = [
   { file: "preload.js", origin: APP_ORIGIN, src: read("preload.js") },
@@ -357,11 +358,11 @@ test("the wrappers refuse untrusted senders and bad arguments, and run trusted c
 });
 
 test("the main process sends every main -> renderer row and registers none of them", () => {
-  const sends = new Set(SOURCES.flatMap(([, src]) => [...src.matchAll(/\.send\(\s*"(splitpage:[^"]+)"/g)].map((m) => m[1])));
+  const sends = new Set(SENDERS.flatMap(([, src]) => [...src.matchAll(/\.send\(\s*"(splitpage:[^"]+)"/g)].map((m) => m[1])));
   const inbound = new Set(IPC_CHANNELS.filter((c) => c.direction !== "receive").map((c) => c.name));
   for (const row of IPC_CHANNELS) {
     if (row.direction !== "receive") continue;
-    assert.ok(sends.has(row.name), `${row.name} is in the table and neither main.js nor an ipc-*.js module sends it`);
+    assert.ok(sends.has(row.name), `${row.name} is in the table and none of main.js, the ipc-*.js modules or voice-composition.js sends it`);
     if (!inbound.has(row.name)) {
       assert.equal(
         registrations.some((r) => r.name === row.name),
@@ -507,6 +508,8 @@ test("packaging: every ./module main.js requires, directly or through another mo
   for (const f of ["close-keep.js", "quit-watchdog.js", "unsaved-dialog.js"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
   for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
   for (const f of ["close-quit.js", "session-restore.js"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
+  assert.ok(requiredBy(MAIN).includes("voice-composition.js"), "main.js requires ./voice-composition");
+  assert.ok(required.has("voice-helper.js") && required.has("prompter-share.js"), "voice-composition.js requires ./voice-helper and ./prompter-share");
   for (const f of required) assert.ok(listed.has(f), f + " is required from main.js but not in electron-builder.yml files");
 });
 

@@ -1217,8 +1217,8 @@ desktop, installer, server, export, ui) for where it lives,
 can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
 
 Follow My Voice on desktop (#8) runs Windows' own recogniser (System.Speech, offline) through
-`desktop/voice/listen.ps1`, driven by `desktop/voice-helper.js` (main.js
-§ 9d, invariants #45–#47); it has never heard a real voice from an agent
+`desktop/voice/listen.ps1`, driven by `desktop/voice-helper.js`, which
+`desktop/voice-composition.js` creates and routes (invariants #45–#47); it has never heard a real voice from an agent
 session — the by-hand check is in `docs/WINDOWS-CHECKS.md` §3.
 
 **The header after Direction B (#169).** The row no longer overlaps
