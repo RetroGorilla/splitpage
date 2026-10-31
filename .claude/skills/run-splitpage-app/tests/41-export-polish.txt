@@ -343,16 +343,15 @@ eval (async function(){ window.__dxCsv = await window.__blobs[window.__blobs.len
 expect __dxCsv.indexOf('"DXBEFORE\n[image]\nDXBETWEEN\n[image]\nDXAFTER"') !== -1 && __dxCsv.indexOf('"DXREPLY\n[image]\nDXREPLYAFTER"') !== -1 && __dxCsv.indexOf('"DXGONE\n[image]\nDXGONEAFTER"') !== -1
 expect __dxCsv.split('\r\n').filter(function(l){ return /,\[image\]$/.test(l); }).length === 2 && /↳ Cy,[^\r\n]*,\[image\]\r\n/.test(__dxCsv) && /,Dee,[^\r\n]*,\[image\]\r\n/.test(__dxCsv)
 
-# .txt — written only back to a foreign .txt (its import home): open one,
-# carry this document's comments into it, Save to file, read what was written
-eval (function(){ window.__dxComments = JSON.parse(JSON.stringify(F.state().comments)); window.__txtBody = null; window.__txtH = { name: 'dx.txt', createWritable: async function(){ return { write: async function(b){ window.__txtBody = b; }, close: async function(){} }; }, getFile: async function(){ return new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }); } }; return F.openFile(new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }), window.__txtH); })()
-wait !document.getElementById('file-chip').hidden && document.getElementById('file-chip-name').textContent === 'dx.txt'
-eval (function(){ var rid = F.state().rows[0].id; F.state().comments = __dxComments.map(function(c){ c.rowId = rid; return c; }); return F.state().comments.length; })()
-jsclick #btn-file
-jsclick #menu-save-back
-wait window.__txtBody !== null
-eval (async function(){ var b = window.__txtBody; window.__dxTxt = typeof b === 'string' ? b : await new Blob([b]).text(); return window.__dxTxt.slice(window.__dxTxt.indexOf('COMMENTS')); })()
-expect __dxTxt.indexOf('  DXBEFORE\n  [image]\n  DXBETWEEN\n  [image]\n  DXAFTER') !== -1 && /> Bob, [^\n]*: DXREPLY\n    \[image\]\n    DXREPLYAFTER/.test(__dxTxt) && /> Cy, [^\n]*: \[image\]\n/.test(__dxTxt) && /Dee[^\n]*\n  \[image\]\n/.test(__dxTxt) && __dxTxt.indexOf('  DXGONE\n  [image]\n  DXGONEAFTER') !== -1 && __dxTxt.indexOf('(empty)') === -1
+# .txt — the whole script as plain text was written only back to a foreign
+# .txt (its import home). Import save-back was switched off on 2026-10-30:
+# a foreign .txt now opens as a script with no file, the File menu has no
+# Save to file, and nothing writes the .txt
+eval (function(){ window.__txtBody = null; window.__txtH = { name: 'dx.txt', createWritable: async function(){ return { write: async function(b){ window.__txtBody = b; }, close: async function(){} }; }, getFile: async function(){ return new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }); } }; return F.openFile(new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }), window.__txtH); })()
+wait F.state().title === 'dx'
+expect document.getElementById('file-chip').hidden === true
+expect document.querySelector('#file-menu [data-file-action="save-back"]') === null
+expect window.__txtBody === null
 
 # =============================================================================
 # Reopening a .docx Splitpage wrote: the script's rows and nothing else. Its
