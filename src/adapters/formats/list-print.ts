@@ -88,7 +88,7 @@ export function shotListPrintSection(input: ListPrintInput, options?: unknown, a
 <td><strong>${escapeHtml(item.name)}</strong>${item.desc ? `<div class="print-text list-detail">${escapeHtml(item.desc)}</div>` : ""}${item.cuts ? `<div class="list-detail"><em>“${escapeHtml(item.cuts)}”</em></div>` : ""}</td>
 <td>${escapeHtml(group.kind === "location" ? "" : item.location)}</td><td>${item.propsWithStatus.map((prop) => `<div>${escapeHtml(prop)}</div>`).join("")}</td>
 <td>${escapeHtml(group.kind === "person" ? "" : item.owner)}</td><td>${item.flagged ? `<strong class="shot-flag">Flagged</strong>${item.note ? `<div class="print-text">${escapeHtml(item.note)}</div>` : ""}` : ""}</td>
-<td>${!item.flagged ? `<div class="print-text">${escapeHtml(item.note)}</div>` : ""}<div class="writing-lines" aria-label="Notes space"></div></td></tr>`).join("")}</tbody>`).join("")}</table>` : "<p>No shots to list.</p>");
+<td>${!item.flagged ? `<div class="print-text">${escapeHtml(item.note)}</div>` : ""}<div class="writing-lines" aria-label="Notes space"><span></span><span></span></div></td></tr>`).join("")}</tbody>`).join("")}</table>` : "<p>No shots to list.</p>");
   return { id: "broll-shot-list", title: "B-roll shot list", html: `<div class="shot-list">${html}</div>` };
 }
 

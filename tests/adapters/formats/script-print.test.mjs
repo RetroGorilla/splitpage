@@ -29,10 +29,25 @@ test("script print preserves captured facts, scene metadata, rich text and annot
   assert.equal(dom.querySelector(".tag").style.color, "rgb(118, 74, 162)");
   assert.equal(dom.querySelector(".comment-marker").textContent, "1");
   assert.match(dom.querySelector(".script-table").textContent, /中文 日本語 العربية हिन्दी 😀/);
-  assert.equal(dom.querySelector(".rundown .ready").textContent, "01");
+  assert.equal(dom.querySelector(".rundown,[aria-label='Scene rundown']"), null);
+  assert.match(dom.body.textContent, /Grey rows: shot scenes/);
   assert.deepEqual([...dom.querySelectorAll("td p")].map((el) => el.textContent), [
     "YouTube https://www.youtube.com/watch?v=aqz-KE-bpKQ", "Local clip (video file)"
   ]);
+});
+
+test("shot scenes have grey rows and retain their written status without a scene strip", () => {
+  const { source, input } = scriptFixture("long");
+  const doc = buildExportDocument(source, input.doc.capturedAt, { production: [], commentNumbers: input.doc.commentNumbers, broll: [] });
+  const dom = page({ ...input, doc });
+  const rows = [...dom.querySelectorAll(".script-table tbody tr")];
+  assert.equal(rows.length, 18);
+  assert.equal(rows[0].classList.contains("shot-done"), false);
+  for (const row of rows.slice(1)) {
+    assert.equal(row.classList.contains("shot-done"), true);
+    assert.match(row.querySelector("td").textContent, /Shot/);
+  }
+  assert.equal(dom.querySelector(".rundown,[aria-label='Scene rundown']"), null);
 });
 
 test("comments retain anchors, locations, quotes, authors, assignments, resolution, replies and pictures in order", () => {

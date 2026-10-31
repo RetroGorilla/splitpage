@@ -62,6 +62,7 @@ test("shot lists use every existing filter and grouping with projected counts an
       const { item, kind } = items[i];
       const cells = row.querySelectorAll("td");
       assert.equal(!!cells[0].querySelector(".checked"), item.shot);
+      assert.equal(row.classList.contains("shot-done"), item.shot);
       assert.equal(cells[0].querySelector("span").getAttribute("aria-label"), item.status);
       assert.equal(cells[1].textContent, item.scene + item.start);
       assert.equal(cells[2].querySelector("strong").textContent, item.name);
@@ -71,10 +72,35 @@ test("shot lists use every existing filter and grouping with projected counts an
       assert.equal(cells[5].textContent, kind === "person" ? "" : item.owner);
       assert.equal(cells[6].textContent, item.flagged ? "Flagged" + item.note : "");
       assert.equal(cells[7].textContent, item.flagged ? "" : item.note);
-      assert.ok(cells[7].querySelector(".writing-lines"));
+      const lines = cells[7].querySelector(".writing-lines");
+      assert.equal(lines.getAttribute("aria-label"), "Notes space");
+      assert.equal(lines.querySelectorAll(":scope > span").length, 2);
     });
   }
   assert.equal(buildShotListPrintPage(input, { filter: "bad", group: "bad" }), buildShotListPrintPage(input));
+});
+
+test("print rules use solid vector marks and preserve legible shot backgrounds without a scene strip", () => {
+  const { input } = listFixture();
+  for (const html of [buildPackingListPrintPage(input, "prop"), buildShotListPrintPage(input), buildScriptWithListsPrintPage(input)]) {
+    const dom = page(html);
+    assert.equal(dom.querySelector(".rundown,[aria-label='Scene rundown']"), null);
+    const css = dom.querySelector("style").textContent;
+    assert.doesNotMatch(css, /gradient\(|\.rundown/);
+    const rules = [...dom.styleSheets[0].cssRules];
+    const style = (selector) => rules.find((rule) => rule.selectorText === selector).style;
+    assert.equal(style(".writing-lines > span").getPropertyValue("border-bottom"), "0.5pt solid rgb(201, 199, 193)");
+    assert.equal(style(".writing-lines > span").getPropertyValue("height"), "12pt");
+    assert.equal(style(".status-mark.sourcing::before").getPropertyValue("width"), "50%");
+    const shot = style(".shot-done > td");
+    assert.equal(shot.getPropertyValue("background"), "rgb(230, 230, 230)");
+    assert.equal(shot.getPropertyValue("print-color-adjust"), "exact");
+    assert.match(css, /\.shot-done > td\s*\{[^}]*-webkit-print-color-adjust:\s*exact;/);
+  }
+  const dom = page(buildScriptWithListsPrintPage(listFixture("long").input));
+  assert.equal(dom.querySelectorAll(".shot-table .shot-done").length, 66);
+  assert.equal(dom.querySelectorAll(".shot-table .shot-done .checked").length, 66);
+  assert.equal(dom.querySelectorAll(".script-table .shot-done").length, 0);
 });
 
 test("script composition keeps every breakdown category, all scene-grouped shots, then comments", () => {
