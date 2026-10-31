@@ -50,21 +50,25 @@ export function sectionMergeOrder<T extends { readonly id: string }>(
   const theirIds = new Set(theirs.rows.map(row => row.id));
   const common = (side: SectionDocument): string => side.rows
     .filter(row => baseIds.has(row.id) && mineIds.has(row.id) && theirIds.has(row.id)).map(row => row.id).join("\n");
-  if (common(theirs) !== common(base) || common(mine) === common(base)) return rows;
+  const baseOrder = common(base);
+  const theirOrder = common(theirs), mineOrder = common(mine);
+  if (theirOrder === baseOrder && mineOrder === baseOrder) return rows;
+  const preferred = theirOrder === baseOrder ? mine : theirs;
+  const additions = preferred === mine ? theirs : mine;
   const byId = new Map(rows.map(row => [row.id, row]));
-  const ordered = mine.rows.flatMap(row => {
+  const ordered = preferred.rows.flatMap(row => {
     const found = byId.get(row.id);
     return found ? [found] : [];
   });
   const placed = new Set(ordered.map(row => row.id));
-  const incomingGroups = sectionGroups(theirs);
-  const incomingPosition = new Map(theirs.rows.map((row, i) => [row.id, i]));
+  const incomingGroups = sectionGroups(additions);
+  const incomingPosition = new Map(additions.rows.map((row, i) => [row.id, i]));
   rows.forEach((row, i) => {
     if (placed.has(row.id)) return;
     const position = incomingPosition.get(row.id);
     const group = position === undefined ? undefined : incomingGroups.find(item => position >= item.start && position < item.end);
     if (group && position !== undefined) {
-      const members = theirs.rows.slice(group.start, group.end);
+      const members = additions.rows.slice(group.start, group.end);
       const memberAt = position - group.start;
       const preceding = members.slice(0, memberAt).reverse().find(member => placed.has(member.id));
       const following = members.slice(memberAt + 1).find(member => placed.has(member.id));

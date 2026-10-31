@@ -4,6 +4,8 @@ import { migrateRows } from "../../src/core/migrate.ts";
 import { sectionForScene } from "../../src/core/document/sections.ts";
 import { mergeSections, sectionMergeOrder } from "../../src/core/merge/sections.ts";
 import { fakeMigration } from "./migrate-ports.ts";
+import { fakePorts } from "./merge/fakes.ts";
+import { mergeStateFields } from "../../src/core/merge/states.ts";
 
 const rows = ["a", "b", "c", "d"].map(id => ({ id }));
 const sections = [{ id: "s1", name: "Opening", firstSceneId: "a" }, { id: "s2", name: "Ending", firstSceneId: "c" }];
@@ -32,6 +34,7 @@ test("sections: concurrent rename and anchor change combine; same-property confl
 test("sections: deletion beats unchanged, edited headers survive deletion, missing anchors advance within their group", () => {
   const base = { rows, sections };
   assert.deepEqual(mergeSections(base, { rows }, base, rows), undefined);
+  assert.deepEqual(mergeSections(base, base, { rows }, rows), undefined);
   const edited = { rows, sections: [{ ...sections[0], name: "Keep" }, sections[1]] };
   assert.deepEqual(mergeSections(base, { rows }, edited, rows), [{ id: "s1", name: "Keep", firstSceneId: "a" }]);
   assert.equal(mergeSections(base, base, base, rows.slice(1))?.[0]?.firstSceneId, "b");
@@ -60,4 +63,12 @@ test("sections: a group move and concurrent paste over its first scene keep the 
   assert.deepEqual(mergedRows.map(row => row.id), ["x", "y", "d", "a", "b"]);
   assert.equal(sectionForScene(merged, "d")?.id, "s2");
   assert.equal(sectionForScene(merged, "a")?.id, "s1");
+  for (const [mineSide, theirSide] of [[mine, theirs], [theirs, mine]]) {
+    const migration = fakeMigration();
+    const result = mergeStateFields(migrateRows(structuredClone(base), migration.ports),
+      migrateRows(structuredClone(mineSide), migration.ports), migrateRows(structuredClone(theirSide), migration.ports), fakePorts(() => []));
+    const state = migrateRows(result.merged, migration.ports);
+    assert.deepEqual(state.rows.map(row => row.id), ["x", "y", "d", "a", "b"]);
+    assert.equal(sectionForScene(state, "d")?.id, "s2");
+  }
 });
