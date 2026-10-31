@@ -12,7 +12,7 @@ expect a fresh clone not to have one until you build it. The source is
 `src/js/`) plus `docs/help.md` (rendered into the in-app Help page) and
 `VERSION`, and `node build.mjs` bundles them with esbuild and inlines the
 result back into `index.html`. The suites need the test build,
-`node build.mjs --test`: it keeps the `window.__*Test` hooks the suites drive,
+`node build.mjs --test`: it keeps the `window.__*Test` hooks and `window.__splitpageFormats` the suites drive,
 which the plain (release) build leaves out (see `tools/release-hooks.mjs`).
 Run `npm install` once first — esbuild builds
 the bundle, jsdom lends the unit tests a DOM. Edit the source, rebuild, then

@@ -51,6 +51,7 @@ import type { RecordsReconciler } from "../application/production/broll-records.
 import { captureOperation, documentSources, startTransitions, stillOwns } from "./wiring/transition-owners.ts";
 import type { LegacyDocumentSource, LegacyTransitionPorts } from "./wiring/transition-owners.ts";
 import { routeUndoReplays, startUndo, undoOwner, undoPorts, undoSessionPort } from "./wiring/undo.ts";
+import { exposeTestHook } from "../features/common/test-hooks.ts";
 
 export interface WiringDeps {
   readonly entry: DocumentEntry;
@@ -390,7 +391,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
   build("undo", () => {
     const stop = startUndo(undoPorts());
-    Object.assign(window, { __undoTest: { sizes: () => undoOwner().sizes(), flush: () => { undoOwner().flush(); } } });
+    exposeTestHook("__undoTest", () => ({ sizes: () => undoOwner().sizes(), flush: () => { undoOwner().flush(); } }), () => undefined);
     return stop;
   }, (stop) => stop);
   build("session", () => {
