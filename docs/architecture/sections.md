@@ -24,26 +24,56 @@ existing row-content merge occurs exactly once in that layout.
 
 Three-way merge first reconciles section existence and names by stable ID.
 A one-sided change wins; competing names retain the incoming value. Deletion
-beats an unchanged record, while a renamed or reanchored record survives
-concurrent header removal. An empty resulting group has no header.
+beats an unchanged name, while a renamed record survives concurrent header
+removal. `firstSceneId` is a derived anchor: an anchor-only change, including
+one caused by deleting or moving its scene, never defeats header removal.
+An empty resulting group has no header and cannot receive another removed
+group's scenes merely because its name survived.
 
 Section order is compared by section IDs, even when none of a group's original
 scenes survives. Scene membership is compared independently against the base:
 a changed side wins over an unchanged side, and competing assignments retain
 the incoming assignment. Removing a header projects its membership onto the
 nearest surviving predecessor in the base, or the unsectioned prefix. A
-concurrent scene move still applies to that projected membership. If an edited
-header survives a removal that left scene order unchanged, that removal does
-not erase its original membership.
+concurrent scene move still applies to that projected membership. A missing
+header's transfer of original scenes into its collapsed predecessor is treated
+as header removal, not a competing scene assignment. This comparison does not
+require either side's row list to equal the base.
+
+A rename beats an absent header for that section's original scenes still
+sitting in the collapsed predecessor. Explicit moves into another surviving
+group still win. Merge uses only observable snapshots, never operation history.
+For example, base `[a,b,c] A:b`, a rename on one side, and `[a,x,b,c]` with no
+headers on the other could mean either Remove header plus insertion of `x`,
+or individually moving `b` and `c` into the unsectioned prefix plus insertion.
+Those snapshots are identical. The result preserves the renamed `A` on `b,c`
+and leaves `a,x` unsectioned in both orientations.
+
+With no base, a side without section metadata defers to the side that has it.
+With a sectionless base, newly added boundaries are ordinary additions; two
+different headers added at the same boundary retain the incoming assignment.
 
 Within each resulting group, a one-sided scene reorder survives; competing
 reorders retain incoming order. New scenes keep their side's neighbouring
 scenes. The internal order of collapsed groups follows base group order, so a
 section move cannot masquerade as a competing scene reorder. A new boundary
+inherits its original group's ordering rank, and its scenes' order is compared
+on both sides even before they belonged to that new identity. A new boundary
 and a concurrent scene reassignment use the same membership conflict rule.
 These layout rules apply only to documents with sections. Sectionless merge
 retains the existing row ordering. Undo uses the existing document-field and
 row-order steps; one command is one entry.
+
+## Older applications
+
+Version 3.1 preserves the unknown `sections` key through load and save, but
+drops it on any merge. If an older application deletes or replaces a section-start
+scene so its ID is absent, opening that file in the new application drops the
+affected header during migration; its scenes join the section above, or the
+unsectioned prefix. A move that preserves the anchor's ID instead moves the
+header with that scene, because migration cannot identify the stale boundary.
+These paths can lose or relocate headings, not scenes, and do not crash.
+Old scripts without sections retain their byte-identical round trip.
 
 ## Boundary deletion decision
 
