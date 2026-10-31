@@ -393,7 +393,7 @@ STRUCTURE SECTION MUST SAY
 - "Types only." The final member list, any member added and why, any cast left and why.
 ```
 
-## AQ-18 [ ] Measure full render() on stamp and hide
+## AQ-18 [x] Measure full render() on stamp and hide
 
 Needs: none.
 Files: tools/perf-record.mjs, docs/architecture/testing.md.
