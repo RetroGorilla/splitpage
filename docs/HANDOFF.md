@@ -773,6 +773,16 @@ builds two fields.
 
 ## 4. State schema
 
+Section headers (I-31) are an optional `sections` list of
+`{ id, name, firstSceneId }` records. They are boundaries anchored to real
+scene IDs, never scene rows. Scenes before the first boundary are unsectioned.
+The list is absent when empty, so sectionless files retain their old bytes.
+Both `.splitpage` and the authoritative Markdown data block carry the list;
+the legacy Markdown project table remains unchanged. Migration orders valid
+boundaries by scene order and removes invalid, duplicate or orphaned entries.
+Names are plain text, limited to 200 code points. See
+[sections.md](architecture/sections.md) for editing, undo and merge rules.
+
 ```jsonc
 {
   "title": "string ≤300 chars",

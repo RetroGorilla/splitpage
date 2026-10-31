@@ -1,4 +1,5 @@
 import { normalizePersonColors } from "./person-colors.ts";
+import { normalizeSections } from "./sections.ts";
 import { cappedName } from "./text-policy.ts";
 import { DEFAULT_WPM, normalizeTargetLength, normalizeWordsPerMinute } from "./timing.ts";
 
@@ -15,6 +16,7 @@ export const STRATEGY_IDS = [
   "theirs-wins",
   "person-colors",
   "target-length",
+  "sections",
   "constant"
 ] as const;
 
@@ -48,6 +50,7 @@ const FIELDS: StateField[] = [
   { key: "lastEditedAt",   merge: "theirs-wins", undo: false },
   { key: "personColors",   normalize: function (v) { return normalizePersonColors(v) || undefined; }, merge: "person-colors", undo: false },
   { key: "targetSeconds",  normalize: normalizeTargetLength, merge: "target-length", undo: true },
+  { key: "sections",       normalize: normalizeSections, merge: "sections", undo: true },
   { key: "schema",         merge: "constant", undo: false }
 ];
 
