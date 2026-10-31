@@ -264,8 +264,8 @@ differences above, which now apply to desktop too:
 - The computer's fonts replace the bundled Noto fonts, so the old warning
   about characters the PDF could not show is not raised for PDFs. Chromium
   falls back through system fonts instead.
-- The footer is not an `/Artifact` (INV-61 desktop scope, awaiting Adam's
-  decision).
+- The footer is not an `/Artifact`, so text extraction includes it (INV-61
+  desktop scope, accepted by Adam on 2026-10-31).
 - A picture whose bytes do not decode fails the export with the build error;
   the old writer left it out. Missing pictures still print the placeholder and
   raise no images-left-out warning, as before.
