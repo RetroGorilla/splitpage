@@ -20,6 +20,8 @@ files:
   - ipc-tabstrip.js
   - ipc-test-mode.js
   - prompter-share.js
+  - close-quit.js
+  - session-restore.js
   - close-keep.js
   - quit-watchdog.js
   - blob-store.js

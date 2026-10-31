@@ -488,16 +488,26 @@ test("Follow My Voice takes no argument, from the app page only", () => {
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
 });
 
-test("packaging: every ./module main.js or an ipc-*.js module requires is in electron-builder.yml's files", () => {
+test("packaging: every ./module main.js requires, directly or through another module, is in electron-builder.yml's files", () => {
   const yml = read("electron-builder.yml");
   const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.js)\s*$/gm)].map((m) => m[1]));
   const requiredBy = (src) => [...src.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(?:\.js)?"\)/g)].map((m) => m[1] + ".js");
-  const required = SOURCES.flatMap(([, src]) => requiredBy(src));
-  assert.ok(required.includes("drafts.js"), "main.js requires ./drafts");
-  assert.ok(required.includes("ipc-setup.js"), "main.js requires ./ipc-setup");
-  assert.ok(required.includes("ipc-channels.js"), "ipc-setup.js requires ./ipc-channels");
+  const required = new Set();
+  const pending = SOURCES.map(([, src]) => src);
+  while (pending.length) {
+    for (const f of requiredBy(pending.shift())) {
+      if (required.has(f)) continue;
+      required.add(f);
+      pending.push(read(f));
+    }
+  }
+  assert.ok(required.has("drafts.js"), "main.js requires ./drafts");
+  assert.ok(required.has("ipc-setup.js"), "main.js requires ./ipc-setup");
+  assert.ok(required.has("ipc-channels.js"), "ipc-setup.js requires ./ipc-channels");
+  for (const f of ["close-keep.js", "quit-watchdog.js", "unsaved-dialog.js"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
   for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
-  for (const f of required) assert.ok(listed.has(f), f + " is required by main.js or an ipc-*.js module but not in electron-builder.yml files");
+  for (const f of ["close-quit.js", "session-restore.js"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
+  for (const f of required) assert.ok(listed.has(f), f + " is required from main.js but not in electron-builder.yml files");
 });
 
 test("the blob channels: a typed sha256, app page only", () => {
