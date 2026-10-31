@@ -13,6 +13,8 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import type { LengthHolder } from "../../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
 import { hiddenShotStripHtml } from "./hide-shot.ts";
+import { sectionHeaderHtml, sectionRowEntries } from "./section-rows.ts";
+import { sectionGroups } from "../../core/document/sections.ts";
 import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
@@ -59,6 +61,7 @@ interface RowParts {
 
 interface SignedRow extends Element {
   __splitpageRowSig?: RowParts;
+  __splitpageSectionSig?: string;
 }
 
 interface RowPatch {
@@ -227,8 +230,9 @@ export function paintRowTimes() {
   for (let c = rowsEl.firstElementChild; c; c = c.nextElementSibling) {
     if (c.classList.contains("row")) byId[c.getAttribute("data-id") as string] = c;
   }
-  let t = 0;
-  doc.rows.forEach(function (row) {
+  let t = 0, groupIndex = 0, groupTotal = 0;
+  const groups = sectionGroups(doc);
+  doc.rows.forEach(function (row, index) {
     const secs = rowSeconds(row, doc, ports.text.productionReaders);
     const el = byId[row.id];
     if (el) {
@@ -236,6 +240,14 @@ export function paintRowTimes() {
       paintReadTime(el.querySelector<HTMLElement>(".row-read"), row, secs, doc);
     }
     t += secs;
+    const group = groups[groupIndex];
+    if (group && index >= group.start) {
+      groupTotal += secs;
+      if (index + 1 === group.end) {
+        document.querySelectorAll('[data-section-total="' + cssAttr(group.section.id) + '"]').forEach(el => setTextIfChanged(el, formatDuration(groupTotal)));
+        groupIndex++; groupTotal = 0;
+      }
+    }
   });
 }
 
@@ -529,12 +541,23 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
   const drop: Element[] = [];
   Array.prototype.slice.call(rowsEl.children).forEach(function (el: SignedRow) {
     const key: string | null = rowMotionKey(el);
-    const reusable = key && !existing.has(key) && (key.indexOf("strip:") === 0 || el[ROW_SIG]);
+    const reusable = key && !existing.has(key) && (key.indexOf("strip:") === 0 || key.indexOf("section:") === 0 || el[ROW_SIG]);
     if (reusable) existing.set(key as string, el);
     else drop.push(el);
   });
 
-  const steps = ports.hiding().groups(doc.rows).map(function (item): RowsStep {
+  const steps = sectionRowEntries(doc, ports.hiding(), ports.sections()).map(function (item): RowsStep {
+    if ("section" in item) {
+      const key = "section:" + item.section.id;
+      const html = sectionHeaderHtml(item, !ports.edits.allowed());
+      const old = existing.get(key);
+      existing.delete(key);
+      if (old?.__splitpageSectionSig === html) return { node: old };
+      if (old) drop.push(old);
+      const node = nodeFromHtml(html) as SignedRow;
+      node.__splitpageSectionSig = html;
+      return { node };
+    }
     const strip = (item as Partial<ShotStrip>).strip;
     const entry = item as ShotRowEntry<Row>;
     const key = strip ? "strip:" + strip.join(",") : "row:" + entry.row.id;
@@ -822,7 +845,7 @@ const ON_SCREEN_ALREADY: Readonly<Record<string, true>> = { visualText: true, au
 
 const ONE_ROW: Readonly<Record<string, true>> = { status: true, lengthSeconds: true, updatedAt: true, updatedBy: true };
 
-const SHOWN_DOC_FIELDS: Readonly<Record<string, true>> = { title: true, wordsPerMinute: true, comments: true };
+const SHOWN_DOC_FIELDS: Readonly<Record<string, true>> = { title: true, wordsPerMinute: true, comments: true, sections: true };
 
 const TEXT_FIELDS: Readonly<Record<string, true>> = { visualText: true, audioText: true };
 

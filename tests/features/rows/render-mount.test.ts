@@ -31,6 +31,7 @@ function fixture() {
     draft: { appendMedia: () => null, model: () => ({ cell: [], media: { markThroughout: () => false, toggleMark: () => [] } }), edit: () => null, isDraft: () => false, isScript: () => false },
     undo: { track: () => { tracks++; } },
     hiding: () => ({ groups: () => [] }),
+    sections: () => ({ folded: () => false }),
     pictures: fakePictures().pictures,
     personColors: { personColor: () => "#000000" },
     preferences: () => ({ clock: () => "24h" }),

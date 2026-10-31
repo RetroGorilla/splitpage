@@ -116,6 +116,12 @@ the hint. Undo restores the header and name in one step.
 timer. Views cancel it on interruptions and disposal. The join command refuses
 a cross-boundary join as a backstop. The editor integration is in stack layer 2.
 
+Alt+Up/Down uses the same confirmation window when moving a section's only
+scene would empty it. The first press shows “Press again to remove the section
+header” without an edit. The next identical shortcut within two seconds moves
+the scene and removes the header together. Interruptions cancel confirmation;
+undo restores the order and header in one step.
+
 Folding is per-session view state, absent from saves, undo and running order.
 Totals and exports include shot and folded scenes. Present's section name is
 a visual cue and never enters narration or voice matching.
