@@ -125,6 +125,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and need an independent review. AQ-30 changes one suite file and can be merged by queue agents. AQ-29 needs AQ-28 (both touch saving; I-20 runs before I-6, as in ROADMAP.md).
 - AQ-32 switches import save-back off and marks it deprecated; the code stays (Adam, 2026-10-30). It is **STOPS FOR ADAM** and runs on Opus with an independent review. It supersedes AQ-29: AQ-29's PR is not merged. Do not run it alongside B1's lifecycle PR or B2 (all touch saving or close).
 - AQ-33 to AQ-35 are wave 2 and the first wave 3 step of [ROADMAP.md](ROADMAP.md). AQ-33 and AQ-35 are **STOPS FOR ADAM** (Opus, independent review): AQ-33 needs AQ-32 merged; AQ-35 needs AQ-32 and the first PR of AQ-23 merged. AQ-34 needs the first PR of AQ-23 merged (both touch the build) and can be merged by queue agents unless it touches a protected path.
+- AQ-36 to AQ-44 cover wave 3: B1 lifecycle (AQ-36, after AQ-35) then voice (AQ-37); B2 save completion (AQ-38, after AQ-36; Adam lifted the hold 2026-10-30); C5 housekeeping (AQ-39); C6 PDF P1 to P5 (AQ-40 to AQ-44). AQ-36 to AQ-38 and AQ-42 to AQ-44 are **STOPS FOR ADAM**; AQ-36 to AQ-38, AQ-42 and AQ-44 run on Opus with independent review and PC smoke. AQ-40 and AQ-41 are not wired and may be merged by queue agents. AQ-42 needs AQ-35; AQ-44 needs AQ-19 and Adam's PC PDF check. The four old `main` PRs in AQ-39 are for Adam's decision only.
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -829,4 +830,227 @@ Do not touch: renderer code, preload files, desktop/ipc-channels.js (the table s
 
 STRUCTURE SECTION MUST SAY
 - "no behaviour change", what moved from main.js to desktop/ipc-setup.js and what the module needs from main.js (the dependency list), the line count of main.js before and after, the (channel, direction) list before and after (equal), the lists updated, smoke count. Name lifecycle and voice as the later steps.
+```
+
+## AQ-36 [ ] Desktop split, step 2: process lifecycle out of desktop/main.js
+
+Needs: AQ-35 merged. Start from a base that includes it; do not run alongside AQ-38.
+Files: desktop/main.js, new CommonJS lifecycle module(s) under desktop/, desktop/test/ (lifecycle tests and smoke.mjs if needed), desktop/electron-builder.yml, desktop/package.json, docs/architecture/desktop-build.md and docs that name the moved code.
+**STOPS FOR ADAM**: desktop/, close and quit are protected. Run on Opus; independent review; full PC Electron smoke.
+
+```text
+Task: roadmap B1, step 2. Move process lifecycle (start, close, quit) out of desktop/main.js after the IPC extraction. One PR, no behaviour change. Voice is AQ-37; save completion is AQ-38.
+
+FILES TO READ
+- AGENTS.md, docs/HANDOFF.md (desktop shell), docs/architecture/invariants.md (especially drafts and close/quit), docs/architecture/desktop-build.md.
+- desktop/main.js: createTabWindow's close and session-end handlers, requestCloseTab, askBeforeClosing, settleDraftsForClose, restoreSessionAtLaunch, the app startup and quit handlers, and the flags they share. Read the IPC module produced by AQ-35 for the calls it makes into lifecycle code.
+- desktop/close-keep.js, quit-watchdog.js, unsaved-dialog.js, tab-registry.js, desktop-state.js, drafts.js; desktop/test/close-keep.test.mjs, quit-watchdog.test.mjs, desktop-state.test.mjs, ipc-table.test.mjs and smoke.mjs.
+- desktop/electron-builder.yml, desktop/package.json, desktop/verify-dist.mjs.
+
+DO
+1. STEP 0 before moving anything: list the startup, tab close, window close, session-end and quit paths, the callbacks and flags each uses, and their current order. Include cancellation, review, a gone file whose kept copy is late, a new edit while close waits, installer quit and macOS activation. Choose the module boundary and list the dependencies main passes in as one named object; stop with a proposed smaller split if the extraction cannot preserve the order.
+2. BEFORE the move, add a test that pins the close/quit order on the existing code with fake app/window events and an event log. It must cover question, kept-copy wait, recheck, draft settlement, session-write freeze and final close/quit, plus cancellation and session-end. Show it passes before the move and fails when a critical pair is deliberately reversed locally; do not commit that reversal. Run the same assertions against the extracted code. Do not rely only on source-text checks.
+3. Extract the lifecycle orchestration as CommonJS like its neighbours. Preserve registration and call order, synchronous versus asynchronous boundaries, flags, question wording, draft holds/discards, persistence, cancellation and error handling. Keep state with one owner and pass functions where that avoids moving unrelated logic. No compatibility wrapper or re-export remains at the old location. Do not change the voice implementation or IPC contracts.
+4. Add every new required module to desktop/electron-builder.yml and the module table in desktop-build.md; add tests to desktop/package.json's test list. Keep ipc-table.test.mjs's registration and packaged-module assertions as strict as before.
+5. Run npm run verify and npm run test:desktop. Build with node build.mjs --test, then full Windows Electron smoke on the PC: node desktop/test/smoke.mjs --only-target dev (all checks, count in the PR). No renderer change means no browser suites are needed; if a renderer change becomes necessary, stop and report rather than widening this extraction. Browser suites, if required by an agreed follow-up, use node tools/run-suites.mjs <out> '<regex>' --lanes 3.
+6. From desktop/, build a fresh package with npm run dist:win and list its new app.asar to prove every extracted module ships. Existing staged artifacts do not prove that; if packaging or the PC checks cannot run, stop and report.
+
+STRUCTURE SECTION MUST SAY
+- "no behaviour change", which lifecycle responsibility moved where, which dependencies main no longer owns, the dependency object, main.js line counts before/after, the pinned close/quit order before/after (equal), lists updated, fresh package evidence and full smoke count. Name any lifecycle code left behind and why.
+```
+
+## AQ-37 [ ] Desktop split, step 3: voice out of desktop/main.js
+
+Needs: AQ-36 merged. Start from a base that includes it.
+Files: desktop/main.js, new CommonJS voice composition module(s) under desktop/, desktop/test/ voice tests, desktop/electron-builder.yml, desktop/package.json, docs/architecture/desktop-build.md and docs that name the moved code.
+**STOPS FOR ADAM**: desktop/ is protected. Run on Opus; independent review; full PC Electron smoke.
+
+```text
+Task: roadmap B1, step 3. Move the remaining voice composition out of desktop/main.js. desktop/voice-helper.js already owns the listener process; do not rewrite it. No behaviour change.
+
+FILES TO READ
+- docs/HANDOFF.md (desktop voice), docs/architecture/invariants.md (INV-45 to INV-47), docs/architecture/desktop-build.md, docs/WINDOWS-CHECKS.md.
+- desktop/main.js: VOICE_SCRIPT, voiceCommand, VOICE_RELAY_PREFIX, voiceHelperInstance, prompterShareInstance, prompterRelaysVoice, forgetTab and the shutdown call; the IPC and lifecycle modules from AQ-35 and AQ-36 for their voice callbacks.
+- desktop/voice-helper.js, desktop/voice/listen.ps1, desktop/prompter-share.js, desktop/test/voice-helper.test.mjs, voice-grace.test.mjs, fake-voice-helper.mjs, ipc-table.test.mjs and smoke.mjs.
+- desktop/electron-builder.yml, desktop/package.json, desktop/stage.mjs and desktop/verify-dist.mjs.
+
+DO
+1. STEP 0: list voice creation, command selection, tab events, relay events, start/stop/status, tab cleanup and app cleanup, with every caller and dependency. Record the development and packaged script paths and the test-helper environment path before changing them.
+2. Extract only this composition, taking named dependencies from main. Preserve lazy creation, tab ownership, the relay prefix and event routing, test-mode command, platform checks and stop/forget order. Keep the existing listener and PowerShell script as they are; registration stays in the AQ-35 IPC module and shutdown stays ordered by AQ-36.
+3. Pin those boundaries with fake-helper tests: ordinary and relay events reach only their owner, closing a tab forgets both identities, quitting stops the helper, and neither status nor teardown accidentally starts a listener. Preserve all existing voice assertions. No re-export or second voice owner.
+4. Update the package files list, test list and desktop-build.md module table, plus any doc naming the moved composition. Build a fresh desktop package with npm run dist:win and show the new module in its app.asar and the listener script in the staged resources. Stop if that cannot be proved.
+5. npm run verify; npm run test:desktop; node build.mjs --test; browser suites node tools/run-suites.mjs <out> 'voice|prompter' --lanes 3; full Windows Electron smoke on the PC: node desktop/test/smoke.mjs --only-target dev, full pass count in the PR. Record Adam's real-microphone check from WINDOWS-CHECKS.md separately from the fake-helper smoke; do not claim a real voice was tested by the fake.
+
+STRUCTURE SECTION MUST SAY
+- "no behaviour change", what moved and which dependency it removes from main, the named dependencies and voice lifetime owner, main.js line counts, unchanged script paths and routing, package evidence, suite and smoke counts, and the real-microphone check status.
+```
+
+## AQ-38 [ ] One owner decides when a save is complete
+
+Needs: AQ-36 merged. Adam lifted the B2 hold on 2026-10-30. Do not overlap lifecycle work on close or saving.
+Files: src/application/save/, src/bootstrap/wiring/save-owners.ts and file-saving.ts, callers found in step 0, their tests and save race suites, docs/architecture/saving.md and docs that describe completion.
+**STOPS FOR ADAM**: save, session and file paths are protected. Run on Opus; independent review; PC smoke. No behaviour change visible to users.
+
+```text
+Task: roadmap B2, the timing gap in saving.md's "Known gaps and exceptions". file-saving.ts's writeDoc calls confirmWrite through save-completion.ts while coordinator.ts's judge separately advances the destination's confirmed generation. One owner must decide when a landed save is complete. The completion owner already holds the steps; this task unifies the decision to run them. No user-visible behaviour change and no revival of deprecated import save-back.
+
+FILES TO READ
+- docs/HANDOFF.md, docs/architecture/invariants.md and all of docs/architecture/saving.md, especially the known gaps, obsolete saves, save identity, capture and import deprecation.
+- src/application/save/coordinator.ts, save-completion.ts, file-saving.ts, file-saving-ports.ts, import-saving.ts, save-state.ts and destinations.ts; src/bootstrap/wiring/save-owners.ts, file-saving.ts and local-files.ts.
+- tests/application/save-coordinator.test.ts, save-completion.test.ts, file-saving.test.ts, import-saving.test.ts and save-destinations.test.ts; src/test/save-coordinator-app.test.mjs, save-label-late-app.test.mjs, save-unstamped-write-app.test.mjs and m4-matrix-files.test.mjs.
+
+DO
+1. STEP 0, before design or edits: list EVERY save path and who confirms it today. Include Save, Save As/copy, force, autosave, picked browser handle, desktop handle, download fallback and the kept but unreachable import writeback kinds. Separately list open/adoption, restore/recovery and export so they cannot accidentally become saves. For each, show capture, ownership/epoch checks, landed-write evidence, baseline, confirmed generation, clean flag, destination/identity updates, history and user notice, with file/function pointers and order.
+2. Propose the one completion decision and its writer result contract in the PR body. BEFORE changing the implementation, add race tests that pin the agreed existing behaviour: later edits; a queued second save; same-id reopen and replacement; Save As identity/destination changes; cancellation, refusal and failure; a landed obsolete write; disposal during a write; and history that never resolves. Assert baseline, generation, dirty state, target/id and notice as well as the outcome. Tests pass before and after. If the desired single decision would change an agreed outcome, stop for Adam to decide before implementing it.
+3. Move the decision to that owner and make every reachable save path use it exactly once. Preserve synchronous capture, per-destination ordering, job.owns/stillOwns protection, seqAtSave handling, obsolete-write reporting, history timing and all close/recovery invariants. Do not equate a landed obsolete write with a current acknowledged save. Adoption and export keep their own meaning; deprecated import code stays unreachable and its direct owner tests stay.
+4. Keep the application layer import-inert, use the existing named ports and owner types, and leave no compatibility re-exports or second confirmation path. If a substantial edit to a JS caller is needed, obey AGENTS.md rule 11 in a separate types-only PR first and report that prerequisite; do not fold a conversion into this PR.
+5. Update saving.md's known-gap bullets to the final responsibility and timing, and every doc naming a changed API. No unrelated save fix or user-visible label change.
+6. npm run verify; node build.mjs --test; browser suites node tools/run-suites.mjs <out> 'save|autosave|conflict|permission|recovery|history|import|title' --lanes 3; full Windows Electron smoke on the PC: node desktop/test/smoke.mjs --only-target dev, all-check pass count in the PR. Stop if the races or PC checks cannot be run; never relax an assertion.
+
+STRUCTURE SECTION MUST SAY
+- "no user-visible behaviour change", the step 0 path/confirmation table, which decision moved from the writers to which owner and which dependency it removes, the completion contract and exact order before/after, the race tests pinning it, the deprecated paths left unreachable, suite and full smoke counts.
+```
+
+## AQ-39 [ ] Close stale tracker rows and list old main PRs for Adam
+
+Needs: none. Check the latest merged base and tracker state before closing any row.
+Files: no product files; GitHub tracker rows and the evidence table in the PR body; docs/AGENT-QUEUE.md only for this task's completion heading.
+
+```text
+Task: roadmap C5. Close tracker rows only when the merged code and its regression coverage prove the work is done, or Adam has explicitly closed the item. The old main PRs #547, #488, #489 and #382 are for Adam's decision ONLY. Never close, reopen, retarget or merge those PRs.
+
+FILES TO READ
+- docs/ROADMAP.md, docs/AGENT-QUEUE.md, docs/HANDOFF.md ("Where to pick up" identifies GitHub Issues as the tracker), docs/architecture/pinned-defects.md as evidence pointers, not as a new task list.
+- The current issue/PR record, merged fix and named regression tests for every candidate. Re-check the code on origin/4.1-development, not an unmerged branch or a task's heading alone.
+
+DO
+1. STEP 0: table of candidate row, current state, resolution, merged PR/commit, regression test and proposed action. Treat undecided, unreproduced or partly fixed work as open unless Adam explicitly decided otherwise. Do not investigate or fix a new product bug here.
+2. Close only rows supported by that evidence or Adam's recorded decision, leaving a concise resolution with links. Do not delete tracker history, change product code, or edit other queue tasks or rules. Re-read each row immediately before changing it so another person's update is respected.
+3. In a separate decision-only table list #547, #488, #489 and #382, each one's CURRENT state, target branch, overlap with merged work and the decision Adam would need to make. Do not assume all four are still open; do not act on any of them.
+4. Run npm ci, npm run check:comments and git diff --check; include git diff --name-only and the hunk headers proving the task's own heading is the only file edit. Run npm run verify before ready. No app change: browser suites, node build.mjs --test and PC smoke are not needed for this housekeeping; if later product work is proposed, give it a separate task with node tools/run-suites.mjs <out> '<regex>' --lanes 3 and its required smoke.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; tracker housekeeping only", each closed row and its evidence, each row kept open and why, and the four old main PRs listed for Adam with no action taken on them.
+```
+
+## AQ-40 [ ] PDF rebuild P1: script HTML print page, not wired
+
+Needs: none. Coordinate shared print files with AQ-41; P3 and P4 wire the output later.
+Files: new TypeScript print-layout modules under src/adapters/formats/, their tests and test-only fixtures/suites, docs describing the new layout. No production export wiring changes.
+Queue agents may merge this task if it stays outside protected paths and has no user-visible effect.
+
+```text
+Task: roadmap C6, P1. Build the script part of one HTML print page from a captured export. It is NOT wired into the app yet. Keep the old PDF export working unchanged. Chromium will paginate the new layout using the computer's fonts; no hand-drawn page-break algorithm and no bundled replacement font.
+
+FILES TO READ
+- docs/ROADMAP.md (C6 and its costs), docs/architecture/saving.md (capture), docs/architecture/invariants.md (exports), docs/architecture/testing.md.
+- src/adapters/formats/pdf.ts (buildPdf and its script content), export-kit.ts, export-projections.ts, export-assets.ts, print-colors.ts and html-runs.ts; src/core/document/export-document.ts; src/application/export/assets.ts.
+- src/bootstrap/wiring/exporters.ts (current PDF registration; read only), src/test/pdf-script.test.mjs, pdf-layout.test.mjs, comment-images-export.test.mjs and m4-matrix-exports.test.mjs.
+
+DO
+1. STEP 0: inventory what buildPdf prints today and the captured facts/assets each part uses. Propose new module names and a shared page shell usable by AQ-41. List the intentional print-layout differences from C6: Chromium page breaks, no "cont." label on continued rows, desktop-only bookmarks later, browser "Save as PDF" later.
+2. Implement the script HTML and print CSS in new strict TypeScript modules. Reuse export facts, runs, scene/comment projections and captured assets; never read the live editor or stored preferences during rendering. Escape content, use safe image references and keep scripts/remote fetches out of the printable document. Preserve content and export options, including pictures, comments and non-Latin text. The list sections are AQ-41, not another PDF writer here.
+3. Test the generated document with fixtures for rich text, tags, comments, images, missing assets, empty/long scripts and non-Latin text. Test a capture followed by edits: the print page still holds the captured content. Add print-media layout coverage for multipage content, wrapping and clipping using a test-only fixture; nothing is registered in the release app.
+4. npm run verify; node build.mjs --test; run the new print-page suites and existing export coverage with node tools/run-suites.mjs <out> 'print|export' --lanes 3. Record printed-page inspection results. No desktop change or live wiring: PC Electron smoke is not needed here. Stop if implementation needs protected paths or production wiring.
+
+STRUCTURE SECTION MUST SAY
+- The new print modules and their captured input contract, "not wired; no user-visible change", the shared shell for P2, content coverage and deliberate C6 pagination differences, suites and print inspection results. The old generator is retained until P5.
+```
+
+## AQ-41 [ ] PDF rebuild P2: list HTML print pages, not wired
+
+Needs: AQ-40 merged for its shared print-page shell. P3 and P4 wait for both print-layout tasks.
+Files: the print-layout modules introduced by AQ-40, new list print modules under src/adapters/formats/, their tests and test-only fixtures/suites, docs describing the layout. No production export wiring changes.
+Queue agents may merge this task if it stays outside protected paths and has no user-visible effect.
+
+```text
+Task: roadmap C6, P2. Add packing lists and the B-roll shot list to the same HTML print-page system as P1, both standalone and as the script's list sections where applicable. NOT wired into the app. Keep the old PDF export unchanged.
+
+FILES TO READ
+- docs/ROADMAP.md (C6), docs/architecture/saving.md (capture), docs/architecture/invariants.md (exports); the AQ-40 modules, fixtures and input contract.
+- src/adapters/formats/pdf.ts (buildPackingListPdf, buildShotListPdf, shotListAppendixPages and buildPdf's list sections), export-kit.ts (breakdownGroups), export-projections.ts (brollShotListForPrint), print-colors.ts.
+- src/bootstrap/wiring/exporters.ts (gear/prop packing and B-roll PDF registrations, read only), src/test/list-pdfs.test.mjs, export-projections.test.mjs and m4-matrix-exports.test.mjs.
+
+DO
+1. STEP 0: table of each existing list output, its options/filters/grouping, columns, status marks, counts and captured facts. Compare standalone and script appendix content so neither is silently lost.
+2. Render those lists through P1's shell and print CSS, using the existing projections. Keep gear and prop packing outputs, B-roll filter/group options, empty states, checkboxes, signatures/notes space and captured dates/content. Let Chromium break pages; no manual PDF drawing or "cont." label on continued rows. No duplicate fact calculation or bundled fonts.
+3. Add content and print-media tests for standalone lists and the composed script page, empty and long lists, long labels, non-Latin text and filters/grouping. Confirm lists use the held capture after a live edit. Existing PDF tests stay unchanged because the live path still uses the old writer.
+4. npm run verify; node build.mjs --test; node tools/run-suites.mjs <out> 'print|export' --lanes 3, including the new fixtures. Record multipage print inspection for both list types. No desktop or live wiring changes: no PC Electron smoke here. Stop on any need for a protected path or live export wiring.
+
+STRUCTURE SECTION MUST SAY
+- Which list responsibilities the new modules hold and which shared P1 parts they use, "not wired; no user-visible change", standalone/appendix coverage, the options and facts preserved, print inspection and suite results. The old generator stays until P5.
+```
+
+## AQ-42 [ ] PDF rebuild P3: desktop printToPDF
+
+Needs: AQ-40 and AQ-41 merged; AQ-35 IPC extraction merged before adding desktop IPC. Take the latest base after any B1 desktop change.
+Files: desktop/ print composition and IPC module from AQ-35, desktop/preload.js, desktop/ipc-channels.js, desktop/test/, desktop/electron-builder.yml and desktop/package.json if new modules/tests ship; src/adapters/desktop/, export ports/wiring and tests, docs describing desktop PDF export.
+**STOPS FOR ADAM**: desktop, IPC and file delivery are protected. Run on Opus; independent review; PC Electron smoke and PC PDF inspection.
+
+```text
+Task: roadmap C6, P3. The desktop app saves P1/P2's HTML print page as a PDF with Electron's printToPDF. Wire all desktop PDF products: script, gear/prop packing lists and B-roll shot list. Browser export stays on the old path until P4; the old generator is not deleted until P5. This is the PDF output change Adam requested, not a change to project saving.
+
+FILES TO READ
+- docs/ROADMAP.md (C6), docs/HANDOFF.md, docs/architecture/invariants.md, docs/architecture/saving.md (capture and export), docs/architecture/desktop-build.md, docs/WINDOWS-CHECKS.md.
+- AQ-40/AQ-41 print modules; src/bootstrap/wiring/exporters.ts; src/application/export/registry.ts; src/features/file-menu/ports.ts and local-files.js (current buildFileData/export flow); src/adapters/files/deliver.ts and src/adapters/desktop/ for the bridge pattern.
+- desktop/main.js, the AQ-35 IPC module, desktop/preload.js, desktop/ipc-channels.js, desktop/test/ipc-table.test.mjs and smoke.mjs, desktop/electron-builder.yml and desktop/package.json. Verify printToPDF options against the Electron version in that package.
+
+DO
+1. STEP 0: list each PDF entry point and its captured layout/options, the desktop request/result contract, trust boundary, print-window lifetime and delivery/cancellation path. Describe how desktop bookmarks will be produced and tested. Identify any conflict with the old byte-level PDF/metadata/footer tests or invariants and obtain Adam's decision before changing those expectations.
+2. Add the smallest desktop print adapter and named export port. Main owns the print window and native delivery; render the captured HTML with its assets ready before printToPDF. Keep the renderer sandbox and IPC origin/argument checks; renderer input never grants arbitrary path access. Destroy print windows and release temporary assets on success, cancel, failure and app quit. Do not change the main editor, document identity, dirty state, save confirmation or autosave.
+3. Route desktop PDF exports through it, preserving export choices, diagnostics and filename suggestions. Keep non-PDF formats unchanged. Add tests for each PDF product, font/image readiness, malformed/untrusted requests, cancellation/failure, cleanup, captured content after a document switch and desktop bookmarks. If a substantial JS feature/adapter edit is needed, do its strict TypeScript conversion in a separate types-only PR first (rule 11).
+4. Update IPC direction/schema tests, package/test lists and docs for every new module; no compatibility re-export. Build a fresh package with npm run dist:win and prove the print module ships in its app.asar.
+5. npm run verify; npm run test:desktop; node build.mjs --test; node tools/run-suites.mjs <out> 'print|export' --lanes 3; full Windows Electron smoke on the PC: node desktop/test/smoke.mjs --only-target dev, all-check count in the PR. Adam checks actual PDFs on the PC for script and both list types, Unicode, pictures, long rows, page breaks and bookmarks. Stop if those checks cannot be completed; do not delete the old writer.
+
+STRUCTURE SECTION MUST SAY
+- Which responsibilities move from the byte generator/export wiring to the print adapter, the capture/IPC/result contract and trust checks, window/asset cleanup, exact intended C6 output differences, desktop bookmark evidence, package evidence, suite/smoke counts and Adam's PDF check status.
+```
+
+## AQ-43 [ ] PDF rebuild P4: browser print dialog
+
+Needs: AQ-40 and AQ-41 merged. Coordinate export wiring with AQ-42; if it is open on the same files, merge one and take its base before the other.
+Files: browser print adapter under src/adapters/, named export ports and src/bootstrap/wiring/exporters.ts, src/features/file-menu/ only as needed for the print result, their tests/suites, Help and export docs.
+**STOPS FOR ADAM**: user-visible export workflow changes; any file-delivery changes are protected. Independent review; Adam checks the browser print workflow on the PC.
+
+```text
+Task: roadmap C6, P4. In the browser, open the print dialog for the P1/P2 HTML page; users choose "Save as PDF" there. Cover script, gear/prop packing lists and B-roll shot list. Keep desktop printToPDF from P3 and every non-PDF export working. P5 removes the old generator later.
+
+FILES TO READ
+- docs/ROADMAP.md (C6's browser cost and desktop-only bookmarks), docs/architecture/saving.md (capture/export), docs/architecture/invariants.md, docs/architecture/testing.md.
+- AQ-40/AQ-41 modules and AQ-42's export contract if merged; src/bootstrap/wiring/exporters.ts, src/application/export/registry.ts, src/features/file-menu/ports.ts and local-files.js, src/adapters/files/deliver.ts; src/test/export-registry-app.test.mjs, export-capture-app.test.mjs and m4-matrix-exports.test.mjs.
+- .claude/skills/run-splitpage-app/tests/03-exports.txt, 41-export-polish.txt, 98-export-dialog.txt and 284-exports-from-a-fixture.txt; existing Help/export wording found by searching the PDF entries.
+
+DO
+1. STEP 0: list every browser PDF action (including Export again), the captured data/options and the old download expectations. Design a print-dialog result that does not falsely report a file saved or treat a cancelled dialog as a document save. List any invariant/test expectation needing Adam's decision before changing it.
+2. Open the print document from a user action without losing the capture while fonts/assets load, then invoke its print dialog. Handle a blocked popup and failed preparation clearly; clean up windows/frames and object URLs after the print flow without closing them before the dialog is done. Use the computer's fonts, Chromium page breaks and no "cont." label; do not promise browser bookmarks or an automatic PDF download.
+3. Route only browser PDF exports to this flow through named ports. No live editor/preference reads during rendering, no dirty/baseline/identity change and no alteration to project Save. Follow rule 11 with a separate types-only prerequisite if a JS module needs substantial edits.
+4. Update Help/export wording to say the browser opens the print dialog and the user chooses "Save as PDF"; describe desktop bookmarks only for desktop. Tests cover all PDF actions, Export again, popup failure, delayed assets, document switch, cancellation and cleanup. Change old PDF download assertions only for this intended workflow change; preserve content assertions and all non-PDF assertions.
+5. npm run verify; node build.mjs --test; node tools/run-suites.mjs <out> 'print|export' --lanes 3. Automate preparation and print invocation; Adam checks the real dialog, cancellation and Save as PDF for script and lists on the PC. If desktop export wiring changed, also run npm run test:desktop and full PC Electron smoke: node desktop/test/smoke.mjs --only-target dev, count in the PR; otherwise state why Electron smoke is not needed. Stop for Adam in either case.
+
+STRUCTURE SECTION MUST SAY
+- The browser print adapter and its named contract, the PDF-only workflow change and user wording, capture and cleanup rules, each updated download assertion and replacement coverage, suite results and Adam's real-dialog/PDF check status. The old writer is kept until P5.
+```
+
+## AQ-44 [ ] PDF rebuild P5: delete old generator, subsetter and Noto fonts
+
+Needs: AQ-42 and AQ-43 merged; AQ-19 merged (both touch pdf.ts); Adam has checked the new desktop and browser PDFs on the PC and approved removing the old path. Start only after that check is recorded.
+Files: src/adapters/formats/pdf.ts, pdf-unicode.ts, truetype.ts, pdf-fonts/noto-sans-regular.ts, pdf-fonts/noto-sans-bold.ts and pdf-fonts/noto-emoji.ts; tools/pdf-font-module.mjs, licenses/OFL-noto-sans.txt, licenses/OFL-noto-emoji.txt and licenses/README.md where no remaining use needs them; tests audited but never deleted by the agent, remaining importers/wiring and docs found in step 0.
+**STOPS FOR ADAM**: final PDF replacement and deletion after the PC check; any protected importers remain protected. Run on Opus; independent review; PC regression checks.
+
+```text
+Task: roadmap C6, P5. Delete the hand-drawn PDF generator, its TrueType subsetter and the bundled Noto fonts once the print paths replace every PDF product. No new output or workflow change here: P3/P4 already made it. AQ-19 must merge first; never race its pdf.ts import cleanup.
+
+FILES TO READ
+- docs/ROADMAP.md (C6), docs/architecture/invariants.md (export facts, capture and PDF expectations), docs/architecture/saving.md, Adam's recorded PC PDF check on P3/P4.
+- src/adapters/formats/pdf.ts, pdf-unicode.ts, truetype.ts, the three modules under pdf-fonts/, tools/pdf-font-module.mjs, licenses/README.md and the two Noto OFL files; src/bootstrap/wiring/exporters.ts and every reference found below.
+- src/test/pdf-script.test.mjs, pdf-layout.test.mjs, pdf-text.test.mjs, pdf-jpeg.test.mjs, pdf-unicode.test.mjs, list-pdfs.test.mjs, tests/adapters/formats/truetype.test.mjs, the P1-P4 tests and src/test/m4-matrix-exports.test.mjs.
+
+DO
+1. STEP 0: grep the entire repository for every old generator export, pdf.ts/pdf-unicode.ts/truetype.ts, font module/constant and font-generation tool. Table each reference as delete, replace or still used, with its actual path. Confirm all four PDF products use print on both platforms and show Adam's PC approval. If a live path or other consumer still needs the old code/fonts, stop and describe it before deleting.
+2. Delete the generator, Unicode PDF layer, subsetter and all three bundled Noto font modules. Remove font-generation tooling and licence files only if the reference audit proves they serve only the deleted assets; otherwise keep them with a reason. Remove every old importer; no shim, fallback copy or compatibility re-export. Leave unrelated format helpers and other fonts alone.
+3. No test is deleted by the agent. List every test that only covers the deleted generator, subsetter or fonts in the PR body: its file, what it covers and the new test that replaces its coverage, if any. Stop for Adam to decide on those tests; no file is pre-approved for deletion. Retain product coverage for content, capture, lists, Unicode, images, print failures and cleanup against the new paths. Never discard a product assertion just because it inspected old PDF bytes; show its replacement or the deliberate P3/P4 behaviour decision. Update all docs still describing the old generator or bundled fonts, including the applicable invariant implementation/test pointers without weakening their rule.
+4. npm run verify; node build.mjs --test; node tools/run-suites.mjs <out> 'print|export' --lanes 3; npm run test:desktop; full PC Electron smoke: node desktop/test/smoke.mjs --only-target dev, full count in the PR. Recheck printed output for script, gear/prop packing and shot lists on desktop and browser; show the new bundle no longer contains the old font payloads. If packaging changes, build a fresh package and inspect it too.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change beyond removal of the replaced PDF path", every deleted module/asset/tool and its audited consumers, the test inventory awaiting Adam's decision and product coverage retained/replaced (no test deleted by the agent), licence disposition, code and bundle bytes removed, AQ-19 merge evidence, Adam's prior PC PDF approval, suite and full smoke results. Stop for Adam; do not merge.
 ```
