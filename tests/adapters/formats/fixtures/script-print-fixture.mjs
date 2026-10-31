@@ -47,7 +47,7 @@ export function scriptFixture(kind = "rich") {
     '<span class="stage-dir">whisper</span><br><span class="audio-cue">MUSIC: theme</span><br>中文 日本語 العربية हिन्दी 😀';
   const rows = kind === "empty" ? [] : [{ id: "r1", visualText: visual, audioText: audio, status: "ready", lengthSeconds: 12,
     imageRef: REF, moreImages: [{ imageRef: REF }, { imageRef: { ...REF, sha256: MISSING } }],
-    imageLinks: [{ href: "https://example.com/video", poster: true }, { name: "Local clip" }] }];
+    imageLinks: [{ href: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", poster: true }, { name: "Local clip" }] }];
   if (kind === "long") {
     rows[0].visualText += "<br>" + Array.from({ length: 180 }, (_, i) => "Visual line " + i).join("<br>");
     rows[0].audioText += "<br>" + "Unbroken".repeat(120) + "<br>" + Array.from({ length: 160 }, (_, i) => "Audio line " + i).join("<br>");

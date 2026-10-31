@@ -62,7 +62,7 @@ try {
   let checks = 0;
   const records = [];
   for (const kind of ["rich", "empty", "long"]) {
-    const path = fileURLToPath(new globalThis.URL(`.generated-script-print-${kind}.html`, import.meta.url));
+    const path = fileURLToPath(new globalThis.URL(`_script-print-${kind}.html`, import.meta.url));
     await send("Page.navigate", { url: pathToFileURL(path).href });
     await evaluate(`new Promise(resolve => { const ready = async () => { await document.fonts.ready; await Promise.all(Array.from(document.images, i => i.decode())); resolve(true); }; if (document.readyState === 'complete') ready(); else addEventListener('load', ready, {once:true}); })`);
     const result = await evaluate(`({print:matchMedia('print').matches,width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,cells:Array.from(document.querySelectorAll('td')).every(e=>e.scrollWidth<=e.clientWidth+1),images:Array.from(document.images).every(e=>e.naturalWidth>0&&e.getBoundingClientRect().width<=e.parentElement.getBoundingClientRect().width),text:document.querySelector('main').textContent})`);

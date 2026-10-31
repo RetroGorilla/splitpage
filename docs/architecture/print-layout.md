@@ -14,7 +14,7 @@ an exporter, resolve assets, or read a session or preference.
 | Scene number, start, status, read time and explicit-duration border | `sceneFacts` | Scene and Read columns |
 | Visual/audio words, bold, italic, underline, strike, highlight, links | Captured scene HTML decoded by `ExportServices`, `exportRuns` | Escaped semantic HTML in fixed-width columns |
 | Tags, B-roll keys, stage directions, audio cues, thread anchors/numbers | `exportRuns`, captured `commentNumbers`, print palette | Category underline, chip, brackets, cue styling and numbered markers |
-| Main and gallery pictures; video references | Captured row/gallery refs, legacy data URLs, held `ExportAssets`, `rowVideoLinks` | Embedded raster data URLs and safe text links; unavailable images get an explicit placeholder |
+| Main and gallery pictures; video references | Captured row/gallery refs, legacy data URLs, held `ExportAssets`, `rowVideoLinks`, `videoHostLabel`, `videoLinkText` | Embedded raster data URLs and safe text links with host labels; unavailable images get an explicit placeholder |
 | Production breakdown | Captured production entries and `breakdownGroups` | AQ-41 section renderer |
 | B-roll shot list appendix | Captured B-roll/people/scenes and `brollShotListForPrint` | AQ-41 section renderer |
 | Comments, quotes, authors, timestamps, assignees, resolution, replies and images | `exportComments({pieces:true})`, captured clock mode and held assets | Comments section, including title/deleted-scene threads |
@@ -104,12 +104,13 @@ generated fixtures. Suite `382-script-print.txt` checks the rich, long and empty
 loaded pictures, complete scene tails, wrapping and horizontal bounds. The
 standalone inspector enables actual print media, tests those bounds at the
 printable width, and saves tagged Chromium PDFs, screenshots and `summary.txt`.
-Generated `.generated-script-print-*.html` files beside the fixture generator
-are temporary test artifacts: remove them after the run, never commit them.
+Generated `_script-print-*.html` files beside the fixture generator are covered
+by the existing root `_*.html` ignore rule. Remove these temporary test artifacts
+after the run; never commit them.
 They are not built into the release app. No desktop smoke or editing/undo
 performance run is needed for this unwired adapter.
 
-P1 validation on Windows Edge: six content tests passed; `npm run verify`
+Initial P1 validation on Windows Edge: six content tests passed; `npm run verify`
 passed all 567 discovered files (194 frontend, 11 source, 317 tests, 23 desktop,
 22 tools). The test-build `print|export` run passed eight suites and 543/543
 checks on three lanes, including 21/21 in suite 382. Print-media inspection
@@ -118,3 +119,9 @@ printed pages were rasterized for review; repeated table heads, continuation
 content, images, footers, comments and system-font non-Latin text were
 inspected. Extracted PDF text retained `Visual line 179`, `Audio line 159`,
 scene 18 and the final reply. The original PDF/export tests remain unchanged.
+
+Review follow-up validation: six content tests passed with exact YouTube host
+label/address and local-file text assertions. Suite 382 passed 23/23 checks
+using the ignored `_script-print-*.html` fixtures; print-media inspection
+passed 18/18 checks with the same one/two/seven-page counts. `git check-ignore`
+confirmed all three generated pages match the root `_*.html` rule.

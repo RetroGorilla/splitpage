@@ -5,7 +5,7 @@ import { buildScriptPrintPage } from "../../../../src/adapters/formats/script-pr
 import { scriptFixture } from "./script-print-fixture.mjs";
 
 for (const kind of ["rich", "empty", "long"]) {
-  const path = fileURLToPath(new URL(`.generated-script-print-${kind}.html`, import.meta.url));
+  const path = fileURLToPath(new URL(`_script-print-${kind}.html`, import.meta.url));
   writeFileSync(path, buildScriptPrintPage(scriptFixture(kind).input));
   log(path);
 }
