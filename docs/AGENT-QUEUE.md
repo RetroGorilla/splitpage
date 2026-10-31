@@ -122,6 +122,9 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-6 and AQ-14 are report-only.
 - AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
 - AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
+- AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and need an independent review. AQ-30 changes one suite file and can be merged by queue agents. AQ-29 needs AQ-28 (both touch saving; I-20 runs before I-6, as in ROADMAP.md).
+- AQ-32 switches import save-back off and marks it deprecated; the code stays (Adam, 2026-10-30). It is **STOPS FOR ADAM** and runs on Opus with an independent review. It supersedes AQ-29: AQ-29's PR is not merged. Do not run it alongside B1's lifecycle PR or B2 (all touch saving or close).
+- AQ-33 to AQ-35 are wave 2 and the first wave 3 step of [ROADMAP.md](ROADMAP.md). AQ-33 and AQ-35 are **STOPS FOR ADAM** (Opus, independent review): AQ-33 needs AQ-32 merged; AQ-35 needs AQ-32 and the first PR of AQ-23 merged. AQ-34 needs the first PR of AQ-23 merged (both touch the build) and can be merged by queue agents unless it touches a protected path.
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -501,7 +504,7 @@ STRUCTURE SECTION MUST SAY
 - Which suites run on PRs and why, what the smoke covers and when it runs, the measured added minutes, how the gate treats the new jobs.
 ```
 
-## AQ-22 [ ] Visible startup failure screen
+## AQ-22 [x] Visible startup failure screen
 
 Needs: none.
 Files: src/bootstrap/main.ts, src/bootstrap/startup/failure-screen.ts (new), tests/bootstrap/.
@@ -577,7 +580,7 @@ Task: improvement plan item 4.3, step 1 for the prompter (AGENTS.md rule 11). Co
 Structure section: "no responsibility moves; types only". Name every file outside prompter.ts that changed and why.
 ```
 
-## AQ-25 [ ] Hold the prompter's state in one object (after AQ-24 merges)
+## AQ-25 [x] Hold the prompter's state in one object (after AQ-24 merges)
 
 Needs: AQ-24. Files: src/features/prompter/prompter.ts only (plus docs that describe its state, if any).
 
@@ -618,4 +621,212 @@ Follow AQ-25 steps 1 to 5 with rundown in place of prompter.
 6. Run `npm run verify`, the rundown suites (node build.mjs, then node tools/run-suites.mjs <out-dir> '^(100|101|102|103|104|105|106|140|141)-' --lanes 6), and the perf-ab comparison with the limits in AQ-26 step 5. STOP if any limit is exceeded.
 
 Structure section: which variables moved into the state object and which stayed out, and why.
+```
+
+## AQ-28 [x] Save button label after a late save (tracker I-20)
+
+Needs: none.
+Files: src/application/save/ (status.ts, coordinator.ts, or whichever writes the label), src/features/title/save-status.js, their tests, a new browser suite under .claude/skills/run-splitpage-app/tests/.
+**STOPS FOR ADAM**: save path, and it changes what the user sees. Independent review.
+
+```text
+Task: tracker I-20, "Late-save Save button label does not reset". When a save finishes late (after the user has edited again, or after another save started), the Save button label can stay on the old state instead of returning to what the current document state says. Fix it so the label always matches saveStatus() once the save settles. This is a bug fix: the label change is the intended behaviour change; nothing else changes.
+
+FILES TO READ
+- docs/architecture/saving.md ("The Save buttons are a projection", "One status selector"), docs/architecture/invariants.md, docs/HANDOFF.md (AGENTS.md rule 9).
+- src/application/save/status.ts (saveStatus, saveButtonView), coordinator.ts, src/features/title/save-status.js, and setSaveButtons.
+- git log --oneline -i --grep="late" -- src/application/save for earlier late-save fixes (#673 and the commits before it).
+
+DO
+1. STEP 0, before any fix: reproduce it. Write a failing unit test (or browser suite) that starts a save, edits or starts a second save before the first finishes, lets the first finish, and checks the label. If you cannot make it fail on the current 4.1-development, stop: post what you tried in the PR and mark the PR as "does not reproduce". Do not change product code in that case.
+2. Fix at the one place the label is decided (the projection), not by adding a second writer of the label. Keep the save coordinator the owner.
+3. If the file you change is .js and the fix is more than a few lines, convert it to TypeScript in a separate PR first (AGENTS.md rule 11), and stop to report.
+4. `npm run verify`; browser suites: node tools/run-suites.mjs <out> 'save|autosave|title' --lanes 6.
+5. Full Windows Electron smoke on the PC: node desktop/test/smoke.mjs --only-target dev, pass count in the PR.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change", the root cause in one or two sentences, the failing test before the fix and passing after, smoke count.
+```
+
+## AQ-29 [ ] Save-back on desktop reads the file once (tracker I-6)
+
+Needs: AQ-28 merged. Start from a base that includes it.
+Files: src/application/save/import-saving.ts, its tests, docs/architecture/saving.md; for part B also the save coordinator's confirm step it calls (src/application/save/) and a browser suite.
+**STOPS FOR ADAM**: save path, and part B changes what the user sees. Independent review; PC smoke.
+
+```text
+Task: tracker I-6. After writing an imported file back in place, saveBackToFile (src/application/save/import-saving.ts) calls `writable.close()` and then reads the file again (`ports.files.read`) to record its new lastModified and size. On the desktop, close() already answers the stamp that main took right after its atomic write (docs/architecture/saving.md, "The desktop shim", and the line "It still reads the file a second time after writing ... a one-line change left for later"). A second read can see a later change made by another program and record that as ours, which can hide a real conflict or raise a false one. Use the stamp from close() when it has one; read the file only when it does not (the browser path). That is part A.
+
+Part B (found while working AQ-28, PR #976; Adam folded it into this task on 2026-10-30): after an import save-back succeeds, the import home reads written back (`dirty: false`, file menu "Up to date"), but the Save button and status line still show `Save •` / "Unsaved changes", because save-back never confirms the document as saved (it never reaches `confirmSavedNow`). It does not depend on timing. After a successful save-back, confirm the document as saved through the coordinator's existing confirm step, with the same guard a normal save uses (only when no edit came in after the capture, `changes() === seqAtSave`), so the Save button, the status line and the file menu agree. Nothing else changes.
+
+FILES TO READ
+- docs/architecture/saving.md (the import save-back section), invariants.md, HANDOFF.md (AGENTS.md rule 9).
+- src/application/save/import-saving.ts (completion.landed and completion.landedUnread), src/adapters/desktop/desktop-handle.ts (what close() answers), the import-saving tests.
+
+DO
+1. STEP 0: confirm the current code still reads after close() on the desktop path. If it no longer does, stop and report "already fixed" with the commit that fixed it.
+2. Change the order so a close() stamp with lastModified is recorded through the same completion step the read path uses; keep the read for a close() that answers nothing. Keep every stillWritingBack check in its place.
+3. Tests: desktop-style handle (close() answers a stamp) records that stamp and does not read; browser-style handle (close() answers nothing) still reads; a file changed by someone else between close() and the old read: record what the next save reports before and after the change, and describe it in the PR. Do not change existing assertions.
+4. Update the saving.md line that calls this "left for later".
+5. Part B, STEP 0: reproduce it with a failing test (save-back succeeds, no edit after the capture, then check saveStatus() and the Save button). Read saving.md section 4, which says the unsaved flag and a destination's dirty can differ: if it says this case is intended, stop part B and describe it in the PR for Adam; part A continues on its own. Otherwise fix it at the confirm step (one writer of the saved state; do not add a second one), and add tests: save-back with no later edit reads saved; save-back with an edit after the capture still reads unsaved. Make part B its own commit.
+6. `npm run verify`; browser suites: node tools/run-suites.mjs <out> 'import|save|conflict|title' --lanes 6; full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change", which stamp is now recorded on each platform, what part B changes for the user (or why it stopped), the test names, smoke count.
+```
+
+## AQ-30 [x] Fix the flaky suite 266-header-collab-condense (tracker I-30)
+
+Needs: none.
+Files: .claude/skills/run-splitpage-app/tests/266-header-collab-condense.txt only.
+
+```text
+Task: tracker I-30. Suite 266 fails about 40% of the time, also when run alone. Its 1310px expand check samples the Production label's width every frame and asserts `window.__mid >= 3`, where __mid counts frames with a width between 1 and 70 px. The label's full width is about 70 px, and sometimes the first sampled frame is already at 69.7 to 72.6 px, so only 0 to 2 frames count. The product is fine (the label ends fully expanded and nothing overlaps); the test's timing is wrong.
+
+DO
+1. Run the suite alone 10 times on the current base and record the pass count: node tools/run-suites.mjs <out> '^266-'.
+2. Fix the measurement, not the threshold: start recording before the width change can land (for example, take the first frame's width before setting the new width, then count frames strictly between the start width and the end width), or compare against the label's measured full width instead of the fixed 70. The check must still fail if the label snaps open with no animation. Show that: temporarily disable the transition locally, run the suite, confirm it fails, and put that output in Validation. Do not commit that change.
+3. Never lower `>= 3` or widen the window to make it pass. The 1290px collapse check must keep its meaning; apply the same fix there only if it has the same problem.
+4. Run the suite alone 20 times after the fix; all must pass. Also run node tools/run-suites.mjs <out> 'header|collab' --lanes 6.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; test only", what the old check measured wrong, what it measures now, pass counts before (of 10) and after (of 20), and the snap-open run that fails.
+```
+
+## AQ-31 [x] Fix the flaky desktop smoke check #496 (tracker I-5)
+
+Needs: none.
+Files: desktop/test/smoke.mjs only.
+**STOPS FOR ADAM**: desktop/ is protected. Independent review; runs on the PC.
+
+```text
+Task: tracker I-5. The desktop smoke check "quit asks again when a moved file's copy is late" (#496) fails now and then. Find out whether the test waits on a fixed time or on a condition that can come too early, and make it wait on the real condition. Product code does not change.
+
+DO
+1. Find the check in desktop/test/smoke.mjs (grep "copy is late"). Read what it does step by step and what it waits for. Read issue #496.
+2. Run that check 20 times on the PC on the current base (node desktop/test/smoke.mjs --only-target dev with the narrowest filter the script offers) and record the pass count and each failure's output.
+3. If the failure is in the test's timing: replace fixed waits with waits on the condition the check needs, with a time limit that fails loudly. Do not remove an expectation or loosen one.
+4. If the failure shows a product bug (quit really does not ask again), stop: do not change product code; describe the evidence in the PR and leave it for Adam.
+5. Run the check 20 times after the fix (all must pass), then the full smoke once, pass count in the PR.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; test only", the cause, what the check waits on now, pass counts before and after.
+```
+
+## AQ-32 [ ] Switch off import save-back (keep the code, mark it deprecated)
+
+Needs: none. Supersedes AQ-29 (its PR stays unmerged and is closed when this task merges).
+Files: the entry points that reach `saveBackToFile` (src/application/save/import-saving.ts): the save-back action and its file menu item (src/features/file-menu/, src/bootstrap/actions.ts, src/bootstrap/wiring/local-files.ts) and the conflict retry that calls it; their tests and browser suites; the docs that describe save-back.
+**STOPS FOR ADAM**: saving and the file menu are protected, and it changes what the user sees. Run on Opus; independent review; PC smoke.
+
+```text
+Task: switch import save-back off (Adam, 2026-10-30). Today, after a user imports a .docx, .csv or .txt, a separate save-back action (and the conflict retry it offers) writes the script back into that original file through saveBackToFile (src/application/save/import-saving.ts; save kinds "writeback" and "writebackForce"; the "import home"; exporters marked `writeback: true` in src/bootstrap/wiring/exporters.ts). Ordinary Save and its shortcut (saveDoc; saveKind in src/bootstrap/wiring/save-owners.ts) never pick those kinds: on a script whose home is an import they already ask for a new project destination. From now on an import starts a separate Splitpage script and Splitpage never writes to the imported file. A user who wants a .docx, .csv or .txt makes a new one with Export. The save-back code stays in the repo, unreachable from the app, and is marked deprecated in the docs; removing it is a later decision, not this task.
+
+WHAT THE USER SEES AFTER
+- Importing a file opens its content as a script that has no Splitpage file yet, like a new untitled script, with the imported file's name as the suggested name.
+- Save on that script is unchanged: it works like Save on any script that has no file yet, with the existing Save choices and default format. No menu item, shortcut, command-menu entry, toast, prompt or status line offers or mentions writing back to the imported file.
+- Export (including "Export again") is unchanged and always writes a file the user picks.
+- The unsaved warning on close, the leave-page warning and the crash-recovery draft behave as for any unsaved script.
+
+OLD DATA
+- A stored location, recent-file entry or recovery draft that still records an import home must load without an error and without losing the document, and Save must treat it as a script with no Splitpage file unless it also has one. Never write to the old imported file. Do not delete the stored field; just stop acting on it.
+
+DO
+1. STEP 0, before any code change: list every caller of saveBackToFile and every way a user reaches one (file menu item, command-menu action, shortcut, toast or status-line button, conflict retry prompt, desktop menu), and confirm that ordinary Save, its shortcut and autosave never reach it. Put that list and the chosen switch points in the PR body. If switching it off needs a change in more than a few places, or in desktop/ or src/application/recovery/, stop and reply with the list before changing code.
+2. Read docs/HANDOFF.md, docs/architecture/invariants.md and docs/architecture/saving.md first (AGENTS.md rule 9). Every invariant holds unchanged; invariants and race-matrix cases about save-back (for example milestone 4's E5 and case I2 in src/test/m4-matrix-files.test.mjs) keep testing the save-back owner directly, since the code stays.
+3. Switch it off at those entry points: remove or hide the save-back action, its menu item and the conflict retry that calls it, so nothing in the app reaches saveBackToFile. Ordinary Save stays exactly as it is. Do not delete the save-back owner, its save kinds, its location/recovery fields or the desktop code; they stay unused.
+4. Tests: unit tests of the save-back owner itself stay and keep passing. Tests and browser suites that drive save-back through the app are updated to assert the new behaviour (AGENTS.md rule 2: the behaviour is meant to change); list each one in the PR with old and new expectation. Never weaken an assertion about anything else. Add tests: after an import, Save asks for a new project destination with the existing choices and default (unchanged behaviour, now pinned); the imported file is never written (assert no write to its handle or path) through Save, autosave, the file menu or any action; a location or draft with an old import home loads and Save treats it as having no project file; no menu item, action or prompt offers save-back.
+5. Mark it deprecated in the docs: a short "Deprecated: import save-back" note in docs/architecture/saving.md (switched off on 2026-10-30, code kept, which files hold it, removal to be decided later), matching lines in HANDOFF.md and pinned-defects.md, the Help text updated so it no longer describes saving back to an imported file, and a CHANGELOG line. No code comments beyond the reason form AGENTS.md rule 1 allows.
+6. `npm run verify`; browser suites node tools/run-suites.mjs <out> 'import|save|file-menu|home|conflict|export|title' --lanes 3 (build with `node build.mjs --test` once the base has that flag); full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; save-back switched off, code kept", every entry point found and how each is now unreachable, that ordinary Save is unchanged, what the user sees now, the old-data handling, every test or suite whose expectation changed, smoke count.
+```
+
+## AQ-33 [ ] Rename the "server" merge kind to "disk"
+
+Needs: AQ-32 merged (both touch src/application/session/). Start from a base that includes it.
+Files: src/application/session/ (apply-merge.ts, change-set.ts, document-session.ts, document-merge.ts, ports.ts, session-merge-ports.ts, session-merge.js), src/bootstrap/wiring/ (session-owner.ts, undo.ts, ports/session-merge.ts), src/bootstrap/wiring.ts, src/features/file-menu/local-files.js, the tests and docs that name the kind (found in step 0).
+**STOPS FOR ADAM**: session and undo are protected paths. Run on Opus; independent review; PC smoke.
+
+```text
+Task: roadmap B3. Collaboration was removed, so "server" no longer names anything. The word still labels how a merge of a changed document lands in the session: the transaction kind `"server"` that subscribers see, `MergeKind`, `AbsorbedKind`, and the functions named after it (`absorbServer`, `noteServerUpdate`). Rename it to "disk". Names and strings only: no behaviour, order or logic changes.
+
+FILES TO READ
+- docs/HANDOFF.md, docs/architecture/invariants.md and docs/architecture/session.md (AGENTS.md rule 9). Every invariant holds unchanged.
+- Where the kind lives today: src/application/session/change-set.ts (TransactionKind), apply-merge.ts (MergeKind, mergeKind), document-session.ts (AbsorbedKind, absorb, take, absorbMerged, absorbServer), document-merge.ts (`ports.view.absorbed(o.kind || "server")`), ports.ts (UndoPort.absorbServer), session-merge-ports.ts and session-merge.js (noteServerUpdate); src/bootstrap/wiring/session-owner.ts, undo.ts, ports/session-merge.ts and wiring.ts (UNDO_ADAPTER_METHODS); the subscriber src/features/file-menu/local-files.js (`change.kind === "server"`). Start from `grep -rn '"server"\|absorbServer\|noteServerUpdate\|publish:server\|undo.server' src tests desktop tools docs`.
+
+DO
+1. STEP 0, before any change, in the PR body: sort every hit of that grep into (a) the merge kind itself (the value in change.kind, the type unions, the `absorbed(kind)` and `noteMerged`/`absorbMerged` parameters, every subscriber that compares it), (b) names built on it (absorbServer, noteServerUpdate, test log labels such as `undo.server` and `publish:server`), (c) unrelated "server" that stays. Known (c), leave each unchanged and say why: the migration source `{ kind: "server", serverId }` in src/core/migrate.ts (it derives a document id from "splitpage-server-doc", so renaming it would change ids of old documents); the stored `server` origin and source shapes used as old-data fixtures (tests/application/recovery/, desktop/test/desktop-state.test.mjs, desktop/test/smoke.mjs); the `setHome("server", ...)` unknown-kind refusal in the location tests; the `server/` layer name in tools/dep-report.mjs. Anything else in (c) is listed with its reason. If a rename needs more than identifiers and string values, stop and reply with what it needs.
+2. Rename (a) to "disk" and (b) to match (absorbServer to absorbDisk, noteServerUpdate to noteDiskUpdate), in one pass; list every renamed identifier and value in the PR. No alias for the old name and no re-export (AGENTS.md rule 4). One name per exported type.
+3. OLD SAVED DATA, answered in step 0 with evidence: the kind is a value that lives inside one running session (change events, merge options). Show by grep and by reading the draft, history, storage and desktop-state writers that it is never written to a draft, history record, local storage, desktop state or file. If that holds, say "no persisted copy" and show the grep; nothing needs migrating, and nothing in saved projects, drafts or recents can carry the old name. If any writer does persist it: stop and reply with that list before changing code; the fix then is one reader that accepts the old "server" and maps it to "disk", with a test that loads old-name data.
+4. Tests: update the strings and identifiers in existing tests and browser suites to the new names (AGENTS.md rule 2: the name is meant to change; no assertion is weakened, removed or skipped). Add one test that a merge publishes kind "disk" to a session subscriber and that the file-menu subscriber still refreshes on it.
+5. Docs: update every doc that names the kind or the functions: docs/architecture/session.md (transaction kinds, the absorbServer rows, UndoPort, the undo adapter) and the "server updates" line in docs/architecture/invariants.md. Check with `grep -rn 'absorbServer\|noteServerUpdate\|"server"' docs`.
+6. `npm run verify`; browser suites: node tools/run-suites.mjs <out> 'undo|merge|session|recovery|save|import|history|file-menu' --lanes 3 (build with `node build.mjs --test` once the base has that flag); full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR. If the diff changes anything but names, also run node tools/perf-ab.mjs and stop if a limit is exceeded; otherwise say that only names changed.
+
+Do not touch: behaviour, call order, src/core/migrate.ts, the stored-shape fixtures in (c), desktop/ beyond the tests named above.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; names only", every renamed identifier and value, every "server" left and why, how old saved data loads (no persisted copy, with the grep, or the one reader), the tests changed, smoke count.
+```
+
+## AQ-34 [ ] CSS by purpose
+
+Needs: AQ-23's first PR merged (flag, helper, `__historyTest`, release-build check; both touch the build).
+Files: src/styles/, the `styles-*.css` files under src/features/, tools/css-inputs.json, the tests that pin the CSS list (src/test/css-aggregation.test.mjs, src/test/css-feature-balance.test.mjs, tools/css-colours.mjs), docs that name the files.
+Not protected: none of these paths is on the protected list (no file under src/features/merge/, src/features/editing/ or src/features/rows/render.* holds a stylesheet). If the work needs a protected path, stop and say so. Split it into several PRs if one is too large to review; each PR keeps the proof below.
+
+```text
+Task: roadmap C3. The app's CSS is 59 `styles-*.css` files under src/features/ (39 are only numbered, such as src/features/file-menu/styles-3.css) plus src/styles/, concatenated in one fixed order. Merge and rename them by feature and purpose (for example `styles-badge.css` stays a name; `styles-3.css` becomes a name that says what is in it), with the computed cascade unchanged. This changes no visible pixel. The proof is the point of the task.
+
+FILES TO READ
+- build.mjs (`appCss` from tools/css-inputs.mjs fills the `/*{{APP_CSS}}*/` placeholder in src/page.html; the --check mode) and tools/css-inputs.mjs (it reads each file and joins them with a single "\n").
+- tools/css-inputs.json: the 84 ordered inputs. Order is the cascade: a later rule wins on equal specificity.
+- src/test/css-aggregation.test.mjs (pins the exact list and order), src/test/css-feature-balance.test.mjs, tools/css-colours.mjs, docs/architecture/dependencies.md and docs/architecture/testing.md where they name CSS files.
+- tools/comment-gate.mjs: CSS comments are checked. A merged file may keep only reason comments of the `/* why: ... */` form; moving a comment must not add a baseline entry.
+
+DO
+1. STEP 0 in the PR body: the table of all 59 files with lines, what each holds, and the proposed new name and group. Mark every merge that joins files which are NOT adjacent in tools/css-inputs.json: those can change the cascade and need extra proof (step 3). Prefer groupings that keep the order, so a merge joins neighbours only.
+2. Rename and merge with git mv and concatenation, so history follows. A merge of neighbours is the first file's text, a "\n", then the second file's text, exactly what the build does today, so the built CSS stays byte for byte the same. Update tools/css-inputs.json (same order), the pinned list in src/test/css-aggregation.test.mjs (the list changes because the names change; the order check stays as strict) and every doc that names a renamed file. Leave no old file behind and no re-export.
+3. PROOF that the computed cascade is unchanged, in the Validation section, with the command output:
+   a. Before changing anything, build on the base (`node build.mjs`) and save the CSS that goes into the page: `node -e "import('./tools/css-inputs.mjs').then(m => process.stdout.write(m.appCss()))" > <out>/css-before.css`. After the change, save css-after.css the same way. For merges of neighbours and pure renames the two files must be identical (`git diff --no-index --stat` shows nothing; also print their SHA-256). That alone proves the cascade, because the page receives the same bytes.
+   b. For any merge that joins non-adjacent files, so the bytes differ: say exactly which rules moved and why the order between conflicting rules is kept (same specificity, same selector overlap), and then prove it with a computed-style comparison: with the harness, load the built page in the states the visual suites reach and dump `getComputedStyle` for every element for the properties the stylesheets set, before and after, and show they are equal. Keep that script out of the repository and put its output summary in the PR. If you cannot show equality for a move, do not make the move.
+   c. The visual browser suites pass. Take the list for style changes from docs/architecture/testing.md ("What to run for which change") and run it with node tools/run-suites.mjs <out> '<regex>' --lanes 3, adding the suites of every feature whose stylesheet you touched (settings, file menu, comments, panels, prompter, gallery, tags, find, overlay, history, imports, writer), in light and dark mode as those suites do. Build with `node build.mjs --test` once the base has that flag. A suite that fails on the base too is on the flaky list: rerun once, then stop.
+4. `npm run verify` (it runs the CSS tests, including the colour checks that read the built CSS), `npm run check:comments`, and `git diff --exit-code -- sw.js` (the committed cache stamp must not change; if the built file list changes it, regenerate with the build and say so).
+5. Do not change a selector, a declaration, a value, a media query or a comment's meaning. No clean-up of unused rules in this task (name them in the PR for a later one).
+
+Do not touch: src/ outside the stylesheets and the tests named above, build.mjs beyond what the file renames force (it should need nothing), .github/, tools/dep-report.mjs.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; stylesheets renamed and merged", the table of old file to new file, which merges joined neighbours and which did not, the SHA-256 of the CSS before and after (equal), the computed-style comparison for any non-adjacent merge, the suites run, and that no rule was added, removed or reordered (or exactly which moved).
+```
+
+## AQ-35 [ ] Desktop split, step 1: IPC setup out of desktop/main.js
+
+Needs: AQ-23's first PR and AQ-32 merged. Start from a base that includes both.
+Files: desktop/main.js, desktop/ipc-setup.js (new), desktop/electron-builder.yml and desktop/package.json (file and test lists), desktop/test/ipc-table.test.mjs, docs/architecture/desktop-build.md.
+**STOPS FOR ADAM**: desktop/ is protected. Run on Opus; independent review; full PC Electron smoke.
+
+```text
+Task: roadmap B1, step 1. desktop/main.js is over 2,500 lines. Its IPC setup is one block: the registration wrappers `ipcHandle`, `ipcOn` and `ipcOnSync` (about line 2084, with `ipcChannelRow`, `ipcRefusalReason` and `logIpcRefusal` just above) and `registerIpc()` (about line 2143 to the call near line 2770). Move the IPC setup into its own module. One PR, no behaviour change. Process lifecycle (start, close, quit) and voice follow as later tasks; do not start them here.
+
+FILES TO READ
+- docs/architecture/desktop-build.md: why each module is listed in `files`, and the rule that every `./module` main.js requires must be added to the list (desktop/test/ipc-table.test.mjs fails if one is missing).
+- desktop/main.js: the IPC block above, and what each handler uses from main.js (tabs, windows, drafts, recents, state, dialogs). The earlier extractions are the pattern: desktop/recents.js, tab-registry.js, restore-notice.js and unsaved-dialog.js each take what they need as arguments and return functions; main.js keeps the state.
+- desktop/ipc-channels.js (the channel table), desktop/preload.js, desktop/tabstrip-preload.js, desktop/test/ipc-table.test.mjs (it reads main.js as text and checks that nothing registers through ipcMain directly, that every registered channel is in the table with its direction, that every inbound row is registered exactly once).
+- desktop/electron-builder.yml (the `files` list) and desktop/package.json (the `test` script, which lists each desktop test), desktop/verify-dist.mjs.
+- docs/HANDOFF.md and docs/architecture/invariants.md for anything the handlers touch (saving, closing).
+
+DO
+1. STEP 0 in the PR body: before any change, print the list of (channel, direction) pairs main.js registers today, in registration order, with their count by direction. Then list what the handlers use from main.js and choose the cut. The module takes those dependencies as one object argument; main.js builds it. If the dependency object would need more than about 30 members, stop and reply with a proposed split by handler group, before changing code. Handler bodies move as they are, or stay in main.js as functions passed in; this task moves the registration and the wrappers, not the logic of a handler.
+2. Create desktop/ipc-setup.js (plain CommonJS like its neighbours) holding the wrappers and registerIpc. Same channels, same registration order, same origin and argument checks, same refusal results, same log lines. main.js requires it and calls it where it calls registerIpc() today. Leave no wrapper copy and no re-export in main.js (AGENTS.md rule 4).
+3. Update every list that names modules: the `files` list in desktop/electron-builder.yml, desktop/package.json's test script if a test file is added, docs/architecture/desktop-build.md (a row for the new module: what it holds and what stays in main.js), and desktop/test/ipc-table.test.mjs so that it reads the new module where it read main.js. Its assertions keep their meaning (no direct ipcMain registration, every channel in the table with that direction, every inbound row exactly once); none is weakened.
+4. Test: record the step 0 list of (channel, direction) pairs, in order, as a test that compares it to what the new module registers against a fake ipcMain. It must pass on the moved code and would fail on a missing, extra or reordered channel.
+5. `npm run verify`; `npm run test:desktop`; `node build.mjs`; the packaged payload check: from desktop/, build a fresh package with `npm run dist:win`, then list the new package's app.asar (for example `npx @electron/asar list <path to the new app.asar>`) and show that `ipc-setup.js` is in it; put that output in the PR. If a fresh package cannot be built on this machine, stop and report; do not accept `node stage.mjs` or `node verify-dist.mjs` on existing artifacts instead, because they do not prove the new module ships. Full Windows Electron smoke on the PC: node desktop/test/smoke.mjs --only-target dev, pass count in the PR (all checks, not a group). Browser suites are not needed because no renderer code changes; say so.
+6. If a handler can only move by changing what it does, leave that handler in main.js and name it in the PR.
+
+Do not touch: renderer code, preload files, desktop/ipc-channels.js (the table stays as it is), the process lifecycle and voice code, and any other desktop module.
+
+STRUCTURE SECTION MUST SAY
+- "no behaviour change", what moved from main.js to desktop/ipc-setup.js and what the module needs from main.js (the dependency list), the line count of main.js before and after, the (channel, direction) list before and after (equal), the lists updated, smoke count. Name lifecycle and voice as the later steps.
 ```
