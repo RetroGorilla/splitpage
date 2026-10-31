@@ -15,7 +15,8 @@ Everything listed here goes inside the asar.
 | --- | --- |
 | `main.js`, `preload.js`, `tabstrip-preload.js`, `drafts.js` | `main.js` requires `./drafts` at load and loads both preloads by path. If one is missing from the asar, the packaged app crashes on startup. |
 | `ipc-channels.js` | The IPC channel table. `ipc-setup.js` requires it at startup, and both preloads read it over `splitpage:ipc-table-sync`, so a packaged build without it has no bridge at all. |
-| `ipc-setup.js` | How a channel is registered (`createIpcSetup`): the `ipcHandle`, `ipcOn` and `ipcOnSync` wrappers, the sender origin and trust checks, the argument check, the refusal results and log lines, and `registerIpc`, which registers the table read, the app version and the test-mode flag itself and calls `main.js`'s handler groups in a fixed order. The handlers stay in `main.js`, in six named functions that each take the wrappers: `registerFileIpc`, `registerShellIpc`, `registerDocumentIpc`, `registerHistoryBlobIpc`, `registerTabStripIpc` and `registerTestModeIpc`. `main.js` passes in `ipcMain`, `app`, the test-mode flag and the window map. |
+| `ipc-setup.js` | How a channel is registered (`createIpcSetup`): the `ipcHandle`, `ipcOn` and `ipcOnSync` wrappers, the sender origin and trust checks, the argument check, the refusal results and log lines, and `registerIpc`, which registers the table read, the app version and the test-mode flag itself and calls `main.js`'s handler groups in a fixed order. The handlers live in six named group functions that each take the wrappers: `registerFileIpc` (in `ipc-files.js`), and `registerShellIpc`, `registerDocumentIpc`, `registerHistoryBlobIpc`, `registerTabStripIpc` and `registerTestModeIpc` (still in `main.js`). `main.js` passes in `ipcMain`, `app`, the test-mode flag and the window map. |
+| `ipc-files.js` | The file and recent-documents channels (`createFileIpc`, which returns `registerFileIpc`): the open and save dialogs, reading, writing and statting a file by its id, the recents list, and the session info the test harness reads. `main.js` builds its dependency object: `dialog`, the file id registry, the path and tab maps, `recents`, `tabOf`, `dialogParentFor`, the test dialog answers and their count, and the test-mode flag. |
 | `prompter-share.js` | The teleprompter's loopback listener (#86). |
 | `close-keep.js` | The close-time checks for a tab whose file is gone: a file check with a one-second limit, so an unreachable drive can't freeze a close (#497), and whether a kept copy really reached the draft folder (#496). It also runs the close check's question rounds (`runCloseCheck`, with main's tabs and helpers passed in) and decides what closing a window that is the last one at "close" settles (`lastWindowClose`, #531). |
 | `quit-watchdog.js` | The update restart's 3 s quit timer, which waits while the quit is still asking the user and starts again once they answer. |
@@ -33,10 +34,10 @@ Everything listed here goes inside the asar.
 | `restore-notice.js` | The one notice, after a session restore, that some files could not be reopened (`createRestoreNotice`): which tab it waits for, delivering it once that tab is ready, and moving it to another tab if that one closes first. `main.js` still sends `splitpage:restore-notice` itself. |
 | `unsaved-dialog.js` | The wording and buttons of the unsaved-changes question asked before closing a tab, a window or the app, the titles it lists, and which answer each button means. Whether to ask, the test-mode answers and showing the dialog stay in `main.js`. |
 
-From `ipc-channels.js` down, `main.js` or `ipc-setup.js` requires each of
-these modules at startup, so each must ship for the same reason `drafts.js`
-does. A new `./module` that either file requires has to be added to this list:
-`desktop/test/ipc-table.test.mjs` fails if one is missing.
+From `ipc-channels.js` down, `main.js` or one of the `ipc-*.js` modules
+requires each of these modules at startup, so each must ship for the same
+reason `drafts.js` does. A new `./module` that any of them requires has to be
+added to this list: `desktop/test/ipc-table.test.mjs` fails if one is missing.
 
 Two things `main.js` needs at startup are deliberately left out of `files`:
 
