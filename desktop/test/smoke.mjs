@@ -7,6 +7,7 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { isMain } from "../../tools/main-module.mjs";
 import { hookNames, leakedHooks } from "../../tools/release-hooks.mjs";
@@ -1054,6 +1055,125 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
       const mdText = fs.readFileSync(exportMdPath, "utf8");
       record(tag + ": exported .md contains the script title", mdText.indexOf(savedTitle) !== -1);
     }
+  } finally {
+    if (app) {
+      await teardown(app, tag);
+      rmrf(app.userDataDir);
+    }
+  }
+}
+
+function pdfSmokePng(width, height) {
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x5a)]);
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+function pdfStringText(token) {
+  if (token[0] === "<") {
+    const hex = token.slice(1, -1);
+    const units = [];
+    for (let i = hex.toUpperCase().startsWith("FEFF") ? 4 : 0; i + 4 <= hex.length; i += 4) units.push(parseInt(hex.slice(i, i + 4), 16));
+    return String.fromCharCode(...units);
+  }
+  return token.slice(1, -1).replace(/\\([()\\])/g, "$1");
+}
+
+function pdfFileFacts(file) {
+  const bytes = fs.readFileSync(file);
+  const text = bytes.toString("latin1");
+  const boxes = [...text.matchAll(/\/MediaBox ?\[([^\]]*)\]/g)].map((m) => m[1].trim().split(/\s+/).map(Number));
+  return {
+    bytes,
+    header: text.startsWith("%PDF-"),
+    pages: boxes.length,
+    landscape: boxes.filter((b) => b[2] > b[3]).length,
+    outline: /\/Outlines \d+ 0 R/.test(text),
+    titles: [...text.matchAll(/\/Title ?(\((?:[^)\\]|\\.)*\)|<[0-9A-Fa-f]+>)/g)].map((m) => pdfStringText(m[1])),
+    images: (text.match(/\/Subtype ?\/Image/g) || []).length,
+    dates: [...text.matchAll(/\/(?:CreationDate|ModDate) ?\((D:[^)]*)\)/g)].map((m) => m[1])
+  };
+}
+
+async function caseDesktopPdfExport(target, fixturesDir) {
+  const tag = target.name + " desktop PDF export";
+  const title = "Print — 中文 العربية 🎬 Bakery";
+  const doc = JSON.parse(fs.readFileSync(path.join(DESKTOP_DIR, "..", "src", "starters", "interview.json"), "utf8"));
+  doc.title = title;
+  doc.rows[0].visualImage = "data:image/png;base64," + pdfSmokePng(48, 30).toString("base64");
+  const fixturePath = path.join(fixturesDir, "case-pdf.splitpage");
+  fs.writeFileSync(fixturePath, JSON.stringify(doc), "utf8");
+  const out = (name) => path.join(fixturesDir, "case-pdf-" + name + ".pdf");
+  const products = [
+    ["export-pdf", out("script")], ["export-packing-gear", out("gear")], ["export-packing-prop", out("prop")],
+    ["export-broll-pdf", out("shots")], ["export-pdf", out("script-again")]
+  ];
+  const now = new Date();
+  const day = "D:" + now.getFullYear() + String(now.getMonth() + 1).padStart(2, "0") + String(now.getDate()).padStart(2, "0") + "000000";
+
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "pdf-export", fixtures: [fixturePath], dialogs: products.map(([, file]) => file) });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const opened = await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify(title), 20000).catch(() => false);
+    record(tag + ": the fixture with gear, props, b-roll and a picture is open", !!opened);
+
+    for (const [action, file] of products) {
+      await evalPage(cdp, "window.__desktopTest.runMenuCommand(" + JSON.stringify(action) + ")", { awaitPromise: false });
+      let size = -1;
+      for (let i = 0; i < 80; i++) {
+        const seen = fs.existsSync(file) ? fs.statSync(file).size : -1;
+        if (seen > 0 && seen === size) break;
+        size = seen;
+        await sleep(250);
+      }
+      record(tag + ": " + action + " writes " + path.basename(file), size > 0, "bytes=" + size);
+    }
+
+    const list = (await fetchJson(`http://127.0.0.1:${app.port}/json`)).body || [];
+    const printViews = list.filter((t) => (t.url || "").startsWith("splitpage://print/"));
+    record(tag + ": no print view is left open after the exports", printViews.length === 0, printViews.map((t) => t.url).join(", "));
+    const problems = await evalPage(cdp, "Array.from(document.querySelectorAll('.toast.error, .toast.warn'), function (t) { return t.textContent; })");
+    record(tag + ": the exports show no error or warning", Array.isArray(problems) && problems.length === 0, JSON.stringify(problems));
+
+    if (!products.every(([, file]) => fs.existsSync(file))) return;
+    const script = pdfFileFacts(out("script"));
+    const gear = pdfFileFacts(out("gear"));
+    const prop = pdfFileFacts(out("prop"));
+    const shots = pdfFileFacts(out("shots"));
+    const again = pdfFileFacts(out("script-again"));
+    const all = [script, gear, prop, shots];
+    record(tag + ": every file is a PDF with bookmarks", all.every((f) => f.header && f.outline),
+      all.map((f) => f.header + "/" + f.outline).join(" "));
+    record(tag + ": the script's bookmarks name its title, in Unicode, and its parts",
+      script.titles.includes(title) && script.titles.includes("Production breakdown") && script.titles.includes("B-roll shot list"),
+      JSON.stringify(script.titles.slice(0, 8)));
+    record(tag + ": the script has portrait script pages and a landscape shot-list appendix",
+      script.pages >= 2 && script.landscape >= 1 && script.landscape < script.pages, "pages=" + script.pages + " landscape=" + script.landscape);
+    record(tag + ": the script's picture is in the PDF", script.images >= 1, "images=" + script.images);
+    record(tag + ": the packing lists are portrait and bookmark their category",
+      gear.landscape === 0 && prop.landscape === 0 && gear.titles.some((t) => /Gear/.test(t)) && prop.titles.some((t) => /Prop/.test(t)),
+      JSON.stringify([gear.titles, prop.titles]));
+    record(tag + ": the shot list is all landscape", shots.pages >= 1 && shots.landscape === shots.pages, "pages=" + shots.pages + " landscape=" + shots.landscape);
+    record(tag + ": every PDF date is the captured day at midnight",
+      all.every((f) => f.dates.length === 2 && f.dates.every((d) => d.startsWith(day))), JSON.stringify(all.map((f) => f.dates)));
+    record(tag + ": the same document exported twice the same day is the same bytes", again.bytes.equals(script.bytes),
+      "first=" + script.bytes.length + " again=" + again.bytes.length);
   } finally {
     if (app) {
       await teardown(app, tag);
@@ -5376,6 +5496,7 @@ async function runTargetSuite(target, groupFilter) {
   const groups = [
     ["open/boot/security", () => caseBootAndSecurity(target), hookFree],
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
+    ["desktop PDF export: script, packing lists, shot list", () => caseDesktopPdfExport(target, fixturesDir)],
     ["second instance", () => caseSecondInstance(target, fixturesDir)],
     ["second instance (relative path)", () => caseSecondInstanceRelativePath(target, fixturesDir)],
     ["session restore", () => caseSessionRestore(target, fixturesDir)],

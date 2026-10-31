@@ -74,6 +74,8 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly blobGet: (sha: string) => Promise<DesktopBlob | null>;
   readonly blobMissing: (shas: readonly string[]) => Promise<readonly string[]>;
 
+  readonly printToPdf: (html: string) => Promise<Uint8Array>;
+
   readonly getSessionInfo: () => Promise<{ readonly hosting?: boolean; readonly [key: string]: unknown } | null>;
   readonly openExternal: (url: string) => void;
   readonly setTheme: (mode: string) => void;
@@ -107,7 +109,7 @@ export const DESKTOP_PORT_MEMBERS = [
   "onRestoreNotice", "onReassignDocId", "onOpenFile", "onMenuCommand", "setDocumentState",
   "writeDraft", "discardDraft", "takeDraft", "draftRestoreDone", "onDraftFlush",
   "historyPut", "historyList", "historyGet", "historyCopy", "historyTouch", "historyListDocs",
-  "blobPut", "blobGet", "blobMissing",
+  "blobPut", "blobGet", "blobMissing", "printToPdf",
   "getSessionInfo", "openExternal", "setTheme",
   "grantVideoFile", "openVideoFile", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",

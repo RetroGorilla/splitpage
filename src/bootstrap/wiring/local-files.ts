@@ -34,7 +34,7 @@ export function mountLocalFilesFeature(): LocalFileMenuControls {
   const writeback: ImportSavingOwner = createImportSavingOwner();
   const stopFiles = files.startLocalFiles(localFilesOwnerPorts(localFileMenuControls));
   const stopSaving = writeback.startImportSaving(importSavingPorts(localFileMenuControls));
-  const view = startLocalFileMenu(localFileMenuPorts()) as LocalFileMenuControls;
+  const view = startLocalFileMenu(localFileMenuPorts(localFileMenuControls)) as LocalFileMenuControls;
   opening = files;
   saving = writeback;
   menu = view;
