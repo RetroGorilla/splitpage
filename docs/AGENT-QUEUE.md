@@ -126,6 +126,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-32 switches import save-back off and marks it deprecated; the code stays (Adam, 2026-10-30). It is **STOPS FOR ADAM** and runs on Opus with an independent review. It supersedes AQ-29: AQ-29's PR is not merged. Do not run it alongside B1's lifecycle PR or B2 (all touch saving or close).
 - AQ-33 to AQ-35 are wave 2 and the first wave 3 step of [ROADMAP.md](ROADMAP.md). AQ-33 and AQ-35 are **STOPS FOR ADAM** (Opus, independent review): AQ-33 needs AQ-32 merged; AQ-35 needs AQ-32 and the first PR of AQ-23 merged. AQ-34 needs the first PR of AQ-23 merged (both touch the build) and can be merged by queue agents unless it touches a protected path.
 - AQ-36 to AQ-44 cover wave 3: B1 lifecycle (AQ-36, after AQ-35) then voice (AQ-37); B2 save completion (AQ-38, after AQ-36; Adam lifted the hold 2026-10-30); C5 housekeeping (AQ-39); C6 PDF P1 to P5 (AQ-40 to AQ-44). AQ-36 to AQ-38 and AQ-42 to AQ-44 are **STOPS FOR ADAM**; AQ-36 to AQ-38, AQ-42 and AQ-44 run on Opus with independent review and PC smoke. AQ-40 and AQ-41 are not wired and may be merged by queue agents. AQ-42 needs AQ-35; AQ-44 needs AQ-19 and Adam's PC PDF check. The four old `main` PRs in AQ-39 are for Adam's decision only.
+- AQ-45 (automatic PDF layout rules, Adam 2026-10-31) needs AQ-43 merged; test-only, stops for Adam only if it would need a workflow or dependency change.
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -1053,4 +1054,36 @@ DO
 
 STRUCTURE SECTION MUST SAY
 - "no structural change beyond removal of the replaced PDF path", every deleted module/asset/tool and its audited consumers, the test inventory awaiting Adam's decision and product coverage retained/replaced (no test deleted by the agent), licence disposition, code and bundle bytes removed, AQ-19 merge evidence, Adam's prior PC PDF approval, suite and full smoke results. Stop for Adam; do not merge.
+```
+
+## AQ-45 [ ] Automatic layout rules for printed PDFs
+
+Needs: AQ-43 merged (the browser print path and its fixtures). Adam asked for this on 2026-10-31 after checking exported PDFs by eye.
+Files: tests/adapters/formats/fixtures/inspect-script-print.mjs and its print fixtures, one new test or browser suite that an existing CI job already runs, docs/architecture/print-layout.md and docs/architecture/testing.md.
+**STOPS FOR ADAM only if** the check cannot run in an existing CI job without changing .github/workflows/ or adding a package.json dependency (both protected): then stop and report the options.
+
+```text
+Task: roadmap C6 follow-up. Printed PDFs are Chromium output of the P1/P2 HTML print pages (browser P4 now, desktop P3 later). inspect-script-print.mjs already prints the 18 script and list fixtures with Page.printToPDF and checks print media, horizontal clipping, cell wrapping, image bounds, page counts and page sizes, but only when someone runs it by hand. Turn it into an automatic check that runs in CI and add the layout rules below. No product or print CSS change in this task.
+
+FILES TO READ
+- docs/architecture/print-layout.md (layout rules, footers, page-break notes), docs/architecture/testing.md (how suites and CI pick tests), docs/architecture/ci.md.
+- tests/adapters/formats/fixtures/inspect-script-print.mjs and the print fixtures it loads; the P1/P2 print page modules it renders.
+
+DO
+1. STEP 0: decide how to read the printed PDF's pages (text and its position per page). Use only what the repo already has (node:zlib for streams, the ToUnicode maps, the tagged-PDF structure Chromium writes with generateTaggedPDF, or Chromium itself). No new dependency. Say which in the PR body, and show it reads one fixture's pages correctly before writing rules.
+2. Rules, each one checked on every fixture that can trigger it:
+   a. No stranded heading: a scene heading, list group heading or section heading is never the last line of a page; the first line it introduces is on the same page.
+   b. No split rows: a script row or list/table row starts and ends on the same page, unless that row alone is taller than a page (then say so in the result).
+   c. Continued tables repeat their header row on every page they continue onto.
+   d. Nothing clipped: every text line lies inside the page's printable area, on all four sides.
+   e. No missing characters: no .notdef glyphs, and the fixture's text, including its non-Latin and emoji samples, appears in the PDF text.
+   f. Footer page numbers and running title, where the print page defines them: present on every page and in order.
+   g. Keep the existing checks: page counts, page size and orientation (portrait script, landscape shot list), print media, clipping, wrapping, images.
+3. Prove each rule fails first: break one fixture or a scratch copy of the print CSS locally for each rule (for example, remove a keep-with-next or make a row too wide), show the failure, then revert. List the probes in the PR body.
+4. Run it in CI on the Linux runners through an existing job (suite list or unit test that CI already runs). Keep Windows and Linux font differences from causing false failures: rules compare positions and order, never pixel images.
+5. If a rule fails on today's output, do not loosen it and do not change the print CSS: stop, attach the failing fixture's PDF page and screenshot, and report it for Adam.
+6. npm run verify; node build.mjs --test; the new check locally and in CI; node tools/run-suites.mjs <out> 'print|export' --lanes 3.
+
+STRUCTURE SECTION MUST SAY
+- "test-only, no product change", how the PDF pages are read, each rule and its fail-first probe, which CI job runs it and its run time, any rule failing on today's output (reported, not fixed).
 ```
