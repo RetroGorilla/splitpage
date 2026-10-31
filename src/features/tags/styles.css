@@ -43,6 +43,8 @@
   .tag-badge { background: var(--visual); }
 
   .tag-cats { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+  #tag-modal.is-category-only #tag-quote,
+  #tag-modal.is-category-only #tag-cats ~ * { display: none; }
   .tag-cat-btn {
     display: inline-flex; align-items: center; gap: var(--space-8);
     height: 32px; padding: 0 var(--space-12) 0 var(--space-10);
