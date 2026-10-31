@@ -8,6 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isMain } from "../../tools/main-module.mjs";
 import { hookNames, leakedHooks } from "../../tools/release-hooks.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -190,7 +191,9 @@ let hookFreeRun = false;
 async function evalPage(cdp, expression, opts) {
   opts = opts || {};
   if (hookFreeRun && hookNames(expression).length) {
-    throw new Error("a hook-free group drove a test hook (" + hookNames(expression).join(", ") + ") -- expr: " + expression.slice(0, 200));
+    const violation = "a hook-free group drove a test hook (" + hookNames(expression).join(", ") + ")";
+    record("hook-free run: " + violation, false, expression.slice(0, 200));
+    throw new Error(violation + " -- expr: " + expression.slice(0, 200));
   }
   const params = {
     expression,
@@ -5555,7 +5558,13 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error("smoke.mjs crashed:", e && e.stack || e);
-  process.exit(1);
-});
+export function setHookFreeRun(on) { hookFreeRun = !!on; }
+export function checkCounts() { return { totalChecks, passedChecks, failureLines: [...failureLines] }; }
+export { evalPage, fireEval };
+
+if (isMain(import.meta.url)) {
+  main().catch((e) => {
+    console.error("smoke.mjs crashed:", e && e.stack || e);
+    process.exit(1);
+  });
+}
