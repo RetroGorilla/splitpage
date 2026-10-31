@@ -123,6 +123,7 @@ Tasks marked **STOPS FOR ADAM** are written and reviewed like any other, then le
 - AQ-15 to AQ-23 are the PDF, CI, startup and test-hook tasks. Only AQ-18 can be merged by queue agents. AQ-15 to AQ-17 and AQ-19 to AQ-23 are **STOPS FOR ADAM** (AQ-16 needs AQ-15). AQ-15, AQ-16 and AQ-19 all edit `pdf.ts` or its imports: merge in the order AQ-15, AQ-19, AQ-16 and base-merge each time.
 - AQ-25 needs AQ-24 and AQ-27 needs AQ-26 (prompter and rundown conversions to TypeScript, then their state into objects); the prompter pair and the rundown pair are independent. AQ-26 and AQ-27 need the PC perf-ab and stop if a limit is exceeded.
 - AQ-28 to AQ-31 are wave 1 of [ROADMAP.md](ROADMAP.md) (known bugs and flaky tests). AQ-28, AQ-29 and AQ-31 are **STOPS FOR ADAM** and need an independent review. AQ-30 changes one suite file and can be merged by queue agents. AQ-29 needs AQ-28 (both touch saving; I-20 runs before I-6, as in ROADMAP.md).
+- AQ-32 switches import save-back off and marks it deprecated; the code stays (Adam, 2026-10-30). It is **STOPS FOR ADAM** and runs on Opus with an independent review. It supersedes AQ-29: AQ-29's PR is not merged. Do not run it alongside B1's lifecycle PR or B2 (all touch saving or close).
 
 ## AQ-1 [x] Fix the flaky tests 186-autosave-panel-edits and migrate-rows
 
@@ -673,7 +674,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change", which stamp is now recorded on each platform, what part B changes for the user (or why it stopped), the test names, smoke count.
 ```
 
-## AQ-30 [ ] Fix the flaky suite 266-header-collab-condense (tracker I-30)
+## AQ-30 [x] Fix the flaky suite 266-header-collab-condense (tracker I-30)
 
 Needs: none.
 Files: .claude/skills/run-splitpage-app/tests/266-header-collab-condense.txt only.
@@ -709,4 +710,34 @@ DO
 
 STRUCTURE SECTION MUST SAY
 - "no structural change; test only", the cause, what the check waits on now, pass counts before and after.
+```
+
+## AQ-32 [ ] Switch off import save-back (keep the code, mark it deprecated)
+
+Needs: none. Supersedes AQ-29 (its PR stays unmerged and is closed when this task merges).
+Files: the entry points that reach `saveBackToFile` (src/application/save/import-saving.ts): the save-back action and its file menu item (src/features/file-menu/, src/bootstrap/actions.ts, src/bootstrap/wiring/local-files.ts) and the conflict retry that calls it; their tests and browser suites; the docs that describe save-back.
+**STOPS FOR ADAM**: saving and the file menu are protected, and it changes what the user sees. Run on Opus; independent review; PC smoke.
+
+```text
+Task: switch import save-back off (Adam, 2026-10-30). Today, after a user imports a .docx, .csv or .txt, a separate save-back action (and the conflict retry it offers) writes the script back into that original file through saveBackToFile (src/application/save/import-saving.ts; save kinds "writeback" and "writebackForce"; the "import home"; exporters marked `writeback: true` in src/bootstrap/wiring/exporters.ts). Ordinary Save and its shortcut (saveDoc; saveKind in src/bootstrap/wiring/save-owners.ts) never pick those kinds: on a script whose home is an import they already ask for a new project destination. From now on an import starts a separate Splitpage script and Splitpage never writes to the imported file. A user who wants a .docx, .csv or .txt makes a new one with Export. The save-back code stays in the repo, unreachable from the app, and is marked deprecated in the docs; removing it is a later decision, not this task.
+
+WHAT THE USER SEES AFTER
+- Importing a file opens its content as a script that has no Splitpage file yet, like a new untitled script, with the imported file's name as the suggested name.
+- Save on that script is unchanged: it works like Save on any script that has no file yet, with the existing Save choices and default format. No menu item, shortcut, command-menu entry, toast, prompt or status line offers or mentions writing back to the imported file.
+- Export (including "Export again") is unchanged and always writes a file the user picks.
+- The unsaved warning on close, the leave-page warning and the crash-recovery draft behave as for any unsaved script.
+
+OLD DATA
+- A stored location, recent-file entry or recovery draft that still records an import home must load without an error and without losing the document, and Save must treat it as a script with no Splitpage file unless it also has one. Never write to the old imported file. Do not delete the stored field; just stop acting on it.
+
+DO
+1. STEP 0, before any code change: list every caller of saveBackToFile and every way a user reaches one (file menu item, command-menu action, shortcut, toast or status-line button, conflict retry prompt, desktop menu), and confirm that ordinary Save, its shortcut and autosave never reach it. Put that list and the chosen switch points in the PR body. If switching it off needs a change in more than a few places, or in desktop/ or src/application/recovery/, stop and reply with the list before changing code.
+2. Read docs/HANDOFF.md, docs/architecture/invariants.md and docs/architecture/saving.md first (AGENTS.md rule 9). Every invariant holds unchanged; invariants and race-matrix cases about save-back (for example milestone 4's E5 and case I2 in src/test/m4-matrix-files.test.mjs) keep testing the save-back owner directly, since the code stays.
+3. Switch it off at those entry points: remove or hide the save-back action, its menu item and the conflict retry that calls it, so nothing in the app reaches saveBackToFile. Ordinary Save stays exactly as it is. Do not delete the save-back owner, its save kinds, its location/recovery fields or the desktop code; they stay unused.
+4. Tests: unit tests of the save-back owner itself stay and keep passing. Tests and browser suites that drive save-back through the app are updated to assert the new behaviour (AGENTS.md rule 2: the behaviour is meant to change); list each one in the PR with old and new expectation. Never weaken an assertion about anything else. Add tests: after an import, Save asks for a new project destination with the existing choices and default (unchanged behaviour, now pinned); the imported file is never written (assert no write to its handle or path) through Save, autosave, the file menu or any action; a location or draft with an old import home loads and Save treats it as having no project file; no menu item, action or prompt offers save-back.
+5. Mark it deprecated in the docs: a short "Deprecated: import save-back" note in docs/architecture/saving.md (switched off on 2026-10-30, code kept, which files hold it, removal to be decided later), matching lines in HANDOFF.md and pinned-defects.md, the Help text updated so it no longer describes saving back to an imported file, and a CHANGELOG line. No code comments beyond the reason form AGENTS.md rule 1 allows.
+6. `npm run verify`; browser suites node tools/run-suites.mjs <out> 'import|save|file-menu|home|conflict|export|title' --lanes 3 (build with `node build.mjs --test` once the base has that flag); full Windows Electron smoke on the PC (node desktop/test/smoke.mjs --only-target dev), pass count in the PR.
+
+STRUCTURE SECTION MUST SAY
+- "no structural change; save-back switched off, code kept", every entry point found and how each is now unreachable, that ordinary Save is unchanged, what the user sees now, the old-data handling, every test or suite whose expectation changed, smoke count.
 ```
