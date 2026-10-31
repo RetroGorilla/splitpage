@@ -8,6 +8,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isMain } from "../../tools/main-module.mjs";
+import { hookNames, leakedHooks } from "../../tools/release-hooks.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_DIR = path.resolve(__dirname, "..");
@@ -21,9 +23,10 @@ function modalShownExpr(id) {
 }
 
 function parseCliArgs(argv) {
-  const out = { exe: null, onlyTarget: null, onlyGroup: null };
+  const out = { exe: null, onlyTarget: null, onlyGroup: null, hookFree: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--exe") out.exe = argv[++i];
+    if (argv[i] === "--hook-free") out.hookFree = true;
     if (argv[i] === "--only-target") out.onlyTarget = argv[++i];
     if (argv[i] === "--only-group") out.onlyGroup = argv[++i];
   }
@@ -53,13 +56,15 @@ function resolveTargets(exeOverride) {
   const devExe = devElectronExe();
   if (fs.existsSync(devExe)) targets.push({ name: "dev", kind: "dev", exe: devExe, appPath: DESKTOP_DIR });
   if (IS_WINDOWS) {
-    const x64Exe = path.join(DESKTOP_DIR, "dist", "win-unpacked", "Splitpage.exe");
-    if (fs.existsSync(x64Exe)) targets.push({ name: "packaged-x64", kind: "packaged", exe: x64Exe });
-    const arm64Exe = path.join(DESKTOP_DIR, "dist", "win-arm64-unpacked", "Splitpage.exe");
-    if (fs.existsSync(arm64Exe)) {
-      if (process.arch === "arm64") targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
-      else targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe,
-        cannotRun: "an arm64 build cannot start on this " + process.arch + " host — run it on the ARM machine" });
+    for (const [prefix, dist, variant] of [["packaged", "dist", "release"], ["test-packaged", "dist-test", "test"]]) {
+      const x64Exe = path.join(DESKTOP_DIR, dist, "win-unpacked", "Splitpage.exe");
+      if (fs.existsSync(x64Exe)) targets.push({ name: prefix + "-x64", kind: "packaged", variant, exe: x64Exe });
+      const arm64Exe = path.join(DESKTOP_DIR, dist, "win-arm64-unpacked", "Splitpage.exe");
+      if (fs.existsSync(arm64Exe)) {
+        if (process.arch === "arm64") targets.push({ name: prefix + "-arm64", kind: "packaged", variant, exe: arm64Exe });
+        else targets.push({ name: prefix + "-arm64", kind: "packaged", variant, exe: arm64Exe,
+          cannotRun: "an arm64 build cannot start on this " + process.arch + " host — run it on the ARM machine" });
+      }
     }
   }
   return targets;
@@ -181,8 +186,15 @@ class CDPConn {
   close() { try { if (this.ws) this.ws.close(); } catch {} }
 }
 
+let hookFreeRun = false;
+
 async function evalPage(cdp, expression, opts) {
   opts = opts || {};
+  if (hookFreeRun && hookNames(expression).length) {
+    const violation = "a hook-free group drove a test hook (" + hookNames(expression).join(", ") + ")";
+    record("hook-free run: " + violation, false, expression.slice(0, 200));
+    throw new Error(violation + " -- expr: " + expression.slice(0, 200));
+  }
   const params = {
     expression,
     awaitPromise: opts.awaitPromise !== false,
@@ -854,6 +866,7 @@ function skip(name, reason) {
 }
 
 const WINDOWS_ONLY = "Windows-only probe (PowerShell/Win32), this run is on " + process.platform;
+const HOOK_GROUP = "drives a test hook that release builds leave out; the full smoke runs it on the dev target and the test package";
 
 async function guarded(name, fn) {
   try {
@@ -5339,24 +5352,42 @@ async function caseWindowCloseCanary() {
   record(tag + ": no window.close( call anywhere in the app code under src", offenders.length === 0, offenders.join(", "));
 }
 
+function casePackageVariant(target) {
+  const indexPath = path.join(path.dirname(target.exe), "resources", "splitpage", "index.html");
+  let leaked;
+  try {
+    leaked = leakedHooks(fs.readFileSync(indexPath, "utf8"));
+  } catch (e) {
+    record(target.name + ": the packaged index.html is readable", false, e && e.message ? e.message : String(e));
+    return;
+  }
+  if (target.variant === "release") {
+    record(target.name + ": the package is a release build (no hook outside the release list)", leaked.length === 0, leaked.join(", "));
+  } else {
+    record(target.name + ": the package is a test build (it has the hooks a release build leaves out)", leaked.length > 0, leaked.length ? leaked.join(", ") : "none found");
+  }
+}
+
 async function runTargetSuite(target, groupFilter) {
-  console.log(`\n==== target: ${target.name} (${target.exe}) ====`);
+  console.log(`\n==== target: ${target.name} (${target.exe})${target.hookFree ? " — hook-free groups only" : ""} ====`);
+  if (target.variant) casePackageVariant(target);
   const fixturesDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-fixtures-"));
+  const hookFree = { hookFree: true };
   const groups = [
-    ["open/boot/security", () => caseBootAndSecurity(target)],
+    ["open/boot/security", () => caseBootAndSecurity(target), hookFree],
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
     ["second instance", () => caseSecondInstance(target, fixturesDir)],
     ["second instance (relative path)", () => caseSecondInstanceRelativePath(target, fixturesDir)],
     ["session restore", () => caseSessionRestore(target, fixturesDir)],
-    ["update status", () => caseUpdateStatus(target)],
-    ["update download", () => caseUpdateDownload(target)],
-    ["update without a checksum", () => caseUpdateNoChecksum(target)],
-    ["unsaved-changes close", () => caseUnsavedChangesClose(target)],
+    ["update status", () => caseUpdateStatus(target), hookFree],
+    ["update download", () => caseUpdateDownload(target), hookFree],
+    ["update without a checksum", () => caseUpdateNoChecksum(target), hookFree],
+    ["unsaved-changes close", () => caseUnsavedChangesClose(target), hookFree],
     ["close authority (no user gesture)", () => caseCloseAuthorityNoGesture(target)],
     ["page-initiated window.close() (documented)", () => caseCloseFromPageIsUnguarded(target)],
     ["quit authority (no user gesture)", () => caseQuitAuthorityNoGesture(target)],
-    ["clean close (regression)", () => caseCleanClose(target)],
-    ["tabstrip origin", () => caseTabstripOrigin(target)],
+    ["clean close (regression)", () => caseCleanClose(target), hookFree],
+    ["tabstrip origin", () => caseTabstripOrigin(target), hookFree],
     ["Ctrl+T new tab (__testShell createTab)", () => caseCtrlTNewTab(target)],
     ["routing: pristine reuse / dirty->new tab / path dedupe", () => caseTabRoutingRules(target, fixturesDir)],
     ["close-tab: clean vs dirty, only that tab", () => caseCloseTabCleanAndDirty(target)],
@@ -5364,24 +5395,24 @@ async function runTargetSuite(target, groupFilter) {
     ["window close: 2 dirty tabs + another window (one dialog)", () => caseWindowCloseTwoDirtyTabs(target)],
     ["quit: dirty tabs in two windows (one answer per attempt)", () => caseQuitTwoWindowsDirty(target)],
     ["tear-off preserves live tab state", () => caseTearOffPreservesState(target)],
-    ["restore at launch: two windows, missing file skipped", () => caseRestoreAtLaunch(target, fixturesDir)],
+    ["restore at launch: two windows, missing file skipped", () => caseRestoreAtLaunch(target, fixturesDir), hookFree],
     ["v1->v2 migration; corrupt JSON boots fresh", () => caseV1MigrationAndCorruptJson(target, fixturesDir)],
     ["restore at launch: a stored server tab is dropped, the other tabs are kept", () => caseRestoreStoredServerTabs(target, fixturesDir)],
-    ["recents: recorded/listed/removed/cleared, capped and path-free",() => caseRecentDocuments(target, fixturesDir)],
+    ["recents: recorded/listed/removed/cleared, capped and path-free",() => caseRecentDocuments(target, fixturesDir), hookFree],
     ["save-in-place birthtime vs the duplicate rule", () => caseAtomicSaveKeepsBirthtime(target, fixturesDir)],
     ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],
     ["history: editor save, panel restore, quit and relaunch", () => caseHistoryEditorRestoreRelaunch(target, fixturesDir)],
-    ["history: round trip (put/list/get/copy/touch/Older put/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
-    ["history: id validation", () => caseHistoryIdValidation(target)],
-    ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target)],
-    ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target)],
-    ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target)],
-    ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target)],
-    ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target)],
-    ["history: FORMAT ahead of ours goes read-only", () => caseHistoryNewerFormatReadOnly(target)],
-    ["history: 3.0.0's v1-backup/ is deleted at launch, v2 history intact", () => caseHistoryV1BackupRemoved(target)],
-    ["history: a raw v1 tree is left dormant, history starts fresh", () => caseHistoryV1RawTreeDormant(target)],
-    ["blobs: put/get/missing over the bridge, bad sha refused, relaunch", () => caseBlobRoundTripAndRelaunch(target)],
+    ["history: round trip (put/list/get/copy/touch/Older put/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target), hookFree],
+    ["history: id validation", () => caseHistoryIdValidation(target), hookFree],
+    ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target), hookFree],
+    ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target), hookFree],
+    ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target), hookFree],
+    ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target), hookFree],
+    ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target), hookFree],
+    ["history: FORMAT ahead of ours goes read-only", () => caseHistoryNewerFormatReadOnly(target), hookFree],
+    ["history: 3.0.0's v1-backup/ is deleted at launch, v2 history intact", () => caseHistoryV1BackupRemoved(target), hookFree],
+    ["history: a raw v1 tree is left dormant, history starts fresh", () => caseHistoryV1RawTreeDormant(target), hookFree],
+    ["blobs: put/get/missing over the bridge, bad sha refused, relaunch", () => caseBlobRoundTripAndRelaunch(target), hookFree],
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
     ["draft: crash-recovery brings a picture back from the blob folder (#82)", () => caseDraftCrashWithImage(target)],
     ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
@@ -5418,14 +5449,15 @@ async function runTargetSuite(target, groupFilter) {
     ["draft: ENOSPC pauses writes, one sticky toast, then resumes", () => caseDraftDiskFull(target)],
     ["draft: forged fileId opens as an untitled copy", () => caseDraftForgedFileId(target)],
     ["draft: renderer crash of a clean tab (J-1)", () => caseRendererCrashRestores(target)],
-    ["draft: clean tabs write nothing, even after idle", () => caseCleanTabsWriteNothing(target)],
+    ["draft: clean tabs write nothing, even after idle", () => caseCleanTabsWriteNothing(target), hookFree],
     ["draft: a torn-off dirty tab crashes and restores exactly once", () => caseTornOffDirtyTabCrashRestoresOnce(target)],
     ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
     ["teleprompter: Follow My Voice on desktop (fake listener)", () => caseTeleprompterVoiceDesktop(target, fixturesDir)],
     ["teleprompter: voice relay to Present in Browser (fake listener)", () => caseTeleprompterVoiceRelay(target, fixturesDir)],
     ["teleprompter: present in chromium (Use Chromium Speech Recognition)", () => caseTeleprompterPresentInChromium(target, fixturesDir)],
-    ["window.close() canary (src grep)", () => caseWindowCloseCanary()]
+    ["window.close() canary (src grep)", () => caseWindowCloseCanary(), hookFree]
   ];
+  hookFreeRun = !!target.hookFree;
   try {
     groups.forEach(([name]) => groupNames.add(name));
     for (const [name, fn, opts] of groups) {
@@ -5435,6 +5467,10 @@ async function runTargetSuite(target, groupFilter) {
         skip(target.name + ": " + name + " (group)", WINDOWS_ONLY + " — " + opts.windowsOnly);
         continue;
       }
+      if (target.hookFree && !(opts && opts.hookFree)) {
+        skip(target.name + ": " + name + " (group)", HOOK_GROUP);
+        continue;
+      }
       try {
         await fn();
       } catch (e) {
@@ -5442,22 +5478,25 @@ async function runTargetSuite(target, groupFilter) {
       }
     }
   } finally {
+    hookFreeRun = false;
     rmrf(fixturesDir);
   }
 }
 
 async function main() {
-  const { exe, onlyTarget, onlyGroup } = parseCliArgs(process.argv.slice(2));
+  const { exe, onlyTarget, onlyGroup, hookFree } = parseCliArgs(process.argv.slice(2));
   const groupFilter = onlyGroup ? onlyGroup.toLowerCase() : null;
   let targets = resolveTargets(exe);
   if (onlyTarget) targets = targets.filter((t) => t.name === onlyTarget);
+  targets.forEach((t) => { t.hookFree = hookFree || t.variant === "release"; });
   if (!targets.some((t) => !t.cannotRun)) {
     targets.filter((t) => t.cannotRun).forEach((t) => console.error("SKIP - " + t.name + " :: " + t.cannotRun));
     console.error(
       "No target found. Nothing to test.\n" +
       "  dev:      " + devElectronExe() + " (run `npm install` in desktop/)\n" +
       (IS_WINDOWS
-        ? "  packaged: desktop/dist/win-unpacked/Splitpage.exe, desktop/dist/win-arm64-unpacked/Splitpage.exe\n"
+        ? "  packaged: desktop/dist/win-unpacked/Splitpage.exe, desktop/dist/win-arm64-unpacked/Splitpage.exe\n" +
+          "  test package: desktop/dist-test/win-unpacked/Splitpage.exe, desktop/dist-test/win-arm64-unpacked/Splitpage.exe\n"
         : "  packaged: Windows only — not looked for on " + process.platform + "\n"));
     process.exit(1);
   }
@@ -5519,7 +5558,13 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error("smoke.mjs crashed:", e && e.stack || e);
-  process.exit(1);
-});
+export function setHookFreeRun(on) { hookFreeRun = !!on; }
+export function checkCounts() { return { totalChecks, passedChecks, failureLines: [...failureLines] }; }
+export { evalPage, fireEval };
+
+if (isMain(import.meta.url)) {
+  main().catch((e) => {
+    console.error("smoke.mjs crashed:", e && e.stack || e);
+    process.exit(1);
+  });
+}
