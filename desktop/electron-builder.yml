@@ -25,6 +25,7 @@ files:
   - close-keep.js
   - quit-watchdog.js
   - blob-store.js
+  - voice-composition.js
   - voice-helper.js
   - chromium-browsers.js
   - history-fs-backend.js
