@@ -26,7 +26,7 @@ function harness() {
   };
   const job: SaveJob<ImportSaveRequest> = {
     request: { kind: "writeback", target: imported }, generation: 1,
-    owns: () => state.owns, alive: () => true, moved: () => {},
+    owns: () => state.owns, alive: () => true, moved: () => {}, landed: () => {},
     operation: () => ({ epoch: 1, docId: "d1", destination: imported, destinationGeneration: 0, generation: 1 })
   };
   return { owner, ports, log, imported, state, job };
