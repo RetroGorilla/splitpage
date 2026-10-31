@@ -3998,8 +3998,11 @@ async function caseMovedFileUnkeptCopyAsksOnQuit(target, fixturesDir) {
       label: "unkept-copy-quit", userDataDir, fixtures: [aPath],
       dialogs: ["confirm", "cancel", "confirm", "confirm"], env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "4000" }
     });
-    await waitForRows(app.cdp, 20000);
     const cdp = app.cdp;
+    // why: rows appear for the untitled start document before the file loads; a quit then has no file copy to keep
+    const opened = await waitForMarker(cdp, marker, 20000);
+    record(tag + ": the file is open in the tab before the quit", !!opened);
+    if (!opened) return;
     const tabId = await tabIdOfTarget(cdp);
     fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
 
