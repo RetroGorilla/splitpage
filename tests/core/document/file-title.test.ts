@@ -26,6 +26,21 @@ test("only untouched default titles are eligible on first save", () => {
   assert.equal(fileTitleChange({ title: "Untitled Script" }, "Headset.md", false), null);
 });
 
+test("seeded filename variants preserve the chosen title and version digits", () => {
+  let seed = 32;
+  const choose = (count: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % count; };
+  const names = ["Headset ad", "Scene 12", "Café", "Headset.ad"];
+  const separators = ["", " ", "_", "-"];
+  for (let i = 0; i < 500; i++) {
+    const title = names[choose(names.length)] as string;
+    const number = String(choose(100000)).padStart(choose(25) + 1, "0");
+    const filename = title + separators[choose(separators.length)] + (choose(2) ? "V" : "v") + number + (choose(2) ? ".md" : ".splitpage");
+    const naming = fileTitleChange({ title: "Untitled Script" }, filename, true);
+    assert.equal(naming?.title, title, filename);
+    assert.equal(naming?.titleVersion, "v" + number, filename);
+  }
+});
+
 test("file naming fields normalize without adding fields to old scripts, and participate in undo", () => {
   const migrate = (raw: unknown) => migrateRows(raw, fakeMigration().ports);
   const old = migrate({ title: "Old script", rows: [] });

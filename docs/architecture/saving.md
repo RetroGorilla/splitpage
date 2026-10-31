@@ -211,9 +211,9 @@ browsers make no naming change: the app never sees the final name.
 The accepted landing in `createSaveCompletion` runs `fileTitleCommand` to
 apply title, tag and provenance as one undoable edit, provided those fields
 still match the initial capture. An intervening title edit wins. Failed,
-cancelled and obsolete saves run no naming command. Completion checks for
-intervening edits before its own naming command and confirms the resulting
-generation only when naming succeeded and no earlier edit remains unsaved.
+cancelled and obsolete saves run no naming command. Completion confirms only
+the captured change count plus its one naming edit, and only when naming
+succeeded. Earlier edits and edits made by completion listeners stay dirty.
 Undo restores the prior naming fields and dirties the document without
 retargeting its file.
 
