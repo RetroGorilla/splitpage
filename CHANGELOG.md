@@ -10,6 +10,13 @@ This release removes collaboration and server documents and fixes several
 saving bugs. If you open or share scripts on a Splitpage server, read
 **Removed** before you upgrade.
 
+### Added
+- First save through a desktop dialog or browser file picker names an untouched
+  untitled script from the filename. A trailing version such as `v3` becomes a
+  small tag beside the title. Typed titles are preserved; Save a copy updates
+  only the tag while the title is still file-derived. Download-only browsers
+  leave title and tag unchanged.
+
 ### Removed
 - Collaboration and server documents are gone: live collaboration,
   presence, invite, share and review links, server bookmarks and PINs,

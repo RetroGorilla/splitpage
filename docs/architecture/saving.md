@@ -193,6 +193,40 @@ The file check is `checkFileConflict(handle, lastModified)` in `src/adapters/fil
 - **Results.** `SAVED`, `CANCELLED`, `FAILED`, `CONFLICTED` (a refusal) or a `failed` result with the error.
 - **Pictures left out.** When some pictures were not available, the writer shows `warnImagesLeftOut` through the notices port (`src/bootstrap/wiring/effects-owner.ts`, wording in `src/application/export/diagnostics.ts`); exports show the same notice from their diagnostics.
 
+### First-save title and version (I-32)
+
+`core/document/file-title.ts` derives naming only for a picked handle. An
+unwritten document with an empty, Untitled or Untitled Script title and no
+`user` provenance can take the filename stem as its title. A terminal
+case-insensitive `v` plus digits becomes `titleVersion`, with a preceding
+space, underscore or hyphen removed from the title. A filename consisting
+only of a version supplies no title and makes no naming change.
+
+`writeDoc` still captures the document before its first await. After a
+desktop dialog or browser picker answers, it replaces only that capture's
+naming fields; assets and content remain the initial snapshot. The same
+capture feeds the serialized bytes and saved baseline. Download-only
+browsers make no naming change: the app never sees the final name.
+
+The accepted landing in `createSaveCompletion` runs `fileTitleCommand` to
+apply title, tag and provenance as one undoable edit, provided those fields
+still match the initial capture. An intervening title edit wins. Failed,
+cancelled and obsolete saves run no naming command. Completion checks for
+intervening edits before its own naming command and confirms the resulting
+generation only when naming succeeded and no earlier edit remains unsaved.
+Undo restores the prior naming fields and dirties the document without
+retargeting its file.
+
+`titleCommand` records `titleOrigin: "user"` on an explicit title change.
+Save As keeps the title and updates or removes the version only while the
+origin is `file`; user titles and their tags remain unchanged. Ordinary
+saves do not re-read the filename to change the tag. Old files have neither
+optional field, and opening them does not derive naming from their path.
+
+Coverage: `src/test/file-title-app.test.mjs`, the file-saving and title
+application tests, core filename and merge tests, browser
+`405-first-save-title.txt`, and desktop smoke's `first-save title and version`.
+
 ### Deprecated: import save-back
 
 Switched off on 2026-10-30 (Adam); the code is kept, and whether to remove it is a later decision. An import (`loadFileIntoEditor`) now opens with `NO_DESTINATION`, like a new untitled script: Save asks where to keep it with the usual choices, autosave has nowhere to write, and Splitpage never writes to the imported file. A `.docx`, `.txt` or `.csv` is made with Export. What was removed is only the way in: the `save-back` action (`features/file-menu/actions.ts`, registered by `bootstrap/actions.ts`), its File menu item and paint (`page.html`, `features/file-menu/local-files.js`), the command menu's place for it, the desktop menu's Save to file (`desktop/main.js`) and the conflict dialog's import overwrite (`features/file-menu/mount.ts`). What stays, unused: `saveBackToFile`, `writeBackToFile` and `importSaveDestination` (`application/save/import-saving.ts`, wired in `bootstrap/wiring/local-files.ts`), the `writeback` and `writebackForce` kinds, the import completion (`save-completion.ts`), the `import` home kind and its fields (`application/location/document-location.ts`), the reload-from-disk branch for an import home, and a draft's `import` origin. Home records are not stored. Old data that names an imported file loads as before without one: a recent-file entry for it opens it as a new import, and a desktop draft whose origin is an import restores as an untitled copy. The owner tests (`tests/application/import-saving.test.ts`, the I-cases in `src/test/m4-matrix-files.test.mjs`) set an import home directly and keep testing the owner. `src/test/import-no-write-back-app.test.mjs` pins the switched-off behaviour.

@@ -813,6 +813,18 @@ builds two fields.
 }
 ```
 
+**Filename naming (I-32)** uses optional `titleOrigin` (`file` or `user`)
+and `titleVersion` (`v` followed by digits) fields. Neither has a default,
+so older documents remain without them. `STATE_FIELDS` normalizes them,
+keeps them in both project formats and includes them in undo. Their optional
+scalar merge takes the changed side, including deletion; competing changes
+take theirs. Schema remains 2. First picked save derives an untouched
+untitled title, while later Save As changes only the tag for file-derived
+titles. Explicit title edits retain the tag and mark the origin `user`.
+Download-only browsers change neither field. See
+[saving.md](architecture/saving.md#first-save-title-and-version-i-32) for
+capture, completion, concurrency and undo rules.
+
 **`personColors`** (#194) is the colour each person picked for themselves,
 `{name: colour}`: a name (trimmed, ≤80 characters) to one of the eight
 `PERSON_COLORS` (`src/core/document/person-colors.ts`), at most 200 of them. It has **no

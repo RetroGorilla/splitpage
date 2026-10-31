@@ -21,6 +21,7 @@ function harness(changes = 4) {
   const log: string[] = [];
   const amended: Record<string, unknown>[] = [];
   const ports: SaveCompletionPorts = {
+    edits: { edit: () => { throw new Error("unexpected title change"); } },
     document: { stamp: (stamp) => { log.push("stamp:" + stamp.name); return null; } },
     location: {
       amendHome: (record, fields) => { log.push("amendHome:" + Object.keys(fields).join(",")); amended.push({ ...fields }); return record; },

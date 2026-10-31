@@ -11,6 +11,9 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since the 4.0 beta
 
+- **A title from your first filename.** Save an untouched untitled script as
+  `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
+  A title you typed stays yours. Download-only browsers leave both unchanged.
 - **Collaboration and server scripts are gone for now.** Live
   collaboration, invite and share links, opening and saving scripts on a
   Splitpage server, hosting from the desktop app, and Google Drive are
@@ -597,6 +600,22 @@ first Save asks where, and in which format:
   comment anchors, pictures, statuses). Leave that block alone.
 - **Splitpage (`.splitpage`)**: the same information without the readable
   table.
+
+On the first save through the desktop dialog or a browser file picker, an
+untouched untitled script takes its title from the chosen filename without
+the extension. A trailing `v3`, `V3`, `_v3`, `-v3` or ` v3` (any number)
+becomes a small `v3` tag beside the title, leaving the separator out of the
+title. Splitpage never invents or increments a version. Both the title and
+tag survive reopening a `.md` or `.splitpage` project.
+
+A title you typed is never replaced. While the title still comes from a
+filename, Save a copy updates the tag from the new name, or removes it when
+there is no version; it keeps the title. Once you edit the title, Save a
+copy leaves both title and tag alone. Undo reverses automatic naming as one
+change and keeps the chosen file as the save destination.
+
+**Download-only browsers: no change; the app never sees the final name.**
+There is no extra filename prompt.
 
 **Save a copy…** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) writes a new
 file and leaves the one on screen where it is.

@@ -707,6 +707,14 @@ function paintAll(): void {
 
   const titleInput = document.getElementById("doc-title") as HTMLInputElement;
   if (document.activeElement !== titleInput) titleInput.value = title;
+  const version = typeof doc.titleVersion === "string" ? doc.titleVersion : "";
+  ["doc-version", "writer-version"].forEach(function (id) {
+    const tag = document.getElementById(id);
+    if (!tag) return;
+    tag.textContent = version;
+    tag.hidden = !version;
+    tag.title = version ? "Version " + version : "";
+  });
   syncPageTitle();
   paintRowTimes();
   announcePainted("screen");
@@ -822,7 +830,7 @@ const ON_SCREEN_ALREADY: Readonly<Record<string, true>> = { visualText: true, au
 
 const ONE_ROW: Readonly<Record<string, true>> = { status: true, lengthSeconds: true, updatedAt: true, updatedBy: true };
 
-const SHOWN_DOC_FIELDS: Readonly<Record<string, true>> = { title: true, wordsPerMinute: true, comments: true };
+const SHOWN_DOC_FIELDS: Readonly<Record<string, true>> = { title: true, titleVersion: true, wordsPerMinute: true, comments: true };
 
 const TEXT_FIELDS: Readonly<Record<string, true>> = { visualText: true, audioText: true };
 
@@ -855,6 +863,13 @@ function paintSessionChange(change: ScreenChange): void {
   if (ABSORBED[change.kind]) { absorbRender(REDRAW_FAILED); return; }
   if (state.screenStale || state.paintBroke) return;
   const c = change.changes;
+  if (c.docFields.includes("title") && c.docFields.includes("titleVersion")) {
+    const title = ports.document.current()?.title || "";
+    ["doc-title", "writer-title"].forEach(function (id) {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      if (input) input.value = title;
+    });
+  }
   if (ports.editing.paint().shown()) {
     const left = rowsTouched(c.cells, ON_SCREEN_ALREADY);
     if (left.length) {

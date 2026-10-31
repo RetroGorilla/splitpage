@@ -1,5 +1,7 @@
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
+import { fileTitleCommand } from "../commands/title.ts";
+import type { FileTitleChange } from "../../core/document/file-title.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { LocalFileData } from "../files/local-file-access.ts";
 import type { DocumentLocation, Home } from "../location/document-location.ts";
@@ -12,6 +14,7 @@ export interface LandedWrite {
 }
 
 export interface CompletedWrite {
+  readonly naming?: FileTitleChange | null;
   readonly captured: ExportDocument;
   readonly published: unknown;
   readonly forkDocId: string | null;
@@ -21,6 +24,7 @@ export interface CompletedWrite {
 }
 
 export interface SaveCompletionPorts {
+  readonly edits: FileSavingPorts["edits"];
   readonly document: Pick<FileSavingPorts["document"], "stamp">;
   readonly location: Pick<FileSavingPorts["location"], "amendHome" | "markWrittenOut">;
   readonly deferred: FileSavingDeferredPorts;
@@ -43,6 +47,8 @@ export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion
   }
 
   function confirmWrite(write: CompletedWrite): void {
+    const unchanged = ports.saves.changes() === write.seqAtSave;
+    const named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
     const stamp = write.captured.document;
     ports.document.stamp(editStamp({ rev: stamp.rev, lastEditedBy: stamp.lastEditedBy, lastEditedAt: stamp.lastEditedAt }));
     ports.deferred.setBaseline(write.published, "saveDoc: the bytes just written");
@@ -50,7 +56,7 @@ export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion
       ports.location.amendHome(write.landed.home, { diskBase: write.published, lastModified: write.landed.lastModified });
     }
     adoptSavedCopyDocId(write.forkDocId, write.docIdAtSave, true);
-    if (ports.saves.changes() === write.seqAtSave) ports.saves.confirmSavedNow();
+    if (unchanged && named) ports.saves.confirmSavedNow();
   }
 
   return Object.freeze({ confirmWrite, adoptSavedCopyDocId });
