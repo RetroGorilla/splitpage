@@ -65,5 +65,5 @@ export function mountSectionBoundary(window: Window, ports: SectionBoundaryPorts
     life.listen(doc, type, cancel, true);
   }
   life.listen(doc, "selectionchange", () => { if (caret && !sameCaret(window.getSelection())) cancel(); });
-  return { dispose() { life.dispose(); cancel(); ports.boundary.dispose(); } };
+  return { dispose() { life.dispose(); cancel(); } };
 }

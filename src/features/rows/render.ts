@@ -230,9 +230,8 @@ export function paintRowTimes() {
   for (let c = rowsEl.firstElementChild; c; c = c.nextElementSibling) {
     if (c.classList.contains("row")) byId[c.getAttribute("data-id") as string] = c;
   }
-  let t = 0, groupIndex = 0, groupTotal = 0;
-  const groups = sectionGroups(doc);
-  doc.rows.forEach(function (row, index) {
+  let t = 0;
+  doc.rows.forEach(function (row) {
     const secs = rowSeconds(row, doc, ports.text.productionReaders);
     const el = byId[row.id];
     if (el) {
@@ -240,15 +239,14 @@ export function paintRowTimes() {
       paintReadTime(el.querySelector<HTMLElement>(".row-read"), row, secs, doc);
     }
     t += secs;
-    const group = groups[groupIndex];
-    if (group && index >= group.start) {
-      groupTotal += secs;
-      if (index + 1 === group.end) {
-        document.querySelectorAll('[data-section-total="' + cssAttr(group.section.id) + '"]').forEach(el => setTextIfChanged(el, formatDuration(groupTotal)));
-        groupIndex++; groupTotal = 0;
-      }
-    }
   });
+  if (Array.isArray(doc.sections) && doc.sections.length) {
+    for (const group of sectionGroups(doc)) {
+      let total = 0;
+      for (let i = group.start; i < group.end; i++) total += rowSeconds(doc.rows[i] as Row, doc, ports.text.productionReaders);
+      document.querySelectorAll('[data-section-total="' + cssAttr(group.section.id) + '"]').forEach(el => setTextIfChanged(el, formatDuration(total)));
+    }
+  }
 }
 
 function paintReadTime(btn: HTMLElement | null, row: Row, secs: number, doc: DocumentView): void {
@@ -541,23 +539,12 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
   const drop: Element[] = [];
   Array.prototype.slice.call(rowsEl.children).forEach(function (el: SignedRow) {
     const key: string | null = rowMotionKey(el);
-    const reusable = key && !existing.has(key) && (key.indexOf("strip:") === 0 || key.indexOf("section:") === 0 || el[ROW_SIG]);
+    const reusable = key && !existing.has(key) && (el[ROW_SIG] || key.indexOf("strip:") === 0 || key.indexOf("section:") === 0);
     if (reusable) existing.set(key as string, el);
     else drop.push(el);
   });
 
-  const steps = sectionRowEntries(doc, ports.hiding(), ports.sections()).map(function (item): RowsStep {
-    if ("section" in item) {
-      const key = "section:" + item.section.id;
-      const html = sectionHeaderHtml(item, !ports.edits.allowed());
-      const old = existing.get(key);
-      existing.delete(key);
-      if (old?.__splitpageSectionSig === html) return { node: old };
-      if (old) drop.push(old);
-      const node = nodeFromHtml(html) as SignedRow;
-      node.__splitpageSectionSig = html;
-      return { node };
-    }
+  function planScene(item: ShotRowEntry<Row> | ShotStrip): RowsStep {
     const strip = (item as Partial<ShotStrip>).strip;
     const entry = item as ShotRowEntry<Row>;
     const key = strip ? "strip:" + strip.join(",") : "row:" + entry.row.id;
@@ -571,7 +558,19 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     }
     if (strip) return { node: nodeFromHtml(hiddenShotStripHtml(strip)) };
     return { node: newRowEl(entry.row, entry.index), added: true };
-  });
+  }
+  const steps = Array.isArray(doc.sections) && doc.sections.length ? sectionRowEntries(doc, ports.hiding(), ports.sections()).map(function (item): RowsStep {
+    if (!("section" in item)) return planScene(item);
+    const key = "section:" + item.section.id;
+    const html = sectionHeaderHtml(item, !ports.edits.allowed());
+    const old = existing.get(key);
+    existing.delete(key);
+    if (old?.__splitpageSectionSig === html) return { node: old };
+    if (old) drop.push(old);
+    const node = nodeFromHtml(html) as SignedRow;
+    node.__splitpageSectionSig = html;
+    return { node };
+  }) : ports.hiding().groups(doc.rows).map(planScene);
   existing.forEach(function (el) { drop.push(el); });
   return { steps: steps, drop: drop };
 }

@@ -50,6 +50,25 @@ const state = () => JSON.stringify(currentDocument());
 const hint = () => document.querySelector('#writer-doc [data-section-id="s2"] .section-hint');
 const ids = () => currentDocument().rows.map(row => row.id);
 
+test("sectionless new-scene input does not inspect section boundaries", async (context) => {
+  await open([]);
+  const cell = document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable');
+  cell.focus();
+  const range = document.createRange();
+  range.selectNodeContents(cell); range.collapse(true);
+  const selection = window.getSelection();
+  selection.removeAllRanges(); selection.addRange(range);
+  const closest = window.Element.prototype.closest;
+  let probes = 0;
+  context.mock.method(window.Element.prototype, "closest", function (selector) {
+    if (selector === "#writer-doc .wr-para") probes++;
+    return closest.call(this, selector);
+  });
+  key("Enter", cell, { ctrlKey: true });
+  assert.equal(currentDocument().rows.length, 5);
+  assert.equal(probes, 0);
+});
+
 test("singleton Alt moves require consecutive confirmation and undo restores the header and row order", async () => {
   for (const direction of ["ArrowUp", "ArrowDown"]) {
     await open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);

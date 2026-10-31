@@ -127,7 +127,7 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
   });
   function dropTarget(event: DragEvent): { id: string; after: boolean; firstSceneId: string; header: Element } | null {
     const target = event.target as Element | null, state = ports.document.current();
-    if (!target?.closest || !state) return null;
+    if (!state || !Array.isArray(state.sections) || !state.sections.length || !target?.closest) return null;
     const divider = target.closest(".section-header"), row = target.closest(".row[data-id]");
     const id = divider?.getAttribute("data-section-id") ?? (row && sectionForScene(state, row.getAttribute("data-id") ?? "")?.id);
     const group = id && sectionGroups(state).find(item => item.section.id === id);
