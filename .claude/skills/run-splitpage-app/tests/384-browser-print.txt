@@ -1,0 +1,54 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (async function(){window.P=(await import('/tests/adapters/print/capture-browser-print.js')).captureBrowserPrint();window.F=window.__splitpageFormats;window.U=window.__undoTest;window.__downloads=[];HTMLAnchorElement.prototype.click=function(){if(this.download)__downloads.push(this.download);};return true;})()
+eval (async function(){await F.openFile(new File([JSON.stringify({schema:2,title:'Print fixture',rows:[{id:'p1',visualText:'B-roll: kettle steam',audioText:'Bring <span class="tag-anchor" data-tag-cat="gear" data-tag-name="boom pole">boom pole</span> and <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span>.',status:'todo'}],comments:[{id:'pc1',rowId:'p1',field:'audioText',author:'Ann',body:'Printed comment',createdAt:'2026-10-31T00:00:00Z',replies:[]}]})],'print-fixture.splitpage'));return true;})()
+wait F.state().title === 'Print fixture' && F.state().comments.length === 1
+eval (function(){U.flush();window.__before=JSON.stringify([F.state(),U.sizes(),document.getElementById('save-status').textContent]);return true;})()
+eval (async function(){var actions=['export-pdf','export-packing-gear','export-packing-prop','export-broll-pdf'];for(var action of actions){var n=P.pages.length;document.querySelector('[data-file-action="'+action+'"]').click();for(var i=0;i<200&&P.pages.length===n;i++)await new Promise(function(r){setTimeout(r,20);});if(P.pages.length!==n+1)throw new Error('No print from '+action);}return true;})()
+expect P.pages.length === 4
+expect P.pages.every(function(p){return p.closed;})
+expect __downloads.length === 0
+expect P.pages[0].html.includes('id="script"') && P.pages[0].html.includes('id="production-breakdown"') && P.pages[0].html.includes('id="broll-shot-list"') && P.pages[0].html.includes('id="comments"')
+expect P.pages[1].html.includes('id="packing-gear"') && P.pages[2].html.includes('id="packing-prop"')
+expect P.pages[3].html.includes('@page shot-list { size: letter landscape; }') && P.pages[3].html.includes('Notes')
+expect P.pages.every(function(p){return !p.html.includes('cont.') && !p.html.includes('@font-face');})
+expect JSON.stringify([F.state(),U.sizes(),document.getElementById('save-status').textContent]) === __before
+jsclick #btn-file
+jsclick #menu-export-again
+wait P.pages.length === 5
+expect P.pages[4].html === P.pages[3].html && P.pages[4].closed
+expect document.getElementById('toast-host').textContent.includes('Print dialog opened. Choose Save as PDF')
+expect !document.getElementById('toast-host').textContent.includes('Exported ')
+eval (function(){P.state.holdDialog=true;document.querySelector('[data-file-action="export-pdf"]').click();return true;})()
+wait P.pages.length === 6
+expect !P.pages[5].closed
+eval (function(){P.pages[5].popup.dispatchEvent(new P.pages[5].popup.Event('afterprint'));return true;})()
+expect P.pages[5].closed
+expect __downloads.length === 0
+expect JSON.stringify([F.state(),U.sizes(),document.getElementById('save-status').textContent]) === __before
+eval (function(){P.state.holdDialog=false;P.state.blocked=true;document.querySelector('[data-file-action="export-pdf"]').click();return true;})()
+wait document.getElementById('toast-host').textContent.includes('Allow pop-ups for Splitpage')
+expect P.pages.length === 6 && __downloads.length === 0
+eval (function(){P.state.blocked=false;P.state.holdFonts=true;document.querySelector('[data-file-action="export-pdf"]').click();window.__held=P.pending[P.pending.length-1];return true;})()
+wait typeof __held.release === 'function'
+expect P.pages.length === 6 && !__held.closed
+eval (async function(){await F.openFile(new File([JSON.stringify({schema:2,title:'Replacement document',rows:[{id:'new1',visualText:'New scene',audioText:'Replacement words',status:'todo'}]})],'replacement.splitpage'));return true;})()
+wait F.state().title === 'Replacement document'
+eval (function(){window.__replacement=JSON.stringify(F.state());__held.release();return true;})()
+wait P.pages.length === 7
+expect P.pages[6].html.includes('gaffer') && !P.pages[6].html.includes('Replacement words') && P.pages[6].closed
+expect JSON.stringify(F.state()) === __replacement && __downloads.length === 0
+eval (function(){P.state.holdFonts=false;P.state.failImages=true;var c=document.createElement('canvas');c.width=20;c.height=10;F.state().rows[0].visualImage=c.toDataURL('image/png');document.querySelector('[data-file-action="export-pdf"]').click();return true;})()
+wait document.getElementById('toast-host').textContent.includes('Could not prepare the print page')
+expect P.pages.length === 7 && P.pending[P.pending.length-1].closed && __downloads.length === 0
+eval (function(){P.restore();return true;})()
+expect P.pending.every(function(p){return p.closed;})
+eval (function(){window.__realOpen=window.open;window.open=function(){var popup=__realOpen.apply(window,arguments);window.__actualPopup=popup;if(popup){popup.print=function(){window.__actualPrint={title:popup.document.title,html:popup.document.documentElement.outerHTML,images:Array.from(popup.document.images,function(i){return i.complete&&i.naturalWidth>0;})};popup.dispatchEvent(new popup.Event('afterprint'));};}return popup;};document.querySelector('[data-file-action="export-pdf"]').click();return true;})()
+wait !!window.__actualPrint
+expect __actualPrint.title === 'Replacement document' && __actualPrint.html.includes('Replacement words')
+expect __actualPrint.images.length === 1 && __actualPrint.images.every(Boolean)
+expect __actualPopup.opener === null
+wait __actualPopup.closed
+expect __downloads.length === 0 && JSON.stringify(F.state()).includes('Replacement words')
+eval (function(){window.open=__realOpen;return true;})()
+quit

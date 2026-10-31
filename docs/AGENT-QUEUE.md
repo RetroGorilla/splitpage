@@ -1006,7 +1006,7 @@ STRUCTURE SECTION MUST SAY
 - Which responsibilities move from the byte generator/export wiring to the print adapter, the capture/IPC/result contract and trust checks, window/asset cleanup, exact intended C6 output differences, desktop bookmark evidence, package evidence, suite/smoke counts and Adam's PDF check status.
 ```
 
-## AQ-43 [ ] PDF rebuild P4: browser print dialog
+## AQ-43 [x] PDF rebuild P4: browser print dialog
 
 Needs: AQ-40 and AQ-41 merged. Coordinate export wiring with AQ-42; if it is open on the same files, merge one and take its base before the other.
 Files: browser print adapter under src/adapters/, named export ports and src/bootstrap/wiring/exporters.ts, src/features/file-menu/ only as needed for the print result, their tests/suites, Help and export docs.
