@@ -373,6 +373,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
   - `desktop/test/drafts.test.mjs`: "discardForUserDecision during a delayed write…", "session states, take never deletes…".
   - `desktop/test/smoke.mjs`: the draft crash-recovery cases, the "draft: moved file …" cases (#258, #496) and "draft: session end keeps a copy of a clean tab whose file is gone (#492)".
   - `desktop/test/close-keep.test.mjs`: the time-limited file check and the kept-copy rule (#496, #497), and the close check's rounds and last re-check (`runCloseCheck`, #508, #509, #532).
+  - `desktop/test/lifecycle-order.test.mjs`: the order of question, kept-copy wait, recheck, draft settlement, session-write freeze and close or quit, for a gone file whose copy is late or kept in time and a tab edited while the close waits.
   - `desktop/test/smoke.mjs`: the "close check:" groups, including "a tab edited during a window close's/quit's copy wait is asked about again (#532)".
   - `src/test/draft-keep-app.test.mjs`: a keep flush writes a clean file tab's draft, and only then (#258).
   - Browser suite `26-desktop-drafts.txt`.
@@ -409,7 +410,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 ### INV-44 — One quit, one question; session end asks nothing
 
 - **Behaviour:** A quit asks at most one unsaved-changes dialog and one stop-sharing prompt. A Windows session end asks neither and discards nothing. `desktop-state.json` is written durably through one queue.
-- **Tests:** partial. `desktop/test/smoke.mjs` ("window close: 2 dirty tabs + another window open (one dialog)", "quit: dirty tabs in two windows (one answer per attempt)", "--host: stop-sharing prompt fires once at quit…"). `desktop/test/drafts.test.mjs` only records the `session-end` state. "draft: session end keeps a copy of a clean tab whose file is gone (#492)" emits `session-end` through a test-only shell op and checks that nothing is asked and an untitled tab's draft stays; it can't show how long Windows lets the writes run. No test checks that writes go through a single queue.
+- **Tests:** partial. `desktop/test/smoke.mjs` ("window close: 2 dirty tabs + another window open (one dialog)", "quit: dirty tabs in two windows (one answer per attempt)", "--host: stop-sharing prompt fires once at quit…"). `desktop/test/drafts.test.mjs` only records the `session-end` state. `desktop/test/lifecycle-order.test.mjs` runs `main.js` against a fake Electron and pins the order of each close and quit step; its "session end: …" cases show a session end with dirty tabs asks nothing and discards nothing. "draft: session end keeps a copy of a clean tab whose file is gone (#492)" emits `session-end` through a test-only shell op and checks that nothing is asked and an untitled tab's draft stays; it can't show how long Windows lets the writes run. No test checks that writes go through a single queue.
 - **Owner:** `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the smoke cases pass. New desktop test: a simulated session end with dirty tabs shows no dialog and leaves every draft in place.
