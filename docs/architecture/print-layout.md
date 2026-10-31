@@ -101,8 +101,34 @@ Gallery pictures flow vertically rather than the old three-thumbnail strip,
 so each remains legible. The target remains in the facts line. The scene-number
 strip is omitted from every print page. Shot script scenes and completed B-roll
 rows have a `#e6e6e6` cell background; written scene status and ticked Done boxes
-remain. Main text (`#171613`) and dimmed shot details (`#64635E`) retain AA
-contrast against that grey. Both `print-color-adjust: exact` and
+remain. Inside shot rows only, comment numbers use the darker amber `#985500`
+and flagged-shot text uses the darker red `#BE2F29`; their original colours
+remain elsewhere. Every print text colour that can appear in a shot row meets
+AA's 4.5:1 minimum against `#e6e6e6`, measured with WCAG relative luminance:
+
+| Text | Colour | Contrast on grey |
+| --- | --- | --- |
+| Main text, scene numbers and read times | `#171613` | 14.50:1 |
+| Scene metadata and list details | `#4E4D48` | 6.79:1 |
+| Dimmed shot names, directions and unavailable images | `#64635E` | 4.82:1 |
+| Links | `#2863AB` | 4.86:1 |
+| B-roll keys and checked boxes | `#00717F` | 4.59:1 |
+| Audio cues and sound tags | `#AB413E` | 4.73:1 |
+| Prop tags | `#764AA2` | 5.14:1 |
+| Location tags | `#2A7449` | 4.56:1 |
+| Cast tags | `#A53C75` | 4.80:1 |
+| VFX tags | `#5E6C00` | 4.65:1 |
+| Gear tags | `#44693C` | 5.05:1 |
+| Comment-number superscripts in shot rows | `#985500` | 4.63:1 |
+| Flagged-shot labels in shot rows | `#BE2F29` | 4.64:1 |
+| Native highlighted text | `#000000` | 16.83:1 |
+
+Native highlights paint their own yellow (`#FFFF00`) backdrop, giving black
+text 19.56:1 contrast there. Tag text uses only the fixed print palette above;
+unknown categories inherit the surrounding text colour. The dotted comment
+underline is decoration, not an additional text colour.
+
+Both `print-color-adjust: exact` and
 `-webkit-print-color-adjust: exact` preserve the grey when browser Background
 graphics is off; desktop `PDF_OPTIONS` already sets `printBackground: true`.
 The script status-count key explains the grey rows. Footer titles can ellipsize; the full title
