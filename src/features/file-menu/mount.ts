@@ -55,7 +55,6 @@ export interface ConflictsPorts {
   readonly reloadProjectFromDisk: () => void;
   readonly reloadFileFromDisk: () => void;
   readonly saveDoc: (options: { force?: boolean; saveAs?: boolean }) => void;
-  readonly saveBackToFile: (options: { force: boolean }) => void;
   readonly openMergeReview: () => void;
   readonly cancelMergeReview: () => void;
   readonly confirmFileMerge: () => void;
@@ -81,7 +80,6 @@ export function mountConflicts(mount: { window: Window; ports: ConflictsPorts })
     const ctx = ports.conflict();
     ports.closeFileConflict();
     if (ctx && ctx.kind === "project") ports.saveDoc({ force: true });
-    else ports.saveBackToFile({ force: true });
   });
   life.listen(element("file-conflict-merge"), "click", ports.openMergeReview);
   life.listen(element("merge-review-close"), "click", ports.cancelMergeReview);

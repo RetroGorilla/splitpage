@@ -39,7 +39,7 @@ import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { mountPanels } from "../../features/panels/mount.ts";
 import { fileConflicts, saveDoc } from "./save-owners.ts";
 import { fileDelivery } from "./ports/files.ts";
-import { localFileMenuControls, localFilesOwner, importSavingOwner } from "./local-files.ts";
+import { localFileMenuControls, localFilesOwner } from "./local-files.ts";
 import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
 import { connectWriter } from "./writer.ts";
@@ -170,7 +170,6 @@ export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
       reloadProjectFromDisk: (...args: Parameters<ReturnType<typeof localFilesOwner>["reloadProjectFromDisk"]>) => localFilesOwner().reloadProjectFromDisk(...args),
       reloadFileFromDisk: (...args: Parameters<ReturnType<typeof localFilesOwner>["reloadFileFromDisk"]>) => localFilesOwner().reloadFileFromDisk(...args),
       saveDoc: saveDoc,
-      saveBackToFile: (...args: Parameters<ReturnType<typeof importSavingOwner>["saveBackToFile"]>) => importSavingOwner().saveBackToFile(...args),
       openMergeReview: function () { currentMergeReview()?.open(); },
       cancelMergeReview: function () { currentMergeReview()?.cancel(); },
       confirmFileMerge: function () { currentMergeReview()?.confirm(); },

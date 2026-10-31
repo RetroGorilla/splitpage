@@ -36,6 +36,7 @@ const { openLongDemo } = await import("../bootstrap/wiring/file-menu-controls.ts
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
+const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
 
 const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 const BROKE = "render broke (#418)";
@@ -228,6 +229,7 @@ test("a reload in place whose render throws still marks the reload unsaved and s
     fresh("Before reload");
     disk = new File(["Wide\tOne.\nClose\tTwo."], "guard.txt", { lastModified: 1 });
     await openDocument({ kind: "file", file: disk, handle: fileHandle, options: { skipSnapshot: true } });
+    setHome("import", { name: "guard.txt", handle: fileHandle, format: "txt", dirty: false, lastModified: 1 });
     hearReplacement();
     flushEdits();
     quiet();

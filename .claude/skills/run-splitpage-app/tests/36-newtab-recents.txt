@@ -57,8 +57,9 @@ expect document.getElementById('newtab-desktop').hidden == true
 # --- clicking one opens it in this tab and closes the page ---------------
 click #newtab-recents-list [data-newtab-action="open-recent"]
 wait document.getElementById('newtab-page').hidden == true
-wait document.getElementById('file-chip-name').textContent.indexOf('script-a.md') !== -1
-expect document.getElementById('doc-title').value == Script A
+wait document.getElementById('doc-title').value === 'Script A'
+# a recent foreign .md opens as a script with no file (import save-back is off since 2026-10-30)
+expect document.getElementById('file-chip').hidden === true
 
 # --- a missing file says so and leaves the entry to be forgotten ---------
 eval (function(){ window.__newTab.open(); window.fake._routeMissing = true; return true; })()
@@ -103,13 +104,18 @@ eval (async function(){ window.__cleared = await window.fake.listRecents(); retu
 expect window.__cleared.length == 0
 
 # --- a starter on desktop: a new document that never touches a file -----
-# Script A is open from its file under the page. Every file call the bridge
-# has is counted from here: opening a starter must make none of them, and
-# must tell main it is a document with no file, nothing unsaved, and an id
-# of its own.
+# Script A is open under the page. A foreign .md has no file since import
+# save-back was switched off on 2026-10-30, so it is saved to a project file
+# first: the starter then has a real file home to let go of. Every file call
+# the bridge has is counted from after that save: opening a starter must make
+# none of them, and must tell main it is a document with no file, nothing
+# unsaved, and an id of its own.
+eval (async function(){ await window.__splitpageFormats.save({}); return window.__splitpageFormats.docFile().kind; })()
+wait window.__splitpageFormats.docFile().kind === 'md'
+wait !!(window.fake._lastDocState && window.fake._lastDocState.fileId)
 eval (function(){ window.__fileCalls = []; ['openFileDialog', 'saveFileDialog', 'writeFile', 'readFile', 'statFile', 'routeOpen'].forEach(function (n) { var f = window.fake[n]; window.fake[n] = function () { window.__fileCalls.push(n); return f.apply(this, arguments); }; }); window.__idWas = window.__splitpageFormats.state().docId; window.__newTab.open(); return true; })()
 wait document.getElementById('newtab-page').hidden == false
-expect window.__splitpageFormats.docFile().kind !== null || !document.getElementById('file-chip').hidden
+expect window.__splitpageFormats.state().title === 'Script A' && window.__splitpageFormats.docFile().kind === 'md'
 click [data-starter="to-camera"]
 wait document.getElementById('newtab-page').hidden == true
 expect document.querySelectorAll('#rows .row').length == 6

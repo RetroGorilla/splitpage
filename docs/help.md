@@ -22,6 +22,10 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   script. A save that worked is no longer reported as failed, and the next
   save no longer sees a false "changed on disk". If the browser withdraws
   permission to a file, saving says so and keeps your work.
+- **Save to file is gone.** Opening a `.docx`, `.txt`, `.csv` or other
+  Markdown file starts a separate script that is not saved yet; Save asks
+  where to keep it, and Splitpage never writes to the file you opened. Use
+  **File ▸ Export…** to make a Word, CSV or other file.
 - **Crash recovery starts again** with your next change after it paused.
 - Settings keeps keyboard focus after **Show the desktop-app notice
   again**, and the rundown's hover lens eases in and out.
@@ -645,7 +649,9 @@ stay in their file.
 - **File ▸ Open…** (<kbd>Ctrl</kbd>+<kbd>O</kbd>) opens a `.md` or
   `.splitpage` file with everything back: scenes, tags, comments, pictures.
 - **A `.docx`, `.txt`, `.csv` or other Markdown file** opens as a new
-  script, with an empty breakdown and no comments.
+  script, with an empty breakdown and no comments. It is not saved yet, like
+  a new script: Save asks where to keep it, and Splitpage never changes the
+  file you opened. For a Word, CSV or other file of it, use **File ▸ Export…**.
 - **A revised draft of the script you're in**: use **File ▸ Import ▸ Paste a
   script…** instead. It replaces or appends the scenes and keeps this
   document's breakdown, cast, b-roll and comments. Paste text or **Choose a
