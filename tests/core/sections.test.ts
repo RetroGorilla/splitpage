@@ -10,6 +10,22 @@ import { mergeStateFields } from "../../src/core/merge/states.ts";
 const rows = ["a", "b", "c", "d"].map(id => ({ id }));
 const sections = [{ id: "s1", name: "Opening", firstSceneId: "a" }, { id: "s2", name: "Ending", firstSceneId: "c" }];
 
+test("sections r2: removing a header retains the predecessor after its original scene leaves", () => {
+  const base = { rows: ["a", "b", "c"].map(id => ({ id })), sections: [
+    { id: "P", name: "P", firstSceneId: "b" }, { id: "S", name: "S", firstSceneId: "c" }
+  ] };
+  for (const [sceneIds, name] of [[["a", "c"], "P"], [["b", "a", "c"], "P"], [["a", "c"], "P2"]] as const) {
+    const edited = { rows: sceneIds.map(id => ({ id })), sections: [{ id: "P", name, firstSceneId: "c" }] };
+    for (const other of [base, { ...base, sections: [base.sections[0]] }]) {
+      for (const [mine, theirs] of [[other, edited], [edited, other]] as const) {
+        const result = mergeSectionLayout(base, mine, theirs, edited.rows);
+        assert.deepEqual(result, edited);
+      }
+    }
+    assert.deepEqual(mergeSectionLayout(base, edited, edited, edited.rows), edited);
+  }
+});
+
 test("sections r1: rename survives removal with an unrelated scene insertion", () => {
   const base = { rows: ["a", "b", "c", "d", "e", "f"].map(id => ({ id })), sections: [
     { id: "one", name: "One", firstSceneId: "b" }, { id: "two", name: "Two", firstSceneId: "d" }

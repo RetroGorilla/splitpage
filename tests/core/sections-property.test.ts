@@ -16,6 +16,31 @@ function documentOf(groups: GroupFixture[]): { rows: { id: string }[]; sections:
   };
 }
 
+function mergeLaws(base: GroupFixture[] | null, mine: GroupFixture[], theirs: GroupFixture[], label: string): void {
+  const migration = fakeMigration();
+  const read = (groups: GroupFixture[]) => migrateRows(documentOf(groups), migration.ports);
+  const original = base && read(base), left = read(mine), right = read(theirs);
+  const layout = (doc: ReturnType<typeof read>) => ({ rows: doc.rows, sections: doc.sections ?? [] });
+  const merge = (a: ReturnType<typeof read>, b: ReturnType<typeof read>) => migrateRows(
+    mergeStateFields(original, a, b, fakePorts(() => [])).merged, migration.ports);
+  for (const side of [left, right]) {
+    const unchanged = original ?? read([]);
+    assert.deepEqual(layout(merge(unchanged, side)), layout(side), label + " one-sided identity incoming");
+    assert.deepEqual(layout(merge(side, unchanged)), layout(side), label + " one-sided identity local");
+    assert.deepEqual(layout(merge(side, side)), layout(side), label + " idempotence");
+  }
+  for (const [local, incoming] of [[left, right], [right, left]] as const) {
+    const result = merge(local, incoming);
+    const survivors = new Set(result.rows.map(row => row.id));
+    for (const group of sectionGroups(original ?? { rows: [] })) {
+      const record = JSON.stringify(group.section);
+      if (![local, incoming].every(side => sectionGroups(side).some(item => JSON.stringify(item.section) === record))) continue;
+      if (!original?.rows.slice(group.start, group.end).some(row => survivors.has(row.id))) continue;
+      assert.ok(sectionGroups(result).some(item => item.section.id === group.section.id), label + " unchanged populated identity survives " + group.section.id + " " + JSON.stringify({ base, mine, theirs, actual: layout(result) }));
+    }
+  }
+}
+
 test("sections: seeded section operations against scene edits preserve identities and every surviving scene", () => {
   const initialSeed = Number(process.env.SPLITPAGE_SECTION_SEED ?? 3101031);
   let seed = initialSeed;
@@ -69,6 +94,7 @@ test("sections: seeded section operations against scene edits preserve identitie
       }
     }
     const original = documentOf(base), edited = documentOf(sectionSide), other = documentOf(sceneSide);
+    mergeLaws(base, sectionSide, sceneSide, "seed " + initialSeed + " trial " + trial);
     for (const [mine, theirs] of [[edited, other], [other, edited]]) {
       const migration = fakeMigration();
       const state = migrateRows(mergeStateFields(migrateRows(structuredClone(original), migration.ports),
@@ -107,7 +133,13 @@ function snapshotProjection(base: GroupFixture[], mine: GroupFixture[], theirs: 
       return current === predecessor ? original.id : current;
     };
     const local = observed(mine), incoming = observed(theirs);
-    assignments.set(scene, local === undefined ? incoming ?? "" : incoming === undefined || incoming === original?.id ? local : incoming);
+    let assigned = local === undefined ? incoming ?? "" : incoming === undefined || incoming === original?.id ? local : incoming;
+    if (assigned && !names.has(assigned)) {
+      const localGroup = mine.find(group => group.scenes.includes(scene))?.id;
+      const incomingGroup = theirs.find(group => group.scenes.includes(scene))?.id;
+      assigned = localGroup === undefined ? incomingGroup ?? "" : incomingGroup === undefined || incomingGroup === original?.id ? localGroup : incomingGroup;
+    }
+    assignments.set(scene, assigned);
   }
   const active = new Set([...assignments.values()].filter(id => names.has(id)));
   const wanted = [{ id: "", name: "", scenes: [] as string[] }, ...sectionOrder.filter(group => group.id && active.has(group.id)).map(group => ({ id: group.id, name: names.get(group.id) ?? "", scenes: [] as string[] }))];
@@ -159,7 +191,7 @@ test("sections: seeded edits on both sides reconcile names, removal, additions a
     let common: GroupFixture[] | null = base;
     const at = 1 + random(base.length - 1), group = base[at];
     assert.ok(group);
-    const operation = trial % 10;
+    const operation = trial % 11;
     covered.add(operation);
     let expected: (incoming: GroupFixture[]) => GroupFixture[];
     if (operation === 0) {
@@ -213,12 +245,22 @@ test("sections: seeded edits on both sides reconcile names, removal, additions a
       const wanted = clone(right);
       remove(wanted, at);
       expected = () => wanted;
-    } else {
+    } else if (operation === 9) {
       common = null;
       atGroup(left, at).name = "Local " + trial;
       atGroup(right, at).name = "Incoming " + trial;
       expected = incoming => incoming;
+    } else {
+      const removedAt = 2 + random(base.length - 2);
+      const predecessor = atGroup(right, removedAt - 1);
+      const moved = predecessor.scenes.splice(0);
+      remove(right, removedAt);
+      if (random(2)) atGroup(right, 0).scenes.unshift(...moved);
+      if (random(2)) predecessor.name = "Retained " + trial;
+      if (random(2)) remove(left, removedAt);
+      expected = () => right;
     }
+    mergeLaws(common, left, right, "seed " + initialSeed + " paired trial " + trial);
     for (const [mine, theirs] of [[left, right], [right, left]] as const) {
       const migration = fakeMigration();
       const result = mergeStateFields(common && migrateRows(documentOf(common), migration.ports),
@@ -233,5 +275,5 @@ test("sections: seeded edits on both sides reconcile names, removal, additions a
       assert.deepEqual(actual.sections ?? [], wanted.sections, label + " identities, names and anchors");
     }
   }
-  assert.equal(covered.size, 10);
+  assert.equal(covered.size, 11);
 });

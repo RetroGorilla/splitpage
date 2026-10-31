@@ -40,6 +40,12 @@ header's transfer of original scenes into its collapsed predecessor is treated
 as header removal, not a competing scene assignment. This comparison does not
 require either side's row list to equal the base.
 
+The restored membership is only a comparison aid. If the reconciled identity
+was removed, merge uses the side's observed destination before deciding which
+groups are populated. For base `a | P: b | S: c`, removing `S` and deleting
+`b` produces `a | P: c`; `P` stays present even though its original scene left.
+The same rule applies when `b` moves into the prefix or `P` is also renamed.
+
 A rename beats an absent header for that section's original scenes still
 sitting in the collapsed predecessor. Explicit moves into another surviving
 group still win. Merge uses only observable snapshots, never operation history.
@@ -48,6 +54,13 @@ headers on the other could mean either Remove header plus insertion of `x`,
 or individually moving `b` and `c` into the unsectioned prefix plus insertion.
 Those snapshots are identical. The result preserves the renamed `A` on `b,c`
 and leaves `a,x` unsectioned in both orientations.
+
+Another known ambiguity is removing `S` and adding a new header `N` at its
+boundary on one side while renaming `S` on the other. The snapshots assign
+those scenes to the new identity `N`; it survives, and the renamed `S` can
+have no scenes left. Merge cannot distinguish replacing a header from explicit
+reassignment into the new section. This does not override one-sided identity,
+idempotence, or preservation of an unchanged populated header on both sides.
 
 With no base, a side without section metadata defers to the side that has it.
 With a sectionless base, newly added boundaries are ordinary additions; two
@@ -63,6 +76,19 @@ and a concurrent scene reassignment use the same membership conflict rule.
 These layout rules apply only to documents with sections. Sectionless merge
 retains the existing row ordering. Undo uses the existing document-field and
 row-order steps; one command is one entry.
+
+The seeded tests check complete order and membership and also enforce three
+independent laws for every generated pair: merging either side with the base
+reproduces that side exactly, merging a side with itself reproduces it, and a
+header unchanged from base on both sides remains when one of its scenes
+survives. These laws compare rows and section records directly; they do not
+use the membership projection oracle.
+
+“Unchanged” in the third law means the whole boundary record: ID, name and
+anchor. An ID/name-only law cannot hold with nonempty, nonoverlapping groups:
+base `S:[a,b]`, one side `S:[a] N:[b]`, and the other `S:[b]` after deleting
+`a` leave only `b`. It cannot populate both `S` and `N`; the new-boundary
+membership rule retains `N:b`.
 
 ## Older applications
 

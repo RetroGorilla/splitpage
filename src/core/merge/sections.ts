@@ -71,7 +71,12 @@ export function mergeSectionLayout<T extends { readonly id: string }>(
   const assignments = rows.map(row => {
     const bm = b.get(row.id), mm = m.get(row.id), tm = t.get(row.id);
     const preferMine = tm === undefined || (mm !== undefined && tm === bm);
-    return { row, id: (preferMine ? mm : tm) ?? "", sideOrder: preferMine ? mineOrder : theirOrder };
+    let id = (preferMine ? mm : tm) ?? "";
+    if (id && !names.has(id)) {
+      const observedMine = mineGroups.get(row.id), observedTheirs = theirGroups.get(row.id);
+      id = (observedTheirs === undefined || (observedMine !== undefined && observedTheirs === bm) ? observedMine : observedTheirs) ?? "";
+    }
+    return { row, id, sideOrder: preferMine ? mineOrder : theirOrder };
   });
   const populated = new Set(assignments.filter(item => names.has(item.id)).map(item => item.id));
   const survivingGroup = (id: string, sideOrder: readonly string[]): string => {
