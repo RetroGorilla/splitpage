@@ -1,14 +1,8 @@
 const HOOK_NAME = /__(?:[A-Za-z]+Test|splitpageFormats)\b/g;
 
 export const STILL_IN_RELEASE = Object.freeze([
-  "__annotateTest",
   "__blobsTest",
-  "__brollTest",
-  "__renderTest",
-  "__rundownTest",
-  "__sceneSelectTest",
-  "__targetTest",
-  "__videoTest"
+  "__renderTest"
 ]);
 
 export function hookNames(text) {
