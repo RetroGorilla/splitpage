@@ -17,6 +17,7 @@ files:
   - ipc-shell.js
   - ipc-document.js
   - ipc-history-blob.js
+  - ipc-tabstrip.js
   - prompter-share.js
   - close-keep.js
   - quit-watchdog.js
