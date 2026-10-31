@@ -1,7 +1,7 @@
 import { wireLegacyApp } from "./wiring.ts";
 import { startAppWhenReady } from "./app.ts";
 import { migrateRows } from "./document-ports.ts";
-import { startBlobs } from "../adapters/storage/02c-blobs.js";
+import { mountBlobStore } from "./wiring/blobs.ts";
 import { startGalleryStore } from "../adapters/storage/02d-gallery.js";
 import { mountPageEntry } from "./startup/page-entry.ts";
 import { mountDocumentIdentityOwner } from "./wiring/document-identity.ts";
@@ -76,7 +76,7 @@ function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountSceneStatusFeature();
   mountHideShotFeature();
   mountDocumentIdentityOwner();
-  startBlobs();
+  mountBlobStore();
   startGalleryStore();
   const sessionMerge = mountSessionMergeOwner();
   mountHistoryOwner();

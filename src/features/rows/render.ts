@@ -16,6 +16,7 @@ import { hiddenShotStripHtml } from "./hide-shot.ts";
 import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import { slotPoster } from "../common/gallery.ts";
@@ -133,8 +134,6 @@ interface RenderState {
   rowsPainted: number;
   cellsPainted: number;
 }
-
-type RenderWindow = Window & { __renderTest?: RenderTest };
 
 let ports: Ports;
 let state = freshState();
@@ -1299,8 +1298,9 @@ export function startRowsRender(given: Ports) {
   let disposed = false;
   const mine = {};
   activeRender = mine;
-  const renderTest: RenderTest = (window as RenderWindow).__renderTest = {
-    render: render,
+  let withdrawHook: (() => void) | null = null;
+  exposeTestHook("__renderTest", (): RenderTest => ({
+    render: function () { if (!disposed) render(); },
     counts: function () {
       if (disposed) return null;
       const p = ports.production.stats();
@@ -1314,7 +1314,7 @@ export function startRowsRender(given: Ports) {
       state.cellsPainted = 0;
       ports.production.resetStats();
     }
-  };
+  }), (withdraw) => { withdrawHook = withdraw; });
   STALE_EVENTS.forEach(function (type) { window.addEventListener(type, refuseOnStaleScreen, true); });
   return {
     paintRowTimes: paintRowTimes,
@@ -1350,7 +1350,6 @@ export function startRowsRender(given: Ports) {
     dispose: function () {
       if (disposed) return;
       disposed = true;
-      renderTest.render = function () {};
       if (activeRender !== mine) return;
       activeRender = null;
       STALE_EVENTS.forEach(function (type) { window.removeEventListener(type, refuseOnStaleScreen, true); });
@@ -1358,7 +1357,7 @@ export function startRowsRender(given: Ports) {
       state = freshState();
       document.body.classList.remove("is-stale-screen");
       markStaleParts(false);
-      if ((window as RenderWindow).__renderTest === renderTest) delete (window as RenderWindow).__renderTest;
+      if (withdrawHook) withdrawHook();
       (ports as unknown) = null;
     }
   };

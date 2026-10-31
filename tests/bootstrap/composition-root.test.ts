@@ -6,10 +6,10 @@ import { analyzeScript, resolveSpecifier } from "../../tools/dep-report.mjs";
 import { REPO, isScript, listRepoFiles } from "../../tools/source-scan.mjs";
 import { COMPOSITION_ROOT } from "./load-manifests.ts";
 
-const OUTSIDE_BOOTSTRAP = ["../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js"];
+const OUTSIDE_BOOTSTRAP = ["../adapters/storage/02d-gallery.js"];
 
 const MOUNT_ORDER = [
-  "mountScreenStateOwner", "mountPageEntry", "mountSceneStatusFeature", "mountHideShotFeature", "mountDocumentIdentityOwner", "startBlobs", "startGalleryStore",
+  "mountScreenStateOwner", "mountPageEntry", "mountSceneStatusFeature", "mountHideShotFeature", "mountDocumentIdentityOwner", "mountBlobStore", "startGalleryStore",
   "mountSessionMergeOwner", "mountHistoryOwner", "mountScriptPlaceFeature", "mountRowsRenderFeature", "mountDraftEditFeature",
   "mountGalleryOverlayFeature", "mountRundownFeature", "mountCopyPasteFeature", "mountReadTimeFeature", "mountScriptZoomFeature",
   "mountTargetFeature", "mountGalleryVideoFeature", "mountGalleryFeature", "mountVideoFilesFeature", "mountScenesFeature",
