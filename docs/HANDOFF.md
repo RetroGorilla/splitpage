@@ -449,9 +449,9 @@ tabs**.
   `isTrustedTabStripSender` in `ipc-setup.js`). Renderer never
   sends file paths to main (#34) — main keeps an id → path registry; writes
   are atomic (temp+rename).
-- `createTabWindow` (`main.js:1013`) makes a `BrowserWindow` whose primary
+- `createTabWindow` (`main.js:1014`) makes a `BrowserWindow` whose primary
   view loads the tab strip; each tab is a `WebContentsView` from
-  `createTab(windowId, opts)` (`main.js:1188`). `tabId`/`windowId` are
+  `createTab(windowId, opts)` (`main.js:1189`). `tabId`/`windowId` are
   32-hex, validated at every trust boundary (#42), stable across tear-off
   and relaunch, and double as the crash-draft folder name (§4). A crashed
   tab closes with no prompt, reports `dirty: false` regardless of the
@@ -484,7 +484,7 @@ tabs**.
   (#40): a tab with `hasDraftToRestore` is `hold()`-ed immediately;
   `write()` on a held tab returns `HELD`, touches nothing; released only by
   `splitpage:draft-restore-done` or an explicit user decision — never
-  crash/kill/session-end/quit. `buildDraftHeader` (`main.js:315`) is built
+  crash/kill/session-end/quit. `buildDraftHeader` (`main.js:316`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
 - **The browser keeps no drafts.** Crash-safe drafts are desktop-only. The
   browser draft store, its writer and its Web Lock were removed with the
@@ -1122,8 +1122,9 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, close/quit lifecycle, session restore, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, file dialogs, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
+| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, close/quit lifecycle, session restore, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
 | `desktop/desktop-state.js`, `file-service.js`, `doc-claims.js`, `recents.js`, `tab-registry.js`, `window-appearance.js`, `restore-notice.js`, `unsaved-dialog.js`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
+| `desktop/ipc-setup.js`, `ipc-files.js` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups), and the file, file dialog and recents channels |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/ipc-channels.js` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |

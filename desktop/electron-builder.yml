@@ -13,6 +13,7 @@ files:
   - drafts.js
   - ipc-channels.js
   - ipc-setup.js
+  - ipc-files.js
   - prompter-share.js
   - close-keep.js
   - quit-watchdog.js
