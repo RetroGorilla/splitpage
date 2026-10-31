@@ -20,6 +20,7 @@ const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
+const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
 
 after(closeApp);
 
@@ -231,6 +232,7 @@ async function openImport() {
   disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   handle.name = "reload.txt";
   await openDocument({ kind: "file", file: disk, handle: handle, options: { skipSnapshot: true } });
+  setHome("import", { name: "reload.txt", handle: handle, format: "txt", dirty: false, lastModified: 1 });
   hearReplacement();
 }
 

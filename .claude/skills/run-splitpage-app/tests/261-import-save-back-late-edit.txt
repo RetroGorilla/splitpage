@@ -1,89 +1,65 @@
-# "Save to <imported file>" must not call later edits up to date (#251).
+# Import save-back is switched off (2026-10-30; this suite used to pin #251,
+# "Save to <imported file>" must not call later edits up to date).
 #
-# saveBackToFile() (18-local-files.js) serialises the document, then awaits:
-# the on-disk conflict check, the write, and for the download fallback the
-# Save dialog. It used to set the import home's `dirty` flag false when it
-# finished, whatever had been typed meanwhile, so a foreign .txt/.csv/.docx
-# whose newest words were not in the file said "· up to date". It now clears
-# the flag only if the import record, the document id and S.editSeq are all
-# what they were when the bytes were built (the same test saveDoc applies to
-# S.dirty), and moves the file's timestamp either way.
+# An imported .txt now opens as a script with no file, like a new untitled
+# one, and Splitpage never writes the imported file:
 #
-#   * in place: an edit made while the write is open leaves the chip on
-#     "· unsaved changes", the bytes without the edit, and the timestamp
-#     moved to the file's new one;
-#   * the same save with nothing typed during it still says "· up to date";
-#   * download (no handle, so the Save dialog of the desktop bridge stands
-#     in for the browser's, which has no gap a person can type through): an
-#     edit made while the dialog is open leaves it unsaved, and one with no
-#     edit clears it.
-# Every `eval` is one physical line.
+#   * with a writable handle or without one, there is no file chip, no Save
+#     to file in the File menu, and the File menu's card says "Not saved yet";
+#   * Save asks where to keep the script (the desktop bridge's Save dialog
+#     stands in for the browser's), suggesting the script's name as .md, and
+#     an edit typed while that dialog is open still leaves the script unsaved;
+#   * the next Save writes the file it picked; the imported handle's
+#     createWritable is never called.
+# The save-back owner keeps its #251 cases as unit tests (I1-I3 in
+# src/test/m4-matrix-files.test.mjs). Every `eval` is one physical line.
 
 open
-eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.__savedToasts=function(){return Array.prototype.filter.call(document.querySelectorAll('#toast-host .toast'), function(t){return t.textContent.indexOf('Saved to late.txt') !== -1;}).length;}; window.__chip=function(){return document.getElementById('file-chip-state').textContent;}; window.__text=function(b){return typeof b === 'string' ? Promise.resolve(b) : new Blob([b]).text();}; return !!(F && D);})()
+eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.FM=window.__fileMenuTest; window.__state=function(){return document.getElementById('btn-save').getAttribute('data-state');}; window.__writes=0; return !!(F && D && FM);})()
 expect true
 
-# --- in place: a fake handle whose write can be held open at close() -----
-eval (function(){window.__hold=true; window.__closing=false; window.__wrote=null; window.__release=null; window.__closed=0; window.__h={name:'late.txt', _mtime:1000, createWritable: async function(){return {write: async function(b){window.__wrote=await window.__text(b);}, close: async function(){window.__closing=true; if(window.__hold){await new Promise(function(r){window.__release=r;});} window.__h._mtime=window.__h._mtime+4000; window.__closed++;}};}, getFile: async function(){return new File(['one\n\ntwo'],'late.txt',{type:'text/plain', lastModified: window.__h._mtime});}}; return F.openFile(new File(['one\n\ntwo'],'late.txt',{type:'text/plain', lastModified: 1000}), window.__h);})()
-wait !document.getElementById('file-chip').hidden && document.getElementById('file-chip-name').textContent === 'late.txt'
-expect __chip() === '· up to date'
+# --- an import with a writable handle: nothing offers to write it ---------
+eval (function(){window.__h={name:'late.txt', createWritable: async function(){window.__writes++; return {write: async function(){}, close: async function(){}};}, getFile: async function(){return new File(['one\n\ntwo'],'late.txt',{type:'text/plain', lastModified: 1000});}}; return F.openFile(new File(['one\n\ntwo'],'late.txt',{type:'text/plain', lastModified: 1000}), window.__h);})()
+wait F.state().title === 'late'
+expect document.getElementById('file-chip').hidden === true
+expect F.docFile().kind === null
+expect FM.cardView().name === 'Not saved yet'
+expect document.getElementById('menu-save-back') === null
+expect document.querySelector('[data-file-action="save-back"]') === null
+jsclick #btn-file
+expect document.getElementById('file-menu').textContent.indexOf('late.txt') === -1
+jsclick #file-menu-close
 
-# an edit first, so the chip has something to clear
+# --- Save asks where; an edit typed under the dialog stays unsaved --------
+eval (function(){window.__fake=D.makeFakeBackend(); var orig=window.__fake.saveFileDialog.bind(window.__fake); window.__asked=[]; window.__dialog=false; window.__finish=null; window.__dl=0; window.__hold=true; window.__fake.saveFileDialog=function(o){window.__asked.push(o); window.__dialog=true; if(!window.__hold) return orig(o); return new Promise(function(res){window.__finish=function(){res(orig(o));};});}; var w=window.__fake.writeFile.bind(window.__fake); window.__fake.writeFile=function(id,d){window.__dl++; return w(id,d);}; D.setBackend(window.__fake); return true;})()
 eval (function(){F.state().rows[0].audioText='typed BEFORE the save'; D.markDirtyForTest(); return true;})()
-expect __chip() === '· unsaved changes'
-
-# save, hold the write open, type more, let it finish
-jsclick #btn-file
-jsclick #menu-save-back
-wait window.__closing === true
-eval (function(){F.state().rows[0].audioText='typed DURING write'; D.markDirtyForTest(); return true;})()
-eval (function(){window.__release(); return true;})()
-wait window.__closed === 1
-# the file's own timestamp moved, edits or not
-wait __savedToasts() === 1
-expect __wrote.indexOf('typed BEFORE the save') !== -1
-expect __wrote.indexOf('typed DURING write') === -1
-expect F.state().rows[0].audioText === 'typed DURING write'
-expect __chip() === '· unsaved changes'
-expect document.getElementById('file-chip-state').classList.contains('unsaved')
-
-# --- the same save with nothing typed during it clears the flag ----------
-eval (function(){window.__hold=false; window.__closing=false; return true;})()
-jsclick #btn-file
-jsclick #menu-save-back
-wait window.__closed === 2
-wait __chip() === '· up to date'
-expect __wrote.indexOf('typed DURING write') !== -1
-expect __chip() === '· up to date'
-eval (function(){F.state().rows[0].audioText='typed AFTER both saves'; D.markDirtyForTest(); return true;})()
-jsclick #btn-file
-jsclick #menu-save-back
-wait window.__closed === 3
-wait __chip() === '· up to date'
-expect __wrote.indexOf('typed AFTER both saves') !== -1
-
-# --- download: the Save dialog is held open, an edit lands under it ------
-eval (function(){window.__fake=D.makeFakeBackend(); var orig=window.__fake.saveFileDialog.bind(window.__fake); window.__dialog=false; window.__finish=null; window.__dl=0; window.__hold2=true; window.__fake.saveFileDialog=function(o){window.__dialog=true; if(!window.__hold2) return orig(o); return new Promise(function(res){window.__finish=function(){res(orig(o));};});}; var w=window.__fake.writeFile.bind(window.__fake); window.__fake.writeFile=function(id,d){window.__dl++; return w(id,d);}; D.setBackend(window.__fake); return F.openFile(new File(['one\n\ntwo'],'copy.txt',{type:'text/plain', lastModified: 1000}), null);})()
-wait !document.getElementById('file-chip').hidden && document.getElementById('file-chip-name').textContent === 'copy.txt'
-expect document.querySelector('#menu-save-back .mi-label').textContent === 'Save a new copy of copy.txt'
-expect __chip() === '· up to date'
-eval (function(){F.state().rows[0].audioText='typed BEFORE download'; D.markDirtyForTest(); return true;})()
-expect __chip() === '· unsaved changes'
-jsclick #btn-file
-jsclick #menu-save-back
+expect __state() === 'pending'
+jsclick #btn-save
 wait window.__dialog === true
-eval (function(){F.state().rows[0].audioText='typed DURING download'; D.markDirtyForTest(); return true;})()
+expect __asked[0].suggestedName === 'late.md'
+eval (function(){F.state().rows[0].audioText='typed DURING the dialog'; D.markDirtyForTest(); return true;})()
 eval (function(){window.__finish(); return true;})()
 wait window.__dl === 1
+wait F.docFile().kind === 'md'
 sleep 300
-expect __chip() === '· unsaved changes'
+expect __state() === 'pending'
+expect window.__writes === 0
 
-# --- and a download with nothing typed under the dialog clears it --------
-eval (function(){window.__dialog=false; window.__hold2=false; return true;})()
-jsclick #btn-file
-jsclick #menu-save-back
+# --- the next Save writes the picked file, never the imported one ---------
+eval (function(){window.__hold=false; F.state().rows[0].audioText='typed AFTER the first save'; D.markDirtyForTest(); return true;})()
+jsclick #btn-save
 wait window.__dl === 2
-wait __chip() === '· up to date'
+wait __state() === 'ok'
+expect __asked.length === 1
+expect window.__writes === 0
+
+# --- an import with no handle: no chip, no Save to file either ------------
+eval (function(){return F.openFile(new File(['uno\n\ndos'],'copy.txt',{type:'text/plain', lastModified: 1000}), null);})()
+wait F.state().title === 'copy'
+expect document.getElementById('file-chip').hidden === true
+expect F.docFile().kind === null
+expect FM.cardView().name === 'Not saved yet'
+expect document.querySelector('[data-file-action="save-back"]') === null
 eval (function(){D.restoreBackend(); return true;})()
 
 quit

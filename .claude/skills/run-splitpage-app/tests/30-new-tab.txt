@@ -88,11 +88,16 @@ expect document.getElementById('newtab-page').hidden == false
 eval (function(){ var id = window.__fileId; window.__fake.openFileDialog = function () { return Promise.resolve({ id: id, name: 'picked.md' }); }; return true; })()
 click [data-newtab-action="open"]
 wait document.getElementById('newtab-page').hidden == true
-wait document.getElementById('file-chip-name').textContent.indexOf('picked.md') !== -1
+wait document.getElementById('doc-title').value === 'Picked'
+# a foreign .md is a script with no file since import save-back was switched off (2026-10-30)
+expect document.getElementById('file-chip').hidden === true
 
-# with a document open, the gate refuses to show the page again
-eval (async function(){ window.__elig = await window.__newTab.eligible(); return true; })()
-wait window.__elig === false
+# the gate refused here while a foreign file was the script's home; since
+# import save-back was switched off (2026-10-30) an import has no home, so the
+# gate's home check passes. The gate only runs when the page mounts at startup,
+# when no import can be open
+eval (async function(){ window.__elig = 'pending'; window.__elig = await window.__newTab.eligible(); return true; })()
+wait window.__elig === true
 
 # (the suppression check is at the top of this suite, before any DOM churn:
 # a goto after this much of it aborts the CDP socket — see the driver
@@ -167,8 +172,8 @@ expect document.documentElement.scrollWidth <= innerWidth
 eval (function(){ window.__canon = function (o) { return JSON.stringify(o, function (k, v) { if (v && typeof v === 'object' && !Array.isArray(v)) { var out = {}; Object.keys(v).sort().forEach(function (key) { if (key !== 'docId') out[key] = v[key]; }); return out; } return v; }); }; window.__ids = [window.__splitpageFormats.state().docId]; return true; })()
 
 # --- To-camera video --------------------------------------------------------
-# picked.md is open (and dirty, as a foreign file is) under the page
-expect window.__splitpageFormats.docFile().kind !== null || !document.getElementById('file-chip').hidden
+# picked.md is open (dirty, with no file since import save-back was switched off) under the page
+expect window.__splitpageFormats.state().title === 'Picked' && window.__splitpageFormats.docFile().kind === null
 click [data-starter="to-camera"]
 wait document.getElementById('newtab-page').hidden == true
 expect document.querySelectorAll('#rows .row').length == 6
@@ -289,8 +294,8 @@ eval (function(){ var dt = new DataTransfer(); dt.items.add(new File(['# Dropped
 expect window.__lit == true
 expect window.__unlit == true
 wait document.getElementById('newtab-page').hidden == true
-wait document.getElementById('file-chip-name').textContent.indexOf('dropped.md') !== -1
-expect document.getElementById('doc-title').value == Dropped script
+wait document.getElementById('doc-title').value === 'Dropped script'
+expect document.getElementById('file-chip').hidden === true
 # a foreign .md: its heading is the title, and (as File ▸ Open reads one) a row
 expect window.__splitpageFormats.state().rows.length == 2
 expect window.__splitpageFormats.state().rows[1].audioText == A dropped line of narration.

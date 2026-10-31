@@ -1,6 +1,6 @@
 import type { ResumeHandle } from "./mount.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
-import type { BusyNotices, MenuItemPort, NoticePort } from "../../application/effects/ports.ts";
+import type { BusyNotices, NoticePort } from "../../application/effects/ports.ts";
 import type { ExportAssetRequest } from "../../application/export/assets.ts";
 import type { ExportRegistry, FileNameOptions } from "../../application/export/registry.ts";
 import type { FileDelivery } from "../../application/files/file-delivery.ts";
@@ -8,7 +8,7 @@ import type { DocumentPlace } from "../../application/location/document-place.ts
 import type { BrollView } from "../../application/preferences/broll-view.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { FileConflict } from "../../application/save/file-conflict.ts";
-import type { BuiltLocalFile, ImportSavingOwner } from "../../application/save/import-saving-ports.ts";
+import type { BuiltLocalFile } from "../../application/save/import-saving-ports.ts";
 import type { ExportKit } from "../../application/save/export-kit.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
@@ -19,7 +19,6 @@ export interface LocalFileMenuPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly preferences: Pick<Preferences, "clock">;
   readonly place: Pick<DocumentPlace, "importHome" | "fileHome">;
-  readonly writeback: Pick<ImportSavingOwner, "saveBackItemState">;
   readonly exports: Pick<ExportKit, "captureExportDocument" | "loadExportAssets">;
   readonly formats: Pick<ExportRegistry, "byId" | "byAction" | "isAction" | "card">;
   readonly assets: { readonly request: (doc: ExportDocument) => ExportAssetRequest };
@@ -28,7 +27,6 @@ export interface LocalFileMenuPorts {
   readonly brollView: Pick<BrollView, "printView">;
   readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "withBar"> };
   readonly delivery: FileDelivery;
-  readonly menuItems: Pick<MenuItemPort<Element>, "setLabel">;
   readonly merge: { readonly offer: (file: unknown, home: unknown) => Promise<void>; readonly reset: () => void };
   readonly exportControls: Pick<FileMenuExportMount, "isExportAction" | "rememberExport">;
   readonly actions: Pick<ActionRegistry, "invoke" | "has">;
