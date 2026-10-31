@@ -8,12 +8,14 @@ import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { makeDesktopBlobBackend, wireDesktopBlobs } from "../../adapters/desktop/desktop-blobs.js";
 import { forgetDesktopVoice } from "../../adapters/desktop/desktop-voice.js";
 import { makeFakeDesktopBackend } from "../../adapters/desktop/fake-desktop.js";
+import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { desktopActions as definitions } from "../../features/desktop/actions.ts";
 import { startDesktopView as mountDesktop } from "../../features/desktop/desktop.js";
 import type { DesktopMount, DesktopPorts } from "../../features/desktop/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { awaitHandedDocument, handDesktopTo, handedDocumentSettled, legacyDesktopDocumentPorts, notifyDesktopDocumentState, startDesktopDocumentState } from "./desktop-owners.ts";
+import { draftsTesting } from "./drafts.ts";
 import { flushDraftNow } from "./recovery-owners.ts";
 import { saveDoc } from "./save-owners.ts";
 import { noteSessionEdit } from "./session-owner.ts";
@@ -24,6 +26,8 @@ import { place as portPlace } from "./ports/location.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { startup as portStartup } from "./ports/startup.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const canOpenPrompter = { browser: canOpenPrompterInBrowser, chromium: canOpenPrompterInChromium };
 
@@ -49,8 +53,8 @@ function desktopPorts(): DesktopPorts {
   };
 }
 
-function installTestHooks(mounted: DesktopMount): void {
-  const hooks = {
+function testHooks(mounted: DesktopMount) {
+  return {
     makeHandle: makeDesktopHandle,
     runMenuCommand: mounted.runMenuCommand,
     makeFakeBackend: makeFakeDesktopBackend,
@@ -68,10 +72,14 @@ function installTestHooks(mounted: DesktopMount): void {
       wireDesktopBlobs(desktopPort());
     },
     get tabId() { const port = desktopPort(); return port && port.tabId; },
+    get drafts() { return draftsTesting(); },
     markDirtyForTest: function () { noteSessionEdit(); }
   };
-  Object.assign(window, { __desktopTest: hooks });
 }
+
+// why: exposeTestHook drops only the call, after tree shaking has kept what it names; folding this to null first
+// lets a release build leave out the hook object and the fake backend it carries.
+const desktopTestHooks = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ? testHooks : null;
 
 export function mountDesktopFeature(): DesktopMount {
   return desktop.replace(() => {
@@ -81,7 +89,7 @@ export function mountDesktopFeature(): DesktopMount {
       if (presence.running()) wireDesktopBlobs(desktopPort());
       mounted = mountDesktop(desktopPorts());
       handDesktopTo({ openPrompterInBrowser: mounted.openPrompterInBrowser });
-      installTestHooks(mounted);
+      exposeTestHook("__desktopTest", () => desktopTestHooks?.(mounted), () => undefined);
     } catch (error) {
       handDesktopTo(null);
       stopState();
