@@ -16,6 +16,9 @@ expect Array.from(document.querySelectorAll('td p')).some(e => e.textContent ===
 goto /tests/adapters/formats/fixtures/_script-print-long.html
 wait Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)
 expect document.querySelectorAll('tbody tr').length === 18
+expect document.querySelectorAll('.rundown,[aria-label="Scene rundown"]').length === 0
+expect document.querySelectorAll('.script-table .shot-done').length === 17
+expect Array.from(document.querySelectorAll('.script-table .shot-done > td')).every(e => getComputedStyle(e).backgroundColor === 'rgb(230, 230, 230)' && getComputedStyle(e).printColorAdjust === 'exact')
 expect document.querySelector('main').textContent.includes('Visual line 179')
 expect document.querySelector('main').textContent.includes('Audio line 159')
 expect document.documentElement.scrollWidth === document.documentElement.clientWidth

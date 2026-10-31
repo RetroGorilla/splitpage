@@ -19,6 +19,10 @@ goto /tests/adapters/formats/fixtures/_list-print-shots-rich.html
 expect document.querySelectorAll('.list-checkbox').length === 3
 expect document.querySelectorAll('.list-checkbox.checked').length === 1
 expect document.querySelectorAll('.writing-lines').length === 3
+expect document.querySelectorAll('.writing-lines > span').length === 6
+expect Array.from(document.querySelectorAll('.writing-lines > span')).every(e => getComputedStyle(e).borderBottomStyle === 'solid' && getComputedStyle(e).backgroundImage === 'none')
+expect Array.from(document.querySelectorAll('.shot-done > td')).every(e => getComputedStyle(e).backgroundColor === 'rgb(230, 230, 230)' && getComputedStyle(e).printColorAdjust === 'exact')
+expect document.querySelectorAll('.rundown,[aria-label="Scene rundown"]').length === 0
 expect document.querySelector('.shot-flag').textContent === 'Flagged'
 expect document.querySelector('main').textContent.includes('Kettle 中文 (sourcing)')
 expect document.querySelector('main').textContent.includes('1 of 3 shot · 1 flagged · by scene')
@@ -42,6 +46,8 @@ wait Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)
 expect Array.from(document.querySelectorAll('section'), e => e.id).join(',') === 'script,production-breakdown,broll-shot-list,comments'
 expect document.querySelectorAll('.breakdown-table .list-group').length === 4
 expect document.querySelectorAll('.shot-table .list-checkbox').length === 3
+expect document.querySelectorAll('.rundown,[aria-label="Scene rundown"]').length === 0
+expect document.querySelector('#script').textContent.includes('Grey rows: shot scenes')
 expect document.querySelector('#comments').textContent.includes('End reply')
 expect document.querySelector('td p').textContent === 'YouTube https://www.youtube.com/watch?v=aqz-KE-bpKQ'
 goto /tests/adapters/formats/fixtures/_list-print-prop-long.html
