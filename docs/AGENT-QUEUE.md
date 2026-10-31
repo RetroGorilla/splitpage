@@ -983,7 +983,7 @@ STRUCTURE SECTION MUST SAY
 - Which list responsibilities the new modules hold and which shared P1 parts they use, "not wired; no user-visible change", standalone/appendix coverage, the options and facts preserved, print inspection and suite results. The old generator stays until P5.
 ```
 
-## AQ-42 [ ] PDF rebuild P3: desktop printToPDF
+## AQ-42 [x] PDF rebuild P3: desktop printToPDF
 
 Needs: AQ-40 and AQ-41 merged; AQ-35 IPC extraction merged before adding desktop IPC. Take the latest base after any B1 desktop change.
 Files: desktop/ print composition and IPC module from AQ-35, desktop/preload.js, desktop/ipc-channels.js, desktop/test/, desktop/electron-builder.yml and desktop/package.json if new modules/tests ship; src/adapters/desktop/, export ports/wiring and tests, docs describing desktop PDF export.

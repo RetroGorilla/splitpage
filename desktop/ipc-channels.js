@@ -92,6 +92,8 @@ const CHANNELS = [
   { name: "splitpage:blob-get", direction: "invoke", argsSchema: ["sha256"], allowedOrigins: APP },
   { name: "splitpage:blob-missing", direction: "invoke", argsSchema: ["array"], allowedOrigins: APP },
 
+  { name: "splitpage:print-to-pdf", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+
   { name: "splitpage:open-file", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:menu-command", direction: "receive", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:restore-notice", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },

@@ -24,6 +24,8 @@ import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
 import type { PrintDialogPort } from "../../src/application/export/print-dialog.ts";
+import type { PdfPrinter } from "../../src/application/export/pdf-printer.ts";
+import type { ExportDocument } from "../../src/core/document/export-document.ts";
 
 export function fakePrintDialog() {
   const pages: string[] = [];
@@ -34,6 +36,13 @@ export function fakePrintDialog() {
     close: () => { closed++; }
   }) };
   return { printDialog, pages, closed: () => closed };
+}
+
+export function fakePdfPrinter() {
+  const pages: { html: string; doc: ExportDocument }[] = [];
+  const pdf = new Uint8Array([37, 80, 68, 70]);
+  const pdfPrinter: PdfPrinter = { print: async (html, doc) => { pages.push({ html, doc }); return pdf; } };
+  return { pdfPrinter, pages, pdf };
 }
 
 export function fakeWriterPorts(initial: DocumentView) {

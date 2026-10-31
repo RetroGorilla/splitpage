@@ -94,6 +94,8 @@ function createIpcSetup({ ipcMain, app, testMode, windowsById }) {
     ipcOnSync("splitpage:is-test-mode-sync", () => testMode);
 
     groups.registerTestModeIpc(wrappers);
+
+    groups.registerPrintIpc(wrappers);
   }
 
   return { registerIpc };

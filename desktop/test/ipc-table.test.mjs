@@ -77,6 +77,7 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:test-request-close-tab send", "splitpage:test-request-quit send", "splitpage:test-draft-status invoke",
   "splitpage:test-crash-renderer send", "splitpage:test-dup-loser invoke", "splitpage:test-shell invoke"
 ];
+const REGISTERED_AFTER_SPLIT = ["splitpage:print-to-pdf invoke"];
 
 function handlerGroups() {
   const groups = [];
@@ -305,14 +306,14 @@ test("main.js passes registerIpc every handler group, and each group's module is
   }
 });
 
-test("in test mode, main.js's real groups register the 59 pairs in the order they had before the split", () => {
-  assert.deepEqual(registerThroughMain({ testMode: true }), REGISTERED_BEFORE_SPLIT);
+test("in test mode, main.js's real groups register the 59 pairs in the order they had before the split, then the print channel", () => {
+  assert.deepEqual(registerThroughMain({ testMode: true }), [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT]);
 });
 
 test("outside test mode, main.js's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
-  const expected = REGISTERED_BEFORE_SPLIT.filter((pair) => !pair.startsWith("splitpage:test-"));
-  assert.equal(expected.length, 52);
+  const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
+  assert.equal(expected.length, 53);
   assert.deepEqual(seen, expected);
   for (const pair of seen) {
     const [name, direction] = pair.split(" ");
@@ -330,7 +331,8 @@ test("the wrappers refuse untrusted senders and bad arguments, and run trusted c
     registerDocumentIpc: () => {},
     registerHistoryBlobIpc: () => {},
     registerTabStripIpc: ({ ipcOn }) => ipcOn("splitpage:tabstrip-new-tab", (e) => { e.ran = true; }),
-    registerTestModeIpc: () => {}
+    registerTestModeIpc: () => {},
+    registerPrintIpc: () => {}
   });
   const entry = (name) => ipcMain.registered.find((e) => e.name === name).listener;
 
@@ -510,6 +512,7 @@ test("packaging: every ./module main.js requires, directly or through another mo
   for (const f of ["close-quit.js", "session-restore.js"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
   assert.ok(requiredBy(MAIN).includes("voice-composition.js"), "main.js requires ./voice-composition");
   assert.ok(required.has("voice-helper.js") && required.has("prompter-share.js"), "voice-composition.js requires ./voice-helper and ./prompter-share");
+  assert.ok(requiredBy(MAIN).includes("print-pdf.js"), "main.js requires ./print-pdf");
   for (const f of required) assert.ok(listed.has(f), f + " is required from main.js but not in electron-builder.yml files");
 });
 
@@ -557,6 +560,19 @@ test("the video thumbnail channel: a typed host and video ref, app page only", (
   ]) {
     assert.ok(checkArgs(c.argsSchema, bad), "refuses " + JSON.stringify(bad));
   }
+});
+
+test("the PDF print channel takes one HTML string, from the app page only", () => {
+  const row = channelFor("splitpage:print-to-pdf", "invoke");
+  assert.ok(row, "declared");
+  assert.deepEqual([...row.argsSchema], ["string"]);
+  assert.deepEqual([...row.allowedOrigins], [APP_ORIGIN]);
+  assert.ok(!row.testOnly);
+  assert.equal(checkArgs(row.argsSchema, ["<!doctype html><title>t</title>"]), null);
+  for (const bad of [[], [null], [{ html: "<p>" }], [new Uint8Array(2)], ["<p>", { path: "C:\\out.pdf" }], ["<p>", "C:\\out.pdf"]]) {
+    assert.ok(checkArgs(row.argsSchema, bad), "refuses " + JSON.stringify(bad));
+  }
+  assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
 });
 
 test("the draft channels let a bad payload through to their own answer", () => {
