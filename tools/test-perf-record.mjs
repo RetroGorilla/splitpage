@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import { crc32, inflateSync } from "node:zlib";
-import { IMAGES, SCENES, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
+import { IMAGES, SCENES, buildArgs, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
 
 const { imageDims, sniffImageMime } = createRequire(import.meta.url)("../shared/blob-policy.js");
 
@@ -33,6 +33,12 @@ function change(label, index, patch) {
   let seen = 0;
   return good.map((t) => (t.label === label && seen++ === index ? { ...t, ...patch } : t));
 }
+
+console.log("\nbuild selection:\n");
+
+eq("test flag is used when supported", buildArgs('const TEST_BUILD = process.argv.includes("--test");'), ["build.mjs", "--test"]);
+eq("single quoted flag is supported", buildArgs("process.argv.includes( '--test' )"), ["build.mjs", "--test"]);
+eq("older builds use the plain command", buildArgs("const TEST_BUILD = false;"), ["build.mjs"]);
 
 console.log("\nparseArgs():\n");
 
