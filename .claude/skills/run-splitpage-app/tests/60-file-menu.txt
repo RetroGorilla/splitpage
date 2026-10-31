@@ -48,10 +48,9 @@ expect document.getElementById('menu-autosave').getAttribute('aria-checked') == 
 expect document.getElementById('menu-autosave').querySelector('.mi-switch-track') !== null
 expect document.querySelector('#file-menu [data-file-action="save-as"]').closest('.fm-card') !== null
 expect document.querySelector('#file-menu [data-file-action="save-as"] .mi-label').textContent == Save a copy…
-# Save to file is only offered while a foreign file is open
-expect document.getElementById('menu-save-back').closest('.fm-card') !== null
-expect document.getElementById('menu-save-back').disabled === true
-expect document.getElementById('menu-save-back').getBoundingClientRect().height == 0
+# Save to file is gone: import save-back was switched off on 2026-10-30
+expect document.getElementById('menu-save-back') === null
+expect document.querySelector('#file-menu [data-file-action="save-back"]') === null
 expect window.__fileMenuTest.timeAgo(Date.now() - 120000) == 2 min ago
 expect window.__fileMenuTest.timeAgo(Date.now() - 5000) == just now
 
@@ -170,10 +169,10 @@ expect F.docId() === window.__docId0
 
 # --- every data-file-action is here exactly once ----------------------------
 # The old flat menu's (tests and the desktop native menu click them), less
-# the server, Collaborate and Google Drive items, plus New script, Export… / Export again (#146) — the eleven formats' own
+# the server, Collaborate and Google Drive items and Save to file, plus New script, Export… / Export again (#146) — the eleven formats' own
 # buttons wait, hidden, in the Export group for the dialog to click — and
 # Search commands… (#147), Minimize the rundown (#178) and Settings (#181).
-eval (function(){var ids=["settings","save-as","save-back","autosave","open","paste","gdoc-import","export-docx","export-md","export-md-table","export-csv","export-xlsx","export-breakdown","export-breakdown-xlsx","export-pdf","export-html","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","export-broll-pdf","export-broll-csv","export-broll-xlsx","history","find","toggle-hide-shot","toggle-rundown-min","setup","tagging-help","help","tour","about","export-app-data","import-app-data","prompter-open-in-browser","prompter-open-in-chromium","new","export","export-again","command-menu"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
+eval (function(){var ids=["settings","save-as","autosave","open","paste","gdoc-import","export-docx","export-md","export-md-table","export-csv","export-xlsx","export-breakdown","export-breakdown-xlsx","export-pdf","export-html","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","export-broll-pdf","export-broll-csv","export-broll-xlsx","history","find","toggle-hide-shot","toggle-rundown-min","setup","tagging-help","help","tour","about","export-app-data","import-app-data","prompter-open-in-browser","prompter-open-in-chromium","new","export","export-again","command-menu"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
 expect window.__actionCounts.every(function(n){return n===1;})
 expect window.__actionTotal === window.__actionIds.length
 

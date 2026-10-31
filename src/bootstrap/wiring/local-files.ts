@@ -6,10 +6,7 @@ import type { DocumentSource } from "../../application/transitions/sources.ts";
 import type { SaveDestination } from "../../application/save/destinations.ts";
 import { startLocalFileMenu } from "../../features/file-menu/local-files.js";
 import type { LocalFileMenuControls } from "../../features/file-menu/local-files-ports.ts";
-import { fileWritebackActions as definitions } from "../../features/file-menu/actions.ts";
-import type { ActionDefinition } from "../../application/actions.ts";
 import { localFilesOwnerPorts, importSavingPorts, localFileMenuPorts } from "./ports/local-files.ts";
-import { screen } from "./ports/screen.ts";
 
 let opening: LocalFilesOwner | null = null;
 let saving: ImportSavingOwner | null = null;
@@ -37,7 +34,7 @@ export function mountLocalFilesFeature(): LocalFileMenuControls {
   const writeback: ImportSavingOwner = createImportSavingOwner();
   const stopFiles = files.startLocalFiles(localFilesOwnerPorts(localFileMenuControls));
   const stopSaving = writeback.startImportSaving(importSavingPorts(localFileMenuControls));
-  const view = startLocalFileMenu(localFileMenuPorts(writeback)) as LocalFileMenuControls;
+  const view = startLocalFileMenu(localFileMenuPorts()) as LocalFileMenuControls;
   opening = files;
   saving = writeback;
   menu = view;
@@ -63,5 +60,3 @@ export function importSaveDestination(): SaveDestination<ImportSaveRequest> {
     write: (job) => importSavingOwner().writeBackToFile(job)
   };
 }
-
-export function fileWritebackActions(): ActionDefinition[] { return definitions(() => saving, screen); }

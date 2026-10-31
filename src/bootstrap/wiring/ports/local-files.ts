@@ -1,6 +1,6 @@
 import type { LocalFilesOwnerPorts } from "../../../application/transitions/local-files-ports.ts";
 import type { LocalFileMenuPorts, LocalFileMenuControls } from "../../../features/file-menu/local-files-ports.ts";
-import type { ImportSavingOwner, ImportSavingPorts } from "../../../application/save/import-saving-ports.ts";
+import type { ImportSavingPorts } from "../../../application/save/import-saving-ports.ts";
 import type { LocalFileAccess } from "../../../application/files/local-file-access.ts";
 import { localFileAccess } from "../../../adapters/files/local-files.js";
 import { loadLastFileHandle, rememberLastFileHandle } from "../../../adapters/files/last-file.ts";
@@ -23,7 +23,7 @@ import { captureExportDocument, loadExportAssets } from "../export-capture.ts";
 import { offerFileMerge, resetMergeOffer } from "../merge-review.ts";
 import { isExportAction, rememberExport } from "../file-menu-export-controls.ts";
 import { documentReader } from "./document.ts";
-import { notices, menuItems } from "./effects.ts";
+import { notices } from "./effects.ts";
 import { exports as formats, fileDelivery } from "./files.ts";
 import { place } from "./location.ts";
 import { confirmation, saves, fileConflicts } from "./saving.ts";
@@ -84,12 +84,11 @@ export function importSavingPorts(menu: () => LocalFileMenuControls): ImportSavi
   };
 }
 
-export function localFileMenuPorts(writeback: ImportSavingOwner): LocalFileMenuPorts {
+export function localFileMenuPorts(): LocalFileMenuPorts {
   return {
     document: documentReader,
     preferences: preferenceValues,
     place,
-    writeback,
     exports: { captureExportDocument, loadExportAssets },
     formats,
     assets: { request: exportAssetsRequest },
@@ -98,7 +97,6 @@ export function localFileMenuPorts(writeback: ImportSavingOwner): LocalFileMenuP
     brollView,
     notices,
     delivery: fileDelivery,
-    menuItems,
     merge: { offer: offerFileMerge, reset: resetMergeOffer },
     exportControls: { isExportAction, rememberExport },
     actions

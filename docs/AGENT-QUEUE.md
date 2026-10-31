@@ -393,7 +393,7 @@ STRUCTURE SECTION MUST SAY
 - "Types only." The final member list, any member added and why, any cast left and why.
 ```
 
-## AQ-18 [ ] Measure full render() on stamp and hide
+## AQ-18 [x] Measure full render() on stamp and hide
 
 Needs: none.
 Files: tools/perf-record.mjs, docs/architecture/testing.md.
@@ -713,7 +713,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change; test only", the cause, what the check waits on now, pass counts before and after.
 ```
 
-## AQ-32 [ ] Switch off import save-back (keep the code, mark it deprecated)
+## AQ-32 [x] Switch off import save-back (keep the code, mark it deprecated)
 
 Needs: none. Supersedes AQ-29 (its PR stays unmerged and is closed when this task merges).
 Files: the entry points that reach `saveBackToFile` (src/application/save/import-saving.ts): the save-back action and its file menu item (src/features/file-menu/, src/bootstrap/actions.ts, src/bootstrap/wiring/local-files.ts) and the conflict retry that calls it; their tests and browser suites; the docs that describe save-back.
@@ -770,7 +770,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change; names only", every renamed identifier and value, every "server" left and why, how old saved data loads (no persisted copy, with the grep, or the one reader), the tests changed, smoke count.
 ```
 
-## AQ-34 [ ] CSS by purpose
+## AQ-34 [x] CSS by purpose
 
 Needs: AQ-23's first PR merged (flag, helper, `__historyTest`, release-build check; both touch the build).
 Files: src/styles/, the `styles-*.css` files under src/features/, tools/css-inputs.json, the tests that pin the CSS list (src/test/css-aggregation.test.mjs, src/test/css-feature-balance.test.mjs, tools/css-colours.mjs), docs that name the files.

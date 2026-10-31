@@ -1,4 +1,3 @@
-import { fileWritebackActions } from "./wiring/local-files.ts";
 import { tagComposerActions } from "./wiring/production-tags.ts";
 import { prompterActions } from "./wiring/prompter.ts";
 import { importActions } from "./wiring/imports.ts";
@@ -56,7 +55,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => {
       const file = fileMenuActions();
-      return registerAll(registry, [...fileWritebackActions(), ...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]);
+      return registerAll(registry, [...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]);
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {
