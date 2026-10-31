@@ -54,6 +54,7 @@ const CASES = [
   ["dep-report.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("dep-report: unknown argument --bogus")],
   ["failure-digest.mjs", [], (r) => r.code === 2 && r.err.includes("usage: node tools/failure-digest.mjs")],
   ["perf-record.mjs", [], (r) => r.code === 1 && r.err.includes("fixture build invoked") && r.err.includes("node build.mjs --test")],
+  ["perf-record.mjs", ["--built"], (r) => r.code === 2 && r.err.includes("index.html is not built") && r.err.includes("node build.mjs --test")],
   ["run-suites.mjs", ["--bogus"], (r) => r.code !== 0 && r.err.includes("run-suites: unknown option --bogus")],
   ["run-tests.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("run-tests: unknown flag --bogus")],
   ["typecheck.mjs", [], (r) => r.code === 1 && r.err.includes("typecheck: tsconfig.core.json is missing")]
