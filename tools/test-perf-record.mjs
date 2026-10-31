@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import { crc32, inflateSync } from "node:zlib";
-import { IMAGES, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
+import { IMAGES, SCENES, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
 
 const { imageDims, sniffImageMime } = createRequire(import.meta.url)("../shared/blob-policy.js");
 
@@ -95,6 +95,20 @@ eq("three opens, three loads, three merges", [count("eval window.__perfImg.open"
 eq("every load and the merges follow a fresh page", count("goto /index.html"), 4);
 eq("the driver sees an assertion", lines[lines.length - 1].startsWith("expect "), true);
 eq("the loads read the sets the opens stored, in order", lines.filter((l) => l.startsWith("eval window.__perfImg.load")), ["0", "1", "2"].map((i) => `eval window.__perfImg.load(${i})`));
+
+console.log("\nthe redraw scenes:\n");
+
+const longLines = suiteText("long").split("\n").filter(Boolean);
+const shortLines = suiteText("short").split("\n").filter(Boolean);
+const at = (prefix) => longLines.findIndex((l) => l.startsWith(prefix));
+eq("the long suite times stamp, hide and the display preference", ["stamp()", "hide()", "preference()"].map((n) => at(`eval window.__perfScene.${n}`) > 0), [true, true, true]);
+eq("they run after the export timing, so the existing cases run first", longLines.findIndex((l) => l.includes("'long export'")) < longLines.findIndex((l) => l.includes("window.__perfScene)")), true);
+eq("the preference is changed with the settings dialog open", longLines.indexOf("wait window.__settingsTest.isOpen()") > at("eval window.__perfScene.hide()") && longLines.indexOf("wait window.__settingsTest.isOpen()") < at("eval window.__perfScene.preference()"), true);
+eq("the short suite has none of them", shortLines.some((l) => l.includes("__perfScene")), false);
+
+const sceneWindow = { __perf: { lat: [] }, __splitpageFormats: {} };
+vm.runInNewContext(SCENES, { window: sceneWindow, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
+eq("the scenes install a stamp, a hide and a preference run", Object.keys(sceneWindow.__perfScene), ["stamp", "hide", "preference"]);
 
 console.log("\nthe pictures:\n");
 
