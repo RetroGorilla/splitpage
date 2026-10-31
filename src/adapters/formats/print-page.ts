@@ -75,6 +75,32 @@ a { color: #${c.visual}; text-decoration: underline; }
 .comment blockquote { margin: 4pt 12pt; color: #${c.dim}; }
 .reply { margin: 8pt 0 8pt 14pt; }
 .comment img { max-width: 60%; max-height: 3.6in; }
+.category-dot { display: inline-block; width: 0.6em; height: 0.6em; border-radius: 50%; margin-right: 0.4em; }
+.list-detail { font-size: 8pt; margin-top: 4pt; color: #${c.dim}; }
+.broll-label, .list-checkbox.checked { color: #${c.broll}; }
+.list-checkbox { display: inline-block; width: 10pt; height: 10pt; border: 0.8pt solid #${c.faint}; font: bold 9pt/9pt sans-serif; text-align: center; }
+.packing-key { display: flex; flex-wrap: wrap; gap: 8pt; font-size: 8pt; margin-bottom: 10pt; }
+.packing-key > span + span { border: 0.5pt solid #${c.faint}; padding: 1pt 3pt; }
+.packing-status { display: flex; gap: 1pt; margin: 3pt 0; }
+.packing-status > span { flex: 1; height: 5pt; border: 0.5pt solid #${c.faint}; }
+.packing-status .filled { background: #${c.audio}; }
+.packing-status.have .filled { background: #${c.dim}; }
+.packing-status.returned .filled { background: #${c.faint}; }
+.packing-signatures { break-inside: avoid; margin-top: 30pt; }
+.packing-signatures p { display: flex; gap: 8pt; align-items: baseline; margin-bottom: 18pt; }
+.signature-line { flex: 1; border-bottom: 0.75pt solid #${c.borderStrong}; }
+.list-group th { font-size: 10pt; color: #${c.text}; padding-top: 14pt; break-after: avoid; }
+.status-mark { display: inline-block; width: 6pt; height: 6pt; border: 0.75pt solid #${c.faint}; border-radius: 50%; margin-right: 4pt; }
+.status-mark.sourcing { background: linear-gradient(90deg, #${c.audio} 50%, transparent 50%); }
+.status-mark.have { background: #${c.text}; }
+.status-mark.returned { border-style: double; }
+.shot-table { font-size: 8pt; }
+.shot-table th { font-size: 7pt; }
+.shot-done > td:nth-child(3) { color: #${c.faint}; }
+.shot-flag { color: #C4302A; }
+.writing-lines { min-height: 24pt; background: repeating-linear-gradient(to bottom, transparent 0 11pt, #${c.borderStrong} 11pt 11.5pt, transparent 11.5pt 12pt); }
+@page shot-list { size: letter landscape; }
+@media print { section:has(.shot-list) { page: shot-list; } }
 @media screen { body { padding: 24px; } }
 @media print { html { print-color-adjust: exact; -webkit-print-color-adjust: exact; } main { max-width: none; } }
 </style></head><body><main>${sections.map((section) =>
