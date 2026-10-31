@@ -11,6 +11,16 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since the 4.0 beta
 
+- **Section headers** group scenes without changing their running order.
+  At the start of a scene after a header, press Backspace once to show
+  “Press Backspace again to remove the section header”. Press it again
+  within two seconds, without another key, click or caret move, to remove
+  only the header. The scenes join the section above, or become unsectioned
+  at the top. A further Backspace joins scenes normally. Delete at the end
+  of the preceding scene works the same way. Other input, a caret move or
+  waiting two seconds cancels the hint. Undo restores the header and its
+  name in one step.
+
 - **Collaboration and server scripts are gone for now.** Live
   collaboration, invite and share links, opening and saving scripts on a
   Splitpage server, hosting from the desktop app, and Google Drive are

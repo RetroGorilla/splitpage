@@ -9,6 +9,7 @@ import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats, RowSide } from "./rows.ts";
 import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWins, mergeTitle } from "./scalars.ts";
 import { listShapedSide } from "./shape.ts";
+import { mergeSections, sectionMergeOrder } from "./sections.ts";
 import { textMergeContext } from "./text-field.ts";
 import type { MergeDecoder } from "./text-field.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
@@ -77,6 +78,10 @@ const STRATEGY_TABLE: Record<StrategyId, FieldStrategy> = {
     const tl = mergeTargetLength(run.base, run.mine, run.theirs);
     if (tl !== null) run.out[f.key] = tl;
   },
+  "sections": function (f, run) {
+    const sections = mergeSections(run.base, run.mine, run.theirs, run.rows);
+    if (sections) run.out[f.key] = sections;
+  },
   "constant": function (f, run) { run.out[f.key] = SCHEMA_VERSION; }
 };
 
@@ -102,7 +107,8 @@ export function mergeStateFields(baseSide: ValidatedDocument | null | undefined,
   const mergedTags = listMerger(tagField)(base && base.productionTags, mine.productionTags, theirs.productionTags, survives);
   const textCtx = textMergeContext(ports.decode, base, mine, theirs, mergedTags as TagEntry[]);
 
-  const rows = mergeRows(base, mine, theirs, { text: textCtx, conflicts: conflicts, stats: stats, clock: ports.clock, editor: ports.editor });
+  const rows = sectionMergeOrder(base, mine, theirs,
+    mergeRows(base, mine, theirs, { text: textCtx, conflicts: conflicts, stats: stats, clock: ports.clock, editor: ports.editor }));
   const comments = mergeComments(base, mine, theirs);
   const title = mergeTitle(base, mine, theirs, conflicts);
   conflicts.forEach(function (c) { comments.push(conflictComment(c, ports)); });
