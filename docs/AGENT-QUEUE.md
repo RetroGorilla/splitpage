@@ -417,7 +417,7 @@ STRUCTURE SECTION MUST SAY
 - The new scenarios, how setup is shared with the existing ones, the measured median/worst per scenario against the 65 ms budget, and a clear verdict: fine, or over budget with the cause.
 ```
 
-## AQ-19 [ ] Drop the storage re-exports
+## AQ-19 [x] Drop the storage re-exports
 
 Needs: AQ-15 merged.
 Files: src/adapters/storage/02d-gallery.js, 02c-blobs.js, importers, tools/dep-report.mjs.
