@@ -25,3 +25,28 @@
   }
   #gdoc-url-input::placeholder { font-family: var(--font-display); }
   #gdoc-url-input:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .import-split-group { display: flex; gap: var(--space-14); font-family: var(--font-body); font-size: 13px; color: var(--text-dim); }
+  .import-split-group label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .modal-preview {
+    margin-top: var(--space-12);
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 9px var(--space-12);
+    line-height: 1.5;
+  }
+  .import-replace-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-dim); cursor: pointer; }
+  .import-scan-group { margin-top: var(--space-12); }
+  .import-scan-title {
+    font-family: var(--font-body); font-size: 13px; font-weight: 600;
+    color: var(--text-dim); margin-bottom: 7px;
+  }
+  .import-scan-toggle {
+    display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 7px;
+    font-size: 13px; color: var(--text-dim); cursor: pointer; padding: var(--space-2) 0;
+  }
+  .import-scan-toggle input { margin: 0; }
+  .import-scan-hint { grid-column: 2; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
