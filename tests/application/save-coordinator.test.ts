@@ -194,7 +194,7 @@ function steps(log: string[]): SaveLanding {
   return { current: function () { log.push("current"); }, obsolete: function () { log.push("obsolete"); } };
 }
 
-test("one decision: a landing reported while the save owns its place is acknowledged there, runs the current steps once, and a later move cannot undo it", async () => {
+test("one decision: a landing reported while the save owns its place is acknowledged there and runs the current steps once; a later move is still reported", async () => {
   const w = world();
   w.coordinator.noteChange();
   const done = w.coordinator.request({ kind: "save" });
@@ -209,9 +209,10 @@ test("one decision: a landing reported while the save owns its place is acknowle
   assert.deepEqual(log, ["current:1"], "a second report runs nothing");
   w.epoch++;
   nth(w, 0).answer(SAVED);
-  assert.deepEqual(await done, { kind: "saved", acknowledged: true });
-  assert.deepEqual(w.obsolete, [], "a save decided current is not reported obsolete afterwards");
-  assert.equal(w.coordinator.confirmed().generation, 1);
+  assert.deepEqual(await done, { kind: "obsolete", here: true }, "a reopen before the writer answers is still a late save");
+  assert.deepEqual(w.obsolete.map(function (o) { return o.here; }), [true]);
+  assert.equal(w.coordinator.confirmed().generation, 1, "the acknowledgement decided at the landing stands");
+  assert.deepEqual(log, ["current:1"], "and no other step runs");
 });
 
 test("one decision: a landing reported after the save lost its place runs only the obsolete steps and is reported once", async () => {

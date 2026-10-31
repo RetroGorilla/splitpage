@@ -74,6 +74,7 @@ interface World {
   picks: (FileSaveTarget | { readonly kind: "cancelled" } | Error)[];
   historyHangs: boolean;
   onRemember: (() => void) | null;
+  onToast: ((message: string) => void) | null;
 }
 
 function world(): World {
@@ -89,7 +90,8 @@ function world(): World {
     confirms: [],
     picks: [],
     historyHangs: false,
-    onRemember: null
+    onRemember: null,
+    onToast: null
   };
   const shown = fakeNotices().notices;
   let coordinator: SaveCoordinator<FileSaveRequest, unknown> | null = null;
@@ -172,7 +174,7 @@ function world(): World {
       changes: () => live().changes()
     },
     notices: {
-      show: (message, kind, sticky) => { w.toasts.push(message); return shown.show(message, kind, sticky); },
+      show: (message, kind, sticky) => { w.toasts.push(message); w.onToast?.(message); return shown.show(message, kind, sticky); },
       imagesLeftOut: () => {}
     },
     preferences: { editorName: () => "Adam", autosave: () => false },
@@ -191,10 +193,10 @@ function world(): World {
   return built;
 }
 
-function open(w: World, target: Disk, docId: string, audio: string): Home {
+function open(w: World, target: Disk, docId: string, audio: string, readAt = target.lastModified): Home {
   w.epoch++;
   w.doc = script(docId, audio);
-  const home = w.location.setHome("file", { handle: target, format: "splitpage", name: target.name, lastModified: target.lastModified, diskBase: cloneState(w.doc) });
+  const home = w.location.setHome("file", { handle: target, format: "splitpage", name: target.name, lastModified: readAt, diskBase: cloneState(w.doc) });
   w.location.markWrittenOut(true);
   w.coordinator.confirmBaseline(cloneState(w.doc));
   w.coordinator.confirmClean();
@@ -543,7 +545,28 @@ test("history that never resolves: a forked Save As still settles saved, and a f
   assert.equal(v.coordinator.running(), false);
 });
 
-test("one decision: a Save As decided current when it landed stays saved when the document moves before the writer answers", async () => {
+test("same-file reopen after the landing: an open of the same file that adopts bytes it read earlier, before the writer answers, still gets the late-save warning", async () => {
+  const w = world();
+  const a = disk("a.splitpage");
+  open(w, a, OLD_ID, "One.");
+  edit(w, "Before.");
+  const readEarlier = a.lastModified;
+  let reopened: Home | null = null;
+  w.onToast = (message) => {
+    if (message !== "Saved to a.splitpage" || reopened) return;
+    reopened = open(w, a, OLD_ID, "One.", readEarlier);
+  };
+  assert.deepEqual(await request(w, "save"), { kind: "obsolete", here: true });
+  assert.equal(w.location.home(), reopened);
+  assert.ok(a.text.includes("Before."), "the bytes landed");
+  assert.deepEqual(w.toasts, ["Saved to a.splitpage", obsoleteSaveText("Pilot")]);
+  assert.deepEqual(snapshot(w), {
+    docId: OLD_ID, rev: 2, audio: "One.", home: "a.splitpage", lastModified: 1000, diskBase: "One.", writtenOut: true,
+    baseline: "One.", baselineId: OLD_ID, generation: 1, changes: 1, dirty: false, unsaved: false
+  });
+});
+
+test("one decision: a Save As decided current when it landed is complete there, and a move before the writer answers is still judged obsolete elsewhere", async () => {
   const w = world();
   const a = disk("a.splitpage");
   const b = disk("b.splitpage");
@@ -552,14 +575,14 @@ test("one decision: a Save As decided current when it landed stays saved when th
   w.picks.push({ kind: "handle", handle: b, picked: true });
   const copyHome: Home[] = [];
   w.onRemember = () => { copyHome.push(w.location.home()); open(w, a, OLD_ID, "One."); };
-  assert.deepEqual(await request(w, "saveAs"), { kind: "saved", acknowledged: true });
+  assert.deepEqual(await request(w, "saveAs"), { kind: "obsolete", here: false });
   const [picked] = copyHome;
   assert.ok(picked);
   assert.equal(w.coordinator.confirmed(picked).generation, 1, "the copy's file was confirmed when the write landed");
   assert.equal(audioOf(w.coordinator.confirmed(picked).baseline), "Copied.");
   assert.equal((w.coordinator.confirmed(picked).baseline as Scripted).docId, NEW_ID);
   assert.deepEqual(w.history, [OLD_ID + ">" + NEW_ID]);
-  assert.deepEqual(w.toasts, ["Saved a new copy: b.splitpage"], "no late-save notice for a save that was current when it landed");
+  assert.deepEqual(w.toasts, ["Saved a new copy: b.splitpage"], "the reopened file is not where the copy landed, so no late-save notice");
   assert.deepEqual(snapshot(w), {
     docId: OLD_ID, rev: 2, audio: "One.", home: "a.splitpage", lastModified: 1000, diskBase: "One.", writtenOut: true,
     baseline: "One.", baselineId: OLD_ID, generation: 1, changes: 1, dirty: false, unsaved: false
