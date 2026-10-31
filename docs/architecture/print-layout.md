@@ -3,11 +3,14 @@
 AQ-40 and AQ-41 implement roadmap C6 P1 and P2. AQ-43 wires these layouts to
 browser PDF actions through a separate print-dialog adapter, and AQ-42 (P3)
 prints the same pages to PDF files on desktop with Electron's `printToPDF`.
-No live path calls the old PDF builders any more; that generator and its unit
-tests remain until P5. The layout modules themselves do not open a window,
-print, register an exporter, resolve assets, or read a session or preference.
+AQ-44 (P5) deleted the old PDF generator, its font layer, TrueType subsetter
+and bundled Noto fonts ([below](#old-generator-removal-p5)). The layout
+modules themselves do not open a window, print, register an exporter, resolve
+assets, or read a session or preference.
 
 ## Existing PDF content inventory
+
+P1's record of what the old `buildPdf` printed; that writer was deleted in P5.
 
 | Output in `buildPdf` | Captured input and existing projection | P1 destination |
 | --- | --- | --- |
@@ -78,7 +81,8 @@ headers, section page breaks, image bounds, list marks and wrapping.
 | `buildShotListPdf` | `all`, `unshot`, `flagged`, `shot`; group by `scene`, `location`, `person`; invalid values fall back to all/scene; added shots and missing location/person groups retained | Done, Scene/start, B-roll shot/name/description/audio reference, Location, Props with status, Assigned, Flagged/note, Notes; grouping field omitted from redundant cells | Grey completed rows, Done checkbox and dimmed shot names; flag mark; ruled notes space; whole-capture shot/flag summary even when filtered; projected scope and group counts; captured title/day | Standalone landscape shot section/page, including "No shots to list." for empty/filtered-empty results |
 | `shotListAppendixPages` from `buildPdf` | All shots by scene, regardless of panel settings; omitted when empty | Same eight columns and row details as standalone shot list | Same marks, counts and notes space; no repeated title/date at appendix heading, since script supplies them | Landscape shot appendix between production breakdown and comments |
 
-No old list output is removed or modified. Standalone packing pages retain
+P2 removed or modified no old list output; P5 later deleted the old list
+writers with the rest of the generator. Standalone packing pages retain
 their signatures; the script retains its all-category breakdown rather than
 adding standalone-only packing signatures. The standalone shot page preserves
 the captured calendar date through `exportDateText(exportDay(doc))`, including
@@ -135,8 +139,8 @@ The script status-count key explains the grey rows. Footer titles can ellipsize;
 remains in the heading and document title.
 
 Bookmarks are desktop-only (P3, from the page's headings). Browser users choose
-“Save as PDF” from their print dialog through P4. The old generator stays until
-P5 and the PC PDF check.
+“Save as PDF” from their print dialog through P4. Adam checked the browser and
+desktop PDFs on his PC on 2026-10-31, and P5 deleted the old generator.
 
 P2 preserves portrait packing/breakdown and landscape Letter shot pages through
 a named CSS page. The shared 0.6-inch margins replace the old packing 0.75-inch
@@ -176,6 +180,7 @@ file-delivery path; since P3 the desktop branch of the same port prints
 through `desktop-pdf.ts` (below). The shared registry's optional
 `printPage(request)` accepts the captured document, held assets and options;
 AQ-42 can consume the same providers without changing the browser adapter.
+Since P5 the four PDF exporters have a `printPage` and no `build`.
 
 | Action | Captured input/options | Previous browser result | P4 result |
 | --- | --- | --- | --- |
@@ -233,11 +238,11 @@ Roadmap C6 explicitly authorizes the browser workflow and Chromium pagination
 differences. INV-57's shared facts and capture rules remain. For INV-60,
 Splitpage's browser HTML remains deterministic for a captured day; the browser
 controls saved-PDF metadata and bytes, so byte equality is no longer promised
-for its PDF file. INV-61's exact artifact syntax and old PDF bookmarks remain
-tested on the old generator, without being claimed for browser output. Adam
-must check real dialog cancellation, saved PDFs, fonts, page breaks and footers
-on his PC before merging P4 or removing the old writer in P5. That check and
-independent review are pending; this PR must not be merged by a queue agent.
+for its PDF file. INV-61's exact artifact syntax and old PDF bookmarks were
+tested on the old generator, without being claimed for browser output; P5
+deleted that generator, and its tests wait for Adam's decision. Adam checked
+real dialog cancellation, saved PDFs, fonts, page breaks and footers on his PC
+before P5 (browser and desktop, 2026-10-31).
 
 ## Desktop printToPDF (P3)
 
@@ -295,7 +300,7 @@ differences above, which now apply to desktop too:
 - `/Creator (Chromium)` and `/Producer (Skia/PDF …)` replace `Splitpage`.
   Dates are midnight of the captured day with its offset, not a date only.
   The PDF is tagged.
-- The computer's fonts replace the bundled Noto fonts, so the old warning
+- The computer's fonts replace the bundled Noto fonts (deleted in P5), so the old warning
   about characters the PDF could not show is not raised for PDFs. Chromium
   falls back through system fonts instead.
 - The footer is not an `/Artifact`, so text extraction includes it (INV-61
@@ -325,6 +330,33 @@ split long rows, landscape pages and footers. After the printed-layout rules
 merged, the same 18 pages printed by `print-pdf.js` passed `checkPrintedLayout`
 rules a–g against the inspector's page models, with five oversized rows split
 as permitted.
+
+## Old generator removal (P5)
+
+P5 deleted `src/adapters/formats/pdf.ts` (the hand-drawn PDF writer),
+`pdf-unicode.ts`, `truetype.ts`, the three Noto font modules under
+`pdf-fonts/`, `tools/pdf-font-module.mjs` and `licenses/` (whose only
+notices were those fonts). No output or workflow changed: every PDF action
+already reached a print page through `pdfPrint` (browser when the desktop is
+absent, desktop otherwise), so the old builders had no caller left.
+
+The four PDF exporters (`pdf`, `packing-gear`, `packing-prop`, `b-roll pdf`)
+register only a `printPage`. `build` is optional in the registry, which
+refuses an exporter that has neither. `buildFileData` (`local-files.js`)
+refuses a print-only kind; its other callers, import write-back and "save a
+separate copy", only ask for an imported file's own kind (`.docx`, `.md`,
+`.txt`, `.csv`). The export dialog's `printWorkflow` still reads the desktop
+presence, for wording only: the browser says "Print dialog · choose Save as
+PDF", the desktop shows the file name it saves. The unshown-character
+diagnostic (`ExportDiagnostics.unshownCharacters`) stays in the registry and
+`buildFileData`, but no built-in exporter reports it any more.
+
+The old generator's unit tests stay in the tree, unchanged, until Adam
+decides on each one; they fail at import. The AQ-44 PR lists every one and
+where the print path covers the same behaviour.
+`src/test/print-capture-app.test.mjs` checks that the four products build no
+file bytes, and that a script print whose picture reads are held keeps the
+captured pictures in their places when the document and its pictures change.
 
 ## Fixtures and validation
 
