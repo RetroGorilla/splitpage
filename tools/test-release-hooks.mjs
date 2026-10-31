@@ -2,18 +2,14 @@ import { appJs } from "../build.mjs";
 import { STILL_IN_RELEASE, hookNames, leakedHooks } from "./release-hooks.mjs";
 
 const APPROVED = Object.freeze([
-  "__annotateTest",
   "__blobsTest",
-  "__brollTest",
-  "__renderTest",
-  "__rundownTest",
-  "__sceneSelectTest",
-  "__targetTest",
-  "__videoTest"
+  "__renderTest"
 ]);
 
 const CONVERTED = Object.freeze([
+  "__annotateTest",
   "__appDataTest",
+  "__brollTest",
   "__cacheTest",
   "__commandTest",
   "__desktopTest",
@@ -22,11 +18,15 @@ const CONVERTED = Object.freeze([
   "__fileMenuTest",
   "__historyTest",
   "__prompterTest",
+  "__rundownTest",
   "__saveStatusTest",
+  "__sceneSelectTest",
   "__settingsTest",
   "__splitpageFormats",
+  "__targetTest",
   "__undoTest",
-  "__updateTest"
+  "__updateTest",
+  "__videoTest"
 ]);
 
 const FAKE_DESKTOP = Object.freeze(["_failNextDraftWrites", "_blobFailNext", "0.0.0-test"]);
@@ -49,7 +49,7 @@ console.log("\nthe hook scan:\n");
 eq("names are found once each and sorted", hookNames("window.__bTest=1;a.__aTest;window.__bTest"), ["__aTest", "__bTest"]);
 eq("a longer name is not a hook name", hookNames("__historyTester __history"), []);
 eq("the formats global is a hook name too", hookNames("window.__splitpageFormats.state();a.__splitpageFormatsX"), ["__splitpageFormats"]);
-eq("a hook outside the list is leaked", leakedHooks("window.__newThingTest=1;window.__videoTest=1"), ["__newThingTest"]);
+eq("a hook outside the list is leaked", leakedHooks("window.__newThingTest=1;window.__blobsTest=1"), ["__newThingTest"]);
 eq("the list is sorted with no repeats", [...new Set(STILL_IN_RELEASE)].sort(), [...STILL_IN_RELEASE]);
 eq("the list adds no hook and brings none back: every name is in the approved snapshot", STILL_IN_RELEASE.filter((name) => !APPROVED.includes(name)), []);
 eq("a converted hook leaves the approved snapshot too, so it cannot come back later", APPROVED.filter((name) => !STILL_IN_RELEASE.includes(name)), []);
