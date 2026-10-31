@@ -8,7 +8,7 @@ import { settingsAppData } from "../application/preferences/preferences.ts";
 import { preferences } from "../bootstrap/wiring/preferences-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
-import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../adapters/storage/02d-gallery.js";
+import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import videoEmbed from "../../shared/video-embed.js";
 import { loadTestDocument } from "./_document.mjs";

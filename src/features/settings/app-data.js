@@ -1,5 +1,6 @@
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { settingsAppData } from "../../application/preferences/preferences.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 export function mountAppData(ports) {
 
@@ -347,17 +348,19 @@ async function onImportAppDataChosen(e) {
   }
 }
 
-  window.__appDataTest = {
-    build: buildAppDataBundle,
-    assertNoSecrets: assertNoSecrets,
-    parse: parseAppDataBundle,
-    importText: importAppData,
-    summary: function () { return appDataLastSummary; },
-    exportFile: exportAppData,
-    exportSummary: function () { return appDataLastExport; },
-    useBlobBackend: function (backend) { ports.useBlobBackend(backend || null); return true; }
-  };
-  var probe = window.__appDataTest;
+  var withdrawHook = null;
+  exposeTestHook("__appDataTest", function () {
+    return {
+      build: buildAppDataBundle,
+      assertNoSecrets: assertNoSecrets,
+      parse: parseAppDataBundle,
+      importText: importAppData,
+      summary: function () { return appDataLastSummary; },
+      exportFile: exportAppData,
+      exportSummary: function () { return appDataLastExport; },
+      useBlobBackend: function (backend) { ports.useBlobBackend(backend || null); return true; }
+    };
+  }, function (withdraw) { withdrawHook = withdraw; });
   var disposed = false;
   return {
     exportAppData: function () { if (!disposed) return exportAppData(); },
@@ -368,7 +371,7 @@ async function onImportAppDataChosen(e) {
       if (appDataInput) appDataInput.removeEventListener("change", onImportAppDataChosen);
       appDataInput = null;
       appDataInputWired = false;
-      if (window.__appDataTest === probe) delete window.__appDataTest;
+      if (withdrawHook) withdrawHook();
     }
   };
 }

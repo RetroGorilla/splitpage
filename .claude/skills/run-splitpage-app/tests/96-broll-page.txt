@@ -18,6 +18,7 @@
 # The phone layout is 97-broll-page-phone.txt. Every `eval` is one line.
 
 open
+eval (async function(){window.PrintCapture=(await import('/tests/adapters/print/capture-browser-print.js')).captureBrowserPrint();return true;})()
 wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){ try { localStorage.removeItem('splitpage-broll-view'); } catch (e) {} window.__blobs = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function(b){ window.__blobs.push(b); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function(){ if (this.download) return; return c.apply(this, arguments); }; return true; })()
 eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = {"schema": 2, "title": "Harbour town", "rows": [{"id": "r1", "visualText": "Host at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Harbour\" contenteditable=\"false\">harbour</span> wall.<br><span class=\"broll-key\" data-broll-id=\"bs1\" contenteditable=\"false\">B-roll:</span> gulls wheeling over the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Fishing nets\" contenteditable=\"false\">nets</span><br>wide, then tight on one bird<br><span class=\"broll-key\" data-broll-id=\"bs2\" contenteditable=\"false\">B-roll:</span> boats coming in at dawn", "audioText": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "status": "todo"}, {"id": "r2", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs3\" contenteditable=\"false\">B-roll:</span> steam off the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> in the caf\u00e9 window", "audioText": "Inside, the caf\u00e9 has been open since five, and the kettle has not stopped once.", "status": "todo"}, {"id": "r3", "visualText": "Interview, two shot.<br><span class=\"broll-key\" data-broll-id=\"bs4\" contenteditable=\"false\">B-roll:</span> hands mending a net<br><span class=\"broll-key\" data-broll-id=\"bs5\" contenteditable=\"false\">B-roll:</span> the ice machine at the market", "audioText": "Mara has mended nets on this quay for thirty years.", "status": "todo"}, {"id": "r4", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs6\" contenteditable=\"false\">B-roll:</span> the lighthouse at blue hour", "audioText": "And when the light goes, the lighthouse takes over.", "status": "todo"}], "people": [{"id": "p1", "name": "Jordan Sato"}, {"id": "p2", "name": "Ada Brenner"}], "productionTags": [{"cat": "prop", "name": "Fishing nets", "status": "have"}, {"cat": "prop", "name": "Kettle", "status": "sourcing"}, {"cat": "prop", "name": "Drone", "status": "needed"}, {"cat": "location", "name": "Harbour"}, {"cat": "location", "name": "Fish market"}], "brollShots": [{"id": "bs1", "name": "gulls wheeling over the nets", "status": "shot", "location": "Harbour", "owner": "p1", "audioRef": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "props": [{"name": "Drone"}]}, {"id": "bs2", "name": "boats coming in at dawn", "status": "unshot", "reshoot": true, "notes": "Too late last time, the light was gone.", "location": "Harbour", "owner": "p2"}, {"id": "bs3", "name": "steam off the kettle in the caf\u00e9 window", "status": "shot", "location": "Caf\u00e9", "owner": "p1"}, {"id": "bs4", "name": "hands mending a net", "status": "unshot", "location": "Harbour", "props": [{"name": "Fishing nets"}]}, {"id": "bs5", "name": "the ice machine at the market", "status": "unshot", "location": "Fish market", "owner": "p2"}, {"id": "bs6", "name": "the lighthouse at blue hour", "status": "shot", "location": "Headland"}, {"id": "bs7", "name": "Establisher of the street, blue hour", "status": "unshot", "origin": "list"}, {"id": "bs8", "name": "Crowd at the fish auction", "status": "unshot", "origin": "list", "location": "Fish market", "notes": "Ask the harbourmaster first."}], "comments": []}; F.openFile(new File([JSON.stringify(doc)], 'harbour.splitpage')); return true; })()
@@ -116,21 +117,22 @@ expect window.__csv[8].indexOf(',Establisher of the street, blue hour') === -1 &
 # ---- 6. Print: a PDF of the list as shown -------------------------------
 click #broll-page [data-action="broll-page-print"]
 wait window.__blobs.length === 2
-eval (async function(){ window.__pdf = new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[1].arrayBuffer())); return window.__pdf.length; })()
-expect window.__blobs[1].type === 'application/pdf'
-expect window.__pdf.indexOf('%PDF') === 0
+eval (async function(){ window.__pdf = await window.__blobs[1].text(); return window.__pdf.length; })()
+expect window.__blobs[1].type === 'text/html'
+expect window.__pdf.indexOf('<!doctype html>') === 0
 expect window.__pdf.indexOf('B-roll shot list') !== -1
-expect window.__pdf.indexOf('(Ada Brenner) Tj') !== -1 && window.__pdf.indexOf('(Jordan Sato) Tj') !== -1
+expect window.__pdf.indexOf('Ada Brenner') !== -1 && window.__pdf.indexOf('Jordan Sato') !== -1
 expect window.__pdf.indexOf('hands mending a net') !== -1
 # the sheet's head, landscape, the table's columns, a shot's scene and
 # where it starts in the Scene column, "Flagged" in sentence case (never
 # "FLAGGED") with its reason (the note) under it, the footer
-expect window.__pdf.indexOf('(B-roll shot list) Tj') !== -1 && window.__pdf.indexOf('(Harbour town) Tj') !== -1
-expect window.__pdf.indexOf('/MediaBox [0 0 792 612]') !== -1 && window.__pdf.indexOf('(Notes) Tj') !== -1
-expect window.__pdf.indexOf('(01) Tj') !== -1 && window.__pdf.indexOf('(00:00) Tj') !== -1
-expect window.__pdf.indexOf('(Flagged) Tj') !== -1 && window.__pdf.indexOf('light was gone.) Tj') !== -1
+expect window.__pdf.indexOf('B-roll shot list') !== -1 && window.__pdf.indexOf('Harbour town') !== -1
+expect window.__pdf.indexOf('@page shot-list { size: letter landscape; }') !== -1 && window.__pdf.indexOf('Notes') !== -1
+eval (function(){var doc=new DOMParser().parseFromString(window.__pdf,'text/html');var row=Array.from(doc.querySelectorAll('.shot-table tr')).find(function(r){return r.cells[2]&&r.cells[2].querySelector('strong')?.textContent==='gulls wheeling over the nets';});window.__printedScene=row&&row.cells[1];return !!__printedScene;})()
+expect __printedScene.firstChild.textContent.trim() === '01' && __printedScene.querySelector('.scene-meta').textContent === '00:00'
+expect window.__pdf.indexOf('Flagged') !== -1 && window.__pdf.indexOf('light was gone.') !== -1
 expect window.__pdf.indexOf('FLAGGED') === -1
-expect window.__pdf.indexOf('(Page 1 of 1) Tj') !== -1
+expect window.__pdf.indexOf('counter(page)') !== -1
 
 # ---- 7. dark mode takes the dark tokens --------------------------------
 eval document.documentElement.setAttribute('data-theme', 'dark')
@@ -159,4 +161,5 @@ wait document.activeElement && document.activeElement.closest && !!document.acti
 
 shot 96-broll-page
 
+expect PrintCapture.pages.length > 0 && PrintCapture.pages.every(function(p){return p.closed;})
 quit

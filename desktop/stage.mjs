@@ -7,10 +7,11 @@ import { leakedHooks } from "../tools/release-hooks.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 const STAGE_DIR = resolve(__dirname, ".stage", "splitpage");
+const TEST_BUILD = process.argv.includes("--test");
 
-console.log("Building app (running build.mjs)...");
+console.log(`Building app (running build.mjs${TEST_BUILD ? " --test" : ""})...`);
 await new Promise((resolve, reject) => {
-  const build = spawn(process.execPath, ["build.mjs"], {
+  const build = spawn(process.execPath, TEST_BUILD ? ["build.mjs", "--test"] : ["build.mjs"], {
     cwd: REPO_ROOT,
     stdio: "inherit"
   });
@@ -68,7 +69,10 @@ for (const [from, filename] of files) {
 }
 
 const leaked = leakedHooks(await fs.readFile(resolve(STAGE_DIR, "index.html"), "utf8"));
-if (leaked.length) {
+if (TEST_BUILD) {
+  if (!leaked.length) throw new Error("The staged index.html has no test hooks; stage --test expects the test build.");
+  console.log(`  test build staged (${leaked.length} hooks a release build leaves out); package it into dist-test/ only, never publish it`);
+} else if (leaked.length) {
   throw new Error(`The staged index.html exposes test hooks (${leaked.join(", ")}); stage a release build (node build.mjs, no --test).`);
 }
 

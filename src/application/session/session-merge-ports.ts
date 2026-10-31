@@ -33,7 +33,7 @@ export interface SessionMergeSession {
   readonly holdMergeBase: (next: ValidatedDocument | null) => void;
   readonly noteMerged: DocumentSession["absorbMerged"];
   readonly noteRecovery: DocumentSession["absorbRecovery"];
-  readonly noteServerUpdate: DocumentSession["absorbServer"];
+  readonly noteDiskUpdate: DocumentSession["absorbDisk"];
   readonly noteAbsorbedDirty: DocumentSession["settle"];
 }
 
