@@ -6,6 +6,7 @@ import {
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { leakedHooks } from "./release-hooks.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const VERSION = readFileSync(join(ROOT, "VERSION"), "utf8").trim();
@@ -49,6 +50,12 @@ for (const [rel] of FILES) {
   const to = join(STAGE, rel);
   mkdirSync(dirname(to), { recursive: true });
   cpSync(from, to);
+}
+
+const leaked = leakedHooks(readFileSync(join(STAGE, "index.html"), "utf8"));
+if (leaked.length) {
+  console.error(`index.html exposes test hooks (${leaked.join(", ")}) — not packaging.`);
+  process.exit(1);
 }
 
 const MANIFEST_NAME = ".splitpage-release.json";

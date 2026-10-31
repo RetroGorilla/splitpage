@@ -36,7 +36,7 @@ A PR that moves code keeps the bugs it moves. Each one is filed as an issue and 
   - changes to `02-state.js` or its shim, `build.mjs`, or the test harness or driver
   - any change where the affected suites can't be chosen with confidence
 - **Desktop smoke locally** when `desktop/` or main-process code changes.
-- **Desktop smoke groups locally** when renderer code that the desktop app relies on changes. Run each matching group with `node desktop/test/smoke.mjs --only-target dev --only-group "<group>"`, after `node build.mjs`. The group is a case-insensitive substring of the group names. This rule exists because #351 changed only `src/legacy/share-actions.ts`, yet broke opening a second server's document in a desktop tab (#361), and nothing ran the smoke until a later desktop PR.
+- **Desktop smoke groups locally** when renderer code that the desktop app relies on changes. Run each matching group with `node desktop/test/smoke.mjs --only-target dev --only-group "<group>"`, after `node build.mjs --test`. The group is a case-insensitive substring of the group names. This rule exists because #351 changed only `src/legacy/share-actions.ts`, yet broke opening a second server's document in a desktop tab (#361), and nothing ran the smoke until a later desktop PR.
 
   | Change touches | Groups |
   |---|---|

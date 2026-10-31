@@ -34,7 +34,7 @@ jobs:
         run: npm ci
 
       - name: Build index.html and stamp sw.js
-        run: node build.mjs
+        run: node build.mjs --test
 
       - name: Select persistent Chromium cache
         run: |

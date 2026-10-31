@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { appCss } from "./tools/css-inputs.mjs";
+import { isMain } from "./tools/main-module.mjs";
+import { leakedHooks } from "./tools/release-hooks.mjs";
 
 let esbuild;
 try {
@@ -17,7 +19,7 @@ const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
 
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-function appJs() {
+export function appJs(testHooks) {
   const result = esbuild.buildSync({
     entryPoints: [join(ROOT, "src", "bootstrap", "main.ts")],
     bundle: true,
@@ -27,6 +29,7 @@ function appJs() {
     legalComments: "none",
     absWorkingDir: ROOT,
     logLevel: "warning",
+    define: { SPLITPAGE_TEST_HOOKS: testHooks ? "true" : "false" },
     write: false
   });
   if (result.outputFiles.length !== 1) {
@@ -226,6 +229,10 @@ function helpHtml() {
 
 const version = () => readFileSync(join(ROOT, "VERSION"), "utf8").trim();
 
+const TEST_BUILD = process.argv.includes("--test");
+const VARIANT = TEST_BUILD ? "test build" : "release build";
+const BUILD_COMMAND = TEST_BUILD ? "node build.mjs --test" : "node build.mjs";
+
 const PARTS = [
   ["{{VERSION}}", version],
   ["{{SEED_CHECK}}", seedCheckValue],
@@ -233,7 +240,7 @@ const PARTS = [
   ["{{SEED_STATE}}", () => src("seed-state.json")],
   ["{{HELP_TOC}}", () => helpHtml().toc],
   ["{{HELP_HTML}}", () => helpHtml().html],
-  ["//{{APP_JS}}", appJs]
+  ["//{{APP_JS}}", () => appJs(TEST_BUILD)]
 ];
 
 const CSP_DIRECTIVES = (scriptHash) => [
@@ -298,38 +305,48 @@ function build() {
   return html.split("{{CSP}}").join(buildCsp(html));
 }
 
-const out = join(ROOT, "index.html");
-const built = build();
-const swOut = join(ROOT, "sw.js");
-const swBuilt = buildSw();
+function main() {
+  const out = join(ROOT, "index.html");
+  const built = build();
+  const swOut = join(ROOT, "sw.js");
+  const swBuilt = buildSw();
 
-if (process.argv.includes("--check")) {
-  let stale = false;
-  const current = existsSync(out) ? readFileSync(out, "utf8") : null;
-  if (current === null) {
-    console.error("index.html has not been built yet — run `node build.mjs`");
-    stale = true;
-  } else if (current === built) {
-    console.log("index.html is up to date with src/ (" + Buffer.byteLength(built) + " bytes)");
-  } else {
-    console.error("index.html does NOT match src/ — run `node build.mjs`");
-    console.error("  built:   " + Buffer.byteLength(built) + " bytes");
-    console.error("  on disk: " + Buffer.byteLength(current) + " bytes");
-    stale = true;
+  const leaked = TEST_BUILD ? [] : leakedHooks(built);
+  if (leaked.length) {
+    console.error("the release build exposes test hooks: " + leaked.join(", ") + " (see tools/release-hooks.mjs)");
+    process.exit(1);
   }
-  const swCurrent = readFileSync(swOut, "utf8");
-  if (swCurrent === swBuilt) {
-    console.log("sw.js is stamped with VERSION (cache " + swCacheName(swBuilt) + ")");
-  } else {
-    console.error("sw.js's cache name does NOT match VERSION — run `node build.mjs`");
-    console.error("  built:   " + swCacheName(swBuilt));
-    console.error("  on disk: " + swCacheName(swCurrent));
-    stale = true;
+
+  if (process.argv.includes("--check")) {
+    let stale = false;
+    const current = existsSync(out) ? readFileSync(out, "utf8") : null;
+    if (current === null) {
+      console.error("index.html has not been built yet — run `" + BUILD_COMMAND + "`");
+      stale = true;
+    } else if (current === built) {
+      console.log("index.html is up to date with src/ (" + VARIANT + ", " + Buffer.byteLength(built) + " bytes)");
+    } else {
+      console.error("index.html does NOT match src/ as a " + VARIANT + " — run `" + BUILD_COMMAND + "`");
+      console.error("  built:   " + Buffer.byteLength(built) + " bytes");
+      console.error("  on disk: " + Buffer.byteLength(current) + " bytes");
+      stale = true;
+    }
+    const swCurrent = readFileSync(swOut, "utf8");
+    if (swCurrent === swBuilt) {
+      console.log("sw.js is stamped with VERSION (cache " + swCacheName(swBuilt) + ")");
+    } else {
+      console.error("sw.js's cache name does NOT match VERSION — run `node build.mjs`");
+      console.error("  built:   " + swCacheName(swBuilt));
+      console.error("  on disk: " + swCacheName(swCurrent));
+      stale = true;
+    }
+    process.exit(stale ? 1 : 0);
   }
-  process.exit(stale ? 1 : 0);
+
+  writeFileSync(out, built);
+  console.log("wrote index.html (" + VARIANT + ", " + Buffer.byteLength(built) + " bytes)");
+  writeFileSync(swOut, swBuilt);
+  console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");
 }
 
-writeFileSync(out, built);
-console.log("wrote index.html (" + Buffer.byteLength(built) + " bytes)");
-writeFileSync(swOut, swBuilt);
-console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");
+if (isMain(import.meta.url)) main();
