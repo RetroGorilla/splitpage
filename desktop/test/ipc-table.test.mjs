@@ -16,6 +16,8 @@ const { IPC_CHANNELS, APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin
 const read = (name) => fs.readFileSync(path.join(desktop, name), "utf8");
 const MAIN = read("main.js");
 const SETUP = read("ipc-setup.js");
+const IPC_MODULES = fs.readdirSync(desktop).filter((f) => /^ipc-[a-z-]+\.js$/.test(f) && f !== "ipc-channels.js").sort();
+const SOURCES = [["main.js", MAIN], ...IPC_MODULES.map((f) => [f, read(f)])];
 const { createIpcSetup } = require(path.join(desktop, "ipc-setup.js"));
 const PRELOADS = [
   { file: "preload.js", origin: APP_ORIGIN, src: read("preload.js") },
@@ -44,10 +46,13 @@ function literalsIn(src) {
 const REGISTRAR_DIRECTION = { ipcHandle: "invoke", ipcOn: "send", ipcOnSync: "sendSync" };
 const registrationsIn = (file, src) => [...src.matchAll(/\b(ipcHandle|ipcOnSync|ipcOn)\(\s*"(splitpage:[^"]+)"/g)]
   .map((m) => ({ file, registrar: m[1], name: m[2], direction: REGISTRAR_DIRECTION[m[1]], at: m.index }));
-const registrations = [...registrationsIn("main.js", MAIN), ...registrationsIn("ipc-setup.js", SETUP)];
+const registrations = SOURCES.flatMap(([file, src]) => registrationsIn(file, src));
 
-const registerTestModeAt = MAIN.indexOf("function registerTestModeIpc(");
-const testModeAt = MAIN.indexOf("\n  if (TEST_MODE) {", registerTestModeAt);
+const [TEST_MODE_FILE, TEST_MODE_SRC] = SOURCES.find(([, src]) => src.includes("function registerTestModeIpc(")) || ["", ""];
+const registerTestModeAt = TEST_MODE_SRC.indexOf("function registerTestModeIpc(");
+const testModeBlock = /\n *if \((?:TEST_MODE|testMode)\) \{/g;
+testModeBlock.lastIndex = Math.max(registerTestModeAt, 0);
+const testModeAt = registerTestModeAt < 0 ? -1 : (testModeBlock.exec(TEST_MODE_SRC) || { index: -1 }).index;
 
 const REGISTERED_BEFORE_SPLIT = [
   "splitpage:ipc-table-sync sendSync", "splitpage:open-file-dialog invoke", "splitpage:save-file-dialog invoke",
@@ -72,16 +77,19 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:test-crash-renderer send", "splitpage:test-dup-loser invoke", "splitpage:test-shell invoke"
 ];
 
-function mainHandlerGroups() {
+function handlerGroups() {
   const groups = [];
-  for (const m of MAIN.matchAll(/^function (register\w+Ipc)\(\{[^}]*\}\) \{$/gm)) {
-    const end = MAIN.indexOf("\n}\n", m.index);
-    groups.push({
-      name: m[1],
-      start: m.index,
-      end,
-      registrations: registrations.filter((r) => r.file === "main.js" && r.at > m.index && r.at < end)
-    });
+  for (const [file, src] of SOURCES) {
+    for (const m of src.matchAll(/^( *)function (register\w+Ipc)\(\{[^}]*\}\) \{$/gm)) {
+      const end = src.indexOf("\n" + m[1] + "}\n", m.index);
+      groups.push({
+        file,
+        name: m[2],
+        start: m.index,
+        end,
+        registrations: registrations.filter((r) => r.file === file && r.at > m.index && r.at < end)
+      });
+    }
   }
   return groups;
 }
@@ -246,15 +254,17 @@ test("neither preload can reach the other's channels", () => {
   }
 });
 
-test("main.js and ipc-setup.js register nothing through ipcMain directly", () => {
-  for (const [file, src] of [["main.js", MAIN], ["ipc-setup.js", SETUP]]) {
+test("main.js and the ipc-*.js modules register nothing through ipcMain directly", () => {
+  for (const [file, src] of SOURCES) {
     const direct = [...src.matchAll(/ipcMain\.(handle|on)\(\s*"/g)];
     assert.deepEqual(direct.map((m) => m[0]), [], `${file}: every registration goes through ipcHandle/ipcOn/ipcOnSync`);
+    if (file !== "ipc-setup.js") {
+      assert.equal(/ipcMain\.(handle|on)\(/.test(src), false, `${file} calls ipcMain only through ipc-setup.js`);
+    }
   }
-  assert.equal(/ipcMain\.(handle|on)\(/.test(MAIN), false, "main.js calls ipcMain only through ipc-setup.js");
 });
 
-test("every channel main.js and ipc-setup.js register is in the table, with that direction", () => {
+test("every channel main.js and the ipc-*.js modules register is in the table, with that direction", () => {
   for (const r of registrations) {
     const row = channelFor(r.name, r.direction);
     assert.ok(row, `${r.file} registers ${key(r.name, r.direction)}, which is not in the table`);
@@ -262,18 +272,21 @@ test("every channel main.js and ipc-setup.js register is in the table, with that
   }
 });
 
-test("main.js and ipc-setup.js register a handler for every inbound row, exactly once", () => {
+test("main.js and the ipc-*.js modules register a handler for every inbound row, exactly once", () => {
   for (const row of IPC_CHANNELS) {
     if (row.direction === "receive") continue;
     const hits = registrations.filter((r) => r.name === row.name && r.direction === row.direction);
-    assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.js and ipc-setup.js`);
+    assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.js and the ipc-*.js modules`);
   }
 });
 
-test("every registration in main.js sits in a handler group that ipc-setup.js calls", () => {
-  const groups = mainHandlerGroups();
-  for (const r of registrations.filter((x) => x.file === "main.js")) {
-    assert.ok(groups.some((g) => r.at > g.start && r.at < g.end), `${r.name} is registered outside a register*Ipc group`);
+test("every registration outside ipc-setup.js sits in a handler group that ipc-setup.js calls", () => {
+  const groups = handlerGroups();
+  for (const r of registrations.filter((x) => x.file !== "ipc-setup.js")) {
+    assert.ok(
+      groups.some((g) => g.file === r.file && r.at > g.start && r.at < g.end),
+      `${r.file}: ${r.name} is registered outside a register*Ipc group`
+    );
   }
   for (const g of groups) {
     assert.ok(g.registrations.length > 0, `${g.name} registers nothing`);
@@ -281,9 +294,14 @@ test("every registration in main.js sits in a handler group that ipc-setup.js ca
   }
 });
 
-test("main.js passes registerIpc every handler group it defines", () => {
+test("main.js passes registerIpc every handler group, and each group's module is required by main.js", () => {
   assert.ok(REGISTER_IPC_CALL, "main.js calls registerIpc({ ...groups })");
-  assert.deepEqual([...GROUPS_PASSED].sort(), mainHandlerGroups().map((g) => g.name).sort());
+  const groups = handlerGroups();
+  assert.deepEqual([...GROUPS_PASSED].sort(), groups.map((g) => g.name).sort());
+  for (const g of groups) {
+    if (g.file === "main.js") continue;
+    assert.ok(MAIN.includes(`require("./${g.file.replace(/\.js$/, "")}")`), `main.js does not require ./${g.file}`);
+  }
 });
 
 test("in test mode, main.js's real groups register the 59 pairs in the order they had before the split", () => {
@@ -338,12 +356,12 @@ test("the wrappers refuse untrusted senders and bad arguments, and run trusted c
   assert.deepEqual(tableRead.returnValue, channelsForOrigin(TABSTRIP_ORIGIN));
 });
 
-test("main.js sends every main -> renderer row and registers none of them", () => {
-  const sends = new Set([...MAIN.matchAll(/\.send\(\s*"(splitpage:[^"]+)"/g)].map((m) => m[1]));
+test("the main process sends every main -> renderer row and registers none of them", () => {
+  const sends = new Set(SOURCES.flatMap(([, src]) => [...src.matchAll(/\.send\(\s*"(splitpage:[^"]+)"/g)].map((m) => m[1])));
   const inbound = new Set(IPC_CHANNELS.filter((c) => c.direction !== "receive").map((c) => c.name));
   for (const row of IPC_CHANNELS) {
     if (row.direction !== "receive") continue;
-    assert.ok(sends.has(row.name), `${row.name} is in the table and main.js never sends it`);
+    assert.ok(sends.has(row.name), `${row.name} is in the table and neither main.js nor an ipc-*.js module sends it`);
     if (!inbound.has(row.name)) {
       assert.equal(
         registrations.some((r) => r.name === row.name),
@@ -359,7 +377,7 @@ test("a TEST_MODE-only row is registered inside the TEST_MODE block, and nothing
   assert.ok(testModeAt > registerTestModeAt, "the TEST_MODE block inside registerTestModeIpc() found");
   for (const r of registrations) {
     const row = channelFor(r.name, r.direction);
-    const inTestBlock = r.file === "main.js" && r.at > testModeAt;
+    const inTestBlock = r.file === TEST_MODE_FILE && r.at > testModeAt;
     if (row.testOnly) {
       assert.ok(inTestBlock, `${r.name} is testOnly and is registered outside the TEST_MODE block`);
     } else {
@@ -470,15 +488,16 @@ test("Follow My Voice takes no argument, from the app page only", () => {
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
 });
 
-test("packaging: every ./module main.js or ipc-setup.js requires is in electron-builder.yml's files", () => {
+test("packaging: every ./module main.js or an ipc-*.js module requires is in electron-builder.yml's files", () => {
   const yml = read("electron-builder.yml");
   const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.js)\s*$/gm)].map((m) => m[1]));
   const requiredBy = (src) => [...src.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(?:\.js)?"\)/g)].map((m) => m[1] + ".js");
-  const required = [...requiredBy(MAIN), ...requiredBy(SETUP)];
+  const required = SOURCES.flatMap(([, src]) => requiredBy(src));
   assert.ok(required.includes("drafts.js"), "main.js requires ./drafts");
   assert.ok(required.includes("ipc-setup.js"), "main.js requires ./ipc-setup");
   assert.ok(required.includes("ipc-channels.js"), "ipc-setup.js requires ./ipc-channels");
-  for (const f of required) assert.ok(listed.has(f), f + " is required by main.js or ipc-setup.js but not in electron-builder.yml files");
+  for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
+  for (const f of required) assert.ok(listed.has(f), f + " is required by main.js or an ipc-*.js module but not in electron-builder.yml files");
 });
 
 test("the blob channels: a typed sha256, app page only", () => {
