@@ -9,7 +9,7 @@ import { screen as portScreen } from "./ports/screen.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { rundownMinimizeActions as minimizeDefinitions, rundownSceneActions as sceneDefinitions } from "../../features/rundown/actions.ts";
 import type { RundownPorts, TargetMount, TargetPorts } from "../../features/rundown/ports.ts";
-import { startRundown as mountRundown } from "../../features/rundown/rundown.js";
+import { startRundown as mountRundown } from "../../features/rundown/rundown.ts";
 import { startTarget as mountTarget } from "../../features/rundown/target.js";
 import { cellEditing, rowDrag } from "./editor-owners.ts";
 import { preferences } from "./preferences-owner.ts";
