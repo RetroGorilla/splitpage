@@ -10,6 +10,73 @@ import { mergeStateFields } from "../../src/core/merge/states.ts";
 const rows = ["a", "b", "c", "d"].map(id => ({ id }));
 const sections = [{ id: "s1", name: "Opening", firstSceneId: "a" }, { id: "s2", name: "Ending", firstSceneId: "c" }];
 
+test("sections r1: rename survives removal with an unrelated scene insertion", () => {
+  const base = { rows: ["a", "b", "c", "d", "e", "f"].map(id => ({ id })), sections: [
+    { id: "one", name: "One", firstSceneId: "b" }, { id: "two", name: "Two", firstSceneId: "d" }
+  ] };
+  const removed = { rows: [{ id: "y" }, ...base.rows], sections: [base.sections[0]] };
+  const renamed = { ...base, sections: [base.sections[0], { ...base.sections[1], name: "Renamed" }] };
+  for (const [mine, theirs] of [[removed, renamed], [renamed, removed]] as const) {
+    const result = mergeSectionLayout(base, mine, theirs, removed.rows);
+    assert.deepEqual(result.rows, removed.rows);
+    assert.deepEqual(result.sections, renamed.sections);
+  }
+});
+
+test("sections r1: absent metadata defers without a base in both orientations", () => {
+  const sectioned = { rows, sections }, plain = { rows };
+  for (const [mine, theirs] of [[sectioned, plain], [plain, sectioned]] as const) {
+    const migration = fakeMigration();
+    const result = mergeStateFields(null, migrateRows(structuredClone(mine), migration.ports),
+      migrateRows(structuredClone(theirs), migration.ports), fakePorts(() => []));
+    const state = migrateRows(result.merged, migration.ports);
+    assert.deepEqual(state.rows.map(row => row.id), rows.map(row => row.id));
+    assert.deepEqual(state.sections, sections);
+  }
+});
+
+test("sections r1: incidental deletion or movement of an anchor does not defeat header removal", () => {
+  const base = { rows, sections };
+  const removed = { rows, sections: [sections[0]] };
+  for (const sceneIds of [["a", "b", "d"], ["a", "c", "b", "d"]]) {
+    const edited = { rows: sceneIds.map(id => ({ id })), sections: [sections[0], { ...sections[1], firstSceneId: "d" }] };
+    for (const [mine, theirs] of [[removed, edited], [edited, removed]] as const) {
+      const result = mergeSectionLayout(base, mine, theirs, edited.rows);
+      assert.deepEqual(result.rows, edited.rows);
+      assert.deepEqual(result.sections, [sections[0]]);
+    }
+  }
+});
+
+test("sections r1: snapshot ambiguity restores renamed original scenes but keeps explicit reassignment", () => {
+  const base = { rows: ["a", "b", "c", "d"].map(id => ({ id })), sections: [
+    { id: "A", name: "A", firstSceneId: "b" }, { id: "B", name: "B", firstSceneId: "d" }
+  ] };
+  const renamed = { ...base, sections: [{ ...base.sections[0], name: "Renamed" }, base.sections[1]] };
+  const removed = { rows: ["a", "x", "b", "d", "c"].map(id => ({ id })), sections: [base.sections[1]] };
+  for (const [mine, theirs] of [[removed, renamed], [renamed, removed]] as const) {
+    const result = mergeSectionLayout(base, mine, theirs, removed.rows);
+    assert.deepEqual(result.rows, removed.rows);
+    assert.deepEqual(result.sections, renamed.sections);
+    assert.equal(sectionForScene(result, "x"), undefined);
+    assert.equal(sectionForScene(result, "b")?.id, "A");
+    assert.equal(sectionForScene(result, "c")?.id, "B");
+  }
+  const anchorOnly = { ...base, sections: [{ ...base.sections[0], firstSceneId: "c" }, base.sections[1]] };
+  assert.deepEqual(mergeSectionLayout(base, { ...base, sections: [base.sections[1]] }, anchorOnly, rows).sections, [base.sections[1]]);
+});
+
+test("sections r1: a new boundary preserves the concurrent order of its scenes", () => {
+  const base = { rows: ["a", "b", "c", "d"].map(id => ({ id })) };
+  const added = { ...base, sections: [{ id: "new", name: "New", firstSceneId: "b" }] };
+  const reordered = { rows: ["a", "b", "d", "c"].map(id => ({ id })) };
+  for (const [mine, theirs] of [[added, reordered], [reordered, added]] as const) {
+    const result = mergeSectionLayout(base, mine, theirs, reordered.rows);
+    assert.deepEqual(result.rows, reordered.rows);
+    assert.deepEqual(result.sections, added.sections);
+  }
+});
+
 test("sections: migration omits absent and empty metadata, normalizes names, rejects bad or duplicate anchors", () => {
   const migration = fakeMigration();
   for (const value of [undefined, null, [], "invalid"]) {
