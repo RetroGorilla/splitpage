@@ -126,7 +126,7 @@ test("project files: disk fallback amends the home before clearing the sync base
   const home = f.ports.location.fileHome();
   f.calls.length = 0;
   assert.equal(formats.forgetDiskBase(), true);
-  const reason = "__splitpageFormats.forgetDiskBase: test hook, drives the two-way fallback";
+  const reason = "formats.forgetDiskBase: test hook, drives the two-way fallback";
   assert.deepEqual(f.calls, [["home"], ["home"], ["amend", home, { diskBase: null }], ["base", null, reason]]);
   f.noHome();
   f.calls.length = 0;

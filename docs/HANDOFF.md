@@ -29,7 +29,7 @@ breakdown for props/locations/cast/VFX/sound.
   `node build.mjs` bundles from `main.ts` with
   esbuild and inlines the result into `index.html`; `node build.mjs --check`
   says whether the copy on disk is in step. `node build.mjs --test` is the
-  test build, which keeps the `window.__*Test` hooks the suites and the
+  test build, which keeps the `window.__*Test` hooks and `window.__splitpageFormats` the suites and the
   desktop smoke drive; the plain build leaves them out. `index.html` is **not in the
   repository** since #80 — it is generated, it is ignored, and a fresh clone
   has none until you build one. Run `npm install` once first — esbuild is the
