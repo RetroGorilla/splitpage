@@ -10,6 +10,13 @@ This release removes collaboration and server documents and fixes several
 saving bugs. If you open or share scripts on a Splitpage server, read
 **Removed** before you upgrade.
 
+### Added
+- With nothing selected in a Visual cell, **Tag** opens the existing label
+  dialog with just its categories. Choose one to start an open tag at the
+  cursor, then type its name as with a typed keyword. Escape or clicking
+  outside dismisses the dialog without an edit; selected-text tagging is
+  unchanged.
+
 ### Removed
 - Collaboration and server documents are gone: live collaboration,
   presence, invite, share and review links, server bookmarks and PINs,

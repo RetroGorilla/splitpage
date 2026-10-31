@@ -5,10 +5,10 @@ import { domToPos } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { isInsideTagOrLink } from "../common/dom.ts";
 import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
-import { replaceText, replaceWithTag } from "../../core/text/edits.ts";
+import { insertText, replaceText, replaceWithTag } from "../../core/text/edits.ts";
 import { namedTagId, projection } from "../../core/text/runs.ts";
 import { registryEntryOf } from "../../core/production/records.ts";
-import type { Run } from "../../core/text/runs.ts";
+import type { Marks, Run } from "../../core/text/runs.ts";
 import type { TagCategoryId } from "../../core/document/tags.ts";
 import type { PlainTagMount, PlainTagPorts } from "./ports.ts";
 
@@ -84,6 +84,84 @@ const HL_PREFIX = "splitpage-open-tag-";
 function tagPorts(): PlainTagPorts {
   if (!ports) throw new TypeError("Plain tags are not mounted");
   return ports;
+}
+interface TagCategoryCaret {
+  cellEl: HTMLElement;
+  range: Range;
+  node: Node;
+  offset: number;
+  html: string;
+  marks: Marks;
+}
+
+let categoryCaret: TagCategoryCaret | null = null;
+
+function tagCaret(cellEl: Element): Range | null {
+  if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows") || plainTagOpen()) return null;
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || !sel.isCollapsed) return null;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  if (!cellEl.contains(node)) return null;
+  const element = node.nodeType === 1 ? node as Element : node.parentElement;
+  if (isInsideTagOrLink(element)) return null;
+  const pos = domToPos(cellEl, node, range.startOffset);
+  if (pos === null) return null;
+  if (!ports) return null;
+  const html = ports.text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, ""));
+  const before = projection(ports.text.fromHtml(html)).slice(0, pos);
+  return matchPlainTagKeyword(before + "prop:") ? range : null;
+}
+
+function openCategoryAtCaret(cellEl: HTMLElement, marks: Marks): boolean {
+  const range = tagCaret(cellEl);
+  const modal = document.getElementById("tag-modal");
+  if (!range || !modal || !modal.hidden || !ports) return false;
+  categoryCaret = { cellEl, range: range.cloneRange(), node: range.startContainer, offset: range.startOffset, html: cellEl.innerHTML, marks };
+  ports.renderCategories(null);
+  modal.classList.add("is-category-only");
+  modal.hidden = false;
+  modal.querySelector<HTMLElement>(".tag-cat-btn")?.focus();
+  return true;
+}
+
+function categoryCaretStillThere(saved: TagCategoryCaret): boolean {
+  return saved.cellEl.isConnected && saved.cellEl.innerHTML === saved.html && saved.cellEl.contains(saved.node) &&
+    saved.range.startContainer === saved.node && saved.range.startOffset === saved.offset;
+}
+
+function cancelCategory(): boolean {
+  const saved = categoryCaret;
+  if (!saved) return false;
+  categoryCaret = null;
+  const modal = document.getElementById("tag-modal");
+  if (modal) {
+    modal.hidden = true;
+    modal.classList.remove("is-category-only");
+  }
+  if (categoryCaretStillThere(saved)) {
+    saved.cellEl.focus();
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(saved.range);
+  }
+  return true;
+}
+
+function chooseCategory(cat: string | null): boolean {
+  const saved = categoryCaret;
+  if (!saved) return false;
+  cancelCategory();
+  if (!categoryCaretStillThere(saved) || !tagCategory(cat)) return true;
+  if (!tagCaret(saved.cellEl) || !ports) return true;
+  const keyword = (cat === "sound" ? "sfx" : cat) + ":";
+  const cellEl = ports.cells.edit(saved.cellEl, function (cell, selection) {
+    if (!selection || selection.from !== selection.to) return null;
+    const end = selection.from + keyword.length;
+    return { cell: insertText(cell, selection.from, keyword, saved.marks), sel: { from: end, to: end } };
+  });
+  if (cellEl) maybeOpenPlainTag({ inputType: "insertText", data: ":" }, cellEl);
+  return true;
 }
 
 function highlightApiOk() {
@@ -275,6 +353,9 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
   ports = given;
   let disposed = false;
   return {
+    openCategoryAtCaret,
+    chooseCategory,
+    cancelCategory,
     maybeOpen: maybeOpenPlainTag,
     refresh: refreshPlainTag,
     cancel: cancelPlainTag,
@@ -285,6 +366,7 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
     dispose: function () {
       if (disposed) return;
       disposed = true;
+      cancelCategory();
       cancelPlainTag();
       ports = null;
     }
