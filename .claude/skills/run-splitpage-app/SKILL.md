@@ -11,7 +11,10 @@ expect a fresh clone not to have one until you build it. The source is
 `src/` (`page.html`, `styles/`, `seed-state.json`, and the ES modules in
 `src/js/`) plus `docs/help.md` (rendered into the in-app Help page) and
 `VERSION`, and `node build.mjs` bundles them with esbuild and inlines the
-result back into `index.html`. Run `npm install` once first — esbuild builds
+result back into `index.html`. The suites need the test build,
+`node build.mjs --test`: it keeps the `window.__*Test` hooks the suites drive,
+which the plain (release) build leaves out (see `tools/release-hooks.mjs`).
+Run `npm install` once first — esbuild builds
 the bundle, jsdom lends the unit tests a DOM. Edit the source, rebuild, then
 test. A change made directly to `index.html` will look like it worked and be
 destroyed by the next build — and, since it is ignored by git, will never
@@ -35,7 +38,7 @@ something that is really just arithmetic over an object.
 
 ```bash
 npm test                      # src/test, TypeScript tests beside source, tests/; no browser
-node build.mjs && node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
+node build.mjs --test && node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
 ```
 
 `src/test/_dom.mjs` is what makes the first one possible: the pure cores
@@ -88,7 +91,7 @@ version of the app.
 ## Run the full regression (milestone and release gates)
 
 ```bash
-node build.mjs
+node build.mjs --test
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
@@ -474,7 +477,7 @@ after any change to `server/server.js`.
 where PowerShell and Edge do not exist:
 
 ```bash
-node build.mjs
+node build.mjs --test
 node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
 ```
 
@@ -512,7 +515,7 @@ suite through `driver.mjs`, several lanes at once, each lane on its own
 folder you name:
 
 ```bash
-node build.mjs && node tools/run-suites.mjs ../splitpage-runs/latest            # every suite
+node build.mjs --test && node tools/run-suites.mjs ../splitpage-runs/latest            # every suite
 node tools/run-suites.mjs ../splitpage-runs/autosave '^18[5-7]-'                # a regex over full filenames
 node tools/run-suites.mjs ../splitpage-runs/one --lanes 1 --timeout 900 '^01-core'
 ```
@@ -634,9 +637,11 @@ save yourself the guess.
 These are why tests fail when the app is fine. Check them before suspecting
 the app.
 
-- **Did you rebuild?** `node build.mjs` after every `src/` edit. Testing a
+- **Did you rebuild?** `node build.mjs --test` after every `src/` edit. Testing a
   stale `index.html` is the cheapest mistake to make here and looks exactly
-  like a change that had no effect. `node build.mjs --check` answers it.
+  like a change that had no effect. `node build.mjs --test --check` answers it.
+  A suite that finds `window.__historyTest` undefined ran against the release
+  build (`node build.mjs`, which `npm run verify` also writes).
 
 - **A blank page with no error is a blocked stylesheet, not broken JS.** A
   stylesheet that is still pending stops the browser running every classic

@@ -53,6 +53,7 @@ takes a `npm install` and one command:
 npm install              # once: esbuild (build), eslint + jsdom (checks)
 node build.mjs           # write index.html, stamp sw.js with VERSION
 node build.mjs --check   # are both in step with src/ and VERSION?
+node build.mjs --test    # the test build the browser suites need (keeps the test hooks)
 ```
 
 The source is `src/` — `page.html` (the shell), `styles/`,
