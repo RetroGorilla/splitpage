@@ -30,6 +30,9 @@ test("script print preserves captured facts, scene metadata, rich text and annot
   assert.equal(dom.querySelector(".comment-marker").textContent, "1");
   assert.match(dom.querySelector(".script-table").textContent, /中文 日本語 العربية हिन्दी 😀/);
   assert.equal(dom.querySelector(".rundown .ready").textContent, "01");
+  assert.deepEqual([...dom.querySelectorAll("td p")].map((el) => el.textContent), [
+    "YouTube https://www.youtube.com/watch?v=aqz-KE-bpKQ", "Local clip (video file)"
+  ]);
 });
 
 test("comments retain anchors, locations, quotes, authors, assignments, resolution, replies and pictures in order", () => {
@@ -64,7 +67,9 @@ test("generated print HTML escapes content, rejects active URLs and forbids remo
   const dom = new JSDOM(html).window.document;
   assert.equal(dom.querySelectorAll("script,iframe,object,embed,link,base,[onload],[onclick]").length, 0);
   assert.equal(dom.querySelectorAll("a").length, 2);
-  assert.ok([...dom.querySelectorAll("a")].every((a) => a.href.startsWith("https://example.com/")));
+  assert.deepEqual([...dom.querySelectorAll("a")].map((a) => a.href), [
+    "https://www.youtube.com/watch?v=aqz-KE-bpKQ", "https://example.com/reference"
+  ]);
   assert.match(dom.querySelector('meta[http-equiv="Content-Security-Policy"]').content, /default-src 'none'; img-src data:/);
   assert.equal(dom.title, input.doc.title);
   const hostile = buildPrintPage('</style><script>alert(1)</script>"\\', [{ id: 'x" onload="bad', title: '<img src=x>', html: "<p>Trusted section</p>" }]);

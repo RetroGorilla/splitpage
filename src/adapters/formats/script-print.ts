@@ -4,11 +4,13 @@ import type { ExportDocument } from "../../core/document/export-document.ts";
 import { morePictureRefs, rowVideoLinks } from "../../core/document/gallery.ts";
 import { decodeImageDataUrl, rowImage } from "../../core/document/media.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
+import { videoLinkText } from "../storage/02d-gallery.js";
 import type { CommentBody } from "./export-projections.ts";
 import { sceneFacts } from "./export-projections.ts";
 import { exportComments, exportFacts, exportRuns, exportSummaryParts } from "./export-kit.ts";
 import type { PrintSection } from "./print-page.ts";
 import { buildPrintPage, printLink, printPicture } from "./print-page.ts";
+import { videoHostLabel } from "./video-host.ts";
 
 export interface ScriptPrintInput {
   doc: ExportDocument;
@@ -61,7 +63,7 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
     const picture = image?.ref ? assets.picture(image.ref.sha256) : legacy ? { bytes: legacy.bytes, mime: legacy.ref.mime } : null;
     const main = image ? printPicture(picture, "Scene " + scene.number + " picture") : "";
     const more = morePictureRefs(row).map((ref) => printPicture(assets.picture(ref.sha256), "Scene " + scene.number + " gallery picture")).join("");
-    const links = rowVideoLinks(row).map((link) => `<p>${printLink(link.href || link.name + " (video file)", link.href)}</p>`).join("");
+    const links = rowVideoLinks(row).map((link) => `<p>${link.href ? escapeHtml(videoHostLabel(link)) + " " : ""}${printLink(String(videoLinkText(link)), link.href)}</p>`).join("");
     return `<tr><td><strong class="scene-number">${scene.number}</strong><span class="scene-meta">${escapeHtml(scene.start)}</span>
 <span class="scene-meta">${escapeHtml(scene.status.label)}</span></td>
 <td>${main}${more}${links}<div class="print-text">${cellHtml(row.visualText, input)}</div></td>
