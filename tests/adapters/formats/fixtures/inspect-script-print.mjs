@@ -10,6 +10,7 @@ import { log } from "node:console";
 import assert from "node:assert/strict";
 
 const out = process.argv[2];
+const lists = process.argv[3] === "--lists";
 assert.ok(out, "Pass an output directory");
 mkdirSync(out, { recursive: true });
 const chrome = process.env.SPLITPAGE_CHROME || join(process.env["ProgramFiles(x86)"] || "", "Microsoft/Edge/Application/msedge.exe");
@@ -61,8 +62,10 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: 701, height: 940, deviceScaleFactor: 1, mobile: false });
   let checks = 0;
   const records = [];
-  for (const kind of ["rich", "empty", "long"]) {
-    const path = fileURLToPath(new globalThis.URL(`_script-print-${kind}.html`, import.meta.url));
+  const cases = lists ? ["prop-rich", "gear-rich", "shots-rich", "script-rich", "prop-empty", "gear-empty", "shots-empty", "script-empty",
+    "prop-long", "gear-long", "shots-long", "script-long", "flagged-location", "shot-person", "unshot-scene"] : ["rich", "empty", "long"];
+  for (const kind of cases) {
+    const path = fileURLToPath(new globalThis.URL(`_${lists ? "list" : "script"}-print-${kind}.html`, import.meta.url));
     await send("Page.navigate", { url: pathToFileURL(path).href });
     await evaluate(`new Promise(resolve => { const ready = async () => { await document.fonts.ready; await Promise.all(Array.from(document.images, i => i.decode())); resolve(true); }; if (document.readyState === 'complete') ready(); else addEventListener('load', ready, {once:true}); })`);
     const result = await evaluate(`({print:matchMedia('print').matches,width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,cells:Array.from(document.querySelectorAll('td')).every(e=>e.scrollWidth<=e.clientWidth+1),images:Array.from(document.images).every(e=>e.naturalWidth>0&&e.getBoundingClientRect().width<=e.parentElement.getBoundingClientRect().width),text:document.querySelector('main').textContent})`);
@@ -75,10 +78,29 @@ try {
       assert.match(result.text, /Audio line 159/); checks++;
       assert.match(result.text, /Scene 18 audio/); checks++;
     }
+    if (lists) {
+      if (kind.endsWith("long")) {
+        if (kind.startsWith("prop") || kind.startsWith("script")) { assert.match(result.text, /Packing note line 99/); checks++; }
+        if (kind.startsWith("shots") || kind.startsWith("script")) { assert.match(result.text, /Shot description line 109/); checks++; }
+        if (kind.startsWith("gear")) { assert.match(result.text, /Spare 089/); checks++; }
+      }
+      if (kind === "script-rich" || kind === "script-long") {
+        assert.match(result.text, /End reply/); checks++;
+        const order = await evaluate("Array.from(document.querySelectorAll('section'), e => e.id)");
+        assert.deepEqual(order, ["script", "production-breakdown", "broll-shot-list", "comments"]); checks++;
+      }
+      const layout = await evaluate("({heads:Array.from(document.querySelectorAll('thead'), e=>getComputedStyle(e).display),landscape:!!document.querySelector('.shot-list')&&getComputedStyle(document.querySelector('#broll-shot-list')).page,boxes:document.querySelectorAll('.list-checkbox').length})");
+      assert.ok(layout.heads.every((display) => display === "table-header-group")); checks++;
+      if (kind.startsWith("shots") || kind === "script-rich" || kind === "script-long") { assert.equal(layout.landscape, "shot-list"); checks++; }
+    }
     const pdf = await send("Page.printToPDF", { preferCSSPageSize: true, printBackground: true, generateTaggedPDF: true });
     const bytes = Buffer.from(pdf.data, "base64");
     const pages = (bytes.toString("latin1").match(/\/Type \/Page\b/g) || []).length;
-    assert.ok(kind === "long" ? pages >= 5 : pages === (kind === "empty" ? 1 : 2), `${kind}: ${pages} pages`); checks++;
+    assert.ok(lists ? (kind.endsWith("long") ? pages >= 2 : pages >= 1) : kind === "long" ? pages >= 5 : pages === (kind === "empty" ? 1 : 2), `${kind}: ${pages} pages`); checks++;
+    if (lists && (kind.startsWith("shots") || kind.startsWith("script") && !kind.endsWith("empty"))) {
+      assert.match(bytes.toString("latin1"), /\/MediaBox \[0 0 792 612\]/); checks++;
+    }
+    if (lists && kind.startsWith("script")) { assert.match(bytes.toString("latin1"), /\/MediaBox \[0 0 612 792\]/); checks++; }
     writeFileSync(join(out, kind + ".pdf"), bytes);
     const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
     writeFileSync(join(out, kind + ".png"), Buffer.from(shot.data, "base64"));
