@@ -275,6 +275,21 @@ bytes (smoke, and `tests/adapters/print/desktop-print.test.mjs`). The editor,
 document identity, dirty state, save confirmation, autosave and history are
 untouched: the route only captures, prints and delivers a file.
 
+P3 validation on Node 24.22.1: `npm run verify` passed all 576 discovered
+files (195 frontend, 11 source, 322 tests, 26 desktop, 22 tools), lint, types,
+dependency/comment gates and build. The desktop unit tests passed 20 files,
+including the print view's 12 and the IPC table's 32. The full PC smoke on the
+dev target passed 813/813 checks, 18 of them in the desktop PDF group. Fifteen
+`print|export|desktop` suites passed 994/994 checks on the test build with
+three lanes, including 65 (55/55) and 384 (36/36). The fresh `dist:win` build
+passed its 15/15 architecture checks, and both `app.asar` files list
+`print-pdf.js` and `ipc-print.js`. The real `print-pdf.js` printed all 18 P1/P2
+fixture pages in Electron in 188–489 ms each (long script 24 pages, long shot
+list 12, long packing lists 4 and 7) with no missing glyph and no line outside
+its page; rasterized pages showed pictures, Unicode, repeated table heads,
+split long rows, landscape pages and footers. A heading still ends a page
+alone when the row after it is taller than a page, as in the browser.
+
 ## Fixtures and validation
 
 AQ-45 originally stopped because the composed `script-long` fixture split the
