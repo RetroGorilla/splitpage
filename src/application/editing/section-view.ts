@@ -17,6 +17,7 @@ export function createSectionView(): SectionView {
     folded: id => folded.has(id),
     toggle(id) { if (folded.has(id)) folded.delete(id); else folded.add(id); changed(); },
     reveal(doc, rowId) {
+      if (!folded.size) return;
       const section = sectionForScene(doc, rowId);
       if (section && folded.delete(section.id)) changed();
     },

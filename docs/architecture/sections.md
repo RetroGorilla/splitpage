@@ -125,3 +125,9 @@ undo restores the order and header in one step.
 Folding is per-session view state, absent from saves, undo and running order.
 Totals and exports include shot and folded scenes. Present's section name is
 a visual cue and never enters narration or voice matching.
+
+Sectionless documents use the existing scene/shot projection in the table and
+Writer without requesting fold state or calculating section groups or totals.
+Boundary input listeners are mounted only while the document has sections;
+adding the first header attaches them, and removing the last detaches them.
+Reveal skips membership lookup when there are no folded sections.

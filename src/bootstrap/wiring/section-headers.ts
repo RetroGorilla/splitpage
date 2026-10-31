@@ -33,8 +33,16 @@ export function mountSectionHeaders(): { dispose: () => void } {
       edits.run(removeSectionCommand(id));
     }
   });
-  const input = mountSectionBoundary(window, { document: documentReader, boundary, allowed: edits.allowed });
-  const offChange = documentReader.onChange(() => boundary.cancel());
-  const offReplaced = documentReader.onReplaced(() => { boundary.cancel(); controls.reset(); });
-  return { dispose() { offChange(); offReplaced(); input.dispose(); controls.dispose(); } };
+  let input: ReturnType<typeof mountSectionBoundary> | null = null;
+  function syncInput(): void {
+    boundary.cancel();
+    const sections = documentReader.current()?.sections;
+    if (Array.isArray(sections) && sections.length) {
+      input ??= mountSectionBoundary(window, { document: documentReader, boundary, allowed: edits.allowed });
+    } else { input?.dispose(); input = null; }
+  }
+  syncInput();
+  const offChange = documentReader.onChange(syncInput);
+  const offReplaced = documentReader.onReplaced(() => { syncInput(); controls.reset(); });
+  return { dispose() { offChange(); offReplaced(); input?.dispose(); boundary.dispose(); controls.dispose(); } };
 }

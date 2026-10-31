@@ -779,7 +779,7 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: 0 3px 12px #0002;
+  box-shadow: var(--shadow);
 }
 .section-menu button { padding: 6px 10px; text-align: left; white-space: nowrap; }
 .section-hint { color: var(--text-dim); font-size: 11px; }
