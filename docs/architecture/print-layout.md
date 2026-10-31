@@ -157,7 +157,7 @@ preferences. The originating mount's lifetime remains authoritative.
 
 `src/adapters/print/browser-print.ts` writes the standalone page, waits for
 its font readiness and image decoding, focuses it and calls `print()`. It
-answers `opened` or `closed`, never `saved`. The UI says to choose Save as PDF;
+answers `opened` or `closed`, never `saved`. The export UI says to choose Save as PDF;
 it cannot know whether the user saved, printed or cancelled. No save owner,
 dirty flag, merge baseline, identity, history or project Save is changed.
 Failures close the preparation window and show an error. A 60-second
@@ -166,14 +166,19 @@ exit release resources. The deadline is cleared before invoking print, so
 it cannot close an active dialog. `afterprint` closes the window for both
 printing and cancellation; browsers without that event leave it for the user
 to close. No object URLs or printable-document scripts are created.
+The completion notice says only that the print request was sent to the browser:
+Chromium's print call can return after saving or cancellation closes the dialog.
 
 The intended workflow replaces the browser download expectations in suites
 03, 12, 41, 65, 96, 98, 145 and 284. They capture the page at print invocation, compare
 the same captured HTML by both routes, retain content/colour/picture-order
 checks, assert cleanup and no PDF download, and leave non-PDF checks intact.
 Suites 12/96 retain the Gear-panel and B-roll-page routes, checklist/signature
-and shot/person/flag details. Suite 65 verifies the held PNG/WebP/legacy images
-decode at their captured dimensions instead of expecting old JPEG conversion.
+and shot/person/flag details. Suite 96 checks the named shot's Scene cell and
+start directly. Suite 65 verifies the held PNG/WebP/legacy images decode at
+their captured dimensions, then forces the unchanged desktop PDF route and
+checks the PDF header, three JPEG image-stream signatures and exact dimensions.
+That real-browser conversion check remains until P5 removes the old writer.
 Old manual pagination geometry in suite 41 is replaced by loaded-image aspect
 ratios, bounds, non-overlap, complete text and print CSS checks; the actual
 page-break checks belong to print fixtures 382/383 and Adam's saved PDFs.
@@ -196,7 +201,7 @@ independent review are pending; this PR must not be merged by a queue agent.
 
 ## Fixtures and validation
 
-P4 validation on Node 24.22.0: the full verification gate passed all 571
+Initial P4 validation on Node 24.22.0: the full verification gate passed all 571
 discovered test files (195 frontend, 11 source, 320 tests, 23 desktop, 22 tools),
 plus lint, types, dependency/comment gates and build. Final focused lifecycle
 and app tests passed 11/11. Fourteen browser suites passed 957/957 checks on
@@ -205,6 +210,14 @@ the test build with at most three lanes: 03, 12, 34, 41, 60, 65, 96, 98, 145,
 popup and passed 36/36; 382/383 passed 23/23 and 60/60. Free RAM exceeded
 10 GB before final browser runs. Native dialog and saved-PDF checks remain
 for Adam; no desktop PDF branch changed, so no Electron smoke was required.
+
+Review round 1 repeated the full gate with all 571 files passing. The focused
+adapter/workflow/app tests passed 12/12, including a print call returning after
+cancellation. Changed suites 65, 96 and 384 passed 55/55, 81/81 and 36/36
+checks on a fresh test build with three lanes and 12.7 GB free RAM beforehand.
+The latest counts across the fourteen suites total 962/962. Browser PDF scope
+is now also recorded in INV-60/61, awaiting Adam's decision; desktop PDF keeps
+both rules. Delta review and Adam's real-dialog/PDF checks remain pending.
 
 The six tests in `tests/adapters/formats/script-print.test.mjs` cover rich text,
 tags/keys/directions/cues, facts, comments/replies, raster/gallery/legacy images,

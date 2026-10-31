@@ -17,7 +17,7 @@ jsclick #btn-file
 jsclick #menu-export-again
 wait P.pages.length === 5
 expect P.pages[4].html === P.pages[3].html && P.pages[4].closed
-expect document.getElementById('toast-host').textContent.includes('Print dialog opened. Choose Save as PDF')
+expect document.getElementById('toast-host').textContent.includes('Print request sent to your browser.')
 expect !document.getElementById('toast-host').textContent.includes('Exported ')
 eval (function(){P.state.holdDialog=true;document.querySelector('[data-file-action="export-pdf"]').click();return true;})()
 wait P.pages.length === 6

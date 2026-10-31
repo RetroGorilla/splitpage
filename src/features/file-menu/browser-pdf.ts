@@ -28,7 +28,7 @@ export function exportBrowserPdf(
         const html = render({ doc, options: capturedOptions, assets });
         const result = await held.print(html);
         if (alive() && result === "opened") {
-          ports.notices.show("Print dialog opened. Choose Save as PDF to save a PDF.", "ok");
+          ports.notices.show("Print request sent to your browser.", "ok");
         }
       } catch {
         held.close();
