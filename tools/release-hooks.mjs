@@ -1,9 +1,6 @@
 const HOOK_NAME = /__(?:[A-Za-z]+Test|splitpageFormats)\b/g;
 
-export const STILL_IN_RELEASE = Object.freeze([
-  "__blobsTest",
-  "__renderTest"
-]);
+export const STILL_IN_RELEASE = Object.freeze([]);
 
 export function hookNames(text) {
   return [...new Set(text.match(HOOK_NAME) ?? [])].sort();
