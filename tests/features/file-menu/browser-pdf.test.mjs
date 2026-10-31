@@ -45,7 +45,7 @@ test("captures document and options before asset loading, even across a document
   assert.equal(h.notices.shown[0].message, "Print request sent to your browser.");
 });
 
-test("desktop and non-PDF exports stay on byte delivery", () => {
+test("desktop and non-PDF exports leave the print-dialog route", () => {
   const h = harness();
   assert.equal(exportBrowserPdf(h.ports, "txt", undefined, () => true), null);
   h.desktop();

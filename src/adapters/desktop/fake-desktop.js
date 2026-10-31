@@ -102,6 +102,10 @@ export function makeFakeDesktopBackend(opts) {
       (this._videoOpens = this._videoOpens || []).push(name);
       return Promise.resolve({ ok: true });
     },
+    printToPdf: function (html) {
+      (this._printed = this._printed || []).push(html);
+      return Promise.resolve(this._printAnswer || strBytes("%PDF-1.7\n%fake desktop print\n"));
+    },
     videoThumbnail: function (host, ref) {
       (this._thumbCalls = this._thumbCalls || []).push([host, ref]);
       return Promise.resolve(this._thumbAnswer || { ok: false, code: "UNAVAILABLE" });

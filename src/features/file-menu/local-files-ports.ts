@@ -15,10 +15,17 @@ import type { SessionChange } from "../../application/session/change-set.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { FileMenuExportMount } from "./ports.ts";
 import type { PrintDialogPort } from "../../application/export/print-dialog.ts";
+import type { PdfPrinter } from "../../application/export/pdf-printer.ts";
 
 export interface BrowserPdfExportPorts extends Pick<LocalFileMenuPorts, "exports" | "formats" | "assets" | "brollView" | "notices"> {
   readonly desktop: () => boolean;
   readonly printDialog: PrintDialogPort;
+}
+
+export interface DesktopPdfExportPorts extends Pick<LocalFileMenuPorts, "exports" | "formats" | "assets" | "brollView" | "notices" | "delivery"> {
+  readonly desktop: () => boolean;
+  readonly pdfPrinter: PdfPrinter;
+  readonly baseName: () => string;
 }
 
 export interface LocalFileMenuPorts {
