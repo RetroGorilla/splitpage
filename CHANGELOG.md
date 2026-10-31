@@ -43,6 +43,7 @@ saving bugs. If you open or share scripts on a Splitpage server, read
   again**, so Escape still closes it.
 
 ### Changed
+- Printed PDFs keep each table row on one page.
 - In a browser, PDF exports now open the print dialog. Choose **Save as PDF**
   to save the script, a gear or prop packing list, or the B-roll shot list.
 - The rundown's hover lens eases in and out instead of jumping.
