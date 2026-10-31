@@ -32,10 +32,10 @@ function title(h: ReturnType<typeof harness>): unknown {
   return h.session.read(function (doc) { return doc ? doc.title : null; });
 }
 
-test("title: a new title is one generation, one undo record, one publication naming only the title", () => {
+test("title: a new title is one generation, one undo record, one publication for title and provenance", () => {
   const h = opened();
   const out = runConfined(h.session, titleCommand("Final cut"));
-  assert.deepEqual(out, { kind: "applied", generation: 1, changes: changeSet({ docFields: ["title"] }) });
+  assert.deepEqual(out, { kind: "applied", generation: 1, changes: changeSet({ docFields: ["title", "titleOrigin"] }) });
   assert.deepEqual(h.log, ["undo.record", "dirty:1", "draft:1", "save:1", "publish:edit"]);
   assert.equal(title(h), "Final cut");
   assert.equal(h.published.length, 1);
@@ -56,6 +56,24 @@ test("title: an empty title is a title like any other", () => {
   const h = opened();
   assert.equal(runConfined(h.session, titleCommand("")).kind, "applied");
   assert.equal(title(h), "");
+  assert.equal(h.session.read((doc) => doc?.titleOrigin), "user");
+});
+
+test("title: a typed title takes ownership while retaining the file version", () => {
+  const h = opened();
+  h.session.adopt({ ...script(), titleOrigin: "file", titleVersion: "v3" });
+  assert.equal(runConfined(h.session, titleCommand("My title")).kind, "applied");
+  assert.equal(h.session.read((doc) => doc?.titleOrigin), "user");
+  assert.equal(h.session.read((doc) => doc?.titleVersion), "v3");
+});
+
+test("title: typing the same default or file-derived title still records user ownership", () => {
+  for (const initial of [{ title: "Untitled Script" }, { title: "Headset", titleOrigin: "file", titleVersion: "v3" }]) {
+    const h = opened();
+    h.session.adopt({ ...script(), ...initial });
+    assert.equal(runConfined(h.session, titleCommand(initial.title)).kind, "applied");
+    assert.equal(h.session.read((doc) => doc?.titleOrigin), "user");
+  }
 });
 
 test("title: a review copy refuses the title before it plans, with nothing written", () => {

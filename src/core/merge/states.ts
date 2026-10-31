@@ -67,6 +67,11 @@ const STRATEGY_TABLE: Record<StrategyId, FieldStrategy> = {
     else run.out[f.key] = listMerger(f)(run.base && run.base[f.key], run.mine[f.key], run.theirs[f.key], run.survives);
   },
   "changed-side-wins": function (f, run) { run.out[f.key] = mergeChangedSideWins(f, run.base, run.mine, run.theirs); },
+  "optional-changed-side-wins": function (f, run) {
+    const mine = run.mine[f.key], theirs = run.theirs[f.key];
+    const value = run.base ? (theirs === run.base[f.key] ? mine : theirs) : (theirs ?? mine);
+    if (value !== undefined) run.out[f.key] = value;
+  },
   "max-plus-one": function (f, run) { run.out[f.key] = mergeMaxPlusOne(f.key, run.mine, run.theirs); },
   "theirs-wins": function (f, run) { run.out[f.key] = mergeTheirsWins(f.key, run.mine, run.theirs); },
   "person-colors": function (f, run) {
