@@ -207,6 +207,15 @@ the thing you changed is a pure function of a document.
 `npm test -- --only src/test/formats` runs just the matching files and says
 it is not the full gate; CI always runs them all.
 
+The old PDF generator (`pdf.ts`, `pdf-unicode.ts`, `truetype.ts` and the Noto
+fonts) was deleted in AQ-44. The rows below that name `buildPdf`,
+`buildPackingListPdf`, `buildShotListPdf`, `assemblePdf` or the subsetter
+describe its retained tests, which fail at import until Adam decides on them
+(`gallery`, `broll-model`, `pdf-layout`, `pdf-script`, `list-pdfs`,
+`export-kit`, `export-colours`, and also `pdf-text`, `pdf-jpeg`,
+`pdf-unicode`, `truetype` and `m4-matrix-exports`). PDF output is now the
+print pages: [print-layout.md](../../../docs/architecture/print-layout.md).
+
 | File | Covers |
 | --- | --- |
 | `src/test/_dom.mjs` | not a suite: the jsdom bootstrap every other file imports first, and the note on why a real DOM rather than a stub |
