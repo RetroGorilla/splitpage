@@ -107,6 +107,14 @@ const shot = (id, name, extra) => Object.assign({
 }, extra || {});
 
 const CASES = [
+  {
+    name: "file-title-mine-only", spec: doc(),
+    mine: (s) => { s.titleOrigin = "file"; s.titleVersion = "v3"; }
+  },
+  {
+    name: "file-title-theirs-only", spec: doc(),
+    theirs: (s) => { s.titleOrigin = "user"; s.titleVersion = "v12"; }
+  },
   { name: "title-mine-only", spec: doc({ title: "Base title" }), mine: (s) => { s.title = "Mine title"; } },
   { name: "title-theirs-only", spec: doc({ title: "Base title" }), theirs: (s) => { s.title = "Their title"; } },
   {

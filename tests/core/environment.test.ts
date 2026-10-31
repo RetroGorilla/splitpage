@@ -13,6 +13,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/comments.ts": await import("../../src/core/document/comments.ts"),
   "document/export-document.ts": await import("../../src/core/document/export-document.ts"),
   "document/fields.ts": await import("../../src/core/document/fields.ts"),
+  "document/file-title.ts": await import("../../src/core/document/file-title.ts"),
   "document/freeze.ts": await import("../../src/core/document/freeze.ts"),
   "document/gallery.ts": await import("../../src/core/document/gallery.ts"),
   "document/id-map.ts": await import("../../src/core/document/id-map.ts"),
