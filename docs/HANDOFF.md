@@ -29,7 +29,7 @@ breakdown for props/locations/cast/VFX/sound.
   `node build.mjs` bundles from `main.ts` with
   esbuild and inlines the result into `index.html`; `node build.mjs --check`
   says whether the copy on disk is in step. `node build.mjs --test` is the
-  test build, which keeps the `window.__*Test` hooks the suites and the
+  test build, which keeps the `window.__*Test` hooks and `window.__splitpageFormats` the suites and the
   desktop smoke drive; the plain build leaves them out. `index.html` is **not in the
   repository** since #80 — it is generated, it is ignored, and a fresh clone
   has none until you build one. Run `npm install` once first — esbuild is the
@@ -1105,7 +1105,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/application/session/` | the document session (`document-session.ts`), change sets, merge (`apply-merge.ts`, `merge-incoming.ts`, `session-merge.js`) |
 | `src/application/commands/` | document edits as session commands: cell text, split and join, clipboard, scene length and status, rows, comments, b-roll and production records |
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
-| `src/application/save/` | the save coordinator, autosave, file saving and import write-back, save completion, export capture, the status selector |
+| `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
 | `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.js`) |
 | `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.js`) |
 | `src/application/` (other) | preferences, document location and identity (with the document guard), production index and b-roll records, media and picture store, files and recents, export registry and services, screen and screen state, actions, shortcuts |
@@ -1262,6 +1262,14 @@ and its home becomes the imported file (`setHome("import")`,
 `src/application/location/document-location.ts`), which replaces either Save target. It used to replace only `state.rows` and the title and keep the rest, which meant an
 unrelated Word file inherited the last script's breakdown, cast list and
 review comments, and Save still pointed at the previous project's file.
+
+**Deprecated: import save-back (Adam, 2026-10-30).** An import now opens
+with no home at all (`NO_DESTINATION`), like a new untitled script, and
+Splitpage never writes to the imported file: the File menu's and the
+desktop menu's Save to file and the conflict dialog's import overwrite are
+gone, so nothing calls `saveBackToFile`. The save-back owner, its save
+kinds and the `import` home kind stay in the code, unused; see
+[saving.md, Deprecated: import save-back](architecture/saving.md#deprecated-import-save-back).
 
 "Draft 2 of the same script" — the workflow that behaviour was useful for —
 is the **Paste/Import modal** (`openImportModal`, `src/features/imports/imports.js`),

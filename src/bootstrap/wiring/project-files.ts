@@ -3,6 +3,7 @@ import type { ProjectFileDeferredPorts } from "../../application/save/project-fi
 import { buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../../adapters/formats/project-file.ts";
 import { documentReader } from "./ports/document.ts";
 import { text } from "./ports/text.ts";
+import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { projectFileDocument, projectFileExports, projectFileLocation, projectFileOpening, projectFileRecovery, projectFileSaving } from "./ports/project-files.ts";
 
 let started: ReturnType<typeof createProjectFiles> | null = null;
@@ -34,5 +35,5 @@ export function finishMarkdownRowChoice(choice: unknown): void {
 }
 
 export function mountProjectFiles(): void {
-  Object.assign(window, { __splitpageFormats: running().formats });
+  exposeTestHook("__splitpageFormats", () => running().formats, () => undefined);
 }

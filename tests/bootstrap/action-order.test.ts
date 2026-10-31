@@ -19,7 +19,7 @@ test("bootstrap preserves the complete action registration order when export def
       "panel-production", "panel-gear", "panel-broll", "panel-comments", "write", "present",
       "settings", "help", "tour", "long-demo", "setup", "about",
       "tagging-help", "export-app-data", "import-app-data",
-      "save-back", "autosave", "new", "paste", "gdoc-import", "show-gdoc-import",
+      "autosave", "new", "paste", "gdoc-import", "show-gdoc-import",
       "export-again", "set-target",
       "prompter-open-in-browser", "prompter-open-in-chromium",
       "script-zoom-in", "script-zoom-out", "script-zoom-reset",
