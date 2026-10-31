@@ -14,7 +14,8 @@ Everything listed here goes inside the asar.
 | Entry | Why |
 | --- | --- |
 | `main.js`, `preload.js`, `tabstrip-preload.js`, `drafts.js` | `main.js` requires `./drafts` at load and loads both preloads by path. If one is missing from the asar, the packaged app crashes on startup. |
-| `ipc-channels.js` | The IPC channel table. `main.js` requires it at startup, and both preloads read it over `splitpage:ipc-table-sync`, so a packaged build without it has no bridge at all. |
+| `ipc-channels.js` | The IPC channel table. `ipc-setup.js` requires it at startup, and both preloads read it over `splitpage:ipc-table-sync`, so a packaged build without it has no bridge at all. |
+| `ipc-setup.js` | How a channel is registered (`createIpcSetup`): the `ipcHandle`, `ipcOn` and `ipcOnSync` wrappers, the sender origin and trust checks, the argument check, the refusal results and log lines, and `registerIpc`, which registers the table read, the app version and the test-mode flag itself and calls `main.js`'s handler groups in a fixed order. The handlers stay in `main.js`, in six named functions that each take the wrappers: `registerFileIpc`, `registerShellIpc`, `registerDocumentIpc`, `registerHistoryBlobIpc`, `registerTabStripIpc` and `registerTestModeIpc`. `main.js` passes in `ipcMain`, `app`, the test-mode flag and the window map. |
 | `prompter-share.js` | The teleprompter's loopback listener (#86). |
 | `close-keep.js` | The close-time checks for a tab whose file is gone: a file check with a one-second limit, so an unreachable drive can't freeze a close (#497), and whether a kept copy really reached the draft folder (#496). It also runs the close check's question rounds (`runCloseCheck`, with main's tabs and helpers passed in) and decides what closing a window that is the last one at "close" settles (`lastWindowClose`, #531). |
 | `quit-watchdog.js` | The update restart's 3 s quit timer, which waits while the quit is still asking the user and starts again once they answer. |
@@ -32,9 +33,9 @@ Everything listed here goes inside the asar.
 | `restore-notice.js` | The one notice, after a session restore, that some files could not be reopened (`createRestoreNotice`): which tab it waits for, delivering it once that tab is ready, and moving it to another tab if that one closes first. `main.js` still sends `splitpage:restore-notice` itself. |
 | `unsaved-dialog.js` | The wording and buttons of the unsaved-changes question asked before closing a tab, a window or the app, the titles it lists, and which answer each button means. Whether to ask, the test-mode answers and showing the dialog stay in `main.js`. |
 
-From `ipc-channels.js` down, `main.js` requires each of these modules at
-startup, so each must ship for the same reason `drafts.js` does. A new
-`./module` that `main.js` requires has to be added to this list:
+From `ipc-channels.js` down, `main.js` or `ipc-setup.js` requires each of
+these modules at startup, so each must ship for the same reason `drafts.js`
+does. A new `./module` that either file requires has to be added to this list:
 `desktop/test/ipc-table.test.mjs` fails if one is missing.
 
 Two things `main.js` needs at startup are deliberately left out of `files`:
