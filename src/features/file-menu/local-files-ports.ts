@@ -14,6 +14,12 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { SessionChange } from "../../application/session/change-set.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { FileMenuExportMount } from "./ports.ts";
+import type { PrintDialogPort } from "../../application/export/print-dialog.ts";
+
+export interface BrowserPdfExportPorts extends Pick<LocalFileMenuPorts, "exports" | "formats" | "assets" | "brollView" | "notices"> {
+  readonly desktop: () => boolean;
+  readonly printDialog: PrintDialogPort;
+}
 
 export interface LocalFileMenuPorts {
   readonly document: Pick<DocumentReader, "current">;
@@ -27,6 +33,7 @@ export interface LocalFileMenuPorts {
   readonly brollView: Pick<BrollView, "printView">;
   readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "withBar"> };
   readonly delivery: FileDelivery;
+  readonly pdfPrint: { readonly export: (kind: string, options: Readonly<Record<string, unknown>> | undefined, alive: () => boolean) => Promise<void> | null };
   readonly merge: { readonly offer: (file: unknown, home: unknown) => Promise<void>; readonly reset: () => void };
   readonly exportControls: Pick<FileMenuExportMount, "isExportAction" | "rememberExport">;
   readonly actions: Pick<ActionRegistry, "invoke" | "has">;

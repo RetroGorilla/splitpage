@@ -35,7 +35,7 @@ function setup() {
       holdMergeBase: () => { log.push("hold"); },
       noteMerged: (_kind, next) => { log.push("merged"); return next; },
       noteRecovery: () => { log.push("recovery"); return document; },
-      noteServerUpdate: () => { log.push("server"); return document; },
+      noteDiskUpdate: () => { log.push("disk"); return document; },
       noteAbsorbedDirty: () => { log.push("dirty"); }
     },
     entry: { migrate: (raw) => migrateRows(raw, migration), withPorts: (_fields, run) => run(migration) },

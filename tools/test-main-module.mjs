@@ -35,6 +35,7 @@ function link(target, path) {
 
 const repo = join(work, "repo");
 mkdirSync(join(repo, "tools"), { recursive: true });
+writeFileSync(join(repo, "build.mjs"), 'if (process.argv.includes("--test")) throw new Error("fixture build invoked");');
 spawnSync("git", ["init", "-q"], { cwd: repo });
 for (const name of readdirSync(join(REPO, "tools"))) {
   if (/\.(?:mjs|json)$/.test(name)) copyFileSync(join(REPO, "tools", name), join(repo, "tools", name));
@@ -52,7 +53,8 @@ const CASES = [
   ["comment-gate.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("comment-gate: unknown argument --bogus")],
   ["dep-report.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("dep-report: unknown argument --bogus")],
   ["failure-digest.mjs", [], (r) => r.code === 2 && r.err.includes("usage: node tools/failure-digest.mjs")],
-  ["perf-record.mjs", [], (r) => r.code === 2 && r.err.includes("perf-record: index.html is not built")],
+  ["perf-record.mjs", [], (r) => r.code === 1 && r.err.includes("fixture build invoked") && r.err.includes("node build.mjs --test")],
+  ["perf-record.mjs", ["--built"], (r) => r.code === 2 && r.err.includes("index.html is not built") && r.err.includes("node build.mjs --test")],
   ["run-suites.mjs", ["--bogus"], (r) => r.code !== 0 && r.err.includes("run-suites: unknown option --bogus")],
   ["run-tests.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("run-tests: unknown flag --bogus")],
   ["typecheck.mjs", [], (r) => r.code === 1 && r.err.includes("typecheck: tsconfig.core.json is missing")]
