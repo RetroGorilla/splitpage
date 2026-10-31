@@ -113,7 +113,8 @@ function job(kind: string, owns = true) {
     operation: () => ({}) as OperationContext,
     owns: () => owns,
     alive: () => true,
-    moved: () => { moves.push("moved"); }
+    moved: () => { moves.push("moved"); },
+    landed: (steps) => { if (owns) steps.current(); else steps.obsolete(); }
   };
   return { value, moves };
 }
@@ -209,7 +210,7 @@ test("Save As of a written-out script forks its id, retargets to the picked file
     "remember:copy.splitpage",
     "imagesLeftOut:0:copy.splitpage"
   ]);
-  assert.deepEqual(saveAs.moves, ["moved", "moved"]);
+  assert.deepEqual(saveAs.moves, ["moved"], "only the retarget moves the job; the forked id is applied after the coordinator decided");
   assert.deepEqual(h.toasts, ["Saved a new copy: copy.splitpage"]);
 });
 

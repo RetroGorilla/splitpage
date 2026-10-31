@@ -16,6 +16,7 @@ import type { ExportReadModels } from "../../src/core/document/export-document.t
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
+import { fakeNotices } from "../features/fakes.ts";
 
 const NO_MODELS: ExportReadModels = { production: [], commentNumbers: {}, broll: [] };
 const OLD_ID = "d0123456789abcdef0123456789abcdef";
@@ -48,9 +49,14 @@ function script(docId: string, audio: string): ValidatedDocument {
   return migrateRows({ title: "Pilot", docId, rev: 2, rows: [{ id: "r1", visualText: "Wide", audioText: audio }] }, fakeMigration().ports);
 }
 
+interface Scripted {
+  readonly docId: string;
+  readonly rows: readonly { readonly audioText?: unknown }[];
+}
+
 function audioOf(doc: unknown): string | null {
   if (!doc) return null;
-  return String((doc as ValidatedDocument).rows[0]?.audioText);
+  return String((doc as Scripted).rows[0]?.audioText);
 }
 
 interface World {
@@ -67,22 +73,25 @@ interface World {
   readonly confirms: string[];
   picks: (FileSaveTarget | { readonly kind: "cancelled" } | Error)[];
   historyHangs: boolean;
+  onRemember: (() => void) | null;
 }
 
 function world(): World {
   const location = createDocumentLocation();
-  const w = {
+  const w: Omit<World, "ownership" | "coordinator" | "mounted"> = {
     epoch: 1,
     doc: script(OLD_ID, "One."),
     location,
-    toasts: [] as string[],
-    history: [] as string[],
-    remembered: [] as string[],
-    downloads: [] as string[],
-    confirms: [] as string[],
-    picks: [] as World["picks"],
-    historyHangs: false
-  } as unknown as World;
+    toasts: [],
+    history: [],
+    remembered: [],
+    downloads: [],
+    confirms: [],
+    picks: [],
+    historyHangs: false,
+    onRemember: null
+  };
+  const shown = fakeNotices().notices;
   let coordinator: SaveCoordinator<FileSaveRequest, unknown> | null = null;
   const live = (): SaveCoordinator<FileSaveRequest, unknown> => {
     if (!coordinator) throw new Error("no coordinator yet");
@@ -108,8 +117,8 @@ function world(): World {
     document: {
       current: () => w.doc,
       stamp: (stamp: Stamp) => {
-        const plan = stamp.plan(w.doc as never);
-        if (plan) plan.apply(w.doc as never);
+        const plan = stamp.plan(w.doc);
+        if (plan) plan.apply(w.doc);
         return null;
       }
     },
@@ -122,7 +131,7 @@ function world(): World {
       writtenOut: () => location.writtenOut(),
       markWrittenOut: (on) => { location.markWrittenOut(on); }
     },
-    lastFile: { remember: (handle) => { w.remembered.push(handle.name); return Promise.resolve(); } },
+    lastFile: { remember: (handle) => { w.remembered.push(handle.name); w.onRemember?.(); return Promise.resolve(); } },
     pictures: { ensureBytes: () => Promise.resolve([]) },
     exports: { captureExportDocument: (opts) => buildExportDocument(w.doc, "2026-10-31T00:00:00.000Z", NO_MODELS, opts) },
     formats: {
@@ -163,7 +172,7 @@ function world(): World {
       changes: () => live().changes()
     },
     notices: {
-      show: (message) => { w.toasts.push(message); return { isConnected: true, dismiss: () => {}, removeEventListener: () => {} } as never; },
+      show: (message, kind, sticky) => { w.toasts.push(message); return shown.show(message, kind, sticky); },
       imagesLeftOut: () => {}
     },
     preferences: { editorName: () => "Adam", autosave: () => false },
@@ -178,8 +187,8 @@ function world(): World {
     report: { obsolete: savePorts.obsolete },
     join: joinSaves as unknown as (pending: FileSaveRequest, next: FileSaveRequest) => FileSaveRequest | null
   });
-  Object.assign(w, { ownership, coordinator, mounted });
-  return w;
+  const built: World = Object.assign(w, { ownership, coordinator: live(), mounted });
+  return built;
 }
 
 function open(w: World, target: Disk, docId: string, audio: string): Home {
@@ -213,7 +222,7 @@ function snapshot(w: World) {
     diskBase: home.kind === "file" ? audioOf(home.diskBase) : null,
     writtenOut: w.location.writtenOut(),
     baseline: audioOf(confirmed.baseline),
-    baselineId: confirmed.baseline ? (confirmed.baseline as ValidatedDocument).docId : null,
+    baselineId: confirmed.baseline ? (confirmed.baseline as Scripted).docId : null,
     generation: confirmed.generation,
     changes: w.coordinator.changes(),
     dirty: w.coordinator.dirty(),
@@ -532,4 +541,27 @@ test("history that never resolves: a forked Save As still settles saved, and a f
   assert.equal(v.doc.docId, OLD_ID);
   assert.deepEqual(v.history, [OLD_ID + ">" + NEW_ID]);
   assert.equal(v.coordinator.running(), false);
+});
+
+test("one decision: a Save As decided current when it landed stays saved when the document moves before the writer answers", async () => {
+  const w = world();
+  const a = disk("a.splitpage");
+  const b = disk("b.splitpage");
+  open(w, a, OLD_ID, "One.");
+  edit(w, "Copied.");
+  w.picks.push({ kind: "handle", handle: b, picked: true });
+  const copyHome: Home[] = [];
+  w.onRemember = () => { copyHome.push(w.location.home()); open(w, a, OLD_ID, "One."); };
+  assert.deepEqual(await request(w, "saveAs"), { kind: "saved", acknowledged: true });
+  const [picked] = copyHome;
+  assert.ok(picked);
+  assert.equal(w.coordinator.confirmed(picked).generation, 1, "the copy's file was confirmed when the write landed");
+  assert.equal(audioOf(w.coordinator.confirmed(picked).baseline), "Copied.");
+  assert.equal((w.coordinator.confirmed(picked).baseline as Scripted).docId, NEW_ID);
+  assert.deepEqual(w.history, [OLD_ID + ">" + NEW_ID]);
+  assert.deepEqual(w.toasts, ["Saved a new copy: b.splitpage"], "no late-save notice for a save that was current when it landed");
+  assert.deepEqual(snapshot(w), {
+    docId: OLD_ID, rev: 2, audio: "One.", home: "a.splitpage", lastModified: 1000, diskBase: "One.", writtenOut: true,
+    baseline: "One.", baselineId: OLD_ID, generation: 1, changes: 1, dirty: false, unsaved: false
+  });
 });
