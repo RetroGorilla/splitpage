@@ -2,21 +2,12 @@ const HOOK_NAME = /__(?:[A-Za-z]+Test|splitpageFormats)\b/g;
 
 export const STILL_IN_RELEASE = Object.freeze([
   "__annotateTest",
-  "__appDataTest",
   "__blobsTest",
   "__brollTest",
-  "__cacheTest",
-  "__commandTest",
-  "__exportTest",
-  "__fileMenuTest",
-  "__prompterTest",
   "__renderTest",
   "__rundownTest",
-  "__saveStatusTest",
   "__sceneSelectTest",
-  "__settingsTest",
   "__targetTest",
-  "__updateTest",
   "__videoTest"
 ]);
 
