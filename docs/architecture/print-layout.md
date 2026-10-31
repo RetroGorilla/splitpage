@@ -91,6 +91,7 @@ stylesheet or script. A restrictive CSP permits only inline CSS and raster
 data images. Links preserve safe HTTP(S)/mailto destinations without fetching
 them during rendering. There is no printable-document script.
 
+Table rows use `break-inside: avoid`; a row taller than a page may still split.
 Chromium decides page breaks and repeats table headers. Oversized scene rows
 can span pages without a hand-drawn pagination algorithm or a `cont.` label.
 Long words wrap within their column; text and scene content are not clipped.
