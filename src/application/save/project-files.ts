@@ -118,7 +118,7 @@ export function createProjectFiles(ports: ProjectFilesPorts) {
         lastModified: f ? f.lastModified : null };
     },
     hasDiskBase: function () { return !!(ports.location.fileHome() && (ports.location.fileHome() as Home).diskBase); },
-    forgetDiskBase: function () { if (ports.location.fileHome()) ports.location.amendHome(ports.location.fileHome() as Home, { diskBase: null }); ports.deferred.replaceSyncBase(null, "__splitpageFormats.forgetDiskBase: test hook, drives the two-way fallback"); return true; }
+    forgetDiskBase: function () { if (ports.location.fileHome()) ports.location.amendHome(ports.location.fileHome() as Home, { diskBase: null }); ports.deferred.replaceSyncBase(null, "formats.forgetDiskBase: test hook, drives the two-way fallback"); return true; }
   };
 
   return { services, formats, finishMarkdownRowChoice };

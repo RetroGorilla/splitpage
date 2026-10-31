@@ -6,6 +6,7 @@ import { heldDocument, currentDocument } from "./session-owner.ts";
 import { startStandaloneHtml } from "../../adapters/page/standalone-html.js";
 import { migrateRows } from "../document-ports.ts";
 import { documentIdentityPorts } from "./ports/document-identity.ts";
+import { exposeTestHook } from "../../features/common/test-hooks.ts";
 
 let started: DocumentIdentityOwner | null = null;
 let stop: (() => void) | null = null;
@@ -26,7 +27,8 @@ export function mountDocumentIdentityOwner(ports: DocumentIdentityPorts = docume
   const mine: DocumentIdentityOwner = createDocumentIdentityOwner();
   const dispose = mine.startIdentity(ports);
   const stopHtml = startStandaloneHtml(migrateRows);
-  const hooks = {
+  let withdrawHook: (() => void) | null = null;
+  exposeTestHook("__documentGuardTest", () => ({
     on: function () { return documentGuardOn(); },
     viewed: function () { const doc = heldDocument(); return doc !== null && documentView(doc) !== doc; },
     writes: function () {
@@ -41,14 +43,13 @@ export function mountDocumentIdentityOwner(ports: DocumentIdentityPorts = docume
         try { quietly(write); return false; } catch (error) { return error instanceof TypeError; }
       });
     }
-  };
-  Object.assign(window, { __documentGuardTest: hooks });
+  }), (withdraw) => { withdrawHook = withdraw; });
   started = mine;
   stop = () => {
     started = null;
     dispose();
     stopHtml();
-    if ((window as Window & { __documentGuardTest?: unknown }).__documentGuardTest === hooks) delete (window as Window & { __documentGuardTest?: unknown }).__documentGuardTest;
+    withdrawHook?.();
   };
   return mine;
 }
