@@ -61,10 +61,6 @@ a { color: #${c.visual}; text-decoration: underline; }
 .read-set { border: 0.5pt solid #${c.borderStrong}; border-radius: 2pt; padding: 2pt; }
 .visual-head { color: #${c.visual}; }
 .audio-head, .comment-marker { color: #${c.audio}; }
-.rundown { display: flex; gap: 1pt; margin: 8pt 0; }
-.rundown span { min-width: 0; background: #${c.surface2}; overflow-wrap: anywhere; font-size: 7pt; padding: 2pt; }
-.rundown .shot { background: #${c.dim}; color: white; }
-.rundown .ready { background: #${c.audioSoft}; color: #${c.audio}; }
 .direction { color: #${c.faint}; }
 .cue { color: #AB413E; font-size: 85%; }
 .tag { text-decoration: underline; }
@@ -92,14 +88,19 @@ a { color: #${c.visual}; text-decoration: underline; }
 .signature-line { flex: 1; border-bottom: 0.75pt solid #${c.borderStrong}; }
 .list-group th { font-size: 10pt; color: #${c.text}; padding-top: 14pt; break-after: avoid; }
 .status-mark { display: inline-block; width: 6pt; height: 6pt; border: 0.75pt solid #${c.faint}; border-radius: 50%; margin-right: 4pt; }
-.status-mark.sourcing { background: linear-gradient(90deg, #${c.audio} 50%, transparent 50%); }
+.status-mark.sourcing { overflow: hidden; }
+.status-mark.sourcing::before { content: ""; display: block; width: 50%; height: 100%; background: #${c.audio}; }
 .status-mark.have { background: #${c.text}; }
 .status-mark.returned { border-style: double; }
 .shot-table { font-size: 8pt; }
 .shot-table th { font-size: 7pt; }
-.shot-done > td:nth-child(3) { color: #${c.faint}; }
+.shot-done > td { background: #e6e6e6; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.shot-table .shot-done > td:nth-child(3) { color: #${c.faint}; }
 .shot-flag { color: #C4302A; }
-.writing-lines { min-height: 24pt; background: repeating-linear-gradient(to bottom, transparent 0 11pt, #${c.borderStrong} 11pt 11.5pt, transparent 11.5pt 12pt); }
+.shot-done .comment-marker { color: #985500; }
+.shot-done .shot-flag { color: #BE2F29; }
+.writing-lines { min-height: 24pt; }
+.writing-lines > span { display: block; height: 12pt; border-bottom: 0.5pt solid #${c.borderStrong}; }
 @page shot-list { size: letter landscape; }
 @media print { section:has(.shot-list) { page: shot-list; } }
 @media screen { body { padding: 24px; } }

@@ -52,9 +52,7 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
   const facts = exportFacts(doc, services);
   const scenes = sceneFacts(doc, services);
   const summary = exportSummaryParts(facts).concat(facts.date).join(" · ");
-  const rundown = scenes.length ? `<div class="rundown" aria-label="Scene rundown">${scenes.map((scene) =>
-    `<span class="${scene.status.id}" style="flex-grow:${Math.max(0, scene.seconds)};flex-basis:0">${scene.number}</span>`).join("")}</div>
-<p class="print-meta">Shot ${facts.status.shot} · Ready ${facts.status.ready} · To do ${facts.status.todo}</p>` : "";
+  const statusSummary = scenes.length ? `<p class="print-meta">Shot ${facts.status.shot} · Ready ${facts.status.ready} · To do ${facts.status.todo} · Grey rows: shot scenes</p>` : "";
   const rows = doc.scenes.map((row, index) => {
     const scene = scenes[index];
     if (!scene) throw new Error("Missing captured scene facts");
@@ -64,13 +62,13 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
     const main = image ? printPicture(picture, "Scene " + scene.number + " picture") : "";
     const more = morePictureRefs(row).map((ref) => printPicture(assets.picture(ref.sha256), "Scene " + scene.number + " gallery picture")).join("");
     const links = rowVideoLinks(row).map((link) => `<p>${link.href ? escapeHtml(videoHostLabel(link)) + " " : ""}${printLink(String(videoLinkText(link)), link.href)}</p>`).join("");
-    return `<tr><td><strong class="scene-number">${scene.number}</strong><span class="scene-meta">${escapeHtml(scene.start)}</span>
+    return `<tr${scene.status.id === "shot" ? ' class="shot-done"' : ""}><td><strong class="scene-number">${scene.number}</strong><span class="scene-meta">${escapeHtml(scene.start)}</span>
 <span class="scene-meta">${escapeHtml(scene.status.label)}</span></td>
 <td>${main}${more}${links}<div class="print-text">${cellHtml(row.visualText, input)}</div></td>
 <td><div class="print-text">${cellHtml(row.audioText, input)}</div></td>
 <td><span${scene.readSet ? ' class="read-set"' : ""}>${escapeHtml(scene.read)}</span></td></tr>`;
   }).join("");
-  const script = `<h1>${escapeHtml(facts.title)}</h1><p class="print-meta">${escapeHtml(summary)}</p>${rundown}` +
+  const script = `<h1>${escapeHtml(facts.title)}</h1><p class="print-meta">${escapeHtml(summary)}</p>${statusSummary}` +
     (rows ? `<table class="script-table"><colgroup><col style="width:10%"><col style="width:40%"><col style="width:40%"><col style="width:10%"></colgroup>
 <thead><tr><th>Scene</th><th class="visual-head">Visual</th><th class="audio-head">Audio</th><th>Read</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No scenes yet.</p>");
   const sections: PrintSection[] = [{ id: "script", title: "Script", html: script }];

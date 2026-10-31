@@ -687,7 +687,7 @@ format, with a preview and the file name.
   reasons, and lines for notes (or the same as a spreadsheet).
 
 **PDF** and **Word** lay the script out the way the app does: the running
-time and target at the top (the PDF adds the rundown strip), each scene's
+time and target at the top (the PDF shades shot rows grey), each scene's
 number, start time, status and read time, tags in their colours, b-roll
 keys, and each open comment's number beside its words. At the end come the
 breakdown by category, the b-roll shot list and the numbered comments. The
