@@ -833,7 +833,7 @@ STRUCTURE SECTION MUST SAY
 - "no behaviour change", what moved from main.js to desktop/ipc-setup.js and what the module needs from main.js (the dependency list), the line count of main.js before and after, the (channel, direction) list before and after (equal), the lists updated, smoke count. Name lifecycle and voice as the later steps.
 ```
 
-## AQ-36 [ ] Desktop split, step 2: process lifecycle out of desktop/main.js
+## AQ-36 [x] Desktop split, step 2: process lifecycle out of desktop/main.js
 
 Needs: AQ-35 merged. Start from a base that includes it; do not run alongside AQ-38.
 Files: desktop/main.js, new CommonJS lifecycle module(s) under desktop/, desktop/test/ (lifecycle tests and smoke.mjs if needed), desktop/electron-builder.yml, desktop/package.json, docs/architecture/desktop-build.md and docs that name the moved code.
