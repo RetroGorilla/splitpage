@@ -76,13 +76,13 @@ const ENTRIES = {
     replaces: true,
     run: (raw) => applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(raw) })
   },
-  server: {
-    kind: "server",
+  disk: {
+    kind: "disk",
     opens: false,
     run: (raw) => applyMerge({ theirs: raw, source: "stash", unchanged: true, report: false })
   },
   merge: {
-    kind: "server",
+    kind: "disk",
     opens: false,
     run: (raw, base, mine) => applyMerge({ base: base, mine: mine, theirs: raw, source: "stash", report: false })
   },
@@ -174,7 +174,7 @@ async function seedEntries(seed, tally = { kinds: {}, known: {}, typed: {} }, br
   return tally;
 }
 
-test("booted app: seeded raw documents through a draft adoption, a server update, a merge and a recovery merge end in a valid fixed point, a typed failure or a refusal that changes nothing", async (t) => {
+test("booted app: seeded raw documents through a draft adoption, a disk update, a merge and a recovery merge end in a valid fixed point, a typed failure or a refusal that changes nothing", async (t) => {
   const tally = { kinds: {}, known: {}, typed: {} };
   for (let seed = 1; seed <= SEEDS; seed++) await seedEntries(seed, tally);
   flushEdits();
@@ -194,7 +194,7 @@ test("booted app: with render() throwing, the same seeded entries still land who
 for (const row of TABLE_304) {
   test("booted app, #304's table, " + row.label + ": applyMerge with that raw theirs, merged, unchanged or recovered, ends in a valid fixed point", async () => {
     const tally = { kinds: {}, known: {}, typed: {} };
-    for (const name of ["merge", "server", "recovery"]) {
+    for (const name of ["merge", "disk", "recovery"]) {
       settle(startingDocument("Table"));
       const theirs = table304Document("Theirs");
       row.spoil(theirs);
@@ -311,7 +311,7 @@ test("a shot's audioRef taken from a line that reads like a tag is stored withou
     schema: 2, title: "Brackets", docId: "d" + "5".repeat(32),
     rows: [{ id: "r1", visualText: "B-roll: harbour", audioText: "Say &lt;b&gt;now&lt;/b&gt;", status: "todo" }]
   });
-  await through("server", raw, "brackets", { kinds: {}, known: {}, typed: {} });
+  await through("disk", raw, "brackets", { kinds: {}, known: {}, typed: {} });
   assert.deepEqual(held().brollShots.map((b) => [b.name, b.audioRef]), [["harbour", "Say now"]]);
   assert.deepEqual(migrateRows(cloneState(held())).brollShots, held().brollShots);
   assert.deepEqual(judge(held(), migrate, allowed), { problems: [], known: [] });
@@ -322,7 +322,7 @@ test("a bare \"B-roll:\" line makes no shot, at entry or at render (#325 H)", as
     schema: 2, title: "Bare", docId: "d" + "6".repeat(32),
     rows: [{ id: "r1", visualText: "B-roll:", audioText: "One.", status: "todo" }]
   });
-  await through("server", raw, "bare", { kinds: {}, known: {}, typed: {} });
+  await through("disk", raw, "bare", { kinds: {}, known: {}, typed: {} });
   assert.deepEqual(held().brollShots, []);
   assert.deepEqual(migrateRows(cloneState(held())).brollShots, []);
 });
@@ -396,7 +396,7 @@ const NOT_DOCUMENTS = [[{ id: "r1", audioText: "x" }], [], 7, "doc", true, null]
 
 test("applyMerge refuses a theirs or a mine that is no document, and nothing changes: an array no longer merges in as an empty script that deletes the scenes mine didn't touch (#407)", () => {
   const calls = {
-    server: (raw) => ({ theirs: raw, source: "stash", unchanged: true, report: false }),
+    disk: (raw) => ({ theirs: raw, source: "stash", unchanged: true, report: false }),
     merge: (raw, start) => ({ base: start.base, mine: start.mine, theirs: raw, source: "stash", report: true, undoPoint: cloneState(start.doc) }),
     recovery: (raw, start) => ({ base: start.base, mine: start.mine, theirs: raw, source: "stash", recovery: true, report: true }),
     mine: (raw, start) => ({ base: start.base, mine: raw, theirs: table304Document("Theirs"), source: "stash", report: true })

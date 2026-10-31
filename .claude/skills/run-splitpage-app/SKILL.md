@@ -839,10 +839,16 @@ native window rather than headless Chromium.
 From `desktop/`:
 
 ```bash
-node test/smoke.mjs                       # dev + both packaged exes (if they exist)
+node test/smoke.mjs                       # dev + the packaged exes in dist/ and dist-test/ (if they exist)
 node test/smoke.mjs --exe <path to .exe>  # one specific target
-node test/smoke.mjs --only-target dev|packaged-x64|packaged-arm64  # filter (for debugging)
+node test/smoke.mjs --only-target dev|packaged-x64|packaged-arm64|test-packaged-x64|test-packaged-arm64  # filter (for debugging)
+node test/smoke.mjs --hook-free           # only the groups that drive no test hook, on every target
 ```
+
+The release packages in `dist/` (`npm run dist:win`) run only the hook-free
+groups; the full smoke runs on the test package in `dist-test/`
+(`npm run dist:win:test`, never published). See
+[WINDOWS-CHECKS.md, Before you start](../../../docs/WINDOWS-CHECKS.md#before-you-start).
 
 Every launch gets its own fresh temp `SPLITPAGE_USER_DATA`, its own free
 `--remote-debugging-port`, and `SPLITPAGE_NO_UPDATE_CHECK=1`. Nothing touches

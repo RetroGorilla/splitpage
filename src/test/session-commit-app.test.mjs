@@ -150,7 +150,7 @@ test("a legacy edit records the colour as it marks the document unsaved, and its
 test("an absorbed change that marks the document unsaved records the colour as before", () => {
   named();
   fresh();
-  noteAbsorbedDirty("server");
+  noteAbsorbedDirty("disk");
   assert.equal(colorOf(currentDocument()), COLOR);
   assert.equal(unsavedChanges(), true);
 });
@@ -159,7 +159,7 @@ test("the dirty effect itself writes no document content, for a named editor too
   named();
   const doc = fresh();
   const before = JSON.stringify(doc);
-  liveSession().settle("server");
+  liveSession().settle("disk");
   liveSession().noteEdit();
   assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(unsavedChanges(), true);

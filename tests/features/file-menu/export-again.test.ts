@@ -42,6 +42,7 @@ function mount(t: TestContext, options: { loaded?: boolean; reasons?: Reasons } 
     notices: fakeNotices().notices,
     exports: registry,
     exportAction: () => true,
+    printWorkflow: () => false,
     onMenuRefresh: () => () => undefined,
     menuItems: { setLabel: () => undefined, setReason: () => undefined },
     text: { cellOf: () => null },
