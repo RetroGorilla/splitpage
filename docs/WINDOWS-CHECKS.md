@@ -120,9 +120,9 @@ node test/smoke.mjs --only-target dev   # dev only, fastest loop
 
 **Packaged targets come in two variants** (Adam, on #974). The real release
 package in `dist/` (`npm run dist:win`) is a release build: it has none of the
-hooks the release build leaves out (`__historyTest`, `__undoTest`,
-`__documentGuardTest`, `__desktopTest` with its fake backend,
-`__splitpageFormats`). The smoke treats `packaged-x64` and `packaged-arm64` as
+hooks the release build leaves out (the `CONVERTED` list in
+`tools/test-release-hooks.mjs`, among them `__historyTest`, `__desktopTest`
+with its fake backend and `__splitpageFormats`). The smoke treats `packaged-x64` and `packaged-arm64` as
 release packages: it checks that their `index.html` exposes no hook outside the
 release list, runs only the groups marked `hookFree` in `runTargetSuite`, and
 lists every other group as a `SKIP`. The full smoke runs on a test package

@@ -3,25 +3,31 @@ import { STILL_IN_RELEASE, hookNames, leakedHooks } from "./release-hooks.mjs";
 
 const APPROVED = Object.freeze([
   "__annotateTest",
-  "__appDataTest",
   "__blobsTest",
   "__brollTest",
-  "__cacheTest",
-  "__commandTest",
-  "__exportTest",
-  "__fileMenuTest",
-  "__prompterTest",
   "__renderTest",
   "__rundownTest",
-  "__saveStatusTest",
   "__sceneSelectTest",
-  "__settingsTest",
   "__targetTest",
-  "__updateTest",
   "__videoTest"
 ]);
 
-const CONVERTED = Object.freeze(["__desktopTest", "__documentGuardTest", "__historyTest", "__splitpageFormats", "__undoTest"]);
+const CONVERTED = Object.freeze([
+  "__appDataTest",
+  "__cacheTest",
+  "__commandTest",
+  "__desktopTest",
+  "__documentGuardTest",
+  "__exportTest",
+  "__fileMenuTest",
+  "__historyTest",
+  "__prompterTest",
+  "__saveStatusTest",
+  "__settingsTest",
+  "__splitpageFormats",
+  "__undoTest",
+  "__updateTest"
+]);
 
 const FAKE_DESKTOP = Object.freeze(["_failNextDraftWrites", "_blobFailNext", "0.0.0-test"]);
 

@@ -4,6 +4,7 @@ import { escapeHtml } from "../../core/document/text-policy.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
 import { formatClock } from "../../../shared/clock.js";
 import { applyTagIcons, applyTheme } from "./appearance.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 var ports = null;
 var listeners = [];
@@ -321,12 +322,14 @@ export function startSettings(given) {
   var unsubscribe = ports.changes.onChange(function (change) {
     onPrefChanged(change.name);
   }, { elsewhere: false });
-  var test = {
-    open: openSettings,
-    close: closeSettings,
-    isOpen: settingsOpen
-  };
-  window.__settingsTest = test;
+  var withdrawHook = null;
+  exposeTestHook("__settingsTest", function () {
+    return {
+      open: openSettings,
+      close: closeSettings,
+      isOpen: settingsOpen
+    };
+  }, function (withdraw) { withdrawHook = withdraw; });
   return {
     openSettings: openSettings,
     dispose: function () {
@@ -336,7 +339,7 @@ export function startSettings(given) {
       while (listeners.length) listeners.pop()();
       var m = modal();
       if (m) m.remove();
-      if (window.__settingsTest === test) delete window.__settingsTest;
+      if (withdrawHook) withdrawHook();
       settingsReturnFocus = null;
       ports = null;
     }
