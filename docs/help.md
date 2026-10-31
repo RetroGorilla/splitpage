@@ -691,11 +691,22 @@ time and target at the top (the PDF adds the rundown strip), each scene's
 number, start time, status and read time, tags in their colours, b-roll
 keys, and each open comment's number beside its words. At the end come the
 breakdown by category, the b-roll shot list and the numbered comments. The
-PDF's links can be clicked, and every page says "Page 2 of 8". Greek,
-Cyrillic and accented Latin letters print, and so do emoji, in black and
-white. Chinese, Japanese, Korean, Arabic, Hebrew and Hindi characters can't
-be shown yet: each shows as a "?" and Splitpage tells you how many when it
-makes the file.
+PDF's links can be clicked, and pages carry a title and page numbers.
+
+In a **browser**, PDF, gear/prop packing lists and the PDF B-roll shot list
+open a print page and the browser's **print dialog**. Choose **Save as PDF**
+there, then choose where to save it. Allow pop-ups for Splitpage if asked.
+There is no automatic PDF download; cancelling the dialog leaves your script
+and its save status alone. The print page closes after the dialog finishes;
+if your browser leaves it open, close it when you are done. Pages use your
+computer's fonts, including the languages those fonts support. The browser
+chooses page breaks, without a continued-row label, and supplies no PDF
+bookmarks.
+
+The **desktop app** still saves a PDF file directly, with bookmarks to its
+sections. Its current PDF writer supports Greek, Cyrillic, accented Latin
+and black-and-white emoji; unsupported characters appear as "?", with a
+warning. The browser print layout does not use that writer.
 
 **Markdown** comes in two shapes. **Stacked** reads like a script, one
 heading per scene with its start time, status and read time; with pictures

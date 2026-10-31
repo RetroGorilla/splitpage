@@ -21,6 +21,7 @@ test("local file menu mounts with named fakes, paints the chip, announces choice
     imagesLeftOut: () => {}, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
     notices: { ...fakeNotices().notices, busy: { withBar: async (_label, work) => work() } },
     delivery: { deliver: async () => true },
+    pdfPrint: { export: () => null },
     merge: { offer: async () => {}, reset: () => {} },
     exportControls: { isExportAction: () => false, rememberExport: () => {} }, actions: createActionRegistry()
   };

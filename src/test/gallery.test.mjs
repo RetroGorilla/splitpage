@@ -11,7 +11,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import {
   addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
-} from "../adapters/storage/02d-gallery.js";
+} from "../core/document/gallery.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";

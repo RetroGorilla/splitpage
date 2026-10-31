@@ -80,8 +80,6 @@ export function mountDraftsFeature(): DraftsMount {
     let unlisten: () => void;
     try {
       unlisten = listenToPage(mounted);
-      const hooks = (window as { __desktopTest?: Record<string, unknown> }).__desktopTest;
-      if (hooks) hooks["drafts"] = mounted.testing;
     } catch (error) {
       mounted.dispose();
       throw error;
@@ -97,6 +95,10 @@ export function mountDraftsFeature(): DraftsMount {
 }
 
 export const stopDraftsFeature = drafts.stop;
+
+export function draftsTesting(): DraftsMount["testing"] | undefined {
+  return drafts.owner()?.testing;
+}
 
 export function draftRecoveryPorts() {
   return {
