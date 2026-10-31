@@ -713,7 +713,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change; test only", the cause, what the check waits on now, pass counts before and after.
 ```
 
-## AQ-32 [ ] Switch off import save-back (keep the code, mark it deprecated)
+## AQ-32 [x] Switch off import save-back (keep the code, mark it deprecated)
 
 Needs: none. Supersedes AQ-29 (its PR stays unmerged and is closed when this task merges).
 Files: the entry points that reach `saveBackToFile` (src/application/save/import-saving.ts): the save-back action and its file menu item (src/features/file-menu/, src/bootstrap/actions.ts, src/bootstrap/wiring/local-files.ts) and the conflict retry that calls it; their tests and browser suites; the docs that describe save-back.

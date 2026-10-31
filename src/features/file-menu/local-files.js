@@ -19,7 +19,6 @@ function currentDocument(...args) { return running().document.current(...args); 
 function preferences() { return running().preferences; }
 function importHome(...args) { return running().place.importHome(...args); }
 function fileHome(...args) { return running().place.fileHome(...args); }
-function saveBackItemState(...args) { return running().writeback.saveBackItemState(...args); }
 function captureExportDocument(...args) { return running().exports.captureExportDocument(...args); }
 function loadExportAssets(...args) { return running().exports.loadExportAssets(...args); }
 function exportAssetsRequest(...args) { return running().assets.request(...args); }
@@ -27,7 +26,6 @@ function standaloneHtmlFor(...args) { return running().standaloneHtml(...args); 
 function warnImagesLeftOut(...args) { return running().imagesLeftOut(...args); }
 function withBusyBar(...args) { return running().notices.busy.withBar(...args); }
 function deliverFile(...args) { return running().delivery.deliver(...args); }
-function setMenuItemLabel(...args) { return running().menuItems.setLabel(...args); }
 function showToast(...args) { return running().notices.show(...args); }
 function offerFileMerge(...args) { return running().merge.offer(...args); }
 function resetMergeOffer(...args) { return running().merge.reset(...args); }
@@ -68,16 +66,8 @@ function mirrorFileChipToWriter() {
   dstState.classList.toggle("unsaved", srcState.classList.contains("unsaved"));
 }
 
-function paintSaveBackItem() {
-  var saveBack = document.getElementById("menu-save-back");
-  var state = saveBackItemState();
-  saveBack.disabled = state.disabled;
-  setMenuItemLabel(saveBack, state.label);
-}
-
 function updateHeaderFileChip() {
   var chip = document.getElementById("file-chip");
-  paintSaveBackItem();
   var imported = importHome();
   if (!imported) {
     chip.hidden = true;

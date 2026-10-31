@@ -21,13 +21,15 @@ saving bugs. If you open or share scripts on a Splitpage server, read
   sessions that pointed at a server document open as unsaved local
   documents with their content intact. Collaboration will come back,
   rebuilt, in a later release.
+- **Save to file** is gone, in the File menu and the desktop menu bar.
+  Opening a `.docx`, `.txt`, `.csv` or other Markdown file now starts a
+  separate script that is not saved yet, like a new script: Save asks where
+  to keep it, and Splitpage never writes to the file you opened. Use
+  **File ▸ Export…** to make a Word, CSV or other file.
 
 ### Fixed
 - Desktop: a save now reaches the disk before it replaces the old file, so
   a power cut during a save can no longer leave an empty script.
-- Saving back to a file you imported no longer refuses the next save with
-  "changed on disk" when the file could not be read again after a good
-  write.
 - A save that reached the file is no longer reported as failed when reading
   the file's time afterwards fails, and the next save no longer sees a
   false "changed on disk".

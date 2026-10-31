@@ -1913,7 +1913,6 @@ function buildMenu() {
     submenu: [
       { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuCommand("save") },
       { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuCommand("save-as") },
-      { label: "Save to file", id: "menu-save-back", click: () => sendMenuCommand("save-back") },
       { type: "separator" },
       { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => sendMenuCommand("open") },
       { label: "Paste a script…", click: () => sendMenuCommand("paste") },

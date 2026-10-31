@@ -49,8 +49,9 @@ expect F.writtenOut() == false
 expect document.getElementById('production-badge').hidden == true
 expect document.getElementById('broll-badge').hidden == true
 expect document.getElementById('comments-badge').hidden == true
-# the chip names the foreign file it is round-tripping, not the old project
-expect document.getElementById('file-chip-name').textContent == stranger.txt
+# no chip: since import save-back was switched off (2026-10-30) the foreign
+# file is not the script's home, and nothing names the old project either
+expect document.getElementById('file-chip').hidden == true
 
 # --- a .md with no data block is foreign too, and takes its # heading -----
 eval (async function(){ await F.openFile(new File(['# Borrowed Heading' + String.fromCharCode(10,10) + 'One paragraph.'], 'plain.md')); return true; })()

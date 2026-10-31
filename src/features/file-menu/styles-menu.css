@@ -224,7 +224,6 @@
   .fm-card-meta { font-size: 12.5px; line-height: 16px; color: var(--text-faint); margin-top: 1px; }
   .fm-card-meta .is-unsaved { color: var(--accent); }
   .fm-card .mi:hover:not(:disabled), .fm-card .mi:focus-visible { background: var(--hover); }
-  .fm-card .mi[data-file-action="save-back"]:disabled { display: none; }
 
   .menu-foot {
     flex: none;

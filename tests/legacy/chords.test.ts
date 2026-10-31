@@ -1,4 +1,4 @@
-import { mountLocalFilesFeature, stopLocalFilesFeature, fileWritebackActions } from "../../src/bootstrap/wiring/local-files.ts";
+import { mountLocalFilesFeature, stopLocalFilesFeature } from "../../src/bootstrap/wiring/local-files.ts";
 import { prompterActions } from "../../src/features/prompter/actions.ts";
 import { screen } from "../../src/bootstrap/wiring/ports/screen.ts";
 import { importActions } from "../../src/bootstrap/wiring/imports.ts";
@@ -56,7 +56,7 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   const file = fileMenuActions();
   const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, stopFindFeature,
     registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]), registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
-    registerAll(registry, [...settingsActions(), ...helpActions(), ...file.slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]), registerAll(registry, [...fileWritebackActions(), ...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...desktopActions()]), stopDesktopFeature, registerAll(registry, scriptZoomActions()), stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature
+    registerAll(registry, [...settingsActions(), ...helpActions(), ...file.slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]), registerAll(registry, [...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...desktopActions()]), stopDesktopFeature, registerAll(registry, scriptZoomActions()), stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature
   ];
   return { registry, dispose: () => {
     try {

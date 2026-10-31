@@ -1,19 +1,11 @@
-import type { ImportSavingOwner } from "../../application/save/import-saving-ports.ts";
-import type { ScreenState } from "../../application/screen.ts";
-import type { ActionDefinition, ActionSource, Availability } from "../../application/actions.ts";
+import type { ActionDefinition, Availability } from "../../application/actions.ts";
 import { EVERY_OVERLAY, OPENS_A_DIALOG, availableUnless, firstRefusal } from "../../application/screen.ts";
 import type { Blocker } from "../../application/screen.ts";
-import type { AutosaveActionPorts, FileMenuActionPorts, FileMenuControls, FileMenuExportActionPorts, FileMenuExportControls, MenuItemState } from "./ports.ts";
+import type { AutosaveActionPorts, FileMenuActionPorts, FileMenuControls, FileMenuExportActionPorts, FileMenuExportControls } from "./ports.ts";
 
 const UNMOUNTED: Availability = { enabled: false };
 
 const OPENS_ONE: readonly Blocker[] = ["loading", ...OPENS_A_DIALOG];
-
-function itemAvailability(state: MenuItemState, source: ActionSource): Availability {
-  const visible = !state.hidden;
-  if (state.disabled) return { enabled: false, reason: source === "native-menu" ? "" : state.reason, visible };
-  return visible ? { enabled: true } : { enabled: true, visible };
-}
 
 export function fileMenuActions(current: () => FileMenuControls | null, ports: FileMenuActionPorts): ActionDefinition[] {
   const pageOwnsKeys = (): boolean => !ports.desktop();
@@ -146,27 +138,6 @@ export function fileMenuExportActions(current: () => FileMenuExportControls | nu
         return { ...firstRefusal(availableUnless(["loading"], ports.screen()), own), visible: false };
       },
       run: () => { current()?.exportAgain(); }
-    }
-  ];
-}
-
-export function fileWritebackActions(current: () => Pick<ImportSavingOwner, "saveBackItemState" | "saveBackToFile"> | null, screen: () => ScreenState): ActionDefinition[] {
-  const saveBackItemState = () => current()?.saveBackItemState() ?? { hidden: false, disabled: true, reason: "", label: "Save to file" };
-  const saveBackToFile = () => current()?.saveBackToFile();
-  const loaded = (own: Availability, blockers: readonly Blocker[]) => firstRefusal(availableUnless(blockers, screen()), own);
-  const NO_DIALOG: readonly Blocker[] = ["loading", "dialog", "launcher"];
-  return [
-    {
-      id: "save-back",
-      label: () => saveBackItemState().label,
-      group: "File",
-      icon: "i-save",
-      words: "write back original docx csv txt",
-      availability: (source) => {
-        const a = loaded(itemAvailability(saveBackItemState(), source), NO_DIALOG);
-        return a.enabled ? a : { ...a, visible: false };
-      },
-      run: async () => { await saveBackToFile(); }
     }
   ];
 }

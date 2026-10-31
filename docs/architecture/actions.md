@@ -86,15 +86,15 @@ and both the menu's painting and the action's availability call it:
 
 | State | Function |
 | --- | --- |
-| Save to file, and its label | `saveBackItemState()`, `src/application/save/import-saving.ts` |
 | Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.js` |
 | Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `src/adapters/desktop/desktop-port.ts`; `appDataImportShown()`, `src/features/desktop/desktop.js` |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
-`itemAvailability()` (`src/features/file-menu/actions.ts`) turns such a state
-into an availability. `label` may be a function: Save to file shows the
-imported file's name. `276-availability-follows-state.txt` changes the state
+The action (`src/features/file-menu/actions.ts`) turns such a state into an
+availability. `label` may be a function: Export again names what it repeats.
+The File menu's Save to file was removed on 2026-10-30 with import save-back
+([saving.md](saving.md#deprecated-import-save-back)). `276-availability-follows-state.txt` changes the state
 with the File menu closed and checks that the command menu and the native
 menu follow it.
 
@@ -191,7 +191,7 @@ started over one of them.
 | Action | Refused under |
 | --- | --- |
 | `save`, `save-as` | still loading, a dialog, the command menu |
-| `save-back`, `prompter-open-in-browser`, `prompter-open-in-chromium` | still loading, a dialog, the command menu (then their own state) |
+| `prompter-open-in-browser`, `prompter-open-in-chromium` | still loading, a dialog, the command menu (then their own state) |
 | `open`, `export` | still loading, every overlay |
 | `command-menu` | still loading, every overlay but itself |
 | `find` | still loading, every overlay but the command menu |
@@ -304,7 +304,7 @@ is "Close the writer first.".
 ran behind an overlay: Present, Write, the panels and Version history behind
 the writer, Present, the shot-list page or the tour; Open, Export, Search
 commands and Find behind the shot-list page and the tour, and Find behind
-Present; Save to file, the two Present in the
+Present; Save to file (removed since, 2026-10-30), the two Present in the
 browser items and the export formats behind a dialog or the command menu. The
 shot-list page and the tour are overlays like the others ("What is in front",
 above). This is a change of behavior on every surface, not only the native
@@ -338,9 +338,9 @@ item goes through `handleFileMenuAction(id, "native-menu")`, what choosing
 that item does: it closes the setup wizard and the File menu, remembers an
 export, and invokes the action. Any other registered command (the script
 zoom commands) runs as itself. Refusals are shown as toasts, except where
-the File menu would show the item greyed out (Save to file, Export again, Save while a save runs): the
+the File menu would show the item greyed out (Export again, Save while a save runs): the
 native menu cannot grey an item out, and in 3.1 it did nothing there, so
-`itemAvailability()` (`src/features/file-menu/actions.ts`) gives such a refusal no reason for that source, and the native path does
+the action (`src/features/file-menu/actions.ts`) gives such a refusal no reason for that source, and the native path does
 nothing at all for a refusal without one; a dialog or other overlay in front
 of a greyed-out item is still named, as it is checked first. The export
 formats are not actions yet (milestone 5) and keep the File menu item's own
@@ -383,7 +383,7 @@ open when a command runs from the keyboard or a menu.
 | `settings`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Help and Tour also from the Settings dialog's and the setup wizard's buttons; Tour also from the New Tab page | Capture-phase File menu listeners in `20s-settings.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js` |
 | `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu; Tagging reference and app data also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
-| `new`, `paste`, `gdoc-import`, `save-back`, `autosave`, `export-again` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
+| `new`, `paste`, `gdoc-import`, `autosave`, `export-again` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
 | `set-target` | Command menu | `18d-command-menu.js` |
 | `prompter-open-in-browser`, `prompter-open-in-chromium` | File menu, command menu, desktop menu (Ctrl+Shift+P) | `18-local-files.js`, `18d-command-menu.js` |
 | `script-zoom-in`, `script-zoom-out`, `script-zoom-reset` | Desktop View menu, Ctrl + "+" / "-" / "0" (not listed in the command menu) | `20f-desktop.js` via `runScriptZoomCommand`, the `05s-script-zoom.js` keydown listener |
