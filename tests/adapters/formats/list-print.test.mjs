@@ -103,6 +103,19 @@ test("print rules use solid vector marks and preserve legible shot backgrounds w
   assert.equal(dom.querySelectorAll(".script-table .shot-done").length, 0);
 });
 
+test("shot-row comment numbers and flagged shots use darker colours without changing unshot marks", () => {
+  const { source, models, input } = listFixture();
+  source.rows[0].status = "shot";
+  models.broll[1].reshoot = true;
+  const doc = buildExportDocument(source, input.doc.capturedAt, models);
+  const dom = page(buildScriptWithListsPrintPage({ ...input, doc }));
+  const color = (selector) => dom.defaultView.getComputedStyle(dom.querySelector(selector)).color;
+  assert.equal(color(".script-table .shot-done .comment-marker"), "rgb(152, 85, 0)");
+  assert.equal(color("#comments .comment-marker"), "rgb(158, 88, 0)");
+  assert.equal(color(".shot-table .shot-done .shot-flag"), "rgb(190, 47, 41)");
+  assert.equal(color(".shot-table tr:not(.shot-done) .shot-flag"), "rgb(196, 48, 42)");
+});
+
 test("script composition keeps every breakdown category, all scene-grouped shots, then comments", () => {
   const { input } = listFixture();
   const dom = page(buildScriptWithListsPrintPage(input));
