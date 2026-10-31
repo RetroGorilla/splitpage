@@ -27,7 +27,7 @@ export function fileTitleChange(doc: FileTitleState, filename: string, firstSave
   const fromFile = doc.titleOrigin === "file";
   if (!fromFile && (!firstSave || doc.titleOrigin === "user" || !isUntitledTitle(doc.title))) return null;
   const stem = filename.replace(/\.[^.]+$/, "").trim();
-  if (/^v\d+$/i.test(stem)) return null;
+  if (/^[ _-]*v\d+$/i.test(stem)) return null;
   const version = /[ _-]+v(\d+)$/i.exec(stem);
   const title = fromFile ? doc.title : (version ? stem.slice(0, version.index) : stem).trim().slice(0, 300);
   if (!title) return null;
