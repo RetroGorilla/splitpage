@@ -83,12 +83,23 @@ export const SCENES = `(function () {
   window.__perfScene = {
     stamp: async function () {
       var rows = ${JSON.stringify(STAMP_ROWS)};
+      var next = { todo: 'ready', ready: 'shot', shot: 'todo' };
+      var find = function (id) { return F.state().rows.filter(function (r) { return r.id === id; })[0]; };
       perf.reset();
       for (var pass = 0; pass < ${STAMP_PASSES}; pass++) {
-        for (var i = 0; i < rows.length; i++) await measure('#rows .row:nth-child(' + rows[i] + ') [data-action="cycle-status"]');
+        for (var i = 0; i < rows.length; i++) {
+          var selector = '#rows .row:nth-child(' + rows[i] + ') [data-action="cycle-status"]';
+          var button = document.querySelector(selector);
+          need(button, 'no element for ' + selector);
+          var id = button.getAttribute('data-id');
+          var before = find(id);
+          need(before, 'no scene ' + id);
+          before = { status: before.status, updatedAt: before.updatedAt };
+          await measure(selector);
+          var after = find(id);
+          need(after && after.status === next[before.status] && after.updatedAt !== before.updatedAt, 'scene ' + id + ' was not stamped');
+        }
       }
-      var shot = F.state().rows.filter(function (r) { return r.status === 'shot'; }).length;
-      need(shot >= rows.length, 'only ' + shot + ' scenes are shot');
       return perf.take('long stamp a scene');
     },
     hide: async function () {

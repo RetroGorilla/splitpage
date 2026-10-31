@@ -110,6 +110,25 @@ const sceneWindow = { __perf: { lat: [] }, __splitpageFormats: {} };
 vm.runInNewContext(SCENES, { window: sceneWindow, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
 eq("the scenes install a stamp, a hide and a preference run", Object.keys(sceneWindow.__perfScene), ["stamp", "hide", "preference"]);
 
+function stampWorld(clicksWork) {
+  const next = { todo: "ready", ready: "shot", shot: "todo" };
+  const rows = Array.from({ length: 12 }, (_, i) => ({ id: `r${i + 1}`, status: i >= 2 && i < 8 ? "todo" : "shot", updatedAt: "start" }));
+  let tick = 0;
+  const document = {
+    querySelector(selector) {
+      const row = rows[Number(/nth-child\((\d+)\)/.exec(selector)[1]) - 1];
+      return { getAttribute: () => row.id, click() { if (clicksWork) { row.status = next[row.status]; row.updatedAt = `t${tick++}`; } } };
+    }
+  };
+  const window = { __perf: { lat: [], reset() {}, take: (label) => label }, __splitpageFormats: { state: () => ({ rows }) } };
+  vm.runInNewContext(SCENES, { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
+  return window.__perfScene.stamp();
+}
+
+const stampRun = async (clicksWork) => stampWorld(clicksWork).then(() => "passed", (e) => e.message);
+eq("a stamp run in which the clicks change the scenes passes", await stampRun(true), "passed");
+eq("a stamp run in which every click does nothing is rejected, though 6 scenes are already shot", (await stampRun(false)).startsWith("perf scenes: "), true);
+
 console.log("\nthe pictures:\n");
 
 const api = boot(IMAGES);
