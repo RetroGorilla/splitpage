@@ -202,6 +202,48 @@ independent review are pending; this PR must not be merged by a queue agent.
 
 ## Fixtures and validation
 
+AQ-45 originally stopped because the composed `script-long` fixture split the
+45.9 pt `Spare 050` breakdown row across pages 5 and 6. Adam chose to keep rows
+together; [the separate CSS fix](https://github.com/RetroGorilla/splitpage/pull/1012)
+moves the whole row to page 6. Original PDF/screenshots remain in
+[the stop report](https://github.com/RetroGorilla/splitpage/pull/1004#issuecomment-6546111375),
+outside the current source tree. This check changes no product code or CSS.
+
+`tests/adapters/formats/printed-layout.test.mjs` is discovered by `test:all`
+and runs all 18 fixtures plus nine fail-first probes. It uses the existing
+Linux `tests` matrix job, without changing a workflow or adding a dependency.
+The `checks` browser step selects exact existing suite filenames, so the new
+check uses normal test discovery instead. Browser selection honors
+`SPLITPAGE_CHROME`, then Windows Edge or the runner's existing versioned
+browser cache, then `google-chrome`/`chrome` on PATH. Missing browsers fail
+the check; no rule or fixture is skipped. Local runtime was 9.2 seconds for
+the check, 10.0 seconds including test startup.
+
+The inspector inflates PDF streams with `node:zlib`, decodes ToUnicode and
+ActualText, applies text matrices, and follows tagged structure MCIDs to
+associate text with physical pages, headings, rows and tables. Embedded
+TrueType glyph bounds, Type3 bounds and CFF typographic metrics supply text
+bounds. The checks use positions/order/text rather than pixel comparisons.
+Text comparison follows tagged reading order, removes repeated column heads
+and normalizes Unicode presentation forms, layout whitespace and RTL runs.
+It retains all fixture text, including the non-Latin and emoji samples.
+
+| Rule | Check | Scratch fail-first probe |
+| --- | --- | --- |
+| a | Section/comment, scene and list-group headings share a page with the first line they introduce | Force the first paragraph after a heading onto the next page |
+| b | Each script/list/table row occupies one physical page; oversized rows are measured at their printable width and reported | Remove row avoidance in composed `script-long`; `Spare 050` splits again |
+| c | Every page carrying table body text has its complete column header | Render `gear-long` with a non-repeating header group |
+| d | Text bounds stay inside the printable rectangle, with footer text in its margin box | Translate `prop-rich` 60 pt left |
+| e | No missing glyphs; complete normalized fixture text matches tagged PDF text | Replace the title; separately insert an unsupported character |
+| f | Running title and `Page n of N` match on every page | Replace the counter; separately remove the title |
+| g | Existing media/clipping/wrapping/image/page-count assertions remain; every page has the correct Letter size/orientation | Print a Letter fixture on A4 |
+
+Each probe edits only the loaded scratch document. It must fail its named
+assertion, then reload and reprint the original fixture and pass all rules.
+The run records 265 checks: the original 130, 126 layout-rule groups and nine
+fail-first/restoration checks. PDFs, viewport screenshots, decoded page JSON
+and `summary.txt` go to the output/TEMP directory, never the source tree.
+
 Initial P4 validation on Node 24.22.0: the full verification gate passed all 571
 discovered test files (195 frontend, 11 source, 320 tests, 23 desktop, 22 tools),
 plus lint, types, dependency/comment gates and build. Final focused lifecycle
@@ -236,12 +278,12 @@ node tools/run-suites.mjs <fixture-out> 'print|export' --lanes 3 --port-base <of
 node tests/adapters/formats/fixtures/inspect-script-print.mjs <inspection-out>
 node tests/adapters/formats/fixtures/write-list-print-fixtures.mjs
 node tools/run-suites.mjs <list-out> 'print|export' --lanes 3 --port-base <offset> --suites tests/adapters/formats/fixtures/suites
-node tests/adapters/formats/fixtures/inspect-script-print.mjs <list-inspection-out> --lists
+node tests/adapters/formats/fixtures/inspect-script-print.mjs <list-inspection-out> --lists --probes
 ```
 
 The suite runner's `--port-base` is an offset: HTTP starts at `18100 + offset`,
-and CDP at `19300 + offset`. The standalone inspector uses CDP port 15780 by
-default (`PRINT_CDP_PORT` overrides it) and `SPLITPAGE_CHROME` or Windows Edge.
+and CDP at `19300 + offset`. The standalone inspector asks for a free CDP port
+by default (`PRINT_CDP_PORT` overrides it); browser discovery is described above.
 Check free RAM before each browser run; keep at least 4 GB available.
 
 The fixture suite has its own suite directory; normal app suites need no

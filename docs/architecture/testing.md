@@ -11,7 +11,7 @@ runs the fast gates in the order CI does.
 | `npm run check:comments` | The no-comment gate ([dependencies.md](dependencies.md#comment-gate)) |
 | `node build.mjs` | Builds the release `index.html` and stamps `sw.js`; fails if the bundle exposes a test hook not listed in `tools/release-hooks.mjs` |
 | `node build.mjs --test` | The test build: the same, but keeps the `window.__*Test` hooks, `window.__splitpageFormats` and the fake desktop backend behind `__desktopTest` (registered through `exposeTestHook` in `src/features/common/test-hooks.ts`, which the release build compiles away). The browser suites, the desktop smoke, performance tools and CI's browser jobs use it; `sw.js` is stamped the same either way |
-| `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
+| `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/`; includes the printed-PDF fixture check, which requires an installed browser |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
 | `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, each tool's entry check) |
 | `npm run test:all` | All three sets |
@@ -34,6 +34,20 @@ Each feature or responsibility owns a JSON manifest under `tests/bootstrap/load-
 Run the four suites with `node --test tests/bootstrap/legacy-shim.test.ts tests/bootstrap/configuration-spies.test.ts tests/bootstrap/load-manifests.test.ts tests/bootstrap/module-load.test.ts`. `test:all` discovers them normally. Keep the existing probe and its side-effect, callback and owner-state assertions; moving coverage into a manifest is not permission to drop it.
 
 ## What to run for which change
+
+The printed-PDF check is documented in
+[print-layout.md](print-layout.md#fixtures-and-validation). The discovered
+`tests/adapters/formats/printed-layout.test.mjs` runs all 18 fixtures, seven
+rule groups per fixture and nine fail-first/restoration probes (265 checks).
+It runs automatically in the existing Linux `tests` matrix job and locally
+through `npm test`, `test:all` and `verify`; a focused run is
+`npm test -- --only tests/adapters/formats/printed-layout.test.mjs`.
+It requires at least 4 GB free RAM and uses an installed browser from
+`SPLITPAGE_CHROME`, Windows Edge, the existing runner cache or PATH. It does
+not skip when a browser is missing. Local test runtime was 9.2 seconds plus
+startup. Failures preserve PDFs, screenshots, page records and `summary.txt`
+in a unique `splitpage-print-layout-*` TEMP directory. The standalone
+inspector still accepts `<out> --lists --probes` after fixture generation.
 
 While a pull request is being written, run the focused checks for what it
 touches. CI then runs every fast gate on every pull request: lint, types, the
