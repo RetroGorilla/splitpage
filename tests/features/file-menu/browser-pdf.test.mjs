@@ -42,7 +42,7 @@ test("captures document and options before asset loading, even across a document
   assert.deepEqual(h.print.pages, ["Captured|flagged"]);
   assert.ok(Object.isFrozen(h.received().options.brollView));
   assert.equal(h.captures(), 1);
-  assert.equal(h.notices.shown[0].message, "Print dialog opened. Choose Save as PDF to save a PDF.");
+  assert.equal(h.notices.shown[0].message, "Print request sent to your browser.");
 });
 
 test("desktop and non-PDF exports stay on byte delivery", () => {
@@ -51,6 +51,18 @@ test("desktop and non-PDF exports stay on byte delivery", () => {
   h.desktop();
   assert.equal(exportBrowserPdf(h.ports, "pdf", undefined, () => true), null);
   assert.equal(h.captures(), 0);
+});
+
+test("a print call that returns after cancellation reports the request without claiming an open dialog or saved file", async () => {
+  const h = harness();
+  let dialogClosed = false;
+  h.ports.printDialog = { reserve: () => ({ ended: new Promise(() => {}),
+    print: async () => { dialogClosed = true; return "opened"; }, close: () => {} }) };
+  h.release();
+  await exportBrowserPdf(h.ports, "pdf", undefined, () => true);
+  assert.equal(dialogClosed, true);
+  assert.deepEqual(h.notices.shown.map((notice) => notice.message), ["Print request sent to your browser."]);
+  assert.equal(h.notices.shown[0].kind, "ok");
 });
 
 test("retiring the originating mount while assets load closes its print window", async () => {

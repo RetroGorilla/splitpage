@@ -126,5 +126,14 @@ jsclick #file-menu [data-file-action="export-md-table"]
 wait (function(){ var b = lastOf('markdown') || lastOf('text/'); return !!b; })()
 expect (async function(){ var b = lastOf('markdown') || lastOf('text/'); var t = await b.text(); return t.indexOf(B.dataUrlForSync(P)) !== -1 && t.indexOf(B.dataUrlForSync(W)) !== -1 && t.indexOf(LEGACY) !== -1; })()
 
+eval (function(){window.__oldPdf=null;window.__oldPrintCount=PrintCapture.pages.length;var D=window.__desktopTest;var backend=D.makeFakeBackend();delete backend.blobPut;backend.saveFileDialog=async function(){return {id:'old-pdf',name:'pictures.pdf'};};backend.writeFile=async function(id,data){window.__oldPdf=data;return {lastModified:1,size:data.length};};D.setBackend(backend);return true;})()
+jsclick #file-menu [data-file-action="export-pdf"]
+wait !!window.__oldPdf
+eval (function(){try{var t=new TextDecoder('latin1').decode(__oldPdf);window.__oldPdfHeader=t.startsWith('%PDF');var re=/\/Subtype \/Image \/Width (\d+) \/Height (\d+)[^]*?stream\n([^]{2})/g,m;window.__oldPdfImgs=[];while((m=re.exec(t)))__oldPdfImgs.push({w:+m[1],h:+m[2],jpeg:m[3].charCodeAt(0)===0xFF&&m[3].charCodeAt(1)===0xD8});return true;}finally{window.__desktopTest.restoreBackend();}})()
+expect __oldPdfHeader
+expect __oldPdfImgs.length === 3 && __oldPdfImgs.every(function(i){return i.jpeg;})
+expect __oldPdfImgs[0].w === 37 && __oldPdfImgs[0].h === 23 && __oldPdfImgs[1].w === 37 && __oldPdfImgs[1].h === 23 && __oldPdfImgs[2].w === 29 && __oldPdfImgs[2].h === 17
+expect PrintCapture.pages.length === __oldPrintCount
+
 logs
 expect PrintCapture.pages.length > 0 && PrintCapture.pages.every(function(p){return p.closed;})

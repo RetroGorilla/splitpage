@@ -128,7 +128,8 @@ expect window.__pdf.indexOf('hands mending a net') !== -1
 # "FLAGGED") with its reason (the note) under it, the footer
 expect window.__pdf.indexOf('B-roll shot list') !== -1 && window.__pdf.indexOf('Harbour town') !== -1
 expect window.__pdf.indexOf('@page shot-list { size: letter landscape; }') !== -1 && window.__pdf.indexOf('Notes') !== -1
-expect window.__pdf.indexOf('01') !== -1 && window.__pdf.indexOf('00:00') !== -1
+eval (function(){var doc=new DOMParser().parseFromString(window.__pdf,'text/html');var row=Array.from(doc.querySelectorAll('.shot-table tr')).find(function(r){return r.cells[2]&&r.cells[2].querySelector('strong')?.textContent==='gulls wheeling over the nets';});window.__printedScene=row&&row.cells[1];return !!__printedScene;})()
+expect __printedScene.firstChild.textContent.trim() === '01' && __printedScene.querySelector('.scene-meta').textContent === '00:00'
 expect window.__pdf.indexOf('Flagged') !== -1 && window.__pdf.indexOf('light was gone.') !== -1
 expect window.__pdf.indexOf('FLAGGED') === -1
 expect window.__pdf.indexOf('counter(page)') !== -1
