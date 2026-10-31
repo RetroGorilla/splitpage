@@ -55,6 +55,7 @@ function harness() {
     },
     fileName: () => "test.pdf",
     exportAction: (action) => { exported.push(action); return true; },
+    printWorkflow: () => false,
     onMenuRefresh: (listener) => { menuListeners.add(listener); return () => { menuListeners.delete(listener); }; }
   };
   return { ports, registry, menuListeners, formatListeners, exported, effects, notices,

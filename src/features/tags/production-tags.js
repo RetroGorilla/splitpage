@@ -1,5 +1,6 @@
 import { plainTagOpen } from "./plain-tags.js";
 import { isInsideTagOrLink } from "../common/dom.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 import { domToPos } from "../common/cell-dom.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { domRangeFor } from "../common/find-dom.js";
@@ -626,7 +627,8 @@ export function startProductionTags(ports) {
   document.head.appendChild(iconStyle);
 
   var disposed = false;
-  var cacheTest = window.__cacheTest = {
+  var withdrawHook = null;
+  exposeTestHook("__cacheTest", function () { return {
     index: function () { return disposed ? null : currentProductionIndex(); },
     frozen: function () {
       if (disposed) return [];
@@ -648,7 +650,7 @@ export function startProductionTags(ports) {
         try { write(); return false; } catch (e) { return e instanceof TypeError; }
       });
     }
-  };
+  }; }, function (withdraw) { withdrawHook = withdraw; });
 
   return {
     onTagged: function (listener) { return disposed ? function () {} : onTagged(listener); },
@@ -670,7 +672,7 @@ export function startProductionTags(ports) {
         untaggedList = [];
         idleFlushes = 0;
         if (window.CSS && window.CSS.highlights) window.CSS.highlights.delete(UNTAGGED_HL);
-        if (window.__cacheTest === cacheTest) delete window.__cacheTest;
+        if (withdrawHook) withdrawHook();
         currentDocument = readSession = requestRefresh = runDocumentEdit = sessionStamps = stampDocument = null;
         cellOf = inertBody = sanitizeHtml = productionReaders = null;
         productionIndex = cellEditing = focusMemory = breakUndoCoalescing = viewFlags = showToast = randomIds = null;

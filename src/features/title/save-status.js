@@ -1,5 +1,6 @@
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../../shared/clock.js";
 import { saveButtonView, saveStatus } from "../../application/save/status.ts";
+import { exposeTestHook } from "../common/test-hooks.ts";
 
 var ports = null;
 
@@ -124,8 +125,8 @@ export function mountSaveStatus(nextPorts) {
   }
   var listening = typeof document !== "undefined" && !!document.addEventListener;
   if (listening) document.addEventListener("undo-owner-cleared", onOwnerCleared);
-  var probe = { refresh: updateSaveStatus };
-  window.__saveStatusTest = probe;
+  var withdrawHook = null;
+  exposeTestHook("__saveStatusTest", function () { return { refresh: updateSaveStatus }; }, function (withdraw) { withdrawHook = withdraw; });
   var disposed = false;
   var mounted = {
     refresh: updateSaveStatus,
@@ -134,7 +135,7 @@ export function mountSaveStatus(nextPorts) {
       if (disposed) return;
       disposed = true;
       if (listening) document.removeEventListener("undo-owner-cleared", onOwnerCleared);
-      if (window.__saveStatusTest === probe) delete window.__saveStatusTest;
+      if (withdrawHook) withdrawHook();
       if (activeMount !== mounted) return;
       activeMount = null;
       if (justNowTimer) clearTimeout(justNowTimer);

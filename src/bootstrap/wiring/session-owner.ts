@@ -150,9 +150,9 @@ const session: DocumentSession = {
   read: function <T>(select: (doc: DocumentView | null) => T): T { return running().current.read(select); },
   held: function () { return running().current.held(); },
   adopt: function (raw: unknown) { return running().current.adopt(unwrapped(raw)); },
-  absorbServer: function (raw: unknown) { return running().current.absorbServer(unwrapped(raw)); },
+  absorbDisk: function (raw: unknown) { return running().current.absorbDisk(unwrapped(raw)); },
   absorbRecovery: function (raw: unknown) { return running().current.absorbRecovery(unwrapped(raw)); },
-  absorbMerged: function (kind: "server" | "recovery", merged: ValidatedDocument) { return running().current.absorbMerged(kind, unwrapped(merged)); },
+  absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument) { return running().current.absorbMerged(kind, unwrapped(merged)); },
   absorbReload: function (content: ReloadedContent) { return running().current.absorbReload(unwrapped(content)); },
   settle: function (kind: AbsorbedKind) { running().current.settle(kind); },
   run: function (command: Command) { return swept(running().current.run(command)); },
@@ -280,15 +280,15 @@ export function noteSessionEdit(): void {
   session.noteEdit();
 }
 
-export function noteServerUpdate(next: unknown): ValidatedDocument | null {
-  return session.absorbServer(next);
+export function noteDiskUpdate(next: unknown): ValidatedDocument | null {
+  return session.absorbDisk(next);
 }
 
 export function noteRecovery(next: unknown): ValidatedDocument | null {
   return session.absorbRecovery(next);
 }
 
-export function noteMerged(kind: "server" | "recovery", merged: ValidatedDocument): ValidatedDocument | null {
+export function noteMerged(kind: "disk" | "recovery", merged: ValidatedDocument): ValidatedDocument | null {
   return session.absorbMerged(kind, merged);
 }
 
