@@ -802,7 +802,7 @@ STRUCTURE SECTION MUST SAY
 - "no structural change; stylesheets renamed and merged", the table of old file to new file, which merges joined neighbours and which did not, the SHA-256 of the CSS before and after (equal), the computed-style comparison for any non-adjacent merge, the suites run, and that no rule was added, removed or reordered (or exactly which moved).
 ```
 
-## AQ-35 [ ] Desktop split, step 1: IPC setup out of desktop/main.js
+## AQ-35 [x] Desktop split, step 1: IPC setup out of desktop/main.js
 
 Needs: AQ-23's first PR and AQ-32 merged. Start from a base that includes both.
 Files: desktop/main.js, desktop/ipc-setup.js (new), desktop/electron-builder.yml and desktop/package.json (file and test lists), desktop/test/ipc-table.test.mjs, docs/architecture/desktop-build.md.
