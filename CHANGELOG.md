@@ -6,6 +6,9 @@ appear in the app under **Help**. The format follows
 
 ## Unreleased
 
+- In a browser, PDF exports now open the print dialog. Choose **Save as PDF**
+  to save the script, a gear or prop packing list, or the B-roll shot list.
+
 This release removes collaboration and server documents and fixes several
 saving bugs. If you open or share scripts on a Splitpage server, read
 **Removed** before you upgrade.

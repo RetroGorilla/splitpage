@@ -17,6 +17,7 @@
 # Every `eval` is one physical line (the driver splits on newlines).
 
 open /index.html
+eval (async function(){ window.P = (await import('/tests/adapters/print/capture-browser-print.js')).captureBrowserPrint(); return true; })()
 wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){window.__files=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__files.push({blob:b,name:null});return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download){var f=window.__files[window.__files.length-1];if(f&&!f.name)f.name=this.download;return;}return c.apply(this,arguments);};window.D=window.__desktopTest;window.X=window.__exportTest;window.__lastFile=function(){return window.__files[window.__files.length-1];};return !!(D&&X);})()
 expect true
@@ -43,7 +44,7 @@ expect Math.round(document.querySelector('#export-modal .export-panel').getBound
 expect getComputedStyle(document.querySelector('#export-modal .export-panel')).borderTopLeftRadius == 10px
 expect document.querySelector('input[name="export-format"]:checked').value == pdf
 expect document.activeElement === document.querySelector('input[name="export-format"]:checked')
-expect document.getElementById('export-go').textContent == Export PDF
+expect document.getElementById('export-go').textContent == Print PDF
 
 # --- the cards: two groups, a name, a purpose and an extension each ---------
 expect Array.prototype.map.call(document.querySelectorAll('#export-formats .export-group-head'), function(h){return h.textContent;}).join('|') === 'Whole script|Part of it'
@@ -53,7 +54,8 @@ expect getComputedStyle(document.querySelector('.export-card-ext')).fontFamily.i
 # the right-hand side for PDF: a sketch with the real title, a summary, the name
 expect document.getElementById('export-preview').textContent.indexOf('Untitled Script') !== -1
 expect document.getElementById('export-summary').textContent.indexOf('2 scenes') === 0
-expect document.getElementById('export-filename').textContent == untitled-script.pdf
+expect document.getElementById('export-filename').textContent == Print dialog · choose Save as PDF
+expect document.getElementById('export-filename').previousElementSibling.textContent == Next step
 expect document.getElementById('export-options').hidden
 shot 98-export-dialog
 
@@ -197,17 +199,18 @@ eval (function(){window.__pairs=[['pdf',null,'export-pdf'],['docx',null,'export-
 eval (async function(){ for (var i = 0; i < window.__pairs.length; i++) await window.__runPair(window.__pairs[i]); return JSON.stringify(window.__results.map(function(r){return r.action+':'+r.sameBytes+(r.diff>=0?'@'+r.diff:'')+':'+r.newName;})); })()
 expect window.__results.length === 16
 expect window.__results.every(function(r){return r.oldName && r.oldName === r.newName;})
-expect window.__results.every(function(r){return r.shown === r.newName;})
+expect window.__results.every(function(r){return r.newName === 'Print dialog' ? r.shown === 'Print dialog · choose Save as PDF' : r.shown === r.newName;})
 expect window.__results.every(function(r){return r.type && r.size > 0;})
 expect window.__results.every(function(r){return r.sameBytes;})
 expect window.__results.every(function(r){return r.closed;})
 expect window.__results.every(function(r){return r.remembered === r.action;})
-expect window.__results.map(function(r){return r.label;}).join('|') === 'Export PDF|Export Word|Export Markdown|Export Markdown, two columns|Export Excel|Export CSV|Export SplitShare|Export Narration (.docx)|Export Narration (.txt)|Export Breakdown (Excel)|Export Breakdown (.csv)|Export Gear packing list|Export Props packing list|Export B-roll shot list|Export B-roll shot list (Excel)|Export B-roll shot list (.csv)'
-expect window.__results.map(function(r){return r.newName;}).join('|') === 'untitled-script.pdf|untitled-script.docx|untitled-script.md|untitled-script - two column.md|untitled-script.xlsx|untitled-script.csv|untitled-script - SplitShare.html|untitled-script - narration.docx|untitled-script - narration.txt|untitled-script - breakdown.xlsx|untitled-script - breakdown.csv|untitled-script - Gear packing list.pdf|untitled-script - Prop packing list.pdf|untitled-script - b-roll shot list.pdf|untitled-script - b-roll shot list.xlsx|untitled-script - b-roll shot list.csv'
-# the shot list's PDF is landscape, every page
-eval (async function(){var r=window.__results.filter(function(x){return x.action==='export-broll-pdf';})[0];var f=window.__files.filter(function(x){return x.name===r.newName;}).pop();var t=new TextDecoder('latin1').decode(new Uint8Array(await f.blob.arrayBuffer()));window.__brollPdf={boxes:(t.match(/\/MediaBox \[0 0 792 612\]/g)||[]).length,portrait:(t.match(/\/MediaBox \[0 0 612 792\]/g)||[]).length,shot:t.indexOf('(steam off the kettle) Tj')!==-1,notes:t.indexOf('(Notes) Tj')!==-1};return window.__brollPdf;})()
-expect window.__brollPdf.boxes >= 1 && window.__brollPdf.portrait === 0
+expect window.__results.map(function(r){return r.label;}).join('|') === 'Print PDF|Export Word|Export Markdown|Export Markdown, two columns|Export Excel|Export CSV|Export SplitShare|Export Narration (.docx)|Export Narration (.txt)|Export Breakdown (Excel)|Export Breakdown (.csv)|Print Gear packing list|Print Props packing list|Print B-roll shot list|Export B-roll shot list (Excel)|Export B-roll shot list (.csv)'
+expect window.__results.map(function(r){return r.newName;}).join('|') === 'Print dialog|untitled-script.docx|untitled-script.md|untitled-script - two column.md|untitled-script.xlsx|untitled-script.csv|untitled-script - SplitShare.html|untitled-script - narration.docx|untitled-script - narration.txt|untitled-script - breakdown.xlsx|untitled-script - breakdown.csv|Print dialog|Print dialog|Print dialog|untitled-script - b-roll shot list.xlsx|untitled-script - b-roll shot list.csv'
+eval (function(){var page=P.pages.filter(function(p){return p.html.includes('class="shot-list"');}).pop();var doc=new DOMParser().parseFromString(page.html,'text/html');window.__brollPdf={landscape:doc.querySelector('style').textContent.includes('@page shot-list { size: letter landscape; }'),shot:doc.body.textContent.includes('steam off the kettle'),notes:doc.body.textContent.includes('Notes')};return true;})()
+expect window.__brollPdf.landscape
 expect window.__brollPdf.shot && window.__brollPdf.notes
+expect P.pages.length === 8 && P.pages.every(function(p){return p.closed;})
+expect window.__files.filter(function(f){return f.blob.type === 'application/pdf';}).length === 0
 
 # --- the remembered choice ---------------------------------------------------
 # Kept per device, never in the document; the dialog opens on it with its
