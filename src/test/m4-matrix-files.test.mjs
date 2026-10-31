@@ -494,10 +494,18 @@ function importDocument() {
   return createHeldFileHandle({ name: "notes.txt", text: "Alpha line.\n\nBeta line.\n", lastModified: 1000 });
 }
 
+async function openWithImportHome(handle) {
+  const file = await handle.getFile();
+  await openDocument({ kind: "file", file: file, handle: handle });
+  assert.equal(homeModule.currentHome().kind, "none", "the " + file.name + " file opened as a script with no file");
+  setHome("import", { name: file.name, handle: handle, format: file.name.split(".").pop(), inPlace: true, dirty: false,
+                      lastModified: file.lastModified, size: file.size });
+}
+
 async function importFrom(target) {
   useDocument(script("Placeholder"));
-  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle });
-  assert.equal(homeModule.currentHome().kind, "import", "the text file opened as an import");
+  await openWithImportHome(target.handle);
+  assert.equal(homeModule.currentHome().kind, "import", "the import home an older build recorded is set");
   assert.equal(homeModule.currentHome().handle, target.handle, "with its handle");
   assert.equal(homeModule.currentHome().dirty, false, "and nothing unsaved");
 }
@@ -668,7 +676,7 @@ test("an import writeback that lands after another file was imported leaves the 
   const saving = importSavingOwner().saveBackToFile();
   await gates.arrived("file.close");
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
-  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle });
+  await openWithImportHome(other.handle);
   const replaced = homeModule.currentHome();
   edit("Typed in the other file.");
   assert.equal(replaced.dirty, true);
@@ -689,7 +697,7 @@ test("a writeback queued behind another writes nothing once a different file was
   await gates.arrived("file.close");
   const second = importSavingOwner().saveBackToFile();
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
-  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle });
+  await openWithImportHome(other.handle);
   const replaced = homeModule.currentHome();
   edit("Typed in the other file.");
   gates.release("file.close");

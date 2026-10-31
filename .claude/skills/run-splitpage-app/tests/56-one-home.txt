@@ -4,47 +4,49 @@
 # other by hand, and an imported .docx/.txt that was saved as a project kept
 # its import alongside the new file. This suite drives that through the real
 # saveDoc() with the fake desktop backend (20f-desktop.js) and reads the
-# answer back off the file chip and window.__splitpageFormats.docFile():
+# answer back off the file chip and window.__splitpageFormats.docFile().
+# Since import save-back was switched off (2026-10-30) an import has no home
+# at all, like a new untitled script:
 #
-#   * a foreign file opens as the "import" home, with the file chip on it;
-#   * a plain Save from it that is cancelled, or whose write fails, leaves
-#     that import home in place (saveDoc's undoRetarget → restoreHome);
-#   * one that writes makes the project file the home and the import chip
-#     goes with the import.
+#   * a foreign file opens with no home: no file chip, the card "Not saved
+#     yet", and no Save to file;
+#   * a plain Save from it that is cancelled, or whose write fails, leaves it
+#     with no home;
+#   * one that writes makes the project file the home, and the imported
+#     file's handle is never written.
 open
 eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.FM=window.__fileMenuTest; return !!(F && D && FM);})()
 expect true
 expect F.docFile().kind === null && document.getElementById('file-chip').hidden === true
 
-# --- a foreign .txt opens as an import home, chip shows it ---------------
-eval (function(){window.__h = {name:'notes.txt', createWritable: async function(){return {write: async function(){}, close: async function(){}};}, getFile: async function(){return new File(['one\n\ntwo'],'notes.txt',{type:'text/plain'});}}; return F.openFile(new File(['one\n\ntwo'],'notes.txt',{type:'text/plain', lastModified: 1000}), window.__h);})()
-wait document.getElementById('file-chip').hidden === false
-expect FM.cardView().name === 'notes.txt' && FM.cardView().bits[1].text === 'Plain text'
-expect document.querySelector('#menu-save-back .mi-label').textContent === 'Save to notes.txt'
+# --- a foreign .txt opens with no home and no chip ------------------------
+eval (function(){window.__writes = 0; window.__h = {name:'notes.txt', createWritable: async function(){window.__writes++; return {write: async function(){}, close: async function(){}};}, getFile: async function(){return new File(['one\n\ntwo'],'notes.txt',{type:'text/plain'});}}; return F.openFile(new File(['one\n\ntwo'],'notes.txt',{type:'text/plain', lastModified: 1000}), window.__h);})()
+wait F.state().title === 'notes'
+expect FM.cardView().name === 'Not saved yet'
+expect document.getElementById('menu-save-back') === null
 expect F.docFile().kind === null
-expect document.getElementById('file-chip').hidden === false
-expect document.getElementById('file-chip-name').textContent === 'notes.txt'
-expect document.getElementById('menu-save-back').disabled === false
+expect document.getElementById('file-chip').hidden === true
 
-# --- plain Save from an import: cancelled dialog keeps the import home ----
+# --- plain Save from an import: a cancelled dialog leaves it with no home --
 eval (function(){window.fakeA = D.makeFakeBackend(); window.fakeA._cancelNextSave = true; D.setBackend(window.fakeA); return true;})()
 eval (async function(){ await F.save({}); return true; })()
 expect F.docFile().kind === null
-expect document.getElementById('file-chip').hidden === false
-expect document.getElementById('file-chip-name').textContent === 'notes.txt'
+expect document.getElementById('file-chip').hidden === true
+expect FM.cardView().name === 'Not saved yet'
 
-# --- a write that fails puts the import home back ------------------------
+# --- a write that fails leaves it with no home too -------------------------
 eval (function(){ window.fakeA._origWrite = window.fakeA.writeFile; window.fakeA.writeFile = function(){ return Promise.reject(new Error('EBUSY')); }; return true;})()
 eval (async function(){ await F.save({}); return true; })()
 expect F.docFile().kind === null
-expect document.getElementById('file-chip').hidden === false
-expect document.getElementById('file-chip-name').textContent === 'notes.txt'
+expect document.getElementById('file-chip').hidden === true
+expect FM.cardView().name === 'Not saved yet'
 eval (function(){ window.fakeA.writeFile = window.fakeA._origWrite; return true;})()
 
-# --- plain Save that writes: the project file replaces the import ---------
+# --- plain Save that writes: the project file becomes the home -------------
 eval (async function(){ await F.save({}); return true; })()
 wait F.docFile().kind !== null
 expect F.docFile().kind === 'md'
 expect document.getElementById('file-chip').hidden === true
-expect document.getElementById('menu-save-back').disabled === true
+expect document.querySelector('[data-file-action="save-back"]') === null
 expect F.hasDiskBase() === true
+expect window.__writes === 0

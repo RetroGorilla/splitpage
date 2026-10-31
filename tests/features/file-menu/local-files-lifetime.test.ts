@@ -33,13 +33,12 @@ function harness(label: string) {
   const notices = fakeNotices();
   const ports: LocalFileMenuPorts = {
     document: fakeDocument(doc).document, preferences: { clock: () => "24h" }, place: createDocumentLocation(),
-    writeback: { saveBackItemState: () => ({ hidden: false, disabled: true, reason: "", label: "Save to file" }) },
     exports: { captureExportDocument: () => captured, loadExportAssets: async () => assets }, formats,
     assets: { request: () => ({ shas: [] }) }, standaloneHtml: () => "",
     imagesLeftOut: (...args) => { warnings.push(args); }, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
     notices: { ...notices.notices, busy: { withBar: async (_label, work) => work() } },
     delivery: { deliver: async (...args) => { deliveries.push(args); return true; } },
-    menuItems: { setLabel: () => {} }, merge: { offer: async () => {}, reset: () => {} },
+    merge: { offer: async () => {}, reset: () => {} },
     exportControls: { isExportAction: () => false, rememberExport: () => {} }, actions: createActionRegistry()
   };
   return { ports, formats, builds, deliveries, warnings, notices };

@@ -2,6 +2,7 @@ import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { fileKindFromName } from "../../../shared/file-names.js";
 import { createAdoptionCompletion } from "../save/save-completion.ts";
+import { NO_DESTINATION } from "./ports.ts";
 
 function startLocalFiles(ports) {
   var active = true;
@@ -180,7 +181,7 @@ async function loadFileIntoEditor(file, handle, opts) {
       from: { raw: { schema: SCHEMA_VERSION, title: openedTitle, rows: newRows } },
       reason: "loadFileIntoEditor: the imported document as it was just read",
       keep: "Before opening " + file.name,
-      destination: { kind: "import", fields: importFields },
+      destination: NO_DESTINATION,
       writtenOut: false
     });
   }
@@ -189,7 +190,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
   if (!active) return;
-  completion.importOpened(imported);
+  if (imported) completion.importOpened(imported);
   sidePanels().close("newtab-page");
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   showToast(opts.reload

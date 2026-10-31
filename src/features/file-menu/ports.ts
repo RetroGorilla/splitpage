@@ -97,12 +97,6 @@ export interface FileMenuExportActionPorts {
   readonly closeMenu: () => void;
 }
 
-export interface MenuItemState {
-  readonly hidden: boolean;
-  readonly disabled: boolean;
-  readonly reason: string;
-}
-
 export interface FileMenuControls {
   readonly toggleFileMenu: (force?: boolean, options?: { focusFirst?: boolean; returnFocus?: boolean }) => void;
   readonly fileMenuOpen: () => boolean;
