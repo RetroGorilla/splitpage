@@ -9,9 +9,9 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
-const { createDraftStore, restoreDoneAction, MAX_BODY_BYTES } = require("./drafts");
+const { createDraftStore, MAX_BODY_BYTES } = require("./drafts");
 const {
-  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer
+  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry
 } = require("./file-service");
 const { createDocClaims } = require("./doc-claims");
 const { createRecents } = require("./recents");
@@ -24,12 +24,10 @@ const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_
 const { createQuitWatchdog } = require("./quit-watchdog");
 const { createVoiceHelper } = require("./voice-helper");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
-const {
-  createBlobStore, imageBlobRefusal, sniffImageMime, isSha256, MAX_MISSING_QUERY
-} = require("./blob-store");
+const { createBlobStore } = require("./blob-store");
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
 const {
-  DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE, LAST_KNOWN_TITLE_MAX,
+  DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE,
   normalizeBounds, normalizeTabSource, createDesktopStateStore
 } = require("./desktop-state");
 const {
@@ -37,6 +35,9 @@ const {
 } = require("./update-release");
 const { createIpcSetup } = require("./ipc-setup");
 const { createFileIpc } = require("./ipc-files");
+const { createShellIpc } = require("./ipc-shell");
+const { createDocumentIpc } = require("./ipc-document");
+const { createHistoryBlobIpc } = require("./ipc-history-blob");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -106,7 +107,7 @@ const APP_ROOT = app.isPackaged
 
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
 const historyPolicy = require(path.join(SHARED_ROOT, "history-policy.js"));
-const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } = historyPolicy;
+const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
 const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.js"));
 const {
   DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
@@ -2073,344 +2074,24 @@ const { registerFileIpc } = createFileIpc({
   consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, testMode: TEST_MODE
 });
 
-function registerShellIpc({ ipcHandle, ipcOn, ipcOnSync }) {
-  ipcOnSync("splitpage:tab-boot-sync", (event) => {
-    const tab = tabOf(event);
-    if (!tab) return null;
-    const intent = launchIntentFor(tab);
-    tab.launchIntent = intent;
-    const hasDraftToRestore = intent.type === "restore-draft";
-    if (draftStore) {
-      if (hasDraftToRestore) {
-        try { draftStore.hold(tab.id); } catch { }
-      } else if (draftsIsHeld(tab.id)) {
-        try { draftStore.release(tab.id); } catch { }
-      }
-    }
-    return {
-      tabId: tab.id,
-      windowId: tab.windowId,
-      launchIntent: intent,
-      hadPriorSession,
-      firstTabOfLaunch: tab.firstTabOfLaunch === true,
-      hasDraftToRestore
-    };
-  });
+const { registerShellIpc } = createShellIpc({
+  tabOf, launchIntentFor, draftStore: () => draftStore, draftsIsHeld, hadPriorSession: () => hadPriorSession,
+  shell, nativeTheme, themeChoice, videoFileGrants, VIDEO_FILE_EXT, testVideoOpens, testMode: TEST_MODE,
+  videoThumbnail, updateStatus: () => updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus,
+  checkForUpdate, downloadUpdate, runUpdateInstaller, openPrompterInBrowser, voiceHelperInstance
+});
 
-  ipcOn("splitpage:open-external", (event, url) => {
-    if (typeof url === "string" && /^(https?|mailto):/i.test(url)) shell.openExternal(url);
-  });
+const { registerDocumentIpc } = createDocumentIpc({
+  tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
+  pushShellState, persistShellState, docClaims, testMode: TEST_MODE, flushPendingPayload, restoreNotice,
+  routeOpenPath, draftStore: () => draftStore, draftFiniteNumber, draftBodyTooLarge, buildDraftHeader,
+  draftsPreviousSession: () => draftsPreviousSession, pendingDraftFlushes
+});
 
-  ipcOn("splitpage:set-theme", (event, mode) => {
-    if (mode !== "system" && mode !== "light" && mode !== "dark") return;
-    if (nativeTheme.themeSource !== mode) nativeTheme.themeSource = mode;
-    themeChoice.write(mode);
-  });
-
-  ipcHandle("splitpage:video-file-grant", async (event, filePath) => {
-    if (!path.isAbsolute(filePath) || !VIDEO_FILE_EXT.test(filePath)) return null;
-    let st;
-    try { st = await fsp.stat(filePath); } catch { return null; }
-    if (!st.isFile()) return null;
-    for (const [token, granted] of videoFileGrants) if (granted === filePath) return token;
-    if (videoFileGrants.size >= 1000) videoFileGrants.delete(videoFileGrants.keys().next().value);
-    const token = crypto.randomBytes(16).toString("hex");
-    videoFileGrants.set(token, filePath);
-    return token;
-  });
-
-  ipcHandle("splitpage:video-file-open", async (event, token) => {
-    const filePath = videoFileGrants.get(token);
-    if (!filePath) return { ok: false, code: "UNKNOWN" };
-    try {
-      if (!(await fsp.stat(filePath)).isFile()) return { ok: false, code: "GONE" };
-    } catch { return { ok: false, code: "GONE" }; }
-    if (TEST_MODE) { testVideoOpens.push(filePath); return { ok: true }; }
-    const failed = await shell.openPath(filePath);
-    return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
-  });
-
-  ipcHandle("splitpage:video-thumbnail", async (event, host, ref) => videoThumbnail(host, ref));
-
-  ipcHandle("splitpage:update-status", async () => {
-    return updateStatus;
-  });
-
-  ipcHandle("splitpage:update-check", async () => {
-    if (SKIP_UPDATE_CHECK) return updateStatus;
-    setUpdateStatus({ checking: true });
-    await checkForUpdate();
-    return updateStatus;
-  });
-
-  ipcHandle("splitpage:update-download", async () => {
-    return downloadUpdate();
-  });
-
-  ipcHandle("splitpage:update-install", async () => {
-    return runUpdateInstaller();
-  });
-
-  ipcHandle("splitpage:prompter-open-in-browser", async (event) => {
-    return openPrompterInBrowser(tabOf(event));
-  });
-  ipcHandle("splitpage:prompter-open-in-chromium", async (event) => {
-    return openPrompterInBrowser(tabOf(event), { chromium: true });
-  });
-
-  ipcHandle("splitpage:voice-status", async () => {
-    return { available: voiceHelperInstance().available() };
-  });
-  ipcHandle("splitpage:voice-start", async (event) => {
-    const tab = tabOf(event);
-    if (!tab) return { ok: false, code: "NO_TAB" };
-    return voiceHelperInstance().start(tab.id);
-  });
-  ipcHandle("splitpage:voice-stop", async (event) => {
-    const tab = tabOf(event);
-    if (!tab) return { ok: true };
-    return voiceHelperInstance().stop(tab.id);
-  });
-}
-
-function registerDocumentIpc({ ipcHandle, ipcOn }) {
-  ipcOn("splitpage:set-document-state", (event, docState) => {
-    const tab = tabOf(event);
-    if (!tab) return;
-    const s = docState || {};
-
-    tab.title = typeof s.title === "string" && s.title ? s.title.slice(0, LAST_KNOWN_TITLE_MAX) : "Untitled";
-    tab.dirty = !!s.dirty;
-    if ("pristine" in s) tab.pristine = !!s.pristine;
-    if ("docId" in s) tab.docId = typeof s.docId === "string" ? s.docId : null;
-
-    const hasFileId = "fileId" in s;
-    const absPath = hasFileId && typeof s.fileId === "string" ? fileIds.pathOf(s.fileId) || null : null;
-    if (hasFileId) {
-      tab.fileId = absPath ? s.fileId : null;
-      unindexTabSource(tab);
-      tab.source = absPath ? { kind: "file", absPath } : { kind: "blank" };
-      indexTabSource(tab);
-    }
-
-    if (tab.source.kind === "file") recents.note(tab.source.absPath, tab.title);
-
-    const w = windowsById.get(tab.windowId);
-    if (w) {
-      if (w.activeTabId === tab.id) applyWindowTitle(w);
-      pushShellState(w.id);
-    }
-    persistShellState();
-    try { docClaims.record(event.sender, tab); }
-    catch (err) { if (TEST_MODE) console.error("[splitpage-test] doc claim failed", err); }
-  });
-
-  ipcOn("splitpage:renderer-ready", (event) => {
-    const tab = tabOf(event);
-    if (!tab) return;
-    tab.ready = true;
-    flushPendingPayload(tab);
-    if (restoreNotice.isFor(tab.id)) restoreNotice.deliver(tab);
-  });
-
-  ipcHandle("splitpage:route-open", async (event, payload) => {
-    const tab = tabOf(event);
-    if (!tab) throw new Error("unknown tab");
-    const p = payload || {};
-    if (p.kind === "file") {
-      const absPath = fileIds.pathOf(p.fileId);
-      if (!absPath) throw new Error("ENOENT: unknown file id");
-      const result = routeOpenPath(absPath, { fromWindowId: tab.windowId, fromTabId: tab.id });
-      if (!result) throw new Error("ENOENT: file is not readable");
-      return { where: result.where };
-    }
-    throw new Error("route-open: unknown kind");
-  });
-
-  const DRAFT_STORE_DOWN = { ok: false, code: "EIO" };
-
-  ipcHandle("splitpage:draft-write", async (event, payload) => {
-    const tab = tabOf(event);
-    if (!tab) return { ok: false, code: "NO_TAB" };
-    if (!draftStore) return DRAFT_STORE_DOWN;
-    const p = payload && typeof payload === "object" ? payload : {};
-    const seq = draftFiniteNumber(p.seq);
-    const baseJson = p.baseJson === undefined || p.baseJson === null ? null : p.baseJson;
-    if (seq === null || typeof p.stateJson !== "string" || (baseJson !== null && typeof baseJson !== "string")) {
-      return { ok: false, code: "BAD_PAYLOAD" };
-    }
-    if (draftBodyTooLarge(p.stateJson) || (baseJson !== null && draftBodyTooLarge(baseJson))) {
-      return { ok: false, code: "TOO_LARGE" };
-    }
-    return await draftStore.write(tab.id, buildDraftHeader(tab, p), p.stateJson, baseJson, seq);
-  });
-
-  ipcHandle("splitpage:draft-discard", async (event, payload) => {
-    const tab = tabOf(event);
-    if (!tab) return { ok: false, code: "NO_TAB" };
-    if (!draftStore) return DRAFT_STORE_DOWN;
-    const seq = draftFiniteNumber(payload && payload.seq);
-    if (seq === null) return { ok: false, code: "BAD_PAYLOAD" };
-    if (tab.keepDraftOnClose) return { ok: false, code: "HELD" };
-    return await draftStore.discardClean(tab.id, seq);
-  });
-
-  ipcHandle("splitpage:draft-take", async (event) => {
-    const tab = tabOf(event);
-    if (!tab || !draftStore) return null;
-    const taken = await draftStore.take(tab.id);
-    if (!taken || taken.corrupt || taken.unsupported) return taken || null;
-
-    const origin = (taken.header && taken.header.origin) || null;
-    const filePath = origin && origin.kind === "file" && typeof origin.filePath === "string" ? origin.filePath : "";
-    taken.file = null;
-    taken.fileProblem = null;
-    if (filePath) {
-      try {
-        const stat = fs.statSync(filePath);
-        if (!stat.isFile()) {
-          taken.fileProblem = "unreadable";
-        } else {
-          const id = fileIds.register(filePath);
-          taken.file = await readFileEntry(id, filePath);
-          unindexTabSource(tab);
-          tab.fileId = id;
-          tab.source = { kind: "file", absPath: filePath };
-          indexTabSource(tab);
-          persistShellState();
-        }
-      } catch (err) {
-        taken.fileProblem = err && err.code === "ENOENT" ? "missing" : "unreadable";
-      }
-    }
-    if (typeof taken.previousSession !== "string") taken.previousSession = draftsPreviousSession;
-    if (!("ageMs" in taken)) taken.ageMs = null;
-    return taken;
-  });
-
-  ipcOn("splitpage:draft-restore-done", (event, payload) => {
-    const tab = tabOf(event);
-    if (!tab || !draftStore) return;
-    const outcome = payload && typeof payload.outcome === "string" ? payload.outcome : "";
-    const action = restoreDoneAction(outcome);
-    if (action === "open") {
-      flushPendingPayload(tab, { force: true });
-      return;
-    }
-    if (action === "release") {
-      try { draftStore.release(tab.id); } catch { }
-    }
-    tab.pendingPayload = null;
-  });
-
-  ipcOn("splitpage:draft-flushed", (event, reqId, result) => {
-    const resolve = pendingDraftFlushes.get(reqId);
-    if (!resolve) return;
-    pendingDraftFlushes.delete(reqId);
-    resolve(result && typeof result === "object" ? result : { ok: false });
-  });
-}
-
-function registerHistoryBlobIpc({ ipcHandle }) {
-  const historyDocIdArg = (v) => {
-    if (typeof v !== "string" || !DOC_ID_RE.test(v)) throw new Error("history: invalid document id");
-    return v;
-  };
-
-  ipcHandle("splitpage:history-put", async (event, docId, meta, stateJson, opts) => {
-    const o = opts && typeof opts === "object" && !Array.isArray(opts) ? opts : {};
-    const older = o.older === true;
-    if (older) {
-      if (docId !== null) throw new Error("history: an Older put names no document");
-    } else {
-      historyDocIdArg(docId);
-    }
-    const clean = sanitizeHistoryMeta(meta);
-    if (!clean) throw new Error("history: invalid snapshot meta");
-    if (typeof stateJson !== "string") throw new Error("history: invalid snapshot body");
-    const held = historyProtectList(o.protect);
-    historyHolds.set(event.sender.id, held);
-    const r = older
-      ? await historyStore.put(null, clean, stateJson, { protect: held, older: true })
-      : await historyStore.put(docId, clean, stateJson, { protect: held });
-    if (r.stored) {
-      return {
-        ok: true,
-        sizeBytes: historyUtf8Length(stateJson),
-        duplicate: !!r.duplicate,
-        evicted: Number(r.evicted) || 0,
-        overCap: !!r.overCap
-      };
-    }
-    const out = { ok: false, code: typeof r.code === "string" ? r.code : "io" };
-    if (r.evicted) out.evicted = r.evicted;
-    return out;
-  });
-
-  ipcHandle("splitpage:history-list", async (event, docId) => {
-    const id = docId == null ? null : historyDocIdArg(docId);
-    const r = await historyStore.list(id);
-    const usage = await historyStore.usage().catch(() => null);
-    return {
-      entries: r.entries.map(historyWireMeta),
-      older: r.older.map(historyWireMeta),
-      olderExpiresAt: r.olderExpiresAt,
-      usage
-    };
-  });
-
-  ipcHandle("splitpage:history-get", async (event, query, snapshotId) => {
-    const q = query || {};
-    const bucket = q.older === true ? HISTORY_OLDER_KEY : historyDocIdArg(q.docId);
-    if (typeof snapshotId !== "string" || !HISTORY_SNAP_ID_RE.test(snapshotId)) {
-      throw new Error("history: invalid snapshot id");
-    }
-    if (Array.isArray(q.protect)) historyHolds.set(event.sender.id, historyProtectList(q.protect));
-    const r = await historyStore.get(bucket, snapshotId);
-    return r ? { meta: historyWireMeta(r.meta), stateJson: r.stateJson } : null;
-  });
-
-  ipcHandle("splitpage:history-copy", async (event, fromDocId, toDocId) => {
-    historyDocIdArg(fromDocId);
-    historyDocIdArg(toDocId);
-    if (fromDocId === toDocId) return { ok: true, copied: 0 };
-    return historyStore.copy(fromDocId, toDocId);
-  });
-
-  ipcHandle("splitpage:history-touch", async (event, docId, title) => {
-    historyDocIdArg(docId);
-    await historyStore.touch(docId, title);
-  });
-
-  ipcHandle("splitpage:history-list-docs", async () => {
-    return historyStore.listDocs();
-  });
-
-  ipcHandle("splitpage:blob-put", async (event, sha, bytes) => {
-    if (typeof bytes === "string") return { ok: false, code: "BAD_BYTES" };
-    let buf;
-    try { buf = toBuffer(bytes); } catch { return { ok: false, code: "BAD_BYTES" }; }
-    const refusal = imageBlobRefusal(buf);
-    if (refusal) return { ok: false, code: refusal };
-    if (!blobStore) return { ok: false, code: "UNAVAILABLE" };
-    return blobStore.put(sha, buf);
-  });
-
-  ipcHandle("splitpage:blob-get", async (event, sha) => {
-    if (!blobStore) return null;
-    const buf = await blobStore.get(sha);
-    if (!buf) return null;
-    const mime = sniffImageMime(buf);
-    return mime ? { bytes: buf, mime } : null;
-  });
-
-  ipcHandle("splitpage:blob-missing", async (event, shas) => {
-    if (shas.length > MAX_MISSING_QUERY) throw new Error("blob-missing: at most " + MAX_MISSING_QUERY + " shas per call");
-    if (!shas.every(isSha256)) throw new Error("blob-missing: every entry must be a sha256");
-    if (!blobStore) return [...new Set(shas)];
-    return blobStore.missing(shas);
-  });
-}
+const { registerHistoryBlobIpc } = createHistoryBlobIpc({
+  historyStore: () => historyStore, historyHolds, historyProtectList, historyWireMeta,
+  blobStore: () => blobStore, historyPolicy, DOC_ID_RE
+});
 
 function registerTabStripIpc({ ipcHandle, ipcOn, ipcOnSync }) {
   ipcOnSync("splitpage:tabstrip-window-id-sync", (event) => {
