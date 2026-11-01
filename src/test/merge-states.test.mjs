@@ -33,6 +33,28 @@ function mk() {
   });
 }
 
+test("#1041: loading before a reorder merge preserves each duplicate scene exactly once", () => {
+  const base = migrateRows({ schema: 2, rows: [
+    { id: "a", audioText: "w0" }, { id: "b", audioText: "b" }, { id: "a", audioText: "w2" }
+  ] });
+  const mine = cloneState(base);
+  mine.rows = [mine.rows[1], mine.rows[0], mine.rows[2]];
+  const { merged } = mergeStates(base, mine, cloneState(base));
+  assert.deepEqual(merged.rows.map(r => r.audioText), ["b", "w0", "w2"]);
+  assert.equal(new Set(merged.rows.map(r => r.id)).size, 3);
+  assert.equal(new Set(merged.rows).size, 3);
+});
+
+test("#1041: loading a local addition with a duplicate id cannot replace the original scene", () => {
+  const base = migrateRows({ schema: 2, rows: [{ id: "a", audioText: "w0" }, { id: "b", audioText: "b" }] });
+  const raw = cloneState(base);
+  raw.rows.push({ id: "a", audioText: "w5" });
+  const mine = migrateRows(raw);
+  const { merged } = mergeStates(base, mine, cloneState(base));
+  assert.deepEqual(merged.rows.map(r => r.audioText), ["w0", "b", "w5"]);
+  assert.equal(new Set(merged.rows.map(r => r.id)).size, 3);
+});
+
 test("the fixture is what the delete cases assume", () => {
   const s = mk();
   assert.equal(s.people.length, 1);

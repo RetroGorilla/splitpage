@@ -14,6 +14,61 @@ type Item = Record<string, unknown>;
 
 const MINTED_DOC_ID = "d" + "f".repeat(32);
 
+test("#1041: later duplicate rows get fresh ids without taking an id elsewhere in the document", () => {
+  const f = fakeMigration();
+  const out = migrateRows({ schema: 2, rows: [
+    { id: "a", audioText: "first" },
+    { id: "a", audioText: "second" },
+    { id: "r-fake-1", audioText: "reserved" },
+    { id: "a", audioText: "third" }
+  ] }, f.ports);
+  assert.deepEqual(out.rows.map(r => r.id), ["a", "r-fake-2", "r-fake-1", "r-fake-3"]);
+  assert.deepEqual(out.rows.map(r => r.audioText), ["first", "second", "reserved", "third"]);
+  assert.deepEqual(f.ids.minted, ["r-fake-1", "r-fake-2", "r-fake-3"]);
+  assert.equal(JSON.stringify(migrateRows(jsonCopy(out), fakeMigration().ports)), JSON.stringify(out));
+});
+
+test("#1041: ids that collide after stripping keep the first row and all later content", () => {
+  const f = fakeMigration();
+  const out = migrateRows({ schema: 2, rows: [
+    { id: "scene.1", visualText: "one" },
+    { id: "scene 1", visualText: "two" },
+    { id: "scene1", visualText: "three" },
+    { id: "__proto__", visualText: "four" },
+    { id: "__proto__", visualText: "five" }
+  ] }, f.ports);
+  assert.deepEqual(out.rows.map(r => r.id), ["scene1", "r-fake-1", "r-fake-2", "__proto__", "r-fake-3"]);
+  assert.deepEqual(out.rows.map(r => r.visualText), ["one", "two", "three", "four", "five"]);
+});
+
+test("#1041: missing ids cannot take a later row's existing id or a previously minted id", () => {
+  const f = fakeMigration();
+  const candidates = ["r-fake-1", "fresh", "fresh", "last"];
+  f.ports.ids = { ...f.ports.ids, id: prefix => {
+    assert.equal(prefix, "r");
+    const next = candidates.shift();
+    assert.ok(next);
+    return next;
+  } };
+  const out = migrateRows({ schema: 2, rows: [{}, { id: "r-fake-1" }, { id: "!?" }] }, f.ports);
+  assert.deepEqual(out.rows.map(r => r.id), ["fresh", "r-fake-1", "last"]);
+  assert.deepEqual(candidates, []);
+});
+
+test("#1041: a document with unique ids retains its exact bytes and consumes no ids", () => {
+  const original = {
+    schema: 2, docId: MINTED_DOC_ID, title: "Unchanged", rows: [
+      { id: "a", audioText: "one", visualText: "", status: "todo", imageRef: null, updatedAt: "", updatedBy: null },
+      { id: "b", audioText: "two", visualText: "", status: "todo", imageRef: null, updatedAt: "", updatedBy: null }
+    ], comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0,
+    sections: [{ id: "section", name: "Part", firstSceneId: "b" }]
+  };
+  const bytes = JSON.stringify(original);
+  const f = fakeMigration();
+  assert.equal(JSON.stringify(migrateRows(jsonCopy(original), f.ports)), bytes);
+  assert.deepEqual(f.ids.minted, []);
+});
+
 function list(doc: Doc, key: string): Item[] {
   return doc[key] as Item[];
 }
