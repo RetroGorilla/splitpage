@@ -4,7 +4,7 @@ import "./_production-tags-started.mjs";
 import { wireProductionIndex } from "../bootstrap/wiring/production-index.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { stampRow } from "../bootstrap/wiring/session-merge.ts";
-import { bulkTagCell } from "../features/tags/production-tags.js";
+import { bulkTagCell } from "../features/tags/production-tags.ts";
 
 import { sessionStarted, startSessionBridge } from "../bootstrap/wiring/session-owner.ts";
 import { legacySessionPorts } from "../bootstrap/wiring.ts";

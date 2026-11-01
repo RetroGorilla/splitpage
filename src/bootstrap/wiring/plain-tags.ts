@@ -4,7 +4,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { cells as portCells } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
-import { renderTagCategories } from "../../features/tags/production-tags.js";
+import { renderTagCategories } from "../../features/tags/production-tags.ts";
 
 const plainTags = owned<PlainTagMount>();
 
