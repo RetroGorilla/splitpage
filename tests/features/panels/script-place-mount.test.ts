@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mountScriptPlace } from "../../../src/features/panels/script-place.js";
+import { mountScriptPlace } from "../../../src/features/panels/script-place.ts";
 import { viewHarness } from "../view-harness.ts";
 
 function setup() {
