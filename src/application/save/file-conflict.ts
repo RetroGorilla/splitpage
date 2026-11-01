@@ -2,7 +2,7 @@ export type FileConflictKind = "project" | "import";
 
 export interface FileConflict {
   readonly fileName: string;
-  readonly current: { readonly lastModified: number } | null;
+  readonly current: { readonly lastModified: number; readonly name?: string } | null;
   readonly kind: FileConflictKind;
 }
 
