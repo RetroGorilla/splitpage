@@ -44,7 +44,7 @@ import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { safeId } from "../../adapters/identity/safe-id.ts";
 import { sanitizeHtml, storedHtmlFromDom } from "../richtext.ts";
 import { cssAttr } from "../../features/common/dom.ts";
-import { announceGalleryEdit } from "../../features/gallery/overlay.js";
+import { announceGalleryEdit } from "../../features/gallery/overlay.ts";
 import {
   cancelLink,
   cancelVideo,
