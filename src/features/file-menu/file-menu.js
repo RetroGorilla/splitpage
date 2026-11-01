@@ -1,4 +1,4 @@
-import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.js";
+import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.ts";
 import { savedStatusText, savedWhenText } from "../../../shared/clock.js";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { NO_DESTINATION } from "../../application/transitions/ports.ts";
