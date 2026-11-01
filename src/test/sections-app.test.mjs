@@ -15,7 +15,7 @@ const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts"
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { sectionView } = await import("../bootstrap/wiring/editor-owners.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 let opened = 0;
 
 async function open(sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r3" }], fields = {}) {
@@ -143,7 +143,7 @@ test("comment jump reveals its folded anchor", async () => {
   await open(undefined, { schema: 2, rows: [{ id: "r1", audioText: '<span class="cmt-anchor" data-cmt="c_one">One</span>', visualText: "" }],
     comments: [{ id: "c_one", kind: "anchor", rowId: "r1", field: "audioText", anchorId: "c_one", quotedText: "One", author: "Ada", body: "Comment", replies: [] }] });
   sectionView().toggle("s1");
-  const { jumpToAnchor } = await import("../features/comments/comments.js");
+  const { jumpToAnchor } = await import("../features/comments/comments.ts");
   jumpToAnchor("c_one");
   assert.equal(sectionView().folded("s1"), false);
   assert.ok(document.querySelector('#rows .cmt-anchor[data-cmt="c_one"].flash'));

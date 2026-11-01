@@ -20,7 +20,7 @@ import { mergeCells } from "../core/merge/cells.ts";
 import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { toHtml } from "../core/text/html.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
-import { healTagRegistry, tagsInField } from "../features/tags/production-tags.js";
+import { healTagRegistry, tagsInField } from "../features/tags/production-tags.ts";
 
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";

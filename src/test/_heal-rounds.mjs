@@ -2,7 +2,7 @@ import "./_production-tags-started.mjs";
 import { productionReaders } from "../bootstrap/document-ports.ts";
 import assert from "node:assert/strict";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { healTagRegistry, productionIndexStats } from "../features/tags/production-tags.js";
+import { healTagRegistry, productionIndexStats } from "../features/tags/production-tags.ts";
 
 import { productionIndex } from "../application/production/index-owner.ts";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
