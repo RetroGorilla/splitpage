@@ -3,7 +3,7 @@ type HistoryImport = Awaited<ReturnType<AppDataPorts["history"]["importBundle"]>
 type DataBundle = { format: string; version: number; exportedAt: string; appVersion: string | undefined; snapshots?: unknown; history?: HistoryExport | null; blobs?: Record<string, unknown>; missingBlobs?: readonly string[]; prefs?: unknown };
 type ExportSummary = { ok: boolean; images: number; missingBlobs: string[]; truncated: boolean; warning: string | null };
 type ImportSummary = { ok: boolean; history: HistoryImport | null; blobs: HistoryImport["blobs"] | null; prefs: string[]; legacy: number | null; toast: string; warning: string | null };
-type DataError = Error & { code: string; secretKey?: string | undefined };
+type DataError = Error & { code: string; secretKey?: string | null | undefined };
 import type { AppDataPorts } from "./ports.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { settingsAppData } from "../../application/preferences/preferences.ts";
@@ -11,31 +11,31 @@ import { exposeTestHook } from "../common/test-hooks.ts";
 
 export function mountAppData(ports: AppDataPorts) {
 
-var APPDATA_FORMAT = "splitpage-app-data";
-var APPDATA_VERSION = 1;
-var APPDATA_SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i;
+const APPDATA_FORMAT = "splitpage-app-data";
+const APPDATA_VERSION = 1;
+const APPDATA_SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i;
 
 function appDataReadRaw(key: string) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
 }
 
 function appDataReadJson(key: string, fallback: unknown) {
-  var raw = appDataReadRaw(key);
+  const raw = appDataReadRaw(key);
   if (raw == null) return fallback;
   try {
-    var parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
     return parsed === undefined ? fallback : parsed;
   } catch (e) { return fallback; }
 }
 
 function appDataVersionString() {
   if (ports.desktop() && typeof ports.launchFacts.appVersion() === "string" && ports.launchFacts.appVersion()) return ports.launchFacts.appVersion();
-  var embedded = typeof ports.embeddedVersion === "function" ? ports.embeddedVersion() : null;
+  const embedded = typeof ports.embeddedVersion === "function" ? ports.embeddedVersion() : null;
   return embedded || "";
 }
 
 async function buildAppDataBundle() {
-  var bundle: DataBundle = {
+  const bundle: DataBundle = {
     format: APPDATA_FORMAT,
     version: APPDATA_VERSION,
     exportedAt: new Date().toISOString(),
@@ -49,7 +49,7 @@ async function buildAppDataBundle() {
   }
 
   try {
-    var history = await ports.history.exportAll();
+    const history = await ports.history.exportAll();
     bundle.history = history;
     bundle.blobs = history.blobs || {};
     bundle.missingBlobs = history.missingBlobs || [];
@@ -74,14 +74,14 @@ function assertNoSecrets(value: unknown) {
   (function walk(v: unknown) {
     if (!v || typeof v !== "object") return;
     if (Array.isArray(v)) {
-      for (var i = 0; i < v.length; i++) walk(v[i]);
+      for (let i = 0; i < v.length; i++) walk(v[i]);
       return;
     }
-    var keys = Object.keys(v);
-    for (var k = 0; k < keys.length; k++) {
-      var key = keys[k];
+    const keys = Object.keys(v);
+    for (let k = 0; k < keys.length; k++) {
+      const key = keys[k];
       if (APPDATA_SECRET_RE.test(key as string)) {
-        var e = new Error("Export cancelled — the bundle contained something that looks like a " +
+        const e = new Error("Export cancelled — the bundle contained something that looks like a " +
           "credential (" + key + "). This is a bug; please report it.") as DataError;
         e.code = "secret";
         e.secretKey = key;
@@ -93,7 +93,7 @@ function assertNoSecrets(value: unknown) {
 }
 
 function appDataFilename() {
-  var d = new Date();
+  const d = new Date();
   function pad(n: number) { return n < 10 ? "0" + n : String(n); }
   return "splitpage-app-data-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".json";
 }
@@ -105,16 +105,16 @@ async function exportAppData() {
   ports.notices.show("Gathering your Splitpage data…");
   await new Promise(function (resolve) { setTimeout(resolve, 0); });
 
-  var bundle;
+  let bundle;
   try {
     bundle = await buildAppDataBundle();
     assertNoSecrets(bundle);
   } catch (e) {
-    ports.notices.show((e && (e as Error).message) || "Export cancelled — something went wrong building your app data.", "error");
+    ports.notices.show(((e as Error | null) && (e as Error).message) || "Export cancelled — something went wrong building your app data.", "error");
     return;
   }
 
-  var json;
+  let json;
   try {
     json = JSON.stringify(bundle, null, 2);
   } catch (e) {
@@ -122,8 +122,8 @@ async function exportAppData() {
     return;
   }
 
-  var saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
-  var missing = bundle.missingBlobs || [];
+  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
+  const missing = bundle.missingBlobs || [];
   appDataLastExport = {
     ok: !!saved,
     images: Object.keys(bundle.blobs || {}).length,
@@ -140,10 +140,10 @@ async function exportAppData() {
   }
 }
 
-var APPDATA_MAX_TEXT = 512 * 1024 * 1024;
+const APPDATA_MAX_TEXT = 512 * 1024 * 1024;
 
 function appDataError(code: string, message: string) {
-  var e = new Error(message) as DataError;
+  const e = new Error(message) as DataError;
   e.code = code;
   return e;
 }
@@ -170,7 +170,7 @@ function appDataNormalizeHistory(h: unknown) {
 
 function appDataNormalizeBlobs(b: unknown) {
   if (!appDataIsPlainObject(b)) return null;
-  var out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = {};
   Object.keys(b).forEach(function (k) {
     if (k === "__proto__") return;
     out[k] = appDataIsPlainObject(b[k]) ? b[k] : null;
@@ -181,7 +181,7 @@ function appDataNormalizeBlobs(b: unknown) {
 function appDataNormalizePrefs(p: unknown) {
   if (!appDataIsPlainObject(p)) return {};
   function str(v: unknown) { return typeof v === "string" ? v : null; }
-  var out: Record<string, string | Record<string, unknown> | null> = {
+  const out: Record<string, string | Record<string, unknown> | null> = {
     onboarding: appDataIsPlainObject(p.onboarding) ? p.onboarding : null,
     tourDone: str(p.tourDone),
     commentAuthor: str(p.commentAuthor),
@@ -201,7 +201,7 @@ function parseAppDataBundle(text: unknown) {
   if (text.length > APPDATA_MAX_TEXT) {
     throw appDataError("too-large", "That file is too large to be Splitpage app data (over 512 MB).");
   }
-  var raw;
+  let raw;
   try { raw = JSON.parse(text); } catch (e) {
     throw appDataError("not-json", "That file isn't Splitpage app data (it isn't valid JSON).");
   }
@@ -216,10 +216,10 @@ function parseAppDataBundle(text: unknown) {
   try {
     assertNoSecrets(raw);
   } catch (e) {
-    var refused = appDataError("secret", "Import refused — the file contains something that looks like a " +
-      "credential (" + ((e && (e as DataError).secretKey) || "unknown") + "). Splitpage never exports those, so this file " +
+    const refused = appDataError("secret", "Import refused — the file contains something that looks like a " +
+      "credential (" + (((e as DataError | null) && (e as DataError).secretKey) || "unknown") + "). Splitpage never exports those, so this file " +
       "did not come from Splitpage.");
-    refused.secretKey = e && (e as DataError).secretKey;
+    refused.secretKey = (e as DataError | null) && (e as DataError).secretKey;
     throw refused;
   }
   return {
@@ -239,7 +239,7 @@ function appDataExtraPrefs() {
 }
 
 function appDataMergePrefs(prefs: Parameters<AppDataPorts["preferences"]["appDataImport"]>[0]) {
-  var written = ports.preferences.appDataImport(prefs, appDataExtraPrefs());
+  const written = ports.preferences.appDataImport(prefs, appDataExtraPrefs());
   try {
     if (written.indexOf("commentsSort") !== -1) ports.commentSorting.choose(ports.preferences.commentsSort());
     if (written.indexOf("writerSize") !== -1) ports.writer.setSize(ports.writer.size(), false);
@@ -254,25 +254,25 @@ function appDataPlural(n: number, one: string, many: string) {
 let appDataLastSummary: ImportSummary | { ok: boolean; code: string; message: string } | null = null;
 
 async function importAppData(text: unknown) {
-  var bundle;
+  let bundle;
   try {
     bundle = parseAppDataBundle(text);
   } catch (e) {
-    var refused = { ok: false, code: (e && (e as DataError).code) || "invalid",
-                    message: (e && (e as Error).message) || "That file could not be imported." };
+    const refused = { ok: false, code: ((e as DataError | null) && (e as DataError).code) || "invalid",
+                    message: ((e as Error | null) && (e as Error).message) || "That file could not be imported." };
     appDataLastSummary = refused;
     ports.notices.show(refused.message, "error");
     return refused;
   }
 
-  var summary: ImportSummary = { ok: true, history: null, blobs: null, prefs: [], legacy: null, toast: "", warning: null };
+  const summary: ImportSummary = { ok: true, history: null, blobs: null, prefs: [], legacy: null, toast: "", warning: null };
 
-  var legacy: unknown[] = [];
+  let legacy: unknown[] = [];
   if (bundle.snapshots) {
     try { legacy = ports.history.normalizeSnapshots(JSON.stringify(bundle.snapshots)) || []; } catch (e) { legacy = []; }
     summary.legacy = legacy.length;
   }
-  var hist = bundle.history || { docs: [] as unknown[], older: [] as unknown[] };
+  const hist = bundle.history || { docs: [] as unknown[], older: [] as unknown[] };
   summary.history = await ports.history.importBundle({ docs: hist.docs, older: hist.older.concat(legacy), blobs: bundle.blobs });
   summary.blobs = summary.history.blobs;
 
@@ -283,10 +283,10 @@ async function importAppData(text: unknown) {
     summary.prefs = [];
   }
 
-  var h = summary.history;
-  var imgs = summary.blobs || { stored: 0, refused: [], failed: [] };
-  var badImages = imgs.refused.length + imgs.failed.length;
-  var snapshots = h.added + h.older;
+  const h = summary.history;
+  const imgs = summary.blobs || { stored: 0, refused: [], failed: [] };
+  const badImages = imgs.refused.length + imgs.failed.length;
+  const snapshots = h.added + h.older;
   summary.toast = "Imported " + appDataPlural(snapshots, "version-history snapshot", "version-history snapshots") +
     " across " + appDataPlural(h.docs, "document", "documents") + " and your preferences.";
   ports.notices.show(summary.toast, "ok");
@@ -309,7 +309,7 @@ async function importAppData(text: unknown) {
     ports.notices.show(summary.warning, "warn", true);
   }
   if (badImages) {
-    var imgWarning = appDataPlural(badImages, "image", "images") + " in that file could not be imported" +
+    const imgWarning = appDataPlural(badImages, "image", "images") + " in that file could not be imported" +
       " — the snapshots that use " + (badImages === 1 ? "it" : "them") + " will show a placeholder." +
       " Details are in the console.";
     summary.warning = summary.warning ? summary.warning + " " + imgWarning : imgWarning;
@@ -320,11 +320,11 @@ async function importAppData(text: unknown) {
   return summary;
 }
 
-var appDataInputWired = false;
+let appDataInputWired = false;
 let appDataInput: HTMLElement | null = null;
 
 function openImportAppData() {
-  var input = document.getElementById("import-app-data-input");
+  const input = document.getElementById("import-app-data-input");
   if (!input) return;
   if (!appDataInputWired) {
     appDataInputWired = true;
@@ -335,8 +335,8 @@ function openImportAppData() {
 }
 
 async function onImportAppDataChosen(e: Event) {
-  var input = e.target as HTMLInputElement;
-  var file = input.files && input.files[0];
+  const input = e.target as HTMLInputElement;
+  const file = input.files && input.files[0];
   if (!file) { input.value = ""; return; }
   try {
     if (file.size > APPDATA_MAX_TEXT) {
@@ -344,7 +344,7 @@ async function onImportAppDataChosen(e: Event) {
       return;
     }
     ports.notices.show("Importing your Splitpage data…");
-    var text;
+    let text;
     try { text = await file.text(); } catch (err) {
       ports.notices.show("Could not read that file.", "error");
       return;
@@ -368,7 +368,7 @@ async function onImportAppDataChosen(e: Event) {
       useBlobBackend: function (backend: Parameters<AppDataPorts["useBlobBackend"]>[0]) { ports.useBlobBackend(backend || null); return true; }
     };
   }, function (withdraw) { withdrawHook = withdraw; });
-  var disposed = false;
+  let disposed = false;
   return {
     exportAppData: function () { if (!disposed) return exportAppData(); },
     openImportAppData: function () { if (!disposed) openImportAppData(); },
