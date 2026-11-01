@@ -15,6 +15,17 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
   A title you typed stays yours. Download-only browsers leave both unchanged.
 - **Section headers** group scenes without changing their running order.
+  Select a scene and choose **+ Section before selected scene** to name a
+  section. Its header shows the scene count and total time, including shot
+  scenes. Click the name to rename it; the ⋯ menu moves or removes the header.
+  Drag the grip to move the whole section, or drag a scene across a header
+  to change its section. The fold chevron hides scenes for this session only;
+  folding changes neither the saved file nor the running order.
+  Section names appear above rundown blocks and in Present's top bar as
+  visual cues. They are never spoken or used by Follow My Voice. Print/PDF,
+  full-script Word and Markdown exports retain headings and totals and include
+  every scene, including folded ones. Narration Word keeps heading cues;
+  plain narration text omits section headings. CSV/XLSX keep their existing columns.
   At the start of a scene after a header, press Backspace once to show
   “Press Backspace again to remove the section header”. Press it again
   within two seconds, without another key, click or caret move, to remove

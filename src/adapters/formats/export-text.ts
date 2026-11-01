@@ -20,7 +20,7 @@ import {
   exportFacts,
   exportSummaryParts
 } from "./export-kit.ts";
-import { sceneFacts, breakdownRows, commentBodyText, commentEntries } from "./export-projections.ts";
+import { sceneFacts, scriptSectionFacts, breakdownRows, commentBodyText, commentEntries } from "./export-projections.ts";
 import { exportServices } from "../../application/export/services.ts";
 import { base64Encode } from "../../core/document/media.ts";
 import { pad2 } from "../../core/production/timing.ts";
@@ -255,6 +255,7 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
   const assets = (opts && opts.assets) || exportAssetsNow(doc);
   const facts = exportFacts(doc, services);
   const scenes = sceneFacts(doc, services);
+  const headings = new Map(scriptSectionFacts(doc, scenes).map(group => [group.start, group]));
   const nums = doc.commentNumbers;
   const lines: string[] = [];
   lines.push("# " + facts.title);
@@ -267,6 +268,8 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
     lines.push("");
   }
   (limit ? doc.scenes.slice(0, limit) : doc.scenes).forEach(function (row, i) {
+    const heading = headings.get(i);
+    if (heading) lines.push("## " + markdownSectionName(heading.name) + " · " + heading.total, "");
     const f = scenes[i];
     if (!f) throw new Error("Missing scene facts");
     lines.push("### Scene " + f.number + " · " + f.start);
@@ -307,6 +310,10 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
   });
   if (!limit) appendMarkdownTail(lines, doc, { export: true }, services);
   return lines.join("\n");
+}
+
+function markdownSectionName(name: string): string {
+  return name.replace(/[\r\n]+/g, " ").replace(/([\\`*_[\]<>#|])/g, "\\$1");
 }
 
 function mdRichTableCell(md: string): string {
@@ -353,9 +360,11 @@ export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions |
     lines.push(exporting ? "_No scenes yet._" : "_No rows yet._");
   } else if (exporting) {
     const scenes = sceneFacts(doc, services);
-    lines.push("| # | Start | Status | Visual | Audio | Read |");
-    lines.push("| --- | --- | --- | --- | --- | --- |");
+    const headings = new Map(scriptSectionFacts(doc, scenes).map(group => [group.start, group]));
     (limit ? s.rows.slice(0, limit) : s.rows).forEach(function (row, i) {
+      const heading = headings.get(i);
+      if (heading) lines.push("", "## " + markdownSectionName(heading.name) + " · " + heading.total, "");
+      if (i === 0 || heading) lines.push("| # | Start | Status | Visual | Audio | Read |", "| --- | --- | --- | --- | --- | --- |");
       const cell = mdSceneCellSource(row, i, false, assets, services);
       const f = scenes[i];
       if (!f) throw new Error("Missing scene facts");
