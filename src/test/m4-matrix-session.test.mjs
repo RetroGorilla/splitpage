@@ -50,7 +50,7 @@ bootTrace.stop();
 const { LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { adoptRestoredState, migrateDocument } = await import("../bootstrap/startup/document-entry.js");
-const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
+const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.ts");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
