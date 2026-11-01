@@ -6,7 +6,7 @@ import { mountRowsRenderFeature, stopRowsRenderFeature } from "../bootstrap/wiri
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { addRow } from "../bootstrap/wiring/rows.ts";
 import { mountPanelListenersFeature, stopPanelListenersFeature } from "../bootstrap/wiring/panels.ts";
-import { openWriter, closeWriter } from "../features/writer/writer.js";
+import { openWriter, closeWriter } from "../features/writer/writer.ts";
 
 window.Element.prototype.scrollIntoView = function () {};
 

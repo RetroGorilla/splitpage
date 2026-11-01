@@ -67,7 +67,7 @@ Destinations are `LegacyDestination` values (`kind` and `fields`), and `NO_DESTI
 
 When `adoptReplacement` has started the new session it calls the listeners registered with `onDocumentReplaced` (`bootstrap/wiring/session-owner.ts`), and so does the undo adapter's adoption hook. A listener made with `liveSession().subscribe` would die with the session it was made on; `onDocumentReplaced` is the app-lifetime way to react to a replacement. Its one listener today is `releaseSessionVideoUrls` in `features/gallery/video-files.ts` (4.22, L1c), which revokes the cached object URLs of session videos and keeps the file and token grants.
 
-`keepSnapshot(label, doc?)` (`src/bootstrap/wiring/transition-owners.ts`, the `history` port) takes the same snapshot outside a transition, for changes that are not replacements: taking your version of a title or field (`features/comments/comments.js`), replacing rows on import (`features/imports/imports.js`), reloading an import from disk (`application/transitions/local-files.js`), and the two snapshots a new blank script or demo keeps, one under the old id and one under the new (`features/file-menu/file-menu.js`).
+`keepSnapshot(label, doc?)` (`src/bootstrap/wiring/transition-owners.ts`, the `history` port) takes the same snapshot outside a transition, for changes that are not replacements: taking your version of a title or field (`features/comments/comments.ts`), replacing rows on import (`features/imports/imports.js`), reloading an import from disk (`application/transitions/local-files.js`), and the two snapshots a new blank script or demo keeps, one under the old id and one under the new (`features/file-menu/file-menu.js`).
 
 ### Document sources (L3h PR 3)
 
@@ -91,7 +91,7 @@ The source runs inside the `openDocument` call, so an opening that adopts at onc
 | `loadFileIntoEditor`'s import branch (`application/transitions/local-files.js`): an import, entered with `{ raw }` and `NO_DESTINATION` (until 2026-10-30 the import destination, 4.12) | `open`, not written out |
 | `adoptUntitledDraft` and `recoverDraftAsUnsavedCopy` (`application/recovery/drafts.ts`): an unsaved copy of a draft (4.18), including a leftover desktop draft whose origin was a server document, which restores as untitled | `recover`, detached |
 | `restoreFileDraft`'s applied branch (`application/recovery/drafts.ts`), after `adoptProjectState` has opened the file (4.18) | `restore` |
-| `adoptRestoredState` (`bootstrap/startup/document-entry.js`): a history version (4.18) | `restore`, with `{ raw }` |
+| `adoptRestoredState` (`bootstrap/startup/document-entry.ts`): a history version (4.18) | `restore`, with `{ raw }` |
 
 Every caller now hands the transition a document it owns (`draftMigrate` output, or `{ raw: cloneState(...) }`), so `restore` and `recover` setting `docId` on the incoming document touches nothing a caller keeps (the note on PR #555, closed in 4.18).
 
