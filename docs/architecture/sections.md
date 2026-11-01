@@ -162,6 +162,13 @@ section records. Narration Word keeps section cues as metadata paragraphs
 before the section's first spoken scene; reimport excludes those cues from
 the narration. Plain narration text and CSV/XLSX keep their existing form.
 
+Reimporting readable Markdown retains the scenes in order but drops section
+headers; it does not recreate sections. The stacked reader skips the writer's
+escaped heading and duration only before a scene heading, at the start or
+after a scene divider. The table reader skips repeated export column headers.
+Ordinary Markdown headings inside scene audio remain content. Use project
+Markdown or `.splitpage` to preserve section records through save and open.
+
 Print and both PDF adapters use the captured script-print layout. Each
 section has a table with a heading spanning all four columns; the heading
 and column labels repeat on continuation pages. The initial unsectioned

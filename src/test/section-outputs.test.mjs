@@ -11,6 +11,7 @@ import { buildDocx, buildNarrationDocx, docxToRows, buildNarrationText } from ".
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { sceneFacts, scriptSectionFacts } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
+import { parseImportRows } from "../adapters/formats/import-text.js";
 
 function fixture() {
   return buildExportDocument(migrateRows({ title: "Section outputs", rows: ["a", "b", "c", "d"].map((id, i) => ({
@@ -84,3 +85,48 @@ test("narration Word retains section cues as metadata while plain narration stay
     "Spoken a Spoken b Spoken c Spoken d");
   assert.doesNotMatch(buildNarrationText(doc), /Opening|Ending/);
 });
+
+function markdownFixture(anchors, count = 4) {
+  return buildExportDocument(migrateRows({ title: "Section round trip", rows: Array.from({ length: count }, (_, i) => ({
+    id: "r" + i, visualText: "Visual " + i, audioText: "Audio " + i,
+    status: i % 2 ? "shot" : "todo", lengthSeconds: i % 3 ? 30 : 3600
+  })), sections: anchors.map((at, i) => ({ id: "s" + i, name: "Part " + i + " & *notes* | #cue", firstSceneId: "r" + at })) }),
+  "2026-10-31T12:00:00Z", { production: [], commentNumbers: {}, broll: [] }, { clockMode: "24" });
+}
+
+function assertMarkdownScenes(doc, markdown, message) {
+  const rows = parseImportRows(markdown, "twocolumn");
+  assert.deepEqual(rows.map(({ visualText, audioText }) => ({ visualText, audioText })),
+    doc.scenes.map(({ visualText, audioText }) => ({ visualText, audioText })), message);
+  assert.ok(rows.every(row => !Object.hasOwn(row, "sections") && !Object.hasOwn(row, "firstSceneId")));
+}
+
+for (const [form, write] of [
+  ["stacked", doc => toMarkdownDoc(doc)],
+  ["table", doc => toMarkdownTableDoc(doc, { export: true })]
+]) {
+  test(form + " Markdown reimports scenes with first, middle, last and adjacent section boundaries", () => {
+    for (const anchors of [[], [0], [1], [3], [1, 2], [0, 1, 2, 3]]) {
+      const doc = markdownFixture(anchors);
+      assertMarkdownScenes(doc, write(doc), "boundaries " + JSON.stringify(anchors));
+    }
+    const doc = markdownFixture([1, 3]);
+    const ownText = form === "stacked" ? "Audio 0\n\n## Personal notes · 0:50\n\nMore audio\n\n## Last note · 0:50" : "Audio 0 ## Personal notes · 0:50";
+    const markdown = write(doc).replace("Audio 0", ownText);
+    const rows = parseImportRows(markdown, "twocolumn");
+    assert.equal(rows.length, 4);
+    assert.equal(rows[0].audioText, ownText);
+    assert.equal(rows[1].audioText, "Audio 1");
+  });
+
+  test(form + " Markdown seeded section placements preserve every scene and its order on reimport", () => {
+    let seed = 3101031;
+    const next = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
+    for (let trial = 0; trial < 128; trial++) {
+      const count = 1 + next() % 12;
+      const anchors = Array.from({ length: count }, (_, i) => i).filter(() => (next() >>> 16) % 3 === 0);
+      const doc = markdownFixture(anchors, count);
+      assertMarkdownScenes(doc, write(doc), "seed 3101031 trial " + trial + " boundaries " + JSON.stringify(anchors));
+    }
+  });
+}
