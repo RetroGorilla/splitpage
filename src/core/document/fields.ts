@@ -2,6 +2,7 @@ import { normalizePersonColors } from "./person-colors.ts";
 import { normalizeSections } from "./sections.ts";
 import { cappedName } from "./text-policy.ts";
 import { DEFAULT_WPM, normalizeTargetLength, normalizeWordsPerMinute } from "./timing.ts";
+import { normalizeTitleOrigin, normalizeTitleVersion } from "./file-title.ts";
 
 export const SCHEMA_VERSION = 2;
 
@@ -12,6 +13,7 @@ export const STRATEGY_IDS = [
   "comments",
   "list-union-with-base",
   "changed-side-wins",
+  "optional-changed-side-wins",
   "max-plus-one",
   "theirs-wins",
   "person-colors",
@@ -38,6 +40,8 @@ export function normalizeEditorName(v: unknown): string | undefined {
 
 const FIELDS: StateField[] = [
   { key: "title",          def: function () { return ""; }, merge: "title", undo: true },
+  { key: "titleOrigin", normalize: normalizeTitleOrigin, merge: "optional-changed-side-wins", undo: true },
+  { key: "titleVersion", normalize: normalizeTitleVersion, merge: "optional-changed-side-wins", undo: true },
   { key: "docId",          merge: "doc-id", undo: false },
   { key: "rows",           def: function () { return []; }, merge: "rows", undo: false },
   { key: "comments",       def: function () { return []; }, merge: "comments", undo: true },

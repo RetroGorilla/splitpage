@@ -4,6 +4,9 @@ import { createSaveCompletion } from "./save-completion.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { fileKindFromName } from "../../../shared/file-names.js";
 import { slugify } from "../../../shared/text.js";
+import { fileTitleChange } from "../../core/document/file-title.ts";
+import type { FileTitleChange } from "../../core/document/file-title.ts";
+import { deepFreeze } from "../../core/document/freeze.ts";
 import type { ExportCaptureOptions, ExportDocument } from "../../core/document/export-document.ts";
 import type { NoticeKind } from "../effects/ports.ts";
 import type { DeliverOptions } from "../files/file-delivery.ts";
@@ -71,10 +74,10 @@ const FAILED: WriterResult = Object.freeze({ kind: "failed" });
 const FILE_CHANGED = "The file changed on disk since it was opened";
 const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 
-function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite | null): SaveLanding {
+function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite | null, naming: FileTitleChange | null): SaveLanding {
   return {
     current: function () {
-      mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed() });
+      mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed(), naming });
       if (forkDocId) job.moved();
     },
     obsolete: function () { adoptSavedCopyDocId(forkDocId, docIdAtSave, false); }
@@ -96,11 +99,13 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
   const forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   const docIdAtSave = (currentDocument() as { readonly docId: string }).docId;
   const homeAtSave = currentHome();
-  const captured = captureExportDocument({
+  let captured = captureExportDocument({
     docId: forkDocId,
     stamp: { rev: ((currentDocument() as { readonly rev: number }).rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
   });
-  const published = cloneState(captured.document);
+  let published = cloneState(captured.document);
+  const firstSave = !documentLocation().writtenOut();
+  let naming: FileTitleChange | null = null;
   const seqAtSave = saveChanges();
   const slug = slugify(published.title);
   const reusing = !saveAs && fileHome() ? fileHome() : null;
@@ -130,6 +135,15 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
     if (target.kind === "cancelled") return CANCELLED;
     if (target.kind === "handle" && target.picked) {
       kind = fileKindFromName(target.handle.name) === "splitpage" ? "splitpage" : "md";
+      naming = fileTitleChange(captured.document, target.handle.name, firstSave);
+      if (naming) {
+        const named = Object.assign({}, captured.document, {
+          title: naming.title, titleOrigin: naming.titleOrigin, titleVersion: naming.titleVersion
+        });
+        if (!naming.titleVersion) Reflect.deleteProperty(named, "titleVersion");
+        captured = deepFreeze({ ...captured, document: named, title: naming.title });
+        published = cloneState(captured.document);
+      }
       retargetTo(target.handle, kind);
     }
 
@@ -163,7 +177,7 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
       job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () {
         const landedHome = fileHome() && (fileHome() as Home).handle === handle ? currentHome() : null;
         return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
-      }));
+      }, naming));
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);
@@ -172,7 +186,7 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
       const ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
       if (!ok) return CANCELLED;
       wrote = true;
-      job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () { return null; }));
+      job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () { return null; }, null));
       warnImagesLeftOut(imagesLeftOut, filename);
       written = SAVED;
     }

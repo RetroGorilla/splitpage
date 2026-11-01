@@ -29,6 +29,8 @@ function fresh() {
 
 const EDITS = [
   ["title", "changed", (s) => { s.title = "Undo, edited"; }],
+  ["titleOrigin", "added", (s) => { s.titleOrigin = "file"; }],
+  ["titleVersion", "added", (s) => { s.titleVersion = "v3"; }],
   ["docId", "changed", (s) => { s.docId = "d" + "6".repeat(32); }],
   ["rows", "a cell changed", (s) => { s.rows[0].audioText = "Hello again."; }],
   ["rows", "a row added", (s) => { s.rows.push({ id: "r2", status: "todo", visualText: "", audioText: "New.", imageRef: null, updatedAt: "", updatedBy: null }); }],

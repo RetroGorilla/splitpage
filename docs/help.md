@@ -11,6 +11,9 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since the 4.0 beta
 
+- **A title from your first filename.** Save an untouched untitled script as
+  `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
+  A title you typed stays yours. Download-only browsers leave both unchanged.
 - **Section headers** group scenes without changing their running order.
   At the start of a scene after a header, press Backspace once to show
   “Press Backspace again to remove the section header”. Press it again
@@ -629,6 +632,23 @@ first Save asks where, and in which format:
   comment anchors, pictures, statuses). Leave that block alone.
 - **Splitpage (`.splitpage`)**: the same information without the readable
   table.
+
+On the first save through the desktop dialog or a browser file picker, an
+untouched untitled script takes its title from the chosen filename without
+the extension. A trailing `v3` or `V3` (any number), separated by a space,
+underscore or hyphen, becomes a small `v3` tag beside the title, leaving the
+separator out of the title. Names such as `Rev2` and `Headsetv3` stay whole
+without a tag. Splitpage never invents or increments a version. Both the title and
+tag survive reopening a `.md` or `.splitpage` project.
+
+A title you typed is never replaced. While the title still comes from a
+filename, Save a copy updates the tag from the new name, or removes it when
+there is no version; it keeps the title. Once you edit the title, Save a
+copy leaves both title and tag alone. Undo reverses automatic naming as one
+change and keeps the chosen file as the save destination.
+
+**Download-only browsers: no change; the app never sees the final name.**
+There is no extra filename prompt.
 
 **Save a copy…** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) writes a new
 file and leaves the one on screen where it is.
