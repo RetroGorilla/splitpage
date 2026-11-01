@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { GalleryOverlayPorts } from "../../../src/features/gallery/ports.ts";
-import { startGalleryOverlay as mountOverlay, closeGalleryOverlay, openGalleryOverlay } from "../../../src/features/gallery/overlay.js";
+import { startGalleryOverlay as mountOverlay, closeGalleryOverlay, openGalleryOverlay } from "../../../src/features/gallery/overlay.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeActions, fakeDocument, fakeNotices, fakeOwnership, fakePreferenceChanges } from "../fakes.ts";
 
