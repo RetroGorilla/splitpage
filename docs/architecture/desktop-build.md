@@ -25,6 +25,18 @@ Both `dist` and `dist:win:test` use `electron-builder.yml`; the latter relies
 on electron-builder's default config discovery and changes the output folder
 and staged app to a test build. Both therefore ship the same IPC modules.
 
+The sandboxed renderer cannot strip TypeScript: Electron 44.4.5 reports a
+syntax error when a sandbox:true preload contains a type annotation.
+`desktop/preload.ts` is therefore the checked source, whose bridge object
+must implement `DesktopPort`. `node tools/build-preload.mjs` strips it with
+Node's stripTypeScriptTypes and writes the committed `desktop/preload.js` that the sandbox runs.
+The generated script still requires only Electron. Both `npm run verify`
+and CI regenerate it and require `git diff --exit-code -- desktop/preload.js`
+to pass. Run the generator after editing the source, and commit both files.
+The TypeScript source and its type-only imports are not packaged;
+`preload.js` remains the preload path in `main.js` and the builder file list.
+`tabstrip-preload.js` continues to read the same channel table over IPC.
+
 ## `files`
 
 Everything listed here goes inside the asar.
