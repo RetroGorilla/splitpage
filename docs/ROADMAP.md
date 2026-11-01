@@ -20,7 +20,7 @@ Groups A, B and C below are done. Every queue task from AQ-1 to AQ-46 is merged 
 | B3 | Storage re-exports gone (AQ-19); the `"server"` merge kind is now `"disk"` (AQ-33); startup slots decided (#954) | #993, #989 |
 | C1 | Prompter and rundown in strict TypeScript, each with its state in one object (AQ-24 to AQ-27) | #959, #973, #988, #997 |
 | C2 | Re-renders on stamp, hide and display settings measured: all under 65 ms, no fix needed (AQ-18) | #987 |
-| C3 | CSS by purpose: 11 stylesheets named by what they style, cascade unchanged (AQ-34) | #986 |
+| C3 | Stylesheets renamed and adjacent same-feature files merged by purpose, cascade unchanged (AQ-34) | #986 |
 | C4 | The remaining JavaScript app files under `src/` converted to strict TypeScript at Adam's request, types only, apart from the nine listed under "Still to do" | The run #1042 to #1079 |
 | C5 | Stale tracker rows closed and the old `main` PRs listed for Adam (AQ-39); Adam closed the old `main` PRs #547, #488, #489 and #382 | #996 |
 | C6 | PDF export as a print layout: script and list print pages (AQ-40, AQ-41), desktop `printToPDF` (AQ-42), browser print dialog (AQ-43), automatic layout checks in CI (AQ-45), the old PDF generator, font subsetter and Noto fonts deleted (AQ-44), plus Adam's print fixes (rows kept together, shot scenes as grey rows, desktop footer accepted as INV-61) | #994, #998, #1015, #1000, #1004, #1024, #1012, #1022, #1021 |
