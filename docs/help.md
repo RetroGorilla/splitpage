@@ -719,9 +719,8 @@ chooses page breaks, without a continued-row label, and supplies no PDF
 bookmarks.
 
 The **desktop app** still saves a PDF file directly, with bookmarks to its
-sections. Its current PDF writer supports Greek, Cyrillic, accented Latin
-and black-and-white emoji; unsupported characters appear as "?", with a
-warning. The browser print layout does not use that writer.
+sections. It prints the same page as the browser, so it also uses your
+computer's fonts and lets the page breaks fall where they fit.
 
 **Markdown** comes in two shapes. **Stacked** reads like a script, one
 heading per scene with its start time, status and read time; with pictures

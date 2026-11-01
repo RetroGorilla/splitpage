@@ -424,8 +424,9 @@ is a two-line dispatcher so every existing call site refreshes both panels
 for free. `applyGearQuickAdd()` diffs the textarea against `gearEntries()`:
 a new line registers a tag (orphaned from creation); a removed line deletes
 the registry entry only if already orphaned (a live one self-heals back,
-§3.4). `buildPackingListPdf(catId)` is a second, smaller PDF writer rather
-than reusing `buildPdf()`'s page-building closures.
+§3.4). The packing list prints through `buildPackingListPrintPage(catId)`
+(`src/adapters/formats/list-print.ts`), on the same print-page shell as the
+script ([print-layout.md](architecture/print-layout.md)).
 
 A harness gotcha, not an app bug: renaming a live tag via a panel opened
 with `jsclick` right after typing can look like registry corruption —
