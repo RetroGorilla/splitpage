@@ -9,7 +9,7 @@ import { changes as portChanges } from "./ports/preferences.ts";
 import { galleryActions as definitions } from "../../features/gallery/actions.ts";
 import { startAnnotate as mountGallery } from "../../features/gallery/annotate.ts";
 import { startGalleryOverlay as mountOverlay } from "../../features/gallery/overlay.js";
-import { startGalleryVideo as mountVideo } from "../../features/gallery/video.js";
+import { startGalleryVideo as mountVideo } from "../../features/gallery/video.ts";
 import type { GalleryMount, GalleryOverlayMount, GalleryOverlayPorts, GalleryPorts, GalleryVideoMount, GalleryVideoPorts } from "../../features/gallery/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { videoHostLabel } from "../../adapters/formats/video-host.ts";
