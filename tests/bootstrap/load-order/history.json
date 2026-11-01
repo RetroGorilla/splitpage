@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/application/recovery/history.js",
+    "src/application/recovery/history.ts",
     "src/adapters/storage/history-backends.js",
     "src/bootstrap/wiring/history.ts"
   ],
