@@ -114,24 +114,24 @@ export function inlineStateImages(s: unknown, only?: readonly string[] | null, u
   function inlineOriginal(a: unknown) {
     if (!a || typeof a !== "object" || !(a as Record<string, unknown>).imageRef) return;
     const u = pick((a as Record<string, unknown>).imageRef);
-    if (u) { (a as Record<string, unknown>).visualImage = u; Reflect.deleteProperty(a as object, "imageRef"); }
+    if (u) { (a as Record<string, unknown>).visualImage = u; delete (a as { imageRef?: unknown }).imageRef; }
   }
   if (!s || typeof s !== "object") return missing;
-  ((Array.isArray((s as Record<string, unknown>).rows) ? (s as Record<string, unknown>).rows : []) as Record<string, unknown>[]).forEach(function (r) {
+  ((Array.isArray((s as Record<string, unknown>).rows) ? (s as Record<string, unknown>).rows : []) as unknown[]).forEach(function (r) {
     if (!r || typeof r !== "object") return;
-    ((Array.isArray(r.moreImages) ? r.moreImages : []) as Record<string, unknown>[]).forEach(function (it) {
-      if (!it || typeof it !== "object" || !it.imageRef) return;
-      inlineOriginal(it.annotation);
-      const u = pick(it.imageRef);
-      if (u) { it.visualImage = u; Reflect.deleteProperty(it, "imageRef"); }
+    ((Array.isArray((r as Record<string, unknown>).moreImages) ? (r as Record<string, unknown>).moreImages : []) as unknown[]).forEach(function (it) {
+      if (!it || typeof it !== "object" || !(it as Record<string, unknown>).imageRef) return;
+      inlineOriginal((it as Record<string, unknown>).annotation);
+      const u = pick((it as Record<string, unknown>).imageRef);
+      if (u) { (it as Record<string, unknown>).visualImage = u; delete (it as { imageRef?: unknown }).imageRef; }
     });
-    inlineOriginal(r.imageAnnotation);
-    if (!r.imageRef) {
-      if (!only && "imageRef" in r) { Reflect.deleteProperty(r, "imageRef"); r.visualImage = null; }
+    inlineOriginal((r as Record<string, unknown>).imageAnnotation);
+    if (!(r as Record<string, unknown>).imageRef) {
+      if (!only && "imageRef" in r) { delete (r as { imageRef?: unknown }).imageRef; (r as Record<string, unknown>).visualImage = null; }
       return;
     }
-    const url = pick(r.imageRef);
-    if (url) { r.visualImage = url; Reflect.deleteProperty(r, "imageRef"); }
+    const url = pick((r as Record<string, unknown>).imageRef);
+    if (url) { (r as Record<string, unknown>).visualImage = url; delete (r as { imageRef?: unknown }).imageRef; }
   });
   function html(h: unknown) {
     if (typeof h !== "string" || h.indexOf("data-blob") === -1) return h;
@@ -147,18 +147,18 @@ export function inlineStateImages(s: unknown, only?: readonly string[] | null, u
       return inlineImgTag(url);
     });
   }
-  ((Array.isArray((s as Record<string, unknown>).rows) ? (s as Record<string, unknown>).rows : []) as Record<string, unknown>[]).forEach(function (r) {
+  ((Array.isArray((s as Record<string, unknown>).rows) ? (s as Record<string, unknown>).rows : []) as unknown[]).forEach(function (r) {
     if (!r || typeof r !== "object") return;
-    r.visualText = html(r.visualText);
-    r.audioText = html(r.audioText);
+    (r as Record<string, unknown>).visualText = html((r as Record<string, unknown>).visualText);
+    (r as Record<string, unknown>).audioText = html((r as Record<string, unknown>).audioText);
   });
-  ((Array.isArray((s as Record<string, unknown>).comments) ? (s as Record<string, unknown>).comments : []) as Record<string, unknown>[]).forEach(function (c) {
+  ((Array.isArray((s as Record<string, unknown>).comments) ? (s as Record<string, unknown>).comments : []) as unknown[]).forEach(function (c) {
     if (!c || typeof c !== "object") return;
-    const url = c.imageValue ? pick(c.imageValue) : null;
-    if (url) c.body = inlineImgTag(url);
-    else c.body = html(c.body);
-    ((Array.isArray(c.replies) ? c.replies : []) as Record<string, unknown>[]).forEach(function (rep) {
-      if (rep && typeof rep === "object") rep.body = html(rep.body);
+    const url = (c as Record<string, unknown>).imageValue ? pick((c as Record<string, unknown>).imageValue) : null;
+    if (url) (c as Record<string, unknown>).body = inlineImgTag(url);
+    else (c as Record<string, unknown>).body = html((c as Record<string, unknown>).body);
+    ((Array.isArray((c as Record<string, unknown>).replies) ? (c as Record<string, unknown>).replies : []) as unknown[]).forEach(function (rep) {
+      if (rep && typeof rep === "object") (rep as Record<string, unknown>).body = html((rep as Record<string, unknown>).body);
     });
   });
   return missing;
