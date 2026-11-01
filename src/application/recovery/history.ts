@@ -333,7 +333,7 @@ function historyTouchDocument(docId: string | null, title: string) {
 }
 
 function historyDocumentChanged() {
-  if (currentDocument() && normalizeDocId((currentDocument() as NonNullable<ReturnType<typeof currentDocument>>).docId)) historyTouchDocument((currentDocument() as NonNullable<ReturnType<typeof currentDocument>>).docId, (currentDocument() as NonNullable<ReturnType<typeof currentDocument>>).title);
+  if (currentDocument() && normalizeDocId(currentDocument()!.docId)) historyTouchDocument(currentDocument()!.docId, currentDocument()!.title);
   historyChanged();
 }
 
