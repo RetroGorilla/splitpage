@@ -25,6 +25,44 @@ function doc(over) {
   return migrateRows(Object.assign({ schema: 2, title: "T", rows: [] }, over));
 }
 
+test("#1041: duplicate-row comments and sections stay on the first scene across repeated loads", () => {
+  const mark = (id, words) => '<span class="cmt-anchor" data-cmt="' + id + '">' + words + '</span>';
+  const s = doc({
+    rows: [
+      { id: "scene.1", audioText: mark("shared", "first"), visualText: "B-roll: First shot" },
+      { id: "scene 1", audioText: mark("shared", "second") + mark("later", " only later"), visualText: "B-roll: Second shot" },
+      { id: "other", audioText: mark("unique", "third") }
+    ],
+    comments: [
+      { id: "shared", rowId: "scene.1", field: "audioText", body: "shared comment" },
+      { id: "later", rowId: "scene 1", field: "audioText", body: "later comment", quotedText: "only later" },
+      { id: "conflict", rowId: "scene1", field: "audioText", kind: "conflict", body: "unmerged words" },
+      { id: "unique", rowId: "other", field: "audioText", body: "unique comment" }
+    ],
+    sections: [{ id: "part", name: "Part", firstSceneId: "scene.1" }]
+  });
+  assert.equal(new Set(s.rows.map(r => r.id)).size, 3);
+  assert.deepEqual(s.comments.map(c => c.rowId), ["scene1", "scene1", "scene1", "other"]);
+  assert.deepEqual(s.comments.map(c => c.body), ["shared comment", "later comment", "unmerged words", "unique comment"]);
+  assert.equal(s.comments[1].quotedText, "only later");
+  assert.equal(s.rows[0].audioText, mark("shared", "first"));
+  assert.equal(s.rows[1].audioText, "second only later");
+  assert.equal(s.rows[2].audioText, mark("unique", "third"));
+  assert.deepEqual(s.sections, [{ id: "part", name: "Part", firstSceneId: "scene1" }]);
+  assert.deepEqual(s.brollShots.map(b => [b.name, b.audioRef]), [["First shot", "first"], ["Second shot", "second only later"]]);
+  assert.equal(JSON.stringify(migrateRows(JSON.parse(JSON.stringify(s)))), JSON.stringify(s));
+});
+
+test("#1041: media on duplicate rows becomes a separate comment on each repaired scene", () => {
+  const s = doc({ rows: [
+    { id: "a", audioText: '<img src="' + PNG + '">' },
+    { id: "a", audioText: '<img src="' + PNG + '">' }
+  ] });
+  assert.equal(s.comments.length, 2);
+  assert.equal(new Set(s.comments.map(c => c.id)).size, 2);
+  assert.deepEqual(s.comments.map(c => c.rowId), s.rows.map(r => r.id));
+});
+
 test("garbage in is a document out, never a throw", () => {
   for (const junk of [null, undefined, 42, "a string", []]) {
     const s = migrateRows(junk);
