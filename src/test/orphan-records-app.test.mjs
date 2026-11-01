@@ -11,7 +11,7 @@ await bootApp();
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { maybeAutoTagShortcut } = await import("../features/tags/production-tags.js");
+const { maybeAutoTagShortcut } = await import("../features/tags/production-tags.ts");
 const { maybeOpenPlainTag, closePlainTag, cancelPlainTag } = await import("../features/tags/plain-tags.ts");
 const { maybeCaptureBroll } = await import("../bootstrap/wiring/broll.ts");
 const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");
@@ -20,7 +20,7 @@ const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 

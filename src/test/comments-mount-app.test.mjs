@@ -12,7 +12,7 @@ const { commentSorting } = await import("../bootstrap/wiring/ports/preferences.t
 const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts");
 const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.ts");
-const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../features/comments/comments.js");
+const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../features/comments/comments.ts");
 after(closeApp);
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

@@ -19,7 +19,7 @@ const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();
 const { liveSession, runDocumentEdit, stampDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { setTargetLength } = await import("../features/rundown/target.ts");
-const { registerProductionTag, findOrAddPerson } = await import("../features/tags/production-tags.js");
+const { registerProductionTag, findOrAddPerson } = await import("../features/tags/production-tags.ts");
 const { renameTag, removeTag, newBrollRecord, removeBrollProp } = await import("../application/commands/production-actions.ts");
 const { retagRewrites: planRetagRewrites, retagMentions: countRetagMentions } = await import("../application/commands/tag-rewrites.ts");
 
@@ -30,7 +30,7 @@ const { sessionStamps, readSession } = await import("../bootstrap/wiring/session
 const { randomIds } = await import("../adapters/identity/ids.ts");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);
-const { setCommentAssignee, toggleResolve } = await import("../features/comments/comments.js");
+const { setCommentAssignee, toggleResolve } = await import("../features/comments/comments.ts");
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { deletePersonCommand } = await import("../application/commands/production-records.ts");
 const { editStamp, documentIdStamp } = await import("../application/commands/save-stamps.ts");

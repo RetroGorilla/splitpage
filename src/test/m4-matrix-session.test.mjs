@@ -49,7 +49,7 @@ bootTrace.stop();
 
 const { LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { adoptRestoredState, migrateDocument } = await import("../bootstrap/startup/document-entry.js");
+const { adoptRestoredState, migrateDocument } = await import("../bootstrap/startup/document-entry.ts");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
@@ -79,7 +79,7 @@ const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 
 after(closeApp);
 
-const { runIdleRefresh } = await import("../features/tags/production-tags.js");
+const { runIdleRefresh } = await import("../features/tags/production-tags.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 const refreshed = { into: null };
