@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/settings/app-data.js"
+    "src/features/settings/app-data.ts"
   ],
   "expectedLoads": 1
 }

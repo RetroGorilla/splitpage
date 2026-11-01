@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mountAppData } from "../../../src/features/settings/app-data.js";
+import { mountAppData } from "../../../src/features/settings/app-data.ts";
 import { appDataActions } from "../../../src/features/settings/actions.ts";
 import { createActionRegistry } from "../../../src/application/actions.ts";
 import { appDataActions as wiredAppDataActions, mountAppDataFeature, stopAppDataFeature } from "../../../src/bootstrap/wiring/settings.ts";

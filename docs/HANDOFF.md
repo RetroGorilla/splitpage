@@ -268,7 +268,7 @@ bytes instead.
 `#state-data` holds the seed document from `src/seed-state.json`. That's its
 whole job — **documents live in files, not copies of the app**. Save writes
 `.md` (table + fenced `splitpage` data block) or `.splitpage` (that record
-alone). The format codecs in `src/adapters/formats/` build and parse both; `openProjectFile()` (`src/application/transitions/local-files.js`) dispatches
+alone). The format codecs in `src/adapters/formats/` build and parse both; `openProjectFile()` (`src/application/transitions/local-files.ts`) dispatches
 into `adoptProjectState()`, the one place a parsed project becomes *the*
 document. `PAGE_SHELL`/`buildPublishHtml()` (`src/adapters/page/page-shell.ts`) exist only for Standalone HTML
 export. A server was a second home from 2026-08-28 until the server
@@ -560,7 +560,7 @@ tabs**.
   `blob-missing(shas)` → the subset not held, ≤2000 shas per call, anything
   else rejects. A store that could not be created leaves the app running:
   puts answer `UNAVAILABLE`, gets null, every sha is missing. The renderer
-  side is `makeDesktopBlobBackend(bridge)` in `src/adapters/desktop/desktop-blobs.js` (the page
+  side is `makeDesktopBlobBackend(bridge)` in `src/adapters/desktop/desktop-blobs.ts` (the page
   registry's `get`/`put`/`missing` interface; `put` rejects with
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites.
@@ -895,7 +895,7 @@ lose) — but both sides changing it keeps theirs with no conflict card, as a
 scene's length does; with no base a set target beats none. Both project
 formats carry it as a plain key; the `.md` table does not show it and no
 export prints it. It is set only through `setTargetLength()`
-(`src/features/rundown/target.js`), one `markDirty()`, so undo sees a `docField` step. What reads it:
+(`src/features/rundown/target.ts`), one `markDirty()`, so undo sees a `docField` step. What reads it:
 the script's length (`updateScriptStats()`: `1:35 / 2:00` and `0:25 left` /
 `0:05 over` in `#runtime-slot`, via the pure `targetClock()`; since #207 a
 label at the end of the rundown, `#runtime-chip`, placed by
@@ -904,7 +904,7 @@ header's status line — it was the header's program clock before; the
 target is measured against the whole script — with shot scenes hidden the
 remaining-to-shoot figure moves to the tooltip), and the rundown
 strip (`setRundownExtraSeconds(target)`, so the span is
-max(target, total) + 10s; `src/features/rundown/target.js` draws the line, "Target 2:00" and
+max(target, total) + 10s; `src/features/rundown/target.ts` draws the line, "Target 2:00" and
 the hatching on `#rundown-overlay` from `rundownLayout().x` — the layout at
 rest, never `rundownX()`, because the overlay is faded while the lens is on
 and must be right when it settles; and never seconds × `pxPerSecond`, since
@@ -1094,7 +1094,7 @@ stores until the one-time move has emptied them — see above), `splitpage-blobs
 `blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
 bytes, #82 — nothing deletes them yet, D4).
 
-**Per-person settings** (#181, the Settings dialog, `src/features/settings/settings.js`), all
+**Per-person settings** (#181, the Settings dialog, `src/features/settings/settings.ts`), all
 localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
 absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 `nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
@@ -1142,7 +1142,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
 | `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
 | `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.ts`) |
-| `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.js`) |
+| `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.ts`) |
 | `src/application/` (other) | preferences, document location and identity (with the document guard), production index and b-roll records, media and picture store, files and recents, export registry and services, screen and screen state, actions, shortcuts |
 | `src/adapters/` | `richtext/` (HTML in and out of cells), `formats/` (DOCX, PDF, CSV/XLSX, Markdown, the `.splitpage` file), `storage/` (blobs, gallery, history IndexedDB, desktop drafts), `files/`, `desktop/`, `page/`, `identity/`, `production/` |
 | `src/core/` | pure rules: `document/`, `text/` (runs, marks, steps, anchors), `merge/`, `production/`, `migrate.ts` |
@@ -1292,7 +1292,7 @@ recovery tool, if ever wanted, finds it by `docs/`/`older/` with no
 `migratedFrom` in `index.json`, or by v1 stores surviving in v3.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
-starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.js`)
+starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.ts`)
 now builds a fresh state through `migrateRows()`, so the document gets a new
 `docId` and empty `productionTags`, `people`, `brollShots` and `comments`,
 and its home becomes the imported file (`setHome("import")`,

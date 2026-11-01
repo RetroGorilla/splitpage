@@ -173,7 +173,7 @@ export function cleanId(id: unknown): string {
   return textOf(id).replace(/[^A-Za-z0-9_-]/g, "");
 }
 
-export function safeId(id: unknown, prefix: string, ids: IdSource): string {
+export function safeId(id: unknown, prefix: string, ids: Pick<IdSource, "id">): string {
   return cleanId(id) || ids.id(prefix);
 }
 

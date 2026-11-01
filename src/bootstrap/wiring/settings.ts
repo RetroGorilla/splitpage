@@ -1,7 +1,7 @@
 import { updateControls } from "./update.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { appDataActions as appDataDefinitions, settingsActions as settingsDefinitions } from "../../features/settings/actions.ts";
-import { mountAppData } from "../../features/settings/app-data.js";
+import { mountAppData } from "../../features/settings/app-data.ts";
 import type { AppDataMount, AppDataPorts } from "../../features/settings/ports.ts";
 import { historyOwner } from "./history.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
@@ -15,7 +15,7 @@ import { actions as portActions } from "./ports/actions.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { changes as portChanges } from "./ports/preferences.ts";
 import { presence } from "./ports/desktop-presence.ts";
-import { startSettings as mountSettings } from "../../features/settings/settings.js";
+import { startSettings as mountSettings } from "../../features/settings/settings.ts";
 import type { SettingsMount, SettingsPorts } from "../../features/settings/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { setHideShotScenes } from "./hide-shot.ts";
