@@ -4,7 +4,7 @@ import type { PresentedProductionEntry, TagRecordsPlan } from "../../core/produc
 import type { FieldHtml, ProductionRow, FieldTag } from "../../core/production/ports.ts";
 import type { Run, TextRun } from "../../core/text/runs.ts";
 import type { TextSpan } from "../../core/text/edits.ts";
-import type { DocumentView, Stamp } from "../../application/session/document-session.ts";
+import type { DeepReadonly, DocumentView, Stamp } from "../../application/session/document-session.ts";
 import type { CellRewrite } from "../../application/commands/document-edit.ts";
 
 type TagShortcut = { open: string; close: string; cat: string };
@@ -13,6 +13,10 @@ type TagGhostState = { cellEl: Element; node: Text; openAt: number; offset: numb
 type UntaggedMention = { cellEl: Element; range: Range; entry: TagCompletion; text: string };
 type UntaggedIndex = { re: RegExp; byName: Record<string, TagCompletion>; boundedInPattern: boolean };
 type TagComposerContext = { quotedText: string; cat?: string; rowId?: string; field?: string; occurrenceIndex?: number };
+type TagProductionOwner = ReturnType<ProductionTagPorts["production"]>;
+type TagReadonlyArgs<A extends readonly unknown[]> = { [K in keyof A]: DeepReadonly<A[K]> };
+type TagProductionRead<K extends "entries" | "current" | "recordsPlan"> =
+  (...args: TagReadonlyArgs<Parameters<TagProductionOwner[K]>>) => ReturnType<TagProductionOwner[K]>;
 import { plainTagOpen } from "./plain-tags.ts";
 import { isInsideTagOrLink } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
@@ -109,15 +113,15 @@ export function findOrAddPerson(name: string) {
 
 
 function productionEntries() {
-  return ((productionIndex as NonNullable<typeof productionIndex>)().entries as (doc: DocumentView | null) => PresentedProductionEntry[])((currentDocument as NonNullable<typeof currentDocument>)());
+  return ((productionIndex as NonNullable<typeof productionIndex>)().entries as TagProductionRead<"entries">)((currentDocument as NonNullable<typeof currentDocument>)());
 }
 
 function currentProductionIndex() {
-  return ((productionIndex as NonNullable<typeof productionIndex>)().current as (doc: DocumentView | null) => ReturnType<ReturnType<ProductionTagPorts["production"]>["current"]>)((currentDocument as NonNullable<typeof currentDocument>)());
+  return ((productionIndex as NonNullable<typeof productionIndex>)().current as TagProductionRead<"current">)((currentDocument as NonNullable<typeof currentDocument>)());
 }
 
 function tagRecordsPlan(doc: DocumentView | null) {
-  return ((productionIndex as NonNullable<typeof productionIndex>)().recordsPlan as (doc: DocumentView | null, viewed: DocumentView | null) => TagRecordsPlan | null)(doc, (currentDocument as NonNullable<typeof currentDocument>)());
+  return ((productionIndex as NonNullable<typeof productionIndex>)().recordsPlan as TagProductionRead<"recordsPlan">)(doc, (currentDocument as NonNullable<typeof currentDocument>)());
 }
 
 const REGISTRY_CHANGE = changeSet({ docFields: ["productionTags"] });
