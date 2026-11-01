@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHistoryOwner } from "../application/recovery/history.js";
+import { createHistoryOwner } from "../application/recovery/history.ts";
 import { createHistoryBackends } from "../adapters/storage/history-backends.ts";
 
 const docId = "d" + "1".repeat(32);
