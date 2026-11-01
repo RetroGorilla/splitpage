@@ -31,7 +31,7 @@ type ReplyDraft = { body?: string; name?: string };
 type CommentMenuEvent = KeyboardEvent & { readonly target: HTMLElement };
 
 import { plainText, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
-import { editableCellHtml } from "../common/editable-cell.js";
+import { editableCellHtml } from "../common/editable-cell.ts";
 import { formatTimestampAbsolute } from "../../../shared/clock.js";
 
 import { pad2 } from "../../core/production/timing.ts";

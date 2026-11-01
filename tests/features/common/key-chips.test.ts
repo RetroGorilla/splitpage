@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { IS_MAC, keyChipWords, keyChipsHtml } from "../../../src/features/common/key-chips.js";
+import { IS_MAC, keyChipWords, keyChipsHtml } from "../../../src/features/common/key-chips.ts";
 
 const MOD = IS_MAC ? "⌘" : "Ctrl";
 const SHIFT = IS_MAC ? "⇧" : "Shift";

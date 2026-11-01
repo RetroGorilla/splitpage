@@ -17,6 +17,7 @@ import {
   cappedLongText,
   cappedName,
   cappedText,
+  cleanId,
   legacyMdToHtml,
   plainName,
   plainText,
@@ -180,9 +181,27 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
 
   if (!Array.isArray(s.rows)) s.rows = [];
   s.rows = (s.rows as unknown[]).filter(isObject);
+  const originalRowIds = (s.rows as Bag[]).map(function (r) { return cleanId(r.id); });
+  const reservedRowIds = new Set(originalRowIds.filter(Boolean));
+  const usedRowIds = new Set<string>();
+  const duplicateRowIds = new Set<string>();
+  const rowIdSuffixes = new Map<string, number>();
   let movedMedia: MediaComment[] = [];
-  (s.rows as Bag[]).forEach(function (r) {
-    r.id = safeId(r.id, "r", ids);
+  (s.rows as Bag[]).forEach(function (r, at) {
+    let id = safeId(r.id, "r", ids);
+    if (originalRowIds[at] && usedRowIds.has(id)) {
+      duplicateRowIds.add(id);
+      // why: Disk reloads must repair the same scene identically, or draft recovery mistakes it for a new scene.
+      let suffix = rowIdSuffixes.get(id) || 0;
+      do { suffix++; } while (reservedRowIds.has(id + "-" + suffix));
+      rowIdSuffixes.set(id, suffix);
+      id += "-" + suffix;
+    } else if (!originalRowIds[at]) {
+      while (reservedRowIds.has(id)) id = ids.id("r");
+    }
+    r.id = id;
+    reservedRowIds.add(id);
+    usedRowIds.add(id);
     r.status = rowStatusId(r.status) ? r.status : "todo";
     const setLength = normalizeSceneLength(r.lengthSeconds);
     if (setLength === undefined) delete r.lengthSeconds; else r.lengthSeconds = setLength;
@@ -315,6 +334,12 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     return toPlainText(readers.cellOf(html || ""));
   }, null, ports.brollLines));
 
+  if (duplicateRowIds.size && Array.isArray(s.sections)) {
+    s.sections.filter(isObject).forEach(function (section) {
+      const firstSceneId = cleanId(section.firstSceneId);
+      if (duplicateRowIds.has(firstSceneId)) section.firstSceneId = firstSceneId;
+    });
+  }
   fields.forEach(function (f) {
     if (!f.normalize || !(f.key in s)) return;
     const value = f.normalize(s[f.key]);
