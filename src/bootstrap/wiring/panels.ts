@@ -1,4 +1,4 @@
-import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
+import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
 import { currentDocument, onRefresh, onSessionChange } from "./session-owner.ts";
 import { onPreferenceChange, preferences, viewFlags } from "./preferences-owner.ts";
 import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-status.ts";
@@ -7,14 +7,14 @@ import { renderHistory } from "./history-panel.ts";
 import { currentProductionTags } from "./production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
 import { onPainted } from "../../features/rows/render.ts";
-import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
+import { refreshGalleryOverlay } from "../../features/gallery/overlay.ts";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.ts";
 import { paintTargetOverlay } from "../../features/rundown/target.js";
 import { refreshAnnotator } from "../../features/gallery/annotate.ts";
-import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../features/tags/panels.js";
+import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../features/tags/panels.ts";
 import { runBrollRefresh } from "../../features/broll/panel.ts";
 import { scheduleBrollRefresh, updateBrollBadge } from "./broll.ts";
-import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.js";
+import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.ts";
 import { writerControls } from "./writer.ts";
 
 let stopPanels: (() => void) | null = null;

@@ -2,7 +2,7 @@ import type { ActionDefinition } from "../../application/actions.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import { EVERY_OVERLAY, OPENS_A_DIALOG, availableUnless, firstRefusal } from "../../application/screen.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
-import { openCommentComposer, openCommentsPanel, showTaggingHelp } from "./comments.js";
+import { openCommentComposer, openCommentsPanel, showTaggingHelp } from "./comments.ts";
 
 export function commentsPanelActions(screen: () => ScreenState, panels: Pick<SidePanels, "close">): ActionDefinition[] {
   return [{

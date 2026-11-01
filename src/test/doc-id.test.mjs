@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { decideDuplicateLoser } from "../../shared/doc-id-policy.js";
 import { mergedDocId, sha256Hex } from "../core/document/ids.ts";
-import { migrateDocument } from "../bootstrap/startup/document-entry.js";
+import { migrateDocument } from "../bootstrap/startup/document-entry.ts";
 import { createHash } from "node:crypto";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 

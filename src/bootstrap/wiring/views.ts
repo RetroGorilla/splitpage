@@ -29,7 +29,7 @@ import { importHome } from "./location-owner.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { promptForName, promptForWpm } from "./title-chrome.ts";
 import { restoreSnapshotFromCard } from "./history-panel.ts";
-import { openGalleryOverlay } from "../../features/gallery/overlay.js";
+import { openGalleryOverlay } from "../../features/gallery/overlay.ts";
 import { importControls } from "./imports.ts";
 import { updateSaveStatus } from "./save-status.ts";
 import { showToast } from "./effects-owner.ts";
