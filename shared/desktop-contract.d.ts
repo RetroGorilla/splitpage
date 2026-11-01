@@ -39,9 +39,9 @@ export interface DesktopWireFailure {
 export type DesktopWireDraftWrite = { ok: true; seq: number; bytes: number } | DesktopWireFailure;
 export type DesktopWireDraftDiscard = { ok: true } | DesktopWireFailure;
 
-export interface DesktopWireDraftHeader {
-  format: string;
-  formatVersion: number;
+export interface DesktopDraftWriteHeader {
+  format: "splitpage-draft";
+  formatVersion: 1;
   tabId: string;
   title: string;
   docId: string | null;
@@ -65,19 +65,33 @@ export interface DesktopWireDraftHeader {
   base: { file: string; bytes: number; sha256: string } | null;
 }
 
-export interface DesktopWireTakenDraft {
-  corrupt?: true;
-  unsupported?: true;
-  header?: DesktopWireDraftHeader;
-  stateJson?: string;
-  baseJson?: string | null;
-  baseProblem?: string | null;
+export type DesktopDraftReadHeader = Pick<DesktopDraftWriteHeader, "format" | "formatVersion" | "tabId" | "state"> & {
+  base?: DesktopDraftWriteHeader["base"];
+} & {
+  [K in Exclude<keyof DesktopDraftWriteHeader, "format" | "formatVersion" | "tabId" | "state" | "base">]?: unknown;
+};
+
+export interface DesktopWireDraftSuccess {
+  corrupt?: undefined;
+  unsupported?: undefined;
+  header: DesktopDraftReadHeader;
+  stateJson: string;
+  baseJson: string | null;
+  baseProblem: "missing" | "corrupt" | null;
   ageMs?: number | null;
   previousSession?: string;
-  usedPrevGeneration?: boolean;
+  usedPrevGeneration: boolean;
   file?: DesktopWireFile | null;
   fileProblem?: "missing" | "unreadable" | null;
 }
+
+type DesktopDraftFailureFields = {
+  [K in Exclude<keyof DesktopWireDraftSuccess, "corrupt" | "unsupported">]?: undefined;
+};
+
+export type DesktopWireTakenDraft = DesktopWireDraftSuccess |
+  (DesktopDraftFailureFields & { corrupt: true; unsupported?: undefined }) |
+  (DesktopDraftFailureFields & { unsupported: true; corrupt?: undefined });
 
 export interface DesktopWireDraftStatus {
   tabId: string | null;
@@ -151,7 +165,7 @@ export interface DesktopWireUpdateStatus {
   canInstall: boolean;
   releaseUrl: string | null;
   error?: string | undefined;
-  download: { state: string; received: number; total: number; error: string | null; verified?: boolean };
+  download: { state: "idle" | "downloading" | "ready" | "failed"; received: number; total: number; error: string | null; verified?: boolean };
 }
 
 export type DesktopWireDownload = { ok: true; state: "ready" } | { ok: false; error: string; message?: string };
@@ -171,7 +185,7 @@ export interface DesktopWireVoiceEvent {
 export interface DesktopWireShellState {
   windowId: string;
   activeTabId: string | null;
-  tabs: ({ tabId: string; title: string; dirty: boolean; crashed: boolean; pristine: boolean; fullPathForTooltip: string | null } | null)[];
+  tabs: { tabId: string; title: string; dirty: boolean; crashed: boolean; pristine: boolean; fullPathForTooltip: string | null }[];
 }
 
 export interface DesktopWireTestShellArgs {
@@ -182,23 +196,28 @@ export interface DesktopWireTestShellArgs {
 
 export type DesktopWireTestShellResult = DesktopWireShellState | string | boolean | null | string[] |
   { browser: string; url: string }[] |
-  { windows: { windowId: string; activeTabId: string | null; tabs: ({ tabId: string; title: string; dirty: boolean; pristine: boolean; path: string | null } | null)[] }[] } |
+  { windows: { windowId: string; activeTabId: string | null; tabs: { tabId: string; title: string; dirty: boolean; pristine: boolean; path: string | null }[] }[] } |
   { listening: boolean; port: number | null; shares: string[]; voiceStreams?: number } |
   { available: boolean; running: boolean; tabId: string | null; session: number | null; pid: number | null | undefined; started: number };
 
-export interface DesktopChannelRow {
-  name: keyof DesktopIpcContract;
-  direction: "invoke" | "send" | "sendSync" | "receive";
-  argsSchema: readonly string[];
-  allowedOrigins: readonly string[];
-  refusal?: null | false;
-  testOnly?: boolean;
-}
+export type DesktopChannelRow = {
+  [C in keyof DesktopIpcContract]: {
+    name: C;
+    argsSchema: readonly string[];
+    allowedOrigins: readonly string[];
+    testOnly?: boolean;
+  } & ({ direction: "invoke" | "send" | "receive"; refusal?: undefined } |
+    { direction: "sendSync"; refusal: DesktopIpcResult<C> });
+}[keyof DesktopIpcContract];
+
+export type DesktopRouteWhere = "this-tab" | "other-tab" | "new-tab";
+export type DesktopWireHistoryCopy = { ok: true; copied: number; code?: undefined } |
+  { ok: false; copied: number; code: string };
 
 type DesktopChannelCall<A extends readonly unknown[], R> = { args: A; result: R };
 
 export interface DesktopIpcContract {
-  "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[]>;
+  "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;
   "splitpage:open-file-dialog": DesktopChannelCall<[], DesktopWireFile | null>;
   "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[] }], { id: string; name: string } | null>;
   "splitpage:read-file": DesktopChannelCall<[string], DesktopWireFile>;
@@ -208,7 +227,7 @@ export interface DesktopIpcContract {
   "splitpage:recents-remove": DesktopChannelCall<[string], DesktopWireRecent[]>;
   "splitpage:recents-clear": DesktopChannelCall<[], DesktopWireRecent[]>;
   "splitpage:get-session-info": DesktopChannelCall<[], { testDialogsSeen: number | undefined }>;
-  "splitpage:get-app-version-sync": DesktopChannelCall<[], string>;
+  "splitpage:get-app-version-sync": DesktopChannelCall<[], string | null>;
   "splitpage:tab-boot-sync": DesktopChannelCall<[], DesktopWireBoot | null>;
   "splitpage:is-test-mode-sync": DesktopChannelCall<[], boolean>;
   "splitpage:open-external": DesktopChannelCall<[string], void>;
@@ -227,7 +246,7 @@ export interface DesktopIpcContract {
   "splitpage:voice-stop": DesktopChannelCall<[], { ok: true }>;
   "splitpage:set-document-state": DesktopChannelCall<[{ title?: string; dirty?: boolean; pristine?: boolean; docId?: string | null; fileId?: string | null }], void>;
   "splitpage:renderer-ready": DesktopChannelCall<[], void>;
-  "splitpage:route-open": DesktopChannelCall<[{ kind: "file"; fileId: string }], { where: string }>;
+  "splitpage:route-open": DesktopChannelCall<[{ kind: "file"; fileId: string }], { where: DesktopRouteWhere }>;
   "splitpage:draft-write": DesktopChannelCall<[unknown], DesktopWireDraftWrite>;
   "splitpage:draft-discard": DesktopChannelCall<[unknown], DesktopWireDraftDiscard>;
   "splitpage:draft-take": DesktopChannelCall<[], DesktopWireTakenDraft | null>;
@@ -236,7 +255,7 @@ export interface DesktopIpcContract {
   "splitpage:history-put": DesktopChannelCall<[string | null, unknown, string, DesktopWireHistoryOptions], DesktopWireHistoryPut>;
   "splitpage:history-list": DesktopChannelCall<[string | null], DesktopWireHistoryList>;
   "splitpage:history-get": DesktopChannelCall<[{ older?: boolean; docId?: string; protect?: readonly { docId: string; id: string }[] }, string], DesktopWireHistoryRead | null>;
-  "splitpage:history-copy": DesktopChannelCall<[string, string], { ok: boolean; copied: number; code?: string }>;
+  "splitpage:history-copy": DesktopChannelCall<[string, string], DesktopWireHistoryCopy>;
   "splitpage:history-touch": DesktopChannelCall<[string, unknown], void>;
   "splitpage:history-list-docs": DesktopChannelCall<[], DesktopWireHistoryDoc[]>;
   "splitpage:blob-put": DesktopChannelCall<[string, string | ArrayBuffer | ArrayBufferView], { ok: true; stored: boolean } | DesktopWireFailure>;

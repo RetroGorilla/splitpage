@@ -106,7 +106,7 @@ function createDocumentIpc({
       if (!taken || taken.corrupt || taken.unsupported) return taken || null;
 
       const origin = (taken.header && taken.header.origin) || null;
-      const filePath = origin && origin.kind === "file" && typeof origin.filePath === "string" ? origin.filePath : "";
+      const filePath = origin && (origin as Record<string, unknown>).kind === "file" && typeof (origin as Record<string, unknown>).filePath === "string" ? (origin as { filePath: string }).filePath : "";
       taken.file = null;
       taken.fileProblem = null;
       if (filePath) {
