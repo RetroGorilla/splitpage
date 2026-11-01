@@ -26,7 +26,7 @@ const lastUndoEntry = () => undoOwner().last();
 const nextRedoEntry = () => undoOwner().nextRedo();
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const find = await import("../features/find/find.js");
