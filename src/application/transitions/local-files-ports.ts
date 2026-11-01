@@ -14,6 +14,7 @@ import type { Transitions } from "./transitions.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { DraftParsedFile } from "../recovery/drafts-ports.ts";
 import type { ImportFormats, ImportedRow } from "../formats/import-formats.ts";
+import type { DesktopIpcArgs, DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 
 export interface LocalFileOpening {
   readonly kind: string;
@@ -56,8 +57,8 @@ export interface LocalFilesOwnerPorts {
   readonly resumeNeeded: (handle: unknown) => void;
   readonly desktop: {
     readonly running: () => boolean;
-    readonly openFileDialog: () => Promise<unknown>;
-    readonly routeOpen: (request: { kind: "file"; fileId: unknown }) => Promise<unknown>;
+    readonly openFileDialog: () => Promise<DesktopIpcResult<"splitpage:open-file-dialog">>;
+    readonly routeOpen: (...args: DesktopIpcArgs<"splitpage:route-open">) => Promise<DesktopIpcResult<"splitpage:route-open">>;
   };
   readonly files: LocalFileAccess;
   readonly chooseFallback: () => void;

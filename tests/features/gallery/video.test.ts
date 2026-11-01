@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { DesktopVideoResult } from "../../../src/application/media/desktop-video.ts";
+import type { DesktopVideoThumbnail } from "../../../src/application/media/desktop-video.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { GalleryVideoPorts } from "../../../src/features/gallery/ports.ts";
 import type { Step } from "../../../src/core/text/steps.ts";
@@ -11,7 +11,7 @@ import { fakeDocument, fakeOwnership, fakePictures } from "../fakes.ts";
 
 const VIMEO = "https://vimeo.com/123456789";
 
-function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string) => Promise<DesktopVideoResult | null> | null } = {}) {
+function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string) => Promise<DesktopVideoThumbnail | null> | null } = {}) {
   const doc = migrateRows({ title: "Video", rows: [{ id: "r1", visualText: "", audioText: "", imageLinks: [{ href: VIMEO, poster: true }] }] }, fakeMigration().ports);
   const pictures = fakePictures();
   const ownership = fakeOwnership();

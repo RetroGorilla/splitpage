@@ -1,3 +1,5 @@
+import type { MalformedDesktopReply } from "../../../src/adapters/desktop/desktop-port.ts";
+import type { RecentFileData } from "../../../src/application/files/recent-files.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
@@ -43,7 +45,7 @@ function harness() {
     document: { current: () => null },
     place: { home: () => state.home },
     desktop: () => state.desktop,
-    recents: { available: () => true, canRemove: () => true, canClear: () => true, list: async () => [], remove: async () => [], clear: async () => [], read: async (id) => ({ id, name: "Recent.splitpage" }), routeOpen: async () => ({ where: "this-tab" }) },
+    recents: { available: () => true, canRemove: () => true, canClear: () => true, list: async () => [], remove: async () => [], clear: async () => [], read: async (id) => ({ id, name: "Recent.splitpage" } as MalformedDesktopReply<RecentFileData>), routeOpen: async () => ({ where: "this-tab" }) },
     launch: { launchIntent: () => state.intent, hasDraftToRestore: () => state.draft },
     lastFile: { load: async () => state.last },
     seedCheck: { passes: () => state.seed },

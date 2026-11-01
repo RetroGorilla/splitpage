@@ -1,3 +1,4 @@
+import type { MalformedDesktopReply, DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createDesktopDraftStore } from "../../../src/adapters/storage/draft-store-desktop.ts";
@@ -7,7 +8,7 @@ test("the desktop draft store is the existing IPC: write and discard go to the b
   const sent: unknown[] = [];
   const bridge: DesktopDraftBridge = {
     writeDraft: function (payload) { sent.push(["write", payload]); return Promise.resolve({ ok: false, code: "STALE_SEQ" }); },
-    discardDraft: function (seq) { sent.push(["discard", seq]); return Promise.resolve({ ok: true }); }
+    discardDraft: function (seq) { sent.push(["discard", seq]); return Promise.resolve({ ok: true } as unknown as MalformedDesktopReply<Awaited<ReturnType<DesktopPort["writeDraft"]>>>); }
   };
   const store = createDesktopDraftStore({ bridge: () => bridge });
   assert.equal(store.writable(), true);
@@ -24,16 +25,16 @@ test("the bridge is read at each call, so a page that gains or loses it is seen"
   assert.equal(store.writable(), false);
   assert.equal(store.canDiscard(), false);
   assert.throws(() => store.write({}), /no desktop bridge/);
-  bridge = { writeDraft: () => Promise.resolve({ ok: true }) };
+  bridge = { writeDraft: () => Promise.resolve({ ok: true } as unknown as MalformedDesktopReply<Awaited<ReturnType<DesktopPort["writeDraft"]>>>) };
   assert.equal(store.writable(), true);
   assert.equal(store.canDiscard(), false, "a bridge without discardDraft cannot discard");
   assert.throws(() => store.discard(1), /cannot discard/);
 });
 
 test("taking a draft, reporting the restore and the pending-draft flag go to the bridge as they are", async () => {
-  const done: string[] = [];
+  const done: unknown[] = [];
   const bridge: DesktopDraftBridge = {
-    takeDraft: function (this: DesktopDraftBridge) { return Promise.resolve(this === bridge ? "taken" : "wrong this"); },
+    takeDraft: function (this: DesktopDraftBridge) { return Promise.resolve((this === bridge ? "taken" : "wrong this") as unknown as MalformedDesktopReply<Awaited<ReturnType<DesktopPort["takeDraft"]>>>); },
     draftRestoreDone: function (outcome) { done.push(outcome); },
     hasDraftToRestore: true
   };
@@ -52,7 +53,7 @@ test("without those members, or without a bridge, there is nothing to take, repo
   assert.equal(store.taker(), null);
   store.restoreDone("applied");
   assert.equal(store.hasDraftToRestore(), false);
-  bridge = { writeDraft: () => Promise.resolve({ ok: true }) };
+  bridge = { writeDraft: () => Promise.resolve({ ok: true } as unknown as MalformedDesktopReply<Awaited<ReturnType<DesktopPort["writeDraft"]>>>) };
   assert.equal(store.taker(), null);
   store.restoreDone("applied");
   assert.equal(store.hasDraftToRestore(), false);

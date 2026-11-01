@@ -116,7 +116,7 @@ const draftPorts: LegacyDraftPorts = {
   noteChange: () => { drafts.owner()?.noteChange(); }
 };
 
-export function draftTaker(): (() => Promise<unknown>) | null {
+export function draftTaker(): ReturnType<DraftsMount["taker"]> {
   const mounted = drafts.owner();
   return mounted ? mounted.taker() : null;
 }

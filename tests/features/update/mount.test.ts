@@ -1,3 +1,4 @@
+import type { MalformedDesktopReply } from "../../../src/adapters/desktop/desktop-port.ts";
 import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -7,15 +8,16 @@ import { updates as updatesPort } from "../../../src/bootstrap/wiring/update.ts"
 import type { UpdatePorts, UpdateStatus } from "../../../src/features/update/ports.ts";
 import { mountUpdate } from "../../../src/features/update/update.ts";
 import type { UpdateFeaturePorts } from "../../../src/features/update/ports.ts";
-import type { UpdateResult } from "../../../src/features/update/ports.ts";
+type UpdateFixtureResult = MalformedDesktopReply<Awaited<ReturnType<UpdatePorts["updates"]["download"]>> & Awaited<ReturnType<UpdatePorts["updates"]["install"]>>>;
+type NativeUpdateStatus = NonNullable<Awaited<ReturnType<UpdatePorts["updates"]["status"]>>>;
 
 for (const operation of ["download", "install"] as const) {
   for (const outcome of ["success", "failure", "rejection"] as const) {
     for (const replace of [false, true]) {
       test(`${operation} ${outcome} cannot affect the UI after ${replace ? "replacement" : "disposal"}`, async () => {
         document.body.innerHTML = '<div id="update-bar" hidden><span id="update-bar-text"></span><button id="update-bar-action"></button></div>';
-        const callbacks: { resolve?: (result: UpdateResult | null) => void; reject?: (error: Error) => void } = {};
-        const pending = new Promise<UpdateResult | null>((resolve, reject) => {
+        const callbacks: { resolve?: (result: UpdateFixtureResult | null) => void; reject?: (error: Error) => void } = {};
+        const pending = new Promise<UpdateFixtureResult | null>((resolve, reject) => {
           callbacks.resolve = resolve;
           callbacks.reject = reject;
         });
@@ -28,7 +30,7 @@ for (const operation of ["download", "install"] as const) {
           preferences: { desktopNoticeDismissed: () => false, dismissDesktopNotice: () => {} },
           externalLinks: { available: () => true, open: () => {} },
           updates: {
-            status: () => Promise.resolve(status),
+            status: () => Promise.resolve(status as unknown as MalformedDesktopReply<NativeUpdateStatus>),
             onStatus: () => {}, stopStatus: () => {},
             download: () => pending, install: () => pending
           }
@@ -43,7 +45,7 @@ for (const operation of ["download", "install"] as const) {
         let second: ReturnType<typeof mountUpdate> | null = null;
         try {
           if (replace) {
-            second = mountUpdate({ ...ports, updates: { ...ports.updates, status: () => Promise.resolve({ ...status, latest: "4.3" }) } });
+            second = mountUpdate({ ...ports, updates: { ...ports.updates, status: () => Promise.resolve({ ...status, latest: "4.3" } as unknown as MalformedDesktopReply<NativeUpdateStatus>) } });
             second.loadUpdateStatus();
             await Promise.resolve();
           }
@@ -52,7 +54,7 @@ for (const operation of ["download", "install"] as const) {
           assert.ok(callbacks.resolve);
           assert.ok(callbacks.reject);
           if (outcome === "rejection") callbacks.reject(new Error("stale request"));
-          else callbacks.resolve(outcome === "success" ? { ok: true } : { ok: false, message: "stale request" });
+          else callbacks.resolve((outcome === "success" ? { ok: true } : { ok: false, message: "stale request" }) as UpdateFixtureResult);
           await Promise.resolve();
           await Promise.resolve();
           assert.equal((document.getElementById("update-bar-text") as HTMLElement).textContent, text);
@@ -67,14 +69,14 @@ for (const operation of ["download", "install"] as const) {
 
 test("update mount owns its subscription, About listeners and probe across replacement", async () => {
   document.body.innerHTML = '<meta name="splitpage-version" content="4.1.0"><div id="update-bar" hidden><span id="update-bar-text"></span><button id="update-bar-action"></button></div><div id="about-modal" hidden><span id="about-version"></span><div id="about-body"></div><a id="about-link"></a><button data-about-close></button></div>';
-  let receive: ((status: UpdateStatus) => void) | null = null;
+  let receive: ((status: NativeUpdateStatus) => void) | null = null;
   let stopped = 0;
   const ports: UpdateFeaturePorts = {
     desktop: () => true,
     preferences: { desktopNoticeDismissed: () => false, dismissDesktopNotice: () => {} },
     externalLinks: { available: () => true, open: () => {} },
     updates: {
-      status: () => Promise.resolve({ version: "4.1.0", latest: "4.2.0", updateAvailable: true, desktop: true, canInstall: true }),
+      status: () => Promise.resolve({ version: "4.1.0", latest: "4.2.0", updateAvailable: true, desktop: true, canInstall: true } as unknown as MalformedDesktopReply<NativeUpdateStatus>),
       onStatus: (listener) => { receive = listener; },
       stopStatus: () => { stopped++; },
       download: () => Promise.resolve(null),
@@ -129,17 +131,17 @@ test("update ports can be wired before mounting and delegate every call and list
   const heard: UpdateStatus[] = [];
   const subscribed: Parameters<DesktopPort["onUpdateStatus"]>[0][] = [];
   const listener = (value: UpdateStatus): void => { heard.push(value); };
-  const first: Partial<DesktopPort> = {
-    getUpdateStatus: () => { calls.push("first:status"); return Promise.resolve(status); },
-    onUpdateStatus: (callback) => { calls.push("first:onStatus"); subscribed.push(callback); },
-    downloadUpdate: () => { calls.push("first:download"); return Promise.resolve(downloadResult); },
-    installUpdate: () => { calls.push("first:install"); return Promise.resolve(installResult); }
+  const first = {
+    getUpdateStatus: () => { calls.push("first:status"); return Promise.resolve(status as unknown as MalformedDesktopReply<NativeUpdateStatus>); },
+    onUpdateStatus: (callback: Parameters<DesktopPort["onUpdateStatus"]>[0]) => { calls.push("first:onStatus"); subscribed.push(callback); },
+    downloadUpdate: () => { calls.push("first:download"); return Promise.resolve(downloadResult as unknown as MalformedDesktopReply); },
+    installUpdate: () => { calls.push("first:install"); return Promise.resolve(installResult as unknown as MalformedDesktopReply); }
   };
-  const second: Partial<DesktopPort> = {
-    getUpdateStatus: () => { calls.push("second:status"); return Promise.resolve(nextStatus); },
-    onUpdateStatus: (callback) => { calls.push("second:onStatus"); subscribed.push(callback); },
-    downloadUpdate: () => { calls.push("second:download"); return Promise.resolve(nextDownloadResult); },
-    installUpdate: () => { calls.push("second:install"); return Promise.resolve(nextInstallResult); }
+  const second = {
+    getUpdateStatus: () => { calls.push("second:status"); return Promise.resolve(nextStatus as unknown as MalformedDesktopReply); },
+    onUpdateStatus: (callback: Parameters<DesktopPort["onUpdateStatus"]>[0]) => { calls.push("second:onStatus"); subscribed.push(callback); },
+    downloadUpdate: () => { calls.push("second:download"); return Promise.resolve(nextDownloadResult as unknown as MalformedDesktopReply); },
+    installUpdate: () => { calls.push("second:install"); return Promise.resolve(nextInstallResult as unknown as MalformedDesktopReply); }
   };
   try {
     for (const desktop of [null, {}]) {

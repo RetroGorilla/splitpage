@@ -1,4 +1,4 @@
-import type { HistoryBackendOptions, HistoryTestingStorage, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult } from "../../application/recovery/history-ports.ts";
+import type { HistoryBackendOptions, HistoryTestingStorage, HistorySnapshotMeta, HistorySnapshotRead, HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
 import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult, HistoryStoreUsage } from "./history-backend-types.ts";
 
 type HistoryStore = {
@@ -19,22 +19,12 @@ type HistoryBrowserBackend = Pick<ReturnType<typeof createIdbHistoryBackend>, "n
 type HistoryLocalEntry = { backend: HistoryBrowserBackend; store: HistoryStore; adapter: HistoryBackendAdapter };
 type HistoryIdbEntry = HistoryLocalEntry & { backend: ReturnType<typeof createIdbHistoryBackend>; ready: Promise<HistoryBackendAdapter> | null };
 type HistoryCapacityEstimate = { at: number; quota: number; usage: number; historyBytes: number };
-type HistoryDesktopReply = {
-  stored?: boolean;
-  ok?: boolean;
-  code?: string;
-  evicted?: number;
-  overCap?: boolean;
-  duplicate?: boolean;
-  copied?: number;
-  entries?: unknown[];
-  older?: unknown[];
-  olderExpiresAt?: number | null;
-  usage?: unknown;
-  meta?: unknown;
-  stateJson?: string;
-};
 
+type HistoryReplyKeys<T> = T extends object ? keyof T : never;
+type HistoryReplyAlternatives<T, All = T> = T extends object ? T & {
+  [K in Exclude<HistoryReplyKeys<All>, keyof T>]?: never;
+} : T;
+type HistoryDesktopDoc = Awaited<ReturnType<HistoryDesktopPort["historyListDocs"]>>[number];
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import { HISTORY_OLDER_KEY, sanitizeHistoryMeta } from "../../../shared/history-policy.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../../shared/history-store.js";
@@ -239,26 +229,27 @@ function historyIdbNotice() {
 
 const HISTORY_DESKTOP_TIMEOUT_MS = 30000;
 
-function historyDesktopUsage(u: unknown) {
+function historyDesktopUsage(u: Awaited<ReturnType<HistoryDesktopPort["historyList"]>>["usage"] | undefined) {
   if (!u || typeof u !== "object") return null;
   return {
-    totalBytes: Number((u as Partial<HistoryStoreUsage>).totalBytes) || 0,
-    capBytes: Number((u as Partial<HistoryStoreUsage>).capBytes) || 0,
-    overCap: !!(u as Partial<HistoryStoreUsage>).overCap,
-    docCount: Number((u as Partial<HistoryStoreUsage>).docCount) || 0,
-    readOnly: !!(u as Partial<HistoryStoreUsage>).readOnly
+    totalBytes: Number(u.totalBytes) || 0,
+    capBytes: Number(u.capBytes) || 0,
+    overCap: !!u.overCap,
+    docCount: Number(u.docCount) || 0,
+    readOnly: !!u.readOnly
   };
 }
 
-function historyDesktopCall<T = HistoryDesktopReply | null>(run: () => unknown, onTimeout: unknown, onReject: unknown): Promise<T> {
-  return new Promise<T>(function (resolve) {
+function historyDesktopCall<T, const Timeout, const Rejected>(run: () => T, onTimeout: Timeout, onReject: Rejected): Promise<HistoryReplyAlternatives<Awaited<T> | Timeout | Rejected>>;
+function historyDesktopCall<T, Timeout, Rejected>(run: () => T, onTimeout: Timeout, onReject: Rejected): Promise<Awaited<T> | Timeout | Rejected> {
+  return new Promise<Awaited<T> | Timeout | Rejected>(function (resolve) {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    function finish(v: unknown) {
+    function finish(v: Awaited<T> | Timeout | Rejected) {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
-      resolve(v as T);
+      resolve(v);
     }
     timer = setTimeout(function () { finish(onTimeout); },
       probe?.timeout() != null ? probe?.timeout() as number : HISTORY_DESKTOP_TIMEOUT_MS);
@@ -288,7 +279,7 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
       return desktopPort().historyPut(docId, clean, stateJson, { protect: historyProtectedList() });
     }, { stored: false, code: "timeout" }, { stored: false, code: "invalid" }).then(function (r) {
       if (!r || typeof r !== "object") return { stored: false, code: "io" };
-      if (r.stored === false) return r as HistoryWriteResult;
+      if (r.stored === false) return r;
       if (!r.ok) return { stored: false, code: typeof r.code === "string" ? r.code : "io" };
       const out: { stored: boolean; evicted: number; overCap: boolean; duplicate?: boolean } = { stored: true, evicted: Number(r.evicted) || 0, overCap: !!r.overCap };
       if (r.duplicate) out.duplicate = true;
@@ -375,7 +366,7 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
   evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); },
 
   rawDocIds: function () {
-    return historyDesktopCall<{ docId?: unknown; title?: string; lastOpenedAt?: number }[] | null>(function () {
+    return historyDesktopCall(function () {
       return desktopPort().historyListDocs();
     }, null, null).then(function (r) {
       if (!Array.isArray(r)) return null;
@@ -389,15 +380,15 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
   },
 
   rawDoc: function (bucket) {
-    return historyDesktopCall<{ docId?: unknown; title?: string; lastOpenedAt?: number }[] | null>(function () {
+    return historyDesktopCall(function () {
       return desktopPort().historyListDocs();
     }, null, null).then(function (r) {
       if (!Array.isArray(r)) return null;
-      let hit: { title?: string; lastOpenedAt?: number } | null = null;
+      let hit: HistoryDesktopDoc | null = null;
       r.forEach(function (d) {
         if (d && normalizeDocId(d.docId) === bucket) hit = d;
       });
-      return hit ? { title: (hit as HistoryBackendDoc).title || "", lastOpenedAt: Number((hit as HistoryBackendDoc).lastOpenedAt) || 0 } : null;
+      return hit ? { title: (hit as HistoryDesktopDoc).title || "", lastOpenedAt: Number((hit as HistoryDesktopDoc).lastOpenedAt) || 0 } : null;
     });
   },
 

@@ -1,3 +1,5 @@
+import type { MalformedDesktopReply } from "../../../src/adapters/desktop/desktop-port.ts";
+import type { RecentFiles, RecentFileData } from "../../../src/application/files/recent-files.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
@@ -51,9 +53,9 @@ function harness() {
     desktop: () => state.desktop,
     recents: {
       available: () => true,
-      list: async () => { calls.push(["listRecents"]); return state.recent; },
+      list: async () => { calls.push(["listRecents"]); return state.recent as MalformedDesktopReply<Awaited<ReturnType<RecentFiles["list"]>>>; },
       routeOpen: async (request) => { calls.push(["routeOpen", request]); return { where: "this-tab" }; },
-      read: async (id) => { calls.push(["readFile", id]); return { id, name: "Recent.splitpage" }; }
+      read: async (id) => { calls.push(["readFile", id]); return { id, name: "Recent.splitpage" } as MalformedDesktopReply<RecentFileData>; }
     },
     recentHandle: (entry) => { calls.push(["makeDesktopHandle", entry]); return { getFile: async () => new win.File(["file"], entry.name) }; },
     canOpenPrompter: { browser: () => state.browser, chromium: () => state.chromium },

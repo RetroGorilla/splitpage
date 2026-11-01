@@ -1,46 +1,32 @@
 import type { HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
 import type { DesktopDocumentState } from "../../application/desktop/document-state.ts";
+import type { DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 
 export type Listener<T> = (value: T) => void;
 
-export interface DesktopResult {
-  readonly ok?: boolean;
-  readonly code?: string;
-  readonly [key: string]: unknown;
-}
-
-export interface DesktopFileEntry {
-  readonly id: string;
-  readonly name: string;
-  readonly bytes?: Uint8Array;
-  readonly lastModified?: number;
-  readonly size?: number;
-}
-
-export interface DesktopLaunchIntent {
-  readonly type: string;
-}
-
-export interface DesktopRouteRequest {
-  readonly kind: "file";
-  readonly fileId: string;
-}
-
-
-export interface DesktopBlob {
-  readonly bytes: Uint8Array;
-  readonly [key: string]: unknown;
-}
-
-export interface DesktopTakenDraft {
-  readonly file?: DesktopFileEntry;
-  readonly [key: string]: unknown;
-}
+type DesktopResultKeys<T> = T extends object ? keyof T : never;
+type DesktopCompleteResult<T, All = T> = T extends object ? T & {
+  [K in Exclude<DesktopResultKeys<All>, keyof T>]?: never;
+} : T;
+type DesktopCall<C extends keyof DesktopIpcContract> = (...args: DesktopIpcArgs<C>) => Promise<DesktopCompleteResult<DesktopIpcResult<C>>>;
+type DesktopByteFields<T> = T extends object ? { [K in keyof T]: K extends "bytes" ? Uint8Array : T[K] } &
+  ("bytes" extends keyof T ? object : { bytes?: never }) : T;
+export type DesktopFileEntry = DesktopByteFields<DesktopIpcResult<"splitpage:read-file">>;
+export type DesktopLaunchIntent = NonNullable<DesktopIpcResult<"splitpage:tab-boot-sync">>["launchIntent"];
+export type DesktopRouteRequest = DesktopIpcArgs<"splitpage:route-open">[0];
+export type DesktopBlob = DesktopByteFields<NonNullable<DesktopIpcResult<"splitpage:blob-get">>>;
+type DesktopDraftFields<T> = T extends object ? {
+  [K in keyof T]: K extends "file" ? DesktopByteFields<T[K]> : T[K];
+} : T;
+export type DesktopTakenDraft = DesktopDraftFields<NonNullable<DesktopIpcResult<"splitpage:draft-take">>>;
+export type DesktopThumbnailResult = DesktopByteFields<DesktopIpcResult<"splitpage:video-thumbnail">>;
+export type DesktopPdfBytes = DesktopByteFields<{ bytes: DesktopIpcResult<"splitpage:print-to-pdf"> }>["bytes"];
+export type DesktopVideoGrant = Extract<DesktopIpcResult<"splitpage:video-file-grant">, string> | null;
 
 export interface DesktopPort extends HistoryDesktopPort {
   readonly isDesktop: true;
   readonly platform: string;
-  readonly appVersion: string;
+  readonly appVersion: DesktopIpcResult<"splitpage:get-app-version-sync">;
   readonly tabId: string | null;
   readonly windowId: string | null;
   readonly launchIntent: DesktopLaunchIntent;
@@ -48,57 +34,61 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly firstTabOfLaunch: boolean;
   readonly hasDraftToRestore: boolean;
 
-  readonly openFileDialog: () => Promise<DesktopFileEntry | null>;
-  readonly saveFileDialog: (options: { readonly suggestedName?: string; readonly [key: string]: unknown }) => Promise<DesktopFileEntry | null>;
+  readonly openFileDialog: () => Promise<DesktopByteFields<DesktopIpcResult<"splitpage:open-file-dialog">>>;
+  readonly saveFileDialog: DesktopCall<"splitpage:save-file-dialog">;
   readonly readFile: (id: string) => Promise<DesktopFileEntry>;
-  readonly writeFile: (id: string, data: Uint8Array) => Promise<{ readonly lastModified?: number } | null>;
-  readonly statFile: (id: string) => Promise<DesktopResult>;
-  readonly routeOpen: (request: DesktopRouteRequest) => Promise<{ readonly where?: string } | null>;
-  readonly listRecents: () => Promise<readonly unknown[]>;
-  readonly removeRecent: (fileId: string) => Promise<readonly unknown[]>;
-  readonly clearRecents: () => Promise<readonly unknown[]>;
+  readonly writeFile: (id: DesktopIpcArgs<"splitpage:write-file">[0], bytes: Uint8Array) => Promise<DesktopIpcResult<"splitpage:write-file">>;
+  readonly statFile: DesktopCall<"splitpage:stat-file">;
+  readonly routeOpen: DesktopCall<"splitpage:route-open">;
+  readonly listRecents: DesktopCall<"splitpage:recents-list">;
+  readonly removeRecent: DesktopCall<"splitpage:recents-remove">;
+  readonly clearRecents: DesktopCall<"splitpage:recents-clear">;
 
-  readonly onRestoreNotice: (cb: Listener<{ readonly skipped?: readonly { readonly name?: string; readonly reason?: string }[] }>) => void;
-  readonly onReassignDocId: (cb: Listener<{ readonly toId: string; readonly [key: string]: unknown } | null>) => void;
+  readonly onRestoreNotice: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:restore-notice">[0]>) => void;
+  readonly onReassignDocId: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:reassign-doc-id">[0]>) => void;
   readonly onOpenFile: (cb: Listener<DesktopFileEntry>) => void;
-  readonly onMenuCommand: (cb: Listener<string>) => void;
+  readonly onMenuCommand: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:menu-command">[0]>) => void;
   readonly setDocumentState: (state: DesktopDocumentState) => void;
 
-  readonly writeDraft: (payload: unknown) => Promise<DesktopResult | null>;
-  readonly discardDraft: (seq: number) => Promise<DesktopResult | null>;
+  readonly writeDraft: DesktopCall<"splitpage:draft-write">;
+  readonly discardDraft: (seq: number) => Promise<DesktopIpcResult<"splitpage:draft-discard">>;
   readonly takeDraft: () => Promise<DesktopTakenDraft | null>;
-  readonly draftRestoreDone: (outcome: unknown) => void;
+  readonly draftRestoreDone: (outcome: DesktopIpcArgs<"splitpage:draft-restore-done">[0]["outcome"]) => void;
   readonly onDraftFlush: (cb: (request: { readonly keep: boolean }) => unknown) => void;
 
-
-  readonly blobPut: (sha: string, bytes: Uint8Array) => Promise<{ readonly ok: true; readonly stored: boolean } | { readonly ok: false; readonly code: string }>;
+  readonly blobPut: DesktopCall<"splitpage:blob-put">;
   readonly blobGet: (sha: string) => Promise<DesktopBlob | null>;
-  readonly blobMissing: (shas: readonly string[]) => Promise<readonly string[]>;
+  readonly blobMissing: DesktopCall<"splitpage:blob-missing">;
+  readonly printToPdf: (html: DesktopIpcArgs<"splitpage:print-to-pdf">[0]) => Promise<DesktopPdfBytes>;
 
-  readonly printToPdf: (html: string) => Promise<Uint8Array>;
+  readonly getSessionInfo: DesktopCall<"splitpage:get-session-info">;
+  readonly openExternal: (...args: DesktopIpcArgs<"splitpage:open-external">) => void;
+  readonly setTheme: (...args: DesktopIpcArgs<"splitpage:set-theme">) => void;
+  readonly grantVideoFile: (file: unknown) => Promise<DesktopVideoGrant>;
+  readonly openVideoFile: DesktopCall<"splitpage:video-file-open">;
+  readonly videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopThumbnailResult>;
 
-  readonly getSessionInfo: () => Promise<{ readonly hosting?: boolean; readonly [key: string]: unknown } | null>;
-  readonly openExternal: (url: string) => void;
-  readonly setTheme: (mode: string) => void;
-
-  readonly grantVideoFile: (file: unknown) => Promise<string | null>;
-  readonly openVideoFile: (token: string) => Promise<DesktopResult | null>;
-  readonly videoThumbnail: (host: string, ref: string) => Promise<DesktopResult>;
-
-  readonly getUpdateStatus: () => Promise<DesktopResult | null>;
-  readonly checkForUpdate: () => Promise<DesktopResult | null>;
-  readonly downloadUpdate: () => Promise<DesktopResult | null>;
-  readonly installUpdate: () => Promise<DesktopResult | null>;
-  readonly onUpdateStatus: (cb: Listener<unknown> | null) => void;
-
-  readonly openPrompterInBrowser: () => Promise<DesktopResult | null>;
-  readonly openPrompterInChromium: () => Promise<DesktopResult | null>;
-
-  readonly voiceStatus: () => Promise<{ readonly available?: boolean } | null>;
-  readonly voiceStart: () => Promise<DesktopResult | null>;
-  readonly voiceStop: () => Promise<DesktopResult | null>;
-  readonly onVoiceEvent: (cb: Listener<unknown>) => void;
+  readonly getUpdateStatus: DesktopCall<"splitpage:update-status">;
+  readonly checkForUpdate: DesktopCall<"splitpage:update-check">;
+  readonly downloadUpdate: DesktopCall<"splitpage:update-download">;
+  readonly installUpdate: DesktopCall<"splitpage:update-install">;
+  readonly onUpdateStatus: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:update-status">[0]> | null) => void;
+  readonly openPrompterInBrowser: DesktopCall<"splitpage:prompter-open-in-browser">;
+  readonly openPrompterInChromium: DesktopCall<"splitpage:prompter-open-in-chromium">;
+  readonly voiceStatus: DesktopCall<"splitpage:voice-status">;
+  readonly voiceStart: DesktopCall<"splitpage:voice-start">;
+  readonly voiceStop: DesktopCall<"splitpage:voice-stop">;
+  readonly onVoiceEvent: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:voice-event">[0]>) => void;
 }
+
+export type DesktopTestPort = { -readonly [K in keyof DesktopPort]?: DesktopPort[K] };
+
+declare const malformedDesktopReply: unique symbol;
+export type MalformedDesktopReply<T = unknown> = T & { readonly [malformedDesktopReply]: true };
+type DesktopFaultInjectionPort = {
+  -readonly [K in keyof DesktopPort]?: DesktopPort[K] extends (...args: infer A) => Promise<infer R>
+    ? (...args: A) => Promise<R | MalformedDesktopReply> : DesktopPort[K];
+};
 
 export type DesktopMember = keyof DesktopPort;
 
@@ -151,7 +141,7 @@ export function canOpenPrompterInChromium(): boolean {
   return current !== null && typeof current.openPrompterInChromium === "function";
 }
 
-export function useDesktopForTest(fake: Partial<DesktopPort> | null | undefined): void {
+export function useDesktopForTest(fake: DesktopTestPort | DesktopFaultInjectionPort | null | undefined): void {
   use(fake as DesktopPort | null | undefined);
 }
 

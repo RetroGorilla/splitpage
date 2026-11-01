@@ -1,16 +1,18 @@
+import type { MalformedDesktopReply } from "../../../src/adapters/desktop/desktop-port.ts";
+import type { DesktopDraftStore } from "../../../src/application/recovery/ports.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startDrafts } from "../../../src/application/recovery/drafts.ts";
 import type { DraftsMount, DraftsPorts } from "../../../src/application/recovery/drafts-ports.ts";
 import { createDraftResume } from "../../../src/application/recovery/draft-resume.ts";
-import type { DesktopDraftResult } from "../../../src/application/recovery/ports.ts";
+type IncompleteDraftWriteFixture = { ok: boolean; code?: string };
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration, pngDataUrl } from "../../core/migrate-ports.ts";
 
 interface Timer { run: () => void; ms: number; live: boolean }
 
-function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boolean; writes?: DesktopDraftResult[] } = {}) {
+function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boolean; writes?: IncompleteDraftWriteFixture[] } = {}) {
   const timers: Timer[] = [];
   const log: string[] = [];
   const written: Record<string, unknown>[] = [];
@@ -27,10 +29,10 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
     canDiscard: () => true,
     write: (payload: unknown) => {
       written.push(payload as Record<string, unknown>);
-      return Promise.resolve(answers.shift() ?? { ok: true });
+      return Promise.resolve((answers.shift() ?? { ok: true }) as MalformedDesktopReply<Awaited<ReturnType<DesktopDraftStore["write"]>>>);
     },
-    discard: (seq: number) => { discarded.push(seq); return Promise.resolve({ ok: true }); },
-    taker: (): (() => Promise<unknown>) | null => () => Promise.resolve(null),
+    discard: (seq: number) => { discarded.push(seq); return Promise.resolve({ ok: true } as const); },
+    taker: (): ReturnType<DesktopDraftStore["taker"]> => () => Promise.resolve(null),
     restoreDone: (outcome: string) => { restoreDone.push(outcome); },
     hasDraftToRestore: () => start.hasDraft ?? false
   };
