@@ -86,6 +86,24 @@ the render and blob suites included, requires the test build; the converted
 names are pinned in `tools/test-release-hooks.mjs`. `__blobsTest` is built by
 `blobsTestControls` in the adapter and exposed by `src/bootstrap/wiring/blobs.ts`.
 
+AQ-46 also removes history fault injection and controls from the release
+bundle. `src/bootstrap/wiring/history.ts` selects the test factories behind
+the folded build flag. The application owner receives an instrumentation
+factory; it never reads the flag. Storage defaults to no-op write observers
+and no instrumentation. The test implementations live in
+`src/adapters/storage/history-backend-testing.ts`, `history-fault-queue.ts`,
+`history-inspection-testing.ts` and `history-owner-testing.ts`.
+Source tests that exercise faults explicitly inject these factories, including
+the shared memory backend and the fake desktop backend.
+
+`tools/release-hooks.mjs` rejects all 27 distinctive history control names and
+fault strings in release builds and packaging. `tools/test-release-hooks.mjs`
+checks that none appear in release JavaScript and all appear in test JavaScript.
+Shared names such as `read`, `idle`, `backendName`, `rawIndex`, `pending`, `seed`,
+`migrate` and `importBundle` also name real product operations; their remaining
+occurrences do not denote a test-control object. The default-owner test covers
+the absence of that object and capture/copy/export without instrumentation.
+
 `node tools/perf-record.mjs [report.md]` builds the test variant with `node build.mjs --test` and drives it in headless
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
 the seed and the long demo, with the machine, browser and font it ran under.

@@ -1,5 +1,5 @@
-import type { HistoryBackendOptions, HistoryDesktopPort, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult } from "../../application/recovery/history-ports.ts";
-import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryFaultBackend, HistoryIndex, HistoryOlderImportResult, HistoryStoreUsage } from "./history-backend-types.ts";
+import type { HistoryBackendOptions, HistoryTestingStorage, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult } from "../../application/recovery/history-ports.ts";
+import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult, HistoryStoreUsage } from "./history-backend-types.ts";
 
 type HistoryStore = {
   name: string;
@@ -15,7 +15,8 @@ type HistoryStore = {
   rawIndex: () => Promise<HistoryIndex>;
   listDocs: () => Promise<{ docId: string }[]>;
 };
-type HistoryLocalEntry = { backend: HistoryFaultBackend; store: HistoryStore; adapter: HistoryBackendAdapter };
+type HistoryBrowserBackend = Pick<ReturnType<typeof createIdbHistoryBackend>, "name" | "persistent" | "exclusive">;
+type HistoryLocalEntry = { backend: HistoryBrowserBackend; store: HistoryStore; adapter: HistoryBackendAdapter };
 type HistoryIdbEntry = HistoryLocalEntry & { backend: ReturnType<typeof createIdbHistoryBackend>; ready: Promise<HistoryBackendAdapter> | null };
 type HistoryCapacityEstimate = { at: number; quota: number; usage: number; historyBytes: number };
 type HistoryDesktopReply = {
@@ -39,10 +40,38 @@ import { HISTORY_OLDER_KEY, sanitizeHistoryMeta } from "../../../shared/history-
 import { createHistoryStore, createMemoryHistoryBackend } from "../../../shared/history-store.js";
 import { createIdbHistoryBackend, hashText as historyHashText } from "./03c-history-idb.ts";
 
-export function createHistoryBackends(ports: HistoryBackendOptions) {
+export interface HistoryBackendProbe {
+  readonly capacity: () => number | null;
+  readonly timeout: () => number | null;
+  readonly choice: () => "idb" | "memory" | null;
+  readonly write: () => Promise<void> | null;
+  readonly importing: () => Promise<void> | null;
+  readonly refuseImport: () => boolean;
+  readonly opening: () => Error | null;
+  readonly memory: (options: { name: string }) => HistoryBrowserBackend;
+  readonly idb: typeof createIdbHistoryBackend;
+  readonly arm: (backend: HistoryBrowserBackend) => void;
+  readonly bind: (access: HistoryBackendAccess) => Pick<HistoryTestingStorage, "prepareResetForTest" | "reset" | "controls">;
+}
+
+export interface HistoryBackendAccess {
+  readonly resolve: () => Promise<HistoryBackendAdapter>;
+  readonly notice: () => { kind: string; text: string } | null;
+  idb: HistoryIdbEntry | null;
+  memory: HistoryLocalEntry | null;
+  failed: boolean;
+  name: string | null;
+  readonly clearEstimate: () => void;
+}
+
+export function createHistoryBackends(ports: HistoryBackendOptions, probe?: HistoryBackendProbe) {
   const historyNow = ports.now;
   const historyProtectedList = ports.holds;
-  const desktopPort = ports.desktop as () => HistoryDesktopPort;
+  const desktopPort = function () {
+    const port = ports.desktop();
+    if (!port) throw new TypeError("The desktop history port is unavailable");
+    return port;
+  };
   const runningOnDesktop = ports.runningOnDesktop;
 const HISTORY_BROWSER_MIN_CAP = 5 * 1024 * 1024;
 const HISTORY_BROWSER_HEADROOM = 50 * 1024 * 1024;
@@ -57,63 +86,10 @@ function historyStripMeta(m: unknown) {
   return out;
 }
 
-let historyFault: string | null = null;
-let historyDelayGate: Promise<void> | null = null;
-let historyDelayRelease: (() => void) | null = null;
-let historyImportGate: Promise<void> | null = null;
-let historyImportRelease: (() => void) | null = null;
-let historyImportGateHit = false;
-
-function historyArmFaults(backend: HistoryFaultBackend | null) {
-  if (!backend || typeof backend.clearFaults !== "function") return;
-  backend.clearFaults();
-  if (historyFault === "quota-once") backend.failNext("put", "quota", 1);
-  else if (historyFault === "quota-always") backend.failNext("put", "quota", Infinity);
-  else if (historyFault === "io-always") backend.failNext("put", "io", Infinity);
-}
-
-function historyPutFaultGate() {
-  if (historyFault === "delay-put") {
-    if (!historyDelayGate) {
-      historyDelayGate = new Promise(function (resolve) { historyDelayRelease = resolve; });
-    }
-    return historyDelayGate;
-  }
-  return null;
-}
-
-function releaseDelayedPut() {
-  if (historyFault === "delay-put") historyFault = null;
-  const r = historyDelayRelease;
-  historyDelayGate = null;
-  historyDelayRelease = null;
-  if (r) r();
-}
-
-function historyImportFaultGate() {
-  if (historyFault === "delay-import") {
-    historyImportGateHit = true;
-    if (!historyImportGate) {
-      historyImportGate = new Promise(function (resolve) { historyImportRelease = resolve; });
-    }
-    return historyImportGate;
-  }
-  return null;
-}
-
-function releaseDelayedImport() {
-  if (historyFault === "delay-import") historyFault = null;
-  const r = historyImportRelease;
-  historyImportGate = null;
-  historyImportRelease = null;
-  if (r) r();
-}
-
-let historyCapOverride: number | null = null;
 let historyEstimateCache: HistoryCapacityEstimate | null = null;
 
 function historyBrowserCap(historyBytes: number) {
-  if (historyCapOverride != null) return Promise.resolve(historyCapOverride);
+  if (probe?.capacity() != null) return Promise.resolve(probe?.capacity() as number);
   const c = historyEstimateCache;
   if (c && Date.now() - c.at < HISTORY_ESTIMATE_TTL_MS) return Promise.resolve(historyCapFrom(c));
   if (typeof navigator === "undefined" || !navigator.storage || typeof navigator.storage.estimate !== "function") return Promise.resolve(Infinity);
@@ -130,17 +106,17 @@ function historyCapFrom(c: HistoryCapacityEstimate) {
 }
 
 function historyIdbCap(lastTotal?: number | null) {
-  if (historyCapOverride != null) return historyCapOverride;
+  if (probe?.capacity() != null) return probe?.capacity() as number;
   if (lastTotal == null) return Infinity;
   return historyBrowserCap(lastTotal);
 }
 
 function historyMemoryCap() {
-  return historyCapOverride != null ? historyCapOverride : HISTORY_MEMORY_CAP;
+  return probe?.capacity() != null ? probe?.capacity() as number : HISTORY_MEMORY_CAP;
 }
 
 
-function historyMakeStore(backend: HistoryFaultBackend, capBytes: (lastTotal?: number | null) => number | Promise<number>): HistoryStore {
+function historyMakeStore(backend: HistoryBrowserBackend, capBytes: (lastTotal?: number | null) => number | Promise<number>): HistoryStore {
   return createHistoryStore({
     backend: backend,
     now: historyNow,
@@ -181,7 +157,7 @@ function historyStoreAdapter(store: HistoryStore): HistoryBackendAdapter & { sto
     persistent: store.persistent,
     store: store,
     put: function (docId, meta, stateJson) {
-      return Promise.resolve(historyPutFaultGate()).then(function () {
+      return Promise.resolve(probe?.write()).then(function () {
         return store.put(docId, meta, stateJson);
       });
     },
@@ -194,8 +170,8 @@ function historyStoreAdapter(store: HistoryStore): HistoryBackendAdapter & { sto
     copy: function (from, to) { return store.copy(from, to); },
     touch: function (docId, title) { return store.touch(docId, title); },
     importOlder: function (entries) {
-      if (historyFault === "import-fail") return Promise.resolve({ ok: false, count: 0, added: 0, code: "io" });
-      return Promise.resolve(historyImportFaultGate()).then(function () {
+      if (probe?.refuseImport()) return Promise.resolve({ ok: false, count: 0, added: 0, code: "io" });
+      return Promise.resolve(probe?.importing()).then(function () {
         return store.importOlder(entries);
       });
     },
@@ -218,8 +194,8 @@ let historyPersistAsked = false;
 
 function historyMemory() {
   if (!historyMem) {
-    const backend = createMemoryHistoryBackend({ name: "memory" });
-    historyArmFaults(backend);
+    const backend = (probe ? probe.memory : createMemoryHistoryBackend)({ name: "memory" }) as HistoryBrowserBackend;
+    probe?.arm(backend);
     const store = historyMakeStore(backend, historyMemoryCap);
     historyMem = { backend: backend, store: store, adapter: historyStoreAdapter(store) };
   }
@@ -228,11 +204,12 @@ function historyMemory() {
 
 function historyOpenIdb() {
   if (historyIdb) return historyIdb.ready as Promise<HistoryBackendAdapter>;
-  if (historyFault === "idb-open-fail") return Promise.reject(new Error("Injected idb-open-fail"));
+  const openingError = probe?.opening();
+  if (openingError) return Promise.reject(openingError);
   let factory;
   try { factory = window.indexedDB || null; } catch (e) { factory = null; }
-  const backend = createIdbHistoryBackend({ indexedDB: factory });
-  historyArmFaults(backend);
+  const backend = (probe ? probe.idb : createIdbHistoryBackend)({ indexedDB: factory });
+  probe?.arm(backend);
   const store = historyMakeStore(backend, historyIdbCap);
   const entry: HistoryIdbEntry = { backend: backend, store: store, adapter: historyStoreAdapter(store), ready: null };
   historyIdb = entry;
@@ -261,7 +238,6 @@ function historyIdbNotice() {
 }
 
 const HISTORY_DESKTOP_TIMEOUT_MS = 30000;
-let historyDesktopTimeoutOverride: number | null = null;
 
 function historyDesktopUsage(u: unknown) {
   if (!u || typeof u !== "object") return null;
@@ -285,7 +261,7 @@ function historyDesktopCall<T = HistoryDesktopReply | null>(run: () => unknown, 
       resolve(v as T);
     }
     timer = setTimeout(function () { finish(onTimeout); },
-      historyDesktopTimeoutOverride != null ? historyDesktopTimeoutOverride : HISTORY_DESKTOP_TIMEOUT_MS);
+      probe?.timeout() != null ? probe?.timeout() as number : HISTORY_DESKTOP_TIMEOUT_MS);
     let p;
     try { p = run(); } catch (e) {
       if (window.console) console.error(e);
@@ -434,7 +410,6 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
   }
 };
 
-let historyForced: "idb" | "memory" | null = null;
 let historyIdbFailed = false;
 let historyBackendNameNow: string | null = null;
 
@@ -444,8 +419,8 @@ function historyUseMemory() {
 }
 
 function resolveHistoryBackend() {
-  if (historyForced === "memory") return Promise.resolve(historyUseMemory());
-  if (!historyForced && runningOnDesktop() && typeof desktopPort().historyPut === "function") {
+  if (probe?.choice() === "memory") return Promise.resolve(historyUseMemory());
+  if (!probe?.choice() && runningOnDesktop() && typeof desktopPort().historyPut === "function") {
     historyBackendNameNow = "desktop";
     return Promise.resolve(desktopHistoryBackend);
   }
@@ -461,87 +436,19 @@ function resolveHistoryBackend() {
 }
 
 
-function historyDropIdb() {
-  const e = historyIdb;
-  historyIdb = null;
-  const closed = e ? e.backend.close().then(historyNoop, historyNoop) : Promise.resolve();
-  return closed.then(function () {
-    return new Promise<void>(function (resolve) {
-      let settled = false;
-      function finish() { if (!settled) { settled = true; resolve(); } }
-      try {
-        const req = indexedDB.deleteDatabase("splitpage-history");
-        req.onsuccess = finish;
-        req.onerror = finish;
-        req.onblocked = function () { setTimeout(finish, 3000); };
-      } catch (x) { finish(); }
-    });
-  });
-}
-
-
-  return {
-    resolveHistoryBackend,
-    historyIdbNotice,
-    backendName: function () { return historyBackendNameNow; },
-    close: function () { return historyIdb ? historyIdb.backend.close() : Promise.resolve(); },
-    prepareResetForTest: function () {
-      historyFault = null;
-      releaseDelayedPut();
-      releaseDelayedImport();
-      historyImportGateHit = false;
-    },
-    reset: function () {
-      historyForced = null;
-      historyCapOverride = null;
-      historyDesktopTimeoutOverride = null;
-      historyEstimateCache = null;
-      historyMem = null;
-      historyIdbFailed = false;
-      historyBackendNameNow = null;
-      return historyDropIdb();
-    },
-    controls: {
-      backendName: function () { return historyBackendNameNow; },
-      forceBackend: function (name: string | null) {
-        historyForced = name === "idb" || name === "memory" ? name : null;
-        if (historyForced === "idb") historyIdbFailed = false;
-        return resolveHistoryBackend().then(function (b) { return b.name; });
-      },
-      setCapOverride: function (bytes: unknown) {
-        historyCapOverride = (bytes == null || !isFinite(Number(bytes))) ? null : Number(bytes);
-        historyEstimateCache = null;
-        return historyCapOverride;
-      },
-      injectFault: function (name: string | null) {
-        const known = ["idb-open-fail", "quota-once", "quota-always", "io-always", "delay-put", "delay-import", "import-fail"];
-        if (name == null) {
-          if (historyFault === "delay-put") releaseDelayedPut();
-          if (historyFault === "delay-import") releaseDelayedImport();
-          historyFault = null;
-          if (historyIdb) historyArmFaults(historyIdb.backend);
-          if (historyMem) historyArmFaults(historyMem.backend);
-          return null;
-        }
-        if (name === "delay-import") historyImportGateHit = false;
-        historyFault = known.indexOf(name) !== -1 ? name : null;
-        if (historyIdb) historyArmFaults(historyIdb.backend);
-        if (historyMem) historyArmFaults(historyMem.backend);
-        if (historyFault === "idb-open-fail") {
-          if (historyIdb) historyIdb.backend.close().then(historyNoop, historyNoop);
-          historyIdb = null;
-          historyIdbFailed = false;
-        }
-        return historyFault;
-      },
-      releaseDelayedPut,
-      releaseDelayedImport,
-      importGateHit: function () { return historyImportGateHit; },
-      notice: function () { const n = historyIdbNotice(); return n ? n.text : null; },
-      setDesktopTimeout: function (ms: unknown) {
-        historyDesktopTimeoutOverride = (ms == null || !isFinite(Number(ms))) ? null : Math.max(0, Number(ms));
-        return historyDesktopTimeoutOverride;
-      }
-    }
-  };
+  const api = { resolveHistoryBackend, historyIdbNotice, backendName: () => historyBackendNameNow,
+    close: () => historyIdb ? historyIdb.backend.close() : Promise.resolve() };
+  return Object.assign(api, probe ? probe.bind({
+    resolve: resolveHistoryBackend,
+    notice: historyIdbNotice,
+    get idb() { return historyIdb; },
+    set idb(value) { historyIdb = value; },
+    get memory() { return historyMem; },
+    set memory(value) { historyMem = value; },
+    get failed() { return historyIdbFailed; },
+    set failed(value) { historyIdbFailed = value; },
+    get name() { return historyBackendNameNow; },
+    set name(value) { historyBackendNameNow = value; },
+    clearEstimate: () => { historyEstimateCache = null; }
+  }) : {});
 }
