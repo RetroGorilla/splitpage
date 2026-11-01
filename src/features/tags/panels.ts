@@ -1,3 +1,28 @@
+import type { Person } from "../../core/production/records.ts";
+import type { TagPanelPorts } from "./ports.ts";
+import type { RemoveTagPorts } from "../../application/commands/production-actions.ts";
+import type { TagChange, OwnerChoice } from "../../application/commands/production-records.ts";
+import type { DeepReadonly, DocumentView } from "../../application/session/document-session.ts";
+import type { PresentedProductionEntry } from "../../core/production/index.ts";
+import type { TagCategoryLook } from "../../core/production/looks.ts";
+
+type PanelTagStatus = (typeof TAG_STATUSES)[number];
+type PanelRowStatus = (typeof ROW_STATUSES)[number];
+type PanelTagMention = PresentedProductionEntry["mentions"][number];
+type SceneMentionGroup = { m: PanelTagMention; n: number; visual: boolean; audio: boolean };
+type PersonTagGroup = { id: string; label: string; items: PresentedProductionEntry[] };
+type ShootTagGroup = { name: string; rows: number[]; needs: Record<string, PresentedProductionEntry>; needOrder: string[] };
+type PanelProductionOwner = TagPanelPorts["production"];
+type PanelReadonlyArgs<A extends readonly unknown[]> = { [K in keyof A]: DeepReadonly<A[K]> };
+type PanelProductionRead<K extends keyof PanelProductionOwner> =
+  (...args: PanelReadonlyArgs<Parameters<PanelProductionOwner[K]>>) => ReturnType<PanelProductionOwner[K]>;
+type PanelQuickAddArgs<A extends readonly unknown[]> = {
+  [K in keyof A]: K extends "0" ? DeepReadonly<A[K]> | null : K extends "3" ? A[K] | null : A[K]
+};
+type PanelQuickAddRead = (...args: PanelQuickAddArgs<Parameters<typeof planQuickAdd>>) => ReturnType<typeof planQuickAdd>;
+type PanelNullableArgs<A extends readonly unknown[], K extends keyof A> = { [P in keyof A]: P extends K ? A[P] | null : A[P] };
+type PanelNullableCall<F extends (...args: never[]) => unknown, K extends keyof Parameters<F>> =
+  (...args: PanelNullableArgs<Parameters<F>, K>) => ReturnType<F>;
 import { tagStatusLampHtml } from "../common/tag-status.ts";
 import { nextTagStatus, normalizeTagName } from "../../core/document/tags.ts";
 import { formatDuration, pad2, rowSeconds } from "../../core/production/timing.ts";
@@ -14,38 +39,38 @@ import { removeTag, renameTag } from "../../application/commands/production-acti
 import { rewrittenCopies } from "../../application/commands/document-edit.ts";
 
 
-export var IS_TOUCH;
+export let IS_TOUCH: boolean | undefined;
 
-var ports = null;
-var tagEditPorts = null;
+let ports: TagPanelPorts | null = null;
+let tagEditPorts: RemoveTagPorts | null = null;
 
-function safeId(id, prefix) {
-  return safeIdFrom(id, prefix, ports.ids);
+function safeId(id: unknown, prefix: string) {
+  return safeIdFrom(id, prefix, (ports as TagPanelPorts).ids);
 }
 
 function productionEntries() {
-  return ports.production.entries(ports.document.current());
+  return ((ports as TagPanelPorts).production.entries as PanelProductionRead<"entries">)((ports as TagPanelPorts).document.current());
 }
 
 function currentProductionIndex() {
-  return ports.production.current(ports.document.current());
+  return ((ports as TagPanelPorts).production.current as PanelProductionRead<"current">)((ports as TagPanelPorts).document.current());
 }
 
-function tagsByCategory(all) {
+function tagsByCategory(all?: readonly PresentedProductionEntry[]) {
   return groupTagsByCategory(all || productionEntries());
 }
 
-function registryEntry(cat, name) {
-  return registryEntryOf(ports.document.current(), cat, name);
+function registryEntry(cat: string, name: string) {
+  return registryEntryOf((ports as TagPanelPorts).document.current(), cat, name);
 }
 
-function personById(id) {
-  return personIn(ports.document.current(), id);
+function personById(id: string | null) {
+  return personIn((ports as TagPanelPorts).document.current(), id);
 }
 
 export function openProductionPanel() {
-  if (!ports.document.current()) return;
-  ports.panels.open("production-panel");
+  if (!(ports as TagPanelPorts).document.current()) return;
+  (ports as TagPanelPorts).panels.open("production-panel");
   renderProduction();
 }
 
@@ -54,57 +79,57 @@ function gearEntries() {
 }
 
 export function openGearPanel() {
-  if (!ports.document.current()) return;
-  ports.panels.open("gear-panel");
+  if (!(ports as TagPanelPorts).document.current()) return;
+  (ports as TagPanelPorts).panels.open("gear-panel");
   fillGearQuickAdd();
   renderProduction();
 }
 
-function updateGearBadge(n) {
-  var badge = document.getElementById("gear-badge");
+function updateGearBadge(n: number) {
+  const badge = document.getElementById("gear-badge");
   if (!badge) return;
   if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? "99+" : String(n); }
   else badge.hidden = true;
 }
 
 export function updateGearCount() {
-  updateGearBadge(ports.document.current() ? gearEntries().length : 0);
+  updateGearBadge((ports as TagPanelPorts).document.current() ? gearEntries().length : 0);
 }
 
-function updateProductionBadge(n) {
-  var badge = document.getElementById("production-badge");
+function updateProductionBadge(n: number) {
+  const badge = document.getElementById("production-badge");
   if (!badge) return;
   if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? "99+" : String(n); }
   else badge.hidden = true;
 }
 
 export function updateProductionCount() {
-  updateProductionBadge(ports.document.current() ? productionEntries().length : 0);
+  updateProductionBadge((ports as TagPanelPorts).document.current() ? productionEntries().length : 0);
 }
 
 export function productionPanelsOpen() {
-  var panel = document.getElementById("production-panel");
-  var gearPanel = document.getElementById("gear-panel");
+  const panel = document.getElementById("production-panel");
+  const gearPanel = document.getElementById("gear-panel");
   return !!((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden));
 }
 
-function updateGearHeadCount(n) {
-  var el = document.getElementById("gear-head-count");
+function updateGearHeadCount(n: number) {
+  const el = document.getElementById("gear-head-count");
   if (!el) return;
   el.hidden = !n;
   el.innerHTML = '<span class="panel-count">' + n + '</span> item' + (n === 1 ? '' : 's');
 }
 
 export function renderGearList() {
-  var panel = document.getElementById("gear-panel");
-  if (!panel || panel.hidden || !ports.document.current()) return;
-  var listEl = document.getElementById("gear-list");
-  var entries = gearEntries();
+  const panel = document.getElementById("gear-panel");
+  if (!panel || panel.hidden || !(ports as TagPanelPorts).document.current()) return;
+  const listEl = document.getElementById("gear-list") as HTMLElement;
+  const entries = gearEntries();
   updateGearBadge(entries.length);
   updateGearHeadCount(entries.length);
 
   document.querySelectorAll("#gear-modes [data-group]").forEach(function (b) {
-    var on = b.getAttribute("data-group") === ports.view.gearGroupBy();
+    const on = b.getAttribute("data-group") === (ports as TagPanelPorts).view.gearGroupBy();
     b.classList.toggle("is-active", on);
     b.setAttribute("aria-checked", on ? "true" : "false");
   });
@@ -117,8 +142,8 @@ export function renderGearList() {
     return;
   }
 
-  if (ports.view.gearGroupBy() === "scene") {
-    var untracked = entries.filter(function (e) { return e.orphaned; }).length;
+  if ((ports as TagPanelPorts).view.gearGroupBy() === "scene") {
+    const untracked = entries.filter(function (e) { return e.orphaned; }).length;
     listEl.innerHTML = renderProductionByScene(entries.filter(function (e) { return !e.orphaned; })) +
       (untracked ? '<div class="tag-orphan-note">' + untracked +
         (untracked === 1 ? " item isn't" : " items aren't") +
@@ -132,29 +157,29 @@ export function renderGearList() {
 }
 
 function fillGearQuickAdd() {
-  var box = document.getElementById("gear-quickadd-input");
+  const box = (document.getElementById("gear-quickadd-input") as HTMLTextAreaElement | null);
   if (!box || document.activeElement === box) return;
-  var names = gearEntries().map(function (e) { return e.name; })
+  const names = gearEntries().map(function (e) { return e.name; })
     .sort(function (a, b) { return a.localeCompare(b); });
   box.value = names.join("\n");
 }
 
 export function applyGearQuickAdd() {
-  var raw = document.getElementById("gear-quickadd-input").value || "";
-  function planned(doc) { return planQuickAdd(doc, ports.text.productionReaders, raw, currentProductionIndex()); }
-  var plan = ports.document.read(planned);
-  var added = plan.added, removed = plan.removed;
+  const raw = (document.getElementById("gear-quickadd-input") as HTMLTextAreaElement).value || "";
+  function planned(doc: DocumentView | null) { return (planQuickAdd as PanelQuickAddRead)(doc, (ports as TagPanelPorts).text.productionReaders, raw, currentProductionIndex()); }
+  const plan = (ports as TagPanelPorts).document.read(planned);
+  const added = plan.added, removed = plan.removed;
 
-  if (!ports.edits.edit(gearQuickAddCommand(planned))) { fillGearQuickAdd(); return; }
+  if (!(ports as TagPanelPorts).edits.edit(gearQuickAddCommand(planned))) { fillGearQuickAdd(); return; }
   renderProduction();
   fillGearQuickAdd();
-  var parts = [];
+  const parts = [];
   if (added) parts.push("added " + added);
   if (removed) parts.push("removed " + removed);
-  ports.notices.show("Gear list updated — " + parts.join(", ") + ".", "ok");
+  (ports as TagPanelPorts).notices.show("Gear list updated — " + parts.join(", ") + ".", "ok");
 }
 
-function joinSceneLinks(links) {
+function joinSceneLinks(links: readonly string[]) {
   return links.map(function (html, i) {
     return i < links.length - 1
       ? '<span class="tag-scene-unit">' + html + '<span class="tag-scene-sep">,</span></span>'
@@ -162,18 +187,18 @@ function joinSceneLinks(links) {
   }).join('<span class="tag-scene-sep"> </span>');
 }
 
-function sceneLinksHtml(item) {
-  var byRow = idMap(), order = [];
+function sceneLinksHtml(item: PresentedProductionEntry) {
+  const byRow = idMap<SceneMentionGroup>(), order: SceneMentionGroup[] = [];
   item.mentions.forEach(function (m) {
-    var s = byRow[m.rowId];
+    let s = byRow[m.rowId];
     if (!s) { s = byRow[m.rowId] = { m: m, n: 0, visual: false, audio: false }; order.push(s); }
     s.n++;
     if (m.field === "visualText") s.visual = true; else s.audio = true;
   });
   order.sort(function (a, b) { return a.m.rowIndex - b.m.rowIndex; });
   return joinSceneLinks(order.map(function (s) {
-    var num = pad2(s.m.rowIndex + 1);
-    var label = "Scene " + num + " · " +
+    const num = pad2(s.m.rowIndex + 1);
+    const label = "Scene " + num + " · " +
       (s.visual && s.audio ? "Visual and Audio" : s.visual ? "Visual" : "Audio") +
       (s.n > 1 ? " · " + s.n + " mentions" : "") + " — go to it";
     return '<button type="button" class="tag-scene jump-link" data-action="jump-tag" data-row="' +
@@ -182,17 +207,17 @@ function sceneLinksHtml(item) {
   }));
 }
 
-function mentionLinksHtml(item) {
-  var seen = {}, order = [];
+function mentionLinksHtml(item: PresentedProductionEntry) {
+  const seen: Record<string, { n: number; m: PanelTagMention }> = {}, order: string[] = [];
   item.mentions.forEach(function (m) {
-    var k = m.rowIndex + "|" + m.field;
-    if (seen[k]) { seen[k].n++; return; }
+    const k = m.rowIndex + "|" + m.field;
+    if (seen[k]) { (seen[k] as { n: number; m: PanelTagMention }).n++; return; }
     seen[k] = { n: 1, m: m };
     order.push(k);
   });
   return order.map(function (k) {
-    var entry = seen[k];
-    var num = pad2(entry.m.rowIndex + 1);
+    const entry = seen[k] as { n: number; m: PanelTagMention };
+    const num = pad2(entry.m.rowIndex + 1);
     return '<button type="button" class="tag-mention jump-link" data-action="jump-tag" data-row="' +
       escapeHtml(entry.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="Go to this mention in scene ' +
       num + '"><span class="tag-figure">' + num + '</span> ' +
@@ -201,48 +226,48 @@ function mentionLinksHtml(item) {
   }).join(", ");
 }
 
-function personAvatarHtml(name) {
-  var initial = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar" style="--presence:' + ports.personColors.personColor(name) + '" aria-hidden="true">' +
+function personAvatarHtml(name: string) {
+  const initial = Array.from(String(name || "").trim())[0] || "?";
+  return '<span class="person-avatar" style="--presence:' + (ports as TagPanelPorts).personColors.personColor(name) + '" aria-hidden="true">' +
     escapeHtml(initial.toUpperCase()) + '</span>';
 }
 
-function ownerCellHtml(owner) {
+function ownerCellHtml(owner: ReturnType<typeof personIn>) {
   if (!owner) {
     return '<span class="tag-owner is-none"><span aria-hidden="true">—</span>' +
       '<span class="tag-sr">Unassigned</span></span>';
   }
-  var first = String(owner.name).trim().split(/\s+/)[0] || owner.name;
+  const first = String(owner.name).trim().split(/\s+/)[0] || owner.name;
   return '<span class="tag-owner" title="' + escapeHtml(owner.name) + '">' + personAvatarHtml(owner.name) +
     '<span class="tag-owner-name">' + escapeHtml(first) + '</span></span>';
 }
 
-function statusCellHtml(item) {
-  var st = tagStatus(item.status) || TAG_STATUSES[0];
-  var k = escapeHtml(item.key);
-  var inner = tagStatusLampHtml(st.id) + escapeHtml(st.label);
-  var nextSt = tagStatus(nextTagStatus(st.id)) || TAG_STATUSES[0];
+function statusCellHtml(item: PresentedProductionEntry) {
+  const st = tagStatus(item.status) || (TAG_STATUSES[0] as PanelTagStatus);
+  const k = escapeHtml(item.key);
+  const inner = tagStatusLampHtml(st.id) + escapeHtml(st.label);
+  const nextSt = tagStatus(nextTagStatus(st.id)) || (TAG_STATUSES[0] as PanelTagStatus);
   return '<button type="button" class="tag-status-pill" data-action="tag-status-cycle" data-key="' + k +
     '" title="' + escapeHtml(st.label + " — click for " + nextSt.label) + '" aria-label="' +
     escapeHtml("Status: " + st.label + ". Click for " + nextSt.label) + '">' + inner + '</button>';
 }
 
-function tagFieldId(what, gear, key) {
+function tagFieldId(what: string, gear: boolean, key: string) {
   return "tag-" + what + "-" + (gear ? "g-" : "p-") +
     String(key).replace(/[^A-Za-z0-9]/g, function (c) { return "_" + c.charCodeAt(0).toString(16); });
 }
 
-function iconHtml(id, cls) {
+function iconHtml(id: string, cls?: string) {
   return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' aria-hidden="true" focusable="false"><use href="#' + id + '"/></svg>';
 }
 
-function untaggedMentionCount(item) {
-  if (!ports.document.current() || !item.name) return 0;
-  return ports.bulkTag(ports.document.current().rows, item.name, item.cat.id, item.name, false, true).hits;
+function untaggedMentionCount(item: PresentedProductionEntry) {
+  if (!(ports as TagPanelPorts).document.current() || !item.name) return 0;
+  return (ports as TagPanelPorts).bulkTag(((ports as TagPanelPorts).document.current() as DocumentView).rows, item.name, item.cat.id, item.name, false, true).hits;
 }
 
-function untaggedMentionsHtml(item) {
-  var n = untaggedMentionCount(item);
+function untaggedMentionsHtml(item: PresentedProductionEntry) {
+  const n = untaggedMentionCount(item);
   if (!n) return "";
   return '<dt>Untagged</dt><dd class="tag-untagged-dd">' +
     '<button type="button" class="btn-outline is-small" data-action="tag-all-mentions" data-key="' +
@@ -250,37 +275,37 @@ function untaggedMentionsHtml(item) {
       ' in the Visual column">Tag all ' + n + ' mention' + (n === 1 ? '' : 's') + '</button></dd>';
 }
 
-export function tagAllMentions(key) {
-  var item = findTagByKey(key);
+export function tagAllMentions(key: string | null) {
+  const item = findTagByKey(key);
   if (!item) return;
-  ports.undo.breakCoalescing();
-  var done = ports.bulkTag(jsonRows(), item.name, item.cat.id, item.name, false, true);
-  var tagged = rewrittenCopies(["visualText"], function (rows) { ports.bulkTag(rows, item.name, item.cat.id, item.name, false, false); });
-  if (!done.hits || !ports.edits.edit(tagCellsCommand("tag-all-mentions", tagged, tagRef(item), ports.edits.stamps))) {
-    ports.notices.show("No untagged mentions of " + item.name + " left.", "warn");
+  (ports as TagPanelPorts).undo.breakCoalescing();
+  const done = (ports as TagPanelPorts).bulkTag(jsonRows(), item.name, item.cat.id, item.name, false, true);
+  const tagged = rewrittenCopies(["visualText"], function (rows) { (ports as TagPanelPorts).bulkTag(rows, item.name, item.cat.id, item.name, false, false); });
+  if (!done.hits || !(ports as TagPanelPorts).edits.edit(tagCellsCommand("tag-all-mentions", tagged, tagRef(item), (ports as TagPanelPorts).edits.stamps))) {
+    (ports as TagPanelPorts).notices.show("No untagged mentions of " + item.name + " left.", "warn");
     return;
   }
-  ports.undo.breakCoalescing();
-  ports.notices.show("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
+  (ports as TagPanelPorts).undo.breakCoalescing();
+  (ports as TagPanelPorts).notices.show("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
 }
 
-function tagEntityDetailHtml(item, renaming, gear, detailId) {
-  var k = escapeHtml(item.key);
-  var name = escapeHtml(item.name);
-  var st = tagStatus(item.status) || TAG_STATUSES[0];
-  var ownerId = tagFieldId("owner", gear, item.key);
-  var notesId = tagFieldId("notes", gear, item.key);
-  var renameId = tagFieldId("rename", gear, item.key);
+function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, gear: boolean, detailId: string) {
+  const k = escapeHtml(item.key);
+  const name = escapeHtml(item.name);
+  const st = tagStatus(item.status) || (TAG_STATUSES[0] as PanelTagStatus);
+  const ownerId = tagFieldId("owner", gear, item.key);
+  const notesId = tagFieldId("notes", gear, item.key);
+  const renameId = tagFieldId("rename", gear, item.key);
 
-  var choices = TAG_STATUSES.map(function (s) {
-    var on = s.id === st.id;
+  const choices = TAG_STATUSES.map(function (s) {
+    const on = s.id === st.id;
     return '<button type="button" role="' + (gear ? 'menuitemradio' : 'radio') + '" class="' +
         (gear ? 'tag-menu-item' : 'tag-status-choice') + (on ? ' is-active' : '') +
         '" data-action="tag-status-set" data-key="' + k + '" data-status="' + escapeHtml(s.id) +
         '" aria-checked="' + (on ? 'true' : 'false') + '">' +
       tagStatusLampHtml(s.id) + escapeHtml(s.label) + '</button>';
   }).join("");
-  var status = gear
+  const status = gear
     ? '<div class="tag-menu-wrap">' +
         '<button type="button" class="tag-status-menu-btn tag-menu-btn" aria-haspopup="menu" aria-expanded="false" ' +
           'aria-label="' + escapeHtml("Status: " + st.label + ". Change") + '">' +
@@ -290,23 +315,23 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '</div>'
     : '<div class="tag-status-seg" role="radiogroup" aria-label="Status of ' + name + '">' + choices + '</div>';
 
-  var ownerField = '<span class="ev-field tag-owner-field">' +
+  const ownerField = '<span class="ev-field tag-owner-field">' +
       '<select class="tag-owner-select' + (personById(item.owner) ? '' : ' is-unassigned') + '" id="' + ownerId +
         '" data-key="' + k + '">' +
         '<option value=""' + (item.owner ? '' : ' selected') + '>Unassigned</option>' +
-        (ports.document.current()?.people || []).map(function (p) {
+        (((ports as TagPanelPorts).document.current()?.people as readonly Person[] | null | undefined) || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' +
             (p.id === item.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
       '</select>' +
       iconHtml("i-chevron-down", "ev-chevron") +
     '</span>';
-  var addPerson =
+  const addPerson =
     '<button type="button" class="tag-person-add tag-quiet-btn" data-action="tag-person-new" data-key="' + k +
       '" title="Add someone to the crew list"' +
       (gear ? ' aria-label="Add a person to the crew list">' + iconHtml("i-plus") + 'Person' : '>Add person') +
     '</button>';
-  var personRow = ports.view.tagAddingPersonKey() === item.key
+  const personRow = (ports as TagPanelPorts).view.tagAddingPersonKey() === item.key
     ? '<div class="tag-person-row">' +
         '<input type="text" class="tag-person-input ev-field" data-key="' + k +
           '" placeholder="Their name" maxlength="60" aria-label="The new person’s name">' +
@@ -315,7 +340,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '</div>'
     : '';
 
-  var more =
+  const more =
     '<div class="tag-menu-wrap tag-more">' +
       '<button type="button" class="tag-more-btn tag-menu-btn' + (gear ? ' tag-icon-btn' : ' btn-outline is-small is-icon') +
         '" aria-haspopup="menu" aria-expanded="false" title="More" aria-label="' +
@@ -333,7 +358,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '</div>' +
     '</div>';
 
-  var dl = '<dl class="tag-entity-detail' + (gear ? ' is-gear' : '') + '" id="' + detailId + '">' +
+  const dl = '<dl class="tag-entity-detail' + (gear ? ' is-gear' : '') + '" id="' + detailId + '">' +
       (renaming
         ? '<dt><label for="' + renameId + '">Name</label></dt>' +
           '<dd class="tag-rename-row">' +
@@ -367,15 +392,15 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
     '</div>';
 }
 
-function tagEntityHtml(item, opts) {
+function tagEntityHtml(item: PresentedProductionEntry, opts?: { gear?: boolean; selection?: boolean; dot?: boolean }) {
   opts = opts || {};
-  var gear = !!opts.gear;
-  var renaming = ports.view.tagRenamingKey() === item.key;
-  var expanded = ports.view.tagExpandedKey() === item.key || renaming;
-  var k = escapeHtml(item.key);
-  var selected = opts.selection && ports.selection.selected(item.key);
-  var detailId = tagFieldId("detail", gear, item.key);
-  var dot = '<span class="tag-row-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>';
+  const gear = !!opts.gear;
+  const renaming = (ports as TagPanelPorts).view.tagRenamingKey() === item.key;
+  const expanded = (ports as TagPanelPorts).view.tagExpandedKey() === item.key || renaming;
+  const k = escapeHtml(item.key);
+  const selected = opts.selection && (ports as TagPanelPorts).selection.selected(item.key);
+  const detailId = tagFieldId("detail", gear, item.key);
+  const dot = '<span class="tag-row-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>';
   return '<li class="tag-entity' + (gear ? ' is-gear' : '') + (item.orphaned ? ' is-orphaned' : '') +
       (expanded ? ' is-expanded' : '') +
       (selected ? ' is-selected' : '') +
@@ -398,17 +423,17 @@ function tagEntityHtml(item, opts) {
   '</li>';
 }
 
-function renderProductionByScene(all) {
-  var byRow = {};
+function renderProductionByScene(all: readonly PresentedProductionEntry[]) {
+  const byRow: Record<number, Record<string, PresentedProductionEntry>> = {};
   all.forEach(function (item) {
     item.mentions.forEach(function (m) {
       if (!byRow[m.rowIndex]) byRow[m.rowIndex] = {};
-      byRow[m.rowIndex][item.key] = item;
+      (byRow[m.rowIndex] as Record<string, PresentedProductionEntry>)[item.key] = item;
     });
   });
-  var indexes = Object.keys(byRow).map(Number).sort(function (a, b) { return a - b; });
+  const indexes = Object.keys(byRow).map(Number).sort(function (a, b) { return a - b; });
   return indexes.map(function (idx) {
-    var items = Object.keys(byRow[idx]).map(function (k) { return byRow[idx][k]; });
+    const items = Object.keys(byRow[idx] as Record<string, PresentedProductionEntry>).map(function (k) { return (byRow[idx] as Record<string, PresentedProductionEntry>)[k] as PresentedProductionEntry; });
     return '<section class="tag-scene-group">' +
       '<h3 class="tag-scene-group-head">Scene <span class="tag-figure">' + pad2(idx + 1) + '</span></h3>' +
       '<ul class="tag-pills">' +
@@ -422,21 +447,21 @@ function renderProductionByScene(all) {
   }).join("");
 }
 
-function renderProductionByPerson(all) {
-  var buckets = idMap(), order = [];
-  function bucket(id, label) {
+function renderProductionByPerson(all: readonly PresentedProductionEntry[]) {
+  const buckets = idMap<PersonTagGroup>(), order: string[] = [];
+  function bucket(id: string, label: string) {
     if (!buckets[id]) { buckets[id] = { id: id, label: label, items: [] }; order.push(id); }
-    return buckets[id];
+    return buckets[id] as PersonTagGroup;
   }
-  (ports.document.current()?.people || []).forEach(function (p) { bucket(p.id, p.name); });
+  (((ports as TagPanelPorts).document.current()?.people as readonly Person[] | null | undefined) || []).forEach(function (p) { bucket(p.id, p.name); });
   all.forEach(function (item) {
-    var p = personById(item.owner);
+    const p = personById(item.owner);
     bucket(p ? p.id : "", p ? p.name : "Unassigned").items.push(item);
   });
   order.sort(function (a, b) { return (a === "" ? 1 : 0) - (b === "" ? 1 : 0); });
 
   return order.map(function (id) {
-    var g = buckets[id];
+    const g = buckets[id] as PersonTagGroup;
     return '<section class="tag-group">' +
       '<h3 class="tag-group-head tag-person-head">' +
         (id ? personAvatarHtml(g.label) : iconHtml("i-person", "tag-person-none")) +
@@ -456,31 +481,31 @@ function renderProductionByPerson(all) {
   }).join("");
 }
 
-function renderProductionByShoot(entries) {
-  const doc = ports.document.current();
+function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) {
+  const doc = (ports as TagPanelPorts).document.current();
   if (!doc) return '<div class="comments-empty">Nothing to schedule yet.</div>';
-  var live = entries || productionEntries();
-  var byRow = {};
+  const live = entries || productionEntries();
+  const byRow: Record<number, PresentedProductionEntry[]> = {};
   live.forEach(function (item) {
     item.mentions.forEach(function (m) {
       (byRow[m.rowIndex] = byRow[m.rowIndex] || []).push(item);
     });
   });
 
-  var groups = {}, order = [];
-  function group(key, name) {
+  const groups: Record<string, ShootTagGroup> = {}, order: string[] = [];
+  function group(key: string, name: string) {
     if (!groups[key]) { groups[key] = { name: name, rows: [], needs: {}, needOrder: [] }; order.push(key); }
-    return groups[key];
+    return groups[key] as ShootTagGroup;
   }
 
   doc.rows.forEach(function (row, i) {
-    var here = byRow[i] || [];
-    var locs = here.filter(function (t) { return t.cat.id === "location"; });
-    var targets = locs.length
+    const here = byRow[i] || [];
+    const locs = here.filter(function (t) { return t.cat.id === "location"; });
+    const targets = locs.length
       ? locs.map(function (t) { return { key: t.key, name: t.name }; })
       : [{ key: "", name: "No location set" }];
     targets.forEach(function (t) {
-      var g = group(t.key, t.name);
+      const g = group(t.key, t.name);
       if (g.rows.indexOf(i) === -1) g.rows.push(i);
       here.forEach(function (item) {
         if (item.cat.id === "location") return;
@@ -495,13 +520,13 @@ function renderProductionByShoot(entries) {
   order.sort(function (a, b) { return (a === "" ? 1 : 0) - (b === "" ? 1 : 0); });
 
   return order.map(function (key) {
-    var g = groups[key];
-    const shot = g.rows.filter(function (i) { return doc.rows[i].status === "shot"; }).length;
-    const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i], doc, ports.text.productionReaders); }, 0);
-    var done = shot === g.rows.length;
-    return '<section class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border-strong)") + '">' +
+    const g = groups[key] as ShootTagGroup;
+    const shot = g.rows.filter(function (i) { return (doc.rows[i] as DocumentView["rows"][number]).status === "shot"; }).length;
+    const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i] as DocumentView["rows"][number], doc, (ports as TagPanelPorts).text.productionReaders); }, 0);
+    const done = shot === g.rows.length;
+    return '<section class="shoot-group" style="--dot:' + (key ? (TAG_CATEGORIES[1] as TagCategoryLook).color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +
-        '<span class="tag-cat-dot"' + (key ? ' data-tag-cat="' + TAG_CATEGORIES[1].id + '"' : '') + ' aria-hidden="true"></span>' +
+        '<span class="tag-cat-dot"' + (key ? ' data-tag-cat="' + (TAG_CATEGORIES[1] as TagCategoryLook).id + '"' : '') + ' aria-hidden="true"></span>' +
         '<span class="shoot-name">' + escapeHtml(g.name) + '</span>' +
         '<span class="shoot-progress' + (done ? ' is-done' : '') + '">' +
           '<span class="tag-figure">' + shot + '/' + g.rows.length + '</span> shot · ' +
@@ -511,9 +536,9 @@ function renderProductionByShoot(entries) {
         '<dt>Scenes</dt>' +
         '<dd class="tag-scenes">' +
           joinSceneLinks(g.rows.map(function (i) {
-            const row = doc.rows[i];
-            var st = rowStatus(row.status) || ROW_STATUSES[0];
-            var label = "Scene " + pad2(i + 1) + " · " + st.label + " — go to it";
+            const row = doc.rows[i] as DocumentView["rows"][number];
+            const st = rowStatus(row.status) || (ROW_STATUSES[0] as PanelRowStatus);
+            const label = "Scene " + pad2(i + 1) + " · " + st.label + " — go to it";
             return '<button type="button" class="tag-scene jump-link' + (row.status === "shot" ? ' is-shot' : '') +
               '" data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
               '" aria-label="' + escapeHtml(label) + '">' + pad2(i + 1) +
@@ -524,9 +549,9 @@ function renderProductionByShoot(entries) {
           ? '<dt>Needs on the day</dt>' +
             '<dd><ul class="shoot-needs">' +
               g.needOrder.map(function (k) {
-                var item = g.needs[k];
-                var owner = personById(item.owner);
-                var nst = tagStatus(item.status) || TAG_STATUSES[0];
+                const item = g.needs[k] as PresentedProductionEntry;
+                const owner = personById(item.owner);
+                const nst = tagStatus(item.status) || (TAG_STATUSES[0] as PanelTagStatus);
                 return '<li class="shoot-need" style="--dot:' + item.cat.color + '">' +
                   '<span class="tag-cat-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>' +
                   '<span class="shoot-need-name">' + escapeHtml(item.name) + '</span>' +
@@ -547,35 +572,35 @@ export function renderProduction() {
 }
 
 function renderProductionPanel() {
-  var panel = document.getElementById("production-panel");
-  if (!panel || panel.hidden || !ports.document.current()) return;
-  var entries = productionEntries();
-  if (ports.selection.selectedKeys().length) ports.selection.prune(entries);
+  const panel = document.getElementById("production-panel");
+  if (!panel || panel.hidden || !(ports as TagPanelPorts).document.current()) return;
+  const entries = productionEntries();
+  if ((ports as TagPanelPorts).selection.selectedKeys().length) (ports as TagPanelPorts).selection.prune(entries);
   renderProductionList(entries);
   renderBulkBar(entries);
   updateProductionBadge(entries.length);
 }
 
-function renderProductionList(entries) {
-  var listEl = document.getElementById("production-list");
-  var panel = document.getElementById("production-panel");
-  if (!listEl || !panel || panel.hidden || !ports.document.current()) return;
+function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
+  const listEl = document.getElementById("production-list");
+  const panel = document.getElementById("production-panel");
+  if (!listEl || !panel || panel.hidden || !(ports as TagPanelPorts).document.current()) return;
   entries = entries || productionEntries();
 
   document.querySelectorAll("#production-modes [data-group]").forEach(function (b) {
-    var on = b.getAttribute("data-group") === ports.view.productionGroupBy();
+    const on = b.getAttribute("data-group") === (ports as TagPanelPorts).view.productionGroupBy();
     b.classList.toggle("is-active", on);
     b.setAttribute("aria-checked", on ? "true" : "false");
   });
 
-  var groups = tagsByCategory(entries);
-  var cols = document.getElementById("production-cols");
+  const groups = tagsByCategory(entries);
+  const cols = document.getElementById("production-cols");
   if (cols) {
     cols.hidden = !groups.length ||
-      (ports.view.productionGroupBy() !== "cat" && ports.view.productionGroupBy() !== "person");
+      ((ports as TagPanelPorts).view.productionGroupBy() !== "cat" && (ports as TagPanelPorts).view.productionGroupBy() !== "person");
   }
 
-  if (ports.view.productionGroupBy() === "shoot") {
+  if ((ports as TagPanelPorts).view.productionGroupBy() === "shoot") {
     listEl.innerHTML = renderProductionByShoot(entries);
     return;
   }
@@ -590,8 +615,8 @@ function renderProductionList(entries) {
     return;
   }
 
-  if (ports.view.productionGroupBy() === "scene") {
-    var orphanCount = groups.reduce(function (n, g) {
+  if ((ports as TagPanelPorts).view.productionGroupBy() === "scene") {
+    const orphanCount = groups.reduce(function (n, g) {
       return n + g.items.filter(function (i) { return i.orphaned; }).length;
     }, 0);
     listEl.innerHTML = renderProductionByScene(entries.filter(function (e) { return !e.orphaned; })) +
@@ -602,7 +627,7 @@ function renderProductionList(entries) {
     return;
   }
 
-  if (ports.view.productionGroupBy() === "person") {
+  if ((ports as TagPanelPorts).view.productionGroupBy() === "person") {
     listEl.innerHTML = renderProductionByPerson(entries);
     return;
   }
@@ -622,38 +647,38 @@ function renderProductionList(entries) {
 }
 
 function jsonRows() {
-  return ports.document.read(function (doc) {
+  return (ports as TagPanelPorts).document.read(function (doc) {
     return doc ? doc.rows.map(function (row) { return { id: row.id, visualText: row.visualText }; }) : [];
   });
 }
 
-function tagRef(item) {
+function tagRef(item: PresentedProductionEntry) {
   return { cat: item.cat.id, name: item.name };
 }
 
-function entryValue(item, field) {
-  var entry = registryEntry(item.cat.id, item.name);
+function entryValue(item: PresentedProductionEntry, field: "owner") {
+  const entry = registryEntry(item.cat.id, item.name);
   return entry ? entry[field] || "" : "";
 }
 
-function updateTags(items, change) {
-  return ports.edits.edit(updateTagsCommand(items.map(tagRef), change, ports.ids));
+function updateTags(items: readonly PresentedProductionEntry[], change: TagChange) {
+  return (ports as TagPanelPorts).edits.edit(updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids));
 }
 
-function findTagByKey(key) {
-  var all = productionEntries();
-  for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i];
+function findTagByKey(key: string | null) {
+  const all = productionEntries();
+  for (let i = 0; i < all.length; i++) if ((all[i] as PresentedProductionEntry).key === key) return all[i];
   return null;
 }
 
-export function jumpToTag(rowId, key) {
-  ports.shotHiding.reveal(rowId);
-  var row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
-  if (!row) { ports.notices.show("That scene is no longer here.", "warn"); return; }
+export function jumpToTag(rowId: string | null, key: string | null) {
+  ((ports as TagPanelPorts).shotHiding.reveal as PanelNullableCall<TagPanelPorts["shotHiding"]["reveal"], "0">)(rowId);
+  const row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
+  if (!row) { (ports as TagPanelPorts).notices.show("That scene is no longer here.", "warn"); return; }
   row.scrollIntoView({ behavior: "smooth", block: "center" });
-  var item = findTagByKey(key);
+  const item = findTagByKey(key);
   if (!item) return;
-  Array.prototype.forEach.call(row.querySelectorAll(".tag-anchor"), function (el) {
+  Array.prototype.forEach.call(row.querySelectorAll(".tag-anchor"), function (el: HTMLElement) {
     if (el.getAttribute("data-tag-cat") !== item.cat.id) return;
     if (normalizeTagName(el.getAttribute("data-tag-name")) !== normalizeTagName(item.name)) return;
     el.classList.remove("flash");
@@ -661,8 +686,8 @@ export function jumpToTag(rowId, key) {
     el.classList.add("flash");
   });
   if (item.cat.id !== "sound") return;
-  Array.prototype.forEach.call(row.querySelectorAll(".audio-cue"), function (el) {
-    var name = (el.textContent || "").replace(/\u200B/g, "").replace(/^\s*(sfx|music)\s*:/i, "");
+  Array.prototype.forEach.call(row.querySelectorAll(".audio-cue"), function (el: HTMLElement) {
+    const name = (el.textContent || "").replace(/\u200B/g, "").replace(/^\s*(sfx|music)\s*:/i, "");
     if (normalizeTagName(name) !== normalizeTagName(item.name)) return;
     el.classList.remove("flash");
     void el.offsetWidth;
@@ -670,27 +695,27 @@ export function jumpToTag(rowId, key) {
   });
 }
 
-export function armRemoveTag(btn, key) {
-  if (ports.deletion.armedId("tag") === key) {
-    ports.deletion.disarm("tag");
-    var item = findTagByKey(key);
+export function armRemoveTag(btn: Element, key: string | null) {
+  if ((ports as TagPanelPorts).deletion.armedId("tag") === key) {
+    (ports as TagPanelPorts).deletion.disarm("tag");
+    const item = findTagByKey(key);
     if (!item) return;
-    ports.undo.breakCoalescing();
-    var n = removeTag(item.cat.id, item.name, tagEditPorts);
-    ports.undo.breakCoalescing();
-    ports.notices.show("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
+    (ports as TagPanelPorts).undo.breakCoalescing();
+    const n = removeTag(item.cat.id, item.name, tagEditPorts as RemoveTagPorts);
+    (ports as TagPanelPorts).undo.breakCoalescing();
+    (ports as TagPanelPorts).notices.show("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
     return;
   }
-  var disarm;
-  ports.deletion.arm("tag", key, function () {
+  let disarm: () => void;
+  ((ports as TagPanelPorts).deletion.arm as PanelNullableCall<TagPanelPorts["deletion"]["arm"], "1">)("tag", key, function () {
     disarm();
   }, function () { disarm = armButton(btn); });
 }
 
-function armButton(btn) {
-  var label = btn.querySelector(".tag-menu-label") || btn;
-  var was = label.innerHTML;
-  var aria = btn.getAttribute("aria-label");
+function armButton(btn: Element) {
+  const label = btn.querySelector(".tag-menu-label") || btn;
+  const was = label.innerHTML;
+  const aria = btn.getAttribute("aria-label");
   label.textContent = "Confirm?";
   if (aria) btn.setAttribute("aria-label", "Confirm? " + aria);
   btn.classList.add("armed");
@@ -701,119 +726,119 @@ function armButton(btn) {
   };
 }
 
-export function armDeleteTag(btn, key) {
-  if (ports.deletion.armedId("tag") === key) {
-    ports.deletion.disarm("tag");
-    var item = findTagByKey(key);
+export function armDeleteTag(btn: Element, key: string | null) {
+  if ((ports as TagPanelPorts).deletion.armedId("tag") === key) {
+    (ports as TagPanelPorts).deletion.disarm("tag");
+    const item = findTagByKey(key);
     if (!item) return;
-    ports.edits.edit(deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, ports.edits.stamps));
-    ports.notices.show("Deleted " + item.name + " from the production list", "ok");
+    (ports as TagPanelPorts).edits.edit(deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, (ports as TagPanelPorts).edits.stamps));
+    (ports as TagPanelPorts).notices.show("Deleted " + item.name + " from the production list", "ok");
     return;
   }
-  var disarm;
-  ports.deletion.arm("tag", key, function () {
+  let disarm: () => void;
+  ((ports as TagPanelPorts).deletion.arm as PanelNullableCall<TagPanelPorts["deletion"]["arm"], "1">)("tag", key, function () {
     disarm();
   }, function () { disarm = armButton(btn); });
 }
 
-export function toggleCardSelection(key) {
-  ports.selection.toggle(key);
-  ports.selection.disarm();
+export function toggleCardSelection(key: string | null) {
+  ((ports as TagPanelPorts).selection.toggle as PanelNullableCall<TagPanelPorts["selection"]["toggle"], "0">)(key);
+  (ports as TagPanelPorts).selection.disarm();
   renderProduction();
 }
 
-export function handleSelectionClick(e, card) {
-  var key = card.getAttribute("data-key");
+export function handleSelectionClick(e: Pick<MouseEvent, "shiftKey">, card: Element) {
+  const key = card.getAttribute("data-key");
   if (!key) return false;
-  var order = Array.prototype.map.call(
+  const order = Array.prototype.map.call(
     document.querySelectorAll("#production-list .tag-entity"),
-    function (el) { return el.getAttribute("data-key"); });
-  if (!ports.selection.select(key, order, e.shiftKey)) return false;
+    function (el: HTMLElement) { return el.getAttribute("data-key"); });
+  if (!(ports as TagPanelPorts).selection.select(key, order as string[], e.shiftKey)) return false;
 
-  var sel = window.getSelection();
+  const sel = window.getSelection();
   if (sel && sel.removeAllRanges) sel.removeAllRanges();
-  ports.selection.disarm();
+  (ports as TagPanelPorts).selection.disarm();
   renderProduction();
   return true;
 }
 
-function selectedEntries(entries) {
-  var byKey = {};
+function selectedEntries(entries?: readonly PresentedProductionEntry[]): PresentedProductionEntry[] {
+  const byKey: Record<string, PresentedProductionEntry> = {};
   (entries || productionEntries()).forEach(function (e) { byKey[e.key] = e; });
-  return ports.selection.selectedKeys().map(function (k) { return byKey[k]; }).filter(Boolean);
+  return (ports as TagPanelPorts).selection.selectedKeys().map(function (k) { return byKey[k]; }).filter(Boolean) as PresentedProductionEntry[];
 }
 
-export function bulkSetOwner(personId) {
+export function bulkSetOwner(personId: string) {
   setOwnerOf(selectedEntries(), { id: personId });
 }
 
-function setOwnerOf(items, choice) {
+function setOwnerOf(items: readonly PresentedProductionEntry[], choice: OwnerChoice) {
   if (!items.length) return;
-  var known = "id" in choice ? personById(choice.id) : ports.document.read(function (doc) { return personNamed(doc, choice.name); });
-  var owner = known ? known.id : "";
-  var n = items.filter(function (item) { return (!known && "name" in choice) || entryValue(item, "owner") !== owner; }).length;
+  const known = "id" in choice ? personById(choice.id) : (ports as TagPanelPorts).document.read(function (doc) { return personNamed(doc, choice.name); });
+  const owner = known ? known.id : "";
+  const n = items.filter(function (item) { return (!known && "name" in choice) || entryValue(item, "owner") !== owner; }).length;
   updateTags(items, { owner: choice });
   renderProduction();
   if (!n) return;
-  var who = "id" in choice ? personById(choice.id) : ports.document.read(function (doc) { return personNamed(doc, choice.name); });
-  ports.notices.show(who ? ("Assigned " + n + " item" + (n === 1 ? "" : "s") + " to " + who.name)
+  const who = "id" in choice ? personById(choice.id) : (ports as TagPanelPorts).document.read(function (doc) { return personNamed(doc, choice.name); });
+  (ports as TagPanelPorts).notices.show(who ? ("Assigned " + n + " item" + (n === 1 ? "" : "s") + " to " + who.name)
                 : ("Unassigned " + n + " item" + (n === 1 ? "" : "s")), "ok");
 }
 
-export function bulkSetStatus(statusId) {
-  var items = selectedEntries();
+export function bulkSetStatus(statusId: string) {
+  const items = selectedEntries();
   if (!items.length) return;
-  var want = (tagStatus(statusId) || TAG_STATUSES[0]);
-  var n = items.filter(function (item) {
-    var entry = registryEntry(item.cat.id, item.name);
-    return (entry ? entry.status : TAG_STATUSES[0].id) !== want.id;
+  const want = (tagStatus(statusId) || (TAG_STATUSES[0] as PanelTagStatus));
+  const n = items.filter(function (item) {
+    const entry = registryEntry(item.cat.id, item.name);
+    return (entry ? entry.status : (TAG_STATUSES[0] as PanelTagStatus).id) !== want.id;
   }).length;
   updateTags(items, { status: want.id });
   renderProduction();
   if (!n) return;
-  ports.notices.show("Marked " + n + " item" + (n === 1 ? "" : "s") + " " + want.label, "ok");
+  (ports as TagPanelPorts).notices.show("Marked " + n + " item" + (n === 1 ? "" : "s") + " " + want.label, "ok");
 }
 
 export function bulkAddPerson() {
-  var input = document.getElementById("bulk-person-input");
+  const input = (document.getElementById("bulk-person-input") as HTMLInputElement | null);
   if (!input) return;
-  ports.view.setTagAddingPerson(null);
+  (ports as TagPanelPorts).view.setTagAddingPerson(null);
   if (!cappedText(input.value, PERSON_NAME_MAX)) { renderProduction(); return; }
   setOwnerOf(selectedEntries(), { name: input.value });
 }
 
 export function bulkDeleteSelected() {
-  var items = selectedEntries();
+  const items = selectedEntries();
   if (!items.length) return;
-  ports.undo.breakCoalescing();
-  var labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
-  var unlabelled = ports.document.read(function (doc) { return retagMentions(ports.text, doc, labelled); });
-  ports.selection.clear();
-  ports.edits.edit(deleteTagsCommand(items.map(function (item) {
+  (ports as TagPanelPorts).undo.breakCoalescing();
+  const labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
+  const unlabelled = (ports as TagPanelPorts).document.read(function (doc) { return retagMentions((ports as TagPanelPorts).text, doc, labelled); });
+  (ports as TagPanelPorts).selection.clear();
+  (ports as TagPanelPorts).edits.edit(deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
-  }), retagRewrites(ports.text, labelled, null), ports.edits.stamps));
-  var n = items.length;
-  ports.undo.breakCoalescing();
-  ports.notices.show("Deleted " + n + " item" + (n === 1 ? "" : "s") +
+  }), retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps));
+  const n = items.length;
+  (ports as TagPanelPorts).undo.breakCoalescing();
+  (ports as TagPanelPorts).notices.show("Deleted " + n + " item" + (n === 1 ? "" : "s") +
     (unlabelled ? " and removed " + unlabelled + " label" + (unlabelled === 1 ? "" : "s") +
       " from the script" : ""), "ok");
 }
 
-function bulkCountsLabel(items) {
-  var live = 0;
+function bulkCountsLabel(items: readonly PresentedProductionEntry[]) {
+  let live = 0;
   items.forEach(function (i) { if (!i.orphaned) live += i.mentions.length; });
   return live;
 }
 
-function renderBulkBar(entries) {
-  var bar = document.getElementById("production-bulk");
+function renderBulkBar(entries?: readonly PresentedProductionEntry[]) {
+  const bar = document.getElementById("production-bulk");
   if (!bar) return;
-  var items = selectedEntries(entries);
-  var cardView = ports.view.productionGroupBy() === "cat" || ports.view.productionGroupBy() === "person";
+  const items = selectedEntries(entries);
+  const cardView = (ports as TagPanelPorts).view.productionGroupBy() === "cat" || (ports as TagPanelPorts).view.productionGroupBy() === "person";
   if (!items.length || !cardView) { bar.hidden = true; bar.innerHTML = ""; return; }
 
-  var n = items.length;
-  var liveMentions = bulkCountsLabel(items);
+  const n = items.length;
+  const liveMentions = bulkCountsLabel(items);
   bar.hidden = false;
   bar.innerHTML =
     '<div class="bulk-row bulk-head">' +
@@ -826,7 +851,7 @@ function renderBulkBar(entries) {
         '<select class="bulk-select" id="bulk-owner" aria-label="Assign the selected items to">' +
           '<option value="__none__" selected>Assign to…</option>' +
           '<option value="">Unassigned</option>' +
-          (ports.document.current()?.people || []).map(function (p) {
+          (((ports as TagPanelPorts).document.current()?.people as readonly Person[] | null | undefined) || []).map(function (p) {
             return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
           }).join("") +
         '</select>' + iconHtml("i-chevron-down", "ev-chevron") +
@@ -841,15 +866,15 @@ function renderBulkBar(entries) {
           }).join("") +
         '</select>' + iconHtml("i-chevron-down", "ev-chevron") +
       '</span>' +
-      '<button type="button" class="bulk-btn btn-outline is-small danger' + (ports.selection.armed() ? ' armed' : '') + '" ' +
+      '<button type="button" class="bulk-btn btn-outline is-small danger' + ((ports as TagPanelPorts).selection.armed() ? ' armed' : '') + '" ' +
         'data-action="bulk-delete">' + iconHtml("i-trash") +
-        (ports.selection.armed()
+        ((ports as TagPanelPorts).selection.armed()
           ? 'Delete ' + n + (liveMentions ? ' + ' + liveMentions + ' label' +
               (liveMentions === 1 ? '' : 's') : '') + '?'
           : 'Delete') +
       '</button>' +
     '</div>' +
-    (ports.view.tagAddingPersonKey() === "__bulk__"
+    ((ports as TagPanelPorts).view.tagAddingPersonKey() === "__bulk__"
       ? '<div class="bulk-row bulk-person-row">' +
           '<input type="text" class="ev-field" id="bulk-person-input" placeholder="Their name" maxlength="60" ' +
             'aria-label="The new person’s name">' +
@@ -857,7 +882,7 @@ function renderBulkBar(entries) {
           '<button type="button" class="tag-quiet-btn" data-action="bulk-person-cancel">Cancel</button>' +
         '</div>'
       : '') +
-    (ports.selection.armed()
+    ((ports as TagPanelPorts).selection.armed()
       ? '<div class="bulk-note">Removes ' + n + ' item' + (n === 1 ? '' : 's') +
           ' from the breakdown' +
           (liveMentions ? ', and their labels from the script — the words stay, the labels go' : '') +
@@ -867,135 +892,135 @@ function renderBulkBar(entries) {
           : 'Ctrl+click a card to add or drop it · Shift+click for a run') + '</div>');
 }
 
-export function setTagStatus(key, statusId) {
-  var item = findTagByKey(key);
+export function setTagStatus(key: string | null, statusId: string | null) {
+  const item = findTagByKey(key);
   if (!item) return;
-  if (updateTags([item], { status: statusId === null ? { next: true } : (tagStatus(statusId) || TAG_STATUSES[0]).id })) renderProduction();
+  if (updateTags([item], { status: statusId === null ? { next: true } : (tagStatus(statusId) || (TAG_STATUSES[0] as PanelTagStatus)).id })) renderProduction();
 }
 
-export function setTagOwner(key, personId) {
-  var item = findTagByKey(key);
+export function setTagOwner(key: string | null, personId: string) {
+  const item = findTagByKey(key);
   if (!item) return;
   updateTags([item], { owner: { id: personId } });
   renderProduction();
 }
 
-export function setTagNotes(key, text) {
-  var item = findTagByKey(key);
+export function setTagNotes(key: string | null, text: string) {
+  const item = findTagByKey(key);
   if (!item) return;
   updateTags([item], { notes: cappedLongText(plainText(text), 2000) });
 }
 
-export function addPersonForTag(key) {
-  var input = document.querySelector('.tag-person-input[data-key="' + cssAttr(key) + '"]');
+export function addPersonForTag(key: string | null) {
+  const input = document.querySelector<HTMLInputElement>('.tag-person-input[data-key="' + cssAttr(key) + '"]');
   if (!input) return;
-  ports.view.setTagAddingPerson(null);
-  var item = findTagByKey(key);
+  (ports as TagPanelPorts).view.setTagAddingPerson(null);
+  const item = findTagByKey(key);
   if (item) updateTags([item], { owner: { name: input.value } });
-  else ports.edits.edit(addPersonCommand(input.value, ports.ids));
+  else (ports as TagPanelPorts).edits.edit(addPersonCommand(input.value, (ports as TagPanelPorts).ids));
   renderProduction();
 }
 
-export function armPersonDelete(btn, personId) {
-  if (ports.deletion.armedId("tag") === "person:" + personId) {
-    ports.deletion.disarm("tag");
-    var person = personById(personId);
-    ports.edits.edit(deletePersonCommand(personId));
+export function armPersonDelete(btn: Element, personId: string | null) {
+  if ((ports as TagPanelPorts).deletion.armedId("tag") === "person:" + personId) {
+    (ports as TagPanelPorts).deletion.disarm("tag");
+    const person = personById(personId);
+    (ports as TagPanelPorts).edits.edit((deletePersonCommand as PanelNullableCall<typeof deletePersonCommand, "0">)(personId));
     renderProduction();
-    ports.notices.show("Removed " + (person ? person.name : "that person") +
+    (ports as TagPanelPorts).notices.show("Removed " + (person ? person.name : "that person") +
       " — their items are now unassigned", "ok");
     return;
   }
-  var disarm;
-  ports.deletion.arm("tag", "person:" + personId, function () {
+  let disarm: () => void;
+  (ports as TagPanelPorts).deletion.arm("tag", "person:" + personId, function () {
     disarm();
   }, function () { disarm = armButton(btn); });
 }
 
-export function saveTagRename(key) {
-  var input = document.querySelector('.tag-rename-input[data-key="' + cssAttr(key) + '"]');
-  var item = findTagByKey(key);
-  if (!input || !item) { ports.view.setTagRenaming(null); renderProduction(); return; }
-  var renamed = input.value;
-  ports.view.setTagRenaming(null);
-  ports.undo.breakCoalescing();
-  var changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts);
+export function saveTagRename(key: string | null) {
+  const input = document.querySelector<HTMLInputElement>('.tag-rename-input[data-key="' + cssAttr(key) + '"]');
+  const item = findTagByKey(key);
+  if (!input || !item) { (ports as TagPanelPorts).view.setTagRenaming(null); renderProduction(); return; }
+  const renamed = input.value;
+  (ports as TagPanelPorts).view.setTagRenaming(null);
+  (ports as TagPanelPorts).undo.breakCoalescing();
+  const changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts as RemoveTagPorts);
   if (changed) {
-    ports.undo.breakCoalescing();
-    ports.notices.show("Renamed to " + plainText(renamed).trim(), "ok");
+    (ports as TagPanelPorts).undo.breakCoalescing();
+    (ports as TagPanelPorts).notices.show("Renamed to " + plainText(renamed).trim(), "ok");
   } else {
     renderProduction();
   }
 }
 
-var openTagMenu = null;
+let openTagMenu: HTMLElement | null = null;
 
-function closeTagMenu(refocus) {
-  var menu = openTagMenu;
+function closeTagMenu(refocus: boolean) {
+  const menu = openTagMenu;
   openTagMenu = null;
   if (!menu) return;
   menu.hidden = true;
-  var btn = menu.parentNode && menu.parentNode.querySelector(".tag-menu-btn");
+  const btn = menu.parentNode && menu.parentNode.querySelector<HTMLElement>(".tag-menu-btn");
   if (!btn) return;
   btn.setAttribute("aria-expanded", "false");
   if (refocus && btn.isConnected) btn.focus();
 }
 
-function openTagMenuFor(btn, focusFirst) {
-  var menu = btn.parentNode.querySelector(".tag-menu");
+function openTagMenuFor(btn: HTMLElement, focusFirst: boolean) {
+  const menu = (btn.parentNode as ParentNode).querySelector<HTMLElement>(".tag-menu");
   if (!menu) return;
   closeTagMenu(false);
   menu.hidden = false;
   btn.setAttribute("aria-expanded", "true");
   openTagMenu = menu;
   menu.classList.remove("opens-up");
-  var list = btn.closest(".comments-list");
-  var box = list ? list.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
-  var r = menu.getBoundingClientRect();
+  const list = btn.closest(".comments-list");
+  const box = list ? list.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+  const r = menu.getBoundingClientRect();
   if (r.bottom > box.bottom - 8 && r.top - r.height - btn.offsetHeight > box.top + 8) menu.classList.add("opens-up");
   if (focusFirst) {
-    var first = menu.querySelector(".tag-menu-item.is-active") || menu.querySelector(".tag-menu-item");
+    const first = menu.querySelector<HTMLElement>(".tag-menu-item.is-active") || menu.querySelector<HTMLElement>(".tag-menu-item");
     if (first) first.focus();
   }
 }
 
-function refocusIn(panel, key, selector) {
-  var a = document.activeElement;
+function refocusIn(panel: Element | null, key: string | null, selector: string) {
+  const a = document.activeElement;
   if (a && a !== document.body && a.isConnected) return;
   if (!panel) return;
-  var el = panel.querySelector('.tag-entity[data-key="' + cssAttr(key) + '"] ' + selector);
+  const el = panel.querySelector<HTMLElement>('.tag-entity[data-key="' + cssAttr(key) + '"] ' + selector);
   if (el) el.focus();
 }
 
-function onTagMenuClick(e) {
-  var t = e.target;
+function onTagMenuClick(e: MouseEvent) {
+  const t = e.target as HTMLElement | null;
   if (!t || !t.closest) return;
   if (openTagMenu && !openTagMenu.isConnected) openTagMenu = null;
-  var panel = document.querySelector("#production-panel:not([hidden]), #gear-panel:not([hidden])");
+  const panel = document.querySelector("#production-panel:not([hidden]), #gear-panel:not([hidden])");
 
-  var rename = t.closest('[data-action="tag-rename"]');
+  const rename = t.closest('[data-action="tag-rename"]');
   if (rename) {
-    var input = panel && panel.querySelector(".tag-rename-input");
+    const input = panel && panel.querySelector<HTMLInputElement>(".tag-rename-input");
     if (input) { input.focus(); input.select(); }
   }
 
-  var redrawn = t.closest(".tag-entity-head, .tag-status-pill");
+  const redrawn = t.closest(".tag-entity-head, .tag-status-pill");
   if (redrawn && !redrawn.isConnected) {
     refocusIn(panel, redrawn.getAttribute("data-key"),
       redrawn.getAttribute("data-action") === "tag-status-cycle" ? ".tag-status-pill" : ".tag-entity-head");
     return;
   }
 
-  var btn = t.closest(".tag-menu-btn");
+  const btn = t.closest<HTMLButtonElement>(".tag-menu-btn");
   if (btn && btn.closest(".tag-entity")) {
     if (e.defaultPrevented) return;
-    var menu = btn.parentNode.querySelector(".tag-menu");
+    const menu = (btn.parentNode as ParentNode).querySelector<HTMLElement>(".tag-menu");
     if (menu && menu === openTagMenu) closeTagMenu(false);
     else openTagMenuFor(btn, e.detail === 0);
     return;
   }
   if (!openTagMenu) {
-    var picked = t.closest('.tag-status-seg [data-action="tag-status-set"]');
+    const picked = t.closest('.tag-status-seg [data-action="tag-status-set"]');
     if (picked && !picked.isConnected) {
       refocusIn(panel, picked.getAttribute("data-key"), picked.classList.contains("tag-status-choice")
         ? '.tag-status-choice[data-status="' + cssAttr(picked.getAttribute("data-status")) + '"]'
@@ -1003,11 +1028,11 @@ function onTagMenuClick(e) {
     }
     return;
   }
-  var item = t.closest(".tag-menu-item");
+  const item = t.closest(".tag-menu-item");
   if (item && openTagMenu.contains(item)) {
     if (item.classList.contains("armed")) return;
-    var key = item.getAttribute("data-key");
-    var fromStatus = item.getAttribute("data-action") === "tag-status-set";
+    const key = item.getAttribute("data-key");
+    const fromStatus = item.getAttribute("data-action") === "tag-status-set";
     closeTagMenu(item.isConnected);
     if (fromStatus) refocusIn(panel, key, ".tag-status-menu-btn");
     return;
@@ -1016,13 +1041,13 @@ function onTagMenuClick(e) {
   closeTagMenu(false);
 }
 
-function onTagMenuKeydown(e) {
-  var t = e.target;
+function onTagMenuKeydown(e: KeyboardEvent) {
+  const t = e.target as HTMLElement | null;
   if (!t || !t.closest) return;
   if (openTagMenu && !openTagMenu.isConnected) openTagMenu = null;
-  var btn = t.closest(".tag-menu-btn");
+  const btn = t.closest<HTMLButtonElement>(".tag-menu-btn");
   if (btn && btn.closest(".tag-entity") && !btn.disabled) {
-    var own = btn.parentNode.querySelector(".tag-menu");
+    const own = (btn.parentNode as ParentNode).querySelector<HTMLElement>(".tag-menu");
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       e.stopPropagation();
@@ -1034,18 +1059,18 @@ function onTagMenuKeydown(e) {
     }
     return;
   }
-  var menu = t.closest(".tag-menu");
+  const menu = t.closest(".tag-menu");
   if (!menu || menu !== openTagMenu) return;
-  var items = Array.prototype.slice.call(menu.querySelectorAll(".tag-menu-item:not(:disabled)"));
-  var i = items.indexOf(t);
+  const items: HTMLElement[] = Array.prototype.slice.call(menu.querySelectorAll(".tag-menu-item:not(:disabled)"));
+  const i = items.indexOf(t);
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
     e.preventDefault();
     e.stopPropagation();
-    if (items.length) items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+    if (items.length) (items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length] as HTMLElement).focus();
   } else if (e.key === "Home" || e.key === "End") {
     e.preventDefault();
     e.stopPropagation();
-    if (items.length) items[e.key === "Home" ? 0 : items.length - 1].focus();
+    if (items.length) (items[e.key === "Home" ? 0 : items.length - 1] as HTMLElement).focus();
   } else if (e.key === "Escape") {
     e.preventDefault();
     e.stopPropagation();
@@ -1055,20 +1080,20 @@ function onTagMenuKeydown(e) {
   }
 }
 
-export function startTagPanels(nextPorts) {
+export function startTagPanels(nextPorts: TagPanelPorts) {
   ports = nextPorts;
   tagEditPorts = {
-    run: ports.edits.edit, read: ports.document.read, stamps: ports.edits.stamps,
-    rewrites: (tags, toName) => retagRewrites(ports.text, tags, toName),
-    mentions: (doc, tags) => retagMentions(ports.text, doc, tags)
+    run: (ports as TagPanelPorts).edits.edit, read: (ports as TagPanelPorts).document.read, stamps: (ports as TagPanelPorts).edits.stamps,
+    rewrites: (tags, toName) => retagRewrites((ports as TagPanelPorts).text, tags, toName),
+    mentions: (doc, tags) => retagMentions((ports as TagPanelPorts).text, doc, tags)
   };
   document.addEventListener("click", onTagMenuClick);
   document.addEventListener("keydown", onTagMenuKeydown, true);
 
   IS_TOUCH = window.matchMedia && window.matchMedia("(hover: none)").matches;
-  var active = true;
-  function command(handler) {
-    return function (...args) {
+  let active = true;
+  function command<Args extends unknown[], Result>(handler: (...args: Args) => Result) {
+    return function (...args: Args) {
       if (active && ports === nextPorts) return handler(...args);
     };
   }
@@ -1085,8 +1110,8 @@ export function startTagPanels(nextPorts) {
       active = false;
       document.removeEventListener("click", onTagMenuClick);
       document.removeEventListener("keydown", onTagMenuKeydown, true);
-      ports.deletion.disarm("tag");
-      ports.selection.disarm();
+      (ports as TagPanelPorts).deletion.disarm("tag");
+      (ports as TagPanelPorts).selection.disarm();
       closeTagMenu(false);
       IS_TOUCH = undefined;
       tagEditPorts = null;

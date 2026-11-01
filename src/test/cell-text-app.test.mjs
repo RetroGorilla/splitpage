@@ -21,7 +21,7 @@ const flushEdits = () => undoOwner().flush();
 const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { fromHtml, sanitizeHtml, storedHtmlFromDom } = await import("../bootstrap/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");

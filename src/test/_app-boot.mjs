@@ -93,7 +93,7 @@ export async function appWiringDeps() {
     import("../bootstrap/document-ports.ts"),
     import("../bootstrap/wiring/document-identity.ts"),
     import("../bootstrap/wiring/session-merge.ts"),
-    import("../features/tags/production-tags.js"),
+    import("../features/tags/production-tags.ts"),
     import("../bootstrap/wiring/broll.ts"),
     import("../bootstrap/wiring/session-effects.ts"),
     import("../bootstrap/wiring/file-saving.ts"),
@@ -102,7 +102,7 @@ export async function appWiringDeps() {
     import("../bootstrap/wiring/imports.ts"),
     import("../bootstrap/wiring/project-files.ts")
   ]);
-  const entry = await import("../bootstrap/startup/document-entry.js");
+  const entry = await import("../bootstrap/startup/document-entry.ts");
   const html = await import("../adapters/page/standalone-html.ts");
   const fileSaving = exporting.wireFileSaving({ copyHistory: (...args) => docId.documentIdentityOwner().copyDocHistorySafe(...args), syncIdentity: (...args) => docId.documentIdentityOwner().syncDocIdentity(...args), setBaseline: sync.setBaseState });
   return {

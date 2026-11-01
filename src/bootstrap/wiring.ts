@@ -1,7 +1,7 @@
 import { sessionMergePorts, stampRow, setBaseState, documentDestinationPort, documentHistoryPort, stopSessionMergeOwner } from "./wiring/session-merge.ts";
 import { documentGuardAsked } from "../adapters/page/document-guard-query.ts";
 import { documentIdentityOwner, documentIdentityPort } from "./wiring/document-identity.ts";
-import { migrateDocument, adoptRestoredState } from "./startup/document-entry.js";
+import { migrateDocument, adoptRestoredState } from "./startup/document-entry.ts";
 import { standaloneHtmlFor } from "../adapters/page/standalone-html.ts";
 import { stopDocumentIdentityOwner } from "./wiring/document-identity.ts";
 import { startDocumentGuard } from "../application/identity/document-guard.ts";
