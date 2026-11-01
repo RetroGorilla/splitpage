@@ -3,6 +3,7 @@ import { recents as portRecents } from "../../src/bootstrap/wiring/ports/desktop
 import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
+import type { DesktopPort } from "../../src/adapters/desktop/desktop-port.ts";
 import type { RecentFileOpenRequest, RecentFiles } from "../../src/application/files/recent-files.ts";
 
 test("the recent files port forwards each call and follows the current desktop", async () => {
@@ -24,7 +25,7 @@ test("the recent files port forwards each call and follows the current desktop",
       const removed = Promise.resolve([{ fileId: id + "-kept" }]);
       const cleared = Promise.resolve([]);
       const read = Promise.resolve({ id, name: id + ".splitpage", bytes: new Uint8Array([1, 2]), lastModified: 123 });
-      const routed = Promise.resolve({ where: "this-tab" });
+      const routed: ReturnType<DesktopPort["routeOpen"]> = Promise.resolve({ where: "this-tab" });
       const desktop = {
         listRecents() { assert.equal(this, desktop); calls.push(["listRecents"]); return listed; },
         removeRecent(fileId: string) { assert.equal(this, desktop); calls.push(["removeRecent", fileId]); return removed; },

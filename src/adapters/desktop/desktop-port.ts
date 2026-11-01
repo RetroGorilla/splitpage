@@ -15,11 +15,10 @@ export type DesktopFileEntry = DesktopByteFields<DesktopIpcResult<"splitpage:rea
 export type DesktopLaunchIntent = NonNullable<DesktopIpcResult<"splitpage:tab-boot-sync">>["launchIntent"];
 export type DesktopRouteRequest = DesktopIpcArgs<"splitpage:route-open">[0];
 export type DesktopBlob = DesktopByteFields<NonNullable<DesktopIpcResult<"splitpage:blob-get">>>;
-export type DesktopTakenDraft = {
-  [K in keyof NonNullable<DesktopIpcResult<"splitpage:draft-take">>]: K extends "file"
-    ? DesktopByteFields<NonNullable<DesktopIpcResult<"splitpage:draft-take">>[K]>
-    : NonNullable<DesktopIpcResult<"splitpage:draft-take">>[K];
-};
+type DesktopDraftFields<T> = T extends object ? {
+  [K in keyof T]: K extends "file" ? DesktopByteFields<T[K]> : T[K];
+} : T;
+export type DesktopTakenDraft = DesktopDraftFields<NonNullable<DesktopIpcResult<"splitpage:draft-take">>>;
 export type DesktopThumbnailResult = DesktopByteFields<DesktopIpcResult<"splitpage:video-thumbnail">>;
 export type DesktopPdfBytes = DesktopByteFields<{ bytes: DesktopIpcResult<"splitpage:print-to-pdf"> }>["bytes"];
 export type DesktopVideoGrant = Extract<DesktopIpcResult<"splitpage:video-file-grant">, string> | null;
@@ -27,7 +26,7 @@ export type DesktopVideoGrant = Extract<DesktopIpcResult<"splitpage:video-file-g
 export interface DesktopPort extends HistoryDesktopPort {
   readonly isDesktop: true;
   readonly platform: string;
-  readonly appVersion: DesktopIpcResult<"splitpage:get-app-version-sync"> | null;
+  readonly appVersion: DesktopIpcResult<"splitpage:get-app-version-sync">;
   readonly tabId: string | null;
   readonly windowId: string | null;
   readonly launchIntent: DesktopLaunchIntent;
@@ -83,7 +82,7 @@ export interface DesktopPort extends HistoryDesktopPort {
 }
 
 type DesktopFixtureProperty<T, K extends PropertyKey> = T extends object ? K extends keyof T ? T[K] : never : never;
-export type DesktopTestValue<T> = [T] extends [ReturnType<() => void>] ? T : [T] extends [Uint8Array] ? T : [T] extends [readonly (infer R)[]] ? readonly DesktopTestValue<R>[] :
+export type DesktopTestValue<T> = unknown extends T ? T : [T] extends [ReturnType<() => void>] ? T : [T] extends [Uint8Array] ? T : [T] extends [readonly (infer R)[]] ? readonly DesktopTestValue<R>[] :
   [NonNullable<T>] extends [object] ? { [K in DesktopResultKeys<NonNullable<T>>]?: DesktopTestValue<DesktopFixtureProperty<NonNullable<T>, K>> | null | undefined } : T;
 export type DesktopTestPort = {
   -readonly [K in keyof DesktopPort]?: DesktopPort[K] extends (...args: infer A) => Promise<infer R>
