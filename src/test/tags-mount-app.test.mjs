@@ -9,7 +9,7 @@ await bootApp();
 const { mountTagsFeature } = await import("../bootstrap/wiring/production.ts");
 const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.ts");
-const { openProductionPanel } = await import("../features/tags/panels.js");
+const { openProductionPanel } = await import("../features/tags/panels.ts");
 const { tagKey } = await import("../core/document/tags.ts");
 const { selectedKeys, clearProductionSelection } = await import("../bootstrap/wiring/production-editing-owners.ts");
 after(closeApp);

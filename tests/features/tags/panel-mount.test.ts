@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startTagPanels, IS_TOUCH, openProductionPanel, setTagNotes } from "../../../src/features/tags/panels.js";
+import { startTagPanels, IS_TOUCH, openProductionPanel, setTagNotes } from "../../../src/features/tags/panels.ts";
 import type { TagPanelPorts } from "../../../src/features/tags/ports.ts";
 import { createProductionSelection } from "../../../src/application/editing/production-selection.ts";
 import { createDeleteConfirm } from "../../../src/application/editing/delete-confirm.ts";
