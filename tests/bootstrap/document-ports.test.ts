@@ -8,7 +8,7 @@ import { STATE_FIELDS } from "../../src/core/merge/state-fields.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import * as state from "../../src/bootstrap/document-ports.ts";
 import { loadInitialState, migrateDocument } from "../../src/bootstrap/startup/document-entry.js";
-import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
+import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.ts";
 import { createHash } from "node:crypto";
 import { mergeStates } from "../../src/bootstrap/wiring/document-merge.ts";
 import * as tags from "../../src/features/tags/production-tags.js";

@@ -12,7 +12,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { refsIn } from "../../shared/blob-policy.js";
-import { dataUrlForSync } from "../adapters/storage/02c-blobs.js";
+import { dataUrlForSync } from "../adapters/storage/02c-blobs.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { collectTagsFromRows } from "../features/tags/production-tags.js";
 

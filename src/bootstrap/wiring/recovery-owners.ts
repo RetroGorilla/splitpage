@@ -19,7 +19,7 @@ import type { OperationContext } from "../../application/session/operation.ts";
 import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { currentDocument, mergeBase, sessionStamps } from "./session-owner.ts";
 import { nowIso } from "../../adapters/identity/ids.ts";
-import { dataUrlForSync, isDurableSync } from "../../adapters/storage/02c-blobs.js";
+import { dataUrlForSync, isDurableSync } from "../../adapters/storage/02c-blobs.ts";
 
 export interface LegacyRecoveryPorts {
   readonly desktop: () => DesktopDraftBridge | null | undefined;

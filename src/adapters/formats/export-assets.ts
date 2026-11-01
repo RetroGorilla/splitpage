@@ -1,7 +1,7 @@
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { ExportAssetRequest, ExportAssets, ExportAssetPorts } from "../../application/export/assets.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
-import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "../storage/02c-blobs.js";
+import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "../storage/02c-blobs.ts";
 import { exportAssetRequest, heldExportAssets } from "../../application/export/assets.ts";
 import { rowImage } from "../../core/document/media.ts";
 import { refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
