@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startHistoryPanel } from "../../../src/features/history/panel.js";
+import { startHistoryPanel } from "../../../src/features/history/panel.ts";
 import type { HistoryPanelControl, HistoryPanelPorts } from "../../../src/features/history/ports.ts";
 import type { SnapshotRestoreRequest, SnapshotRestoreResult } from "../../../src/application/session/session-merge-ports.ts";
 import type { HistoryOwner } from "../../../src/application/recovery/history-ports.ts";
