@@ -137,7 +137,7 @@ jobs:
           retention-days: 7
 
       - name: Upload the built app
-        if: needs.changes.outputs.app == 'true'
+        if: needs.changes.outputs.app == 'true' && github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with:
           name: splitpage-app
