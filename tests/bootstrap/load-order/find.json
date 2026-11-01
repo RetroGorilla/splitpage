@@ -1,9 +1,9 @@
 {
   "loadOnly": [
-    "src/features/find/find.js",
+    "src/features/find/find.ts",
     "src/features/find/actions.ts",
     "src/bootstrap/wiring/find.ts",
-    "src/features/common/find-dom.js"
+    "src/features/common/find-dom.ts"
   ],
   "expectedLoads": 4
 }
