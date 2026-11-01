@@ -2,7 +2,7 @@ import { wireLegacyApp } from "./wiring.ts";
 import { startAppWhenReady } from "./app.ts";
 import { migrateRows } from "./document-ports.ts";
 import { mountBlobStore } from "./wiring/blobs.ts";
-import { startGalleryStore } from "../adapters/storage/02d-gallery.js";
+import { startGalleryStore } from "../adapters/storage/02d-gallery.ts";
 import { mountPageEntry } from "./startup/page-entry.ts";
 import { mountDocumentIdentityOwner } from "./wiring/document-identity.ts";
 import { mountSessionMergeOwner } from "./wiring/session-merge.ts";

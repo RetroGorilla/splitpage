@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/panels/script-place.js",
+    "src/features/panels/script-place.ts",
     "src/bootstrap/wiring/side-panels.ts"
   ],
   "expectedLoads": 2

@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../../src/features/rows/row-menu.js";
+import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../../src/features/rows/row-menu.ts";
 
 function rowHtml(id: string): string {
   return '<div class="row" data-id="' + id + '">' +

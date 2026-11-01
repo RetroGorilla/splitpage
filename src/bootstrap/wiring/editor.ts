@@ -1,5 +1,5 @@
 import type { UndoRoutePorts } from "../../features/undo/routes.ts";
-import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
+import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { rowActions } from "../../features/rows/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -72,7 +72,7 @@ import {
   draftUndo,
   noteDraftInput,
   pasteIntoDraft
-} from "../../features/editing/draft-edit.js";
+} from "../../features/editing/draft-edit.ts";
 import {
   addRow,
   addRowAndFocus,
@@ -92,8 +92,8 @@ import {
   swapAdjacentRows,
   updateDragScroll
 } from "./rows.ts";
-import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.js";
-import { compressImageFile, videoFirstFrame } from "../../features/rows/scene-media.js";
+import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.ts";
+import { compressImageFile, videoFirstFrame } from "../../features/rows/scene-media.ts";
 import { videoFiles } from "./video-files.ts";
 import {
   acceptTagGhost,
@@ -109,14 +109,14 @@ import {
   updateUntaggedPrompt
 } from "../../features/tags/production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
-import { renderProduction } from "../../features/tags/panels.js";
+import { renderProduction } from "../../features/tags/panels.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll, scheduleBrollRefresh } from "./broll.ts";
 import {
   captureReplyDrafts,
   jumpToComment,
   openCommentsPanel,
   renderComments
-} from "../../features/comments/comments.js";
+} from "../../features/comments/comments.ts";
 import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { configureUndo, undoOwner } from "./undo.ts";

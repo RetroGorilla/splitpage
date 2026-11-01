@@ -12,7 +12,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { closeAnnotator } = await import("../features/gallery/annotate.ts");
-const { closeCommentComposer } = await import("../features/comments/comments.js");
+const { closeCommentComposer } = await import("../features/comments/comments.ts");
 const { closeTagComposer } = await import("../features/tags/production-tags.ts");
 const { rowSlots, videoLinkKey } = await import("../core/document/gallery.ts");
 const { loadTestDocument } = await import("./_document.mjs");

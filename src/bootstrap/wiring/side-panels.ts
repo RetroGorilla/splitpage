@@ -2,7 +2,7 @@ import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { createSidePanels } from "../../features/panels/side-panels.ts";
 import { startSidePanels } from "./ports/panels.ts";
 import { panelWidths } from "./preferences-owner.ts";
-import { mountScriptPlace } from "../../features/panels/script-place.js";
+import { mountScriptPlace } from "../../features/panels/script-place.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { newTabControls } from "./newtab.ts";
 

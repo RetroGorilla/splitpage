@@ -1,4 +1,4 @@
-import { startWriter } from "../../features/writer/writer.js";
+import { startWriter } from "../../features/writer/writer.ts";
 import { writerActions as definitions } from "../../features/writer/actions.ts";
 import type { WriterFeaturePorts } from "../../features/writer/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
