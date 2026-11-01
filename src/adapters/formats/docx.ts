@@ -78,6 +78,7 @@ interface NarrationOptions { directions?: unknown }
 interface ImportOptions { ownExport: boolean }
 type LinkMap = Record<string, string | null>;
 interface ImportedRow {
+  [key: string]: unknown;
   id: string;
   visualText: string;
   imageRef: ImageRef | null;

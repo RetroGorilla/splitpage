@@ -6,10 +6,10 @@ import { NO_DESTINATION } from "./ports.ts";
 import type { LocalFileOpening, LocalFilesOwner, LocalFilesOwnerPorts } from "./local-files-ports.ts";
 import type { LocalFileData, LocalFileHandle } from "../files/local-file-access.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import type { ImportedRow, ImportFormats } from "../formats/import-formats.ts";
+import type { ImportedRow } from "../formats/import-formats.ts";
 import type { RecentFileData, RecentFiles } from "../files/recent-files.ts";
 
-type FileOptions = { skipSnapshot?: boolean; silent?: boolean; resumed?: boolean; reload?: boolean };
+type FileOptions = NonNullable<LocalFileOpening["options"]>;
 type CurrentFileDocument = Pick<NonNullable<ReturnType<LocalFilesOwnerPorts["document"]["current"]>>, "comments" | "title" | "rows">;
 
 function startLocalFiles(ports: LocalFilesOwnerPorts) {
@@ -44,8 +44,8 @@ function projectFileSource(): ReturnType<LocalFilesOwner["projectFileSource"]> {
     takes: function (opening: LocalFileOpening) { return opening.kind === "file"; },
     open: function (opening: LocalFileOpening) {
       const parsed = opening.parsed;
-      if (parsed) return adoptProjectState(parsed.state, opening.file as LocalFileData | null | undefined, opening.handle || null, parsed.kind, opening.options as FileOptions | null | undefined);
-      return openProjectFile(opening.file as LocalFileData | null | undefined, opening.handle || null, opening.options as FileOptions | null | undefined);
+      if (parsed) return adoptProjectState(parsed.state, opening.file, opening.handle || null, parsed.kind, opening.options);
+      return openProjectFile(opening.file, opening.handle || null, opening.options);
     }
   };
 }
@@ -131,23 +131,23 @@ async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle
   busyReads.add(readBusy);
   try {
     if (kind === "docx") {
-      const parsed = await docxToRows(file as LocalFileData) as Awaited<ReturnType<ImportFormats["docx"]>> & { title: string | null };
+      const parsed = await docxToRows(file as LocalFileData);
       if (!active) return;
       newTitle = parsed.title;
       newRows = parsed.rows;
       if (!newRows.length && parsed.looseText) {
         const looseMode = detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph";
-        newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode), sanitizeHtml) as ImportedRow[];
+        newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode), sanitizeHtml);
       }
     } else if (kind === "csv") {
       const csvText = await ports.files.text(file as LocalFileData);
       if (!active) return;
-      newRows = csvToRows(csvText) as ImportedRow[];
+      newRows = csvToRows(csvText);
     } else {
       const text = await ports.files.text(file as LocalFileData);
       if (!active) return;
       const mode = detectTwoColumnFormat(text) ? "twocolumn" : "paragraph";
-      newRows = normalizeImportedRows(parseImportRows(text, mode), sanitizeHtml) as ImportedRow[];
+      newRows = normalizeImportedRows(parseImportRows(text, mode), sanitizeHtml);
       const firstHeading = /^#\s+(.+)$/m.exec(text);
       if (firstHeading) newTitle = (firstHeading[1] as string).trim();
     }
