@@ -49,7 +49,7 @@ const el = (id: string) => win.document.getElementById(id) as HTMLElement;
 
 interface Setup {
   mine: Doc & ValidatedDocument;
-  parsed: () => Promise<unknown>;
+  parsed: () => ReturnType<MergeReviewPorts["files"]["parse"]>;
   mergeBase?: Doc | null;
   fileHome?: Home | null;
 }
@@ -181,7 +181,7 @@ test("merge review: a file that does not parse, a different embedded id or a res
   assert.equal(el("file-conflict-merge").hidden, true);
   second.dispose();
 
-  let release: (v: unknown) => void = () => {};
+  let release: (v: Awaited<ReturnType<MergeReviewPorts["files"]["parse"]>>) => void = () => {};
   const slow = setup({ mine, parsed: () => new Promise((resolve) => { release = resolve; }) });
   const third = startLocalMerge(slow.ports);
   const probe = third.offer(file(), null);
