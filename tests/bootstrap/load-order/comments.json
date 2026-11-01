@@ -5,7 +5,7 @@
     "src/features/comments/actions.ts",
     "src/features/common/comment-time.js",
     "src/features/common/comment-anchors.js",
-    "src/features/common/editable-cell.js",
+    "src/features/common/editable-cell.ts",
     "src/application/comment-author.ts"
   ],
   "expectedLoads": 7
