@@ -758,7 +758,7 @@ the end. Now:
   writer's paragraph and the reply box.
 - **One idle refresh.** `scheduleProductionRefresh()`, `scheduleUntaggedScan()`,
   `scheduleBrollRefresh()` and `scheduleWriterStats()` only mark their job
-  pending on `scheduleIdleRefresh()` (`src/features/tags/production-tags.js`): one 180ms
+  pending on `scheduleIdleRefresh()` (`src/features/tags/production-tags.ts`): one 180ms
   debounce, capped at 1s of unbroken typing, runs everything pending against
   one production index (§3.4). They used to be four timers (180/200/220/400ms)
   each deriving the breakdown for itself.
