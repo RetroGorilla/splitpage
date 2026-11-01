@@ -6,7 +6,7 @@ import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { openBulkTag, closeBulkTag, runBulkTag } = await import("../features/find/find.js");
+const { openBulkTag, closeBulkTag, runBulkTag } = await import("../features/find/find.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);

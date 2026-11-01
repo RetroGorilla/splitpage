@@ -5,7 +5,7 @@ import { fakeDocument, fakeNotices } from "../../../tests/features/fakes.ts";
 import { fakeMigration } from "../../../tests/core/migrate-ports.ts";
 import { migrateRows } from "../../core/migrate.ts";
 import type { FindPorts } from "./ports.ts";
-import { startFind, findQueryChanged } from "./find.js";
+import { startFind, findQueryChanged } from "./find.ts";
 
 test("find uses owner ports to reveal matches", () => {
   const win = jsdomWindow() as unknown as Window & typeof globalThis;
