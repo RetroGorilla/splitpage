@@ -40,8 +40,8 @@ export function beginBusy(label?: string) {
 }
 
 export function endBusy(token: unknown) {
-  if (!token || (token as { done: boolean }).done) return;
-  (token as { done: boolean }).done = true;
+  if (!token || (token as ReturnType<typeof beginBusy>).done) return;
+  (token as ReturnType<typeof beginBusy>).done = true;
   busyCount = Math.max(0, busyCount - 1);
   if (busyCount === 0) {
     (clearTimeout as (id: number | null) => void)(busyTimer);
