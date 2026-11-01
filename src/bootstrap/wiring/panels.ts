@@ -1,4 +1,4 @@
-import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
+import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
 import { currentDocument, onRefresh, onSessionChange } from "./session-owner.ts";
 import { onPreferenceChange, preferences, viewFlags } from "./preferences-owner.ts";
 import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-status.ts";
@@ -14,7 +14,7 @@ import { refreshAnnotator } from "../../features/gallery/annotate.ts";
 import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../features/tags/panels.ts";
 import { runBrollRefresh } from "../../features/broll/panel.ts";
 import { scheduleBrollRefresh, updateBrollBadge } from "./broll.ts";
-import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.js";
+import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.ts";
 import { writerControls } from "./writer.ts";
 
 let stopPanels: (() => void) | null = null;

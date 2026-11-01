@@ -1,4 +1,4 @@
-import { formatTimestamp } from "../common/comment-time.js";
+import { formatTimestamp } from "../common/comment-time.ts";
 import { exportToggleOptions } from "../../application/export/registry.ts";
 import { unshownCharactersText } from "../../application/export/diagnostics.ts";
 import { slugify } from "../../../shared/text.js";
