@@ -4,7 +4,7 @@ import type { ExportDocument } from "../../core/document/export-document.ts";
 import { morePictureRefs, rowVideoLinks } from "../../core/document/gallery.ts";
 import { decodeImageDataUrl, rowImage } from "../../core/document/media.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
-import { videoLinkText } from "../storage/02d-gallery.js";
+import { videoLinkText } from "../storage/02d-gallery.ts";
 import type { CommentBody } from "./export-projections.ts";
 import { sceneFacts, scriptSectionFacts } from "./export-projections.ts";
 import { exportComments, exportFacts, exportRuns, exportSummaryParts } from "./export-kit.ts";

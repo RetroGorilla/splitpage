@@ -10,7 +10,7 @@ const atBoot = await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
+const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { openLongDemo, startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { seedCheckPasses } = await import("../adapters/page/seed-check.ts");

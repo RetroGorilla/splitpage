@@ -1,4 +1,4 @@
-import { startWriter } from "../../features/writer/writer.js";
+import { startWriter } from "../../features/writer/writer.ts";
 import { writerActions as definitions } from "../../features/writer/actions.ts";
 import type { WriterFeaturePorts } from "../../features/writer/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -19,7 +19,7 @@ import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { sectionView } from "./editor-owners.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { currentRowsRender } from "./render.ts";
-import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.js";
+import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.ts";
 
 const writer = owned<ReturnType<typeof startWriter>>();
 const connections = new Set<(control: ReturnType<typeof startWriter> | null) => void>();
