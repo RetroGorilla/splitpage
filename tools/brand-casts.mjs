@@ -102,6 +102,10 @@ export function brandForgeries(program, repo, files) {
     return carriesBrand(from) && checker.isTypeAssignableTo(checker.getNonNullableType(from), checker.getTypeFromTypeNode(predicate.type));
   };
   const isNever = (t) => !!(t.flags & ts.TypeFlags.Never);
+  const holdsVoid = (t) => {
+    const c = t.flags & ts.TypeFlags.TypeParameter ? checker.getBaseConstraintOfType(t) : t;
+    return !!c && (c.isUnion() ? c.types : [c]).some((m) => !!(m.flags & ts.TypeFlags.Void));
+  };
   const neverContainer = (target) => (target.isUnion() ? target.types : [target]).some((t) =>
     !!(t.flags & ts.TypeFlags.Object) && !!(t.objectFlags & ts.ObjectFlags.Reference) && fromLibrary(program, t) && checker.getTypeArguments(t).some(isNever));
   const inCast = (node) => {
@@ -137,7 +141,7 @@ export function brandForgeries(program, repo, files) {
         const source = typeOf(node.expression);
         const present = checker.getNonNullableType(source);
         if ((carriesBrand(target) || neverContainer(target)) && !isNever(source) &&
-          (isNever(present) || !checker.isTypeAssignableTo(present, target))) {
+          (holdsVoid(source) || isNever(present) || !checker.isTypeAssignableTo(present, target))) {
           report(node, "a type assertion to the validated document brand or to never");
         }
       } else if (ts.isTypePredicateNode(node) && node.type && carriesBrand(checker.getTypeFromTypeNode(node.type)) && !narrowsBranded(node)) {
