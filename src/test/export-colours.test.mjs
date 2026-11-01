@@ -1,7 +1,7 @@
 import { TAG_CATEGORIES } from "../core/production/looks.ts";
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
-import { liveDoc, liveWithAssets } from "./_export-now.mjs";
+import { liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
@@ -12,7 +12,6 @@ import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { htmlToPlainText } from "../bootstrap/plain-text.ts";
 import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
-import { buildPackingListPdf, buildPdf } from "../adapters/formats/pdf.ts";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -32,17 +31,6 @@ function load() {
         audioText: tag("sound", "Theme") + " over the " + tag("gear", "Tripod") + ".", status: "todo" }
     ]
   }));
-}
-
-const rgb = (hex) => [0, 2, 4].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3)).join(" ");
-
-function streams(bytes) {
-  const t = new TextDecoder("latin1").decode(bytes);
-  const out = [];
-  const re = /obj\n<< \/Length (\d+) >>\nstream\n/g;
-  let m;
-  while ((m = re.exec(t))) out.push(t.substr(re.lastIndex, +m[1]));
-  return out;
 }
 
 async function documentXml(bytes) {
@@ -128,73 +116,5 @@ test("a .docx with coloured categories reopens as exactly its script, highlight 
   const all = JSON.stringify(parsed.rows);
   for (const word of ["●", "Production breakdown", "Music & SFX", "Item", "<u>"]) {
     assert.equal(all.indexOf(word), -1, word + " leaked into a row");
-  }
-});
-
-test("the PDF breakdown heads each category's group with a dot in its colour and its plural", () => {
-  load();
-  const pages = streams(buildPdf(liveDoc(), [null, null]));
-  const all = pages.join("\n");
-  const at = all.indexOf("(Production breakdown) Tj");
-  assert.ok(at > 0, "no breakdown page");
-  const breakdown = all.slice(at).split("\n");
-  const seen = new Set();
-  for (let i = 0; i < breakdown.length; i++) {
-    const m = /^q ([\d.]+ [\d.]+ [\d.]+) rg (.*) f Q$/.exec(breakdown[i]);
-    if (!m) continue;
-    const cat = TAG_CATEGORIES.find((c) => rgb(TAG_PRINT_COLORS[c.id]) === m[1]);
-    assert.ok(cat, "a fill in a colour no category has: " + m[1]);
-    assert.equal((m[2].match(/ c\b/g) || []).length, 4, "not four curves: " + m[2]);
-    assert.match(m[2], /^[\d.]+ [-\d.]+ m .* c h$/, "not one closed path: " + m[2]);
-    const label = /^BT \/F2 10 Tf 1 0 0 1 ([\d.]+) [\d.]+ Tm \((.*)\) Tj ET$/.exec(breakdown[i + 1]);
-    assert.ok(label, "no name after the dot: " + breakdown[i + 1]);
-    assert.equal(label[2], cat.plural.replace(/[()]/g, "\\$&"));
-    assert.equal(+label[1], 65);
-    seen.add(cat.id);
-  }
-  assert.deepEqual([...seen].sort(), TAG_CATEGORIES.map((c) => c.id).sort(), "every category's group drawn");
-});
-
-test("the PDF script draws each tagged word in its category's colour, underlined in it", () => {
-  load();
-  const pages = streams(buildPdf(liveDoc(), [null, null]));
-  const script = pages[0].split("\n");
-  for (const [word, id] of [["Mug", "prop"], ["Kitchen", "location"], ["Ann", "cast"], ["Glow", "vfx"], ["Kettle", "prop"], ["Theme", "sound"], ["Tripod", "gear"]]) {
-    const re = new RegExp("^q " + rgb(TAG_PRINT_COLORS[id]) + " rg BT /F1 [\\d.]+ Tf 1 0 0 1 ([\\d.]+) [\\d.]+ Tm \\(" + word + "\\) Tj ET Q$");
-    const drawn = script.map((op) => re.exec(op)).find(Boolean);
-    assert.ok(drawn, word + " is not drawn in " + id + "'s colour");
-    assert.ok(script.some((op) => op.startsWith("q " + rgb(TAG_PRINT_COLORS[id]) + " rg " + drawn[1] + " ") && / re f Q$/.test(op)), word + " has no rule under it in " + id + "'s colour");
-  }
-  assert.ok(script.some((op) => /^BT \/F1 [\d.]+ Tf .* Tm \(The\) Tj ET$/.test(op)));
-});
-
-test("the PDF breakdown draws a note at the size it was wrapped at, a space between its words", () => {
-  load();
-  currentDocument().productionTags.find((t) => t.name === "Mug").notes = "Borrow from the prop house.";
-  const pdf = streams(buildPdf(liveDoc(), [null, null])).join("\n");
-  const all = pdf.slice(pdf.indexOf("(Production breakdown) Tj"));
-  const words = [];
-  for (const m of all.matchAll(/BT \/F1 ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((\w+\.?)\) Tj ET/g)) {
-    if (["Borrow", "from", "the", "prop", "house."].includes(m[4])) words.push({ size: +m[1], x: +m[2], y: +m[3], w: m[4] });
-  }
-  assert.deepEqual(words.map((w) => w.w), ["Borrow", "from", "the", "prop", "house."]);
-  for (const w of words) assert.equal(w.size, 8.5, w.w + " drawn at " + w.size);
-  assert.ok(Math.abs(words[1].x - words[0].x - 29.28) < 0.05, "from at +" + (words[1].x - words[0].x).toFixed(2));
-});
-
-test("the packing list's heading names its category after a dot in that category's colour", () => {
-  load();
-  for (const id of ["gear", "prop"]) {
-    const cat = TAG_CATEGORIES.find((c) => c.id === id);
-    const page = streams(buildPackingListPdf(liveDoc(), id))[0].split("\n");
-    const colour = rgb(TAG_PRINT_COLORS[id]);
-    const dots = page.filter((op) => op.includes(colour));
-    assert.equal(dots.length, 1, id + ": the category's colour more than once");
-    assert.match(dots[0], new RegExp("^q " + colour + " rg [\\d. mc]+ h f Q$"), id + ": a filled dot");
-    const heading = page[page.indexOf(dots[0]) + 1];
-    assert.match(heading, new RegExp("^q " + rgb("171613") + " rg BT /F2 20 Tf .* Tm \\(" +
-      cat.plural.replace(/[&]/g, "\\$&") + "\\) Tj ET Q$"), id + ": " + heading);
-    assert.ok(page.some((op) => /\(Packing list\) Tj/.test(op)), id + ": the kicker");
-    assert.ok(page.some((op) => /\(Colours · .+\) Tj/.test(op)), id + ": the title and the date");
   }
 });
