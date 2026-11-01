@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { openTagComposer, closeTagComposer } = await import("../features/tags/production-tags.js");
+const { openTagComposer, closeTagComposer } = await import("../features/tags/production-tags.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
