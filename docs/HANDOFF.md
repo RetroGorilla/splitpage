@@ -1094,7 +1094,7 @@ stores until the one-time move has emptied them — see above), `splitpage-blobs
 `blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
 bytes, #82 — nothing deletes them yet, D4).
 
-**Per-person settings** (#181, the Settings dialog, `src/features/settings/settings.js`), all
+**Per-person settings** (#181, the Settings dialog, `src/features/settings/settings.ts`), all
 localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
 absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 `nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`

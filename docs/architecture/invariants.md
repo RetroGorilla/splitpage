@@ -444,7 +444,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 - **Behaviour:** Before any byte of an app-data export is written, the bundle is checked for keys matching `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, and it must contain none. An import carrying such a key is refused. Image bytes count toward the 200 MB export cap. Images whose bytes could not be read are listed in `missingBlobs`, and the export warns about them.
 - **Tests:** browser `27-app-data.txt` (case 2, the "invariant #48" key walk; case 7, a bundle carrying `apiKey`; cases 14, 15 and 19); `34-desktop-app-data-export.txt`.
-- **Owner:** app-data bundle codec under `src/features/settings/app-data.js` · **Milestone:** 6 · **Class:** keep
+- **Owner:** app-data bundle codec under `src/features/settings/app-data.ts` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** both suites pass. New unit test: the codec refuses to write, and refuses to import, a bundle with a credential-shaped key at any depth.
 
@@ -452,7 +452,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 - **Behaviour:** Import writes through the history store's public write path and never deletes. Existing preferences are never overwritten. Each image is verified and stored durably before the first snapshot that names it. A bad image is dropped and reported, and its snapshots still import. A bundle without `blobs` imports exactly as before.
 - **Tests:** browser `27-app-data.txt` (cases 4 and 5: idempotence, preferences; cases 16–18: images first, a tampered image, an old bundle).
-- **Owner:** app-data bundle codec under `src/features/settings/app-data.js` · **Milestone:** 6 · **Class:** keep
+- **Owner:** app-data bundle codec under `src/features/settings/app-data.ts` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the suite passes. New unit test: importing into a store that already holds newer snapshots and preferences leaves all of them unchanged.
 

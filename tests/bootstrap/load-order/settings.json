@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/settings/settings.js",
+    "src/features/settings/settings.ts",
     "src/features/settings/actions.ts",
     "src/bootstrap/wiring/settings.ts"
   ],
