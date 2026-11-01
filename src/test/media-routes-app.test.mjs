@@ -19,7 +19,7 @@ const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { rowSlots } = await import("../core/document/gallery.ts");
-const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.js");
+const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

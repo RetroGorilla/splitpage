@@ -1,5 +1,5 @@
 # A picture in a scene's gallery dialog at full size (#216,
-# 05e-gallery-overlay.js): a click on the picked picture in the preview (or
+# src/features/gallery/overlay.ts): a click on the picked picture in the preview (or
 # Enter on it) lays it over the whole window —
 #   * bigger than the window: fitted first; a click or the wheel takes it to
 #     100 % round the point under the pointer, a drag pans, a click goes back;
