@@ -23,7 +23,7 @@ import { safeHref } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import { slotPoster } from "../common/gallery.ts";
 import { rowMotionKey, withRowMotion } from "./row-motion.ts";
-import { formatTimestamp } from "../common/comment-time.js";
+import { formatTimestamp } from "../common/comment-time.ts";
 import { idMap } from "../../core/document/id-map.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { estimatedSeconds, pad2, formatDuration, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
