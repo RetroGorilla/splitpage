@@ -94,12 +94,18 @@ export function brandForgeries(program, repo, files) {
     if (predicate?.type && carriesBrand(predicate.type) && !(declaredPredicate?.type && carriesBrand(declaredPredicate.type))) return true;
     return carriesBrand(sig.getReturnType()) && !carriesBrand(declared.getReturnType());
   };
+  const holdsVoid = (t, depth = 0) => {
+    if (!t || depth > MAX_DEPTH) return false;
+    if (t.flags & ts.TypeFlags.Void) return true;
+    if (t.flags & ts.TypeFlags.TypeParameter) return holdsVoid(checker.getBaseConstraintOfType(t), depth + 1);
+    return (t.isUnion() || t.isIntersection()) && t.types.some((m) => holdsVoid(m, depth + 1));
+  };
   const narrowsBranded = (predicate) => {
     const name = predicate.parameterName;
     const param = ts.isIdentifier(name) ? predicate.parent.parameters?.find((p) => ts.isIdentifier(p.name) && p.name.text === name.text) : null;
     if (!param) return false;
     const from = typeOf(param);
-    return carriesBrand(from) && checker.isTypeAssignableTo(checker.getNonNullableType(from), checker.getTypeFromTypeNode(predicate.type));
+    return carriesBrand(from) && !holdsVoid(from) && checker.isTypeAssignableTo(checker.getNonNullableType(from), checker.getTypeFromTypeNode(predicate.type));
   };
   const isNever = (t) => !!(t.flags & ts.TypeFlags.Never);
   const neverContainer = (target) => (target.isUnion() ? target.types : [target]).some((t) =>
@@ -134,7 +140,10 @@ export function brandForgeries(program, repo, files) {
     const visit = (node) => {
       if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) {
         const target = checker.getTypeFromTypeNode(node.type);
-        if ((carriesBrand(target) || neverContainer(target)) && !checker.isTypeAssignableTo(typeOf(node.expression), target)) {
+        const source = typeOf(node.expression);
+        const present = checker.getNonNullableType(source);
+        if ((carriesBrand(target) || neverContainer(target)) && !isNever(source) &&
+          (holdsVoid(source) || isNever(present) || !checker.isTypeAssignableTo(present, target))) {
           report(node, "a type assertion to the validated document brand or to never");
         }
       } else if (ts.isTypePredicateNode(node) && node.type && carriesBrand(checker.getTypeFromTypeNode(node.type)) && !narrowsBranded(node)) {
