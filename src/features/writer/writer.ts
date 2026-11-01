@@ -1,4 +1,4 @@
-import { editableCellHtml } from "../common/editable-cell.js";
+import { editableCellHtml } from "../common/editable-cell.ts";
 import { formatDuration, pad2, totalSeconds } from "../../core/production/timing.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot, cssAttr } from "../common/dom.ts";
