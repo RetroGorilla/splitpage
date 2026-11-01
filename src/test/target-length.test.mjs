@@ -11,7 +11,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeTargetLength } from "../core/merge/scalars.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
-import { targetOverlayParts } from "../features/rundown/target.js";
+import { targetOverlayParts } from "../features/rundown/target.ts";
 import { TARGET_PRESETS } from "../features/title/target-section.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";

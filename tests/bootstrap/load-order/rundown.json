@@ -3,7 +3,7 @@
     "src/features/rundown/rundown.ts",
     "src/features/rundown/actions.ts",
     "src/bootstrap/wiring/rundown.ts",
-    "src/features/rundown/target.js"
+    "src/features/rundown/target.ts"
   ],
   "expectedLoads": 4
 }
