@@ -38,7 +38,7 @@ function desktopPorts(): DesktopPorts {
     running: presence.running,
     shell: desktopPort,
     canOpenPrompter: canOpenPrompter,
-    makeHandle: (entry) => makeDesktopHandle(entry as Parameters<typeof makeDesktopHandle>[0]),
+    makeHandle: (entry) => makeDesktopHandle(entry),
     wireBlobs: () => { wireDesktopBlobs(desktopPort()); },
     document: portDocument,
     place: portPlace,

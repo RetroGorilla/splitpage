@@ -1,3 +1,4 @@
+import type { MalformedDesktopReply } from "../../../src/adapters/desktop/desktop-port.ts";
 import "../../../src/test/_dom.mjs";
 import { fileDelivery as portFileDelivery } from "../../../src/bootstrap/wiring/ports/files.ts";
 import test from "node:test";
@@ -17,7 +18,7 @@ test("file delivery forwards to the current desktop adapter and keeps saved, can
   try {
     useDesktopForTest({
       saveFileDialog: async (options) => { dialogs.push(options); return { id: "picked", name: "host.cmd" }; },
-      writeFile: async (id, data) => { writes.push([id, Array.from(data)]); return null; }
+      writeFile: async (id, data) => { writes.push([id, Array.from(data)]); return null as unknown as MalformedDesktopReply; }
     });
     assert.equal(await delivery.deliver("host.cmd", new Uint8Array([65, 66]), { savedMsg: "Saved the host command." }), true);
     assert.deepEqual(dialogs, [{ suggestedName: "host.cmd", filters: [{ name: "CMD file", extensions: ["cmd"] }] }]);

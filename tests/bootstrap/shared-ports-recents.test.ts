@@ -1,8 +1,10 @@
+import type { MalformedDesktopReply } from "../../src/adapters/desktop/desktop-port.ts";
 import "../../src/test/_dom.mjs";
 import { recents as portRecents } from "../../src/bootstrap/wiring/ports/desktop.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
+import type { DesktopPort } from "../../src/adapters/desktop/desktop-port.ts";
 import type { RecentFileOpenRequest, RecentFiles } from "../../src/application/files/recent-files.ts";
 
 test("the recent files port forwards each call and follows the current desktop", async () => {
@@ -20,11 +22,11 @@ test("the recent files port forwards each call and follows the current desktop",
     assert.equal(recents.routeOpen(request), undefined);
     for (const id of ["first", "second"]) {
       const calls: unknown[][] = [];
-      const listed = Promise.resolve([{ fileId: id, name: id + ".splitpage" }]);
-      const removed = Promise.resolve([{ fileId: id + "-kept" }]);
+      const listed = Promise.resolve([{ fileId: id, name: id + ".splitpage" }] as unknown as MalformedDesktopReply);
+      const removed = Promise.resolve([{ fileId: id + "-kept" }] as unknown as MalformedDesktopReply);
       const cleared = Promise.resolve([]);
-      const read = Promise.resolve({ id, name: id + ".splitpage", bytes: new Uint8Array([1, 2]), lastModified: 123 });
-      const routed = Promise.resolve({ where: "this-tab" });
+      const read = Promise.resolve({ id, name: id + ".splitpage", bytes: new Uint8Array([1, 2]), lastModified: 123 } as unknown as MalformedDesktopReply);
+      const routed: ReturnType<DesktopPort["routeOpen"]> = Promise.resolve({ where: "this-tab" });
       const desktop = {
         listRecents() { assert.equal(this, desktop); calls.push(["listRecents"]); return listed; },
         removeRecent(fileId: string) { assert.equal(this, desktop); calls.push(["removeRecent", fileId]); return removed; },
@@ -51,7 +53,7 @@ test("the recent files port forwards each call and follows the current desktop",
     }
     const failure = new Error("file missing");
     const rejected = Promise.reject(failure);
-    useDesktopForTest({ readFile: () => rejected, routeOpen: () => Promise.resolve(null) });
+    useDesktopForTest({ readFile: () => rejected, routeOpen: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
     assert.equal(recents.available(), false);
     assert.equal(recents.canRemove(), false);
     assert.equal(recents.canClear(), false);

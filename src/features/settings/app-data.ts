@@ -1,6 +1,6 @@
 type HistoryExport = Awaited<ReturnType<AppDataPorts["history"]["exportAll"]>>;
 type HistoryImport = Awaited<ReturnType<AppDataPorts["history"]["importBundle"]>>;
-type DataBundle = { format: string; version: number; exportedAt: string; appVersion: string | undefined; snapshots?: unknown; history?: HistoryExport | null; blobs?: Record<string, unknown>; missingBlobs?: readonly string[]; prefs?: unknown };
+type DataBundle = { format: string; version: number; exportedAt: string; appVersion: string | null | undefined; snapshots?: unknown; history?: HistoryExport | null; blobs?: Record<string, unknown>; missingBlobs?: readonly string[]; prefs?: unknown };
 type ExportSummary = { ok: boolean; images: number; missingBlobs: string[]; truncated: boolean; warning: string | null };
 type ImportSummary = { ok: boolean; history: HistoryImport | null; blobs: HistoryImport["blobs"] | null; prefs: string[]; legacy: number | null; toast: string; warning: string | null };
 type DataError = Error & { code: string; secretKey?: string | null | undefined };

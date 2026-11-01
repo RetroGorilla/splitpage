@@ -1,22 +1,16 @@
-export interface RecentFileData {
-  readonly id: string;
-  readonly name: string;
-  readonly bytes?: Uint8Array;
-  readonly lastModified?: number;
-}
+import type { DesktopIpcArgs, DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 
-export interface RecentFileOpenRequest {
-  readonly kind: "file";
-  readonly fileId: string;
-}
+export type RecentFileData = Pick<DesktopIpcResult<"splitpage:read-file">, "id" | "name" | "bytes" | "lastModified">;
+
+export type RecentFileOpenRequest = DesktopIpcArgs<"splitpage:route-open">[0];
 
 export interface RecentFiles {
   readonly available: () => boolean;
   readonly canRemove: () => boolean;
   readonly canClear: () => boolean;
-  readonly list: () => Promise<readonly unknown[]> | undefined;
-  readonly remove: (fileId: string) => Promise<readonly unknown[]> | undefined;
-  readonly clear: () => Promise<readonly unknown[]> | undefined;
+  readonly list: () => Promise<DesktopIpcResult<"splitpage:recents-list">> | undefined;
+  readonly remove: (fileId: string) => Promise<DesktopIpcResult<"splitpage:recents-remove">> | undefined;
+  readonly clear: () => Promise<DesktopIpcResult<"splitpage:recents-clear">> | undefined;
   readonly read: (id: string) => Promise<RecentFileData> | undefined;
-  readonly routeOpen: (request: RecentFileOpenRequest) => Promise<{ readonly where?: string } | null> | undefined;
+  readonly routeOpen: (request: RecentFileOpenRequest) => Promise<DesktopIpcResult<"splitpage:route-open">> | undefined;
 }

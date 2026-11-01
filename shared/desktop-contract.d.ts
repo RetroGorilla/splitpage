@@ -36,7 +36,7 @@ export interface DesktopWireFailure {
   code: string;
 }
 
-export type DesktopWireDraftWrite = { ok: true; seq: number; bytes: number } | DesktopWireFailure;
+export type DesktopWireDraftWrite = { ok: true; seq: number; bytes: number; obsolete?: undefined } | DesktopWireFailure;
 export type DesktopWireDraftDiscard = { ok: true } | DesktopWireFailure;
 
 export interface DesktopDraftWriteHeader {
