@@ -20,7 +20,7 @@ const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);
 const { openBrollPanel } = await import("../features/broll/panel.js");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
-const { renderComments, setCommentAssignee } = await import("../features/comments/comments.js");
+const { renderComments, setCommentAssignee } = await import("../features/comments/comments.ts");
 const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { colorsWithMine } = await import("../core/document/person-colors.ts");
 const { cleanAuthorName } = await import("../core/document/people.ts");

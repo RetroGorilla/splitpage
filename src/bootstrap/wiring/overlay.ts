@@ -6,7 +6,7 @@ import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { hideTagGhost, tagGhost } from "../../features/tags/production-tags.js";
 import { clearProductionSelection, selectedKeys } from "./production-editing-owners.ts";
 import { renderProduction } from "../../features/tags/panels.js";
-import { closeCommentComposer } from "../../features/comments/comments.js";
+import { closeCommentComposer } from "../../features/comments/comments.ts";
 import { connectWriter } from "./writer.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { sidePanels } from "./ports/panels.ts";

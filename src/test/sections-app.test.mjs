@@ -143,7 +143,7 @@ test("comment jump reveals its folded anchor", async () => {
   await open(undefined, { schema: 2, rows: [{ id: "r1", audioText: '<span class="cmt-anchor" data-cmt="c_one">One</span>', visualText: "" }],
     comments: [{ id: "c_one", kind: "anchor", rowId: "r1", field: "audioText", anchorId: "c_one", quotedText: "One", author: "Ada", body: "Comment", replies: [] }] });
   sectionView().toggle("s1");
-  const { jumpToAnchor } = await import("../features/comments/comments.js");
+  const { jumpToAnchor } = await import("../features/comments/comments.ts");
   jumpToAnchor("c_one");
   assert.equal(sectionView().folded("s1"), false);
   assert.ok(document.querySelector('#rows .cmt-anchor[data-cmt="c_one"].flash'));
