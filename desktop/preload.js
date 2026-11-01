@@ -1,15 +1,43 @@
 "use strict";
 
-const { contextBridge, ipcRenderer, webUtils } = require("electron");
+                                                                                             
+                                                        
+                                                                                                                                                      
+
+                                                                                                                      
+
+                                   
+                                                                                                               
+                
+                                                                                                                          
+                                                                                              
+                                                                                                                     
+                                                                                                                                         
+    
+                                                          
+ 
+
+                            
+                                 
+                                
+                                    
+                                                                                                                      
+                                                                                                                                 
+                                                                                                                                          
+                                  
+ 
+
+
+const { contextBridge, ipcRenderer, webUtils }                          = require("electron");
 
 if (location.origin === "splitpage://app") {
-  const channelDirections = new Map();
+  const channelDirections = new Map                                                               ();
   for (const entry of ipcRenderer.sendSync("splitpage:ipc-table-sync") || []) {
     if (!channelDirections.has(entry.name)) channelDirections.set(entry.name, new Set());
-    channelDirections.get(entry.name).add(entry.direction);
+    (channelDirections.get(entry.name)                                       ).add(entry.direction);
   }
 
-  const channel = (name, direction) => {
+  const channel =                                     (name   , direction                                )    => {
     const directions = channelDirections.get(name);
     if (!directions || !directions.has(direction)) {
       throw new Error("splitpage: " + name + " (" + direction + ") is not a channel this origin may use");
@@ -17,18 +45,18 @@ if (location.origin === "splitpage://app") {
     return name;
   };
 
-  const invoke = (name, ...args) => ipcRenderer.invoke(channel(name, "invoke"), ...args);
-  const send = (name, ...args) => ipcRenderer.send(channel(name, "send"), ...args);
-  const sendSync = (name, ...args) => ipcRenderer.sendSync(channel(name, "sendSync"), ...args);
-  const receive = (name, handler) => ipcRenderer.on(channel(name, "receive"), handler);
+  const invoke =                                         (name   , ...args                   ) => ipcRenderer.invoke(channel(name, "invoke"), ...args);
+  const send =                                       (name   , ...args                   ) => ipcRenderer.send(channel(name, "send"), ...args);
+  const sendSync =                                           (name   , ...args                   ) => ipcRenderer.sendSync(channel(name, "sendSync"), ...args);
+  const receive =                                          (name   , handler                                                             ) => ipcRenderer.on(channel(name, "receive"), handler);
 
-  let openFileCallback = null;
-  let menuCommandCallback = null;
-  let restoreNoticeCallback = null;
-  let reassignDocIdCallback = null;
-  let draftFlushCallback = null;
-  let updateStatusCallback = null;
-  let voiceEventCallback = null;
+  let openFileCallback                                                  = null;
+  let menuCommandCallback                                                     = null;
+  let restoreNoticeCallback                                                       = null;
+  let reassignDocIdCallback                                                       = null;
+  let draftFlushCallback                                                    = null;
+  let updateStatusCallback                                                      = null;
+  let voiceEventCallback                                                    = null;
 
   receive("splitpage:open-file", (_event, entry) => {
     if (openFileCallback) openFileCallback(reviveFileEntry(entry));
@@ -49,19 +77,21 @@ if (location.origin === "splitpage://app") {
     if (reassignDocIdCallback) reassignDocIdCallback(payload);
   });
   receive("splitpage:draft-flush", (_event, reqId, keep) => {
-    const reply = (result) => {
+    const reply = (result                                              ) => {
       try { send("splitpage:draft-flushed", reqId, result); } catch (_) { }
     };
     if (typeof draftFlushCallback !== "function") { reply({ ok: false, code: "NO_TAB" }); return; }
     Promise.resolve()
-      .then(() => draftFlushCallback({ keep: keep === true }))
+      .then(() => (draftFlushCallback                                          )({ keep: keep === true }))
       .then(
         (result) => reply(result && typeof result === "object" ? result : { ok: true }),
         () => reply({ ok: false })
       );
   });
 
-  function reviveFileEntry(entry) {
+                                                                      
+                                                                                    
+  function reviveFileEntry(entry                         )                          {
     if (entry && entry.bytes && !(entry.bytes instanceof Uint8Array)) {
       entry = { ...entry, bytes: new Uint8Array(entry.bytes) };
     }
@@ -70,7 +100,7 @@ if (location.origin === "splitpage://app") {
 
   const appVersion = sendSync("splitpage:get-app-version-sync");
 
-  const boot = sendSync("splitpage:tab-boot-sync") || {};
+  const boot                                                                    = sendSync("splitpage:tab-boot-sync") || {};
   const tabId = typeof boot.tabId === "string" ? boot.tabId : null;
   const windowId = typeof boot.windowId === "string" ? boot.windowId : null;
   const launchIntent = boot.launchIntent && typeof boot.launchIntent === "object"
@@ -82,7 +112,7 @@ if (location.origin === "splitpage://app") {
 
   const testMode = sendSync("splitpage:is-test-mode-sync");
 
-  const bridge = {
+  const bridge                                          = {
     isDesktop: true,
     platform: process.platform,
     appVersion,
@@ -103,7 +133,7 @@ if (location.origin === "splitpage://app") {
     },
 
     readFile(id) {
-      return invoke("splitpage:read-file", id).then(reviveFileEntry);
+      return invoke("splitpage:read-file", id).then                  (reviveFileEntry);
     },
 
     writeFile(id, data) {
@@ -176,7 +206,7 @@ if (location.origin === "splitpage://app") {
 
     historyPut(docId, meta, stateJson, opts) {
       const o = opts && typeof opts === "object" ? opts : {};
-      const wire = { protect: Array.isArray(o.protect) ? o.protect : [] };
+      const wire                                             = { protect: Array.isArray(o.protect) ? o.protect : [] };
       if (o.older === true) wire.older = true;
       return invoke("splitpage:history-put", docId, meta, stateJson, wire);
     },
@@ -244,10 +274,10 @@ if (location.origin === "splitpage://app") {
     },
 
     videoThumbnail(host, ref) {
-      return invoke("splitpage:video-thumbnail", host, ref).then((got) => {
+      return invoke("splitpage:video-thumbnail", host, ref).then((got)                                                     => {
         if (got && got.ok && got.bytes && !(got.bytes instanceof Uint8Array)) got = { ...got, bytes: new Uint8Array(got.bytes) };
         return got || { ok: false, code: "UNAVAILABLE" };
-      }, () => ({ ok: false, code: "REFUSED" }));
+      }, ()                                                     => ({ ok: false, code: "REFUSED" }));
     },
 
     getUpdateStatus() {
