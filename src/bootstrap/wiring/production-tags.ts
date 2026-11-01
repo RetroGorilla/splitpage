@@ -1,4 +1,4 @@
-import * as productionTags from "../../features/tags/production-tags.js";
+import * as productionTags from "../../features/tags/production-tags.ts";
 import type { ProductionTagPorts } from "../../features/tags/ports.ts";
 import { tagComposerActions as composerDefinitions } from "../../features/tags/actions.ts";
 import { owned } from "../../features/routing/owned.ts";

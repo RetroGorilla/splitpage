@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { cellOf } from "../bootstrap/richtext.ts";
 import { toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
-import { tagsInField } from "../features/tags/production-tags.js";
+import { tagsInField } from "../features/tags/production-tags.ts";
 
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
 import { htmlToPlainText } from "../bootstrap/plain-text.ts";
