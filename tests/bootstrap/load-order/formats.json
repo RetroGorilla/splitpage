@@ -13,8 +13,10 @@
     "src/adapters/formats/csv.ts",
     "src/adapters/formats/xlsx.ts",
     "src/adapters/formats/docx.ts",
-    "src/adapters/formats/pdf.ts",
+    "src/adapters/formats/print-page.ts",
+    "src/adapters/formats/script-print.ts",
+    "src/adapters/formats/list-print.ts",
     "src/bootstrap/wiring/exporters.ts"
   ],
-  "expectedLoads": 15
+  "expectedLoads": 17
 }

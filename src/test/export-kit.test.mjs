@@ -19,7 +19,6 @@ import {
 } from "../bootstrap/wiring/export-capture.ts";
 import { exportRuns } from "../adapters/formats/export-kit.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
-import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../adapters/formats/pdf.ts";
 import { LONG_DEMO } from "../starters/index.ts";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -151,54 +150,4 @@ test("the b-roll by scene, with each scene's start and count", () => {
   const s = currentDocument().brollShots.length;
   exportBrollScenes(exportDocumentOf(currentDocument()));
   assert.equal(currentDocument().brollShots.length, s, "reading the list adds nothing to it");
-});
-
-test("the PDF wrap keeps a run's annotations and makes room for its markers", () => {
-  const runs = [
-    { text: "Some words then ", b: false },
-    { text: "a tagged thing", tag: { cat: "prop", name: "a tagged thing", color: "764AA2" }, cmt: ["x"], markers: [7] },
-    { text: " after.", b: false }
-  ];
-  const lines = pdfWrapRuns(runs, 1000, 10, { markerWidth: () => 12 });
-  assert.equal(lines.length, 1);
-  const segs = lines[0];
-  assert.ok(segs.filter((s) => s.tag).length >= 1);
-  const last = segs.filter((s) => s.markers);
-  assert.equal(last.length, 1);
-  assert.equal(last[0].text, "thing");
-  assert.equal(last[0].markerWidth, 12);
-  const w = pdfTextWidth("Some words then a tagged thing", false, 10);
-  const tight = pdfWrapRuns(runs, w + 2, 10, { markerWidth: () => 12 });
-  assert.equal(tight[0][tight[0].length - 1].text, "tagged");
-  assert.equal(tight[1][0].text, "thing");
-  assert.deepEqual(tight[1][0].markers, [7]);
-});
-
-test("assemblePdf: a title the viewer shows, links, bookmarks, every stream still plain text", () => {
-  const bytes = assemblePdf({
-    size: [612, 792],
-    pages: [
-      { ops: ["BT /F1 10 Tf 1 0 0 1 54.00 700.00 Tm (Hello) Tj ET", pdfLampOp("check", 60, 60, 4, "171613")],
-        links: [{ x: 54, y: 690, w: 40, h: 12, uri: "https://example.com/a?b=(c)" }] },
-      { ops: ["BT /F2 10 Tf 1 0 0 1 54.00 700.00 Tm (Two) Tj ET"] }
-    ],
-    info: { title: "Café — the script" },
-    outline: [{ title: "Script", page: 0, y: 792 }, { title: "Comments", page: 1 }]
-  });
-  const t = new TextDecoder("latin1").decode(bytes);
-  assert.match(t, /^%PDF-1\.4/);
-  assert.match(t, /\/DisplayDocTitle true/);
-  assert.match(t, /\/Title <FEFF00430061006600E9/);
-  assert.match(t, /\/Creator \(Splitpage\)/);
-  assert.match(t, /\/CreationDate \(D:\d{8}\)/);
-  assert.match(t, /\/Subtype \/Link \/Rect \[54\.00 690\.00 94\.00 702\.00\]/);
-  assert.match(t, /\/URI \(https:\/\/example\.com\/a\?b=\\\(c\\\)\)/);
-  assert.match(t, /\/Type \/Outlines/);
-  assert.match(t, /\/Title \(Comments\)/);
-  assert.match(t, /\/Info 7 0 R/);
-  const streams = [...t.matchAll(/obj\n<< \/Length (\d+) >>\nstream\n/g)];
-  assert.equal(streams.length, 2);
-  const xref = t.slice(t.lastIndexOf("xref\n"));
-  const offsets = xref.split("\n").slice(3).filter((l) => / 00000 n $/.test(l)).map((l) => +l.slice(0, 10));
-  offsets.forEach((off, i) => assert.equal(t.slice(off, off + String(i + 1).length + 6), (i + 1) + " 0 obj"));
 });
