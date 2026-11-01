@@ -1,7 +1,7 @@
 import type { CommandMenuPorts } from "./ports.ts";
 import type { ActionView } from "../../application/actions.ts";
 import type { Exporter } from "../../application/export/registry.ts";
-import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.js";
+import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.ts";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { addListener } from "../common/listeners.ts";
