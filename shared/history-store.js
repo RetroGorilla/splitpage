@@ -596,16 +596,8 @@ function createMemoryHistoryBackend(o) {
   var index = Object.create(null);
   var bodies = Object.create(null);
   var chain = Promise.resolve();
-  var faults = { put: [], commit: [] };
-  var counts = { exclusive: 0, put: 0, commit: 0 };
-
-  function takeFault(op) {
-    var q = faults[op];
-    if (!q.length) return null;
-    var f = q[0];
-    if (--f.times <= 0) q.shift();
-    return f.code;
-  }
+  var before = o.before || noop;
+  var observe = o.observe || noop;
 
   function isNamed(sha, idx) {
     return Object.keys(idx).some(function (b) {
@@ -656,9 +648,8 @@ function createMemoryHistoryBackend(o) {
       put: function (sha, text) {
         return op(function () {
           mustWrite("put");
-          counts.put++;
-          var code = takeFault("put");
-          if (code) throw codedError(code, "Injected " + code + " fault");
+          observe("put");
+          before("put");
           if (typeof sha !== "string" || typeof text !== "string") throw codedError("io", "history: bad body");
           if (!(sha in bodies)) stagedBodies[sha] = text;
         });
@@ -667,9 +658,8 @@ function createMemoryHistoryBackend(o) {
         return op(function () {
           mustWrite("commit");
           if (staged) throw codedError("io", "history: commit called twice in one transaction");
-          counts.commit++;
-          var code = takeFault("commit");
-          if (code) throw codedError(code, "Injected " + code + " fault");
+          observe("commit");
+          before("commit");
           staged = { changes: plainCopy(changes || {}), dropped: Array.isArray(dropped) ? dropped.slice() : [] };
         });
       }
@@ -707,37 +697,22 @@ function createMemoryHistoryBackend(o) {
     name: typeof o.name === "string" ? o.name : "memory",
     persistent: !!o.persistent,
     readOnly: !!o.readOnly,
-    counts: counts,
 
     exclusive: function (fn, xo) {
       var write = !(xo && xo.write === false);
-      counts.exclusive++;
+      observe("exclusive");
       var job = chain.then(function () { return runTx(fn, write); });
       chain = job.then(noop, noop);
       return job;
     },
 
-    failNext: function (op, code, times) {
-      if (!faults[op]) throw new TypeError("failNext: unknown op " + op);
-      faults[op].push({ code: code, times: times == null ? 1 : times });
-    },
-    clearFaults: function () { faults.put = []; faults.commit = []; },
-    bodyCount: function () { return Object.keys(bodies).length; },
-    hasBody: function (sha) { return sha in bodies; },
-    dropBody: function (sha) { delete bodies[sha]; },
-    inspect: function () {
-      var b = {};
-      Object.keys(bodies).forEach(function (sha) { b[sha] = bodies[sha]; });
-      return { index: plainCopy(Object.assign({}, index)), bodies: b };
-    },
-    seed: function (idx, bods) {
-      index = Object.create(null);
-      Object.keys(idx || {}).forEach(function (bucket) { index[bucket] = deepFreeze(plainCopy(idx[bucket])); });
-      bodies = Object.create(null);
-      Object.keys(bods || {}).forEach(function (sha) { bodies[sha] = bods[sha]; });
-    }
+
   };
-  return backend;
+  return Object.assign(backend, o.extend ? o.extend({
+    get index() { return index; }, set index(value) { index = value; },
+    get bodies() { return bodies; }, set bodies(value) { bodies = value; },
+    clone: plainCopy, freeze: deepFreeze
+  }) : {});
 }
 
 module.exports = {

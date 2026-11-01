@@ -225,7 +225,7 @@ test("writer: the bar's Bold button formats the selection as one edit", async ()
 test("writer: typing the Writer's title is one set-title edit, mirrored to the main title", async () => {
   await openInWriter();
   const changes = await throughSession(() => typeTitle(writerTitle(), "Writer commands!"));
-  assert.deepEqual(changes.docFields, ["title"]);
+  assert.deepEqual(changes.docFields, ["title", "titleOrigin"]);
   assert.deepEqual(changes.cells, []);
   assert.equal(currentDocument().title, "Writer commands!");
   assert.equal(docTitle().value, "Writer commands!", "the main title shows the same words");
@@ -240,7 +240,7 @@ test("writer: typing the main title is one set-title edit and updates the page t
   await open();
   breakUndoCoalescing();
   const changes = await throughSession(() => typeTitle(docTitle(), "Main title"));
-  assert.deepEqual(changes.docFields, ["title"]);
+  assert.deepEqual(changes.docFields, ["title", "titleOrigin"]);
   assert.equal(currentDocument().title, "Main title");
   assert.match(document.title, /Main title/);
   undo();

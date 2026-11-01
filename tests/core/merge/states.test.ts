@@ -33,7 +33,7 @@ function cm(id: string): MergeComment {
 
 function doc(over?: Partial<MergeDoc>): ValidatedDocument {
   return migratedThenSet(Object.assign({
-    title: "Lighthouse", docId: DOC, rows: [row("r1", ONE)], comments: [], people: [], productionTags: [], brollShots: [],
+    title: "Lighthouse", titleOrigin: "file", titleVersion: "v3", docId: DOC, rows: [row("r1", ONE)], comments: [], people: [], productionTags: [], brollShots: [],
     wordsPerMinute: 150, rev: 4, lastEditedBy: "Base", lastEditedAt: OLD, personColors: { Sam: "#80BDFB" }, targetSeconds: 300,
     schema: SCHEMA_VERSION
   }, over || {}));
@@ -43,13 +43,16 @@ const shot = { id: "b1", name: "Gulls", desc: "", status: "unshot", reshoot: fal
 const kettle = { id: "t_kettle", cat: "prop", name: "Kettle", owner: "", notes: "", status: "needed" };
 
 function everyField() {
-  const base = doc();
+  const sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }];
+  const base = doc({ sections });
   const mine = doc({
+    sections,
     title: "Mine title", docId: DOC_MINE, rows: [row("r1", ONE_M, { updatedBy: "Mine" })], comments: [cm("cM")],
     people: [{ id: "p1", name: "Sam" }], productionTags: [kettle], wordsPerMinute: 180, rev: 9, lastEditedBy: "Mine", lastEditedAt: NEW,
     personColors: { Sam: "#CBA1FA" }, targetSeconds: 420
   });
   const theirs = doc({
+    sections,
     rows: [row("r1", ONE_T, { updatedBy: "Theirs" })], people: [{ id: "p2", name: "Ada" }], brollShots: [shot],
     rev: 6, lastEditedBy: "Theirs", lastEditedAt: NEW, schema: SCHEMA_VERSION + 1
   });
@@ -69,6 +72,8 @@ test("every strategy merges its field, in the table's order", () => {
   assert.deepEqual(Object.keys(r.merged), STATE_FIELDS.map((f) => f.key));
   assert.deepEqual(r.merged, {
     title: "Mine title",
+    titleOrigin: "file",
+    titleVersion: "v3",
     docId: DOC_MINE,
     rows: [row("r1", ONE_MT, { updatedAt: FIXED_ISO, updatedBy: EDITOR })],
     comments: [cm("cM")],
@@ -81,17 +86,33 @@ test("every strategy merges its field, in the table's order", () => {
     lastEditedAt: NEW,
     personColors: { Sam: "#CBA1FA" },
     targetSeconds: 420,
+    sections: [{ id: "s1", name: "Opening", firstSceneId: "r1" }],
     schema: SCHEMA_VERSION
   });
   assert.deepEqual(r.conflicts, []);
   assert.deepEqual(r.stats, { rowsFromThem: 0, rowsFromMe: 1, rowsAddedByMe: 0, rowsAddedByThem: 0 });
 });
 
-test("person colours and a target length that no side has leave no key behind", () => {
+test("person colours, target length and sections that no side has leave no key behind", () => {
   const strip = (d: ValidatedDocument) => { delete d.personColors; delete d.targetSeconds; return d; };
   const { decode } = fakeDecoder(CELLS);
   const r = mergeStateFields(strip(doc()), strip(doc()), strip(doc()), fakePorts(decode));
-  assert.deepEqual(Object.keys(r.merged), STATE_FIELDS.map((f) => f.key).filter((k) => k !== "personColors" && k !== "targetSeconds"));
+  assert.deepEqual(Object.keys(r.merged), STATE_FIELDS.map((f) => f.key).filter((k) => k !== "personColors" && k !== "targetSeconds" && k !== "sections"));
+});
+
+test("file naming metadata survives merge, including version removal from either side", () => {
+  const { decode } = fakeDecoder(CELLS);
+  const merge = (base: ValidatedDocument | null, mine: ValidatedDocument, theirs: ValidatedDocument) => mergeStateFields(base, mine, theirs, fakePorts(decode)).merged;
+  const without = () => { const d = doc(); delete d.titleVersion; return d; };
+  assert.equal(Object.hasOwn(merge(doc(), without(), doc()), "titleVersion"), false);
+  assert.equal(Object.hasOwn(merge(doc(), doc(), without()), "titleVersion"), false);
+  assert.equal(merge(doc(), doc({ titleOrigin: "user" }), doc()).titleOrigin, "user");
+  assert.equal(merge(doc(), doc(), doc({ titleVersion: "v4" })).titleVersion, "v4");
+  const old = () => { const d = without(); delete d.titleOrigin; return d; };
+  const legacy = merge(old(), old(), old());
+  assert.equal(Object.hasOwn(legacy, "titleOrigin"), false);
+  assert.equal(Object.hasOwn(legacy, "titleVersion"), false);
+  assert.equal(merge(null, old(), doc()).titleVersion, "v3");
 });
 
 test("with fake ids, clock and editor the merge is deterministic, conflict cards included", () => {
@@ -158,7 +179,7 @@ test("INV-04: a field added to a copy of the table with a per-key strategy merge
   const theirs = doc({ probeChanged: "base", probeTheirs: "theirs", probeCount: 7, probeColors: { Ada: "#64D1D7" }, probeSchema: 99 });
   const { decode } = fakeDecoder(CELLS);
   const r = mergeStateFields(base, mine, theirs, fakePorts(decode, { fields: fields }));
-  assert.deepEqual(Object.keys(r.merged), fields.map((f) => f.key));
+  assert.deepEqual(Object.keys(r.merged), fields.map((f) => f.key).filter(key => key !== "sections"));
   assert.deepEqual(added.map((f) => r.merged[f.key]),
     ["mine", "fallback", "theirs", 8, { Ada: "#64D1D7", Bo: "#73D4AC" }, SCHEMA_VERSION]);
   assert.ok(Object.isFrozen(STATE_FIELDS));
@@ -168,8 +189,8 @@ test("INV-04: a field added to a copy of the table with a per-key strategy merge
 test("a table passed in is used as given, and core's table is the default", () => {
   const { decode } = fakeDecoder(CELLS);
   const fields = STATE_FIELDS.filter((f) => f.key !== "title" && f.key !== "schema");
-  assert.deepEqual(Object.keys(mergeStateFields(doc(), doc(), doc(), fakePorts(decode, { fields: fields })).merged), fields.map((f) => f.key));
-  assert.deepEqual(Object.keys(mergeStateFields(doc(), doc(), doc(), fakePorts(decode)).merged), STATE_FIELDS.map((f) => f.key));
+  assert.deepEqual(Object.keys(mergeStateFields(doc(), doc(), doc(), fakePorts(decode, { fields: fields })).merged), fields.map((f) => f.key).filter(key => key !== "sections"));
+  assert.deepEqual(Object.keys(mergeStateFields(doc(), doc(), doc(), fakePorts(decode)).merged), STATE_FIELDS.map((f) => f.key).filter(key => key !== "sections"));
 });
 
 test("productionTags is merged once by id: a rename on my side and a status on theirs both land", () => {

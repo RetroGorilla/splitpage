@@ -1,4 +1,5 @@
 import { gallerySize, rowSlots, setRowSlots } from "../../core/document/gallery.ts";
+import { sectionBeforeScene } from "../../core/document/sections.ts";
 import type { DocumentRow } from "../../core/document/validated.ts";
 import { clampRange, deleteRange, joinCells, splitCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -135,6 +136,7 @@ export function joinScenesCommand(intoId: string, ports: JoinPorts): Command {
       const at = doc.rows.findIndex(function (r) { return r.id === intoId; });
       const prev = doc.rows[at], cur = doc.rows[at + 1];
       if (!prev || !cur) return null;
+      if (sectionBeforeScene(doc, cur.id)) return { refused: "remove the section header before joining these scenes" };
       const curHasVisual = hasVisual(cur, ports.plainText);
       if (hasVisual(prev, ports.plainText) && curHasVisual) return { refused: BOTH_VISUALS };
       const audio = joinedAudio(textOf(prev.audioText), textOf(cur.audioText), ports);

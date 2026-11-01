@@ -193,6 +193,43 @@ The file check is `checkFileConflict(handle, lastModified)` in `src/adapters/fil
 - **Results.** `SAVED`, `CANCELLED`, `FAILED`, `CONFLICTED` (a refusal) or a `failed` result with the error.
 - **Pictures left out.** When some pictures were not available, the writer shows `warnImagesLeftOut` through the notices port (`src/bootstrap/wiring/effects-owner.ts`, wording in `src/application/export/diagnostics.ts`); exports show the same notice from their diagnostics.
 
+### First-save title and version (I-32)
+
+`core/document/file-title.ts` derives naming only for a picked handle. An
+unwritten document with an empty, Untitled or Untitled Script title and no
+`user` provenance can take the filename stem as its title. A terminal
+case-insensitive `v` plus digits becomes `titleVersion` only after a space,
+underscore or hyphen, which is removed from the title. Glued endings such as
+`Rev2` and `Headsetv3` stay in the title without a tag. A filename consisting
+only of a version supplies no title and makes no naming change.
+
+`writeDoc` still captures the document before its first await. After a
+desktop dialog or browser picker answers, it replaces only that capture's
+naming fields; assets and content remain the initial snapshot. The same
+capture feeds the serialized bytes and saved baseline. Download-only
+browsers make no naming change: the app never sees the final name.
+
+The accepted landing in `createSaveCompletion` records the baseline, landed
+file metadata and saved-copy identity before running `fileTitleCommand`, so
+a throwing naming listener cannot leave a stale disk timestamp. It runs the command to
+apply title, tag and provenance as one undoable edit, provided those fields
+still match the initial capture. An intervening title edit wins. Failed,
+cancelled and obsolete saves run no naming command. Completion confirms only
+the captured change count plus its one naming edit, and only when naming
+succeeded. Earlier edits and edits made by completion listeners stay dirty.
+Undo restores the prior naming fields and dirties the document without
+retargeting its file.
+
+`titleCommand` records `titleOrigin: "user"` on an explicit title change.
+Save As keeps the title and updates or removes the version only while the
+origin is `file`; user titles and their tags remain unchanged. Ordinary
+saves do not re-read the filename to change the tag. Old files have neither
+optional field, and opening them does not derive naming from their path.
+
+Coverage: `src/test/file-title-app.test.mjs`, the file-saving and title
+application tests, core filename and merge tests, browser
+`405-first-save-title.txt`, and desktop smoke's `first-save title and version`.
+
 ### Deprecated: import save-back
 
 Switched off on 2026-10-30 (Adam); the code is kept, and whether to remove it is a later decision. An import (`loadFileIntoEditor`) now opens with `NO_DESTINATION`, like a new untitled script: Save asks where to keep it with the usual choices, autosave has nowhere to write, and Splitpage never writes to the imported file. A `.docx`, `.txt` or `.csv` is made with Export. What was removed is only the way in: the `save-back` action (`features/file-menu/actions.ts`, registered by `bootstrap/actions.ts`), its File menu item and paint (`page.html`, `features/file-menu/local-files.js`), the command menu's place for it, the desktop menu's Save to file (`desktop/main.js`) and the conflict dialog's import overwrite (`features/file-menu/mount.ts`). What stays, unused: `saveBackToFile`, `writeBackToFile` and `importSaveDestination` (`application/save/import-saving.ts`, wired in `bootstrap/wiring/local-files.ts`), the `writeback` and `writebackForce` kinds, the import completion (`save-completion.ts`), the `import` home kind and its fields (`application/location/document-location.ts`), the reload-from-disk branch for an import home, and a draft's `import` origin. Home records are not stored. Old data that names an imported file loads as before without one: a recent-file entry for it opens it as a new import, and a desktop draft whose origin is an import restores as an untitled copy. The owner tests (`tests/application/import-saving.test.ts`, the I-cases in `src/test/m4-matrix-files.test.mjs`) set an import home directly and keep testing the owner. `src/test/import-no-write-back-app.test.mjs` pins the switched-off behaviour.
@@ -220,19 +257,21 @@ The autosave entry points are in `save-owners.ts`: `autoSaveTarget()` asks the d
 Browser PDF actions use the same capture and held-asset contract through
 `features/file-menu/browser-pdf.ts` and the registry's `printPage` providers.
 They open a print dialog, whose result is never a file-save acknowledgement.
-Desktop PDF and all non-PDF exports retain byte building and file delivery.
-See [print-layout.md](print-layout.md#browser-print-workflow-p4) for capture,
-cleanup and browser PDF metadata limits.
+Desktop PDF actions print the same pages through
+`features/file-menu/desktop-pdf.ts` and deliver the PDF file; all non-PDF
+exports retain byte building and file delivery. The PDF exporters have no byte
+builder (P5). See [print-layout.md](print-layout.md#browser-print-workflow-p4)
+for capture, cleanup and browser PDF metadata limits.
 
 `captureExportDocument(opts)` (`application/save/export-kit.ts`, over `application/save/capture.ts`) reads the session once, synchronously, and returns a frozen `ExportDocument`: the document, the capture time, and core's production index, comment numbers and b-roll entries. It carries no handle or path, and no picture bytes: pictures are content hashes. `opts.docId` stamps a different id on the capture, which is how Save As writes a forked id without changing the live document yet. It throws when there is no document. The wiring supplies its typed ports (`src/bootstrap/wiring/export-capture.ts`), and callers reach the owner through it.
 
-The exporters take it: `buildSplitpageFile` and `buildMarkdownProject` (`src/adapters/formats/project-file.ts`, over the project file services the wiring installs; L3h PR 4), `standaloneHtmlFor`, the CSV, DOCX, PDF and XLSX builders and the export dialog, and `exportFacts`. `exportDocumentOf(state)` builds the same shape from a given state; the project file services (`application/save/project-files.ts`) use it when asked to build a file from a state they are given.
+The exporters take it: `buildSplitpageFile` and `buildMarkdownProject` (`src/adapters/formats/project-file.ts`, over the project file services the wiring installs; L3h PR 4), `standaloneHtmlFor`, the CSV, DOCX and XLSX builders, the PDF print pages and the export dialog, and `exportFacts`. `exportDocumentOf(state)` builds the same shape from a given state; the project file services (`application/save/project-files.ts`) use it when asked to build a file from a state they are given.
 
 `writeDoc` captures before its first `await`, so the file's bytes are the document as it stood when the save started. `opts.stamp` (4.11) lays the next `rev` and the last-edited stamps on the capture, like `opts.docId`, so the bytes carry them while the live document keeps its own until `confirmWrite`. `buildFileData` (used by import writeback and the export dialog) builds one export request before its first `await` (5.1, `exportRequest` in `features/file-menu/local-files.js`): the capture, the resolved options (stage directions, the b-roll view, the image-bundle choice) and the asset request; the capture itself carries the clock setting (`clockMode`). Providers come from the format registry (registered by `src/bootstrap/wiring/exporters.ts`, milestone-5.md step 4) and are called with the document, the options, the held assets and the ports they need. The writers decode cells through the export services (`src/application/export/services.ts`): the cached cell reader, the inert-body parser, the decoder, the Markdown and plain-text projections, the production readers and the cache seal, which the wiring's `export services` step builds from the legacy rich-text objects and starts before the registry. The writers read nothing else: no stored preference, panel state or live row.
 
-**Assets (5.1).** The asset request (`src/application/export/assets.ts`) is the capture's picture hashes. `loadExportAssets` resolves the request once (`ensureBytes`) into a frozen asset map, `picture(sha)` and `missing`; every writer takes its pictures from the map, and a picture missing from it is left out as before (the HTML export's warning counts `missing`). The PDF's JPEG preparation (`pdfImagesFor`, `pdfCommentImagesFor`) decodes from the map.
+**Assets (5.1).** The asset request (`src/application/export/assets.ts`) is the capture's picture hashes. `loadExportAssets` resolves the request once (`ensureBytes`) into a frozen asset map, `picture(sha)` and `missing`; every writer takes its pictures from the map, and a picture missing from it is left out as before (the HTML export's warning counts `missing`). The PDF print pages embed the map's raster bytes (`printPicture`, `src/adapters/formats/print-page.ts`).
 
-**Dates (5.1).** An export's date is the local calendar day of the capture time, at midnight (`exportDay`). The PDF's `/CreationDate`, the `.docx` and `.xlsx` `docProps` dates, the printed dates of the packing and shot lists, and every ZIP entry (DOS time 0, the captured day's date) come from it, so an export captured before midnight and written after keeps its day (INV-60). `zipWrite` with no day writes 1980-01-01, never the clock.
+**Dates (5.1).** An export's date is the local calendar day of the capture time, at midnight (`exportDay`). A desktop PDF's `/CreationDate` and `/ModDate` (`pinPdfDay`), the `.docx` and `.xlsx` `docProps` dates, the printed dates of the packing and shot lists, and every ZIP entry (DOS time 0, the captured day's date) come from it, so an export captured before midnight and written after keeps its day (INV-60). `zipWrite` with no day writes 1980-01-01, never the clock.
 
 ## 7. Restore and adoption (4.17, 4.18)
 

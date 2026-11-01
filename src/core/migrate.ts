@@ -28,6 +28,7 @@ import {
   withoutLoneSurrogates
 } from "./document/text-policy.ts";
 import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
+import { sectionsInOrder, writeSections } from "./document/sections.ts";
 import { applyBrollRecords, brollCutRenames, planBrollRecords } from "./production/broll.ts";
 import type { BrollShot, LineShotIds } from "./production/broll.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
@@ -323,6 +324,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
 
   s.title = cappedLongText(plainText(s.title), 300);
   if (!Number.isFinite(s.rev)) s.rev = 0;
+  if ("sections" in s) writeSections(s, sectionsInOrder({ rows: s.rows as { id: string }[], sections: s.sections }));
   s.docId = normalizeDocId(s.docId) || ids.docId();
   s.schema = SCHEMA_VERSION;
   return s as ValidatedDocument;

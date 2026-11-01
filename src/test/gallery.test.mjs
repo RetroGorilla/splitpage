@@ -3,7 +3,7 @@ import "./_dom.mjs";
 import "./_export-services-started.mjs";
 import "./_project-file-services-started.mjs";
 import "./_preferences-started.mjs";
-import { liveDoc, liveWithAssets } from "./_export-now.mjs";
+import { liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
@@ -17,7 +17,6 @@ import "./_merge-started.mjs";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
-import { buildPdf } from "../adapters/formats/pdf.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
@@ -143,7 +142,7 @@ test("Word: every picture in the Visual cell, the video links under them, and ba
   assert.ok(parsed.rows[1].visualText.indexOf("not a caption, just words") !== -1);
 });
 
-test("Markdown and PDF name every picture and every link", () => {
+test("Markdown names every picture and every link", () => {
   loadTestDocument(doc([{ visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc" }],
     moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]));
   const md = toMarkdownDoc(exportDocumentOf(currentDocument()));
@@ -151,12 +150,4 @@ test("Markdown and PDF name every picture and every link", () => {
   assert.ok(md.indexOf("](images/scene-01-2.jpg)") !== -1);
   assert.ok(md.indexOf("▶ [youtu.be/abc](https://youtu.be/abc)") !== -1);
   assert.ok(md.indexOf("▶ b.mov _(video file)_") !== -1);
-  const jpeg = (w, h) => ({ bytes: jpegBytes(w, h, 9), size: { w, h } });
-  const jpegs = [jpeg(300, 200)];
-  jpegs.more = [[jpeg(200, 300)]];
-  const t = new TextDecoder("latin1").decode(buildPdf(liveDoc(), jpegs));
-  assert.ok(t.indexOf("(YouTube) Tj") !== -1 && t.indexOf("(youtu.be/abc) Tj") !== -1);
-  assert.ok(t.indexOf("/Subtype /Link") !== -1 && t.indexOf("/URI (https://youtu.be/abc)") !== -1);
-  assert.ok(t.indexOf("(b.mov) Tj") !== -1);
-  assert.ok(/ cm \/Im1 Do Q/.test(t) && / cm \/Im2 Do Q/.test(t), "both pictures drawn");
 });

@@ -11,6 +11,41 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since the 4.0 beta
 
+- **A title from your first filename.** Save an untouched untitled script as
+  `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
+  A title you typed stays yours. Download-only browsers leave both unchanged.
+- **Section headers** group scenes without changing their running order.
+  Select a scene and choose **+ Section before selected scene** to name a
+  section. Its header shows the scene count and total time, including shot
+  scenes. Click the name to rename it; the ⋯ menu moves or removes the header.
+  Drag the grip to move the whole section, or drag a scene across a header
+  to change its section. The fold chevron hides scenes for this session only;
+  folding changes neither the saved file nor the running order.
+  Section names appear above rundown blocks and in Present's top bar as
+  visual cues. They are never spoken or used by Follow My Voice. Print/PDF,
+  full-script Word and Markdown exports retain headings and totals and include
+  every scene, including folded ones. Narration Word keeps heading cues;
+  plain narration text omits section headings. CSV/XLSX keep their existing columns.
+  At the start of a scene after a header, press Backspace once to show
+  “Press Backspace again to remove the section header”. Press it again
+  within two seconds, without another key, click or caret move, to remove
+  only the header. The scenes join the section above, or become unsectioned
+  at the top. A further Backspace joins scenes normally. Delete at the end
+  of the preceding scene works the same way. Other input, a caret move or
+  waiting two seconds cancels the hint. Undo restores the header and its
+  name in one step.
+  - If <kbd>Alt</kbd>+<kbd>↑</kbd> or <kbd>Alt</kbd>+<kbd>↓</kbd> would move a
+    section's only scene across its header, the first press changes nothing
+    and shows “Press again to remove the section header”. Repeat the same
+    shortcut within two seconds, without another non-modifier key, click or caret move,
+    to move the scene and remove the emptied header. Undo restores both.
+    Releasing and pressing Alt again does not cancel the hint; the same
+    confirmation also applies when Shift is held with the shortcut.
+
+- **Start a tag at the cursor.** With nothing selected in a Visual cell,
+  press **Tag** and choose a category, then type its name. The same dialog
+  shows just its categories; selecting existing words still opens the full
+  label dialog.
 - **Collaboration and server scripts are gone for now.** Live
   collaboration, invite and share links, opening and saving scripts on a
   Splitpage server, hosting from the desktop app, and Google Drive are
@@ -527,9 +562,20 @@ exports and read times stay the same, and the teleprompter leaves them out.
 `Music:`, in any case). The words you type next are tinted in that
 category's colour.
 
+You can also put the caret in the Visual column with nothing selected and
+press **Tag**. The label dialog shows only its categories, with the first
+one focused. Click a category, or focus it and press <kbd>Enter</kbd>, to
+start the same open tag at your saved caret. <kbd>Esc</kbd> or a click
+outside the dialog returns to that caret without changing the script.
+This works wherever typing a category keyword would open a tag, outside
+links and existing tags. With selected words, the full label dialog works
+as before.
+
 - <kbd>Tab</kbd> (on a phone, tap the note under the box) makes them one
   tag.
 - <kbd>Esc</kbd> cancels and leaves the plain text.
+- <kbd>Enter</kbd> or leaving the cell ends the open tag as plain text;
+  <kbd>Enter</kbd> also inserts a line break.
 - <kbd>Ctrl</kbd>+<kbd>Z</kbd> after <kbd>Tab</kbd> takes the tag off and
   leaves your words as you typed them.
 
@@ -597,6 +643,23 @@ first Save asks where, and in which format:
   comment anchors, pictures, statuses). Leave that block alone.
 - **Splitpage (`.splitpage`)**: the same information without the readable
   table.
+
+On the first save through the desktop dialog or a browser file picker, an
+untouched untitled script takes its title from the chosen filename without
+the extension. A trailing `v3` or `V3` (any number), separated by a space,
+underscore or hyphen, becomes a small `v3` tag beside the title, leaving the
+separator out of the title. Names such as `Rev2` and `Headsetv3` stay whole
+without a tag. Splitpage never invents or increments a version. Both the title and
+tag survive reopening a `.md` or `.splitpage` project.
+
+A title you typed is never replaced. While the title still comes from a
+filename, Save a copy updates the tag from the new name, or removes it when
+there is no version; it keeps the title. Once you edit the title, Save a
+copy leaves both title and tag alone. Undo reverses automatic naming as one
+change and keeps the chosen file as the save destination.
+
+**Download-only browsers: no change; the app never sees the final name.**
+There is no extra filename prompt.
 
 **Save a copy…** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) writes a new
 file and leaves the one on screen where it is.
@@ -704,9 +767,8 @@ chooses page breaks, without a continued-row label, and supplies no PDF
 bookmarks.
 
 The **desktop app** still saves a PDF file directly, with bookmarks to its
-sections. Its current PDF writer supports Greek, Cyrillic, accented Latin
-and black-and-white emoji; unsupported characters appear as "?", with a
-warning. The browser print layout does not use that writer.
+sections. It prints the same page as the browser, so it also uses your
+computer's fonts and lets the page breaks fall where they fit.
 
 **Markdown** comes in two shapes. **Stacked** reads like a script, one
 heading per scene with its start time, status and read time; with pictures

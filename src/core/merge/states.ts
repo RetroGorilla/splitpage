@@ -9,6 +9,8 @@ import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats, RowSide } from "./rows.ts";
 import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWins, mergeTitle } from "./scalars.ts";
 import { listShapedSide } from "./shape.ts";
+import { mergeSectionLayout } from "./sections.ts";
+import type { DocumentSection } from "../document/sections.ts";
 import { textMergeContext } from "./text-field.ts";
 import type { MergeDecoder } from "./text-field.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
@@ -46,6 +48,7 @@ interface FieldRun {
   people: unknown[] | undefined;
   survives: PersonSurvives | undefined;
   rows: MergeRow[];
+  sections: DocumentSection[] | undefined;
   comments: MergeComment[];
   title: unknown;
 }
@@ -67,6 +70,11 @@ const STRATEGY_TABLE: Record<StrategyId, FieldStrategy> = {
     else run.out[f.key] = listMerger(f)(run.base && run.base[f.key], run.mine[f.key], run.theirs[f.key], run.survives);
   },
   "changed-side-wins": function (f, run) { run.out[f.key] = mergeChangedSideWins(f, run.base, run.mine, run.theirs); },
+  "optional-changed-side-wins": function (f, run) {
+    const mine = run.mine[f.key], theirs = run.theirs[f.key];
+    const value = run.base ? (theirs === run.base[f.key] ? mine : theirs) : (theirs ?? mine);
+    if (value !== undefined) run.out[f.key] = value;
+  },
   "max-plus-one": function (f, run) { run.out[f.key] = mergeMaxPlusOne(f.key, run.mine, run.theirs); },
   "theirs-wins": function (f, run) { run.out[f.key] = mergeTheirsWins(f.key, run.mine, run.theirs); },
   "person-colors": function (f, run) {
@@ -76,6 +84,9 @@ const STRATEGY_TABLE: Record<StrategyId, FieldStrategy> = {
   "target-length": function (f, run) {
     const tl = mergeTargetLength(run.base, run.mine, run.theirs);
     if (tl !== null) run.out[f.key] = tl;
+  },
+  "sections": function (f, run) {
+    if (run.sections) run.out[f.key] = run.sections;
   },
   "constant": function (f, run) { run.out[f.key] = SCHEMA_VERSION; }
 };
@@ -102,7 +113,8 @@ export function mergeStateFields(baseSide: ValidatedDocument | null | undefined,
   const mergedTags = listMerger(tagField)(base && base.productionTags, mine.productionTags, theirs.productionTags, survives);
   const textCtx = textMergeContext(ports.decode, base, mine, theirs, mergedTags as TagEntry[]);
 
-  const rows = mergeRows(base, mine, theirs, { text: textCtx, conflicts: conflicts, stats: stats, clock: ports.clock, editor: ports.editor });
+  const layout = mergeSectionLayout(base, mine, theirs,
+    mergeRows(base, mine, theirs, { text: textCtx, conflicts: conflicts, stats: stats, clock: ports.clock, editor: ports.editor }));
   const comments = mergeComments(base, mine, theirs);
   const title = mergeTitle(base, mine, theirs, conflicts);
   conflicts.forEach(function (c) { comments.push(conflictComment(c, ports)); });
@@ -110,7 +122,7 @@ export function mergeStateFields(baseSide: ValidatedDocument | null | undefined,
   const run: FieldRun = {
     base: base, mine: mine, theirs: theirs, out: {},
     tagField: tagField, tags: mergedTags, peopleField: peopleField, people: mergedPeople, survives: survives,
-    rows: rows, comments: comments, title: title
+    rows: layout.rows, sections: layout.sections, comments: comments, title: title
   };
   fields.forEach(function (f) { strategyFor(f)(f, run); });
   repointOwners([run.out.productionTags, run.out.brollShots], personIdRemap(sidePeople, run.out.people as PersonList));

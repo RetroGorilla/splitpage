@@ -1,0 +1,107 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.old=F.state(); F.openFile(new File([JSON.stringify({title:'Section headers',rows:['One.','Two.','Three.','Four.'].map(function(text,i){return {id:'r'+(i+1),visualText:'',audioText:text,status:i===1?'shot':'todo',lengthSeconds:(i+1)*10};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r3'}]})],'sections.splitpage'));return true;})()
+wait F.state() !== old && F.state().title === 'Section headers'
+expect document.querySelectorAll('#rows .section-header').length === 2
+expect document.querySelectorAll('#rows .row').length === 4
+expect document.querySelector('#rows [data-section-id="s1"] .section-stats').textContent.includes('2 scenes')
+expect document.querySelector('#rows [data-section-id="s1"] [data-section-total]').textContent === '0:30'
+eval window.beforeFold=JSON.stringify(F.state()); document.querySelector('#rows [data-section-id="s1"] .section-fold').click(); true
+wait document.querySelectorAll('#rows .row').length === 2
+expect document.activeElement === document.querySelector('#rows [data-section-id="s1"] .section-fold')
+expect JSON.stringify(F.state()) === beforeFold
+eval document.querySelector('#rows [data-section-id="s1"] .section-fold').click(); true
+wait document.querySelectorAll('#rows .row').length === 4
+eval document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable').focus(); document.querySelector('[data-section-action="add"]').click(); true
+wait !!document.querySelector('.section-rename input')
+press Middle
+key none Enter
+wait F.state().sections.length === 3
+expect F.state().sections[1].name === 'Middle' && F.state().sections[1].firstSceneId === 'r2'
+eval window.middle=F.state().sections[1].id; document.querySelector('#rows [data-section-id="'+middle+'"] .section-name').click(); true
+wait !!document.querySelector('.section-rename input')
+press Bridge
+key none Enter
+wait F.state().sections[1].name === 'Bridge'
+eval document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable').focus(); window.beforeMove=JSON.stringify(F.state()); true
+key alt ArrowDown
+expect JSON.stringify(F.state()) === beforeMove
+expect document.querySelector('#rows [data-section-id="'+middle+'"] .section-hint').textContent === 'Press again to remove the section header'
+key none ArrowRight
+key alt ArrowDown
+expect JSON.stringify(F.state()) === beforeMove
+wait document.querySelector('#rows [data-section-id="'+middle+'"] .section-hint').hidden
+key alt ArrowDown
+expect JSON.stringify(F.state()) === beforeMove
+eval (function(){var c=document.activeElement;c.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',altKey:true,bubbles:true}));c.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',altKey:true,repeat:true,bubbles:true}));return true;})()
+key alt ArrowDown
+wait F.state().rows.map(function(r){return r.id;}).join(',') === 'r1,r3,r2,r4'
+expect F.state().sections.length === 2
+key ctrl KeyZ
+wait F.state().rows.map(function(r){return r.id;}).join(',') === 'r1,r2,r3,r4'
+expect F.state().sections[1].name === 'Bridge'
+eval document.querySelector('#rows [data-section-id="'+middle+'"] [data-section-action="remove"]').click(); true
+wait F.state().sections.length === 2
+expect F.state().rows.length === 4
+key ctrl KeyZ
+wait F.state().sections.length === 3
+expect F.state().sections[1].name === 'Bridge'
+eval document.querySelector('#rows [data-section-id="'+middle+'"] [data-section-action="remove"]').click(); true
+wait F.state().sections.length === 2
+eval window.sectionDrag=function(from,to,scene){var dt=new DataTransfer(); if(scene)from.querySelector('[data-action="drag-grip"]').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true})); from.dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:dt}));var r=to.getBoundingClientRect();for(var type of ['dragover','drop'])to.dispatchEvent(new DragEvent(type,{bubbles:true,cancelable:true,dataTransfer:dt,clientX:r.left+10,clientY:r.top+2}));from.dispatchEvent(new DragEvent('dragend',{bubbles:true,cancelable:true,dataTransfer:dt}));return true;}; sectionDrag(document.querySelector('#rows [data-section-id="s2"] .section-grip'),document.querySelector('#rows [data-section-id="s1"]'),false)
+wait F.state().rows.map(function(r){return r.id;}).join(',') === 'r3,r4,r1,r2'
+expect F.state().sections.map(function(s){return s.id;}).join(',') === 's2,s1'
+key ctrl KeyZ
+wait F.state().rows[0].id === 'r1'
+eval sectionDrag(document.querySelector('#rows .row[data-id="r2"]'),document.querySelector('#rows [data-section-id="s2"]'),true)
+wait F.state().sections[1].firstSceneId === 'r2'
+expect F.state().rows.map(function(r){return r.id;}).join(',') === 'r1,r2,r3,r4'
+key ctrl KeyZ
+wait F.state().sections[1].firstSceneId === 'r3'
+click #btn-write
+wait !document.getElementById('writer').hidden
+eval var menu=document.querySelector('#writer-doc [data-section-id="s2"] details');menu.open=true;menu.querySelector('summary').focus();true
+key none Escape
+expect !document.querySelector('#writer-doc [data-section-id="s2"] details').open && !document.getElementById('writer').hidden
+eval window.caret=function(id,end){var el=document.querySelector('#writer-doc .wr-para[data-id="'+id+'"]');el.focus();var r=document.createRange();r.selectNodeContents(el);r.collapse(!end);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;}; window.hint=function(){return document.querySelector('#writer-doc [data-section-id="s2"] .section-hint');}; caret('r3',false)
+eval window.beforeBoundary=JSON.stringify(F.state()); U.flush();window.undoBefore=U.sizes().undo;true
+key none Backspace
+expect JSON.stringify(F.state()) === beforeBoundary
+expect !hint().hidden && hint().textContent === 'Press Backspace again to remove the section header'
+expect document.querySelectorAll('.section-hint:not([hidden])').length === 1 && document.getElementById('section-hint-live').textContent === hint().textContent
+expect U.sizes().undo === undoBefore
+key none Backspace
+wait F.state().sections.length === 1
+expect F.state().rows.length === 4
+eval U.flush(); true
+expect U.sizes().undo === undoBefore+1
+key ctrl KeyZ
+wait F.state().sections.length === 2
+expect F.state().sections[1].name === 'Ending'
+eval caret('r3',false)
+key none Backspace
+key none ArrowRight
+expect hint().hidden
+key none Home
+key none Backspace
+expect F.state().sections.length === 2
+wait hint().hidden
+expect F.state().sections.length === 2
+key none Backspace
+expect F.state().sections.length === 2 && !hint().hidden
+eval document.querySelector('#writer-doc [data-section-id="s2"] .section-name').click();true
+expect hint().hidden
+key none Escape
+eval caret('r2',true)
+key none Delete
+expect F.state().sections.length === 2 && hint().textContent === 'Press Delete again to remove the section header'
+key none Delete
+wait F.state().sections.length === 1
+expect F.state().rows.length === 4
+key ctrl KeyZ
+wait F.state().sections.length === 2
+expect F.state().sections[1].name === 'Ending'
+click #wr-close
+wait document.getElementById('writer').hidden
+wait getComputedStyle(document.getElementById('writer')).display === 'none'
+shot section-headers

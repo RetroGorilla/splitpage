@@ -57,6 +57,9 @@ a { color: #${c.visual}; text-decoration: underline; }
 .print-meta, .image-unavailable { color: #${c.faint}; }
 .print-text { white-space: pre-wrap; }
 .scene-number { font-size: 12pt; }
+.script-table + .script-table { margin-top: 8pt; }
+.script-section th { font-size: 11pt; color: #${c.text}; border-top: 1pt solid #${c.border}; break-after: avoid; }
+.script-section-total { float: right; margin-left: 12pt; font-weight: normal; white-space: nowrap; }
 .scene-meta { display: block; font-size: 7pt; color: #${c.dim}; }
 .read-set { border: 0.5pt solid #${c.borderStrong}; border-radius: 2pt; padding: 2pt; }
 .visual-head { color: #${c.visual}; }

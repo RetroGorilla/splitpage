@@ -108,6 +108,7 @@ async function buildFileData(kind, baseName, opts) {
   var request = exportRequest(kind, opts);
   var registered = running().formats.byId(kind);
   var exporter = registered || running().formats.byId("md");
+  if (!exporter.build) throw new Error("The " + kind + " export prints a page and builds no file");
   var assets = await loadExportAssets(request.assets);
   if (!active) throw new Error("The local file menu is not started yet");
   var made = await exporter.build({

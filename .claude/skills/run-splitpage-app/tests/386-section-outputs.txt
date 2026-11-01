@@ -1,0 +1,64 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F=window.__splitpageFormats; window.old=F.state(); F.openFile(new File([JSON.stringify({title:'Section cues',rows:['Prefix words.','Opening words.','Folded words.','Ending words.'].map(function(text,i){return {id:'r'+(i+1),visualText:'',audioText:text,status:i===1?'shot':'todo',lengthSeconds:i<2?i+1:(i+1)*10};}),sections:[{id:'s1',name:'Opening cue',firstSceneId:'r2'},{id:'s2',name:'Ending cue',firstSceneId:'r4'}]})],'sections.splitpage'));return true;})()
+wait F.state() !== old && F.state().title === 'Section cues'
+wait document.querySelectorAll('.rd-section').length === 2
+expect Array.from(document.querySelectorAll('.rd-section')).map(function(e){return e.textContent;}).join('|') === 'Opening cue|Ending cue'
+expect document.querySelectorAll('.rundown-blocks .rd-block').length === 4
+eval window.aligned=function(){return Array.from(document.querySelectorAll('.rd-section')).every(function(label){var blocks=document.querySelectorAll('.rundown-blocks .rd-block');var a=blocks[Number(label.dataset.start)].getBoundingClientRect();var b=blocks[Number(label.dataset.end)-1].getBoundingClientRect();var h=label.getBoundingClientRect();return Math.abs(h.left-a.left)<1&&Math.abs(h.right-b.right)<1;});}; window.restWidth=document.querySelector('.rd-block[data-row="r2"]').getBoundingClientRect().width;true
+expect aligned()
+eval (function(){var track=document.querySelector('.rundown-track'),box=document.querySelector('.rd-block[data-row="r2"]').getBoundingClientRect();track.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse',clientX:box.left+box.width/2,clientY:box.top+10}));return true;})()
+wait document.querySelector('.rd-block[data-row="r2"]').getBoundingClientRect().width > restWidth+10
+expect aligned()
+eval document.querySelector('.rundown-track').dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));true
+wait Math.abs(document.querySelector('.rd-block[data-row="r2"]').getBoundingClientRect().width-restWidth)<1
+expect aligned()
+jsclick .rundown-toggle
+wait document.querySelector('.rundown-sections').hidden
+jsclick .rundown-toggle
+wait !document.querySelector('.rundown-sections').hidden
+eval document.querySelector('#rows [data-section-id="s1"] .section-name').click();var form=document.querySelector('.section-rename');form.querySelector('input').value='Renamed cue';form.requestSubmit();true
+wait document.querySelector('.rd-section').textContent === 'Renamed cue'
+eval window.__undoTest.flush();document.querySelector('#rows .row[data-id="r1"] .audio-cell .cell-editable').focus();true
+key ctrl KeyZ
+wait document.querySelector('.rd-section').textContent === 'Opening cue'
+eval document.querySelector('#rows [data-section-id="s1"] .section-fold').click(); true
+wait document.querySelectorAll('#rows .row').length === 2
+expect document.querySelectorAll('.rundown-blocks .rd-block').length === 4
+eval document.querySelector('#rows .row[data-id="r1"] .audio-cell .cell-editable').focus(); true
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('pp-section').hidden
+expect !document.getElementById('prompter-content').textContent.includes('Opening cue') && !document.getElementById('prompter-content').textContent.includes('Ending cue')
+expect document.getElementById('prompter-content').textContent.includes('Folded words.')
+eval if(document.getElementById('pp-scene-mode').getAttribute('aria-pressed')!=='true')document.getElementById('pp-scene-mode').click(); true
+jsclick #pp-scene-next
+wait document.getElementById('pp-section').textContent === 'Opening cue' && !document.getElementById('pp-section').hidden
+jsclick #pp-scene-next
+wait document.getElementById('pp-scene-readout').textContent === 'Scene 3 of 4'
+expect document.getElementById('pp-section').textContent === 'Opening cue'
+jsclick #pp-scene-next
+wait document.getElementById('pp-section').textContent === 'Ending cue'
+shot section-present
+viewport 390 844
+expect document.getElementById('pp-section').getBoundingClientRect().width >= 70
+expect document.getElementById('pp-section').getBoundingClientRect().right <= document.querySelector('.pp-clock').getBoundingClientRect().left
+shot section-present-phone
+viewport 1400 900
+jsclick #pp-skip-shot
+wait document.getElementById('pp-skip-shot').getAttribute('aria-pressed') === 'true'
+expect !document.getElementById('prompter-content').textContent.includes('Opening words.')
+expect document.getElementById('pp-section').hidden
+jsclick #pp-scene-next
+wait document.getElementById('pp-section').textContent === 'Opening cue'
+expect document.getElementById('prompter-content').textContent.includes('Folded words.')
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+shot section-rundown
+eval window.old=F.state(); F.openFile(new File([JSON.stringify({title:'No sections',rows:[{id:'plain',visualText:'',audioText:'Plain words.'}]})],'plain.splitpage')); true
+wait F.state() !== old && F.state().title === 'No sections'
+expect document.querySelector('.rundown-sections').hidden && document.querySelectorAll('.rd-section').length === 0
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('pp-section').hidden && document.getElementById('pp-section').textContent === ''
+jsclick #pp-close

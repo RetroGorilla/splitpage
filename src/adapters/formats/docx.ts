@@ -25,7 +25,7 @@ import {
   exportSummaryParts
 } from "./export-kit.ts";
 import { capturedPicture, capturedRowPicture } from "./export-assets.ts";
-import { sceneFacts } from "./export-projections.ts";
+import { sceneFacts, scriptSectionFacts } from "./export-projections.ts";
 import { strBytes } from "./bytes.ts";
 import { xmlEscape } from "./xml.ts";
 import { zipRead, zipWrite } from "./zip.ts";
@@ -466,9 +466,14 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
     "</w:tr>";
 
   const scenes = sceneFacts(doc);
+  const headings = new Map(scriptSectionFacts(doc, scenes).map(group => [group.start, group]));
   const ann = { nums: doc.commentNumbers, open: commentOpenness(doc) };
   const maxW = (COL_VISUAL - 200) * 635;
   doc.scenes.forEach(function (row, idx) {
+    const heading = headings.get(idx);
+    if (heading) rowsXml += '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + docxCellXml(
+      cellParaXml(textRunXml(heading.name + " · " + heading.total, { b: true, sz: 24 }), { keepNext: true, before: 80, after: 80 }),
+      PAGE_W, { span: 4 }) + '</w:tr>';
     let visual = "";
     const rowPic = rowImage(row);
     const pic = rowPic && capturedRowPicture(assets, row);
@@ -864,6 +869,8 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
   const links: string[] = [];
   const rels = { addLink: function (href: string) { links.push(href); return "rIdL" + links.length; } };
   const rows = narrationRows(doc, opts);
+  const sections = scriptSectionFacts(doc, sceneFacts(doc));
+  let lastSection = "";
   const words = rows.reduce(function (n, row) { return n + exportServices().productionReaders.wordCount(row.audioText); }, 0);
   const wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
 
@@ -872,7 +879,14 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
       "about " + formatDuration(words / Number(wpm) * 60) + " at " + String(wpm) + " wpm"].join(" · "));
 
   rows.forEach(function (row) {
-    const number = pad2(doc.scenes.indexOf(row) + 1);
+    const index = doc.scenes.indexOf(row);
+    const heading = sections.find(group => index >= group.start && index < group.end);
+    if (heading && heading.id !== lastSection) {
+      lastSection = heading.id;
+      body += '<w:p><w:pPr><w:pStyle w:val="' + META_STYLE + '"/><w:keepNext/><w:spacing w:before="240" w:after="120"/></w:pPr>' +
+        textRunXml(heading.name + " · " + heading.total, { b: true, sz: 24, color: PRINT_COLORS.text }) + '</w:p>';
+    }
+    const number = pad2(index + 1);
     body += docxRunsXml(row.audioText, rels, Object.assign({
       pPr: '<w:pStyle w:val="' + NARRATION_STYLE + '"/><w:ind w:left="0" w:hanging="' + SCENE_NO_HANG + '"/>',
       lead: '<w:r><w:rPr><w:rStyle w:val="' + SCENE_NO_STYLE + '"/><w:color w:val="' + PRINT_COLORS.faint + '"/><w:sz w:val="16"/></w:rPr>' +

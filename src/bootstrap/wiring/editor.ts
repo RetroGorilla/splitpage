@@ -122,6 +122,8 @@ import { viewFlags } from "./preferences-owner.ts";
 import { configureUndo, undoOwner } from "./undo.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";
+import { mountSectionHeaders } from "./section-headers.ts";
+import { sectionView } from "./editor-owners.ts";
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
@@ -409,13 +411,15 @@ const rowRoutePorts: RowRoutePorts = {
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
   expandHidden: expandHiddenShotStrip,
-  reveal: function (rowId) { shotHiding().reveal(rowId); },
+  reveal: function (rowId) { const doc = currentDocument(); if (doc) sectionView().reveal(doc, rowId); shotHiding().reveal(rowId); },
   gone: function () { showToast("That scene is no longer here.", "warn"); }
 };
 
 export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
   return rowRoutes.replace(function () {
-    return mountRowRoutes({ window: window, rows: document.getElementById("rows") as Element, ports: rowRoutePorts });
+    const routes = mountRowRoutes({ window: window, rows: document.getElementById("rows") as Element, ports: rowRoutePorts });
+    const sections = mountSectionHeaders();
+    return { ...routes, dispose() { sections.dispose(); routes.dispose(); } };
   }, function (owner) {
     return [
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
@@ -429,7 +433,7 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
 export const stopRowsFeature = rowRoutes.stop;
 
 export function rowsActions(): ActionDefinition[] {
-  return rowActions({ reveal: (rowId) => { shotHiding().reveal(rowId); } });
+  return rowActions({ reveal: (rowId) => { const doc = currentDocument(); if (doc) sectionView().reveal(doc, rowId); shotHiding().reveal(rowId); } });
 }
 
 const rowsEditor = owned<ReturnType<typeof mountRowsEditor>>();
@@ -486,7 +490,7 @@ export function onRootInput(e: RootInput): void {
   maybeDirectionShortcut(e as InputEvent, cellEl);
   maybeCueShortcut(e as InputEvent, cellEl);
   maybeCaptureBroll(e, cellEl);
-  currentPlainTags()?.maybeOpen(e, cellEl);
+  currentPlainTags()?.maybeOpen(e as InputEvent, cellEl);
   cellEditing().sync(cellEl);
   settleEndedComposition(e);
   afterScriptCellChange(cellEl);
@@ -764,6 +768,8 @@ export function onRootKeydown(e: KeyboardEvent): void {
     const mvField = cellEl.getAttribute("data-field");
     const mvOffset = caretTextOffset(cellEl);
     if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1)) {
+      const moved = currentDocument();
+      if (moved && mvId) sectionView().reveal(moved, mvId);
       if (!viewFlags().writerOpen()) focusRowField(mvId, mvField, mvOffset);
       renderProduction();
     }

@@ -164,6 +164,7 @@
       </div>
         <span class="topbar-rule" aria-hidden="true"></span>
         <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
+        <span id="doc-version" class="title-version" hidden></span>
         <div class="save-state">
           <span class="save-status" id="save-status" role="status" aria-live="polite" hidden></span>
           <button class="save-btn" id="btn-save" type="button" data-status="Save">Save</button>
@@ -198,6 +199,7 @@
     </div>
     <section class="rundown" id="rundown" aria-label="Rundown" hidden>
       <div class="rundown-ruler" aria-hidden="true"></div>
+      <div class="rundown-sections" aria-label="Sections" hidden></div>
       <div class="rundown-track">
         <div class="rundown-blocks"></div>
         <div class="rundown-overlay" id="rundown-overlay" aria-hidden="true"></div>
@@ -288,6 +290,7 @@
 
   <div class="add-row-bar">
     <button class="add-row-btn" type="button" data-action="add-row">+ Add scene</button>
+    <button class="add-row-btn" type="button" data-section-action="add">+ Section before selected scene</button>
   </div>
 </div>
 
@@ -452,6 +455,7 @@
 <div class="prompter" id="prompter" hidden>
   <div class="prompter-top">
     <div class="pp-where">
+      <span class="pp-section" id="pp-section" hidden></span>
       <span class="pp-scene-pos" id="pp-scene-pos" aria-hidden="true"></span><span class="pp-sr" id="pp-scene-pos-sr"></span>
       <span class="pp-scene-start" id="pp-scene-start" title="Where this scene starts"></span>
     </div>
@@ -525,6 +529,7 @@
   <div class="writer-top">
     <span class="writer-kicker">Narration</span>
     <input type="text" class="writer-title" id="writer-title" aria-label="Script title" spellcheck="false">
+    <span id="writer-version" class="title-version" hidden></span>
     <span class="writer-stats">
       <span><b id="wr-scenes">0</b> scenes</span>
       <span><b id="wr-words">0</b> words</span>
@@ -1079,6 +1084,7 @@
   </div>
 </div>
 
+<div id="section-hint-live" class="section-hint-live" role="status" aria-atomic="true"></div>
 <script id="state-data" type="application/json">
 {{SEED_STATE}}
 </script>

@@ -59,6 +59,22 @@
   text-overflow: ellipsis;
 }
 .doc-title:hover { border-color: var(--border); }
+.title-version {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+}
 .doc-title:focus {
   outline: none;
   border-color: var(--visual);
@@ -726,7 +742,7 @@
 body:has(.annotate-overlay:not([hidden])) #toast-host {
   bottom: calc(52px + env(safe-area-inset-bottom));
 }
-.add-row-bar { padding: 18px 0 var(--space-4); display: flex; justify-content: center; }
+.add-row-bar { position: relative; padding: 18px 0 var(--space-4); display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .add-row-btn {
   font-family: var(--font-body);
   font-size: 13.5px;
@@ -737,6 +753,75 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
   border-radius: var(--radius-sm);
   padding: var(--space-10) 22px;
   cursor: pointer;
+}
+.section-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  padding: 2px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--text);
+  font: 13px/1.4 var(--font-body);
+}
+.section-header button, .section-more summary {
+  color: inherit;
+  font: inherit;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 3px 5px;
+  cursor: pointer;
+}
+.section-header button:hover, .section-more summary:hover { background: var(--hover); }
+.section-header button:disabled { opacity: .45; cursor: default; }
+.section-header .section-grip { color: var(--text-faint); cursor: grab; font-size: 17px; line-height: 1; }
+.section-fold { width: 24px; flex: none; }
+.section-header [role="heading"] { min-width: 0; }
+.section-header .section-name { font-weight: 600; text-align: left; overflow-wrap: anywhere; }
+.section-stats { flex: none; color: var(--text-faint); font: 11px var(--font-display); white-space: nowrap; }
+.section-more { margin-left: auto; flex: none; }
+.section-more summary { list-style: none; font-size: 18px; line-height: 1; }
+.section-more summary::-webkit-details-marker { display: none; }
+.section-menu {
+  position: absolute;
+  right: 4px;
+  top: 100%;
+  z-index: 20;
+  display: grid;
+  min-width: 158px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.section-menu button { padding: 6px 10px; text-align: left; white-space: nowrap; }
+.section-hint { color: var(--text-dim); font-size: 11px; }
+.section-hint-live {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.section-drop-before { box-shadow: inset 0 3px var(--visual); }
+.section-drop-after { box-shadow: inset 0 -3px var(--visual); }
+.section-rename {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  background: var(--surface-2);
+}
+.section-rename input { flex: 1; min-width: 0; padding: 4px 6px; font: 13px var(--font-body); }
+.section-rename button { padding: 4px 8px; font: 12px var(--font-body); cursor: pointer; }
+#writer-doc .section-header { margin: 12px 0; }
+@media (max-width: 600px) {
+  .section-header { flex-wrap: wrap; gap: 4px; padding: 4px 6px; }
+  .section-header [role="heading"] { flex: 1; min-width: 60px; }
+  .section-hint { flex-basis: 100%; padding-left: 30px; }
 }
 .empty-state {
   text-align: center;
@@ -1825,6 +1910,19 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
   white-space: nowrap;
 }
 .rundown-track { position: relative; height: 45px; }
+.rundown-sections { position: relative; height: 20px; overflow: hidden; pointer-events: none; }
+.rundown-sections[hidden] { display: none; }
+.rd-section {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border-left: 1px solid var(--border-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 11px/16px var(--font-display);
+  color: var(--text-dim);
+}
 .rundown-blocks, .rundown-overlay { position: absolute; inset: 0; }
 .rundown-overlay { pointer-events: none; }
 .rundown-blocks {

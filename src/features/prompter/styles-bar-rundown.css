@@ -224,6 +224,8 @@
     .prompter .pp-scene-pos { font-size: 14px; }
     .prompter .pp-scene-start { font-size: 12.5px; }
     .prompter .pp-where { gap: var(--space-8); }
+    .prompter .pp-where:has(.pp-section:not([hidden])) { display: grid; grid-template-columns: auto 1fr; row-gap: 0; }
+    .prompter .pp-section:not([hidden]) { grid-column: 1 / -1; }
     .prompter .pp-elapsed { font-size: 22px; line-height: 28px; }
     .prompter .pp-remaining { font-size: 13px; }
     .prompter .pp-clock { gap: var(--space-6); }

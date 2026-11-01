@@ -86,6 +86,24 @@ the render and blob suites included, requires the test build; the converted
 names are pinned in `tools/test-release-hooks.mjs`. `__blobsTest` is built by
 `blobsTestControls` in the adapter and exposed by `src/bootstrap/wiring/blobs.ts`.
 
+AQ-46 also removes history fault injection and controls from the release
+bundle. `src/bootstrap/wiring/history.ts` selects the test factories behind
+the folded build flag. The application owner receives an instrumentation
+factory; it never reads the flag. Storage defaults to no-op write observers
+and no instrumentation. The test implementations live in
+`src/adapters/storage/history-backend-testing.ts`, `history-fault-queue.ts`,
+`history-inspection-testing.ts` and `history-owner-testing.ts`.
+Source tests that exercise faults explicitly inject these factories, including
+the shared memory backend and the fake desktop backend.
+
+`tools/release-hooks.mjs` rejects all 27 distinctive history control names and
+fault strings in release builds and packaging. `tools/test-release-hooks.mjs`
+checks that none appear in release JavaScript and all appear in test JavaScript.
+Shared names such as `read`, `idle`, `backendName`, `rawIndex`, `pending`, `seed`,
+`migrate` and `importBundle` also name real product operations; their remaining
+occurrences do not denote a test-control object. The default-owner test covers
+the absence of that object and capture/copy/export without instrumentation.
+
 `node tools/perf-record.mjs [report.md]` builds the test variant with `node build.mjs --test` and drives it in headless
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
 the seed and the long demo, with the machine, browser and font it ran under.
@@ -616,8 +634,10 @@ Supported Node versions are 22 (from 22.22.2), 24 (from 24.15.0) and 26 and late
 `package.json`'s `engines`; `.nvmrc` pins Node 24.22.0, the one used locally and in CI.
 Run `nvm use` before `npm run verify`: on Node 22.22.0, `TextDecoder("latin1")`
 decodes bytes `0x85`, `0x93` and `0x94` as C1 control characters instead of
-`…`, `“` and `”`, so `list-pdfs.test.mjs` and `pdf-script.test.mjs` fail there
-and pass on 22.22.2 and later and on Node 24. `tools/run-tests.mjs` prints a warning,
+`…`, `“` and `”`, so the former generator cases in `list-pdfs.test.mjs` and `pdf-script.test.mjs` failed there
+and passed on 22.22.2 and later and on Node 24. AQ-44 removed those old-generator
+cases after Adam approved their disposition on 2026-10-31; the runtime
+requirement remains. `tools/run-tests.mjs` prints a warning,
 and still runs, when `process.version` differs from `.nvmrc` but is inside `engines`.
 Outside `engines` it lists the tests but refuses to run them, exiting 2 with the
 range and the pinned version, so an unsupported runtime is not reported as failing

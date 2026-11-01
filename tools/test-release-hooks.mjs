@@ -1,5 +1,5 @@
 import { appJs } from "../build.mjs";
-import { STILL_IN_RELEASE, hookNames, leakedHooks } from "./release-hooks.mjs";
+import { HISTORY_TEST_NAMES, STILL_IN_RELEASE, historyTestNames, hookNames, leakedHooks } from "./release-hooks.mjs";
 
 const APPROVED = Object.freeze([]);
 
@@ -51,6 +51,8 @@ eq("names are found once each and sorted", hookNames("window.__bTest=1;a.__aTest
 eq("a longer name is not a hook name", hookNames("__historyTester __history"), []);
 eq("the formats global is a hook name too", hookNames("window.__splitpageFormats.state();a.__splitpageFormatsX"), ["__splitpageFormats"]);
 eq("a hook outside the list is leaked", leakedHooks("window.__newThingTest=1;window.__blobsTest=1"), ["__blobsTest", "__newThingTest"]);
+eq("every history fault and distinctive control name is rejected", leakedHooks(HISTORY_TEST_NAMES.join(" ")), [...HISTORY_TEST_NAMES].sort());
+eq("a longer word is not a history control", historyTestNames("inspection resetForTester failNextTime"), []);
 eq("the list is sorted with no repeats", [...new Set(STILL_IN_RELEASE)].sort(), [...STILL_IN_RELEASE]);
 eq("the list adds no hook and brings none back: every name is in the approved snapshot", STILL_IN_RELEASE.filter((name) => !APPROVED.includes(name)), []);
 eq("a converted hook leaves the approved snapshot too, so it cannot come back later", APPROVED.filter((name) => !STILL_IN_RELEASE.includes(name)), []);
@@ -62,6 +64,7 @@ eq("no converted hook name is left in it", CONVERTED.filter((name) => release.in
 check("the build flag is replaced, not left as a name", !release.includes("SPLITPAGE_TEST_HOOKS"), null);
 eq("the fake desktop backend and its fault switches are left out", FAKE_DESKTOP.filter((marker) => release.includes(marker)), []);
 eq("the render counters and blob store controls are left out", HOOK_ONLY.filter((marker) => release.includes(marker)), []);
+eq("history fault queues, controls and inspection code are left out", historyTestNames(release), []);
 
 console.log("\nthe test build (node build.mjs --test):\n");
 
@@ -70,6 +73,7 @@ eq("it exposes every hook, the converted ones included", hookNames(testBuild), [
 eq("a converted hook is never also on the list", CONVERTED.filter((name) => STILL_IN_RELEASE.includes(name)), []);
 eq("it keeps the fake desktop backend and its fault switches", FAKE_DESKTOP.filter((marker) => !testBuild.includes(marker)), []);
 eq("it keeps the render counters and blob store controls", HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
+eq("it keeps every history fault and distinctive control name", historyTestNames(testBuild), [...HISTORY_TEST_NAMES].sort());
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {

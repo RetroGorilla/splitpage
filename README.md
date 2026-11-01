@@ -95,7 +95,7 @@ drives the browser suites.
 
 CI (`.github/workflows/ci.yml`) runs the same fast gate on every pull
 request, plus the smoke and CSP browser suites, builds the app,
-and uploads the built files as a `splitpage-app` artifact
+and, on pushes, uploads the built files as a `splitpage-app` artifact
 ([RELEASING.md](docs/RELEASING.md) §1).
 
 ## Building a release
@@ -233,8 +233,8 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
   document from corrupting, how to test, and what is still unverified. Read it
   before changing anything in `src/`.
 - `.github/workflows/ci.yml` — lint, unit tests, server and updater tests and
-  two browser suites on every pull request, plus the build whose output is
-  uploaded as the `splitpage-app` artifact.
+  two browser suites on every pull request, plus the build whose output a push
+  run uploads as the `splitpage-app` artifact.
 
 ## License
 

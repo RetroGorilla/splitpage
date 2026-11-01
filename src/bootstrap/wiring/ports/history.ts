@@ -1,6 +1,6 @@
 import type { HistoryOwnerPorts } from "../../../application/recovery/history-ports.ts";
 import type { LegacySnapshots } from "../../../application/recovery/legacy-snapshots.ts";
-import { createHistoryBackends } from "../../../adapters/storage/history-backends.js";
+import { createHistoryBackends } from "../../../adapters/storage/history-backends.ts";
 import { inlineStateJson } from "../../../adapters/storage/02c-blobs.js";
 import { historyDesktop } from "./desktop.ts";
 import { getEditorName } from "../preferences-owner.ts";
@@ -13,7 +13,7 @@ import { pictures } from "./pictures.ts";
 import { ids } from "./identity.ts";
 import { seedCheck } from "./startup.ts";
 
-export function historyPorts(snapshots: LegacySnapshots = legacySnapshots()): HistoryOwnerPorts {
+export function historyPorts(snapshots: LegacySnapshots = legacySnapshots(), storage: HistoryOwnerPorts["storage"] = createHistoryBackends): HistoryOwnerPorts {
   return {
     document: documentReader,
     location: homes,
@@ -30,6 +30,6 @@ export function historyPorts(snapshots: LegacySnapshots = legacySnapshots()): Hi
     decodeBase64: (text) => atob(text),
     yield: () => new Promise((resolve) => { setTimeout(resolve, 0); }),
     desktop: historyDesktop,
-    storage: createHistoryBackends
+    storage: storage
   };
 }

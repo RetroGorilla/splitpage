@@ -138,7 +138,8 @@ release gates.
 Since #80 CI also **produces** the app. It builds `index.html` and uploads it,
 with `sw.js`, `manifest.webmanifest`, the icons, `VERSION` and `server/`, as the
 `splitpage-app` artifact. The upload is the last step, so an
-artifact only exists for a run whose checks all passed.
+artifact only exists for a run whose checks all passed. Since 2026-10-31 only
+push runs upload it; pull request runs do not (artifact storage quota).
 
 **`.githooks/` is gone** (#80). It held a pre-commit hook that did two jobs:
 it re-ran `build.mjs --check` against the staged tree so a commit could not
@@ -424,8 +425,9 @@ is a two-line dispatcher so every existing call site refreshes both panels
 for free. `applyGearQuickAdd()` diffs the textarea against `gearEntries()`:
 a new line registers a tag (orphaned from creation); a removed line deletes
 the registry entry only if already orphaned (a live one self-heals back,
-§3.4). `buildPackingListPdf(catId)` is a second, smaller PDF writer rather
-than reusing `buildPdf()`'s page-building closures.
+§3.4). The packing list prints through `buildPackingListPrintPage(catId)`
+(`src/adapters/formats/list-print.ts`), on the same print-page shell as the
+script ([print-layout.md](architecture/print-layout.md)).
 
 A harness gotcha, not an app bug: renaming a live tag via a panel opened
 with `jsclick` right after typing can look like registry corruption —
@@ -773,6 +775,16 @@ builds two fields.
 
 ## 4. State schema
 
+Section headers (I-31) are an optional `sections` list of
+`{ id, name, firstSceneId }` records. They are boundaries anchored to real
+scene IDs, never scene rows. Scenes before the first boundary are unsectioned.
+The list is absent when empty, so sectionless files retain their old bytes.
+Both `.splitpage` and the authoritative Markdown data block carry the list;
+the legacy Markdown project table remains unchanged. Migration orders valid
+boundaries by scene order and removes invalid, duplicate or orphaned entries.
+Names are plain text, limited to 200 code points. See
+[sections.md](architecture/sections.md) for editing, undo and merge rules.
+
 ```jsonc
 {
   "title": "string ≤300 chars",
@@ -812,6 +824,18 @@ builds two fields.
   "personColors": { "Adam": "#CBA1FA" }  // #194 — ABSENT until somebody picks; see below
 }
 ```
+
+**Filename naming (I-32)** uses optional `titleOrigin` (`file` or `user`)
+and `titleVersion` (`v` followed by digits) fields. Neither has a default,
+so older documents remain without them. `STATE_FIELDS` normalizes them,
+keeps them in both project formats and includes them in undo. Their optional
+scalar merge takes the changed side, including deletion; competing changes
+take theirs. Schema remains 2. First picked save derives an untouched
+untitled title, while later Save As changes only the tag for file-derived
+titles. Explicit title edits retain the tag and mark the origin `user`.
+Download-only browsers change neither field. See
+[saving.md](architecture/saving.md#first-save-title-and-version-i-32) for
+capture, completion, concurrency and undo rules.
 
 **`personColors`** (#194) is the colour each person picked for themselves,
 `{name: colour}`: a name (trimmed, ≤80 characters) to one of the eight
@@ -985,13 +1009,13 @@ per-document history, drafts, duplicate-tab detection. Invariants #35–#37.
 snapshot id, the stamp after the bucket's newest, the trim to 50, cap
 eviction, the quota retry, Older's creation and expiry, holds, index-only
 copy, which bodies may go), run over a backend per place: in the browser
-over `03c-history-idb.js`'s IndexedDB (`splitpage-history` v3: an `index`
+over `03c-history-idb.ts`'s IndexedDB (`splitpage-history` v3: an `index`
 store, one DocRecord `{bucket, title, lastOpenedAt, migratedAt?,
 expiresAt?, snapshots:[meta + sha]}` per bucket, and a `bodies` store,
 `{sha, stateJson}`, one row per distinct content, shared by every entry
 naming it), or over the shared memory backend when IndexedDB will not open
 (for the rest of that page); on the desktop in main, over its folder
-backend (§3.13), with `src/adapters/storage/history-backends.js`'s `desktopHistoryBackend` a
+backend (§3.13), with `src/adapters/storage/history-backends.ts`'s `desktopHistoryBackend` a
 thin IPC client. Totals are computed from the index (no stored counters);
 a body goes only in the commit that stops naming it, and is written before
 the commit that names it. Pre-tabs shared history migrated once into a
@@ -1011,6 +1035,13 @@ written: there is no reader left, and dropping them would destroy
 history. A database a newer build wrote is served read-only: every write
 answers `read-only`, and captures stay pending in the page with ONE toast
 and one panel line.
+
+History fault injection and inspection controls are test-build-only. The
+factories in `src/adapters/storage/history-*-testing.ts` and
+`history-fault-queue.ts` are selected by `src/bootstrap/wiring/history.ts`;
+the storage backends and recovery owner receive no-op defaults in release
+builds. The shared memory backend takes the same injected write observer.
+See [testing.md](architecture/testing.md) for the release-name scan and test setup.
 
 **Crash-safe drafts** (§3.13): a `stateJson` full `state`
 object plus a separate `DraftHeader` (never document fields) — not document
@@ -1110,7 +1141,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/application/commands/` | document edits as session commands: cell text, split and join, clipboard, scene length and status, rows, comments, b-roll and production records |
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
 | `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
-| `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.js`) |
+| `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.ts`) |
 | `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.js`) |
 | `src/application/` (other) | preferences, document location and identity (with the document guard), production index and b-roll records, media and picture store, files and recents, export registry and services, screen and screen state, actions, shortcuts |
 | `src/adapters/` | `richtext/` (HTML in and out of cells), `formats/` (DOCX, PDF, CSV/XLSX, Markdown, the `.splitpage` file), `storage/` (blobs, gallery, history IndexedDB, desktop drafts), `files/`, `desktop/`, `page/`, `identity/`, `production/` |
