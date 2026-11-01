@@ -1,4 +1,5 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
+import { sectionsAfterRemoval, sectionsInOrder, writeSections } from "../../core/document/sections.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
@@ -29,16 +30,20 @@ export function pasteScenesCommand(paste: ScenePaste): Command {
       const planned = paste.plan(doc);
       if (!planned || !planned.inserted.length) return null;
       const replaced = planned.replaced !== null && present(doc, planned.replaced) ? [planned.replaced] : [];
+      const sections = sectionsInOrder(doc);
+      const nextSections = replaced.length ? sections?.map(section => section.firstSceneId === planned.replaced
+        ? { ...section, firstSceneId: planned.inserted[0] as string } : section) : sections;
       return {
         changes: changeSet({
           rowsInserted: planned.inserted,
           rowsRemoved: replaced,
-          docFields: planned.title ? SCENE_PASTE_FIELDS.concat(["title"]) : SCENE_PASTE_FIELDS,
+          docFields: SCENE_PASTE_FIELDS.concat(planned.title ? ["title"] : [], sections ? ["sections"] : []),
           derive: CELL_TEXT_DERIVES,
           saveNow: planned.saveNow
         }),
         apply: function (live) {
           paste.apply(live);
+          if (sections) writeSections(live, nextSections);
           planned.inserted.forEach(function (id) {
             if (!live.rows.some(function (r) { return r.id === id; })) throw new Error("pasted scene " + id + " is not in the document");
           });
@@ -55,14 +60,17 @@ export function removeScenesCommand(rowIds: readonly string[]): Command {
     plan: function (doc): Plan | null {
       const gone = rowIds.filter(function (id, at) { return present(doc, id) && rowIds.indexOf(id) === at; });
       if (!gone.length) return null;
+      const hadSections = !!sectionsInOrder(doc);
+      const sections = sectionsAfterRemoval(doc, new Set(gone));
       return {
-        changes: changeSet({ rowsRemoved: gone, derive: CELL_TEXT_DERIVES, saveNow: true }),
+        changes: changeSet({ rowsRemoved: gone, docFields: hadSections ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true }),
         apply: function (live) {
           const out = new Set(gone);
           for (let i = live.rows.length - 1; i >= 0; i--) {
             const row = live.rows[i];
             if (row && out.has(row.id)) live.rows.splice(i, 1);
           }
+          if (hadSections) writeSections(live, sections);
         }
       };
     }

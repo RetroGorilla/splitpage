@@ -9,7 +9,8 @@
     "productionTags",
     "brollShots",
     "wordsPerMinute",
-    "targetSeconds"
+    "targetSeconds",
+    "sections"
   ],
   "notUndone": [
     "docId",
@@ -313,6 +314,24 @@
       "changedBetween": {
         "doc": [
           "targetSeconds"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "sections",
+      "edit": "header added",
+      "undoEntries": 1,
+      "steps": [
+        "docField:sections"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "restamped": false,
+      "changedBetween": {
+        "doc": [
+          "sections"
         ],
         "rowFields": [],
         "structure": false

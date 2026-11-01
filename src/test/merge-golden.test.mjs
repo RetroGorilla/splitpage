@@ -115,6 +115,10 @@ const CASES = [
     name: "file-title-theirs-only", spec: doc(),
     theirs: (s) => { s.titleOrigin = "user"; s.titleVersion = "v12"; }
   },
+  {
+    name: "sections-both-changed", spec: doc({ sections: [{ id: "s1", name: "Base", firstSceneId: "r1" }] }),
+    mine: (s) => { s.sections[0].name = "Mine"; }, theirs: (s) => { s.sections[0].name = "Theirs"; }
+  },
   { name: "title-mine-only", spec: doc({ title: "Base title" }), mine: (s) => { s.title = "Mine title"; } },
   { name: "title-theirs-only", spec: doc({ title: "Base title" }), theirs: (s) => { s.title = "Their title"; } },
   {

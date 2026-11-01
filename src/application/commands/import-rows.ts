@@ -1,4 +1,5 @@
 import type { DocumentRow, ValidatedDocument } from "../../core/document/validated.ts";
+import { sectionsInOrder, writeSections } from "../../core/document/sections.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, Plan } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
@@ -34,10 +35,12 @@ export function importRowsCommand(request: ImportRequest, ports: StampPorts): Re
     plan: function (doc): Plan | null {
       if (!request.rows.length) return null;
       const removed = request.replace ? doc.rows.map(function (r) { return r.id; }) : [];
+      const clearsSections = request.replace && !!sectionsInOrder(doc);
       return {
         changes: changeSet({
           rowsInserted: request.rows.map(function (r) { return r.id; }),
           rowsRemoved: removed,
+          docFields: clearsSections ? ["sections"] : [],
           derive: CELL_TEXT_DERIVES
         }),
         apply: function (live) {
@@ -52,6 +55,7 @@ export function importRowsCommand(request: ImportRequest, ports: StampPorts): Re
           });
           if (request.replace) live.rows.splice(0, live.rows.length, ...added);
           else live.rows.push(...added);
+          if (clearsSections) writeSections(live, undefined);
           found = request.scan(live, added);
         }
       };

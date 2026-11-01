@@ -90,6 +90,12 @@
     "listMerger": false
   },
   {
+    "key": "sections",
+    "merge": "sections",
+    "default": null,
+    "listMerger": false
+  },
+  {
     "key": "schema",
     "merge": "constant",
     "default": null,
