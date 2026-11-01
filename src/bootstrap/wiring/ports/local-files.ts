@@ -10,7 +10,7 @@ import { csvToRows } from "../../../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../../../adapters/formats/import-rows.ts";
 import { parseProjectFileState } from "../../../adapters/formats/project-file.ts";
 import { exportAssetsRequest } from "../../../adapters/formats/export-assets.ts";
-import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.js";
+import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.ts";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
