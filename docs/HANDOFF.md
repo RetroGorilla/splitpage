@@ -1009,13 +1009,13 @@ per-document history, drafts, duplicate-tab detection. Invariants #35–#37.
 snapshot id, the stamp after the bucket's newest, the trim to 50, cap
 eviction, the quota retry, Older's creation and expiry, holds, index-only
 copy, which bodies may go), run over a backend per place: in the browser
-over `03c-history-idb.js`'s IndexedDB (`splitpage-history` v3: an `index`
+over `03c-history-idb.ts`'s IndexedDB (`splitpage-history` v3: an `index`
 store, one DocRecord `{bucket, title, lastOpenedAt, migratedAt?,
 expiresAt?, snapshots:[meta + sha]}` per bucket, and a `bodies` store,
 `{sha, stateJson}`, one row per distinct content, shared by every entry
 naming it), or over the shared memory backend when IndexedDB will not open
 (for the rest of that page); on the desktop in main, over its folder
-backend (§3.13), with `src/adapters/storage/history-backends.js`'s `desktopHistoryBackend` a
+backend (§3.13), with `src/adapters/storage/history-backends.ts`'s `desktopHistoryBackend` a
 thin IPC client. Totals are computed from the index (no stored counters);
 a body goes only in the commit that stops naming it, and is written before
 the commit that names it. Pre-tabs shared history migrated once into a
@@ -1134,7 +1134,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/application/commands/` | document edits as session commands: cell text, split and join, clipboard, scene length and status, rows, comments, b-roll and production records |
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
 | `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
-| `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.js`) |
+| `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.ts`) |
 | `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.js`) |
 | `src/application/` (other) | preferences, document location and identity (with the document guard), production index and b-roll records, media and picture store, files and recents, export registry and services, screen and screen state, actions, shortcuts |
 | `src/adapters/` | `richtext/` (HTML in and out of cells), `formats/` (DOCX, PDF, CSV/XLSX, Markdown, the `.splitpage` file), `storage/` (blobs, gallery, history IndexedDB, desktop drafts), `files/`, `desktop/`, `page/`, `identity/`, `production/` |

@@ -1,4 +1,4 @@
-import { MD_EXPORT_TAIL_RE, columnIndicesFromHeader, markdownExportScript, parseMarkdownTable } from "./markdown-table.ts";
+import { MD_EXPORT_TAIL_RE, columnIndicesFromHeader, isStackedSectionHeading, markdownExportScript, parseMarkdownTable } from "./markdown-table.ts";
 
 function splitImportText(text, mode) {
   var norm = String(text || "").replace(/\r\n/g, "\n").trim();
@@ -52,6 +52,7 @@ function parseStackedMarkdownExport(text) {
   while (i < lines.length && !lines[i].trim()) i++;
   if (i === lines.length || !/^#\s+\S/.test(lines[i])) return null;
   for (i++; i < lines.length && !MD_SCENE_HEADING_RE.test(lines[i].trim()); i++) {
+    if (isStackedSectionHeading(lines, i)) { i++; continue; }
     if (lines[i].trim() && !MD_SCENE_META_RE.test(lines[i].trim())) return null;
   }
   if (i === lines.length) return null;
@@ -62,7 +63,7 @@ function parseStackedMarkdownExport(text) {
     if (MD_SCENE_HEADING_RE.test(lines[i].trim())) {
       scenes.push([]);
       timed.push(lines[i].indexOf("·") !== -1);
-    } else scenes[scenes.length - 1].push(lines[i]);
+    } else if (!(lines[i - 2] === "---" && isStackedSectionHeading(lines, i))) scenes[scenes.length - 1].push(lines[i]);
   }
   return scenes.map(function (sc, n) {
     function cellText(s) {

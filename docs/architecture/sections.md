@@ -142,3 +142,34 @@ Writer without requesting fold state or calculating section groups or totals.
 Boundary input listeners are mounted only while the document has sections;
 adding the first header attaches them, and removing the last detaches them.
 Reveal skips membership lookup when there are no folded sections.
+
+## Cues and outputs
+
+Rundown labels sit above the scene blocks and follow the same rest and hover
+lens coordinates. Their element/index mapping is cached; lens frames reuse
+the block positions without another section grouping pass or layout read.
+Sectionless documents skip the section-label query and painting work.
+
+Present builds a separate scene-to-section cue list from the whole document
+before applying Skip shot. The top-bar label reads that list; section names
+never enter the narration DOM, word cursor or voice matching vocabulary.
+
+Full-script Word and readable Markdown exports retain section headings and
+totals from the captured document. Word uses a spanning table cell, which
+reimport skips as a heading rather than turning it into a scene. Project
+Markdown's human scene table remains unchanged; its data block preserves the
+section records. Narration Word keeps section cues as metadata paragraphs
+before the section's first spoken scene; reimport excludes those cues from
+the narration. Plain narration text and CSV/XLSX keep their existing form.
+
+Reimporting readable Markdown retains the scenes in order but drops section
+headers; it does not recreate sections. The stacked reader skips the writer's
+escaped heading and duration only before a scene heading, at the start or
+after a scene divider. The table reader skips repeated export column headers.
+Ordinary Markdown headings inside scene audio remain content. Use project
+Markdown or `.splitpage` to preserve section records through save and open.
+
+Print and both PDF adapters use the captured script-print layout. Each
+section has a table with a heading spanning all four columns; the heading
+and column labels repeat on continuation pages. The initial unsectioned
+scenes remain unheaded. Totals and scene rows include shot and folded scenes.

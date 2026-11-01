@@ -32,6 +32,13 @@ not silently select live export-dialog settings.
 
 ## Modules and input contract
 
+Named script sections come from the captured document's optional `sections`
+records. `scriptSectionFacts` derives each boundary's complete total, including
+shot scenes. Script print emits a table per section with a four-column divider
+in its repeated table head; initial unsectioned scenes use an unheaded table.
+Browser print and desktop PDF consume that same layout. Session folding does
+not enter the capture, so every scene still prints.
+
 `src/adapters/formats/script-print.ts` accepts `ScriptPrintInput`: one frozen
 `ExportDocument`, its held `ExportAssets`, and the existing `ExportServices`.
 The caller captures before any asynchronous asset loading, as described in
