@@ -1,6 +1,6 @@
 const BUSY_SHOW_DELAY_MS = 250;
 let busyCount = 0;
-let busyTimer: number | null = null;
+let busyTimer: ReturnType<typeof setTimeout> | null = null;
 let busyBarEl: HTMLDivElement | null = null;
 
 function busyBar() {
@@ -28,7 +28,7 @@ function hideBusyBar() {
 export function beginBusy(label?: string) {
   busyCount++;
   if (busyCount === 1) {
-    (clearTimeout as (id: number | null) => void)(busyTimer);
+    (clearTimeout as (id: ReturnType<typeof setTimeout> | null) => void)(busyTimer);
     busyTimer = setTimeout(function () {
       busyTimer = null;
       if (busyCount > 0) showBusyBar(label);
@@ -44,7 +44,7 @@ export function endBusy(token: unknown) {
   (token as ReturnType<typeof beginBusy>).done = true;
   busyCount = Math.max(0, busyCount - 1);
   if (busyCount === 0) {
-    (clearTimeout as (id: number | null) => void)(busyTimer);
+    (clearTimeout as (id: ReturnType<typeof setTimeout> | null) => void)(busyTimer);
     busyTimer = null;
     hideBusyBar();
   }
