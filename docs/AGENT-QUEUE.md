@@ -1089,7 +1089,7 @@ STRUCTURE SECTION MUST SAY
 - "test-only, no product change", how the PDF pages are read, each rule and its fail-first probe, which CI job runs it and its run time, any rule failing on today's output (reported, not fixed).
 ```
 
-## AQ-46 [ ] History fault injection out of release builds (last in line)
+## AQ-46 [x] History fault injection out of release builds (last in line)
 
 Needs: every other open task done or stopped (Adam, 2026-10-31: last in line). AQ-23 PR 5 (#1014) merged. Read the "Stopped:" comment on #1017 first.
 Files: src/adapters/storage/history-backends.js, src/adapters/storage/03c-history-idb.js, shared/history-store.js (its memory backend's fault queue), src/application/recovery/history.js, their tests, src/bootstrap/wiring/history.ts, tools/release-hooks.mjs, docs/architecture/testing.md and the docs naming the moved code.

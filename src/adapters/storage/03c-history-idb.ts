@@ -1,6 +1,5 @@
 import type { HistoryBackendTransaction, HistoryIndex, HistoryIndexRecord } from "./history-backend-types.ts";
 
-type IdbHistoryFault = { code: string; times: number };
 type IdbHistoryError = { name?: string; code?: string | number; cause?: unknown };
 type IdbHistoryRow = HistoryIndexRecord & { bucket: string };
 
@@ -92,7 +91,16 @@ function upgradeDb(d: IDBDatabase, t: IDBTransaction) {
   });
 }
 
-export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; name?: string }) {
+export interface HistoryIdbInspectionAccess {
+  readonly enqueue: <T>(job: () => T | PromiseLike<T>) => Promise<T>;
+  readonly transaction: (stores: string[], mode: IDBTransactionMode) => Promise<IDBTransaction>;
+  readonly runIn: <T>(tx: IDBTransaction, body: (tx: IDBTransaction) => T | PromiseLike<T>) => Promise<T>;
+  readonly request: <T>(req: IDBRequest<T>) => Promise<T>;
+  readonly record: (row: IdbHistoryRow) => HistoryIndexRecord;
+  readonly row: (bucket: string, record: HistoryIndexRecord) => IdbHistoryRow;
+}
+
+export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; name?: string; before?: (op: "put" | "commit") => void; observe?: (op: "exclusive" | "put" | "commit") => void; extend?: (access: HistoryIdbInspectionAccess) => object }) {
   o = o || {};
   const factory = o.indexedDB || (typeof window !== "undefined" ? window.indexedDB : null) || null;
   const dbName = typeof o.name === "string" && o.name ? o.name : HISTORY_IDB_NAME;
@@ -101,16 +109,8 @@ export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; nam
   let opening: Promise<IDBDatabase> | null = null;
   let readOnly = false;
   let chain = Promise.resolve();
-  const faults: Record<"put" | "commit", IdbHistoryFault[]> = { put: [], commit: [] };
-  const counts = { exclusive: 0, put: 0, commit: 0 };
-
-  function takeFault(op: "put" | "commit") {
-    const q = faults[op];
-    if (!q.length) return null;
-    const f = q[0] as IdbHistoryFault;
-    if (--f.times <= 0) q.shift();
-    return f.code;
-  }
+  const before = o.before || noop;
+  const observe = o.observe || noop;
 
   function forget(d: IDBDatabase) {
     if (db === d) { db = null; readOnly = false; }
@@ -238,9 +238,8 @@ export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; nam
       put: function (sha: string, text: string) {
         try {
           mustWrite();
-          counts.put++;
-          const code = takeFault("put");
-          if (code) throw codedError(code, "Injected " + code + " fault");
+          observe("put");
+          before("put");
           if (typeof sha !== "string" || !sha || typeof text !== "string") throw codedError("io", "history: bad body");
         } catch (e) { return Promise.reject(e); }
         return idbReq(bodies.count(sha)).then(function (n) {
@@ -253,9 +252,8 @@ export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; nam
           mustWrite();
           if (committed) throw codedError("io", "history: commit called twice in one transaction");
           committed = true;
-          counts.commit++;
-          const code = takeFault("commit");
-          if (code) throw codedError(code, "Injected " + code + " fault");
+          observe("commit");
+          before("commit");
         } catch (e) { return Promise.reject(e); }
         const reqs: Promise<unknown>[] = [];
         Object.keys(changes || {}).forEach(function (bucket) {
@@ -284,21 +282,14 @@ export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; nam
     return run;
   }
 
-  function peek<T>(stores: string[], body: (tx: IDBTransaction) => T | PromiseLike<T>) {
-    return enqueue(function () {
-      return transaction(stores, "readonly").then(function (t) { return runIn(t, body); });
-    });
-  }
-
   const backend = {
     name: "idb",
     persistent: true,
     get readOnly() { return readOnly; },
-    counts: counts,
 
     exclusive: function <T>(fn: (tx: HistoryBackendTransaction) => T | PromiseLike<T>, xo?: { write?: boolean }) {
       const write = !(xo && xo.write === false);
-      counts.exclusive++;
+      observe("exclusive");
       return enqueue(function () { return runTx(fn, write); }).then(null, function (e) { throw historyIdbError(e); });
     },
 
@@ -313,52 +304,7 @@ export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; nam
       });
     },
 
-    failNext: function (op: "put" | "commit", code: string, times?: number) {
-      if (!faults[op]) throw new TypeError("failNext: unknown op " + op);
-      faults[op].push({ code: code, times: times == null ? 1 : times });
-    },
-    clearFaults: function () { faults.put = []; faults.commit = []; },
 
-    bodyCount: function () {
-      return peek([BODY_STORE], function (t) { return idbReq(t.objectStore(BODY_STORE).count()); });
-    },
-    hasBody: function (sha: unknown) {
-      return peek([BODY_STORE], function (t) {
-        return idbReq(t.objectStore(BODY_STORE).count(String(sha))).then(function (n) { return n > 0; });
-      });
-    },
-    inspect: function () {
-      return peek([INDEX_STORE, BODY_STORE], function (t) {
-        return Promise.all([idbReq(t.objectStore(INDEX_STORE).getAll()), idbReq(t.objectStore(BODY_STORE).getAll())]).then(function (res) {
-          const index: HistoryIndex = {}, bodies: Record<string, string> = {};
-          (res[0] as IdbHistoryRow[]).forEach(function (row) { index[row.bucket] = recordOf(row); });
-          (res[1] as { sha: string; stateJson: string }[]).forEach(function (row) { bodies[row.sha] = row.stateJson; });
-          return { index: index, bodies: bodies };
-        });
-      });
-    },
-    dropBody: function (sha: unknown) {
-      return enqueue(function () {
-        return transaction([BODY_STORE], "readwrite").then(function (t) {
-          return runIn(t, function () { return idbReq(t.objectStore(BODY_STORE).delete(String(sha))); });
-        });
-      });
-    },
-    seed: function (idx: HistoryIndex, bods: Record<string, string>) {
-      return enqueue(function () {
-        return transaction([INDEX_STORE, BODY_STORE], "readwrite").then(function (t) {
-          return runIn(t, function () {
-            const index = t.objectStore(INDEX_STORE), bodies = t.objectStore(BODY_STORE);
-            return Promise.all([idbReq(index.clear()), idbReq(bodies.clear())]).then(function () {
-              const reqs: Promise<unknown>[] = [];
-              Object.keys(idx || {}).forEach(function (b) { reqs.push(idbReq(index.put(rowOf(b, idx[b] as HistoryIndexRecord)))); });
-              Object.keys(bods || {}).forEach(function (sha) { reqs.push(idbReq(bodies.put({ sha: sha, stateJson: bods[sha] }))); });
-              return Promise.all(reqs);
-            });
-          });
-        });
-      });
-    }
   };
-  return backend;
+  return Object.assign(backend, o.extend ? o.extend({ enqueue, transaction, runIn, request: idbReq, record: recordOf, row: rowOf }) : {});
 }

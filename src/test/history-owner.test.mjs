@@ -1,3 +1,5 @@
+import { createHistoryBackendProbe } from "../adapters/storage/history-backend-testing.ts";
+import { createHistoryOwnerInstrumentation } from "../adapters/storage/history-owner-testing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -21,11 +23,11 @@ async function harness(options = {}) {
   let removed = 0;
   const messages = [];
   let holds = () => [];
-  const storage = createHistoryBackends({ now: () => 1000, holds: () => holds(), desktop: () => null, runningOnDesktop: () => false });
-  await storage.controls.forceBackend("memory");
+  const storage = createHistoryBackends({ now: () => 1000, holds: () => holds(), desktop: () => null, runningOnDesktop: () => false }, options.release ? undefined : createHistoryBackendProbe());
+  if (!options.release) await storage.controls.forceBackend("memory");
   const backend = await storage.resolveHistoryBackend();
   if (options.persistent) backend.name = "idb";
-  const owner = createHistoryOwner();
+  const owner = createHistoryOwner(options.release ? undefined : createHistoryOwnerInstrumentation);
   const ports = {
     document: { current: () => live },
     location: { home: () => ({ kind: "none" }) },
@@ -52,7 +54,7 @@ async function harness(options = {}) {
 }
 
 test("history owner refuses every public operation before start and after stop", async () => {
-  const fresh = createHistoryOwner();
+  const fresh = createHistoryOwner(createHistoryOwnerInstrumentation);
   const calls = [
     (owner) => owner.captureSnapshot("Keep", document()),
     (owner) => owner.listDocHistory(docId),
@@ -235,4 +237,18 @@ test("reset waits for accepted writes with their armed backend failures before r
   assert.equal((await capture.done).stored, false);
   await resetting;
   await h.stop();
+});
+
+
+test("the default owner and storage have no test controls and preserve capture, copy and export", async () => {
+  const h = await harness({ release: true });
+  assert.equal("testControls" in h.owner, false);
+  for (const name of ["controls", "reset", "prepareResetForTest"]) assert.equal(name in h.storage, false, name);
+  const captured = h.owner.captureSnapshot("Keep", document());
+  assert.equal((await captured.done).stored, true);
+  assert.equal(JSON.parse((await h.owner.getHistorySnapshot({ docId, id: captured.id })).stateJson).title, "Original");
+  assert.deepEqual(await h.owner.copyHistory(docId, otherId), { ok: true, copied: 1 });
+  assert.equal((await h.owner.exportHistoryAll()).docs.length, 2);
+  await h.stop();
+  assert.equal(h.closed(), 1);
 });
