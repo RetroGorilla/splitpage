@@ -9,7 +9,7 @@
     "src/application/identity/document-identity.js",
     "src/application/identity/document-guard.ts",
     "src/bootstrap/startup/document-entry.js",
-    "src/adapters/page/standalone-html.js",
+    "src/adapters/page/standalone-html.ts",
     "src/bootstrap/wiring/document-identity.ts",
     "src/bootstrap/wiring/ports/document-identity.ts",
     "src/adapters/page/document-guard-query.ts",
