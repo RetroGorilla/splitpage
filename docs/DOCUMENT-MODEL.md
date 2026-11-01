@@ -197,7 +197,7 @@ ledger's INV-18.
   (`src/application/commands/split-join.ts`, run by `splitRowFieldCore` in
   `src/bootstrap/wiring/rows.ts`) is `splitCell` at the caret;
   `joinScenesCommand` (the same file, run by `mergeWriterRows` in
-  `src/features/writer/writer.js`) is
+  `src/features/writer/writer.ts`) is
   `joinCells`, whose glue space carries a comment (or link) the text on
   both sides of it is in, so a phrase a split cut in two is one anchor
   again when joined back.
@@ -792,7 +792,7 @@ words.
   each new path. No step deletes an old path until its replacement has
   passed the full browser run on Windows.
 - **Caret restore after re-render.** Position-based restore exists already
-  (the writer's `(rowId, char offset)`, `src/features/writer/writer.js`). It gets one shared
+  (the writer's `(rowId, char offset)`, `src/features/writer/writer.ts`). It gets one shared
   implementation used by every re-render.
 - **IME and spellcheck.** These are left to the browser (§5) exactly because
   they are the risk. The by-hand check list gets a Japanese-IME and a

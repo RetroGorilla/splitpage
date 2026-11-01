@@ -2,7 +2,7 @@ import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import { escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
 import { driveFormatSize } from "../../../shared/text.js";
 import { formatClock } from "../../../shared/clock.js";
-import { formatTimestamp } from "../common/comment-time.js";
+import { formatTimestamp } from "../common/comment-time.ts";
 
 export function startHistoryPanel(ports) {
   var active = true;
