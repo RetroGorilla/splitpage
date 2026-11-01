@@ -74,8 +74,12 @@ inherits its original group's ordering rank, and its scenes' order is compared
 on both sides even before they belonged to that new identity. A new boundary
 and a concurrent scene reassignment use the same membership conflict rule.
 These layout rules apply only to documents with sections. Sectionless merge
-retains the existing row ordering. Undo uses the existing document-field and
-row-order steps; one command is one entry.
+compares the order of base scenes present on both sides: a local-only reorder
+survives, while competing reorders or a missing base retain incoming order.
+Content, deletion, conflicts and merge statistics are reconciled independently
+of that order. Scenes present only on the other side follow their nearest
+surviving predecessor. Undo uses the existing document-field and row-order
+steps; one command is one entry.
 
 The seeded tests check complete order and membership and also enforce three
 independent laws for every generated pair: merging either side with the base
