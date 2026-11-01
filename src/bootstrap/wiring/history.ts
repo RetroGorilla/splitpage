@@ -1,4 +1,4 @@
-import { createHistoryOwner } from "../../application/recovery/history.js";
+import { createHistoryOwner } from "../../application/recovery/history.ts";
 import type { HistoryOwner, HistoryOwnerPorts } from "../../application/recovery/history-ports.ts";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { historyPorts } from "./ports/history.ts";
