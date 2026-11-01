@@ -11,7 +11,7 @@ await bootApp();
 const { liveSession, noteReload } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
+const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.ts");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../features/tags/production-tags.js");
