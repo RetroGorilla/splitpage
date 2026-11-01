@@ -152,7 +152,7 @@ export default [
     files: typescriptFiles,
     languageOptions: {
       parserOptions: {
-        project: ["./tsconfig.core.json", "./tsconfig.web.json", "./tsconfig.test.json"],
+        project: ["./tsconfig.core.json", "./tsconfig.web.json", "./tsconfig.test.json", "./tsconfig.desktop.json"],
         tsconfigRootDir: import.meta.dirname
       }
     },
@@ -162,6 +162,11 @@ export default [
       "@typescript-eslint/no-unnecessary-type-parameters": "error",
       "@typescript-eslint/method-signature-style": ["error", "property"]
     }
+  },
+
+  {
+    files: ["desktop/*.ts"],
+    rules: { "@typescript-eslint/no-require-imports": "off" }
   },
 
   {

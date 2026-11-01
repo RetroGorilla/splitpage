@@ -1,5 +1,7 @@
 "use strict";
 
+import type { DesktopChannelRow } from "../shared/desktop-contract.d.ts";
+
 const APP_ORIGIN = "splitpage://app";
 const TABSTRIP_ORIGIN = "splitpage://tabstrip";
 
@@ -13,7 +15,7 @@ const HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const VIDEO_REF_RE = /^(?:[A-Za-z0-9_-]{11}|[0-9]{1,12}(?::[0-9a-f]{6,32})?)$/;
 
-const TYPES = {
+const TYPES: Record<string, ((value: unknown) => boolean) | undefined> = {
   any: () => true,
   string: (v) => typeof v === "string",
   number: (v) => typeof v === "number" && Number.isFinite(v),
@@ -31,7 +33,7 @@ const TYPES = {
   videoRef: (v) => typeof v === "string" && VIDEO_REF_RE.test(v)
 };
 
-const NONE = [];
+const NONE: string[] = [];
 
 const CHANNELS = [
   { name: "splitpage:ipc-table-sync", direction: "sendSync", argsSchema: NONE, allowedOrigins: BOTH, refusal: null },
@@ -119,40 +121,42 @@ const CHANNELS = [
   { name: "splitpage:test-draft-status", direction: "invoke", argsSchema: ["tabId?"], allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-dup-loser", direction: "invoke", argsSchema: ["object", "object"], allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-shell", direction: "invoke", argsSchema: ["string", "object|null"], allowedOrigins: APP, testOnly: true }
-];
+] satisfies readonly DesktopChannelRow[];
 
-function checkArg(descriptor, value, index) {
+export type DesktopChannel = typeof CHANNELS[number];
+
+function checkArg(descriptor: string, value: unknown, index: number) {
   const optional = descriptor.endsWith("?");
   const body = optional ? descriptor.slice(0, -1) : descriptor;
   if (value === undefined) {
     return optional || body === "any" ? null : `argument ${index + 1} is missing (expected ${body})`;
   }
   for (const type of body.split("|")) {
-    if (TYPES[type](value)) return null;
+    if ((TYPES[type] as (value: unknown) => boolean)(value)) return null;
   }
   return `argument ${index + 1} is not ${body}`;
 }
 
-function checkArgs(argsSchema, args) {
+function checkArgs(argsSchema: readonly string[], args: readonly unknown[]) {
   if (args.length > argsSchema.length) {
     return `expects ${argsSchema.length} argument(s), got ${args.length}`;
   }
   for (let i = 0; i < argsSchema.length; i++) {
-    const reason = checkArg(argsSchema[i], args[i], i);
+    const reason = checkArg(argsSchema[i] as string, args[i], i);
     if (reason) return reason;
   }
   return null;
 }
 
-function deepFreeze(value) {
+function deepFreeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
-    for (const key of Object.keys(value)) deepFreeze(value[key]);
+    for (const key of Object.keys(value)) deepFreeze((value as Record<string, unknown>)[key]);
   }
   return value;
 }
 
-const byKey = new Map();
+const byKey = new Map<string, DesktopChannelRow>();
 
 for (const channel of CHANNELS) {
   const key = channel.name + " " + channel.direction;
@@ -175,13 +179,22 @@ for (const channel of CHANNELS) {
 
 const IPC_CHANNELS = deepFreeze(CHANNELS);
 
-function channelFor(name, direction) {
+function channelFor(name: string, direction: DesktopChannelRow["direction"]) {
   return byKey.get(name + " " + direction) || null;
 }
 
-function channelsForOrigin(origin) {
-  return IPC_CHANNELS.filter((c) => c.allowedOrigins.includes(origin));
+function channelsForOrigin(origin: string | null) {
+  return IPC_CHANNELS.filter((c) => (c.allowedOrigins as readonly unknown[]).includes(origin));
 }
+
+export type DesktopChannelModule = {
+  APP_ORIGIN: typeof APP_ORIGIN;
+  TABSTRIP_ORIGIN: typeof TABSTRIP_ORIGIN;
+  IPC_CHANNELS: typeof IPC_CHANNELS;
+  channelFor: typeof channelFor;
+  channelsForOrigin: typeof channelsForOrigin;
+  checkArgs: typeof checkArgs;
+};
 
 module.exports = {
   APP_ORIGIN,

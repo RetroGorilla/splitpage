@@ -305,7 +305,7 @@ again, and arm64 has not been built at all.
   root, and without it the packaged server dies on its first `require`),
   stages `docs/help.md` as `help.md`, served at `/help.md` instead of
   `/README.md` (#80), and stages `shared/` with its own `package.json` (#76).
-- `desktop/electron-builder.yml`'s `files` list gained `ipc-channels.js`
+- `desktop/electron-builder.yml`'s `files` list gained `ipc-channels.ts`
   (#77). **A missing entry means no bridge in the packaged app** even though
   dev mode works. `shared/` deliberately does NOT go in that list — it rides
   on `extraResources` via `stage.mjs`, because `files` is rooted at

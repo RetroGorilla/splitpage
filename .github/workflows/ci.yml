@@ -66,7 +66,7 @@ jobs:
           node-version-file: .nvmrc
 
       - name: Install tooling
-        run: npm ci
+        run: npm ci && npm ci --prefix desktop
 
       - name: Lint
         run: npm run lint
@@ -170,7 +170,7 @@ jobs:
           node-version-file: .nvmrc
 
       - name: Install tooling
-        run: npm ci
+        run: npm ci && npm ci --prefix desktop
 
       - name: Build index.html and stamp sw.js
         run: node build.mjs

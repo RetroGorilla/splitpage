@@ -11,15 +11,15 @@ files:
   - preload.js
   - tabstrip-preload.js
   - drafts.js
-  - ipc-channels.js
-  - ipc-setup.js
-  - ipc-files.js
-  - ipc-shell.js
-  - ipc-document.js
-  - ipc-history-blob.js
-  - ipc-tabstrip.js
-  - ipc-test-mode.js
-  - ipc-print.js
+  - ipc-channels.ts
+  - ipc-setup.ts
+  - ipc-files.ts
+  - ipc-shell.ts
+  - ipc-document.ts
+  - ipc-history-blob.ts
+  - ipc-tabstrip.ts
+  - ipc-test-mode.ts
+  - ipc-print.ts
   - print-pdf.js
   - prompter-share.js
   - close-quit.js

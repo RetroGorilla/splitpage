@@ -1,16 +1,24 @@
 "use strict";
 
-const path = require("node:path");
-const fsp = require("node:fs/promises");
-const crypto = require("node:crypto");
+import type * as NodeCrypto from "node:crypto";
+
+import type * as NodeFsPromises from "node:fs/promises";
+
+import type * as NodePath from "node:path";
+
+import type { DesktopDraftStoreBoundary, DesktopShellIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+
+const path: typeof NodePath = require("node:path");
+const fsp: typeof NodeFsPromises = require("node:fs/promises");
+const crypto: typeof NodeCrypto = require("node:crypto");
 
 function createShellIpc({
   tabOf, launchIntentFor, draftStore, draftsIsHeld, hadPriorSession, shell, nativeTheme, themeChoice,
   videoFileGrants, VIDEO_FILE_EXT, testVideoOpens, testMode: TEST_MODE, videoThumbnail,
   updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus, checkForUpdate, downloadUpdate,
   runUpdateInstaller, openPrompterInBrowser, voiceHelperInstance
-}) {
-  function registerShellIpc({ ipcHandle, ipcOn, ipcOnSync }) {
+}: DesktopShellIpcDependencies) {
+  function registerShellIpc({ ipcHandle, ipcOn, ipcOnSync }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcOnSync("splitpage:tab-boot-sync", (event) => {
       const tab = tabOf(event);
       if (!tab) return null;
@@ -19,9 +27,9 @@ function createShellIpc({
       const hasDraftToRestore = intent.type === "restore-draft";
       if (draftStore()) {
         if (hasDraftToRestore) {
-          try { draftStore().hold(tab.id); } catch { }
+          try { (draftStore() as DesktopDraftStoreBoundary).hold(tab.id); } catch { }
         } else if (draftsIsHeld(tab.id)) {
-          try { draftStore().release(tab.id); } catch { }
+          try { (draftStore() as DesktopDraftStoreBoundary).release(tab.id); } catch { }
         }
       }
       return {
@@ -50,7 +58,7 @@ function createShellIpc({
       try { st = await fsp.stat(filePath); } catch { return null; }
       if (!st.isFile()) return null;
       for (const [token, granted] of videoFileGrants) if (granted === filePath) return token;
-      if (videoFileGrants.size >= 1000) videoFileGrants.delete(videoFileGrants.keys().next().value);
+      if (videoFileGrants.size >= 1000) videoFileGrants.delete(videoFileGrants.keys().next().value as string);
       const token = crypto.randomBytes(16).toString("hex");
       videoFileGrants.set(token, filePath);
       return token;
@@ -112,5 +120,7 @@ function createShellIpc({
 
   return { registerShellIpc };
 }
+
+export type { createShellIpc };
 
 module.exports = { createShellIpc };

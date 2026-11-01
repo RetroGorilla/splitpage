@@ -1,14 +1,20 @@
 "use strict";
 
-const path = require("node:path");
-const fsp = require("node:fs/promises");
-const { pathKey, readFileEntry, toBuffer, writeFileEntry } = require("./file-service");
+import type * as NodeFsPromises from "node:fs/promises";
+
+import type * as NodePath from "node:path";
+
+import type { DesktopFileServiceBoundary, DesktopFileIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+
+const path: typeof NodePath = require("node:path");
+const fsp: typeof NodeFsPromises = require("node:fs/promises");
+const { pathKey, readFileEntry, toBuffer, writeFileEntry }: DesktopFileServiceBoundary = require("./file-service");
 
 function createFileIpc({
   dialog, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
   consumeTestDialogAnswer, testDialogsSeen, testMode: TEST_MODE
-}) {
-  function registerFileIpc({ ipcHandle }) {
+}: DesktopFileIpcDependencies) {
+  function registerFileIpc({ ipcHandle }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcHandle("splitpage:open-file-dialog", async (event) => {
       const answer = consumeTestDialogAnswer();
       let chosen;
@@ -113,5 +119,7 @@ function createFileIpc({
 
   return { registerFileIpc };
 }
+
+export type { createFileIpc };
 
 module.exports = { createFileIpc };
