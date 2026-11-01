@@ -1,18 +1,19 @@
+import type { AppDataPorts } from "./ports.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { settingsAppData } from "../../application/preferences/preferences.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 
-export function mountAppData(ports) {
+export function mountAppData(ports: AppDataPorts) {
 
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
 var APPDATA_SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i;
 
-function appDataReadRaw(key) {
+function appDataReadRaw(key: string) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
 }
 
-function appDataReadJson(key, fallback) {
+function appDataReadJson(key: string, fallback: unknown) {
   var raw = appDataReadRaw(key);
   if (raw == null) return fallback;
   try {
@@ -63,8 +64,8 @@ async function buildAppDataBundle() {
   return bundle;
 }
 
-function assertNoSecrets(value) {
-  (function walk(v) {
+function assertNoSecrets(value: unknown) {
+  (function walk(v: unknown) {
     if (!v || typeof v !== "object") return;
     if (Array.isArray(v)) {
       for (var i = 0; i < v.length; i++) walk(v[i]);
@@ -87,7 +88,7 @@ function assertNoSecrets(value) {
 
 function appDataFilename() {
   var d = new Date();
-  function pad(n) { return n < 10 ? "0" + n : String(n); }
+  function pad(n: number) { return n < 10 ? "0" + n : String(n); }
   return "splitpage-app-data-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".json";
 }
 
@@ -135,17 +136,17 @@ async function exportAppData() {
 
 var APPDATA_MAX_TEXT = 512 * 1024 * 1024;
 
-function appDataError(code, message) {
+function appDataError(code: string, message: string) {
   var e = new Error(message);
   e.code = code;
   return e;
 }
 
-function appDataIsPlainObject(v) {
+function appDataIsPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-function appDataNormalizeHistory(h) {
+function appDataNormalizeHistory(h: unknown) {
   if (!appDataIsPlainObject(h)) return null;
   return {
     docs: (Array.isArray(h.docs) ? h.docs : []).filter(appDataIsPlainObject).map(function (d) {
@@ -161,7 +162,7 @@ function appDataNormalizeHistory(h) {
   };
 }
 
-function appDataNormalizeBlobs(b) {
+function appDataNormalizeBlobs(b: unknown) {
   if (!appDataIsPlainObject(b)) return null;
   var out = {};
   Object.keys(b).forEach(function (k) {
@@ -171,9 +172,9 @@ function appDataNormalizeBlobs(b) {
   return out;
 }
 
-function appDataNormalizePrefs(p) {
+function appDataNormalizePrefs(p: unknown) {
   if (!appDataIsPlainObject(p)) return {};
-  function str(v) { return typeof v === "string" ? v : null; }
+  function str(v: unknown) { return typeof v === "string" ? v : null; }
   var out = {
     onboarding: appDataIsPlainObject(p.onboarding) ? p.onboarding : null,
     tourDone: str(p.tourDone),
@@ -187,7 +188,7 @@ function appDataNormalizePrefs(p) {
   return out;
 }
 
-function parseAppDataBundle(text) {
+function parseAppDataBundle(text: unknown) {
   if (typeof text !== "string") {
     throw appDataError("not-json", "That file isn't Splitpage app data (it isn't readable text).");
   }
@@ -231,7 +232,7 @@ function appDataExtraPrefs() {
   return settingsAppData();
 }
 
-function appDataMergePrefs(prefs) {
+function appDataMergePrefs(prefs: Parameters<AppDataPorts["preferences"]["appDataImport"]>[0]) {
   var written = ports.preferences.appDataImport(prefs, appDataExtraPrefs());
   try {
     if (written.indexOf("commentsSort") !== -1) ports.commentSorting.choose(ports.preferences.commentsSort());
@@ -240,13 +241,13 @@ function appDataMergePrefs(prefs) {
   return written;
 }
 
-function appDataPlural(n, one, many) {
+function appDataPlural(n: number, one: string, many: string) {
   return n + " " + (n === 1 ? one : many);
 }
 
 var appDataLastSummary = null;
 
-async function importAppData(text) {
+async function importAppData(text: unknown) {
   var bundle;
   try {
     bundle = parseAppDataBundle(text);
@@ -327,7 +328,7 @@ function openImportAppData() {
   input.click();
 }
 
-async function onImportAppDataChosen(e) {
+async function onImportAppDataChosen(e: Event) {
   var input = e.target;
   var file = input.files && input.files[0];
   if (!file) { input.value = ""; return; }
@@ -348,7 +349,7 @@ async function onImportAppDataChosen(e) {
   }
 }
 
-  var withdrawHook = null;
+  let withdrawHook: (() => void) | null = null;
   exposeTestHook("__appDataTest", function () {
     return {
       build: buildAppDataBundle,
@@ -358,7 +359,7 @@ async function onImportAppDataChosen(e) {
       summary: function () { return appDataLastSummary; },
       exportFile: exportAppData,
       exportSummary: function () { return appDataLastExport; },
-      useBlobBackend: function (backend) { ports.useBlobBackend(backend || null); return true; }
+      useBlobBackend: function (backend: Parameters<AppDataPorts["useBlobBackend"]>[0]) { ports.useBlobBackend(backend || null); return true; }
     };
   }, function (withdraw) { withdrawHook = withdraw; });
   var disposed = false;
