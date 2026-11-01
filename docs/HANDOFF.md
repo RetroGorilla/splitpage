@@ -1035,6 +1035,13 @@ history. A database a newer build wrote is served read-only: every write
 answers `read-only`, and captures stay pending in the page with ONE toast
 and one panel line.
 
+History fault injection and inspection controls are test-build-only. The
+factories in `src/adapters/storage/history-*-testing.ts` and
+`history-fault-queue.ts` are selected by `src/bootstrap/wiring/history.ts`;
+the storage backends and recovery owner receive no-op defaults in release
+builds. The shared memory backend takes the same injected write observer.
+See [testing.md](architecture/testing.md) for the release-name scan and test setup.
+
 **Crash-safe drafts** (§3.13): a `stateJson` full `state`
 object plus a separate `DraftHeader` (never document fields) — not document
 schema. On the desktop per tab, for every kind of document; in the browser

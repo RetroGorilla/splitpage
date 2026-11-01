@@ -1,6 +1,7 @@
+import type { HistoryInstrumentation, HistoryPendingSnapshot } from "./history-instrumentation.ts";
 import type { HistoryOwner, HistoryOwnerPorts, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult, HistoryResolvedBackend, HistoryImportResult } from "./history-ports.ts";
 
-type LocalHistoryEntry = { docId: string; meta: HistorySnapshotMeta; stateJson: string; status: string; refs?: string[] };
+
 type HistoryAddress = { id?: string; docId?: string; older?: boolean };
 type HistoryMigrationResult = { migrated: number; removedKey: boolean };
 type HistoryExportDoc = { docId: string; title: string; lastOpenedAt: number; metas: HistorySnapshotMeta[]; snapshots?: HistorySnapshotRead[] };
@@ -8,7 +9,6 @@ type HistoryExportBundle = { docs: { docId: string; title: string; lastOpenedAt:
 type HistoryImageData = { mime: string; b64: string };
 type HistoryImportCandidate = { atMs: number; id: string; entry: HistorySnapshotRead | null };
 type HistoryImportCounts = { -readonly [K in keyof HistoryImportResult]: HistoryImportResult[K] };
-type HistoryTestAdapter = HistoryResolvedBackend & { store: NonNullable<HistoryResolvedBackend["store"]> };
 type HistoryCallable = (...args: never[]) => unknown;
 type HistoryOwnerApi = Omit<HistoryOwner, "startHistory" | "testControls">;
 
@@ -18,7 +18,7 @@ import { HISTORY_OLDER_KEY, HISTORY_PER_DOC, HISTORY_SNAP_ID_RE, historyClip, hi
 import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
 import { checksumText } from "../../../shared/text.js";
 
-function startHistory(ports: HistoryOwnerPorts) {
+function startHistory(ports: HistoryOwnerPorts, instrumentation?: HistoryInstrumentation) {
   let active = true;
   const currentDocument = ports.document.current;
   const currentHome = ports.location.home;
@@ -61,9 +61,8 @@ function historyIdle(): Promise<boolean> {
   });
 }
 
-let historyNowOverride: number | null = null;
 function historyNow() {
-  return historyNowOverride != null ? historyNowOverride : ports.now();
+  return instrumentation ? instrumentation.clock(ports.now) : ports.now();
 }
 
 
@@ -107,7 +106,7 @@ function isPristineSeedDocument() {
   return !!currentDocument() && saveChanges() === 0 && !unsavedChanges() && currentHome().kind === "none" && seedCheckPasses();
 }
 
-let historyLocal: Record<string, LocalHistoryEntry> = {};
+let historyLocal: Record<string, HistoryPendingSnapshot> = {};
 let historyWarnedDocs: Record<string, boolean> = {};
 let historyLastAtMs = 0;
 let historyRetryQueued = false;
@@ -115,7 +114,7 @@ let historyRetryQueued = false;
 function historyLocalKey(docId: string, id: string) { return docId + "/" + id; }
 
 function historyLocalEntries(docId?: string | null, status?: string) {
-  return Object.keys(historyLocal).map(function (k) { return historyLocal[k] as LocalHistoryEntry; }).filter(function (e) {
+  return Object.keys(historyLocal).map(function (k) { return historyLocal[k] as HistoryPendingSnapshot; }).filter(function (e) {
     return (!docId || e.docId === docId) && (!status || e.status === status);
   }).sort(function (a, b) { return a.meta.atMs - b.meta.atMs; });
 }
@@ -135,11 +134,11 @@ function historyChanged() {
   historyChangeListeners.slice().forEach(function (listener) { listener(); });
 }
 
-function historyMarkPending(entry: LocalHistoryEntry) {
+function historyMarkPending(entry: HistoryPendingSnapshot) {
   entry.status = "pending";
   const mine = historyLocalEntries(entry.docId, "pending");
   while (mine.length > HISTORY_PENDING_PER_DOC) {
-    const old = mine.shift() as LocalHistoryEntry;
+    const old = mine.shift() as HistoryPendingSnapshot;
     Reflect.deleteProperty(historyLocal, historyLocalKey(old.docId, old.meta.id));
   }
   const notice = storage.backendName() === "idb" ? historyIdbNotice() : null;
@@ -159,7 +158,7 @@ function historyMarkPending(entry: LocalHistoryEntry) {
   }
 }
 
-function historyPersistRefs(entry: LocalHistoryEntry) {
+function historyPersistRefs(entry: HistoryPendingSnapshot) {
   const refs = entry.refs || [];
   if (!refs.length) return Promise.resolve();
   return persist(refs).then(function (failed) {
@@ -167,7 +166,7 @@ function historyPersistRefs(entry: LocalHistoryEntry) {
   });
 }
 
-function historyStoreEntry(backend: HistoryResolvedBackend, entry: LocalHistoryEntry) {
+function historyStoreEntry(backend: HistoryResolvedBackend, entry: HistoryPendingSnapshot) {
   entry.status = "writing";
   return historyPersistRefs(entry).then(function () {
     return backend.put(entry.docId, entry.meta, entry.stateJson);
@@ -219,7 +218,7 @@ function captureSnapshot(label: string, src: unknown, opts?: { allowSeedSkip?: b
     title: typeof (src as { title?: unknown }).title === "string" ? (src as { title: string }).title : "",
     kind: "snapshot"
   });
-  const entry: LocalHistoryEntry = { docId: docId, meta: meta as HistorySnapshotMeta, stateJson: stateJson, status: "writing", refs: refsIn(src) };
+  const entry: HistoryPendingSnapshot = { docId: docId, meta: meta as HistorySnapshotMeta, stateJson: stateJson, status: "writing", refs: refsIn(src) };
   historyLocal[historyLocalKey(docId, id)] = entry;
   const done = enqueueHistory(function () {
     return resolveHistoryBackend().then(function (backend) {
@@ -248,7 +247,7 @@ function retryPendingSnapshots() {
       let i = 0;
       function next(): Promise<null> | null {
         if (i >= list.length) return null;
-        const entry = list[i++] as LocalHistoryEntry;
+        const entry = list[i++] as HistoryPendingSnapshot;
         if (historyLocal[historyLocalKey(entry.docId, entry.meta.id)] !== entry) return next();
         return historyStoreEntry(backend, entry).then(function (r) { return r.stored ? next() : null; });
       }
@@ -257,7 +256,7 @@ function retryPendingSnapshots() {
   }, function () { historyRetryQueued = false; return null; });
 }
 
-function historyLocalMetas(docId: string, lists: LocalHistoryEntry[], seen: Record<string, boolean>) {
+function historyLocalMetas(docId: string, lists: HistoryPendingSnapshot[], seen: Record<string, boolean>) {
   const out: HistorySnapshotMeta[] = [];
   lists.forEach(function (e) {
     if (seen[e.meta.id]) return;
@@ -361,7 +360,7 @@ function copyHistory(from: string | null, to: string | null) {
       if (extra) {
         const mine = historyLocalEntries(to, "pending");
         while (mine.length > HISTORY_PENDING_PER_DOC) {
-          const old = mine.shift() as LocalHistoryEntry;
+          const old = mine.shift() as HistoryPendingSnapshot;
           Reflect.deleteProperty(historyLocal, historyLocalKey(old.docId, old.meta.id));
         }
       }
@@ -375,10 +374,9 @@ function copyHistory(from: string | null, to: string | null) {
 }
 
 const HISTORY_EXPORT_CAP_BYTES = 200 * 1024 * 1024;
-let historyExportCapOverride: number | null = null;
 
 function historyExportCap() {
-  return historyExportCapOverride != null ? historyExportCapOverride : HISTORY_EXPORT_CAP_BYTES;
+  return instrumentation ? instrumentation.capacity(HISTORY_EXPORT_CAP_BYTES) : HISTORY_EXPORT_CAP_BYTES;
 }
 
 function historyExportError(code: string, message: string) {
@@ -853,92 +851,17 @@ function runHistoryMigration() {
   });
 }
 
-function historyTestBucket(docId: unknown) {
-  if (docId === HISTORY_OLDER_KEY || docId === "older") return HISTORY_OLDER_KEY;
-  return normalizeDocId(docId);
-}
-
-function historyTestStore() {
-  return resolveHistoryBackend().then(function (b) { return b.store ? b as HistoryTestAdapter : null; });
-}
-
-function historyTestBodyCount(adapter: HistoryResolvedBackend & { store: NonNullable<HistoryResolvedBackend["store"]> }, bucket: string | null) {
-  const backend = adapter.store.backend;
-  if (!bucket) return Promise.resolve(backend.bodyCount());
-  return adapter.store.rawIndex().then(function (index) {
-    const shas: Record<string, boolean> = {};
-    ((index[bucket] && index[bucket].snapshots) || []).forEach(function (s) {
-      if (s && typeof s.sha === "string") shas[s.sha] = true;
-    });
-    return Promise.all(Object.keys(shas).map(function (sha) {
-      return Promise.resolve(backend.hasBody(sha));
-    })).then(function (have) { return have.filter(Boolean).length; });
-  });
-}
-
-
-function historyResetForTest() {
-  storage.prepareResetForTest();
-  return historyIdle().then(function () {
-    historyNowOverride = null;
-    historyLastAtMs = 0;
-    historyLocal = {};
-    historyWarnedDocs = {};
-    historyRetryQueued = false;
-    historyProtected = {};
-    return storage.reset();
-  }).then(function () { return resolveHistoryBackend(); }).then(function () { return true; });
-}
-
   historyChain = Promise.resolve();
-  const testControls = {
-    idle: historyIdle,
-    ...storage.controls,
-    setNow: function (ms: unknown) {
-      historyNowOverride = (ms == null || !isFinite(Number(ms))) ? null : Number(ms);
-      historyLastAtMs = 0;
-      return historyNow();
-    },
-    injectFault: function (name: string | null) {
-      const fault = storage.controls.injectFault(name);
-      if (name == null && historyLocalEntries(null, "pending").length) retryPendingSnapshots();
-      return fault;
-    },
-    listRaw: function (docId: unknown) {
-      const bucket = historyTestBucket(docId);
-      if (!bucket) return Promise.resolve([]);
-      return resolveHistoryBackend().then(function (b) { return b.rawList ? b.rawList(bucket) : []; });
-    },
-    bodyCount: function (docId?: unknown) {
-      const bucket = docId == null ? null : historyTestBucket(docId);
-      if (docId != null && !bucket) return Promise.resolve(0);
-      return historyTestStore().then(function (a) { return a ? historyTestBodyCount(a, bucket) : 0; });
-    },
-    docRecord: function (docId: unknown) {
-      const bucket = historyTestBucket(docId);
-      if (!bucket) return Promise.resolve(null);
-      return resolveHistoryBackend().then(function (b) { return b.rawDoc ? b.rawDoc(bucket) : null; });
-    },
-    rawIndex: function () {
-      return historyTestStore().then(function (a) { return a ? a.store.rawIndex() : null; });
-    },
-    inspect: function () {
-      return historyTestStore().then(function (a) { return a ? a.store.backend.inspect() : null; });
-    },
-    read: getHistorySnapshot,
-    pending: function (docId?: string) {
-      return historyLocalEntries(docId ? normalizeDocId(docId) || "-" : null, "pending").map(function (e) {
-        return { docId: e.docId, id: e.meta.id, label: e.meta.label, status: e.status };
-      });
-    },
-    migrate: startHistoryMigration,
-    resetForTest: historyResetForTest,
-    importBundle: importHistoryBundle,
-    setExportCap: function (bytes: unknown) {
-      historyExportCapOverride = (bytes == null || !isFinite(Number(bytes))) ? null : Math.max(0, Number(bytes));
-      return historyExportCapOverride;
-    }
-  };
+  const extensions = instrumentation ? instrumentation.controls({
+    storage, resolve: resolveHistoryBackend, idle: historyIdle, now: ports.now,
+    localEntries: historyLocalEntries, retry: retryPendingSnapshots,
+    read: getHistorySnapshot, migrate: startHistoryMigration, importBundle: importHistoryBundle,
+    get lastAt() { return historyLastAtMs; }, set lastAt(value) { historyLastAtMs = value; },
+    get local() { return historyLocal; }, set local(value) { historyLocal = value; },
+    get warned() { return historyWarnedDocs; }, set warned(value) { historyWarnedDocs = value; },
+    get retryQueued() { return historyRetryQueued; }, set retryQueued(value) { historyRetryQueued = value; },
+    get protected() { return historyProtected; }, set protected(value) { historyProtected = value; }
+  }) : null;
   const pending = new Set<PromiseLike<unknown>>();
   function guarded<A extends unknown[], R>(fn: (...args: A) => R) {
     return function (...args: A) {
@@ -952,29 +875,30 @@ function historyResetForTest() {
       return result;
     };
   }
-  const api: HistoryOwnerApi & Partial<{ testControls: typeof testControls; dispose: () => Promise<void> | undefined }> = { protectHistorySnapshot, isPristineSeedDocument, onHistoryChange, captureSnapshot, listDocHistory, getHistorySnapshot, historyDocumentChanged, copyHistory, exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots, startHistoryMigration };
+  const api: HistoryOwnerApi & Partial<{ extensions: typeof extensions; dispose: () => Promise<void> | undefined }> = { protectHistorySnapshot, isPristineSeedDocument, onHistoryChange, captureSnapshot, listDocHistory, getHistorySnapshot, historyDocumentChanged, copyHistory, exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots, startHistoryMigration };
   Object.keys(api).forEach(function (key) { (api as unknown as Record<string, HistoryCallable>)[key] = guarded((api as unknown as Record<string, HistoryCallable>)[key] as HistoryCallable); });
-  Object.keys(testControls).forEach(function (key) { (testControls as Record<string, HistoryCallable>)[key] = guarded((testControls as Record<string, HistoryCallable>)[key] as HistoryCallable); });
-  api.testControls = testControls;
+  if (extensions) Object.keys(extensions).forEach(function (key) { (extensions as unknown as Record<string, HistoryCallable>)[key] = guarded((extensions as unknown as Record<string, HistoryCallable>)[key] as HistoryCallable); });
+  api.extensions = extensions;
   api.dispose = function () {
     if (!active) return;
     active = false;
     historyChangeListeners = [];
     return Promise.allSettled(Array.from(pending)).then(historyIdle).then(function () { return storage.close(); });
   };
-  return api as HistoryOwnerApi & { testControls: typeof testControls; dispose: () => Promise<void> | undefined };
+  return api as HistoryOwnerApi & { extensions: typeof extensions; dispose: () => Promise<void> | undefined };
 }
 
-export function createHistoryOwner(): HistoryOwner {
+export function createHistoryOwner(factory?: () => HistoryInstrumentation): HistoryOwner {
+  const instrumentation = factory?.();
   let started: ReturnType<typeof startHistory> | null = null;
   function running() {
     if (!started) throw new Error("The version history is not started yet");
     return started;
   }
-  return {
+  const owner: HistoryOwner = {
     startHistory: function (ports) {
       if (started) throw new Error("The version history is already started; stop it first");
-      const mine = startHistory(ports);
+      const mine = startHistory(ports, instrumentation);
       started = mine;
       return function () {
         if (started !== mine) return;
@@ -993,7 +917,7 @@ export function createHistoryOwner(): HistoryOwner {
     exportHistoryAll: function (...args) { return running().exportHistoryAll(...args); },
     importHistoryBundle: function (...args) { return running().importHistoryBundle(...args); },
     normalizeLegacySnapshots: function (...args) { return running().normalizeLegacySnapshots(...args); },
-    startHistoryMigration: function (...args) { return running().startHistoryMigration(...args); },
-    testControls: function () { return running().testControls; }
+    startHistoryMigration: function (...args) { return running().startHistoryMigration(...args); }
   };
+  return Object.assign(owner, instrumentation ? instrumentation.expose(running) : {});
 }

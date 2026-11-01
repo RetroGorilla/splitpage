@@ -67,7 +67,6 @@ export interface HistoryOwner {
   readonly importHistoryBundle: (bundle: unknown) => Promise<HistoryImportResult>;
   readonly normalizeLegacySnapshots: (raw: unknown) => HistorySnapshotRead[] | null;
   readonly startHistoryMigration: () => Promise<{ migrated: number; removedKey: boolean }>;
-  readonly testControls: () => HistoryTestControls;
 }
 
 export interface DesktopHistoryOptions {
@@ -120,6 +119,9 @@ export interface HistoryStorage {
   readonly historyIdbNotice: () => { kind: string; text: string } | null;
   readonly backendName: () => string | null;
   readonly close: () => Promise<void>;
+}
+
+export interface HistoryTestingStorage extends HistoryStorage {
   readonly prepareResetForTest: () => void;
   readonly reset: () => Promise<unknown>;
   readonly controls: Pick<HistoryTestControls, "forceBackend" | "injectFault" | "releaseDelayedPut" | "releaseDelayedImport" | "importGateHit" | "setCapOverride">;
