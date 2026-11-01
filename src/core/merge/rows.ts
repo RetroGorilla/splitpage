@@ -208,6 +208,25 @@ export function mergeRows(base: RowSide | null | undefined, mine: RowSide, their
 
   theirs.rows.forEach(function (t) { if (!baseRows[t.id] && !mineRows[t.id]) stats.rowsAddedByThem++; });
 
+  if (base) {
+    const commonOrder = (side: RowSide): string => JSON.stringify(side.rows
+      .filter(row => baseRows[row.id] && mineRows[row.id] && theirRows[row.id]).map(row => row.id));
+    const originalOrder = commonOrder(base);
+    if (commonOrder(mine) !== originalOrder && commonOrder(theirs) === originalOrder) {
+      const survivors = byId(merged);
+      const ordered = mine.rows.filter(row => survivors[row.id]).map(row => survivors[row.id] as MergeRow);
+      theirs.rows.forEach(function (row, index) {
+        const survivor = survivors[row.id];
+        if (!survivor || mineRows[row.id]) return;
+        let anchor = -1;
+        for (let i = index - 1; i >= 0 && anchor === -1; i--) {
+          anchor = ordered.findIndex(item => item.id === theirs.rows[i]?.id);
+        }
+        ordered.splice(anchor + 1, 0, survivor);
+      });
+      return ordered;
+    }
+  }
   return merged;
 }
 
