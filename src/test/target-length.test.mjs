@@ -12,7 +12,7 @@ import { mergeTargetLength } from "../core/merge/scalars.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { targetOverlayParts } from "../features/rundown/target.js";
-import { TARGET_PRESETS } from "../features/title/target-section.js";
+import { TARGET_PRESETS } from "../features/title/target-section.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
