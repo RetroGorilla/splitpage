@@ -10,7 +10,7 @@ import { textMergeContext } from "../bootstrap/wiring/session-merge.ts";
 import { stashLocalWork } from "../bootstrap/wiring/recovery-owners.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
-import { createMemoryBackend, dataUrlForSync, intern, internDataUrl, setBackend } from "../adapters/storage/02c-blobs.js";
+import { createMemoryBackend, dataUrlForSync, intern, internDataUrl, setBackend } from "../adapters/storage/02c-blobs.ts";
 import { conflictStash, startRecovery } from "../bootstrap/wiring/recovery-owners.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { personIdRemap } from "../core/merge/lists.ts";

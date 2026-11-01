@@ -3,7 +3,7 @@ import { ownership as portOwnership } from "../../src/bootstrap/wiring/ports/sav
 import { pictures as portPictures } from "../../src/bootstrap/wiring/ports/pictures.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { blobImgHtml, has, setBackend } from "../../src/adapters/storage/02c-blobs.js";
+import { blobImgHtml, has, setBackend } from "../../src/adapters/storage/02c-blobs.ts";
 
 import { captureOperation, stillOwns } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { image } from "../../src/test/golden-helpers.mjs";

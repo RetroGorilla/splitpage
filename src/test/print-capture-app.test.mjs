@@ -11,7 +11,7 @@ const { printDialog } = await import("../bootstrap/wiring/ports/printing.ts");
 const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const { exportFormats } = await import("../bootstrap/wiring/export-registry.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.js");
+const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
