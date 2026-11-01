@@ -41,7 +41,10 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .pp-where { gap: var(--space-12); }
+  .pp-where { gap: var(--space-12); min-width: 0; }
+  .pp-section { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+  .pp-section[hidden] { display: none; }
+  .pp-scene-pos, .pp-scene-start { flex: none; }
   .pp-scene-pos { font-size: 16px; line-height: 20px; }
   .pp-scene-start { font-size: 14px; line-height: 20px; color: var(--text-faint); }
   .pp-clock { gap: var(--space-10); }
