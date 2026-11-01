@@ -1,6 +1,6 @@
 # Auto-scroll while a scene is dragged to the top/bottom edge of the window
 # (issue #23): the window-level dragover listener + the updateDragScroll/
-# dragScrollStep loop in features/rows/scenes.js.
+# dragScrollStep loop in features/rows/scenes.ts.
 #
 # Real native HTML5 drag-and-drop cannot be produced by a synthetic pointer
 # over CDP (there is no OS-level drag session to drive), so this drives the
