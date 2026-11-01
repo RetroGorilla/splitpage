@@ -160,6 +160,15 @@
     "docId": "d11111111111111111111111111111111",
     "rows": [
       {
+        "id": "r4",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Four.",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      },
+      {
         "id": "r1",
         "status": "todo",
         "visualText": "",
@@ -182,15 +191,6 @@
         "status": "todo",
         "visualText": "",
         "audioText": "Three.",
-        "imageRef": null,
-        "updatedAt": "2026-02-01T09:00:00.000Z",
-        "updatedBy": "Base Writer"
-      },
-      {
-        "id": "r4",
-        "status": "todo",
-        "visualText": "",
-        "audioText": "Four.",
         "imageRef": null,
         "updatedAt": "2026-02-01T09:00:00.000Z",
         "updatedBy": "Base Writer"
