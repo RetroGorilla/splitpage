@@ -1,17 +1,23 @@
 "use strict";
 
-const fs = require("node:fs");
-const { readFileEntry } = require("./file-service");
-const { restoreDoneAction } = require("./drafts");
-const { LAST_KNOWN_TITLE_MAX } = require("./desktop-state");
+import type { DesktopWireFailure } from "../shared/desktop-contract.d.ts";
+
+import type * as NodeFs from "node:fs";
+
+import type { DesktopDraftStoreBoundary, DesktopFileServiceBoundary, DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+
+const fs: typeof NodeFs = require("node:fs");
+const { readFileEntry }: Pick<DesktopFileServiceBoundary, "readFileEntry"> = require("./file-service");
+const { restoreDoneAction }: { restoreDoneAction: (outcome: string) => "open" | "drop" | "release" } = require("./drafts");
+const { LAST_KNOWN_TITLE_MAX }: { LAST_KNOWN_TITLE_MAX: number } = require("./desktop-state");
 
 function createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
   pushShellState, persistShellState, docClaims, testMode: TEST_MODE, flushPendingPayload, restoreNotice,
   routeOpenPath, draftStore, draftFiniteNumber, draftBodyTooLarge, buildDraftHeader, draftsPreviousSession,
   pendingDraftFlushes
-}) {
-  function registerDocumentIpc({ ipcHandle, ipcOn }) {
+}: DesktopDocumentIpcDependencies) {
+  function registerDocumentIpc({ ipcHandle, ipcOn }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcOn("splitpage:set-document-state", (event, docState) => {
       const tab = tabOf(event);
       if (!tab) return;
@@ -65,13 +71,13 @@ function createDocumentIpc({
       throw new Error("route-open: unknown kind");
     });
 
-    const DRAFT_STORE_DOWN = { ok: false, code: "EIO" };
+    const DRAFT_STORE_DOWN: DesktopWireFailure = { ok: false, code: "EIO" };
 
     ipcHandle("splitpage:draft-write", async (event, payload) => {
       const tab = tabOf(event);
       if (!tab) return { ok: false, code: "NO_TAB" };
       if (!draftStore()) return DRAFT_STORE_DOWN;
-      const p = payload && typeof payload === "object" ? payload : {};
+      const p: Record<string, unknown> = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
       const seq = draftFiniteNumber(p.seq);
       const baseJson = p.baseJson === undefined || p.baseJson === null ? null : p.baseJson;
       if (seq === null || typeof p.stateJson !== "string" || (baseJson !== null && typeof baseJson !== "string")) {
@@ -80,27 +86,27 @@ function createDocumentIpc({
       if (draftBodyTooLarge(p.stateJson) || (baseJson !== null && draftBodyTooLarge(baseJson))) {
         return { ok: false, code: "TOO_LARGE" };
       }
-      return await draftStore().write(tab.id, buildDraftHeader(tab, p), p.stateJson, baseJson, seq);
+      return await (draftStore() as DesktopDraftStoreBoundary).write(tab.id, buildDraftHeader(tab, p), p.stateJson, baseJson, seq);
     });
 
     ipcHandle("splitpage:draft-discard", async (event, payload) => {
       const tab = tabOf(event);
       if (!tab) return { ok: false, code: "NO_TAB" };
       if (!draftStore()) return DRAFT_STORE_DOWN;
-      const seq = draftFiniteNumber(payload && payload.seq);
+      const seq = draftFiniteNumber(payload && (payload as { seq?: unknown }).seq);
       if (seq === null) return { ok: false, code: "BAD_PAYLOAD" };
       if (tab.keepDraftOnClose) return { ok: false, code: "HELD" };
-      return await draftStore().discardClean(tab.id, seq);
+      return await (draftStore() as DesktopDraftStoreBoundary).discardClean(tab.id, seq);
     });
 
     ipcHandle("splitpage:draft-take", async (event) => {
       const tab = tabOf(event);
       if (!tab || !draftStore()) return null;
-      const taken = await draftStore().take(tab.id);
+      const taken = await (draftStore() as DesktopDraftStoreBoundary).take(tab.id);
       if (!taken || taken.corrupt || taken.unsupported) return taken || null;
 
       const origin = (taken.header && taken.header.origin) || null;
-      const filePath = origin && origin.kind === "file" && typeof origin.filePath === "string" ? origin.filePath : "";
+      const filePath = origin && (origin as Record<string, unknown>).kind === "file" && typeof (origin as Record<string, unknown>).filePath === "string" ? (origin as { filePath: string }).filePath : "";
       taken.file = null;
       taken.fileProblem = null;
       if (filePath) {
@@ -118,7 +124,7 @@ function createDocumentIpc({
             persistShellState();
           }
         } catch (err) {
-          taken.fileProblem = err && err.code === "ENOENT" ? "missing" : "unreadable";
+          taken.fileProblem = err && (err as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unreadable";
         }
       }
       if (typeof taken.previousSession !== "string") taken.previousSession = draftsPreviousSession();
@@ -136,7 +142,7 @@ function createDocumentIpc({
         return;
       }
       if (action === "release") {
-        try { draftStore().release(tab.id); } catch { }
+        try { (draftStore() as DesktopDraftStoreBoundary).release(tab.id); } catch { }
       }
       tab.pendingPayload = null;
     });
@@ -151,5 +157,7 @@ function createDocumentIpc({
 
   return { registerDocumentIpc };
 }
+
+export type { createDocumentIpc };
 
 module.exports = { createDocumentIpc };

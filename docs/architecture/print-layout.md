@@ -273,7 +273,7 @@ Contract and trust boundary. `PdfPrinter.print(html, doc)` (application type)
 is built by `desktopPdfPrinter` (`src/adapters/print/desktop-print.ts`), which
 calls the bridge's `printToPdf(html)` and pins the PDF's dates to
 `exportDay(doc)`. The bridge crosses `splitpage:print-to-pdf`: app origin
-only, one string argument, checked by `ipc-setup.js` like every channel. The
+only, one string argument, checked by `ipc-setup.ts` like every channel. The
 request carries no path, options or URL. Main refuses an empty string or one
 over 256 Mi characters, and answers bytes; the renderer saves them through the
 existing `saveFileDialog` and `writeFile` (file ids, never paths), so a
@@ -329,7 +329,7 @@ dev target passed 813/813 checks, 18 of them in the desktop PDF group. Fifteen
 `print|export|desktop` suites passed 994/994 checks on the test build with
 three lanes, including 65 (55/55) and 384 (36/36). The fresh `dist:win` build
 passed its 15/15 architecture checks, and both `app.asar` files list
-`print-pdf.js` and `ipc-print.js`. The real `print-pdf.js` printed all 18 P1/P2
+`print-pdf.js` and `ipc-print.ts`. The real `print-pdf.js` printed all 18 P1/P2
 fixture pages in Electron in 188–489 ms each (long script 24 pages, long shot
 list 12, long packing lists 4 and 7) with no missing glyph and no line outside
 its page; rasterized pages showed pictures, Unicode, repeated table heads,

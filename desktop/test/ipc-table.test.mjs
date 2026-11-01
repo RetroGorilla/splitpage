@@ -3,23 +3,26 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
-import { createRequire } from "node:module";
+import { stripTypeScriptTypes, createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.join(here, "..");
 
-const table = require(path.join(desktop, "ipc-channels.js"));
+const table = require(path.join(desktop, "ipc-channels.ts"));
 const { IPC_CHANNELS, APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin, checkArgs } = table;
 
-const read = (name) => fs.readFileSync(path.join(desktop, name), "utf8");
+const read = (name) => {
+  const text = fs.readFileSync(path.join(desktop, name), "utf8");
+  return name.endsWith(".ts") ? stripTypeScriptTypes(text) : text;
+};
 const MAIN = read("main.js");
-const SETUP = read("ipc-setup.js");
-const IPC_MODULES = fs.readdirSync(desktop).filter((f) => /^ipc-[a-z-]+\.js$/.test(f) && f !== "ipc-channels.js").sort();
+const SETUP = read("ipc-setup.ts");
+const IPC_MODULES = fs.readdirSync(desktop).filter((f) => /^ipc-[a-z-]+\.ts$/.test(f) && f !== "ipc-channels.ts").sort();
 const SOURCES = [["main.js", MAIN], ...IPC_MODULES.map((f) => [f, read(f)])];
 const SENDERS = [...SOURCES, ["voice-composition.js", read("voice-composition.js")]];
-const { createIpcSetup } = require(path.join(desktop, "ipc-setup.js"));
+const { createIpcSetup } = require(path.join(desktop, "ipc-setup.ts"));
 const PRELOADS = [
   { file: "preload.js", origin: APP_ORIGIN, src: read("preload.js") },
   { file: "tabstrip-preload.js", origin: TABSTRIP_ORIGIN, src: read("tabstrip-preload.js") }
@@ -82,7 +85,7 @@ const REGISTERED_AFTER_SPLIT = ["splitpage:print-to-pdf invoke"];
 function handlerGroups() {
   const groups = [];
   for (const [file, src] of SOURCES) {
-    for (const m of src.matchAll(/^( *)function (register\w+Ipc)\(\{[^}]*\}\) \{$/gm)) {
+    for (const m of src.matchAll(/^( *)function (register\w+Ipc)\(\{[^}]*\}\s*\)\s*\{$/gm)) {
       const end = src.indexOf("\n" + m[1] + "}\n", m.index);
       groups.push({
         file,
@@ -256,17 +259,17 @@ test("neither preload can reach the other's channels", () => {
   }
 });
 
-test("main.js and the ipc-*.js modules register nothing through ipcMain directly", () => {
+test("main.js and the ipc-*.ts modules register nothing through ipcMain directly", () => {
   for (const [file, src] of SOURCES) {
     const direct = [...src.matchAll(/ipcMain\.(handle|on)\(\s*"/g)];
     assert.deepEqual(direct.map((m) => m[0]), [], `${file}: every registration goes through ipcHandle/ipcOn/ipcOnSync`);
-    if (file !== "ipc-setup.js") {
-      assert.equal(/ipcMain\.(handle|on)\(/.test(src), false, `${file} calls ipcMain only through ipc-setup.js`);
+    if (file !== "ipc-setup.ts") {
+      assert.equal(/ipcMain\.(handle|on)\(/.test(src), false, `${file} calls ipcMain only through ipc-setup.ts`);
     }
   }
 });
 
-test("every channel main.js and the ipc-*.js modules register is in the table, with that direction", () => {
+test("every channel main.js and the ipc-*.ts modules register is in the table, with that direction", () => {
   for (const r of registrations) {
     const row = channelFor(r.name, r.direction);
     assert.ok(row, `${r.file} registers ${key(r.name, r.direction)}, which is not in the table`);
@@ -274,17 +277,17 @@ test("every channel main.js and the ipc-*.js modules register is in the table, w
   }
 });
 
-test("main.js and the ipc-*.js modules register a handler for every inbound row, exactly once", () => {
+test("main.js and the ipc-*.ts modules register a handler for every inbound row, exactly once", () => {
   for (const row of IPC_CHANNELS) {
     if (row.direction === "receive") continue;
     const hits = registrations.filter((r) => r.name === row.name && r.direction === row.direction);
-    assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.js and the ipc-*.js modules`);
+    assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.js and the ipc-*.ts modules`);
   }
 });
 
-test("every registration outside ipc-setup.js sits in a handler group that ipc-setup.js calls", () => {
+test("every registration outside ipc-setup.ts sits in a handler group that ipc-setup.ts calls", () => {
   const groups = handlerGroups();
-  for (const r of registrations.filter((x) => x.file !== "ipc-setup.js")) {
+  for (const r of registrations.filter((x) => x.file !== "ipc-setup.ts")) {
     assert.ok(
       groups.some((g) => g.file === r.file && r.at > g.start && r.at < g.end),
       `${r.file}: ${r.name} is registered outside a register*Ipc group`
@@ -292,7 +295,7 @@ test("every registration outside ipc-setup.js sits in a handler group that ipc-s
   }
   for (const g of groups) {
     assert.ok(g.registrations.length > 0, `${g.name} registers nothing`);
-    assert.ok(SETUP.includes(`groups.${g.name}(wrappers);`), `ipc-setup.js never calls ${g.name}`);
+    assert.ok(SETUP.includes(`groups.${g.name}(wrappers);`), `ipc-setup.ts never calls ${g.name}`);
   }
 });
 
@@ -364,7 +367,7 @@ test("the main process sends every main -> renderer row and registers none of th
   const inbound = new Set(IPC_CHANNELS.filter((c) => c.direction !== "receive").map((c) => c.name));
   for (const row of IPC_CHANNELS) {
     if (row.direction !== "receive") continue;
-    assert.ok(sends.has(row.name), `${row.name} is in the table and none of main.js, the ipc-*.js modules or voice-composition.js sends it`);
+    assert.ok(sends.has(row.name), `${row.name} is in the table and none of main.js, the ipc-*.ts modules or voice-composition.js sends it`);
     if (!inbound.has(row.name)) {
       assert.equal(
         registrations.some((r) => r.name === row.name),
@@ -493,8 +496,8 @@ test("Follow My Voice takes no argument, from the app page only", () => {
 
 test("packaging: every ./module main.js requires, directly or through another module, is in electron-builder.yml's files", () => {
   const yml = read("electron-builder.yml");
-  const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.js)\s*$/gm)].map((m) => m[1]));
-  const requiredBy = (src) => [...src.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(?:\.js)?"\)/g)].map((m) => m[1] + ".js");
+  const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.(?:js|ts))\s*$/gm)].map((m) => m[1]));
+  const requiredBy = (src) => [...src.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(\.(?:js|ts))?"\)/g)].map((m) => m[1] + (m[2] || ".js"));
   const required = new Set();
   const pending = SOURCES.map(([, src]) => src);
   while (pending.length) {
@@ -505,8 +508,8 @@ test("packaging: every ./module main.js requires, directly or through another mo
     }
   }
   assert.ok(required.has("drafts.js"), "main.js requires ./drafts");
-  assert.ok(required.has("ipc-setup.js"), "main.js requires ./ipc-setup");
-  assert.ok(required.has("ipc-channels.js"), "ipc-setup.js requires ./ipc-channels");
+  assert.ok(required.has("ipc-setup.ts"), "main.js requires ./ipc-setup");
+  assert.ok(required.has("ipc-channels.ts"), "ipc-setup.ts requires ./ipc-channels");
   for (const f of ["close-keep.js", "quit-watchdog.js", "unsaved-dialog.js"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
   for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
   for (const f of ["close-quit.js", "session-restore.js"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");

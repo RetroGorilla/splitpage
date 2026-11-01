@@ -1,10 +1,12 @@
 "use strict";
 
+import type { DesktopIpcEvent, DesktopTabStripIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+
 function createTabStripIpc({
   tabStripWindowOf, shellStateForWindow, tabs, createTab, activateTab, requestCloseTab, reorderTab,
   moveTabToWindow, tearOffToNewWindow
-}) {
-  function registerTabStripIpc({ ipcHandle, ipcOn, ipcOnSync }) {
+}: DesktopTabStripIpcDependencies) {
+  function registerTabStripIpc({ ipcHandle, ipcOn, ipcOnSync }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcOnSync("splitpage:tabstrip-window-id-sync", (event) => {
       const w = tabStripWindowOf(event);
       return w ? w.id : null;
@@ -15,7 +17,7 @@ function createTabStripIpc({
       return w ? shellStateForWindow(w.id) : null;
     });
 
-    const stripTab = (_event, tabId) => tabs.get(tabId) || null;
+    const stripTab = (_event: DesktopIpcEvent, tabId: string) => tabs.get(tabId) || null;
 
     ipcOn("splitpage:tabstrip-new-tab", (event) => {
       const w = tabStripWindowOf(event);
@@ -51,5 +53,7 @@ function createTabStripIpc({
 
   return { registerTabStripIpc };
 }
+
+export type { createTabStripIpc };
 
 module.exports = { createTabStripIpc };

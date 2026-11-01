@@ -5,7 +5,7 @@ import { BRAND_PRODUCER, brandForgeries } from "./brand-casts.mjs";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 
-export const CONFIGS = ["tsconfig.core.json", "tsconfig.web.json", "tsconfig.test.json"];
+export const CONFIGS = ["tsconfig.core.json", "tsconfig.web.json", "tsconfig.test.json", "tsconfig.desktop.json"];
 
 const NO_INPUTS = 18003;
 const TS_FILE = /\.(?:ts|mts|cts)$/;
