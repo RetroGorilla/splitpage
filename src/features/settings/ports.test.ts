@@ -4,7 +4,7 @@ import { jsdomWindow } from "../../../tests/features/editing/jsdom.mjs";
 import { createActionRegistry } from "../../application/actions.ts";
 import { createPreferences } from "../../application/preferences/preferences.ts";
 import type { PreferenceName, PreferenceNotice } from "../../application/preferences/preferences.ts";
-import { startSettings as mountSettings } from "./settings.js";
+import { startSettings as mountSettings } from "./settings.ts";
 import type { SettingsMount, SettingsPorts } from "./ports.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;

@@ -19,7 +19,7 @@ const { openCommentComposer, postComment, postReply, toggleReplyComposer } = awa
 import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/comment-author.ts";
 import { getEditorName, preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences()); }
-const { openSettings } = await import("../features/settings/settings.js");
+const { openSettings } = await import("../features/settings/settings.ts");
 const { render } = await import("../features/rows/render.ts");
 const { toastLastEditor } = await import("../bootstrap/wiring/history-panel.ts");
 import { historyOwner } from "../bootstrap/wiring/history.ts";
