@@ -11,6 +11,7 @@ interface ImportRow {
 }
 
 interface ImportedRow {
+  [key: string]: unknown;
   id: string;
   visualText: string;
   imageRef: ImageRef | null;

@@ -27,7 +27,8 @@ type ProjectFileKind = "splitpage" | "html" | "md";
 
 type ParsedProjectFile =
   | { readonly state: ValidatedDocument; readonly kind: ProjectFileKind; readonly docIdEmbedded: boolean }
-  | { readonly error: "unreadable" | "not-splitpage" };
+  | { readonly error: "unreadable" }
+  | { readonly error: "not-splitpage" };
 
 interface ProjectFileOptions {
   readonly noAsk?: boolean | undefined;
