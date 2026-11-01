@@ -1,7 +1,11 @@
+import type { DocumentShape } from "../../core/document/validated.ts";
+import type { Frozen } from "../../core/document/freeze.ts";
+
 export type HomeKind = "none" | "file" | "import";
 
 export interface Home {
   readonly kind: HomeKind;
+  readonly diskBase?: Frozen<DocumentShape> | null;
   readonly [field: string]: unknown;
 }
 

@@ -38,7 +38,7 @@ export const stopMergeReviewFeature = mergeReview.stop;
 
 export const currentMergeReview: () => MergeReviewControl | null = mergeReview.owner;
 
-export function offerFileMerge(currentFile: unknown, home: unknown): Promise<void> {
+export function offerFileMerge(currentFile: Parameters<MergeReviewControl["offer"]>[0], home: Parameters<MergeReviewControl["offer"]>[1]): Promise<void> {
   return mergeReview.owner()?.offer(currentFile, home) ?? Promise.resolve();
 }
 
