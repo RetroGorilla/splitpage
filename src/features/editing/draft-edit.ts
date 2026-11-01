@@ -7,7 +7,7 @@ import type { DraftEditPorts } from "./ports.ts";
 import type { CellInput, MarkName, Run } from "../../core/text/runs.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 
-type MediaPredicate = (ch: string) => boolean;
+type MediaPredicate = (ch: string | undefined) => boolean;
 interface DraftMediaTable {
   media: Record<string, string>;
   add: (html: string) => string;
@@ -60,7 +60,7 @@ export function mediaTable(texts?: readonly unknown[] | null): DraftMediaTable {
       table.media[ch] = html;
       return ch;
     },
-    isMedia: function (ch) { return Object.prototype.hasOwnProperty.call(table.media, ch); },
+    isMedia: function (ch) { return (Object.prototype.hasOwnProperty as MediaPredicate).call(table.media, ch); },
     cell: function (html) { return (ports as DraftEditPorts).text.fromHtml(liftMedia(html, table)); },
     html: function (cell) { return dropMedia(toHtml(stripMediaMarks(cell, table.isMedia)), table); },
     markThroughout: function (cell, from, to, name) { return markThroughoutText(cell, from, to, name, table.isMedia); },
@@ -114,7 +114,7 @@ export function markThroughoutText(cell: CellInput, from: number, to: number, na
   const proj = projection(cell);
   let seen = false, start = a;
   for (let i = a; i <= b; i++) {
-    if (i < b && !isMedia(proj[i] as string)) continue;
+    if (i < b && !isMedia(proj[i])) continue;
     if (i > start) {
       const words = proj.slice(start, i).replace(/[\n\uFFFC]/g, "");
       if (words) {
