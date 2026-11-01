@@ -2,9 +2,8 @@ import type { Person } from "../../core/production/records.ts";
 import type { TagPanelPorts } from "./ports.ts";
 import type { RemoveTagPorts } from "../../application/commands/production-actions.ts";
 import type { TagChange, OwnerChoice } from "../../application/commands/production-records.ts";
-import type { DocumentView } from "../../application/session/document-session.ts";
+import type { DeepReadonly, DocumentView } from "../../application/session/document-session.ts";
 import type { PresentedProductionEntry } from "../../core/production/index.ts";
-import type { ProductionIndex, QuickAddPlan } from "../../core/production/tags.ts";
 import type { TagCategoryLook } from "../../core/production/looks.ts";
 
 type PanelTagStatus = (typeof TAG_STATUSES)[number];
@@ -13,6 +12,17 @@ type PanelTagMention = PresentedProductionEntry["mentions"][number];
 type SceneMentionGroup = { m: PanelTagMention; n: number; visual: boolean; audio: boolean };
 type PersonTagGroup = { id: string; label: string; items: PresentedProductionEntry[] };
 type ShootTagGroup = { name: string; rows: number[]; needs: Record<string, PresentedProductionEntry>; needOrder: string[] };
+type PanelProductionOwner = TagPanelPorts["production"];
+type PanelReadonlyArgs<A extends readonly unknown[]> = { [K in keyof A]: DeepReadonly<A[K]> };
+type PanelProductionRead<K extends keyof PanelProductionOwner> =
+  (...args: PanelReadonlyArgs<Parameters<PanelProductionOwner[K]>>) => ReturnType<PanelProductionOwner[K]>;
+type PanelQuickAddArgs<A extends readonly unknown[]> = {
+  [K in keyof A]: K extends "0" ? DeepReadonly<A[K]> | null : K extends "3" ? A[K] | null : A[K]
+};
+type PanelQuickAddRead = (...args: PanelQuickAddArgs<Parameters<typeof planQuickAdd>>) => ReturnType<typeof planQuickAdd>;
+type PanelNullableArgs<A extends readonly unknown[], K extends keyof A> = { [P in keyof A]: P extends K ? A[P] | null : A[P] };
+type PanelNullableCall<F extends (...args: never[]) => unknown, K extends keyof Parameters<F>> =
+  (...args: PanelNullableArgs<Parameters<F>, K>) => ReturnType<F>;
 import { tagStatusLampHtml } from "../common/tag-status.ts";
 import { nextTagStatus, normalizeTagName } from "../../core/document/tags.ts";
 import { formatDuration, pad2, rowSeconds } from "../../core/production/timing.ts";
@@ -39,11 +49,11 @@ function safeId(id: unknown, prefix: string) {
 }
 
 function productionEntries() {
-  return ((ports as TagPanelPorts).production.entries as (doc: DocumentView | null) => PresentedProductionEntry[])((ports as TagPanelPorts).document.current());
+  return ((ports as TagPanelPorts).production.entries as PanelProductionRead<"entries">)((ports as TagPanelPorts).document.current());
 }
 
 function currentProductionIndex() {
-  return ((ports as TagPanelPorts).production.current as (doc: DocumentView | null) => ProductionIndex | null)((ports as TagPanelPorts).document.current());
+  return ((ports as TagPanelPorts).production.current as PanelProductionRead<"current">)((ports as TagPanelPorts).document.current());
 }
 
 function tagsByCategory(all?: readonly PresentedProductionEntry[]) {
@@ -156,7 +166,7 @@ function fillGearQuickAdd() {
 
 export function applyGearQuickAdd() {
   const raw = (document.getElementById("gear-quickadd-input") as HTMLTextAreaElement).value || "";
-  function planned(doc: DocumentView | null) { return (planQuickAdd as (doc: DocumentView | null, readers: TagPanelPorts["text"]["productionReaders"], raw: string, index: ProductionIndex | null) => QuickAddPlan)(doc, (ports as TagPanelPorts).text.productionReaders, raw, currentProductionIndex()); }
+  function planned(doc: DocumentView | null) { return (planQuickAdd as PanelQuickAddRead)(doc, (ports as TagPanelPorts).text.productionReaders, raw, currentProductionIndex()); }
   const plan = (ports as TagPanelPorts).document.read(planned);
   const added = plan.added, removed = plan.removed;
 
@@ -662,7 +672,7 @@ function findTagByKey(key: string | null) {
 }
 
 export function jumpToTag(rowId: string | null, key: string | null) {
-  (ports as TagPanelPorts).shotHiding.reveal(rowId as string);
+  ((ports as TagPanelPorts).shotHiding.reveal as PanelNullableCall<TagPanelPorts["shotHiding"]["reveal"], "0">)(rowId);
   const row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
   if (!row) { (ports as TagPanelPorts).notices.show("That scene is no longer here.", "warn"); return; }
   row.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -697,7 +707,7 @@ export function armRemoveTag(btn: Element, key: string | null) {
     return;
   }
   let disarm: () => void;
-  (ports as TagPanelPorts).deletion.arm("tag", key as string, function () {
+  ((ports as TagPanelPorts).deletion.arm as PanelNullableCall<TagPanelPorts["deletion"]["arm"], "1">)("tag", key, function () {
     disarm();
   }, function () { disarm = armButton(btn); });
 }
@@ -726,13 +736,13 @@ export function armDeleteTag(btn: Element, key: string | null) {
     return;
   }
   let disarm: () => void;
-  (ports as TagPanelPorts).deletion.arm("tag", key as string, function () {
+  ((ports as TagPanelPorts).deletion.arm as PanelNullableCall<TagPanelPorts["deletion"]["arm"], "1">)("tag", key, function () {
     disarm();
   }, function () { disarm = armButton(btn); });
 }
 
 export function toggleCardSelection(key: string | null) {
-  (ports as TagPanelPorts).selection.toggle(key as string);
+  ((ports as TagPanelPorts).selection.toggle as PanelNullableCall<TagPanelPorts["selection"]["toggle"], "0">)(key);
   (ports as TagPanelPorts).selection.disarm();
   renderProduction();
 }
@@ -915,7 +925,7 @@ export function armPersonDelete(btn: Element, personId: string | null) {
   if ((ports as TagPanelPorts).deletion.armedId("tag") === "person:" + personId) {
     (ports as TagPanelPorts).deletion.disarm("tag");
     const person = personById(personId);
-    (ports as TagPanelPorts).edits.edit(deletePersonCommand(personId as string));
+    (ports as TagPanelPorts).edits.edit((deletePersonCommand as PanelNullableCall<typeof deletePersonCommand, "0">)(personId));
     renderProduction();
     (ports as TagPanelPorts).notices.show("Removed " + (person ? person.name : "that person") +
       " — their items are now unassigned", "ok");
