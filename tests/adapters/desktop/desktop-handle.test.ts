@@ -1,3 +1,4 @@
+import type { MalformedDesktopReply } from "../../../src/adapters/desktop/desktop-port.ts";
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { makeDesktopHandle } from "../../../src/adapters/desktop/desktop-handle.ts";
@@ -11,12 +12,12 @@ function fakeDesktop(answers: { name?: string; lastModified?: number; written?: 
   useDesktopForTest({
     readFile: (id: string) => {
       calls.push("read " + id);
-      return Promise.resolve({ id, name: answers.name ?? "renamed.md", bytes: new TextEncoder().encode("hello"), lastModified: answers.lastModified ?? 1234 });
+      return Promise.resolve({ id, name: answers.name ?? "renamed.md", bytes: new TextEncoder().encode("hello"), lastModified: answers.lastModified ?? 1234 } as unknown as MalformedDesktopReply);
     },
     writeFile: (id: string, data: Uint8Array) => {
       calls.push("write " + id);
       writes.push(data);
-      return Promise.resolve(answers.written as { lastModified?: number } | null);
+      return Promise.resolve(answers.written as MalformedDesktopReply);
     }
   });
   return { calls, writes };

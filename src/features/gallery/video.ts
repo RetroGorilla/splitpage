@@ -4,7 +4,7 @@ import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../../core/
 import { exposeTestHook } from "../common/test-hooks.ts";
 
 import type { GalleryVideoMount, GalleryVideoPorts } from "./ports.ts";
-import type { DesktopVideoResult } from "../../application/media/desktop-video.ts";
+import type { DesktopVideoThumbnail } from "../../application/media/desktop-video.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
 import type { Step, StepRow } from "../../core/text/steps.ts";
 
@@ -92,7 +92,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
   function fetchThumbnailRecord(href: string) {
     const v = parseVideoLink(href);
     if (!v) return Promise.resolve(null);
-    let got: Promise<DesktopVideoResult | null> | null;
+    let got: Promise<DesktopVideoThumbnail | null> | null;
     if (ports.desktop.present()) {
       try { got = ports.desktop.thumbnail(v.host, videoRef(v) as string); } catch (e) { return Promise.resolve(null); }
       if (!got) return Promise.resolve(null);
@@ -103,7 +103,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
     }
     return got.then(function (res) {
       if (!res || !res.ok || !res.bytes) return null;
-      const bytes = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes as ArrayBuffer);
+      const bytes = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes);
       return (v.host === "youtube" ? trimLetterbox(bytes, res.mime || "image/jpeg") : Promise.resolve(bytes)).then(function (b) {
         const rec = ports.pictures.intern(b) || ports.pictures.intern(bytes);
         if (rec) ports.pictures.persist([rec.sha256]);

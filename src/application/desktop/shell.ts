@@ -1,7 +1,6 @@
-export interface DesktopOpenedFile {
-  readonly id: string;
-  readonly name: string;
-}
+import type { DesktopIpcReceiveArgs, DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
+
+export type DesktopOpenedFile = Pick<DesktopIpcReceiveArgs<"splitpage:open-file">[0], "id" | "name">;
 
 export interface DesktopRestoreNotice {
   readonly skipped?: readonly { readonly name?: string; readonly reason?: string }[];
@@ -11,12 +10,7 @@ export interface DesktopReassign {
   readonly toId: string;
 }
 
-export interface DesktopAnswer {
-  readonly ok?: boolean;
-  readonly code?: string;
-  readonly browser?: string;
-  readonly voice?: string;
-}
+export type DesktopAnswer = DesktopIpcResult<"splitpage:prompter-open-in-browser">;
 
 export interface DesktopShell {
   readonly launchIntent?: { readonly type: string };
@@ -25,8 +19,8 @@ export interface DesktopShell {
   readonly onReassignDocId?: (cb: (msg: DesktopReassign | null) => void) => void;
   readonly onMenuCommand: (cb: (command: string) => void) => void;
   readonly onDraftFlush?: (cb: (request: { readonly keep: boolean }) => unknown) => void;
-  readonly openPrompterInBrowser: () => Promise<DesktopAnswer | null>;
-  readonly openPrompterInChromium: () => Promise<DesktopAnswer | null>;
+  readonly openPrompterInBrowser: () => Promise<DesktopAnswer>;
+  readonly openPrompterInChromium: () => Promise<DesktopIpcResult<"splitpage:prompter-open-in-chromium">>;
 }
 
 export interface PrompterElsewhere {

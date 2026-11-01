@@ -7,7 +7,6 @@ import type { LocalFileOpening, LocalFilesOwner, LocalFilesOwnerPorts } from "./
 import type { LocalFileData, LocalFileHandle } from "../files/local-file-access.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { ImportedRow } from "../formats/import-formats.ts";
-import type { RecentFileData, RecentFiles } from "../files/recent-files.ts";
 
 type FileOptions = NonNullable<LocalFileOpening["options"]>;
 type CurrentFileDocument = Pick<NonNullable<ReturnType<LocalFilesOwnerPorts["document"]["current"]>>, "comments" | "title" | "rows">;
@@ -211,8 +210,8 @@ async function openLocalFile() {
   if (runningOnDesktop()) {
     const entry = await desktopPort().openFileDialog();
     if (!active || !entry) return;
-    const r = await desktopPort().routeOpen({ kind: "file", fileId: (entry as Pick<RecentFileData, "id">).id });
-    if (!active || !r || (r as NonNullable<Awaited<ReturnType<RecentFiles["routeOpen"]>>>).where !== "this-tab") return;
+    const r = await desktopPort().routeOpen({ kind: "file", fileId: entry.id });
+    if (!active || !r || r.where !== "this-tab") return;
     const desktopHandle = makeDesktopHandle(entry);
     const desktopFile = await ports.files.read(desktopHandle);
     if (!active) return;

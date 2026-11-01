@@ -1,16 +1,9 @@
-import type { DesktopDraftResult, DesktopDraftStore } from "../../application/recovery/ports.ts";
+import type { DesktopDraftStore } from "../../application/recovery/ports.ts";
+import type { DesktopPort } from "../desktop/desktop-port.ts";
 
-export interface DesktopDraftBridge {
-  readonly writeDraft?: ((payload: unknown) => Promise<DesktopDraftResult | null | undefined>) | undefined;
-  readonly discardDraft?: ((seq: number) => Promise<DesktopDraftResult | null | undefined>) | undefined;
-  readonly takeDraft?: (() => Promise<unknown>) | undefined;
-  readonly draftRestoreDone?: ((outcome: string) => void) | undefined;
-  readonly hasDraftToRestore?: boolean | undefined;
-}
+export type DesktopDraftBridge = Partial<Pick<DesktopPort, "writeDraft" | "discardDraft" | "takeDraft" | "draftRestoreDone" | "hasDraftToRestore">>;
 
-interface DesktopDraftTaking {
-  readonly takeDraft: () => Promise<unknown>;
-}
+type DesktopDraftTaking = Pick<DesktopPort, "takeDraft">;
 
 export interface DesktopDraftStorePorts {
   readonly bridge: () => DesktopDraftBridge | null | undefined;

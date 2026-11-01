@@ -81,12 +81,13 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly onVoiceEvent: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:voice-event">[0]>) => void;
 }
 
-type DesktopFixtureProperty<T, K extends PropertyKey> = T extends object ? K extends keyof T ? T[K] : never : never;
-export type DesktopTestValue<T> = unknown extends T ? T : [T] extends [ReturnType<() => void>] ? T : [T] extends [Uint8Array] ? T : [T] extends [readonly (infer R)[]] ? readonly DesktopTestValue<R>[] :
-  [NonNullable<T>] extends [object] ? { [K in DesktopResultKeys<NonNullable<T>>]?: DesktopTestValue<DesktopFixtureProperty<NonNullable<T>, K>> | null | undefined } : T;
-export type DesktopTestPort = {
+export type DesktopTestPort = { -readonly [K in keyof DesktopPort]?: DesktopPort[K] };
+
+declare const malformedDesktopReply: unique symbol;
+export type MalformedDesktopReply<T = unknown> = T & { readonly [malformedDesktopReply]: true };
+type DesktopFaultInjectionPort = {
   -readonly [K in keyof DesktopPort]?: DesktopPort[K] extends (...args: infer A) => Promise<infer R>
-    ? (...args: A) => Promise<DesktopTestValue<R> | null | undefined> : DesktopPort[K];
+    ? (...args: A) => Promise<R | MalformedDesktopReply> : DesktopPort[K];
 };
 
 export type DesktopMember = keyof DesktopPort;
@@ -140,7 +141,7 @@ export function canOpenPrompterInChromium(): boolean {
   return current !== null && typeof current.openPrompterInChromium === "function";
 }
 
-export function useDesktopForTest(fake: DesktopTestPort | null | undefined): void {
+export function useDesktopForTest(fake: DesktopTestPort | DesktopFaultInjectionPort | null | undefined): void {
   use(fake as DesktopPort | null | undefined);
 }
 
