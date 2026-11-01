@@ -6,7 +6,7 @@ import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, resto
 import type { DesktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { makeDesktopBlobBackend, wireDesktopBlobs } from "../../adapters/desktop/desktop-blobs.js";
-import { forgetDesktopVoice } from "../../adapters/desktop/desktop-voice.js";
+import { forgetDesktopVoice } from "../../adapters/desktop/desktop-voice.ts";
 import { makeFakeDesktopBackend } from "../../adapters/desktop/fake-desktop.js";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { desktopActions as definitions } from "../../features/desktop/actions.ts";
