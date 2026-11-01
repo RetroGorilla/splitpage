@@ -1,4 +1,4 @@
-import { beginBusy, endBusy, withBusyBar } from "../../../features/notices/busy.js";
+import { beginBusy, endBusy, withBusyBar } from "../../../features/notices/busy.ts";
 import type { BusyNotices } from "../../../application/effects/ports.ts";
 import type { EffectPorts } from "../../../application/effects/ports.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../effects-owner.ts";
