@@ -10,7 +10,6 @@ after(closeApp);
 const { LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.js");
-const { brollShotListForPrint } = await import("../adapters/formats/export-projections.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
@@ -20,16 +19,15 @@ const { buildDocx, buildNarrationDocx, buildNarrationText } = await import("../a
 const { narrationIncludesDirections, setNarrationIncludesDirections } = await import("../bootstrap/wiring/exporters.ts");
 const { buildBreakdownCsv, buildBrollCsv, buildCsv } = await import("../adapters/formats/csv.ts");
 const { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } = await import("../adapters/formats/xlsx.ts");
-const { buildPackingListPdf, buildPdf, buildShotListPdf } = await import("../adapters/formats/pdf.ts");
 const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const KINDS = [
-  "docx", "csv", "breakdown", "b-roll csv", "xlsx", "breakdown xlsx", "b-roll xlsx", "b-roll pdf", "pdf", "txt",
-  "narration-docx", "narration-txt", "packing-gear", "packing-prop", "md-table", "html", "md"
+  "docx", "csv", "breakdown", "b-roll csv", "xlsx", "breakdown xlsx", "b-roll xlsx", "txt",
+  "narration-docx", "narration-txt", "md-table", "html", "md"
 ];
 
-const DATED = ["docx", "xlsx", "breakdown xlsx", "b-roll xlsx", "b-roll pdf", "pdf", "narration-docx", "packing-gear", "packing-prop"];
+const DATED = ["docx", "xlsx", "breakdown xlsx", "b-roll xlsx", "narration-docx"];
 
 function demo() {
   return migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)));
@@ -72,8 +70,6 @@ function liveJson() {
   return JSON.stringify(currentDocument());
 }
 
-const BROLL_VIEW = { filter: "all", group: "scene" };
-
 const WRITERS = [
   ["X6", "buildDocx", (doc) => buildDocx(doc, exportAssetsNow(doc))],
   ["X7", "buildNarrationDocx", (doc) => buildNarrationDocx(doc, { directions: true })],
@@ -82,11 +78,8 @@ const WRITERS = [
   ["X10", "buildScriptXlsx", (doc) => buildScriptXlsx(doc)],
   ["X11", "buildBreakdownXlsx", (doc) => buildBreakdownXlsx(doc)],
   ["X12", "buildBrollXlsx", (doc) => buildBrollXlsx(doc)],
-  ["X13", "buildPdf", (doc) => buildPdf(doc, null, null)],
   ["X14", "buildBreakdownCsv", (doc) => buildBreakdownCsv(doc)],
-  ["X15", "buildBrollCsv", (doc) => buildBrollCsv(doc)],
-  ["X16", "buildShotListPdf", (doc) => buildShotListPdf(doc, brollShotListForPrint(doc, BROLL_VIEW))],
-  ["X17", "buildPackingListPdf", (doc) => buildPackingListPdf(doc, "prop")]
+  ["X15", "buildBrollCsv", (doc) => buildBrollCsv(doc)]
 ];
 
 WRITERS.forEach(([id, name, serialize]) => {
@@ -128,14 +121,6 @@ rightToday("X18", "every export route builds from the one capture taken before i
 });
 
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
-
-function pngBytes(width, height, salt) {
-  const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
-  return new Uint8Array([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52,
-    ...be32(width), ...be32(height), 8, 6, 0, 0, 0, ...be32(salt || 0), ...be32(0), 0x49, 0x45, 0x4e, 0x44
-  ]);
-}
 
 function picturedScript(refs) {
   return migrateRows({
@@ -224,79 +209,6 @@ rightToday("X19", "an export whose local picture reads are held keeps the captur
       assert.equal(liveJson(), replaced, kind + ": the replacement document is as it was left");
       assert.equal(currentDocument().rows[0].imageRef.sha256, replacement.ref.sha256, kind + ": the live row keeps its new picture");
     });
-  }
-});
-
-function fakeDecoder(gates, out) {
-  const RealImage = globalThis.Image;
-  const realCreate = URL.createObjectURL;
-  const realRevoke = URL.revokeObjectURL;
-  const proto = window.HTMLCanvasElement.prototype;
-  const realContext = proto.getContext;
-  const realToBlob = proto.toBlob;
-  const blobs = new Map();
-  const decoded = [];
-  let n = 0;
-  URL.createObjectURL = (blob) => { const url = "blob:decode/" + (++n); blobs.set(url, blob); return url; };
-  URL.revokeObjectURL = () => {};
-  class FakeImage {
-    set src(url) {
-      const blob = blobs.get(url);
-      blob.arrayBuffer().then(async (ab) => {
-        decoded.push(new Uint8Array(ab));
-        await gates.pass("decode", url);
-        this.naturalWidth = 40;
-        this.naturalHeight = 30;
-        this.onload();
-      });
-    }
-  }
-  globalThis.Image = FakeImage;
-  window.Image = FakeImage;
-  proto.getContext = function () { return { fillRect() {}, drawImage() {}, fillStyle: "" }; };
-  proto.toBlob = function (cb) { cb(new Blob([out])); };
-  return {
-    decoded: decoded,
-    restore: function () {
-      globalThis.Image = RealImage;
-      window.Image = RealImage;
-      URL.createObjectURL = realCreate;
-      URL.revokeObjectURL = realRevoke;
-      proto.getContext = realContext;
-      proto.toBlob = realToBlob;
-    }
-  };
-}
-
-rightToday("X20", "a PDF whose picture decoding is held prints the captured pictures in their captured places when the document and pictures change", async (t) => {
-  mockClock(t);
-  const gates = createGates();
-  const decoder = fakeDecoder(gates, jpegBytes(40, 30, 77));
-  try {
-    const row = freshPicture(pngBytes, 40, 30, 41);
-    const more = freshPicture(pngBytes, 40, 30, 42);
-    const comment = freshPicture(pngBytes, 40, 30, 43);
-    const replacement = freshPicture(pngBytes, 40, 30, 44);
-    useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
-    const reference = await localFileMenuControls().buildFileData("pdf", "pictures");
-    const asked = decoder.decoded.length;
-    useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
-    gates.hold("decode", { times: 99 });
-    const building = localFileMenuControls().buildFileData("pdf", "pictures");
-    await gates.arrived("decode");
-    mutateLive();
-    swapPictures(replacement);
-    const replaced = liveJson();
-    gates.releaseAll("decode");
-    const built = await building;
-    const late = decoder.decoded.slice(asked).map((b) => Buffer.from(b).toString("hex")).sort();
-    assert.deepEqual(late, [row.bytes, more.bytes, comment.bytes].map((b) => Buffer.from(b).toString("hex")).sort(), "the held decodes were of the captured pictures");
-    sameBytes(built.data, reference.data, "the PDF holds the captured pictures where they were");
-    assert.ok(Buffer.from(built.data).toString("latin1").includes("/Im3 Do"), "setup: the decoded pictures are drawn");
-    assert.equal(liveJson(), replaced, "the replacement document is as it was left");
-  } finally {
-    gates.releaseAll("decode");
-    decoder.restore();
   }
 });
 

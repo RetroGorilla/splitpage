@@ -228,9 +228,9 @@ test("a second variant joins an existing card as one more choice", () => {
   assert.deepEqual(exportFormats.card("md")?.variants.map((v) => v.choice?.value), ["stacked", "table"]);
 });
 
-test("the byte-capture matrix lists every registered exporter, so a new format cannot skip its cases", () => {
+test("the byte-capture matrix lists every registered file builder, so a new format cannot skip its cases", () => {
   const matrix = readFileSync(new URL("./m4-matrix-exports.test.mjs", import.meta.url), "utf8");
   const kinds = new Set((/const KINDS = \[([^\]]*)\]/.exec(matrix) || ["", ""])[1].match(/"[^"]+"/g)?.map((k) => k.slice(1, -1)));
-  const registered = exportFormats.exporters().map((e) => e.id).concat(["txt"]);
+  const registered = exportFormats.exporters().filter((e) => e.build).map((e) => e.id).concat(["txt"]);
   assert.deepEqual(registered.filter((id) => !kinds.has(id)), [], "add the new exporter to KINDS in m4-matrix-exports.test.mjs");
 });

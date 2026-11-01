@@ -486,7 +486,7 @@ export function onRootInput(e: RootInput): void {
   maybeDirectionShortcut(e as InputEvent, cellEl);
   maybeCueShortcut(e as InputEvent, cellEl);
   maybeCaptureBroll(e, cellEl);
-  currentPlainTags()?.maybeOpen(e, cellEl);
+  currentPlainTags()?.maybeOpen(e as InputEvent, cellEl);
   cellEditing().sync(cellEl);
   settleEndedComposition(e);
   afterScriptCellChange(cellEl);
