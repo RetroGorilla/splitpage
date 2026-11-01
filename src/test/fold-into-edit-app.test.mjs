@@ -23,7 +23,7 @@ const flushEdits = () => undoOwner().flush();
 const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo, setVideoThumbnail, videoLinkKey } = await import("../core/document/gallery.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 

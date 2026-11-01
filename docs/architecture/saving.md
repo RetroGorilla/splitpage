@@ -67,7 +67,7 @@ Destinations are `LegacyDestination` values (`kind` and `fields`), and `NO_DESTI
 
 When `adoptReplacement` has started the new session it calls the listeners registered with `onDocumentReplaced` (`bootstrap/wiring/session-owner.ts`), and so does the undo adapter's adoption hook. A listener made with `liveSession().subscribe` would die with the session it was made on; `onDocumentReplaced` is the app-lifetime way to react to a replacement. Its one listener today is `releaseSessionVideoUrls` in `features/gallery/video-files.ts` (4.22, L1c), which revokes the cached object URLs of session videos and keeps the file and token grants.
 
-`keepSnapshot(label, doc?)` (`src/bootstrap/wiring/transition-owners.ts`, the `history` port) takes the same snapshot outside a transition, for changes that are not replacements: taking your version of a title or field (`features/comments/comments.js`), replacing rows on import (`features/imports/imports.js`), reloading an import from disk (`application/transitions/local-files.ts`), and the two snapshots a new blank script or demo keeps, one under the old id and one under the new (`features/file-menu/file-menu.js`).
+`keepSnapshot(label, doc?)` (`src/bootstrap/wiring/transition-owners.ts`, the `history` port) takes the same snapshot outside a transition, for changes that are not replacements: taking your version of a title or field (`features/comments/comments.ts`), replacing rows on import (`features/imports/imports.js`), reloading an import from disk (`application/transitions/local-files.ts`), and the two snapshots a new blank script or demo keeps, one under the old id and one under the new (`features/file-menu/file-menu.js`).
 
 ### Document sources (L3h PR 3)
 
