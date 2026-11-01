@@ -1,0 +1,52 @@
+open
+eval window.F=window.__splitpageFormats; if(F.autosave.enabled()) F.autosave.toggle(); document.querySelector('[data-newtab-action="new"]').click(); true
+wait F.state().title === 'Untitled Script'
+expect !F.writtenOut()
+eval window.__name='Headset ad V3.md'; window.__files={}; window.__picker=window.showSaveFilePicker=async function(){var name=window.__name; return {name:name,createWritable:async function(){return {write:async function(body){window.__files[name]=body;},close:async function(){return {lastModified:1000};}};},getFile:async function(){return new File([window.__files[name]||''],name,{lastModified:1000});}};}; true
+click #btn-save
+wait F.state().title === 'Headset ad'
+wait !document.getElementById('btn-save').classList.contains('is-dirty')
+expect document.getElementById('doc-title').value === 'Headset ad'
+expect document.getElementById('doc-version').textContent === 'v3'
+expect document.getElementById('doc-version').hidden === false
+expect document.getElementById('writer-version').textContent === 'v3'
+expect F.parseMarkdown(window.__files['Headset ad V3.md']).state.titleVersion === 'v3'
+expect F.parseMarkdown(window.__files['Headset ad V3.md']).state.titleOrigin === 'file'
+eval F.openFile(new File([window.__files['Headset ad V3.md']],'Headset ad V3.md'))
+wait F.state().titleOrigin === 'file'
+expect F.state().titleVersion === 'v3'
+eval window.__name='Another name_v42.splitpage'; F.save({saveAs:true})
+expect F.state().title === 'Headset ad'
+expect F.state().titleVersion === 'v42'
+expect JSON.parse(window.__files[window.__name]).titleVersion === 'v42'
+eval window.__name='Another name.md'; F.save({saveAs:true})
+expect F.state().title === 'Headset ad'
+expect !F.state().titleVersion
+expect document.getElementById('doc-version').hidden === true
+eval window.__name='Another name-v9.md'; F.save({saveAs:true})
+eval var input=document.getElementById('doc-title'); input.value='My own title'; input.dispatchEvent(new Event('input',{bubbles:true})); true
+eval window.__name='Unrelated v10.md'; F.save({saveAs:true})
+expect F.state().title === 'My own title'
+expect F.state().titleVersion === 'v9'
+expect F.state().titleOrigin === 'user'
+eval document.querySelector('[data-newtab-action="new"]').click(); true
+wait F.state().title === 'Untitled Script'
+eval window.showSaveFilePicker=async function(){throw new DOMException('cancel','AbortError');}; F.save()
+expect F.state().title === 'Untitled Script'
+expect !F.state().titleVersion && !F.state().titleOrigin && !F.writtenOut()
+eval delete window.showSaveFilePicker; window.__downloadClick=HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click=function(){window.__downloadName=this.download;}; F.save()
+expect window.__downloadName === 'untitled-script.md'
+expect F.state().title === 'Untitled Script'
+expect !F.state().titleVersion && !F.state().titleOrigin
+eval HTMLAnchorElement.prototype.click=window.__downloadClick; true
+
+eval window.showSaveFilePicker=window.__picker; document.querySelector('[data-newtab-action="new"]').click(); true
+wait F.state().title === 'Untitled Script'
+eval window.__name='Rev2.md'; F.save()
+expect F.state().title === 'Rev2' && !F.state().titleVersion
+expect document.getElementById('doc-version').hidden === true
+
+eval document.querySelector('[data-newtab-action="new"]').click(); true
+wait F.state().title === 'Untitled Script'
+eval window.__name='Headsetv3.md'; F.save()
+expect F.state().title === 'Headsetv3' && !F.state().titleVersion

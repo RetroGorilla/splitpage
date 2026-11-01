@@ -4,7 +4,7 @@ import { mountFileSaving, obsoleteSaveText } from "../../src/application/save/fi
 import type { FileSaveCheck, FileSaveHandle, FileSaveTarget, FileSavingMount, FileSavingPorts } from "../../src/application/save/file-saving-ports.ts";
 import type { Home } from "../../src/application/location/document-location.ts";
 import { buildExportDocument } from "../../src/core/document/export-document.ts";
-import type { ExportReadModels } from "../../src/core/document/export-document.ts";
+import type { ExportDocument, ExportReadModels } from "../../src/core/document/export-document.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
@@ -33,6 +33,7 @@ function fileHandle(name: string): FileSaveHandle {
 function harness(setup: Setup = {}) {
   const log: string[] = [];
   const toasts: string[] = [];
+  const built: ExportDocument[] = [];
   const state = { home: setup.home ?? ({ kind: "none" } as Home), writtenOut: setup.writtenOut ?? false, changes: 4, menuOn: true };
   const doc = migrateRows({ title: "Pilot Script", docId: OLD_ID, rev: 2, rows: [] }, fakeMigration().ports);
   const menu = {
@@ -42,6 +43,13 @@ function harness(setup: Setup = {}) {
     classList: { toggle: (token: string, force?: boolean) => { if (force) menu.classes.add(token); else menu.classes.delete(token); return !!force; } }
   };
   const ports: FileSavingPorts = {
+    edits: { edit: (command) => {
+      const plan = command.plan(doc, { edit: () => ({ allowed: true }) });
+      if (!plan || "refused" in plan) return false;
+      plan.apply(doc);
+      state.changes++;
+      return true;
+    } },
     deferred: {
       copyHistory: (fromId, toId) => { log.push("copyHistory:" + fromId + ">" + toId); },
       syncIdentity: () => { log.push("syncIdentity"); },
@@ -72,7 +80,7 @@ function harness(setup: Setup = {}) {
     },
     formats: {
       buildSplitpage: () => { log.push("build:splitpage"); return "{}"; },
-      buildMarkdown: () => { log.push("build:md"); return "# Pilot"; },
+      buildMarkdown: (captured) => { built.push(captured); log.push("build:md"); return "# Pilot"; },
       imagesMissing: () => []
     },
     files: {
@@ -102,7 +110,7 @@ function harness(setup: Setup = {}) {
     page: { getElementById: (id) => (id === "menu-autosave" ? menu : null) }
   };
   const mounted = mountFileSaving(ports) as FileSavingMount;
-  return { log, toasts, state, menu, mounted, ports };
+  return { log, toasts, state, menu, mounted, ports, doc, built };
 }
 
 function job(kind: string, owns = true) {
@@ -124,6 +132,54 @@ function write(h: ReturnType<typeof harness>, kind: string, owns = true): Promis
 }
 
 const FILE_HOME = { kind: "file", handle: fileHandle("pilot.md"), format: "md", name: "pilot.md", lastModified: 50 } as unknown as Home;
+
+test("first picked save writes the filename title and trailing version into the captured document", async () => {
+  const h = harness({ pick: { kind: "handle", handle: fileHandle("Headset ad v3.md"), picked: true } });
+  h.doc.title = "Untitled Script";
+  try {
+    assert.equal((await write(h, "save")).kind, "saved");
+    assert.equal(h.built[0]?.document.title, "Headset ad");
+    assert.equal(h.built[0]?.title, "Headset ad");
+    assert.equal(h.built[0]?.document.titleVersion, "v3");
+    assert.equal(h.built[0]?.document.titleOrigin, "file");
+    assert.equal(h.doc.title, "Headset ad");
+    assert.equal(h.doc.titleVersion, "v3");
+    assert.equal(h.doc.titleOrigin, "file");
+  } finally { h.mounted.dispose(); }
+});
+
+test("download-only browsers leave the default title and tag unchanged", async () => {
+  const h = harness();
+  h.doc.title = "Untitled Script";
+  h.doc.titleVersion = "v7";
+  try {
+    assert.equal((await write(h, "save")).kind, "saved");
+    assert.equal(h.doc.title, "Untitled Script");
+    assert.equal(h.doc.titleVersion, "v7");
+    assert.equal(h.doc.titleOrigin, undefined);
+    assert.equal(h.built[0]?.document.title, "Untitled Script");
+    assert.equal(h.built[0]?.document.titleVersion, "v7");
+  } finally { h.mounted.dispose(); }
+});
+
+test("cancelled, failed and obsolete first saves never apply file naming to the live document", async () => {
+  for (const kind of ["cancelled", "failed", "obsolete"]) {
+    const h = harness({
+      pick: kind === "cancelled" ? { kind: "cancelled" } : { kind: "handle", handle: fileHandle("Headset v3.md"), picked: true },
+      ...(kind === "failed" ? { writeFails: new Error("disk full") } : {})
+    });
+    h.doc.title = "Untitled Script";
+    try {
+      await write(h, "save", kind !== "obsolete");
+      assert.equal(h.doc.title, "Untitled Script");
+      assert.equal(h.doc.titleVersion, undefined);
+      assert.equal(h.doc.titleOrigin, undefined);
+      assert.equal(h.state.changes, 4);
+      assert.equal(h.state.writtenOut, false);
+      assert.equal(h.state.home.kind, "none");
+    } finally { h.mounted.dispose(); }
+  }
+});
 
 test("a save to the open file checks the disk, writes, then confirms the document in order", async () => {
   const h = harness({ home: FILE_HOME, writtenOut: true });

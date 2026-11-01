@@ -7,6 +7,7 @@ import { buildExportDocument } from "../../src/core/document/export-document.ts"
 import type { ExportDocument, ExportReadModels } from "../../src/core/document/export-document.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
+import { fileTitleChange } from "../../src/core/document/file-title.ts";
 
 const NO_MODELS: ExportReadModels = { production: [], commentNumbers: {}, broll: [] };
 const OLD_ID = "d0123456789abcdef0123456789abcdef";
@@ -17,10 +18,17 @@ function captured(): ExportDocument {
   return buildExportDocument(doc, "2026-10-29T00:00:00.000Z", NO_MODELS, { stamp: { rev: 3, lastEditedBy: "Adam", lastEditedAt: "2026-10-29T00:00:00.000Z" } });
 }
 
-function harness(changes = 4) {
+function harness(changes = 4, editsDuringNaming = 0, throwDuringNaming = false) {
   const log: string[] = [];
   const amended: Record<string, unknown>[] = [];
   const ports: SaveCompletionPorts = {
+    edits: { edit: () => {
+      if (!editsDuringNaming) throw new Error("unexpected title change");
+      changes += editsDuringNaming;
+      log.push("naming");
+      if (throwDuringNaming) throw new Error("paint failed");
+      return true;
+    } },
     document: { stamp: (stamp) => { log.push("stamp:" + stamp.name); return null; } },
     location: {
       amendHome: (record, fields) => { log.push("amendHome:" + Object.keys(fields).join(",")); amended.push({ ...fields }); return record; },
@@ -40,6 +48,32 @@ function harness(changes = 4) {
 }
 
 const HOME = { kind: "file", name: "pilot.md" } as unknown as Home;
+
+test("landed metadata and copy identity are recorded before naming, even when its paint listener throws", () => {
+  for (const throws of [true, false]) {
+    const h = harness(4, 1, throws);
+    const naming = fileTitleChange({ title: "Untitled Script" }, "Pilot v3.md", true);
+    const complete = () => h.completion.confirmWrite({ naming, captured: captured(), published: { rev: 3 },
+      forkDocId: NEW_ID, docIdAtSave: OLD_ID, seqAtSave: 4, landed: { home: HOME, lastModified: 77 } });
+    if (throws) assert.throws(complete, /paint failed/);
+    else complete();
+    assert.deepEqual(h.log, [
+      "stamp:stamp-edit", "setBaseline:3:saveDoc: the bytes just written", "amendHome:diskBase,lastModified",
+      "copyHistory:" + OLD_ID + ">" + NEW_ID, "stamp:stamp-document-id", "markWrittenOut:true", "syncIdentity",
+      "naming", ...(!throws ? ["confirmSavedNow"] : [])
+    ]);
+    assert.deepEqual(h.amended, [{ diskBase: { rev: 3 }, lastModified: 77 }]);
+  }
+});
+
+test("naming confirms its own edit, but never confirms an extra edit made by a completion listener", () => {
+  const naming = fileTitleChange({ title: "Untitled Script" }, "Pilot v3.md", true);
+  for (const edits of [1, 2]) {
+    const h = harness(4, edits);
+    h.completion.confirmWrite({ naming, captured: captured(), published: { rev: 3 }, forkDocId: null, docIdAtSave: OLD_ID, seqAtSave: 4, landed: null });
+    assert.equal(h.log.includes("confirmSavedNow"), edits === 1);
+  }
+});
 
 test("a confirmed write stamps, sets the baseline, amends the landed home, marks it written out and confirms clean, in that order", () => {
   const h = harness();

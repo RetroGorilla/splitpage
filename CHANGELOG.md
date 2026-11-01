@@ -14,6 +14,11 @@ saving bugs. If you open or share scripts on a Splitpage server, read
 - Named section dividers group scenes, fold for the current session and move
   as a group. Section cues appear in the rundown and Present; print, PDF,
   Word and Markdown exports retain headings and section totals.
+- First save through a desktop dialog or browser file picker names an untouched
+  untitled script from the filename. A trailing version such as `v3` becomes a
+  small tag beside the title. Typed titles are preserved; Save a copy updates
+  only the tag while the title is still file-derived. Download-only browsers
+  leave title and tag unchanged.
 - With nothing selected in a Visual cell, **Tag** opens the existing label
   dialog with just its categories. Choose one to start an open tag at the
   cursor, then type its name as with a typed keyword. Escape or clicking
