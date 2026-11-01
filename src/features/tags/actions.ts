@@ -1,4 +1,4 @@
-import { openTagComposer } from "./production-tags.js";
+import { openTagComposer } from "./production-tags.ts";
 import type { Availability, ActionDefinition } from "../../application/actions.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import { EVERY_OVERLAY, availableUnless, firstRefusal } from "../../application/screen.ts";
@@ -72,6 +72,6 @@ export function tagComposerActions(current: () => PlainTagControl | null, notice
       if (!current()?.openCategoryAtCaret(input.caret, marks)) notices.show("Select the words you want to label first.", "warn");
       return;
     }
-    openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]));
+    openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]) as Parameters<typeof openTagComposer>[0]);
   })];
 }

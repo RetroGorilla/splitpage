@@ -6,7 +6,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { healTagRegistry, productionIndexStats, registerProductionTag } from "../features/tags/production-tags.js";
+import { healTagRegistry, productionIndexStats, registerProductionTag } from "../features/tags/production-tags.ts";
 
 import { renameTag, newBrollRecord } from "../application/commands/production-actions.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";

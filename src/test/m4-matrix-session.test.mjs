@@ -79,7 +79,7 @@ const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 
 after(closeApp);
 
-const { runIdleRefresh } = await import("../features/tags/production-tags.js");
+const { runIdleRefresh } = await import("../features/tags/production-tags.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 const refreshed = { into: null };

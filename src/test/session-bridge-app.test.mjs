@@ -14,7 +14,7 @@ const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts
 const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
-const { scheduleIdleRefresh, productionIndexStats } = await import("../features/tags/production-tags.js");
+const { scheduleIdleRefresh, productionIndexStats } = await import("../features/tags/production-tags.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
