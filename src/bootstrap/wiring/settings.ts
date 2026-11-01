@@ -5,7 +5,7 @@ import { mountAppData } from "../../features/settings/app-data.js";
 import type { AppDataMount, AppDataPorts } from "../../features/settings/ports.ts";
 import { historyOwner } from "./history.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
-import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.js";
+import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.ts";
 import { appDataPreferences, commentSorting } from "./ports/preferences.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { launch } from "./ports/desktop.ts";

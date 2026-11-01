@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startLocalMerge } from "../../../src/features/merge/local-merge.js";
+import { startLocalMerge } from "../../../src/features/merge/local-merge.ts";
 import type { MergeReviewPorts } from "../../../src/features/merge/ports.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
@@ -49,8 +49,8 @@ const el = (id: string) => win.document.getElementById(id) as HTMLElement;
 
 interface Setup {
   mine: Doc & ValidatedDocument;
-  parsed: () => Promise<unknown>;
-  mergeBase?: Doc | null;
+  parsed: () => ReturnType<MergeReviewPorts["files"]["parse"]>;
+  mergeBase?: (Doc & ValidatedDocument) | null;
   fileHome?: Home | null;
 }
 
@@ -181,7 +181,7 @@ test("merge review: a file that does not parse, a different embedded id or a res
   assert.equal(el("file-conflict-merge").hidden, true);
   second.dispose();
 
-  let release: (v: unknown) => void = () => {};
+  let release: (v: Awaited<ReturnType<MergeReviewPorts["files"]["parse"]>>) => void = () => {};
   const slow = setup({ mine, parsed: () => new Promise((resolve) => { release = resolve; }) });
   const third = startLocalMerge(slow.ports);
   const probe = third.offer(file(), null);

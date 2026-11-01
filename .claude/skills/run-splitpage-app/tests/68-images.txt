@@ -1,5 +1,5 @@
 # Images out of the document state (#82 P2b): a picture is `row.imageRef`,
-# a record naming bytes in the image registry (02c-blobs.js), and the
+# a record naming bytes in the image registry (02c-blobs.ts), and the
 # bytes live in the 'splitpage-blobs' IndexedDB database, not in `state`.
 # Three pictures dropped onto three scenes the way a user drops them (a
 # real DragEvent carrying a File) leave the state under 10 KB and show

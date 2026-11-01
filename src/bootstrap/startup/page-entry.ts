@@ -1,7 +1,7 @@
 import type { DesktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { attachDesktop } from "../../adapters/desktop/desktop-port.ts";
 import { capturePageShell } from "../../adapters/page/page-shell.ts";
-import { captureSpeechRecognition } from "../../adapters/page/speech-recognition.js";
+import { captureSpeechRecognition } from "../../adapters/page/speech-recognition.ts";
 
 export const suppressUnloadWarning = false;
 

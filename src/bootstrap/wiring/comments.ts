@@ -21,7 +21,7 @@ import type { CommentsPorts } from "../../features/comments/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "./ports/actions.ts";
 import { mountComments } from "../../features/comments/mount.ts";
-import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
+import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.ts";
 import { storedImageHtml } from "../../core/document/text-policy.ts";
 import { typePendingMarks } from "../../features/rows/render.ts";
 import {
@@ -34,7 +34,7 @@ import {
   pasteIntoDraft
 } from "../../features/editing/draft-edit.ts";
 import { isDraftBox } from "../../features/editing/cell-page.ts";
-import { compressImageFile } from "../../features/rows/scene-media.js";
+import { compressImageFile } from "../../features/rows/scene-media.ts";
 import {
   AUTHOR_NAME_FIELDS,
   armDeleteComment,
