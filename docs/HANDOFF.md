@@ -138,7 +138,8 @@ release gates.
 Since #80 CI also **produces** the app. It builds `index.html` and uploads it,
 with `sw.js`, `manifest.webmanifest`, the icons, `VERSION` and `server/`, as the
 `splitpage-app` artifact. The upload is the last step, so an
-artifact only exists for a run whose checks all passed.
+artifact only exists for a run whose checks all passed. Since 2026-10-31 only
+push runs upload it; pull request runs do not (artifact storage quota).
 
 **`.githooks/` is gone** (#80). It held a pre-commit hook that did two jobs:
 it re-ran `build.mjs --check` against the staged tree so a commit could not
