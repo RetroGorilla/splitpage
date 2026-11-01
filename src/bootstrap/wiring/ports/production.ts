@@ -2,7 +2,7 @@ import { deleteConfirmation, resetProductionPanelState, tagPanelState as tagPane
 import type { ProductionIndexOwner } from "../../../core/production/index.ts";
 import { productionIndex } from "../../../application/production/index-owner.ts";
 import type { TagPanelState } from "../../../application/tag-panel-state.ts";
-import { productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences } from "../../../features/tags/production-tags.js";
+import { productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences } from "../../../features/tags/production-tags.ts";
 
 export const renderDeletes = deleteConfirmation;
 export const renderProduction = {
