@@ -27,13 +27,14 @@ export interface DraftFileHandle {
 
 export type DraftParsedFile =
   | { readonly state: ValidatedDocument; readonly kind: unknown; readonly docIdEmbedded: boolean; readonly error?: undefined }
-  | { readonly error: "unreadable" | "not-splitpage" };
+  | { readonly error: "unreadable" }
+  | { readonly error: "not-splitpage" };
 
 export type DraftOpening = {
   readonly kind: "file";
   readonly file: unknown;
   readonly handle: unknown;
-  readonly parsed: { readonly state: unknown; readonly kind: unknown };
+  readonly parsed: { readonly state: ValidatedDocument; readonly kind: unknown };
   readonly options: { readonly skipSnapshot: boolean; readonly silent: boolean };
 };
 
