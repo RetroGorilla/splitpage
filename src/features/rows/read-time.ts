@@ -8,13 +8,16 @@ import type { ReadTimePorts } from "./ports.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 
 interface ReadTimeEditor {
- rowId: string;
+ rowId: string | null;
  btn: HTMLElement;
  input: HTMLInputElement;
  prefill: string;
  wasSet: boolean;
 }
 type ReadTimeDocument = Pick<DocumentView, "rows">;
+type ReadTimeNullableIdArgs<T extends readonly unknown[]> = T extends [infer Id, ...infer Rest] ? [Id | null, ...Rest] : never;
+type ReadTimeSceneAt = (...args: ReadTimeNullableIdArgs<Parameters<typeof sceneAt>>) => ReturnType<typeof sceneAt>;
+type ReadTimeLengthCommand = (...args: ReadTimeNullableIdArgs<Parameters<typeof sceneLengthCommand>>) => ReturnType<typeof sceneLengthCommand>;
 interface ReadTimePortUse extends Omit<ReadTimePorts, "document"> {
  readonly document: {
   readonly read: ReadTimePorts["document"]["read"];
@@ -26,21 +29,21 @@ let editing: ReadTimeEditor | null = null;
 
 export function readTimeEditing() { return editing ? editing.rowId : null; }
 
-function applySceneLength(rowId: string, seconds: number | null | undefined) {
-  const outcome = (ports as ReadTimePortUse).edits.run(sceneLengthCommand(rowId, seconds, (ports as ReadTimePortUse).edits.stamps));
+function applySceneLength(rowId: string | null, seconds: number | null | undefined) {
+  const outcome = (ports as ReadTimePortUse).edits.run((sceneLengthCommand as ReadTimeLengthCommand)(rowId, seconds, (ports as ReadTimePortUse).edits.stamps));
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
-export function setSceneLength(rowId: string, seconds: number | null | undefined) {
+export function setSceneLength(rowId: string | null, seconds: number | null | undefined) {
   if (!ports) return false;
   return applySceneLength(rowId, seconds);
 }
 
 function openReadTimeEditor(btn: HTMLElement | null) {
   if (!btn || !ports) return;
-  const rowId = btn.getAttribute("data-id") as string;
-  const scene = (ports as ReadTimePortUse).document.read(sceneAt(rowId));
+  const rowId = btn.getAttribute("data-id");
+  const scene = (ports as ReadTimePortUse).document.read((sceneAt as ReadTimeSceneAt)(rowId));
   if (!scene) return;
   closeReadTimeEditor(false);
   const row = scene.row;

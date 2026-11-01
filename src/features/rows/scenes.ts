@@ -16,6 +16,9 @@ interface SceneDragScroll {
  raf: number | null;
 }
 type SceneDocument = Pick<DocumentView, "rows" | "comments">;
+type SceneNullableIdArgs<T extends readonly unknown[]> = T extends [infer Id, ...infer Rest] ? [Id | null, ...Rest] : never;
+type SceneSplitCommand = (...args: SceneNullableIdArgs<Parameters<typeof splitSceneCommand>>) => ReturnType<typeof splitSceneCommand>;
+type SceneSwapCommand = (...args: SceneNullableIdArgs<Parameters<typeof swapScenesCommand>>) => ReturnType<typeof swapScenesCommand>;
 interface ScenePortUse extends Omit<ScenePorts, "document"> {
  readonly document: {
   readonly read: ScenePorts["document"]["read"];
@@ -65,7 +68,7 @@ function splitField(cellEl: Element) {
   if (!sel) return null;
   (ports as ScenePortUse).undo.breakCoalescing();
   const createdId = (ports as ScenePortUse).ids.id("r");
-  const outcome = (ports as ScenePortUse).edits.run(splitSceneCommand(id as string, field, textCut(sel.from, sel.to), createdId, (ports as ScenePortUse).edits.text));
+  const outcome = (ports as ScenePortUse).edits.run((splitSceneCommand as SceneSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as ScenePortUse).edits.text));
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed" ? { id: createdId, field: field } : null;
 }
@@ -162,7 +165,7 @@ function deleteRow(id: string) {
 }
 
 function swapAdjacent(id: string | null, dir: number) {
-  return runRowCommand(swapScenesCommand(id as string, dir < 0 ? -1 : 1));
+  return runRowCommand((swapScenesCommand as SceneSwapCommand)(id, dir < 0 ? -1 : 1));
 }
 
 function moveRow(id: string, dir: number) {
