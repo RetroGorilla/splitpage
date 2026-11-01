@@ -964,7 +964,7 @@ is `localStorage["splitpage-export-directions"]` (`"0"` off, absent on).
 **Images are references, not bytes** (#82). The document state never holds
 image bytes; the bytes live once, content-addressed by SHA-256, in a blob
 store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
-server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
+server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
 - A row's picture is `imageRef`, a record gated by `normalizeImageRef()`
   (`shared/blob-policy.js`): exactly those four fields, the type sniffed
   from the bytes, never SVG. The old key `visualImage` (a `data:` URI) is
@@ -977,7 +977,7 @@ server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
   that form, keeps a valid `data-blob` (attributes from the registry when it
   holds the bytes), strips any `src`, and drops everything else.
   `storedImageHtml(ref)` is the same string for HTML built outside it.
-- The hydrator (a MutationObserver in `02c-blobs.js`) gives every
+- The hydrator (a MutationObserver in `02c-blobs.ts`) gives every
   `<img data-blob>` in the live DOM a `blob:` `src` once `ensureBytes()`
   has the bytes (memory, then the backend); one nobody has
   is marked `data-blob-state="missing"`, alt "Image unavailable". The mark

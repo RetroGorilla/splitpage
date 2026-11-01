@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { intern } from "../adapters/storage/02c-blobs.js";
+import { intern } from "../adapters/storage/02c-blobs.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentEntries } from "../adapters/formats/export-projections.ts";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
