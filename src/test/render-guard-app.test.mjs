@@ -29,7 +29,7 @@ const undoSizes = () => undoOwner().sizes();
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
-const find = await import("../features/find/find.js");
+const find = await import("../features/find/find.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { localFilesOwner, localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const { openLongDemo } = await import("../bootstrap/wiring/file-menu-controls.ts");
