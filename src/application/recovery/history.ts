@@ -1,90 +1,104 @@
+import type { HistoryOwner, HistoryOwnerPorts, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult, HistoryResolvedBackend, HistoryImportResult } from "./history-ports.ts";
+
+type LocalHistoryEntry = { docId: string; meta: HistorySnapshotMeta; stateJson: string; status: string; refs?: string[] };
+type HistoryAddress = { id?: string; docId?: string; older?: boolean };
+type HistoryMigrationResult = { migrated: number; removedKey: boolean };
+type HistoryExportDoc = { docId: string; title: string; lastOpenedAt: number; metas: HistorySnapshotMeta[]; snapshots?: HistorySnapshotRead[] };
+type HistoryExportBundle = { docs: { docId: string; title: string; lastOpenedAt: number; snapshots: HistorySnapshotRead[] }[]; older: HistorySnapshotRead[]; truncated: boolean; blobs?: Record<string, HistoryImageData>; missingBlobs?: string[] };
+type HistoryImageData = { mime: string; b64: string };
+type HistoryImportCandidate = { atMs: number; id: string; entry: HistorySnapshotRead | null };
+type HistoryImportCounts = { -readonly [K in keyof HistoryImportResult]: HistoryImportResult[K] };
+type HistoryTestAdapter = HistoryResolvedBackend & { store: NonNullable<HistoryResolvedBackend["store"]> };
+type HistoryCallable = (...args: never[]) => unknown;
+type HistoryOwnerApi = Omit<HistoryOwner, "startHistory" | "testControls">;
+
 import { sha256Bytes } from "../../core/document/ids.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import { HISTORY_OLDER_KEY, HISTORY_PER_DOC, HISTORY_SNAP_ID_RE, historyClip, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.js";
 import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
 import { checksumText } from "../../../shared/text.js";
 
-function startHistory(ports) {
-  var active = true;
-  var currentDocument = ports.document.current;
-  var currentHome = ports.location.home;
-  var getEditorName = ports.preferences.editorName;
-  var saveChanges = ports.saving.changes;
-  var unsavedChanges = ports.saving.unsaved;
-  var legacySnapshots = function () { return ports.recovery; };
-  var seedCheckPasses = ports.seed.passes;
-  var showToast = function (...args) { if (active) ports.effects.show(...args); };
-  var { intern, persist, recordFor, ensureBytes } = ports.pictures;
-  var dataUrlForSync = ports.pictures.dataUrlFor;
-  var inlineStateJson = ports.inlinePictures;
-  var mintDocId = ports.ids.docId;
-  var makeId = ports.ids.id;
-  var storage = ports.storage({ now: historyNow, holds: historyProtectedList, desktop: ports.desktop.history, runningOnDesktop: ports.desktop.running });
-  var { resolveHistoryBackend, historyIdbNotice } = storage;
-var historyChain;
+function startHistory(ports: HistoryOwnerPorts) {
+  let active = true;
+  const currentDocument = ports.document.current;
+  const currentHome = ports.location.home;
+  const getEditorName = ports.preferences.editorName;
+  const saveChanges = ports.saving.changes;
+  const unsavedChanges = ports.saving.unsaved;
+  const legacySnapshots = function () { return ports.recovery; };
+  const seedCheckPasses = ports.seed.passes;
+  const showToast = function (...args: Parameters<HistoryOwnerPorts["effects"]["show"]>) { if (active) ports.effects.show(...args); };
+  const { intern, persist, recordFor, ensureBytes } = ports.pictures;
+  const dataUrlForSync = ports.pictures.dataUrlFor;
+  const inlineStateJson = ports.inlinePictures;
+  const mintDocId = ports.ids.docId;
+  const makeId = ports.ids.id;
+  const storage = ports.storage({ now: historyNow, holds: historyProtectedList, desktop: ports.desktop.history, runningOnDesktop: ports.desktop.running });
+  const { resolveHistoryBackend, historyIdbNotice } = storage;
+let historyChain: Promise<void>;
 
 
-var HISTORY_PENDING_PER_DOC = 10;
-var HISTORY_MIGRATION_LOOPS = 3;
+const HISTORY_PENDING_PER_DOC = 10;
+const HISTORY_MIGRATION_LOOPS = 3;
 
 function historyNoop() {}
 
-function enqueueHistory(job, fallback) {
-  var run = historyChain.then(function () { return job(); }).then(null, function (e) {
+function enqueueHistory<T, F>(job: () => T | PromiseLike<T>, fallback: F | ((error: unknown) => F)): Promise<Awaited<T | F> | undefined> {
+  const run = historyChain.then(function () { return job(); }).then(null, function (e) {
     if (ports.logger) ports.logger.error(e);
-    try { return typeof fallback === "function" ? fallback(e) : fallback; } catch (x) { return undefined; }
+    try { return typeof fallback === "function" ? (fallback as (error: unknown) => F)(e) : fallback; } catch (x) { return undefined; }
   });
   historyChain = run.then(historyNoop, historyNoop);
-  return run;
+  return run as Promise<Awaited<T | F> | undefined>;
 }
 
-function historyIdle() {
-  var c = historyChain;
-  var m = historyMigrationPromise;
+function historyIdle(): Promise<boolean> {
+  const c = historyChain;
+  const m = historyMigrationPromise;
   return Promise.all([c, m]).then(function () {
     if (c === historyChain && m === historyMigrationPromise) return true;
     return historyIdle();
   });
 }
 
-var historyNowOverride = null;
+let historyNowOverride: number | null = null;
 function historyNow() {
   return historyNowOverride != null ? historyNowOverride : ports.now();
 }
 
 
-function historyStripMeta(m) {
-  var out = sanitizeHistoryMeta(m);
-  if (out && m && typeof m.docId === "string") out.docId = m.docId;
+function historyStripMeta(m: unknown) {
+  const out: HistorySnapshotMeta | null = sanitizeHistoryMeta(m);
+  if (out && m && typeof (m as { docId?: unknown }).docId === "string") out.docId = (m as { docId: string }).docId;
   return out;
 }
 
 
-var historyProtected = {};
+let historyProtected: Record<string, number> = {};
 
-function historyProtectKey(bucket, id) { return bucket + "\n" + id; }
+function historyProtectKey(bucket: string, id: string) { return bucket + "\n" + id; }
 
 function historyProtectedList() {
   return Object.keys(historyProtected).map(function (k) {
-    var i = k.indexOf("\n");
+    const i = k.indexOf("\n");
     return { docId: k.slice(0, i), id: k.slice(i + 1) };
   });
 }
 
-function protectHistorySnapshot(q) {
+function protectHistorySnapshot(q?: HistoryAddress) {
   q = q || {};
-  var id = typeof q.id === "string" ? q.id : "";
-  var bucket = q.older ? HISTORY_OLDER_KEY : normalizeDocId(q.docId);
+  const id = typeof q.id === "string" ? q.id : "";
+  const bucket = q.older ? HISTORY_OLDER_KEY : normalizeDocId(q.docId);
   if (!bucket || !HISTORY_SNAP_ID_RE.test(id)) return historyNoop;
-  var key = historyProtectKey(bucket, id);
-  var holds = historyProtected;
+  const key = historyProtectKey(bucket, id);
+  const holds = historyProtected;
   holds[key] = (holds[key] || 0) + 1;
-  var released = false;
+  let released = false;
   return function () {
     if (released) return;
     released = true;
     if (holds !== historyProtected || !holds[key]) return;
-    if (holds[key] > 1) holds[key]--; else delete holds[key];
+    if ((holds[key] as number) > 1) (holds[key] as number)--; else Reflect.deleteProperty(holds, key);
   };
 }
 
@@ -93,25 +107,25 @@ function isPristineSeedDocument() {
   return !!currentDocument() && saveChanges() === 0 && !unsavedChanges() && currentHome().kind === "none" && seedCheckPasses();
 }
 
-var historyLocal = {};
-var historyWarnedDocs = {};
-var historyLastAtMs = 0;
-var historyRetryQueued = false;
+let historyLocal: Record<string, LocalHistoryEntry> = {};
+let historyWarnedDocs: Record<string, boolean> = {};
+let historyLastAtMs = 0;
+let historyRetryQueued = false;
 
-function historyLocalKey(docId, id) { return docId + "/" + id; }
+function historyLocalKey(docId: string, id: string) { return docId + "/" + id; }
 
-function historyLocalEntries(docId, status) {
-  return Object.keys(historyLocal).map(function (k) { return historyLocal[k]; }).filter(function (e) {
+function historyLocalEntries(docId?: string | null, status?: string) {
+  return Object.keys(historyLocal).map(function (k) { return historyLocal[k] as LocalHistoryEntry; }).filter(function (e) {
     return (!docId || e.docId === docId) && (!status || e.status === status);
   }).sort(function (a, b) { return a.meta.atMs - b.meta.atMs; });
 }
 
-var historyChangeListeners = [];
+let historyChangeListeners: (() => void)[] = [];
 
-function onHistoryChange(listener) {
+function onHistoryChange(listener: () => void) {
   historyChangeListeners.push(listener);
   return function () {
-    var at = historyChangeListeners.indexOf(listener);
+    const at = historyChangeListeners.indexOf(listener);
     if (at !== -1) historyChangeListeners.splice(at, 1);
   };
 }
@@ -121,14 +135,14 @@ function historyChanged() {
   historyChangeListeners.slice().forEach(function (listener) { listener(); });
 }
 
-function historyMarkPending(entry) {
+function historyMarkPending(entry: LocalHistoryEntry) {
   entry.status = "pending";
-  var mine = historyLocalEntries(entry.docId, "pending");
+  const mine = historyLocalEntries(entry.docId, "pending");
   while (mine.length > HISTORY_PENDING_PER_DOC) {
-    var old = mine.shift();
-    delete historyLocal[historyLocalKey(old.docId, old.meta.id)];
+    const old = mine.shift() as LocalHistoryEntry;
+    Reflect.deleteProperty(historyLocal, historyLocalKey(old.docId, old.meta.id));
   }
-  var notice = storage.backendName() === "idb" ? historyIdbNotice() : null;
+  const notice = storage.backendName() === "idb" ? historyIdbNotice() : null;
   if (notice) {
     if (!historyWarnedDocs["store:" + notice.kind]) {
       historyWarnedDocs["store:" + notice.kind] = true;
@@ -145,25 +159,25 @@ function historyMarkPending(entry) {
   }
 }
 
-function historyPersistRefs(entry) {
-  var refs = entry.refs || [];
+function historyPersistRefs(entry: LocalHistoryEntry) {
+  const refs = entry.refs || [];
   if (!refs.length) return Promise.resolve();
   return persist(refs).then(function (failed) {
     if (failed.length) entry.stateJson = inlineStateJson(entry.stateJson, failed);
   });
 }
 
-function historyStoreEntry(backend, entry) {
+function historyStoreEntry(backend: HistoryResolvedBackend, entry: LocalHistoryEntry) {
   entry.status = "writing";
   return historyPersistRefs(entry).then(function () {
     return backend.put(entry.docId, entry.meta, entry.stateJson);
   }).then(function (r) {
     r = r || { stored: false, code: "io" };
-    var key = historyLocalKey(entry.docId, entry.meta.id);
+    const key = historyLocalKey(entry.docId, entry.meta.id);
     if (r.stored) {
-      if (historyLocal[key] === entry) delete historyLocal[key];
+      if (historyLocal[key] === entry) Reflect.deleteProperty(historyLocal, key);
     } else if (r.code === "invalid") {
-      if (historyLocal[key] === entry) delete historyLocal[key];
+      if (historyLocal[key] === entry) Reflect.deleteProperty(historyLocal, key);
     } else if (historyLocal[key] === entry) {
       historyMarkPending(entry);
     }
@@ -174,12 +188,12 @@ function historyStoreEntry(backend, entry) {
   });
 }
 
-function captureSnapshot(label, src, opts) {
+function captureSnapshot(label: string, src: unknown, opts?: { allowSeedSkip?: boolean }) {
   opts = opts || {};
-  if (!src || typeof src !== "object" || !Array.isArray(src.rows)) return null;
+  if (!src || typeof src !== "object" || !Array.isArray((src as { rows?: unknown }).rows)) return null;
   if (opts.allowSeedSkip && src === currentDocument() && isPristineSeedDocument()) return null;
-  var docId = normalizeDocId(src.docId) || (src.docId = mintDocId());
-  var stateJson;
+  const docId = normalizeDocId((src as { docId?: unknown }).docId) || ((src as { docId: string }).docId = mintDocId());
+  let stateJson;
   try {
     stateJson = JSON.stringify(src);
   } catch (e) {
@@ -190,24 +204,24 @@ function captureSnapshot(label, src, opts) {
     return null;
   }
   if (typeof stateJson !== "string") return null;
-  var atMs = historyNow();
+  let atMs = historyNow();
   if (atMs <= historyLastAtMs) atMs = historyLastAtMs + 1;
   historyLastAtMs = atMs;
-  var id = makeId("s");
+  let id = makeId("s");
   while (!HISTORY_SNAP_ID_RE.test(id) || historyLocal[historyLocalKey(docId, id)]) id = makeId("s");
-  var meta = sanitizeHistoryMeta({
+  const meta: HistorySnapshotMeta | null = sanitizeHistoryMeta({
     id: id,
     label: label,
     at: new Date(atMs).toISOString(),
     atMs: atMs,
     by: getEditorName(),
-    rows: src.rows.length,
-    title: typeof src.title === "string" ? src.title : "",
+    rows: (src as { rows: unknown[] }).rows.length,
+    title: typeof (src as { title?: unknown }).title === "string" ? (src as { title: string }).title : "",
     kind: "snapshot"
   });
-  var entry = { docId: docId, meta: meta, stateJson: stateJson, status: "writing", refs: refsIn(src) };
+  const entry: LocalHistoryEntry = { docId: docId, meta: meta as HistorySnapshotMeta, stateJson: stateJson, status: "writing", refs: refsIn(src) };
   historyLocal[historyLocalKey(docId, id)] = entry;
-  var done = enqueueHistory(function () {
+  const done = enqueueHistory(function () {
     return resolveHistoryBackend().then(function (backend) {
       return historyStoreEntry(backend, entry);
     }).then(function (r) {
@@ -220,7 +234,7 @@ function captureSnapshot(label, src, opts) {
     return { stored: false, code: "io" };
   });
   historyChanged();
-  return { id: id, docId: docId, done: done };
+  return { id: id, docId: docId, done: done as Promise<HistoryWriteResult> };
 }
 
 function retryPendingSnapshots() {
@@ -228,13 +242,13 @@ function retryPendingSnapshots() {
   historyRetryQueued = true;
   enqueueHistory(function () {
     historyRetryQueued = false;
-    var list = historyLocalEntries(null, "pending");
+    const list = historyLocalEntries(null, "pending");
     if (!list.length) return null;
     return resolveHistoryBackend().then(function (backend) {
-      var i = 0;
-      function next() {
+      let i = 0;
+      function next(): Promise<null> | null {
         if (i >= list.length) return null;
-        var entry = list[i++];
+        const entry = list[i++] as LocalHistoryEntry;
         if (historyLocal[historyLocalKey(entry.docId, entry.meta.id)] !== entry) return next();
         return historyStoreEntry(backend, entry).then(function (r) { return r.stored ? next() : null; });
       }
@@ -243,12 +257,12 @@ function retryPendingSnapshots() {
   }, function () { historyRetryQueued = false; return null; });
 }
 
-function historyLocalMetas(docId, lists, seen) {
-  var out = [];
+function historyLocalMetas(docId: string, lists: LocalHistoryEntry[], seen: Record<string, boolean>) {
+  const out: HistorySnapshotMeta[] = [];
   lists.forEach(function (e) {
     if (seen[e.meta.id]) return;
     seen[e.meta.id] = true;
-    var m = historyStripMeta(e.meta);
+    const m = historyStripMeta(e.meta) as HistorySnapshotMeta;
     m.docId = docId;
     m.status = e.status;
     m.sizeBytes = m.sizeBytes || historyUtf8Length(e.stateJson);
@@ -257,15 +271,16 @@ function historyLocalMetas(docId, lists, seen) {
   return out;
 }
 
-function listDocHistory(docId) {
+function listDocHistory(docId?: string | null) {
   docId = normalizeDocId(docId);
-  var localBefore = docId ? historyLocalEntries(docId) : [];
+  const localBefore = docId ? historyLocalEntries(docId) : [];
   return resolveHistoryBackend().then(function (backend) {
     return backend.list(docId || null).then(null, function () {
       return { entries: [], older: [], olderExpiresAt: null, usage: null };
     }).then(function (listed) {
       listed = listed || { entries: [], older: [], olderExpiresAt: null, usage: null };
-      var seen = {}, entries = [];
+      const seen: Record<string, boolean> = {};
+      let entries: HistorySnapshotMeta[] = [];
       (listed.entries || []).forEach(function (m) {
         seen[m.id] = true;
         m.status = "stored";
@@ -273,11 +288,11 @@ function listDocHistory(docId) {
       });
       if (docId) entries = entries.concat(historyLocalMetas(docId, historyLocalEntries(docId).concat(localBefore), seen));
       entries.sort(function (a, b) { return b.atMs - a.atMs; });
-      var n = backend.name === "idb" ? historyIdbNotice() : null;
-      var notice = n ? n.text : null;
+      const n = backend.name === "idb" ? historyIdbNotice() : null;
+      const notice = n ? n.text : null;
       return {
         entries: entries,
-        older: (listed.older || []).map(function (m) { m.status = "stored"; return m; }),
+        older: ((listed as NonNullable<typeof listed>).older || []).map(function (m) { m.status = "stored"; return m; }),
         olderExpiresAt: listed.olderExpiresAt == null ? null : listed.olderExpiresAt,
         backend: backend.name,
         persistent: !!backend.persistent,
@@ -291,25 +306,25 @@ function listDocHistory(docId) {
   });
 }
 
-function getHistorySnapshot(q) {
+function getHistorySnapshot(q?: HistoryAddress) {
   q = q || {};
-  var id = typeof q.id === "string" ? q.id : "";
+  const id = typeof q.id === "string" ? q.id : "";
   if (!HISTORY_SNAP_ID_RE.test(id)) return Promise.resolve(null);
-  var bucket;
+  let bucket: string | null;
   if (q.older) {
     bucket = HISTORY_OLDER_KEY;
   } else {
     bucket = normalizeDocId(q.docId);
     if (!bucket) return Promise.resolve(null);
-    var local = historyLocal[historyLocalKey(bucket, id)];
-    if (local) return Promise.resolve({ meta: historyStripMeta(local.meta), stateJson: local.stateJson });
+    const local = historyLocal[historyLocalKey(bucket, id)];
+    if (local) return Promise.resolve({ meta: historyStripMeta(local.meta) as HistorySnapshotMeta, stateJson: local.stateJson });
   }
   return resolveHistoryBackend().then(function (backend) {
-    return backend.get(bucket, id);
+    return backend.get(bucket as string, id);
   }).then(function (r) { return r || null; }, function () { return null; });
 }
 
-function historyTouchDocument(docId, title) {
+function historyTouchDocument(docId: string | null, title: string) {
   docId = normalizeDocId(docId);
   if (!docId) return Promise.resolve();
   return enqueueHistory(function () {
@@ -318,11 +333,11 @@ function historyTouchDocument(docId, title) {
 }
 
 function historyDocumentChanged() {
-  if (currentDocument() && normalizeDocId(currentDocument().docId)) historyTouchDocument(currentDocument().docId, currentDocument().title);
+  if (currentDocument() && normalizeDocId((currentDocument() as NonNullable<ReturnType<typeof currentDocument>>).docId)) historyTouchDocument((currentDocument() as NonNullable<ReturnType<typeof currentDocument>>).docId, (currentDocument() as NonNullable<ReturnType<typeof currentDocument>>).title);
   historyChanged();
 }
 
-function copyHistory(from, to) {
+function copyHistory(from: string | null, to: string | null) {
   if (from === HISTORY_OLDER_KEY || to === HISTORY_OLDER_KEY) return Promise.resolve({ ok: false, copied: 0, code: "invalid" });
   from = normalizeDocId(from);
   to = normalizeDocId(to);
@@ -336,44 +351,44 @@ function copyHistory(from, to) {
       });
     }).then(function (r) {
       r = r || { ok: false, copied: 0, code: "io" };
-      var extra = 0;
+      let extra = 0;
       historyLocalEntries(from, "pending").forEach(function (e) {
-        var key = historyLocalKey(to, e.meta.id);
+        const key = historyLocalKey(to, e.meta.id);
         if (historyLocal[key]) return;
-        historyLocal[key] = { docId: to, meta: sanitizeHistoryMeta(e.meta), stateJson: e.stateJson, status: "pending" };
+        historyLocal[key] = { docId: to, meta: sanitizeHistoryMeta(e.meta) as HistorySnapshotMeta, stateJson: e.stateJson, status: "pending" };
         extra++;
       });
       if (extra) {
-        var mine = historyLocalEntries(to, "pending");
+        const mine = historyLocalEntries(to, "pending");
         while (mine.length > HISTORY_PENDING_PER_DOC) {
-          var old = mine.shift();
-          delete historyLocal[historyLocalKey(old.docId, old.meta.id)];
+          const old = mine.shift() as LocalHistoryEntry;
+          Reflect.deleteProperty(historyLocal, historyLocalKey(old.docId, old.meta.id));
         }
       }
       historyChanged();
       return { ok: !!r.ok, copied: (r.copied || 0) + extra, code: r.code };
     });
   }, function () { return { ok: false, copied: 0, code: "io" }; }).then(function (r) {
-    if (r && r.code === undefined) delete r.code;
-    return r;
+    if (r && r.code === undefined) delete (r as { code?: string | undefined }).code;
+    return r as { ok: boolean; copied: number; code?: string };
   });
 }
 
-var HISTORY_EXPORT_CAP_BYTES = 200 * 1024 * 1024;
-var historyExportCapOverride = null;
+const HISTORY_EXPORT_CAP_BYTES = 200 * 1024 * 1024;
+let historyExportCapOverride: number | null = null;
 
 function historyExportCap() {
   return historyExportCapOverride != null ? historyExportCapOverride : HISTORY_EXPORT_CAP_BYTES;
 }
 
-function historyExportError(code, message) {
-  var e = new Error(message);
+function historyExportError(code: string, message: string) {
+  const e: Error & { code?: string } = new Error(message);
   e.code = code;
   return e;
 }
 
-function historyFlattenForExport(docs, olderMetas) {
-  var flat = [];
+function historyFlattenForExport(docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[]) {
+  const flat: { docId: string | null; id: string; atMs: number; sizeBytes: number }[] = [];
   docs.forEach(function (d) {
     (d.metas || []).forEach(function (m) {
       flat.push({ docId: d.docId, id: m.id, atMs: m.atMs, sizeBytes: Number(m.sizeBytes) || 0 });
@@ -386,11 +401,12 @@ function historyFlattenForExport(docs, olderMetas) {
   return flat;
 }
 
-function historyAssembleExport(backend, docs, olderMetas) {
-  var flat = historyFlattenForExport(docs, olderMetas);
-  var total = 0, truncated = false, keep = {};
+function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[]) {
+  const flat = historyFlattenForExport(docs, olderMetas);
+  let total = 0, truncated = false;
+  const keep: Record<string, boolean> = {};
   flat.forEach(function (f) {
-    var key = (f.docId == null ? "_older" : f.docId) + "\n" + f.id;
+    const key = (f.docId == null ? "_older" : f.docId) + "\n" + f.id;
     if (total === 0 || total + f.sizeBytes <= historyExportCap()) {
       total += f.sizeBytes;
       keep[key] = true;
@@ -398,17 +414,17 @@ function historyAssembleExport(backend, docs, olderMetas) {
       truncated = true;
     }
   });
-  var bodyJobs = [];
+  const bodyJobs: Promise<void>[] = [];
   docs.forEach(function (d) {
     d.snapshots = [];
     (d.metas || []).forEach(function (m) {
       if (!keep[d.docId + "\n" + m.id]) return;
       bodyJobs.push(backend.get(d.docId, m.id).then(function (r) {
-        if (r) d.snapshots.push({ meta: r.meta, stateJson: r.stateJson });
+        if (r) (d.snapshots as HistorySnapshotRead[]).push({ meta: r.meta, stateJson: r.stateJson });
       }));
     });
   });
-  var olderOut = [];
+  const olderOut: HistorySnapshotRead[] = [];
   (olderMetas || []).forEach(function (m) {
     if (!keep["_older\n" + m.id]) return;
     bodyJobs.push(backend.get(HISTORY_OLDER_KEY, m.id).then(function (r) {
@@ -416,12 +432,12 @@ function historyAssembleExport(backend, docs, olderMetas) {
     }));
   });
   return Promise.all(bodyJobs).then(function () {
-    function newestFirst(a, b) { return b.meta.atMs - a.meta.atMs; }
-    docs.forEach(function (d) { d.snapshots.sort(newestFirst); });
+    function newestFirst(a: HistorySnapshotRead, b: HistorySnapshotRead) { return b.meta.atMs - a.meta.atMs; }
+    docs.forEach(function (d) { (d.snapshots as HistorySnapshotRead[]).sort(newestFirst); });
     olderOut.sort(newestFirst);
     return {
       docs: docs.map(function (d) {
-        return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots };
+        return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots as HistorySnapshotRead[] };
       }),
       older: olderOut,
       truncated: truncated
@@ -429,10 +445,10 @@ function historyAssembleExport(backend, docs, olderMetas) {
   });
 }
 
-function historyBuildExport(backend, ids) {
-  var docJobs = ids.map(function (docId) {
+function historyBuildExport(backend: HistoryResolvedBackend, ids: string[]) {
+  const docJobs = ids.map(function (docId) {
     return Promise.all([backend.rawDoc(docId), backend.rawList(docId)]).then(function (res) {
-      var rec = res[0] || null;
+      const rec = res[0] || null;
       return {
         docId: docId,
         title: rec ? rec.title : "",
@@ -460,24 +476,24 @@ function exportHistoryAll() {
       });
     });
   }, function (e) {
-    return Promise.reject(e && e.code ? e : historyExportError("io", "Could not read version history for export."));
-  }).then(historyExportAttachBlobs);
+    return Promise.reject(e && (e as { code?: unknown }).code ? e : historyExportError("io", "Could not read version history for export."));
+  }).then(historyExportAttachBlobs as (out: HistoryExportBundle | undefined) => Promise<HistoryExportBundle>);
 }
 
-var HISTORY_BLOB_HINT_RE = /imageRef|imageValue|data-blob/;
+const HISTORY_BLOB_HINT_RE = /imageRef|imageValue|data-blob/;
 
-function historyRefsInJson(stateJson) {
+function historyRefsInJson(stateJson: unknown): string[] {
   if (typeof stateJson !== "string" || !HISTORY_BLOB_HINT_RE.test(stateJson)) return [];
-  try { return refsIn(JSON.parse(stateJson)); } catch (e) { return []; }
+  try { return refsIn(JSON.parse(stateJson)) as string[]; } catch (e) { return []; }
 }
 
-function historyBlobCost(sha, entry) {
-  return sha.length + entry.mime.length + entry.b64.length + 40;
+function historyBlobCost(sha: string, entry: HistoryImageData) {
+  return sha.length + entry.mime.length + (entry as { b64: string }).b64.length + 40;
 }
 
-async function historyExportAttachBlobs(out) {
-  var cap = historyExportCap();
-  var all = [];
+async function historyExportAttachBlobs(out: HistoryExportBundle) {
+  const cap = historyExportCap();
+  const all: { snap: HistorySnapshotRead; owner: HistorySnapshotRead[] }[] = [];
   out.docs.forEach(function (d) {
     d.snapshots.forEach(function (s) { all.push({ snap: s, owner: d.snapshots }); });
   });
@@ -486,29 +502,32 @@ async function historyExportAttachBlobs(out) {
     return (b.snap.meta.atMs - a.snap.meta.atMs) || (a.snap.meta.id < b.snap.meta.id ? 1 : -1);
   });
 
-  var blobs = {}, missing = [], counted = {}, total = 0, dropped = [];
-  for (var i = 0; i < all.length; i++) {
-    var snap = all[i].snap;
-    var fresh = historyRefsInJson(snap.stateJson).filter(function (sha) { return !counted[sha]; });
-    var gone = fresh.length ? await ensureBytes(fresh) : [];
-    var add = {}, addMissing = [], cost = historyUtf8Length(snap.stateJson);
+  const blobs: Record<string, HistoryImageData> = {}, missing: string[] = [], counted: Record<string, boolean> = {};
+  let total = 0;
+  const dropped: typeof all = [];
+  for (let i = 0; i < all.length; i++) {
+    const snap = (all[i] as typeof all[number]).snap;
+    const fresh = historyRefsInJson(snap.stateJson).filter(function (sha) { return !counted[sha]; });
+    const gone = fresh.length ? await ensureBytes(fresh) : [];
+    const add: Record<string, HistoryImageData> = {}, addMissing: string[] = [];
+    let cost = historyUtf8Length(snap.stateJson);
     fresh.forEach(function (sha) {
-      var url = gone.indexOf(sha) === -1 ? dataUrlForSync(sha) : null;
-      var rec = url ? recordFor(sha) : null;
+      const url = gone.indexOf(sha) === -1 ? dataUrlForSync(sha) : null;
+      const rec = url ? recordFor(sha) : null;
       if (!url || !rec) { addMissing.push(sha); return; }
       add[sha] = { mime: rec.mime, b64: url.slice(url.indexOf(",") + 1) };
-      cost += historyBlobCost(sha, add[sha]);
+      cost += historyBlobCost(sha, add[sha] as HistoryImageData);
     });
     if (total > 0 && total + cost > cap) {
-      dropped.push(all[i]);
+      dropped.push(all[i] as typeof all[number]);
       continue;
     }
     total += cost;
-    Object.keys(add).forEach(function (sha) { blobs[sha] = add[sha]; counted[sha] = true; });
+    Object.keys(add).forEach(function (sha) { blobs[sha] = add[sha] as HistoryImageData; counted[sha] = true; });
     addMissing.forEach(function (sha) { missing.push(sha); counted[sha] = true; });
   }
   dropped.forEach(function (x) {
-    var at = x.owner.indexOf(x.snap);
+    const at = x.owner.indexOf(x.snap);
     if (at !== -1) x.owner.splice(at, 1);
   });
   if (dropped.length) out.truncated = true;
@@ -517,22 +536,22 @@ async function historyExportAttachBlobs(out) {
   return out;
 }
 
-var HISTORY_IMPORT_BATCH = 25;
-var HISTORY_IMPORT_BLOB_MAX_BYTES = 16 * 1024 * 1024;
-var HISTORY_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const HISTORY_IMPORT_BATCH = 25;
+const HISTORY_IMPORT_BLOB_MAX_BYTES = 16 * 1024 * 1024;
+const HISTORY_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-function historyDecodeBase64(b64) {
+function historyDecodeBase64(b64: unknown) {
   if (typeof b64 !== "string" || !HISTORY_BASE64_RE.test(b64)) return null;
-  var bin;
+  let bin;
   try { bin = ports.decodeBase64(b64); } catch (e) { return null; }
-  var out = new Uint8Array(bin.length);
-  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
 
-function historyImportRefs(docs, older) {
-  var refs = {};
-  function scan(list) {
+function historyImportRefs(docs: unknown, older: unknown) {
+  const refs: Record<string, boolean> = {};
+  function scan(list: unknown) {
     (Array.isArray(list) ? list : []).forEach(function (s) {
       if (!s || typeof s !== "object") return;
       historyRefsInJson(s.stateJson).forEach(function (sha) { refs[sha] = true; });
@@ -545,11 +564,11 @@ function historyImportRefs(docs, older) {
   return refs;
 }
 
-function historyVerifyBlob(sha, entry) {
+function historyVerifyBlob(sha: string, entry: unknown) {
   if (!isSha256Hex(sha)) return { reason: "not-a-sha" };
-  if (!entry || typeof entry !== "object" || typeof entry.b64 !== "string") return { reason: "malformed" };
-  if (entry.b64.length > Math.ceil(HISTORY_IMPORT_BLOB_MAX_BYTES / 3) * 4) return { reason: "too-large" };
-  var bytes = historyDecodeBase64(entry.b64);
+  if (!entry || typeof entry !== "object" || typeof (entry as { b64?: unknown }).b64 !== "string") return { reason: "malformed" };
+  if ((entry as { b64: string }).b64.length > Math.ceil(HISTORY_IMPORT_BLOB_MAX_BYTES / 3) * 4) return { reason: "too-large" };
+  const bytes = historyDecodeBase64((entry as { b64: string }).b64);
   if (!bytes || !bytes.length) return { reason: "bad-base64" };
   if (bytes.length > HISTORY_IMPORT_BLOB_MAX_BYTES) return { reason: "too-large" };
   if (!sniffImageMime(bytes) || !imageDims(bytes)) return { reason: "not-an-image" };
@@ -557,21 +576,21 @@ function historyVerifyBlob(sha, entry) {
   return { bytes: bytes };
 }
 
-async function historyImportBlobs(blobs, refs) {
-  var out = { stored: 0, refused: [], failed: [], ignored: 0 };
+async function historyImportBlobs(blobs: unknown, refs: Record<string, boolean>) {
+  const out: HistoryImportResult["blobs"] = { stored: 0, refused: [], failed: [], ignored: 0 };
   if (!blobs || typeof blobs !== "object" || Array.isArray(blobs)) return out;
-  var keys = Object.keys(blobs);
-  var ready = [];
-  for (var i = 0; i < keys.length; i++) {
-    var key = keys[i];
+  const keys = Object.keys(blobs);
+  const ready: string[] = [];
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i] as string;
     if (isSha256Hex(key) && !Object.prototype.hasOwnProperty.call(refs, key)) { out.ignored++; continue; }
-    var v = historyVerifyBlob(key, blobs[key]);
+    const v = historyVerifyBlob(key, (blobs as Record<string, unknown>)[key]);
     if (!v.bytes) {
       out.refused.push(String(key).slice(0, 64));
       if (ports.logger) ports.logger.warn("Import app data: image " + String(key).slice(0, 64) + " refused (" + v.reason + ")");
       continue;
     }
-    var rec = intern(v.bytes);
+    const rec = intern(v.bytes);
     if (!rec || rec.sha256 !== key) { out.refused.push(key); continue; }
     ready.push(key);
     await historyImportYield();
@@ -588,14 +607,14 @@ function historyImportYield() {
   return ports.yield();
 }
 
-function historyImportIsQuota(code) {
+function historyImportIsQuota(code: unknown) {
   return code === "quota" || code === "enospc";
 }
 
-function historyImportEntries(list, counts) {
-  var out = [], seen = {};
+function historyImportEntries(list: unknown, counts: Pick<HistoryImportCounts, "failed" | "skipped">) {
+  const out: HistorySnapshotRead[] = [], seen: Record<string, boolean> = {};
   (Array.isArray(list) ? list : []).forEach(function (s) {
-    var meta = (s && typeof s === "object") ? sanitizeHistoryMeta(s.meta) : null;
+    const meta: HistorySnapshotMeta | null = (s && typeof s === "object") ? sanitizeHistoryMeta(s.meta) : null;
     if (!meta || !HISTORY_SNAP_ID_RE.test(meta.id) || typeof s.stateJson !== "string") {
       counts.failed++;
       return;
@@ -607,31 +626,31 @@ function historyImportEntries(list, counts) {
   return out;
 }
 
-function historyImportByAtAscending(a, b) {
+function historyImportByAtAscending(a: HistorySnapshotRead, b: HistorySnapshotRead) {
   return (a.meta.atMs - b.meta.atMs) || (a.meta.id < b.meta.id ? -1 : a.meta.id > b.meta.id ? 1 : 0);
 }
 
-async function importHistoryBundle(bundle) {
-  var result = { docs: 0, added: 0, skipped: 0, failed: 0, older: 0, capped: 0,
+async function importHistoryBundle(bundle: unknown) {
+  const result: HistoryImportCounts = { docs: 0, added: 0, skipped: 0, failed: 0, older: 0, capped: 0,
                  blobs: { stored: 0, refused: [], failed: [], ignored: 0 } };
   try {
     bundle = (bundle && typeof bundle === "object") ? bundle : {};
-    var docs = Array.isArray(bundle.docs) ? bundle.docs : [];
-    var stopped = false;
+    const docs = (Array.isArray((bundle as { docs?: unknown }).docs) ? (bundle as { docs?: unknown }).docs : []) as { docId?: unknown; title?: unknown; snapshots?: unknown }[];
+    let stopped = false;
 
-    if (bundle.blobs) result.blobs = await historyImportBlobs(bundle.blobs, historyImportRefs(docs, bundle.older));
+    if ((bundle as { blobs?: unknown }).blobs) result.blobs = await historyImportBlobs((bundle as { blobs?: unknown }).blobs, historyImportRefs(docs, (bundle as { older?: unknown }).older));
 
-    for (var d = 0; d < docs.length; d++) {
-      var doc = docs[d];
-      var snaps = (doc && typeof doc === "object" && Array.isArray(doc.snapshots)) ? doc.snapshots : [];
-      var docId = normalizeDocId(doc && doc.docId);
+    for (let d = 0; d < docs.length; d++) {
+      const doc = docs[d];
+      const snaps = (doc && typeof doc === "object" && Array.isArray(doc.snapshots)) ? doc.snapshots : [];
+      const docId = normalizeDocId(doc && doc.docId);
       if (!docId) { result.failed += snaps.length; continue; }
 
-      var entries = historyImportEntries(snaps, result);
+      const entries = historyImportEntries(snaps, result);
       if (!entries.length) continue;
       if (stopped) { result.failed += entries.length; continue; }
 
-      var existing = await enqueueHistory(function (id) {
+      const existing = await enqueueHistory(function (id) {
         return function () {
           return resolveHistoryBackend().then(function (backend) { return backend.list(id, { strict: true }); })
             .then(function (listed) {
@@ -644,36 +663,36 @@ async function importHistoryBundle(bundle) {
         continue;
       }
 
-      var have = {};
+      const have: Record<string, boolean> = {};
       existing.forEach(function (m) { if (m && typeof m.id === "string") have[m.id] = true; });
-      var fresh = entries.filter(function (e) {
+      const fresh = entries.filter(function (e) {
         if (have[e.meta.id]) { result.skipped++; return false; }
         return true;
       });
-      var pool = existing.map(function (m) {
+      const pool = existing.map(function (m): HistoryImportCandidate {
         return { atMs: Number(m.atMs) || 0, id: String(m.id), entry: null };
       }).concat(fresh.map(function (e) {
         return { atMs: e.meta.atMs, id: e.meta.id, entry: e };
       }));
       pool.sort(function (a, b) { return (b.atMs - a.atMs) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0); });
-      var keep = pool.slice(0, HISTORY_PER_DOC).filter(function (p) { return p.entry; }).map(function (p) { return p.entry; });
-      var capped = fresh.length - keep.length;
+      const keep = pool.slice(0, HISTORY_PER_DOC).filter(function (p) { return p.entry; }).map(function (p) { return p.entry as HistorySnapshotRead; });
+      const capped = fresh.length - keep.length;
       result.skipped += capped;
       result.capped += capped;
       keep.sort(historyImportByAtAscending);
 
-      var docAdded = 0;
-      var processed = 0;
-      for (var start = 0; start < keep.length && !stopped; start += HISTORY_IMPORT_BATCH) {
+      let docAdded = 0;
+      let processed = 0;
+      for (let start = 0; start < keep.length && !stopped; start += HISTORY_IMPORT_BATCH) {
         if (start > 0) await historyImportYield();
-        var batch = keep.slice(start, start + HISTORY_IMPORT_BATCH);
-        var progress = { done: 0, added: 0, skipped: 0, failed: 0, quota: false };
+        const batch = keep.slice(start, start + HISTORY_IMPORT_BATCH);
+        const progress = { done: 0, added: 0, skipped: 0, failed: 0, quota: false };
         await enqueueHistory(function (id, batch, progress) {
           return function () {
             return resolveHistoryBackend().then(function (backend) {
-              function next() {
+              function next(): Promise<null> | null {
                 if (progress.done >= batch.length) return null;
-                var e = batch[progress.done];
+                const e = batch[progress.done] as HistorySnapshotRead;
                 return Promise.resolve(backend.put(id, e.meta, e.stateJson)).then(function (r) {
                   r = r || { stored: false, code: "io" };
                   if (!r.stored && historyImportIsQuota(r.code)) { progress.quota = true; return null; }
@@ -708,7 +727,7 @@ async function importHistoryBundle(bundle) {
 
       if (docAdded) {
         result.docs++;
-        var titleForTouch = existing.length ? "" : historyClip(doc.title, 300);
+        const titleForTouch = existing.length ? "" : historyClip((doc as NonNullable<typeof doc>).title, 300);
         await enqueueHistory(function (id, t) {
           return function () {
             return resolveHistoryBackend().then(function (backend) { return backend.touch(id, t); });
@@ -717,16 +736,16 @@ async function importHistoryBundle(bundle) {
       }
     }
 
-    var olderEntries = historyImportEntries(bundle.older, result);
+    const olderEntries = historyImportEntries((bundle as { older?: unknown }).older, result);
     if (olderEntries.length) {
       if (stopped) {
         result.failed += olderEntries.length;
       } else {
-        var r = await enqueueHistory(function () {
+        let r = await enqueueHistory(function () {
           return resolveHistoryBackend().then(function (backend) { return backend.importOlder(olderEntries); });
         }, function () { return { ok: false, added: 0, code: "io" }; });
         r = r || { ok: false, added: 0, code: "io" };
-        var added = Math.max(0, Math.min(olderEntries.length, Number(r.added) || 0));
+        const added = Math.max(0, Math.min(olderEntries.length, Number(r.added) || 0));
         result.older += added;
         if (r.ok) {
           result.skipped += olderEntries.length - added;
@@ -748,26 +767,26 @@ function historyLegacyRaw() {
   return legacySnapshots().readRaw();
 }
 
-function normalizeLegacySnapshots(raw) {
+function normalizeLegacySnapshots(raw: unknown) {
   if (typeof raw !== "string") return null;
-  var list;
+  let list;
   try { list = JSON.parse(raw); } catch (e) { return null; }
   if (!Array.isArray(list)) return null;
-  var out = [], seen = {};
+  const out: HistorySnapshotRead[] = [], seen: Record<string, boolean> = {};
   list.forEach(function (e) {
     if (!e || typeof e !== "object" || !e.state || typeof e.state !== "object") return;
-    var stateJson;
+    let stateJson;
     try { stateJson = JSON.stringify(e.state); } catch (x) { return; }
     if (typeof stateJson !== "string") return;
-    var at = typeof e.at === "string" ? e.at : "";
-    var label = typeof e.label === "string" ? e.label : "";
-    var rawId = String(e.id == null ? "" : e.id);
-    var id = HISTORY_SNAP_ID_RE.test(rawId) ? rawId : "l" + checksumText(rawId) + checksumText(at + "|" + label);
+    const at: string = typeof e.at === "string" ? e.at : "";
+    const label: string = typeof e.label === "string" ? e.label : "";
+    const rawId = String(e.id == null ? "" : e.id);
+    const id = HISTORY_SNAP_ID_RE.test(rawId) ? rawId : "l" + checksumText(rawId) + checksumText(at + "|" + label);
     if (seen[id]) return;
     seen[id] = true;
-    var atMs = Date.parse(at);
+    let atMs = Date.parse(at);
     if (!isFinite(atMs)) atMs = 0;
-    var meta = sanitizeHistoryMeta({
+    const meta: HistorySnapshotMeta | null = sanitizeHistoryMeta({
       id: id,
       label: label,
       at: isFinite(Date.parse(at)) ? at : new Date(0).toISOString(),
@@ -783,11 +802,11 @@ function normalizeLegacySnapshots(raw) {
   return out;
 }
 
-var historyMigrationPromise = null;
+let historyMigrationPromise: Promise<HistoryMigrationResult> | null = null;
 
 function startHistoryMigration() {
   if (historyMigrationPromise) return historyMigrationPromise;
-  var p = runHistoryMigration().then(null, function (e) {
+  const p = runHistoryMigration().then(null, function (e) {
     if (ports.logger) ports.logger.error(e);
     return { migrated: 0, removedKey: false };
   }).then(function (r) {
@@ -799,29 +818,29 @@ function startHistoryMigration() {
 }
 
 function runHistoryMigration() {
-  var result = { migrated: 0, removedKey: false };
+  const result = { migrated: 0, removedKey: false };
   return resolveHistoryBackend().then(function (backend) {
     if (backend.name === "memory") return result;
     if (historyLegacyRaw() == null) return result;
-    var loops = 0;
-    var expirySweep = typeof backend.evict === "function"
+    let loops = 0;
+    const expirySweep = typeof backend.evict === "function"
       ? enqueueHistory(function () { return backend.evict(Infinity); }, null)
       : Promise.resolve();
-    function loop() {
+    function loop(): HistoryMigrationResult | Promise<HistoryMigrationResult> {
       if (loops++ >= HISTORY_MIGRATION_LOOPS) return result;
-      var raw = historyLegacyRaw();
+      const raw = historyLegacyRaw();
       if (raw == null) return result;
-      var entries = normalizeLegacySnapshots(raw);
+      const entries = normalizeLegacySnapshots(raw);
       if (!entries) return result;
       return enqueueHistory(function () {
-        return backend.importOlder(entries);
+        return backend.importOlder(entries as HistorySnapshotRead[]);
       }, { ok: false }).then(function (r) {
         if (!r || !r.ok) return result;
-        result.migrated += r.added || 0;
+        result.migrated += (r as { added?: number }).added || 0;
         return backend.list(null).then(function (listed) {
-          var have = {};
-          (listed.older || []).forEach(function (m) { have[m.id] = true; });
-          var confirmed = entries.every(function (e) { return have[e.meta.id]; });
+          const have: Record<string, boolean> = {};
+          ((listed as NonNullable<typeof listed>).older || []).forEach(function (m) { have[m.id] = true; });
+          const confirmed = (entries as HistorySnapshotRead[]).every(function (e) { return have[e.meta.id]; });
           if (!confirmed) return result;
           if (historyLegacyRaw() !== raw) return loop();
           if (legacySnapshots().remove()) result.removedKey = true;
@@ -834,20 +853,20 @@ function runHistoryMigration() {
   });
 }
 
-function historyTestBucket(docId) {
+function historyTestBucket(docId: unknown) {
   if (docId === HISTORY_OLDER_KEY || docId === "older") return HISTORY_OLDER_KEY;
   return normalizeDocId(docId);
 }
 
 function historyTestStore() {
-  return resolveHistoryBackend().then(function (b) { return b.store ? b : null; });
+  return resolveHistoryBackend().then(function (b) { return b.store ? b as HistoryTestAdapter : null; });
 }
 
-function historyTestBodyCount(adapter, bucket) {
-  var backend = adapter.store.backend;
+function historyTestBodyCount(adapter: HistoryResolvedBackend & { store: NonNullable<HistoryResolvedBackend["store"]> }, bucket: string | null) {
+  const backend = adapter.store.backend;
   if (!bucket) return Promise.resolve(backend.bodyCount());
   return adapter.store.rawIndex().then(function (index) {
-    var shas = {};
+    const shas: Record<string, boolean> = {};
     ((index[bucket] && index[bucket].snapshots) || []).forEach(function (s) {
       if (s && typeof s.sha === "string") shas[s.sha] = true;
     });
@@ -872,31 +891,31 @@ function historyResetForTest() {
 }
 
   historyChain = Promise.resolve();
-  var testControls = {
+  const testControls = {
     idle: historyIdle,
     ...storage.controls,
-    setNow: function (ms) {
+    setNow: function (ms: unknown) {
       historyNowOverride = (ms == null || !isFinite(Number(ms))) ? null : Number(ms);
       historyLastAtMs = 0;
       return historyNow();
     },
-    injectFault: function (name) {
-      var fault = storage.controls.injectFault(name);
+    injectFault: function (name: string | null) {
+      const fault = storage.controls.injectFault(name);
       if (name == null && historyLocalEntries(null, "pending").length) retryPendingSnapshots();
       return fault;
     },
-    listRaw: function (docId) {
-      var bucket = historyTestBucket(docId);
+    listRaw: function (docId: unknown) {
+      const bucket = historyTestBucket(docId);
       if (!bucket) return Promise.resolve([]);
       return resolveHistoryBackend().then(function (b) { return b.rawList ? b.rawList(bucket) : []; });
     },
-    bodyCount: function (docId) {
-      var bucket = docId == null ? null : historyTestBucket(docId);
+    bodyCount: function (docId?: unknown) {
+      const bucket = docId == null ? null : historyTestBucket(docId);
       if (docId != null && !bucket) return Promise.resolve(0);
       return historyTestStore().then(function (a) { return a ? historyTestBodyCount(a, bucket) : 0; });
     },
-    docRecord: function (docId) {
-      var bucket = historyTestBucket(docId);
+    docRecord: function (docId: unknown) {
+      const bucket = historyTestBucket(docId);
       if (!bucket) return Promise.resolve(null);
       return resolveHistoryBackend().then(function (b) { return b.rawDoc ? b.rawDoc(bucket) : null; });
     },
@@ -907,7 +926,7 @@ function historyResetForTest() {
       return historyTestStore().then(function (a) { return a ? a.store.backend.inspect() : null; });
     },
     read: getHistorySnapshot,
-    pending: function (docId) {
+    pending: function (docId?: string) {
       return historyLocalEntries(docId ? normalizeDocId(docId) || "-" : null, "pending").map(function (e) {
         return { docId: e.docId, id: e.meta.id, label: e.meta.label, status: e.status };
       });
@@ -915,27 +934,27 @@ function historyResetForTest() {
     migrate: startHistoryMigration,
     resetForTest: historyResetForTest,
     importBundle: importHistoryBundle,
-    setExportCap: function (bytes) {
+    setExportCap: function (bytes: unknown) {
       historyExportCapOverride = (bytes == null || !isFinite(Number(bytes))) ? null : Math.max(0, Number(bytes));
       return historyExportCapOverride;
     }
   };
-  var pending = new Set();
-  function guarded(fn) {
-    return function (...args) {
+  const pending = new Set<PromiseLike<unknown>>();
+  function guarded<A extends unknown[], R>(fn: (...args: A) => R) {
+    return function (...args: A) {
       if (!active) throw new Error("The version history is not started yet");
-      var result = fn(...args);
-      var promise = result && result.done ? result.done : result;
+      const result = fn(...args);
+      const promise = (result && (result as { done?: unknown }).done ? (result as { done?: unknown }).done : result) as PromiseLike<unknown> | null;
       if (promise && typeof promise.then === "function") {
         pending.add(promise);
-        promise.then(function () { pending.delete(promise); }, function () { pending.delete(promise); });
+        promise.then(function () { pending.delete(promise as PromiseLike<unknown>); }, function () { pending.delete(promise as PromiseLike<unknown>); });
       }
       return result;
     };
   }
-  var api = { protectHistorySnapshot, isPristineSeedDocument, onHistoryChange, captureSnapshot, listDocHistory, getHistorySnapshot, historyDocumentChanged, copyHistory, exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots, startHistoryMigration };
-  Object.keys(api).forEach(function (key) { api[key] = guarded(api[key]); });
-  Object.keys(testControls).forEach(function (key) { testControls[key] = guarded(testControls[key]); });
+  const api: HistoryOwnerApi & Partial<{ testControls: typeof testControls; dispose: () => Promise<void> | undefined }> = { protectHistorySnapshot, isPristineSeedDocument, onHistoryChange, captureSnapshot, listDocHistory, getHistorySnapshot, historyDocumentChanged, copyHistory, exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots, startHistoryMigration };
+  Object.keys(api).forEach(function (key) { (api as unknown as Record<string, HistoryCallable>)[key] = guarded((api as unknown as Record<string, HistoryCallable>)[key] as HistoryCallable); });
+  Object.keys(testControls).forEach(function (key) { (testControls as Record<string, HistoryCallable>)[key] = guarded((testControls as Record<string, HistoryCallable>)[key] as HistoryCallable); });
   api.testControls = testControls;
   api.dispose = function () {
     if (!active) return;
@@ -943,11 +962,11 @@ function historyResetForTest() {
     historyChangeListeners = [];
     return Promise.allSettled(Array.from(pending)).then(historyIdle).then(function () { return storage.close(); });
   };
-  return api;
+  return api as HistoryOwnerApi & { testControls: typeof testControls; dispose: () => Promise<void> | undefined };
 }
 
-export function createHistoryOwner() {
-  var started = null;
+export function createHistoryOwner(): HistoryOwner {
+  let started: ReturnType<typeof startHistory> | null = null;
   function running() {
     if (!started) throw new Error("The version history is not started yet");
     return started;
@@ -955,7 +974,7 @@ export function createHistoryOwner() {
   return {
     startHistory: function (ports) {
       if (started) throw new Error("The version history is already started; stop it first");
-      var mine = startHistory(ports);
+      const mine = startHistory(ports);
       started = mine;
       return function () {
         if (started !== mine) return;
