@@ -7,7 +7,7 @@ import { mergeUndo } from "../editor-owners.ts";
 import { setHome } from "../location-owner.ts";
 import { getEditorName } from "../preferences-owner.ts";
 import { documentIdentityOwner } from "../document-identity.ts";
-import { adoptRestoredState } from "../../startup/document-entry.js";
+import { adoptRestoredState } from "../../startup/document-entry.ts";
 import { historyOwner } from "../history.ts";
 import { documentReader } from "./document.ts";
 import { text } from "./text.ts";
