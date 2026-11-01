@@ -1,28 +1,33 @@
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../../shared/clock.js";
 import { saveButtonView, saveStatus } from "../../application/save/status.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
+import type { SaveStatusPorts, SaveStatusListeners, SaveStatusMount } from "./ports.ts";
+import type { SaveStatusLine } from "../../application/save/status.ts";
+import type { LocalFileHandle } from "../../application/files/local-file-access.ts";
 
-var ports = null;
+type MutableSaveStatusLine = { -readonly [K in keyof SaveStatusLine]: SaveStatusLine[K] };
+
+let ports: SaveStatusPorts | null = null;
 
 function paintSaveButtons() {
-  var view = saveButtonView({ busy: ports.saves.busy(), dirty: ports.saves.unsaved() });
+  const view = saveButtonView({ busy: (ports as SaveStatusPorts).saves.busy(), dirty: (ports as SaveStatusPorts).saves.unsaved() });
   ["btn-save", "wr-save"].forEach(function (id) {
-    var btn = document.getElementById(id);
+    const btn = document.getElementById(id);
     if (!btn) return;
     btn.textContent = view.label;
-    btn.disabled = view.disabled;
+    (btn as HTMLButtonElement).disabled = view.disabled;
     btn.classList.toggle("is-dirty", view.dirty);
   });
 }
 
 function setSaveButtons() {
   paintSaveButtons();
-  ports.identity.sync();
-  ports.drafts.noteChange();
+  (ports as SaveStatusPorts).identity.sync();
+  (ports as SaveStatusPorts).drafts.noteChange();
   updateSaveStatus();
 }
 
-function saveStatusListeners() {
+function saveStatusListeners(): SaveStatusListeners {
   return {
     paint: function () {
       paintSaveButtons();
@@ -30,7 +35,7 @@ function saveStatusListeners() {
     },
     save: function (change) {
       if (change === "change") {
-        if (!ports.saves.busy()) setSaveButtons();
+        if (!(ports as SaveStatusPorts).saves.busy()) setSaveButtons();
       } else if (change === "clean") {
         savedAt = 0;
         setSaveButtons();
@@ -44,28 +49,28 @@ function saveStatusListeners() {
       if (change !== "writtenOut") updateSaveStatus();
     },
     preference: function (change) {
-      if (ports.preferences.nameOf(change.key) === "clock") updateSaveStatus();
+      if ((ports as SaveStatusPorts).preferences.nameOf(change.key) === "clock") updateSaveStatus();
     }
   };
 }
 
-function savedTitle(where) {
-  var when = savedWhenText(savedAt, Date.now(), ports.preferences.clock());
+function savedTitle(where: SaveStatusLine["where"]) {
+  const when = savedWhenText(savedAt, Date.now(), (ports as SaveStatusPorts).preferences.clock());
   if (when) return "Last saved " + (where ? "to " + where + " " : "") + "at " + when + ".";
   return where ? "Up to date with " + where + "." : "Everything is saved.";
 }
 
 function saveStatusView() {
-  var target = ports.autoSave.target();
-  var place = ports.place;
-  var where = place.home().kind === "file" ? (place.home().handle && place.home().handle.name) || ""
-    : place.home().kind === "import" ? place.home().name || ""
+  const target = (ports as SaveStatusPorts).autoSave.target();
+  const place = (ports as SaveStatusPorts).place;
+  const where = place.home().kind === "file" ? ((place.home().handle && (place.home().handle as Pick<LocalFileHandle, "name">).name) as string | null | undefined) || ""
+    : place.home().kind === "import" ? (place.home().name as string | null | undefined) || ""
     : "";
 
-  var autosave = ports.autoSave.policy();
-  var line = saveStatus({
-    busy: ports.saves.busy(),
-    dirty: ports.saves.unsaved(),
+  const autosave = (ports as SaveStatusPorts).autoSave.policy();
+  const line = saveStatus({
+    busy: (ports as SaveStatusPorts).saves.busy(),
+    dirty: (ports as SaveStatusPorts).saves.unsaved(),
     halted: autosave.halted(),
     autoSaveOn: autosave.enabled(),
     target: target,
@@ -75,19 +80,19 @@ function saveStatusView() {
   return line ? Object.assign({}, line) : null;
 }
 
-var savedAt = 0;
-var lastViewText = "";
-var justNowTimer = null;
+let savedAt = 0;
+let lastViewText = "";
+let justNowTimer: ReturnType<typeof setTimeout> | null = null;
 
 function updateSaveStatus() {
-  var view = saveStatusView();
-  var text = view ? view.text : "";
+  const view = saveStatusView();
+  const text = view ? view.text : "";
   if (text === "Saved" && lastViewText === "Saving…") savedAt = Date.now();
   else if (text !== "Saved") savedAt = 0;
   lastViewText = text;
-  if (text === "Saved") view.title = savedTitle(view.where);
+  if (text === "Saved") (view as MutableSaveStatusLine).title = savedTitle((view as MutableSaveStatusLine).where);
   ["save-status", "wr-save-status"].forEach(function (id) {
-    var el = document.getElementById(id);
+    const el = document.getElementById(id);
     if (!el) return;
     el.hidden = !view;
     if (!view) { el.textContent = ""; el.removeAttribute("title"); return; }
@@ -95,16 +100,16 @@ function updateSaveStatus() {
     el.title = view.title;
     el.className = "save-status is-" + view.cls;
   });
-  var btn = document.getElementById("btn-save");
+  const btn = document.getElementById("btn-save");
   if (btn) {
-    var shown = !view ? "Save" : text === "Saved" ? savedStatusText(savedAt, Date.now()) : view.text;
+    const shown = !view ? "Save" : text === "Saved" ? savedStatusText(savedAt, Date.now()) : view.text;
     btn.setAttribute("data-status", shown);
     btn.setAttribute("data-state", view ? view.cls : "none");
     btn.setAttribute("aria-label", view ? shown + ". Save now" : "Save");
     btn.title = view ? view.title + " Click to save now." : "Save this script";
   }
   if (savedAt && !justNowTimer) {
-    var left = savedAt + SAVED_JUST_NOW_MS - Date.now();
+    const left = savedAt + SAVED_JUST_NOW_MS - Date.now();
     if (left > 0) {
       justNowTimer = setTimeout(function () {
         justNowTimer = null;
@@ -114,21 +119,21 @@ function updateSaveStatus() {
   }
 }
 
-var activeMount = null;
+let activeMount: SaveStatusMount | null = null;
 
-export function mountSaveStatus(nextPorts) {
+export function mountSaveStatus(nextPorts: SaveStatusPorts) {
   ports = nextPorts;
-  var mine = nextPorts;
-  function onOwnerCleared(e) {
-    var n = (e.detail && e.detail.count) || 0;
+  const mine = nextPorts;
+  function onOwnerCleared(e: Event) {
+    const n = ((e as CustomEvent<{ count?: number }>).detail && (e as CustomEvent<{ count?: number }>).detail.count) || 0;
     if (n) mine.notices.show("That person is no longer on the crew, so " + (n === 1 ? "1 item is" : n + " items are") + " now unassigned.", "warn");
   }
-  var listening = typeof document !== "undefined" && !!document.addEventListener;
+  const listening = typeof document !== "undefined" && !!document.addEventListener;
   if (listening) document.addEventListener("undo-owner-cleared", onOwnerCleared);
-  var withdrawHook = null;
+  let withdrawHook: (() => void) | null = null;
   exposeTestHook("__saveStatusTest", function () { return { refresh: updateSaveStatus }; }, function (withdraw) { withdrawHook = withdraw; });
-  var disposed = false;
-  var mounted = {
+  let disposed = false;
+  const mounted = {
     refresh: updateSaveStatus,
     listeners: saveStatusListeners,
     dispose: function () {

@@ -2,7 +2,7 @@
 # or a reply's picture is stored as
 #   <img class="comment-img" data-blob="<sha>" data-w data-h data-mime>
 # with NO src: the sanitiser (04-richtext.js) interns an inline data: image
-# into that form, and the hydrator (02c-blobs.js) gives the <img> a blob:
+# into that form, and the hydrator (02c-blobs.ts) gives the <img> a blob:
 # URL on screen only. What this pins, the way a user does it:
 #   * a picture attached in the comment composer: the stored body names it
 #     by sha, it is in IndexedDB, the card shows it from a blob: URL;

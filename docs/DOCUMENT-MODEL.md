@@ -393,7 +393,7 @@ selection kept:
   (tag shortcuts, b-roll capture). Moving the caret forgets it.
 - The comment composer and reply boxes, which are not document cells and
   may hold pictures and video cards, go through the same model functions
-  by way of `editDraft` (`src/features/editing/draft-edit.js`, §10 step 7), with an undo
+  by way of `editDraft` (`src/features/editing/draft-edit.ts`, §10 step 7), with an undo
   history of each box's own. No edit anywhere uses `execCommand`; the
   page-wide `styleWithCSS` and `applyHighlight` are gone.
 
@@ -545,7 +545,7 @@ sides:
 
 This fixes the named case: a tag re-wrap (marks only) on one side plus a
 word edit on the other merges cleanly. The on-disk merge review
-(`src/features/merge/local-merge.js`) uses the same function, so its preview and its outcome
+(`src/features/merge/local-merge.ts`) uses the same function, so its preview and its outcome
 can no longer disagree.
 
 **Built (step 6).** `mergeTextField(base, mine, theirs, ctx)` in
@@ -739,7 +739,7 @@ until step 4.
    comment's `rowId`/`field` is derived from its mark. And no edit uses
    `execCommand` any more:
    - **The comment composer and reply boxes** edit through the model
-     (`editDraft`, `src/features/editing/draft-edit.js`), though no model stands behind
+     (`editDraft`, `src/features/editing/draft-edit.ts`), though no model stands behind
      them and they may hold pictures and video cards: each one is lifted
      out as a private-use placeholder character (U+E000–U+F8FF, never one
      the box or a paste already holds), which the model treats as a

@@ -5,7 +5,7 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { intern } from "../adapters/storage/02c-blobs.js";
+import { intern } from "../adapters/storage/02c-blobs.ts";
 import {
   ANNOTATION_COLORS, annotateGallerySlot, moveGallerySlot, normalizeMarks, removeGallerySlot, replaceGalleryPicture, rowSlots, slotOriginal
 } from "../core/document/gallery.ts";
