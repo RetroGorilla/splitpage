@@ -3,7 +3,7 @@
     "src/features/imports/imports.js",
     "src/features/imports/actions.ts",
     "src/bootstrap/wiring/imports.ts",
-    "src/adapters/formats/import-text.js"
+    "src/adapters/formats/import-text.ts"
   ],
   "expectedLoads": 4
 }
