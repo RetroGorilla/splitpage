@@ -6,7 +6,7 @@ import { decodeImageDataUrl, rowImage } from "../../core/document/media.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { videoLinkText } from "../storage/02d-gallery.js";
 import type { CommentBody } from "./export-projections.ts";
-import { sceneFacts } from "./export-projections.ts";
+import { sceneFacts, scriptSectionFacts } from "./export-projections.ts";
 import { exportComments, exportFacts, exportRuns, exportSummaryParts } from "./export-kit.ts";
 import type { PrintSection } from "./print-page.ts";
 import { buildPrintPage, printLink, printPicture } from "./print-page.ts";
@@ -67,10 +67,16 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
 <td>${main}${more}${links}<div class="print-text">${cellHtml(row.visualText, input)}</div></td>
 <td><div class="print-text">${cellHtml(row.audioText, input)}</div></td>
 <td><span${scene.readSet ? ' class="read-set"' : ""}>${escapeHtml(scene.read)}</span></td></tr>`;
-  }).join("");
+  });
+  const groups = scriptSectionFacts(doc, scenes);
+  function table(from: number, to: number, heading = ""): string {
+    return `<table class="script-table"><colgroup><col style="width:10%"><col style="width:40%"><col style="width:40%"><col style="width:10%"></colgroup>
+<thead><tr><th>Scene</th><th class="visual-head">Visual</th><th class="audio-head">Audio</th><th>Read</th></tr>${heading}</thead><tbody>${rows.slice(from, to).join("")}</tbody></table>`;
+  }
+  const tables = groups.length ? (groups[0] && groups[0].start > 0 ? table(0, groups[0].start) : "") + groups.map(group =>
+    table(group.start, group.end, `<tr class="script-section"><th colspan="4"><span>${escapeHtml(group.name)}</span><span class="script-section-total">${escapeHtml(group.total)}</span></th></tr>`)).join("") : table(0, rows.length);
   const script = `<h1>${escapeHtml(facts.title)}</h1><p class="print-meta">${escapeHtml(summary)}</p>${statusSummary}` +
-    (rows ? `<table class="script-table"><colgroup><col style="width:10%"><col style="width:40%"><col style="width:40%"><col style="width:10%"></colgroup>
-<thead><tr><th>Scene</th><th class="visual-head">Visual</th><th class="audio-head">Audio</th><th>Read</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No scenes yet.</p>");
+    (rows.length ? tables : "<p>No scenes yet.</p>");
   const sections: PrintSection[] = [{ id: "script", title: "Script", html: script }];
   const comments = exportComments(doc, { pieces: true }, services);
   if (comments.length) {
