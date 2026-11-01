@@ -21,7 +21,7 @@ import { mountImports, mountGdoc } from "../../features/imports/mount.ts";
 import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../../features/writer/mount.ts";
 import { mountHistoryGallery } from "../../features/gallery/mount.ts";
 import { mountTopbar } from "../../features/title/topbar.ts";
-import { mountCellReach } from "../../features/editing/cell-reach.js";
+import { mountCellReach } from "../../features/editing/cell-reach.ts";
 import { mountPhoneBar } from "../../features/notices/phone-bar.ts";
 import { importMode, prompterState } from "./ports/preferences.ts";
 import { captureOperation, openDocument, stillOwns } from "./transition-owners.ts";

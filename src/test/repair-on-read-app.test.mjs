@@ -18,7 +18,7 @@ const { openProductionPanel, renderProduction, setTagNotes, setTagStatus } = awa
 const { anchorBrollInLeftCell, updateBrollBadge } = await import("../bootstrap/wiring/broll.ts");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const brollEntries = () => currentBrollRecords().brollEntries();
-const { openBrollPanel, renderBroll, runBrollRefresh } = await import("../features/broll/panel.js");
+const { openBrollPanel, renderBroll, runBrollRefresh } = await import("../features/broll/panel.ts");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
