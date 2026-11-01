@@ -1,3 +1,4 @@
+import type { DesktopIpcArgs, DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 import type { DocumentReader } from "../session/document-reader.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
 import type { SaveCoordinator } from "../save/coordinator.ts";
@@ -75,12 +76,12 @@ export interface DesktopHistoryOptions {
 }
 
 export interface HistoryDesktopPort {
-  readonly historyPut: (docId: string | null, meta: unknown, stateJson: string, opts?: DesktopHistoryOptions) => Promise<unknown>;
-  readonly historyList: (docId: string | null) => Promise<unknown>;
-  readonly historyGet: (query: unknown, snapshotId: string) => Promise<unknown>;
-  readonly historyCopy: (fromDocId: string, toDocId: string) => Promise<unknown>;
-  readonly historyTouch: (docId: string, title: string) => Promise<unknown>;
-  readonly historyListDocs: () => Promise<unknown>;
+  readonly historyPut: (docId: string | null, meta: unknown, stateJson: string, opts?: DesktopHistoryOptions) => Promise<DesktopIpcResult<"splitpage:history-put">>;
+  readonly historyList: (docId: string | null) => Promise<DesktopIpcResult<"splitpage:history-list">>;
+  readonly historyGet: (query: DesktopIpcArgs<"splitpage:history-get">[0], snapshotId: string) => Promise<DesktopIpcResult<"splitpage:history-get">>;
+  readonly historyCopy: (fromDocId: string, toDocId: string) => Promise<DesktopIpcResult<"splitpage:history-copy">>;
+  readonly historyTouch: (docId: string, title: string) => Promise<DesktopIpcResult<"splitpage:history-touch">>;
+  readonly historyListDocs: () => Promise<DesktopIpcResult<"splitpage:history-list-docs">>;
 }
 
 export interface HistoryDesktopAccess {

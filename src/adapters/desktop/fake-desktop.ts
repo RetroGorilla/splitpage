@@ -1,6 +1,6 @@
 import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
 import type { DraftPayload } from "../../application/recovery/draft-origin.ts";
-import type { DesktopFileEntry, DesktopPort } from "./desktop-port.ts";
+import type { DesktopFileEntry, DesktopPort, DesktopTestPort, DesktopTestValue } from "./desktop-port.ts";
 
 type FlushHandler = Parameters<DesktopPort["onDraftFlush"]>[0];
 
@@ -31,8 +31,9 @@ type FakeBlobBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "
   _blobCalls?: Record<string, unknown>[];
   _blobFailNext?: { code: string } | null;
 };
-type FakeVoiceBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & MutablePort<"voiceStart" | "voiceStop" | "onVoiceEvent"> & {
-  voiceStatus?: () => Promise<{ [K in "available"]: NonNullable<Awaited<ReturnType<DesktopPort["voiceStatus"]>>>[K] }>;
+type FakeVoiceBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "voiceStart" | "voiceStop"> & {
+  voiceStatus?: DesktopTestPort["voiceStatus"];
+  onVoiceEvent?: (cb: (event: DesktopTestValue<Parameters<Parameters<DesktopPort["onVoiceEvent"]>[0]>[0]>) => void) => void;
   _voiceCalls?: { status: number; start: number; stop: number };
   _voiceAvailable?: boolean;
   _voiceSession?: number;
@@ -41,7 +42,7 @@ type FakeVoiceBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | 
   _voiceEmit?: (event: Record<string, unknown>) => void;
 };
 
-type FakeHistoryBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & MutablePort<"historyPut" | "historyList" | "historyGet" | "historyCopy" | "historyTouch" | "historyListDocs"> & {
+type FakeHistoryBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "historyPut" | "historyList" | "historyGet" | "historyCopy" | "historyTouch" | "historyListDocs"> & {
   _historyDump?: () => Record<string, unknown[]>;
   _historyStore?: ReturnType<typeof createHistoryStore>;
   _historyBackend?: ReturnType<typeof createMemoryHistoryTestBackend>;
@@ -244,7 +245,7 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
 }
 
 function addFakeDesktopVoice(backend: FakeVoiceBackend) {
-  let handler: Parameters<DesktopPort["onVoiceEvent"]>[0] | null = null;
+  let handler: Parameters<NonNullable<FakeVoiceBackend["onVoiceEvent"]>>[0] | null = null;
   backend._voiceCalls = { status: 0, start: 0, stop: 0 };
   backend._voiceAvailable = true;
   backend._voiceSession = 0;
@@ -265,7 +266,7 @@ function addFakeDesktopVoice(backend: FakeVoiceBackend) {
     backend._voiceRunning = false;
     return Promise.resolve({ ok: true });
   };
-  backend.onVoiceEvent = function (cb: Parameters<DesktopPort["onVoiceEvent"]>[0]) { handler = cb; };
+  backend.onVoiceEvent = function (cb: Parameters<NonNullable<FakeVoiceBackend["onVoiceEvent"]>>[0]) { handler = cb; };
   backend._voiceEmit = function (event: Record<string, unknown>) {
     const e = Object.assign({ session: backend._voiceSession }, event);
     if (handler) handler(e);

@@ -2,7 +2,7 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { updateActions as definitions } from "../../features/update/actions.ts";
-import type { UpdatePorts, UpdateStatus } from "../../features/update/ports.ts";
+import type { UpdatePorts } from "../../features/update/ports.ts";
 import { mountUpdate } from "../../features/update/update.ts";
 import type { UpdateMount } from "../../features/update/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -27,8 +27,8 @@ export function updateActions(): ActionDefinition[] {
 }
 
 export const updates: UpdatePorts["updates"] = {
-  status: () => (desktopPort()?.getUpdateStatus?.() ?? Promise.resolve(null)) as Promise<UpdateStatus | null>,
-  onStatus: (listener) => { desktopPort()?.onUpdateStatus?.(listener as (status: unknown) => void); },
+  status: () => (desktopPort()?.getUpdateStatus?.() ?? Promise.resolve(null)),
+  onStatus: (listener) => { desktopPort()?.onUpdateStatus?.(listener); },
   stopStatus: () => { desktopPort()?.onUpdateStatus?.(null); },
   download: () => desktopPort()?.downloadUpdate?.() ?? Promise.resolve(null),
   install: () => desktopPort()?.installUpdate?.() ?? Promise.resolve(null)
