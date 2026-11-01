@@ -53,6 +53,7 @@ export type DocumentShape = {
   docId: string;
   rev: number;
   schema: number;
+  targetSeconds?: number | undefined;
   rows: DocumentRow[];
   comments: DocumentComment[];
   productionTags: (DocumentTag | null | undefined)[];
