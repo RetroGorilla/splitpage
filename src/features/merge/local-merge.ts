@@ -44,10 +44,10 @@ function fileConflicts() { return (ports as MergeReviewPorts).conflicts; }
 function applyStashedWork(disk: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[0], work: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[1], options: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[2]) { return (ports as MergeReviewPorts).recovery.applyStashedWork(disk, work, options); }
 function htmlToPlainText(html: Parameters<MergeReviewPorts["text"]["htmlToPlainText"]>[0]) { return (ports as MergeReviewPorts).text.htmlToPlainText(html); }
 
-function fileMergeBase(home: Home | null) {
+function fileMergeBase(home: Home | null | undefined) {
   if (home && home.diskBase) return home.diskBase as MergeReviewDocument;
   if (home && home === fileHome() && mergeBase() && currentDocument() &&
-      normalizeDocId((mergeBase() as MergeReviewDocument).docId) === normalizeDocId((currentDocument() as Pick<MergeReviewDocument, "docId">).docId)) return mergeBase() as MergeReviewDocument;
+      normalizeDocId((mergeBase() as MergeReviewDocument).docId) === normalizeDocId((currentDocument() as Pick<MergeReviewDocument, "docId">).docId)) return mergeBase() as MergeReviewDocument | null;
   return null;
 }
 
@@ -72,7 +72,7 @@ async function offerFileMerge(currentFile: unknown, home: unknown) {
   if (!parsed || parsed.error || !parsed.state) return;
 
   const theirs = parsed.state;
-  const base = fileMergeBase(home as Home | null);
+  const base = fileMergeBase(home as Home | null | undefined);
   const refId = normalizeDocId((base && base.docId) || (currentDocument() as Pick<MergeReviewDocument, "docId">).docId);
   if (parsed.docIdEmbedded && refId && normalizeDocId(theirs.docId) !== refId) return;
   if (refId) theirs.docId = refId;
@@ -80,7 +80,7 @@ async function offerFileMerge(currentFile: unknown, home: unknown) {
   mergeCandidate = {
     theirs: theirs,
     base: base,
-    home: (home as Home | null) || null,
+    home: (home as Home | null | undefined) || null,
     fileName: (currentFile as Pick<LocalFileData, "name">).name || "",
     lastModified: (currentFile as Pick<LocalFileData, "lastModified">).lastModified || null
   };
