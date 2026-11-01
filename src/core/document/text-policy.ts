@@ -169,9 +169,12 @@ export function legacyMdToHtml(text: unknown): string {
   return out;
 }
 
-export function safeId(id: unknown, prefix: string, ids: IdSource): string {
-  const clean = textOf(id).replace(/[^A-Za-z0-9_-]/g, "");
-  return clean || ids.id(prefix);
+export function cleanId(id: unknown): string {
+  return textOf(id).replace(/[^A-Za-z0-9_-]/g, "");
+}
+
+export function safeId(id: unknown, prefix: string, ids: Pick<IdSource, "id">): string {
+  return cleanId(id) || ids.id(prefix);
 }
 
 export type StoredImageRef = Pick<ImageRef, "sha256"> & Partial<Omit<ImageRef, "sha256">>;

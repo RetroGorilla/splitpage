@@ -1,4 +1,4 @@
-import { startDraftEdit as mountDraftEdit } from "../../features/editing/draft-edit.js";
+import { startDraftEdit as mountDraftEdit } from "../../features/editing/draft-edit.ts";
 import { text as portText } from "./ports/text.ts";
 import type { DraftEditPorts } from "../../features/editing/ports.ts";
 import { owned } from "../../features/routing/owned.ts";

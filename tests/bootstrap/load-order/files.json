@@ -3,7 +3,7 @@
     "src/application/save/file-saving.ts",
     "src/adapters/files/save-dialogs.ts",
     "src/bootstrap/wiring/file-saving.ts",
-    "src/application/transitions/local-files.js",
+    "src/application/transitions/local-files.ts",
     "src/application/save/import-saving.ts",
     "src/features/file-menu/local-files.js",
     "src/adapters/files/local-files.js",

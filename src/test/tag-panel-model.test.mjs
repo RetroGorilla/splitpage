@@ -9,7 +9,7 @@ import { inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { cellOf } from "../bootstrap/richtext.ts";
 import { projection, tagNameOf } from "../core/text/runs.ts";
 import { toHtml } from "../core/text/html.ts";
-import { tagFieldOccurrences, tagsInField } from "../features/tags/production-tags.js";
+import { tagFieldOccurrences, tagsInField } from "../features/tags/production-tags.ts";
 import { tagOccurrences } from "../core/production/tags.ts";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
@@ -18,7 +18,7 @@ import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions
 const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
-import { domProjection } from "../features/common/find-dom.js";
+import { domProjection } from "../features/common/find-dom.ts";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
 

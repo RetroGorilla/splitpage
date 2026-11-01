@@ -4,7 +4,7 @@ import { text as portText } from "./ports/text.ts";
 import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import type { ReadTimePorts } from "../../features/rows/ports.ts";
-import { startReadTime as mountReadTime } from "../../features/rows/read-time.js";
+import { startReadTime as mountReadTime } from "../../features/rows/read-time.ts";
 import { paintGuard } from "./editor-owners.ts";
 
 const readTime = owned<ReturnType<typeof mountReadTime>>();

@@ -1,5 +1,5 @@
 # Splitting and joining scenes through the document model (#85, design
-# §3.2; splitField in features/rows/scenes.js, mergeWriterRows in 19-writer.js,
+# §3.2; splitField in features/rows/scenes.ts, mergeWriterRows in 19-writer.js,
 # syncCommentAnchors in src/core/text).
 #
 #   * a split through the middle of a commented phrase leaves the comment

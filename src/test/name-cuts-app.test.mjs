@@ -8,7 +8,7 @@ await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { render } = await import("../features/rows/render.ts");
-const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag } = await import("../features/tags/production-tags.js");
+const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag } = await import("../features/tags/production-tags.ts");
 const { renameTag } = await import("../application/commands/production-actions.ts");
 const { runDocumentEdit, sessionStamps } = await import("../bootstrap/wiring/session-owner.ts");
 const { retagRewrites: planRetagRewrites } = await import("../application/commands/tag-rewrites.ts");
@@ -18,9 +18,9 @@ const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toNam
 const { plainTagPhrase } = await import("../features/tags/plain-tags.ts");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);
-const { openBrollPanel } = await import("../features/broll/panel.js");
+const { openBrollPanel } = await import("../features/broll/panel.ts");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
-const { renderComments, setCommentAssignee } = await import("../features/comments/comments.js");
+const { renderComments, setCommentAssignee } = await import("../features/comments/comments.ts");
 const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { colorsWithMine } = await import("../core/document/person-colors.ts");
 const { cleanAuthorName } = await import("../core/document/people.ts");

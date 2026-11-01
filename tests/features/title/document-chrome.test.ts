@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startDocumentChrome } from "../../../src/features/title/document-chrome.js";
+import { startDocumentChrome } from "../../../src/features/title/document-chrome.ts";
 import type { DocumentChromeControl, DocumentChromePorts } from "../../../src/features/title/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";

@@ -268,7 +268,7 @@ bytes instead.
 `#state-data` holds the seed document from `src/seed-state.json`. That's its
 whole job — **documents live in files, not copies of the app**. Save writes
 `.md` (table + fenced `splitpage` data block) or `.splitpage` (that record
-alone). The format codecs in `src/adapters/formats/` build and parse both; `openProjectFile()` (`src/application/transitions/local-files.js`) dispatches
+alone). The format codecs in `src/adapters/formats/` build and parse both; `openProjectFile()` (`src/application/transitions/local-files.ts`) dispatches
 into `adoptProjectState()`, the one place a parsed project becomes *the*
 document. `PAGE_SHELL`/`buildPublishHtml()` (`src/adapters/page/page-shell.ts`) exist only for Standalone HTML
 export. A server was a second home from 2026-08-28 until the server
@@ -560,7 +560,7 @@ tabs**.
   `blob-missing(shas)` → the subset not held, ≤2000 shas per call, anything
   else rejects. A store that could not be created leaves the app running:
   puts answer `UNAVAILABLE`, gets null, every sha is missing. The renderer
-  side is `makeDesktopBlobBackend(bridge)` in `src/adapters/desktop/desktop-blobs.js` (the page
+  side is `makeDesktopBlobBackend(bridge)` in `src/adapters/desktop/desktop-blobs.ts` (the page
   registry's `get`/`put`/`missing` interface; `put` rejects with
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites.
@@ -673,7 +673,7 @@ leaving does not shift the editor under a still-clear layer.
 `.claude/skills/run-splitpage-app/tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
 on the two elements and checks all of it.
 
-**`render()` must stay synchronous.** `src/features/rows/row-motion.js` animates scene
+**`render()` must stay synchronous.** `src/features/rows/row-motion.ts` animates scene
 reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
 `#rows` (§3.16), measure again, put things back with a transform and animate
 it away. It is FLIP and *not* the View Transitions API for one reason:
@@ -705,7 +705,7 @@ Two traps it already works around:
 
 ### 3.15 One loading indicator, and it waits before showing
 
-`src/features/notices/busy.js` owns the only "something is happening" affordance in the app:
+`src/features/notices/busy.ts` owns the only "something is happening" affordance in the app:
 a 2px indeterminate bar at the top of the window. `withBusyBar(label, fn)`
 wraps an async operation; the result and any thrown error pass straight
 through. Currently wrapped: every export (they all funnel through
@@ -736,7 +736,7 @@ the end. Now:
   identical is not touched. `rowHtmlFromParts()` in `src/features/rows/render.js` is those parts joined, byte for byte
   what it always produced.
 - **`render()`** keys `#rows` by row id (a shot strip by the ids it covers —
-  `hiddenShotStripHtml()` in `src/features/rows/hide-shot.ts`, the key `rowMotionKey()` in `src/features/rows/row-motion.js`
+  `hiddenShotStripHtml()` in `src/features/rows/hide-shot.ts`, the key `rowMotionKey()` in `src/features/rows/row-motion.ts`
   uses), reuses every element still wanted, repaints only changed parts,
   creates new rows, drops gone ones, and moves the rest with a
   longest-increasing-run pass that never moves the row holding focus (a
@@ -758,7 +758,7 @@ the end. Now:
   writer's paragraph and the reply box.
 - **One idle refresh.** `scheduleProductionRefresh()`, `scheduleUntaggedScan()`,
   `scheduleBrollRefresh()` and `scheduleWriterStats()` only mark their job
-  pending on `scheduleIdleRefresh()` (`src/features/tags/production-tags.js`): one 180ms
+  pending on `scheduleIdleRefresh()` (`src/features/tags/production-tags.ts`): one 180ms
   debounce, capped at 1s of unbroken typing, runs everything pending against
   one production index (§3.4). They used to be four timers (180/200/220/400ms)
   each deriving the breakdown for itself.
@@ -797,7 +797,7 @@ Names are plain text, limited to 200 code points. See
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",
     "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
                   "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
-    // the scene's gallery (#135, 02d-gallery.js), each key absent when empty:
+    // the scene's gallery (#135, 02d-gallery.ts), each key absent when empty:
     "imageName": "wide.png",
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
     // a poster link's item's imageRef is its still: a file's first frame, or
@@ -871,7 +871,7 @@ panels, the CSV, Present's clock — reads `rowSeconds()`, never the words
 directly (Present's *scroll speed* is still words and reading speed).
 `migrateRows()` keeps a whole number 0–86400 and drops anything else, so a
 file from before #179 reads as the estimate. It is set from the rail's Read
-time (`src/features/rows/read-time.js`; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
+time (`src/features/rows/read-time.ts`; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
 `parseSceneLength()`). It is not in
 `ROW_FIELDS` (not text): `mergeRow` takes the side that changed it since the
 base, theirs when both did (no conflict card), and with no base a set length
@@ -895,7 +895,7 @@ lose) — but both sides changing it keeps theirs with no conflict card, as a
 scene's length does; with no base a set target beats none. Both project
 formats carry it as a plain key; the `.md` table does not show it and no
 export prints it. It is set only through `setTargetLength()`
-(`src/features/rundown/target.js`), one `markDirty()`, so undo sees a `docField` step. What reads it:
+(`src/features/rundown/target.ts`), one `markDirty()`, so undo sees a `docField` step. What reads it:
 the script's length (`updateScriptStats()`: `1:35 / 2:00` and `0:25 left` /
 `0:05 over` in `#runtime-slot`, via the pure `targetClock()`; since #207 a
 label at the end of the rundown, `#runtime-chip`, placed by
@@ -904,7 +904,7 @@ header's status line — it was the header's program clock before; the
 target is measured against the whole script — with shot scenes hidden the
 remaining-to-shoot figure moves to the tooltip), and the rundown
 strip (`setRundownExtraSeconds(target)`, so the span is
-max(target, total) + 10s; `src/features/rundown/target.js` draws the line, "Target 2:00" and
+max(target, total) + 10s; `src/features/rundown/target.ts` draws the line, "Target 2:00" and
 the hatching on `#rundown-overlay` from `rundownLayout().x` — the layout at
 rest, never `rundownX()`, because the overlay is faded while the lens is on
 and must be right when it settles; and never seconds × `pxPerSecond`, since
@@ -933,7 +933,7 @@ an "Unmerged edit" card (design D3). The result names every tag the way the
 **merged** registry does (the registry is merged before the rows for that),
 so a rename from the other side reaches a cell taken from this one. A cell
 holding a picture or video card (which the model leaves out, D7) is still
-compared as a string, whole. The on-disk merge review (`src/features/merge/local-merge.js`)
+compared as a string, whole. The on-disk merge review (`src/features/merge/local-merge.ts`)
 decides each cell with the same `mergeTextField()`, and shows "both sets of
 changes are combined" for an outcome of `merged`.
 
@@ -964,7 +964,7 @@ is `localStorage["splitpage-export-directions"]` (`"0"` off, absent on).
 **Images are references, not bytes** (#82). The document state never holds
 image bytes; the bytes live once, content-addressed by SHA-256, in a blob
 store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
-server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
+server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
 - A row's picture is `imageRef`, a record gated by `normalizeImageRef()`
   (`shared/blob-policy.js`): exactly those four fields, the type sniffed
   from the bytes, never SVG. The old key `visualImage` (a `data:` URI) is
@@ -977,7 +977,7 @@ server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
   that form, keeps a valid `data-blob` (attributes from the registry when it
   holds the bytes), strips any `src`, and drops everything else.
   `storedImageHtml(ref)` is the same string for HTML built outside it.
-- The hydrator (a MutationObserver in `02c-blobs.js`) gives every
+- The hydrator (a MutationObserver in `02c-blobs.ts`) gives every
   `<img data-blob>` in the live DOM a `blob:` `src` once `ensureBytes()`
   has the bytes (memory, then the backend); one nobody has
   is marked `data-blob-state="missing"`, alt "Image unavailable". The mark
@@ -1094,7 +1094,7 @@ stores until the one-time move has emptied them — see above), `splitpage-blobs
 `blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
 bytes, #82 — nothing deletes them yet, D4).
 
-**Per-person settings** (#181, the Settings dialog, `src/features/settings/settings.js`), all
+**Per-person settings** (#181, the Settings dialog, `src/features/settings/settings.ts`), all
 localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
 absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 `nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
@@ -1142,7 +1142,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
 | `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
 | `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.ts`) |
-| `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.js`) |
+| `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.ts`) |
 | `src/application/` (other) | preferences, document location and identity (with the document guard), production index and b-roll records, media and picture store, files and recents, export registry and services, screen and screen state, actions, shortcuts |
 | `src/adapters/` | `richtext/` (HTML in and out of cells), `formats/` (DOCX, PDF, CSV/XLSX, Markdown, the `.splitpage` file), `storage/` (blobs, gallery, history IndexedDB, desktop drafts), `files/`, `desktop/`, `page/`, `identity/`, `production/` |
 | `src/core/` | pure rules: `document/`, `text/` (runs, marks, steps, anchors), `merge/`, `production/`, `migrate.ts` |
@@ -1276,7 +1276,7 @@ name never does (#183). `#root` spans the window and only the script is
 held to 1800px (#190); the rundown strip runs the window's width, less an
 open panel (#189), below 1100px too. One slim scroll-bar style app-wide,
 and the page's own bar hidden while a panel is open (#187, #188), its
-width handed back (`--page-gutter`, `src/features/panels/script-place.js`) so nothing steps
+width handed back (`--page-gutter`, `src/features/panels/script-place.ts`) so nothing steps
 sideways; a panel opening or closing keeps the scene at the top of the
 view put (`holdScriptPlace`, as the script zoom does). `.claude/skills/run-splitpage-app/tests/85-header-fit.txt`
 measures all of it by resizing an iframe; 250–251 the rest.
@@ -1292,7 +1292,7 @@ recovery tool, if ever wanted, finds it by `docs/`/`older/` with no
 `migratedFrom` in `index.json`, or by v1 stores surviving in v3.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
-starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.js`)
+starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.ts`)
 now builds a fresh state through `migrateRows()`, so the document gets a new
 `docId` and empty `productionTags`, `people`, `brollShots` and `comments`,
 and its home becomes the imported file (`setHome("import")`,

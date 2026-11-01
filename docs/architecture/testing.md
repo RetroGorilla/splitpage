@@ -539,9 +539,21 @@ signature. A top-level `never` counts too, because `never` is assignable to
 every type; a `never` nested inside another type does not, so the rule checks
 where a nested `never` comes out instead. The typecheck refuses, in every
 `.ts` file but `migrate.ts`:
-- a type assertion to such a type, unless the value already has that type
-  (this covers `as never`), and an assertion to a library container of
-  `never` (`never[]`, `Promise<never>`, `Set<never>`);
+- a type assertion to such a type, and an assertion to a library container
+  of `never` (`never[]`, `Promise<never>`, `Set<never>`), unless the value,
+  with `null` and `undefined` removed, is something that already has the
+  target type, or the value is itself `never` (`fail() as T`). Removing only
+  `null` adds no brand the value did not have: `(ports as FindPorts)` over
+  `FindPorts | null` passes, the same narrowing the `!` operator does, which
+  eslint forbids. A value that is only `null`, `undefined` or `void` has
+  nothing left once those are removed, so it is refused; that closes
+  laundering through a nullable target, as in `((raw as null) as
+  ValidatedDocument | null) as ValidatedDocument` or `(raw as null) as never
+  as ValidatedDocument`. `(shape as DocumentShape | null) as
+  ValidatedDocument` is refused too. A value whose type includes `void`
+  anywhere (`ValidatedDocument | void`, `void & {}`) is refused, here and as
+  the parameter of a branded type predicate, because a `() => void` callback
+  may return anything, so removing `void` is not removing an empty value;
 - a property or element access whose declared type is `never` on a value that
   is not `never` (`({ v: raw } as { v: never }).v`, `([raw] as [never])[0]`),
   and a call through a signature written inside a cast that returns `never`

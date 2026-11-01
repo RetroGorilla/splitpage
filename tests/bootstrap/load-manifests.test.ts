@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { COMPOSITION_ROOT, manifestTargets, parseLoadManifest, readLoadManifests, validateManifestCoverage, validateManifestNames } from "./load-manifests.ts";
 import type { LoadManifest } from "./load-manifests.ts";
 
-const adapter = "src/adapters/storage/02c-blobs.js";
+const adapter = "src/adapters/storage/02c-blobs.ts";
 const migrated = "src/features/example/view.ts";
 const storage: LoadManifest = { area: "storage", loadOnly: [adapter], expectedLoads: 1 };
 const feature: LoadManifest = { area: "example", loadOnly: [migrated], expectedLoads: 1 };

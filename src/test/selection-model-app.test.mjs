@@ -19,7 +19,7 @@ const undoSizes = () => undoOwner().sizes();
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { closeCommandMenu, openCommandMenu } = await import("../features/command-menu/command-menu.ts");
 const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 

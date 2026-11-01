@@ -1,4 +1,4 @@
-import { blobsTestControls, startBlobs } from "../../adapters/storage/02c-blobs.js";
+import { blobsTestControls, startBlobs } from "../../adapters/storage/02c-blobs.ts";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;

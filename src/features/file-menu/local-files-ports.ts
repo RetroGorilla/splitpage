@@ -41,7 +41,7 @@ export interface LocalFileMenuPorts {
   readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "withBar"> };
   readonly delivery: FileDelivery;
   readonly pdfPrint: { readonly export: (kind: string, options: Readonly<Record<string, unknown>> | undefined, alive: () => boolean) => Promise<void> | null };
-  readonly merge: { readonly offer: (file: unknown, home: unknown) => Promise<void>; readonly reset: () => void };
+  readonly merge: { readonly offer: (file: FileConflict["current"], home: ReturnType<DocumentPlace["fileHome"]> | undefined) => Promise<void>; readonly reset: () => void };
   readonly exportControls: Pick<FileMenuExportMount, "isExportAction" | "rememberExport">;
   readonly actions: Pick<ActionRegistry, "invoke" | "has">;
 }

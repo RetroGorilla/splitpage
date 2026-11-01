@@ -14,11 +14,11 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
-const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.js");
-const { openCommentComposer, closeCommentComposer } = await import("../features/comments/comments.js");
+const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.ts");
+const { openCommentComposer, closeCommentComposer } = await import("../features/comments/comments.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
