@@ -1,6 +1,8 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHistoryBackendProbe } from "../adapters/storage/history-backend-testing.ts";
+import { createHistoryOwnerInstrumentation } from "../adapters/storage/history-owner-testing.ts";
 import { createHistoryOwner } from "../application/recovery/history.ts";
 import { createHistoryBackends } from "../adapters/storage/history-backends.ts";
 
@@ -21,11 +23,11 @@ async function harness(options = {}) {
   let removed = 0;
   const messages = [];
   let holds = () => [];
-  const storage = createHistoryBackends({ now: () => 1000, holds: () => holds(), desktop: () => null, runningOnDesktop: () => false });
-  await storage.controls.forceBackend("memory");
+  const storage = createHistoryBackends({ now: () => 1000, holds: () => holds(), desktop: () => null, runningOnDesktop: () => false }, options.release ? undefined : createHistoryBackendProbe());
+  if (!options.release) await storage.controls.forceBackend("memory");
   const backend = await storage.resolveHistoryBackend();
   if (options.persistent) backend.name = "idb";
-  const owner = createHistoryOwner();
+  const owner = createHistoryOwner(options.release ? undefined : createHistoryOwnerInstrumentation);
   const ports = {
     document: { current: () => live },
     location: { home: () => ({ kind: "none" }) },
@@ -52,7 +54,7 @@ async function harness(options = {}) {
 }
 
 test("history owner refuses every public operation before start and after stop", async () => {
-  const fresh = createHistoryOwner();
+  const fresh = createHistoryOwner(createHistoryOwnerInstrumentation);
   const calls = [
     (owner) => owner.captureSnapshot("Keep", document()),
     (owner) => owner.listDocHistory(docId),
@@ -235,4 +237,47 @@ test("reset waits for accepted writes with their armed backend failures before r
   assert.equal((await capture.done).stored, false);
   await resetting;
   await h.stop();
+});
+
+
+test("the default owner and storage have no test controls and preserve capture, copy and export", async () => {
+  const h = await harness({ release: true });
+  assert.equal("testControls" in h.owner, false);
+  for (const name of ["controls", "reset", "prepareResetForTest"]) assert.equal(name in h.storage, false, name);
+  const captured = h.owner.captureSnapshot("Keep", document());
+  assert.equal((await captured.done).stored, true);
+  assert.equal(JSON.parse((await h.owner.getHistorySnapshot({ docId, id: captured.id })).stateJson).title, "Original");
+  assert.deepEqual(await h.owner.copyHistory(docId, otherId), { ok: true, copied: 1 });
+  assert.equal((await h.owner.exportHistoryAll()).docs.length, 2);
+  await h.stop();
+  assert.equal(h.closed(), 1);
+});
+
+test("restarting the same owner resets its test clock and export capacity", async () => {
+  const h = await harness();
+  const controls = h.owner.testControls();
+  controls.setNow(1);
+  controls.setExportCap(0);
+  const first = h.owner.captureSnapshot("First", document());
+  assert.equal((await first.done).stored, true);
+  assert.equal((await h.owner.getHistorySnapshot({ docId, id: first.id })).meta.atMs, 1);
+  assert.equal((await h.owner.captureSnapshot("Second", document("Second")).done).stored, true);
+  assert.equal((await h.owner.exportHistoryAll()).truncated, true);
+  await h.stop();
+  const stop = h.owner.startHistory(h.ports);
+  assert.throws(() => controls.setNow(2), /not started yet/);
+  const next = h.owner.captureSnapshot("Next", document("Next"));
+  assert.equal((await next.done).stored, true);
+  assert.equal((await h.owner.getHistorySnapshot({ docId, id: next.id })).meta.atMs, 1000);
+  const bundle = await h.owner.exportHistoryAll();
+  assert.equal(bundle.truncated, false);
+  assert.equal(bundle.docs[0].snapshots.length, 3);
+  await stop();
+});
+
+test("a missing desktop history port still throws during backend resolution", () => {
+  for (const probe of [undefined, createHistoryBackendProbe()]) {
+    const storage = createHistoryBackends({ now: () => 1000, holds: () => [], desktop: () => null, runningOnDesktop: () => true }, probe);
+    assert.throws(() => storage.resolveHistoryBackend(), TypeError);
+  }
 });
