@@ -88,8 +88,8 @@ test("#1041: the same picture in duplicate rows keeps a comment on each repaired
   const url = pngDataUrl(6, 6, 31);
   const out = migrateRows({ schema: 2, rows: [{ id: "r1", visualText: '<img src="' + url + '">' }, { id: "r1", visualText: 'again <img src="' + url + '">' }] }, fakeMigration().ports);
   assert.equal(list(out, "comments").length, 2);
-  assert.deepEqual(only(list(out, "rows"), "id"), ["r1", "r-fake-1"]);
-  assert.deepEqual(only(list(out, "comments"), "rowId"), ["r1", "r-fake-1"]);
+  assert.deepEqual(only(list(out, "rows"), "id"), ["r1", "r1-1"]);
+  assert.deepEqual(only(list(out, "comments"), "rowId"), ["r1", "r1-1"]);
   assert.equal(new Set(only(list(out, "comments"), "id")).size, 2);
   assert.deepEqual(only(list(out, "rows"), "visualText"), ["", "again "]);
 });

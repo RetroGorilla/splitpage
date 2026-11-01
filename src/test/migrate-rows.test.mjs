@@ -25,7 +25,7 @@ function doc(over) {
   return migrateRows(Object.assign({ schema: 2, title: "T", rows: [] }, over));
 }
 
-test("#1041: duplicate-row comments and sections stay on the first scene across repeated loads", () => {
+test("#1041: duplicate-row references keep the first scene while comments follow their first actual mark", () => {
   const mark = (id, words) => '<span class="cmt-anchor" data-cmt="' + id + '">' + words + '</span>';
   const s = doc({
     rows: [
@@ -42,15 +42,47 @@ test("#1041: duplicate-row comments and sections stay on the first scene across 
     sections: [{ id: "part", name: "Part", firstSceneId: "scene.1" }]
   });
   assert.equal(new Set(s.rows.map(r => r.id)).size, 3);
-  assert.deepEqual(s.comments.map(c => c.rowId), ["scene1", "scene1", "scene1", "other"]);
+  assert.deepEqual(s.comments.map(c => c.rowId), ["scene1", s.rows[1].id, "scene1", "other"]);
   assert.deepEqual(s.comments.map(c => c.body), ["shared comment", "later comment", "unmerged words", "unique comment"]);
   assert.equal(s.comments[1].quotedText, "only later");
   assert.equal(s.rows[0].audioText, mark("shared", "first"));
-  assert.equal(s.rows[1].audioText, "second only later");
+  assert.equal(s.rows[1].audioText, mark("shared", "second") + mark("later", " only later"));
   assert.equal(s.rows[2].audioText, mark("unique", "third"));
   assert.deepEqual(s.sections, [{ id: "part", name: "Part", firstSceneId: "scene1" }]);
   assert.deepEqual(s.brollShots.map(b => [b.name, b.audioRef]), [["First shot", "first"], ["Second shot", "second only later"]]);
   assert.equal(JSON.stringify(migrateRows(JSON.parse(JSON.stringify(s)))), JSON.stringify(s));
+});
+
+test("#1041: duplicate ids reload identically without changing their document or scene identities", () => {
+  const raw = { schema: 2, docId: "d" + "4".repeat(32), title: "Repeat load", rows: [
+    { id: "a", audioText: "w0" }, { id: "b", audioText: "b" }, { id: "a", audioText: "w2" }
+  ] };
+  const first = migrateRows(structuredClone(raw));
+  const second = migrateRows(structuredClone(raw));
+  assert.equal(JSON.stringify(second), JSON.stringify(first));
+  assert.deepEqual(first.rows.map(r => r.id), ["a", "b", "a-1"]);
+});
+
+test("#1041: a comment spanning a unique scene keeps every mark when another scene id is duplicated", () => {
+  const first = '<span class="cmt-anchor" data-cmt="c1">first half</span>';
+  const second = '<span class="cmt-anchor" data-cmt="c1">second half</span>';
+  const s = doc({ rows: [
+    { id: "a", audioText: first }, { id: "b", audioText: second }, { id: "a", audioText: "duplicate" }
+  ], comments: [{ id: "c1", rowId: "a", field: "audioText" }] });
+  assert.equal(s.rows[0].audioText, first);
+  assert.equal(s.rows[1].audioText, second);
+  assert.equal(s.comments[0].rowId, "a");
+  assert.equal(JSON.stringify(migrateRows(structuredClone(s))), JSON.stringify(s));
+});
+
+test("#1041: a comment whose only mark is on a unique scene still follows that mark", () => {
+  const marked = '<span class="cmt-anchor" data-cmt="c1">only here</span>';
+  const s = doc({ rows: [
+    { id: "a", audioText: "plain" }, { id: "b", audioText: marked }, { id: "a", audioText: "duplicate" }
+  ], comments: [{ id: "c1", rowId: "a", field: "audioText" }] });
+  assert.equal(s.rows[1].audioText, marked);
+  assert.equal(s.comments[0].rowId, "b");
+  assert.equal(JSON.stringify(migrateRows(structuredClone(s))), JSON.stringify(s));
 });
 
 test("#1041: media on duplicate rows becomes a separate comment on each repaired scene", () => {

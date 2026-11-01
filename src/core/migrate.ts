@@ -39,7 +39,6 @@ import { toHtml } from "./text/html.ts";
 import { toPlainText } from "./text/projections.ts";
 import type { DecodeOptions } from "./text/ports.ts";
 import type { Run } from "./text/runs.ts";
-import { commentIds, normalizeCell } from "./text/runs.ts";
 
 type MigrateDecoder = (html: string, opts: DecodeOptions) => readonly Run[];
 
@@ -168,27 +167,6 @@ function shotRenamesFor(shots: readonly Bag[], rows: readonly ProductionRow[], r
   return wanted;
 }
 
-function keepAmbiguousAnchorsOnFirstRow(s: Bag, duplicates: ReadonlySet<string>, readers: ProductionReaders): void {
-  if (!duplicates.size) return;
-  const anchorRows = new Map<string, string>();
-  (s.comments as Bag[]).forEach(function (c) {
-    if (c.kind !== "conflict" && c.field !== "title" && duplicates.has(c.rowId as string)) {
-      anchorRows.set(c.anchorId as string, c.rowId as string);
-    }
-  });
-  (s.rows as Bag[]).forEach(function (r) {
-    const keep = (id: string) => !anchorRows.has(id) || anchorRows.get(id) === r.id;
-    MEDIA_FIELDS.forEach(function (field) {
-      const html = r[field] as string;
-      if (!html.includes("cmt-anchor")) return;
-      const cell = readers.cellOf(html);
-      if (commentIds(cell).every(keep)) return;
-      // why: Ambiguous references belong to the first row; later marks would move them again on the next load or edit.
-      r[field] = toHtml(normalizeCell(cell, { hasComment: keep }));
-    });
-  });
-}
-
 export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocument {
   const s: Bag = isDocumentObject(input) ? input : { title: "Untitled Script", rows: [], comments: [] };
   const fields = ports.fields || STATE_FIELDS;
@@ -207,13 +185,19 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   const reservedRowIds = new Set(originalRowIds.filter(Boolean));
   const usedRowIds = new Set<string>();
   const duplicateRowIds = new Set<string>();
+  const rowIdSuffixes = new Map<string, number>();
   let movedMedia: MediaComment[] = [];
   (s.rows as Bag[]).forEach(function (r, at) {
     let id = safeId(r.id, "r", ids);
-    if (usedRowIds.has(id) || (!originalRowIds[at] && reservedRowIds.has(id))) {
-      if (originalRowIds[at]) duplicateRowIds.add(id);
-      // why: Reserve later rows' ids too, so repairing a duplicate never renames an otherwise unique scene.
-      do { id = ids.id("r"); } while (reservedRowIds.has(id));
+    if (originalRowIds[at] && usedRowIds.has(id)) {
+      duplicateRowIds.add(id);
+      // why: Disk reloads must repair the same scene identically, or draft recovery mistakes it for a new scene.
+      let suffix = rowIdSuffixes.get(id) || 0;
+      do { suffix++; } while (reservedRowIds.has(id + "-" + suffix));
+      rowIdSuffixes.set(id, suffix);
+      id += "-" + suffix;
+    } else if (!originalRowIds[at]) {
+      while (reservedRowIds.has(id)) id = ids.id("r");
     }
     r.id = id;
     reservedRowIds.add(id);
@@ -289,7 +273,6 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     }
     c.assignee = c.assignee ? cappedText(c.assignee, 80) : "";
   });
-  keepAmbiguousAnchorsOnFirstRow(s, duplicateRowIds, ports.readers);
   syncCommentAnchors(s as ValidatedDocument, ports.readers.cellOf);
 
   if (!Array.isArray(s.people)) s.people = [];
