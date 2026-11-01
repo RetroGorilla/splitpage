@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/desktop/desktop.js",
+    "src/features/desktop/desktop.ts",
     "src/features/desktop/actions.ts",
     "src/adapters/desktop/desktop-blobs.ts",
     "src/adapters/desktop/desktop-voice.js",

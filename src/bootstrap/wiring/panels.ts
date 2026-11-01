@@ -9,7 +9,7 @@ import { currentPlainTags } from "./plain-tags.ts";
 import { onPainted } from "../../features/rows/render.ts";
 import { refreshGalleryOverlay } from "../../features/gallery/overlay.ts";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.ts";
-import { paintTargetOverlay } from "../../features/rundown/target.js";
+import { paintTargetOverlay } from "../../features/rundown/target.ts";
 import { refreshAnnotator } from "../../features/gallery/annotate.ts";
 import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../features/tags/panels.ts";
 import { runBrollRefresh } from "../../features/broll/panel.ts";

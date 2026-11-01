@@ -7,7 +7,7 @@ import type { DocumentRow } from "../../core/document/validated.ts";
 import type { PlainTextOptions } from "../../core/text/projections.ts";
 import type { ExportRun } from "./export-kit.ts";
 import type { BreakdownRow, CommentBody, SceneFacts } from "./export-projections.ts";
-import { internDataUrl, queuePersist } from "../storage/02c-blobs.js";
+import { internDataUrl, queuePersist } from "../storage/02c-blobs.ts";
 import { rowImage } from "../../core/document/media.ts";
 import { morePictureRefs, rowVideoLinks } from "../../core/document/gallery.ts";
 import { imageDims, sniffImageMime } from "../../../shared/blob-policy.js";
@@ -78,6 +78,7 @@ interface NarrationOptions { directions?: unknown }
 interface ImportOptions { ownExport: boolean }
 type LinkMap = Record<string, string | null>;
 interface ImportedRow {
+  [key: string]: unknown;
   id: string;
   visualText: string;
   imageRef: ImageRef | null;

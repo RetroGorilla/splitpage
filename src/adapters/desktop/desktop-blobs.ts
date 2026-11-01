@@ -1,5 +1,5 @@
 import type { DesktopPort } from "./desktop-port.ts";
-import { setBackend as setBlobBackend } from "../storage/02c-blobs.js";
+import { setBackend as setBlobBackend } from "../storage/02c-blobs.ts";
 
 const DESKTOP_BLOB_MISSING_SLICE = 2000;
 
@@ -13,7 +13,7 @@ export function wireDesktopBlobs(bridge: Partial<Pick<DesktopPort, "blobPut" | "
   setBlobBackend(backend);
 }
 
-export function makeDesktopBlobBackend(bridge: Partial<Pick<DesktopPort, "blobPut" | "blobGet" | "blobMissing">> | null) {
+export function makeDesktopBlobBackend(bridge: Partial<Pick<DesktopPort, "blobPut" | "blobGet" | "blobMissing">> | null): (NonNullable<Parameters<typeof setBlobBackend>[0]> & { kind: string }) | null {
   const b = bridge;
   if (!b || typeof b.blobPut !== "function" || typeof b.blobGet !== "function" || typeof b.blobMissing !== "function") {
     return null;
@@ -54,7 +54,7 @@ export function makeDesktopBlobBackend(bridge: Partial<Pick<DesktopPort, "blobPu
             return out.concat(Array.isArray(m) ? m : slice);
           });
         });
-      }, Promise.resolve([] as readonly string[]));
+      }, Promise.resolve<string[]>([]));
     }
   };
 }

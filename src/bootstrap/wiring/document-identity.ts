@@ -1,9 +1,9 @@
-import { createDocumentIdentityOwner } from "../../application/identity/document-identity.js";
+import { createDocumentIdentityOwner } from "../../application/identity/document-identity.ts";
 import type { DocumentIdentityOwner, DocumentIdentityPorts } from "../../application/identity/ports.ts";
 import type { IdentityPort } from "../../application/transitions/ports.ts";
 import { documentGuardOn, documentView, quietly } from "../../application/identity/document-guard.ts";
 import { heldDocument, currentDocument } from "./session-owner.ts";
-import { startStandaloneHtml } from "../../adapters/page/standalone-html.js";
+import { startStandaloneHtml } from "../../adapters/page/standalone-html.ts";
 import { migrateRows } from "../document-ports.ts";
 import { documentIdentityPorts } from "./ports/document-identity.ts";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";

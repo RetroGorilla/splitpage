@@ -545,7 +545,7 @@ sides:
 
 This fixes the named case: a tag re-wrap (marks only) on one side plus a
 word edit on the other merges cleanly. The on-disk merge review
-(`src/features/merge/local-merge.js`) uses the same function, so its preview and its outcome
+(`src/features/merge/local-merge.ts`) uses the same function, so its preview and its outcome
 can no longer disagree.
 
 **Built (step 6).** `mergeTextField(base, mine, theirs, ctx)` in
