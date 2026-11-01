@@ -1,6 +1,6 @@
-# Drawing on a picture in a scene's gallery (2026-09-27; features/gallery/annotate.ts,
-# the gallery dialog's Annotate button in src/features/gallery/overlay.ts, the data
-# layer in 02d-gallery.js), driven with real mouse input:
+# Drawing on a picture in a scene's gallery (2026-09-27; src/features/gallery/annotate.ts,
+# the gallery dialog's Annotate button in features/gallery/overlay.ts, the data
+# layer in src/adapters/storage/02d-gallery.ts), driven with real mouse input:
 #   * Annotate is offered for a picture, not a video's tile;
 #   * a pen stroke and a highlight (drawn once where it crosses itself) are
 #     marks; the eraser takes a whole mark; a text is placed, typed, put
