@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { ReadTimePorts } from "../../../src/features/rows/ports.ts";
-import { startReadTime as mountReadTime, readTimeEditing, setSceneLength } from "../../../src/features/rows/read-time.js";
+import { startReadTime as mountReadTime, readTimeEditing, setSceneLength } from "../../../src/features/rows/read-time.ts";
 import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeUndo } from "../fakes.ts";

@@ -14,7 +14,7 @@ const undoSizes = () => undoOwner().sizes();
 const stubs = await import("./_fanout-stubs.mjs");
 const { createSceneStatus } = await import("../features/rows/scene-status.ts");
 const { cycleRowStatus } = createSceneStatus(stubs.sceneStatusPorts());
-const { startReadTime: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
+const { startReadTime: mountReadTime, setSceneLength } = await import("../features/rows/read-time.ts");
 mountReadTime(stubs.readTimePorts());
 const { loadTestDocument } = await import("./_document.mjs");
 
