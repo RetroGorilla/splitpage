@@ -3,6 +3,7 @@ import { cssDurationMs } from "../common/css-duration.ts";
 export function rowMotionKey(el) {
   if (!el || !el.classList) return null;
   if (el.classList.contains("row")) return "row:" + el.getAttribute("data-id");
+  if (el.classList.contains("section-header")) return "section:" + el.getAttribute("data-section-id");
   if (el.classList.contains("hidden-shot-strip")) return "strip:" + el.getAttribute("data-ids");
   return null;
 }
