@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { cellOf } from "../bootstrap/richtext.ts";
 import { projection } from "../core/text/runs.ts";
-import { bulkTagCell } from "../features/tags/production-tags.js";
+import { bulkTagCell } from "../features/tags/production-tags.ts";
 
 import { bulkTagRows } from "../bootstrap/wiring/production-index.ts";
 import { loadTestDocument } from "./_document.mjs";
