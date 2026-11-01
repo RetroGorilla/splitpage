@@ -4,7 +4,7 @@ import { documentIdentityOwner } from "../bootstrap/wiring/document-identity.ts"
 import "./_production-tags-started.mjs";
 import { installProjectFileServices, projectFileServicesStarted } from "../application/formats/project-file-services.ts";
 import { wireProjectFiles } from "../bootstrap/wiring/project-files.ts";
-import { adoptRestoredState, migrateDocument } from "../bootstrap/startup/document-entry.js";
+import { adoptRestoredState, migrateDocument } from "../bootstrap/startup/document-entry.ts";
 import { standaloneHtmlFor } from "../adapters/page/standalone-html.js";
 const docIdEvents = (...args) => documentIdentityOwner().docIdEvents(...args);
 const initDocIdentityChannel = (...args) => documentIdentityOwner().initDocIdentityChannel(...args);

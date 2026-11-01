@@ -91,7 +91,7 @@ The source runs inside the `openDocument` call, so an opening that adopts at onc
 | `loadFileIntoEditor`'s import branch (`application/transitions/local-files.js`): an import, entered with `{ raw }` and `NO_DESTINATION` (until 2026-10-30 the import destination, 4.12) | `open`, not written out |
 | `adoptUntitledDraft` and `recoverDraftAsUnsavedCopy` (`application/recovery/drafts.ts`): an unsaved copy of a draft (4.18), including a leftover desktop draft whose origin was a server document, which restores as untitled | `recover`, detached |
 | `restoreFileDraft`'s applied branch (`application/recovery/drafts.ts`), after `adoptProjectState` has opened the file (4.18) | `restore` |
-| `adoptRestoredState` (`bootstrap/startup/document-entry.js`): a history version (4.18) | `restore`, with `{ raw }` |
+| `adoptRestoredState` (`bootstrap/startup/document-entry.ts`): a history version (4.18) | `restore`, with `{ raw }` |
 
 Every caller now hands the transition a document it owns (`draftMigrate` output, or `{ raw: cloneState(...) }`), so `restore` and `recover` setting `docId` on the incoming document touches nothing a caller keeps (the note on PR #555, closed in 4.18).
 
