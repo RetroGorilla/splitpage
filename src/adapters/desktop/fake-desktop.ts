@@ -25,13 +25,13 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _chromiumAnswer?: NonNullable<Awaited<ReturnType<DesktopPort["openPrompterInChromium"]>>>;
 };
 
-type MutablePort = { -readonly [K in keyof DesktopPort]?: DesktopPort[K] };
-type FakeBlobBackend = MutablePort & {
+type MutablePort<K extends keyof DesktopPort> = { -readonly [P in K]?: DesktopPort[P] };
+type FakeBlobBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & MutablePort<"blobPut" | "blobGet" | "blobMissing"> & {
   _blobs?: Record<string, { bytes: Uint8Array; mime: string }>;
   _blobCalls?: Record<string, unknown>[];
   _blobFailNext?: { code: string } | null;
 };
-type FakeVoiceBackend = Omit<MutablePort, "voiceStatus"> & {
+type FakeVoiceBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & MutablePort<"voiceStart" | "voiceStop" | "onVoiceEvent"> & {
   voiceStatus?: () => Promise<{ [K in "available"]: NonNullable<Awaited<ReturnType<DesktopPort["voiceStatus"]>>>[K] }>;
   _voiceCalls?: { status: number; start: number; stop: number };
   _voiceAvailable?: boolean;
@@ -41,7 +41,7 @@ type FakeVoiceBackend = Omit<MutablePort, "voiceStatus"> & {
   _voiceEmit?: (event: Record<string, unknown>) => void;
 };
 
-type FakeHistoryBackend = MutablePort & {
+type FakeHistoryBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & MutablePort<"historyPut" | "historyList" | "historyGet" | "historyCopy" | "historyTouch" | "historyListDocs"> & {
   _historyDump?: () => Record<string, unknown[]>;
   _historyStore?: ReturnType<typeof createHistoryStore>;
   _historyBackend?: ReturnType<typeof createMemoryHistoryTestBackend>;
@@ -231,15 +231,15 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
     _setBytesKeepMtime: function (id: string, text: string) { if (files[id]) files[id].bytes = strBytes(text); },
     _fireOpenFile: function (id: string) {
       const f = files[id];
-      if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes } as Parameters<Parameters<DesktopPort["onOpenFile"]>[0]>[0]);
+      if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
     },
     _fireMenuCommand: function (cmd: string) { if (menuHandler) menuHandler(cmd); },
     _fireRestoreNotice: function (notice: Parameters<Parameters<DesktopPort["onRestoreNotice"]>[0]>[0]) { if (restoreNoticeHandler) restoreNoticeHandler(notice); },
     _fireReassignDocId: function (msg: Parameters<Parameters<DesktopPort["onReassignDocId"]>[0]>[0]) { if (reassignDocIdHandler) reassignDocIdHandler(msg); }
   } satisfies ThisType<FakeExtras>;
-  if (opts && opts.history) addFakeDesktopHistory(backend as FakeHistoryBackend);
-  if (opts && opts.blobs) addFakeDesktopBlobs(backend as FakeBlobBackend, opts);
-  if (opts && opts.voice) addFakeDesktopVoice(backend as FakeVoiceBackend);
+  if (opts && opts.history) addFakeDesktopHistory(backend);
+  if (opts && opts.blobs) addFakeDesktopBlobs(backend, opts);
+  if (opts && opts.voice) addFakeDesktopVoice(backend);
   return backend;
 }
 
