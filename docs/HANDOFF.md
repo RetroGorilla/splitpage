@@ -797,7 +797,7 @@ Names are plain text, limited to 200 code points. See
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",
     "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
                   "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
-    // the scene's gallery (#135, 02d-gallery.js), each key absent when empty:
+    // the scene's gallery (#135, 02d-gallery.ts), each key absent when empty:
     "imageName": "wide.png",
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
     // a poster link's item's imageRef is its still: a file's first frame, or

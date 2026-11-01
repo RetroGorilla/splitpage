@@ -1,4 +1,4 @@
-# A scene's Image section is a gallery (#135; 02d-gallery.js for the
+# A scene's Image section is a gallery (#135; src/adapters/storage/02d-gallery.ts for the
 # model, rowGalleryHtml in 05-render.js for the cell, 05e-gallery-overlay.js
 # for its dialog), drawn as Adam's chosen design:
 #   * in the cell, a capped mosaic: 1 item is the picture as before; 3 and 4
