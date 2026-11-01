@@ -1,4 +1,4 @@
-import type { HistoryBackendOptions, HistoryTestingStorage, HistoryDesktopPort, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult } from "../../application/recovery/history-ports.ts";
+import type { HistoryBackendOptions, HistoryTestingStorage, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult } from "../../application/recovery/history-ports.ts";
 import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult, HistoryStoreUsage } from "./history-backend-types.ts";
 
 type HistoryStore = {
@@ -67,7 +67,11 @@ export interface HistoryBackendAccess {
 export function createHistoryBackends(ports: HistoryBackendOptions, probe?: HistoryBackendProbe) {
   const historyNow = ports.now;
   const historyProtectedList = ports.holds;
-  const desktopPort = ports.desktop as () => HistoryDesktopPort;
+  const desktopPort = function () {
+    const port = ports.desktop();
+    if (!port) throw new TypeError("The desktop history port is unavailable");
+    return port;
+  };
   const runningOnDesktop = ports.runningOnDesktop;
 const HISTORY_BROWSER_MIN_CAP = 5 * 1024 * 1024;
 const HISTORY_BROWSER_HEADROOM = 50 * 1024 * 1024;

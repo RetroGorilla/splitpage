@@ -252,3 +252,32 @@ test("the default owner and storage have no test controls and preserve capture, 
   await h.stop();
   assert.equal(h.closed(), 1);
 });
+
+test("restarting the same owner resets its test clock and export capacity", async () => {
+  const h = await harness();
+  const controls = h.owner.testControls();
+  controls.setNow(1);
+  controls.setExportCap(0);
+  const first = h.owner.captureSnapshot("First", document());
+  assert.equal((await first.done).stored, true);
+  assert.equal((await h.owner.getHistorySnapshot({ docId, id: first.id })).meta.atMs, 1);
+  assert.equal((await h.owner.captureSnapshot("Second", document("Second")).done).stored, true);
+  assert.equal((await h.owner.exportHistoryAll()).truncated, true);
+  await h.stop();
+  const stop = h.owner.startHistory(h.ports);
+  assert.throws(() => controls.setNow(2), /not started yet/);
+  const next = h.owner.captureSnapshot("Next", document("Next"));
+  assert.equal((await next.done).stored, true);
+  assert.equal((await h.owner.getHistorySnapshot({ docId, id: next.id })).meta.atMs, 1000);
+  const bundle = await h.owner.exportHistoryAll();
+  assert.equal(bundle.truncated, false);
+  assert.equal(bundle.docs[0].snapshots.length, 3);
+  await stop();
+});
+
+test("a missing desktop history port still throws during backend resolution", () => {
+  for (const probe of [undefined, createHistoryBackendProbe()]) {
+    const storage = createHistoryBackends({ now: () => 1000, holds: () => [], desktop: () => null, runningOnDesktop: () => true }, probe);
+    assert.throws(() => storage.resolveHistoryBackend(), TypeError);
+  }
+});
