@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/merge/local-merge.js",
+    "src/features/merge/local-merge.ts",
     "src/bootstrap/wiring/merge-review.ts",
     "src/application/session/session-merge.js",
     "src/bootstrap/wiring/session-merge.ts",

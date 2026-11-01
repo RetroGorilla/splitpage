@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startLocalMerge } from "../../../src/features/merge/local-merge.js";
+import { startLocalMerge } from "../../../src/features/merge/local-merge.ts";
 import type { MergeReviewPorts } from "../../../src/features/merge/ports.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
