@@ -89,7 +89,9 @@ if (location.origin === "splitpage://app") {
       );
   });
 
-  function reviveFileEntry<T extends DesktopFileEntry | null>(entry: T): T {
+  function reviveFileEntry(entry: DesktopFileEntry): DesktopFileEntry;
+  function reviveFileEntry(entry: DesktopFileEntry | null): DesktopFileEntry | null;
+  function reviveFileEntry(entry: DesktopFileEntry | null): DesktopFileEntry | null {
     if (entry && entry.bytes && !(entry.bytes instanceof Uint8Array)) {
       entry = { ...entry, bytes: new Uint8Array(entry.bytes) };
     }
@@ -131,7 +133,7 @@ if (location.origin === "splitpage://app") {
     },
 
     readFile(id) {
-      return invoke("splitpage:read-file", id).then(reviveFileEntry);
+      return invoke("splitpage:read-file", id).then<DesktopFileEntry>(reviveFileEntry);
     },
 
     writeFile(id, data) {
