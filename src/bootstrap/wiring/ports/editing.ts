@@ -8,7 +8,7 @@ import type { CellEditing } from "../../../application/editing/cell-editing.ts";
 import { cellEditing, editorSelection, focusMemory } from "../editor-owners.ts";
 import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../session-owner.ts";
 import { paintGuard, undoGuard } from "../editor-owners.ts";
-import { appendDraftMedia, draftModel, editDraft } from "../../../features/editing/draft-edit.js";
+import { appendDraftMedia, draftModel, editDraft } from "../../../features/editing/draft-edit.ts";
 import { isDraftBox, isScriptCell } from "../../../features/editing/cell-page.ts";
 
 export const renderEditing = { cells: cellEditing, selection: editorSelection, paint: paintGuard, undo: undoGuard };
