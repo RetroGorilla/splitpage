@@ -37,7 +37,7 @@ Start with the feature map: run `node tools/code-map.mjs` (or `node tools/code-m
 2. `src/bootstrap/wiring/X.ts`: which real owner each port field comes from.
 3. The port module or owner it names, under `src/bootstrap/wiring/ports/` or `src/application/`.
 
-A moved feature file starts through `start<Name>(ports)`, such as `startFind` in `find.js`. Changing logic inside a feature is normally one file. Giving a feature a new dependency means its `ports.ts`, its wiring file, its tests and the fake in `tests/features/fakes.ts`.
+A moved feature file starts through `start<Name>(ports)`, such as `startFind` in `find.ts`. Changing logic inside a feature is normally one file. Giving a feature a new dependency means its `ports.ts`, its wiring file, its tests and the fake in `tests/features/fakes.ts`.
 
 ## Hard rules
 
