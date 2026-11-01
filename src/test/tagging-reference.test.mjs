@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { PLAIN_TAG_KEYWORDS } from "../features/tags/plain-tags.js";
+import { PLAIN_TAG_KEYWORDS } from "../features/tags/plain-tags.ts";
 
 const html = readFileSync(new URL("../page.html", import.meta.url), "utf8");
 const doc = new DOMParser().parseFromString(html, "text/html");

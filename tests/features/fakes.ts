@@ -38,6 +38,11 @@ export function fakePrintDialog() {
   return { printDialog, pages, closed: () => closed };
 }
 
+export function fakeTagCategories() {
+  const selected: (string | null)[] = [];
+  return { selected, renderCategories: (category: string | null) => { selected.push(category); } };
+}
+
 export function fakePdfPrinter() {
   const pages: { html: string; doc: ExportDocument }[] = [];
   const pdf = new Uint8Array([37, 80, 68, 70]);

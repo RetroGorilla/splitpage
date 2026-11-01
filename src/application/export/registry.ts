@@ -47,7 +47,7 @@ export interface ExporterDecl<Request = unknown, Doc = unknown> {
   readonly writeback?: boolean;
   readonly bundlesPictures?: boolean;
   readonly fileName: (baseName: string, opts: FileNameOptions) => string;
-  readonly build: (request: Request, baseName: string) => ExportProduct | Promise<ExportProduct>;
+  readonly build?: (request: Request, baseName: string) => ExportProduct | Promise<ExportProduct>;
   readonly printPage?: (request: ExportPrintRequest) => string;
   readonly defaults?: Readonly<Record<string, unknown>>;
   readonly action?: string;
@@ -131,6 +131,7 @@ export function createExportRegistry<Request = unknown, Doc = unknown>(): Export
 
   function register(decl: ExporterDecl<Request, Doc>): () => void {
     if (entries.some((e) => e.id === decl.id)) refuse("exporter " + decl.id + " is already registered");
+    if (!decl.build && !decl.printPage) refuse("exporter " + decl.id + " needs a build or a print page");
     checkSurface(decl);
     const exporter: Exporter<Request, Doc> = Object.freeze({ ...decl });
     entries.push(exporter);

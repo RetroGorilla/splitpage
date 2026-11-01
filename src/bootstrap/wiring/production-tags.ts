@@ -10,6 +10,7 @@ import { tagView } from "./ports/preferences.ts";
 import { notices } from "./ports/effects.ts";
 import { ids } from "./ports/identity.ts";
 import type { ProjectFileServices } from "../../application/formats/project-file-services.ts";
+import { currentPlainTags } from "./plain-tags.ts";
 
 const production = owned<ReturnType<typeof productionTags.startProductionTags>>();
 
@@ -34,7 +35,7 @@ export function wireTagProduction() {
 }
 
 export function tagComposerActions() {
-  return composerDefinitions();
+  return composerDefinitions(currentPlainTags, notices);
 }
 
 export const currentProductionTags = production.owner;

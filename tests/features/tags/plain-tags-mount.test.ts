@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startPlainTags } from "../../../src/features/tags/plain-tags.js";
+import { startPlainTags } from "../../../src/features/tags/plain-tags.ts";
 import type { PlainTagPorts } from "../../../src/features/tags/ports.ts";
 import type { CellEditResult, CellEdit } from "../../../src/application/editing/cell-editing.ts";
 import { projection } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
-import { fakeDocument, fakeTextServices } from "../fakes.ts";
+import { fakeDocument, fakeTagCategories, fakeTextServices } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -22,6 +22,7 @@ function fixture(html: string, model: string) {
   const text = fakeTextServices(win.document);
   const changes: CellEditResult[] = [];
   const ports: PlainTagPorts = {
+    renderCategories: fakeTagCategories().renderCategories,
     document: fakeDocument(null).document,
     cells: {
       edit: (target: Element, change: CellEdit) => {
@@ -47,8 +48,8 @@ function caretAt(node: Node, offset: number): void {
   sel.addRange(range);
 }
 
-function typedColon(): Pick<Event, "target"> {
-  return { inputType: "insertText", data: ":" } as unknown as Pick<Event, "target">;
+function typedColon(): Pick<InputEvent, "inputType" | "data"> {
+  return { inputType: "insertText", data: ":" };
 }
 
 test("plain tags mount with fake ports: the keyword opens, Tab edits through the cells port and the listeners hear it", () => {

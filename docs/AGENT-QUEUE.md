@@ -1033,7 +1033,7 @@ STRUCTURE SECTION MUST SAY
 - The browser print adapter and its named contract, the PDF-only workflow change and user wording, capture and cleanup rules, each updated download assertion and replacement coverage, suite results and Adam's real-dialog/PDF check status. The old writer is kept until P5.
 ```
 
-## AQ-44 [ ] PDF rebuild P5: delete old generator, subsetter and Noto fonts
+## AQ-44 [x] PDF rebuild P5: delete old generator, subsetter and Noto fonts
 
 Needs: AQ-42 and AQ-43 merged; AQ-19 merged (both touch pdf.ts); Adam has checked the new desktop and browser PDFs on the PC and approved removing the old path. Start only after that check is recorded.
 Files: src/adapters/formats/pdf.ts, pdf-unicode.ts, truetype.ts, pdf-fonts/noto-sans-regular.ts, pdf-fonts/noto-sans-bold.ts and pdf-fonts/noto-emoji.ts; tools/pdf-font-module.mjs, licenses/OFL-noto-sans.txt, licenses/OFL-noto-emoji.txt and licenses/README.md where no remaining use needs them; tests audited but never deleted by the agent, remaining importers/wiring and docs found in step 0.
