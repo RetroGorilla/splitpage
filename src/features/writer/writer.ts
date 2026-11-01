@@ -15,6 +15,10 @@ import type { DocumentView } from "../../application/session/document-session.ts
 type WriterDocument = Pick<DocumentView, "title" | "rows">;
 type WriterCurrentDocument = (...args: Parameters<WriterFeaturePorts["document"]["current"]>) => WriterDocument | null;
 type WriterRow = DocumentView["rows"][number];
+type WriterToggleFormat = (
+  cell: Parameters<WriterFeaturePorts["formatting"]["toggle"]>[0],
+  command: Parameters<WriterFeaturePorts["formatting"]["toggle"]>[1] | null
+) => ReturnType<WriterFeaturePorts["formatting"]["toggle"]>;
 interface WriterRedoBoundary {
   top: ReturnType<WriterFeaturePorts["undo"]["last"]>;
   mark: number;
@@ -234,7 +238,7 @@ export function onWriterFormat(btn: Element) {
   const cmd = btn.getAttribute("data-cmd");
   (cellEl as HTMLElement).focus();
   if (cmd === "direction") (toggleCellDirection as WriterFeaturePorts["formatting"]["direction"])(cellEl);
-  else (toggleCellFormat as WriterFeaturePorts["formatting"]["toggle"])(cellEl, cmd as string);
+  else (toggleCellFormat as WriterToggleFormat)(cellEl, cmd);
   updateWriterFormatState();
 }
 
