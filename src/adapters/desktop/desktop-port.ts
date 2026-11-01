@@ -14,6 +14,7 @@ export interface DesktopFileEntry {
   readonly name: string;
   readonly bytes?: Uint8Array;
   readonly lastModified?: number;
+  readonly size?: number;
 }
 
 export interface DesktopLaunchIntent {

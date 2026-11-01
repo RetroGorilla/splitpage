@@ -1,3 +1,60 @@
+import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
+import type { DraftPayload } from "../../application/recovery/draft-origin.ts";
+import type { DesktopFileEntry, DesktopPort } from "./desktop-port.ts";
+
+type FlushHandler = Parameters<DesktopPort["onDraftFlush"]>[0];
+
+type FakeExtras = Pick<DesktopPort, "listRecents"> & {
+  _cancelNextSave?: boolean;
+  _routeMissing?: boolean;
+  _lastRoute?: unknown;
+  _routeAnswer?: NonNullable<Awaited<ReturnType<DesktopPort["routeOpen"]>>>;
+  _externalOpens?: string[];
+  _videoGrants?: Record<string, string | null | undefined>;
+  _videoOpens?: string[];
+  _printed?: string[];
+  _printAnswer?: Awaited<ReturnType<DesktopPort["printToPdf"]>>;
+  _thumbCalls?: [string, string][];
+  _thumbAnswer?: Awaited<ReturnType<DesktopPort["videoThumbnail"]>>;
+  _prompterCalls?: number;
+  _chromiumCalls?: number;
+  _lastDocState?: unknown;
+  _prompterDocState?: unknown;
+  _chromiumDocState?: unknown;
+  _prompterAnswer?: NonNullable<Awaited<ReturnType<DesktopPort["openPrompterInBrowser"]>>>;
+  _chromiumAnswer?: NonNullable<Awaited<ReturnType<DesktopPort["openPrompterInChromium"]>>>;
+};
+
+type MutablePort<K extends keyof DesktopPort> = { -readonly [P in K]?: DesktopPort[P] };
+type FakeBlobBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & MutablePort<"blobPut" | "blobGet" | "blobMissing"> & {
+  _blobs?: Record<string, { bytes: Uint8Array; mime: string }>;
+  _blobCalls?: Record<string, unknown>[];
+  _blobFailNext?: { code: string } | null;
+};
+type FakeVoiceBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & MutablePort<"voiceStart" | "voiceStop" | "onVoiceEvent"> & {
+  voiceStatus?: () => Promise<{ [K in "available"]: NonNullable<Awaited<ReturnType<DesktopPort["voiceStatus"]>>>[K] }>;
+  _voiceCalls?: { status: number; start: number; stop: number };
+  _voiceAvailable?: boolean;
+  _voiceSession?: number;
+  _voiceRunning?: boolean;
+  _voiceStartAnswer?: Awaited<ReturnType<DesktopPort["voiceStart"]>>;
+  _voiceEmit?: (event: Record<string, unknown>) => void;
+};
+
+type FakeHistoryBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & MutablePort<"historyPut" | "historyList" | "historyGet" | "historyCopy" | "historyTouch" | "historyListDocs"> & {
+  _historyDump?: () => Record<string, unknown[]>;
+  _historyStore?: ReturnType<typeof createHistoryStore>;
+  _historyBackend?: ReturnType<typeof createMemoryHistoryTestBackend>;
+};
+
+type FakeQueryFields = { [K in keyof Parameters<HistoryOwner["getHistorySnapshot"]>[0] | keyof NonNullable<Parameters<DesktopPort["historyPut"]>[3]>]?: unknown };
+
+type FakeDraft = { [K in keyof Pick<DraftPayload, "seq" | "editSeq" | "originKind" | "baseJson" | "stateJson">]?: unknown };
+
+type FakeOptions = { history?: boolean; blobs?: boolean; voice?: boolean; blobHash?: (bytes: Uint8Array) => string };
+type FakeFile = { -readonly [K in keyof Required<Pick<DesktopFileEntry, "name" | "bytes" | "lastModified">>]: Required<Pick<DesktopFileEntry, "name" | "bytes" | "lastModified">>[K] };
+type FakeRecent = { fileId: string; name: string; title: string; at: number };
+
 import { createMemoryHistoryTestBackend } from "../storage/history-backend-testing.ts";
 import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.js";
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
@@ -5,28 +62,28 @@ import { hashText as historyHashText } from "../storage/03c-history-idb.ts";
 import { createHistoryStore } from "../../../shared/history-store.js";
 import { strBytes } from "../formats/bytes.ts";
 
-export function makeFakeDesktopBackend(opts) {
-  var files = {};
-  var recents = [];
-  var nextId = 1;
-  var openHandler = null;
-  var menuHandler = null;
-  var restoreNoticeHandler = null;
-  var reassignDocIdHandler = null;
+export function makeFakeDesktopBackend(opts?: FakeOptions) {
+  const files: Record<string, FakeFile> = {};
+  let recents: FakeRecent[] = [];
+  let nextId = 1;
+  let openHandler: Parameters<DesktopPort["onOpenFile"]>[0] | null = null;
+  let menuHandler: Parameters<DesktopPort["onMenuCommand"]>[0] | null = null;
+  let restoreNoticeHandler: Parameters<DesktopPort["onRestoreNotice"]>[0] | null = null;
+  let reassignDocIdHandler: Parameters<DesktopPort["onReassignDocId"]>[0] | null = null;
   function newId() { return "fake" + (nextId++); }
 
-  var draftStore = { floor: -Infinity, current: null, previous: null, base: null, writes: 0, failures: 0 };
-  var draftLog = [];
-  var draftTaken = null;
-  var flushHandler = null;
-  var draftFailNext = null;
-  function draftFail(code) {
+  const draftStore: { floor: number; current: { header: unknown; stateJson: string } | null; previous: { header: unknown; stateJson: string } | null; base: unknown; writes: number; failures: number } = { floor: -Infinity, current: null, previous: null, base: null, writes: 0, failures: 0 };
+  const draftLog: Record<string, unknown>[] = [];
+  let draftTaken: unknown = null;
+  let flushHandler: FlushHandler | null = null;
+  let draftFailNext: { code: string; count: number } | null = null;
+  function draftFail(code: string) {
     if (code !== "HELD" && code !== "NEED_BASE" && code !== "STALE_SEQ" && code !== "DISCARDED") draftStore.failures++;
     draftStore.base = null;
     return Promise.resolve({ ok: false, code: code });
   }
 
-  var backend = {
+  const backend = {
     isDesktop: true,
     platform: "test",
     appVersion: "0.0.0-test",
@@ -39,21 +96,21 @@ export function makeFakeDesktopBackend(opts) {
     hasDraftToRestore: false,
 
     openFileDialog: function () { return Promise.resolve(null); },
-    saveFileDialog: function (opts) {
+    saveFileDialog: function (opts?: Partial<Parameters<DesktopPort["saveFileDialog"]>[0]> | null) {
       if (this._cancelNextSave) { this._cancelNextSave = false; return Promise.resolve(null); }
-      var id = newId();
+      const id = newId();
       files[id] = { name: (opts && opts.suggestedName) || "untitled", bytes: new Uint8Array(0), lastModified: Date.now() + nextId };
-      return Promise.resolve({ id: id, name: files[id].name });
+      return Promise.resolve({ id: id, name: (files[id] as FakeFile).name });
     },
-    readFile: function (id) {
-      var f = files[id];
+    readFile: function (id: string) {
+      const f = files[id];
       if (!f) return Promise.reject(new Error("ENOENT"));
       return Promise.resolve({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
     },
-    writeFile: function (id, data) {
-      var f = files[id];
+    writeFile: function (id: string, data: unknown) {
+      const f = files[id];
       if (!f) return Promise.reject(new Error("ENOENT"));
-      var bytes = data instanceof Uint8Array ? data
+      const bytes = data instanceof Uint8Array ? data
         : (data instanceof ArrayBuffer ? new Uint8Array(data)
         : (ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
         : new Uint8Array(0)));
@@ -61,53 +118,53 @@ export function makeFakeDesktopBackend(opts) {
       f.lastModified = Date.now() + (nextId++);
       return Promise.resolve({ lastModified: f.lastModified, size: bytes.length });
     },
-    statFile: function (id) {
-      var f = files[id];
+    statFile: function (id: string) {
+      const f = files[id];
       return Promise.resolve(f ? { lastModified: f.lastModified, size: f.bytes.length } : null);
     },
-    routeOpen: function (p) {
+    routeOpen: function (p: Partial<Parameters<DesktopPort["routeOpen"]>[0]> | null) {
       if (p && p.kind === "file" && this._routeMissing) return Promise.reject(new Error("ENOENT: file is not readable"));
       this._lastRoute = p ? JSON.parse(JSON.stringify(p)) : null;
       return Promise.resolve(this._routeAnswer || { where: "this-tab" });
     },
 
     listRecents: function () { return Promise.resolve(recents.map(function (r) { return { fileId: r.fileId, name: r.name, title: r.title, at: r.at }; })); },
-    removeRecent: function (fileId) {
+    removeRecent: function (fileId: string) {
       recents = recents.filter(function (r) { return r.fileId !== fileId; });
       return this.listRecents();
     },
     clearRecents: function () { recents = []; return this.listRecents(); },
-    _addRecent: function (fileId, name, title, at) {
+    _addRecent: function (fileId: string, name: string, title?: string, at?: number) {
       recents = recents.filter(function (r) { return r.fileId !== fileId; });
       recents.unshift({ fileId: fileId, name: name, title: title || "", at: at || Date.now() });
       return fileId;
     },
-    onOpenFile: function (cb) { openHandler = cb; },
-    onRestoreNotice: function (cb) { restoreNoticeHandler = cb; },
-    onReassignDocId: function (cb) { reassignDocIdHandler = cb; },
-    onMenuCommand: function (cb) { menuHandler = cb; },
-    setDocumentState: function (s) { this._lastDocState = s; },
+    onOpenFile: function (cb: Parameters<DesktopPort["onOpenFile"]>[0]) { openHandler = cb; },
+    onRestoreNotice: function (cb: Parameters<DesktopPort["onRestoreNotice"]>[0]) { restoreNoticeHandler = cb; },
+    onReassignDocId: function (cb: Parameters<DesktopPort["onReassignDocId"]>[0]) { reassignDocIdHandler = cb; },
+    onMenuCommand: function (cb: Parameters<DesktopPort["onMenuCommand"]>[0]) { menuHandler = cb; },
+    setDocumentState: function (s: Parameters<DesktopPort["setDocumentState"]>[0]) { this._lastDocState = s; },
     getSessionInfo: function () {
       return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
     },
-    openExternal: function (url) { (this._externalOpens = this._externalOpens || []).push(url); },
-    grantVideoFile: function (file) {
+    openExternal: function (url: string) { (this._externalOpens = this._externalOpens || []).push(url); },
+    grantVideoFile: function (file: Partial<Pick<DesktopFileEntry, "name">> | null) {
       this._videoGrants = this._videoGrants || {};
-      var token = "t" + Object.keys(this._videoGrants).length;
+      const token = "t" + Object.keys(this._videoGrants).length;
       this._videoGrants[token] = file && file.name;
       return Promise.resolve(token);
     },
-    openVideoFile: function (token) {
-      var name = this._videoGrants && this._videoGrants[token];
+    openVideoFile: function (token: string) {
+      const name = this._videoGrants && this._videoGrants[token];
       if (!name) return Promise.resolve({ ok: false, code: "UNKNOWN" });
       (this._videoOpens = this._videoOpens || []).push(name);
       return Promise.resolve({ ok: true });
     },
-    printToPdf: function (html) {
+    printToPdf: function (html: string) {
       (this._printed = this._printed || []).push(html);
       return Promise.resolve(this._printAnswer || strBytes("%PDF-1.7\n%fake desktop print\n"));
     },
-    videoThumbnail: function (host, ref) {
+    videoThumbnail: function (host: string, ref: string) {
       (this._thumbCalls = this._thumbCalls || []).push([host, ref]);
       return Promise.resolve(this._thumbAnswer || { ok: false, code: "UNAVAILABLE" });
     },
@@ -122,7 +179,7 @@ export function makeFakeDesktopBackend(opts) {
       return Promise.resolve(this._chromiumAnswer || { ok: true, kind: "file", voice: "browser", browser: "Microsoft Edge" });
     },
 
-    writeDraft: function (payload) {
+    writeDraft: function (payload: FakeDraft | null) {
       draftLog.push({ op: "write", seq: payload && payload.seq, editSeq: payload && payload.editSeq,
                       originKind: payload && payload.originKind, hasBase: !!(payload && payload.baseJson) });
       if (draftFailNext && draftFailNext.count > 0) {
@@ -139,7 +196,7 @@ export function makeFakeDesktopBackend(opts) {
       draftStore.writes++;
       return Promise.resolve({ ok: true, seq: payload.seq, bytes: payload.stateJson.length });
     },
-    discardDraft: function (seq) {
+    discardDraft: function (seq: number | undefined) {
       draftLog.push({ op: "discard", seq: seq });
       if (typeof seq === "number") {
         if (seq < draftStore.floor) return Promise.resolve({ ok: false, code: "STALE_SEQ" });
@@ -154,74 +211,74 @@ export function makeFakeDesktopBackend(opts) {
       draftLog.push({ op: "take" });
       return Promise.resolve(draftTaken);
     },
-    draftRestoreDone: function (outcome) { draftLog.push({ op: "restore-done", outcome: outcome }); },
-    onDraftFlush: function (cb) { flushHandler = cb; },
+    draftRestoreDone: function (outcome: unknown) { draftLog.push({ op: "restore-done", outcome: outcome }); },
+    onDraftFlush: function (cb: Parameters<DesktopPort["onDraftFlush"]>[0]) { flushHandler = cb; },
 
     _drafts: draftStore,
     _draftLog: draftLog,
-    _setDraft: function (taken) { draftTaken = taken; },
-    _failNextDraftWrites: function (code, count) {
+    _setDraft: function (taken: unknown) { draftTaken = taken; },
+    _failNextDraftWrites: function (code: string | null, count: number | null | undefined) {
       draftFailNext = code ? { code: code, count: count == null ? 1 : count } : null;
     },
-    _fireDraftFlush: function () { return flushHandler ? flushHandler() : null; },
-    _addFile: function (name, text) {
-      var id = newId();
+    _fireDraftFlush: function () { return flushHandler ? (flushHandler as () => ReturnType<FlushHandler>)() : null; },
+    _addFile: function (name: string, text: string) {
+      const id = newId();
       files[id] = { name: name, bytes: strBytes(text), lastModified: Date.now() + nextId };
       return id;
     },
-    _text: function (id) { return new TextDecoder().decode(files[id].bytes); },
-    _touch: function (id) { if (files[id]) files[id].lastModified = Date.now() + (nextId++); },
-    _setBytesKeepMtime: function (id, text) { if (files[id]) files[id].bytes = strBytes(text); },
-    _fireOpenFile: function (id) {
-      var f = files[id];
+    _text: function (id: string) { return new TextDecoder().decode((files[id] as FakeFile).bytes); },
+    _touch: function (id: string) { if (files[id]) files[id].lastModified = Date.now() + (nextId++); },
+    _setBytesKeepMtime: function (id: string, text: string) { if (files[id]) files[id].bytes = strBytes(text); },
+    _fireOpenFile: function (id: string) {
+      const f = files[id];
       if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
     },
-    _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); },
-    _fireRestoreNotice: function (notice) { if (restoreNoticeHandler) restoreNoticeHandler(notice); },
-    _fireReassignDocId: function (msg) { if (reassignDocIdHandler) reassignDocIdHandler(msg); }
-  };
+    _fireMenuCommand: function (cmd: string) { if (menuHandler) menuHandler(cmd); },
+    _fireRestoreNotice: function (notice: Parameters<Parameters<DesktopPort["onRestoreNotice"]>[0]>[0]) { if (restoreNoticeHandler) restoreNoticeHandler(notice); },
+    _fireReassignDocId: function (msg: Parameters<Parameters<DesktopPort["onReassignDocId"]>[0]>[0]) { if (reassignDocIdHandler) reassignDocIdHandler(msg); }
+  } satisfies ThisType<FakeExtras>;
   if (opts && opts.history) addFakeDesktopHistory(backend);
   if (opts && opts.blobs) addFakeDesktopBlobs(backend, opts);
   if (opts && opts.voice) addFakeDesktopVoice(backend);
   return backend;
 }
 
-function addFakeDesktopVoice(backend) {
-  var handler = null;
+function addFakeDesktopVoice(backend: FakeVoiceBackend) {
+  let handler: Parameters<DesktopPort["onVoiceEvent"]>[0] | null = null;
   backend._voiceCalls = { status: 0, start: 0, stop: 0 };
   backend._voiceAvailable = true;
   backend._voiceSession = 0;
   backend._voiceRunning = false;
   backend.voiceStatus = function () {
-    backend._voiceCalls.status++;
+    (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).status++;
     return Promise.resolve({ available: backend._voiceAvailable });
   };
   backend.voiceStart = function () {
-    backend._voiceCalls.start++;
+    (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).start++;
     if (backend._voiceStartAnswer) return Promise.resolve(backend._voiceStartAnswer);
-    backend._voiceSession++;
+    (backend._voiceSession as number)++;
     backend._voiceRunning = true;
     return Promise.resolve({ ok: true, session: backend._voiceSession });
   };
   backend.voiceStop = function () {
-    backend._voiceCalls.stop++;
+    (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).stop++;
     backend._voiceRunning = false;
     return Promise.resolve({ ok: true });
   };
-  backend.onVoiceEvent = function (cb) { handler = cb; };
-  backend._voiceEmit = function (event) {
-    var e = Object.assign({ session: backend._voiceSession }, event);
+  backend.onVoiceEvent = function (cb: Parameters<DesktopPort["onVoiceEvent"]>[0]) { handler = cb; };
+  backend._voiceEmit = function (event: Record<string, unknown>) {
+    const e = Object.assign({ session: backend._voiceSession }, event);
     if (handler) handler(e);
   };
 }
 
-function addFakeDesktopBlobs(backend, opts) {
-  var SHA_RE = /^[0-9a-f]{64}$/;
-  var MAX = 16 * 1024 * 1024;
-  var hash = typeof opts.blobHash === "function" ? opts.blobHash : null;
-  var store = {};
-  var calls = [];
-  function sniff(u) {
+function addFakeDesktopBlobs(backend: FakeBlobBackend, opts: FakeOptions) {
+  const SHA_RE = /^[0-9a-f]{64}$/;
+  const MAX = 16 * 1024 * 1024;
+  const hash = typeof opts.blobHash === "function" ? opts.blobHash : null;
+  const store: Record<string, { bytes: Uint8Array; mime: string }> = {};
+  const calls: Record<string, unknown>[] = [];
+  function sniff(u: Uint8Array) {
     if (u.length >= 8 && u[0] === 0x89 && u[1] === 0x50 && u[2] === 0x4e && u[3] === 0x47) return "image/png";
     if (u.length >= 3 && u[0] === 0xff && u[1] === 0xd8 && u[2] === 0xff) return "image/jpeg";
     if (u.length >= 6 && u[0] === 0x47 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x38) return "image/gif";
@@ -230,36 +287,36 @@ function addFakeDesktopBlobs(backend, opts) {
     return null;
   }
   function badSha() { return Promise.reject(new Error("splitpage:blob: argument 1 is not sha256")); }
-  backend.blobPut = function (sha, bytes) {
+  backend.blobPut = function (sha: string, bytes: unknown) {
     calls.push({ op: "put", sha: sha });
     if (typeof sha !== "string" || !SHA_RE.test(sha)) return badSha();
     if (typeof bytes === "string") return Promise.resolve({ ok: false, code: "BAD_BYTES" });
-    var u = bytes instanceof Uint8Array ? bytes : bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : null;
+    const u = bytes instanceof Uint8Array ? bytes : bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : null;
     if (!u) return Promise.reject(new Error("splitpage:blob-put: argument 2 is not bytes"));
     if (!u.length) return Promise.resolve({ ok: false, code: "EMPTY" });
     if (u.length > MAX) return Promise.resolve({ ok: false, code: "TOO_LARGE" });
-    var mime = sniff(u);
+    const mime = sniff(u);
     if (!mime) return Promise.resolve({ ok: false, code: "NOT_AN_IMAGE" });
-    if (backend._blobFailNext) { var f = backend._blobFailNext; backend._blobFailNext = null; return Promise.resolve({ ok: false, code: f.code }); }
+    if (backend._blobFailNext) { const f = backend._blobFailNext; backend._blobFailNext = null; return Promise.resolve({ ok: false, code: f.code }); }
     if (hash && hash(u) !== sha) return Promise.resolve({ ok: false, code: "HASH_MISMATCH" });
     if (store[sha]) return Promise.resolve({ ok: true, stored: false });
     store[sha] = { bytes: new Uint8Array(u), mime: mime };
     return Promise.resolve({ ok: true, stored: true });
   };
-  backend.blobGet = function (sha) {
+  backend.blobGet = function (sha: string) {
     calls.push({ op: "get", sha: sha });
     if (typeof sha !== "string" || !SHA_RE.test(sha)) return badSha();
-    var e = store[sha];
+    const e = store[sha];
     return Promise.resolve(e ? { bytes: new Uint8Array(e.bytes), mime: e.mime } : null);
   };
-  backend.blobMissing = function (shas) {
+  backend.blobMissing = function (shas: readonly string[]) {
     calls.push({ op: "missing", count: Array.isArray(shas) ? shas.length : -1 });
     if (!Array.isArray(shas)) return Promise.reject(new Error("splitpage:blob-missing: argument 1 is not array"));
     if (shas.length > 2000) return Promise.reject(new Error("blob-missing: at most 2000 shas per call"));
     if (!shas.every(function (x) { return typeof x === "string" && SHA_RE.test(x); })) {
       return Promise.reject(new Error("blob-missing: every entry must be a sha256"));
     }
-    var seen = {};
+    const seen: Record<string, boolean> = {};
     return Promise.resolve(shas.filter(function (x) {
       if (seen[x] || store[x]) return false;
       seen[x] = true;
@@ -271,37 +328,37 @@ function addFakeDesktopBlobs(backend, opts) {
   backend._blobFailNext = null;
 }
 
-function addFakeDesktopHistory(backend) {
-  var mem = createMemoryHistoryTestBackend({ name: "desktop-fake", persistent: true });
-  var held = [];
-  var store = createHistoryStore({
+function addFakeDesktopHistory(backend: FakeHistoryBackend) {
+  const mem = createMemoryHistoryTestBackend({ name: "desktop-fake", persistent: true });
+  let held: unknown[] = [];
+  const store = createHistoryStore({
     backend: mem,
     now: Date.now,
     hashText: historyHashText,
     holds: function () { return held; }
   });
 
-  function bucketOf(query) {
-    if (query && query.older === true) return HISTORY_OLDER_KEY;
-    return normalizeDocId(query && query.docId) || null;
+  function bucketOf(query: unknown) {
+    if (query && (query as FakeQueryFields).older === true) return HISTORY_OLDER_KEY;
+    return normalizeDocId(query && (query as FakeQueryFields).docId) || null;
   }
-  function invalid(what) { return Promise.reject(new Error("history: " + what)); }
+  function invalid(what: string) { return Promise.reject(new Error("history: " + what)); }
 
-  backend.historyPut = function (docId, meta, stateJson, opts) {
-    var o = opts && typeof opts === "object" && !Array.isArray(opts) ? opts : {};
-    var older = o.older === true;
-    var id = older ? (docId === null ? HISTORY_OLDER_KEY : null) : normalizeDocId(docId);
-    var m = sanitizeHistoryMeta(meta);
+  backend.historyPut = function (docId: string | null, meta: unknown, stateJson: string, opts?: Parameters<DesktopPort["historyPut"]>[3]) {
+    const o = opts && typeof opts === "object" && !Array.isArray(opts) ? opts : {};
+    const older = o.older === true;
+    const id = older ? (docId === null ? HISTORY_OLDER_KEY : null) : normalizeDocId(docId);
+    const m = sanitizeHistoryMeta(meta);
     if (!id || !m || typeof stateJson !== "string") return invalid("invalid put");
-    if (Array.isArray(o.protect)) held = o.protect.slice();
+    if (Array.isArray(o.protect)) held = (o.protect as unknown[]).slice();
     return (older ? store.put(null, m, stateJson, { older: true }) : store.put(id, m, stateJson)).then(function (r) {
       if (!r.stored) return { ok: false, code: r.code };
       return { ok: true, sizeBytes: historyUtf8Length(stateJson), duplicate: !!r.duplicate, evicted: r.evicted || 0, overCap: !!r.overCap };
     });
   };
 
-  backend.historyList = function (docId) {
-    var id = docId == null ? null : normalizeDocId(docId);
+  backend.historyList = function (docId: string | null) {
+    const id = docId == null ? null : normalizeDocId(docId);
     if (docId != null && !id) return invalid("invalid document id");
     return store.list(id).then(function (r) {
       return store.usage().then(null, function () { return null; }).then(function (usage) {
@@ -310,24 +367,24 @@ function addFakeDesktopHistory(backend) {
     });
   };
 
-  backend.historyGet = function (query, snapshotId) {
-    var bucket = bucketOf(query);
+  backend.historyGet = function (query: unknown, snapshotId: string) {
+    const bucket = bucketOf(query);
     if (!bucket) return invalid("invalid document id");
     if (typeof snapshotId !== "string" || !HISTORY_SNAP_ID_RE.test(snapshotId)) return invalid("invalid snapshot id");
-    if (query && Array.isArray(query.protect)) held = query.protect.slice();
+    if (query && Array.isArray((query as FakeQueryFields).protect)) held = ((query as FakeQueryFields).protect as unknown[]).slice();
     return store.get(bucket, snapshotId).then(function (hit) {
       return hit ? { meta: sanitizeHistoryMeta(hit.meta), stateJson: hit.stateJson } : null;
     });
   };
 
-  backend.historyCopy = function (fromDocId, toDocId) {
-    var from = normalizeDocId(fromDocId), to = normalizeDocId(toDocId);
+  backend.historyCopy = function (fromDocId: string, toDocId: string) {
+    const from = normalizeDocId(fromDocId), to = normalizeDocId(toDocId);
     if (!from || !to) return invalid("invalid document id");
     return store.copy(from, to);
   };
 
-  backend.historyTouch = function (docId, title) {
-    var id = normalizeDocId(docId);
+  backend.historyTouch = function (docId: string, title: string) {
+    const id = normalizeDocId(docId);
     if (!id) return invalid("invalid document id");
     return store.touch(id, title);
   };
@@ -335,9 +392,9 @@ function addFakeDesktopHistory(backend) {
   backend.historyListDocs = function () { return store.listDocs(); };
 
   backend._historyDump = function () {
-    var raw = mem.inspect(), out = {};
+    const raw = mem.inspect(), out: Record<string, unknown[]> = {};
     Object.keys(raw.index).forEach(function (bucket) {
-      out[bucket] = (raw.index[bucket].snapshots || []).map(function (s) {
+      out[bucket] = ((raw.index[bucket] as NonNullable<typeof raw.index[string]>).snapshots || []).map(function (s) {
         return { meta: sanitizeHistoryMeta(s), stateJson: raw.bodies[s.sha] };
       });
     });
