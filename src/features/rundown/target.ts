@@ -49,7 +49,7 @@ const LABEL_GAP_PX = 4;
 export function paintTargetOverlay() {
   const layer = document.getElementById("rundown-overlay");
   if (!layer || !ports) return;
-  const target = targetLengthOf(ports.document.current() as Parameters<typeof targetLengthOf>[0]);
+  const target = targetLengthOf(ports.document.current());
   const L = rundownLayout();
   const parts = target && L.pxPerSecond > 0 ? targetOverlayParts(L.totalSeconds, target, L.x) : null;
   const html = parts ? overlayHtml(parts) : "";
