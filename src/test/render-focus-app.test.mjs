@@ -23,7 +23,7 @@ const flushEdits = () => undoOwner().flush();
 const undoSizes = () => undoOwner().sizes();
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 

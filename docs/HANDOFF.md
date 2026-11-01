@@ -758,7 +758,7 @@ the end. Now:
   writer's paragraph and the reply box.
 - **One idle refresh.** `scheduleProductionRefresh()`, `scheduleUntaggedScan()`,
   `scheduleBrollRefresh()` and `scheduleWriterStats()` only mark their job
-  pending on `scheduleIdleRefresh()` (`src/features/tags/production-tags.js`): one 180ms
+  pending on `scheduleIdleRefresh()` (`src/features/tags/production-tags.ts`): one 180ms
   debounce, capped at 1s of unbroken typing, runs everything pending against
   one production index (§3.4). They used to be four timers (180/200/220/400ms)
   each deriving the breakdown for itself.
@@ -797,7 +797,7 @@ Names are plain text, limited to 200 code points. See
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",
     "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
                   "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
-    // the scene's gallery (#135, 02d-gallery.js), each key absent when empty:
+    // the scene's gallery (#135, 02d-gallery.ts), each key absent when empty:
     "imageName": "wide.png",
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
     // a poster link's item's imageRef is its still: a file's first frame, or
