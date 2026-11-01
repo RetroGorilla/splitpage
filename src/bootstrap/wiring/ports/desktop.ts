@@ -2,7 +2,7 @@ import type { PrompterDesktop, PrompterVoice } from "../../../application/prompt
 import { openPrompterInBrowser } from "../desktop-owners.ts";
 import { createDesktopRecognition, desktopVoiceAvailable, desktopVoiceKnown, loadDesktopVoice } from "../../../adapters/desktop/desktop-voice.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../../../adapters/desktop/voice-relay.js";
-import { SpeechRecognitionCtor } from "../../../adapters/page/speech-recognition.js";
+import { SpeechRecognitionCtor } from "../../../adapters/page/speech-recognition.ts";
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
 import type { ExternalLinks, LaunchFacts } from "../../../application/desktop-presence.ts";
