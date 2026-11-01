@@ -108,4 +108,3 @@ export function withRowMotion(rowsEl: Element | null, paint: () => void) {
   } catch (e) {
   }
 }
-
