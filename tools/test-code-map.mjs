@@ -31,26 +31,26 @@ eq("a local type does not count", duplicateTypeNames([
 
 console.log("\nfeature map:\n");
 
-eq("common and routing are not features", [featureOf("src/features/common/dom.ts"), featureOf("src/features/routing/owned.ts"), featureOf("src/features/find/find.js")], [null, null, "find"]);
+eq("common and routing are not features", [featureOf("src/features/common/dom.ts"), featureOf("src/features/routing/owned.ts"), featureOf("src/features/find/find.ts")], [null, null, "find"]);
 eq("action ids are read from definitions", actionIds('[{\n  id: "find",\n  label: "x"\n}, {\n    id: "find-next"\n}]'), ["find", "find-next"]);
 eq("action ids passed to a helper that takes id are read", actionIds('const zoom = (id: string, label: string) => ({ id, label });\nfunction panel(id: string) { return { id }; }\nexport const all = [zoom("zoom-in", "In"), panel("panel-gear"), other("not-an-action")];\n'), ["zoom-in", "panel-gear"]);
 {
   const map = buildMap([
-    { path: "src/features/find/find.js", text: "" },
+    { path: "src/features/find/find.ts", text: "" },
     { path: "src/features/find/actions.ts", text: 'export const findActions = [{\n  id: "find"\n}];\n' },
     { path: "src/features/find/ports.test.ts", text: "" },
-    { path: "src/bootstrap/wiring/find.ts", text: 'import { a } from "./ports/document.ts";\nimport { b } from "../../features/find/find.js";\n' },
+    { path: "src/bootstrap/wiring/find.ts", text: 'import { a } from "./ports/document.ts";\nimport { b } from "../../features/find/find.ts";\n' },
     { path: "src/bootstrap/wiring/ports/document.ts", text: "" },
     { path: "tests/features/find/mount.test.ts", text: "" },
-    { path: "src/test/find-replace.test.mjs", text: 'import { x } from "../features/find/find.js";\n' }
+    { path: "src/test/find-replace.test.mjs", text: 'import { x } from "../features/find/find.ts";\n' }
   ]);
   const find = map.get("find");
-  eq("source files exclude tests", find.files.sort(), ["src/features/find/actions.ts", "src/features/find/find.js"]);
+  eq("source files exclude tests", find.files.sort(), ["src/features/find/actions.ts", "src/features/find/find.ts"]);
   eq("the wiring that imports the feature is listed", [...find.wiring], ["src/bootstrap/wiring/find.ts"]);
   eq("the shared ports its wiring imports are listed", [...find.ports], ["document"]);
   eq("its actions are listed", find.actions, ["find"]);
   eq("tests beside it, under tests/features and importing it are listed", [...find.tests].sort(), ["src/features/find/ports.test.ts", "src/test/find-replace.test.mjs", "tests/features/find/mount.test.ts"]);
-  check("the rendered row names the wiring and ports", renderMap(map).includes("| `find` | `actions.ts`, `find.js` | `find.ts` | `document` | `find` |"), renderMap(map));
+  check("the rendered row names the wiring and ports", renderMap(map).includes("| `find` | `actions.ts`, `find.ts` | `find.ts` | `document` | `find` |"), renderMap(map));
 }
 
 console.log("\nthe repository:\n");

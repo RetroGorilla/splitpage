@@ -2,7 +2,7 @@
   "loadOnly": [
     "src/bootstrap/wiring/broll.ts",
     "src/features/broll/records.ts",
-    "src/features/broll/panel.js",
+    "src/features/broll/panel.ts",
     "src/features/broll/actions.ts",
     "src/application/production/broll-records.ts",
     "src/application/preferences/broll-view.ts"
