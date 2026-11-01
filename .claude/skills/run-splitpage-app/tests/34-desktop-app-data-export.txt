@@ -119,7 +119,7 @@ eval (function(){ window.__reDoc1 = window.__reExport.history.docs.filter(functi
 expect window.__reDoc1.snapshots.length === 2
 
 # =============================================================================
-# 5. images (#82 P7) on the desktop path. The image registry (02c-blobs.js)
+# 5. images (#82 P7) on the desktop path. The image registry (02c-blobs.ts)
 # is pointed at the desktop blob backend (20f-desktop.js's
 # makeDesktopBlobBackend) over the fake's blob bridge, so its bytes live in
 # the fake's _blobs — main's <userData>/blobs, as far as the page can tell.

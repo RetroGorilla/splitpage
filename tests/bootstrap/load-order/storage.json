@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/adapters/storage/02c-blobs.js",
+    "src/adapters/storage/02c-blobs.ts",
     "src/adapters/storage/02d-gallery.js",
     "src/adapters/storage/03c-history-idb.ts"
   ],
