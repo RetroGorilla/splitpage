@@ -14,6 +14,16 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **A title from your first filename.** Save an untouched untitled script as
   `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
   A title you typed stays yours. Download-only browsers leave both unchanged.
+- **Section headers** group scenes without changing their running order.
+  At the start of a scene after a header, press Backspace once to show
+  “Press Backspace again to remove the section header”. Press it again
+  within two seconds, without another key, click or caret move, to remove
+  only the header. The scenes join the section above, or become unsectioned
+  at the top. A further Backspace joins scenes normally. Delete at the end
+  of the preceding scene works the same way. Other input, a caret move or
+  waiting two seconds cancels the hint. Undo restores the header and its
+  name in one step.
+
 - **Start a tag at the cursor.** With nothing selected in a Visual cell,
   press **Tag** and choose a category, then type its name. The same dialog
   shows just its categories; selecting existing words still opens the full

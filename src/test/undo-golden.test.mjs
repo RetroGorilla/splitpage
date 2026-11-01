@@ -56,6 +56,7 @@ const EDITS = [
   ["personColors", "removed", (s) => { delete s.personColors; }],
   ["targetSeconds", "changed", (s) => { s.targetSeconds = 420; }],
   ["targetSeconds", "removed", (s) => { delete s.targetSeconds; }],
+  ["sections", "header added", (s) => { s.sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }]; }],
   ["schema", "changed", (s) => { s.schema = 3; }]
 ];
 
