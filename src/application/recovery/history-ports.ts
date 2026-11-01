@@ -71,7 +71,7 @@ export interface HistoryOwner {
 }
 
 export interface DesktopHistoryOptions {
-  readonly protect?: readonly string[];
+  readonly protect?: readonly { docId: string; id: string }[];
   readonly older?: boolean;
 }
 
