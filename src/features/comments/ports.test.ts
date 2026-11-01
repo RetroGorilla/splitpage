@@ -2,7 +2,7 @@ import "../../test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { CommentStatePorts } from "./ports.ts";
-import { startComments, captureCommentComposer, openCommentComposer, postComment } from "./comments.js";
+import { startComments, captureCommentComposer, openCommentComposer, postComment } from "./comments.ts";
 
 test("tagging help listeners stop on disposal and install once on remount", () => {
   const fake = fixture();

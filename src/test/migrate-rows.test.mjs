@@ -14,7 +14,7 @@ import "./_merge-started.mjs";
 import { refsIn } from "../../shared/blob-policy.js";
 import { dataUrlForSync } from "../adapters/storage/02c-blobs.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
-import { collectTagsFromRows } from "../features/tags/production-tags.js";
+import { collectTagsFromRows } from "../features/tags/production-tags.ts";
 
 
 initTags();

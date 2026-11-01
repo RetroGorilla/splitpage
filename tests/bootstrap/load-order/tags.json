@@ -2,10 +2,10 @@
   "loadOnly": [
     "src/bootstrap/wiring/production.ts",
     "src/bootstrap/wiring/production-editing.ts",
-    "src/features/tags/panels.js",
+    "src/features/tags/panels.ts",
     "src/features/tags/plain-tags.ts",
     "src/bootstrap/wiring/plain-tags.ts",
-    "src/features/tags/production-tags.js",
+    "src/features/tags/production-tags.ts",
     "src/bootstrap/wiring/production-tags.ts"
   ],
   "expectedLoads": 7
