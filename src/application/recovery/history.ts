@@ -898,7 +898,7 @@ export function createHistoryOwner(factory?: () => HistoryInstrumentation): Hist
   const owner: HistoryOwner = {
     startHistory: function (ports) {
       if (started) throw new Error("The version history is already started; stop it first");
-      const mine = startHistory(ports, instrumentation);
+      const mine = startHistory(ports, factory?.());
       started = mine;
       return function () {
         if (started !== mine) return;
