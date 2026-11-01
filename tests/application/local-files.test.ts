@@ -37,7 +37,7 @@ function harness() {
     undo: { flush: () => { log.push("flush"); } },
     imports: {
       parseProjectFileState: async () => { log.push("parse"); return { state: doc, kind: "splitpage", docIdEmbedded: true }; },
-      docxToRows: async () => ({ rows: [] }), csvToRows: () => [], detectTwoColumnFormat: () => null,
+      docxToRows: async () => ({ title: null, rows: [], looseText: "" }), csvToRows: () => [], detectTwoColumnFormat: () => null,
       parseImportRows: () => [], normalizeImportedRows: () => []
     },
     text: { sanitizeHtml: (html) => String(html) },
@@ -89,7 +89,7 @@ for (const stage of ["parse", "last handle", "permission", "read", "dialog", "ro
       open = () => h.owner.openLocalFile();
     } else if (stage === "text" || stage === "docx") {
       const file = { ...h.file, name: "import." + (stage === "text" ? "txt" : "docx") };
-      ports = { ...ports, imports: { ...ports.imports, parseProjectFileState: async () => null, docxToRows: stage === "docx" ? hold : ports.imports.docxToRows }, files: { ...ports.files, text: async () => String(await hold()) } };
+      ports = { ...ports, imports: { ...ports.imports, parseProjectFileState: async () => null, docxToRows: stage === "docx" ? async () => { await hold(); return { title: "late", rows: [], looseText: "" }; } : ports.imports.docxToRows }, files: { ...ports.files, text: async () => String(await hold()) } };
       finish = stage === "text" ? "late import" : { title: "late", rows: [] };
       open = async () => { await h.owner.projectFileSource().open({ kind: "file", file }); };
     } else {
