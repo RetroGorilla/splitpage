@@ -2,7 +2,7 @@
   "loadOnly": [
     "src/features/editing/cell-reach.ts",
     "src/bootstrap/wiring/editor.ts",
-    "src/features/editing/draft-edit.js",
+    "src/features/editing/draft-edit.ts",
     "src/bootstrap/wiring/draft-edit.ts"
   ],
   "expectedLoads": 4

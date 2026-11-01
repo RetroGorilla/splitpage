@@ -16,7 +16,7 @@ import type { CommentStatePorts } from "../../features/comments/ports.ts";
 import { keepSnapshot } from "./transition-owners.ts";
 import { personColors as portPersonColors } from "./ports/person-colors.ts";
 import { shotHiding } from "./ports/shot-hiding.ts";
-import { resetDraftHistory } from "../../features/editing/draft-edit.js";
+import { resetDraftHistory } from "../../features/editing/draft-edit.ts";
 import type { CommentsPorts } from "../../features/comments/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "./ports/actions.ts";
@@ -32,7 +32,7 @@ import {
   noteDraftComposition,
   noteDraftFocus,
   pasteIntoDraft
-} from "../../features/editing/draft-edit.js";
+} from "../../features/editing/draft-edit.ts";
 import { isDraftBox } from "../../features/editing/cell-page.ts";
 import { compressImageFile } from "../../features/rows/scene-media.ts";
 import {

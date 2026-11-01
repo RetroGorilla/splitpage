@@ -13,7 +13,7 @@ import {
   mediaTable,
   newHistory,
   stripMediaMarks
-} from "../features/editing/draft-edit.js";
+} from "../features/editing/draft-edit.ts";
 import { cellLength, projection } from "../core/text/runs.ts";
 import { fromHtml } from "../bootstrap/richtext.ts";
 import { setMark } from "../core/text/edits.ts";
