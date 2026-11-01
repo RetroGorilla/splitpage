@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { storedImageMarkup } from "../../src/core/document/text-policy.ts";
 import * as legacy from "../../src/bootstrap/richtext.ts";
-import { has, intern, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
+import { has, intern, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.ts";
 import { readFileSync } from "node:fs";
 import { image } from "../../src/test/golden-helpers.mjs";
 
@@ -28,7 +28,7 @@ test("consumers import richtext functions directly from their owners", () => {
   const imports = [
     ["src/bootstrap/plain-text.ts", 'import { inertBody } from "./richtext.ts";'],
     ["src/bootstrap/wiring/ports/text.ts", 'import { buildVideoCardEl } from "../../richtext.ts";'],
-    ["src/features/tags/production-tags.js", 'import { cappedText, codePointPrefix, escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";'],
+    ["src/features/tags/production-tags.ts", 'import { cappedText, codePointPrefix, escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";'],
     ["src/bootstrap/wiring/ports/text.ts", 'import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../richtext.ts";'],
     ["src/bootstrap/wiring/editor.ts", 'import { sanitizeHtml, storedHtmlFromDom } from "../richtext.ts";'],
     ["src/bootstrap/wiring/comments.ts", 'import { storedImageHtml } from "../../core/document/text-policy.ts";'],

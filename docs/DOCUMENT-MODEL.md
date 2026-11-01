@@ -197,7 +197,7 @@ ledger's INV-18.
   (`src/application/commands/split-join.ts`, run by `splitRowFieldCore` in
   `src/bootstrap/wiring/rows.ts`) is `splitCell` at the caret;
   `joinScenesCommand` (the same file, run by `mergeWriterRows` in
-  `src/features/writer/writer.js`) is
+  `src/features/writer/writer.ts`) is
   `joinCells`, whose glue space carries a comment (or link) the text on
   both sides of it is in, so a phrase a split cut in two is one anchor
   again when joined back.
@@ -393,7 +393,7 @@ selection kept:
   (tag shortcuts, b-roll capture). Moving the caret forgets it.
 - The comment composer and reply boxes, which are not document cells and
   may hold pictures and video cards, go through the same model functions
-  by way of `editDraft` (`src/features/editing/draft-edit.js`, §10 step 7), with an undo
+  by way of `editDraft` (`src/features/editing/draft-edit.ts`, §10 step 7), with an undo
   history of each box's own. No edit anywhere uses `execCommand`; the
   page-wide `styleWithCSS` and `applyHighlight` are gone.
 
@@ -545,7 +545,7 @@ sides:
 
 This fixes the named case: a tag re-wrap (marks only) on one side plus a
 word edit on the other merges cleanly. The on-disk merge review
-(`src/features/merge/local-merge.js`) uses the same function, so its preview and its outcome
+(`src/features/merge/local-merge.ts`) uses the same function, so its preview and its outcome
 can no longer disagree.
 
 **Built (step 6).** `mergeTextField(base, mine, theirs, ctx)` in
@@ -739,7 +739,7 @@ until step 4.
    comment's `rowId`/`field` is derived from its mark. And no edit uses
    `execCommand` any more:
    - **The comment composer and reply boxes** edit through the model
-     (`editDraft`, `src/features/editing/draft-edit.js`), though no model stands behind
+     (`editDraft`, `src/features/editing/draft-edit.ts`), though no model stands behind
      them and they may hold pictures and video cards: each one is lifted
      out as a private-use placeholder character (U+E000–U+F8FF, never one
      the box or a paste already holds), which the model treats as a
@@ -792,7 +792,7 @@ words.
   each new path. No step deletes an old path until its replacement has
   passed the full browser run on Windows.
 - **Caret restore after re-render.** Position-based restore exists already
-  (the writer's `(rowId, char offset)`, `src/features/writer/writer.js`). It gets one shared
+  (the writer's `(rowId, char offset)`, `src/features/writer/writer.ts`). It gets one shared
   implementation used by every re-render.
 - **IME and spellcheck.** These are left to the browser (§5) exactly because
   they are the risk. The by-hand check list gets a Japanese-IME and a

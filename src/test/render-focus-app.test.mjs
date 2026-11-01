@@ -16,14 +16,14 @@ const { paintGuard } = await import("../bootstrap/wiring/editor-owners.ts");
 const whilePainting = (paint) => paintGuard().whilePainting(paint);
 const afterThisPaint = (work) => paintGuard().afterThisPaint(work);
 const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
-const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../features/broll/panel.js");
+const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../features/broll/panel.ts");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undoSizes = () => undoOwner().sizes();
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 

@@ -1,10 +1,10 @@
 {
   "loadOnly": [
-    "src/features/desktop/desktop.js",
+    "src/features/desktop/desktop.ts",
     "src/features/desktop/actions.ts",
-    "src/adapters/desktop/desktop-blobs.js",
-    "src/adapters/desktop/desktop-voice.js",
-    "src/adapters/desktop/fake-desktop.js",
+    "src/adapters/desktop/desktop-blobs.ts",
+    "src/adapters/desktop/desktop-voice.ts",
+    "src/adapters/desktop/fake-desktop.ts",
     "src/application/desktop/document-state.ts",
     "src/application/desktop/menu-commands.ts",
     "src/bootstrap/wiring/desktop-owners.ts",

@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 
-const { intern } = await import("../adapters/storage/02c-blobs.js");
+const { intern } = await import("../adapters/storage/02c-blobs.ts");
 
 const jpegBytes = new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, 0, 200, 1, 44, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 7, 0xFF, 0xD9]);
 

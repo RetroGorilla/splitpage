@@ -1,6 +1,6 @@
 import type { ExportServices } from "../../application/export/services.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
-import type { DocumentRow } from "../../core/document/validated.ts";
+import type { ImportedRow } from "../../application/formats/import-formats.ts";
 import type { TableCell } from "./export-projections.ts";
 import { sceneFacts, breakdownRows, breakdownTable, brollTable, commentBodyText } from "./export-projections.ts";
 import { exportBrollScenes, exportComments, exportFacts } from "./export-kit.ts";
@@ -184,7 +184,7 @@ function looksLikeIndexColumn(table: readonly (readonly string[])[], from: numbe
   return checked > 0;
 }
 
-export function csvToRows(text: unknown): DocumentRow[] {
+export function csvToRows(text: unknown): ImportedRow[] {
   const table = parseCsv(text);
   const first = table[0];
   if (!first) return [];
@@ -208,7 +208,7 @@ export function csvToRows(text: unknown): DocumentRow[] {
 
   const ours = head[0] === "scene" && head.indexOf("status") !== -1 && hv !== -1 && ha !== -1;
 
-  const out: DocumentRow[] = [];
+  const out: ImportedRow[] = [];
   for (let i = start; i < table.length; i++) {
     const r = table[i];
     if (!r) throw new Error("Missing CSV row");

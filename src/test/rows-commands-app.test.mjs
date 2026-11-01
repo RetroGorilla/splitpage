@@ -18,7 +18,7 @@ const { currentDocument, liveSession } = await import("../bootstrap/wiring/sessi
 const { sessionEffects } = await import("../bootstrap/wiring/session-effects.ts");
 const { addRow } = await import("../bootstrap/wiring/rows.ts");
 const { cellEditing, rowDrag } = await import("../bootstrap/wiring/editor-owners.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
