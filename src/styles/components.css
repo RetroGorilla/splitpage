@@ -59,6 +59,22 @@
   text-overflow: ellipsis;
 }
 .doc-title:hover { border-color: var(--border); }
+.title-version {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+}
 .doc-title:focus {
   outline: none;
   border-color: var(--visual);

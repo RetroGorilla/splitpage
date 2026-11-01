@@ -46,7 +46,7 @@ test("title routes: the main title is one set-title edit, then the page title fo
   t.mount();
   type(p, p.main, "Final");
   assert.equal(t.title(), "Final");
-  assert.deepEqual(t.h.published.map((c) => c.changes), [changeSet({ docFields: ["title"] })]);
+  assert.deepEqual(t.h.published.map((c) => c.changes), [changeSet({ docFields: ["title", "titleOrigin"] })]);
   assert.deepEqual(t.pages, ["Final"]);
 });
 

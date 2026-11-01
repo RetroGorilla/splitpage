@@ -969,6 +969,38 @@ async function caseBootAndSecurity(target) {
   }
 }
 
+async function caseFirstSaveTitle(target, fixturesDir) {
+  const tag = target.name + " first-save title and version";
+  const first = path.join(fixturesDir, "Headset ad V3.splitpage");
+  const copy = path.join(fixturesDir, "Different name_v12.splitpage");
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "first-save-title", dialogs: [null, first, copy] });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await evalPage(cdp, "document.querySelector('[data-newtab-action=new]').click(); true");
+    await poll(cdp, "window.__splitpageFormats.state().title === 'Untitled Script'", 5000);
+    const seen = await dialogsSeen(cdp);
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
+    await waitForDialogAnswered(cdp, seen);
+    record(tag + ": cancelled first save leaves title and tag alone", await evalPage(cdp,
+      "window.__splitpageFormats.state().title === 'Untitled Script' && !window.__splitpageFormats.state().titleVersion && !window.__splitpageFormats.writtenOut()"));
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
+    const named = await poll(cdp, "window.__splitpageFormats.state().title === 'Headset ad' && window.__splitpageFormats.writtenOut()", 10000);
+    record(tag + ": first Save uses the native chosen filename", !!named);
+    record(tag + ": both title areas show the small version tag", await evalPage(cdp,
+      "['doc-version','writer-version'].every(function(id){var e=document.getElementById(id);return e && !e.hidden && e.textContent==='v3';})"));
+    const disk = JSON.parse(fs.readFileSync(first, "utf8"));
+    record(tag + ": disk carries title, version and provenance", disk.title === "Headset ad" && disk.titleVersion === "v3" && disk.titleOrigin === "file");
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
+    await poll(cdp, "window.__splitpageFormats.state().titleVersion === 'v12'", 10000);
+    const copied = JSON.parse(fs.readFileSync(copy, "utf8"));
+    record(tag + ": Save As updates only the tag", copied.title === "Headset ad" && copied.titleVersion === "v12");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
 async function caseOpenSaveConflictExport(target, fixturesDir) {
   const tag = target.name + " open/save/conflict/save-as/export";
   const openTitle = "Opened — 🎬 Fixture";
@@ -5496,6 +5528,7 @@ async function runTargetSuite(target, groupFilter) {
   const groups = [
     ["open/boot/security", () => caseBootAndSecurity(target), hookFree],
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
+    ["first-save title and version", () => caseFirstSaveTitle(target, fixturesDir)],
     ["desktop PDF export: script, packing lists, shot list", () => caseDesktopPdfExport(target, fixturesDir)],
     ["second instance", () => caseSecondInstance(target, fixturesDir)],
     ["second instance (relative path)", () => caseSecondInstanceRelativePath(target, fixturesDir)],
