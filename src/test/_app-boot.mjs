@@ -102,7 +102,7 @@ export async function appWiringDeps() {
     import("../bootstrap/wiring/imports.ts"),
     import("../bootstrap/wiring/project-files.ts")
   ]);
-  const entry = await import("../bootstrap/startup/document-entry.js");
+  const entry = await import("../bootstrap/startup/document-entry.ts");
   const html = await import("../adapters/page/standalone-html.js");
   const fileSaving = exporting.wireFileSaving({ copyHistory: (...args) => docId.documentIdentityOwner().copyDocHistorySafe(...args), syncIdentity: (...args) => docId.documentIdentityOwner().syncDocIdentity(...args), setBaseline: sync.setBaseState });
   return {
