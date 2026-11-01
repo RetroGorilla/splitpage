@@ -16,7 +16,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { titleCommand } = await import("../application/commands/title.ts");
 const { mountDocumentChromeFeature, stopDocumentChromeFeature } = await import("../bootstrap/wiring/document-chrome.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 
 const desktop = window.__desktopTest.makeFakeBackend();
 window.__desktopTest.setBackend(desktop);

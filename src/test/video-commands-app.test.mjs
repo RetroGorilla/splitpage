@@ -18,7 +18,7 @@ const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/ga
 const { openCommentComposer, closeCommentComposer } = await import("../features/comments/comments.js");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 

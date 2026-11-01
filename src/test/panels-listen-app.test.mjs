@@ -25,7 +25,7 @@ const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { mountPanelListenersFeature, stopPanelListenersFeature } = await import("../bootstrap/wiring/panels.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 
 after(closeApp);
 
