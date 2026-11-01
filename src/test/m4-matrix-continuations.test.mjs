@@ -21,7 +21,7 @@ const lastUndoEntry = () => undoOwner().last();
 const undoSizes = () => undoOwner().sizes();
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { handleImageFile } = await import("../bootstrap/wiring/rows.ts");
-const { openGalleryOverlay } = await import("../features/gallery/overlay.js");
+const { openGalleryOverlay } = await import("../features/gallery/overlay.ts");
 const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
 const annotate = await import("../features/gallery/annotate.ts");
 const { addGalleryVideo, rowSlots } = await import("../core/document/gallery.ts");
