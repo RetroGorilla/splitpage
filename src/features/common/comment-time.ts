@@ -1,10 +1,10 @@
 import { formatClock, formatDateClock } from "../../../shared/clock.js";
 
-export function formatTimestamp(iso, clock) {
+export function formatTimestamp(iso: unknown, clock?: string) {
   try {
-    var d = new Date(iso);
+    const d = new Date(iso as string);
     if (isNaN(d.getTime())) return "";
-    var sameDay = d.toDateString() === new Date().toDateString();
+    const sameDay = d.toDateString() === new Date().toDateString();
     return sameDay ? formatClock(d, clock) : formatDateClock(d, null, clock);
   } catch (e) { return ""; }
 }

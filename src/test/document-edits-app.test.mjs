@@ -30,7 +30,7 @@ const { sessionStamps, readSession } = await import("../bootstrap/wiring/session
 const { randomIds } = await import("../adapters/identity/ids.ts");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);
-const { setCommentAssignee, toggleResolve } = await import("../features/comments/comments.js");
+const { setCommentAssignee, toggleResolve } = await import("../features/comments/comments.ts");
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { deletePersonCommand } = await import("../application/commands/production-records.ts");
 const { editStamp, documentIdStamp } = await import("../application/commands/save-stamps.ts");
