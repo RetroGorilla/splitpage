@@ -768,6 +768,8 @@ export function onRootKeydown(e: KeyboardEvent): void {
     const mvField = cellEl.getAttribute("data-field");
     const mvOffset = caretTextOffset(cellEl);
     if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1)) {
+      const moved = currentDocument();
+      if (moved && mvId) sectionView().reveal(moved, mvId);
       if (!viewFlags().writerOpen()) focusRowField(mvId, mvField, mvOffset);
       renderProduction();
     }

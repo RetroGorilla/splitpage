@@ -1,6 +1,6 @@
 import type { TimerPort } from "../session/ports.ts";
 
-export type SectionBoundaryKey = "Backspace" | "Delete" | "Alt+ArrowUp" | "Alt+ArrowDown";
+export type SectionBoundaryKey = "Backspace" | "Delete" | "Alt+ArrowUp" | "Alt+ArrowDown" | "Alt+Shift+ArrowUp" | "Alt+Shift+ArrowDown";
 
 export interface SectionBoundaryRemoval {
   readonly press: (id: string, key: SectionBoundaryKey) => boolean;

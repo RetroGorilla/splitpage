@@ -137,6 +137,7 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     return { id: group.section.id, firstSceneId: group.section.firstSceneId, after: event.clientY > bounds.top + bounds.height / 2, header: shown };
   }
   life.listen(doc, "dragstart", event => {
+    if (!(event.target instanceof Element)) return;
     const grip = event.target.closest(".section-grip");
     if (!grip) return;
     if (!ports.edits.allowed()) { event.preventDefault(); return; }
@@ -167,12 +168,23 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     ports.drag.end(); finishDrag();
   }, true);
   life.listen(doc, "dragend", finishDrag, true);
+  life.listen(doc, "keydown", event => {
+    if (event.key !== "Escape") return;
+    const menu = event.target.closest?.<HTMLDetailsElement>(".section-more[open]");
+    if (!menu) return;
+    event.preventDefault(); event.stopPropagation();
+    menu.open = false;
+    menu.querySelector<HTMLElement>("summary")?.focus();
+  });
   return {
     hint(id, text) {
+      const active = id ? header(id) : null;
       doc.querySelectorAll<HTMLElement>(".section-hint").forEach(el => {
-        const shown = !!id && el.closest(".section-header")?.getAttribute("data-section-id") === id;
+        const shown = !!active && el.closest(".section-header") === active;
         el.hidden = !shown; el.textContent = shown ? text : "";
       });
+      const live = doc.getElementById("section-hint-live");
+      if (live) live.textContent = active ? text : "";
     },
     reset() { cancelName(); finishDrag(); },
     dispose() { life.dispose(); cancelName(); finishDrag(); }

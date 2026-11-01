@@ -32,7 +32,7 @@ export function mountSectionBoundary(window: Window, ports: SectionBoundaryPorts
     const key = event.key;
     if (caret && !sameCaret(selection)) cancel();
     const scriptCell = event.target.closest?.('.cell-editable[data-field="audioText"],.cell-editable[data-field="visualText"]');
-    if (scriptCell && ports.allowed() && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.isComposing &&
+    if (scriptCell && ports.allowed() && event.altKey && !event.ctrlKey && !event.metaKey && !event.isComposing &&
       (key === "ArrowUp" || key === "ArrowDown")) {
       const state = ports.document.current();
       const at = state?.rows.findIndex(row => row.id === scriptCell.getAttribute("data-id")) ?? -1;
@@ -40,13 +40,18 @@ export function mountSectionBoundary(window: Window, ports: SectionBoundaryPorts
       const next = state?.rows[at + (key === "ArrowUp" ? -1 : 1)];
       if (group && next && selection) {
         caret = { node: selection.anchorNode, offset: selection.anchorOffset, end: selection.focusNode, endOffset: selection.focusOffset };
-        if (!event.repeat && ports.boundary.press(group.section.id, key === "ArrowUp" ? "Alt+ArrowUp" : "Alt+ArrowDown")) return;
+        const chord = event.shiftKey ? (key === "ArrowUp" ? "Alt+Shift+ArrowUp" : "Alt+Shift+ArrowDown") :
+          (key === "ArrowUp" ? "Alt+ArrowUp" : "Alt+ArrowDown");
+        if (!event.repeat && ports.boundary.press(group.section.id, chord)) return;
         event.preventDefault(); event.stopImmediatePropagation();
         return;
       }
     }
     if (!cell || !ports.allowed() || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
-      (key !== "Backspace" && key !== "Delete") || !selection?.rangeCount) { cancel(); return; }
+      (key !== "Backspace" && key !== "Delete") || !selection?.rangeCount) {
+      if (!["Alt", "Shift", "Control", "Meta"].includes(key)) cancel();
+      return;
+    }
     const range = selection.getRangeAt(0);
     if (!range.collapsed || !cell.contains(range.startContainer) || !atEdge(cell, range, key === "Backspace")) { cancel(); return; }
     const state = ports.document.current();

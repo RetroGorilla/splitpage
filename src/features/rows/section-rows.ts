@@ -38,9 +38,9 @@ export function sectionHeaderHtml(entry: SectionDivider, readOnly = false, total
     '<button type="button" class="section-grip" draggable="true" aria-label="Drag section ' + name + '"' + disabled + '>⠿</button>' +
     '<button type="button" class="section-fold" data-section-action="fold" aria-expanded="' + !entry.folded + '" aria-label="' +
       (entry.folded ? 'Expand ' : 'Fold ') + name + '">' + (entry.folded ? '▸' : '▾') + '</button>' +
-    '<button type="button" class="section-name" data-section-action="rename"' + disabled + '>' + name + '</button>' +
+    '<span role="heading" aria-level="2"><button type="button" class="section-name" data-section-action="rename"' + disabled + '>' + name + '</button></span>' +
     '<span class="section-stats">' + entry.count + ' scene' + (entry.count === 1 ? '' : 's') + ' · <span data-section-total="' + id + '">' + escapeHtml(total) + '</span></span>' +
-    '<span class="section-hint" role="status" hidden></span>' +
+    '<span class="section-hint" aria-hidden="true" hidden></span>' +
     '<details class="section-more"><summary aria-label="Section menu for ' + name + '">⋯</summary><div class="section-menu">' +
     '<button type="button" data-section-action="rename"' + disabled + '>Rename</button>' +
     '<button type="button" data-section-action="up"' + disabled + '>Move section ↑</button>' +
