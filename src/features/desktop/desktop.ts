@@ -53,7 +53,7 @@ async function openPrompterElsewhere(chromium: boolean) {
   try {
     if (!(ports as DesktopPorts).document.current()) return prompterBrowserResult(false, "Still loading…");
     const fh = (ports as DesktopPorts).place.fileHome();
-    const onDisk = !!(fh && fh.handle && (fh.handle as { _desktopId?: unknown })._desktopId);
+    const onDisk = !!(fh && fh.handle && (fh.handle as Pick<NonNullable<ReturnType<DesktopPorts["place"]["fileHome"]>>, "_desktopId">)._desktopId);
     if (!onDisk) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
     if ((ports as DesktopPorts).saves.unsaved()) {
       if (onDisk && (fh as NonNullable<typeof fh>).format === "html") return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
