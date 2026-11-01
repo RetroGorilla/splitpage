@@ -60,7 +60,7 @@ The ports, all supplied by the legacy modules:
 | `live` | `liveDocumentPort` (`src/bootstrap/wiring/session-owner.ts`) | Reads the session's document and replaces it |
 | `session` | `adoptReplacement` (`bootstrap/wiring/session-owner.ts`) | Adopts a document in the session now |
 | `destination` | `documentDestinationPort` (`application/session/session-merge.js`) | `set` calls `setHome`; `confirm` calls `setBaseState` with a clone of the baseline |
-| `identity` | `documentIdentityPort` (`application/identity/document-identity.js`) | Mints ids and reads and writes whether the id was written out, through the document location owner (`documentLocation()`) |
+| `identity` | `documentIdentityPort` (`application/identity/document-identity.ts`) | Mints ids and reads and writes whether the id was written out, through the document location owner (`documentLocation()`) |
 | `history` | `documentHistoryPort` (`application/session/session-merge.js`) | `keep(label, doc?)` takes a history snapshot of `doc`, or of the live document when none is given |
 
 Destinations are `LegacyDestination` values (`kind` and `fields`), and `NO_DESTINATION` is `{ kind: "none" }`.
