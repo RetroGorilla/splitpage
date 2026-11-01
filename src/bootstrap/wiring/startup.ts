@@ -8,7 +8,7 @@ import { documentTransitions } from "./transition-owners.ts";
 import { suppressUnloadWarning } from "../startup/page-entry.ts";
 import { updateHideShotMenu } from "./hide-shot.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
-import { loadInitialState } from "../startup/document-entry.js";
+import { loadInitialState } from "../startup/document-entry.ts";
 import { heldDocument } from "./session-owner.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";

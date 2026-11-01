@@ -3,7 +3,7 @@ import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { loadInitialState, migrateDocument } from "../bootstrap/startup/document-entry.js";
+import { loadInitialState, migrateDocument } from "../bootstrap/startup/document-entry.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 
