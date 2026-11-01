@@ -2,7 +2,7 @@
 
 import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContents, WebContentsView } from "electron";
 import type {
-  DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot, DesktopWireDraftHeader, DesktopWireDraftStatus,
+  DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot, DesktopDraftWriteHeader, DesktopWireDraftStatus,
   DesktopWireHistoryMeta, DesktopWireHistoryOptions, DesktopWireHistoryUsage, DesktopWireLaunch,
   DesktopWireTakenDraft, DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
@@ -20,7 +20,7 @@ export interface DesktopMainTab {
   fileId: string | null | undefined;
   source: { kind: "file"; absPath: string } | { kind: "blank" };
   ready: boolean;
-  keepDraftOnClose: boolean;
+  keepDraftOnClose?: boolean;
   pendingPayload: unknown;
   launchIntent: DesktopWireLaunch;
   firstTabOfLaunch?: boolean;
@@ -55,7 +55,7 @@ export interface DesktopRecentsBoundary {
 }
 
 export interface DesktopDraftStoreBoundary {
-  write: (id: string, header: Omit<DesktopWireDraftHeader, "format" | "formatVersion" | "tabId" | "writtenAt" | "state" | "base" | "appVersion" | "seq">, stateJson: string, baseJson: string | null, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-write">>;
+  write: (id: string, header: Omit<DesktopDraftWriteHeader, "format" | "formatVersion" | "tabId" | "writtenAt" | "state" | "base" | "appVersion" | "seq">, stateJson: string, baseJson: string | null, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-write">>;
   discardClean: (id: string, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-discard">>;
   take: (id: string) => Promise<DesktopWireTakenDraft | null>;
   release: (id: string) => void;
@@ -81,12 +81,14 @@ export interface DesktopMainCommon {
 }
 
 export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "tabs" | "fileIds" | "recents" | "testMode"> {
-  dialog: Pick<Dialog, "showOpenDialog" | "showMessageBoxSync"> & {
-    showSaveDialog: (parent: BrowserWindow, options: {
+  dialog: {
+    showOpenDialog: (parent: BrowserWindow | undefined, options: Parameters<Dialog["showOpenDialog"]>[0]) => ReturnType<Dialog["showOpenDialog"]>;
+    showMessageBoxSync: (parent: BrowserWindow | undefined, options: Parameters<Dialog["showMessageBoxSync"]>[0]) => ReturnType<Dialog["showMessageBoxSync"]>;
+    showSaveDialog: (parent: BrowserWindow | undefined, options: {
       defaultPath: string | undefined; filters: { name: string; extensions: string[] }[] | undefined;
     }) => ReturnType<Dialog["showSaveDialog"]>;
   };
-  dialogParentFor: (event: DesktopIpcEvent) => BrowserWindow;
+  dialogParentFor: (event: DesktopIpcEvent) => BrowserWindow | undefined;
   pathToTabId: Map<string, string>;
   consumeTestDialogAnswer: () => string | null | undefined;
   testDialogsSeen: () => number;
@@ -101,7 +103,7 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
   docClaims: { record: (sender: WebContents, tab: DesktopMainTab) => void };
   flushPendingPayload: (tab: DesktopMainTab, options?: { force: boolean }) => void;
   restoreNotice: { isFor: (id: string) => boolean; deliver: (tab: DesktopMainTab) => void };
-  routeOpenPath: (path: string, options: { fromWindowId: string; fromTabId: string }) => { where: string } | null;
+  routeOpenPath: (path: string, options: { fromWindowId: string; fromTabId: string }) => DesktopIpcResult<"splitpage:route-open"> | null;
   draftFiniteNumber: (value: unknown) => number | null;
   draftBodyTooLarge: (text: string) => boolean;
   buildDraftHeader: (tab: DesktopMainTab, payload: Record<string, unknown>) => Parameters<DesktopDraftStoreBoundary["write"]>[1];

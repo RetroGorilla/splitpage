@@ -1,10 +1,12 @@
 "use strict";
 
-import type { DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
+import type { DesktopIpcArgs, DesktopWireTestShellResult } from "../shared/desktop-contract.d.ts";
 
 import type { DesktopDraftStoreBoundary, DesktopTestModeIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
 
 const { TAB_OR_WINDOW_ID_RE }: { TAB_OR_WINDOW_ID_RE: RegExp } = require("./desktop-state");
+
+type TestTargetTab = Extract<DesktopWireTestShellResult, { windows: unknown }>["windows"][number]["tabs"][number];
 
 function createTestModeIpc({
   testMode: TEST_MODE, app, BrowserWindow, tabOf, tabs, windowsById, requestCloseTab, draftStore,
@@ -74,7 +76,7 @@ function createTestModeIpc({
                 pristine: !!t.pristine,
                 path: t.source.kind === "file" ? t.source.absPath : null
               } : null;
-            }).filter(Boolean)
+            }).filter(Boolean as BooleanConstructor & ((tab: TestTargetTab | null) => tab is TestTargetTab))
           }))
         });
 
