@@ -12,7 +12,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { closeGdocModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
-const { closeSettings, settingsOpen } = await import("../features/settings/settings.js");
+const { closeSettings, settingsOpen } = await import("../features/settings/settings.ts");
 const { fileMenuOpen, toggleFileMenu } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
