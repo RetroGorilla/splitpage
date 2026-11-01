@@ -5,7 +5,7 @@
     "src/features/tags/panels.js",
     "src/features/tags/plain-tags.ts",
     "src/bootstrap/wiring/plain-tags.ts",
-    "src/features/tags/production-tags.js",
+    "src/features/tags/production-tags.ts",
     "src/bootstrap/wiring/production-tags.ts"
   ],
   "expectedLoads": 7

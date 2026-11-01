@@ -9,7 +9,7 @@ import { inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { cellOf } from "../bootstrap/richtext.ts";
 import { projection, tagNameOf } from "../core/text/runs.ts";
 import { toHtml } from "../core/text/html.ts";
-import { tagFieldOccurrences, tagsInField } from "../features/tags/production-tags.js";
+import { tagFieldOccurrences, tagsInField } from "../features/tags/production-tags.ts";
 import { tagOccurrences } from "../core/production/tags.ts";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
