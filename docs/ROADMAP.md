@@ -1,18 +1,18 @@
 # Roadmap
 
-What is left for Splitpage 4.1 and the order it runs in. Checked on 2026-10-31 at `99cc8bfd`. "4.1" is the internal name for this work (the `4.1-development` branch); it ships publicly as **4.0.0** (Adam, 2026-10-30). Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
+What is left for Splitpage 4.1 and the order it runs in. Checked on 2026-10-31 at `32dbcca9`. "4.1" is the internal name for this work (the `4.1-development` branch); it ships publicly as **4.0.0** (Adam, 2026-10-30). Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
 
 ## Where it stands
 
 The 4.1 restructure is finished: `src/js/` and `src/legacy/` are gone, there are no import loops, and the build starts from `src/bootstrap/main.ts`. The server and collaboration features were removed, not moved.
 
-Groups A, B and C below are done except the last PDF step (AQ-44) and AQ-46, which Adam placed last in line. Every queue task from AQ-1 to AQ-45 is merged or closed except AQ-44; AQ-29 was replaced by AQ-32. Nothing is tagged yet.
+Groups A, B and C below are done. Every queue task from AQ-1 to AQ-46 is merged or closed; AQ-29 was replaced by AQ-32. The run is recorded in the draft summary PR #1037. Adam also brought three new features into 4.1 (I-31, I-32, I-33), and they are merged. Nothing is tagged yet.
 
 ## Done for 4.1
 
 | Id | What | PRs |
 | --- | --- | --- |
-| A1 | Release builds expose no test hook (AQ-23, PRs 1 to 5). The history fault-injection code still ships unreachable; moving it out is AQ-46 | #974, #985, #990, #999, #1011, #1014 |
+| A1 | Release builds expose no test hook (AQ-23, PRs 1 to 5), and history's fault-injection code is out of release builds too (AQ-46: two TypeScript conversions, then the move) | #974, #985, #990, #999, #1011, #1014, #1033, #1034, #1036 |
 | A2 | I-20 (Save label after a late save) does not reproduce; its test stays as a regression test (AQ-28). I-6 is moot: import save-back is switched off and the code is marked deprecated (AQ-32, which replaced AQ-29) | #976, #982 |
 | A3 | Flaky suite 266 (AQ-30) and desktop smoke #496 (AQ-31) fixed in the tests' timing; no assertion loosened | #975, #980 |
 | B1 | Desktop split: IPC setup in seven parts (AQ-35), process lifecycle (AQ-36) and voice (AQ-37) moved out of `desktop/main.js`, now 1,810 lines | #1002, #1005 to #1010, #1013, #1016 |
@@ -21,28 +21,31 @@ Groups A, B and C below are done except the last PDF step (AQ-44) and AQ-46, whi
 | C1 | Prompter and rundown in strict TypeScript, each with its state in one object (AQ-24 to AQ-27) | #959, #973, #988, #997 |
 | C2 | Re-renders on stamp, hide and display settings measured: all under 65 ms, no fix needed (AQ-18) | #987 |
 | C3 | CSS by purpose: 11 stylesheets named by what they style, cascade unchanged (AQ-34) | #986 |
-| C5 | Stale tracker rows closed and the old `main` PRs listed for Adam (AQ-39) | #996 |
-| C6 | PDF export as a print layout: script and list print pages (AQ-40, AQ-41), desktop `printToPDF` (AQ-42), browser print dialog (AQ-43), automatic layout checks in CI (AQ-45), plus Adam's print fixes (rows kept together, shot scenes as grey rows, desktop footer accepted as INV-61) | #994, #998, #1015, #1000, #1004, #1012, #1022, #1021 |
-| | Also merged: Unicode PDF font (AQ-16), PDF text and JPEG fixes (AQ-15), release needs green CI (AQ-20), real-app tests on PRs (AQ-21), startup failure screen (AQ-22). Reports AQ-6 and AQ-14 read and closed by Adam | #969, #961, #963, #964, #965, #1001, #950 |
+| C5 | Stale tracker rows closed and the old `main` PRs listed for Adam (AQ-39); Adam closed the old `main` PRs #547, #488, #489 and #382 | #996 |
+| C6 | PDF export as a print layout: script and list print pages (AQ-40, AQ-41), desktop `printToPDF` (AQ-42), browser print dialog (AQ-43), automatic layout checks in CI (AQ-45), the old PDF generator, font subsetter and Noto fonts deleted (AQ-44), plus Adam's print fixes (rows kept together, shot scenes as grey rows, desktop footer accepted as INV-61) | #994, #998, #1015, #1000, #1004, #1024, #1012, #1022, #1021 |
+| I-1 | Rows animating when a document opens (#595): closed by Adam, who will open an issue if he sees it again | none |
+| I-31 | Section Headers: divider rows between scenes, with a name and a running total; double Backspace removes a header. Model, editor, then print, PDF, Word, Markdown, rundown and Present output | #1028, #1029, #1031 |
+| I-32 | The first save takes the script title, and a version tag such as "v3", from the file name | #1027 |
+| I-33 | The tag button with nothing selected starts an open tag at the cursor | #1026 |
+| | Also merged: Unicode PDF font (AQ-16), PDF text and JPEG fixes (AQ-15), release needs green CI (AQ-20), real-app tests on PRs (AQ-21), startup failure screen (AQ-22), CI uploads the built app on pushes only (#1032). Reports AQ-6 and AQ-14 read and closed by Adam | #969, #961, #963, #964, #965, #1032, #1001, #950 |
 
 ## Still to do for 4.1
 
 | Item | What | State | Adam's input |
 | --- | --- | --- | --- |
-| C6 P5 | Delete the old PDF generator in `pdf.ts` (1,787 lines), the font subsetter and the Noto fonts (AQ-44). Adam checked the new PDFs on browser and desktop on 2026-10-31 | In progress, #1024 (draft); protected | Decide on the old-generator tests it lists; merge approval |
-| A1 end | History fault injection out of release builds (AQ-46): two TypeScript conversions, then the move | Last in line, after AQ-44; protected | Merge approval for each PR |
-| C4 | Files over 1,000 lines and the 57 remaining JavaScript files, only when a change touches them (rule 11) | As touched | none |
-| C5 end | Old PRs on `main`: #547, #488 and #489 are still open (#382 is closed) | Waiting | Close or retarget them |
-| I-1 | Rows animate when a document opens (#595), cosmetic | Waiting | Fix or close |
+| C4 | Files over 1,000 lines and the remaining JavaScript files, only when a change touches them (rule 11) | As touched | none |
+| #1035 | Desktop smoke: the moved-file "asks again" group (#496) fails on most first runs on the hosted runner | In progress | none |
+| AQ-37 check | Real-microphone check of desktop voice (#1016), `WINDOWS-CHECKS.md` §3 | Waiting | Run it on his PC |
+| #1030 | Row merge: a one-sided scene reorder can come back in a different order (pre-existing; merge is protected) | Filed | Whether to fix it for 4.1 |
+| #1023 | Notes handwriting lines in printed PDFs are too close together | Parked by Adam for the later PDF layout work | none |
 
 "Protected" means the task touches a protected path in [AGENT-QUEUE.md](AGENT-QUEUE.md#autonomous-run-rules), so it gets an independent review and the PC checks, then stops for Adam's merge.
 
 ## New features (not in 4.1 unless Adam says so)
 
-- I-31 Section Headers: organise a script's sections into scenes. Needs a design.
-- I-32 Script title from the file name on first save, with a small version tag such as "v3". Protected (first save).
-- I-33 Clicking the tag button with nothing selected inserts an open tag at the cursor. Editing path, needs perf-ab.
 - Collaboration rebuilt with Yjs. Held by Adam.
+
+I-31, I-32 and I-33 were here; Adam brought them into 4.1 and they are listed under Done.
 
 ## Releasing 4.0.0 (last step, when Adam calls it)
 
