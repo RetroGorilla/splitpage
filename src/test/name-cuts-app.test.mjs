@@ -18,7 +18,7 @@ const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toNam
 const { plainTagPhrase } = await import("../features/tags/plain-tags.ts");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);
-const { openBrollPanel } = await import("../features/broll/panel.js");
+const { openBrollPanel } = await import("../features/broll/panel.ts");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { renderComments, setCommentAssignee } = await import("../features/comments/comments.ts");
 const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
