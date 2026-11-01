@@ -895,7 +895,7 @@ lose) — but both sides changing it keeps theirs with no conflict card, as a
 scene's length does; with no base a set target beats none. Both project
 formats carry it as a plain key; the `.md` table does not show it and no
 export prints it. It is set only through `setTargetLength()`
-(`src/features/rundown/target.js`), one `markDirty()`, so undo sees a `docField` step. What reads it:
+(`src/features/rundown/target.ts`), one `markDirty()`, so undo sees a `docField` step. What reads it:
 the script's length (`updateScriptStats()`: `1:35 / 2:00` and `0:25 left` /
 `0:05 over` in `#runtime-slot`, via the pure `targetClock()`; since #207 a
 label at the end of the rundown, `#runtime-chip`, placed by
@@ -904,7 +904,7 @@ header's status line — it was the header's program clock before; the
 target is measured against the whole script — with shot scenes hidden the
 remaining-to-shoot figure moves to the tooltip), and the rundown
 strip (`setRundownExtraSeconds(target)`, so the span is
-max(target, total) + 10s; `src/features/rundown/target.js` draws the line, "Target 2:00" and
+max(target, total) + 10s; `src/features/rundown/target.ts` draws the line, "Target 2:00" and
 the hatching on `#rundown-overlay` from `rundownLayout().x` — the layout at
 rest, never `rundownX()`, because the overlay is faded while the lens is on
 and must be right when it settles; and never seconds × `pxPerSecond`, since
