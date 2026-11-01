@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mountSaveStatus } from "../../../src/features/title/save-status.js";
+import { mountSaveStatus } from "../../../src/features/title/save-status.ts";
 import { showRefusal } from "../../../src/features/title/refusal.ts";
 import type { SaveStatusMount, SaveStatusPorts } from "../../../src/features/title/ports.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";

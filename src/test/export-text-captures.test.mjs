@@ -6,7 +6,7 @@ import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import "./_preferences-started.mjs";
 import { preferences } from "../bootstrap/wiring/preferences-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { blobStore, intern } from "../adapters/storage/02c-blobs.js";
+import { blobStore, intern } from "../adapters/storage/02c-blobs.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import "./_broll-mounted.mjs";
 import { exportAssetsNow } from "../adapters/formats/export-assets.ts";

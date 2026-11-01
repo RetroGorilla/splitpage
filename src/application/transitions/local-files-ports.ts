@@ -11,22 +11,25 @@ import type { TextServices } from "../text/services.ts";
 import type { DocumentDestination, HistoryPort } from "./ports.ts";
 import type { DocumentSource } from "./sources.ts";
 import type { Transitions } from "./transitions.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
+import type { DraftParsedFile } from "../recovery/drafts-ports.ts";
+import type { ImportFormats, ImportedRow } from "../formats/import-formats.ts";
 
 export interface LocalFileOpening {
   readonly kind: string;
-  readonly file?: unknown;
+  readonly file?: LocalFileData | null;
   readonly handle?: unknown;
-  readonly parsed?: unknown;
-  readonly options?: unknown;
+  readonly parsed?: { readonly state: ValidatedDocument; readonly kind: unknown };
+  readonly options?: { readonly skipSnapshot?: boolean; readonly silent?: boolean; readonly resumed?: boolean; readonly reload?: boolean } | null;
 }
 
 export interface LocalFileImports {
-  readonly parseProjectFileState: (file: unknown) => Promise<unknown>;
-  readonly docxToRows: (file: LocalFileData) => Promise<unknown>;
-  readonly csvToRows: (text: string) => unknown;
+  readonly parseProjectFileState: (file: unknown) => Promise<DraftParsedFile | null>;
+  readonly docxToRows: (file: LocalFileData) => ReturnType<ImportFormats["docx"]>;
+  readonly csvToRows: (text: string) => ImportedRow[];
   readonly detectTwoColumnFormat: (text: string) => string | null;
   readonly parseImportRows: (text: string, mode: string) => unknown;
-  readonly normalizeImportedRows: (rows: unknown, sanitize: TextServices["sanitizeHtml"]) => unknown;
+  readonly normalizeImportedRows: (rows: unknown, sanitize: TextServices["sanitizeHtml"]) => ImportedRow[];
 }
 
 export interface LocalFilesOwnerPorts {

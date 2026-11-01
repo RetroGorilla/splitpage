@@ -56,13 +56,13 @@ test("every CSS variable has a CSS definition or a runtime assignment", () => {
     "src/features/tags/panels.ts",
     "src/features/tags/production-tags.ts",
     "src/features/title/topbar.ts",
-    "src/features/title/document-chrome.js",
+    "src/features/title/document-chrome.ts",
     "src/features/comments/comments.ts",
-    "src/features/notices/busy.js",
+    "src/features/notices/busy.ts",
     "src/features/editing/cell-reach.ts",
     "src/features/notices/phone-bar.ts",
     "src/features/panels/side-panels.ts",
-    "src/features/panels/script-place.js",
+    "src/features/panels/script-place.ts",
     "src/features/file-menu/export-dialog.js",
     "src/features/gallery/annotate.ts"
   ]) addRuntimeDefinitions(new URL(file, repoUrl), definitions);

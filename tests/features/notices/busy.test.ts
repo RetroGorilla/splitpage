@@ -2,7 +2,7 @@ import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { beginBusy, endBusy, withBusyBar } from "../../../src/features/notices/busy.js";
+import { beginBusy, endBusy, withBusyBar } from "../../../src/features/notices/busy.ts";
 
 const SHOW_DELAY_MS = 250;
 

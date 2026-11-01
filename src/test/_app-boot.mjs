@@ -103,7 +103,7 @@ export async function appWiringDeps() {
     import("../bootstrap/wiring/project-files.ts")
   ]);
   const entry = await import("../bootstrap/startup/document-entry.ts");
-  const html = await import("../adapters/page/standalone-html.js");
+  const html = await import("../adapters/page/standalone-html.ts");
   const fileSaving = exporting.wireFileSaving({ copyHistory: (...args) => docId.documentIdentityOwner().copyDocHistorySafe(...args), syncIdentity: (...args) => docId.documentIdentityOwner().syncDocIdentity(...args), setBaseline: sync.setBaseState });
   return {
     entry: migrateRows,

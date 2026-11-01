@@ -17,5 +17,5 @@ export interface PrompterVoice {
   readonly createRelay: () => PrompterRecognition;
   readonly hasRelay: () => boolean;
   readonly setRelay: (value: string | null) => boolean;
-  readonly browserRecognition: () => (new () => PrompterRecognition) | null;
+  readonly browserRecognition: () => (new () => PrompterRecognition) | null | undefined;
 }
