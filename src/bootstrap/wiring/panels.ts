@@ -7,7 +7,7 @@ import { renderHistory } from "./history-panel.ts";
 import { currentProductionTags } from "./production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
 import { onPainted } from "../../features/rows/render.ts";
-import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
+import { refreshGalleryOverlay } from "../../features/gallery/overlay.ts";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.ts";
 import { paintTargetOverlay } from "../../features/rundown/target.js";
 import { refreshAnnotator } from "../../features/gallery/annotate.ts";
