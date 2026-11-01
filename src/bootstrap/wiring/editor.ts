@@ -109,7 +109,7 @@ import {
   updateUntaggedPrompt
 } from "../../features/tags/production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
-import { renderProduction } from "../../features/tags/panels.js";
+import { renderProduction } from "../../features/tags/panels.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll, scheduleBrollRefresh } from "./broll.ts";
 import {
   captureReplyDrafts,
