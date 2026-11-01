@@ -13,7 +13,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 - **Section headers** group scenes without changing their running order.
   Select a scene and choose **+ Section before selected scene** to name a
-  section. Its header shows every scene's count and total, including shot
+  section. Its header shows the scene count and total time, including shot
   scenes. Click the name to rename it; the ⋯ menu moves or removes the header.
   Drag the grip to move the whole section, or drag a scene across a header
   to change its section. The fold chevron hides scenes for this session only;

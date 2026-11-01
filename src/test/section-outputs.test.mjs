@@ -80,5 +80,7 @@ test("narration Word retains section cues as metadata while plain narration stay
   assert.ok(headings.every(p => p.getElementsByTagName("w:keepNext").length === 1));
   const imported = await docxToRows(new File([bytes], "narration.docx"));
   assert.doesNotMatch(imported.rows.map(row => row.audioText + row.visualText).join(""), /Opening|Ending/);
+  assert.equal(imported.rows.map(row => exportServices().htmlToPlainText(row.audioText)).join(" ").replace(/\s+/g, " "),
+    "Spoken a Spoken b Spoken c Spoken d");
   assert.doesNotMatch(buildNarrationText(doc), /Opening|Ending/);
 });

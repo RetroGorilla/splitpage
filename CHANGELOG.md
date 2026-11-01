@@ -11,6 +11,9 @@ saving bugs. If you open or share scripts on a Splitpage server, read
 **Removed** before you upgrade.
 
 ### Added
+- Named section dividers group scenes, fold for the current session and move
+  as a group. Section cues appear in the rundown and Present; print, PDF,
+  Word and Markdown exports retain headings and section totals.
 - With nothing selected in a Visual cell, **Tag** opens the existing label
   dialog with just its categories. Choose one to start an open tag at the
   cursor, then type its name as with a typed keyword. Escape or clicking
