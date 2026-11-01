@@ -18,7 +18,7 @@ import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions
 const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
-import { domProjection } from "../features/common/find-dom.js";
+import { domProjection } from "../features/common/find-dom.ts";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
 
