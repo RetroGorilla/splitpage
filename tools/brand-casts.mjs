@@ -136,7 +136,7 @@ export function brandForgeries(program, repo, files) {
         const target = checker.getTypeFromTypeNode(node.type);
         const source = typeOf(node.expression);
         const present = checker.getNonNullableType(source);
-        if ((carriesBrand(target) || neverContainer(target)) && !checker.isTypeAssignableTo(source, target) &&
+        if ((carriesBrand(target) || neverContainer(target)) && !isNever(source) &&
           (isNever(present) || !checker.isTypeAssignableTo(present, target))) {
           report(node, "a type assertion to the validated document brand or to never");
         }
