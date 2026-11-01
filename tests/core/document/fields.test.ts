@@ -23,7 +23,7 @@ const UNDO_GOLDEN = JSON.parse(readFileSync(new URL("../../../src/test/fixtures/
 
 const KEYS = [
   "title", "docId", "rows", "comments", "people", "productionTags", "brollShots",
-  "wordsPerMinute", "rev", "lastEditedBy", "lastEditedAt", "personColors", "targetSeconds", "schema"
+  "wordsPerMinute", "rev", "lastEditedBy", "lastEditedAt", "personColors", "targetSeconds", "sections", "schema"
 ];
 
 test("the document is schema 2, with its fields in their saved order", () => {
@@ -52,7 +52,7 @@ test("every field names a merge strategy from the closed list", () => {
     title: "title", docId: "doc-id", rows: "rows", comments: "comments",
     people: "list-union-with-base", productionTags: "list-union-with-base", brollShots: "list-union-with-base",
     wordsPerMinute: "changed-side-wins", rev: "max-plus-one", lastEditedBy: "theirs-wins", lastEditedAt: "theirs-wins",
-    personColors: "person-colors", targetSeconds: "target-length", schema: "constant"
+    personColors: "person-colors", targetSeconds: "target-length", sections: "sections", schema: "constant"
   });
   assert.ok(STATE_FIELDS.every((f) => !("mergeList" in f)), "core holds no merge callbacks");
 });
@@ -66,8 +66,8 @@ test("defaults are fresh values, and only the fields a document always has carry
   assert.notEqual(rows?.def?.(), rows?.def?.());
 });
 
-test("normalize: four fields carry one, and undefined from it means the field goes", () => {
-  assert.deepEqual(STATE_FIELDS.filter((f) => f.normalize).map((f) => f.key), ["wordsPerMinute", "lastEditedBy", "personColors", "targetSeconds"]);
+test("normalize: five fields carry one, and undefined from it means the field goes", () => {
+  assert.deepEqual(STATE_FIELDS.filter((f) => f.normalize).map((f) => f.key), ["wordsPerMinute", "lastEditedBy", "personColors", "targetSeconds", "sections"]);
   const norm = (key: string, v: unknown) => (STATE_FIELDS.find((f) => f.key === key)?.normalize as (v: unknown) => unknown)(v);
   assert.equal(norm("wordsPerMinute", "212.5"), 213);
   assert.equal(norm("wordsPerMinute", undefined), DEFAULT_WPM);
@@ -85,6 +85,8 @@ test("normalize: four fields carry one, and undefined from it means the field go
   assert.equal(norm("targetSeconds", 59.6), 60);
   assert.equal(norm("targetSeconds", 0), undefined);
   assert.equal(norm("targetSeconds", "60"), undefined);
+  assert.equal(norm("sections", []), undefined);
+  assert.deepEqual(norm("sections", [{ id: "s1", name: "Opening", firstSceneId: "r1" }]), [{ id: "s1", name: "Opening", firstSceneId: "r1" }]);
 });
 
 test("a field is undone as a document field exactly when the undo golden records a step for it", () => {
