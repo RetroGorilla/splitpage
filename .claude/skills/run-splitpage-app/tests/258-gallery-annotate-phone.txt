@@ -1,4 +1,4 @@
-# Drawing on a gallery picture on a phone (05w-annotate.js, app.css
+# Drawing on a gallery picture on a phone (src/features/gallery/annotate.ts, app.css
 # .annotate-* under max-width 600px), at 375×812 with touch:
 #   * the gallery dialog offers Annotate, and nothing in it runs off the
 #     screen;

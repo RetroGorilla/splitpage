@@ -7,12 +7,13 @@ import { exposeTestHook } from "../common/test-hooks.ts";
 import type { GalleryMount, GalleryPorts } from "./ports.ts";
 import type { Mark, Slot } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
+import type { DocumentView } from "../../application/session/document-session.ts";
 
-type AnnotatorDocument = { readonly rows: readonly unknown[] };
+type AnnotatorDocument = Pick<DocumentView, "rows">;
 
 interface AnnotatorPortUse extends Omit<GalleryPorts, "document"> {
   readonly document: {
-    readonly current: () => AnnotatorDocument | null;
+    readonly current: (...args: Parameters<GalleryPorts["document"]["current"]>) => AnnotatorDocument | Extract<ReturnType<GalleryPorts["document"]["current"]>, null | undefined>;
     readonly read: GalleryPorts["document"]["read"];
   };
 }
