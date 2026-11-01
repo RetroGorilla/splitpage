@@ -1,5 +1,5 @@
 # Where you can type in the script (#182, app.css "#rows .cell-editable",
-# src/js/05q-cell-reach.js).
+# src/js/05q-cell-reach.ts).
 #
 # The page stays calm — no box round a field at rest — but: the current
 # scene steps off the page (--row-current), the field with the caret has a
