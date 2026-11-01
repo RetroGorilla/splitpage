@@ -1,7 +1,7 @@
 {
   "loadOnly": [
     "src/features/gallery/annotate.ts",
-    "src/features/gallery/overlay.js",
+    "src/features/gallery/overlay.ts",
     "src/features/gallery/actions.ts",
     "src/bootstrap/wiring/gallery.ts",
     "src/features/common/gallery.ts",
