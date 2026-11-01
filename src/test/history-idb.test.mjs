@@ -1,9 +1,9 @@
-import { createMemoryHistoryTestBackend, createIdbHistoryTestBackend } from "../adapters/storage/history-backend-testing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
+import { createMemoryHistoryTestBackend, createIdbHistoryTestBackend } from "../adapters/storage/history-backend-testing.ts";
 import { createHistoryStore } from "../../shared/history-store.js";
 import { HISTORY_OLDER_KEY, HISTORY_OLDER_TTL_MS, historyUtf8Length } from "../../shared/history-policy.js";
 import {
