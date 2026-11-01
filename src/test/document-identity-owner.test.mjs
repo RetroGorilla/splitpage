@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createDocumentIdentityOwner } from "../application/identity/document-identity.js";
+import { createDocumentIdentityOwner } from "../application/identity/document-identity.ts";
 import { deriveDocId } from "../core/document/ids.ts";
 
 const A = "d" + "1".repeat(32);
