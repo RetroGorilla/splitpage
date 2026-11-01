@@ -12,14 +12,14 @@ function setup() {
   return { timers, removed, owner, hint: () => hint };
 }
 
-for (const key of ["Backspace", "Delete"] as const) {
+for (const key of ["Backspace", "Delete", "Alt+ArrowUp", "Alt+ArrowDown"] as const) {
   test("section boundary: " + key + " first press only hints, second removes exactly one header", () => {
     const h = setup();
-    h.owner.press("s1", key);
+    assert.equal(h.owner.press("s1", key), false);
     assert.deepEqual(h.removed, []);
-    assert.equal(h.hint(), "Press " + key + " again to remove the section header");
+    assert.equal(h.hint(), key.startsWith("Alt+") ? "Press again to remove the section header" : "Press " + key + " again to remove the section header");
     h.timers.advance(1999);
-    h.owner.press("s1", key);
+    assert.equal(h.owner.press("s1", key), true);
     assert.deepEqual(h.removed, ["s1"]);
     assert.equal(h.hint(), "");
     assert.equal(h.timers.armed(), 0);

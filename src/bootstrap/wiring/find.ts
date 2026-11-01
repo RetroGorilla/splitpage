@@ -9,7 +9,7 @@ import { findActions as definitions } from "../../features/find/actions.ts";
 import { startFind, mountFindEvents } from "../../features/find/find.js";
 import type { FindControls, FindPorts } from "../../features/find/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { shotHiding } from "./shot-hiding.ts";
+import { shotHiding } from "./ports/shot-hiding.ts";
 import { bulkTagRows } from "./production-index.ts";
 
 const find = owned<FindControls>();
@@ -21,7 +21,7 @@ export function mountFindFeature(): FindControls {
       document: portDocument,
       edits: portEdits,
       text: portText,
-      shotHiding,
+      shotHiding: () => shotHiding,
       undo: portUndo,
       notices: portNotices,
       flags: portFlags,
