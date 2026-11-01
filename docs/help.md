@@ -21,6 +21,10 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   waiting two seconds cancels the hint. Undo restores the header and its
   name in one step.
 
+- **Start a tag at the cursor.** With nothing selected in a Visual cell,
+  press **Tag** and choose a category, then type its name. The same dialog
+  shows just its categories; selecting existing words still opens the full
+  label dialog.
 - **Collaboration and server scripts are gone for now.** Live
   collaboration, invite and share links, opening and saving scripts on a
   Splitpage server, hosting from the desktop app, and Google Drive are
@@ -537,9 +541,20 @@ exports and read times stay the same, and the teleprompter leaves them out.
 `Music:`, in any case). The words you type next are tinted in that
 category's colour.
 
+You can also put the caret in the Visual column with nothing selected and
+press **Tag**. The label dialog shows only its categories, with the first
+one focused. Click a category, or focus it and press <kbd>Enter</kbd>, to
+start the same open tag at your saved caret. <kbd>Esc</kbd> or a click
+outside the dialog returns to that caret without changing the script.
+This works wherever typing a category keyword would open a tag, outside
+links and existing tags. With selected words, the full label dialog works
+as before.
+
 - <kbd>Tab</kbd> (on a phone, tap the note under the box) makes them one
   tag.
 - <kbd>Esc</kbd> cancels and leaves the plain text.
+- <kbd>Enter</kbd> or leaving the cell ends the open tag as plain text;
+  <kbd>Enter</kbd> also inserts a line break.
 - <kbd>Ctrl</kbd>+<kbd>Z</kbd> after <kbd>Tab</kbd> takes the tag off and
   leaves your words as you typed them.
 
@@ -714,9 +729,8 @@ chooses page breaks, without a continued-row label, and supplies no PDF
 bookmarks.
 
 The **desktop app** still saves a PDF file directly, with bookmarks to its
-sections. Its current PDF writer supports Greek, Cyrillic, accented Latin
-and black-and-white emoji; unsupported characters appear as "?", with a
-warning. The browser print layout does not use that writer.
+sections. It prints the same page as the browser, so it also uses your
+computer's fonts and lets the page breaks fall where they fit.
 
 **Markdown** comes in two shapes. **Stacked** reads like a script, one
 heading per scene with its start time, status and read time; with pictures

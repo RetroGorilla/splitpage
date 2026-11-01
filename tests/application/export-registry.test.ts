@@ -64,6 +64,19 @@ test("an exporter with no action is a provider only: nothing lists it, but it ca
   assert.throws(() => registry.register({ id: "odd", card: "demo", fileName: () => "", build: () => ({ data: "" }) }), /card without an action/);
 });
 
+test("an exporter needs a build or a print page; a print page alone is enough", () => {
+  const registry = createExportRegistry();
+  registry.defineCard(CARD);
+  const nothing: ExporterDecl = { id: "none", action: "export-none", card: "demo", name: "none", menuLabel: "none", fileName: (base) => base + ".pdf" };
+  assert.throws(() => registry.register(nothing), /exporter none needs a build or a print page/);
+  assert.equal(registry.byId("none"), undefined);
+  assert.deepEqual(registry.exporters(), []);
+  const page = (): string => "<p>page</p>";
+  registry.register({ ...nothing, id: "printed", printPage: page });
+  assert.equal(registry.byId("printed")?.build, undefined);
+  assert.equal(registry.byId("printed")?.printPage, page);
+});
+
 test("isAction answers only for registered action ids", () => {
   const registry = createExportRegistry();
   registry.defineCard(CARD);

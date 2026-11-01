@@ -1170,6 +1170,15 @@ export function handleToolbarCmd(btn: Element): void {
   }
   if (cmd === "tag") {
     const tsel = window.getSelection() as Selection;
+    if (tsel.rangeCount && tsel.isCollapsed && rangeInside(tsel.getRangeAt(0), cellEl)) {
+      const selection = cellSelection(cellEl);
+      const cell = ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML));
+      ports.actions.invoke("tag-selection", "button", {
+        caret: cellEl,
+        marks: selection ? marksForTyping(cellEl, cell, selection.from) : {}
+      });
+      return;
+    }
     if (!tsel.rangeCount || tsel.isCollapsed || !rangeInside(tsel.getRangeAt(0), cellEl)) {
       ports.notices.show("Select the words you want to label first.", "warn");
       return;
