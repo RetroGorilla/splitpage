@@ -17,7 +17,7 @@ const flushEdits = () => undoOwner().flush();
 const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { editorSelection } = await import("../bootstrap/wiring/editor-owners.ts");
 const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
