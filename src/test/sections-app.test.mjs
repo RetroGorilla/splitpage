@@ -15,7 +15,7 @@ const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts"
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { sectionView } = await import("../bootstrap/wiring/editor-owners.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 let opened = 0;
 
 async function open(sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r3" }], fields = {}) {
