@@ -1,7 +1,7 @@
 import type { HistoryOwnerPorts } from "../../../application/recovery/history-ports.ts";
 import type { LegacySnapshots } from "../../../application/recovery/legacy-snapshots.ts";
 import { createHistoryBackends } from "../../../adapters/storage/history-backends.ts";
-import { inlineStateJson } from "../../../adapters/storage/02c-blobs.js";
+import { inlineStateJson } from "../../../adapters/storage/02c-blobs.ts";
 import { historyDesktop } from "./desktop.ts";
 import { getEditorName } from "../preferences-owner.ts";
 import { saveChanges, unsavedChanges } from "../save-owners.ts";

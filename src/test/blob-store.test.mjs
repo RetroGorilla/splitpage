@@ -21,7 +21,7 @@ import {
   rowImageBytes,
   rowImageDataUrl,
   rowImageUrl
-} from "../adapters/storage/02c-blobs.js";
+} from "../adapters/storage/02c-blobs.ts";
 import { rowImage, rowImageKey, rowImageShas } from "../core/document/media.ts";
 
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];

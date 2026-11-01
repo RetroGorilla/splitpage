@@ -186,7 +186,7 @@ expect window.__c13Summary.code === 'not-json'
 # 14-19. images (#82 P7). Nothing in the app creates an imageRef yet, so the
 # snapshots below are built by hand and seeded through __historyTest's
 # importBundle; the images are real canvas PNGs interned and persisted
-# through __blobsTest (02c-blobs.js, IndexedDB 'splitpage-blobs').
+# through __blobsTest (02c-blobs.ts, IndexedDB 'splitpage-blobs').
 # clearBlobs() deletes that database, points the registry back at its own
 # backend choice (forgetting what it knew to be durable) and drops the bytes
 # it holds in memory — a fresh machine, as far as images go.
