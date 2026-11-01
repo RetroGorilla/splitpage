@@ -87,6 +87,35 @@ const ONE = [T("one two")], ONE_M = [T("ONE two")], ONE_T = [T("one TWO")], ONE_
 const TWO = [T("two")], THREE = [T("three")], FOUR = [T("four")], FOUR_M = [T("four, mine")];
 const NEW_M = [T("mine new")], NEW_T = [T("theirs new")];
 
+test("rows: a one-sided swap survives in either orientation", () => {
+  const base = { rows: [row("a", ONE), row("b", TWO)] };
+  const changed = { rows: [row("b", TWO), row("a", ONE)] };
+  for (const [mine, theirs] of [[changed, base], [base, changed], [changed, changed]] as const) {
+    assert.deepEqual(runRows([ONE, TWO], base, mine, theirs).rows, changed.rows);
+  }
+});
+
+test("rows: a local reorder combines with incoming edits and additions without changing content merge decisions", () => {
+  const base = { rows: [row("a", ONE), row("b", TWO), row("c", THREE), row("d", FOUR)] };
+  const mine = { rows: [row("b", TWO), row("x", NEW_M), row("a", ONE_M), row("c", THREE)] };
+  const theirs = { rows: [row("a", ONE_T), row("b", TWO), row("y", NEW_T), row("c", THREE), row("d", FOUR_M)] };
+  const result = runRows([ONE, ONE_M, ONE_T, TWO, THREE, FOUR, FOUR_M, NEW_M, NEW_T], base, mine, theirs);
+  assert.deepEqual(result.rows, [mine.rows[0], theirs.rows[2], mine.rows[1],
+    row("a", ONE_MT, { updatedAt: FIXED_ISO, updatedBy: EDITOR }), mine.rows[3], theirs.rows[4]]);
+  assert.deepEqual(result.stats, { rowsFromThem: 0, rowsFromMe: 1, rowsAddedByMe: 1, rowsAddedByThem: 1 });
+  assert.deepEqual(result.conflicts, []);
+});
+
+test("rows: competing reorders and merges without a base retain incoming order", () => {
+  const base = { rows: [row("a", ONE), row("b", TWO), row("c", THREE)] };
+  const mine = { rows: [row("b", TWO), row("a", ONE), row("c", THREE)] };
+  const theirs = { rows: [row("a", ONE), row("c", THREE), row("b", TWO)] };
+  for (const original of [base, null]) {
+    assert.deepEqual(runRows([ONE, TWO, THREE], original, mine, theirs).rows, theirs.rows);
+    assert.deepEqual(runRows([ONE, TWO, THREE], original, theirs, mine).rows, mine.rows);
+  }
+});
+
 test("rows: inserts land after their neighbour, deletes of untouched rows hold, edits merge and stamp mine", () => {
   const base = { rows: [row("r1", ONE), row("r2", TWO), row("r3", THREE), row("r4", FOUR)] };
   const mine = { rows: [row("r1", ONE_M, { updatedBy: "Mine" }), row("r2", TWO), row("rM", NEW_M), row("r4", FOUR_M, { updatedBy: "Mine" })] };
