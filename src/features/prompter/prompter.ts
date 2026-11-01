@@ -1,4 +1,5 @@
 import { pad2, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
+import { sectionGroups } from "../../core/document/sections.ts";
 import { withoutCues } from "../../core/text/cues.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -26,6 +27,7 @@ type TimerHandle = ReturnType<typeof setTimeout>;
 type PrompterDoc = {
   readonly rows: readonly (Parameters<typeof rowSeconds>[0] & { readonly id: string; readonly status?: string | undefined })[];
   readonly wordsPerMinute?: number | null | undefined;
+  readonly sections?: unknown;
 };
 type PromptWord = { el: HTMLElement; norm: string };
 type SceneView = { html: string; words: number };
@@ -63,6 +65,7 @@ interface PrompterState {
   promptLinePx: number;
   prompterWakeLock: WakeLockSentinel | null;
   sceneRowIds: string[];
+  sceneSections: string[];
   sceneWordStart: number[];
   sceneWordEnd: number[];
   promptSceneIndex: number;
@@ -98,6 +101,7 @@ function freshState(): PrompterState {
     promptLinePx: 60 * 1.42,
     prompterWakeLock: null,
     sceneRowIds: [],
+    sceneSections: [],
     sceneWordStart: [],
     sceneWordEnd: [],
     promptSceneIndex: -1,
@@ -192,12 +196,20 @@ export function buildPrompterContent(): void {
   state.speakCursor = -1;
 
   state.sceneRowIds = [];
+  state.sceneSections = [];
+  const sectionNames = new Map<string, string>();
+  if (Array.isArray(doc.sections) && doc.sections.length) {
+    for (const group of sectionGroups(doc)) {
+      for (let i = group.start; i < group.end; i++) sectionNames.set((doc.rows[i] as { id: string }).id, group.section.name);
+    }
+  }
   state.sceneWordStart = [];
   state.sceneWordEnd = [];
   let cursor = 0;
   sceneEntries.forEach(function (e) {
     const n = e.view ? e.view.words : 0;
     state.sceneRowIds.push(e.id);
+    state.sceneSections.push(sectionNames.get(e.id) ?? "");
     state.sceneWordStart.push(cursor);
     cursor += n;
     state.sceneWordEnd.push(cursor);
@@ -295,6 +307,9 @@ export function updatePrompterStatus(): void {
   setText(posEl, scene === -1 ? "" : pad2(scene + 1) + " / " + pad2(state.sceneRowIds.length));
   setText(document.getElementById("pp-scene-pos-sr"), scene === -1 ? "" : "Scene " + (scene + 1) + " of " + state.sceneRowIds.length);
   setText(document.getElementById("pp-scene-start"), scene === -1 ? "" : formatTimecode(state.sceneStartSec[scene] as number));
+  const sectionEl = document.getElementById("pp-section");
+  const sectionName = scene === -1 ? "" : state.sceneSections[scene] ?? "";
+  if (sectionEl) { setText(sectionEl, sectionName); sectionEl.hidden = !sectionName; sectionEl.title = sectionName; }
   const read = Math.round(elapsed);
   const total = Math.round(state.promptTotalSec);
   const readText = formatTimecode(read);

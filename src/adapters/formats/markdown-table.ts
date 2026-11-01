@@ -14,6 +14,12 @@ const AUDIO_HEADER_RE = /^(audio|vo|voiceover|voice-over|narration|dialogue|scri
 
 export const MD_EXPORT_TAIL_RE = /^\s*##\s+(Production breakdown|B-roll shot list|Comments)\s*$/;
 const MD_OWN_TABLE_HEADERS: readonly string[] = Object.freeze(["#|visual|audio|status", "#|start|status|visual|audio|read"]);
+const MD_SECTION_HEADING_RE = /^## (?:\\[\\`*_[\]<>#|]|[^\\`*_[\]<>#|])+ · (?:[1-9]\d*:)?[0-5]?\d:[0-5]\d$/;
+
+export function isStackedSectionHeading(lines: readonly string[], at: number): boolean {
+  return MD_SECTION_HEADING_RE.test(lines[at] ?? "") && lines[at - 1] === "" && lines[at + 1] === "" &&
+    /^### Scene \d+ · (?:[1-9]\d*:)?[0-5]\d:[0-5]\d$/.test(lines[at + 2] ?? "");
+}
 
 export function columnIndicesFromHeader(header: readonly string[]): ColumnIndices {
   let visualIdx = header.findIndex(function (c) { return VISUAL_HEADER_RE.test(c.trim()); });
@@ -55,7 +61,8 @@ export function parseMarkdownTable(text: unknown, opts?: { readonly keepEmpty?: 
   const keepEmpty = !!(opts && opts.keepEmpty);
   const lines = markdownExportScript(text).replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
   const rows: string[][] = [];
-  lines.forEach(function (line) {
+  lines.forEach(function (line, at) {
+    if (MD_SECTION_HEADING_RE.test(line) && MD_OWN_TABLE_HEADERS.includes(splitTableRowCells(lines[at + 1] ?? "").join("|").toLowerCase())) return;
     if (line.indexOf("|") === -1) return;
     const cells = splitTableRowCells(line);
     if (cells.every(function (c) { return /^:?-{2,}:?$/.test(c) || c === ""; })) return;
@@ -75,6 +82,7 @@ export function parseMarkdownTable(text: unknown, opts?: { readonly keepEmpty?: 
   const out: MarkdownTableRow[] = [];
   for (let i = startIdx; i < rows.length; i++) {
     const row = rows[i] ?? [];
+    if (MD_OWN_TABLE_HEADERS.includes(header.join("|")) && row.map(c => c.toLowerCase()).join("|") === header.join("|")) continue;
     const v = row[visualIdx] || "", a = row[audioIdx] || "";
     if (!v && !a && !keepEmpty) continue;
     out.push({
