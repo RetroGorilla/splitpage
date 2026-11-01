@@ -237,7 +237,7 @@ function replaceCurrent() {
   function replaced(doc: FindDocumentView) {
     const row = doc.rows[rowIndexOf(doc, m.rowId)];
     if (!row) return [];
-    const res = replaceInHtml(row[m.field] as string, needle, replacement, m.nth, matchCase, registryTagHooks((doc as FindDocumentView).productionTags));
+    const res = replaceInHtml(row[m.field] as string, needle, replacement, m.nth, matchCase, registryTagHooks(doc.productionTags));
     return res.changed ? [{ rowId: m.rowId, field: m.field, html: res.html }] : [];
   }
   if (!(ports as FindRuntimePorts).edits.edit(rewriteCellsCommand("replace-match", replaced, (ports as FindRuntimePorts).edits.stamps, { needs: "edit", stamped: true }))) return;
