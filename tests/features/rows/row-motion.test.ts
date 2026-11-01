@@ -2,7 +2,7 @@ import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { rowMotionKey, withRowMotion } from "../../../src/features/rows/row-motion.js";
+import { rowMotionKey, withRowMotion } from "../../../src/features/rows/row-motion.ts";
 
 interface Played {
   readonly node: Element;
