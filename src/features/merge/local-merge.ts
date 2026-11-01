@@ -10,14 +10,12 @@ import { idMap } from "../../core/document/id-map.ts";
 import { safeImageSrc } from "../../core/document/text-policy.ts";
 import { pad2 } from "../../core/production/timing.ts";
 import { cloneState } from "../../core/document/clone.ts";
-import type { MergeReviewPorts } from "./ports.ts";
+import type { MergeReviewControl, MergeReviewPorts } from "./ports.ts";
 import type { Home } from "../../application/location/document-location.ts";
-import type { LocalFileData } from "../../application/files/local-file-access.ts";
 import type { DocumentShape, DocumentRow, DocumentShot, ValidatedDocument } from "../../core/document/validated.ts";
-import type { ExportPerson } from "../../core/document/export-document.ts";
 import type { Frozen } from "../../core/document/freeze.ts";
 
-type MergeReviewDocument = Frozen<Pick<DocumentShape, "docId" | "title" | "rows" | "productionTags" | "brollShots"> & { people: ExportPerson[] }>;
+type MergeReviewDocument = Frozen<Pick<DocumentShape, "docId" | "title" | "rows" | "productionTags" | "brollShots" | "people">>;
 type MergeCandidate = { theirs: ValidatedDocument; base: MergeReviewDocument | null; home: Home | null; fileName: string; lastModified: number | null };
 import {
   mergeDiffPairHtml,
@@ -27,6 +25,10 @@ import {
   mergeListEntries,
   mergeRowFate
 } from "../../core/merge/review.ts";
+
+type MergeReviewDecision = { outcome: ReturnType<typeof mergeTextField>["outcome"] | ReturnType<typeof mergeFieldOutcome>; marks?: ReturnType<typeof mergeTextField>["marks"] };
+type MergeReviewEntry = Omit<ReturnType<typeof mergeListEntries>[number], "outcome"> & { outcome: ReturnType<typeof mergeListEntries>[number]["outcome"] | ReturnType<typeof mergeFieldOutcome>; text?: ReturnType<typeof mergeDiffPairHtml>["mine"] | undefined };
+type MergeReviewGroup = Pick<MergeReviewEntry, "label"> & { entries: MergeReviewEntry[]; note?: ReturnType<typeof mergeRowFate> };
 
 let ports: MergeReviewPorts | null = null;
 let mergeCandidate: MergeCandidate | null = null;
@@ -45,9 +47,9 @@ function applyStashedWork(disk: Parameters<MergeReviewPorts["recovery"]["applySt
 function htmlToPlainText(html: Parameters<MergeReviewPorts["text"]["htmlToPlainText"]>[0]) { return (ports as MergeReviewPorts).text.htmlToPlainText(html); }
 
 function fileMergeBase(home: Home | null | undefined) {
-  if (home && home.diskBase) return home.diskBase as MergeReviewDocument;
+  if (home && home.diskBase) return home.diskBase;
   if (home && home === fileHome() && mergeBase() && currentDocument() &&
-      normalizeDocId((mergeBase() as MergeReviewDocument).docId) === normalizeDocId((currentDocument() as Pick<MergeReviewDocument, "docId">).docId)) return mergeBase() as MergeReviewDocument | null;
+      normalizeDocId((mergeBase() as MergeReviewDocument).docId) === normalizeDocId((currentDocument() as Pick<MergeReviewDocument, "docId">).docId)) return mergeBase();
   return null;
 }
 
@@ -58,7 +60,7 @@ function resetMergeOffer() {
   if (btn) btn.hidden = true;
 }
 
-async function offerFileMerge(currentFile: unknown, home: unknown) {
+async function offerFileMerge(currentFile: Parameters<MergeReviewControl["offer"]>[0], home: Parameters<MergeReviewControl["offer"]>[1]) {
   resetMergeOffer();
   const token = mergeProbeToken;
   if (!currentFile || !currentDocument()) return;
@@ -72,7 +74,7 @@ async function offerFileMerge(currentFile: unknown, home: unknown) {
   if (!parsed || parsed.error || !parsed.state) return;
 
   const theirs = parsed.state;
-  const base = fileMergeBase(home as Home | null | undefined);
+  const base = fileMergeBase(home);
   const refId = normalizeDocId((base && base.docId) || (currentDocument() as Pick<MergeReviewDocument, "docId">).docId);
   if (parsed.docIdEmbedded && refId && normalizeDocId(theirs.docId) !== refId) return;
   if (refId) theirs.docId = refId;
@@ -80,9 +82,9 @@ async function offerFileMerge(currentFile: unknown, home: unknown) {
   mergeCandidate = {
     theirs: theirs,
     base: base,
-    home: (home as Home | null | undefined) || null,
-    fileName: (currentFile as Pick<LocalFileData, "name">).name || "",
-    lastModified: (currentFile as Pick<LocalFileData, "lastModified">).lastModified || null
+    home: home || null,
+    fileName: currentFile.name || "",
+    lastModified: currentFile.lastModified || null
   };
   const btn = document.getElementById("file-conflict-merge");
   if (btn) btn.hidden = false;
@@ -109,7 +111,7 @@ function mergeStatusLabel(id: unknown) {
 }
 
 function mergeDiffModel(base: MergeReviewDocument | null, mine: MergeReviewDocument | null, theirs: MergeReviewDocument) {
-  const groups = [];
+  const groups: MergeReviewGroup[] = [];
   const b = base || null;
 
   const mineTitle = (mine as MergeReviewDocument).title || "", theirTitle = theirs.title || "";
@@ -131,7 +133,7 @@ function mergeDiffModel(base: MergeReviewDocument | null, mine: MergeReviewDocum
 
   order.forEach(function (id) {
     const m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
-    const entries = [];
+    const entries: MergeReviewEntry[] = [];
     ROW_FIELDS.forEach(function (f) {
       if (GALLERY_FIELDS[f]) {
         if (rowFieldKey(m, f) === rowFieldKey(t, f)) return;
@@ -156,7 +158,7 @@ function mergeDiffModel(base: MergeReviewDocument | null, mine: MergeReviewDocum
         });
         return;
       }
-      const decided = m && t
+      const decided: MergeReviewDecision = m && t
         ? mergeTextField(bb ? (bb[f] || "") : undefined, m[f], t[f], textCtx)
         : { outcome: mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null) };
       const outcome = decided.outcome;
@@ -167,7 +169,7 @@ function mergeDiffModel(base: MergeReviewDocument | null, mine: MergeReviewDocum
       entries.push({
         label: f === "audioText" ? "Audio" : "Visual",
         outcome: outcome,
-        text: (decided as { marks?: unknown }).marks ? MERGE_OUTCOME_TEXT.conflictMarks : undefined,
+        text: decided.marks ? MERGE_OUTCOME_TEXT.conflictMarks : undefined,
         mineHtml: pair.mine,
         theirsHtml: pair.theirs
       });
@@ -219,7 +221,7 @@ function mergeDiffImageHtml(row: DocumentRow | null) {
 function mergeEntryHtml(e: ReturnType<typeof mergeDiffModel>[number]["entries"][number]) {
   return '<div class="merge-entry" data-outcome="' + escapeHtml(e.outcome || "both") + '">' +
     '<div class="merge-entry-head">' + escapeHtml(e.label) +
-      '<span class="merge-entry-outcome">' + escapeHtml((e as { text?: string }).text || MERGE_OUTCOME_TEXT[e.outcome as keyof typeof MERGE_OUTCOME_TEXT] || "") + "</span></div>" +
+      '<span class="merge-entry-outcome">' + escapeHtml(e.text || MERGE_OUTCOME_TEXT[e.outcome as keyof typeof MERGE_OUTCOME_TEXT] || "") + "</span></div>" +
     '<div class="merge-sides">' +
       '<div class="merge-side"><div class="merge-side-head">Open here</div>' +
         '<div class="merge-side-body">' + e.mineHtml + "</div></div>" +
@@ -231,14 +233,14 @@ function mergeEntryHtml(e: ReturnType<typeof mergeDiffModel>[number]["entries"][
 function mergeGroupHtml(g: ReturnType<typeof mergeDiffModel>[number]) {
   return '<div class="merge-group">' +
     '<div class="merge-group-head">' + escapeHtml(g.label) +
-      ((g as { note?: string | null }).note ? '<span class="merge-group-note">' + escapeHtml((g as { note?: string | null }).note) + "</span>" : "") + "</div>" +
+      (g.note ? '<span class="merge-group-note">' + escapeHtml(g.note) + "</span>" : "") + "</div>" +
     g.entries.map(mergeEntryHtml).join("") +
   "</div>";
 }
 
 function openMergeReview() {
   if (!mergeCandidate || !currentDocument()) return;
-  const groups = mergeDiffModel(mergeCandidate.base, currentDocument() as MergeReviewDocument | null, mergeCandidate.theirs as unknown as MergeReviewDocument);
+  const groups = mergeDiffModel(mergeCandidate.base, currentDocument(), mergeCandidate.theirs);
   const count = groups.reduce(function (n, g) { return n + g.entries.length; }, 0);
   (document.getElementById("merge-review-detail") as HTMLElement).textContent = count
     ? (count === 1 ? "One field differs" : count + " fields differ") +

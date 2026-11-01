@@ -50,7 +50,7 @@ const el = (id: string) => win.document.getElementById(id) as HTMLElement;
 interface Setup {
   mine: Doc & ValidatedDocument;
   parsed: () => ReturnType<MergeReviewPorts["files"]["parse"]>;
-  mergeBase?: Doc | null;
+  mergeBase?: (Doc & ValidatedDocument) | null;
   fileHome?: Home | null;
 }
 
