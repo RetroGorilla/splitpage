@@ -53,7 +53,7 @@ export default [
   },
 
   {
-    files: ["src/features/find/find.js", "src/features/common/find-dom.js"],
+    files: ["src/features/find/find.ts", "src/features/common/find-dom.ts"],
     rules: { "no-control-regex": "off" }
   },
 

@@ -4,7 +4,7 @@ import { createBrollView } from "../../../src/application/preferences/broll-view
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startBrollPanel, mountBrollPanel } from "../../../src/features/broll/panel.js";
+import { startBrollPanel, mountBrollPanel } from "../../../src/features/broll/panel.ts";
 import type { BrollPanelPorts } from "../../../src/features/broll/ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
 

@@ -21,7 +21,7 @@ const realm = globalThis as unknown as Record<string, unknown>;
 realm.window = win;
 realm.document = win.document;
 realm.getComputedStyle = win.getComputedStyle.bind(win);
-const annotate = await import("../../../src/features/gallery/annotate.js");
+const annotate = await import("../../../src/features/gallery/annotate.ts");
 const page = readFileSync(new URL("../../../src/page.html", import.meta.url), "utf8");
 
 function element(id: string): HTMLElement {

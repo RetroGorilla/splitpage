@@ -12,31 +12,57 @@ import { deleteShotCommand, setShotsCommand } from "../../application/commands/b
 import { newBrollRecord, removeBrollProp } from "../../application/commands/production-actions.ts";
 import { brollRecord as shotIn, personById as personIn, personNamed } from "../../core/production/records.ts";
 
-var ports = null;
+import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "./ports.ts";
+import type { BrollPorts } from "./mount.ts";
+import type { BrollEntry } from "../../core/production/broll.ts";
+import type { Person } from "../../core/production/records.ts";
+import type { NewBrollPorts } from "../../application/commands/production-actions.ts";
+import type { ShotFields } from "../../application/commands/broll-records.ts";
+import type { OwnerChoice } from "../../application/commands/production-records.ts";
 
-const shotEditPorts = { run: (...args) => ports.edits.edit(...args), get ids() { return ports.ids; } };
-
-function productionEntries() {
-  return ports.production.entries(ports.document.current());
+interface PanelDocument extends Pick<NonNullable<ReturnType<BrollPanelPorts["document"]["current"]>>, "rows" | "brollShots"> {
+  readonly people?: readonly (Person & Record<string, unknown>)[];
+  readonly wordsPerMinute?: number | null | undefined;
 }
 
-function setFilter(id) {
-  ports.view.setFilter(id);
+interface PanelDocumentReader extends Pick<BrollPanelPorts["document"], "read"> {
+  readonly current: () => PanelDocument | null;
+}
+
+interface PanelPortUse extends Omit<BrollPanelPorts, "document"> {
+  readonly document: PanelDocumentReader;
+}
+
+type PanelGroup = Omit<ReturnType<typeof brollGroupsFrom>[number], "items"> & { items: BrollEntry[] };
+type PanelShot = BrollEntry;
+type PanelInput = HTMLInputElement | HTMLTextAreaElement;
+type PanelEvent = Parameters<Parameters<typeof mountBroll>[0]["ports"]["click"]>[0];
+
+let ports: BrollPanelPorts | null = null;
+
+const shotEditPorts: NewBrollPorts = { run: (...args) => (ports as PanelPortUse).edits.edit(...args), get ids() { return (ports as PanelPortUse).ids; } };
+
+function productionEntries() {
+  return ((ports as PanelPortUse).production.entries as (doc: ReturnType<PanelPortUse["document"]["current"]>) => ReturnType<BrollPanelPorts["production"]["entries"]>)((ports as PanelPortUse).document.current());
+}
+
+function setFilter(id: unknown) {
+  (ports as PanelPortUse).view.setFilter(id);
   renderBrollViews();
 }
 
-var openId = null;
-var renamingId = null;
-var addingPersonFor = null;
-var editingLocFor = null;
-var editingRefFor = null;
-var menuFor = null;
-var groupMenuOpen = false;
-var selection = Object.create(null);
-var selectionAnchor = null;
-var bulkInput = null;
+let openId: string | null = null;
+let renamingId: string | null = null;
+let addingPersonFor: string | null = null;
+let editingLocFor: string | null = null;
+let editingRefFor: string | null = null;
+let menuFor: string | null = null;
+let groupMenuOpen = false;
+let selection: Record<string, boolean> = Object.create(null);
+let selectionAnchor: string | null = null;
+let bulkInput: string | null = null;
 
-var ICONS = {
+const ICONS: Record<string, string> = {
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   pin: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
@@ -55,49 +81,50 @@ var ICONS = {
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'
 };
 
-export function brollIcon(name, size, cls) {
-  var px = size || 16;
+export function brollIcon(name: string, size?: number, cls?: string) {
+  const px = size || 16;
   return '<svg class="broll-ico' + (cls ? " " + cls : "") + '" width="' + px + '" height="' + px +
     '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" ' +
     'stroke-linejoin="round" aria-hidden="true" focusable="false">' + (ICONS[name] || "") + '</svg>';
 }
 
-function icon(name, cls) {
+function icon(name: string, cls?: string) {
   return '<svg class="broll-si' + (cls ? " " + cls : "") + '" aria-hidden="true" focusable="false"><use href="#i-' +
     name + '"/></svg>';
 }
 
-function catColor(id) {
-  var cat = tagCategory(id);
+function catColor(id: string) {
+  const cat = tagCategory(id);
   return cat ? cat.color : "var(--text-dim)";
 }
 
-function initials(name) {
-  var words = String(name || "").trim().split(/\s+/).filter(Boolean);
+function initials(name: string) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "?";
-  var first = Array.from(words[0])[0] || "";
-  var last = words.length > 1 ? (Array.from(words[words.length - 1])[0] || "") : "";
+  const first = Array.from((words[0] as string))[0] || "";
+  const last = words.length > 1 ? (Array.from((words[words.length - 1] as string))[0] || "") : "";
   return (first + last).toUpperCase();
 }
 
-function avatarHtml(person) {
+function avatarHtml(person: Person) {
   return '<span class="person-avatar broll-avatar" aria-hidden="true" style="--presence:' +
-    escapeHtml(ports.personColors.personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
+    escapeHtml((ports as PanelPortUse).personColors.personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
 }
 
-function plural(n, one, many) {
+function plural(n: number, one: string, many: string) {
   return n + " " + (n === 1 ? one : many);
 }
 
 function sceneStarts() {
-  var t = 0, out = Object.create(null);
-  const doc = ports.document.current();
-  (doc?.rows || []).forEach(function (row) { out[row.id] = t; t += rowSeconds(row, doc, ports.text.productionReaders); });
+  let t = 0;
+  const out: Record<string, number> = Object.create(null);
+  const doc = (ports as PanelPortUse).document.current();
+  (doc?.rows || []).forEach(function (row) { out[row.id] = t; t += rowSeconds(row, doc, (ports as PanelPortUse).text.productionReaders); });
   return out;
 }
 
-function propChipHtml(e, p) {
-  var st = tagStatus(p.status);
+function propChipHtml(e: PanelShot, p: BrollEntry["props"][number]) {
+  const st = tagStatus(p.status);
   return '<span class="broll-prop-chip' + (p.tracked ? '' : ' is-untracked') + '" title="' +
       escapeHtml(p.auto
         ? p.name + " — tagged on this shot's lines in the script"
@@ -113,10 +140,10 @@ function propChipHtml(e, p) {
     '</span>';
 }
 
-function itemLampHtml(st, cls, besideWord) {
-  var named = ' title="' + escapeHtml(st.label) + '"' +
+function itemLampHtml(st: NonNullable<ReturnType<typeof tagStatus>>, cls: string, besideWord?: boolean) {
+  const named = ' title="' + escapeHtml(st.label) + '"' +
     (besideWord ? ' aria-hidden="true"' : ' role="img" aria-label="' + escapeHtml(st.label) + '"');
-  var extra = cls ? " " + cls : "";
+  const extra = cls ? " " + cls : "";
   if (st.id === "returned") {
     return '<span class="broll-lamp-returned' + extra + '"' + named + '>' +
       '<svg class="item-lamp is-returned" aria-hidden="true" focusable="false"><use href="#i-return"/></svg></span>';
@@ -125,43 +152,43 @@ function itemLampHtml(st, cls, besideWord) {
 }
 
 function propOptionsHtml() {
-  var seen = Object.create(null);
+  const seen: Record<string, boolean> = Object.create(null);
   return productionEntries().filter(function (t) { return t.cat.id === "prop"; })
     .map(function (t) { return t.name; })
     .sort(function (a, b) { return a.localeCompare(b); })
-    .filter(function (n) { var k = normalizeTagName(n); if (seen[k]) return false; seen[k] = true; return true; })
+    .filter(function (n) { const k = normalizeTagName(n); if (seen[k]) return false; seen[k] = true; return true; })
     .map(function (n) { return '<option value="' + escapeHtml(n) + '"></option>'; }).join("");
 }
 
-function propStatusDot(p) {
-  var st = tagStatus(p.status);
+function propStatusDot(p: PanelShot["props"][number]) {
+  const st = tagStatus(p.status);
   if (!st) return "";
   return '<span class="broll-st-dot is-' + escapeHtml(st.id) + '" title="' + escapeHtml(st.label) +
     '" role="img" aria-label="' + escapeHtml(st.label) + '"></span>';
 }
 
-function propListHtml(e) {
+function propListHtml(e: PanelShot) {
   return e.props.map(function (p) {
     return '<span class="broll-prop-item">' + propStatusDot(p) + escapeHtml(p.name) + '</span>';
   }).join(", ");
 }
 
-function propLampListHtml(e) {
+function propLampListHtml(e: PanelShot) {
   return e.props.map(function (p) {
-    var st = tagStatus(p.status);
+    const st = tagStatus(p.status);
     return '<span class="broll-prop-item">' + (st ? itemLampHtml(st, "broll-prop-lamp") : '') + escapeHtml(p.name) + '</span>';
   }).join(", ");
 }
 
-function propListTitle(e) {
+function propListTitle(e: PanelShot) {
   return e.props.map(function (p) {
-    var st = tagStatus(p.status);
+    const st = tagStatus(p.status);
     return p.name + (st ? " (" + st.label + ")" : "");
   }).join(", ");
 }
 
-function propsEditHtml(e) {
-  var id = escapeHtml(e.id);
+function propsEditHtml(e: PanelShot) {
+  const id = escapeHtml(e.id);
   return '<div class="broll-props">' +
       e.props.map(function (p) { return propChipHtml(e, p); }).join("") +
       '<input type="text" class="broll-prop-input ev-field" data-id="' + id + '" list="broll-prop-options" ' +
@@ -170,16 +197,16 @@ function propsEditHtml(e) {
 }
 
 function knownLocations() {
-  var seen = Object.create(null), out = [];
-  function add(name) {
-    var clean = String(name || "").trim();
-    var k = normalizeTagName(clean);
+  const seen: Record<string, boolean> = Object.create(null), out: string[] = [];
+  function add(name: string | undefined) {
+    const clean = String(name || "").trim();
+    const k = normalizeTagName(clean);
     if (!clean || seen[k]) return;
     seen[k] = true;
     out.push(clean);
   }
   productionEntries().forEach(function (t) { if (t.cat.id === "location") add(t.name); });
-  (ports.document.current()?.brollShots || []).forEach(function (r) { add(r.location); });
+  ((ports as PanelPortUse).document.current()?.brollShots || []).forEach(function (r) { add(r.location); });
   return out.sort(function (a, b) { return a.localeCompare(b); });
 }
 
@@ -190,32 +217,32 @@ function datalistsHtml() {
     }).join("") + '</datalist>';
 }
 
-function progressBarHtml(entries) {
-  var n = filterCounts(entries);
-  var gap = n.all <= 12 ? 2 : n.all <= 24 ? 1 : 0;
+function progressBarHtml(entries: readonly PanelShot[]) {
+  const n: Record<string, number> & ReturnType<typeof filterCounts> = filterCounts(entries);
+  const gap = n.all <= 12 ? 2 : n.all <= 24 ? 1 : 0;
   return '<div class="broll-bar" role="progressbar" aria-label="Shots done" aria-valuemin="0" aria-valuemax="' + n.all +
       '" aria-valuenow="' + n.shot + '" aria-valuetext="' +
       escapeHtml(n.shot + " of " + n.all + " shot" + (n.flagged ? ", " + n.flagged + " flagged" : "")) +
       '" style="--seg-gap:' + gap + 'px">' +
       brollSortedForList(entries).map(function (e) {
-        var cls = e.reshoot ? "is-flagged" : e.status === "shot" ? "is-shot" : "is-todo";
+        const cls = e.reshoot ? "is-flagged" : e.status === "shot" ? "is-shot" : "is-todo";
         return '<span class="broll-bar-seg ' + cls + '"></span>';
       }).join("") +
     '</div>';
 }
 
-function summaryHtml(entries) {
-  var n = filterCounts(entries);
+function summaryHtml(entries: readonly PanelShot[]) {
+  const n: Record<string, number> & ReturnType<typeof filterCounts> = filterCounts(entries);
   return '<span class="broll-summary-line"><span class="broll-summary-n">' + n.shot + '</span> of ' +
       '<span class="broll-summary-n">' + n.all + '</span> shot</span>' +
     progressBarHtml(entries);
 }
 
-function filterTabsHtml(entries) {
-  var n = filterCounts(entries);
+function filterTabsHtml(entries: readonly PanelShot[]) {
+  const n: Record<string, number> & ReturnType<typeof filterCounts> = filterCounts(entries);
   return '<div class="panel-tabs broll-tabs" role="radiogroup" aria-label="Show shots">' +
     FILTERS.map(function (f) {
-      var on = f.id === ports.view.current().filter;
+      const on = f.id === (ports as PanelPortUse).view.current().filter;
       return '<button type="button" class="panel-tab broll-chip' + (on ? ' is-active' : '') +
         '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" data-action="broll-filter" data-filter="' +
         f.id + '">' + escapeHtml(f.label) + ' <span class="panel-count broll-chip-n">' + n[f.id] + '</span></button>';
@@ -223,11 +250,11 @@ function filterTabsHtml(entries) {
   '</div>';
 }
 
-function filterChipsHtml(entries) {
-  var n = filterCounts(entries);
+function filterChipsHtml(entries: readonly PanelShot[]) {
+  const n: Record<string, number> & ReturnType<typeof filterCounts> = filterCounts(entries);
   return '<div class="broll-filters" role="radiogroup" aria-label="Show">' +
     FILTERS.map(function (f) {
-      var on = f.id === ports.view.current().filter;
+      const on = f.id === (ports as PanelPortUse).view.current().filter;
       return '<button type="button" class="broll-chip' + (on ? ' is-active' : '') +
         '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" data-action="broll-filter" data-filter="' +
         f.id + '">' + escapeHtml(f.label) + ' <span class="broll-chip-n">' + n[f.id] + '</span></button>';
@@ -236,7 +263,7 @@ function filterChipsHtml(entries) {
 }
 
 function groupMenuHtml() {
-  var current = GROUPS.filter(function (g) { return g.id === ports.view.current().group; })[0] || GROUPS[0];
+  const current = GROUPS.filter(function (g) { return g.id === (ports as PanelPortUse).view.current().group; })[0] || (GROUPS[0] as { id: string; label: string; button: string; });
   return '<div class="broll-group-wrap">' +
       '<button type="button" class="broll-group-btn" data-action="broll-group-menu" aria-haspopup="menu" ' +
         'aria-expanded="' + (groupMenuOpen ? 'true' : 'false') + '" title="Group the shots">' + escapeHtml(current.button) +
@@ -244,7 +271,7 @@ function groupMenuHtml() {
       (groupMenuOpen
         ? '<div class="broll-menu broll-group-menu" role="menu" aria-label="Group shots by">' +
             GROUPS.map(function (g) {
-              var on = g.id === ports.view.current().group;
+              const on = g.id === (ports as PanelPortUse).view.current().group;
               return '<button type="button" role="menuitemradio" aria-checked="' + (on ? 'true' : 'false') +
                 '" class="broll-menu-item' + (on ? ' is-active' : '') + '" data-action="broll-group" data-group="' +
                 g.id + '">' + escapeHtml(g.label) + (on ? icon("check", "broll-menu-check") : '') + '</button>';
@@ -254,22 +281,22 @@ function groupMenuHtml() {
     '</div>';
 }
 
-function brollGroups(entries, by, from) {
-  return brollGroupsFrom(entries, by, from || { rows: ports.document.current()?.rows || [], people: ports.document.current()?.people || [] });
+function brollGroups(entries: readonly PanelShot[], by: string, from?: Parameters<typeof brollGroupsFrom>[2]) {
+  return brollGroupsFrom(entries, by, from || { rows: (ports as PanelPortUse).document.current()?.rows || [], people: ((ports as PanelPortUse).document.current()?.people as readonly (Person & Record<string, unknown>)[] | undefined) || [] }) as PanelGroup[];
 }
 
-function doneCountHtml(items, cls) {
-  var done = items.filter(function (e) { return e.status === "shot"; }).length;
+function doneCountHtml(items: readonly PanelShot[], cls: string) {
+  const done = items.filter(function (e) { return e.status === "shot"; }).length;
   return '<span class="' + cls + (done === items.length ? ' is-done' : '') + '">' + done + '/' + items.length + '</span>';
 }
 
-function groupHeadHtml(g, starts) {
+function groupHeadHtml(g: PanelGroup, starts: Record<string, number>) {
   if (g.kind === "flat") return "";
-  var title, time = "";
+  let title, time = "";
   if (g.kind === "scene") {
     title = '<span class="broll-group-scene">' + escapeHtml(g.label) + '</span>';
     if (g.row && starts[g.row.id] !== undefined) {
-      time = '<span class="broll-group-time">' + formatTimecode(starts[g.row.id]) + '</span>';
+      time = '<span class="broll-group-time">' + formatTimecode((starts[g.row.id] as number)) + '</span>';
     }
   } else if (g.kind === "location") {
     title = '<span class="broll-group-title">' +
@@ -281,13 +308,13 @@ function groupHeadHtml(g, starts) {
   return '<h3 class="broll-group-head">' + title + time + doneCountHtml(g.items, "broll-group-count") + '</h3>';
 }
 
-function rowMetaHtml(e) {
-  var parts = [];
+function rowMetaHtml(e: PanelShot) {
+  const parts = [];
   if (e.location) {
     parts.push('<span class="broll-meta-item broll-meta-loc"><span class="broll-loc-pin">' + icon("pin") + '</span>' +
       escapeHtml(e.location) + '</span>');
   }
-  var who = personById(e.owner);
+  const who = personById(e.owner);
   if (who) {
     parts.push('<span class="broll-meta-item broll-meta-owner" title="' + escapeHtml("Assigned to " + who.name) + '">' +
       avatarHtml(who) + '<span class="broll-sr">' + escapeHtml(who.name) + '</span></span>');
@@ -299,8 +326,8 @@ function rowMetaHtml(e) {
   return parts.join("");
 }
 
-function rowStateIconsHtml(e) {
-  var out = "";
+function rowStateIconsHtml(e: PanelShot) {
+  let out = "";
   if (e.markerless) {
     out += '<span class="broll-state-ico broll-loose-badge" title="This line has no marker yet, so it is matched ' +
       'by name — click away from the script and it gets one." aria-label="Not anchored yet">' + brollIcon("unlink", 14) + '</span>';
@@ -314,8 +341,8 @@ function rowStateIconsHtml(e) {
   return out;
 }
 
-function checkHtml(e) {
-  var shot = e.status === "shot";
+function checkHtml(e: PanelShot) {
+  const shot = e.status === "shot";
   return '<button type="button" class="broll-check" role="checkbox" aria-checked="' + (shot ? 'true' : 'false') +
     '" data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
     escapeHtml("Shot: " + (e.name || "Untitled shot")) + '" title="' +
@@ -323,9 +350,9 @@ function checkHtml(e) {
     '"><span class="broll-check-box">' + icon("check") + '</span></button>';
 }
 
-function rowHtml(e, starts) {
-  var id = escapeHtml(e.id);
-  var open = openId === e.id || renamingId === e.id;
+function rowHtml(e: PanelShot, starts: Record<string, number>) {
+  const id = escapeHtml(e.id);
+  const open = openId === e.id || renamingId === e.id;
   return '<div class="broll-row' + (e.status === "shot" ? ' is-shot' : '') + (e.reshoot ? ' is-flagged' : '') +
       (selection[e.id] ? ' is-selected' : '') + (open ? ' is-open' : '') + (e.orphaned ? ' is-orphaned' : '') +
       '" data-id="' + id + '" aria-selected="' + (selection[e.id] ? 'true' : 'false') + '">' +
@@ -344,7 +371,7 @@ function rowHtml(e, starts) {
     (open ? cardHtml(e, starts) : '');
 }
 
-function field(label, valueHtml) {
+function field(label: string, valueHtml: string) {
   return '<dt class="broll-label">' + escapeHtml(label) + '</dt><dd class="broll-value">' + valueHtml + '</dd>';
 }
 
@@ -352,18 +379,18 @@ function chevronHtml() {
   return '<svg class="ev-chevron" aria-hidden="true" focusable="false"><use href="#i-chevron-down"/></svg>';
 }
 
-var SHOT_STATUSES = [{ id: "unshot", label: "To shoot" }, { id: "shot", label: "Shot" }];
+const SHOT_STATUSES = [{ id: "unshot", label: "To shoot" }, { id: "shot", label: "Shot" }];
 
-function statusLampHtml(status) {
+function statusLampHtml(status: string) {
   return '<span class="broll-status-lamp' + (status === "shot" ? ' is-shot' : '') + '" aria-hidden="true">' +
     (status === "shot" ? icon("check") : '') + '</span>';
 }
 
-function statusFieldHtml(e) {
-  var id = escapeHtml(e.id);
-  var cur = SHOT_STATUSES.filter(function (s) { return s.id === e.status; })[0] || SHOT_STATUSES[0];
-  var next = SHOT_STATUSES.filter(function (s) { return s.id !== cur.id; })[0];
-  var says = "Status: " + cur.label + ". Click to mark " + next.label.toLowerCase();
+function statusFieldHtml(e: PanelShot) {
+  const id = escapeHtml(e.id);
+  const cur = SHOT_STATUSES.filter(function (s) { return s.id === e.status; })[0] || (SHOT_STATUSES[0] as { id: string; label: string; });
+  const next = (SHOT_STATUSES.filter(function (s) { return s.id !== cur.id; })[0] as { id: string; label: string; });
+  const says = "Status: " + cur.label + ". Click to mark " + next.label.toLowerCase();
   return '<span class="ev-field broll-status-field">' +
       '<button type="button" class="broll-status-btn" data-action="broll-status-toggle" data-id="' + id + '" data-status="' +
         cur.id + '" aria-label="' + escapeHtml(says) + '" title="' + escapeHtml(says) + '">' +
@@ -371,19 +398,19 @@ function statusFieldHtml(e) {
     '</span>';
 }
 
-function cardHtml(e, starts) {
-  var id = escapeHtml(e.id);
-  var renaming = renamingId === e.id;
+function cardHtml(e: PanelShot, starts: Record<string, number>) {
+  const id = escapeHtml(e.id);
+  const renaming = renamingId === e.id;
 
-  var when = startOf(e, starts);
-  var scene = e.rowId
+  const when = startOf(e, starts);
+  const scene = e.rowId
     ? '<button type="button" class="jump-link broll-scene-link" data-action="broll-jump" data-id="' + id + '" title="Go to scene ' +
         sceneLabel(e) + '"><span class="broll-scene-n">' + sceneLabel(e) + '</span>' + (when ? ' · ' + when : '') + '</button>'
     : e.orphaned
       ? '<span class="broll-muted">No longer in the script — its line was deleted.</span>'
       : '<span class="broll-muted">Added here</span>';
 
-  var location = editingLocFor === e.id
+  const location = editingLocFor === e.id
     ? '<input type="text" class="broll-loc-input ev-field" data-id="' + id + '" list="broll-loc-options" maxlength="80" ' +
         'placeholder="Where it gets shot" aria-label="Location" value="' + escapeHtml(e.location) + '">'
     : '<span class="ev-field broll-loc-field"><button type="button" class="broll-picker" data-action="broll-loc-edit" data-id="' + id +
@@ -391,12 +418,12 @@ function cardHtml(e, starts) {
         (e.location ? escapeHtml(e.location) : '<span class="broll-muted">Choose…</span>') + '</button>' +
         chevronHtml() + '</span>';
 
-  var who = personById(e.owner);
-  var assigned = '<div class="broll-owner-row">' +
+  const who = personById(e.owner);
+  const assigned = '<div class="broll-owner-row">' +
       '<span class="ev-field broll-owner-field">' + (who ? avatarHtml(who) : '') +
         '<select class="broll-owner-select' + (who ? '' : ' is-empty') + '" data-id="' + id + '" aria-label="Assigned to">' +
           '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
-          (ports.document.current()?.people || []).map(function (p) {
+          (((ports as PanelPortUse).document.current()?.people as readonly (Person & Record<string, unknown>)[] | undefined) || []).map(function (p) {
             return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' +
               escapeHtml(p.name) + '</option>';
           }).join("") +
@@ -414,7 +441,7 @@ function cardHtml(e, starts) {
         '</div>'
       : '');
 
-  var cuts = editingRefFor === e.id
+  const cuts = editingRefFor === e.id
     ? '<textarea class="broll-ref-input ev-field" data-id="' + id + '" rows="3" aria-label="Cuts against" ' +
         'placeholder="The line of audio this cuts against">\n' + escapeHtml(e.audioRef) + '</textarea>'
     : '<div class="broll-cuts">' +
@@ -425,7 +452,7 @@ function cardHtml(e, starts) {
           '" aria-label="Edit the line this cuts against" title="Edit">' + brollIcon("pencil", 16) + '</button>' +
       '</div>';
 
-  var foot = '<div class="broll-card-foot">' +
+  const foot = '<div class="broll-card-foot">' +
       '<button type="button" class="broll-flag-btn btn-outline is-small' + (e.reshoot ? ' is-active' : '') + '"' +
         ' data-action="broll-reshoot-toggle" data-id="' + id + '" aria-pressed="' + (e.reshoot ? 'true' : 'false') + '" title="' +
         (e.reshoot ? 'Flagged — click to clear' : 'Flag it: a reshoot, or anything else worth a second look') + '">' +
@@ -468,15 +495,15 @@ function cardHtml(e, starts) {
     '</div>';
 }
 
-function selectedIds(entries) {
+function selectedIds(entries: readonly PanelShot[]) {
   return entries.filter(function (e) { return selection[e.id]; }).map(function (e) { return e.id; });
 }
 
-function bulkBarHtml(entries) {
-  var chosen = entries.filter(function (e) { return selection[e.id]; });
+function bulkBarHtml(entries: readonly PanelShot[]) {
+  const chosen = entries.filter(function (e) { return selection[e.id]; });
   if (!chosen.length) return "";
-  var allShot = chosen.every(function (e) { return e.status === "shot"; });
-  var allFlagged = chosen.every(function (e) { return e.reshoot; });
+  const allShot = chosen.every(function (e) { return e.status === "shot"; });
+  const allFlagged = chosen.every(function (e) { return e.reshoot; });
   return '<div class="broll-bulk-row">' +
       '<span class="broll-bulk-n">' + chosen.length + ' selected</span>' +
       '<button type="button" class="broll-bulk-btn btn-outline is-small" data-action="broll-bulk-shot">' +
@@ -484,7 +511,7 @@ function bulkBarHtml(entries) {
       '<select class="broll-bulk-select" id="broll-bulk-owner" aria-label="Assign the selected shots">' +
         '<option value="__none__" selected>Assign</option>' +
         '<option value="">Unassigned</option>' +
-        (ports.document.current()?.people || []).map(function (p) {
+        (((ports as PanelPortUse).document.current()?.people as readonly (Person & Record<string, unknown>)[] | undefined) || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
         }).join("") +
         '<option value="__new__">+ Person…</option>' +
@@ -515,58 +542,58 @@ function bulkBarHtml(entries) {
       : '');
 }
 
-function focusKey(el) {
+function focusKey(el: Element | null) {
   if (!el || el === document.body) return null;
   if (el.id) return "#" + cssAttr(el.id);
-  var cls = el.classList && el.classList[0];
+  const cls = el.classList && el.classList[0];
   if (!cls) return null;
-  var sel = "." + cls;
+  let sel = "." + cls;
   ["data-id", "data-action", "data-filter", "data-group", "data-status", "data-ref"].forEach(function (a) {
-    var v = el.getAttribute(a);
+    const v = el.getAttribute(a);
     if (v !== null) sel += "[" + a + '="' + cssAttr(v) + '"]';
   });
   return sel;
 }
 
-var RECORD_INPUTS = [
+const RECORD_INPUTS: { cls: string; field: "notes" | "audioRef" | "location" }[] = [
   { cls: "broll-notes-input", field: "notes" },
   { cls: "broll-ref-input", field: "audioRef" },
   { cls: "broll-loc-input", field: "location" }
 ];
 
-function recordField(el) {
+function recordField(el: Element | null) {
   if (!el || !el.classList || !el.getAttribute || !el.getAttribute("data-id")) return null;
-  for (var i = 0; i < RECORD_INPUTS.length; i++) {
-    if (el.classList.contains(RECORD_INPUTS[i].cls)) return RECORD_INPUTS[i].field;
+  for (let i = 0; i < RECORD_INPUTS.length; i++) {
+    if (el.classList.contains((RECORD_INPUTS[i] as { cls: string; field: "notes" | "audioRef" | "location"; }).cls)) return (RECORD_INPUTS[i] as { cls: string; field: "notes" | "audioRef" | "location"; }).field;
   }
   return null;
 }
 
-function typedSinceDrawn(el) {
+function typedSinceDrawn(el: PanelInput) {
   return el.value !== el.defaultValue;
 }
 
-function typedChange(el) {
-  var field = recordField(el);
-  var rec = field && brollRecord(el.getAttribute("data-id"));
+function typedChange(el: PanelInput) {
+  const field = recordField(el);
+  const rec = field && brollRecord(el.getAttribute("data-id"));
   if (!rec || !typedSinceDrawn(el)) return null;
-  var next = field === "location" ? cappedText(el.value, 80) : cappedLongText(plainText(el.value), BROLL_TEXT_MAX);
-  if (rec[field] === next) return null;
-  var change = {};
-  change[field] = next;
+  const next = field === "location" ? cappedText(el.value, 80) : cappedLongText(plainText(el.value), BROLL_TEXT_MAX);
+  if (rec[(field as "location" | "notes" | "audioRef")] === next) return null;
+  const change: Record<string, string> = {};
+  change[(field as "location" | "notes" | "audioRef")] = next;
   return change;
 }
 
-var drawingPanel = 0;
+let drawingPanel = 0;
 
-function keepingFocus(container, draw) {
-  var active = document.activeElement;
-  var kept = null;
+function keepingFocus(container: HTMLElement, draw: () => void) {
+  const active = document.activeElement as PanelInput | null;
+  let kept = null;
   if (active && container.contains(active)) {
-    var typed = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
-    var ownValue = recordField(active) ? typedSinceDrawn(active) : typed;
+    const typed = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
+    const ownValue = recordField(active) ? typedSinceDrawn(active) : typed;
     if (ownValue) {
-      var change = typedChange(active);
+      const change = typedChange(active);
       if (change) writeRecord(active.getAttribute("data-id"), change);
     }
     kept = { key: focusKey(active), typed: typed, ownValue: ownValue, value: active.value,
@@ -579,7 +606,7 @@ function keepingFocus(container, draw) {
     drawingPanel--;
   }
   if (!kept || !kept.key) return;
-  var again = container.querySelector(kept.key);
+  const again = container.querySelector<PanelInput>(kept.key);
   if (!again) return;
   if (kept.ownValue) again.value = kept.value;
   if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;
@@ -589,54 +616,54 @@ function keepingFocus(container, draw) {
   again.focus({ preventScroll: true });
 }
 
-function emptyListHtml(entries) {
+function emptyListHtml(entries: readonly PanelShot[]) {
   if (!entries.length) {
     return '<div class="broll-empty">No b-roll yet.<br><br>Start a line in the Visual column with ' +
       '<code>B-roll:</code> and whatever follows it becomes a shot to track — or add one below.</div>';
   }
-  var msg = {
+  const msg = ({
     unshot: "Nothing left to shoot — everything on the list is in the can.",
     shot: "Nothing shot yet.",
     flagged: "Nothing flagged."
-  }[ports.view.current().filter] || "No shots match.";
+  } as Record<string, string>)[(ports as PanelPortUse).view.current().filter] || "No shots match.";
   return '<div class="broll-empty">' + escapeHtml(msg) + '</div>';
 }
 
 export function renderBroll() {
-  ports.records.updateBrollBadge();
-  var panel = document.getElementById("broll-panel");
-  if (!panel || panel.hidden || !ports.document.current()) return;
-  var summary = document.getElementById("broll-summary");
-  var controls = document.getElementById("broll-controls");
-  var listEl = document.getElementById("broll-list");
-  var bulk = document.getElementById("broll-bulk");
+  (ports as PanelPortUse).records.updateBrollBadge();
+  const panel = document.getElementById("broll-panel");
+  if (!panel || panel.hidden || !(ports as PanelPortUse).document.current()) return;
+  const summary = document.getElementById("broll-summary");
+  const controls = (document.getElementById("broll-controls") as HTMLElement);
+  const listEl = (document.getElementById("broll-list") as HTMLElement);
+  const bulk = (document.getElementById("broll-bulk") as HTMLElement);
 
   keepingFocus(panel, function () {
-    var entries = ports.records.brollEntries();
+    const entries = (ports as PanelPortUse).records.brollEntries();
     pruneSelection(entries);
     if (summary) summary.innerHTML = entries.length ? summaryHtml(entries) : '';
     controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
-    var shown = entries.filter(function (e) { return matchesFilter(e, ports.view.current().filter); });
-    var starts = sceneStarts();
+    const shown = entries.filter(function (e) { return matchesFilter(e, (ports as PanelPortUse).view.current().filter); });
+    const starts = sceneStarts();
     listEl.innerHTML = datalistsHtml() + (shown.length
-      ? brollGroups(shown, ports.view.current().group).map(function (g) {
+      ? brollGroups(shown, (ports as PanelPortUse).view.current().group).map(function (g) {
           return '<div class="broll-group" role="group" aria-label="' + escapeHtml(g.label || "Shots") + '">' +
             groupHeadHtml(g, starts) + g.items.map(function (e) { return rowHtml(e, starts); }).join("") + '</div>';
         }).join("")
       : emptyListHtml(entries));
-    var bar = bulkBarHtml(entries);
+    const bar = bulkBarHtml(entries);
     bulk.innerHTML = bar;
     bulk.hidden = !bar;
   });
   fitNotes(listEl);
 }
 
-function fitNotes(root) {
+function fitNotes(root: HTMLElement) {
   if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("field-sizing", "content")) return;
   Array.prototype.forEach.call(root.querySelectorAll("textarea.ev-field"), fitTextarea);
 }
 
-function fitTextarea(box) {
+function fitTextarea(box: HTMLTextAreaElement) {
   if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("field-sizing", "content")) return;
   box.style.height = "auto";
   box.style.height = (box.scrollHeight + box.offsetHeight - box.clientHeight) + "px";
@@ -648,96 +675,96 @@ function renderBrollViews() {
 }
 
 export function runBrollRefresh() {
-  ports.records.updateBrollBadge();
+  (ports as PanelPortUse).records.updateBrollBadge();
   renderBrollViews();
 }
 
-function entryById(id) {
-  var all = ports.records.brollEntries();
-  for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
+function entryById(id: string | null) {
+  const all = (ports as PanelPortUse).records.brollEntries();
+  for (let i = 0; i < all.length; i++) if ((all[i] as BrollEntry).id === id) return all[i];
   return null;
 }
 
-function brollRecord(id) {
-  return ports.document.read(function (doc) { return shotIn(doc, id); });
+function brollRecord(id: unknown) {
+  return (ports as PanelPortUse).document.read(function (doc) { return shotIn(doc, id); });
 }
 
-function personById(id) {
-  return ports.document.read(function (doc) { return personIn(doc, id); });
+function personById(id: unknown) {
+  return (ports as PanelPortUse).document.read(function (doc) { return personIn(doc, id); });
 }
 
-function writeRecord(id, fields) {
+function writeRecord(id: string | null, fields: ShotFields) {
   if (!brollRecord(id)) return false;
-  ports.edits.edit(setShotsCommand([id], fields));
+  (ports as PanelPortUse).edits.edit(setShotsCommand([(id as string)], fields));
   return true;
 }
 
-function updateRecord(id, fields) {
+function updateRecord(id: string | null, fields: ShotFields) {
   if (writeRecord(id, fields)) renderBrollViews();
 }
 
-function toggleBrollShot(id) {
-  var rec = brollRecord(id);
+function toggleBrollShot(id: string | null) {
+  const rec = brollRecord(id);
   if (!rec) return;
   updateRecord(id, { status: rec.status === "shot" ? "unshot" : "shot" });
 }
 
-function bulkUpdate(fields, describe, owner) {
-  var entries = ports.records.brollEntries();
-  var ids = selectedIds(entries);
+function bulkUpdate(fields: ShotFields, describe: (n: number) => string, owner?: OwnerChoice) {
+  const entries = (ports as PanelPortUse).records.brollEntries();
+  const ids = selectedIds(entries);
   if (!ids.length) return;
-  ports.undo.breakCoalescing();
-  var n = ids.filter(function (id) {
-    var rec = brollRecord(id);
-    return rec && Object.keys(fields).some(function (k) { return rec[k] !== fields[k]; });
+  (ports as PanelPortUse).undo.breakCoalescing();
+  const n = ids.filter(function (id) {
+    const rec = brollRecord(id);
+    return rec && Object.keys(fields).some(function (k) { return (rec as NonNullable<ReturnType<typeof brollRecord>>)[k] !== fields[k]; });
   }).length;
-  if (!n || !ports.edits.edit(setShotsCommand(ids, fields, owner, ports.ids))) { renderBrollViews(); return; }
+  if (!n || !(ports as PanelPortUse).edits.edit(setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids))) { renderBrollViews(); return; }
   renderBrollViews();
-  ports.notices.show(describe(n), "ok");
+  (ports as PanelPortUse).notices.show(describe(n), "ok");
 }
 
-function shotsWord(n) { return plural(n, "shot", "shots"); }
+function shotsWord(n: number) { return plural(n, "shot", "shots"); }
 
 function bulkMarkShot() {
-  var entries = ports.records.brollEntries().filter(function (e) { return selection[e.id]; });
-  var allShot = entries.length && entries.every(function (e) { return e.status === "shot"; });
-  var want = allShot ? "unshot" : "shot";
+  const entries = (ports as PanelPortUse).records.brollEntries().filter(function (e) { return selection[e.id]; });
+  const allShot = entries.length && entries.every(function (e) { return e.status === "shot"; });
+  const want = allShot ? "unshot" : "shot";
   bulkUpdate({ status: want }, function (n) { return "Marked " + shotsWord(n) + (want === "shot" ? " shot" : " to shoot") + "."; });
 }
 
 function bulkFlag() {
-  var entries = ports.records.brollEntries().filter(function (e) { return selection[e.id]; });
-  var want = !(entries.length && entries.every(function (e) { return e.reshoot; }));
+  const entries = (ports as PanelPortUse).records.brollEntries().filter(function (e) { return selection[e.id]; });
+  const want = !(entries.length && entries.every(function (e) { return e.reshoot; }));
   bulkUpdate({ reshoot: want }, function (n) { return (want ? "Flagged " : "Unflagged ") + shotsWord(n) + "."; });
 }
 
-function bulkAssign(personId) {
-  var owner = personById(personId) ? personId : "";
+function bulkAssign(personId: string) {
+  const owner = personById(personId) ? personId : "";
   bulkUpdate({ owner: owner }, function (n) {
-    var who = personById(owner);
+    const who = personById(owner);
     return who ? "Assigned " + shotsWord(n) + " to " + who.name + "." : "Unassigned " + shotsWord(n) + ".";
   });
 }
 
-function bulkLocation(name) {
-  var clean = cappedText(name, 80);
+function bulkLocation(name: string) {
+  const clean = cappedText(name, 80);
   bulkUpdate({ location: clean }, function (n) { return clean ? "Moved " + shotsWord(n) + " to " + clean + "." : "Cleared the location of " + shotsWord(n) + "."; });
 }
 
-function bulkAssignNewPerson(name) {
-  var entries = ports.records.brollEntries();
-  var ids = selectedIds(entries);
+function bulkAssignNewPerson(name: string) {
+  const entries = (ports as PanelPortUse).records.brollEntries();
+  const ids = selectedIds(entries);
   if (!ids.length) return;
-  ports.undo.breakCoalescing();
-  var known = ports.document.read(function (doc) { return personNamed(doc, name); });
-  var n = ids.filter(function (sid) {
-    var rec = brollRecord(sid);
+  (ports as PanelPortUse).undo.breakCoalescing();
+  const known = (ports as PanelPortUse).document.read(function (doc) { return personNamed(doc, name); });
+  const n = ids.filter(function (sid) {
+    const rec = brollRecord(sid);
     return rec && (!known || rec.owner !== known.id);
   }).length;
-  if (!ports.edits.edit(setShotsCommand(ids, {}, { name: name }, ports.ids))) { renderBrollViews(); return; }
+  if (!(ports as PanelPortUse).edits.edit(setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids))) { renderBrollViews(); return; }
   renderBrollViews();
-  var who = ports.document.read(function (doc) { return personNamed(doc, name); });
-  ports.notices.show("Assigned " + shotsWord(n) + " to " + (who ? who.name : "them") + ".", "ok");
+  const who = (ports as PanelPortUse).document.read(function (doc) { return personNamed(doc, name); });
+  (ports as PanelPortUse).notices.show("Assigned " + shotsWord(n) + " to " + (who ? who.name : "them") + ".", "ok");
 }
 
 function clearSelection() {
@@ -746,112 +773,112 @@ function clearSelection() {
   bulkInput = null;
 }
 
-function pruneSelection(entries) {
-  var live = Object.create(null);
+function pruneSelection(entries: readonly PanelShot[]) {
+  const live: Record<string, boolean> = Object.create(null);
   entries.forEach(function (e) { live[e.id] = true; });
-  Object.keys(selection).forEach(function (id) { if (!live[id]) delete selection[id]; });
+  Object.keys(selection).forEach(function (id) { if (!live[id]) Reflect.deleteProperty(selection, id); });
   if (!Object.keys(selection).length) bulkInput = null;
 }
 
-function selectWithModifier(e, id, orderIds) {
+function selectWithModifier(e: Partial<Pick<MouseEvent, "shiftKey">>, id: string, orderIds: string[]) {
   if (e.shiftKey && selectionAnchor && orderIds.indexOf(selectionAnchor) !== -1) {
-    var a = orderIds.indexOf(selectionAnchor), b = orderIds.indexOf(id);
-    var lo = Math.min(a, b), hi = Math.max(a, b);
-    for (var i = lo; i <= hi; i++) selection[orderIds[i]] = true;
+    const a = orderIds.indexOf(selectionAnchor), b = orderIds.indexOf(id);
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    for (let i = lo; i <= hi; i++) selection[(orderIds[i] as string)] = true;
   } else {
-    if (selection[id]) delete selection[id]; else selection[id] = true;
+    if (selection[id]) Reflect.deleteProperty(selection, id); else selection[id] = true;
     selectionAnchor = id;
   }
-  var sel = window.getSelection();
+  const sel = window.getSelection();
   if (sel && sel.removeAllRanges) sel.removeAllRanges();
 }
 
-function shownOrder(container) {
-  return Array.prototype.map.call(container.querySelectorAll(".broll-row[data-id]"), function (r) {
+function shownOrder(container: HTMLElement): string[] {
+  return Array.prototype.map.call(container.querySelectorAll(".broll-row[data-id]"), function (r: Element) {
     return r.getAttribute("data-id");
-  });
+  }) as string[];
 }
 
 function addBrollFromPanel() {
-  var input = document.getElementById("broll-add-input");
+  const input = document.getElementById("broll-add-input") as HTMLInputElement | null;
   if (!input) return;
-  var name = cappedText(input.value, BROLL_NAME_MAX);
+  const name = cappedText(input.value, BROLL_NAME_MAX);
   if (!name) return;
-  var rec = newBrollRecord({ name: name, origin: "list" }, shotEditPorts);
+  const rec = newBrollRecord({ name: name, origin: "list" }, shotEditPorts);
   input.value = "";
   openId = rec.id;
   renderBrollViews();
-  ports.notices.show("Added to the b-roll list.", "ok");
+  (ports as PanelPortUse).notices.show("Added to the b-roll list.", "ok");
 }
 
-function jumpToBrollShot(id) {
-  var e = entryById(id);
+function jumpToBrollShot(id: string | null) {
+  const e = entryById(id);
   if (!e || !e.rowId) return false;
-  ports.shotHiding.reveal(e.rowId);
-  ports.rows.focusField(e.rowId, "visualText");
+  (ports as PanelPortUse).shotHiding.reveal(e.rowId);
+  (ports as PanelPortUse).rows.focusField(e.rowId, "visualText");
   return true;
 }
 
-function commitPropInput(input) {
-  var id = input.getAttribute("data-id");
-  var name = input.value;
+function commitPropInput(input: PanelInput) {
+  const id = input.getAttribute("data-id");
+  const name = input.value;
   input.value = "";
   if (!plainText(name).trim()) return;
-  ports.records.addBrollProp(id, name);
+  (ports as PanelPortUse).records.addBrollProp((id as string), name);
   renderBrollViews();
-  var again = document.querySelector('.broll-prop-input[data-id="' + cssAttr(id) + '"]');
+  const again = document.querySelector<HTMLInputElement>('.broll-prop-input[data-id="' + cssAttr(id) + '"]');
   if (again) again.focus();
 }
 
-function commitLocation(input) {
+function commitLocation(input: PanelInput) {
   editingLocFor = null;
-  var change = typedChange(input);
+  const change = typedChange(input);
   if (change) updateRecord(input.getAttribute("data-id"), change);
   else renderBrollViews();
 }
 
-function renameShot(id, box) {
-  var e = entryById(id);
-  var next = box ? cappedText(box.value, BROLL_NAME_MAX) : "";
+function renameShot(id: string | null, box: PanelInput | null) {
+  const e = entryById(id);
+  const next = box ? cappedText(box.value, BROLL_NAME_MAX) : "";
   renamingId = null;
-  ports.undo.breakCoalescing();
-  if (e && next && next !== e.name) ports.records.renameBrollInScript(e, next);
+  (ports as PanelPortUse).undo.breakCoalescing();
+  if (e && next && next !== e.name) (ports as PanelPortUse).records.renameBrollInScript(e, next);
   renderBrollViews();
 }
 
-function deleteShot(id) {
-  var e = entryById(id);
+function deleteShot(id: string | null) {
+  const e = entryById(id);
   if (!e) return;
-  ports.edits.edit(deleteShotCommand(id));
+  (ports as PanelPortUse).edits.edit(deleteShotCommand((id as string)));
   if (openId === id) openId = null;
   menuFor = null;
-  delete selection[id];
+  Reflect.deleteProperty(selection, (id as string));
   renderBrollViews();
-  ports.notices.show(e.rowId ? "Removed from the list — the line stays in the script." : "Removed from the list.", "ok");
+  (ports as PanelPortUse).notices.show(e.rowId ? "Removed from the list — the line stays in the script." : "Removed from the list.", "ok");
 }
 
-function onBrollClick(e, root, exportAs) {
-  var btn = e.target.closest("[data-action]");
+function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, exportAs: BrollPanelEventsPorts["exportAs"]) {
+  const btn = e.target.closest<HTMLElement>("[data-action]");
   if (!btn || !root.contains(btn)) {
     if (groupMenuOpen || menuFor) { groupMenuOpen = false; menuFor = null; renderBrollViews(); }
     return;
   }
-  var action = btn.getAttribute("data-action");
-  var id = btn.getAttribute("data-id");
+  const action = btn.getAttribute("data-action");
+  const id = btn.getAttribute("data-id");
 
   if (action !== "broll-group-menu" && action !== "broll-group") groupMenuOpen = false;
   if (action !== "broll-menu" && action !== "broll-rename" && action !== "broll-delete") menuFor = null;
 
   if (action === "broll-status-toggle") {
     e.stopPropagation();
-    var fromField = btn.classList.contains("broll-status-btn");
+    const fromField = btn.classList.contains("broll-status-btn");
     toggleBrollShot(id);
-    var again = fromField && root.querySelector('.broll-status-btn[data-id="' + cssAttr(id) + '"]');
+    const again = fromField && root.querySelector<HTMLInputElement>('.broll-status-btn[data-id="' + cssAttr(id) + '"]');
     if (again) again.focus();
   } else if (action === "broll-expand") {
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      selectWithModifier(e, id, shownOrder(root));
+      selectWithModifier(e, (id as string), shownOrder(root));
       renderBrollViews();
       return;
     }
@@ -859,13 +886,13 @@ function onBrollClick(e, root, exportAs) {
     renamingId = null; editingLocFor = null; editingRefFor = null; addingPersonFor = null;
     renderBrollViews();
   } else if (action === "broll-reshoot-toggle") {
-    var rec = brollRecord(id);
+    const rec = brollRecord(id);
     if (!rec) return;
-    var raising = !rec.reshoot;
+    const raising = !rec.reshoot;
     openId = id;
     updateRecord(id, { reshoot: raising });
     if (raising) {
-      var notes = root.querySelector('.broll-notes-input[data-id="' + cssAttr(id) + '"]');
+      const notes = root.querySelector<HTMLInputElement>('.broll-notes-input[data-id="' + cssAttr(id) + '"]');
       if (notes) notes.focus();
     }
   } else if (action === "broll-jump") {
@@ -876,14 +903,14 @@ function onBrollClick(e, root, exportAs) {
     groupMenuOpen = !groupMenuOpen;
     renderBrollViews();
     if (groupMenuOpen) {
-      var first = root.querySelector('.broll-group-menu .broll-menu-item.is-active, .broll-group-menu .broll-menu-item');
+      const first = root.querySelector<HTMLInputElement>('.broll-group-menu .broll-menu-item.is-active, .broll-group-menu .broll-menu-item');
       if (first) first.focus();
     }
   } else if (action === "broll-group") {
-    ports.view.setGroup(btn.getAttribute("data-group"));
+    (ports as PanelPortUse).view.setGroup(btn.getAttribute("data-group"));
     groupMenuOpen = false;
     renderBrollViews();
-    var gb = root.querySelector(".broll-group-btn");
+    const gb = root.querySelector<HTMLInputElement>(".broll-group-btn");
     if (gb) gb.focus();
   } else if (action === "broll-menu") {
     menuFor = menuFor === id ? null : id;
@@ -893,10 +920,10 @@ function onBrollClick(e, root, exportAs) {
     renamingId = id;
     openId = id;
     renderBrollViews();
-    var input = root.querySelector('.broll-rename-input[data-id="' + cssAttr(id) + '"]');
+    const input = root.querySelector<HTMLInputElement>('.broll-rename-input[data-id="' + cssAttr(id) + '"]');
     if (input) { input.focus(); input.select(); }
   } else if (action === "broll-rename-save") {
-    renameShot(id, root.querySelector('.broll-rename-input[data-id="' + cssAttr(id) + '"]'));
+    renameShot(id, root.querySelector<HTMLInputElement>('.broll-rename-input[data-id="' + cssAttr(id) + '"]'));
   } else if (action === "broll-rename-cancel") {
     renamingId = null;
     renderBrollViews();
@@ -905,27 +932,27 @@ function onBrollClick(e, root, exportAs) {
   } else if (action === "broll-loc-edit") {
     editingLocFor = id;
     renderBrollViews();
-    var loc = root.querySelector('.broll-loc-input[data-id="' + cssAttr(id) + '"]');
+    const loc = root.querySelector<HTMLInputElement>('.broll-loc-input[data-id="' + cssAttr(id) + '"]');
     if (loc) { loc.focus(); loc.select(); }
   } else if (action === "broll-ref-edit") {
     editingRefFor = id;
     renderBrollViews();
-    var ref = root.querySelector('.broll-ref-input[data-id="' + cssAttr(id) + '"]');
+    const ref = root.querySelector<HTMLInputElement>('.broll-ref-input[data-id="' + cssAttr(id) + '"]');
     if (ref) ref.focus();
   } else if (action === "broll-prop-remove") {
-    removeBrollProp(id, btn.getAttribute("data-ref"), shotEditPorts);
+    removeBrollProp((id as string), (btn.getAttribute("data-ref") as string), shotEditPorts);
     renderBrollViews();
   } else if (action === "broll-person-new") {
     addingPersonFor = id;
     renderBrollViews();
-    var pi = root.querySelector('.broll-person-input[data-id="' + cssAttr(id) + '"]');
+    const pi = root.querySelector<HTMLInputElement>('.broll-person-input[data-id="' + cssAttr(id) + '"]');
     if (pi) pi.focus();
   } else if (action === "broll-person-save") {
-    var nameBox = root.querySelector('.broll-person-input[data-id="' + cssAttr(id) + '"]');
+    const nameBox = root.querySelector<HTMLInputElement>('.broll-person-input[data-id="' + cssAttr(id) + '"]');
     addingPersonFor = null;
-    ports.undo.breakCoalescing();
-    var named = nameBox ? nameBox.value : "";
-    if (brollRecord(id)) ports.edits.edit(setShotsCommand([id], {}, { name: named }, ports.ids));
+    (ports as PanelPortUse).undo.breakCoalescing();
+    const named = nameBox ? nameBox.value : "";
+    if (brollRecord(id)) (ports as PanelPortUse).edits.edit(setShotsCommand([(id as string)], {}, { name: named }, (ports as PanelPortUse).ids));
     renderBrollViews();
   } else if (action === "broll-person-cancel") {
     addingPersonFor = null;
@@ -938,9 +965,9 @@ function onBrollClick(e, root, exportAs) {
     clearSelection();
     renderBrollViews();
   } else if (action === "broll-bulk-input-save") {
-    var box = document.getElementById("broll-bulk-input");
-    var value = box ? box.value : "";
-    var mode = bulkInput;
+    const box = document.getElementById("broll-bulk-input") as HTMLInputElement | null;
+    const value = box ? box.value : "";
+    const mode = bulkInput;
     bulkInput = null;
     if (mode === "person") bulkAssignNewPerson(value);
     else if (mode === "location" && plainText(value).trim()) bulkLocation(value);
@@ -953,8 +980,8 @@ function onBrollClick(e, root, exportAs) {
   }
 }
 
-function onBrollChange(e) {
-  var t = e.target;
+function onBrollChange(e: PanelEvent) {
+  const t = e.target as PanelInput;
   if (t.classList.contains("broll-owner-select")) {
     updateRecord(t.getAttribute("data-id"), { owner: personById(t.value) ? t.value : "" });
   } else if (t.id === "broll-bulk-owner") {
@@ -967,27 +994,27 @@ function onBrollChange(e) {
 }
 
 function focusBulkInput() {
-  var box = document.getElementById("broll-bulk-input");
+  const box = document.getElementById("broll-bulk-input");
   if (box) box.focus();
 }
 
-function onBrollFocusOut(e) {
+function onBrollFocusOut(e: PanelEvent) {
   if (drawingPanel) return;
-  var el = e.target;
-  var field = recordField(el);
+  const el = e.target as PanelInput;
+  const field = recordField(el);
   if (!field || !brollRecord(el.getAttribute("data-id"))) return;
   if (field === "location") { commitLocation(el); return; }
   if (field === "audioRef") editingRefFor = null;
-  var change = typedChange(el);
+  const change = typedChange(el);
   if (change) updateRecord(el.getAttribute("data-id"), change);
   else if (field === "audioRef") renderBrollViews();
 }
 
-function onBrollKeydown(e, root) {
-  var t = e.target;
-  var onPage = root.id === "broll-page";
+function onBrollKeydown(e: PanelEvent, root: HTMLElement) {
+  const t = e.target as PanelInput;
+  const onPage = root.id === "broll-page";
   if (e.key === "Escape") {
-    var refocus = null;
+    let refocus = null;
     if (groupMenuOpen) { groupMenuOpen = false; refocus = ".broll-group-btn"; }
     else if (menuFor) { refocus = '[data-action="broll-menu"][data-id="' + cssAttr(menuFor) + '"]'; menuFor = null; }
     else if (t.classList.contains("broll-loc-input")) editingLocFor = null;
@@ -1003,15 +1030,15 @@ function onBrollKeydown(e, root) {
     e.preventDefault();
     e.stopPropagation();
     renderBrollViews();
-    var back = refocus && root.querySelector(refocus);
+    const back = refocus && root.querySelector<HTMLInputElement>(refocus);
     if (back) back.focus();
     return;
   }
   if ((e.key === "ArrowDown" || e.key === "ArrowUp") && t.classList && t.classList.contains("broll-menu-item")) {
-    var items = Array.prototype.slice.call(t.parentNode.querySelectorAll(".broll-menu-item"));
-    var at = items.indexOf(t) + (e.key === "ArrowDown" ? 1 : -1);
+    const items: HTMLElement[] = Array.prototype.slice.call((t.parentNode as ParentNode).querySelectorAll(".broll-menu-item"));
+    const at = items.indexOf(t) + (e.key === "ArrowDown" ? 1 : -1);
     e.preventDefault();
-    items[(at + items.length) % items.length].focus();
+    (items[(at + items.length) % items.length] as HTMLElement).focus();
     return;
   }
   if (e.key !== "Enter") return;
@@ -1023,17 +1050,17 @@ function onBrollKeydown(e, root) {
     renameShot(t.getAttribute("data-id"), t);
   } else if (t.classList.contains("broll-person-input")) {
     e.preventDefault();
-    var add = root.querySelector('[data-action="broll-person-save"][data-id="' + cssAttr(t.getAttribute("data-id")) + '"]');
+    const add = root.querySelector<HTMLInputElement>('[data-action="broll-person-save"][data-id="' + cssAttr(t.getAttribute("data-id")) + '"]');
     if (add) add.click();
   } else if (t.id === "broll-bulk-input") {
     e.preventDefault();
-    var save = root.querySelector('[data-action="broll-bulk-input-save"]');
+    const save = root.querySelector<HTMLInputElement>('[data-action="broll-bulk-input-save"]');
     if (save) save.click();
   }
 }
 
-function onBrollInput(e) {
-  var box = e.target;
+function onBrollInput(e: PanelEvent & Partial<Pick<InputEvent, "inputType">>) {
+  const box = e.target as HTMLTextAreaElement;
   if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
   if (box.classList && box.classList.contains("broll-prop-input") &&
       (e.inputType === "insertReplacementText" || e.inputType === undefined)) {
@@ -1042,8 +1069,8 @@ function onBrollInput(e) {
 }
 
 export function openBrollPanel() {
-  if (!ports.document.current()) return;
-  ports.panels.open("broll-panel");
+  if (!(ports as PanelPortUse).document.current()) return;
+  (ports as PanelPortUse).panels.open("broll-panel");
   renderBroll();
 }
 
@@ -1052,14 +1079,14 @@ function brollPanelClosed() {
   menuFor = null;
 }
 
-var brollMount = null;
-var brollPanelRegistration = null;
+let brollMount: ReturnType<typeof mountBroll> | null = null;
+let brollPanelRegistration: (() => void) | null = null;
 
-export function mountBrollPanel(exportPort) {
+export function mountBrollPanel(exportPort: BrollPanelEventsPorts) {
   stopBrollFeature();
-  brollPanelRegistration = ports.panels.registerPanel("broll-panel", brollPanelClosed);
-  var panel = document.getElementById("broll-panel");
-  var page = brollPageEl();
+  brollPanelRegistration = (ports as PanelPortUse).panels.registerPanel("broll-panel", brollPanelClosed);
+  const panel = document.getElementById("broll-panel");
+  const page = brollPageEl();
   brollMount = mountBroll({
     window: window,
     ports: {
@@ -1069,12 +1096,12 @@ export function mountBrollPanel(exportPort) {
       keydown: onBrollKeydown,
       input: onBrollInput,
       add: addBrollFromPanel,
-      closePanel: function () { ports.panels.close("broll-panel"); },
-      openPanel: function () { ports.actions.invoke("panel-broll", "button"); },
+      closePanel: function () { (ports as PanelPortUse).panels.close("broll-panel"); },
+      openPanel: function () { (ports as PanelPortUse).actions.invoke("panel-broll", "button"); },
       closePage: closeBrollPage,
-      pageOpen: function () { return ports.flags.brollPageOpen(); },
+      pageOpen: function () { return (ports as PanelPortUse).flags.brollPageOpen(); },
       setPageGroup: function (value) {
-        ports.view.setPageGroup(value);
+        (ports as PanelPortUse).view.setPageGroup(value);
         renderBrollPage();
       },
       menusOpen: function () { return groupMenuOpen || !!menuFor; },
@@ -1092,69 +1119,69 @@ export function mountBrollPanel(exportPort) {
         if (panel && document.getElementById("broll-panel") === panel) panel.hidden = true;
         if (page && brollPageEl() === page) {
           page.hidden = true;
-          ports.flags.setBrollPageOpen(false);
+          (ports as PanelPortUse).flags.setBrollPageOpen(false);
           document.body.classList.remove("broll-page-open");
         }
-        ports.panels.sync();
+        (ports as PanelPortUse).panels.sync();
       }
-    }
+    } as BrollPorts & { readonly refresh: () => void }
   });
   return brollMount;
 }
 
 export function stopBrollFeature() {
-  var owner = brollMount;
-  var registration = brollPanelRegistration;
+  const owner = brollMount;
+  const registration = brollPanelRegistration;
   brollMount = null;
   brollPanelRegistration = null;
   if (registration) registration();
   if (owner) owner.dispose();
 }
 
-var pageReturnFocus = null;
-var pagePanelWasOpen = false;
+let pageReturnFocus: Element | null = null;
+let pagePanelWasOpen = false;
 
 function brollPageEl() {
   return document.getElementById("broll-page");
 }
 
 export function openBrollPage() {
-  var page = brollPageEl();
-  if (!page || !ports.document.current()) return;
+  const page = brollPageEl();
+  if (!page || !(ports as PanelPortUse).document.current()) return;
   pageReturnFocus = document.activeElement;
-  var panel = document.getElementById("broll-panel");
+  const panel = document.getElementById("broll-panel");
   pagePanelWasOpen = !!panel && !panel.hidden;
   groupMenuOpen = false;
   menuFor = null;
-  ports.panels.closeAll();
+  (ports as PanelPortUse).panels.closeAll();
   page.hidden = false;
-  ports.flags.setBrollPageOpen(true);
+  (ports as PanelPortUse).flags.setBrollPageOpen(true);
   document.body.classList.add("broll-page-open");
   renderBrollPage();
-  var back = document.getElementById("broll-page-close");
+  const back = document.getElementById("broll-page-close");
   if (back) back.focus();
 }
 
-export function closeBrollPage(andThen) {
-  var page = brollPageEl();
+export function closeBrollPage(andThen?: () => void) {
+  const page = brollPageEl();
   if (!page || page.hidden) return;
   page.hidden = true;
-  ports.flags.setBrollPageOpen(false);
+  (ports as PanelPortUse).flags.setBrollPageOpen(false);
   document.body.classList.remove("broll-page-open");
   if (pagePanelWasOpen) openBrollPanel();
   if (andThen) { andThen(); return; }
-  var back = pageReturnFocus;
+  const back = pageReturnFocus;
   pageReturnFocus = null;
-  if (back && document.body.contains(back) && back.offsetParent !== null) back.focus();
+  if (back && document.body.contains(back) && (back as HTMLElement).offsetParent !== null) (back as HTMLElement).focus();
   else {
-    var btn = document.getElementById(pagePanelWasOpen ? "broll-open-page" : "btn-broll");
+    const btn = document.getElementById(pagePanelWasOpen ? "broll-open-page" : "btn-broll");
     if (btn) btn.focus();
   }
 }
 
-function pageGroupHeadHtml(g) {
-  var done = g.items.filter(function (e) { return e.status === "shot"; }).length;
-  var title;
+function pageGroupHeadHtml(g: PanelGroup) {
+  const done = g.items.filter(function (e) { return e.status === "shot"; }).length;
+  let title;
   if (g.kind === "location") {
     title = (g.none ? '' : '<span class="broll-loc-pin" style="--loc:' + catColor("location") + '">' + brollIcon("pin", 15) + '</span>') +
       '<span class="broll-page-group-name">' + escapeHtml(g.label) + '</span>';
@@ -1163,7 +1190,7 @@ function pageGroupHeadHtml(g) {
   } else if (g.kind === "added") {
     title = '<span class="broll-page-group-name">' + escapeHtml(g.label) + '</span>';
   } else {
-    var who = g.none ? null : personById(g.items[0].owner);
+    const who = g.none ? null : personById((g.items[0] as BrollEntry).owner);
     title = (who ? avatarHtml(who) : '') + '<span class="broll-page-group-name">' + escapeHtml(g.label) + '</span>';
   }
   return '<tr class="broll-page-group"><th colspan="7" scope="rowgroup"><span class="broll-page-group-in">' + title +
@@ -1171,9 +1198,9 @@ function pageGroupHeadHtml(g) {
     done + '/' + g.items.length + ' shot</span></span></th></tr>';
 }
 
-function pageRowHtml(e) {
-  var id = escapeHtml(e.id);
-  var props = e.props.map(function (p) { return p.name; }).join(", ");
+function pageRowHtml(e: PanelShot) {
+  const id = escapeHtml(e.id);
+  const props = e.props.map(function (p) { return p.name; }).join(", ");
   return '<tr class="broll-page-row' + (e.status === "shot" ? ' is-shot' : '') + (e.reshoot ? ' is-flagged' : '') +
       '" data-id="' + id + '">' +
     '<td class="broll-page-c-check">' + checkHtml(e) + '</td>' +
@@ -1190,7 +1217,7 @@ function pageRowHtml(e) {
     '<td class="broll-page-c-owner" data-label="Assigned">' +
       '<select class="broll-owner-select broll-page-owner" data-id="' + id + '" aria-label="' + escapeHtml("Assigned to, " + (e.name || "Untitled shot")) + '">' +
         '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
-        (ports.document.current()?.people || []).map(function (p) {
+        (((ports as PanelPortUse).document.current()?.people as readonly (Person & Record<string, unknown>)[] | undefined) || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
       '</select></td>' +
@@ -1202,22 +1229,22 @@ function pageRowHtml(e) {
 }
 
 function renderBrollPage() {
-  var page = brollPageEl();
-  if (!page || page.hidden || !ports.document.current()) return;
+  const page = brollPageEl();
+  if (!page || page.hidden || !(ports as PanelPortUse).document.current()) return;
   keepingFocus(page, function () {
-    var entries = ports.records.brollEntries();
-    var shown = entries.filter(function (e) { return matchesFilter(e, ports.view.current().filter); });
-    document.getElementById("broll-page-summary").textContent = pageSummaryText(entries);
-    var sel = document.getElementById("broll-page-group");
-    if (sel) sel.value = ports.view.current().pageGroup;
-    document.getElementById("broll-page-filters").innerHTML = filterChipsHtml(entries);
-    document.getElementById("broll-page-table").innerHTML = shown.length
+    const entries = (ports as PanelPortUse).records.brollEntries();
+    const shown = entries.filter(function (e) { return matchesFilter(e, (ports as PanelPortUse).view.current().filter); });
+    (document.getElementById("broll-page-summary") as HTMLElement).textContent = pageSummaryText(entries);
+    const sel = document.getElementById("broll-page-group") as HTMLSelectElement | null;
+    if (sel) sel.value = (ports as PanelPortUse).view.current().pageGroup;
+    (document.getElementById("broll-page-filters") as HTMLElement).innerHTML = filterChipsHtml(entries);
+    (document.getElementById("broll-page-table") as HTMLElement).innerHTML = shown.length
       ? '<table class="broll-page-table">' +
           '<colgroup><col class="broll-page-w-check"><col class="broll-page-w-shot"><col class="broll-page-w-scene">' +
           '<col class="broll-page-w-props"><col class="broll-page-w-cuts"><col class="broll-page-w-owner"><col class="broll-page-w-note"></colgroup>' +
           '<thead><tr><th scope="col"><span class="broll-sr">Shot or to shoot</span></th><th scope="col">Shot</th><th scope="col">Scene</th>' +
             '<th scope="col">Props</th><th scope="col">Cuts against</th><th scope="col">Assigned</th><th scope="col">Note</th></tr></thead>' +
-          brollGroups(shown, ports.view.current().pageGroup).map(function (g) {
+          brollGroups(shown, (ports as PanelPortUse).view.current().pageGroup).map(function (g) {
             return '<tbody>' + pageGroupHeadHtml(g) + g.items.map(pageRowHtml).join("") + '</tbody>';
           }).join("") +
         '</table>'
@@ -1225,28 +1252,28 @@ function renderBrollPage() {
   });
 }
 
-function onBrollPageAction(action, btn, exportAs) {
+function onBrollPageAction(action: string | null, btn: HTMLElement, exportAs: BrollPanelEventsPorts["exportAs"]) {
   if (action === "broll-open-page") openBrollPage();
   else if (action === "broll-page-close") closeBrollPage();
   else if (action === "broll-page-jump") {
-    var id = btn.getAttribute("data-id");
+    const id = btn.getAttribute("data-id");
     closeBrollPage(function () { jumpToBrollShot(id); });
   } else if (action === "broll-page-csv") exportAs("b-roll csv");
   else if (action === "broll-page-print") {
-    if (!ports.records.brollEntries().length) { ports.notices.show("There is no b-roll to print yet.", "warn"); return; }
+    if (!(ports as PanelPortUse).records.brollEntries().length) { (ports as PanelPortUse).notices.show("There is no b-roll to print yet.", "warn"); return; }
     exportAs("b-roll pdf");
   }
 }
 
-export function startBrollPanel(nextPorts) {
+export function startBrollPanel(nextPorts: BrollPanelPorts): BrollPanelState {
   ports = nextPorts;
-  ports.view.load();
-  var withdrawHook = null;
+  (ports as PanelPortUse).view.load();
+  let withdrawHook: (() => void) | null = null;
   exposeTestHook("__brollTest", function () { return {
-    view: function () { return ports.view.current(); },
+    view: function () { return (ports as PanelPortUse).view.current(); },
     selected: function () { return Object.keys(selection); }
   }; }, function (withdraw) { withdrawHook = withdraw; });
-  var active = true;
+  let active = true;
   return { openBrollPanel: function () { if (active) openBrollPanel(); }, dispose: function () {
     if (!active) return;
     active = false;
