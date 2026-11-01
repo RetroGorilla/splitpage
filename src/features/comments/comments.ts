@@ -7,7 +7,9 @@ import type { CommentFilter } from "../../application/preferences/preferences.ts
 import type { ConflictValue } from "../../application/commands/comments.ts";
 import type { RewritePlanner } from "../../application/commands/document-edit.ts";
 
-type CommentRenderReply = { readonly author: string; readonly body: string; readonly createdAt?: string | null | undefined };
+type CommentRenderReply = NonNullable<DocumentView["comments"][number]["replies"]>[number] & {
+  readonly author: string; readonly body: string; readonly createdAt?: string | null | undefined;
+};
 type CommentRenderRecord = {
   readonly id: string; readonly createdAt?: string | null | undefined; readonly resolvedAt?: string | null | undefined;
   readonly resolved?: unknown; readonly kind?: unknown; readonly imageValue?: unknown; readonly emptyValue?: unknown;
@@ -22,10 +24,7 @@ type CommentsReadDocument = {
   readonly people: readonly { readonly name?: string | null | undefined }[];
 };
 type CommentsRuntimePorts = { readonly [K in Exclude<keyof CommentStatePorts, "document">]: CommentStatePorts[K] } & {
-  readonly document: {
-    readonly current: () => CommentsReadDocument | null;
-    readonly read: <T>(select: (doc: CommentsReadDocument | null) => T) => T;
-  };
+  readonly document: CommentStatePorts["document"];
 };
 type PendingCommentContext = { id: string; rowId: string; field: string; quotedText: string };
 type ReplyDraft = { body?: string; name?: string };
@@ -312,8 +311,8 @@ function commentAssigneeCandidates() {
     seen[norm] = true;
     out.push(clean);
   }
-  ((ports as CommentsRuntimePorts).document.current()?.people || []).forEach(function (p) { add(p.name); });
-  ((ports as CommentsRuntimePorts).document.current()?.comments || []).forEach(function (c) {
+  (((ports as CommentsRuntimePorts).document.current() as CommentsReadDocument | null)?.people || []).forEach(function (p) { add(p.name); });
+  (((ports as CommentsRuntimePorts).document.current() as CommentsReadDocument | null)?.comments || []).forEach(function (c) {
     add(c.author);
     (c.replies || []).forEach(function (r) { add(r.author); });
   });
@@ -344,7 +343,7 @@ function commentAssigneeOptionsHtml(current: string | undefined) {
 }
 
 function renderCommentFilterBar() {
-  const doc = (ports as CommentsRuntimePorts).document.current();
+  const doc = (ports as CommentsRuntimePorts).document.current() as CommentsReadDocument | null;
   if (!doc) return;
   const seg = document.getElementById("comments-filter-seg");
   if (seg) {
@@ -677,7 +676,7 @@ export function jumpToComment(cmtId: string | null) {
   const doc = (ports as CommentsRuntimePorts).document.current();
   if (!doc) return;
   const idx = findCommentIndex(cmtId);
-  const target = idx === -1 ? null : doc.comments[idx];
+  const target = idx === -1 ? null : doc.comments[idx] as CommentRenderRecord | undefined;
   if (target && (!commentMatchesFilterMode(target, (commentFilter as CommentFilter).mode) ||
       !commentMatchesAssigneeFilter(target, (commentFilter as CommentFilter).assignee))) {
     (commentFilter as CommentFilter).mode = "all";
@@ -983,7 +982,7 @@ export function captureReplyDrafts() {
 const COMMENTS_HINT_HTML = '<p class="comments-hint">To start a thread, select words in the script and choose Comment.</p>';
 
 export function renderComments() {
-  const doc = (ports as CommentsRuntimePorts).document.current();
+  const doc = (ports as CommentsRuntimePorts).document.current() as CommentsReadDocument | null;
   if (!doc) return;
   const listEl = (document.getElementById("comments-list") as HTMLElement);
   if (!listEl) return;
