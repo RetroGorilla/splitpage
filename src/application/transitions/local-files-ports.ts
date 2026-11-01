@@ -11,17 +11,19 @@ import type { TextServices } from "../text/services.ts";
 import type { DocumentDestination, HistoryPort } from "./ports.ts";
 import type { DocumentSource } from "./sources.ts";
 import type { Transitions } from "./transitions.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
+import type { DraftParsedFile } from "../recovery/drafts-ports.ts";
 
 export interface LocalFileOpening {
   readonly kind: string;
   readonly file?: unknown;
   readonly handle?: unknown;
-  readonly parsed?: unknown;
+  readonly parsed?: { readonly state: ValidatedDocument; readonly kind: unknown };
   readonly options?: unknown;
 }
 
 export interface LocalFileImports {
-  readonly parseProjectFileState: (file: unknown) => Promise<unknown>;
+  readonly parseProjectFileState: (file: unknown) => Promise<DraftParsedFile | null>;
   readonly docxToRows: (file: LocalFileData) => Promise<unknown>;
   readonly csvToRows: (text: string) => unknown;
   readonly detectTwoColumnFormat: (text: string) => string | null;

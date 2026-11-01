@@ -268,7 +268,7 @@ bytes instead.
 `#state-data` holds the seed document from `src/seed-state.json`. That's its
 whole job — **documents live in files, not copies of the app**. Save writes
 `.md` (table + fenced `splitpage` data block) or `.splitpage` (that record
-alone). The format codecs in `src/adapters/formats/` build and parse both; `openProjectFile()` (`src/application/transitions/local-files.js`) dispatches
+alone). The format codecs in `src/adapters/formats/` build and parse both; `openProjectFile()` (`src/application/transitions/local-files.ts`) dispatches
 into `adoptProjectState()`, the one place a parsed project becomes *the*
 document. `PAGE_SHELL`/`buildPublishHtml()` (`src/adapters/page/page-shell.ts`) exist only for Standalone HTML
 export. A server was a second home from 2026-08-28 until the server
@@ -1142,7 +1142,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
 | `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
 | `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.ts`) |
-| `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.js`) |
+| `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.ts`) |
 | `src/application/` (other) | preferences, document location and identity (with the document guard), production index and b-roll records, media and picture store, files and recents, export registry and services, screen and screen state, actions, shortcuts |
 | `src/adapters/` | `richtext/` (HTML in and out of cells), `formats/` (DOCX, PDF, CSV/XLSX, Markdown, the `.splitpage` file), `storage/` (blobs, gallery, history IndexedDB, desktop drafts), `files/`, `desktop/`, `page/`, `identity/`, `production/` |
 | `src/core/` | pure rules: `document/`, `text/` (runs, marks, steps, anchors), `merge/`, `production/`, `migrate.ts` |
@@ -1292,7 +1292,7 @@ recovery tool, if ever wanted, finds it by `docs/`/`older/` with no
 `migratedFrom` in `index.json`, or by v1 stores surviving in v3.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
-starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.js`)
+starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.ts`)
 now builds a fresh state through `migrateRows()`, so the document gets a new
 `docId` and empty `productionTags`, `people`, `brollShots` and `comments`,
 and its home becomes the imported file (`setHome("import")`,
