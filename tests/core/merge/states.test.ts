@@ -33,7 +33,7 @@ function cm(id: string): MergeComment {
 
 function doc(over?: Partial<MergeDoc>): ValidatedDocument {
   return migratedThenSet(Object.assign({
-    title: "Lighthouse", docId: DOC, rows: [row("r1", ONE)], comments: [], people: [], productionTags: [], brollShots: [],
+    title: "Lighthouse", titleOrigin: "file", titleVersion: "v3", docId: DOC, rows: [row("r1", ONE)], comments: [], people: [], productionTags: [], brollShots: [],
     wordsPerMinute: 150, rev: 4, lastEditedBy: "Base", lastEditedAt: OLD, personColors: { Sam: "#80BDFB" }, targetSeconds: 300,
     schema: SCHEMA_VERSION
   }, over || {}));
@@ -72,6 +72,8 @@ test("every strategy merges its field, in the table's order", () => {
   assert.deepEqual(Object.keys(r.merged), STATE_FIELDS.map((f) => f.key));
   assert.deepEqual(r.merged, {
     title: "Mine title",
+    titleOrigin: "file",
+    titleVersion: "v3",
     docId: DOC_MINE,
     rows: [row("r1", ONE_MT, { updatedAt: FIXED_ISO, updatedBy: EDITOR })],
     comments: [cm("cM")],
@@ -96,6 +98,21 @@ test("person colours, target length and sections that no side has leave no key b
   const { decode } = fakeDecoder(CELLS);
   const r = mergeStateFields(strip(doc()), strip(doc()), strip(doc()), fakePorts(decode));
   assert.deepEqual(Object.keys(r.merged), STATE_FIELDS.map((f) => f.key).filter((k) => k !== "personColors" && k !== "targetSeconds" && k !== "sections"));
+});
+
+test("file naming metadata survives merge, including version removal from either side", () => {
+  const { decode } = fakeDecoder(CELLS);
+  const merge = (base: ValidatedDocument | null, mine: ValidatedDocument, theirs: ValidatedDocument) => mergeStateFields(base, mine, theirs, fakePorts(decode)).merged;
+  const without = () => { const d = doc(); delete d.titleVersion; return d; };
+  assert.equal(Object.hasOwn(merge(doc(), without(), doc()), "titleVersion"), false);
+  assert.equal(Object.hasOwn(merge(doc(), doc(), without()), "titleVersion"), false);
+  assert.equal(merge(doc(), doc({ titleOrigin: "user" }), doc()).titleOrigin, "user");
+  assert.equal(merge(doc(), doc(), doc({ titleVersion: "v4" })).titleVersion, "v4");
+  const old = () => { const d = without(); delete d.titleOrigin; return d; };
+  const legacy = merge(old(), old(), old());
+  assert.equal(Object.hasOwn(legacy, "titleOrigin"), false);
+  assert.equal(Object.hasOwn(legacy, "titleVersion"), false);
+  assert.equal(merge(null, old(), doc()).titleVersion, "v3");
 });
 
 test("with fake ids, clock and editor the merge is deterministic, conflict cards included", () => {

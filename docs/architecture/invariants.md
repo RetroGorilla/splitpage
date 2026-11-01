@@ -492,6 +492,11 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-53 — Every edit is recorded once; nothing else is recorded
 
+- **First-save naming (I-32):** accepting a filename for an untouched title
+  applies one undoable command after a successful current save. Title, tag
+  and provenance undo together; the file destination remains. Failed or
+  cancelled saves add no entry. `src/test/file-title-app.test.mjs` pins this
+  and the protection for title edits made while a save waits.
 - **Behaviour:** Every edit to the document ends in `markDirty()` or is a session command, and undo learns of the edit by diffing. An edit is recorded once, unless it ends where it began: typing that coalesces back to its start, such as a letter typed and deleted within a second, leaves no step. Changes that are not the user's edits are registered as such and never become undo steps: a new document, someone else's merge, a reload in place, or the repair made by an undo's own repaint.
 - **Tests:** `src/test/undo.test.mjs` ("diffStates: the lists and comments are one step each; bookkeeping is never a step", "forget (design D4)…", the coalesced-back and redo tests, and `redoInvariantRun`); `src/test/apply-merge.test.mjs` ("nothing differed: no merge, no snapshot, no rev bump"); `tests/application/document-session.test.ts` (the "E2", "E3" and "E4" tests); `src/test/cell-text-app.test.mjs`, `split-join-app.test.mjs` and `cut-paste-app.test.mjs` (one generation, one change count step and one undo step per command); browser `73-undo.txt`, `76-tags-model.txt` (`settleAfterApply`), `185-autosave-every-edit.txt`, `186-autosave-panel-edits.txt`, `289-script-cell-ime.txt`.
 - **Owner:** `src/application` (DocumentSession) · **Milestone:** 3 · **Class:** absorb

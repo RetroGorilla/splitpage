@@ -106,6 +106,7 @@ function world(): World {
   });
   let minted = 0;
   const ports: FileSavingPorts = {
+    edits: { edit: () => { throw new Error("unexpected title change"); } },
     deferred: {
       copyHistory: (fromId, toId) => {
         w.history.push(fromId + ">" + toId);
