@@ -10,7 +10,7 @@ type HistoryImageData = { mime: string; b64: string };
 type HistoryImportCandidate = { atMs: number; id: string; entry: HistorySnapshotRead | null };
 type HistoryImportCounts = { -readonly [K in keyof HistoryImportResult]: HistoryImportResult[K] };
 type HistoryCallable = (...args: never[]) => unknown;
-type HistoryOwnerApi = Omit<HistoryOwner, "startHistory" | "testControls">;
+type HistoryOwnerApi = Omit<HistoryOwner, "startHistory">;
 
 import { sha256Bytes } from "../../core/document/ids.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";

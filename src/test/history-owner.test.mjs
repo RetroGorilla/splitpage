@@ -1,8 +1,8 @@
-import { createHistoryBackendProbe } from "../adapters/storage/history-backend-testing.ts";
-import { createHistoryOwnerInstrumentation } from "../adapters/storage/history-owner-testing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHistoryBackendProbe } from "../adapters/storage/history-backend-testing.ts";
+import { createHistoryOwnerInstrumentation } from "../adapters/storage/history-owner-testing.ts";
 import { createHistoryOwner } from "../application/recovery/history.ts";
 import { createHistoryBackends } from "../adapters/storage/history-backends.ts";
 
