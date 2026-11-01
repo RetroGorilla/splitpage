@@ -11,7 +11,7 @@ import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.ts";
 import { paintTargetOverlay } from "../../features/rundown/target.js";
 import { refreshAnnotator } from "../../features/gallery/annotate.js";
-import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../features/tags/panels.js";
+import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../features/tags/panels.ts";
 import { runBrollRefresh } from "../../features/broll/panel.js";
 import { scheduleBrollRefresh, updateBrollBadge } from "./broll.ts";
 import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.js";

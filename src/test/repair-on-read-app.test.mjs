@@ -14,7 +14,7 @@ const { render } = await import("../features/rows/render.ts");
 const { updateTagBadges } = await import("../bootstrap/wiring/panels.ts");
 const { productionIndex } = await import("../application/production/index-owner.ts");
 const { currentDocument } = await import("../bootstrap/wiring/session-owner.ts");
-const { openProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../features/tags/panels.js");
+const { openProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../features/tags/panels.ts");
 const { anchorBrollInLeftCell, updateBrollBadge } = await import("../bootstrap/wiring/broll.ts");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const brollEntries = () => currentBrollRecords().brollEntries();

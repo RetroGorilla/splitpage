@@ -237,7 +237,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 - **Behaviour:** A quick-add box that tracks items whether or not the script mentions them adds a registry entry for each new line. When a line is removed, it deletes that entry only if the item is orphaned; an item still tagged in the script stays.
 - **Tests:** `tests/core/production/tags.test.ts` ("INV-26: the quick-add plan deletes an orphaned entry whose line went and keeps one still tagged in the script"); `tests/core/production/golden.test.ts` (the Gear quick add against `production-gear-quick-add`); browser `12-gear.txt` ("removing a line un-tracks it, UNLESS it's still tagged live").
-- **Owner:** `src/core/production` (reconciliation plan, `planQuickAdd`), `src/features/tags/panels.js` (the caller) · **Milestone:** 2 · **Class:** keep
+- **Owner:** `src/core/production` (reconciliation plan, `planQuickAdd`), `src/features/tags/panels.ts` (the caller) · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** new unit test: for a removed line, the quick-add reconciliation plan deletes an orphaned entry and keeps a live-tagged one. `12-gear.txt` passes.
 
