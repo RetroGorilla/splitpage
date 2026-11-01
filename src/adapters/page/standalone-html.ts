@@ -25,7 +25,7 @@ export function standaloneHtmlFor(doc: ExportDocument, head?: Parameters<typeof 
     const held = assets.picture(sha);
     return held && held.mime ? "data:" + held.mime + ";base64," + base64Encode(held.bytes) : null;
   } : null);
-  Reflect.deleteProperty(copy, "docId");
+  delete (copy as Partial<Pick<typeof copy, "docId">>).docId;
   const html = buildPublishHtml(JSON.stringify(copy));
   return head ? withPageHead(html, head) : html;
 }
