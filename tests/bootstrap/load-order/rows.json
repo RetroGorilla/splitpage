@@ -1,13 +1,13 @@
 {
   "loadOnly": [
-    "src/features/rows/row-motion.js",
+    "src/features/rows/row-motion.ts",
     "src/features/rows/actions.ts",
-    "src/features/rows/read-time.js",
+    "src/features/rows/read-time.ts",
     "src/bootstrap/wiring/read-time.ts",
     "src/bootstrap/wiring/hide-shot.ts",
     "src/bootstrap/wiring/scene-status.ts",
-    "src/features/rows/scenes.js",
-    "src/features/rows/scene-media.js",
+    "src/features/rows/scenes.ts",
+    "src/features/rows/scene-media.ts",
     "src/bootstrap/wiring/rows.ts",
     "src/features/gallery/video-files.ts",
     "src/bootstrap/wiring/video-files.ts",

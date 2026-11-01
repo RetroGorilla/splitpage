@@ -17,7 +17,7 @@ after(closeApp);
 const { STARTERS, LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.ts");
-const { intern } = await import("../adapters/storage/02c-blobs.js");
+const { intern } = await import("../adapters/storage/02c-blobs.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();

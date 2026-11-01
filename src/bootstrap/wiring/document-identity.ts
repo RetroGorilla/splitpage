@@ -1,4 +1,4 @@
-import { createDocumentIdentityOwner } from "../../application/identity/document-identity.js";
+import { createDocumentIdentityOwner } from "../../application/identity/document-identity.ts";
 import type { DocumentIdentityOwner, DocumentIdentityPorts } from "../../application/identity/ports.ts";
 import type { IdentityPort } from "../../application/transitions/ports.ts";
 import { documentGuardOn, documentView, quietly } from "../../application/identity/document-guard.ts";

@@ -4,7 +4,7 @@ import type { DraftsMount, DraftsPorts } from "../../application/recovery/drafts
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { parseProjectFileState } from "../../adapters/formats/project-file.ts";
-import { inlineStateJson, internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
+import { inlineStateJson, internDataUrl, persist } from "../../adapters/storage/02c-blobs.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";

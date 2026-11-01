@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { storedImageMarkup } from "../../src/core/document/text-policy.ts";
 import * as legacy from "../../src/bootstrap/richtext.ts";
-import { has, intern, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
+import { has, intern, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.ts";
 import { readFileSync } from "node:fs";
 import { image } from "../../src/test/golden-helpers.mjs";
 
