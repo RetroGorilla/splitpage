@@ -673,7 +673,7 @@ leaving does not shift the editor under a still-clear layer.
 `.claude/skills/run-splitpage-app/tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
 on the two elements and checks all of it.
 
-**`render()` must stay synchronous.** `src/features/rows/row-motion.js` animates scene
+**`render()` must stay synchronous.** `src/features/rows/row-motion.ts` animates scene
 reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
 `#rows` (§3.16), measure again, put things back with a transform and animate
 it away. It is FLIP and *not* the View Transitions API for one reason:
@@ -736,7 +736,7 @@ the end. Now:
   identical is not touched. `rowHtmlFromParts()` in `src/features/rows/render.js` is those parts joined, byte for byte
   what it always produced.
 - **`render()`** keys `#rows` by row id (a shot strip by the ids it covers —
-  `hiddenShotStripHtml()` in `src/features/rows/hide-shot.ts`, the key `rowMotionKey()` in `src/features/rows/row-motion.js`
+  `hiddenShotStripHtml()` in `src/features/rows/hide-shot.ts`, the key `rowMotionKey()` in `src/features/rows/row-motion.ts`
   uses), reuses every element still wanted, repaints only changed parts,
   creates new rows, drops gone ones, and moves the rest with a
   longest-increasing-run pass that never moves the row holding focus (a
@@ -871,7 +871,7 @@ panels, the CSV, Present's clock — reads `rowSeconds()`, never the words
 directly (Present's *scroll speed* is still words and reading speed).
 `migrateRows()` keeps a whole number 0–86400 and drops anything else, so a
 file from before #179 reads as the estimate. It is set from the rail's Read
-time (`src/features/rows/read-time.js`; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
+time (`src/features/rows/read-time.ts`; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
 `parseSceneLength()`). It is not in
 `ROW_FIELDS` (not text): `mergeRow` takes the side that changed it since the
 base, theirs when both did (no conflict card), and with no base a set length
