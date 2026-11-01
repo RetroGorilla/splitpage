@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { URL } from "node:url";
 import { JSDOM } from "jsdom";
 import { mountImportDialog } from "../../../src/features/imports/imports.js";
-import { parseImportRows, detectTwoColumnFormat } from "../../../src/adapters/formats/import-text.js";
+import { parseImportRows, detectTwoColumnFormat } from "../../../src/adapters/formats/import-text.ts";
 
 function harness(storageDisabled = false) {
   const realm = new JSDOM(readFileSync(new URL("../../../src/page.html", import.meta.url), "utf8"), { url: "https://splitpage.test/" }).window;
