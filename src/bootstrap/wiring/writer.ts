@@ -19,7 +19,7 @@ import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { sectionView } from "./editor-owners.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { currentRowsRender } from "./render.ts";
-import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.js";
+import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.ts";
 
 const writer = owned<ReturnType<typeof startWriter>>();
 const connections = new Set<(control: ReturnType<typeof startWriter> | null) => void>();

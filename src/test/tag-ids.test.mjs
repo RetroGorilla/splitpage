@@ -11,7 +11,7 @@ import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { fromHtml } from "../bootstrap/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
-import { registryEntryById } from "../features/tags/production-tags.js";
+import { registryEntryById } from "../features/tags/production-tags.ts";
 import { ensureTagIds } from "../core/document/tags.ts";
 import { isTagId } from "../core/document/tags.ts";
 import { renameTag } from "../application/commands/production-actions.ts";
