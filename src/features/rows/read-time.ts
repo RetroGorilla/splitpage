@@ -49,7 +49,7 @@ function openReadTimeEditor(btn: HTMLElement | null) {
   const row = scene.row;
   const idx = scene.index;
   const wasSet = hasSetLength(row as LengthHolder);
-  const doc = (ports as ReadTimePortUse).document.current() as ReadTimeDocument;
+  const doc = (ports as ReadTimePortUse).document.current();
   const secs = rowSeconds(row, doc, (ports as ReadTimePortUse).text.productionReaders);
   const estimate = formatDuration(estimatedSeconds(row, doc, (ports as ReadTimePortUse).text.productionReaders));
   const prefill = wasSet || secs >= 0.5 ? formatDuration(secs) : "";
