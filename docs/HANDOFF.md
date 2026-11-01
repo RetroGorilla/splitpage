@@ -705,7 +705,7 @@ Two traps it already works around:
 
 ### 3.15 One loading indicator, and it waits before showing
 
-`src/features/notices/busy.js` owns the only "something is happening" affordance in the app:
+`src/features/notices/busy.ts` owns the only "something is happening" affordance in the app:
 a 2px indeterminate bar at the top of the window. `withBusyBar(label, fn)`
 wraps an async operation; the result and any thrown error pass straight
 through. Currently wrapped: every export (they all funnel through
