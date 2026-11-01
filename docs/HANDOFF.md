@@ -1276,7 +1276,7 @@ name never does (#183). `#root` spans the window and only the script is
 held to 1800px (#190); the rundown strip runs the window's width, less an
 open panel (#189), below 1100px too. One slim scroll-bar style app-wide,
 and the page's own bar hidden while a panel is open (#187, #188), its
-width handed back (`--page-gutter`, `src/features/panels/script-place.js`) so nothing steps
+width handed back (`--page-gutter`, `src/features/panels/script-place.ts`) so nothing steps
 sideways; a panel opening or closing keeps the scene at the top of the
 view put (`holdScriptPlace`, as the script zoom does). `.claude/skills/run-splitpage-app/tests/85-header-fit.txt`
 measures all of it by resizing an iframe; 250–251 the rest.
