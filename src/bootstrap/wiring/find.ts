@@ -6,7 +6,7 @@ import { notices as portNotices } from "./ports/effects.ts";
 import { findOptions, flags as portFlags } from "./ports/preferences.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { findActions as definitions } from "../../features/find/actions.ts";
-import { startFind, mountFindEvents } from "../../features/find/find.js";
+import { startFind, mountFindEvents } from "../../features/find/find.ts";
 import type { FindControls, FindPorts } from "../../features/find/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { shotHiding } from "./ports/shot-hiding.ts";

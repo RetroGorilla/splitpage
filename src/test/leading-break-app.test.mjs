@@ -9,7 +9,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { render } = await import("../features/rows/render.ts");
 const { registryKey } = await import("../core/document/tags.ts");
 const { openProductionPanel } = await import("../features/tags/panels.ts");
-const { closeBrollPage, openBrollPage, openBrollPanel } = await import("../features/broll/panel.js");
+const { closeBrollPage, openBrollPage, openBrollPanel } = await import("../features/broll/panel.ts");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const closeBroll = () => { sidePanels().close("broll-panel"); };
 const closeProduction = () => { sidePanels().close("production-panel"); };
