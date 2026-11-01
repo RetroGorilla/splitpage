@@ -1,4 +1,4 @@
-import { startHistoryPanel } from "../../features/history/panel.js";
+import { startHistoryPanel } from "../../features/history/panel.ts";
 import type { HistoryPanelControl, HistoryPanelPorts } from "../../features/history/ports.ts";
 import { historyActions as definitions } from "../../features/history/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
