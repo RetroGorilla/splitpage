@@ -144,7 +144,7 @@ test("--broll is defined in every theme, off every other hue, and readable as te
   }
 });
 
-import { tagIconCss, tagIconSvg } from "../features/tags/production-tags.js";
+import { tagIconCss, tagIconSvg } from "../features/tags/production-tags.ts";
 
 import "./_preferences-started.mjs";
 import { settingsAppData } from "../application/preferences/preferences.ts";

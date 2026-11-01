@@ -20,7 +20,7 @@ const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { sanitizeHtml } = await import("../bootstrap/richtext.ts");
 const cellText = await import("../application/commands/cell-text.ts");
 const splitJoin = await import("../application/commands/split-join.ts");
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 

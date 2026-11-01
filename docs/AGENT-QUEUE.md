@@ -421,14 +421,14 @@ STRUCTURE SECTION MUST SAY
 ## AQ-19 [x] Drop the storage re-exports
 
 Needs: AQ-15 merged.
-Files: src/adapters/storage/02d-gallery.js, 02c-blobs.js, importers, tools/dep-report.mjs.
+Files: src/adapters/storage/02d-gallery.ts, 02c-blobs.js, importers, tools/dep-report.mjs.
 **STOPS FOR ADAM**: src/adapters/storage/ and tools/dep-report.mjs are protected. The contracts-layer half already landed in #916; only the storage re-exports remain (check first).
 
 
 ```text
 Task: two small structural clean-ups in one PR (two commits). Start after AQ-15 is merged (AQ-15 edits pdf.ts). The contracts-layer half already landed (#916): check first and do only the storage re-exports. No behaviour change.
 
-3.2 STORAGE RE-EXPORTS. The storage adapter re-exports functions that belong to core: src/adapters/storage/02d-gallery.js (around lines 27-50) and src/adapters/storage/02c-blobs.js (around line 13). Because of that, src/adapters/formats/pdf.ts (around line 5) reaches core code through storage, which AGENTS.md rule 4 forbids. Point every consumer directly at its real home under src/core/document/, delete the re-export blocks, and update every importer.
+3.2 STORAGE RE-EXPORTS. The storage adapter re-exports functions that belong to core: src/adapters/storage/02d-gallery.ts (around lines 27-50) and src/adapters/storage/02c-blobs.js (around line 13). Because of that, src/adapters/formats/pdf.ts (around line 5) reaches core code through storage, which AGENTS.md rule 4 forbids. Point every consumer directly at its real home under src/core/document/, delete the re-export blocks, and update every importer.
 - Find the names: read the re-export blocks; for each name find its defining file under src/core/ and every importer: `grep -rn "02d-gallery\|02c-blobs" src tests tools docs`.
 - Importers include pdf.ts, docx.ts and export-text.ts under src/adapters/formats/; there may be others (features, tests, wiring). Update all of them, including tests (import paths only).
 - If an importer is a feature, it must get the function through its named port, not by importing core directly if the layer rules forbid that; check docs/architecture/dependencies.md#layers and follow it. Say in the PR what you did for each importer.

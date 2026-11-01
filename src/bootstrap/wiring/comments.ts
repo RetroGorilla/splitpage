@@ -10,7 +10,7 @@ import { saves as portSaves, ownership as portOwnership } from "./ports/saving.t
 import { deletion as portDeletion } from "./ports/production.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { screen as portScreen } from "./ports/screen.ts";
-import { startComments as mountCommentState } from "../../features/comments/comments.js";
+import { startComments as mountCommentState } from "../../features/comments/comments.ts";
 import type { CommentStatePorts } from "../../features/comments/ports.ts";
 
 import { keepSnapshot } from "./transition-owners.ts";
@@ -54,7 +54,7 @@ import {
   toggleCommentMenu,
   toggleReplyComposer,
   toggleResolve
-} from "../../features/comments/comments.js";
+} from "../../features/comments/comments.ts";
 import { showToast } from "./effects-owner.ts";
 import {
   onRootClick,

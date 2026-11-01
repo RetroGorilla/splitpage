@@ -2,7 +2,7 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { startWriter } from "../../../src/features/writer/writer.js";
+import { startWriter } from "../../../src/features/writer/writer.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeWriterPorts } from "../fakes.ts";

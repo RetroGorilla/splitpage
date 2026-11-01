@@ -10,7 +10,7 @@ import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { directionShortcut, importDirections } from "../core/text/directions.ts";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
 import { normalizeSceneLength, normalizeTargetLength } from "../core/document/timing.ts";
-import { migrateGallery } from "../adapters/storage/02d-gallery.js";
+import { migrateGallery } from "../adapters/storage/02d-gallery.ts";
 import { normalizeMarks, normalizePictureName, normalizeVideoLink, normalizeVideoLinks } from "../core/document/gallery.ts";
 import { assertGolden, goldenNames, mintedId, updatingGoldens } from "./golden-helpers.mjs";
 
