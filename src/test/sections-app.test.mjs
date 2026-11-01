@@ -123,7 +123,7 @@ test("moving a scene into a folded section reveals the destination and restores 
 });
 
 test("Find and Replace reveal a folded match through their real wiring", async () => {
-  const find = await import("../features/find/find.js");
+  const find = await import("../features/find/find.ts");
   await open();
   sectionView().toggle("s2");
   find.openFindBar();
