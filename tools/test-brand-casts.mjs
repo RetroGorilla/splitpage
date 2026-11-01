@@ -116,6 +116,8 @@ const FORGED = [
   ["export function generic<T extends ValidatedDocument>(x: unknown): T { return x as T; }", ASSERTION],
   ["export function voidForge(x: ValidatedDocument | void): ValidatedDocument { return x as ValidatedDocument; }", ASSERTION],
   ["export function voidGeneric<T extends ValidatedDocument | void>(x: T): ValidatedDocument { return x as ValidatedDocument; }", ASSERTION],
+  ["export function voidMixed(x: ValidatedDocument | (void & {})): ValidatedDocument { return x as ValidatedDocument; }", ASSERTION],
+  ["export function isVoidDoc(x: ValidatedDocument | void): x is ValidatedDocument { return !!x; }", PREDICATE],
   ["export function overload(x: unknown): ValidatedDocument;\nexport function overload(x: unknown): unknown { return x; }", BODILESS],
   ["declare function made(x: unknown): Holder;", BODILESS],
   ["declare const ambient: ValidatedDocument;", DECLARED],

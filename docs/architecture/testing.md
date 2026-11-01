@@ -551,7 +551,8 @@ where a nested `never` comes out instead. The typecheck refuses, in every
   ValidatedDocument | null) as ValidatedDocument` or `(raw as null) as never
   as ValidatedDocument`. `(shape as DocumentShape | null) as
   ValidatedDocument` is refused too. A value whose type includes `void`
-  (`ValidatedDocument | void`) is refused, because a `() => void` callback
+  anywhere (`ValidatedDocument | void`, `void & {}`) is refused, here and as
+  the parameter of a branded type predicate, because a `() => void` callback
   may return anything, so removing `void` is not removing an empty value;
 - a property or element access whose declared type is `never` on a value that
   is not `never` (`({ v: raw } as { v: never }).v`, `([raw] as [never])[0]`),
