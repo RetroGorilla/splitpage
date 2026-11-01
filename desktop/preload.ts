@@ -5,15 +5,13 @@ import type { DesktopChannel } from "./ipc-channels.ts";
 import type { DesktopChannelRow, DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
 
 type PreloadChannelName<D extends DesktopChannelRow["direction"]> = Extract<DesktopChannel, { direction: D }>["name"];
-type PreloadSyncResult<C extends PreloadChannelName<"sendSync">> = DesktopIpcResult<C> |
-  (C extends "splitpage:ipc-table-sync" | "splitpage:get-app-version-sync" ? null : never);
 
 interface PreloadElectronBoundary {
   contextBridge: { exposeInMainWorld: (name: string, value: DesktopPort & Partial<PreloadTestHooks>) => void };
   ipcRenderer: {
     invoke: <C extends PreloadChannelName<"invoke">>(name: C, ...args: DesktopIpcArgs<C>) => Promise<DesktopIpcResult<C>>;
     send: <C extends PreloadChannelName<"send">>(name: C, ...args: DesktopIpcArgs<C>) => void;
-    sendSync: <C extends PreloadChannelName<"sendSync">>(name: C, ...args: DesktopIpcArgs<C>) => PreloadSyncResult<C>;
+    sendSync: <C extends PreloadChannelName<"sendSync">>(name: C, ...args: DesktopIpcArgs<C>) => DesktopIpcResult<C>;
     on: <C extends PreloadChannelName<"receive">>(name: C, handler: (event: unknown, ...args: DesktopIpcReceiveArgs<C>) => void) => void;
   };
   webUtils: { getPathForFile: (file: unknown) => string };
