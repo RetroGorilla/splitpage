@@ -32,14 +32,14 @@ const {
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
 } = require("./update-release");
-const { createIpcSetup } = require("./ipc-setup");
-const { createFileIpc } = require("./ipc-files");
-const { createShellIpc } = require("./ipc-shell");
-const { createDocumentIpc } = require("./ipc-document");
-const { createHistoryBlobIpc } = require("./ipc-history-blob");
-const { createTabStripIpc } = require("./ipc-tabstrip");
-const { createTestModeIpc } = require("./ipc-test-mode");
-const { createPrintIpc } = require("./ipc-print");
+const { createIpcSetup } = require("./ipc-setup.ts");
+const { createFileIpc } = require("./ipc-files.ts");
+const { createShellIpc } = require("./ipc-shell.ts");
+const { createDocumentIpc } = require("./ipc-document.ts");
+const { createHistoryBlobIpc } = require("./ipc-history-blob.ts");
+const { createTabStripIpc } = require("./ipc-tabstrip.ts");
+const { createTestModeIpc } = require("./ipc-test-mode.ts");
+const { createPrintIpc } = require("./ipc-print.ts");
 const { createPdfPrinter } = require("./print-pdf");
 
 protocol.registerSchemesAsPrivileged([
