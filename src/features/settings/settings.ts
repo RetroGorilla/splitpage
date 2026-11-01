@@ -232,7 +232,7 @@ function applyChange(target: HTMLInputElement) {
   if (id === "settings-default-wpm") {
     var n = Math.round(Number(target.value));
     if (isFinite(n) && n >= 60 && n <= 400) (ports as SettingsPorts).preferences.setDefaultWpm(n);
-    else target.value = (ports as SettingsPorts).preferences.defaultWpm();
+    else target.value = (ports as SettingsPorts).preferences.defaultWpm() as unknown as string;
     return;
   }
   if (id === "settings-writer-size") { (ports as SettingsPorts).editor.setWriterSize(Number(target.value), true); return; }
