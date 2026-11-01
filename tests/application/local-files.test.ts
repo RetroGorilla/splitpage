@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLocalFilesOwner } from "../../src/application/transitions/local-files.js";
+import { createLocalFilesOwner } from "../../src/application/transitions/local-files.ts";
 import type { LocalFilesOwner, LocalFilesOwnerPorts } from "../../src/application/transitions/local-files-ports.ts";
 import { createDocumentLocation } from "../../src/application/location/document-location.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
@@ -36,7 +36,7 @@ function harness() {
     panels: { close: () => { log.push("closePanel"); } },
     undo: { flush: () => { log.push("flush"); } },
     imports: {
-      parseProjectFileState: async () => { log.push("parse"); return { state: doc, kind: "splitpage" }; },
+      parseProjectFileState: async () => { log.push("parse"); return { state: doc, kind: "splitpage", docIdEmbedded: true }; },
       docxToRows: async () => ({ rows: [] }), csvToRows: () => [], detectTwoColumnFormat: () => null,
       parseImportRows: () => [], normalizeImportedRows: () => []
     },
@@ -71,7 +71,7 @@ for (const stage of ["parse", "last handle", "permission", "read", "dialog", "ro
     let finish: unknown = h.file;
     let open = () => h.owner.resumeFromHandle({});
     if (stage === "parse") {
-      ports = { ...ports, imports: { ...ports.imports, parseProjectFileState: hold } };
+      ports = { ...ports, imports: { ...ports.imports, parseProjectFileState: async () => { await hold(); return { state: h.doc, kind: "splitpage", docIdEmbedded: true }; } } };
       finish = { state: h.doc, kind: "splitpage" };
       open = async () => { await h.owner.projectFileSource().open({ kind: "file", file: h.file, handle: {} }); };
     } else if (stage === "last handle" || stage === "permission") {
