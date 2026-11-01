@@ -933,7 +933,7 @@ an "Unmerged edit" card (design D3). The result names every tag the way the
 **merged** registry does (the registry is merged before the rows for that),
 so a rename from the other side reaches a cell taken from this one. A cell
 holding a picture or video card (which the model leaves out, D7) is still
-compared as a string, whole. The on-disk merge review (`src/features/merge/local-merge.js`)
+compared as a string, whole. The on-disk merge review (`src/features/merge/local-merge.ts`)
 decides each cell with the same `mergeTextField()`, and shows "both sets of
 changes are combined" for an outcome of `merged`.
 

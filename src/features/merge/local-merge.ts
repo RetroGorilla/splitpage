@@ -10,6 +10,7 @@ import { idMap } from "../../core/document/id-map.ts";
 import { safeImageSrc } from "../../core/document/text-policy.ts";
 import { pad2 } from "../../core/production/timing.ts";
 import { cloneState } from "../../core/document/clone.ts";
+import type { MergeReviewPorts } from "./ports.ts";
 import {
   mergeDiffPairHtml,
   mergeFieldOutcome,
@@ -19,21 +20,21 @@ import {
   mergeRowFate
 } from "../../core/merge/review.ts";
 
-var ports = null;
+var ports: MergeReviewPorts | null = null;
 var mergeCandidate = null;
 var mergeProbeToken = 0;
 
-function currentDocument() { return ports.document.current(); }
-function mergeBase() { return ports.session.mergeBase(); }
-function fileHome() { return ports.place.fileHome(); }
-function amendHome(record, fields) { return ports.homes.amendHome(record, fields); }
-function migrateRows(raw) { return ports.entry.migrate(raw); }
-function blobImgHtml(ref, cls) { return ports.pictures.imgHtml(ref, cls); }
-function textMergeContext(base, mine, theirs) { return ports.textMergeContext(base, mine, theirs); }
-function parseProjectFileState(file, opts) { return ports.files.parse(file, opts); }
-function fileConflicts() { return ports.conflicts; }
-function applyStashedWork(disk, work, options) { return ports.recovery.applyStashedWork(disk, work, options); }
-function htmlToPlainText(html) { return ports.text.htmlToPlainText(html); }
+function currentDocument() { return (ports as MergeReviewPorts).document.current(); }
+function mergeBase() { return (ports as MergeReviewPorts).session.mergeBase(); }
+function fileHome() { return (ports as MergeReviewPorts).place.fileHome(); }
+function amendHome(record: Parameters<MergeReviewPorts["homes"]["amendHome"]>[0], fields: Parameters<MergeReviewPorts["homes"]["amendHome"]>[1]) { return (ports as MergeReviewPorts).homes.amendHome(record, fields); }
+function migrateRows(raw: Parameters<MergeReviewPorts["entry"]["migrate"]>[0]) { return (ports as MergeReviewPorts).entry.migrate(raw); }
+function blobImgHtml(ref: Parameters<MergeReviewPorts["pictures"]["imgHtml"]>[0], cls: Parameters<MergeReviewPorts["pictures"]["imgHtml"]>[1]) { return (ports as MergeReviewPorts).pictures.imgHtml(ref, cls); }
+function textMergeContext(base: unknown, mine: unknown, theirs: unknown) { return (ports as MergeReviewPorts).textMergeContext(base, mine, theirs); }
+function parseProjectFileState(file: unknown, opts: Parameters<MergeReviewPorts["files"]["parse"]>[1]) { return (ports as MergeReviewPorts).files.parse(file, opts); }
+function fileConflicts() { return (ports as MergeReviewPorts).conflicts; }
+function applyStashedWork(disk: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[0], work: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[1], options: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[2]) { return (ports as MergeReviewPorts).recovery.applyStashedWork(disk, work, options); }
+function htmlToPlainText(html: Parameters<MergeReviewPorts["text"]["htmlToPlainText"]>[0]) { return (ports as MergeReviewPorts).text.htmlToPlainText(html); }
 
 function fileMergeBase(home) {
   if (home && home.diskBase) return home.diskBase;
@@ -284,7 +285,7 @@ function confirmFileMerge() {
   mergeCandidate = null;
 }
 
-export function startLocalMerge(given) {
+export function startLocalMerge(given: MergeReviewPorts) {
   ports = given;
   var disposed = false;
   return {
