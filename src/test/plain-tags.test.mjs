@@ -11,7 +11,7 @@ import {
   applyPlainTag,
   matchPlainTagKeyword,
   plainTagPhrase
-} from "../features/tags/plain-tags.js";
+} from "../features/tags/plain-tags.ts";
 
 const cat = (s) => (matchPlainTagKeyword(s) || {}).cat || null;
 const ZW = String.fromCharCode(0x200B), NB = String.fromCharCode(0xA0), OBJ = String.fromCharCode(0xFFFC);

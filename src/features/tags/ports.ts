@@ -17,6 +17,7 @@ import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import type { TagPanelState } from "../../application/tag-panel-state.ts";
 import type { TagPanelCommands } from "../../application/tag-panel-commands.ts";
 import type { BulkTagRows } from "../../application/commands/bulk-tags.ts";
+import type { Marks } from "../../core/text/runs.ts";
 
 export interface TagPanelMount extends TagPanelCommands {
   readonly openProductionPanel: () => void;
@@ -25,13 +26,17 @@ export interface TagPanelMount extends TagPanelCommands {
 }
 
 export interface PlainTagPorts {
+  readonly renderCategories: (selected: string | null) => void;
   readonly document: Pick<DocumentReader, "current">;
   readonly cells: Pick<CellEditing<Element>, "edit">;
   readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
 }
 
 export interface PlainTagControl {
-  readonly maybeOpen: (e: Pick<Event, "target">, cellEl: Element) => void;
+  readonly openCategoryAtCaret: (cellEl: HTMLElement, marks: Marks) => boolean;
+  readonly chooseCategory: (cat: string | null) => boolean;
+  readonly cancelCategory: () => boolean;
+  readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
   readonly refresh: () => void;
   readonly cancel: () => void;
   readonly close: () => boolean;

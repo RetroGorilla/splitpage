@@ -1,4 +1,4 @@
-import { plainTagOpen } from "./plain-tags.js";
+import { plainTagOpen } from "./plain-tags.ts";
 import { isInsideTagOrLink } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { domToPos } from "../common/cell-dom.ts";
