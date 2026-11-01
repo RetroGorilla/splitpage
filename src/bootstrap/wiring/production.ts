@@ -29,7 +29,7 @@ import {
   hideTagGhost,
   hideUntaggedPrompt,
   renderTagCategories
-} from "../../features/tags/production-tags.js";
+} from "../../features/tags/production-tags.ts";
 import { tagKey } from "../../core/document/tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
 import {
