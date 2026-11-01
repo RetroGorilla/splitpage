@@ -9,11 +9,12 @@ import { embeddableVideo } from "../../../shared/video-embed.js";
 import type { GalleryOverlayMount, GalleryOverlayPorts } from "./ports.ts";
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
+import type { DocumentView } from "../../application/session/document-session.ts";
 
-type OverlayDocument = { readonly rows: readonly unknown[] };
+type OverlayDocument = Pick<DocumentView, "rows">;
 interface OverlayPortUse extends Omit<GalleryOverlayPorts, "document"> {
   readonly document: {
-    readonly current: () => OverlayDocument | null;
+    readonly current: (...args: Parameters<GalleryOverlayPorts["document"]["current"]>) => OverlayDocument | Extract<ReturnType<GalleryOverlayPorts["document"]["current"]>, null | undefined>;
     readonly read: GalleryOverlayPorts["document"]["read"];
   };
 }
