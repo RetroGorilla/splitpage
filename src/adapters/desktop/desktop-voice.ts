@@ -131,21 +131,21 @@ export function createDesktopRecognition() {
       activeDesktopRecognition = rec;
       Promise.resolve()
         .then(function () { return (bridge as DesktopPort).voiceStart(); })
-        .catch(function () { return { ok: false, code: "SPAWN_FAILED" }; })
+        .catch(function (): DesktopResult { return { ok: false, code: "SPAWN_FAILED" }; })
         .then(function (answer) {
           if (!rec._running || activeDesktopRecognition !== rec) {
             if (answer && answer.ok) (bridge as DesktopPort).voiceStop();
             return;
           }
-          if (!answer || !answer.ok || typeof (answer as DesktopResult).session !== "number") {
+          if (!answer || !answer.ok || typeof answer.session !== "number") {
             rec._fire("onerror", { error: VOICE_START_ERRORS[(answer && answer.code) as string] || "helper-failed" });
             rec._finish();
             return;
           }
-          rec._session = (answer as DesktopResult).session as number;
+          rec._session = answer.session;
           const early = rec._early;
           rec._early = [];
-          early.forEach(function (event) { if (event.session === (answer as DesktopResult).session) rec._handle(event); });
+          early.forEach(function (event) { if (event.session === answer.session) rec._handle(event); });
         });
     },
     stop: function () {
