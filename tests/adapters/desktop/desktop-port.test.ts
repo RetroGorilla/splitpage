@@ -12,7 +12,7 @@ import type { DesktopMember, DesktopPort } from "../../../src/adapters/desktop/d
 
 const require = createRequire(import.meta.url);
 const PRELOAD = fileURLToPath(new URL("../../../desktop/preload.js", import.meta.url));
-const { APP_ORIGIN, channelsForOrigin } = require("../../../desktop/ipc-channels.js") as {
+const { APP_ORIGIN, channelsForOrigin } = require("../../../desktop/ipc-channels.ts") as {
   APP_ORIGIN: string;
   channelsForOrigin: (origin: string) => readonly { name: string; direction: string }[];
 };

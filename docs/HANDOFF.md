@@ -448,7 +448,7 @@ tabs**.
   allowlist, no file/draft/history bridge methods (#43).
 - `preload.js` exposes `window.splitpageDesktop` only on `splitpage://app`;
   every `ipcMain` handler re-checks the sender frame (`isTrustedSender` /
-  `isTrustedTabStripSender` in `ipc-setup.js`). Renderer never
+  `isTrustedTabStripSender` in `ipc-setup.ts`). Renderer never
   sends file paths to main (#34) — main keeps an id → path registry; writes
   are atomic (temp+rename).
 - `createTabWindow` (`main.js:985`) makes a `BrowserWindow` whose primary
@@ -505,7 +505,7 @@ tabs**.
   on read. Ids validated in renderer and main (#38); the renderer names
   only `(docId, snapshot id)`. Per-tab holds (`historyHolds`, dropped in
   `forgetTab`) join every eviction. **Channels** (six since #83 step 4,
-  all `invoke`, app origin, table in `desktop/ipc-channels.js`):
+  all `invoke`, app origin, table in `desktop/ipc-channels.ts`):
   `history-put(docId|null, meta, stateJson, {protect?, older?})` →
   `{ok, sizeBytes, duplicate, evicted, overCap}` or `{ok:false, code,
   evicted?}` — `{older:true}` (literally `true`) with a **null** docId
@@ -551,7 +551,7 @@ tabs**.
   (`imageBlobRefusal`: PNG/JPEG/GIF/WebP by magic, never SVG, ≤16 MiB) is
   the **IPC door's**, exported from the same file only so main and the unit
   test share one copy. **Channels** (all `invoke`, app origin, a new
-  `sha256` arg type in `ipc-channels.js` — 64 lowercase hex):
+  `sha256` arg type in `ipc-channels.ts` — 64 lowercase hex):
   `blob-put(sha, bytes)` → `{ok, stored}` or `{ok:false, code}`
   (`BAD_BYTES` for a string, `EMPTY`, `TOO_LARGE`, `NOT_AN_IMAGE`,
   `HASH_MISMATCH`, `READ_ONLY`, `UNAVAILABLE`, or a write errno such as
@@ -1156,9 +1156,9 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.js` over `history-fs-backend.js`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
 | `desktop/desktop-state.js`, `file-service.js`, `doc-claims.js`, `recents.js`, `tab-registry.js`, `window-appearance.js`, `restore-notice.js`, `unsaved-dialog.js`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
 | `desktop/close-quit.js`, `session-restore.js` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
-| `desktop/ipc-setup.js`, `ipc-files.js`, `ipc-shell.js`, `ipc-document.js`, `ipc-history-blob.js`, `ipc-tabstrip.js`, `ipc-test-mode.js` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups); the file, file dialog and recents channels; the tab boot, theme, video file, update, teleprompter browser and Follow My Voice channels; the document state, route-open and crash-draft channels; the version history and image blob channels; the tab strip's channels; the `__test` channels, registered only in test mode |
+| `desktop/ipc-setup.ts`, `ipc-files.ts`, `ipc-shell.ts`, `ipc-document.ts`, `ipc-history-blob.ts`, `ipc-tabstrip.ts`, `ipc-test-mode.ts` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups); the file, file dialog and recents channels; the tab boot, theme, video file, update, teleprompter browser and Follow My Voice channels; the document state, route-open and crash-draft channels; the version history and image blob channels; the tab strip's channels; the `__test` channels, registered only in test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
-| `desktop/ipc-channels.js` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
+| `desktop/ipc-channels.ts` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/voice-helper.js` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |

@@ -1,14 +1,20 @@
 "use strict";
 
-const { TAB_OR_WINDOW_ID_RE } = require("./desktop-state");
+import type { DesktopIpcArgs, DesktopWireTestShellResult } from "../shared/desktop-contract.d.ts";
+
+import type { DesktopDraftStoreBoundary, DesktopTestModeIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+
+const { TAB_OR_WINDOW_ID_RE }: { TAB_OR_WINDOW_ID_RE: RegExp } = require("./desktop-state");
+
+type TestTargetTab = Extract<DesktopWireTestShellResult, { windows: unknown }>["windows"][number]["tabs"][number];
 
 function createTestModeIpc({
   testMode: TEST_MODE, app, BrowserWindow, tabOf, tabs, windowsById, requestCloseTab, draftStore,
   draftsPreviousSession, chooseDuplicateLoser, shellStateForWindow, createTab, activateTab, reorderTab,
   createTabWindow, moveTabToWindow, liveWindows, testExternalOpens, testChromiumLaunches, testVideoOpens,
   prompterShare, voiceHelperInstance
-}) {
-  function registerTestModeIpc({ ipcHandle, ipcOn }) {
+}: DesktopTestModeIpcDependencies) {
+  function registerTestModeIpc({ ipcHandle, ipcOn }: Parameters<DesktopRegisterIpcGroup>[0]) {
     if (TEST_MODE) {
       ipcOn("splitpage:test-request-close", (event) => {
         const tab = tabOf(event);
@@ -31,7 +37,7 @@ function createTestModeIpc({
         const tab = named || tabOf(event);
         const id = tab ? tab.id : null;
         if (draftStore() && id) {
-          try { return draftStore().status(id); } catch { }
+          try { return (draftStore() as DesktopDraftStoreBoundary).status(id); } catch { }
         }
         return {
           tabId: id, hasDraft: false, held: false, lastSeq: null, tombstoned: false,
@@ -44,7 +50,7 @@ function createTestModeIpc({
       });
 
       ipcHandle("splitpage:test-dup-loser", async (event, a, b) => {
-        const claim = (c) => ({
+        const claim = (c: DesktopIpcArgs<"splitpage:test-dup-loser">[0]) => ({
           docId: String((c && c.docId) || ""),
           homeKey: String((c && c.homeKey) || ""),
           seq: Number((c && c.seq) || 0)
@@ -70,7 +76,7 @@ function createTestModeIpc({
                 pristine: !!t.pristine,
                 path: t.source.kind === "file" ? t.source.absPath : null
               } : null;
-            }).filter(Boolean)
+            }).filter(Boolean as BooleanConstructor & ((tab: TestTargetTab | null) => tab is TestTargetTab))
           }))
         });
 
@@ -116,7 +122,7 @@ function createTestModeIpc({
           case "videoFileOpens":
             return testVideoOpens.slice();
           case "prompterShareStatus":
-            return prompterShare() ? prompterShare().status() : { listening: false, port: null, shares: [] };
+            return prompterShare() ? (prompterShare() as NonNullable<ReturnType<typeof prompterShare>>).status() : { listening: false, port: null, shares: [] };
           case "voiceStatus":
             return voiceHelperInstance().status();
           default:
@@ -128,5 +134,7 @@ function createTestModeIpc({
 
   return { registerTestModeIpc };
 }
+
+export type { createTestModeIpc };
 
 module.exports = { createTestModeIpc };
