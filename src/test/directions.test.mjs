@@ -27,7 +27,7 @@ import { toHtml } from "../core/text/html.ts";
 import { clipboardOfCell } from "../features/clipboard/cell-clipboard.js";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 
-import { startFind as initFind, replaceInHtml } from "../features/find/find.js";
+import { startFind as initFind, replaceInHtml } from "../features/find/find.ts";
 initFind({ document: portDocument, edits: portEdits, text: portText, undo: portUndo, notices: portNotices, flags: portFlags });
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";

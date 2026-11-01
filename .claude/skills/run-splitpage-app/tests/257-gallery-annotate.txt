@@ -1,4 +1,4 @@
-# Drawing on a picture in a scene's gallery (2026-09-27; 05w-annotate.js,
+# Drawing on a picture in a scene's gallery (2026-09-27; features/gallery/annotate.ts,
 # the gallery dialog's Annotate button in src/features/gallery/overlay.ts, the data
 # layer in 02d-gallery.js), driven with real mouse input:
 #   * Annotate is offered for a picture, not a video's tile;

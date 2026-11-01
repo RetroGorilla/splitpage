@@ -3,7 +3,7 @@ import { isInsideTagOrLink } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { domToPos } from "../common/cell-dom.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { domRangeFor } from "../common/find-dom.js";
+import { domRangeFor } from "../common/find-dom.ts";
 import { idMap } from "../../core/document/id-map.ts";
 import { cappedText, codePointPrefix, escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
 import { TAG_CATEGORIES, tagCategory } from "../../core/production/looks.ts";

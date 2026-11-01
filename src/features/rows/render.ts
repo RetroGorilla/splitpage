@@ -7,7 +7,7 @@ import type { ViewFlagChange } from "../../application/preferences/view-flags.ts
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import { rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
-import { editableCellHtml } from "../common/editable-cell.js";
+import { editableCellHtml } from "../common/editable-cell.ts";
 import { disarmDeleteButton } from "./delete-button.ts";
 import { hasSetLength } from "../../core/document/timing.ts";
 import type { LengthHolder } from "../../core/document/timing.ts";
