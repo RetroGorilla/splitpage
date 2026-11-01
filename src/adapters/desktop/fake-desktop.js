@@ -1,6 +1,6 @@
 import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.js";
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
-import { hashText as historyHashText } from "../storage/03c-history-idb.js";
+import { hashText as historyHashText } from "../storage/03c-history-idb.ts";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../../shared/history-store.js";
 import { strBytes } from "../formats/bytes.ts";
 
