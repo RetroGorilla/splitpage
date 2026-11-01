@@ -94,18 +94,20 @@ export function brandForgeries(program, repo, files) {
     if (predicate?.type && carriesBrand(predicate.type) && !(declaredPredicate?.type && carriesBrand(declaredPredicate.type))) return true;
     return carriesBrand(sig.getReturnType()) && !carriesBrand(declared.getReturnType());
   };
+  const holdsVoid = (t, depth = 0) => {
+    if (!t || depth > MAX_DEPTH) return false;
+    if (t.flags & ts.TypeFlags.Void) return true;
+    if (t.flags & ts.TypeFlags.TypeParameter) return holdsVoid(checker.getBaseConstraintOfType(t), depth + 1);
+    return (t.isUnion() || t.isIntersection()) && t.types.some((m) => holdsVoid(m, depth + 1));
+  };
   const narrowsBranded = (predicate) => {
     const name = predicate.parameterName;
     const param = ts.isIdentifier(name) ? predicate.parent.parameters?.find((p) => ts.isIdentifier(p.name) && p.name.text === name.text) : null;
     if (!param) return false;
     const from = typeOf(param);
-    return carriesBrand(from) && checker.isTypeAssignableTo(checker.getNonNullableType(from), checker.getTypeFromTypeNode(predicate.type));
+    return carriesBrand(from) && !holdsVoid(from) && checker.isTypeAssignableTo(checker.getNonNullableType(from), checker.getTypeFromTypeNode(predicate.type));
   };
   const isNever = (t) => !!(t.flags & ts.TypeFlags.Never);
-  const holdsVoid = (t) => {
-    const c = t.flags & ts.TypeFlags.TypeParameter ? checker.getBaseConstraintOfType(t) : t;
-    return !!c && (c.isUnion() ? c.types : [c]).some((m) => !!(m.flags & ts.TypeFlags.Void));
-  };
   const neverContainer = (target) => (target.isUnion() ? target.types : [target]).some((t) =>
     !!(t.flags & ts.TypeFlags.Object) && !!(t.objectFlags & ts.ObjectFlags.Reference) && fromLibrary(program, t) && checker.getTypeArguments(t).some(isNever));
   const inCast = (node) => {
