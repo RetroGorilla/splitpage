@@ -7,7 +7,7 @@ import type { DesktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { makeDesktopBlobBackend, wireDesktopBlobs } from "../../adapters/desktop/desktop-blobs.ts";
 import { forgetDesktopVoice } from "../../adapters/desktop/desktop-voice.ts";
-import { makeFakeDesktopBackend } from "../../adapters/desktop/fake-desktop.js";
+import { makeFakeDesktopBackend } from "../../adapters/desktop/fake-desktop.ts";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { desktopActions as definitions } from "../../features/desktop/actions.ts";
 import { startDesktopView as mountDesktop } from "../../features/desktop/desktop.ts";
