@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startProductionTags, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer } from "../../../src/features/tags/production-tags.js";
+import { startProductionTags, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer } from "../../../src/features/tags/production-tags.ts";
 import type { ProductionTagPorts } from "../../../src/features/tags/ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";

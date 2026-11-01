@@ -4,7 +4,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { healTagRegistry, productionIndexStats, resetProductionIndexStats } from "../features/tags/production-tags.js";
+import { healTagRegistry, productionIndexStats, resetProductionIndexStats } from "../features/tags/production-tags.ts";
 
 import { productionIndex } from "../application/production/index-owner.ts";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
