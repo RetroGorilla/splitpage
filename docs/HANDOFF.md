@@ -1009,13 +1009,13 @@ per-document history, drafts, duplicate-tab detection. Invariants #35–#37.
 snapshot id, the stamp after the bucket's newest, the trim to 50, cap
 eviction, the quota retry, Older's creation and expiry, holds, index-only
 copy, which bodies may go), run over a backend per place: in the browser
-over `03c-history-idb.js`'s IndexedDB (`splitpage-history` v3: an `index`
+over `03c-history-idb.ts`'s IndexedDB (`splitpage-history` v3: an `index`
 store, one DocRecord `{bucket, title, lastOpenedAt, migratedAt?,
 expiresAt?, snapshots:[meta + sha]}` per bucket, and a `bodies` store,
 `{sha, stateJson}`, one row per distinct content, shared by every entry
 naming it), or over the shared memory backend when IndexedDB will not open
 (for the rest of that page); on the desktop in main, over its folder
-backend (§3.13), with `src/adapters/storage/history-backends.js`'s `desktopHistoryBackend` a
+backend (§3.13), with `src/adapters/storage/history-backends.ts`'s `desktopHistoryBackend` a
 thin IPC client. Totals are computed from the index (no stored counters);
 a body goes only in the commit that stops naming it, and is written before
 the commit that names it. Pre-tabs shared history migrated once into a
