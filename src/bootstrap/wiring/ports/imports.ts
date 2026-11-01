@@ -1,5 +1,5 @@
 import type { ImportFormats } from "../../../application/formats/import-formats.ts";
-import { parseImportRows, detectTwoColumnFormat } from "../../../adapters/formats/import-text.js";
+import { parseImportRows, detectTwoColumnFormat } from "../../../adapters/formats/import-text.ts";
 import { normalizeImportedRows } from "../../../adapters/formats/import-rows.ts";
 import { csvToRows } from "../../../adapters/formats/csv.ts";
 import { docxToRows } from "../../../adapters/formats/docx.ts";

@@ -4,7 +4,7 @@ import type { ImportSavingPorts } from "../../../application/save/import-saving-
 import type { LocalFileAccess } from "../../../application/files/local-file-access.ts";
 import { localFileAccess } from "../../../adapters/files/local-files.js";
 import { loadLastFileHandle, rememberLastFileHandle } from "../../../adapters/files/last-file.ts";
-import { detectTwoColumnFormat, parseImportRows } from "../../../adapters/formats/import-text.js";
+import { detectTwoColumnFormat, parseImportRows } from "../../../adapters/formats/import-text.ts";
 import { docxToRows } from "../../../adapters/formats/docx.ts";
 import { csvToRows } from "../../../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../../../adapters/formats/import-rows.ts";

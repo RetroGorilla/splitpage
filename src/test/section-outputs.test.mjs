@@ -11,7 +11,7 @@ import { buildDocx, buildNarrationDocx, docxToRows, buildNarrationText } from ".
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { sceneFacts, scriptSectionFacts } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
-import { parseImportRows } from "../adapters/formats/import-text.js";
+import { parseImportRows } from "../adapters/formats/import-text.ts";
 
 function fixture() {
   return buildExportDocument(migrateRows({ title: "Section outputs", rows: ["a", "b", "c", "d"].map((id, i) => ({

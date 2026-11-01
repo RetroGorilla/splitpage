@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../../../src/bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../../../src/bootstrap/wiring/production-tags.ts";
-import { detectTwoColumnFormat, parseImportRows } from "../../../src/adapters/formats/import-text.js";
+import { detectTwoColumnFormat, parseImportRows } from "../../../src/adapters/formats/import-text.ts";
 import { parseMarkdownTable } from "../../../src/adapters/formats/markdown-table.ts";
 import { cellOf } from "../../../src/bootstrap/richtext.ts";
 import { toMarkdown } from "../../../src/core/text/projections.ts";
