@@ -20,7 +20,7 @@ const { cellEditing } = await import("../bootstrap/wiring/editor-owners.ts");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { targetLengthCommand } = await import("../application/commands/document-settings.ts");
-const { openProductionPanel } = await import("../features/tags/panels.js");
+const { openProductionPanel } = await import("../features/tags/panels.ts");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
