@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
+import { createMemoryHistoryTestBackend } from "../adapters/storage/history-backend-testing.ts";
+import { createHistoryStore } from "../../shared/history-store.js";
 import {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
@@ -19,7 +20,7 @@ const macrotask = (cb) => setImmediate(cb);
 
 function fixture(opts = {}) {
   const clock = { t: opts.t ?? 1_000_000 };
-  const backend = createMemoryHistoryBackend({ strict: true, macrotask, ...(opts.backend || {}) });
+  const backend = createMemoryHistoryTestBackend({ strict: true, macrotask, ...(opts.backend || {}) });
   const store = createHistoryStore({
     backend,
     now: () => clock.t,
@@ -505,7 +506,7 @@ function backendDelete(backend, id) {
 }
 
 test("strict mode: a stray non-tx await inside exclusive() fails, as IndexedDB would", async () => {
-  const backend = createMemoryHistoryBackend({ strict: true, macrotask });
+  const backend = createMemoryHistoryTestBackend({ strict: true, macrotask });
   const clean = await backend.exclusive(async (tx) => {
     await tx.list();
     await Promise.resolve();
@@ -532,7 +533,7 @@ test("strict mode: a stray non-tx await inside exclusive() fails, as IndexedDB w
 });
 
 test("strict mode: a failed job leaves nothing, a read job cannot write, the records are frozen", async () => {
-  const backend = createMemoryHistoryBackend({ strict: true, macrotask });
+  const backend = createMemoryHistoryTestBackend({ strict: true, macrotask });
   await assert.rejects(backend.exclusive(async (tx) => {
     await tx.put("abc", "text");
     throw new Error("boom");
@@ -556,8 +557,8 @@ test("strict mode: a failed job leaves nothing, a read job cannot write, the rec
 });
 
 test("strict mode needs a scheduler; the default memory backend is lenient", () => {
-  assert.throws(() => createMemoryHistoryBackend({ strict: true }), TypeError);
-  const b = createMemoryHistoryBackend();
+  assert.throws(() => createMemoryHistoryTestBackend({ strict: true }), TypeError);
+  const b = createMemoryHistoryTestBackend();
   assert.equal(b.name, "memory");
   assert.equal(b.persistent, false);
   assert.equal(b.readOnly, false);

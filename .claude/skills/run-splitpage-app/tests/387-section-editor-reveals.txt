@@ -1,0 +1,39 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.old=F.state();F.openFile(new File([JSON.stringify({schema:2,title:'Folded navigation',rows:[{id:'a',audioText:'Prefix',visualText:''},{id:'b',audioText:'<span class="cmt-anchor" data-cmt="c_one">Needle</span>',visualText:''},{id:'c',audioText:'Only scene',visualText:''},{id:'d',audioText:'Ending',visualText:''}],sections:[{id:'p',name:'Predecessor',firstSceneId:'a'},{id:'s',name:'Singleton',firstSceneId:'c'},{id:'t',name:'Tail',firstSceneId:'d'}],comments:[{id:'c_one',kind:'anchor',rowId:'b',field:'audioText',anchorId:'c_one',quotedText:'Needle',author:'Ada',body:'Jump here',replies:[]}]})],'folded.splitpage'));return true;})()
+wait F.state() !== old && F.state().title === 'Folded navigation'
+expect document.querySelector('#rows [data-section-id="p"] [role="heading"][aria-level="2"]').textContent === 'Predecessor'
+eval var m=document.querySelector('#rows [data-section-id="p"] details');m.open=true;m.querySelector('summary').focus();true
+key none Escape
+expect !document.querySelector('#rows [data-section-id="p"] details').open
+eval document.querySelector('#rows [data-section-id="p"] .section-fold').click();true
+wait !document.querySelector('#rows .row[data-id="b"]')
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+eval document.getElementById('find-input').value='Needle';document.getElementById('find-input').dispatchEvent(new Event('input',{bubbles:true}));true
+wait !!document.querySelector('#rows .row[data-id="b"]')
+expect document.getElementById('find-count').textContent.includes('1 of 1')
+expect CSS.highlights.get('splitpage-find-match').size === 1
+eval document.querySelector('#rows [data-section-id="p"] .section-fold').click();document.getElementById('replace-input').value='Needle replaced';true
+jsclick #find-replace
+wait !!document.querySelector('#rows .row[data-id="b"]') && document.querySelector('#rows .row[data-id="b"]').textContent.includes('Needle replaced')
+jsclick #find-close
+eval document.querySelector('#rows [data-section-id="p"] .section-fold').click();true
+jsclick #btn-comments
+wait !!document.querySelector('.comment-card[data-id="c_one"] .comment-loc')
+jsclick .comment-card[data-id="c_one"] .comment-loc
+wait !!document.querySelector('#rows .cmt-anchor[data-cmt="c_one"].flash')
+jsclick #comments-panel-close
+eval document.querySelector('#rows [data-section-id="p"] .section-fold').click();document.querySelector('#rows .row[data-id="c"] .audio-cell .cell-editable').focus();window.beforeMove=JSON.stringify(F.state());true
+key alt+shift ArrowUp
+expect JSON.stringify(F.state()) === beforeMove
+expect document.getElementById('section-hint-live').textContent === 'Press again to remove the section header'
+eval var c=document.activeElement;c.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',altKey:true,repeat:true,bubbles:true}));true
+key alt+shift ArrowUp
+wait F.state().rows.map(function(r){return r.id;}).join(',') === 'a,c,b,d'
+expect document.activeElement.getAttribute('data-id') === 'c' && document.activeElement.getAttribute('data-field') === 'audioText'
+expect !!document.querySelector('#rows .row[data-id="b"]')
+expect document.getElementById('section-hint-live').textContent === ''
+key ctrl KeyZ
+wait F.state().sections.length === 3 && F.state().rows.map(function(r){return r.id;}).join(',') === 'a,b,c,d'
+shot section-reveals

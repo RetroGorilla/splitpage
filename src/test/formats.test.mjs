@@ -77,6 +77,24 @@ function withState(s, fn) {
   try { return fn(s); } finally { loadTestDocument(was); }
 }
 
+test("sections round-trip in both project formats while the legacy scene table stays unchanged", () => {
+  const s = fixture();
+  const legacyTable = toMarkdownTableDoc(exportDocumentOf(s));
+  const legacySplit = buildSplitpageFile(exportDocumentOf(s));
+  const legacyMd = buildMarkdownProject(exportDocumentOf(s));
+  assert.equal(buildSplitpageFile(exportDocumentOf(migrateRows(parseSplitpageFile(legacySplit)))), legacySplit);
+  assert.equal(buildMarkdownProject(exportDocumentOf(parseMarkdownProject(legacyMd).state)), legacyMd);
+  s.sections = [{ id: "s1", name: "Opening | & text", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r2" }];
+  const split = buildSplitpageFile(exportDocumentOf(s));
+  const md = buildMarkdownProject(exportDocumentOf(s));
+  assert.deepEqual(migrateRows(parseSplitpageFile(split)).sections, s.sections);
+  const parsed = parseMarkdownProject(md);
+  assert.deepEqual(parsed.state.sections, s.sections);
+  assert.equal(parsed.table.length, 2);
+  assert.equal(buildMarkdownProject(exportDocumentOf(parsed.state)), md);
+  assert.equal(toMarkdownTableDoc(exportDocumentOf(s)), legacyTable);
+});
+
 test(".splitpage has no envelope: the file IS the state object", () => {
   const s = fixture();
   const parsed = JSON.parse(buildSplitpageFile(exportDocumentOf(s)));

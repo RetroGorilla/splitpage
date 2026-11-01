@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import "./_export-services-started.mjs";
-import { liveDoc, printData } from "./_export-now.mjs";
+import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { escapeHtml } from "../core/document/text-policy.ts";
@@ -26,7 +26,6 @@ const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 
 import { buildBreakdownCsv, buildBrollCsv } from "../adapters/formats/csv.ts";
-import { buildShotListPdf } from "../adapters/formats/pdf.ts";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
@@ -621,20 +620,4 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,,00:00");
   assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
   assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,," + at(2));
-});
-
-test("the printed shot list is a PDF of the shots as shown, flagged ones marked", () => {
-  const s = propsDoc();
-  s.brollShots[1].reshoot = true;
-  s.brollShots[1].notes = "too dark";
-  const text = Buffer.from(buildShotListPdf(liveDoc(), printData())).toString("latin1");
-  assert.ok(text.startsWith("%PDF-1.4"));
-  assert.ok(text.includes("(the red mug on the sill) Tj"));
-  assert.ok(text.includes("(drone over the pier) Tj"));
-  assert.ok(text.includes("0.769 0.188 0.165 rg BT /F2 8.5 Tf") && text.includes("(Flagged) Tj"), "Flagged, bold and red");
-  assert.ok(text.includes("(too dark) Tj"), "the reason under it");
-  assert.ok(!text.includes("FLAGGED"));
-  assert.ok(text.includes("(Red mug \\(have it\\)) Tj"), "each prop with its status in words");
-  assert.match(text, /\/Count 1 >>/);
-  assert.match(text, /\/MediaBox \[0 0 792 612\]/);
 });

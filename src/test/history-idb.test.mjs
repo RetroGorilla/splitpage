@@ -3,14 +3,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
-import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
+import { createMemoryHistoryTestBackend, createIdbHistoryTestBackend } from "../adapters/storage/history-backend-testing.ts";
+import { createHistoryStore } from "../../shared/history-store.js";
 import { HISTORY_OLDER_KEY, HISTORY_OLDER_TTL_MS, historyUtf8Length } from "../../shared/history-policy.js";
 import {
   HISTORY_IDB_NAME,
   HISTORY_IDB_VERSION,
-  createIdbHistoryBackend,
   hashText
-} from "../adapters/storage/03c-history-idb.js";
+} from "../adapters/storage/03c-history-idb.ts";
 
 const DOC_A = "d" + "a".repeat(32);
 const DOC_B = "d" + "b".repeat(32);
@@ -32,8 +32,8 @@ function req(r) {
 }
 
 const BACKENDS = {
-  memory: () => createMemoryHistoryBackend({ strict: true, macrotask: (cb) => setImmediate(cb) }),
-  idb: () => createIdbHistoryBackend({ indexedDB: new IDBFactory() })
+  memory: () => createMemoryHistoryTestBackend({ strict: true, macrotask: (cb) => setImmediate(cb) }),
+  idb: () => createIdbHistoryTestBackend({ indexedDB: new IDBFactory() })
 };
 
 function storeOver(backend, opts = {}) {
@@ -201,7 +201,7 @@ for (const [kind, make] of Object.entries(BACKENDS)) {
 function idbFixture(opts = {}) {
   const factory = opts.factory || new IDBFactory();
   const clock = { t: opts.t ?? 1_000_000 };
-  const backend = createIdbHistoryBackend({ indexedDB: factory, now: () => clock.t, ...(opts.backend || {}) });
+  const backend = createIdbHistoryTestBackend({ indexedDB: factory, now: () => clock.t, ...(opts.backend || {}) });
   return { factory, ...storeOver(backend, { ...opts, clock }) };
 }
 
@@ -507,7 +507,7 @@ test("an old connection that will NOT close: this open fails at once with 'io', 
     open: (...args) => { const r = factory.open(...args); opened.push(r); return r; },
     deleteDatabase: (name) => factory.deleteDatabase(name)
   };
-  const backend = createIdbHistoryBackend({ indexedDB: spy });
+  const backend = createIdbHistoryTestBackend({ indexedDB: spy });
   await assert.rejects(backend.open(), (e) => e.code === "io" && /blocked/.test(e.message));
   assert.equal(old.seen.versionchange, 1);
   old.db.close();

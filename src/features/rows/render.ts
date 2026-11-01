@@ -13,6 +13,8 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import type { LengthHolder } from "../../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
 import { hiddenShotStripHtml } from "./hide-shot.ts";
+import { sectionHeaderHtml, sectionRowEntries } from "./section-rows.ts";
+import { sectionGroups } from "../../core/document/sections.ts";
 import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
@@ -59,6 +61,7 @@ interface RowParts {
 
 interface SignedRow extends Element {
   __splitpageRowSig?: RowParts;
+  __splitpageSectionSig?: string;
 }
 
 interface RowPatch {
@@ -237,6 +240,13 @@ export function paintRowTimes() {
     }
     t += secs;
   });
+  if (Array.isArray(doc.sections) && doc.sections.length) {
+    for (const group of sectionGroups(doc)) {
+      let total = 0;
+      for (let i = group.start; i < group.end; i++) total += rowSeconds(doc.rows[i] as Row, doc, ports.text.productionReaders);
+      document.querySelectorAll('[data-section-total="' + cssAttr(group.section.id) + '"]').forEach(el => setTextIfChanged(el, formatDuration(total)));
+    }
+  }
 }
 
 function paintReadTime(btn: HTMLElement | null, row: Row, secs: number, doc: DocumentView): void {
@@ -529,12 +539,12 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
   const drop: Element[] = [];
   Array.prototype.slice.call(rowsEl.children).forEach(function (el: SignedRow) {
     const key: string | null = rowMotionKey(el);
-    const reusable = key && !existing.has(key) && (key.indexOf("strip:") === 0 || el[ROW_SIG]);
+    const reusable = key && !existing.has(key) && (el[ROW_SIG] || key.indexOf("strip:") === 0 || key.indexOf("section:") === 0);
     if (reusable) existing.set(key as string, el);
     else drop.push(el);
   });
 
-  const steps = ports.hiding().groups(doc.rows).map(function (item): RowsStep {
+  function planScene(item: ShotRowEntry<Row> | ShotStrip): RowsStep {
     const strip = (item as Partial<ShotStrip>).strip;
     const entry = item as ShotRowEntry<Row>;
     const key = strip ? "strip:" + strip.join(",") : "row:" + entry.row.id;
@@ -548,7 +558,19 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     }
     if (strip) return { node: nodeFromHtml(hiddenShotStripHtml(strip)) };
     return { node: newRowEl(entry.row, entry.index), added: true };
-  });
+  }
+  const steps = Array.isArray(doc.sections) && doc.sections.length ? sectionRowEntries(doc, ports.hiding(), ports.sections()).map(function (item): RowsStep {
+    if (!("section" in item)) return planScene(item);
+    const key = "section:" + item.section.id;
+    const html = sectionHeaderHtml(item, !ports.edits.allowed());
+    const old = existing.get(key);
+    existing.delete(key);
+    if (old?.__splitpageSectionSig === html) return { node: old };
+    if (old) drop.push(old);
+    const node = nodeFromHtml(html) as SignedRow;
+    node.__splitpageSectionSig = html;
+    return { node };
+  }) : ports.hiding().groups(doc.rows).map(planScene);
   existing.forEach(function (el) { drop.push(el); });
   return { steps: steps, drop: drop };
 }
@@ -707,6 +729,14 @@ function paintAll(): void {
 
   const titleInput = document.getElementById("doc-title") as HTMLInputElement;
   if (document.activeElement !== titleInput) titleInput.value = title;
+  const version = typeof doc.titleVersion === "string" ? doc.titleVersion : "";
+  ["doc-version", "writer-version"].forEach(function (id) {
+    const tag = document.getElementById(id);
+    if (!tag) return;
+    tag.textContent = version;
+    tag.hidden = !version;
+    tag.title = version ? "Version " + version : "";
+  });
   syncPageTitle();
   paintRowTimes();
   announcePainted("screen");
@@ -822,7 +852,7 @@ const ON_SCREEN_ALREADY: Readonly<Record<string, true>> = { visualText: true, au
 
 const ONE_ROW: Readonly<Record<string, true>> = { status: true, lengthSeconds: true, updatedAt: true, updatedBy: true };
 
-const SHOWN_DOC_FIELDS: Readonly<Record<string, true>> = { title: true, wordsPerMinute: true, comments: true };
+const SHOWN_DOC_FIELDS: Readonly<Record<string, true>> = { title: true, titleVersion: true, wordsPerMinute: true, comments: true, sections: true };
 
 const TEXT_FIELDS: Readonly<Record<string, true>> = { visualText: true, audioText: true };
 
@@ -855,6 +885,13 @@ function paintSessionChange(change: ScreenChange): void {
   if (ABSORBED[change.kind]) { absorbRender(REDRAW_FAILED); return; }
   if (state.screenStale || state.paintBroke) return;
   const c = change.changes;
+  if (c.docFields.includes("title") && (c.docFields.includes("titleVersion") || change.kind === "replay")) {
+    const title = ports.document.current()?.title || "";
+    ["doc-title", "writer-title"].forEach(function (id) {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      if (input) input.value = title;
+    });
+  }
   if (ports.editing.paint().shown()) {
     const left = rowsTouched(c.cells, ON_SCREEN_ALREADY);
     if (left.length) {
@@ -1170,6 +1207,15 @@ export function handleToolbarCmd(btn: Element): void {
   }
   if (cmd === "tag") {
     const tsel = window.getSelection() as Selection;
+    if (tsel.rangeCount && tsel.isCollapsed && rangeInside(tsel.getRangeAt(0), cellEl)) {
+      const selection = cellSelection(cellEl);
+      const cell = ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML));
+      ports.actions.invoke("tag-selection", "button", {
+        caret: cellEl,
+        marks: selection ? marksForTyping(cellEl, cell, selection.from) : {}
+      });
+      return;
+    }
     if (!tsel.rangeCount || tsel.isCollapsed || !rangeInside(tsel.getRangeAt(0), cellEl)) {
       ports.notices.show("Select the words you want to label first.", "warn");
       return;

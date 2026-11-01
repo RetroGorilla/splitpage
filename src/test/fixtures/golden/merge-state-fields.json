@@ -6,6 +6,18 @@
     "listMerger": false
   },
   {
+    "key": "titleOrigin",
+    "merge": "optional-changed-side-wins",
+    "default": null,
+    "listMerger": false
+  },
+  {
+    "key": "titleVersion",
+    "merge": "optional-changed-side-wins",
+    "default": null,
+    "listMerger": false
+  },
+  {
     "key": "docId",
     "merge": "doc-id",
     "default": null,
@@ -74,6 +86,12 @@
   {
     "key": "targetSeconds",
     "merge": "target-length",
+    "default": null,
+    "listMerger": false
+  },
+  {
+    "key": "sections",
+    "merge": "sections",
     "default": null,
     "listMerger": false
   },

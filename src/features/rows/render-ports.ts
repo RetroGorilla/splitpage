@@ -12,6 +12,7 @@ import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { ShotHiding } from "../../application/shot-hiding.ts";
+import type { SectionView } from "../../application/editing/section-view.ts";
 import type { TagPanelState } from "../../application/tag-panel-state.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { IdSource } from "../../core/document/ports.ts";
@@ -49,6 +50,7 @@ export interface RowsRenderPorts {
   readonly draft: RowDraftEditing;
   readonly undo: Pick<Undo, "track">;
   readonly hiding: () => Pick<ShotHiding, "groups">;
+  readonly sections: () => Pick<SectionView, "folded">;
   readonly pictures: Pick<PictureStore, "imgHtml">;
   readonly personColors: PersonColorLookup;
   readonly preferences: () => Pick<Preferences, "clock">;

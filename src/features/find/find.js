@@ -205,6 +205,7 @@ function stepFind(dir) {
 function replaceCurrent() {
   var needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
+  revealFindMatch();
   var m = findMatches[findIndex];
   var idx = ports.document.read(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return;

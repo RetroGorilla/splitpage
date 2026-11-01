@@ -8,7 +8,6 @@ import { tagCategory } from "../../core/production/looks.ts";
 import { preferences } from "./preferences-owner.ts";
 import { exportServices } from "../../application/export/services.ts";
 import { exportBrollScenes, exportDay, exportFacts } from "../../adapters/formats/export-kit.ts";
-import { brollShotListForPrint } from "../../adapters/formats/export-projections.ts";
 import {
   exportMetaLine,
   htmlToPlainScript,
@@ -24,15 +23,6 @@ import {
 } from "../../adapters/formats/docx.ts";
 import { buildBreakdownCsv, buildBrollCsv, buildCsv } from "../../adapters/formats/csv.ts";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "../../adapters/formats/xlsx.ts";
-import {
-  buildPackingListPdf,
-  buildPdf,
-  buildShotListPdf,
-  pdfCommentImagesFor,
-  pdfImagesFor,
-  withUnshownCount
-} from "../../adapters/formats/pdf.ts";
-import { loadPdfFonts } from "../../adapters/formats/pdf-unicode.ts";
 import { buildPackingListPrintPage, buildScriptWithListsPrintPage, buildShotListPrintPage } from "../../adapters/formats/list-print.ts";
 
 export interface ExportBuild extends ExportPrintRequest {
@@ -55,11 +45,6 @@ function suffixed(suffix: string): (base: string) => string {
 
 function product(data: string | Uint8Array): ExportProduct {
   return { data: data };
-}
-
-async function pdfProduct(build: () => Uint8Array): Promise<ExportProduct> {
-  const made = withUnshownCount(build, await loadPdfFonts());
-  return { data: made.value, diagnostics: { imagesLeftOut: 0, unshownCharacters: made.unshown } };
 }
 
 function packingLabel(catId: string): string {
@@ -109,12 +94,7 @@ const CARDS: readonly ExportCardDecl[] = [
 const EXPORTERS: readonly BuiltInExporter[] = [
   { id: "pdf", action: "export-pdf", card: "pdf", name: "PDF", menuLabel: "PDF (.pdf)",
     words: "pdf print", fileName: suffixed(".pdf"),
-    printPage: (ctx) => buildScriptWithListsPrintPage({ doc: ctx.doc, assets: ctx.assets, services: exportServices() }),
-    build: async (ctx) => {
-      const jpegs = await pdfImagesFor(ctx.doc, ctx.assets);
-      const commentJpegs = await pdfCommentImagesFor(ctx.doc, ctx.assets);
-      return pdfProduct(() => buildPdf(ctx.doc, jpegs, commentJpegs));
-    } },
+    printPage: (ctx) => buildScriptWithListsPrintPage({ doc: ctx.doc, assets: ctx.assets, services: exportServices() }) },
   { id: "docx", action: "export-docx", card: "docx", name: "Word", menuLabel: "Word (.docx)",
     words: "word docx document google docs", writeback: true, fileName: suffixed(".docx"),
     build: (ctx) => product(buildDocx(ctx.doc, ctx.assets)) },
@@ -183,24 +163,19 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     choice: { value: "gear", label: "Gear" }, name: "Gear packing list", menuLabel: "Gear packing list (.pdf)",
     words: "packing list checklist gear equipment kit pdf", reason: packingReason("gear"),
     fileName: (base) => base + " - " + packingLabel("gear") + " packing list.pdf",
-    printPage: (ctx) => buildPackingListPrintPage({ doc: ctx.doc, services: exportServices() }, "gear"),
-    build: (ctx) => pdfProduct(() => buildPackingListPdf(ctx.doc, "gear")) },
+    printPage: (ctx) => buildPackingListPrintPage({ doc: ctx.doc, services: exportServices() }, "gear") },
   { id: "packing-prop", action: "export-packing-prop", card: "packing",
     choice: { value: "prop", label: "Props" }, name: "Props packing list", menuLabel: "Props packing list (.pdf)",
     words: "packing list checklist props prop pdf", reason: packingReason("prop"),
     fileName: (base) => base + " - " + packingLabel("prop") + " packing list.pdf",
-    printPage: (ctx) => buildPackingListPrintPage({ doc: ctx.doc, services: exportServices() }, "prop"),
-    build: (ctx) => pdfProduct(() => buildPackingListPdf(ctx.doc, "prop")) },
+    printPage: (ctx) => buildPackingListPrintPage({ doc: ctx.doc, services: exportServices() }, "prop") },
   { id: "b-roll pdf", action: "export-broll-pdf", card: "broll", choice: { value: "pdf", label: "PDF, landscape" },
     name: "B-roll shot list", menuLabel: "B-roll shot list (.pdf)",
     words: "b-roll broll shot list shots second unit print pdf landscape",
     reason: brollReason, refusal: "There is no b-roll to export yet — start a Visual line with B-roll:",
     defaults: { brollView: { filter: "all", group: "scene" } },
     fileName: suffixed(" - b-roll shot list.pdf"),
-    printPage: (ctx) => buildShotListPrintPage({ doc: ctx.doc, services: exportServices() }, ctx.options.brollView),
-    build: (ctx) => {
-      return pdfProduct(() => buildShotListPdf(ctx.doc, brollShotListForPrint(ctx.doc, ctx.options.brollView, exportServices())));
-    } },
+    printPage: (ctx) => buildShotListPrintPage({ doc: ctx.doc, services: exportServices() }, ctx.options.brollView) },
   { id: "b-roll xlsx", action: "export-broll-xlsx", card: "broll", choice: { value: "xlsx", label: "Excel (.xlsx)" },
     name: "B-roll shot list (Excel)", menuLabel: "B-roll shot list (.xlsx)",
     words: "b-roll broll shot list shots excel xlsx spreadsheet workbook sheets",

@@ -8,7 +8,7 @@ import type { SeedCheck } from "../preferences/seed-check.ts";
 import type { LegacySnapshots } from "./legacy-snapshots.ts";
 import type { sanitizeHistoryMeta } from "../../../shared/history-policy.js";
 
-export type HistorySnapshotMeta = NonNullable<ReturnType<typeof sanitizeHistoryMeta>> & { docId?: string; status?: string };
+export type HistorySnapshotMeta = Omit<NonNullable<ReturnType<typeof sanitizeHistoryMeta>>, "id"> & { id: string; docId?: string; status?: string };
 
 export interface HistoryWriteResult {
   readonly stored: boolean;
@@ -67,11 +67,10 @@ export interface HistoryOwner {
   readonly importHistoryBundle: (bundle: unknown) => Promise<HistoryImportResult>;
   readonly normalizeLegacySnapshots: (raw: unknown) => HistorySnapshotRead[] | null;
   readonly startHistoryMigration: () => Promise<{ migrated: number; removedKey: boolean }>;
-  readonly testControls: () => HistoryTestControls;
 }
 
 export interface DesktopHistoryOptions {
-  readonly protect?: readonly string[];
+  readonly protect?: readonly { docId: string; id: string }[];
   readonly older?: boolean;
 }
 
@@ -116,11 +115,42 @@ export interface HistoryOwnerPorts {
 }
 
 export interface HistoryStorage {
-  readonly resolveHistoryBackend: () => Promise<unknown>;
+  readonly resolveHistoryBackend: () => Promise<HistoryResolvedBackend>;
   readonly historyIdbNotice: () => { kind: string; text: string } | null;
   readonly backendName: () => string | null;
-  readonly close: () => Promise<unknown>;
+  readonly close: () => Promise<void>;
+}
+
+export interface HistoryTestingStorage extends HistoryStorage {
   readonly prepareResetForTest: () => void;
   readonly reset: () => Promise<unknown>;
   readonly controls: Pick<HistoryTestControls, "forceBackend" | "injectFault" | "releaseDelayedPut" | "releaseDelayedImport" | "importGateHit" | "setCapOverride">;
+}
+
+export interface HistoryResolvedBackend {
+  name: string;
+  persistent: boolean;
+  readonly put: (docId: string, meta: HistorySnapshotMeta, stateJson: string) => Promise<HistoryWriteResult>;
+  readonly list: (docId: string | null, options?: { strict?: boolean }) => Promise<{
+    entries: HistorySnapshotMeta[];
+    older: HistorySnapshotMeta[];
+    olderExpiresAt: number | null;
+    usage?: unknown;
+  } | null>;
+  readonly get: (bucket: string, id: string) => Promise<HistorySnapshotRead | null>;
+  readonly touch: (docId: string, title: string) => Promise<unknown>;
+  readonly copy: (from: string, to: string) => Promise<{ ok: boolean; copied: number; code?: string | undefined }>;
+  readonly rawDocIds: () => Promise<string[] | null>;
+  readonly rawDoc: (bucket: string) => Promise<{ title: string; lastOpenedAt: number } | null>;
+  readonly rawList: (bucket: string) => Promise<HistorySnapshotMeta[]>;
+  readonly importOlder: (entries: HistorySnapshotRead[]) => Promise<{ ok: boolean; added: number; code?: string }>;
+  readonly evict: (cap: number) => Promise<unknown>;
+  readonly store?: {
+    readonly rawIndex: () => Promise<Record<string, { snapshots: { sha: string }[] }>>;
+    readonly backend: {
+      readonly bodyCount: () => number | Promise<number>;
+      readonly hasBody: (sha: string) => boolean | Promise<boolean>;
+      readonly inspect: () => unknown;
+    };
+  };
 }
