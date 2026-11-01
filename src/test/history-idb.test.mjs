@@ -10,7 +10,7 @@ import {
   HISTORY_IDB_VERSION,
   createIdbHistoryBackend,
   hashText
-} from "../adapters/storage/03c-history-idb.js";
+} from "../adapters/storage/03c-history-idb.ts";
 
 const DOC_A = "d" + "a".repeat(32);
 const DOC_B = "d" + "b".repeat(32);
