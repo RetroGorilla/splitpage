@@ -94,7 +94,8 @@ const FORGED = [
   ["Array.from(raw as never[]).map(use)", ASSERTION],
   ["raw as never[] | null", ASSERTION],
   ["(shape as DocumentShape | null) as ValidatedDocument", ASSERTION],
-  ["(raw as (() => DocumentShape) | null) as () => ValidatedDocument", ASSERTION]
+  ["(raw as (() => DocumentShape) | null) as () => ValidatedDocument", ASSERTION],
+  ["undefined as unknown as () => ValidatedDocument", ASSERTION]
 ].map(([e, what], i) => [`export const f${i} = ${e};`, what]).concat([
   ["export const inferred: ValidatedDocument = launder(raw);", CALL],
   ["export function isDoc(x: unknown): x is ValidatedDocument { return !!x; }", PREDICATE],
@@ -167,6 +168,7 @@ const ALLOWED = [
   "export class Built { doc: ValidatedDocument; constructor() { this.doc = migrateRows(raw, ports); } }",
   "export function a40(slot: ValidatedDocument | null): ValidatedDocument { return slot as ValidatedDocument; }",
   "export function a41(reader: (() => ValidatedDocument) | null): ValidatedDocument { return (reader as NonNullable<typeof reader>)(); }",
+  "export const a43 = undefined as ValidatedDocument | undefined;",
   "export function a42(held: { read(): ValidatedDocument } | undefined): ValidatedDocument { return (held as { read(): ValidatedDocument }).read(); }"
 ];
 
