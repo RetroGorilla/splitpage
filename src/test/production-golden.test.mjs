@@ -28,7 +28,7 @@ import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { startTestHistory as initHistory } from "./_history-started.mjs";
 import { mountTagPanelsFeature } from "../bootstrap/wiring/production.ts";
-import { applyGearQuickAdd } from "../features/tags/panels.js";
+import { applyGearQuickAdd } from "../features/tags/panels.ts";
 import { LONG_DEMO } from "../starters/index.ts";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
 import { confirmSavedNow, startSaves, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
