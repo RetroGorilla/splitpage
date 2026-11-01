@@ -14,7 +14,7 @@ import { cellSelection } from "../../features/common/cell-selection.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../document-ports.ts";
 import { stampRow } from "./session-merge.ts";
-import { closeRowMenus } from "../../features/rows/row-menu.js";
+import { closeRowMenus } from "../../features/rows/row-menu.ts";
 import { collectTagsFromRows, scheduleProductionRefresh } from "../../features/tags/production-tags.js";
 import { startNewScript } from "./file-menu-controls.ts";
 import { cellEditing, paintGuard, rowDrag } from "./editor-owners.ts";

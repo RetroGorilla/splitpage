@@ -92,8 +92,8 @@ import {
   swapAdjacentRows,
   updateDragScroll
 } from "./rows.ts";
-import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.js";
-import { compressImageFile, videoFirstFrame } from "../../features/rows/scene-media.js";
+import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.ts";
+import { compressImageFile, videoFirstFrame } from "../../features/rows/scene-media.ts";
 import { videoFiles } from "./video-files.ts";
 import {
   acceptTagGhost,

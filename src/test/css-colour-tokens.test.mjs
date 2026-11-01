@@ -51,7 +51,7 @@ test("every CSS variable has a CSS definition or a runtime assignment", () => {
   const definitions = new Set();
   for (const file of [
     "src/features/prompter/prompter.ts",
-    "src/features/rows/row-motion.js",
+    "src/features/rows/row-motion.ts",
     "src/features/broll/panel.js",
     "src/features/tags/panels.js",
     "src/features/tags/production-tags.js",
