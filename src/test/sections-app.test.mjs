@@ -18,11 +18,11 @@ const { sectionView } = await import("../bootstrap/wiring/editor-owners.ts");
 const writer = await import("../features/writer/writer.js");
 let opened = 0;
 
-async function open(sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]) {
+async function open(sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r3" }], fields = {}) {
   if (viewFlags().writerOpen()) writer.closeWriter();
   const doc = migrateRows({ title: "Sections", rows: ["One.", "Two.", "Three.", "Four."].map((audioText, i) => ({
     id: "r" + (i + 1), audioText, visualText: "", status: i === 1 ? "shot" : "todo", lengthSeconds: (i + 1) * 10
-  })), sections });
+  })), sections, ...fields });
   const file = new File([buildSplitpageFile(exportDocumentOf(doc))], "sections-" + (++opened) + ".splitpage");
   await openDocument({ kind: "file", file, handle: null, options: { skipSnapshot: true } });
   undoOwner().flush();
@@ -90,6 +90,94 @@ test("singleton Alt moves require consecutive confirmation and undo restores the
     undoOwner().undo();
     assert.equal(state(), before);
   }
+});
+
+test("singleton move confirmation survives modifier-only keydowns, including repeated Alt and Alt+Shift", async () => {
+  for (const shiftKey of [false, true]) {
+    await open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);
+    const cell = document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable');
+    cell.focus();
+    const before = state();
+    key("ArrowDown", cell, { altKey: true, shiftKey });
+    assert.equal(state(), before);
+    for (const modifier of ["Alt", "Shift", "Control", "Meta"]) key(modifier, cell, { altKey: true });
+    key("Alt", cell, { altKey: true, repeat: true });
+    key("ArrowDown", cell, { altKey: true, shiftKey });
+    assert.deepEqual(ids(), ["r1", "r3", "r2", "r4"]);
+    assert.equal(currentDocument().sections.length, 1);
+    undoOwner().flush(); undoOwner().undo();
+    assert.equal(state(), before);
+  }
+});
+
+test("moving a scene into a folded section reveals the destination and restores its caret", async () => {
+  await open();
+  sectionView().toggle("s1");
+  const cell = document.querySelector('#rows .row[data-id="r3"] .audio-cell .cell-editable');
+  cell.focus();
+  key("ArrowUp", cell, { altKey: true });
+  assert.deepEqual(ids(), ["r1", "r3", "r2", "r4"]);
+  assert.equal(sectionView().folded("s1"), false);
+  assert.equal(document.activeElement.getAttribute("data-id"), "r3");
+  assert.equal(document.activeElement.getAttribute("data-field"), "audioText");
+});
+
+test("Find and Replace reveal a folded match through their real wiring", async () => {
+  const find = await import("../features/find/find.js");
+  await open();
+  sectionView().toggle("s2");
+  find.openFindBar();
+  document.getElementById("find-input").value = "Three";
+  find.findQueryChanged();
+  assert.equal(sectionView().folded("s2"), false);
+  assert.match(document.querySelector('#rows .row[data-id="r3"]').textContent, /Three/);
+  sectionView().toggle("s2");
+  document.getElementById("replace-input").value = "Replaced";
+  document.getElementById("find-replace").click();
+  assert.equal(sectionView().folded("s2"), false);
+  assert.match(document.querySelector('#rows .row[data-id="r3"]').textContent, /Replaced/);
+  find.closeFindBar();
+});
+
+test("comment jump reveals its folded anchor", async () => {
+  await open(undefined, { schema: 2, rows: [{ id: "r1", audioText: '<span class="cmt-anchor" data-cmt="c_one">One</span>', visualText: "" }],
+    comments: [{ id: "c_one", kind: "anchor", rowId: "r1", field: "audioText", anchorId: "c_one", quotedText: "One", author: "Ada", body: "Comment", replies: [] }] });
+  sectionView().toggle("s1");
+  const { jumpToAnchor } = await import("../features/comments/comments.js");
+  jumpToAnchor("c_one");
+  assert.equal(sectionView().folded("s1"), false);
+  assert.ok(document.querySelector('#rows .cmt-anchor[data-cmt="c_one"].flash'));
+});
+
+test("headers expose headings, Escape closes the menu, and non-element drag targets are ignored", async context => {
+  await open();
+  const header = document.querySelector('#rows [data-section-id="s1"]');
+  assert.equal(header.querySelector('[role="heading"][aria-level="2"]').textContent, "Opening");
+  const menu = header.querySelector("details"), summary = menu.querySelector("summary");
+  menu.open = true; summary.focus();
+  key("Escape", summary);
+  assert.equal(menu.open, false);
+  assert.equal(document.activeElement, summary);
+  const errors = [];
+  const listen = event => { errors.push(event.error); event.preventDefault(); };
+  window.addEventListener("error", listen);
+  context.after(() => window.removeEventListener("error", listen));
+  document.dispatchEvent(new window.Event("dragstart", { bubbles: true }));
+  assert.deepEqual(errors, []);
+});
+
+test("boundary hint uses one persistent live region and only the visible Writer header", async () => {
+  await open();
+  const live = document.getElementById("section-hint-live");
+  assert.ok(live); assert.equal(live.hidden, false); assert.equal(live.textContent, "");
+  writer.openWriter(); caret("r3"); key("Backspace");
+  assert.equal(document.getElementById("section-hint-live"), live);
+  assert.equal(live.textContent, "Press Backspace again to remove the section header");
+  assert.equal(document.querySelectorAll('.section-hint:not([hidden])').length, 1);
+  assert.equal(document.querySelectorAll('.section-hint[role="status"]').length, 0);
+  key("ArrowRight");
+  assert.equal(live.textContent, "");
+  assert.equal(document.getElementById("section-hint-live"), live);
 });
 
 test("section dividers count all scenes, fold without an edit and reset when another file opens", async () => {

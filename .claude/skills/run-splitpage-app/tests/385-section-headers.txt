@@ -33,6 +33,7 @@ expect JSON.stringify(F.state()) === beforeMove
 wait document.querySelector('#rows [data-section-id="'+middle+'"] .section-hint').hidden
 key alt ArrowDown
 expect JSON.stringify(F.state()) === beforeMove
+eval (function(){var c=document.activeElement;c.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',altKey:true,bubbles:true}));c.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',altKey:true,repeat:true,bubbles:true}));return true;})()
 key alt ArrowDown
 wait F.state().rows.map(function(r){return r.id;}).join(',') === 'r1,r3,r2,r4'
 expect F.state().sections.length === 2
@@ -59,11 +60,15 @@ key ctrl KeyZ
 wait F.state().sections[1].firstSceneId === 'r3'
 click #btn-write
 wait !document.getElementById('writer').hidden
+eval var menu=document.querySelector('#writer-doc [data-section-id="s2"] details');menu.open=true;menu.querySelector('summary').focus();true
+key none Escape
+expect !document.querySelector('#writer-doc [data-section-id="s2"] details').open && !document.getElementById('writer').hidden
 eval window.caret=function(id,end){var el=document.querySelector('#writer-doc .wr-para[data-id="'+id+'"]');el.focus();var r=document.createRange();r.selectNodeContents(el);r.collapse(!end);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;}; window.hint=function(){return document.querySelector('#writer-doc [data-section-id="s2"] .section-hint');}; caret('r3',false)
 eval window.beforeBoundary=JSON.stringify(F.state()); U.flush();window.undoBefore=U.sizes().undo;true
 key none Backspace
 expect JSON.stringify(F.state()) === beforeBoundary
 expect !hint().hidden && hint().textContent === 'Press Backspace again to remove the section header'
+expect document.querySelectorAll('.section-hint:not([hidden])').length === 1 && document.getElementById('section-hint-live').textContent === hint().textContent
 expect U.sizes().undo === undoBefore
 key none Backspace
 wait F.state().sections.length === 1

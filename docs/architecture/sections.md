@@ -122,6 +122,17 @@ header” without an edit. The next identical shortcut within two seconds moves
 the scene and removes the header together. Interruptions cancel confirmation;
 undo restores the order and header in one step.
 
+Modifier-only keydowns do not cancel confirmation, including repeated Alt
+keydown events on Windows. Alt+Shift+Up/Down receives the same protection;
+confirmation requires the same chord twice. Moving into a folded section
+unfolds that destination before restoring the scene's caret. Find, Replace
+and comment jumps use the same section-aware reveal port.
+
+One persistent live region announces boundary hints. Only the active view
+shows the visual hint, so Writer and the underlying table do not announce
+the same instruction twice. Section names are level-two headings; Escape
+closes an open section menu and restores focus to its summary.
+
 Folding is per-session view state, absent from saves, undo and running order.
 Totals and exports include shot and folded scenes. Present's section name is
 a visual cue and never enters narration or voice matching.
