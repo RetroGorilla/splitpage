@@ -10,8 +10,8 @@ import { fakeDocument, fakeNotices, fakePictures, fakeTextServices } from "../fa
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 
-function fixture() {
-  const doc = fakeDocument(migrateRows({ title: "Render mount", rows: [] }, fakeMigration().ports));
+function fixture(withScene = false) {
+  const doc = fakeDocument(migrateRows({ title: "Render mount", rows: withScene ? [{ id: "r1" }] : [] }, fakeMigration().ports));
   const notices = fakeNotices();
   const paint = createPaintGuard();
   const selection = createEditorSelection<Element, Range, Element>({ epoch: () => 0, order: () => [], keys: () => [] });
@@ -31,6 +31,7 @@ function fixture() {
     draft: { appendMedia: () => null, model: () => ({ cell: [], media: { markThroughout: () => false, toggleMark: () => [] } }), edit: () => null, isDraft: () => false, isScript: () => false },
     undo: { track: () => { tracks++; } },
     hiding: () => ({ groups: () => [] }),
+    sections: () => ({ folded: () => false }),
     pictures: fakePictures().pictures,
     personColors: { personColor: () => "#000000" },
     preferences: () => ({ clock: () => "24h" }),
@@ -44,6 +45,17 @@ function fixture() {
   };
   return { ports, paint, tracks: () => tracks };
 }
+
+test("sectionless rendering never requests the fold owner", () => {
+  document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
+  const first = fixture(true);
+  let folds = 0;
+  const mounted = startRowsRender({ ...first.ports, sections: () => { folds++; return { folded: () => false }; } });
+  try {
+    assert.equal(mounted.renderFirstDraw(), true);
+    assert.equal(folds, 0);
+  } finally { mounted.dispose(); }
+});
 
 test("render mounts without drawing and a disposed queued paint cannot reach the replacement", () => {
   document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';

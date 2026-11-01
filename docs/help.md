@@ -20,6 +20,13 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   of the preceding scene works the same way. Other input, a caret move or
   waiting two seconds cancels the hint. Undo restores the header and its
   name in one step.
+  - If <kbd>Alt</kbd>+<kbd>↑</kbd> or <kbd>Alt</kbd>+<kbd>↓</kbd> would move a
+    section's only scene across its header, the first press changes nothing
+    and shows “Press again to remove the section header”. Repeat the same
+    shortcut within two seconds, without another non-modifier key, click or caret move,
+    to move the scene and remove the emptied header. Undo restores both.
+    Releasing and pressing Alt again does not cancel the hint; the same
+    confirmation also applies when Shift is held with the shortcut.
 
 - **Start a tag at the cursor.** With nothing selected in a Visual cell,
   press **Tag** and choose a category, then type its name. The same dialog
