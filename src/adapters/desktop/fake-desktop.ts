@@ -1,6 +1,7 @@
-import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
+import type { HistoryOwner, HistorySnapshotMeta } from "../../application/recovery/history-ports.ts";
+import type { DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 import type { DraftPayload } from "../../application/recovery/draft-origin.ts";
-import type { DesktopFileEntry, DesktopPort, DesktopTestPort, DesktopTestValue } from "./desktop-port.ts";
+import type { DesktopFileEntry, DesktopPort, DesktopTakenDraft, DesktopTestPort } from "./desktop-port.ts";
 
 type FlushHandler = Parameters<DesktopPort["onDraftFlush"]>[0];
 
@@ -10,8 +11,8 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _lastRoute?: unknown;
   _routeAnswer?: NonNullable<Awaited<ReturnType<DesktopPort["routeOpen"]>>>;
   _externalOpens?: string[];
-  _videoGrants?: Record<string, string | null | undefined>;
-  _videoOpens?: string[];
+  _videoGrants?: Record<string, unknown>;
+  _videoOpens?: unknown[];
   _printed?: string[];
   _printAnswer?: Awaited<ReturnType<DesktopPort["printToPdf"]>>;
   _thumbCalls?: [string, string][];
@@ -33,18 +34,37 @@ type FakeBlobBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "
 };
 type FakeVoiceBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "voiceStart" | "voiceStop"> & {
   voiceStatus?: DesktopTestPort["voiceStatus"];
-  onVoiceEvent?: (cb: (event: DesktopTestValue<Parameters<Parameters<DesktopPort["onVoiceEvent"]>[0]>[0]>) => void) => void;
+  onVoiceEvent?: DesktopPort["onVoiceEvent"];
   _voiceCalls?: { status: number; start: number; stop: number };
   _voiceAvailable?: boolean;
   _voiceSession?: number;
   _voiceRunning?: boolean;
   _voiceStartAnswer?: Awaited<ReturnType<DesktopPort["voiceStart"]>>;
-  _voiceEmit?: (event: Record<string, unknown>) => void;
+  _voiceEmit?: (event: Omit<Parameters<Parameters<DesktopPort["onVoiceEvent"]>[0]>[0], "session">) => void;
 };
 
-type FakeHistoryBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "historyPut" | "historyList" | "historyGet" | "historyCopy" | "historyTouch" | "historyListDocs"> & {
+type FakeSanitizedMeta = ReturnType<typeof sanitizeHistoryMeta>;
+type FakeMalformedCoreReplies = {
+  getSessionInfo: () => Promise<Omit<DesktopIpcResult<"splitpage:get-session-info">, "testDialogsSeen">>;
+  openPrompterInBrowser: () => Promise<DesktopIpcResult<"splitpage:prompter-open-in-browser"> | Omit<Extract<DesktopIpcResult<"splitpage:prompter-open-in-browser">, { ok: true }>, "voice">>;
+};
+type FakeMalformedHistoryReplies = {
+  historyList?: (docId: string | null) => Promise<Omit<DesktopIpcResult<"splitpage:history-list">, "entries" | "older"> & { entries: FakeSanitizedMeta[]; older: FakeSanitizedMeta[] }>;
+  historyGet?: (...args: Parameters<DesktopPort["historyGet"]>) => Promise<(Omit<NonNullable<DesktopIpcResult<"splitpage:history-get">>, "meta"> & { meta: FakeSanitizedMeta }) | null>;
+};
+type FakeHistoryStoreBoundary = {
+  put: (docId: string | null, meta: HistorySnapshotMeta, stateJson: string, opts?: { older: boolean }) => Promise<
+    { stored: false; code: string } | { stored: true; duplicate?: boolean; evicted?: number; overCap?: boolean }>;
+  list: (docId: string | null) => Promise<Omit<DesktopIpcResult<"splitpage:history-list">, "usage">>;
+  usage: () => Promise<NonNullable<DesktopIpcResult<"splitpage:history-list">["usage"]>>;
+  get: (bucket: string, id: string) => ReturnType<DesktopPort["historyGet"]>;
+  copy: DesktopPort["historyCopy"];
+  touch: DesktopPort["historyTouch"];
+  listDocs: DesktopPort["historyListDocs"];
+};
+type FakeHistoryBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "historyPut" | "historyCopy" | "historyTouch" | "historyListDocs"> & FakeMalformedHistoryReplies & {
   _historyDump?: () => Record<string, unknown[]>;
-  _historyStore?: ReturnType<typeof createHistoryStore>;
+  _historyStore?: FakeHistoryStoreBoundary;
   _historyBackend?: ReturnType<typeof createMemoryHistoryTestBackend>;
 };
 
@@ -75,10 +95,10 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
 
   const draftStore: { floor: number; current: { header: unknown; stateJson: string } | null; previous: { header: unknown; stateJson: string } | null; base: unknown; writes: number; failures: number } = { floor: -Infinity, current: null, previous: null, base: null, writes: 0, failures: 0 };
   const draftLog: Record<string, unknown>[] = [];
-  let draftTaken: unknown = null;
+  let draftTaken: DesktopTakenDraft | null = null;
   let flushHandler: FlushHandler | null = null;
   let draftFailNext: { code: string; count: number } | null = null;
-  function draftFail(code: string) {
+  function draftFail(code: string): ReturnType<DesktopPort["writeDraft"]> {
     if (code !== "HELD" && code !== "NEED_BASE" && code !== "STALE_SEQ" && code !== "DISCARDED") draftStore.failures++;
     draftStore.base = null;
     return Promise.resolve({ ok: false, code: code });
@@ -149,10 +169,10 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
       return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
     },
     openExternal: function (url: string) { (this._externalOpens = this._externalOpens || []).push(url); },
-    grantVideoFile: function (file: Partial<Pick<DesktopFileEntry, "name">> | null) {
+    grantVideoFile: function (file: unknown) {
       this._videoGrants = this._videoGrants || {};
       const token = "t" + Object.keys(this._videoGrants).length;
-      this._videoGrants[token] = file && file.name;
+      this._videoGrants[token] = file && (file as Partial<Record<keyof Pick<DesktopFileEntry, "name">, unknown>>).name;
       return Promise.resolve(token);
     },
     openVideoFile: function (token: string) {
@@ -180,22 +200,22 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
       return Promise.resolve(this._chromiumAnswer || { ok: true, kind: "file", voice: "browser", browser: "Microsoft Edge" });
     },
 
-    writeDraft: function (payload: FakeDraft | null) {
-      draftLog.push({ op: "write", seq: payload && payload.seq, editSeq: payload && payload.editSeq,
-                      originKind: payload && payload.originKind, hasBase: !!(payload && payload.baseJson) });
+    writeDraft: function (payload: unknown) {
+      draftLog.push({ op: "write", seq: payload && (payload as FakeDraft).seq, editSeq: payload && (payload as FakeDraft).editSeq,
+                      originKind: payload && (payload as FakeDraft).originKind, hasBase: !!(payload && (payload as FakeDraft).baseJson) });
       if (draftFailNext && draftFailNext.count > 0) {
         draftFailNext.count--;
         return draftFail(draftFailNext.code);
       }
-      if (!payload || typeof payload.stateJson !== "string" || typeof payload.seq !== "number") return draftFail("BAD_PAYLOAD");
-      if (!(payload.seq > draftStore.floor)) return draftFail("STALE_SEQ");
-      if (payload.baseJson == null && draftStore.base == null) return draftFail("NEED_BASE");
-      if (payload.baseJson != null) draftStore.base = payload.baseJson;
+      if (!payload || typeof (payload as FakeDraft).stateJson !== "string" || typeof (payload as FakeDraft).seq !== "number") return draftFail("BAD_PAYLOAD");
+      if (!(((payload as FakeDraft).seq as number) > draftStore.floor)) return draftFail("STALE_SEQ");
+      if ((payload as FakeDraft).baseJson == null && draftStore.base == null) return draftFail("NEED_BASE");
+      if ((payload as FakeDraft).baseJson != null) draftStore.base = (payload as FakeDraft).baseJson;
       draftStore.previous = draftStore.current;
-      draftStore.current = { header: payload, stateJson: payload.stateJson };
-      draftStore.floor = payload.seq;
+      draftStore.current = { header: payload, stateJson: (payload as FakeDraft).stateJson as string };
+      draftStore.floor = (payload as FakeDraft).seq as number;
       draftStore.writes++;
-      return Promise.resolve({ ok: true, seq: payload.seq, bytes: payload.stateJson.length });
+      return Promise.resolve({ ok: true, seq: (payload as FakeDraft).seq as number, bytes: ((payload as FakeDraft).stateJson as string).length });
     },
     discardDraft: function (seq: number | undefined) {
       draftLog.push({ op: "discard", seq: seq });
@@ -217,7 +237,7 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
 
     _drafts: draftStore,
     _draftLog: draftLog,
-    _setDraft: function (taken: unknown) { draftTaken = taken; },
+    _setDraft: function (taken: DesktopTakenDraft | null) { draftTaken = taken; },
     _failNextDraftWrites: function (code: string | null, count: number | null | undefined) {
       draftFailNext = code ? { code: code, count: count == null ? 1 : count } : null;
     },
@@ -237,7 +257,7 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
     _fireMenuCommand: function (cmd: string) { if (menuHandler) menuHandler(cmd); },
     _fireRestoreNotice: function (notice: Parameters<Parameters<DesktopPort["onRestoreNotice"]>[0]>[0]) { if (restoreNoticeHandler) restoreNoticeHandler(notice); },
     _fireReassignDocId: function (msg: Parameters<Parameters<DesktopPort["onReassignDocId"]>[0]>[0]) { if (reassignDocIdHandler) reassignDocIdHandler(msg); }
-  } satisfies ThisType<FakeExtras>;
+  } satisfies Partial<Omit<DesktopPort, keyof FakeMalformedCoreReplies>> & FakeMalformedCoreReplies & Record<string, unknown> & ThisType<FakeExtras>;
   if (opts && opts.history) addFakeDesktopHistory(backend);
   if (opts && opts.blobs) addFakeDesktopBlobs(backend, opts);
   if (opts && opts.voice) addFakeDesktopVoice(backend);
@@ -252,14 +272,14 @@ function addFakeDesktopVoice(backend: FakeVoiceBackend) {
   backend._voiceRunning = false;
   backend.voiceStatus = function () {
     (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).status++;
-    return Promise.resolve({ available: backend._voiceAvailable });
+    return Promise.resolve({ available: backend._voiceAvailable as boolean });
   };
   backend.voiceStart = function () {
     (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).start++;
     if (backend._voiceStartAnswer) return Promise.resolve(backend._voiceStartAnswer);
     (backend._voiceSession as number)++;
     backend._voiceRunning = true;
-    return Promise.resolve({ ok: true, session: backend._voiceSession });
+    return Promise.resolve({ ok: true, session: backend._voiceSession as number });
   };
   backend.voiceStop = function () {
     (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).stop++;
@@ -267,8 +287,8 @@ function addFakeDesktopVoice(backend: FakeVoiceBackend) {
     return Promise.resolve({ ok: true });
   };
   backend.onVoiceEvent = function (cb: Parameters<NonNullable<FakeVoiceBackend["onVoiceEvent"]>>[0]) { handler = cb; };
-  backend._voiceEmit = function (event: Record<string, unknown>) {
-    const e = Object.assign({ session: backend._voiceSession }, event);
+  backend._voiceEmit = function (event: Omit<Parameters<Parameters<DesktopPort["onVoiceEvent"]>[0]>[0], "session">) {
+    const e = Object.assign({ session: backend._voiceSession as number }, event);
     if (handler) handler(e);
   };
 }
@@ -332,7 +352,7 @@ function addFakeDesktopBlobs(backend: FakeBlobBackend, opts: FakeOptions) {
 function addFakeDesktopHistory(backend: FakeHistoryBackend) {
   const mem = createMemoryHistoryTestBackend({ name: "desktop-fake", persistent: true });
   let held: unknown[] = [];
-  const store = createHistoryStore({
+  const store: FakeHistoryStoreBoundary = createHistoryStore({
     backend: mem,
     now: Date.now,
     hashText: historyHashText,

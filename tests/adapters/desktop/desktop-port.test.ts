@@ -1,3 +1,4 @@
+import type { MalformedDesktopReply } from "../../../src/adapters/desktop/desktop-port.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -223,7 +224,7 @@ test("the attached bridge is the port, and the test seam swaps it and restores i
   attachDesktop(real);
   assert.equal(desktopPort(), real);
   assert.equal(runningOnDesktop(), true);
-  const fake = { readFile: async () => ({ id: "x", name: "x" }) };
+  const fake = { readFile: async () => ({ id: "x", name: "x" } as unknown as MalformedDesktopReply) };
   useDesktopForTest(fake);
   assert.equal(desktopPort(), fake);
   assert.equal(runningOnDesktop(), true);
@@ -242,9 +243,9 @@ test("the attached bridge is the port, and the test seam swaps it and restores i
 test("the prompter can open in a browser or Chromium only when the attached desktop app offers it", () => {
   useDesktopForTest(null);
   assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [false, false]);
-  useDesktopForTest({ openPrompterInBrowser: () => Promise.resolve(null) });
+  useDesktopForTest({ openPrompterInBrowser: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
   assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [true, false]);
-  useDesktopForTest({ openPrompterInChromium: () => Promise.resolve(null) });
+  useDesktopForTest({ openPrompterInChromium: () => Promise.resolve(null as unknown as MalformedDesktopReply) });
   assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [false, true]);
   restoreDesktop();
 });

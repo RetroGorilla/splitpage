@@ -1,3 +1,4 @@
+import type { MalformedDesktopReply } from "../../src/adapters/desktop/desktop-port.ts";
 import "../../src/test/_dom.mjs";
 import { fileDelivery as portFileDelivery } from "../../src/bootstrap/wiring/ports/files.ts";
 import test from "node:test";
@@ -39,7 +40,7 @@ test("file delivery forwards desktop saves and preserves every saved-message opt
     const calls: unknown[][] = [];
     useDesktopForTest({
       saveFileDialog: (input) => { calls.push(["saveFileDialog", input]); return Promise.resolve({ id: "picked", name: "notes.txt" }); },
-      writeFile: (id, bytes) => { calls.push(["writeFile", id, bytes]); return Promise.resolve(null); }
+      writeFile: (id, bytes) => { calls.push(["writeFile", id, bytes]); return Promise.resolve(null as unknown as MalformedDesktopReply); }
     });
     assert.equal(portFileDelivery, delivery);
     assert.equal(await delivery.deliver("notes.txt", data, options), true);
@@ -57,7 +58,7 @@ test("file delivery returns false without a notice or write when the desktop dia
   let writes = 0;
   useDesktopForTest({
     saveFileDialog: () => Promise.resolve(null),
-    writeFile: () => { writes++; return Promise.resolve(null); }
+    writeFile: () => { writes++; return Promise.resolve(null as unknown as MalformedDesktopReply); }
   });
   assert.equal(await portFileDelivery.deliver("notes.txt", "hello", { savedMsg: "Saved the notes" }), false);
   assert.equal(writes, 0);

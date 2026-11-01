@@ -1,6 +1,7 @@
 import type { ExternalLinks } from "../../application/desktop-presence.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
+import type { DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 
 export interface UpdateActionPorts {
   readonly screen: () => ScreenState;
@@ -25,19 +26,13 @@ export interface UpdateStatus {
   readonly desktop?: boolean;
 }
 
-export interface UpdateResult {
-  readonly ok?: boolean;
-  readonly error?: string;
-  readonly message?: string;
-}
-
 export interface UpdatePorts {
   readonly updates: {
-    readonly status: () => Promise<UpdateStatus | null>;
-    readonly onStatus: (listener: (status: UpdateStatus) => void) => void;
+    readonly status: () => Promise<DesktopIpcResult<"splitpage:update-status"> | null>;
+    readonly onStatus: (listener: (status: DesktopIpcResult<"splitpage:update-status">) => void) => void;
     readonly stopStatus: () => void;
-    readonly download: () => Promise<UpdateResult | null>;
-    readonly install: () => Promise<UpdateResult | null>;
+    readonly download: () => Promise<DesktopIpcResult<"splitpage:update-download"> | null>;
+    readonly install: () => Promise<DesktopIpcResult<"splitpage:update-install"> | null>;
   };
 }
 

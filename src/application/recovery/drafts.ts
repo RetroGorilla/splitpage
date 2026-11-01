@@ -108,7 +108,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
   const draftStats: { writes: number; failures: number; discards: number; obsolete: number; lastCode: string | null } =
     { writes: 0, failures: 0, discards: 0, obsolete: 0, lastCode: null };
 
-  function draftBackendWrite(payload: DraftPayload): Promise<DraftFlush | null | undefined> {
+  function draftBackendWrite(payload: DraftPayload): ReturnType<ReturnType<DraftsPorts["recovery"]["desktopDrafts"]>["write"]> {
     return desktopDrafts().write(payload);
   }
 
@@ -116,7 +116,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     return desktopDrafts().canDiscard();
   }
 
-  function draftBackendDiscard(seq: number): Promise<DraftFlush | null | undefined> {
+  function draftBackendDiscard(seq: number): ReturnType<ReturnType<DraftsPorts["recovery"]["desktopDrafts"]>["discard"]> {
     return desktopDrafts().discard(seq);
   }
 
@@ -256,7 +256,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     return draftInFlight;
   }
 
-  function sendDraftPayload(payload: DraftPayload, baseTextFor: () => string, retriedWithBase: boolean): Promise<DraftFlush | null | undefined> {
+  function sendDraftPayload(payload: DraftPayload, baseTextFor: () => string, retriedWithBase: boolean): ReturnType<typeof draftBackendWrite> {
     return Promise.resolve().then(function () {
       return draftBackendWrite(payload);
     }).then(function (r) {
@@ -448,7 +448,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     return adoptUntitledDraft(draft, mine, base);
   }
 
-  function draftTaker(): (() => Promise<unknown>) | null {
+  function draftTaker(): ReturnType<DraftsMount["taker"]> {
     if (!runningOnDesktop()) return null;
     const take = desktopDrafts().taker();
     if (!(take && draftResume().restorePending())) return null;

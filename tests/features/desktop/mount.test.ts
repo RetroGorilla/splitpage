@@ -1,3 +1,5 @@
+import type { MalformedDesktopReply } from "../../../src/adapters/desktop/desktop-port.ts";
+import type { DesktopAnswer } from "../../../src/application/desktop/shell.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
@@ -42,8 +44,8 @@ function harness(start: { running?: boolean; intent?: string; doc?: boolean } = 
     onReassignDocId: (cb: (msg: DesktopReassign | null) => void) => { handlers.reassign = cb; },
     onMenuCommand: (cb: (command: string) => void) => { handlers.menu = cb; },
     onDraftFlush: (cb: (request: { readonly keep: boolean }) => unknown) => { handlers.flush = cb; },
-    openPrompterInBrowser: () => { log.push("browser"); return Promise.resolve({ ok: true, voice: "relay" }); },
-    openPrompterInChromium: () => Promise.resolve({ ok: true, browser: "Edge" })
+    openPrompterInBrowser: () => { log.push("browser"); return Promise.resolve({ ok: true, voice: "relay" } as unknown as MalformedDesktopReply<DesktopAnswer>); },
+    openPrompterInChromium: () => Promise.resolve({ ok: true, browser: "Edge" } as unknown as MalformedDesktopReply<DesktopAnswer>)
   };
   const notices = fakeNotices();
   const flushDraft = (request: { readonly keep: boolean }) => { log.push("flush:" + request.keep); return "flushed"; };

@@ -45,7 +45,7 @@ export function makeDesktopHandle(entry: Pick<DesktopFileEntry, "id" | "name">):
         name = fresh.name || name;
         handle.name = name;
         const bytes = fresh.bytes instanceof Uint8Array ? fresh.bytes : new Uint8Array(fresh.bytes || []);
-        return new File([bytes as BlobPart], name, { lastModified: fresh.lastModified as number, type: mimeForFilename(name) as string });
+        return new File([bytes as BlobPart], name, { lastModified: fresh.lastModified, type: mimeForFilename(name) as string });
       });
     },
     createWritable: function () {

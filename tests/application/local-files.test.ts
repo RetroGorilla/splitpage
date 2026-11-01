@@ -1,3 +1,4 @@
+import type { MalformedDesktopReply, DesktopPort } from "../../src/adapters/desktop/desktop-port.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createLocalFilesOwner } from "../../src/application/transitions/local-files.ts";
@@ -42,7 +43,7 @@ function harness() {
     },
     text: { sanitizeHtml: (html) => String(html) },
     resumeNeeded: () => { log.push("banner"); },
-    desktop: { running: () => false, openFileDialog: async () => null, routeOpen: async () => null },
+    desktop: { running: () => false, openFileDialog: async () => null, routeOpen: async () => null as unknown as MalformedDesktopReply<Awaited<ReturnType<DesktopPort["routeOpen"]>>> },
     files: {
       read: async () => { log.push("read"); return file; }, text: (data) => data.text(),
       permission: async (_handle, options) => { assert.deepEqual(options, { mode: "readwrite" }); log.push("permission"); return state.permission; },
@@ -81,7 +82,7 @@ for (const stage of ["parse", "last handle", "permission", "read", "dialog", "ro
       finish = stage === "permission" ? "prompt" : {};
       open = () => h.owner.tryResumeLastProject();
     } else if (stage === "dialog" || stage === "route") {
-      ports = { ...ports, desktop: { running: () => true, openFileDialog: stage === "dialog" ? hold : async () => ({ id: 1 }), routeOpen: stage === "route" ? hold : async () => ({ where: "this-tab" }) } };
+      ports = { ...ports, desktop: { running: () => true, openFileDialog: stage === "dialog" ? hold as () => Promise<MalformedDesktopReply<Awaited<ReturnType<DesktopPort["openFileDialog"]>>>> : async () => ({ id: 1 } as unknown as MalformedDesktopReply<Awaited<ReturnType<DesktopPort["openFileDialog"]>>>), routeOpen: stage === "route" ? hold as () => Promise<MalformedDesktopReply<Awaited<ReturnType<DesktopPort["routeOpen"]>>>> : async () => ({ where: "this-tab" }) } };
       finish = stage === "dialog" ? { id: 1 } : { where: "this-tab" };
       open = () => h.owner.openLocalFile();
     } else if (stage === "picker") {

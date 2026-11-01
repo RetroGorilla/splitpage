@@ -14,7 +14,7 @@ import type { ApplyStashedWork } from "./stashed-work.ts";
 export interface DraftFlush {
   readonly ok?: boolean;
   readonly code?: string;
-  readonly obsolete?: boolean;
+  readonly obsolete?: boolean | undefined;
 }
 
 export interface DraftFile {
@@ -77,7 +77,7 @@ export interface DraftsPorts {
 export interface DraftsMount {
   readonly flush: (opts?: { readonly keep?: boolean } | null) => Promise<DraftFlush>;
   readonly noteChange: () => void;
-  readonly taker: () => (() => Promise<unknown>) | null;
+  readonly taker: DesktopDraftStore["taker"];
   readonly applyTaken: (taken: unknown) => Promise<string>;
   readonly testing: Readonly<Record<string, unknown>>;
   readonly dispose: () => void;
