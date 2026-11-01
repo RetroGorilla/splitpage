@@ -540,8 +540,12 @@ every type; a `never` nested inside another type does not, so the rule checks
 where a nested `never` comes out instead. The typecheck refuses, in every
 `.ts` file but `migrate.ts`:
 - a type assertion to such a type, unless the value already has that type
-  (this covers `as never`), and an assertion to a library container of
-  `never` (`never[]`, `Promise<never>`, `Set<never>`);
+  once `null` and `undefined` are removed (this covers `as never`), and an
+  assertion to a library container of `never` (`never[]`, `Promise<never>`,
+  `Set<never>`). Removing only `null` adds no brand the value did not have:
+  `(ports as FindPorts)` over `FindPorts | null` passes, the same narrowing
+  the `!` operator does, which eslint forbids. `(shape as DocumentShape |
+  null) as ValidatedDocument` is still refused;
 - a property or element access whose declared type is `never` on a value that
   is not `never` (`({ v: raw } as { v: never }).v`, `([raw] as [never])[0]`),
   and a call through a signature written inside a cast that returns `never`

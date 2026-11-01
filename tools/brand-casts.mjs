@@ -134,7 +134,7 @@ export function brandForgeries(program, repo, files) {
     const visit = (node) => {
       if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) {
         const target = checker.getTypeFromTypeNode(node.type);
-        if ((carriesBrand(target) || neverContainer(target)) && !checker.isTypeAssignableTo(typeOf(node.expression), target)) {
+        if ((carriesBrand(target) || neverContainer(target)) && !checker.isTypeAssignableTo(checker.getNonNullableType(typeOf(node.expression)), target)) {
           report(node, "a type assertion to the validated document brand or to never");
         }
       } else if (ts.isTypePredicateNode(node) && node.type && carriesBrand(checker.getTypeFromTypeNode(node.type)) && !narrowsBranded(node)) {
