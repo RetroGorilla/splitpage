@@ -4,6 +4,7 @@ import { cappedLongText, plainText } from "../../core/document/text-policy.ts";
 import { decideDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput, normalizeDocId } from "../../../shared/doc-id-policy.js";
 import type { DocumentIdentityPorts, DocumentIdentityOwner, IdentityChannel } from "./ports.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
+import type { LocalFileHandle } from "../files/local-file-access.ts";
 
 type IdentityApi = { -readonly [K in keyof Omit<DocumentIdentityOwner, "startIdentity">]: Omit<DocumentIdentityOwner, "startIdentity">[K] } & { dispose: () => void };
 type IdentityDocument = Pick<ValidatedDocument, "docId" | "title">;
@@ -66,7 +67,7 @@ function copyDocHistorySafe(from: unknown, to: unknown) {
 function docHomeKey() {
   const home = currentHome();
   if (home.kind === "file") {
-    return "file:" + ((home.handle && (home.handle as { name?: string }).name) || home.name || "");
+    return "file:" + ((home.handle && (home.handle as Pick<LocalFileHandle, "name">).name) || home.name || "");
   }
   return "none:" + PAGE_NONCE;
 }
