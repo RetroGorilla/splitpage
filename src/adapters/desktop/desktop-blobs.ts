@@ -1,4 +1,4 @@
-import type { DesktopPort, DesktopResult } from "./desktop-port.ts";
+import type { DesktopPort } from "./desktop-port.ts";
 import { setBackend as setBlobBackend } from "../storage/02c-blobs.js";
 
 const DESKTOP_BLOB_MISSING_SLICE = 2000;
@@ -35,8 +35,8 @@ export function makeDesktopBlobBackend(bridge: Partial<Pick<DesktopPort, "blobPu
       return Promise.resolve()
         .then(function () { return (b.blobPut as DesktopPort["blobPut"])(sha, bytes); })
         .then(function (res) {
-          if (res && (res as DesktopResult).ok === true) return { stored: (res as DesktopResult).stored === true };
-          const code = ((res && typeof (res as DesktopResult).code === "string" && (res as DesktopResult).code) || "FAILED") as string;
+          if (res && res.ok === true) return { stored: res.stored === true };
+          const code = (res && typeof res.code === "string" && res.code) || "FAILED";
           const err = new Error("blob-put refused: " + code);
           (err as Error & { code: string }).code = code;
           throw err;
