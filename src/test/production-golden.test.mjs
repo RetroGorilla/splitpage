@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { cellOf, inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
-import { bulkTagCell, healTagRegistry, tagsInField } from "../features/tags/production-tags.js";
+import { bulkTagCell, healTagRegistry, tagsInField } from "../features/tags/production-tags.ts";
 import { tagKey } from "../core/document/tags.ts";
 import { tagOccurrences } from "../core/production/tags.ts";
 import { tagStatusRank } from "../core/document/tags.ts";

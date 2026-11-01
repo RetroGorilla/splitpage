@@ -10,7 +10,7 @@ const docIdEvents = (...args) => documentIdentityOwner().docIdEvents(...args);
 const initDocIdentityChannel = (...args) => documentIdentityOwner().initDocIdentityChannel(...args);
 const reassignDocId = (...args) => documentIdentityOwner().reassignDocId(...args);
 import { setBaseState } from "../bootstrap/wiring/session-merge.ts";
-import { tagFieldOccurrences } from "../features/tags/production-tags.js";
+import { tagFieldOccurrences } from "../features/tags/production-tags.ts";
 
 
 if (!projectFileServicesStarted()) installProjectFileServices(wireProjectFiles({

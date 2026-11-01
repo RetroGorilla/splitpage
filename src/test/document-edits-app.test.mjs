@@ -19,7 +19,7 @@ const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();
 const { liveSession, runDocumentEdit, stampDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { setTargetLength } = await import("../features/rundown/target.js");
-const { registerProductionTag, findOrAddPerson } = await import("../features/tags/production-tags.js");
+const { registerProductionTag, findOrAddPerson } = await import("../features/tags/production-tags.ts");
 const { renameTag, removeTag, newBrollRecord, removeBrollProp } = await import("../application/commands/production-actions.ts");
 const { retagRewrites: planRetagRewrites, retagMentions: countRetagMentions } = await import("../application/commands/tag-rewrites.ts");
 
