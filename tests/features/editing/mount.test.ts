@@ -5,7 +5,7 @@ import { fakeTextServices } from "../fakes.ts";
 import { owned } from "../../../src/features/routing/owned.ts";
 import { setCellSelection } from "../../../src/features/common/cell-selection.ts";
 import type { DraftEditPorts } from "../../../src/features/editing/ports.ts";
-import * as draft from "../../../src/features/editing/draft-edit.js";
+import * as draft from "../../../src/features/editing/draft-edit.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 Object.assign(globalThis, { window: win, document: win.document });

@@ -72,7 +72,7 @@ import {
   draftUndo,
   noteDraftInput,
   pasteIntoDraft
-} from "../../features/editing/draft-edit.js";
+} from "../../features/editing/draft-edit.ts";
 import {
   addRow,
   addRowAndFocus,
