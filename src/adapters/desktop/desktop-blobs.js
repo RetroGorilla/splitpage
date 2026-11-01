@@ -1,4 +1,4 @@
-import { setBackend as setBlobBackend } from "../storage/02c-blobs.js";
+import { setBackend as setBlobBackend } from "../storage/02c-blobs.ts";
 
 var DESKTOP_BLOB_MISSING_SLICE = 2000;
 

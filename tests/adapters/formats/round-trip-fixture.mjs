@@ -3,7 +3,7 @@ import "../../../src/test/_export-services-started.mjs";
 import { loadTestDocument } from "../../../src/test/_document.mjs";
 import { currentDocument } from "../../../src/bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
-import { intern } from "../../../src/adapters/storage/02c-blobs.js";
+import { intern } from "../../../src/adapters/storage/02c-blobs.ts";
 import { htmlToPlainText } from "../../../src/bootstrap/plain-text.ts";
 import { mountProductionTagsFeature as initTags } from "../../../src/bootstrap/wiring/production-tags.ts";
 

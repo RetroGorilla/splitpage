@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { sanitizeHtml, storedHtmlFromDom } from "../bootstrap/richtext.ts";
 import { storedImageHtml } from "../core/document/text-policy.ts";
-import { dataUrlForSync, has, inlineStateImages, recordFor } from "../adapters/storage/02c-blobs.js";
+import { dataUrlForSync, has, inlineStateImages, recordFor } from "../adapters/storage/02c-blobs.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { refsIn } from "../../shared/blob-policy.js";
 
