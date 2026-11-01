@@ -537,8 +537,8 @@ try {
   let checks = 0;
   const records = [];
   const headroom = emptyHeadroom();
-  const cases = lists ? ["prop-rich", "gear-rich", "shots-rich", "script-rich", "prop-empty", "gear-empty", "shots-empty", "script-empty",
-    "prop-long", "gear-long", "shots-long", "script-long", "flagged-location", "shot-person", "unshot-scene"] : ["rich", "empty", "long"];
+  const cases = options.cases || (lists ? ["prop-rich", "gear-rich", "shots-rich", "script-rich", "prop-empty", "gear-empty", "shots-empty", "script-empty",
+    "prop-long", "gear-long", "shots-long", "script-long", "flagged-location", "shot-person", "unshot-scene"] : ["rich", "empty", "long"]);
   async function captureModel() {
     return evaluate(`(() => {
       const allRows = Array.from(document.querySelectorAll('tr'));
@@ -572,7 +572,7 @@ try {
     assert.equal(result.scroll, result.width); checks++;
     assert.equal(result.cells, true); checks++;
     assert.equal(result.images, true); checks++;
-    if (kind === "long") {
+    if (!lists && kind.endsWith("long")) {
       assert.match(result.text, /Visual line 179/); checks++;
       assert.match(result.text, /Audio line 159/); checks++;
       assert.match(result.text, /Scene 18 audio/); checks++;
@@ -595,7 +595,7 @@ try {
     const pdf = await send("Page.printToPDF", { preferCSSPageSize: true, printBackground: true, generateTaggedPDF: true });
     const bytes = Buffer.from(pdf.data, "base64");
     const pages = (bytes.toString("latin1").match(/\/Type \/Page\b/g) || []).length;
-    assert.ok(lists ? (kind.endsWith("long") ? pages >= 2 : pages >= 1) : kind === "long" ? pages >= 5 : pages === (kind === "empty" ? 1 : 2), `${kind}: ${pages} pages`); checks++;
+    assert.ok(lists ? (kind.endsWith("long") ? pages >= 2 : pages >= 1) : kind.endsWith("long") ? pages >= 5 : pages === (kind === "empty" ? 1 : 2), `${kind}: ${pages} pages`); checks++;
     if (lists && (kind.startsWith("shots") || kind.startsWith("script") && !kind.endsWith("empty"))) {
       assert.match(bytes.toString("latin1"), /\/MediaBox \[0 0 792 612\]/); checks++;
     }

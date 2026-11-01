@@ -8,6 +8,7 @@ import { exportServices } from "../../application/export/services.ts";
 import { compareCommentPositions } from "../../core/document/comments.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
 import { hasSetLength } from "../../core/document/timing.ts";
+import { sectionGroups } from "../../core/document/sections.ts";
 import { brollSortedForList } from "../../core/production/broll.ts";
 import {
   groupTagsByCategory,
@@ -27,6 +28,13 @@ export interface SceneFacts {
   read: string;
   readSet: boolean;
   status: { id: RowStatusId; label: string };
+}
+export interface ScriptSectionFacts {
+  readonly id: string;
+  readonly name: string;
+  readonly start: number;
+  readonly end: number;
+  readonly total: string;
 }
 export interface BreakdownRow {
   catId: string;
@@ -102,6 +110,13 @@ export function sceneFacts(doc: ExportDocument, services: ExportServices = expor
     at += sec;
     return out;
   });
+}
+
+export function scriptSectionFacts(doc: ExportDocument, scenes: readonly SceneFacts[]): ScriptSectionFacts[] {
+  return sectionGroups({ rows: doc.scenes, sections: doc.document.sections }).map(group => ({
+    id: group.section.id, name: group.section.name, start: group.start, end: group.end,
+    total: formatDuration(scenes.slice(group.start, group.end).reduce((sum, scene) => sum + scene.seconds, 0))
+  }));
 }
 
 function capturedEntries(doc: ExportDocument) {

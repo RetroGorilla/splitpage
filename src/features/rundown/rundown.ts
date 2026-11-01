@@ -1,5 +1,6 @@
 import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
+import { sectionGroups } from "../../core/document/sections.ts";
 import { contentMemo } from "../../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../../core/document/text-policy.ts";
 import { pad2, formatDuration, rowSeconds } from "../../core/production/timing.ts";
@@ -425,6 +426,8 @@ interface RundownState {
   currentRowId: string | null;
   lastBlocksHtml: string;
   lastRulerHtml: string;
+  lastSectionsHtml: string;
+  sectionLabels: { el: HTMLElement; start: number; end: number }[];
   lastLayout: LayoutView;
   lastKnotsKey: string;
   minimized: boolean;
@@ -442,6 +445,8 @@ function freshState(): RundownState {
     currentRowId: null,
     lastBlocksHtml: "",
     lastRulerHtml: "",
+    lastSectionsHtml: "",
+    sectionLabels: [],
     lastLayout: { pxPerSecond: 0, spanSeconds: 0, totalSeconds: 0, width: 0, x: function () { return 0; } },
     lastKnotsKey: "",
     minimized: false,
@@ -610,6 +615,27 @@ export function renderRundown(): void {
   const right = Math.max(0, tenth(trackWidth - width)) + "px";
   if (blocksEl.style.right !== right) blocksEl.style.right = right;
 
+  const hasSections = doc && Array.isArray(doc.sections) && doc.sections.length;
+  const sectionsEl = hasSections || state.lastSectionsHtml ? strip.querySelector<HTMLElement>(".rundown-sections") : null;
+  if (sectionsEl) {
+    const groups = hasSections ? sectionGroups(doc) : [];
+    sectionsEl.hidden = !groups.length || state.minimized;
+    if (groups.length || state.lastSectionsHtml) {
+      const labels = groups.map(group => {
+        const first = blocks[group.start], last = blocks[group.end - 1];
+        if (!first || !last) return "";
+        return '<span class="rd-section" data-start="' + group.start + '" data-end="' + group.end + '" title="' + escapeHtml(group.section.name) + '" style="left:' + first.left +
+          'px;width:' + (last.left + last.width - first.left) + 'px">' + escapeHtml(group.section.name) + '</span>';
+      }).join("");
+      if (labels !== state.lastSectionsHtml) {
+        sectionsEl.innerHTML = labels; state.lastSectionsHtml = labels;
+        state.sectionLabels = Array.from(sectionsEl.querySelectorAll<HTMLElement>(".rd-section"), el => ({
+          el, start: Number(el.dataset.start), end: Number(el.dataset.end)
+        }));
+      }
+    }
+  }
+
   const current = state.currentRowId && rows.some(function (r) { return r.id === state.currentRowId; }) ? state.currentRowId : null;
   const tabRow = current || (rows[0] as SceneRow).id;
   let html = "";
@@ -750,6 +776,7 @@ function applyKnots(Z: readonly number[]): void {
       }
     }
   }
+  if (state.sectionLabels.length) paintSectionLabels();
   const strip = stripEl();
   const playhead = strip && strip.querySelector<HTMLElement>(".rundown-playhead");
   if (playhead && state.base.current !== -1) {
@@ -764,6 +791,15 @@ function applyKnots(Z: readonly number[]): void {
   }
   if (state.drop.x !== null) showDrop(state.drop.x);
   lengthCovered(Z);
+}
+
+function paintSectionLabels(): void {
+  for (const label of state.sectionLabels) {
+    const left = state.base.lefts[label.start] ?? 0;
+    const right = (state.base.lefts[label.end - 1] ?? left) + (state.base.widths[label.end - 1] ?? 0);
+    label.el.style.left = left + "px";
+    label.el.style.width = Math.max(0, right - left) + "px";
+  }
 }
 
 function lensFrame(now: number): void {
@@ -831,6 +867,7 @@ function lensSettle(): void {
       state.base.lefts[i] = b.left;
       state.base.widths[i] = b.width;
     }
+    if (state.sectionLabels.length) paintSectionLabels();
     const playhead = strip.querySelector<HTMLElement>(".rundown-playhead");
     if (playhead && state.base.current !== -1 && state.base.blocks[state.base.current]) {
       playhead.style.left = tenth((state.base.blocks[state.base.current] as RundownBlock).left - 1) + "px";
