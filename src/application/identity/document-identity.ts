@@ -2,44 +2,49 @@ import { documentIdStamp } from "../commands/save-stamps.ts";
 import { sha256Hex } from "../../core/document/ids.ts";
 import { cappedLongText, plainText } from "../../core/document/text-policy.ts";
 import { decideDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput, normalizeDocId } from "../../../shared/doc-id-policy.js";
+import type { DocumentIdentityPorts, DocumentIdentityOwner, IdentityChannel } from "./ports.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
 
-function startIdentity(ports) {
-  var currentDocument = ports.session.currentDocument;
-  var stampDocument = ports.session.stampDocument;
-  var currentHome = ports.location.home;
-  var documentLocation = function () { return ports.location; };
-  var showToast = ports.effects.show;
-  var copyHistory = ports.history.copyHistory;
-  var historyDocumentChanged = ports.history.historyDocumentChanged;
-  var runningOnDesktop = ports.desktop.running;
-  var mintDocId = ports.ids.docId;
-  var randomHexBytes = ports.ids.randomHexBytes;
+type IdentityApi = { -readonly [K in keyof Omit<DocumentIdentityOwner, "startIdentity">]: Omit<DocumentIdentityOwner, "startIdentity">[K] } & { dispose: () => void };
+type IdentityDocument = Pick<ValidatedDocument, "docId" | "title">;
 
-var PAGE_NONCE = randomHexBytes(16);
+function startIdentity(ports: DocumentIdentityPorts) {
+  const currentDocument = ports.session.currentDocument;
+  const stampDocument = ports.session.stampDocument;
+  const currentHome = ports.location.home;
+  const documentLocation = function () { return ports.location; };
+  const showToast = ports.effects.show;
+  const copyHistory = ports.history.copyHistory;
+  const historyDocumentChanged = ports.history.historyDocumentChanged;
+  const runningOnDesktop = ports.desktop.running;
+  const mintDocId = ports.ids.docId;
+  const randomHexBytes = ports.ids.randomHexBytes;
 
-function noteMergedDocId(prevId) {
+const PAGE_NONCE = randomHexBytes(16);
+
+function noteMergedDocId(prevId: unknown) {
   prevId = normalizeDocId(prevId);
-  if (!currentDocument() || !prevId || prevId === currentDocument().docId) return;
-  copyDocHistorySafe(prevId, currentDocument().docId);
+  if (!currentDocument() || !prevId || prevId === (currentDocument() as IdentityDocument).docId) return;
+  copyDocHistorySafe(prevId, (currentDocument() as IdentityDocument).docId);
   syncDocIdentity();
 }
 
-var documentIdentityPort = Object.freeze({
+const documentIdentityPort = Object.freeze({
   mint: mintDocId,
   writtenOut: function () { return documentLocation().writtenOut(); },
-  markWrittenOut: function (writtenOut) { documentLocation().markWrittenOut(writtenOut); }
+  markWrittenOut: function (writtenOut: boolean) { documentLocation().markWrittenOut(writtenOut); }
 });
 
-var identityAdoptedAt = 0;
-var lastIdentityKey = "";
-var docIdEventLog = [];
-var docIdCopyWarned = false;
+let identityAdoptedAt = 0;
+let lastIdentityKey = "";
+const docIdEventLog: ReturnType<DocumentIdentityOwner["docIdEvents"]> = [];
+let docIdCopyWarned = false;
 
-function copyDocHistorySafe(from, to) {
+function copyDocHistorySafe(from: unknown, to: unknown) {
   from = normalizeDocId(from);
   to = normalizeDocId(to);
   if (!from || !to || from === to) return;
-  docIdEventLog.push({ type: "copy", from: from, to: to });
+  docIdEventLog.push({ type: "copy", from: from as string, to: to as string });
   if (docIdEventLog.length > 200) docIdEventLog.shift();
   if (typeof copyHistory !== "function") return;
   function warn() {
@@ -51,7 +56,7 @@ function copyDocHistorySafe(from, to) {
     } catch (e) { }
   }
   try {
-    var p = copyHistory(from, to);
+    const p = copyHistory(from as string, to as string);
     if (p && typeof p.then === "function") {
       p.then(function (r) { if (r && r.ok === false) warn(); }, warn);
     }
@@ -59,16 +64,16 @@ function copyDocHistorySafe(from, to) {
 }
 
 function docHomeKey() {
-  var home = currentHome();
+  const home = currentHome();
   if (home.kind === "file") {
-    return "file:" + ((home.handle && home.handle.name) || home.name || "");
+    return "file:" + ((home.handle && (home.handle as { name?: string }).name) || home.name || "");
   }
   return "none:" + PAGE_NONCE;
 }
 
 function syncDocIdentity() {
   if (!currentDocument()) return;
-  var key = normalizeDocId(currentDocument().docId) + "|" + docHomeKey();
+  const key = normalizeDocId((currentDocument() as IdentityDocument).docId) + "|" + docHomeKey();
   if (key === lastIdentityKey) return;
   lastIdentityKey = key;
   identityAdoptedAt = ports.now();
@@ -78,68 +83,68 @@ function syncDocIdentity() {
   if (!runningOnDesktop()) announceDocIdentity();
 }
 
-function reassignDocId(toId, opts) {
+function reassignDocId(toId: unknown, opts?: { fromId?: unknown; otherTitle?: unknown }) {
   opts = opts || {};
   toId = normalizeDocId(toId);
-  var fromId = normalizeDocId(opts.fromId);
-  if (!toId || !fromId || toId === fromId || !currentDocument() || currentDocument().docId !== fromId) return false;
-  stampDocument(documentIdStamp(fromId, toId));
+  const fromId = normalizeDocId(opts.fromId);
+  if (!toId || !fromId || toId === fromId || !currentDocument() || (currentDocument() as IdentityDocument).docId !== fromId) return false;
+  stampDocument(documentIdStamp(fromId, toId as string));
   documentLocation().markWrittenOut(false);
   copyDocHistorySafe(fromId, toId);
   syncDocIdentity();
-  var other = cappedLongText(plainText(opts.otherTitle == null ? "" : opts.otherTitle).trim(), 300) || "Untitled Script";
+  const other = cappedLongText(plainText(opts.otherTitle == null ? "" : opts.otherTitle).trim(), 300) || "Untitled Script";
   showToast('This file is a copy of "' + other + '", which is open in another tab. ' +
     "It now has its own version history. Save it to keep them separate.", "warn", true);
   return true;
 }
 
-var DOC_ID_CHANNEL_NAME = "splitpage-doc-ids";
-var docIdChannel = null;
+const DOC_ID_CHANNEL_NAME = "splitpage-doc-ids";
+let docIdChannel: IdentityChannel | null = null;
 
-function initDocIdentityChannel(factory) {
+function initDocIdentityChannel(factory?: unknown) {
   if (runningOnDesktop()) return null;
   if (docIdChannel) {
     try { if (typeof docIdChannel.close === "function") docIdChannel.close(); } catch (e) {}
     docIdChannel = null;
   }
-  var ch;
+  let ch: IdentityChannel | null;
   try {
-    if (typeof factory === "function") ch = factory(DOC_ID_CHANNEL_NAME);
+    if (typeof factory === "function") ch = (factory as DocumentIdentityPorts["channel"])(DOC_ID_CHANNEL_NAME);
     else ch = ports.channel(DOC_ID_CHANNEL_NAME);
   } catch (e) { ch = null; }
   if (!ch) return null;
-  ch.onmessage = function (ev) {
-    onDocIdentityMessage(ev && typeof ev === "object" && "data" in ev ? ev.data : ev);
+  ch.onmessage = function (ev: unknown) {
+    onDocIdentityMessage((ev && typeof ev === "object" && "data" in ev ? ev.data : ev) as Parameters<typeof onDocIdentityMessage>[0]);
   };
   docIdChannel = ch;
   announceDocIdentity();
   return ch;
 }
 
-function currentDocIdClaim(type) {
+function currentDocIdClaim(type: string) {
   if (!currentDocument()) return null;
-  var docId = normalizeDocId(currentDocument().docId);
-  var home = docHomeKey();
+  const docId = normalizeDocId((currentDocument() as IdentityDocument).docId);
+  const home = docHomeKey();
   if (!docId || home.indexOf("file:") !== 0) return null;
   return { type: type, docId: docId, home: home, at: identityAdoptedAt, nonce: PAGE_NONCE,
-           title: cappedLongText(plainText(currentDocument().title || ""), 300) };
+           title: cappedLongText(plainText((currentDocument() as IdentityDocument).title || ""), 300) };
 }
 
 function announceDocIdentity() {
   if (runningOnDesktop() || !docIdChannel) return false;
-  var claim = currentDocIdClaim("claim");
+  const claim = currentDocIdClaim("claim");
   if (!claim) return false;
   try { docIdChannel.postMessage(claim); } catch (e) { return false; }
   return true;
 }
 
-function onDocIdentityMessage(msg) {
+function onDocIdentityMessage(msg: { type?: unknown; nonce?: unknown; docId?: unknown; home?: unknown; at?: unknown; title?: unknown } | null) {
   if (runningOnDesktop() || !msg || typeof msg !== "object") return;
   if (msg.type !== "claim" && msg.type !== "here") return;
   if (msg.nonce === PAGE_NONCE) return;
-  var mine = currentDocIdClaim("here");
+  const mine = currentDocIdClaim("here");
   if (!mine) return;
-  var theirs = {
+  const theirs = {
     type: msg.type,
     docId: normalizeDocId(msg.docId),
     home: String(msg.home == null ? "" : msg.home),
@@ -147,7 +152,7 @@ function onDocIdentityMessage(msg) {
     nonce: String(msg.nonce == null ? "" : msg.nonce),
     title: cappedLongText(plainText(msg.title == null ? "" : String(msg.title)), 300)
   };
-  var loser = decideDuplicateLoser(mine, theirs);
+  const loser = decideDuplicateLoser(mine, theirs);
   if (!loser) return;
   if (loser === mine) {
     reassignDocId(docIdFromSha256Hex(sha256Hex(duplicateReplacementInput(mine.docId, mine.home))),
@@ -155,7 +160,7 @@ function onDocIdentityMessage(msg) {
     return;
   }
   if (msg.type === "claim") {
-    try { docIdChannel.postMessage(mine); } catch (e) {}
+    try { (docIdChannel as IdentityChannel).postMessage(mine); } catch (e) {}
   }
 }
 
@@ -163,15 +168,15 @@ function docIdEvents() {
   return docIdEventLog.slice();
 }
 
-  var active = true;
-  function guarded(fn) {
-    return function (...args) {
+  let active = true;
+  function guarded<T extends (...args: never[]) => unknown>(fn: T): T {
+    return function (...args: Parameters<T>) {
       if (!active) throw new Error("The document identity is not started yet");
       return fn(...args);
-    };
+    } as T;
   }
-  var api = { noteMergedDocId, copyDocHistorySafe, syncDocIdentity, reassignDocId, initDocIdentityChannel, docIdEvents };
-  Object.keys(api).forEach(function (key) { api[key] = guarded(api[key]); });
+  const api = { noteMergedDocId, copyDocHistorySafe, syncDocIdentity, reassignDocId, initDocIdentityChannel, docIdEvents } as IdentityApi;
+  Object.keys(api).forEach(function (key) { (api as unknown as Record<string, (...args: never[]) => unknown>)[key] = guarded((api as unknown as Record<string, (...args: never[]) => unknown>)[key] as (...args: never[]) => unknown); });
   api.documentIdentityPort = Object.freeze(documentIdentityPort);
   api.dispose = function () {
     if (!active) return;
@@ -185,8 +190,8 @@ function docIdEvents() {
   return api;
 }
 
-export function createDocumentIdentityOwner() {
-  var started = null;
+export function createDocumentIdentityOwner(): DocumentIdentityOwner {
+  let started: IdentityApi | null = null;
   function running() {
     if (!started) throw new Error("The document identity is not started yet");
     return started;
@@ -194,7 +199,7 @@ export function createDocumentIdentityOwner() {
   return {
     startIdentity: function (ports) {
       if (started) throw new Error("The document identity is already started; stop it first");
-      var mine = startIdentity(ports);
+      const mine = startIdentity(ports);
       started = mine;
       return function () {
         if (started !== mine) return;
@@ -205,7 +210,7 @@ export function createDocumentIdentityOwner() {
     documentIdentityPort: Object.freeze({
       mint: function () { return running().documentIdentityPort.mint(); },
       writtenOut: function () { return running().documentIdentityPort.writtenOut(); },
-      markWrittenOut: function (value) { return running().documentIdentityPort.markWrittenOut(value); }
+      markWrittenOut: function (value: boolean) { return running().documentIdentityPort.markWrittenOut(value); }
     }),
     noteMergedDocId: function (...args) { return running().noteMergedDocId(...args); },
     copyDocHistorySafe: function (...args) { return running().copyDocHistorySafe(...args); },
