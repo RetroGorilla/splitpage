@@ -4209,8 +4209,11 @@ async function caseMovedFileUnkeptCopyAsksOnWindowClose(target, fixturesDir) {
       label: "unkept-copy-window-close", userDataDir, fixtures: [aPath],
       dialogs: ["confirm", "cancel", "confirm"], env: { SPLITPAGE_TEST_DRAFT_FAIL: "EIO:1" }
     });
-    await waitForRows(app.cdp, 20000);
     const cdp = app.cdp;
+    // why: startup rows precede the file read; moving the file then can leave a blank tab with no copy to keep
+    const opened = await waitForMarker(cdp, marker, 20000);
+    record(tag + ": the file is open in the tab before the move and close", !!opened);
+    if (!opened) return;
     const tabId = await tabIdOfTarget(cdp);
     fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
 
