@@ -12,3 +12,10 @@
 *.png binary
 *.jpg binary
 *.ico binary
+
+src/test/** linguist-detectable=false
+tests/** linguist-detectable=false
+desktop/test/** linguist-detectable=false
+*.test.ts linguist-detectable=false
+*.test.mjs linguist-detectable=false
+tools/test-*.mjs linguist-detectable=false
