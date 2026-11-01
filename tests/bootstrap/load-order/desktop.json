@@ -2,7 +2,7 @@
   "loadOnly": [
     "src/features/desktop/desktop.ts",
     "src/features/desktop/actions.ts",
-    "src/adapters/desktop/desktop-blobs.js",
+    "src/adapters/desktop/desktop-blobs.ts",
     "src/adapters/desktop/desktop-voice.js",
     "src/adapters/desktop/fake-desktop.js",
     "src/application/desktop/document-state.ts",

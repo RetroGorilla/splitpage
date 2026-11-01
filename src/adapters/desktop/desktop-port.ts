@@ -70,7 +70,7 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly onDraftFlush: (cb: (request: { readonly keep: boolean }) => unknown) => void;
 
 
-  readonly blobPut: (sha: string, bytes: Uint8Array) => Promise<unknown>;
+  readonly blobPut: (sha: string, bytes: Uint8Array) => Promise<{ readonly ok: true; readonly stored: boolean } | { readonly ok: false; readonly code: string }>;
   readonly blobGet: (sha: string) => Promise<DesktopBlob | null>;
   readonly blobMissing: (shas: readonly string[]) => Promise<readonly string[]>;
 

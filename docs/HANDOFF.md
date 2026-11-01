@@ -560,7 +560,7 @@ tabs**.
   `blob-missing(shas)` → the subset not held, ≤2000 shas per call, anything
   else rejects. A store that could not be created leaves the app running:
   puts answer `UNAVAILABLE`, gets null, every sha is missing. The renderer
-  side is `makeDesktopBlobBackend(bridge)` in `src/adapters/desktop/desktop-blobs.js` (the page
+  side is `makeDesktopBlobBackend(bridge)` in `src/adapters/desktop/desktop-blobs.ts` (the page
   registry's `get`/`put`/`missing` interface; `put` rejects with
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites.
