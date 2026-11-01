@@ -1,5 +1,5 @@
 import type { UndoRoutePorts } from "../../features/undo/routes.ts";
-import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
+import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { rowActions } from "../../features/rows/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -116,7 +116,7 @@ import {
   jumpToComment,
   openCommentsPanel,
   renderComments
-} from "../../features/comments/comments.js";
+} from "../../features/comments/comments.ts";
 import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { configureUndo, undoOwner } from "./undo.ts";

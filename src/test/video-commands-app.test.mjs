@@ -15,7 +15,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.js");
-const { openCommentComposer, closeCommentComposer } = await import("../features/comments/comments.js");
+const { openCommentComposer, closeCommentComposer } = await import("../features/comments/comments.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.js");

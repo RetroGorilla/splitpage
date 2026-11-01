@@ -57,7 +57,7 @@ test("every CSS variable has a CSS definition or a runtime assignment", () => {
     "src/features/tags/production-tags.js",
     "src/features/title/topbar.ts",
     "src/features/title/document-chrome.js",
-    "src/features/comments/comments.js",
+    "src/features/comments/comments.ts",
     "src/features/notices/busy.js",
     "src/features/editing/cell-reach.js",
     "src/features/notices/phone-bar.ts",
