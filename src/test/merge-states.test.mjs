@@ -1,4 +1,5 @@
 import { rowContentEqual } from "../core/merge/rows.ts";
+import { sameDocContent } from "../application/recovery/draft-restore.ts";
 import { mergeTextField } from "../core/merge/text-field.ts";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
@@ -53,6 +54,21 @@ test("#1041: loading a local addition with a duplicate id cannot replace the ori
   const { merged } = mergeStates(base, mine, cloneState(base));
   assert.deepEqual(merged.rows.map(r => r.audioText), ["w0", "b", "w5"]);
   assert.equal(new Set(merged.rows.map(r => r.id)).size, 3);
+});
+
+test("#1041: independently reloading a damaged disk file neither duplicates a recovered edit nor reports a clean draft changed", () => {
+  const raw = { schema: 2, docId: "d" + "5".repeat(32), title: "Recovery", rows: [
+    { id: "a", audioText: "w0" }, { id: "b", audioText: "b" }, { id: "a", audioText: "w2" }
+  ] };
+  const base = migrateRows(cloneState(raw));
+  const mine = cloneState(base);
+  mine.rows[2].audioText = "w2 edited";
+  const disk = migrateRows(cloneState(raw));
+  assert.equal(sameDocContent(base, disk, migrateRows), true);
+  const { merged, conflicts } = mergeStates(base, mine, disk);
+  assert.deepEqual(merged.rows.map(r => r.audioText), ["w0", "b", "w2 edited"]);
+  assert.deepEqual(merged.rows.map(r => r.id), ["a", "b", "a-1"]);
+  assert.equal(conflicts.length, 0);
 });
 
 test("the fixture is what the delete cases assume", () => {

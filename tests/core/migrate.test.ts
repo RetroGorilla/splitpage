@@ -14,17 +14,17 @@ type Item = Record<string, unknown>;
 
 const MINTED_DOC_ID = "d" + "f".repeat(32);
 
-test("#1041: later duplicate rows get fresh ids without taking an id elsewhere in the document", () => {
+test("#1041: later duplicate rows get deterministic ids without taking an id elsewhere in the document", () => {
   const f = fakeMigration();
   const out = migrateRows({ schema: 2, rows: [
     { id: "a", audioText: "first" },
     { id: "a", audioText: "second" },
-    { id: "r-fake-1", audioText: "reserved" },
+    { id: "a-1", audioText: "reserved" },
     { id: "a", audioText: "third" }
   ] }, f.ports);
-  assert.deepEqual(out.rows.map(r => r.id), ["a", "r-fake-2", "r-fake-1", "r-fake-3"]);
+  assert.deepEqual(out.rows.map(r => r.id), ["a", "a-2", "a-1", "a-3"]);
   assert.deepEqual(out.rows.map(r => r.audioText), ["first", "second", "reserved", "third"]);
-  assert.deepEqual(f.ids.minted, ["r-fake-1", "r-fake-2", "r-fake-3"]);
+  assert.deepEqual(f.ids.minted, []);
   assert.equal(JSON.stringify(migrateRows(jsonCopy(out), fakeMigration().ports)), JSON.stringify(out));
 });
 
@@ -37,7 +37,7 @@ test("#1041: ids that collide after stripping keep the first row and all later c
     { id: "__proto__", visualText: "four" },
     { id: "__proto__", visualText: "five" }
   ] }, f.ports);
-  assert.deepEqual(out.rows.map(r => r.id), ["scene1", "r-fake-1", "r-fake-2", "__proto__", "r-fake-3"]);
+  assert.deepEqual(out.rows.map(r => r.id), ["scene1", "scene1-1", "scene1-2", "__proto__", "__proto__-1"]);
   assert.deepEqual(out.rows.map(r => r.visualText), ["one", "two", "three", "four", "five"]);
 });
 
