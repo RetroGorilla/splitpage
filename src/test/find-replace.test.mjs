@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import { cellOf } from "../bootstrap/richtext.ts";
 import { projection } from "../core/text/runs.ts";
 import { inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
-import { countInTags, findInCell, findInRows, noMatchLabel, replaceInHtml } from "../features/find/find.js";
-import { domProjection, domRangeFor } from "../features/common/find-dom.js";
-import { startFind } from "../features/find/find.js";
+import { countInTags, findInCell, findInRows, noMatchLabel, replaceInHtml } from "../features/find/find.ts";
+import { domProjection, domRangeFor } from "../features/common/find-dom.ts";
+import { startFind } from "../features/find/find.ts";
 startFind({ text: { cellOf, inertBody, sanitizeHtml } });
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
