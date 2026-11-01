@@ -10,7 +10,7 @@ import { forgetDesktopVoice } from "../../adapters/desktop/desktop-voice.js";
 import { makeFakeDesktopBackend } from "../../adapters/desktop/fake-desktop.js";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { desktopActions as definitions } from "../../features/desktop/actions.ts";
-import { startDesktopView as mountDesktop } from "../../features/desktop/desktop.js";
+import { startDesktopView as mountDesktop } from "../../features/desktop/desktop.ts";
 import type { DesktopMount, DesktopPorts } from "../../features/desktop/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";

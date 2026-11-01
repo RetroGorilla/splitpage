@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startDesktopView } from "../../../src/features/desktop/desktop.js";
+import { startDesktopView } from "../../../src/features/desktop/desktop.ts";
 import { desktopActions } from "../../../src/features/desktop/actions.ts";
 import type { DesktopMount, DesktopPorts, DesktopOpening } from "../../../src/features/desktop/ports.ts";
 import type { DesktopOpenedFile, DesktopReassign, DesktopRestoreNotice } from "../../../src/application/desktop/shell.ts";

@@ -1,4 +1,4 @@
-import { bytesForSync, registryImages } from "./02c-blobs.js";
+import { bytesForSync, registryImages } from "./02c-blobs.ts";
 import { migrateGallery as migrateGalleryWith } from "../../core/document/gallery.ts";
 
 import type { GalleryRow, VideoLink } from "../../core/document/gallery.ts";

@@ -673,7 +673,7 @@ leaving does not shift the editor under a still-clear layer.
 `.claude/skills/run-splitpage-app/tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
 on the two elements and checks all of it.
 
-**`render()` must stay synchronous.** `src/features/rows/row-motion.js` animates scene
+**`render()` must stay synchronous.** `src/features/rows/row-motion.ts` animates scene
 reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
 `#rows` (§3.16), measure again, put things back with a transform and animate
 it away. It is FLIP and *not* the View Transitions API for one reason:
@@ -705,7 +705,7 @@ Two traps it already works around:
 
 ### 3.15 One loading indicator, and it waits before showing
 
-`src/features/notices/busy.js` owns the only "something is happening" affordance in the app:
+`src/features/notices/busy.ts` owns the only "something is happening" affordance in the app:
 a 2px indeterminate bar at the top of the window. `withBusyBar(label, fn)`
 wraps an async operation; the result and any thrown error pass straight
 through. Currently wrapped: every export (they all funnel through
@@ -736,7 +736,7 @@ the end. Now:
   identical is not touched. `rowHtmlFromParts()` in `src/features/rows/render.js` is those parts joined, byte for byte
   what it always produced.
 - **`render()`** keys `#rows` by row id (a shot strip by the ids it covers —
-  `hiddenShotStripHtml()` in `src/features/rows/hide-shot.ts`, the key `rowMotionKey()` in `src/features/rows/row-motion.js`
+  `hiddenShotStripHtml()` in `src/features/rows/hide-shot.ts`, the key `rowMotionKey()` in `src/features/rows/row-motion.ts`
   uses), reuses every element still wanted, repaints only changed parts,
   creates new rows, drops gone ones, and moves the rest with a
   longest-increasing-run pass that never moves the row holding focus (a
@@ -871,7 +871,7 @@ panels, the CSV, Present's clock — reads `rowSeconds()`, never the words
 directly (Present's *scroll speed* is still words and reading speed).
 `migrateRows()` keeps a whole number 0–86400 and drops anything else, so a
 file from before #179 reads as the estimate. It is set from the rail's Read
-time (`src/features/rows/read-time.js`; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
+time (`src/features/rows/read-time.ts`; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
 `parseSceneLength()`). It is not in
 `ROW_FIELDS` (not text): `mergeRow` takes the side that changed it since the
 base, theirs when both did (no conflict card), and with no base a set length
@@ -933,7 +933,7 @@ an "Unmerged edit" card (design D3). The result names every tag the way the
 **merged** registry does (the registry is merged before the rows for that),
 so a rename from the other side reaches a cell taken from this one. A cell
 holding a picture or video card (which the model leaves out, D7) is still
-compared as a string, whole. The on-disk merge review (`src/features/merge/local-merge.js`)
+compared as a string, whole. The on-disk merge review (`src/features/merge/local-merge.ts`)
 decides each cell with the same `mergeTextField()`, and shows "both sets of
 changes are combined" for an outcome of `merged`.
 
@@ -964,7 +964,7 @@ is `localStorage["splitpage-export-directions"]` (`"0"` off, absent on).
 **Images are references, not bytes** (#82). The document state never holds
 image bytes; the bytes live once, content-addressed by SHA-256, in a blob
 store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
-server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
+server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
 - A row's picture is `imageRef`, a record gated by `normalizeImageRef()`
   (`shared/blob-policy.js`): exactly those four fields, the type sniffed
   from the bytes, never SVG. The old key `visualImage` (a `data:` URI) is
@@ -977,7 +977,7 @@ server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
   that form, keeps a valid `data-blob` (attributes from the registry when it
   holds the bytes), strips any `src`, and drops everything else.
   `storedImageHtml(ref)` is the same string for HTML built outside it.
-- The hydrator (a MutationObserver in `02c-blobs.js`) gives every
+- The hydrator (a MutationObserver in `02c-blobs.ts`) gives every
   `<img data-blob>` in the live DOM a `blob:` `src` once `ensureBytes()`
   has the bytes (memory, then the backend); one nobody has
   is marked `data-blob-state="missing"`, alt "Image unavailable". The mark
@@ -1276,7 +1276,7 @@ name never does (#183). `#root` spans the window and only the script is
 held to 1800px (#190); the rundown strip runs the window's width, less an
 open panel (#189), below 1100px too. One slim scroll-bar style app-wide,
 and the page's own bar hidden while a panel is open (#187, #188), its
-width handed back (`--page-gutter`, `src/features/panels/script-place.js`) so nothing steps
+width handed back (`--page-gutter`, `src/features/panels/script-place.ts`) so nothing steps
 sideways; a panel opening or closing keeps the scene at the top of the
 view put (`holdScriptPlace`, as the script zoom does). `.claude/skills/run-splitpage-app/tests/85-header-fit.txt`
 measures all of it by resizing an iframe; 250–251 the rest.

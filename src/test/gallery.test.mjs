@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { intern } from "../adapters/storage/02c-blobs.js";
+import { intern } from "../adapters/storage/02c-blobs.ts";
 import {
   addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../core/document/gallery.ts";

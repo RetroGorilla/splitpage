@@ -1,4 +1,4 @@
-import { startDocumentChrome } from "../../features/title/document-chrome.js";
+import { startDocumentChrome } from "../../features/title/document-chrome.ts";
 import type { DocumentChromeControl, DocumentChromePorts } from "../../features/title/ports.ts";
 import { targetActions as definitions } from "../../features/title/actions.ts";
 import { owned } from "../../features/routing/owned.ts";

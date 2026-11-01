@@ -1,7 +1,7 @@
 import type { ImageRef } from "../../core/document/ports.ts";
 import { MD_IMAGE_PREFIX_RE } from "./markdown-image.ts";
 import { audioDirectionsHtml } from "./docx.ts";
-import { internDataUrl, queuePersist } from "../storage/02c-blobs.js";
+import { internDataUrl, queuePersist } from "../storage/02c-blobs.ts";
 import { makeId } from "../identity/ids.ts";
 import { legacyMdToHtml, safeImageSrc } from "../../core/document/text-policy.ts";
 
