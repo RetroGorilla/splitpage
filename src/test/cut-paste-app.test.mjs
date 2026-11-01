@@ -16,7 +16,7 @@ const { copyFromCell, pasteIntoCell } = await import("../features/clipboard/cell
 const { render } = await import("../features/rows/render.ts");
 const { cellEditing } = await import("../bootstrap/wiring/editor-owners.ts");
 const { cellSelection } = await import("../features/common/cell-selection.ts");
-const { armDeleteComment } = await import("../features/comments/comments.js");
+const { armDeleteComment } = await import("../features/comments/comments.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const redo = () => undoOwner().redo();

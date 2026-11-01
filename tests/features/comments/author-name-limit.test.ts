@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { AUTHOR_NAME_FIELDS, limitAuthorNameField } from "../../../src/features/comments/comments.js";
+import { AUTHOR_NAME_FIELDS, limitAuthorNameField } from "../../../src/features/comments/comments.ts";
 import { EDITOR_NAME_MAX } from "../../../src/core/document/fields.ts";
 
 function field(value: string, caret?: number, end?: number): HTMLInputElement {
