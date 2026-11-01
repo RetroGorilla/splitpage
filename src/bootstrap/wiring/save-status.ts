@@ -1,6 +1,6 @@
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import type { Refusal } from "../../application/actions.ts";
-import { mountSaveStatus } from "../../features/title/save-status.js";
+import { mountSaveStatus } from "../../features/title/save-status.ts";
 import { showRefusal as showRefusalNotice } from "../../features/title/refusal.ts";
 import type { DocumentIdentitySync, SaveStatusListeners, SaveStatusMount } from "../../features/title/ports.ts";
 import { owned } from "../../features/routing/owned.ts";

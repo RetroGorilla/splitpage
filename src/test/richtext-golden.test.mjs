@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { buildVideoCardEl, htmlToMarkdown, sanitizeHtml, storedHtmlFromDom } from "../bootstrap/richtext.ts";
 import { fromHtml } from "../bootstrap/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
-import { intern } from "../adapters/storage/02c-blobs.js";
+import { intern } from "../adapters/storage/02c-blobs.ts";
 import { createIdMasker, goldenText, idsInHtml, image, mintedId, settleGolden } from "./golden-helpers.mjs";
 
 const KNOWN = image("png", 7, 5);

@@ -5,7 +5,7 @@ import { withPageHead } from "../../core/document/ids.ts";
 import { base64Encode } from "../../core/document/media.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { buildPublishHtml } from "./page-shell.ts";
-import { inlineStateImages } from "../storage/02c-blobs.js";
+import { inlineStateImages } from "../storage/02c-blobs.ts";
 
 let entry: ((raw: Parameters<typeof migrateRowsCore>[0]) => ReturnType<typeof migrateRowsCore>) | null = null;
 
