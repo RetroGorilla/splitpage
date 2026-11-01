@@ -94,7 +94,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
     if (!v) return Promise.resolve(null);
     let got: Promise<DesktopVideoResult | null> | null;
     if (ports.desktop.present()) {
-      try { got = ports.desktop.thumbnail(v.host, videoRef(v)); } catch (e) { return Promise.resolve(null); }
+      try { got = ports.desktop.thumbnail(v.host, videoRef(v) as string); } catch (e) { return Promise.resolve(null); }
       if (!got) return Promise.resolve(null);
     } else {
       const f = testHooks.fetch || (noRemote() ? null : (typeof fetch === "function" ? fetch.bind(window) : null));
