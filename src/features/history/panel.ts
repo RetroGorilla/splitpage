@@ -1,10 +1,12 @@
+import type { HistoryPanelPorts, HistoryPanelControl } from "./ports.ts";
+import type { HistorySnapshotMeta } from "../../application/recovery/history-ports.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import { escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
 import { driveFormatSize } from "../../../shared/text.js";
 import { formatClock } from "../../../shared/clock.js";
 import { formatTimestamp } from "../common/comment-time.ts";
 
-export function startHistoryPanel(ports) {
+export function startHistoryPanel(ports: HistoryPanelPorts) {
   var active = true;
   var currentDocument = ports.document.current;
   var listDocHistory = ports.history.listDocHistory;
@@ -14,19 +16,19 @@ export function startHistoryPanel(ports) {
   var personColors = ports.personColors;
   var getEditorName = ports.preferences.editorName;
   var showToast = ports.effects.show;
-  var safeId = function (id, prefix) { return safeIdFrom(id, prefix, ports.ids); };
+  var safeId = function (id: unknown, prefix: string) { return safeIdFrom(id, prefix, ports.ids); };
 var RESTORE_ARM_MS = 4000;
 var RESTORE_LABEL = "Restore this version";
 var RESTORE_OLDER_LABEL = "Restore";
 var RESTORE_ARMED_LABEL = "Could not keep a backup — restore anyway?";
-var restoreArmedKey = null;
-var restoreArmTimer = null;
+let restoreArmedKey: string | null = null;
+let restoreArmTimer: ReturnType<typeof setTimeout> | null = null;
 
-function restoreCardKey(bucket, id) {
+function restoreCardKey(bucket: string | null, id: string | null) {
   return (bucket === "older" ? "older" : "doc") + "/" + id;
 }
 
-function restoreButtonLabel(bucket, armed) {
+function restoreButtonLabel(bucket: string | null, armed: boolean) {
   if (armed) return RESTORE_ARMED_LABEL;
   return bucket === "older" ? RESTORE_OLDER_LABEL : RESTORE_LABEL;
 }
@@ -52,7 +54,7 @@ function disarmRestore() {
   applyRestoreArm();
 }
 
-function restoreSnapshotFromCard(btn) {
+function restoreSnapshotFromCard(btn: Element | null) {
   if (!btn) return;
   var id = btn.getAttribute("data-id") || "";
   var older = btn.getAttribute("data-bucket") === "older";
@@ -86,7 +88,7 @@ function openHistoryPanel() {
   renderHistory();
 }
 var historyRenderToken = 0;
-var historyShownDocId = null;
+let historyShownDocId: string | null = null;
 
 var HISTORY_SUBTITLES = {
   idb: "Snapshots of this document, kept in this browser before anything that could overwrite your work.",
@@ -98,24 +100,24 @@ var HISTORY_SUBTITLE_DEFAULT = "Snapshots of this document, kept before anything
 var HISTORY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 var HISTORY_RESTORE_HINT = "Replaces what's on screen, which is saved here first.";
 
-var historyOpenKey = null;
+let historyOpenKey: string | null = null;
 var historyToggleBound = false;
 
-function historyFig(text) {
+function historyFig(text: string) {
   return '<span class="history-fig">' + escapeHtml(text) + '</span>';
 }
 
-function historyWhen(m) {
+function historyWhen(m: HistorySnapshotMeta) {
   var d = new Date(m && m.at);
   if (isNaN(d.getTime()) && m && Number(m.atMs) > 0) d = new Date(Number(m.atMs));
   return isNaN(d.getTime()) ? null : d;
 }
 
-function historyDayKey(d) {
+function historyDayKey(d: Date | null) {
   return d ? d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate() : "";
 }
 
-function historyDay(d) {
+function historyDay(d: Date | null) {
   if (!d) return { word: "Date unknown", date: "" };
   var now = new Date();
   var yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -126,7 +128,7 @@ function historyDay(d) {
   };
 }
 
-function historyClock(d) {
+function historyClock(d: Date | null) {
   return d ? formatClock(d, preferences().clock()) : "";
 }
 
@@ -134,30 +136,30 @@ function historyClockWide() {
   return formatClock(new Date(2000, 0, 1, 12, 52), preferences().clock()).length > 5;
 }
 
-function historySavedHtml(d) {
+function historySavedHtml(d: Date | null) {
   if (!d) return "Date unknown";
   var day = historyDay(d);
   return (day.word ? escapeHtml(day.word) : historyFig(day.date)) + " at " + historyFig(historyClock(d));
 }
 
-function historyScenesHtml(n) {
+function historyScenesHtml(n: number) {
   return historyFig(String(n)) + " scene" + (n === 1 ? "" : "s");
 }
 
-function historySizeText(bytes) {
+function historySizeText(bytes: unknown) {
   var n = Number(bytes);
   var gb = 1024 * 1024 * 1024;
   if (!(n >= gb)) return driveFormatSize(n);
   return (n / gb).toFixed(1).replace(/\.0$/, "") + " GB";
 }
 
-function historySizeHtml(bytes) {
+function historySizeHtml(bytes: unknown) {
   var text = historySizeText(Math.max(0, Math.floor(Number(bytes) || 0)));
   var parts = /^([\d.]+) (.+)$/.exec(text);
   return parts ? historyFig(parts[1]) + " " + escapeHtml(parts[2]) : escapeHtml(text);
 }
 
-function historyInitials(name) {
+function historyInitials(name: string) {
   var words = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "?";
   var first = Array.from(words[0])[0] || "";
@@ -165,7 +167,7 @@ function historyInitials(name) {
   return (first + last).toUpperCase();
 }
 
-function historyPersonHtml(name) {
+function historyPersonHtml(name: string) {
   name = String(name || "").trim();
   if (!name) return '<span class="history-none">—</span>';
   return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(personColors.personColor(name)) + '" aria-hidden="true">' +
@@ -173,7 +175,7 @@ function historyPersonHtml(name) {
     '<span class="history-person">' + escapeHtml(name) + '</span>';
 }
 
-function historyCardHtml(m, bucket) {
+function historyCardHtml(m: HistorySnapshotMeta, bucket: string) {
   var status = m.status === "writing" || m.status === "pending" ? m.status : "stored";
   var rows = Math.max(0, Math.floor(Number(m.rows) || 0));
   var armed = restoreArmedKey !== null && restoreCardKey(bucket, m.id) === restoreArmedKey;
@@ -225,7 +227,7 @@ function historyCardHtml(m, bucket) {
   '</li>';
 }
 
-function historyDaysHtml(entries) {
+function historyDaysHtml(entries: HistorySnapshotMeta[]) {
   var days = [];
   var byDay = Object.create(null);
   entries.forEach(function (m) {
@@ -249,7 +251,7 @@ function historyDaysHtml(entries) {
   }).join("");
 }
 
-function onHistoryRowToggle(e) {
+function onHistoryRowToggle(e: Event) {
   var snap = e.target;
   if (!snap || !snap.classList || !snap.classList.contains("history-snap")) return;
   var key = snap.getAttribute("data-snap");
@@ -263,7 +265,7 @@ function onHistoryRowToggle(e) {
   }
 }
 
-function historyUsageHtml(backend, usage) {
+function historyUsageHtml(backend: string | null, usage: unknown) {
   if (!usage || typeof usage !== "object") return "";
   if (usage.readOnly && backend === "desktop") {
     return "Version history is read-only: it was written by a newer version of Splitpage.";
@@ -341,19 +343,19 @@ async function renderHistory() {
   }
 }
 
-function toastLastEditor(loaded) {
+function toastLastEditor(loaded: Parameters<HistoryPanelControl["toastLastEditor"]>[0]) {
   if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
     showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
   }
 }
 
 
-  function restored(snap, opts) {
+  function restored(snap: Parameters<HistoryPanelControl["restored"]>[0], opts: Parameters<HistoryPanelControl["restored"]>[1]) {
     sidePanels().close("history-panel");
     showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at, preferences().clock()), "ok");
   }
-  function guarded(fn) {
-    return function (...args) {
+  function guarded<T extends unknown[], R>(fn: (...args: T) => R) {
+    return function (...args: T) {
       if (!active) throw new Error("The history panel is not started yet");
       return fn(...args);
     };
