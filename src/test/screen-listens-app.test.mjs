@@ -24,7 +24,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const redo = () => undoOwner().redo();
 const undo = () => undoOwner().undo();
-const writer = await import("../features/writer/writer.js");
+const writer = await import("../features/writer/writer.ts");
 
 after(closeApp);
 

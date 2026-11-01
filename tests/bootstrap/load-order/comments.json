@@ -1,10 +1,10 @@
 {
   "loadOnly": [
     "src/bootstrap/wiring/comments.ts",
-    "src/features/comments/comments.js",
+    "src/features/comments/comments.ts",
     "src/features/comments/actions.ts",
-    "src/features/common/comment-time.js",
-    "src/features/common/comment-anchors.js",
+    "src/features/common/comment-time.ts",
+    "src/features/common/comment-anchors.ts",
     "src/features/common/editable-cell.ts",
     "src/application/comment-author.ts"
   ],

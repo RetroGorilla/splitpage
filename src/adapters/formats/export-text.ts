@@ -10,7 +10,7 @@ import type { SceneFacts } from "./export-projections.ts";
 import { capturedPicture, capturedRowPicture, exportAssetsNow } from "./export-assets.ts";
 import { rowImageDataUrl } from "../storage/02c-blobs.js";
 import { rowImage, rowImageKey } from "../../core/document/media.ts";
-import { videoLinkText } from "../storage/02d-gallery.js";
+import { videoLinkText } from "../storage/02d-gallery.ts";
 import { morePictureRefs, rowVideoLinks, videoLinkLabel } from "../../core/document/gallery.ts";
 import {
   breakdownGroups,
