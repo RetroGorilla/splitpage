@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectTwoColumnFormat, parseImportRows } from "./import-text.js";
+import { detectTwoColumnFormat, parseImportRows } from "./import-text.ts";
 
 for (const [mode, text, expected] of [
   ["paragraph", " First\r\nline \n\n Second ", [{ visualText: "", audioText: "First\nline" }, { visualText: "", audioText: "Second" }]],
