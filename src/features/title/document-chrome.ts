@@ -6,8 +6,9 @@ import { cleanAuthorName } from "../../core/document/people.ts";
 import { PERSON_COLORS, PERSON_COLOR_NAMES } from "../../core/document/person-colors.ts";
 import { targetSectionHtml, wireTargetSection } from "./target-section.ts";
 import type { DocumentChromePorts, DocumentChromeControl } from "./ports.ts";
+import type { DocumentShape } from "../../core/document/validated.ts";
 
-type AnchorPopover = { el: HTMLElement; host: HTMLElement; place: () => void; onOutside: (e: PointerEvent) => void; onKey: (e: KeyboardEvent) => void };
+type AnchorPopover = { el: HTMLElement; host: HTMLElement | null; place: () => void; onOutside: (e: PointerEvent) => void; onKey: (e: KeyboardEvent) => void };
 
 export function startDocumentChrome(ports: DocumentChromePorts) {
   let active = true;
@@ -52,15 +53,15 @@ function closeAnchorPopover(opts?: { keepFocus?: boolean }) {
   window.removeEventListener("resize", p.place);
   window.removeEventListener("scroll", p.place, true);
   p.el.remove();
-  p.host.setAttribute("aria-expanded", "false");
+  (p.host as HTMLElement).setAttribute("aria-expanded", "false");
   if (!(opts && opts.keepFocus) && document.contains(p.host)) {
-    try { p.host.focus({ preventScroll: true }); } catch (e) { p.host.focus(); }
+    try { (p.host as HTMLElement).focus({ preventScroll: true }); } catch (e) { (p.host as HTMLElement).focus(); }
   }
 }
 
-function placeAnchorPopover(el: HTMLElement, host: HTMLElement) {
+function placeAnchorPopover(el: HTMLElement, host: HTMLElement | null) {
   const margin = 8, gap = 6;
-  const r = host.getBoundingClientRect();
+  const r = (host as HTMLElement).getBoundingClientRect();
   const vw = document.documentElement.clientWidth || window.innerWidth;
   const vh = window.innerHeight;
   el.style.maxWidth = (vw - margin * 2) + "px";
@@ -74,10 +75,10 @@ function placeAnchorPopover(el: HTMLElement, host: HTMLElement) {
   el.classList.toggle("is-above", top < r.top);
 }
 
-function openAnchorPopover(host: HTMLElement, id: string, label: string, html: string) {
+function openAnchorPopover(host: HTMLElement | null, id: string, label: string, html: string) {
   const wasOpen = anchorPopover && anchorPopover.el.id === id;
   closeAnchorPopover({ keepFocus: true });
-  if (wasOpen) { host.focus(); return null; }
+  if (wasOpen) { (host as HTMLElement).focus(); return null; }
   const el = document.createElement("div");
   el.id = id;
   el.className = "anchor-popover";
@@ -90,7 +91,7 @@ function openAnchorPopover(host: HTMLElement, id: string, label: string, html: s
     host: host,
     place: function () { placeAnchorPopover(el, host); },
     onOutside: function (e: PointerEvent) {
-      if (el.contains(e.target as Node | null) || host.contains(e.target as Node | null)) return;
+      if (el.contains(e.target as Node | null) || (host as HTMLElement).contains(e.target as Node | null)) return;
       closeAnchorPopover({ keepFocus: true });
     },
     onKey: function (e: KeyboardEvent) {
@@ -101,7 +102,7 @@ function openAnchorPopover(host: HTMLElement, id: string, label: string, html: s
     }
   };
   anchorPopover = p;
-  host.setAttribute("aria-expanded", "true");
+  (host as HTMLElement).setAttribute("aria-expanded", "true");
   p.place();
   document.addEventListener("pointerdown", p.onOutside, true);
   document.addEventListener("keydown", p.onKey, true);
@@ -127,7 +128,7 @@ function personSwatchesHtml(name: string, radioName?: string, legendClass?: stri
 function promptForName() {
   const current = getSavedAuthorName(preferences());
   const host = document.getElementById("identity-chip");
-  const wrap = openAnchorPopover(host as HTMLElement, "identity-editor", "Your name and colour",
+  const wrap = openAnchorPopover(host, "identity-editor", "Your name and colour",
     '<label class="anchor-popover-label" for="identity-input">Your name</label>' +
     '<div class="anchor-popover-row">' +
       '<input type="text" id="identity-input" placeholder="Your name" autocomplete="name" value="' + escapeHtml(current) + '">' +
@@ -169,11 +170,11 @@ function promptForTarget() {
 function openClockPopover(focusOn: string) {
   if (!currentDocument()) return;
   const host = lengthHost();
-  const wrap = openAnchorPopover(host as HTMLElement, "wpm-editor", "Reading speed and target length",
+  const wrap = openAnchorPopover(host, "wpm-editor", "Reading speed and target length",
     '<label class="anchor-popover-label" for="wpm-input">Reading speed</label>' +
     '<div class="anchor-popover-row">' +
       '<input type="number" id="wpm-input" min="60" max="400" step="5" value="' +
-        escapeHtml(String((currentDocument() as { wordsPerMinute?: unknown }).wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute">' +
+        escapeHtml(String((currentDocument() as Partial<Pick<DocumentShape, "wordsPerMinute">>).wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute">' +
       '<span class="anchor-popover-unit">words a minute</span>' +
       '<button type="button" id="wpm-save" class="btn-outline">Set</button>' +
     '</div>' +

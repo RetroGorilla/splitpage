@@ -2,6 +2,10 @@ import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../../shar
 import { saveButtonView, saveStatus } from "../../application/save/status.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import type { SaveStatusPorts, SaveStatusListeners, SaveStatusMount } from "./ports.ts";
+import type { SaveStatusLine } from "../../application/save/status.ts";
+import type { LocalFileHandle } from "../../application/files/local-file-access.ts";
+
+type MutableSaveStatusLine = { -readonly [K in keyof SaveStatusLine]: SaveStatusLine[K] };
 
 let ports: SaveStatusPorts | null = null;
 
@@ -50,7 +54,7 @@ function saveStatusListeners(): SaveStatusListeners {
   };
 }
 
-function savedTitle(where: string) {
+function savedTitle(where: SaveStatusLine["where"]) {
   const when = savedWhenText(savedAt, Date.now(), (ports as SaveStatusPorts).preferences.clock());
   if (when) return "Last saved " + (where ? "to " + where + " " : "") + "at " + when + ".";
   return where ? "Up to date with " + where + "." : "Everything is saved.";
@@ -59,8 +63,8 @@ function savedTitle(where: string) {
 function saveStatusView() {
   const target = (ports as SaveStatusPorts).autoSave.target();
   const place = (ports as SaveStatusPorts).place;
-  const where = place.home().kind === "file" ? ((place.home().handle && (place.home().handle as { name?: string }).name) as string | null | undefined) || ""
-    : place.home().kind === "import" ? (place.home().name as string | undefined) || ""
+  const where = place.home().kind === "file" ? ((place.home().handle && (place.home().handle as Pick<LocalFileHandle, "name">).name) as string | null | undefined) || ""
+    : place.home().kind === "import" ? (place.home().name as string | null | undefined) || ""
     : "";
 
   const autosave = (ports as SaveStatusPorts).autoSave.policy();
@@ -86,7 +90,7 @@ function updateSaveStatus() {
   if (text === "Saved" && lastViewText === "Saving…") savedAt = Date.now();
   else if (text !== "Saved") savedAt = 0;
   lastViewText = text;
-  if (text === "Saved") (view as { title: string; where: string }).title = savedTitle((view as { where: string }).where);
+  if (text === "Saved") (view as MutableSaveStatusLine).title = savedTitle((view as MutableSaveStatusLine).where);
   ["save-status", "wr-save-status"].forEach(function (id) {
     const el = document.getElementById(id);
     if (!el) return;
