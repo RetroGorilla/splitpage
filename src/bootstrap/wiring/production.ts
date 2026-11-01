@@ -1,5 +1,5 @@
 import { mountBrollPanelFeature } from "./broll.ts";
-import { startTagPanels as mountPanelState } from "../../features/tags/panels.js";
+import { startTagPanels as mountPanelState } from "../../features/tags/panels.ts";
 import type { TagPanelMount, TagPanelPorts } from "../../features/tags/ports.ts";
 import { tagPanelActions as panelDefinitions } from "../../features/tags/actions.ts";
 import * as tagPanelCommands from "../../application/tag-panel-commands.ts";
@@ -54,7 +54,7 @@ import {
   toggleCardSelection,
   setTagOwner,
   setTagNotes
-} from "../../features/tags/panels.js";
+} from "../../features/tags/panels.ts";
 import { queueAutoSave } from "./save-owners.ts";
 import { bulkTagRows } from "./production-index.ts";
 import { localFileMenuControls } from "./local-files.ts";

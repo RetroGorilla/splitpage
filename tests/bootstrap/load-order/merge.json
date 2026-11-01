@@ -5,8 +5,8 @@
     "src/application/session/session-merge.js",
     "src/bootstrap/wiring/session-merge.ts",
     "src/features/history/panel.js",
-    "src/features/title/document-chrome.js",
-    "src/features/title/target-section.js"
+    "src/features/title/document-chrome.ts",
+    "src/features/title/target-section.ts"
   ],
   "expectedLoads": 7
 }
