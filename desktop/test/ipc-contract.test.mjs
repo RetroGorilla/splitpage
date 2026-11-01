@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { compileFixtures } from "../../tools/ts-fixtures.mjs";
 
 const configPath = fileURLToPath(new URL("../../tsconfig.desktop.json", import.meta.url));
 const fixture = fileURLToPath(new URL("../ipc-contract-check.ts", import.meta.url)).replaceAll("\\", "/");
@@ -186,4 +188,21 @@ for (const expected of CASES) {
   assert.ok(ts.flattenDiagnosticMessageText(error.messageText, " ").includes(expected.about), expected.source);
 }
 
-console.log("ALL PASS (strict IPC arguments, results, directions and contract coverage)");
+const preloadPath = "desktop/preload.ts";
+const preloadSource = readFileSync(new URL("../preload.ts", import.meta.url), "utf8");
+function preloadDiagnostics(source) {
+  return ts.getPreEmitDiagnostics(compileFixtures({ [preloadPath]: source }, { config: "tsconfig.desktop.json" }).program);
+}
+assert.deepEqual(preloadDiagnostics(preloadSource), []);
+const brokenReviver = preloadSource.replace('entry = { ...entry, bytes: new Uint8Array(entry.bytes) };', 'entry = { ...entry, bytes: "wrong" };');
+assert.notEqual(brokenReviver, preloadSource);
+const reviverErrors = preloadDiagnostics(brokenReviver);
+assert.equal(reviverErrors.length, 1);
+const reviverError = reviverErrors[0];
+assert.ok(reviverError.file?.fileName.replaceAll("\\", "/").endsWith("/" + preloadPath));
+assert.equal(reviverError.code, 2322);
+assert.equal(reviverError.start, brokenReviver.indexOf('bytes: "wrong"'));
+assert.equal(reviverError.length, "bytes".length);
+assert.ok(ts.flattenDiagnosticMessageText(reviverError.messageText, " ").includes("Uint8Array"));
+
+console.log("ALL PASS (strict IPC arguments, results, directions, contract coverage and file revival)");

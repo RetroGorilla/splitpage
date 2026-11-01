@@ -89,7 +89,9 @@ if (location.origin === "splitpage://app") {
       );
   });
 
-  function reviveFileEntry                                   (entry   )    {
+                                                                      
+                                                                                    
+  function reviveFileEntry(entry                         )                          {
     if (entry && entry.bytes && !(entry.bytes instanceof Uint8Array)) {
       entry = { ...entry, bytes: new Uint8Array(entry.bytes) };
     }
@@ -131,7 +133,7 @@ if (location.origin === "splitpage://app") {
     },
 
     readFile(id) {
-      return invoke("splitpage:read-file", id).then(reviveFileEntry);
+      return invoke("splitpage:read-file", id).then                  (reviveFileEntry);
     },
 
     writeFile(id, data) {
