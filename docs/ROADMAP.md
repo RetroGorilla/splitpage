@@ -1,6 +1,6 @@
 # Roadmap
 
-What is left for Splitpage 4.1 and the order it runs in. Checked on 2026-10-31 at `32dbcca9`. "4.1" is the internal name for this work (the `4.1-development` branch); it ships publicly as **4.0.0** (Adam, 2026-10-30). Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
+What is left for Splitpage 4.1 and the order it runs in. Checked on 2026-10-31 at `5f20908c`. "4.1" is the internal name for this work (the `4.1-development` branch); it ships publicly as **4.0.0** (Adam, 2026-10-30). Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
 
 ## Where it stands
 
@@ -27,6 +27,7 @@ Groups A, B and C below are done. Every queue task from AQ-1 to AQ-46 is merged 
 | I-31 | Section Headers: divider rows between scenes, with a name and a running total; double Backspace removes a header. Model, editor, then print, PDF, Word, Markdown, rundown and Present output | #1028, #1029, #1031 |
 | I-32 | The first save takes the script title, and a version tag such as "v3", from the file name | #1027 |
 | I-33 | The tag button with nothing selected starts an open tag at the cursor | #1026 |
+| Fixes | Desktop smoke no longer flakes on the moved-file "asks again" group: the test waits for the file to open before moving it (#1035). Row merge keeps a scene reorder made on one side when the other side did not reorder (#1030) | #1038, #1040 |
 | | Also merged: Unicode PDF font (AQ-16), PDF text and JPEG fixes (AQ-15), release needs green CI (AQ-20), real-app tests on PRs (AQ-21), startup failure screen (AQ-22), CI uploads the built app on pushes only (#1032). Reports AQ-6 and AQ-14 read and closed by Adam | #969, #961, #963, #964, #965, #1032, #1001, #950 |
 
 ## Still to do for 4.1
@@ -34,9 +35,9 @@ Groups A, B and C below are done. Every queue task from AQ-1 to AQ-46 is merged 
 | Item | What | State | Adam's input |
 | --- | --- | --- | --- |
 | C4 | Files over 1,000 lines and the remaining JavaScript files, only when a change touches them (rule 11) | As touched | none |
-| #1035 | Desktop smoke: the moved-file "asks again" group (#496) fails on most first runs on the hosted runner | In progress | none |
 | AQ-37 check | Real-microphone check of desktop voice (#1016), `WINDOWS-CHECKS.md` §3 | Waiting | Run it on his PC |
-| #1030 | Row merge: a one-sided scene reorder can come back in a different order (pre-existing; merge is protected) | Filed | Whether to fix it for 4.1 |
+| #1041 | Row merge: a malformed file with duplicate row ids can lose or repeat a row (pre-existing; merge is protected) | Filed | Whether to fix it for 4.1 |
+| #1039 | `perf-ab`'s images fixture calls a removed test hook, so the default run stops; `--only short,long` works | Filed | none |
 | #1023 | Notes handwriting lines in printed PDFs are too close together | Parked by Adam for the later PDF layout work | none |
 
 "Protected" means the task touches a protected path in [AGENT-QUEUE.md](AGENT-QUEUE.md#autonomous-run-rules), so it gets an independent review and the PC checks, then stops for Adam's merge.
