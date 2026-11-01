@@ -10,7 +10,7 @@
 # nothing selected, B/I/U applies to what is typed next. A cell still
 # holding a picture (none does since design D7) is left alone: nothing
 # edits it behind the model's back. A comment composer is not a document
-# cell but goes through the model too (05d-draft-edit.js; its own suite is
+# cell but goes through the model too (05d-draft-edit.ts; its own suite is
 # 81-draft-edit.txt). The pure core is src/test/doc-model.test.mjs ("the
 # editor's formatting edits").
 #
