@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/editing/cell-reach.js",
+    "src/features/editing/cell-reach.ts",
     "src/bootstrap/wiring/editor.ts",
     "src/features/editing/draft-edit.ts",
     "src/bootstrap/wiring/draft-edit.ts"

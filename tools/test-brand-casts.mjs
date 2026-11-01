@@ -92,7 +92,17 @@ const FORGED = [
   ["use(((() => raw) as () => never)())", NEVER_OUT],
   ["async () => use(await (raw as Promise<never>))", ASSERTION],
   ["Array.from(raw as never[]).map(use)", ASSERTION],
-  ["raw as never[] | null", ASSERTION]
+  ["raw as never[] | null", ASSERTION],
+  ["(shape as DocumentShape | null) as ValidatedDocument", ASSERTION],
+  ["(raw as (() => DocumentShape) | null) as () => ValidatedDocument", ASSERTION],
+  ["undefined as unknown as () => ValidatedDocument", ASSERTION],
+  ["(null as never) as ValidatedDocument", ASSERTION],
+  ["(raw as null) as never as ValidatedDocument", ASSERTION],
+  ["(raw as void) as never as ValidatedDocument", ASSERTION],
+  ["((raw as null) as ValidatedDocument | null) as ValidatedDocument", ASSERTION],
+  ["((raw as undefined) as Alias | undefined) as Alias", ASSERTION],
+  ["undefined as ValidatedDocument | undefined", ASSERTION],
+  ["null as never", ASSERTION]
 ].map(([e, what], i) => [`export const f${i} = ${e};`, what]).concat([
   ["export const inferred: ValidatedDocument = launder(raw);", CALL],
   ["export function isDoc(x: unknown): x is ValidatedDocument { return !!x; }", PREDICATE],
@@ -104,6 +114,10 @@ const FORGED = [
   ["export class Guard {\n  isDoc(): this is ValidatedDocument { return false; }\n}", PREDICATE, 1],
   ["export function assertDoc(x: unknown): asserts x is Alias { if (!x) throw new Error(\"no\"); }", PREDICATE],
   ["export function generic<T extends ValidatedDocument>(x: unknown): T { return x as T; }", ASSERTION],
+  ["export function voidForge(x: ValidatedDocument | void): ValidatedDocument { return x as ValidatedDocument; }", ASSERTION],
+  ["export function voidGeneric<T extends ValidatedDocument | void>(x: T): ValidatedDocument { return x as ValidatedDocument; }", ASSERTION],
+  ["export function voidMixed(x: ValidatedDocument | (void & {})): ValidatedDocument { return x as ValidatedDocument; }", ASSERTION],
+  ["export function isVoidDoc(x: ValidatedDocument | void): x is ValidatedDocument { return !!x; }", PREDICATE],
   ["export function overload(x: unknown): ValidatedDocument;\nexport function overload(x: unknown): unknown { return x; }", BODILESS],
   ["declare function made(x: unknown): Holder;", BODILESS],
   ["declare const ambient: ValidatedDocument;", DECLARED],
@@ -162,7 +176,11 @@ const ALLOWED = [
   "export const a38 = raw as Store<never>;",
   "export function narrowed(o: { k: \"a\" | \"b\" }): string { if (o.k === \"a\") return \"a\"; if (o.k === \"b\") return \"b\"; return String(o.k); }",
   "export const a39 = ((() => \"x\") as () => string)();",
-  "export class Built { doc: ValidatedDocument; constructor() { this.doc = migrateRows(raw, ports); } }"
+  "export class Built { doc: ValidatedDocument; constructor() { this.doc = migrateRows(raw, ports); } }",
+  "export function a40(slot: ValidatedDocument | null): ValidatedDocument { return slot as ValidatedDocument; }",
+  "export function a41(reader: (() => ValidatedDocument) | null): ValidatedDocument { return (reader as NonNullable<typeof reader>)(); }",
+  "export const a43 = (): ValidatedDocument => fail() as ValidatedDocument;",
+  "export function a42(held: { read(): ValidatedDocument } | undefined): ValidatedDocument { return (held as { read(): ValidatedDocument }).read(); }"
 ];
 
 const KNOWN_GAPS = [
