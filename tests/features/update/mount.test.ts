@@ -2,7 +2,7 @@ import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../../src/adapters/desktop/desktop-port.ts";
-import type { DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
+import type { DesktopPort, DesktopTestPort } from "../../../src/adapters/desktop/desktop-port.ts";
 import { updates as updatesPort } from "../../../src/bootstrap/wiring/update.ts";
 import type { UpdatePorts, UpdateStatus } from "../../../src/features/update/ports.ts";
 import { mountUpdate } from "../../../src/features/update/update.ts";
@@ -129,13 +129,13 @@ test("update ports can be wired before mounting and delegate every call and list
   const heard: UpdateStatus[] = [];
   const subscribed: Parameters<DesktopPort["onUpdateStatus"]>[0][] = [];
   const listener = (value: UpdateStatus): void => { heard.push(value); };
-  const first: Partial<DesktopPort> = {
+  const first: DesktopTestPort = {
     getUpdateStatus: () => { calls.push("first:status"); return Promise.resolve(status); },
     onUpdateStatus: (callback) => { calls.push("first:onStatus"); subscribed.push(callback); },
     downloadUpdate: () => { calls.push("first:download"); return Promise.resolve(downloadResult); },
     installUpdate: () => { calls.push("first:install"); return Promise.resolve(installResult); }
   };
-  const second: Partial<DesktopPort> = {
+  const second: DesktopTestPort = {
     getUpdateStatus: () => { calls.push("second:status"); return Promise.resolve(nextStatus); },
     onUpdateStatus: (callback) => { calls.push("second:onStatus"); subscribed.push(callback); },
     downloadUpdate: () => { calls.push("second:download"); return Promise.resolve(nextDownloadResult); },

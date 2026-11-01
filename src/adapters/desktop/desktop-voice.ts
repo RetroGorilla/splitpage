@@ -1,4 +1,4 @@
-import type { DesktopPort, DesktopResult } from "./desktop-port.ts";
+import type { DesktopPort } from "./desktop-port.ts";
 import type { PrompterRecognition } from "../../application/prompter-services.ts";
 
 type DesktopRecognition = PrompterRecognition & {
@@ -131,7 +131,7 @@ export function createDesktopRecognition() {
       activeDesktopRecognition = rec;
       Promise.resolve()
         .then(function () { return (bridge as DesktopPort).voiceStart(); })
-        .catch(function (): DesktopResult { return { ok: false, code: "SPAWN_FAILED" }; })
+        .catch(function (): Awaited<ReturnType<DesktopPort["voiceStart"]>> { return { ok: false, code: "SPAWN_FAILED" }; })
         .then(function (answer) {
           if (!rec._running || activeDesktopRecognition !== rec) {
             if (answer && answer.ok) (bridge as DesktopPort).voiceStop();

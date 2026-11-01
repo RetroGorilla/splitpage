@@ -13,7 +13,7 @@ export interface UpdateStatus {
   readonly updateAvailable?: boolean;
   readonly canInstall?: boolean;
   readonly checking?: boolean;
-  readonly error?: string | null;
+  readonly error?: string | null | undefined;
   readonly download?: {
     readonly state: "idle" | "downloading" | "ready" | "failed";
     readonly received?: number;

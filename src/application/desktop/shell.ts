@@ -14,7 +14,8 @@ export interface DesktopReassign {
 export interface DesktopAnswer {
   readonly ok?: boolean;
   readonly code?: string;
-  readonly [key: string]: unknown;
+  readonly browser?: string;
+  readonly voice?: string;
 }
 
 export interface DesktopShell {

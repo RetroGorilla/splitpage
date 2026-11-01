@@ -3,7 +3,7 @@ export interface LaunchFacts {
   readonly hadPriorSession: () => boolean | undefined;
   readonly launchIntent: () => { readonly type: string } | undefined;
   readonly hasDraftToRestore: () => boolean | undefined;
-  readonly appVersion: () => string | undefined;
+  readonly appVersion: () => string | null | undefined;
 }
 
 export interface ExternalLinks {
