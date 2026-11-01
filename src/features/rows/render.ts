@@ -22,7 +22,7 @@ import { exposeTestHook } from "../common/test-hooks.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import { slotPoster } from "../common/gallery.ts";
-import { rowMotionKey, withRowMotion } from "./row-motion.js";
+import { rowMotionKey, withRowMotion } from "./row-motion.ts";
 import { formatTimestamp } from "../common/comment-time.ts";
 import { idMap } from "../../core/document/id-map.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";

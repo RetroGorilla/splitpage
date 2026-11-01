@@ -10,6 +10,13 @@ import { idMap } from "../../core/document/id-map.ts";
 import { safeImageSrc } from "../../core/document/text-policy.ts";
 import { pad2 } from "../../core/production/timing.ts";
 import { cloneState } from "../../core/document/clone.ts";
+import type { MergeReviewControl, MergeReviewPorts } from "./ports.ts";
+import type { Home } from "../../application/location/document-location.ts";
+import type { DocumentShape, DocumentRow, DocumentShot, ValidatedDocument } from "../../core/document/validated.ts";
+import type { Frozen } from "../../core/document/freeze.ts";
+
+type MergeReviewDocument = Frozen<Pick<DocumentShape, "docId" | "title" | "rows" | "productionTags" | "brollShots" | "people">>;
+type MergeCandidate = { theirs: ValidatedDocument; base: unknown; home: Home | null; fileName: string; lastModified: number | null };
 import {
   mergeDiffPairHtml,
   mergeFieldOutcome,
@@ -19,41 +26,45 @@ import {
   mergeRowFate
 } from "../../core/merge/review.ts";
 
-var ports = null;
-var mergeCandidate = null;
-var mergeProbeToken = 0;
+type MergeReviewDecision = { outcome: ReturnType<typeof mergeTextField>["outcome"] | ReturnType<typeof mergeFieldOutcome>; marks?: ReturnType<typeof mergeTextField>["marks"] };
+type MergeReviewEntry = Omit<ReturnType<typeof mergeListEntries>[number], "outcome"> & { outcome: ReturnType<typeof mergeListEntries>[number]["outcome"] | ReturnType<typeof mergeFieldOutcome>; text?: ReturnType<typeof mergeDiffPairHtml>["mine"] | undefined };
+type MergeReviewGroup = Pick<MergeReviewEntry, "label"> & { entries: MergeReviewEntry[]; note?: ReturnType<typeof mergeRowFate> };
 
-function currentDocument() { return ports.document.current(); }
-function mergeBase() { return ports.session.mergeBase(); }
-function fileHome() { return ports.place.fileHome(); }
-function amendHome(record, fields) { return ports.homes.amendHome(record, fields); }
-function migrateRows(raw) { return ports.entry.migrate(raw); }
-function blobImgHtml(ref, cls) { return ports.pictures.imgHtml(ref, cls); }
-function textMergeContext(base, mine, theirs) { return ports.textMergeContext(base, mine, theirs); }
-function parseProjectFileState(file, opts) { return ports.files.parse(file, opts); }
-function fileConflicts() { return ports.conflicts; }
-function applyStashedWork(disk, work, options) { return ports.recovery.applyStashedWork(disk, work, options); }
-function htmlToPlainText(html) { return ports.text.htmlToPlainText(html); }
+let ports: MergeReviewPorts | null = null;
+let mergeCandidate: MergeCandidate | null = null;
+let mergeProbeToken = 0;
 
-function fileMergeBase(home) {
+function currentDocument() { return (ports as MergeReviewPorts).document.current(); }
+function mergeBase() { return (ports as MergeReviewPorts).session.mergeBase(); }
+function fileHome() { return (ports as MergeReviewPorts).place.fileHome(); }
+function amendHome(record: Parameters<MergeReviewPorts["homes"]["amendHome"]>[0], fields: Parameters<MergeReviewPorts["homes"]["amendHome"]>[1]) { return (ports as MergeReviewPorts).homes.amendHome(record, fields); }
+function migrateRows(raw: Parameters<MergeReviewPorts["entry"]["migrate"]>[0]) { return (ports as MergeReviewPorts).entry.migrate(raw); }
+function blobImgHtml(ref: Parameters<MergeReviewPorts["pictures"]["imgHtml"]>[0], cls: Parameters<MergeReviewPorts["pictures"]["imgHtml"]>[1]) { return (ports as MergeReviewPorts).pictures.imgHtml(ref, cls); }
+function textMergeContext(base: unknown, mine: unknown, theirs: unknown) { return (ports as MergeReviewPorts).textMergeContext(base, mine, theirs); }
+function parseProjectFileState(file: unknown, opts: Parameters<MergeReviewPorts["files"]["parse"]>[1]) { return (ports as MergeReviewPorts).files.parse(file, opts); }
+function fileConflicts() { return (ports as MergeReviewPorts).conflicts; }
+function applyStashedWork(disk: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[0], work: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[1], options: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[2]) { return (ports as MergeReviewPorts).recovery.applyStashedWork(disk, work, options); }
+function htmlToPlainText(html: Parameters<MergeReviewPorts["text"]["htmlToPlainText"]>[0]) { return (ports as MergeReviewPorts).text.htmlToPlainText(html); }
+
+function fileMergeBase(home: Home | null | undefined) {
   if (home && home.diskBase) return home.diskBase;
   if (home && home === fileHome() && mergeBase() && currentDocument() &&
-      normalizeDocId(mergeBase().docId) === normalizeDocId(currentDocument().docId)) return mergeBase();
+      normalizeDocId((mergeBase() as MergeReviewDocument).docId) === normalizeDocId((currentDocument() as Pick<MergeReviewDocument, "docId">).docId)) return mergeBase();
   return null;
 }
 
 function resetMergeOffer() {
   mergeCandidate = null;
   mergeProbeToken++;
-  var btn = document.getElementById("file-conflict-merge");
+  const btn = document.getElementById("file-conflict-merge");
   if (btn) btn.hidden = true;
 }
 
-async function offerFileMerge(currentFile, home) {
+async function offerFileMerge(currentFile: Parameters<MergeReviewControl["offer"]>[0], home: Parameters<MergeReviewControl["offer"]>[1]) {
   resetMergeOffer();
-  var token = mergeProbeToken;
+  const token = mergeProbeToken;
   if (!currentFile || !currentDocument()) return;
-  var parsed;
+  let parsed;
   try {
     parsed = await parseProjectFileState(currentFile, { noAsk: true });
   } catch (e) {
@@ -62,9 +73,9 @@ async function offerFileMerge(currentFile, home) {
   if (token !== mergeProbeToken) return;
   if (!parsed || parsed.error || !parsed.state) return;
 
-  var theirs = parsed.state;
-  var base = fileMergeBase(home);
-  var refId = normalizeDocId((base && base.docId) || currentDocument().docId);
+  const theirs = parsed.state;
+  const base = fileMergeBase(home);
+  const refId = normalizeDocId((base && (base as Pick<MergeReviewDocument, "docId">).docId) || (currentDocument() as Pick<MergeReviewDocument, "docId">).docId);
   if (parsed.docIdEmbedded && refId && normalizeDocId(theirs.docId) !== refId) return;
   if (refId) theirs.docId = refId;
 
@@ -75,11 +86,11 @@ async function offerFileMerge(currentFile, home) {
     fileName: currentFile.name || "",
     lastModified: currentFile.lastModified || null
   };
-  var btn = document.getElementById("file-conflict-merge");
+  const btn = document.getElementById("file-conflict-merge");
   if (btn) btn.hidden = false;
 }
 
-var MERGE_OUTCOME_TEXT = {
+const MERGE_OUTCOME_TEXT = {
   theirs: "The file's version is taken",
   mine: "Your version is kept",
   conflict: "Changed on both sides — the file's version goes live, yours is kept as a comment",
@@ -89,45 +100,45 @@ var MERGE_OUTCOME_TEXT = {
   both: "Both sides are kept"
 };
 
-function mergeFieldText(row, field) {
+function mergeFieldText(row: DocumentRow | null, field: string) {
   if (!row) return "";
   return htmlToPlainText(row[field] || "");
 }
 
-function mergeStatusLabel(id) {
-  var s = rowStatus(id);
+function mergeStatusLabel(id: unknown) {
+  const s = rowStatus(id);
   return s ? s.label : "To do";
 }
 
-function mergeDiffModel(base, mine, theirs) {
-  var groups = [];
-  var b = base || null;
+function mergeDiffModel(base: unknown, mine: MergeReviewDocument | null, theirs: MergeReviewDocument) {
+  const groups: MergeReviewGroup[] = [];
+  const b = base || null;
 
-  var mineTitle = mine.title || "", theirTitle = theirs.title || "";
+  const mineTitle = (mine as MergeReviewDocument).title || "", theirTitle = theirs.title || "";
   if (mineTitle !== theirTitle) {
-    var titlePair = mergeDiffPairHtml(mineTitle, theirTitle);
+    const titlePair = mergeDiffPairHtml(mineTitle, theirTitle);
     groups.push({ label: "Title", entries: [{
       label: "Script title",
-      outcome: mergeFieldOutcome(b ? (b.title || "") : null, mineTitle, theirTitle),
+      outcome: mergeFieldOutcome(b ? ((b as MergeReviewDocument).title || "") : null, mineTitle, theirTitle),
       mineHtml: titlePair.mine,
       theirsHtml: titlePair.theirs
     }] });
   }
 
-  var baseRows = byId(b && b.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
-  var textCtx = textMergeContext(b, mine, theirs);
-  var order = [], seen = idMap(), sceneNo = idMap();
+  const baseRows = byId(b && (b as MergeReviewDocument).rows), mineRows = byId((mine as MergeReviewDocument).rows), theirRows = byId(theirs.rows);
+  const textCtx = textMergeContext(b, mine, theirs);
+  const order: string[] = [], seen = idMap<boolean>(), sceneNo = idMap<number>();
   theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; });
-  mine.rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; } });
+  (mine as MergeReviewDocument).rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; } });
 
   order.forEach(function (id) {
-    var m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
-    var entries = [];
+    const m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
+    const entries: MergeReviewEntry[] = [];
     ROW_FIELDS.forEach(function (f) {
       if (GALLERY_FIELDS[f]) {
         if (rowFieldKey(m, f) === rowFieldKey(t, f)) return;
-        var gm = mergeGallerySummary(m, f), gt = mergeGallerySummary(t, f);
-        var gPair = mergeDiffPairHtml(gm, gt);
+        const gm = mergeGallerySummary(m, f), gt = mergeGallerySummary(t, f);
+        const gPair = mergeDiffPairHtml(gm, gt);
         entries.push({
           label: f === "imageLinks" ? "Video links" : "More pictures",
           outcome: "both",
@@ -137,7 +148,7 @@ function mergeDiffModel(base, mine, theirs) {
         return;
       }
       if (f === "imageRef") {
-        var mi = rowImageKey(m), ti = rowImageKey(t);
+        const mi = rowImageKey(m), ti = rowImageKey(t);
         if (mi === ti) return;
         entries.push({
           label: "Visual image",
@@ -147,14 +158,14 @@ function mergeDiffModel(base, mine, theirs) {
         });
         return;
       }
-      var decided = m && t
+      const decided: MergeReviewDecision = m && t
         ? mergeTextField(bb ? (bb[f] || "") : undefined, m[f], t[f], textCtx)
         : { outcome: mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null) };
-      var outcome = decided.outcome;
+      const outcome = decided.outcome;
       if (outcome === "same" || outcome === null) return;
-      var mv = mergeFieldText(m, f), tv = mergeFieldText(t, f);
+      const mv = mergeFieldText(m, f), tv = mergeFieldText(t, f);
       if (mv === tv && outcome !== "conflict") return;
-      var pair = mergeDiffPairHtml(mv, tv);
+      const pair = mergeDiffPairHtml(mv, tv);
       entries.push({
         label: f === "audioText" ? "Audio" : "Visual",
         outcome: outcome,
@@ -164,53 +175,53 @@ function mergeDiffModel(base, mine, theirs) {
       });
     });
     if (m && t && m.status !== t.status) {
-      var statusPair = mergeDiffPairHtml(mergeStatusLabel(m.status), mergeStatusLabel(t.status));
+      const statusPair = mergeDiffPairHtml(mergeStatusLabel(m.status), mergeStatusLabel(t.status));
       entries.push({ label: "Status", outcome: "status", mineHtml: statusPair.mine, theirsHtml: statusPair.theirs });
     }
     if (!entries.length) return;
-    groups.push({ label: "Scene " + pad2(sceneNo[id]), note: mergeRowFate(bb, m, t), entries: entries });
+    groups.push({ label: "Scene " + pad2(sceneNo[id] as number), note: mergeRowFate(bb, m, t), entries: entries });
   });
 
-  var tagEntries = mergeListEntries("Breakdown", mine.productionTags, theirs.productionTags,
+  const tagEntries = mergeListEntries("Breakdown", (mine as MergeReviewDocument).productionTags, theirs.productionTags,
     function (t) { return t.id || registryKey(t.cat, t.name); },
-    function (t) { var c = tagCategory(t.cat); return (c ? c.label + " " : "") + t.name; },
+    function (t) { const c = tagCategory(t.cat); return (c ? c.label + " " : "") + t.name; },
     function (t) {
-      var st = tagStatus(t.status);
+      const st = tagStatus(t.status);
       return mergeItemSummary([t.name, st ? st.label : "Needed", t.owner, t.notes]);
     });
   if (tagEntries.length) groups.push({ label: "Production breakdown", entries: tagEntries });
 
-  var peopleEntries = mergeListEntries("Crew", mine.people, theirs.people,
+  const peopleEntries = mergeListEntries("Crew", (mine as MergeReviewDocument).people, theirs.people,
     function (p) { return normalizeTagName(p.name); },
     function (p) { return p.name; },
     function (p) { return p.name; });
   if (peopleEntries.length) groups.push({ label: "Crew", entries: peopleEntries });
 
-  var brollEntries = mergeListEntries("B-roll", mine.brollShots, theirs.brollShots,
+  const brollEntries = mergeListEntries("B-roll", (mine as MergeReviewDocument).brollShots, theirs.brollShots,
     function (s) { return s.id; },
     function (s) { return s.name || "Shot"; },
     function (s) {
       return mergeItemSummary([s.name, s.desc, s.location, s.owner, s.audioRef, s.notes,
         s.status === "shot" ? "Shot" : "To shoot", s.reshoot ? "Flagged" : "",
-        (Array.isArray(s.props) ? s.props : []).map(function (p) { return p && p.name; }).filter(Boolean).join(", ")]);
+        (Array.isArray(s.props) ? s.props : []).map(function (p: NonNullable<DocumentShot["props"]>[number]) { return p && p.name; }).filter(Boolean).join(", ")]);
     });
   if (brollEntries.length) groups.push({ label: "B-roll", entries: brollEntries });
 
   return groups;
 }
 
-function mergeDiffImageHtml(row) {
-  var img = rowImage(row);
+function mergeDiffImageHtml(row: DocumentRow | null) {
+  const img = rowImage(row);
   if (img && img.ref) return blobImgHtml(img.ref, "diff-img");
-  var ok = img ? safeImageSrc(img.dataUrl) : null;
+  const ok = img ? safeImageSrc(img.dataUrl) : null;
   return ok ? '<img class="diff-img" src="' + escapeHtml(ok) + '" alt="">'
             : '<em class="diff-empty">(no image)</em>';
 }
 
-function mergeEntryHtml(e) {
+function mergeEntryHtml(e: ReturnType<typeof mergeDiffModel>[number]["entries"][number]) {
   return '<div class="merge-entry" data-outcome="' + escapeHtml(e.outcome || "both") + '">' +
     '<div class="merge-entry-head">' + escapeHtml(e.label) +
-      '<span class="merge-entry-outcome">' + escapeHtml(e.text || MERGE_OUTCOME_TEXT[e.outcome] || "") + "</span></div>" +
+      '<span class="merge-entry-outcome">' + escapeHtml(e.text || MERGE_OUTCOME_TEXT[e.outcome as keyof typeof MERGE_OUTCOME_TEXT] || "") + "</span></div>" +
     '<div class="merge-sides">' +
       '<div class="merge-side"><div class="merge-side-head">Open here</div>' +
         '<div class="merge-side-body">' + e.mineHtml + "</div></div>" +
@@ -219,7 +230,7 @@ function mergeEntryHtml(e) {
     "</div></div>";
 }
 
-function mergeGroupHtml(g) {
+function mergeGroupHtml(g: ReturnType<typeof mergeDiffModel>[number]) {
   return '<div class="merge-group">' +
     '<div class="merge-group-head">' + escapeHtml(g.label) +
       (g.note ? '<span class="merge-group-note">' + escapeHtml(g.note) + "</span>" : "") + "</div>" +
@@ -229,9 +240,9 @@ function mergeGroupHtml(g) {
 
 function openMergeReview() {
   if (!mergeCandidate || !currentDocument()) return;
-  var groups = mergeDiffModel(mergeCandidate.base, currentDocument(), mergeCandidate.theirs);
-  var count = groups.reduce(function (n, g) { return n + g.entries.length; }, 0);
-  document.getElementById("merge-review-detail").textContent = count
+  const groups = mergeDiffModel(mergeCandidate.base, currentDocument(), mergeCandidate.theirs);
+  const count = groups.reduce(function (n, g) { return n + g.entries.length; }, 0);
+  (document.getElementById("merge-review-detail") as HTMLElement).textContent = count
     ? (count === 1 ? "One field differs" : count + " fields differ") +
       " between " + (mergeCandidate.fileName || "the file on disk") + " and what you have open" +
       (mergeCandidate.base ? "" : ", and there is no earlier version of this file to compare both against, " +
@@ -239,29 +250,29 @@ function openMergeReview() {
       ". Nothing is written until you merge."
     : "Nothing differs between " + (mergeCandidate.fileName || "the file on disk") +
       " and what you have open.";
-  document.getElementById("merge-review-list").innerHTML = count
+  (document.getElementById("merge-review-list") as HTMLElement).innerHTML = count
     ? groups.map(mergeGroupHtml).join("")
     : '<div class="comments-empty">The two versions say the same thing.</div>';
-  document.getElementById("file-conflict-modal").hidden = true;
-  document.getElementById("merge-review-modal").hidden = false;
-  document.getElementById("merge-review-confirm").focus();
+  (document.getElementById("file-conflict-modal") as HTMLElement).hidden = true;
+  (document.getElementById("merge-review-modal") as HTMLElement).hidden = false;
+  (document.getElementById("merge-review-confirm") as HTMLElement).focus();
 }
 
 function cancelMergeReview() {
-  document.getElementById("merge-review-modal").hidden = true;
-  document.getElementById("merge-review-list").innerHTML = "";
-  if (mergeCandidate) document.getElementById("file-conflict-modal").hidden = false;
+  (document.getElementById("merge-review-modal") as HTMLElement).hidden = true;
+  (document.getElementById("merge-review-list") as HTMLElement).innerHTML = "";
+  if (mergeCandidate) (document.getElementById("file-conflict-modal") as HTMLElement).hidden = false;
 }
 
 function confirmFileMerge() {
-  var cand = mergeCandidate;
+  const cand = mergeCandidate;
   if (!cand || !currentDocument()) { cancelMergeReview(); return; }
-  document.getElementById("merge-review-modal").hidden = true;
-  document.getElementById("merge-review-list").innerHTML = "";
+  (document.getElementById("merge-review-modal") as HTMLElement).hidden = true;
+  (document.getElementById("merge-review-list") as HTMLElement).innerHTML = "";
   fileConflicts().close();
 
-  var diskCopy = cloneState(cand.theirs);
-  var prevDocId = currentDocument().docId;
+  const diskCopy = cloneState(cand.theirs);
+  const prevDocId = (currentDocument() as Pick<MergeReviewDocument, "docId">).docId;
   if (cand.home) {
     amendHome(cand.home, cand.lastModified
       ? { diskBase: diskCopy, lastModified: cand.lastModified }
@@ -284,9 +295,9 @@ function confirmFileMerge() {
   mergeCandidate = null;
 }
 
-export function startLocalMerge(given) {
+export function startLocalMerge(given: MergeReviewPorts) {
   ports = given;
-  var disposed = false;
+  let disposed = false;
   return {
     offer: offerFileMerge,
     reset: resetMergeOffer,

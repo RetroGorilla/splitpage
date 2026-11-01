@@ -1,5 +1,5 @@
 # Alt+Up / Alt+Down move the scene the caret is in one place earlier or
-# later (issue #24): swapAdjacent() in features/rows/scenes.js (undone since #85 by the document-wide undo, 12a-undo.js), reusing
+# later (issue #24): swapAdjacent() in features/rows/scenes.ts (undone since #85 by the document-wide undo, 12a-undo.js), reusing
 # the exact record-and-sync path moveRowTo() (drag-reorder) already uses.
 # Covers both #rows and the writer, no wrap at either end, one Ctrl+Z undo
 # step, tags/status/comments travelling with the scene, the production

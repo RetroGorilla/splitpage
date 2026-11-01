@@ -56,6 +56,7 @@ export type DocumentShape = {
   targetSeconds?: number | undefined;
   rows: DocumentRow[];
   comments: DocumentComment[];
+  people: { id: string; name: string; [key: string]: unknown }[];
   productionTags: (DocumentTag | null | undefined)[];
   brollShots: DocumentShot[];
   [key: string]: unknown;

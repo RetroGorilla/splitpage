@@ -1,6 +1,6 @@
 # Document identity
 
-The identity owner is in `src/application/identity/document-identity.js`. Its wiring creates it at the old 02b initializer slot, after page entry, scene status and shot hiding, before blobs, gallery and sync. Importing it creates nothing. Its methods and identity port refuse before start and after stop; stop closes the cross-tab channel. Pending history copies remain unawaited, but a late failure cannot display a notice after that owner stops.
+The identity owner is in `src/application/identity/document-identity.ts`. Its wiring creates it at the old 02b initializer slot, after page entry, scene status and shot hiding, before blobs, gallery and sync. Importing it creates nothing. Its methods and identity port refuse before start and after stop; stop closes the cross-tab channel. Pending history copies remain unawaited, but a late failure cannot display a notice after that owner stops.
 
 ## Responsibilities and ports
 
