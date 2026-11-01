@@ -1,3 +1,9 @@
+type HistoryExport = Awaited<ReturnType<AppDataPorts["history"]["exportAll"]>>;
+type HistoryImport = Awaited<ReturnType<AppDataPorts["history"]["importBundle"]>>;
+type DataBundle = { format: string; version: number; exportedAt: string; appVersion: string | undefined; snapshots?: unknown; history?: HistoryExport | null; blobs?: Record<string, unknown>; missingBlobs?: readonly string[]; prefs?: unknown };
+type ExportSummary = { ok: boolean; images: number; missingBlobs: string[]; truncated: boolean; warning: string | null };
+type ImportSummary = { ok: boolean; history: HistoryImport | null; blobs: HistoryImport["blobs"] | null; prefs: string[]; legacy: number | null; toast: string; warning: string | null };
+type DataError = Error & { code: string; secretKey?: string | undefined };
 import type { AppDataPorts } from "./ports.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { settingsAppData } from "../../application/preferences/preferences.ts";
@@ -29,7 +35,7 @@ function appDataVersionString() {
 }
 
 async function buildAppDataBundle() {
-  var bundle = {
+  var bundle: DataBundle = {
     format: APPDATA_FORMAT,
     version: APPDATA_VERSION,
     exportedAt: new Date().toISOString(),
@@ -47,8 +53,8 @@ async function buildAppDataBundle() {
     bundle.history = history;
     bundle.blobs = history.blobs || {};
     bundle.missingBlobs = history.missingBlobs || [];
-    delete history.blobs;
-    delete history.missingBlobs;
+    Reflect.deleteProperty(history, "blobs");
+    Reflect.deleteProperty(history, "missingBlobs");
   } catch (e) {
     bundle.history = null;
     bundle.blobs = {};
@@ -74,14 +80,14 @@ function assertNoSecrets(value: unknown) {
     var keys = Object.keys(v);
     for (var k = 0; k < keys.length; k++) {
       var key = keys[k];
-      if (APPDATA_SECRET_RE.test(key)) {
+      if (APPDATA_SECRET_RE.test(key as string)) {
         var e = new Error("Export cancelled — the bundle contained something that looks like a " +
-          "credential (" + key + "). This is a bug; please report it.");
+          "credential (" + key + "). This is a bug; please report it.") as DataError;
         e.code = "secret";
         e.secretKey = key;
         throw e;
       }
-      walk(v[key]);
+      walk((v as Record<string, unknown>)[key as string]);
     }
   })(value);
 }
@@ -92,7 +98,7 @@ function appDataFilename() {
   return "splitpage-app-data-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".json";
 }
 
-var appDataLastExport = null;
+let appDataLastExport: ExportSummary | null = null;
 
 async function exportAppData() {
   appDataLastExport = null;
@@ -104,7 +110,7 @@ async function exportAppData() {
     bundle = await buildAppDataBundle();
     assertNoSecrets(bundle);
   } catch (e) {
-    ports.notices.show((e && e.message) || "Export cancelled — something went wrong building your app data.", "error");
+    ports.notices.show((e && (e as Error).message) || "Export cancelled — something went wrong building your app data.", "error");
     return;
   }
 
@@ -137,7 +143,7 @@ async function exportAppData() {
 var APPDATA_MAX_TEXT = 512 * 1024 * 1024;
 
 function appDataError(code: string, message: string) {
-  var e = new Error(message);
+  var e = new Error(message) as DataError;
   e.code = code;
   return e;
 }
@@ -164,7 +170,7 @@ function appDataNormalizeHistory(h: unknown) {
 
 function appDataNormalizeBlobs(b: unknown) {
   if (!appDataIsPlainObject(b)) return null;
-  var out = {};
+  var out: Record<string, unknown> = {};
   Object.keys(b).forEach(function (k) {
     if (k === "__proto__") return;
     out[k] = appDataIsPlainObject(b[k]) ? b[k] : null;
@@ -175,7 +181,7 @@ function appDataNormalizeBlobs(b: unknown) {
 function appDataNormalizePrefs(p: unknown) {
   if (!appDataIsPlainObject(p)) return {};
   function str(v: unknown) { return typeof v === "string" ? v : null; }
-  var out = {
+  var out: Record<string, string | Record<string, unknown> | null> = {
     onboarding: appDataIsPlainObject(p.onboarding) ? p.onboarding : null,
     tourDone: str(p.tourDone),
     commentAuthor: str(p.commentAuthor),
@@ -211,9 +217,9 @@ function parseAppDataBundle(text: unknown) {
     assertNoSecrets(raw);
   } catch (e) {
     var refused = appDataError("secret", "Import refused — the file contains something that looks like a " +
-      "credential (" + ((e && e.secretKey) || "unknown") + "). Splitpage never exports those, so this file " +
+      "credential (" + ((e && (e as DataError).secretKey) || "unknown") + "). Splitpage never exports those, so this file " +
       "did not come from Splitpage.");
-    refused.secretKey = e && e.secretKey;
+    refused.secretKey = e && (e as DataError).secretKey;
     throw refused;
   }
   return {
@@ -245,28 +251,28 @@ function appDataPlural(n: number, one: string, many: string) {
   return n + " " + (n === 1 ? one : many);
 }
 
-var appDataLastSummary = null;
+let appDataLastSummary: ImportSummary | { ok: boolean; code: string; message: string } | null = null;
 
 async function importAppData(text: unknown) {
   var bundle;
   try {
     bundle = parseAppDataBundle(text);
   } catch (e) {
-    var refused = { ok: false, code: (e && e.code) || "invalid",
-                    message: (e && e.message) || "That file could not be imported." };
+    var refused = { ok: false, code: (e && (e as DataError).code) || "invalid",
+                    message: (e && (e as Error).message) || "That file could not be imported." };
     appDataLastSummary = refused;
     ports.notices.show(refused.message, "error");
     return refused;
   }
 
-  var summary = { ok: true, history: null, blobs: null, prefs: [], legacy: null, toast: "", warning: null };
+  var summary: ImportSummary = { ok: true, history: null, blobs: null, prefs: [], legacy: null, toast: "", warning: null };
 
-  var legacy = [];
+  var legacy: unknown[] = [];
   if (bundle.snapshots) {
     try { legacy = ports.history.normalizeSnapshots(JSON.stringify(bundle.snapshots)) || []; } catch (e) { legacy = []; }
     summary.legacy = legacy.length;
   }
-  var hist = bundle.history || { docs: [], older: [] };
+  var hist = bundle.history || { docs: [] as unknown[], older: [] as unknown[] };
   summary.history = await ports.history.importBundle({ docs: hist.docs, older: hist.older.concat(legacy), blobs: bundle.blobs });
   summary.blobs = summary.history.blobs;
 
@@ -315,7 +321,7 @@ async function importAppData(text: unknown) {
 }
 
 var appDataInputWired = false;
-var appDataInput = null;
+let appDataInput: HTMLElement | null = null;
 
 function openImportAppData() {
   var input = document.getElementById("import-app-data-input");
@@ -329,7 +335,7 @@ function openImportAppData() {
 }
 
 async function onImportAppDataChosen(e: Event) {
-  var input = e.target;
+  var input = e.target as HTMLInputElement;
   var file = input.files && input.files[0];
   if (!file) { input.value = ""; return; }
   try {
