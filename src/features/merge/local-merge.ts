@@ -16,7 +16,7 @@ import type { DocumentShape, DocumentRow, DocumentShot, ValidatedDocument } from
 import type { Frozen } from "../../core/document/freeze.ts";
 
 type MergeReviewDocument = Frozen<Pick<DocumentShape, "docId" | "title" | "rows" | "productionTags" | "brollShots" | "people">>;
-type MergeCandidate = { theirs: ValidatedDocument; base: MergeReviewDocument | null; home: Home | null; fileName: string; lastModified: number | null };
+type MergeCandidate = { theirs: ValidatedDocument; base: unknown; home: Home | null; fileName: string; lastModified: number | null };
 import {
   mergeDiffPairHtml,
   mergeFieldOutcome,
@@ -75,7 +75,7 @@ async function offerFileMerge(currentFile: Parameters<MergeReviewControl["offer"
 
   const theirs = parsed.state;
   const base = fileMergeBase(home);
-  const refId = normalizeDocId((base && base.docId) || (currentDocument() as Pick<MergeReviewDocument, "docId">).docId);
+  const refId = normalizeDocId((base && (base as Pick<MergeReviewDocument, "docId">).docId) || (currentDocument() as Pick<MergeReviewDocument, "docId">).docId);
   if (parsed.docIdEmbedded && refId && normalizeDocId(theirs.docId) !== refId) return;
   if (refId) theirs.docId = refId;
 
@@ -110,7 +110,7 @@ function mergeStatusLabel(id: unknown) {
   return s ? s.label : "To do";
 }
 
-function mergeDiffModel(base: MergeReviewDocument | null, mine: MergeReviewDocument | null, theirs: MergeReviewDocument) {
+function mergeDiffModel(base: unknown, mine: MergeReviewDocument | null, theirs: MergeReviewDocument) {
   const groups: MergeReviewGroup[] = [];
   const b = base || null;
 
@@ -119,13 +119,13 @@ function mergeDiffModel(base: MergeReviewDocument | null, mine: MergeReviewDocum
     const titlePair = mergeDiffPairHtml(mineTitle, theirTitle);
     groups.push({ label: "Title", entries: [{
       label: "Script title",
-      outcome: mergeFieldOutcome(b ? (b.title || "") : null, mineTitle, theirTitle),
+      outcome: mergeFieldOutcome(b ? ((b as MergeReviewDocument).title || "") : null, mineTitle, theirTitle),
       mineHtml: titlePair.mine,
       theirsHtml: titlePair.theirs
     }] });
   }
 
-  const baseRows = byId(b && b.rows), mineRows = byId((mine as MergeReviewDocument).rows), theirRows = byId(theirs.rows);
+  const baseRows = byId(b && (b as MergeReviewDocument).rows), mineRows = byId((mine as MergeReviewDocument).rows), theirRows = byId(theirs.rows);
   const textCtx = textMergeContext(b, mine, theirs);
   const order: string[] = [], seen = idMap<boolean>(), sceneNo = idMap<number>();
   theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; });
