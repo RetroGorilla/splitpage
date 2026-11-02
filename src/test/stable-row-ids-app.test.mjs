@@ -121,14 +121,14 @@ test("#1049: missing comment, reply and b-roll ids do not duplicate recovered wo
 test("#1049: embedded b-roll ids later in the file are reserved before missing keys are repaired", () => {
   const row = { id: "scene", visualText: '<span class="broll-key">B-roll:</span> Steam' };
   const id = migrateRows({ schema: 2, rows: [structuredClone(row)] }).brollShots[0].id;
-  for (const rows of [
-    [row, { id: "later", visualText: '<span class="broll-key" data-broll-id="' + id + '">B-roll:</span> Hands' }],
-    [{ id: "later", visualText: '<span class="broll-key" data-broll-id="' + id + '">B-roll:</span> Hands' }, row]
-  ]) {
-    const doc = migrateRows({ schema: 2, rows: structuredClone(rows) });
-    assert.equal(doc.brollShots.find(b => b.name === "Steam").id, id + "-1");
-    assert.equal(doc.brollShots.find(b => b.name === "Hands").id, id);
-    assert.equal(JSON.stringify(migrateRows(structuredClone(doc))), JSON.stringify(doc));
+  for (const attribute of ["data-broll-id", "DATA-BROLL-ID"]) {
+    const held = { id: "later", visualText: '<span class="broll-key" ' + attribute + '="' + id + '">B-roll:</span> Hands' };
+    for (const rows of [[row, held], [held, row]]) {
+      const doc = migrateRows({ schema: 2, rows: structuredClone(rows) });
+      assert.equal(doc.brollShots.find(b => b.name === "Steam").id, id + "-1");
+      assert.equal(doc.brollShots.find(b => b.name === "Hands").id, id);
+      assert.equal(JSON.stringify(migrateRows(structuredClone(doc))), JSON.stringify(doc));
+    }
   }
 });
 

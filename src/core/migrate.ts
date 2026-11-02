@@ -78,7 +78,7 @@ function reservedIds(s: Bag, ports: MigratePorts): Set<string> {
     for (const record of all) {
       for (const field of ["visualText", "audioText", "body"]) {
         const html = record[field];
-        if (typeof html === "string" && html.includes("data-")) {
+        if (typeof html === "string" && /data-/i.test(html)) {
           ports.htmlIds(html).forEach(id => { const clean = cleanId(id); if (clean) reserved.add(clean); });
         }
       }
