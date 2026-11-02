@@ -30,7 +30,7 @@ files:
   - voice-composition.js
   - voice-helper.js
   - chromium-browsers.js
-  - history-fs-backend.js
+  - history-fs-backend.ts
   - desktop-state.js
   - update-release.js
   - file-service.js
