@@ -1,9 +1,8 @@
+import type { LocalFileHandle } from "../../application/files/local-file-access.ts";
 import type { NoticeKind } from "../../application/effects/ports.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
-export interface ResumeHandle {
-  readonly requestPermission: (options: { mode: "readwrite" }) => Promise<string>;
-}
+export type ResumeHandle = Partial<Pick<LocalFileHandle, "name" | "requestPermission">>;
 
 export interface SaveRecoveryPorts {
   readonly hideResumeBanner: () => void;
@@ -25,7 +24,7 @@ export function mountSaveRecovery(mount: { window: Window; ports: SaveRecoveryPo
     const owns = ports.capture();
     if (!handle) { ports.hideResumeBanner(); return; }
     try {
-      const perm = await handle.requestPermission({ mode: "readwrite" });
+      const perm = await (handle.requestPermission as NonNullable<ResumeHandle["requestPermission"]>)({ mode: "readwrite" });
       if (!life.active() || !owns() || ports.pendingHandle() !== handle) return;
       if (perm !== "granted") { ports.hideResumeBanner(); return; }
       await ports.resumeFromHandle(handle);

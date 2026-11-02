@@ -1,3 +1,4 @@
+import type { LocalFileData } from "../files/local-file-access.ts";
 import { deriveDocId } from "../../core/document/ids.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
@@ -29,7 +30,7 @@ export interface ProjectFileSavePort {
 }
 
 export interface ProjectFileOpeningPort {
-  readonly open: (opening: { readonly kind: "file" | "import"; readonly file: unknown; readonly handle?: unknown; readonly options?: { readonly skipSnapshot: boolean } }) => Promise<unknown>;
+  readonly open: (opening: { readonly kind: "file" | "import"; readonly file: LocalFileData; readonly handle?: unknown; readonly options?: { readonly skipSnapshot: boolean } }) => Promise<unknown>;
 }
 
 export interface ProjectFilesPorts {
@@ -96,8 +97,8 @@ export function createProjectFiles(ports: ProjectFilesPorts) {
     reassignDocId: ports.deferred.changeDocumentId,
     docIdEvents: ports.deferred.identityEvents,
     initDocIdentityChannel: ports.deferred.connectIdentity,
-    openFile: function (file: unknown, handle?: unknown) { return ports.opening.open({ kind: "file", file: file, handle: handle || null, options: { skipSnapshot: true } }); },
-    importFile: function (file: unknown) { return ports.opening.open({ kind: "import", file: file }); },
+    openFile: function (file: LocalFileData, handle?: unknown) { return ports.opening.open({ kind: "file", file: file, handle: handle || null, options: { skipSnapshot: true } }); },
+    importFile: function (file: LocalFileData) { return ports.opening.open({ kind: "import", file: file }); },
     save: function (opts?: Parameters<ProjectFileSavePort["save"]>[0] | null) { return ports.saving.save(opts || {}); },
     autosave: {
       timing: function () { return ports.saving.autoSave().timing; },
