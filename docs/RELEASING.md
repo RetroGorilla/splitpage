@@ -189,15 +189,15 @@ The 2.0.0 installer also removes a detected 1.0.x install from
 data folder untouched; see the `customInit` macro committed in
 `desktop/build/installer.nsh`.
 
-Existing installations check the mirror on startup and say when there is
-something newer; the desktop app offers to install it.
+Existing installations check this repository's latest release on startup and
+say when there is something newer; the desktop app offers to install it.
 
-**Where that mirror URL comes from.** `SPLITPAGE_UPDATE_API` (the desktop app
+**Where that update URL comes from.** `SPLITPAGE_UPDATE_API` (the desktop app
 honours it only with `SPLITPAGE_TEST=1`), or the default
 compiled into `update.mjs` and `desktop/main.js`, and nothing else. `release.json`
 used to be copied into each release's `.splitpage-release.json` as an
 `updateApi` field that the next update check would follow; #64 made that field
 ignored (a release naming where the next release comes from is a redirect
-nobody could revoke) and #75 stopped writing it, and the file itself is gone. To move the mirror, change the
+nobody could revoke) and #75 stopped writing it, and the file itself is gone. To move it, change the
 default in those two files and cut a release from it.
 
