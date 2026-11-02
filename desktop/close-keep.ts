@@ -9,7 +9,7 @@ export type CloseCheckDecision = ReturnType<typeof decisionFor>;
 export interface CloseCheckIo extends Pick<DesktopMainCommon, "tabs"> {
   goneFileTabsOf: (ids: (string | undefined)[]) => Promise<DesktopMainTab[]>;
   unsavedTabsOf: (ids: (string | undefined)[], gone: DesktopMainTab[]) => DesktopMainTab[];
-  askAboutUnsaved: (list: DesktopMainTab[], verb: string, parent: BrowserWindow | undefined) => CloseCheckDecision;
+  askAboutUnsaved: (list: DesktopMainTab[], verb: string, parent: BrowserWindow | undefined, gone: DesktopMainTab[]) => CloseCheckDecision;
   keepDraftsOfGoneFiles: (tabs: DesktopMainTab[], holder: object) => Promise<DesktopMainTab[]>;
   report: (verb: string, error: unknown) => void;
 }
@@ -57,8 +57,8 @@ function runCloseCheck(io: CloseCheckIo, tabIdsNow: () => (string | undefined)[]
   const held: DesktopMainTab[] = [];
   const asked: (string | undefined)[] = [];
   const answered = new Set<string | undefined>();
-  const ask = async (list: DesktopMainTab[]) => {
-    const answer = io.askAboutUnsaved(list, verb, parentOf(list));
+  const ask = async (list: DesktopMainTab[], gone: DesktopMainTab[] = []) => {
+    const answer = io.askAboutUnsaved(list, verb, parentOf(list), gone);
     if (answer === "discard") for (const tab of list) answered.add(tab.id);
     // why: A quit question blocks main while other windows can queue edits; drain those before rechecking.
     if (verb === "Quit" && list.length && answer === "discard") await new Promise((resolve) => setTimeout(resolve, 0));
@@ -69,7 +69,7 @@ function runCloseCheck(io: CloseCheckIo, tabIdsNow: () => (string | undefined)[]
     return io.goneFileTabsOf(ids).then(async (gone) => {
       if (!stillWanted()) return "cancel";
       const unsaved = io.unsavedTabsOf(ids.filter((id) => io.tabs.has(id)), gone);
-      const first = await ask(unsaved);
+      const first = await ask(unsaved, gone);
       if (!stillWanted()) return "cancel";
       if (first !== "discard" || !gone.length) return first;
       held.push(...gone);
@@ -78,7 +78,7 @@ function runCloseCheck(io: CloseCheckIo, tabIdsNow: () => (string | undefined)[]
         if (verb === "Quit") await new Promise((resolve) => setTimeout(resolve, 0));
         if (!stillWanted()) return "cancel";
         const missing = unkept.filter((tab) => io.tabs.get(tab.id) === tab);
-        return ask(missing);
+        return ask(missing, gone);
       });
     }).then(next);
   };
