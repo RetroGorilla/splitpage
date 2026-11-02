@@ -5,8 +5,8 @@ import type { HistoryOwner, HistoryOwnerPorts, HistorySnapshotMeta, HistorySnaps
 type HistoryAddress = { id?: string; docId?: string | null; older?: boolean };
 type HistoryMigrationResult = { migrated: number; removedKey: boolean };
 type HistoryExportSnapshot = { meta: HistorySnapshotReply["meta"]; stateJson: HistorySnapshotReply["stateJson"] };
-type HistoryExportDoc = { docId: string; title: unknown; lastOpenedAt: number; metas: HistorySnapshotMeta[]; snapshots?: HistoryExportSnapshot[] };
-type HistoryExportBundle = { docs: { docId: string; title: unknown; lastOpenedAt: number; snapshots: HistoryExportSnapshot[] }[]; older: HistoryExportSnapshot[]; truncated: boolean; blobs?: Record<string, HistoryImageData>; missingBlobs?: string[] };
+type HistoryExportDoc = { docId: string; title: unknown; lastOpenedAt: number; damaged?: number; metas: HistorySnapshotMeta[]; snapshots?: HistoryExportSnapshot[] };
+type HistoryExportBundle = { docs: { docId: string; title: unknown; lastOpenedAt: number; snapshots: HistoryExportSnapshot[] }[]; older: HistoryExportSnapshot[]; truncated: boolean; omittedSnapshots?: number; blobs?: Record<string, HistoryImageData>; missingBlobs?: string[] };
 type HistoryImageData = { mime: string; b64: string };
 type HistoryImportCandidate = { atMs: number; id: string; entry: HistorySnapshotRead | null };
 type HistoryImportCounts = { -readonly [K in keyof HistoryImportResult]: HistoryImportResult[K] };
@@ -402,9 +402,10 @@ function historyFlattenForExport(docs: HistoryExportDoc[], olderMetas: HistorySn
   return flat;
 }
 
-function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[]) {
+function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[], olderDamaged: number) {
   const flat = historyFlattenForExport(docs, olderMetas);
   let total = 0, truncated = false;
+  let omittedSnapshots = docs.reduce(function (n, d) { return n + (d.damaged || 0); }, olderDamaged);
   const keep: Record<string, boolean> = {};
   flat.forEach(function (f) {
     const key = (f.docId == null ? "_older" : f.docId) + "\n" + f.id;
@@ -422,6 +423,7 @@ function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExp
       if (!keep[d.docId + "\n" + m.id]) return;
       bodyJobs.push(backend.get(d.docId, m.id).then(function (r) {
         if (r) (d.snapshots as HistoryExportSnapshot[]).push({ meta: r.meta, stateJson: r.stateJson });
+        else omittedSnapshots++;
       }));
     });
   });
@@ -430,6 +432,7 @@ function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExp
     if (!keep["_older\n" + m.id]) return;
     bodyJobs.push(backend.get(HISTORY_OLDER_KEY, m.id).then(function (r) {
       if (r) olderOut.push({ meta: r.meta, stateJson: r.stateJson });
+      else omittedSnapshots++;
     }));
   });
   return Promise.all(bodyJobs).then(function () {
@@ -441,7 +444,8 @@ function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExp
         return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots as HistoryExportSnapshot[] };
       }),
       older: olderOut,
-      truncated: truncated
+      truncated: truncated,
+      ...(omittedSnapshots ? { omittedSnapshots } : {})
     };
   });
 }
@@ -454,13 +458,14 @@ function historyBuildExport(backend: HistoryResolvedBackend, ids: string[]) {
         docId: docId,
         title: rec ? rec.title : "",
         lastOpenedAt: rec ? rec.lastOpenedAt : 0,
+        damaged: rec?.damaged || 0,
         metas: res[1] || []
       };
     });
   });
   return Promise.all(docJobs).then(function (docs) {
-    return backend.rawList(HISTORY_OLDER_KEY).then(function (olderMetas) {
-      return historyAssembleExport(backend, docs, olderMetas || []);
+    return Promise.all([backend.rawList(HISTORY_OLDER_KEY), backend.rawDoc(HISTORY_OLDER_KEY)]).then(function ([olderMetas, older]) {
+      return historyAssembleExport(backend, docs, olderMetas || [], older?.damaged || 0);
     });
   });
 }

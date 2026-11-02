@@ -35,6 +35,7 @@ export interface HistoryOlderImportResult {
 }
 
 export interface HistoryBackendDoc {
+  damaged?: number;
   title: unknown;
   lastOpenedAt: number;
   docId?: string;
