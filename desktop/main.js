@@ -9,7 +9,7 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
-const { createDraftStore, MAX_BODY_BYTES } = require("./drafts");
+const { createDraftStore, MAX_BODY_BYTES } = require("./drafts.ts");
 const {
   filesToOpenFrom, pathKey, createFileRegistry, readFileEntry
 } = require("./file-service.ts");
