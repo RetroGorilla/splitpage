@@ -69,7 +69,7 @@ jobs:
         run: npm ci && npm ci --prefix desktop
 
       - name: Desktop preloads are generated from their checked sources
-        run: node tools/build-preload.mjs && git diff --exit-code -- desktop/preload.js desktop/tabstrip-preload.js
+        run: node tools/build-preload.mjs && node tools/check-preload.mjs
 
       - name: Lint
         run: npm run lint
