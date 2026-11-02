@@ -1,6 +1,6 @@
 "use strict";
 
-import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContents, WebContentsView } from "electron";
+import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContentsView } from "electron";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
   DesktopWireHistoryMeta, DesktopWireHistoryOptions, DesktopWireHistoryUsage, DesktopWireLaunch,
@@ -9,11 +9,15 @@ import type {
 import type { createDraftStore } from "./drafts.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { createVoiceComposition } from "./voice-composition.ts";
+import type { createPdfPrinter } from "./print-pdf.ts";
+import type { createBlobStore } from "./blob-store.ts";
 import type { createFileRegistry } from "./file-service.ts";
 import type { createRecents } from "./recents.ts";
 import type { createDocClaims } from "./doc-claims.ts";
 import type { createRestoreNotice } from "./restore-notice.ts";
 import type { createThemeChoice } from "./window-appearance.ts";
+import type { createTabRegistry } from "./tab-registry.ts";
+import type { createDesktopStateStore } from "./desktop-state.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
 
@@ -51,7 +55,10 @@ export interface DesktopMainCommon {
   draftStore: () => ReturnType<typeof createDraftStore> | null;
   draftsPreviousSession: () => string;
   shellStateForWindow: (id: string) => DesktopIpcResult<"splitpage:tabstrip-get-state">;
-  createTab: (windowId: string, options: { source: { kind: "blank" }; launchIntent: { type: string } }) => DesktopMainTab | null;
+  createTab: (windowId: string, options: {
+    source: DesktopMainTab["source"]; launchIntent: DesktopWireLaunch;
+    tabId?: string | undefined; pendingPayload?: DesktopMainTab["pendingPayload"]; index?: unknown;
+  }) => DesktopMainTab | null;
   activateTab: (id: string | undefined) => void;
   requestCloseTab: (id: string | undefined) => void;
   reorderTab: (id: string | undefined, index: number | undefined) => boolean;
@@ -124,11 +131,7 @@ export interface DesktopHistoryBlobIpcDependencies {
   historyHolds: Map<number, { docId: string; id: string }[]>;
   historyProtectList: (value: unknown) => { docId: string; id: string }[];
   historyWireMeta: (meta: DesktopWireHistoryMeta) => DesktopWireHistoryMeta;
-  blobStore: () => {
-    put: (sha: string, bytes: Buffer) => Promise<DesktopIpcResult<"splitpage:blob-put">>;
-    get: (sha: string) => Promise<Buffer | null>;
-    missing: (shas: readonly string[]) => Promise<string[]>;
-  } | null;
+  blobStore: () => ReturnType<typeof createBlobStore> | null;
   historyPolicy: {
     HISTORY_OLDER_KEY: string;
     HISTORY_SNAP_ID_RE: RegExp;
@@ -157,7 +160,21 @@ export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, 
 }
 
 export interface DesktopPrintIpcDependencies {
-  pdfPrinter: { print: (sender: WebContents, html: string) => Promise<DesktopIpcResult<"splitpage:print-to-pdf">> };
+  pdfPrinter: ReturnType<typeof createPdfPrinter>;
 }
 
 export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;
+
+export interface DesktopSessionRestoreDependencies extends Pick<DesktopMainCommon, "tabs" | "windowsById" | "draftStore" | "createTab" | "activateTab">, Pick<ReturnType<typeof createTabRegistry>, "pathToTabId" | "claimRoutingKey" | "firstWindowRecord"> {
+  app: Pick<App, "on">;
+  BrowserWindow: Pick<typeof BrowserWindow, "getAllWindows">;
+  desktopState: Pick<ReturnType<typeof createDesktopStateStore>, "read">;
+  draftsList: ReturnType<typeof createDraftStore>["list"];
+  createTabWindow: (options: Partial<Pick<ReturnType<ReturnType<typeof createDesktopStateStore>["read"]>["windows"][number], "windowId" | "bounds" | "maximized">>) => DesktopMainWindow;
+  liveWindows: DesktopTestModeIpcDependencies["liveWindows"];
+  payloadForSource: (source: DesktopMainTab["source"]) => DesktopMainTab["pendingPayload"];
+  routeLaunchFile: (file: string) => void;
+  argvFilesToOpen: string[];
+  restoreNotice: Pick<ReturnType<typeof createRestoreNotice>, "set">;
+  persistShellState: DesktopDocumentIpcDependencies["persistShellState"];
+}
