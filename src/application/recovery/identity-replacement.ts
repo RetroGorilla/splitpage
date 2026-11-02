@@ -22,10 +22,11 @@ export function prepareIdentityReplacement(
   const baseRows = new Map(base?.rows.map(row => [row.id, row]));
   const baseComments = new Map(base?.comments.map(comment => [comment.id, comment]));
   const hasLoadBase = base?.rows.some(row => loadRow(row.id));
+  const wholeIdentityReplaced = !!base && base.rows.length > 0 && base.rows.every(row => !diskIds.has(row.id));
   const noted = new Set(mine.comments.filter(comment =>
     JSON.stringify(comment) !== JSON.stringify(baseComments.get(comment.id))).map(comment => comment.rowId));
   const retained = new Set(mine.rows.filter(row => !diskIds.has(row.id) &&
-    (loadRow(row.id) || (!hasLoadBase && /^r[a-z0-9]{8,}$/.test(row.id))) &&
+    (loadRow(row.id) || (!hasLoadBase && wholeIdentityReplaced && /^r[a-z0-9]{8,}$/.test(row.id))) &&
     (!rowContentEqual(baseRows.get(row.id), row) || noted.has(row.id))).map(row => row.id));
   if (!retained.size) return { base, mine, disk };
 
