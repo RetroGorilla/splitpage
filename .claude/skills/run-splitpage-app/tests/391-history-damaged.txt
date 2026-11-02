@@ -13,6 +13,7 @@ wait document.getElementById('history-panel').hidden
 eval (async function(){ await H.idle(); await seedDamage([damageBad]); return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 0
 wait document.getElementById('history-list').textContent.includes('1 damaged snapshot could not be listed')
 expect !document.getElementById('history-list').textContent.includes('No snapshots')
 expect document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 0
