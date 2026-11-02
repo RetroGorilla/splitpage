@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument, liveSession } from "../bootstrap/wiring/session-owner.ts";
-import { prompterControls } from "../bootstrap/wiring/prompter.ts";
+import { mountPrompterRuntimeFeature, prompterControls } from "../bootstrap/wiring/prompter.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { draftsTesting } from "../bootstrap/wiring/drafts.ts";
@@ -142,3 +142,40 @@ test("Present Find can jump through a script containing only visible stage direc
   closeFindBar(); present.closePrompter();
   present.setPrompterSceneMode(false);
 });
+
+for (const method of ["disposeRuntime", "dispose"]) {
+  test(method + " closes fullscreen Find and releases its accepted Escape lock", async () => {
+    load();
+    const present = prompterControls();
+    present.openPrompter();
+    const fullscreen = Object.getOwnPropertyDescriptor(document, "fullscreenElement");
+    const keyboard = Object.getOwnPropertyDescriptor(window.navigator, "keyboard");
+    const requests = [];
+    let unlocks = 0;
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, value: document.documentElement });
+    Object.defineProperty(window.navigator, "keyboard", { configurable: true, value: {
+      lock: keys => { requests.push(keys); return Promise.resolve(); },
+      unlock: () => { unlocks++; }
+    } });
+    try {
+      openFindBar();
+      await Promise.resolve();
+      assert.deepEqual(requests, [["Escape"]]);
+      assert.equal(el("findbar").hidden, false);
+      present[method]();
+      assert.equal(unlocks, 1);
+      assert.equal(el("findbar").hidden, true);
+      assert.equal(present.closeFind(), false);
+      present[method]();
+      assert.equal(unlocks, 1);
+    } finally {
+      closeFindBar();
+      if (fullscreen) Object.defineProperty(document, "fullscreenElement", fullscreen);
+      else delete document.fullscreenElement;
+      if (keyboard) Object.defineProperty(window.navigator, "keyboard", keyboard);
+      else delete window.navigator.keyboard;
+      mountPrompterRuntimeFeature();
+      prompterControls().closePrompter();
+    }
+  });
+}
