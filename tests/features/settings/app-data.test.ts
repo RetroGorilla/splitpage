@@ -95,6 +95,21 @@ test("damage without any exportable history cancels delivery", async () => {
   } finally { mounted.dispose(); }
 });
 
+test("export size limits are disclosed alongside damage and missing images", async () => {
+  const { ports, shown } = setup();
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: () => Promise.resolve({ docs: [{ snapshots: [{}] }], older: [], omittedSnapshots: 2, truncated: true, missingBlobs: ["missing"] }) }
+  });
+  try {
+    await mounted.exportAppData();
+    const warning = shown.at(-1);
+    assert.equal(warning?.[1], "warn");
+    assert.match(warning?.[0] || "", /1 image was missing/);
+    assert.match(warning?.[0] || "", /2 damaged or unreadable history snapshots/);
+    assert.match(warning?.[0] || "", /older history snapshots were left out/);
+  } finally { mounted.dispose(); }
+});
+
 test("app data export reads legacy storage, history and preferences in the same order, and writes no server bookmarks", async () => {
   const { ports, calls } = setup();
   const storage = Object.getPrototypeOf(localStorage) as Storage;
