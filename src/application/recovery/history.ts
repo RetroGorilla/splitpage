@@ -388,6 +388,16 @@ function historyExportError(code: string, message: string) {
   return e;
 }
 
+function historyReadIsTemporary(error: unknown) {
+  const failure = (error && typeof error === "object" ? error : { message: error }) as { code?: unknown; name?: unknown; message?: unknown; cause?: unknown };
+  const cause = (failure.cause && typeof failure.cause === "object" ? failure.cause : { message: failure.cause }) as typeof failure;
+  return [failure.code, failure.name, cause.code, cause.name].some(function (value) {
+    return typeof value === "string" && /^(?:timeout|ETIMEDOUT|ESOCKETTIMEDOUT|EAGAIN|EWOULDBLOCK|EBUSY|EINTR|ECONNRESET|ECONNABORTED|ENETDOWN|ENETUNREACH|EHOSTUNREACH|AbortError|TimeoutError|NetworkError)$/i.test(value);
+  }) || [failure.message, cause.message].some(function (value) {
+    return typeof value === "string" && /\b(?:ETIMEDOUT|ESOCKETTIMEDOUT|EAGAIN|EWOULDBLOCK|EBUSY|EINTR|ECONNRESET|ECONNABORTED|ENETDOWN|ENETUNREACH|EHOSTUNREACH|AbortError|TimeoutError|NetworkError)\b|\btimed out\b|\btemporar(?:y|ily)\b|(?:^|:\s*)timeout[.!]?$/i.test(value);
+  });
+}
+
 function historyFlattenForExport(docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[]) {
   const flat: { docId: string | null; id: string; atMs: number; sizeBytes: number }[] = [];
   docs.forEach(function (d) {
@@ -402,7 +412,7 @@ function historyFlattenForExport(docs: HistoryExportDoc[], olderMetas: HistorySn
   return flat;
 }
 
-async function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[], olderDamaged: number, readFailed: () => void) {
+async function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[], olderDamaged: number, readFailed: (error: unknown) => void) {
   const flat = historyFlattenForExport(docs, olderMetas);
   let total = 0;
   let omittedSnapshots = docs.reduce(function (n, d) { return n + (d.damaged || 0); }, olderDamaged);
@@ -427,7 +437,7 @@ async function historyAssembleExport(backend: HistoryResolvedBackend, docs: Hist
         total += f.sizeBytes;
         const target = f.docId === null ? olderOut : byDoc.get(f.docId) as HistoryExportSnapshot[];
         target.push({ meta: read.meta, stateJson: read.stateJson });
-      }, function () { omittedSnapshots++; readFailed(); }));
+      }, function (e: unknown) { omittedSnapshots++; readFailed(e); }));
     });
     if (!reads.length) break;
     await Promise.all(reads);
@@ -447,7 +457,7 @@ async function historyAssembleExport(backend: HistoryResolvedBackend, docs: Hist
   };
 }
 
-function historyBuildExport(backend: HistoryResolvedBackend, ids: string[], readFailed: () => void) {
+function historyBuildExport(backend: HistoryResolvedBackend, ids: string[], readFailed: (error: unknown) => void) {
   const docJobs = ids.map(function (docId) {
     return Promise.all([backend.rawDoc(docId), backend.rawList(docId)]).then(function (res) {
       const rec = res[0] || null;
@@ -467,9 +477,14 @@ function historyBuildExport(backend: HistoryResolvedBackend, ids: string[], read
   });
 }
 
-function exportHistoryAll() {
+function exportHistoryAll(options?: { allowOmissions?: boolean }) {
+  const allowOmissions = options?.allowOmissions === true;
   let failed = false;
-  const readFailed = function () { failed = true; };
+  let temporary = false;
+  const readFailed = function (error: unknown) { failed = true; temporary = temporary || historyReadIsTemporary(error); };
+  function checkTemporary() {
+    if (temporary) throw historyExportError("temporary-read-failed", "History or image reading was interrupted. Please try again.");
+  }
   return enqueueHistory(function () {
     return resolveHistoryBackend({ strict: true }).then(function (backend) {
       return backend.rawDocIds().then(function (ids) {
@@ -481,11 +496,13 @@ function exportHistoryAll() {
       });
     });
   }, function (e) {
+    if (historyReadIsTemporary(e)) return Promise.reject(historyExportError("temporary-read-failed", "History or image reading was interrupted. Please try again."));
     return Promise.reject(e && (e as { code?: unknown }).code ? e : historyExportError("io", "Could not read version history for export."));
-  }).then(function (out) { return historyExportAttachBlobs(out as HistoryExportBundle, readFailed); }).then(function (out) {
+  }).then(function (out) { checkTemporary(); return historyExportAttachBlobs(out as HistoryExportBundle, readFailed); }).then(function (out) {
+    checkTemporary();
     if (failed) {
       const readable = out.older.length || out.docs.some(function (d) { return d.snapshots.length; });
-      throw Object.assign(historyExportError("read-failed", "Could not read all history or image data for export."), readable ? { partial: out } : {});
+      if (!allowOmissions || !readable) throw Object.assign(historyExportError("read-failed", "Could not read all history or image data for export."), { canExportRest: !!readable });
     }
     return out;
   });
@@ -502,7 +519,7 @@ function historyBlobCost(sha: string, entry: HistoryImageData) {
   return sha.length + entry.mime.length + (entry as { b64: string }).b64.length + 40;
 }
 
-async function historyExportAttachBlobs(out: HistoryExportBundle, readFailed: () => void) {
+async function historyExportAttachBlobs(out: HistoryExportBundle, readFailed: (error: unknown) => void) {
   const cap = historyExportCap();
   const all: { snap: HistoryExportSnapshot; owner: HistoryExportSnapshot[] }[] = [];
   out.docs.forEach(function (d) {
@@ -522,7 +539,7 @@ async function historyExportAttachBlobs(out: HistoryExportBundle, readFailed: ()
     const gone = (await Promise.all(fresh.map(function (sha) {
       return ensureBytes([sha], { strict: true }).catch(function (e: unknown) {
         if ((e as { code?: unknown } | null)?.code === "storage-unavailable") throw e;
-        readFailed();
+        readFailed(e);
         return [sha];
       });
     }))).flat();

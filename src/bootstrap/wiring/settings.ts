@@ -113,7 +113,7 @@ export function mountAppDataFeature(): AppDataMount {
       desktop: presence.running,
       launchFacts: launch,
       commentSorting: { choose: commentSorting.choose },
-      history: { exportAll: () => historyOwner().exportHistoryAll(), importBundle: (bundle) => historyOwner().importHistoryBundle(bundle), normalizeSnapshots: (raw) => historyOwner().normalizeLegacySnapshots(raw) },
+      history: { exportAll: (options) => historyOwner().exportHistoryAll(options), importBundle: (bundle) => historyOwner().importHistoryBundle(bundle), normalizeSnapshots: (raw) => historyOwner().normalizeLegacySnapshots(raw) },
       writer,
       embeddedVersion: () => updateControls()?.readEmbeddedVersion() ?? null,
       useBlobBackend: setBlobBackend

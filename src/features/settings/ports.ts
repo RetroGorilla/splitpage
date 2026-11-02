@@ -84,7 +84,7 @@ export interface AppDataPorts {
   readonly launchFacts: Pick<LaunchFacts, "appVersion">;
   readonly commentSorting: Pick<CommentSorting, "choose">;
   readonly history: {
-    readonly exportAll: () => Promise<AppDataHistoryExport>;
+    readonly exportAll: (options?: { allowOmissions?: boolean }) => Promise<AppDataHistoryExport>;
     readonly importBundle: (bundle: { readonly docs: readonly unknown[]; readonly older: readonly unknown[]; readonly blobs: Record<string, unknown> | null }) => Promise<AppDataHistoryImport>;
     readonly normalizeSnapshots: (raw: string) => unknown[] | null;
   };

@@ -226,9 +226,9 @@ function historyDesktopUsage(u: Awaited<ReturnType<HistoryDesktopPort["historyLi
   };
 }
 
-function historyDesktopCall<T, const Timeout, const Rejected>(run: () => T, onTimeout: Timeout, onReject: Rejected): Promise<HistoryReplyAlternatives<Awaited<T> | Timeout | Rejected>>;
-function historyDesktopCall<T, Timeout, Rejected>(run: () => T, onTimeout: Timeout, onReject: Rejected): Promise<Awaited<T> | Timeout | Rejected> {
-  return new Promise<Awaited<T> | Timeout | Rejected>(function (resolve) {
+function historyDesktopCall<T, const Timeout, const Rejected>(run: () => T, onTimeout: Timeout, onReject: Rejected, strict?: boolean): Promise<HistoryReplyAlternatives<Awaited<T> | Timeout | Rejected>>;
+function historyDesktopCall<T, Timeout, Rejected>(run: () => T, onTimeout: Timeout, onReject: Rejected, strict?: boolean): Promise<Awaited<T> | Timeout | Rejected> {
+  return new Promise<Awaited<T> | Timeout | Rejected>(function (resolve, reject) {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     function finish(v: Awaited<T> | Timeout | Rejected) {
@@ -237,18 +237,25 @@ function historyDesktopCall<T, Timeout, Rejected>(run: () => T, onTimeout: Timeo
       if (timer) clearTimeout(timer);
       resolve(v);
     }
-    timer = setTimeout(function () { finish(onTimeout); },
+    function fail(e: unknown) {
+      if (settled) return;
+      if (window.console) console.error(e);
+      if (!strict) { finish(onReject); return; }
+      settled = true;
+      if (timer) clearTimeout(timer);
+      reject(e);
+    }
+    timer = setTimeout(function () {
+      if (strict) fail(Object.assign(new Error("History request timed out."), { code: "timeout" }));
+      else finish(onTimeout);
+    },
       probe?.timeout() != null ? probe?.timeout() as number : HISTORY_DESKTOP_TIMEOUT_MS);
     let p;
     try { p = run(); } catch (e) {
-      if (window.console) console.error(e);
-      finish(onReject);
+      fail(e);
       return;
     }
-    Promise.resolve(p).then(finish, function (e) {
-      if (window.console) console.error(e);
-      finish(onReject);
-    });
+    Promise.resolve(p).then(finish, fail);
   });
 }
 
@@ -278,7 +285,7 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
     const failed = (opts && opts.strict) ? null : empty;
     return historyDesktopCall(function () {
       return desktopPort().historyList(docId || null);
-    }, failed, failed).then(function (r) {
+    }, failed, failed, !!opts?.strict).then(function (r) {
       if (!r || typeof r !== "object") return failed;
       if (opts && opts.strict && (!Array.isArray(r.entries) || !Array.isArray(r.older))) return null;
       const entries = (r.entries || []).map(historyStripMeta).filter(Boolean) as HistorySnapshotMeta[];
@@ -302,7 +309,7 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
       : { docId: bucket, protect: historyProtectedList() };
     return historyDesktopCall(function () {
       return desktopPort().historyGet(query, id);
-    }, { failed: true }, { failed: true }).then(function (r) {
+    }, { failed: true }, { failed: true }, !!options?.strict).then(function (r) {
       if (r && r.failed) {
         if (options?.strict) throw new Error("Could not read version history for export.");
         return null;
@@ -367,7 +374,7 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
   rawDocIds: function () {
     return historyDesktopCall(function () {
       return desktopPort().historyListDocs();
-    }, null, null).then(function (r) {
+    }, null, null, true).then(function (r) {
       if (!Array.isArray(r)) return null;
       const ids: string[] = [];
       r.forEach(function (d) {
@@ -380,7 +387,7 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
 
   rawDoc: function (bucket) {
     return Promise.all([
-      historyDesktopCall(function () { return desktopPort().historyListDocs(); }, null, null),
+      historyDesktopCall(function () { return desktopPort().historyListDocs(); }, null, null, true),
       desktopHistoryBackend.list(bucket === HISTORY_OLDER_KEY ? null : bucket, { strict: true })
     ]).then(function ([r, list]) {
       if (!Array.isArray(r) || !list) throw new Error("Could not read version history for export.");
