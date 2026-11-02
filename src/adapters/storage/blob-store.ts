@@ -11,7 +11,7 @@ export interface StoredBlob {
 export interface BlobBackend {
   name?: string;
   persistent?: boolean;
-  get: (sha: string) => Promise<StoredBlob | null>;
+  get: (sha: string, options?: { strict?: boolean }) => Promise<StoredBlob | null>;
   put: (sha: string, bytes: Uint8Array, mime: string) => Promise<unknown>;
   missing: (shas: string[]) => Promise<string[]>;
 }
@@ -48,7 +48,7 @@ export interface BlobStore {
   isDurable: (sha: unknown) => boolean;
   queuePersist: (shas: unknown) => void;
   persist: (shas: unknown) => Promise<string[]>;
-  ensureBytes: (shas: unknown) => Promise<string[]>;
+  ensureBytes: (shas: unknown, options?: { strict?: boolean }) => Promise<string[]>;
   setBackend: (backend: BlobBackend | null | undefined) => void;
   backendInfo: () => BlobBackendInfo | null;
   resolveBackend: () => Promise<BlobBackend>;
@@ -87,6 +87,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
   let backendPromise: Promise<BlobBackend> | null = null;
   let backendGen = 0;
   let preferredFailed = false;
+  const unavailableFallbacks = new WeakSet<BlobBackend>();
 
   let persistQueue: Record<string, boolean> = Object.create(null);
   let persistQueued = false;
@@ -188,6 +189,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
   function setBackend(next: BlobBackend | null | undefined): void {
     backendGen++;
     backend = next || null;
+    if (next) unavailableFallbacks.delete(next);
     backendPromise = null;
     durable = Object.create(null);
     persisting = new Map();
@@ -207,7 +209,9 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     const p = opened.then(null, function (e: unknown) {
       if (!preferredFailed) host.warn("Image store: IndexedDB unavailable, keeping images in memory", e);
       preferredFailed = true;
-      return host.fallback();
+      const fallback = host.fallback();
+      if (preferred) unavailableFallbacks.add(fallback);
+      return fallback;
     }).then(function (b) {
       if (gen === backendGen && !backend) backend = b;
       backendPromise = null;
@@ -217,21 +221,23 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     return p;
   }
 
-  function ensureBytes(shas: unknown): Promise<string[]> {
+  function ensureBytes(shas: unknown, options?: { strict?: boolean }): Promise<string[]> {
     const list = uniqueStrings(shas);
     const need = list.filter(function (sha) { return isSha256Hex(sha) && !entries[sha]; });
     const report = function (): string[] { return list.filter(function (sha) { return !has(sha); }); };
     if (!need.length) return Promise.resolve(report());
-    return resolveBackend().then(function (b) {
+    const reading = resolveBackend().then(function (b) {
+      if (options?.strict && unavailableFallbacks.has(b)) throw new Error("Persistent images are unavailable");
       return Promise.all(need.map(function (sha) { return loadBlob(b, sha); }));
-    }).then(report, report);
+    });
+    return options?.strict ? reading.then(report) : reading.then(report, report);
   }
 
   function loadBlob(from: BlobBackend, sha: string): Promise<void> {
     const inFlight = loading.get(sha);
     if (inFlight) return inFlight;
     const gen = backendGen;
-    const p: Promise<void> = Promise.resolve().then(function () { return from.get(sha); }).then(function (r) {
+    const p: Promise<void> = Promise.resolve().then(function () { return from.get(sha, { strict: true }); }).then(function (r) {
       if (!r || !r.bytes || entries[sha]) return;
       const rec = intern(r.bytes);
       if (!rec) return;
@@ -240,7 +246,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
         return;
       }
       if (gen === backendGen) durable[sha] = true;
-    }).then(null, noop).then(function () {
+    }).finally(function () {
       if (loading.get(sha) === p) loading.delete(sha);
     });
     loading.set(sha, p);

@@ -27,6 +27,7 @@ export type HistorySnapshotReply = Omit<NonNullable<Awaited<ReturnType<ReturnTyp
 };
 
 export interface HistoryBundleData {
+  readonly omittedSnapshots?: number;
   readonly docs: readonly unknown[];
   readonly older: readonly unknown[];
   readonly blobs?: Record<string, unknown>;
@@ -120,7 +121,7 @@ export interface HistoryOwnerPorts {
 }
 
 export interface HistoryStorage {
-  readonly resolveHistoryBackend: () => Promise<HistoryResolvedBackend>;
+  readonly resolveHistoryBackend: (options?: { strict?: boolean }) => Promise<HistoryResolvedBackend>;
   readonly historyIdbNotice: () => { kind: string; text: string } | null;
   readonly backendName: () => string | null;
   readonly close: () => Promise<void>;
@@ -144,11 +145,11 @@ export interface HistoryResolvedBackend {
     olderDamaged?: number;
     usage?: unknown;
   } | null>;
-  readonly get: (bucket: string, id: string) => Promise<HistorySnapshotReply | null>;
+  readonly get: (bucket: string, id: string, options?: { strict?: boolean }) => Promise<HistorySnapshotReply | null>;
   readonly touch: (docId: string, title: string) => Promise<unknown>;
   readonly copy: (from: string, to: string) => Promise<{ ok: boolean; copied: number; code?: string | undefined }>;
   readonly rawDocIds: () => Promise<string[] | null>;
-  readonly rawDoc: (bucket: string) => Promise<{ title: unknown; lastOpenedAt: number } | null>;
+  readonly rawDoc: (bucket: string) => Promise<{ title: unknown; lastOpenedAt: number; damaged?: number } | null>;
   readonly rawList: (bucket: string) => Promise<HistorySnapshotMeta[]>;
   readonly importOlder: (entries: HistorySnapshotRead[]) => Promise<{ ok: boolean; added: number; code?: string }>;
   readonly evict: (cap: number) => Promise<unknown>;

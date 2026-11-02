@@ -51,6 +51,66 @@ function setup() {
   return { ports, calls, shown };
 }
 
+test("history read failures cancel app-data delivery", async () => {
+  const { ports, shown } = setup();
+  let deliveries = 0;
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: () => Promise.reject(new Error("unreadable")) },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    assert.equal(deliveries, 0);
+    assert.deepEqual(shown.at(-1), ["Export cancelled — history or image data could not be read. Nothing was downloaded.", "error"]);
+  } finally { mounted.dispose(); }
+});
+
+test("a partial history export delivers intact data with an explicit damage warning", async () => {
+  const { ports, shown } = setup();
+  let delivered = "", savedMessage = "";
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: () => Promise.resolve({ docs: [{ snapshots: [{ stateJson: "intact" }] }], older: [], omittedSnapshots: 1 }) },
+    fileDelivery: { deliver: (_name, data, options) => { delivered = String(data); savedMessage = options?.savedMsg || ""; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    const bundle = JSON.parse(delivered) as { history: { docs: unknown[]; omittedSnapshots: number } };
+    assert.deepEqual(bundle.history.docs, [{ snapshots: [{ stateJson: "intact" }] }]);
+    assert.equal(bundle.history.omittedSnapshots, 1);
+    assert.equal(savedMessage, "Exported your Splitpage app data with omissions");
+    assert.deepEqual(shown.at(-1), ["Exported, but 1 damaged or unreadable history snapshot could not be included. Intact versions and their available images are included.", "warn"]);
+  } finally { mounted.dispose(); }
+});
+
+test("damage without any exportable history cancels delivery", async () => {
+  const { ports, shown } = setup();
+  let deliveries = 0;
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: () => Promise.resolve({ docs: [], older: [], omittedSnapshots: 2 }) },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    assert.equal(deliveries, 0);
+    assert.deepEqual(shown.at(-1), ["Export cancelled — history or image data could not be read. Nothing was downloaded.", "error"]);
+  } finally { mounted.dispose(); }
+});
+
+test("export size limits are disclosed alongside damage and missing images", async () => {
+  const { ports, shown } = setup();
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: () => Promise.resolve({ docs: [{ snapshots: [{}] }], older: [], omittedSnapshots: 2, truncated: true, missingBlobs: ["missing"] }) }
+  });
+  try {
+    await mounted.exportAppData();
+    const warning = shown.at(-1);
+    assert.equal(warning?.[1], "warn");
+    assert.match(warning?.[0] || "", /1 image was missing/);
+    assert.match(warning?.[0] || "", /2 damaged or unreadable history snapshots/);
+    assert.match(warning?.[0] || "", /older history snapshots were left out/);
+  } finally { mounted.dispose(); }
+});
+
 test("app data export reads legacy storage, history and preferences in the same order, and writes no server bookmarks", async () => {
   const { ports, calls } = setup();
   const storage = Object.getPrototypeOf(localStorage) as Storage;
