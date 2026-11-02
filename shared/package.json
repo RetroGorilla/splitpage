@@ -1,6 +1,6 @@
 {
   "name": "splitpage-shared",
   "private": true,
-  "type": "commonjs",
-  "description": "Policy the browser bundle, the Electron main process and the node --test suites all have to agree on. CommonJS on purpose — see history-policy.js's header."
+  "type": "module",
+  "description": "Policy shared by the browser bundle, the Electron main process and the node --test suites. Synchronous ES modules support both import and require(esm)."
 }
