@@ -1,8 +1,14 @@
 "use strict";
 
-function createQuitWatchdog(delayMs, isWaiting, onExpire, timers) {
+type QuitWatchdogTimer = ReturnType<typeof setTimeout> | number;
+interface QuitWatchdogTimers {
+  setTimeout: (callback: () => void, delayMs: number) => QuitWatchdogTimer;
+  clearTimeout: (timer: QuitWatchdogTimer) => void;
+}
+
+function createQuitWatchdog(delayMs: number, isWaiting: () => boolean, onExpire: () => void, timers?: QuitWatchdogTimers) {
   const t = timers || { setTimeout, clearTimeout };
-  let timer = null;
+  let timer: QuitWatchdogTimer | null = null;
   let done = false;
   const fire = () => {
     timer = null;
@@ -25,5 +31,7 @@ function createQuitWatchdog(delayMs, isWaiting, onExpire, timers) {
     }
   };
 }
+
+export type { createQuitWatchdog };
 
 module.exports = { createQuitWatchdog };
