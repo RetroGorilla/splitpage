@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createTabRegistry } = require(path.join(here, "..", "tab-registry.js"));
+const { createTabRegistry } = require(path.join(here, "..", "tab-registry.ts"));
 const { TAB_OR_WINDOW_ID_RE } = require(path.join(here, "..", "desktop-state.js"));
 
 const cases = [];
