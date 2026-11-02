@@ -382,11 +382,11 @@ if (typed.problem && process.platform === "win32" && !process.env.CI) {
   eq("non-erasable syntax is rejected", checkTypes(repo).code, 1);
   rmSync(join(repo, "src/core/text/ns.ts"));
 
-  mkdirSync(join(repo, "server"), { recursive: true });
-  writeFileSync(join(repo, "server/stray.ts"), "export const s = 1;\n");
+  mkdirSync(join(repo, "uncovered"), { recursive: true });
+  writeFileSync(join(repo, "uncovered/stray.ts"), "export const s = 1;\n");
   const stray = checkTypes(repo);
   eq("a TypeScript file outside every config fails", stray.code, 1);
-  check("and is named", stray.err.includes("server/stray.ts is not in any of"), stray.err);
+  check("and is named", stray.err.includes("uncovered/stray.ts is not in any of"), stray.err);
 }
 
 for (const link of links) unlinkSync(link);
