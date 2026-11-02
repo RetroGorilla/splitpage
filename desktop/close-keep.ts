@@ -73,7 +73,9 @@ function runCloseCheck(io: CloseCheckIo, tabIdsNow: () => (string | undefined)[]
       if (!stillWanted()) return "cancel";
       if (first !== "discard" || !gone.length) return first;
       held.push(...gone);
-      return io.keepDraftsOfGoneFiles(gone, holder).then((unkept) => {
+      return io.keepDraftsOfGoneFiles(gone, holder).then(async (unkept) => {
+        // why: A successful keep reply can also overtake another window's queued edit.
+        if (verb === "Quit") await new Promise((resolve) => setTimeout(resolve, 0));
         if (!stillWanted()) return "cancel";
         const missing = unkept.filter((tab) => io.tabs.get(tab.id) === tab);
         return ask(missing);
