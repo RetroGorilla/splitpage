@@ -9,7 +9,7 @@ import {
   docIdFromSha256Hex,
   duplicateReplacementInput,
   normalizeDocId
-} from "../../shared/doc-id-policy.js";
+} from "../../shared/doc-id-policy.ts";
 
 const ID = "d" + "a".repeat(32);
 const ID2 = "d" + "b".repeat(32);
@@ -139,7 +139,7 @@ test("the derived replacement id is FROZEN (invariant #37)", () => {
 
 test("require() and import see the same named exports", () => {
   const require = createRequire(import.meta.url);
-  const cjs = require("../../shared/doc-id-policy.js");
+  const cjs = require("../../shared/doc-id-policy.ts");
   assert.equal(cjs.chooseDuplicateLoser, chooseDuplicateLoser);
   assert.equal(cjs.decideDuplicateLoser, decideDuplicateLoser);
   assert.equal(cjs.normalizeDocId, normalizeDocId);

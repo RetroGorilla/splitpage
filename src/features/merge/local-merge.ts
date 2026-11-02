@@ -2,7 +2,7 @@ import { normalizeTagName, registryKey } from "../../core/document/tags.ts";
 import { mergeTextField } from "../../core/merge/text-field.ts";
 import { byId, rowFieldKey } from "../../core/merge/rows.ts";
 import { GALLERY_FIELDS, ROW_FIELDS } from "../../core/document/fields.ts";
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { rowStatus, tagCategory, tagStatus } from "../../core/production/looks.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { rowImage, rowImageKey } from "../../core/document/media.ts";

@@ -2,7 +2,7 @@ import { brollGroups, shotRecordForFile, oneOf, FILTERS, PAGE_GROUPS, matchesFil
 import type { ExportServices } from "../../application/export/services.ts";
 import type { ExportDocument, ClockMode } from "../../core/document/export-document.ts";
 import type { RowStatusId } from "../../core/document/timing.ts";
-import { formatTimestampAbsolute } from "../../../shared/clock.js";
+import { formatTimestampAbsolute } from "../../../shared/clock.ts";
 import { isSha256Hex, normalizeImageRef } from "../../../shared/blob-policy.js";
 import { exportServices } from "../../application/export/services.ts";
 import { compareCommentPositions } from "../../core/document/comments.ts";
