@@ -1,4 +1,4 @@
-import type { HistoryOwner, HistorySnapshotMeta } from "../../application/recovery/history-ports.ts";
+import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
 import type { DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 import type { DraftPayload } from "../../application/recovery/draft-origin.ts";
 import type { DesktopFileEntry, DesktopPort, DesktopTakenDraft, DesktopTestPort } from "./desktop-port.ts";
@@ -52,16 +52,7 @@ type FakeMalformedHistoryReplies = {
   historyList?: (docId: string | null) => Promise<Omit<DesktopIpcResult<"splitpage:history-list">, "entries" | "older"> & { entries: FakeSanitizedMeta[]; older: FakeSanitizedMeta[] }>;
   historyGet?: (...args: Parameters<DesktopPort["historyGet"]>) => Promise<(Omit<NonNullable<DesktopIpcResult<"splitpage:history-get">>, "meta"> & { meta: FakeSanitizedMeta }) | null>;
 };
-type FakeHistoryStoreBoundary = {
-  put: (docId: string | null, meta: HistorySnapshotMeta, stateJson: string, opts?: { older: boolean }) => Promise<
-    { stored: false; code: string } | { stored: true; duplicate?: boolean; evicted?: number; overCap?: boolean }>;
-  list: (docId: string | null) => Promise<Omit<DesktopIpcResult<"splitpage:history-list">, "usage">>;
-  usage: () => Promise<NonNullable<DesktopIpcResult<"splitpage:history-list">["usage"]>>;
-  get: (bucket: string, id: string) => ReturnType<DesktopPort["historyGet"]>;
-  copy: DesktopPort["historyCopy"];
-  touch: DesktopPort["historyTouch"];
-  listDocs: DesktopPort["historyListDocs"];
-};
+type FakeHistoryStoreBoundary = ReturnType<typeof createHistoryStore<ReturnType<typeof createMemoryHistoryTestBackend>>>;
 type FakeHistoryBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "historyPut" | "historyCopy" | "historyTouch" | "historyListDocs"> & FakeMalformedHistoryReplies & {
   _historyDump?: () => Record<string, unknown[]>;
   _historyStore?: FakeHistoryStoreBoundary;

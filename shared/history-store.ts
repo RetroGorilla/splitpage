@@ -19,7 +19,7 @@ export interface SharedHistoryBucketReader {
 export type SharedHistoryIndex = Record<string, SharedHistoryBucketReader | null | undefined>;
 export type SharedHistoryBucket = { [key: string]: unknown; snapshots: SharedHistorySnapshotReader[] };
 type HistoryStoreMutableBucket = SharedHistoryBucket;
-type HistoryStoreChanges = Record<string, SharedHistoryBucketReader | null | undefined>;
+type HistoryStoreChanges = Record<string, HistoryStoreMutableBucket | null | undefined>;
 type HistoryStoreHold = { docId: string; id: string };
 type HistoryStoreFlags = Record<string, true | undefined>;
 type HistoryStoreError = "quota" | "enospc" | "io" | "read-only";
@@ -27,7 +27,7 @@ export interface SharedHistoryTransaction {
   readonly list: () => Promise<SharedHistoryIndex>;
   readonly get: (sha: string) => Promise<string | null | undefined>;
   readonly put: (sha: string, text: string) => Promise<void>;
-  readonly commit: (changes: HistoryStoreChanges, dropped: string[]) => Promise<void>;
+  readonly commit: (changes: SharedHistoryIndex, dropped: string[]) => Promise<void>;
 }
 export interface SharedHistoryBackend {
   readonly name: string;
@@ -45,6 +45,7 @@ type HistoryStorePutResult = HistoryStorePutSuccess | { stored: false; code: str
 type HistoryStorePutOnceResult = { duplicate: true; evicted?: undefined; overCap?: undefined } |
   { duplicate: false; evicted: number; overCap: boolean };
 type HistoryStoreImportResult = { ok: boolean; count: number; added: number; code?: string };
+type HistoryStoreCopyResult = { ok: true; copied: number; code?: never } | { ok: false; copied: number; code: string };
 type HistoryMemoryAccess = {
   index: SharedHistoryIndex; bodies: Record<string, string | undefined>;
   clone: typeof plainCopy; freeze: typeof deepFreeze;
@@ -54,6 +55,7 @@ type HistoryMemoryOptions<E extends object> = {
   observe?: (op: "put" | "commit" | "exclusive") => unknown; name?: string; persistent?: boolean;
   readOnly?: boolean; extend?: (access: HistoryMemoryAccess) => E;
 };
+type HistoryMemoryBackend = SharedHistoryBackend & { persistent: boolean; readOnly: boolean };
 
 const HISTORY_OLDER_KEY = policy.HISTORY_OLDER_KEY;
 const HISTORY_OLDER_TTL_MS = policy.HISTORY_OLDER_TTL_MS;
@@ -85,15 +87,15 @@ function entryOf(meta: unknown, sha: string) {
   return m as HistoryStoreEntry;
 }
 
-function cloneRecord(rec: SharedHistoryBucketReader) {
+function cloneRecord(rec: SharedHistoryBucketReader | null | undefined) {
   const out = {} as HistoryStoreMutableBucket;
-  Object.keys(rec).forEach(function (k) { if (k !== "snapshots") out[k] = rec[k]; });
-  out.snapshots = Array.isArray(rec.snapshots) ? rec.snapshots.slice() : [];
+  Object.keys(rec as SharedHistoryBucketReader).forEach(function (k) { if (k !== "snapshots") out[k] = (rec as SharedHistoryBucketReader)[k]; });
+  out.snapshots = Array.isArray((rec as SharedHistoryBucketReader).snapshots) ? ((rec as SharedHistoryBucketReader).snapshots as readonly SharedHistorySnapshotReader[]).slice() : [];
   return out;
 }
 
 function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonly SharedHistorySnapshotReader[] {
-  return rec && Array.isArray(rec.snapshots) ? rec.snapshots : [];
+  return rec && Array.isArray(rec.snapshots) ? rec.snapshots as readonly SharedHistorySnapshotReader[] : [];
 }
 
 function findEntry(rec: SharedHistoryBucketReader | null | undefined, id: string) {
@@ -146,7 +148,7 @@ function protectList(list: unknown, out: HistoryStoreHold[], seen: HistoryStoreF
   return out;
 }
 
-function namedShas(index: SharedHistoryIndex, changes: HistoryStoreChanges | null) {
+function namedShas(index: SharedHistoryIndex, changes: SharedHistoryIndex | null) {
   const named: HistoryStoreFlags = Object.create(null);
   const buckets = Object.keys(index || {});
   Object.keys(changes || {}).forEach(function (b) { if (!(b in (index || {}))) buckets.push(b); });
@@ -181,7 +183,7 @@ function planChanges(index: SharedHistoryIndex, changes: HistoryStoreChanges, ca
     (gone[d.docId] || (gone[d.docId] = Object.create(null)))[d.id] = true;
   });
   Object.keys(gone).forEach(function (b) {
-    const rec = Object.prototype.hasOwnProperty.call(out, b) ? out[b] : cloneRecord(index[b] as SharedHistoryBucketReader);
+    const rec = Object.prototype.hasOwnProperty.call(out, b) ? out[b] : cloneRecord(index[b]);
     (rec as HistoryStoreMutableBucket).snapshots = (rec as SharedHistoryBucketReader).snapshots.filter(function (s) { return !(gone[b] as HistoryStoreFlags)[s.id]; });
     out[b] = rec;
   });
@@ -220,11 +222,11 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
   let lastTotal: number | null = null;
   const ownHolds: Record<string, number | undefined> = Object.create(null);
 
-  function readOnly() { return !!backend.readOnly; }
+  function readOnly() { return !!(backend as B).readOnly; }
 
   function run<T>(write: boolean, fn: (tx: SharedHistoryTransaction) => T | PromiseLike<T>): Promise<T> {
     return Promise.resolve().then(function () {
-      return backend.exclusive(fn, { write: !!write });
+      return (backend as B).exclusive(fn, { write: !!write });
     });
   }
 
@@ -236,7 +238,7 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
     });
   }
 
-  function commitAndNote(tx: SharedHistoryTransaction, index: SharedHistoryIndex, changes: HistoryStoreChanges, dropped: string[]) {
+  function commitAndNote(tx: SharedHistoryTransaction, index: SharedHistoryIndex, changes: SharedHistoryIndex, dropped: string[]) {
     return tx.commit(changes, dropped).then(function () {
       const next: SharedHistoryIndex = {};
       Object.keys(index).forEach(function (b) { next[b] = index[b]; });
@@ -286,7 +288,7 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
     return function () {
       if (released) return;
       released = true;
-      if ((ownHolds[key] as number) > 1) (ownHolds[key] as number)--; else delete ownHolds[key];
+      if ((ownHolds[key] as number) > 1) (ownHolds[key] as number)--; else Reflect.deleteProperty(ownHolds, key);
     };
   }
 
@@ -325,7 +327,7 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
       return listIndex(tx).then(function (index) {
         const rec = index[bucket] || null;
         if (findEntry(rec, clean.id)) return { duplicate: true };
-        const m = historyStampAfter(entryOf(clean, sha) as HistoryStoreEntry, newestAtMs(rec));
+        const m: HistoryStoreEntry = historyStampAfter(entryOf(clean, sha) as HistoryStoreEntry, newestAtMs(rec));
         m.sizeBytes = size;
         return tx.put(sha, stateJson).then(function () {
           const t = now();
@@ -380,19 +382,19 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
         out.overCap = !!r.overCap;
         return out;
       }
-      return attempt().then(function (r) { return stored(r, 0); }, function (e) {
+      return attempt().then(function (r) { return stored(r, 0); }, function (e): HistoryStorePutResult | Promise<HistoryStorePutResult> {
         const code = errorCode(e);
         if (!isNoRoom(code)) return { stored: false, code: code === "read-only" ? code : "io" };
         if (quotaStuck) return { stored: false, code: code, evicted: 0, overCap: true };
         return evictWith(function (total) { return Math.min(cap, Math.max(0, total - size)); }, o.protect)
           .then(null, function () { return { evicted: 0 }; })
-          .then(function (ev) {
+          .then(function (ev): HistoryStorePutResult | Promise<HistoryStorePutResult> {
             const evicted = ev.evicted || 0;
             if (!evicted) {
               quotaStuck = true;
               return { stored: false, code: code, evicted: 0, overCap: true };
             }
-            return attempt().then(function (r) { return stored(r, evicted); }, function (e2) {
+            return attempt().then(function (r) { return stored(r, evicted); }, function (e2): HistoryStorePutResult {
               const code2 = errorCode(e2);
               if (isNoRoom(code2)) quotaStuck = true;
               return { stored: false, code: isNoRoom(code2) ? code2 : "io", evicted: evicted, overCap: true };
@@ -415,7 +417,7 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
           Object.keys(index).forEach(function (b) {
             const list = snapshotsOf(index[b]);
             if (!list.some(function (s) { return s && s.sha === sha; })) return;
-            const next = cloneRecord(index[b] as SharedHistoryBucketReader);
+            const next = cloneRecord(index[b]);
             next.snapshots = next.snapshots.filter(function (s) { return !s || s.sha !== sha; });
             changes[b] = next.snapshots.length ? next : null;
           });
@@ -488,7 +490,7 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
     });
   }
 
-  function copy(from: unknown, to: unknown, o?: HistoryStoreOperationOptions | null) {
+  function copy(from: unknown, to: unknown, o?: HistoryStoreOperationOptions | null): Promise<HistoryStoreCopyResult> {
     if (!isDocId(from) || !isDocId(to)) return Promise.resolve({ ok: false, copied: 0, code: "invalid" });
     if (from === to) return Promise.resolve({ ok: true, copied: 0 });
     if (readOnly()) return Promise.resolve({ ok: false, copied: 0, code: "read-only" });
@@ -517,10 +519,10 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
           const changes: HistoryStoreChanges = {};
           changes[to as string] = next;
           const plan = planChanges(index, changes, cap, t, held, []);
-          return commitAndNote(tx, index, plan.changes, plan.dropped).then(function () { return { ok: true, copied: copied }; });
+          return commitAndNote(tx, index, plan.changes, plan.dropped).then(function (): HistoryStoreCopyResult { return { ok: true, copied: copied }; });
         });
       });
-    }).then(null, function (e) {
+    }).then(null, function (e): HistoryStoreCopyResult {
       return { ok: false, copied: 0, code: errorCode(e) };
     });
   }
@@ -603,9 +605,9 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
   }
 
   return {
-    get backend() { return backend; },
-    get name() { return backend.name; },
-    get persistent() { return !!backend.persistent; },
+    get backend() { return backend as B; },
+    get name() { return (backend as B).name; },
+    get persistent() { return !!(backend as B).persistent; },
     get readOnly() { return readOnly(); },
     put: put,
     get: get,
@@ -638,6 +640,8 @@ function codedError(code: string, message: string, name?: string) {
   return e;
 }
 
+function createMemoryHistoryBackend<E extends object>(o: HistoryMemoryOptions<E> & { extend: NonNullable<HistoryMemoryOptions<E>["extend"]> }): Omit<HistoryMemoryBackend, keyof E> & E;
+function createMemoryHistoryBackend(o?: HistoryMemoryOptions<object> | null): HistoryMemoryBackend;
 function createMemoryHistoryBackend<E extends object>(o?: HistoryMemoryOptions<E> | null) {
   o = o || {};
   const strict = !!o.strict;
@@ -660,7 +664,7 @@ function createMemoryHistoryBackend<E extends object>(o?: HistoryMemoryOptions<E
   function runTx<T>(fn: (tx: SharedHistoryTransaction) => T | PromiseLike<T>, write: boolean) {
     let active = true, pending = 0, done = false;
     const stagedBodies: Record<string, string | undefined> = Object.create(null);
-    let staged: { changes: HistoryStoreChanges; dropped: string[] } | null = null;
+    let staged: { changes: SharedHistoryIndex; dropped: string[] } | null = null;
 
     function scheduleCheck() {
       (macrotask as NonNullable<typeof macrotask>)(function () { if (!done && pending === 0) active = false; });
@@ -685,7 +689,7 @@ function createMemoryHistoryBackend<E extends object>(o?: HistoryMemoryOptions<E
     const tx: SharedHistoryTransaction = {
       list: function () {
         return op(function () {
-          let out: SharedHistoryIndex = {};
+          const out: SharedHistoryIndex = {};
           Object.keys(index).forEach(function (b) { out[b] = index[b]; });
           return strict ? Object.freeze(out) : plainCopy(out);
         });
@@ -726,7 +730,7 @@ function createMemoryHistoryBackend<E extends object>(o?: HistoryMemoryOptions<E
       if (staged) {
         Object.keys(staged.changes).forEach(function (b) {
           if ((staged as NonNullable<typeof staged>).changes[b]) nextIndex[b] = deepFreeze((staged as NonNullable<typeof staged>).changes[b]);
-          else delete nextIndex[b];
+          else Reflect.deleteProperty(nextIndex, b);
         });
       }
       const drop = staged ? staged.dropped.filter(function (sha) {
@@ -736,7 +740,7 @@ function createMemoryHistoryBackend<E extends object>(o?: HistoryMemoryOptions<E
       }) : [];
       Object.keys(stagedBodies).forEach(function (sha) { bodies[sha] = stagedBodies[sha]; });
       index = nextIndex;
-      drop.forEach(function (sha) { delete bodies[sha]; });
+      drop.forEach(function (sha) { Reflect.deleteProperty(bodies, sha); });
       return result;
     }, function (e) {
       done = true;
@@ -751,9 +755,9 @@ function createMemoryHistoryBackend<E extends object>(o?: HistoryMemoryOptions<E
     readOnly: !!o.readOnly,
 
     exclusive: function <T>(fn: (tx: SharedHistoryTransaction) => T | PromiseLike<T>, xo?: { write?: boolean }) {
-      let write = !(xo && xo.write === false);
+      const write = !(xo && xo.write === false);
       observe("exclusive");
-      let job = chain.then(function () { return runTx(fn, write); });
+      const job = chain.then(function () { return runTx(fn, write); });
       chain = job.then(noop, noop);
       return job;
     },

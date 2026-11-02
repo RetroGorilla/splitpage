@@ -8,7 +8,7 @@ import type { HistoryFaultBackend } from "./history-backend-types.ts";
 export function createMemoryHistoryTestBackend(options?: { name?: string; persistent?: boolean; readOnly?: boolean; strict?: boolean; macrotask?: (callback: () => void) => void }) {
   const faults = createHistoryTestFaults();
   const counts = { exclusive: 0, put: 0, commit: 0 };
-  return Object.assign(createMemoryHistoryBackend({ ...options, before: faults.before, observe: (op: keyof typeof counts) => { counts[op]++; }, extend: historyMemoryInspection }), { counts }, faults.controls) as Pick<ReturnType<typeof createIdbHistoryBackend>, "name" | "persistent" | "readOnly" | "exclusive"> & ReturnType<typeof historyMemoryInspection> & typeof faults.controls & { counts: typeof counts };
+  return Object.assign(createMemoryHistoryBackend({ ...options, before: faults.before, observe: (op: keyof typeof counts) => { counts[op]++; }, extend: historyMemoryInspection }), { counts }, faults.controls);
 }
 
 export function createIdbHistoryTestBackend(options?: Parameters<typeof createIdbHistoryBackend>[0]) {
