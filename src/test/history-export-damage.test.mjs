@@ -197,6 +197,16 @@ test("an obsolete image open failure cannot mark a replacement backend unavailab
   assert.deepEqual(await reading, [image]);
 });
 
+test("strict reads support an intentionally memory-only image store", async () => {
+  const pictures = createBlobStore({ preferred: null, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==", "base64");
+  const record = pictures.intern(bytes);
+  assert.deepEqual(await pictures.persist([record.sha256]), []);
+  pictures.forgetMemory();
+  assert.deepEqual(await pictures.ensureBytes([record.sha256, image], { strict: true }), [image]);
+  assert.equal(pictures.dataUrlFor(record.sha256), "data:image/png;base64," + bytes.toString("base64"));
+});
+
 test("confirmed desktop body absence still permits a partial export", async (t) => {
   const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
   const get = h.bridge.historyGet;

@@ -209,7 +209,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     const p = opened.then(null, function (e: unknown) {
       if (!preferredFailed) host.warn("Image store: IndexedDB unavailable, keeping images in memory", e);
       preferredFailed = true;
-      if (gen === backendGen) fallbackUnavailable = true;
+      if (preferred && gen === backendGen) fallbackUnavailable = true;
       return host.fallback();
     }).then(function (b) {
       if (gen === backendGen && !backend) backend = b;
