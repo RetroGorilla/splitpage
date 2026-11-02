@@ -1,0 +1,118 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.D=window.__desktopTest;var rows=[{id:'r1',visualText:'visual secret',audioText:'First needle. A <strong>nee</strong>dle again.',status:'todo'},{id:'r2',audioText:'Shot secret needle.',status:'shot'},{id:'r3',audioText:('Filler words for scrolling. ').repeat(60)+'Last needle.',status:'todo'}];return F.openFile(new File([JSON.stringify({schema:2,title:'Find in Present',rows:rows,comments:[{id:'c1',rowId:'r1',field:'audioText',body:'comment secret',author:'Test'}]})],'present-find.splitpage'));})()
+wait F.state().title === 'Find in Present'
+expect F.state().comments[0].body === 'comment secret'
+eval (function(){window.__query=function(q){var i=document.getElementById('find-input');i.value=q;i.dispatchEvent(new Event('input',{bubbles:true}));return true;};window.__count=function(){return document.getElementById('find-count').textContent;};window.__all=function(){return CSS.highlights.get('splitpage-present-matches');};window.__hit=function(){var h=CSS.highlights.get('splitpage-find-match');return h&&h.values().next().value;};window.__aligned=function(){var r=__hit(),n=r.startContainer.parentElement.closest('.w'),s=document.getElementById('prompter-scroll');return Math.abs(n.offsetTop-s.scrollTop-s.clientHeight/2)<2;};window.__top=function(el){var r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));};window.__before=JSON.stringify(F.state());window.__dirtyBefore=document.getElementById('btn-save').textContent;return true;})()
+click #btn-present
+wait !document.getElementById('prompter').hidden
+click #pp-skip-shot
+click #pp-play
+expect document.getElementById('pp-play').classList.contains('is-active')
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+expect document.activeElement.id === 'find-input'
+expect __top(document.getElementById('find-input'))
+expect !document.getElementById('pp-play').classList.contains('is-active')
+expect ['replace-input','find-replace','find-replace-all','find-tag'].every(function(id){return document.getElementById(id).getClientRects().length === 0;})
+press foo mix
+key ArrowUp
+key ArrowDown
+expect document.getElementById('find-input').value === 'foo mix'
+expect !document.getElementById('pp-play').classList.contains('is-active')
+expect !document.getElementById('prompter-scroll').classList.contains('mirror') && !document.getElementById('prompter-scroll').classList.contains('flip')
+eval __query('visual secret')
+expect __count() === 'No matches'
+eval __query('comment secret')
+expect __count() === 'No matches'
+eval __query('Shot secret')
+expect __count() === 'No matches'
+eval __query('needle')
+expect __count() === '1 of 3' && __all().size === 3
+expect Array.from(__all()).every(function(r){return r.toString() === 'needle' && document.getElementById('prompter-content').contains(r.startContainer);})
+click #pp-mirror
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('prompter').hidden
+expect document.activeElement.id === 'pp-play'
+key ctrl KeyF
+wait document.activeElement.id === 'find-input'
+click #pp-mirror
+focus #find-input
+eval window.__scrollBefore=document.getElementById('prompter-scroll').scrollTop
+key Enter
+expect __count() === '2 of 3' && __aligned()
+expect document.activeElement.id === 'find-input'
+key Enter
+expect __count() === '3 of 3' && __aligned()
+expect document.getElementById('prompter-scroll').scrollTop > __scrollBefore
+key shift Enter
+expect __count() === '2 of 3' && __aligned()
+click #find-case
+eval __query('NEEDLE')
+expect __count() === 'No matches'
+click #find-case
+expect __count() === '1 of 3'
+eval __query('needle')
+click #pp-mirror
+focus #find-input
+key Enter
+expect __aligned() && document.getElementById('prompter-scroll').classList.contains('mirror')
+click #pp-flip
+focus #find-input
+key Enter
+expect __aligned() && document.getElementById('prompter-scroll').classList.contains('flip')
+shot find-present-mirrored-flipped
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('prompter').hidden
+expect document.getElementById('prompter').contains(document.activeElement)
+expect !CSS.highlights.has('splitpage-present-matches') && !CSS.highlights.has('splitpage-find-match')
+expect !document.getElementById('pp-play').classList.contains('is-active')
+click #pp-play
+expect document.getElementById('pp-play').classList.contains('is-active')
+click #pp-play
+key Escape
+wait document.getElementById('prompter').hidden
+expect JSON.stringify(F.state()) === __before
+expect document.getElementById('btn-save').textContent === __dirtyBefore
+click #btn-present
+wait !document.getElementById('prompter').hidden
+eval (function(){window.__locks=[];window.__unlocks=0;var k=navigator.keyboard;if(k&&k.lock){var l=k.lock.bind(k),u=k.unlock.bind(k);k.lock=function(keys){var r={keys:keys,state:'pending'};__locks.push(r);return l(keys).then(function(){r.state='granted';},function(e){r.state=e.name;throw e;});};k.unlock=function(){__unlocks++;return u();};}return true;})()
+click #pp-fullscreen
+wait document.fullscreenElement === document.documentElement
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+wait !navigator.keyboard || !navigator.keyboard.lock || (__locks.length > 0 && __locks[__locks.length-1].state !== 'pending')
+eval window.__locked=__locks.length > 0 && __locks[__locks.length-1].state === 'granted';JSON.stringify({requests:__locks,locked:__locked})
+expect __locks.every(function(r){return JSON.stringify(r.keys) === '["Escape"]';})
+expect document.activeElement.id === 'find-input' && __top(document.getElementById('find-input'))
+eval __query('needle')
+key Enter
+expect __aligned()
+shot find-present-fullscreen
+key Escape
+sleep 300
+eval JSON.stringify({escape:1,fullscreen:!!document.fullscreenElement,findOpen:!document.getElementById('findbar').hidden,presentOpen:!document.getElementById('prompter').hidden,focus:document.activeElement.id})
+expect !document.getElementById('prompter').hidden
+expect __locked ? (document.getElementById('findbar').hidden && !document.fullscreenElement && __unlocks === 1) : (!document.getElementById('findbar').hidden && !document.fullscreenElement)
+key Escape
+sleep 300
+eval JSON.stringify({escape:2,fullscreen:!!document.fullscreenElement,findOpen:!document.getElementById('findbar').hidden,presentOpen:!document.getElementById('prompter').hidden,focus:document.activeElement.id})
+expect document.getElementById('findbar').hidden
+expect !document.fullscreenElement && (document.getElementById('prompter').hidden === __locked)
+key Escape
+wait document.getElementById('prompter').hidden
+expect document.fullscreenElement === null
+eval (function(){var rows=Array.from({length:300},function(_,i){return {id:'long'+i,audioText:('Some narration words for the long script. ').repeat(6)+'needle '+i+'.',status:'todo'};});return F.openFile(new File([JSON.stringify({schema:2,title:'Long Present find',rows:rows})],'long-find.splitpage'));})()
+wait F.state().title === 'Long Present find'
+click #btn-present
+wait !document.getElementById('prompter').hidden
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+eval (async function(){var cpu=[],frames=[];for(var i=0;i<31;i++){var t=performance.now();__query(i%2?'words':'needle');cpu.push(performance.now()-t);await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);frames.push(performance.now()-t);}cpu.shift();frames.shift();cpu.sort(function(a,b){return a-b;});frames.sort(function(a,b){return a-b;});window.__searchTiming={scenes:300,words:document.querySelectorAll('#prompter-content .w').length,samples:cpu.length,searchP50:cpu[14],searchP95:cpu[28],searchMax:cpu[29],twoFrameP50:frames[14],twoFrameP95:frames[28],twoFrameMax:frames[29]};return JSON.stringify(__searchTiming);})()
+expect __count() === '1 of 300' && __all().size === 300
+key shift Enter
+expect __count() === '300 of 300' && __aligned()
+key Escape
+key Escape
+wait document.getElementById('prompter').hidden
+quit

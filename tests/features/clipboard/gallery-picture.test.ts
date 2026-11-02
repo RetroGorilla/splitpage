@@ -7,6 +7,7 @@ import { cellFromClipboard, hasMediaFiles, readClipboardFiles, startCellClipboar
 import type { CellClipboardPorts } from "../../../src/features/clipboard/ports.ts";
 import type { PictureStore } from "../../../src/application/media/picture-store.ts";
 import { adapterWith, fakePorts } from "../../adapters/richtext/fakes.ts";
+import { cleanPastedLinks } from "../../../src/adapters/richtext/paste-links.ts";
 import { fakeDocument, fakeEdits, fakePictures } from "../fakes.ts";
 
 const ref = { sha256: "d".repeat(64), width: 17, height: 13, mime: "image/png" };
@@ -42,7 +43,7 @@ function clipboard(recover: boolean = false, inline: boolean = false) {
     edits: { ...edits.edits, text: { ...edits.edits.stamps, cells: () => [] } },
     undo: { breakCoalescing: () => {}, flush: () => {} },
     pictures,
-    text: { cellOf: text.createCellReader(noFreeze), fromHtml: text.decode, inertBody: text.inertBody, storedHtmlFromDom: text.storedHtmlFromDom },
+    text: { cellOf: text.createCellReader(noFreeze), fromHtml: text.decode, inertBody: text.inertBody, cleanPastedCell: cleanPastedLinks, storedHtmlFromDom: text.storedHtmlFromDom },
     imageRefOf: text.imageRefOf,
     ids: { id: (prefix) => prefix + "1" },
     nonce: () => "n1",

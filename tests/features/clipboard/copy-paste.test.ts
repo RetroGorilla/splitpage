@@ -107,7 +107,7 @@ test("cell clipboard: a pasted video link alone goes to the scene's gallery thro
     edits: { run: (command) => { calls.push("run"); return edits.edits.run(command); }, text: { ...edits.edits.stamps, cells: () => [] } },
     undo: { breakCoalescing: () => { calls.push("break"); }, flush: () => { calls.push("flush"); } },
     pictures: fakePictures().pictures,
-    text: { cellOf: () => [], fromHtml: () => [], inertBody: () => document.createElement("body"), storedHtmlFromDom: (html) => html },
+    text: { cellOf: () => [], fromHtml: () => [], inertBody: () => document.createElement("body"), cleanPastedCell: (cell) => Array.from(cell), storedHtmlFromDom: (html) => html },
     imageRefOf: () => null,
     ids: { id: (prefix) => prefix + "1" },
     nonce: () => "n1",

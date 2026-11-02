@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../../../tests/features/editing/jsdom.mjs";
-import { fakeDocument, fakeNotices } from "../../../tests/features/fakes.ts";
+import { fakeDocument, fakeNotices, fakeFindPresent } from "../../../tests/features/fakes.ts";
 import { fakeMigration } from "../../../tests/core/migrate-ports.ts";
 import { migrateRows } from "../../core/migrate.ts";
 import type { FindPorts } from "./ports.ts";
@@ -17,6 +17,7 @@ test("find uses owner ports to reveal matches", () => {
   const doc = migrateRows({ rows: [{ id: "r1", visualText: "needle", audioText: "" }] }, fakeMigration().ports);
   const reader = fakeDocument(doc);
   const revealed: string[] = [];
+  const presentation = fakeFindPresent();
   let open = false;
   const ports: FindPorts = {
     document: reader.document,
@@ -31,7 +32,8 @@ test("find uses owner ports to reveal matches", () => {
     notices: fakeNotices().notices,
     flags: { setFindOpen: (value) => { open = value; } },
     options: { matchesCase: () => false },
-    bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 })
+    bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 }),
+    present: presentation.present
   };
   const mounted = startFind(ports);
   mounted.openFindBar();
@@ -45,5 +47,17 @@ test("find uses owner ports to reveal matches", () => {
   findQueryChanged();
   assert.equal(win.document.getElementById("find-count")?.textContent, "1 of 1");
   again.dispose();
+  const content = win.document.createElement("div");
+  content.id = "prompter-content";
+  content.innerHTML = '<div class="prompter-line">needle</div>';
+  win.document.body.append(content);
+  presentation.state.open = true;
+  const presenting = startFind(ports);
+  presenting.openFindBar();
+  assert.equal(presentation.state.searching, true);
+  win.document.getElementById("findbar")?.remove();
+  presenting.dispose();
+  assert.equal(presentation.state.searching, false);
+  presentation.changed();
   win.close();
 });

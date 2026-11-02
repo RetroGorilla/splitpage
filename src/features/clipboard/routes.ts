@@ -12,7 +12,7 @@ interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly placeOf: (cell: Element) => Place;
   readonly restorePlace: (cell: Element, place: Place) => void;
   readonly findCell: (rowId: string, field: string) => Element | null;
-  readonly insertNow: (cell: Element, html: string, text: string, extra: Extra | null) => void;
+  readonly insertNow: (cell: Element, html: string, text: string, extra: Extra | null, fromPaste: boolean) => void;
 }
 
 interface ClipboardRoutesMount<Owner, Place, Extra> {
@@ -52,10 +52,10 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
     ports.afterCut(fresh || cell);
   }
 
-  function insert(cell: Element, html: string, text: string, files: FileList | readonly File[] | null | undefined): void {
+  function insert(cell: Element, html: string, text: string, files: FileList | readonly File[] | null | undefined, fromPaste = false): void {
     if (!open) return;
     if (!ports.hasMedia(files, html)) {
-      ports.insertNow(cell, html, text, null);
+      ports.insertNow(cell, html, text, null, fromPaste);
       return;
     }
     const rowId = cell.getAttribute("data-id") || "";
@@ -68,7 +68,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
       const live = cell.isConnected ? cell : ports.findCell(rowId, field);
       if (!live) return;
       if (html || text) ports.restorePlace(live, place);
-      ports.insertNow(live, html, text, extra);
+      ports.insertNow(live, html, text, extra, fromPaste);
     });
   }
 
@@ -84,7 +84,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
     }
     if (ports.pasteScenes(data, cell)) return;
     if (!data) return;
-    insert(cell, data.getData("text/html"), data.getData("text/plain"), data.files);
+    insert(cell, data.getData("text/html"), data.getData("text/plain"), data.files, true);
   }
 
   const handlers: Record<(typeof ROUTES)[number], (e: Event) => void> = {

@@ -20,6 +20,7 @@ import type { NoticeKind, NoticePort } from "../../src/application/effects/ports
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
+import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
@@ -88,6 +89,19 @@ export function fakeWriterPorts(initial: DocumentView) {
   return { ports, reader, notices, calls, state };
 }
 
+export function fakeFindPresent() {
+  const state = { open: false, searching: false };
+  const jumps: Range[] = [];
+  const listeners = new Set<() => void>();
+  const present: FindPorts["present"] = {
+    isOpen: () => state.open,
+    setSearching: (value) => { state.searching = value; },
+    jump: (range) => { jumps.push(range); },
+    onViewChange: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; }
+  };
+  return { present, state, jumps, changed: () => { for (const listener of listeners) listener(); } };
+}
+
 export function fakePrompterPorts(initial: DocumentView | null = null) {
   const reader = fakeDocument(initial);
   const notices = fakeNotices();
@@ -135,7 +149,11 @@ export function fakeTextServices(document: Document) {
     body.innerHTML = String(html ?? "");
     return body;
   };
-  const text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "sanitizeHtml" | "storedHtmlFromDom"> = {
+  const text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "cleanPastedCell" | "sanitizeHtml" | "storedHtmlFromDom"> = {
+    cleanPastedCell: (cell) => {
+      calls.push({ method: "cleanPastedCell", html: cell });
+      return cell.map((run) => ({ ...run }));
+    },
     fromHtml: (html) => {
       calls.push({ method: "fromHtml", html });
       return [{ text: inertBody(html).textContent ?? "", marks: {} }];

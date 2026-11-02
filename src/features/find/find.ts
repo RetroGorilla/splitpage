@@ -33,12 +33,25 @@ import { escapeHtml, withoutLoneSurrogates } from "../../core/document/text-poli
 import { replaceText } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
+import { presentFindRanges } from "./present-ranges.ts";
+import { captureFindEscape } from "./keyboard-lock.ts";
 
 let ports: FindRuntimePorts | null = null;
 
 let findMatches: FindMatch[] = [];
 let findIndex = -1;
 let findInTags = 0;
+let presentRanges: Range[] = [];
+let stopViewChange: (() => void) | null = null;
+let releaseEscapeLock: (() => void) | null = null;
+
+function findingInPresent() {
+  return !!document.getElementById("findbar")?.classList.contains("is-present");
+}
+
+function matchCount() {
+  return findingInPresent() ? presentRanges.length : findMatches.length;
+}
 
 function findNeedle() {
   return (document.getElementById("find-input") as HTMLInputElement).value || "";
@@ -154,6 +167,19 @@ export function replaceInHtml(html: string, needle: string, replacement: unknown
 }
 
 function refreshFindMatches(keepIndex: boolean) {
+  if (findingInPresent()) {
+    findMatches = [];
+    presentRanges = presentFindRanges(document.getElementById("prompter-content") as HTMLElement, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
+    findInTags = 0;
+    findIndex = presentRanges.length ? (keepIndex ? Math.max(0, Math.min(findIndex, presentRanges.length - 1)) : 0) : -1;
+    if (highlightsSupported()) {
+      const highlight = new Highlight();
+      for (const range of presentRanges) highlight.add(range);
+      CSS.highlights.set(PRESENT_HL, highlight);
+    }
+    updateFindCount();
+    return;
+  }
   const found = findInRows((ports as FindRuntimePorts).document.current()?.rows ?? [], findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
   findMatches = found.matches;
   findInTags = found.inTags;
@@ -170,14 +196,14 @@ function updateFindCount() {
   const needle = findNeedle();
   el.removeAttribute("title");
   if (!needle) { el.textContent = ""; el.classList.remove("none"); return; }
-  if (!findMatches.length) {
+  if (!matchCount()) {
     el.textContent = noMatchLabel(findInTags);
     if (findInTags) el.title = "Find never changes a tag's words — rename it in Production instead.";
     el.classList.add("none");
     return;
   }
   el.classList.remove("none");
-  el.textContent = (findIndex + 1) + " of " + findMatches.length;
+  el.textContent = (findIndex + 1) + " of " + matchCount();
 }
 
 function currentMatchRange() {
@@ -195,12 +221,21 @@ function currentMatchRange() {
 }
 
 const FIND_HL = "splitpage-find-match";
+const PRESENT_HL = "splitpage-present-matches";
 
 function highlightsSupported() {
   return !!(window.CSS && CSS.highlights && window.Highlight);
 }
 
 function revealFindMatch() {
+  if (findingInPresent()) {
+    const range = presentRanges[findIndex];
+    if (highlightsSupported()) {
+      if (range) CSS.highlights.set(FIND_HL, new Highlight(range));
+      else CSS.highlights.delete(FIND_HL);
+    }
+    return;
+  }
   const m = (findMatches[findIndex] as FindMatch);
   if (m) (ports as FindRuntimePorts).shotHiding().reveal(m.rowId);
   const hit = currentMatchRange();
@@ -219,13 +254,16 @@ export function findQueryChanged() {
 }
 
 function stepFind(dir: number) {
-  if (!findMatches.length) return;
-  findIndex = (findIndex + dir + findMatches.length) % findMatches.length;
+  const count = matchCount();
+  if (!count) return;
+  findIndex = (findIndex + dir + count) % count;
   updateFindCount();
   revealFindMatch();
+  if (findingInPresent()) (ports as FindRuntimePorts).present.jump(presentRanges[findIndex] as Range);
 }
 
 function replaceCurrent() {
+  if (findingInPresent()) return;
   const needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
   revealFindMatch();
@@ -246,6 +284,7 @@ function replaceCurrent() {
 }
 
 export function replaceAll() {
+  if (findingInPresent()) return;
   const needle = findNeedle();
   if (!needle) return;
   const replacement = (document.getElementById("replace-input") as HTMLInputElement).value || "";
@@ -349,6 +388,7 @@ function defaultBulkTagCat(needle: string) {
 }
 
 export function openBulkTag() {
+  if (findingInPresent()) return;
   if (!(ports as FindRuntimePorts).document.current()) return;
   bulkTagCat = defaultBulkTagCat(bulkTagNeedle());
   const row = bulkTagRowEl();
@@ -377,6 +417,7 @@ function refreshBulkTagRow() {
 }
 
 export function runBulkTag() {
+  if (findingInPresent()) return;
   const doc = (ports as FindRuntimePorts).document.current();
   if (!doc) return;
   const needle = bulkTagNeedle();
@@ -403,8 +444,22 @@ export function runBulkTag() {
 }
 
 export function openFindBar() {
+  if (!stopViewChange) stopViewChange = (ports as FindRuntimePorts).present.onViewChange(function () {
+    if ((ports as FindRuntimePorts).present.isOpen()) {
+      if (!findingInPresent()) openFindBar();
+      else findQueryChanged();
+    } else if (findingInPresent()) closeFindBar();
+  });
   (ports as FindRuntimePorts).flags.setFindOpen(true);
-  (document.getElementById("findbar") as HTMLElement).hidden = false;
+  const bar = document.getElementById("findbar") as HTMLElement;
+  const present = (ports as FindRuntimePorts).present.isOpen();
+  bar.classList.toggle("is-present", present);
+  bar.hidden = false;
+  if (present) {
+    closeBulkTag();
+    (ports as FindRuntimePorts).present.setSearching(true, closeFindBar);
+    releaseEscapeLock ??= captureFindEscape(window);
+  }
   const input = (document.getElementById("find-input") as HTMLInputElement);
   const sel = window.getSelection();
   const picked = sel && !sel.isCollapsed ? String(sel).trim() : "";
@@ -450,16 +505,29 @@ function firstMatchFrom(range: Range | null) {
 }
 
 export function closeFindBar() {
+  releaseEscapeLock?.();
+  releaseEscapeLock = null;
+  const present = findingInPresent();
+  const bar = document.getElementById("findbar") as HTMLElement;
+  if (present && bar.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+  stopViewChange?.();
+  stopViewChange = null;
+  if (present) (ports as FindRuntimePorts).present.setSearching(false);
   (ports as FindRuntimePorts).flags.setFindOpen(false);
   (document.getElementById("findbar") as HTMLElement).hidden = true;
+  document.getElementById("findbar")?.classList.remove("is-present");
+  presentRanges = [];
   findMatches = [];
   findIndex = -1;
   findInTags = 0;
   closeBulkTag();
   if (highlightsSupported()) CSS.highlights.delete(FIND_HL);
+  if (highlightsSupported()) CSS.highlights.delete(PRESENT_HL);
+  if (present && (ports as FindRuntimePorts).present.isOpen()) document.getElementById("pp-play")?.focus({ preventScroll: true });
 }
 
 function leaveFindAtMatch() {
+  if (findingInPresent()) { closeFindBar(); return; }
   const hit = currentMatchRange();
   closeFindBar();
   if (!hit) return;
@@ -480,11 +548,18 @@ export function startFind(given: FindPorts): FindControls {
       disposed = true;
       if ((document.getElementById("findbar") as HTMLElement)) closeFindBar();
       else {
+        releaseEscapeLock?.();
+        releaseEscapeLock = null;
+        stopViewChange?.();
+        stopViewChange = null;
+        given.present.setSearching(false);
         (ports as FindRuntimePorts).flags.setFindOpen(false);
         findMatches = [];
         findIndex = -1;
         findInTags = 0;
         if (highlightsSupported()) CSS.highlights.delete(FIND_HL);
+        if (highlightsSupported()) CSS.highlights.delete(PRESENT_HL);
+        presentRanges = [];
       }
       bulkTagCat = null;
       ports = null;
