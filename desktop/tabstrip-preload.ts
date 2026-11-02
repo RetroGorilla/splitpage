@@ -1,26 +1,11 @@
 "use strict";
 
 import type { DesktopChannel } from "./ipc-channels.ts";
-import type { DesktopChannelRow, DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
+import type { DesktopTabStripBridge, DesktopChannelRow, DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
 
 type TabstripPreloadChannelName<D extends DesktopChannelRow["direction"]> = Extract<DesktopChannel, { direction: D }>["name"];
-type TabstripPreloadCall<C extends keyof DesktopIpcContract> = (...args: DesktopIpcArgs<C>) => DesktopIpcResult<C>;
-
-interface TabstripPreloadBridge {
-  windowId: DesktopIpcResult<"splitpage:tabstrip-window-id-sync">;
-  platform: NodeJS.Platform;
-  getShellState: () => Promise<DesktopIpcResult<"splitpage:tabstrip-get-state">>;
-  onShellStateChanged: (callback: (state: DesktopIpcArgs<"splitpage:tabstrip-state">[0]) => void) => void;
-  newTab: TabstripPreloadCall<"splitpage:tabstrip-new-tab">;
-  activateTab: TabstripPreloadCall<"splitpage:tabstrip-activate">;
-  closeTab: TabstripPreloadCall<"splitpage:tabstrip-close">;
-  reorderTab: TabstripPreloadCall<"splitpage:tabstrip-reorder">;
-  moveTabHere: TabstripPreloadCall<"splitpage:tabstrip-move-here">;
-  tearOffToNewWindow: TabstripPreloadCall<"splitpage:tabstrip-tear-off">;
-}
-
 interface TabstripPreloadElectronBoundary {
-  contextBridge: { exposeInMainWorld: (name: string, value: TabstripPreloadBridge) => void };
+  contextBridge: { exposeInMainWorld: (name: string, value: DesktopTabStripBridge) => void };
   ipcRenderer: {
     invoke: <C extends TabstripPreloadChannelName<"invoke">>(name: C, ...args: DesktopIpcArgs<C>) => Promise<DesktopIpcResult<C>>;
     send: <C extends TabstripPreloadChannelName<"send">>(name: C, ...args: DesktopIpcArgs<C>) => void;
@@ -51,7 +36,7 @@ if (location.origin === "splitpage://tabstrip") {
   const sendSync = <C extends TabstripPreloadChannelName<"sendSync">>(name: C, ...args: DesktopIpcArgs<C>) => ipcRenderer.sendSync(channel(name, "sendSync"), ...args);
   const receive = <C extends TabstripPreloadChannelName<"receive">>(name: C, handler: (event: unknown, ...args: DesktopIpcReceiveArgs<C>) => void) => ipcRenderer.on(channel(name, "receive"), handler);
 
-  let shellStateCallback: Parameters<TabstripPreloadBridge["onShellStateChanged"]>[0] | null = null;
+  let shellStateCallback: Parameters<DesktopTabStripBridge["onShellStateChanged"]>[0] | null = null;
 
   receive("splitpage:tabstrip-state", (_event, state) => {
     if (shellStateCallback) shellStateCallback(state);

@@ -1,18 +1,20 @@
 "use strict";
 
+                                                                                                       
+
 (function () {
-  var bridge = window.splitpageTabStrip;
+  const bridge = window.splitpageTabStrip;
   if (!bridge) {
     return;
   }
 
-  var stripEl = document.getElementById("tabstrip");
+  const stripEl = document.getElementById("tabstrip");
 
-  var tabsEl = document.createElement("div");
+  const tabsEl = document.createElement("div");
   tabsEl.className = "tabstrip__tabs";
-  stripEl.appendChild(tabsEl);
+  (stripEl               ).appendChild(tabsEl);
 
-  var newTabBtn = document.createElement("button");
+  const newTabBtn = document.createElement("button");
   newTabBtn.type = "button";
   newTabBtn.className = "tabstrip__new";
   newTabBtn.setAttribute("aria-label", "New tab");
@@ -20,24 +22,24 @@
   newTabBtn.addEventListener("click", function () {
     bridge.newTab();
   });
-  stripEl.appendChild(newTabBtn);
+  (stripEl               ).appendChild(newTabBtn);
 
-  var draggedTabId = null;
+  let draggedTabId                = null;
 
   function windowId() {
-    return bridge.windowId;
+    return (bridge                         ).windowId;
   }
 
-  function render(state) {
+  function render(state                              ) {
     tabsEl.textContent = "";
-    var tabs = (state && state.tabs) || [];
-    for (var i = 0; i < tabs.length; i++) {
-      tabsEl.appendChild(buildTabEl(state, tabs[i]));
+    const tabs = (state && state.tabs) || [];
+    for (let i = 0; i < tabs.length; i++) {
+      tabsEl.appendChild(buildTabEl(state                         , tabs[i]                                         ));
     }
   }
 
-  function buildTabEl(state, tab) {
-    var el = document.createElement("div");
+  function buildTabEl(state                       , tab                                       ) {
+    const el = document.createElement("div");
     el.className = "tab" + (tab.tabId === state.activeTabId ? " tab--active" : "");
     el.setAttribute("role", "tab");
     el.setAttribute("aria-selected", tab.tabId === state.activeTabId ? "true" : "false");
@@ -48,74 +50,74 @@
     el.dataset.tabId = tab.tabId;
     el.draggable = true;
 
-    var titleEl = document.createElement("span");
+    const titleEl = document.createElement("span");
     titleEl.className = "tab__title";
     titleEl.textContent = tab.title;
     el.appendChild(titleEl);
 
     if (tab.crashed) {
-      var broken = document.createElement("span");
+      const broken = document.createElement("span");
       broken.className = "tab__broken";
       broken.textContent = "!";
       broken.setAttribute("aria-label", "stopped responding");
       el.appendChild(broken);
     } else if (tab.dirty) {
-      var dot = document.createElement("span");
+      const dot = document.createElement("span");
       dot.className = "tab__dot";
       dot.setAttribute("aria-hidden", "true");
       el.appendChild(dot);
     }
 
-    var closeBtn = document.createElement("button");
+    const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "tab__close";
     closeBtn.setAttribute("aria-label", "Close " + tab.title);
     closeBtn.textContent = "×";
     closeBtn.addEventListener("click", function (e) {
       e.stopPropagation();
-      bridge.closeTab(tab.tabId);
+      (bridge                         ).closeTab(tab.tabId);
     });
     el.appendChild(closeBtn);
 
     el.addEventListener("click", function () {
-      bridge.activateTab(tab.tabId);
+      (bridge                         ).activateTab(tab.tabId);
     });
 
     el.addEventListener("mousedown", function (e) {
       if (e.button === 1) e.preventDefault();
     });
     el.addEventListener("auxclick", function (e) {
-      if (e.button === 1) bridge.closeTab(tab.tabId);
+      if (e.button === 1) (bridge                         ).closeTab(tab.tabId);
     });
 
     el.addEventListener("dragstart", function (e) {
       draggedTabId = tab.tabId;
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData(
+      (e.dataTransfer                ).effectAllowed = "move";
+      (e.dataTransfer                ).setData(
         "application/x-splitpage-tab",
         JSON.stringify({ tabId: tab.tabId, sourceWindowId: windowId() })
       );
     });
 
     el.addEventListener("dragend", function (e) {
-      var draggedId = draggedTabId;
+      const draggedId = draggedTabId;
       draggedTabId = null;
       clearDropMarkers();
       if (!draggedId) return;
-      if (e.dataTransfer.dropEffect !== "none") return;
-      var outside =
+      if ((e.dataTransfer                ).dropEffect !== "none") return;
+      const outside =
         e.clientX < 0 ||
         e.clientY < 0 ||
         e.clientX > window.innerWidth ||
         e.clientY > window.innerHeight;
       if (outside) {
-        bridge.tearOffToNewWindow(draggedId, e.screenX, e.screenY);
+        (bridge                         ).tearOffToNewWindow(draggedId, e.screenX, e.screenY);
       }
     });
 
     el.addEventListener("dragover", function (e) {
       e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
+      (e.dataTransfer                ).dropEffect = "move";
       markDropSide(el, e.clientX);
     });
 
@@ -131,50 +133,50 @@
     return el;
   }
 
-  function markDropSide(el, clientX) {
-    var rect = el.getBoundingClientRect();
-    var before = clientX < rect.left + rect.width / 2;
+  function markDropSide(el             , clientX        ) {
+    const rect = el.getBoundingClientRect();
+    const before = clientX < rect.left + rect.width / 2;
     el.classList.toggle("tab--drop-before", before);
     el.classList.toggle("tab--drop-after", !before);
   }
 
   function clearDropMarkers() {
-    var marked = tabsEl.querySelectorAll(".tab--drop-before, .tab--drop-after");
-    for (var i = 0; i < marked.length; i++) {
-      marked[i].classList.remove("tab--drop-before", "tab--drop-after");
+    const marked = tabsEl.querySelectorAll(".tab--drop-before, .tab--drop-after");
+    for (let i = 0; i < marked.length; i++) {
+      (marked[i]           ).classList.remove("tab--drop-before", "tab--drop-after");
     }
   }
 
-  function dropIndexForTarget(el, clientX) {
-    var pills = Array.prototype.slice.call(tabsEl.children);
-    var index = pills.indexOf(el);
-    var rect = el.getBoundingClientRect();
-    var before = clientX < rect.left + rect.width / 2;
+  function dropIndexForTarget(el             , clientX        ) {
+    const pills = Array.prototype.slice.call(tabsEl.children)             ;
+    const index = pills.indexOf(el);
+    const rect = el.getBoundingClientRect();
+    const before = clientX < rect.left + rect.width / 2;
     return before ? index : index + 1;
   }
 
-  function handleDrop(e, dropIndex) {
+  function handleDrop(e           , dropIndex        ) {
     clearDropMarkers();
-    var raw = e.dataTransfer.getData("application/x-splitpage-tab");
+    const raw = (e.dataTransfer                ).getData("application/x-splitpage-tab");
     if (!raw) return;
-    var payload;
+    let payload         ;
     try {
       payload = JSON.parse(raw);
     } catch (err) {
       return;
     }
-    if (!payload || !payload.tabId) return;
-    if (payload.sourceWindowId === windowId()) {
-      bridge.reorderTab(payload.tabId, dropIndex);
+    if (!payload || !(payload                           ).tabId) return;
+    if ((payload                           ).sourceWindowId === windowId()) {
+      (bridge                         ).reorderTab((payload                           ).tabId          , dropIndex);
     } else {
-      bridge.moveTabHere(payload.tabId, dropIndex);
+      (bridge                         ).moveTabHere((payload                           ).tabId          , dropIndex);
     }
   }
 
-  function dropIndexForPoint(clientX) {
-    var pills = tabsEl.children;
-    for (var i = 0; i < pills.length; i++) {
-      var rect = pills[i].getBoundingClientRect();
+  function dropIndexForPoint(clientX        ) {
+    const pills = tabsEl.children;
+    for (let i = 0; i < pills.length; i++) {
+      const rect = (pills[i]           ).getBoundingClientRect();
       if (clientX < rect.left + rect.width / 2) return i;
     }
     return pills.length;
@@ -182,7 +184,7 @@
 
   tabsEl.addEventListener("dragover", function (e) {
     e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
+    (e.dataTransfer                ).dropEffect = "move";
   });
   tabsEl.addEventListener("drop", function (e) {
     if (e.target === tabsEl) {
@@ -195,11 +197,11 @@
   Promise.resolve(bridge.getShellState()).then(render);
 
   function applyTitlebarInset() {
-    var overlay = navigator.windowControlsOverlay;
+    const overlay = navigator.windowControlsOverlay;
     if (!overlay || !overlay.getTitlebarAreaRect) return;
-    var rect = overlay.getTitlebarAreaRect();
+    const rect = overlay.getTitlebarAreaRect();
     if (!rect || !rect.width) return;
-    var inset = Math.max(0, window.innerWidth - (rect.x + rect.width));
+    const inset = Math.max(0, window.innerWidth - (rect.x + rect.width));
     document.documentElement.style.setProperty("--titlebar-inset", inset + "px");
   }
 
@@ -212,3 +214,12 @@
     document.documentElement.style.setProperty("--titlebar-inset", "0px");
   }
 })();
+
+                                                                             
+                                             
+ 
+
+                
+                                                                 
+                                                                      
+ 
