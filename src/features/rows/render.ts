@@ -205,6 +205,7 @@ function rowGutterHtml(row: Row, index: number): string {
             rowMenuItemHtml(row, "move-up", "i-arrow-up", "Move up", "Move this scene up (Alt+Up)") +
             rowMenuItemHtml(row, "move-down", "i-arrow-down", "Move down", "Move this scene down (Alt+Down)") +
             rowMenuItemHtml(row, "insert-below", "i-plus", "Insert scene", "Insert an empty scene below this one") +
+            rowMenuItemHtml(row, "add-section", "i-plus", "Add Section Header", "Insert a section header above this scene") +
             rowMenuItemHtml(row, "delete-row", "i-trash", "Delete", "Delete this scene", true) +
           '</div>' +
         '</div>' +
