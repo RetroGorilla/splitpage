@@ -4,5 +4,5 @@
     "lib": ["ES2023", "DOM"],
     "types": ["node"]
   },
-  "include": ["types/*.d.ts", "desktop/*.ts", "desktop/tabstrip/*.ts", "shared/desktop-contract.d.ts"]
+  "include": ["types/*.d.ts", "desktop/*.ts", "server/*.ts", "desktop/tabstrip/*.ts", "shared/desktop-contract.d.ts"]
 }

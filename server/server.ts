@@ -1,15 +1,20 @@
 "use strict";
 
-const http = require("node:http");
-const fs = require("node:fs");
-const fsp = require("node:fs/promises");
-const path = require("node:path");
+import type * as Http from "node:http";
+import type * as Fs from "node:fs";
+import type * as Fsp from "node:fs/promises";
+import type * as Path from "node:path";
+
+const http: typeof Http = require("node:http");
+const fs: typeof Fs = require("node:fs");
+const fsp: typeof Fsp = require("node:fs/promises");
+const path: typeof Path = require("node:path");
 
 const PORT = Number(process.env.PORT || 8791);
 const HOST = process.env.HOST || "0.0.0.0";
 const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "..", "public");
 
-const MIME = {
+const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
@@ -21,11 +26,11 @@ const MIME = {
   ".txt": "text/plain; charset=utf-8"
 };
 
-function notFound(res) {
+function notFound(res: Http.ServerResponse) {
   res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
 }
 
-async function handleStatic(req, res, url) {
+async function handleStatic(req: Http.IncomingMessage, res: Http.ServerResponse, url: URL) {
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405).end();
     return;
@@ -46,7 +51,7 @@ async function handleStatic(req, res, url) {
     return;
   }
   const segments = path.relative(root, full).split(path.sep);
-  if (rel.includes(":") || segments.some((seg) => seg.charAt(0) === ".") || segments[0].toLowerCase() === "data") {
+  if (rel.includes(":") || segments.some((seg) => seg.charAt(0) === ".") || (segments[0] as string).toLowerCase() === "data") {
     notFound(res);
     return;
   }
@@ -67,7 +72,7 @@ async function handleStatic(req, res, url) {
   const cache = (ext === ".html" || rel === "/sw.js")
     ? "no-cache"
     : "public, max-age=3600";
-  const headers = {
+  const headers: Http.OutgoingHttpHeaders = {
     "Content-Type": MIME[ext] || "application/octet-stream",
     "Content-Length": stat.size,
     "Cache-Control": cache
@@ -86,7 +91,7 @@ async function handleStatic(req, res, url) {
 const server = http.createServer((req, res) => {
   let url;
   try {
-    url = new URL(req.url, "http://localhost");
+    url = new URL(req.url as string, "http://localhost");
   } catch (e) {
     res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Connection": "close" });
     res.end("Bad request");

@@ -40,7 +40,7 @@ eq("CODEOWNERS and LICENSE are prose", needsChecks([".github/CODEOWNERS", "LICEN
 
 console.log("\nchangedFiles():\n");
 
-for (const files of [null, [], ["src/features/rows/view.ts"], ["server/server.js"], ["docs/help.md"], ["build.mjs"], ["package-lock.json"], ["tools/run-suites.mjs"], [".github/workflows/ci.yml"], [".github/workflows/nightly.yml"], [".claude/skills/run-splitpage-app/tests/01-core.txt"], ["unknown/new.file"]]) {
+for (const files of [null, [], ["src/features/rows/view.ts"], ["server/server.ts"], ["docs/help.md"], ["build.mjs"], ["package-lock.json"], ["tools/run-suites.mjs"], [".github/workflows/ci.yml"], [".github/workflows/nightly.yml"], [".claude/skills/run-splitpage-app/tests/01-core.txt"], ["unknown/new.file"]]) {
   eq(`app checks stay enabled for ${JSON.stringify(files)}`, needsAppChecks(files), true);
 }
 for (const files of [["README.md"], ["tests/application/session.test.ts"], ["src/test/a.test.mjs"], ["desktop/test/smoke.mjs"], ["tools/test-run-suites.mjs"], ["tools/ci-changes.mjs"], [".github/ISSUE_TEMPLATE/bug.yml"], [".github/dependabot.yml"], [".github/workflows/windows-local.yml"], [".github/workflows/release.yml"]]) {
