@@ -3,7 +3,7 @@
 import type * as NodeFs from "node:fs";
 import type * as NodePath from "node:path";
 import type * as NodeCrypto from "node:crypto";
-import type { SharedHistoryBucketReader, SharedHistorySnapshotReader, SharedHistoryIndex, SharedHistoryTransaction } from "../shared/history-store.ts";
+import type { SharedHistoryIndex, SharedHistoryTransaction, projectHistoryBucket as ProjectHistoryBucket } from "../shared/history-store.ts";
 import type { createBlobStore as CreateBlobStore, isSha256 as IsSha256 } from "./blob-store.ts";
 
 type HistoryFsFields = Record<string, unknown>;
@@ -21,6 +21,7 @@ const { createBlobStore, isSha256 }: {
   createBlobStore: typeof CreateBlobStore;
   isSha256: typeof IsSha256;
 } = require("./blob-store.ts");
+const { projectHistoryBucket }: { projectHistoryBucket: typeof ProjectHistoryBucket } = require("../shared/history-store.ts");
 
 const FORMAT_VERSION = 2;
 const INDEX_FILE = "index.json";
@@ -51,14 +52,10 @@ function bodyErrorCode(code: unknown) {
   return "io";
 }
 
-function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonly unknown[] {
-  return rec && Array.isArray(rec.snapshots) ? rec.snapshots as readonly unknown[] : [];
-}
-
 function namedShas(buckets: SharedHistoryIndex) {
   const named = new Set<string>();
   for (const b of Object.keys(buckets)) {
-    for (const s of snapshotsOf(buckets[b])) if (s && typeof (s as SharedHistorySnapshotReader).sha === "string") named.add((s as SharedHistorySnapshotReader).sha as string);
+    for (const sha of Object.keys(projectHistoryBucket(buckets[b]).references)) named.add(sha);
   }
   return named;
 }

@@ -3013,6 +3013,73 @@ async function caseHistoryDamagedEntries(target) {
   }
 }
 
+async function caseHistoryOpaqueWrites(target) {
+  const tag = target.name + " history: opaque entries survive writes and backup retention";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const retentionDoc = randDocId(), oldDoc = randDocId(), capDoc = randDocId(), nullDoc = randDocId(), payloadDoc = randDocId();
+  const body = JSON.stringify({ rows: [], title: "Intact" });
+  const opaqueBody = "opaque body must remain";
+  const versions = () => Array.from({ length: 50 }, (_, i) => ({ meta: historyMeta({ id: "intact" + i, atMs: 1000 + i }), body }));
+  const index = seedHistoryV2OnDisk(userDataDir, {
+    [retentionDoc]: versions(),
+    [oldDoc]: [...versions(), { meta: historyMeta({ id: "oldbad", atMs: 1 }), body: opaqueBody }],
+    [capDoc]: [{ meta: historyMeta({ id: "target", atMs: 1000 }), body }],
+    [nullDoc]: [{ meta: historyMeta({ id: "intact", atMs: 1000 }), body }],
+    [payloadDoc]: [{ meta: historyMeta({ id: "seed", atMs: 1000 }), body }]
+  });
+  const future = { id: "future", atMs: 1e100, sha: historyShaHex(body), sizeBytes: 5 * 1024 * 1024 };
+  index.buckets[retentionDoc].snapshots.push(future);
+  index.buckets[capDoc].snapshots.push(future);
+  index.buckets[nullDoc].snapshots.push(null);
+  const opaque = index.buckets[oldDoc].snapshots.find((entry) => entry.id === "oldbad");
+  opaque.label = { toString: null };
+  const opaqueBytes = JSON.stringify(opaque);
+  const payload = { raw: ["  unchanged  ", null], sha: historyShaHex(body) };
+  index.buckets[payloadDoc].snapshots = payload;
+  fs.writeFileSync(path.join(historyDirOnDisk(userDataDir), "index.json"), JSON.stringify(index));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-opaque-writes", userDataDir, env: { SPLITPAGE_TEST_HISTORY_CAP_BYTES: String(5 * 1024 * 1024) } });
+    await waitForRows(app.cdp, 20000);
+    const call = (name, args) => historyCall(app.cdp, name, args);
+    const put = await call("historyPut", [retentionDoc, historyMeta({ id: "retention-backup", atMs: 2000 }), body]);
+    const listed = await call("historyList", [retentionDoc]);
+    record(tag + ": fifty readable versions retain their allowance beside a damaged future entry",
+      put.ok === true && put.evicted === 1 && listed.entries.length === 50 && listed.damaged === 1, JSON.stringify({ put, count: listed.entries.length }));
+    record(tag + ": the new backup remains readable after trimming",
+      (await call("historyGet", [{ docId: retentionDoc }, "retention-backup"]))?.stateJson === body, "");
+    await call("historyPut", [oldDoc, historyMeta({ id: "prune-backup", atMs: 2000 }), body]);
+    await call("historyTouch", [oldDoc, "Opened again"]);
+    record(tag + ": pruning keeps opaque metadata byte for byte",
+      JSON.stringify(historyBucketOnDisk(userDataDir, oldDoc).snapshots.find((entry) => entry?.id === "oldbad")) === opaqueBytes, "");
+    record(tag + ": pruning keeps the opaque entry's body",
+      fs.readFileSync(historyBodyPathOnDisk(userDataDir, historyShaHex(opaqueBody)), "utf8") === opaqueBody, "");
+    const capPut = await call("historyPut", [capDoc, historyMeta({ id: "cap-backup", atMs: 2000 }), body, { protect: [{ docId: capDoc, id: "target" }] }]);
+    record(tag + ": a cap-sized damaged future entry cannot consume a successful backup",
+      capPut.ok === true && (await call("historyGet", [{ docId: capDoc }, "cap-backup"]))?.stateJson === body, JSON.stringify(capPut));
+    record(tag + ": the protected restore target is retained",
+      (await call("historyGet", [{ docId: capDoc }, "target"]))?.stateJson === body, "");
+    const nullPut = await call("historyPut", [nullDoc, historyMeta({ id: "null-backup", atMs: 2000 }), body]);
+    record(tag + ": null damage cannot block a new backup and remains opaque",
+      nullPut.ok === true && historyBucketOnDisk(userDataDir, nullDoc).snapshots.includes(null) &&
+        (await call("historyGet", [{ docId: nullDoc }, "null-backup"]))?.stateJson === body, JSON.stringify(nullPut));
+    await call("historyTouch", [payloadDoc, "Opened"]);
+    record(tag + ": touch quarantines the exact malformed payload",
+      JSON.stringify(historyBucketOnDisk(userDataDir, payloadDoc).damagedSnapshots) === JSON.stringify(payload), "");
+    const payloadPut = await call("historyPut", [payloadDoc, historyMeta({ id: "payload-backup", atMs: 2000 }), body]);
+    await call("historyCopy", [retentionDoc, payloadDoc]);
+    await call("historyTouch", [payloadDoc, "Opened after pruning"]);
+    const payloadList = await call("historyList", [payloadDoc]);
+    record(tag + ": save and prune keep the quarantined payload and its notice",
+      payloadPut.ok === true && JSON.stringify(historyBucketOnDisk(userDataDir, payloadDoc).damagedSnapshots) === JSON.stringify(payload) && payloadList.damaged === 1, "");
+    record(tag + ": a new backup remains readable alongside quarantine",
+      (await call("historyGet", [{ docId: payloadDoc }, "payload-backup"]))?.stateJson === body, "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
 async function caseHistoryTornIndex(target) {
   const tag = target.name + " history: torn index.json falls back to index.prev.json";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -5604,6 +5671,7 @@ async function runTargetSuite(target, groupFilter) {
     ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target), hookFree],
     ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target), hookFree],
     ["history: damaged entries preserve intact versions", () => caseHistoryDamagedEntries(target), hookFree],
+    ["history: opaque entries survive writes and backup retention", () => caseHistoryOpaqueWrites(target), hookFree],
     ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target), hookFree],
     ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target), hookFree],
     ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target), hookFree],
