@@ -9,12 +9,12 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
-const { createDraftStore, MAX_BODY_BYTES } = require("./drafts");
+const { createDraftStore, MAX_BODY_BYTES } = require("./drafts.ts");
 const {
   filesToOpenFrom, pathKey, createFileRegistry, readFileEntry
-} = require("./file-service");
-const { createDocClaims } = require("./doc-claims");
-const { createRecents } = require("./recents");
+} = require("./file-service.ts");
+const { createDocClaims } = require("./doc-claims.ts");
+const { createRecents } = require("./recents.ts");
 const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance.ts");
 const { createTabRegistry } = require("./tab-registry.ts");
 const { createRestoreNotice } = require("./restore-notice.ts");
