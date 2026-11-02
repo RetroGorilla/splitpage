@@ -9,7 +9,7 @@ import { fakeNotices } from "../features/fakes.ts";
 function harness() {
   const log: string[] = [];
   const location = createDocumentLocation();
-  const imported = location.setHome("import", { name: "draft.txt", handle: { createWritable: true }, format: "txt", inPlace: true });
+  const imported = location.setHome("import", { name: "draft.txt", handle: { createWritable: async () => { throw new Error("the file port owns writes"); } }, format: "txt", inPlace: true });
   const state = { conflict: false, owns: true };
   const owner: ImportSavingOwner = createImportSavingOwner();
   const ports: ImportSavingPorts = {
