@@ -8,7 +8,7 @@ const configPath = fileURLToPath(new URL("../../tsconfig.desktop.json", import.m
 const fixture = fileURLToPath(new URL("../ipc-contract-check.ts", import.meta.url)).replaceAll("\\", "/");
 const config = ts.getParsedCommandLineOfConfigFile(configPath, {}, ts.sys);
 assert.ok(config);
-assert.deepEqual(config.errors, []);
+assert.deepEqual(config.errors.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
 
 const prelude = `import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { DesktopChannelRow, DesktopDraftReadHeader, DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
@@ -55,7 +55,7 @@ const uint8Bytes: DesktopIpcArgs<"splitpage:write-file">[1] = new Uint8Array(8);
 const blobBytes: DesktopIpcArgs<"splitpage:blob-put">[1] = new Uint8Array(8);
 if (!closeDeps.tabIsUnsaved(maybeTab) && maybeTab && gone.includes(maybeTab)) maybeTab.id.toUpperCase();
 if (!closeDeps.tabHasFile(fileTab)) fileTab.source.kind.toUpperCase();`;
-assert.deepEqual(diagnostics(valid), []);
+assert.deepEqual(diagnostics(valid).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
 
 const CASES = [
   ...[["tabIsUnsaved", "maybeTab"], ["tabHasFile", "fileTab"]].map(([check, candidate]) => ({
@@ -218,7 +218,7 @@ const preloadSource = readFileSync(new URL("../preload.ts", import.meta.url), "u
 function preloadDiagnostics(source) {
   return ts.getPreEmitDiagnostics(compileFixtures({ [preloadPath]: source }, { config: "tsconfig.desktop.json" }).program);
 }
-assert.deepEqual(preloadDiagnostics(preloadSource), []);
+assert.deepEqual(preloadDiagnostics(preloadSource).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
 const brokenReviver = preloadSource.replace('entry = { ...entry, bytes: new Uint8Array(entry.bytes) };', 'entry = { ...entry, bytes: "wrong" };');
 assert.notEqual(brokenReviver, preloadSource);
 const reviverErrors = preloadDiagnostics(brokenReviver);
@@ -235,7 +235,7 @@ const tabstripSource = readFileSync(new URL("../tabstrip-preload.ts", import.met
 function tabstripDiagnostics(source) {
   return ts.getPreEmitDiagnostics(compileFixtures({ [tabstripPath]: source }, { config: "tsconfig.desktop.json" }).program);
 }
-assert.deepEqual(tabstripDiagnostics(tabstripSource), []);
+assert.deepEqual(tabstripDiagnostics(tabstripSource).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
 const brokenTabId = tabstripSource.replace('send("splitpage:tabstrip-activate", tabId);', 'send("splitpage:tabstrip-activate", 123);');
 assert.notEqual(brokenTabId, tabstripSource);
 const tabIdErrors = tabstripDiagnostics(brokenTabId);
