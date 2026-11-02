@@ -405,6 +405,7 @@ export function fakePictures() {
     return ref;
   };
   const pictures: PictureStore = {
+    has: (sha) => !!held.get(sha)?.bytes,
     intern: (bytes) => bytes.length ? add(bytes, "image/png") : null,
     internDataUrl: (dataUrl) => dataUrl.startsWith("data:image/") ? add(new Uint8Array([1]), dataUrl.slice(5, dataUrl.indexOf(";"))) : null,
     recordFor: (sha) => held.get(sha)?.ref ?? null,

@@ -1,7 +1,8 @@
 import type { PictureStore } from "../../../application/media/picture-store.ts";
-import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../../adapters/storage/02c-blobs.ts";
+import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, has, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../../adapters/storage/02c-blobs.ts";
 
 export const pictures: PictureStore = {
+  has,
   intern,
   internDataUrl,
   recordFor,
