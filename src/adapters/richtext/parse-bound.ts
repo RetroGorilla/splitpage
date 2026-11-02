@@ -38,6 +38,12 @@ const PARSED_UNITS_PER_INPUT_UNIT = 8;
 
 const FREE_PARSED_UNITS = 4096;
 
+const PARAGRAPH_END = /<\/p(?=[\t\n\f\r />])/i;
+
+const DIV_START = /<div(?=[\t\n\f\r />])/i;
+
+const SCOPED_DIV_DEPTH = 32;
+
 const NAME = 0;
 const BEFORE_NAME = 1;
 const ATTR_NAME = 2;
@@ -223,7 +229,7 @@ function rawTextEnd(html: string, from: number, name: string): number {
   return html.length;
 }
 
-function modelTags(html: string): Token[] {
+function modelTags(html: string, visit?: (token: Token, foreign: boolean) => void): Token[] {
   const tokens: Token[] = [];
   const found = new Map<string, number>();
   let foreign = 0;
@@ -237,7 +243,11 @@ function modelTags(html: string): Token[] {
       const tag = readTag(html, at, from, Infinity) as Tag;
       const name = lowerName(html, from, tag.nameEnd);
       next = tag.end + 1;
-      if (tag.end < html.length && FORMATTING_NAME.test(name)) tokens.push({ ...tag, name: name, closing: closing });
+      if (tag.end < html.length) {
+        const token = { ...tag, name: name, closing: closing };
+        if (FORMATTING_NAME.test(name)) tokens.push(token);
+        if (visit) visit(token, foreign > 0);
+      }
       if (FOREIGN_NAME.test(name)) foreign = closing ? Math.max(0, foreign - 1) : foreign + (tag.selfClosing ? 0 : 1);
       else if (!closing && !foreign) next = rawTextEnd(html, next, name);
     } else if (c === 33 || c === 47 || c === 63) next = bogusEnd(html, at);
@@ -367,13 +377,66 @@ function reopenLimit(inputLength: number): number {
   return REOPENED_PER_INPUT_UNIT * inputLength + FREE_REOPENED;
 }
 
+interface ScopedDiv {
+  readonly token: Token;
+  limited: boolean;
+}
+
+// why: Stray paragraph ends scan deep block stacks before sanitizing can remove their shells.
+function boundedScopes(html: string, limit: number): string {
+  if (!PARAGRAPH_END.test(html) || !DIV_START.test(html)) return html;
+  const divs: ScopedDiv[] = [];
+  const open: ScopedDiv[] = [];
+  const pending = new Set<ScopedDiv>();
+  let paragraph = false;
+  let work = 0;
+  modelTags(html, function (token, foreign) {
+    if (foreign) return;
+    if (token.name === "div") {
+      paragraph = false;
+      const div = { token: token, limited: false };
+      divs.push(div);
+      if (token.closing) {
+        const closed = open.pop();
+        if (closed) pending.delete(closed);
+      } else {
+        work += open.length;
+        open.push(div);
+        pending.add(div);
+      }
+    } else if (token.name === "p") {
+      if (token.closing && !paragraph) {
+        work += open.length;
+        if (work > limit) {
+          pending.forEach(function (div) { div.limited = true; });
+          pending.clear();
+        }
+      }
+      paragraph = !token.closing;
+    }
+  });
+  let depth = 0;
+  const edits: Edit[] = [];
+  divs.forEach(function (div) {
+    if (div.token.closing) { depth = Math.max(0, depth - 1); return; }
+    if (div.limited && depth >= SCOPED_DIV_DEPTH) {
+      const close = depth - SCOPED_DIV_DEPTH + 1;
+      edits.push([div.token.at, div.token.at, "</div>".repeat(close)]);
+      depth -= close;
+    }
+    depth++;
+  });
+  return edits.length ? applied(html, edits) : html;
+}
+
 export function boundedMarkup(html: string): string {
   const limit = reopenLimit(html.length);
-  if (reopenWork(html, limit) <= limit) return html;
-  const tokens = modelTags(html);
-  const plain = applied(html, plainEdits(html, tokens));
+  const scoped = boundedScopes(html, limit);
+  if (reopenWork(scoped, limit) <= limit) return scoped;
+  const tokens = modelTags(scoped);
+  const plain = applied(scoped, plainEdits(scoped, tokens));
   if (reopenWork(plain, limit) <= limit) return plain;
-  const renamed = applied(html, renameEdits(html, tokens));
+  const renamed = applied(scoped, renameEdits(scoped, tokens));
   if (reopenWork(renamed, limit) <= limit) return renamed;
   return applied(renamed, strayEdits(renamed));
 }
