@@ -1,10 +1,13 @@
 "use strict";
 
+import type { createDraftStore } from "./drafts.ts";
+
 import type { DesktopIpcArgs, DesktopWireTestShellResult } from "../shared/desktop-contract.d.ts";
 
-import type { DesktopDraftStoreBoundary, DesktopTestModeIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopTestModeIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { TAB_OR_WINDOW_ID_RE as DesktopStateIdPattern } from "./desktop-state.ts";
 
-const { TAB_OR_WINDOW_ID_RE }: { TAB_OR_WINDOW_ID_RE: RegExp } = require("./desktop-state.ts");
+const { TAB_OR_WINDOW_ID_RE }: { TAB_OR_WINDOW_ID_RE: typeof DesktopStateIdPattern } = require("./desktop-state.ts");
 
 type TestTargetTab = Extract<DesktopWireTestShellResult, { windows: unknown }>["windows"][number]["tabs"][number];
 
@@ -37,7 +40,7 @@ function createTestModeIpc({
         const tab = named || tabOf(event);
         const id = tab ? tab.id : null;
         if (draftStore() && id) {
-          try { return (draftStore() as DesktopDraftStoreBoundary).status(id); } catch { }
+          try { return (draftStore() as ReturnType<typeof createDraftStore>).status(id); } catch { }
         }
         return {
           tabId: id, hasDraft: false, held: false, lastSeq: null, tombstoned: false,
