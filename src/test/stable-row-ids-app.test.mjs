@@ -10,7 +10,8 @@ const { currentDocument } = await import("../bootstrap/wiring/session-owner.ts")
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
 const { makeId } = await import("../adapters/identity/ids.ts");
-const { buildSplitpageFile, buildMarkdownProject } = await import("../adapters/formats/project-file.ts");
+const { buildSplitpageFile, buildMarkdownProject, parseProjectFileState } = await import("../adapters/formats/project-file.ts");
+const { projectFileServices } = await import("../application/formats/project-file-services.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 
 after(closeApp);
@@ -19,17 +20,24 @@ const raw = () => ({ schema: 2, docId: "d" + "9".repeat(32), title: "Recovered",
   { audioText: "Alpha original." }, { audioText: "Beta original." }
 ] });
 
-async function recover(disk, base, mine) {
+async function recover(disk, base, mine, markdown = false) {
   const fake = window.__desktopTest.makeFakeBackend();
   window.__desktopTest.setBackend(fake);
   try {
-    const picked = await fake.saveFileDialog({ suggestedName: "idless.splitpage" });
-    const bytes = JSON.stringify(disk);
+    const picked = await fake.saveFileDialog({ suggestedName: markdown ? "idless.md" : "idless.splitpage" });
+    const bytes = markdown ? disk : JSON.stringify(disk);
     await fake.writeFile(picked.id, new TextEncoder().encode(bytes));
-    const outcome = await applyTakenDraft({
+    const restoring = applyTakenDraft({
       header: { origin: { kind: "file", fileName: picked.name }, docIdWrittenOut: true },
       file: { id: picked.id, name: picked.name }, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base)
     });
+    if (markdown) {
+      const modal = document.getElementById("md-rows-modal");
+      for (let turn = 0; turn < 100 && modal.hidden; turn++) await new Promise(resolve => setImmediate(resolve));
+      assert.equal(modal.hidden, false);
+      document.getElementById("md-rows-table").click();
+    }
+    const outcome = await restoring;
     assert.equal(fake._text(picked.id), bytes);
     return { outcome, doc: structuredClone(currentDocument()) };
   } finally {
@@ -48,6 +56,20 @@ test("#1049: restoreFileDraft restores an independently loaded id-less file with
   assert.equal(result.outcome, "applied");
   assert.deepEqual(result.doc.rows.map(r => r.audioText), ["Alpha unsaved.", "Beta original."]);
   assert.deepEqual(result.doc.comments, []);
+});
+
+test("#1049: restoreFileDraft keeps a hand-added Markdown scene after accepting the same table twice", async () => {
+  const block = migrateRows({ schema: 2, docId: "d" + "8".repeat(32), title: "Markdown", rows: [{ id: "a", visualText: "wide", audioText: "Original." }] });
+  const text = '# Markdown\n\n| # | Visual | Audio | Status |\n| --- | --- | --- | --- |\n| 1 | wide | Original. | todo |\n| 2 | close | Added original. | todo |\n\n~~~~splitpage\n' + JSON.stringify(block) + '\n~~~~\n';
+  const parsed = await parseProjectFileState({ name: "idless.md", text: async () => text }, null,
+    { ...projectFileServices(), askMarkdownRows: async () => "table" });
+  assert.ok(parsed && "state" in parsed);
+  const base = parsed.state;
+  const mine = structuredClone(base);
+  mine.rows[1].audioText = "Added unsaved.";
+  const { outcome, doc } = await recover(text, base, mine, true);
+  assert.equal(outcome, "applied");
+  assert.deepEqual(doc.rows.map(r => r.audioText), ["Original.", "Added unsaved."]);
 });
 
 for (const change of ["insert", "reorder"]) {
