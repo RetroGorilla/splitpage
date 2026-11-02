@@ -55,14 +55,14 @@ export function idsInHtml(html) {
   return [...html.matchAll(/data-(cmt|broll-id)="([^"]*)"/g)].map((m) => ({ prefix: m[1] === "cmt" ? "c" : "bs", value: m[2] }));
 }
 
-export function createIdMasker(from, to) {
+export function createIdMasker(from, to, derived = () => false) {
   const placeholders = new Map();
   const counts = new Map();
   const minted = [];
   function id(value, prefix) {
     if (typeof value !== "string") return value;
     if (placeholders.has(value)) return placeholders.get(value);
-    if (!mintedId(value, prefix, from(), to())) return value;
+    if (!mintedId(value, prefix, from(), to()) && !derived(value, prefix)) return value;
     const n = (counts.get(prefix) ?? 0) + 1;
     counts.set(prefix, n);
     const ph = `{minted:${prefix}:${n}}`;

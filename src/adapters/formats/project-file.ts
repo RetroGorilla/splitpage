@@ -4,11 +4,11 @@ import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { DocumentRow, DocumentTag, ValidatedDocument } from "../../core/document/validated.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { docIdEmbeddedIn } from "../../core/document/ids.ts";
+import { canonicalSourceJson } from "../../core/document/load-ids.ts";
 import { cappedLongText, legacyMdToHtml, plainText, safeImageSrc } from "../../core/document/text-policy.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
 import { fileKindFromName } from "../../../shared/file-names.ts";
 import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "../storage/02c-blobs.ts";
-import { makeId } from "../identity/ids.ts";
 import { audioDirectionsHtml } from "./docx.ts";
 import { mdSceneCellSource, toMarkdownTableDoc } from "./export-text.ts";
 import { MD_IMAGE_PREFIX_RE } from "./markdown-image.ts";
@@ -121,7 +121,7 @@ export function parseMarkdownProject(text: unknown, services: ProjectFileService
   const heading = /^#\s+(.+)$/m.exec(block.before);
   const docIdEmbedded = docIdEmbeddedIn(parsed);
   return {
-    state: services.migrateDocument(parsed, { kind: "file" }),
+    state: services.migrateDocument(docIdEmbedded ? parsed : JSON.parse(canonicalSourceJson(parsed)), { kind: "file" }),
     docIdEmbedded: docIdEmbedded,
     table: parseMarkdownTable(sceneSection, { keepEmpty: true }),
     title: heading ? (heading[1] ?? "").trim() : null
@@ -209,7 +209,7 @@ function reconcileMarkdownRows(s: ValidatedDocument, table: readonly MarkdownTab
 function rowsFromMarkdownTable(s: ValidatedDocument, table: readonly MarkdownTableRow[], services: ProjectFileServices): DocumentRow[] {
   return table.map(function (cells, i) {
     const old = s.rows[i] || null;
-    const row: DocumentRow = old || { id: makeId(), status: "todo", imageRef: null, updatedAt: "", updatedBy: null };
+    const row: DocumentRow = old || { id: "", status: "todo", imageRef: null, updatedAt: "", updatedBy: null };
     const edits: CellEdits = old ? sceneCellEdits(old, i, cells) : { visual: true, audio: true };
     if (edits.visual) {
       applyMarkdownVisualCell(s, row, cells.visualText, services);

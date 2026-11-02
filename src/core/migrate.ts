@@ -6,6 +6,7 @@ import type { StateField } from "./document/fields.ts";
 import { migrateGallery } from "./document/gallery.ts";
 import type { GalleryRow } from "./document/gallery.ts";
 import { deriveDocId, docIdEmbeddedIn } from "./document/ids.ts";
+import { createLoadIds } from "./document/load-ids.ts";
 import { mediaComments } from "./document/media.ts";
 import type { CellMedia, MediaComment, MediaField, MediaRow } from "./document/media.ts";
 import type { IdSource, ImageSource } from "./document/ports.ts";
@@ -21,7 +22,6 @@ import {
   legacyMdToHtml,
   plainName,
   plainText,
-  safeId,
   safeImageSrc,
   settledNames,
   storedImageHtml,
@@ -44,7 +44,8 @@ type MigrateDecoder = (html: string, opts: DecodeOptions) => readonly Run[];
 
 export interface MigratePorts {
   images: ImageSource;
-  sanitize: (html: unknown) => string;
+  sanitize: (html: unknown, ids?: IdSource) => string;
+  htmlIds?: (html: string) => readonly string[];
   decode: MigrateDecoder;
   videoCardHtml: (href: string) => string;
   readers: ProductionReaders;
@@ -63,6 +64,28 @@ type Bag = Record<string, unknown>;
 
 function isObject(v: unknown): v is Bag {
   return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function objectsIn(value: unknown): Bag[] {
+  return Array.isArray(value) ? (value as unknown[]).filter(isObject) : [];
+}
+
+function reservedIds(s: Bag, ports: MigratePorts): Set<string> {
+  const records = [s.rows, s.comments, s.people, s.productionTags, s.brollShots, s.sections].flatMap(objectsIn);
+  const replies = objectsIn(s.comments).flatMap(c => objectsIn(c.replies));
+  const all = records.concat(replies);
+  const reserved = new Set(all.map(r => cleanId(r.id)).filter(Boolean));
+  if (ports.htmlIds) {
+    for (const record of all) {
+      for (const field of ["visualText", "audioText", "body"]) {
+        const html = record[field];
+        if (typeof html === "string" && /data-/i.test(html)) {
+          ports.htmlIds(html).forEach(id => { const clean = cleanId(id); if (clean) reserved.add(clean); });
+        }
+      }
+    }
+  }
+  return reserved;
 }
 
 export function isDocumentObject(raw: unknown): raw is Record<string, unknown> {
@@ -182,31 +205,34 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   if (!Array.isArray(s.rows)) s.rows = [];
   s.rows = (s.rows as unknown[]).filter(isObject);
   const originalRowIds = (s.rows as Bag[]).map(function (r) { return cleanId(r.id); });
-  const reservedRowIds = new Set(originalRowIds.filter(Boolean));
+  const loadIds = createLoadIds(function () { return s; }, function () { return reservedIds(s, ports); });
+  const loadedIds: IdSource = { docId: ids.docId, id: loadIds.id };
+  function sanitize(html: unknown): string {
+    return ports.sanitize(html, loadedIds);
+  }
   const usedRowIds = new Set<string>();
   const duplicateRowIds = new Set<string>();
   const rowIdSuffixes = new Map<string, number>();
   let movedMedia: MediaComment[] = [];
   (s.rows as Bag[]).forEach(function (r, at) {
-    let id = safeId(r.id, "r", ids);
+    let id = originalRowIds[at] || loadIds.id("r");
     if (originalRowIds[at] && usedRowIds.has(id)) {
       duplicateRowIds.add(id);
+      const reservedRowIds = loadIds.reserved();
       // why: Disk reloads must repair the same scene identically, or draft recovery mistakes it for a new scene.
       let suffix = rowIdSuffixes.get(id) || 0;
       do { suffix++; } while (reservedRowIds.has(id + "-" + suffix));
       rowIdSuffixes.set(id, suffix);
       id += "-" + suffix;
-    } else if (!originalRowIds[at]) {
-      while (reservedRowIds.has(id)) id = ids.id("r");
+      reservedRowIds.add(id);
     }
     r.id = id;
-    reservedRowIds.add(id);
     usedRowIds.add(id);
     r.status = rowStatusId(r.status) ? r.status : "todo";
     const setLength = normalizeSceneLength(r.lengthSeconds);
     if (setLength === undefined) delete r.lengthSeconds; else r.lengthSeconds = setLength;
-    r.visualText = ports.sanitize(legacy ? legacyMdToHtml(r.visualText || "") : textOf(r.visualText || ""));
-    r.audioText = ports.sanitize(legacy ? legacyMdToHtml(r.audioText || "") : textOf(r.audioText || ""));
+    r.visualText = sanitize(legacy ? legacyMdToHtml(r.visualText || "") : textOf(r.visualText || ""));
+    r.audioText = sanitize(legacy ? legacyMdToHtml(r.audioText || "") : textOf(r.audioText || ""));
     const legacyImage = safeImageSrc(r.visualImage);
     const interned = legacyImage ? ports.images.fromDataUrl(legacyImage) : null;
     r.imageRef = interned || normalizeImageRef(r.imageRef) || null;
@@ -221,9 +247,12 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
 
   if (!Array.isArray(s.comments)) s.comments = [];
   s.comments = (s.comments as unknown[]).filter(isObject);
+  (s.comments as Bag[]).forEach(function (c) {
+    c.id = cleanId(c.id) || loadIds.id("c");
+  });
   if (movedMedia.length) {
     const haveComment: Record<string, boolean> = Object.create(null);
-    (s.comments as Bag[]).forEach(function (c) { haveComment[safeId(c.id, "c", ids)] = true; });
+    (s.comments as Bag[]).forEach(function (c) { haveComment[c.id as string] = true; });
     movedMedia.forEach(function (c) {
       if (haveComment[c.id]) return;
       haveComment[c.id] = true;
@@ -231,24 +260,23 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     });
   }
   (s.comments as Bag[]).forEach(function (c) {
-    c.id = safeId(c.id, "c", ids);
     if (c.field === "title") {
       c.rowId = null;
       c.anchorId = null;
     } else {
-      c.rowId = safeId(c.rowId, "r", ids);
-      c.anchorId = safeId(c.anchorId || c.id, "c", ids);
+      c.rowId = cleanId(c.rowId) || loadIds.id("r-orphan");
+      c.anchorId = cleanId(c.anchorId) || c.id;
       c.field = (c.field === "visualText" || c.field === "visualImage") ? c.field : "audioText";
     }
     if (!Array.isArray(c.replies)) c.replies = [];
     c.replies = (c.replies as unknown[]).filter(isObject);
     (c.replies as Bag[]).forEach(function (rep) {
-      rep.id = safeId(rep.id, "rp", ids);
-      rep.body = ports.sanitize(textOf(rep.body || ""));
+      rep.id = cleanId(rep.id) || loadIds.id("rp");
+      rep.body = sanitize(textOf(rep.body || ""));
       rep.author = plainName(rep.author);
       if (rep.createdAt !== undefined) rep.createdAt = stampOrNull(rep.createdAt);
     });
-    c.body = ports.sanitize(textOf(c.body || ""));
+    c.body = sanitize(textOf(c.body || ""));
     c.quotedText = withoutLoneSurrogates(plainText(c.quotedText));
     if (typeof c.resolved !== "boolean") c.resolved = false;
     c.author = plainName(c.author);
@@ -278,7 +306,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   if (!Array.isArray(s.people)) s.people = [];
   s.people = (s.people as unknown[]).filter(isObject);
   (s.people as Bag[]).forEach(function (p) {
-    p.id = safeId(p.id, "p", ids);
+    p.id = cleanId(p.id) || loadIds.id("p");
   });
   const peopleNames = settledNames((s.people as Bag[]).map(textOfName), 60, nameKey);
   (s.people as Bag[]).forEach(function (p, at) { p.name = peopleNames[at]; });
@@ -314,7 +342,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   if (!Array.isArray(s.brollShots)) s.brollShots = [];
   s.brollShots = (s.brollShots as unknown[]).filter(isObject);
   const shots = s.brollShots as Bag[];
-  shots.forEach(function (b) { b.id = safeId(b.id, "bs", ids); });
+  shots.forEach(function (b) { b.id = cleanId(b.id) || loadIds.id("bs"); });
   const shotNames = settledNames(shots.map(textOfName), 200, nameKey, shotRenamesFor(shots, s.rows as ProductionRow[], ports.readers));
   shots.forEach(function (b, at) {
     b.name = shotNames[at];
@@ -330,9 +358,10 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   });
   s.brollShots = (s.brollShots as Bag[]).filter(function (b) { return b.name; });
   const readers = ports.readers;
-  applyBrollRecords(s.brollShots as BrollShot[], planBrollRecords(s as ValidatedDocument, readers, ids, function (html) {
+  const shotIds: IdSource = { docId: ids.docId, id: loadIds.id };
+  applyBrollRecords(s.brollShots as BrollShot[], planBrollRecords(s as ValidatedDocument, readers, shotIds, function (html) {
     return toPlainText(readers.cellOf(html || ""));
-  }, null, ports.brollLines));
+  }, null, ports.brollLines, ports.brollLines ? function () { return loadIds.id("bs"); } : undefined));
 
   if (duplicateRowIds.size && Array.isArray(s.sections)) {
     s.sections.filter(isObject).forEach(function (section) {
