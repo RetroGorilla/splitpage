@@ -101,7 +101,7 @@ function toView(definition: ActionDefinition, source: ActionSource): ActionView 
   };
 }
 
-function isThenable(value: unknown): value is PromiseLike<unknown> {
+function isThenable(value: unknown): boolean {
   return typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
 }
 
@@ -174,7 +174,7 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
       }
       try {
         const pending: unknown = definition.run(source, input);
-        if (isThenable(pending)) pending.then(undefined, (error: unknown) => { report(error, id); });
+        if (isThenable(pending)) (pending as Exclude<ReturnType<ActionDefinition["run"]>, void>).then(undefined, (error: unknown) => { report(error, id); });
         return { kind: "ran", id };
       } catch (error) {
         report(error, id);
