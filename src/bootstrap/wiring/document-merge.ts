@@ -57,7 +57,7 @@ export function mergeStates(base: ValidatedDocument | null, mine: ValidatedDocum
   return merge().states(base, mine, theirs);
 }
 
-export function applyMerge<T>(opts?: ApplyMergeOptions<T> | null): MergeOutcome<ValidatedDocument | T> | Promise<MergeOutcome<ValidatedDocument | T>> {
+export function applyMerge<T extends ValidatedDocument | null>(opts?: ApplyMergeOptions<T, ValidatedDocument> | null): MergeOutcome<ValidatedDocument | T> | Promise<MergeOutcome<ValidatedDocument | T>> {
   return merge().apply(opts);
 }
 
