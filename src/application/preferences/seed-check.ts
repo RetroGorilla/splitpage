@@ -1,4 +1,4 @@
-import { checksumText } from "../../../shared/text.js";
+import { checksumText } from "../../../shared/text.ts";
 
 export interface SeedCheck {
   readonly passes: () => boolean;

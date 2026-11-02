@@ -2,7 +2,7 @@ import type { FileMenuDropdownPorts, FileMenuDropdownMount } from "./ports.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.ts";
-import { savedStatusText, savedWhenText } from "../../../shared/clock.js";
+import { savedStatusText, savedWhenText } from "../../../shared/clock.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { NO_DESTINATION } from "../../application/transitions/ports.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";

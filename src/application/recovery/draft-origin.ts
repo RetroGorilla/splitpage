@@ -1,4 +1,4 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { refsIn } from "../../../shared/blob-policy.js";
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import type { Home } from "../location/document-location.ts";
