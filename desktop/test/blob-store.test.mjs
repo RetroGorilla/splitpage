@@ -6,6 +6,8 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
+import { compileFixtures } from "../../tools/ts-fixtures.mjs";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -306,6 +308,27 @@ test("the store itself stores any bytes: the image rule is the IPC layer's, not 
   const body = Buffer.from(JSON.stringify({ rows: [{ id: "r1" }] }));
   assert.deepEqual(await s.put(sha(body), body), { ok: true, stored: true });
   assert.ok((await s.get(sha(body))).equals(body));
+});
+
+test("a rejected SHA string stays a string in the predicate's false branch", () => {
+  const fixture = "desktop/blob-sha-contract-check.ts";
+  const source = `import type { isSha256 as IsSha256 } from "./blob-store.ts";
+declare const check: typeof IsSha256;
+function safe(value: string | number) {
+  if (check(value)) { const sha: string = value; return sha; }
+  if (typeof value === "number") return value.toFixed(0);
+  return value.toUpperCase();
+}
+`;
+  const diagnostics = (text) => ts.getPreEmitDiagnostics(compileFixtures({ [fixture]: text }, { config: "tsconfig.desktop.json" }).program);
+  assert.deepEqual(diagnostics(source), []);
+  const broken = source + "function unsafe(value: string | number) { if (check(value)) return null; return value.toFixed(0); }";
+  const errors = diagnostics(broken);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].code, 2339);
+  assert.ok(errors[0].file.fileName.replaceAll("\\", "/").endsWith("/" + fixture));
+  assert.equal(errors[0].start, broken.lastIndexOf("toFixed"));
+  assert.equal(errors[0].length, "toFixed".length);
 });
 
 const failures = [];
