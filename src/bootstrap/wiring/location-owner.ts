@@ -43,6 +43,6 @@ export function fileHome(): Home | null {
   return running().fileHome();
 }
 
-export function importHome(): Home | null {
+export function importHome(): Extract<Home, { readonly kind: "import" }> | null {
   return running().importHome();
 }
