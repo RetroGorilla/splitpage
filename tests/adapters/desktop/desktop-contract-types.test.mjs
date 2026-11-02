@@ -120,13 +120,18 @@ test("the history wrapper preserves the actual call's result", () => {
   const source = original.replace('desktopPort().historyList(docId || null)', 'desktopPort().historyTouch(docId || "", "")');
   assert.notEqual(source, original);
   const found = ts.getPreEmitDiagnostics(compileFixtures({ [path]: source }).program);
-  assert.equal(found.length, 1);
-  const error = found[0];
-  assert.ok(error.file?.fileName.replaceAll("\\", "/").endsWith("/" + path));
-  assert.equal(error.code, 2339);
-  assert.equal(error.start, source.indexOf("r.usage", source.indexOf("const desktopHistoryBackend")) + 2);
-  assert.equal(error.length, "usage".length);
-  assert.ok(ts.flattenDiagnosticMessageText(error.messageText, " ").includes("usage"));
+  const fields = ["damaged", "damaged", "olderDamaged", "olderDamaged", "usage"];
+  assert.equal(found.length, fields.length);
+  let offset = source.indexOf("const desktopHistoryBackend");
+  fields.forEach((field, i) => {
+    const error = found[i];
+    assert.ok(error.file?.fileName.replaceAll("\\", "/").endsWith("/" + path));
+    assert.equal(error.code, 2339);
+    assert.equal(error.start, source.indexOf("r." + field, offset) + 2);
+    assert.equal(error.length, field.length);
+    assert.ok(ts.flattenDiagnosticMessageText(error.messageText, " ").includes(field));
+    offset = error.start + error.length;
+  });
 });
 
 test("the reusable fake checks its native read reply", () => {

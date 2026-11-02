@@ -128,8 +128,8 @@ function findEntry(rec: SharedHistoryBucketReader | null | undefined, id: string
 function newestAtMs(rec: SharedHistoryBucketReader | null | undefined) {
   let n: number | null = null;
   snapshotsOf(rec).forEach(function (s) {
-    const v = Number(s && (s as SharedHistorySnapshotReader).atMs);
-    if (isFinite(v) && (n == null || v > n)) n = v;
+    const entry = storedEntry(s);
+    if (entry && (n == null || entry.atMs > n)) n = entry.atMs;
   });
   return n;
 }
