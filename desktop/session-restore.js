@@ -2,7 +2,7 @@
 
 const path = require("node:path");
 const fs = require("node:fs");
-const { pathKey } = require("./file-service");
+const { pathKey } = require("./file-service.ts");
 
 function createSessionRestore({
   app, BrowserWindow, desktopState, draftStore, draftsList, tabs, windowsById, pathToTabId, claimRoutingKey,
