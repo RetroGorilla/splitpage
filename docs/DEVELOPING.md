@@ -31,9 +31,9 @@ Help page. Nothing else feeds the build. Which folder may import which is
 [docs/architecture/dependencies.md](architecture/dependencies.md).
 
 The build inlines everything into one self-contained page, and that is a
-requirement rather than a preference: saving writes this page's own HTML
-back out with your document inside it, so a page that linked out to
-`app.css`/`app.js` would produce saved files that only worked next to those
+requirement rather than a preference: the SplitShare export writes this page's
+own HTML back out with your document inside it, so a page that linked out to
+`app.css`/`app.js` would produce exports that only worked next to those
 files. Editing `index.html` by hand therefore gets overwritten by the next
 build — and because it is untracked, there is nothing to commit by accident
 either: the copy in your working tree is yours, script and all.
@@ -82,24 +82,7 @@ all of it and opens a draft release on the releases page
 carrying both architectures' runtimes, `start.bat` picks the right one
 automatically.
 
-## What changed from the Claude artifact
-
-The editor, comments, teleprompter, tags, and local version-history panel
-are unchanged — none of that ever depended on Claude. Two things did, and
-were rewired to work standalone:
-
-- **Save** used to publish to Claude's hosted copy of the artifact (with
-  multi-writer conflict/merge handling). Now, the first time you click
-  **Save**, your browser's native *Save As* dialog appears — pick a spot on
-  disk. Every Save after that (in Chrome/Edge/other Chromium browsers)
-  writes straight back to that same file, silently, no dialog. Once you have
-  picked a file, edits go to it on their own — see
-  [Autosave](help.md#autosave) — and before that first save they don't, so nothing
-  ever pops the file dialog on you unprompted.
-- **Exports** (Word, Markdown, CSV, PDF, and "Save a copy" of an opened
-  file) used to go through Claude's download capability. They now use a
-  plain browser download, landing in your normal Downloads folder,
-  everywhere.
+## Browser notes
 
 **Follow My Voice** (in the teleprompter) needs a microphone, and browsers
 only hand one to a served page — so it is disabled when you open
@@ -128,7 +111,7 @@ Chrome, Brave…) instead of the default one, to use its own recognition.
 
 **Firefox / Safari note:** these don't support the File System Access API
 (`showSaveFilePicker`), so **Save** falls back to downloading a fresh
-`.html` copy each time, same as Export — open the newest one next session.
+`.md` or `.splitpage` copy each time — open the newest one next session.
 Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 
 ## Files
