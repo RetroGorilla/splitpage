@@ -91,7 +91,7 @@ export interface DocumentSession {
   adopt: (raw: unknown) => ValidatedDocument | null;
   absorbDisk: (raw: unknown) => ValidatedDocument | null;
   absorbRecovery: (raw: unknown) => ValidatedDocument | null;
-  absorbMerged: (kind: "disk" | "recovery", merged: ValidatedDocument) => ValidatedDocument | null;
+  absorbMerged: (kind: "disk" | "recovery", merged: ValidatedDocument | null) => ValidatedDocument | null;
   absorbReload: (content: ReloadedContent) => ValidatedDocument | null;
   settle: (kind: AbsorbedKind) => void;
   run: (command: Command) => CommandOutcome;
