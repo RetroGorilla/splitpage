@@ -1,0 +1,102 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.D=window.__desktopTest;var rows=[{id:'r1',visualText:'visual secret',audioText:'First needle. A <strong>nee</strong>dle again.',status:'todo'},{id:'r2',audioText:'Shot secret needle.',status:'shot'},{id:'r3',audioText:('Filler words for scrolling. ').repeat(60)+'Last needle.',status:'todo'}];return F.openFile(new File([JSON.stringify({schema:2,title:'Find in Present',rows:rows,comments:[{id:'c1',text:'comment secret'}]})],'present-find.splitpage'));})()
+wait F.state().title === 'Find in Present'
+eval (function(){window.__query=function(q){var i=document.getElementById('find-input');i.value=q;i.dispatchEvent(new Event('input',{bubbles:true}));return true;};window.__count=function(){return document.getElementById('find-count').textContent;};window.__all=function(){return CSS.highlights.get('splitpage-present-matches');};window.__hit=function(){var h=CSS.highlights.get('splitpage-find-match');return h&&h.values().next().value;};window.__aligned=function(){var r=__hit(),n=r.startContainer.parentElement.closest('.w'),s=document.getElementById('prompter-scroll');return Math.abs(n.offsetTop-s.scrollTop-s.clientHeight/2)<2;};window.__top=function(el){var r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));};window.__before=JSON.stringify(F.state());window.__dirtyBefore=document.getElementById('btn-save').textContent;return true;})()
+click #btn-present
+wait !document.getElementById('prompter').hidden
+click #pp-skip-shot
+click #pp-play
+expect document.getElementById('pp-play').classList.contains('is-active')
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+expect document.activeElement.id === 'find-input'
+expect __top(document.getElementById('find-input'))
+expect !document.getElementById('pp-play').classList.contains('is-active')
+expect ['replace-input','find-replace','find-replace-all','find-tag'].every(function(id){return document.getElementById(id).getClientRects().length === 0;})
+press foo mix
+key ArrowUp
+key ArrowDown
+expect document.getElementById('find-input').value === 'foo mix'
+expect !document.getElementById('pp-play').classList.contains('is-active')
+expect !document.getElementById('prompter-scroll').classList.contains('mirror') && !document.getElementById('prompter-scroll').classList.contains('flip')
+eval __query('visual secret')
+expect __count() === 'No matches'
+eval __query('comment secret')
+expect __count() === 'No matches'
+eval __query('Shot secret')
+expect __count() === 'No matches'
+eval __query('needle')
+expect __count() === '1 of 3' && __all().size === 3
+expect Array.from(__all()).every(function(r){return r.toString() === 'needle' && document.getElementById('prompter-content').contains(r.startContainer);})
+eval window.__scrollBefore=document.getElementById('prompter-scroll').scrollTop
+key Enter
+expect __count() === '2 of 3' && __aligned()
+expect document.activeElement.id === 'find-input'
+key Enter
+expect __count() === '3 of 3' && __aligned()
+expect document.getElementById('prompter-scroll').scrollTop > __scrollBefore
+key shift Enter
+expect __count() === '2 of 3' && __aligned()
+click #find-case
+eval __query('NEEDLE')
+expect __count() === 'No matches'
+click #find-case
+expect __count() === '1 of 3'
+eval __query('needle')
+click #pp-mirror
+focus #find-input
+key Enter
+expect __aligned() && document.getElementById('prompter-scroll').classList.contains('mirror')
+click #pp-flip
+focus #find-input
+key Enter
+expect __aligned() && document.getElementById('prompter-scroll').classList.contains('flip')
+shot find-present-mirrored-flipped
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('prompter').hidden
+expect document.getElementById('prompter').contains(document.activeElement)
+expect !CSS.highlights.has('splitpage-present-matches') && !CSS.highlights.has('splitpage-find-match')
+expect !document.getElementById('pp-play').classList.contains('is-active')
+click #pp-play
+expect document.getElementById('pp-play').classList.contains('is-active')
+click #pp-play
+key Escape
+wait document.getElementById('prompter').hidden
+expect JSON.stringify(F.state()) === __before
+expect document.getElementById('btn-save').textContent === __dirtyBefore
+click #btn-present
+wait !document.getElementById('prompter').hidden
+click #pp-fullscreen
+wait document.fullscreenElement === document.documentElement
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+expect document.activeElement.id === 'find-input' && __top(document.getElementById('find-input'))
+eval __query('needle')
+key Enter
+expect __aligned()
+shot find-present-fullscreen
+key Escape
+sleep 300
+eval JSON.stringify({fullscreenAfterEscape:!!document.fullscreenElement,findOpen:!document.getElementById('findbar').hidden,presentOpen:!document.getElementById('prompter').hidden,focus:document.activeElement.id})
+expect !document.getElementById('prompter').hidden
+eval if(document.fullscreenElement)document.exitFullscreen()
+wait document.fullscreenElement === null
+eval if(!document.getElementById('findbar').hidden)document.getElementById('find-close').click()
+expect document.getElementById('prompter').contains(document.activeElement)
+key Escape
+wait document.getElementById('prompter').hidden
+eval (function(){var rows=Array.from({length:300},function(_,i){return {id:'long'+i,audioText:('Some narration words for the long script. ').repeat(6)+'needle '+i+'.',status:'todo'};});return F.openFile(new File([JSON.stringify({schema:2,title:'Long Present find',rows:rows})],'long-find.splitpage'));})()
+wait F.state().title === 'Long Present find'
+click #btn-present
+wait !document.getElementById('prompter').hidden
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+eval (function(){var times=[];for(var i=0;i<31;i++){var t=performance.now();__query(i%2?'words':'needle');times.push(performance.now()-t);}times.shift();times.sort(function(a,b){return a-b;});window.__searchTiming={scenes:300,words:document.querySelectorAll('#prompter-content .w').length,samples:times.length,p50:times[14],p95:times[28],max:times[29]};return JSON.stringify(__searchTiming);})()
+expect __count() === '1 of 300' && __all().size === 300
+key shift Enter
+expect __count() === '300 of 300' && __aligned()
+key Escape
+key Escape
+wait document.getElementById('prompter').hidden
+quit

@@ -20,6 +20,7 @@ import type { NoticeKind, NoticePort } from "../../src/application/effects/ports
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
+import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
@@ -86,6 +87,19 @@ export function fakeWriterPorts(initial: DocumentView) {
     cancelStats: () => { calls.push(["cancelStats"]); }
   };
   return { ports, reader, notices, calls, state };
+}
+
+export function fakeFindPresent() {
+  const state = { open: false, searching: false };
+  const jumps: Range[] = [];
+  const listeners = new Set<() => void>();
+  const present: FindPorts["present"] = {
+    isOpen: () => state.open,
+    setSearching: (value) => { state.searching = value; },
+    jump: (range) => { jumps.push(range); },
+    onViewChange: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; }
+  };
+  return { present, state, jumps, changed: () => { for (const listener of listeners) listener(); } };
 }
 
 export function fakePrompterPorts(initial: DocumentView | null = null) {

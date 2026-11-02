@@ -5,6 +5,12 @@
     background: var(--surface);
   }
   .findbar[hidden] { display: none; }
+  .findbar.is-present {
+    position: fixed; top: 64px; left: 12px; right: 12px; z-index: 146;
+    margin: 0; color: var(--text);
+  }
+  .findbar.is-present :is(#replace-input, #find-replace, #find-replace-all, #find-tag, #find-tag-row) { display: none; }
+  ::highlight(splitpage-present-matches) { background-color: #735b00; color: #fff; }
   .findbar input[type="text"] {
     font-family: var(--font-body); font-size: 13px;
     padding: 5px var(--space-8); border: 1px solid var(--border); border-radius: 5px;

@@ -8,6 +8,7 @@ import type { DocumentEdits } from "../../application/session/document-edits.ts"
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import type { PrompterState } from "../../application/prompter-state.ts";
 
 export interface FindPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
@@ -19,6 +20,11 @@ export interface FindPorts {
   readonly flags: Pick<ViewFlags, "setFindOpen">;
   readonly options: Pick<FindOptions, "matchesCase">;
   readonly bulkTag: BulkTagRows;
+  readonly present: Pick<PrompterState, "isOpen"> & {
+    readonly setSearching: (value: boolean) => void;
+    readonly jump: (range: Range) => void;
+    readonly onViewChange: (listener: () => void) => () => void;
+  };
 }
 
 export interface FindControls {

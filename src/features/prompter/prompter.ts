@@ -119,6 +119,9 @@ let initialReadyTimer: TimerHandle | null = null;
 let voiceSession = 0;
 let wakeLockGen = 0;
 let prompterLeaveSeq = 0;
+let searching = false;
+let voiceFromReadingLine = false;
+const viewListeners = new Set<() => void>();
 let prompterReturnFocus: HTMLElement | null = null;
 
 export let prompterMirror: boolean;
@@ -231,6 +234,8 @@ export function buildPrompterContent(): void {
   renderPrompterRundown();
   const skip = document.getElementById("pp-skip-shot");
   if (skip) skip.setAttribute("aria-pressed", ports.state.skipsShot() ? "true" : "false");
+  voiceFromReadingLine = false;
+  for (const listener of viewListeners) listener();
 }
 
 function renderPrompterRundown(): void {
@@ -364,6 +369,8 @@ export function disposePrompterView(): void {
   stopVoiceFollow();
   releaseWakeLock();
   prompterReturnFocus = null;
+  searching = false;
+  voiceFromReadingLine = false;
 }
 
 function applyPrompterOrientation(): void {
@@ -506,12 +513,14 @@ export function openPrompter(): void {
   updatePrompterStatus();
   document.getElementById("pp-play")?.focus({ preventScroll: true });
   acquireWakeLock();
+  for (const listener of viewListeners) listener();
 }
 
 export function closePrompter(): void {
   setPrompterPlaying(false);
   stopVoiceFollow();
   ports.state.setOpen(false);
+  for (const listener of viewListeners) listener();
   releaseWakeLock();
   const el = document.getElementById("prompter") as HTMLElement;
   if (el.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
@@ -532,6 +541,7 @@ export function closePrompter(): void {
 }
 
 export function setPrompterPlaying(on: boolean): void {
+  if (on && searching) return;
   if (on && ports.state.voiceFollowing()) stopVoiceFollow();
   ports.state.setPlaying(on);
   const btn = document.getElementById("pp-play") as HTMLElement;
@@ -795,6 +805,7 @@ const DESKTOP_VOICE_WARNINGS: Record<string, () => string> = {
 const CLEARABLE_VOICE_WARNINGS = ["no-signal", "too-quiet", "blocked-all", "blocked-desktop"];
 
 export async function startVoiceFollow(): Promise<void> {
+  if (searching) return;
   const owner = ports;
   const requestedSession = voiceSession;
   const desktop = ports.desktop.running();
@@ -805,7 +816,7 @@ export async function startVoiceFollow(): Promise<void> {
       throw error;
     }
   }
-  if (ports !== owner || requestedSession !== voiceSession) return;
+  if (ports !== owner || requestedSession !== voiceSession || searching) return;
   if (desktop && !desktopListens()) {
     if (!ports.desktop.canOpen()) { setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, ""); return; }
     setVoiceStatus("Opening in your browser…", "");
@@ -827,8 +838,9 @@ export async function startVoiceFollow(): Promise<void> {
   setPrompterPlaying(false);
   state.finalTranscript = "";
   state.interimTranscript = "";
-  state.wordCursor = -1;
-  state.speakCursor = -1;
+  const readingWord = voiceFromReadingLine ? Math.floor(readingPosition(document.getElementById("prompter-scroll") as HTMLElement)) : -1;
+  state.speakCursor = readingWord < 0 ? -1 : state.speakable.findIndex((at) => at >= readingWord);
+  state.wordCursor = state.speakable[state.speakCursor] ?? -1;
   state.voiceRestarts = 0;
   state.voiceMicName = "";
   clearSpokenHighlights();
@@ -1133,6 +1145,39 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
   if (launch) startPrompterLaunch(launch);
 
   return {
+    setSearching: function (value) {
+      searching = value;
+      if (value) { setPrompterPlaying(false); stopVoiceFollow(); }
+    },
+    jumpToFind: function (range) {
+      if (!searching || !ports.state.isOpen()) return;
+      const content = document.getElementById("prompter-content") as HTMLElement;
+      if (!content.contains(range.startContainer)) return;
+      const scroller = document.getElementById("prompter-scroll") as HTMLElement;
+      const node = range.startContainer.nodeType === 1 ? range.startContainer as Element : range.startContainer.parentElement;
+      const word = node?.closest<HTMLElement>(".w");
+      const rect = range.getClientRects()[0];
+      const viewport = scroller.getBoundingClientRect();
+      const top = word ? word.offsetTop : rect ? scroller.scrollTop + (prompterFlip ? viewport.bottom - rect.bottom : rect.top - viewport.top) : 0;
+      scroller.scrollTop = Math.max(0, top - scroller.clientHeight / 2);
+      let index = state.promptWords.findIndex((entry) => entry.el === word);
+      if (index < 0) index = state.promptWords.findIndex((entry) => range.comparePoint(entry.el, 0) >= 0);
+      if (index < 0) index = state.promptWords.length - 1;
+      voiceFromReadingLine = true;
+      clearSpokenHighlights();
+      if (state.promptSceneMode) {
+        const scene = state.sceneWordEnd.findIndex((end) => end > index);
+        state.promptSceneIndex = scene;
+        state.promptSceneGuideOffset = scroller.clientHeight / 2;
+        state.promptSceneEndWordOffset = scene < 0 ? null : (state.promptWords[(state.sceneWordEnd[scene] as number) - 1] as PromptWord).el.offsetTop;
+        updateSceneReadout();
+      }
+      updatePrompterStatus();
+    },
+    onViewChange: function (listener) {
+      viewListeners.add(listener);
+      return () => { viewListeners.delete(listener); };
+    },
     openPrompter, closePrompter, stopVoiceFollow, startVoiceFollow,
     setPrompterPlaying, setPrompterSpeed, applyPrompterSize, stepPrompterSpeed, stepPrompterSize,
     updatePrompterStatus, buildPrompterContent, updateVoiceAvailability,
@@ -1153,6 +1198,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
       clearTimeout(initialReadyTimer as TimerHandle);
       initialReadyTimer = null;
       withdrawHook?.();
+      viewListeners.clear();
       (ports as unknown) = null;
     }
   };
