@@ -132,6 +132,7 @@ function createCloseQuit({
   }
 
   function attachWindowClose(win: BrowserWindow, rec: DesktopMainWindow) {
+    if (!quitConfirmed && !sessionEnding) sessionWritesFrozen = false;
     win.on("close", (event) => {
       if (quitConfirmed || sessionEnding) {
         closeConfirmedWindows.add(win);

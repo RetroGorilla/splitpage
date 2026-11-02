@@ -11,6 +11,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since the 4.0 beta
 
+- On macOS, a window reopened after closing the last window saves its layout again.
 - Downloads and update checks now use the Splitpage repository releases page.
 - **A title from your first filename.** Save an untouched untitled script as
   `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
