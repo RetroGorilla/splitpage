@@ -100,7 +100,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
   };
   dialogParentFor: (event: DesktopIpcEvent) => BrowserWindow | undefined;
   pathToTabId: Map<string, string>;
-  consumeTestDialogAnswer: () => string | null | undefined;
+  consumeTestDialogAnswer: () => unknown;
   testDialogsSeen: () => number;
 }
 
