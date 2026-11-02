@@ -19,7 +19,7 @@ const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisib
 const { createTabRegistry } = require("./tab-registry");
 const { createRestoreNotice } = require("./restore-notice");
 const { isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
-const { createCloseQuit } = require("./close-quit");
+const { createCloseQuit } = require("./close-quit.ts");
 const { createSessionRestore } = require("./session-restore");
 const { createVoiceComposition } = require("./voice-composition");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");

@@ -1,70 +1,89 @@
 "use strict";
 
-const fsp = require("node:fs/promises");
-const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
-const { createQuitWatchdog } = require("./quit-watchdog");
-const { unsavedTitles, unsavedDialogFor, decisionFor } = require("./unsaved-dialog");
+import type * as NodeFsPromises from "node:fs/promises";
+import type * as CloseKeep from "./close-keep.ts";
+import type * as QuitWatchdog from "./quit-watchdog.ts";
+import type * as UnsavedDialog from "./unsaved-dialog.ts";
+import type { BrowserWindow } from "electron";
+import type { DesktopCloseQuitDependencies, DesktopMainTab, DesktopMainWindow } from "./ipc-boundaries.d.ts";
+import type { DesktopWireInstall } from "../shared/desktop-contract.d.ts";
+
+const fsp: typeof NodeFsPromises = require("node:fs/promises");
+const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS }: {
+  checkFileGone: typeof CloseKeep.checkFileGone;
+  copyKept: typeof CloseKeep.copyKept;
+  holdKeep: typeof CloseKeep.holdKeep;
+  runCloseCheck: typeof CloseKeep.runCloseCheck;
+  lastWindowClose: typeof CloseKeep.lastWindowClose;
+  FILE_CHECK_TIMEOUT_MS: typeof CloseKeep.FILE_CHECK_TIMEOUT_MS;
+} = require("./close-keep.ts");
+const { createQuitWatchdog }: { createQuitWatchdog: typeof QuitWatchdog.createQuitWatchdog } = require("./quit-watchdog.ts");
+const { unsavedTitles, unsavedDialogFor, decisionFor }: {
+  unsavedTitles: typeof UnsavedDialog.unsavedTitles;
+  unsavedDialogFor: typeof UnsavedDialog.unsavedDialogFor;
+  decisionFor: typeof UnsavedDialog.decisionFor;
+} = require("./unsaved-dialog.ts");
 
 function createCloseQuit({
   app, dialog, testMode: TEST_MODE, tabs, windowsById, liveWindows, tabHasFile, tabIsUnsaved, draftsHasDraft,
   requestDraftFlush, draftFlushBudgetMs: DRAFT_FLUSH_BUDGET_MS, draftStore, draftsList,
   draftsDiscardForUserDecision, draftsDiscardClean, consumeTestDialogAnswer, activateTab, focusWindow,
   destroyTabView, startInstallerNow, prompterShare, voiceHelper
-}) {
+}: DesktopCloseQuitDependencies) {
   let quitConfirmed = false;
   let quitKeepingDrafts = false;
   const sessionEndKeep = { holder: "session-end" };
   let sessionWritesFrozen = false;
   let sessionEnding = false;
-  const closeConfirmedWindows = new WeakSet();
+  const closeConfirmedWindows = new WeakSet<BrowserWindow>();
   let installOnQuit = false;
-  let installQuitWatcher = null;
-  let installQuitWatchdog = null;
+  let installQuitWatcher: ((value: DesktopWireInstall) => void) | null = null;
+  let installQuitWatchdog: ReturnType<typeof createQuitWatchdog> | null = null;
 
   const TEST_CLOSE_STAT_DELAY_MS = TEST_MODE ? Number(process.env.SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS) || 0 : 0;
 
-  function closeCheckStat(p) {
+  function closeCheckStat(p: string) {
     if (TEST_CLOSE_STAT_DELAY_MS > 0) return new Promise((r) => setTimeout(r, TEST_CLOSE_STAT_DELAY_MS)).then(() => fsp.stat(p));
     return fsp.stat(p);
   }
 
-  function tabFileGone(tab) {
+  function tabFileGone(tab: DesktopMainTab) {
     if (!tabHasFile(tab)) return Promise.resolve(false);
     return checkFileGone(closeCheckStat, tab.source.absPath, FILE_CHECK_TIMEOUT_MS);
   }
 
-  function keepDraftsOfGoneFiles(goneTabs, holder) {
+  function keepDraftsOfGoneFiles(goneTabs: DesktopMainTab[], holder: object) {
     return Promise.all(goneTabs.map((tab) => {
       holdKeep(tab, holder);
       return requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS, true)
         .then((result) => (copyKept(result, draftsHasDraft(tab.id)) ? null : tab));
-    })).then((unkept) => unkept.filter(Boolean));
+    })).then((unkept) => unkept.filter(Boolean as unknown as (tab: DesktopMainTab | null) => tab is DesktopMainTab));
   }
 
-  function goneFileTabsOf(tabIds) {
+  function goneFileTabsOf(tabIds: (string | undefined)[]) {
     const fileTabs = tabIds.map((id) => tabs.get(id)).filter(tabHasFile);
     return Promise.all(fileTabs.map(tabFileGone))
       .then((gone) => fileTabs.filter((tab, i) => gone[i] && tabs.get(tab.id) === tab));
   }
 
-  function askAboutUnsaved(list, verb, parentWin) {
+  function askAboutUnsaved(list: DesktopMainTab[], verb: string, parentWin: BrowserWindow | undefined) {
     if (!list.length) return "discard";
     const decision = buildUnsavedDialog(list, verb, parentWin);
     if (decision === "review") reviewFirstUnsaved(list);
     return decision;
   }
 
-  function reportCloseCheckFailure(verb, err) {
-    console.error(`[splitpage] close check failed (${verb}): ${(err && err.stack) || err}`);
+  function reportCloseCheckFailure(verb: string, err: unknown) {
+    console.error(`[splitpage] close check failed (${verb}): ${(err && (err as Error).stack) || err}`);
   }
 
-  function askBeforeClosing(tabIdsNow, verb, parentOf, stillWanted) {
+  function askBeforeClosing(tabIdsNow: Parameters<typeof runCloseCheck>[1], verb: string, parentOf: Parameters<typeof runCloseCheck>[3], stillWanted: () => boolean) {
     const io = { tabs, goneFileTabsOf, unsavedTabsOf, askAboutUnsaved, keepDraftsOfGoneFiles, report: reportCloseCheckFailure };
     return runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted);
   }
 
-  function unsavedTabsOf(tabIds, gone) {
-    const out = [];
+  function unsavedTabsOf(tabIds: (string | undefined)[], gone: DesktopMainTab[]) {
+    const out: DesktopMainTab[] = [];
     for (const id of tabIds) {
       const tab = tabs.get(id);
       if (tabIsUnsaved(tab) || (tab && gone.includes(tab))) out.push(tab);
@@ -73,12 +92,12 @@ function createCloseQuit({
   }
 
   function allTabsInOrder() {
-    const out = [];
+    const out: string[] = [];
     for (const w of windowsById.values()) for (const id of w.tabIds) if (tabs.has(id)) out.push(id);
     return out;
   }
 
-  function buildUnsavedDialog(list, verb, parentWin) {
+  function buildUnsavedDialog(list: DesktopMainTab[], verb: string, parentWin: BrowserWindow | undefined) {
     if (TEST_MODE) process.stderr.write(`[splitpage] test question (${verb}): ${JSON.stringify(list.map((tab) => tab.id))}\n`);
     const answer = consumeTestDialogAnswer();
     if (answer === "confirm") return "discard";
@@ -90,16 +109,16 @@ function createCloseQuit({
     return decisionFor(spec, dialog.showMessageBoxSync(parentWin, spec.options));
   }
 
-  function reviewFirstUnsaved(list) {
+  function reviewFirstUnsaved(list: DesktopMainTab[]) {
     const first = list[0];
     if (!first || !tabs.has(first.id)) return;
     activateTab(first.id);
     focusWindow(first.windowId);
   }
 
-  function settleDraftsForClose(tabIds, discardUnsaved, reason) {
-    const unsaved = [];
-    const clean = [];
+  function settleDraftsForClose(tabIds: (string | undefined)[], discardUnsaved: boolean, reason: string) {
+    const unsaved: (string | undefined)[] = [];
+    const clean: (string | undefined)[] = [];
     for (const id of tabIds) {
       const tab = tabs.get(id);
       if (!tab) continue;
@@ -110,7 +129,7 @@ function createCloseQuit({
     for (const id of clean) draftsDiscardClean(id);
   }
 
-  function attachWindowClose(win, rec) {
+  function attachWindowClose(win: BrowserWindow, rec: DesktopMainWindow) {
     win.on("close", (event) => {
       if (quitConfirmed || sessionEnding) {
         closeConfirmedWindows.add(win);
@@ -120,7 +139,7 @@ function createCloseQuit({
       if (rec.closeKeepingDrafts) { event.preventDefault(); return; }
 
       const tabIds = rec.tabIds.slice();
-      const confirmClose = (closing) => {
+      const confirmClose = (closing: (string | undefined)[]) => {
         const othersOpen = liveWindows().some((w) => w.win !== win);
         const { freezeSession } = lastWindowClose(othersOpen);
         settleDraftsForClose(closing, true, "close-without-saving");
@@ -149,8 +168,8 @@ function createCloseQuit({
       if (sessionEnding) return;
       sessionEnding = true;
       sessionWritesFrozen = true;
-      if (draftStore()) { try { draftStore().markSessionEnd(); } catch { } }
-      const flushes = [];
+      if (draftStore()) { try { (draftStore() as NonNullable<ReturnType<typeof draftStore>>).markSessionEnd(); } catch { } }
+      const flushes: ReturnType<typeof requestDraftFlush>[] = [];
       for (const tab of tabs.values()) {
         if (tab.view.webContents.isDestroyed()) continue;
         if (tab.dirty || !tabHasFile(tab)) {
@@ -164,13 +183,13 @@ function createCloseQuit({
       }
       Promise.all(flushes).then((results) => {
         if (!TEST_MODE) return;
-        const ok = results.filter((r) => r && r.ok).length;
+        const ok = results.filter((r) => r && (r as { ok?: unknown }).ok).length;
         process.stderr.write(`[splitpage] session-end flush: ${ok}/${results.length} tabs answered\n`);
       });
     });
   }
 
-  function requestCloseTab(tabId) {
+  function requestCloseTab(tabId: string | undefined) {
     const tab = tabs.get(tabId);
     if (!tab) return;
     const w = windowsById.get(tab.windowId);
@@ -199,11 +218,11 @@ function createCloseQuit({
     });
   }
 
-  function quitToInstall(onCancelled) {
+  function quitToInstall(onCancelled: () => void) {
     installOnQuit = true;
-    return new Promise((resolve) => {
+    return new Promise<DesktopWireInstall>((resolve) => {
       let settled = false;
-      const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+      const done = (value: DesktopWireInstall) => { if (!settled) { settled = true; resolve(value); } };
       installQuitWatcher = done;
       app.quit();
       if (installQuitWatchdog) installQuitWatchdog.stop();
@@ -225,15 +244,15 @@ function createCloseQuit({
       if (quitKeepingDrafts) { event.preventDefault(); return; }
 
       const tabIds = allTabsInOrder();
-      const parentOf = (list) => {
-        const w = list.length ? windowsById.get(list[0].windowId) : null;
+      const parentOf = (list: DesktopMainTab[]) => {
+        const w = list.length ? windowsById.get((list[0] as DesktopMainTab).windowId) : null;
         return w && !w.win.isDestroyed() ? w.win : undefined;
       };
       const stayOpen = () => {
         quitConfirmed = false;
         sessionWritesFrozen = false;
       };
-      const confirmQuit = (quitting) => {
+      const confirmQuit = (quitting: (string | undefined)[]) => {
         settleDraftsForClose(quitting, true, "quit-without-saving");
         quitConfirmed = true;
         sessionWritesFrozen = true;
@@ -276,9 +295,9 @@ function createCloseQuit({
           installQuitWatcher = null;
         }
       }
-      if (prompterShare()) prompterShare().closeAll();
-      if (voiceHelper()) voiceHelper().stopAll();
-      if (draftStore()) { try { draftStore().markCleanExit(); } catch { } }
+      if (prompterShare()) (prompterShare() as NonNullable<ReturnType<typeof prompterShare>>).closeAll();
+      if (voiceHelper()) (voiceHelper() as NonNullable<ReturnType<typeof voiceHelper>>).stopAll();
+      if (draftStore()) { try { (draftStore() as NonNullable<ReturnType<typeof draftStore>>).markCleanExit(); } catch { } }
     });
   }
 
@@ -293,5 +312,7 @@ function createCloseQuit({
     registerQuitHandlers
   };
 }
+
+export type { createCloseQuit };
 
 module.exports = { createCloseQuit };
