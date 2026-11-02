@@ -73,8 +73,9 @@ test("a partial history export delivers intact data with an explicit damage warn
   });
   try {
     await mounted.exportAppData();
-    assert.equal(JSON.parse(delivered).history.docs[0].snapshots[0].stateJson, "intact");
-    assert.equal(JSON.parse(delivered).history.omittedSnapshots, 1);
+    const bundle = JSON.parse(delivered) as { history: { docs: unknown[]; omittedSnapshots: number } };
+    assert.deepEqual(bundle.history.docs, [{ snapshots: [{ stateJson: "intact" }] }]);
+    assert.equal(bundle.history.omittedSnapshots, 1);
     assert.equal(savedMessage, "Exported your Splitpage app data with omissions");
     assert.deepEqual(shown.at(-1), ["Exported, but 1 damaged or unreadable history snapshot could not be included. Intact versions and their available images are included.", "warn"]);
   } finally { mounted.dispose(); }
