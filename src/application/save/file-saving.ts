@@ -1,3 +1,4 @@
+import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { refsIn } from "../../../shared/blob-policy.js";
 import { autoSaveWhere } from "./autosave.ts";
 import { createSaveCompletion } from "./save-completion.ts";
@@ -74,7 +75,7 @@ const FAILED: WriterResult = Object.freeze({ kind: "failed" });
 const FILE_CHANGED = "The file changed on disk since it was opened";
 const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 
-function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite | null, naming: FileTitleChange | null): SaveLanding {
+function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: ValidatedDocument, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite | null, naming: FileTitleChange | null): SaveLanding {
   return {
     current: function () {
       mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed(), naming });
