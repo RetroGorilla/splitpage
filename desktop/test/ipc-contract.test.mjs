@@ -12,13 +12,17 @@ assert.deepEqual(config.errors, []);
 
 const prelude = `import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { DesktopChannelRow, DesktopDraftReadHeader, DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
-import type { DesktopIpcEvent, DesktopFileIpcDependencies, DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopCloseQuitDependencies, DesktopIpcEvent, DesktopFileIpcDependencies, DesktopMainTab } from "./ipc-boundaries.d.ts";
 import type { BrowserWindow } from "electron";
 declare const wrappers: DesktopIpcWrappers;
 declare const deps: DesktopFileIpcDependencies;
 declare const event: DesktopIpcEvent;
 declare const tab: DesktopMainTab;
 declare const readHeader: DesktopDraftReadHeader;
+declare const closeDeps: DesktopCloseQuitDependencies;
+declare const maybeTab: DesktopMainTab | undefined;
+declare const fileTab: DesktopMainTab & { source: Extract<DesktopMainTab["source"], { kind: "file" }> };
+declare const gone: DesktopMainTab[];
 `;
 
 function diagnostics(source) {
@@ -47,10 +51,18 @@ const refusal: DesktopChannelRow = { name: "splitpage:get-app-version-sync", dir
 const textBytes: DesktopIpcArgs<"splitpage:write-file">[1] = "text";
 const arrayBufferBytes: DesktopIpcArgs<"splitpage:write-file">[1] = new ArrayBuffer(8);
 const uint8Bytes: DesktopIpcArgs<"splitpage:write-file">[1] = new Uint8Array(8);
-const blobBytes: DesktopIpcArgs<"splitpage:blob-put">[1] = new Uint8Array(8);`;
+const blobBytes: DesktopIpcArgs<"splitpage:blob-put">[1] = new Uint8Array(8);
+if (!closeDeps.tabIsUnsaved(maybeTab) && maybeTab && gone.includes(maybeTab)) maybeTab.id.toUpperCase();
+if (!closeDeps.tabHasFile(fileTab)) fileTab.source.absPath.toUpperCase();`;
 assert.deepEqual(diagnostics(valid), []);
 
 const CASES = [
+  ...[["tabIsUnsaved", "maybeTab"], ["tabHasFile", "fileTab"]].map(([check, candidate]) => ({
+    source: `if (!closeDeps.${check}(${candidate}) && ${candidate}) { const unreachable: never = ${candidate}; }`,
+    code: 2322,
+    at: "unreachable",
+    about: "never"
+  })),
   ...["splitpage:write-file", "splitpage:blob-put"].flatMap((channel) => [
     "new DataView(new ArrayBuffer(8))", "new Uint16Array(8)", "new Uint8ClampedArray(8)"
   ].map((value) => ({
@@ -216,5 +228,22 @@ assert.equal(reviverError.code, 2322);
 assert.equal(reviverError.start, brokenReviver.indexOf('bytes: "wrong"'));
 assert.equal(reviverError.length, "bytes".length);
 assert.ok(ts.flattenDiagnosticMessageText(reviverError.messageText, " ").includes("Uint8Array"));
+
+const tabstripPath = "desktop/tabstrip-preload.ts";
+const tabstripSource = readFileSync(new URL("../tabstrip-preload.ts", import.meta.url), "utf8");
+function tabstripDiagnostics(source) {
+  return ts.getPreEmitDiagnostics(compileFixtures({ [tabstripPath]: source }, { config: "tsconfig.desktop.json" }).program);
+}
+assert.deepEqual(tabstripDiagnostics(tabstripSource), []);
+const brokenTabId = tabstripSource.replace('send("splitpage:tabstrip-activate", tabId);', 'send("splitpage:tabstrip-activate", 123);');
+assert.notEqual(brokenTabId, tabstripSource);
+const tabIdErrors = tabstripDiagnostics(brokenTabId);
+assert.equal(tabIdErrors.length, 1);
+const tabIdError = tabIdErrors[0];
+assert.ok(tabIdError.file?.fileName.replaceAll("\\", "/").endsWith("/" + tabstripPath));
+assert.equal(tabIdError.code, 2345);
+assert.equal(tabIdError.start, brokenTabId.indexOf('123);'));
+assert.equal(tabIdError.length, 3);
+assert.ok(ts.flattenDiagnosticMessageText(tabIdError.messageText, " ").includes("string"));
 
 console.log("ALL PASS (strict IPC arguments, results, directions, contract coverage and file revival)");

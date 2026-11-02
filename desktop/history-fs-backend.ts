@@ -1,6 +1,35 @@
 "use strict";
 
-const { createBlobStore, isSha256 } = require("./blob-store.ts");
+import type * as NodeFs from "node:fs";
+import type * as NodePath from "node:path";
+import type * as NodeCrypto from "node:crypto";
+import type { HistoryIndexRecord } from "../src/adapters/storage/history-backend-types.ts";
+import type { DesktopHistoryBlobIpcDependencies } from "./ipc-boundaries.d.ts";
+import type { createBlobStore as CreateBlobStore, isSha256 as IsSha256 } from "./blob-store.ts";
+
+type HistoryFsSnapshot = Pick<HistoryIndexRecord["snapshots"][number], "id" | "sha"> & {
+  [K in Exclude<keyof HistoryIndexRecord["snapshots"][number], "id" | "sha">]?: unknown;
+};
+type HistoryFsRecord = { [K in Exclude<keyof HistoryIndexRecord, "snapshots">]?: unknown } & {
+  snapshots: HistoryFsSnapshot[];
+};
+type HistoryFsIndex = Record<string, HistoryFsRecord>;
+type HistoryFsDocument = { formatVersion: number; buckets: HistoryFsIndex; trash: string[]; migratedFrom?: number };
+type HistoryFsBlobStore = Pick<ReturnType<typeof CreateBlobStore>, "init" | "delete" | "has" | "pathFor"> &
+  Pick<NonNullable<ReturnType<DesktopHistoryBlobIpcDependencies["blobStore"]>>, "get" | "put">;
+type HistoryFsOptions = {
+  dir: string; fs: typeof NodeFs; fsp: typeof NodeFs.promises;
+  path: typeof NodePath; crypto: typeof NodeCrypto;
+  now?: () => number; name?: string; maxBodyBytes?: number;
+  testHooks?: Record<string, (...args: string[]) => unknown>;
+};
+type HistoryFsIndexRead = { doc: HistoryFsDocument; bad?: undefined; missing?: undefined } |
+  { doc?: undefined; bad?: true; missing?: true };
+
+const { createBlobStore, isSha256 }: {
+  createBlobStore: (options: Parameters<typeof CreateBlobStore>[0]) => HistoryFsBlobStore;
+  isSha256: typeof IsSha256;
+} = require("./blob-store.ts");
 
 const FORMAT_VERSION = 2;
 const INDEX_FILE = "index.json";
@@ -9,64 +38,64 @@ const BODIES_DIR = "bodies";
 
 const MAX_BODY_BYTES = 256 * 1024 * 1024;
 
-const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const RENAME_RETRY_CODES = new Set<string | undefined>(["EPERM", "EACCES", "EBUSY"]);
 const RENAME_ATTEMPTS = 5;
 const RENAME_RETRY_MS = 20;
 
 function noop() {}
 
-function isPlainObject(v) {
+function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-function codedError(code, message) {
-  const e = new Error(message);
+function codedError(code: string, message: string) {
+  const e: NodeJS.ErrnoException = new Error(message);
   e.code = code;
   return e;
 }
 
-function bodyErrorCode(code) {
+function bodyErrorCode(code: unknown) {
   if (code === "ENOSPC" || code === "EDQUOT") return "enospc";
   if (code === "READ_ONLY") return "read-only";
   return "io";
 }
 
-function snapshotsOf(rec) {
+function snapshotsOf(rec: HistoryFsRecord | null | undefined) {
   return rec && Array.isArray(rec.snapshots) ? rec.snapshots : [];
 }
 
-function namedShas(buckets) {
-  const named = new Set();
+function namedShas(buckets: HistoryFsIndex) {
+  const named = new Set<string>();
   for (const b of Object.keys(buckets)) {
     for (const s of snapshotsOf(buckets[b])) if (s && typeof s.sha === "string") named.add(s.sha);
   }
   return named;
 }
 
-function cleanIndexDoc(raw) {
+function cleanIndexDoc(raw: unknown): HistoryFsDocument | null {
   if (!isPlainObject(raw) || !isPlainObject(raw.buckets)) return null;
   const formatVersion = Number(raw.formatVersion);
   if (!Number.isFinite(formatVersion)) return null;
-  const buckets = {};
+  const buckets: HistoryFsIndex = {};
   for (const b of Object.keys(raw.buckets)) {
     const rec = raw.buckets[b];
     if (!isPlainObject(rec) || !Array.isArray(rec.snapshots)) continue;
-    const snaps = rec.snapshots.filter((s) => isPlainObject(s) && typeof s.id === "string" && isSha256(s.sha));
+    const snaps = rec.snapshots.filter((s: unknown): s is HistoryFsSnapshot => isPlainObject(s) && typeof s.id === "string" && isSha256(s.sha));
     if (!snaps.length) continue;
-    buckets[b] = snaps.length === rec.snapshots.length ? rec : Object.assign({}, rec, { snapshots: snaps });
+    buckets[b] = snaps.length === rec.snapshots.length ? rec as HistoryFsRecord : Object.assign({}, rec, { snapshots: snaps });
   }
   const trash = Array.isArray(raw.trash) ? raw.trash.filter(isSha256) : [];
-  const doc = { formatVersion, buckets, trash };
+  const doc: HistoryFsDocument = { formatVersion, buckets, trash };
   if (Number.isFinite(Number(raw.migratedFrom)) && raw.migratedFrom != null) doc.migratedFrom = Number(raw.migratedFrom);
   return doc;
 }
 
-function emptyDoc() {
+function emptyDoc(): HistoryFsDocument {
   return { formatVersion: FORMAT_VERSION, buckets: {}, trash: [] };
 }
 
-function createHistoryFsBackend(opts) {
-  const o = opts || {};
+function createHistoryFsBackend(opts?: HistoryFsOptions | null) {
+  const o = opts || ({} as HistoryFsOptions);
   const { dir, fs, fsp, path, crypto } = o;
   if (typeof dir !== "string" || !dir) throw new TypeError("createHistoryFsBackend: dir is required");
   if (!fs || !fsp || !path || !crypto) throw new TypeError("createHistoryFsBackend: fs, fsp, path and crypto are required");
@@ -78,25 +107,25 @@ function createHistoryFsBackend(opts) {
   const formatPath = path.join(dir, "FORMAT");
   const bodies = createBlobStore({
     dir: path.join(dir, BODIES_DIR), fs, fsp, path, crypto,
-    maxBytes: Number.isInteger(o.maxBodyBytes) && o.maxBodyBytes > 0 ? o.maxBodyBytes : MAX_BODY_BYTES
+    maxBytes: Number.isInteger(o.maxBodyBytes) && (o.maxBodyBytes as number) > 0 ? o.maxBodyBytes as number : MAX_BODY_BYTES
   });
 
   let state = "idle";
   let readOnly = false;
-  let openPromise = null;
-  let openError = null;
-  let loadedFrom = null;
+  let openPromise: Promise<{ readOnly: boolean; loadedFrom: string | null }> | null = null;
+  let openError: unknown = null;
+  let loadedFrom: string | null = null;
   let doc = emptyDoc();
-  let gone = new Set();
-  const orphans = new Set();
+  let gone = new Set<string>();
+  const orphans = new Set<string>();
   let chain = Promise.resolve();
   let dead = false;
   const counts = { exclusive: 0, commit: 0, put: 0, unlinked: 0 };
 
-  async function hook(name, ...args) {
+  async function hook(name: string, ...args: string[]) {
     if (!hooks || typeof hooks[name] !== "function") return;
     try {
-      await hooks[name](...args);
+      await (hooks[name] as (...args: string[]) => unknown)(...args);
     } catch (err) {
       dead = true;
       state = "dead";
@@ -104,21 +133,21 @@ function createHistoryFsBackend(opts) {
     }
   }
 
-  function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+  function sleep(ms: number) { return new Promise<void>((r) => setTimeout(r, ms)); }
 
-  async function renameRetry(from, to) {
+  async function renameRetry(from: string, to: string) {
     for (let attempt = 1; ; attempt++) {
       try {
         await fsp.rename(from, to);
         return;
       } catch (err) {
-        if (attempt >= RENAME_ATTEMPTS || !err || !RENAME_RETRY_CODES.has(err.code)) throw err;
+        if (attempt >= RENAME_ATTEMPTS || !err || !RENAME_RETRY_CODES.has((err as NodeJS.ErrnoException).code)) throw err;
         await sleep(RENAME_RETRY_MS);
       }
     }
   }
 
-  async function fsyncDirBestEffort(d) {
+  async function fsyncDirBestEffort(d: string) {
     let fh = null;
     try {
       fh = await fsp.open(d, "r");
@@ -129,18 +158,18 @@ function createHistoryFsBackend(opts) {
     }
   }
 
-  async function exists(p) {
+  async function exists(p: string) {
     try { await fsp.lstat(p); return true; } catch (err) {
-      if (err && err.code === "ENOENT") return false;
+      if (err && (err as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw err;
     }
   }
 
-  function tmpName(base) {
+  function tmpName(base: string) {
     return path.join(dir, `.tmp-${crypto.randomBytes(6).toString("hex")}-${base}`);
   }
 
-  async function writeTmpDurable(tmp, text) {
+  async function writeTmpDurable(tmp: string, text: string) {
     const buf = Buffer.from(text, "utf8");
     const fh = await fsp.open(tmp, "wx");
     let closed = false;
@@ -159,7 +188,7 @@ function createHistoryFsBackend(opts) {
     }
   }
 
-  async function writeGeneration(next) {
+  async function writeGeneration(next: HistoryFsDocument) {
     const text = JSON.stringify(next);
     const tmp = tmpName(INDEX_FILE);
     try {
@@ -176,7 +205,7 @@ function createHistoryFsBackend(opts) {
     await fsyncDirBestEffort(dir);
   }
 
-  async function writeSmallDurable(file, text) {
+  async function writeSmallDurable(file: string, text: string) {
     const tmp = tmpName(path.basename(file));
     try {
       await writeTmpDurable(tmp, text);
@@ -188,12 +217,12 @@ function createHistoryFsBackend(opts) {
     await fsyncDirBestEffort(dir);
   }
 
-  async function readIndexFile(file) {
+  async function readIndexFile(file: string): Promise<HistoryFsIndexRead> {
     let text;
     try {
       text = await fsp.readFile(file, "utf8");
     } catch (err) {
-      if (err && err.code === "ENOENT") return { missing: true };
+      if (err && (err as NodeJS.ErrnoException).code === "ENOENT") return { missing: true };
       throw err;
     }
     let raw;
@@ -202,7 +231,7 @@ function createHistoryFsBackend(opts) {
     return d ? { doc: d } : { bad: true };
   }
 
-  async function moveAsideCorrupt(file) {
+  async function moveAsideCorrupt(file: string) {
     if (readOnly) return;
     let dest = `${file}.corrupt-${now()}`;
     for (let n = 1; await exists(dest); n++) dest = `${file}.corrupt-${now()}-${n}`;
@@ -213,7 +242,7 @@ function createHistoryFsBackend(opts) {
     try {
       return (await fsp.readFile(formatPath, "utf8")).trim();
     } catch (err) {
-      if (err && err.code === "ENOENT") return null;
+      if (err && (err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
   }
@@ -242,7 +271,7 @@ function createHistoryFsBackend(opts) {
     await fsp.mkdir(dir, { recursive: true });
     let fmt = await readFormat();
     let n = fmt == null ? null : parseInt(fmt, 10);
-    readOnly = Number.isFinite(n) && n > FORMAT_VERSION;
+    readOnly = Number.isFinite(n) && (n as number) > FORMAT_VERSION;
     if (!readOnly) {
       await sweepTemps();
       if (bodies.init().readOnly) readOnly = true;
@@ -252,7 +281,7 @@ function createHistoryFsBackend(opts) {
     if (!readOnly) {
       fmt = await readFormat();
       n = fmt == null ? null : parseInt(fmt, 10);
-      if (!(Number.isFinite(n) && n >= FORMAT_VERSION)) await writeSmallDurable(formatPath, FORMAT_VERSION + "\n");
+      if (!(Number.isFinite(n) && (n as number) >= FORMAT_VERSION)) await writeSmallDurable(formatPath, FORMAT_VERSION + "\n");
     }
     state = "ready";
   }
@@ -269,13 +298,13 @@ function createHistoryFsBackend(opts) {
     return openPromise;
   }
 
-  function makeTx(write) {
+  function makeTx(write: boolean) {
     let active = true;
     let commitCalled = false;
     let committed = false;
-    const putShas = [];
+    const putShas: string[] = [];
 
-    function check(op, writes) {
+    function check(op: string, writes: boolean) {
       if (!active) throw codedError("io", `history: tx.${op} after its job finished (a non-tx await inside exclusive()?)`);
       if (dead) throw codedError("io", "history: the backend was killed (test hook)");
       if (writes) {
@@ -290,21 +319,21 @@ function createHistoryFsBackend(opts) {
         return Object.assign({}, doc.buckets);
       },
 
-      get: async (sha) => {
+      get: async (sha: string) => {
         check("get", false);
         if (!isSha256(sha)) return null;
         const buf = await bodies.get(sha);
         if (buf) return buf.toString("utf8");
         try {
-          await fsp.stat(bodies.pathFor(sha));
+          await fsp.stat(bodies.pathFor(sha) as string);
         } catch (err) {
-          if (err && err.code === "ENOENT") return null;
-          throw codedError("io", `history: body ${sha} unreadable (${err && err.code})`);
+          if (err && (err as NodeJS.ErrnoException).code === "ENOENT") return null;
+          throw codedError("io", `history: body ${sha} unreadable (${err && (err as NodeJS.ErrnoException).code})`);
         }
         throw codedError("io", `history: body ${sha} unreadable`);
       },
 
-      put: async (sha, text) => {
+      put: async (sha: string, text: string) => {
         check("put", true);
         if (!isSha256(sha) || typeof text !== "string") throw codedError("io", "history: bad body");
         counts.put++;
@@ -315,21 +344,21 @@ function createHistoryFsBackend(opts) {
         await hook("afterBodyPut", sha);
       },
 
-      commit: async (changes, dropped) => {
+      commit: async (changes: Record<string, HistoryFsRecord | null>, dropped: string[]) => {
         check("commit", true);
         if (commitCalled) throw codedError("io", "history: commit called twice in one transaction");
         commitCalled = true;
         counts.commit++;
         const buckets = Object.assign({}, doc.buckets);
         for (const b of Object.keys(changes || {})) {
-          if (changes[b]) buckets[b] = changes[b];
-          else delete buckets[b];
+          if (changes[b]) buckets[b] = changes[b] as HistoryFsRecord;
+          else Reflect.deleteProperty(buckets, b);
         }
         const named = namedShas(buckets);
         const eligible = doc.trash.filter((s) => !named.has(s) && !gone.has(s));
-        const trash = [];
-        const seen = new Set();
-        const add = (s) => {
+        const trash: string[] = [];
+        const seen = new Set<string>();
+        const add = (s: unknown) => {
           if (!isSha256(s) || seen.has(s) || named.has(s) || gone.has(s)) return;
           seen.add(s);
           trash.push(s);
@@ -338,7 +367,7 @@ function createHistoryFsBackend(opts) {
         putShas.forEach((s) => { if (!named.has(s)) add(s); });
         doc.trash.forEach(add);
         orphans.forEach(add);
-        const next = { formatVersion: FORMAT_VERSION, buckets, trash };
+        const next: HistoryFsDocument = { formatVersion: FORMAT_VERSION, buckets, trash };
         if (doc.migratedFrom != null) next.migratedFrom = doc.migratedFrom;
 
         await hook("beforeIndexWrite");
@@ -367,7 +396,7 @@ function createHistoryFsBackend(opts) {
     };
   }
 
-  function exclusive(fn, xo) {
+  function exclusive<T>(fn: (tx: ReturnType<typeof makeTx>["tx"]) => T | Promise<T>, xo?: { write?: boolean }): Promise<T> {
     const write = !(xo && xo.write === false);
     counts.exclusive++;
     const job = chain.then(async () => {
@@ -403,6 +432,8 @@ function createHistoryFsBackend(opts) {
     paths: { dir, index: indexPath, prev: prevPath, format: formatPath, bodies: path.join(dir, BODIES_DIR) }
   };
 }
+
+export type { createHistoryFsBackend, cleanIndexDoc, FORMAT_VERSION, INDEX_FILE, PREV_FILE, BODIES_DIR, MAX_BODY_BYTES };
 
 module.exports = {
   createHistoryFsBackend,
