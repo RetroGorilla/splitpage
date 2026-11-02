@@ -7,6 +7,7 @@ import { parseProjectFileState } from "../../adapters/formats/project-file.ts";
 import { inlineStateJson, internDataUrl, persist } from "../../adapters/storage/02c-blobs.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../document-ports.ts";
+import { cellOf } from "../richtext.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { notifyDesktopDocumentState } from "./desktop-owners.ts";
 import { documentLocation } from "./location-owner.ts";
@@ -39,7 +40,7 @@ function draftsPorts(): DraftsPorts {
     markWrittenOut: (on) => { documentLocation().markWrittenOut(on); },
     saves: { unsaved: () => unsavedChanges(), editSeq: () => saveChanges() },
     notices: portNotices,
-    entry: { migrate: (raw) => migrateRows(raw) },
+    entry: { migrate: (raw) => migrateRows(raw), cell: cellOf },
     identity: { copyHistory: (fromId, toId) => { documentIdentity.copyDocHistorySafe(fromId, toId); }, sync: () => { documentIdentity.syncDocIdentity(); } },
     transitions: portTransitions,
     documents: { open: (opening) => openDocument(opening as Parameters<typeof openDocument>[0]) },

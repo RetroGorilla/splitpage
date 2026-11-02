@@ -329,7 +329,7 @@ test("history: dropping a later word gives back no redo while the entry under it
   assert.equal(h.top().steps[0].after, "xa ");
 });
 
-test("history: a cancel whose last update was undone before the drop never puts the older redo on top of that update's redo", () => {
+test("history: a cancel whose last update was undone restores older redo without the cancelled update (#459)", () => {
   const h = createUndoHistory(cellRuns);
   h.record(status("r9"), 0);
   const live = doc([row("r9", "", { status: "shot" }), row("r1", "T")]);
@@ -343,13 +343,14 @@ test("history: a cancel whose last update was undone before the drop never puts 
   assert.equal(live.rows[1].audioText, "T");
   assert.equal(h.dropEmptySince(mark, true), true);
   assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
-  assert.deepEqual(h.nextRedo().steps, typed("T", "Tx"));
+  assert.deepEqual(h.nextRedo().steps, status("r9"));
   assert.equal(h.redo(live).ok, true);
   assert.equal(h.redo(live).empty, true);
-  assert.equal(live.rows[0].status, "todo");
+  assert.equal(live.rows[0].status, "shot");
+  assert.equal(live.rows[1].audioText, "T");
 });
 
-test("history: the older redo a cancel did not put back stays parked, so Ctrl+Y on the update and a Backspace back within the second give it back (#446 N1)", () => {
+test("history: after a cancel, typing and deleting a fresh letter still restores the older redo (#459)", () => {
   const h = createUndoHistory(cellRuns);
   h.record(status("r9"), 0);
   const live = doc([row("r9", "", { status: "shot" }), row("r1", "T")]);
@@ -362,9 +363,10 @@ test("history: the older redo a cancel did not put back stays parked, so Ctrl+Y 
   assert.equal(h.undo(live).ok, true);
   assert.equal(h.dropEmptySince(mark, true), true);
   assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
-  assert.equal(h.redo(live).ok, true);
-  assert.equal(live.rows[1].audioText, "Tx");
-  h.record(typed("Tx", "T"), 7300);
+  assert.deepEqual(h.nextRedo().steps, status("r9"));
+  h.record(typed("T", "Ty"), 7300);
+  live.rows[1].audioText = "Ty";
+  h.record(typed("Ty", "T"), 7400);
   live.rows[1].audioText = "T";
   assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
   assert.deepEqual(h.nextRedo().steps, status("r9"));
@@ -825,13 +827,10 @@ function redoInvariantRun(seed, count) {
       setText(at, text, 1100);
       setText(at, text + "x", 1100);
       const entry = h.top();
-      const from = canon();
       assert.equal(h.undo(live).ok, true);
       undoneFrom.set(entry, canon());
       live = clone(live);
       h.dropEmptySince(mark, true);
-      model.redo.length = 0;
-      model.redo.push(from);
     } else if (kind === "crossCommit" || kind === "crossCancel" || kind === "crossJoin") {
       real();
       setText(at, text + "e", 5000);

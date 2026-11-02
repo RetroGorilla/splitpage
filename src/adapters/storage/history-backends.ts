@@ -291,6 +291,8 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
         entries: entries,
         older: older,
         olderExpiresAt: r.olderExpiresAt == null ? null : Number(r.olderExpiresAt),
+        ...(r.damaged ? { damaged: r.damaged } : {}),
+        ...(r.olderDamaged ? { olderDamaged: r.olderDamaged } : {}),
         usage: historyDesktopUsage(r.usage)
       };
     });

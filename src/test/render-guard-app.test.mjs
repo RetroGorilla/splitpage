@@ -507,6 +507,20 @@ async function pressRedraw() {
   assert.equal(redrawToasts().length, 0);
 }
 
+test("dismissing a redraw toast keeps editing blocked and offers recovery on the next interaction", async () => {
+  await staleScreen();
+  const toast = redrawToasts()[0];
+  toast.querySelector(".toast-dismiss").click();
+  assert.ok(toast.classList.contains("is-leaving"));
+  assert.equal(rowsInert(), true);
+  document.body.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+  assert.equal(redrawToasts().length, 1);
+  assert.notEqual(redrawToasts()[0], toast);
+  assert.equal(document.activeElement, redrawToasts()[0].querySelector(".toast-action"));
+  await pressRedraw();
+  assert.equal(rowsInert(), false);
+});
+
 function typedOnce() {
   typeChar(cellOf("r1", "visualText"), "!");
   flushEdits();
@@ -576,7 +590,8 @@ test("a stale screen makes the script, the titles and the editing controls inert
   assert.deepEqual(parts.filter((p) => !p[1]), [], "every part is inert");
   assert.deepEqual(dimmedParts().filter((p) => !p[1]), [], "every part is dimmed");
   const toast = redrawToasts()[0];
-  assert.equal(toast.getAttribute("role"), "alert");
+  assert.equal(toast.hasAttribute("role"), false);
+  assert.ok(Array.from(document.querySelectorAll('#toast-alert[role="alert"] > span')).some(el => el.textContent === REDRAW));
   assert.equal(toast.hasAttribute("title"), false);
   assert.equal(document.activeElement, toast.querySelector(".toast-action"));
   toast.click();

@@ -36,9 +36,7 @@ function click(action: string) {
 }
 
 async function settled() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>(resolve => { setTimeout(resolve, 0); });
 }
 
 test("onboarding mounts with ports, walks its three steps, records completion and starts the tour", async () => {
@@ -152,11 +150,107 @@ test("a disposed mount cannot auto-open after a last-file read completes", async
   page();
   const h = fakeOnboardingPorts();
   let resolve: (value: unknown) => void = () => {};
-  const mounted = startOnboarding({ ...h.ports, lastFile: { load: () => new Promise((done) => { resolve = done; }) } });
+  let requested = false;
+  const mounted = startOnboarding({ ...h.ports, lastFile: { load: () => new Promise((done) => { requested = true; resolve = done; }) } });
+  await settled();
+  assert.equal(requested, true);
   mounted.dispose();
   resolve(null);
   await settled();
   assert.equal(modal().hidden, true);
   assert.equal(h.choices.size, 0);
+});
+
+test("automatic onboarding waits to decide until startup is ready", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  let ready = () => {};
+  const waiting = new Promise<void>(resolve => { ready = resolve; });
+  const mounted = startOnboarding({ ...h.ports, startup: { ready: () => waiting } });
+  try {
+    await settled();
+    assert.equal(modal().hidden, true);
+    assert.equal(h.panels.closed(), 0);
+    ready();
+    await settled();
+    assert.equal(modal().hidden, false);
+    assert.equal(h.panels.closed(), 1);
+  } finally { mounted.dispose(); }
+});
+
+test("an ineligible onboarding decision settles even while startup remains pending", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  h.state.seed = false;
+  const mounted = startOnboarding({ ...h.ports, startup: { ready: () => new Promise(() => {}) } });
+  const probe = (win as unknown as { __onboarding: { autoShowDecided: () => Promise<void> } }).__onboarding;
+  let decided = false;
+  void probe.autoShowDecided().then(() => { decided = true; });
+  try {
+    await settled();
+    assert.equal(decided, true);
+    assert.equal(modal().hidden, true);
+    assert.equal(h.panels.closed(), 0);
+  } finally { mounted.dispose(); }
+});
+
+test("automatic onboarding rechecks eligibility when startup becomes ready", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  let ready = () => {};
+  const waiting = new Promise<void>(resolve => { ready = resolve; });
+  const mounted = startOnboarding({ ...h.ports, startup: { ready: () => waiting } });
+  try {
+    await settled();
+    h.state.home = { kind: "file", name: "arrived.splitpage" };
+    ready();
+    await settled();
+    assert.equal(modal().hidden, true);
+    assert.equal(h.panels.closed(), 0);
+  } finally { mounted.dispose(); }
+});
+
+test("a delayed automatic eligibility read cannot reset a manually opened wizard", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  let reads = 0;
+  let release: (value: unknown) => void = () => {};
+  const mounted = startOnboarding({ ...h.ports, lastFile: { load: () => {
+    reads++;
+    return reads === 2 ? new Promise(resolve => { release = resolve; }) : Promise.resolve(null);
+  } } });
+  try {
+    await settled();
+    assert.equal(reads, 2);
+    assert.equal(modal().hidden, true);
+    mounted.openOnboarding();
+    click("next");
+    click("next");
+    const finish = win.document.querySelector<HTMLButtonElement>('[data-onboard-action="next"]');
+    assert.ok(finish);
+    finish.focus();
+    assert.equal(stepShown(3), true);
+    release(null);
+    const probe = (win as unknown as { __onboarding: { autoShowDecided: () => Promise<void> } }).__onboarding;
+    await probe.autoShowDecided();
+    assert.equal(modal().hidden, false);
+    assert.equal(stepShown(3), true);
+    assert.equal(finish.textContent, "Finish");
+    assert.equal(win.document.activeElement, finish);
+    assert.equal(h.panels.closed(), 1);
+  } finally { mounted.dispose(); }
+});
+
+test("a mount disposed while startup is pending cannot open after it becomes ready", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  let ready = () => {};
+  const waiting = new Promise<void>(resolve => { ready = resolve; });
+  const mounted = startOnboarding({ ...h.ports, startup: { ready: () => waiting } });
+  mounted.dispose();
+  ready();
+  await settled();
+  assert.equal(modal().hidden, true);
+  assert.equal(h.panels.closed(), 0);
 });
 

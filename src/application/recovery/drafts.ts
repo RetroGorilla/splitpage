@@ -1,4 +1,5 @@
 import { NO_DESTINATION } from "../transitions/ports.ts";
+import { prepareIdentityReplacement } from "./identity-replacement.ts";
 import { createCaptureSchedule } from "./capture-schedule.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import type { DocumentView } from "../session/document-session.ts";
@@ -399,7 +400,8 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       return "applied";
     }
 
-    const merged = await applyStashedWork(disk, { base: base, mine: mine }, {
+    const prepared = prepareIdentityReplacement(base, mine, disk, live().entry.cell);
+    const merged = await applyStashedWork(prepared.disk, { base: prepared.base, mine: prepared.mine }, {
       recovery: true,
       awaitUndoPoint: true,
       keepLabel: "Your unsaved changes, recovered",

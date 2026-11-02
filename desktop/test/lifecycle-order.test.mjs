@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.join(here, "..");
 const MAIN = stripTypeScriptTypes(fs.readFileSync(path.join(desktop, "main.ts"), "utf8"));
-const EXPOSED = ["createTabWindow", "createTab", "tabs", "windowsById", "pendingDraftFlushes", "initDraftStore", "persistShellState", "requestCloseTab"];
+const EXPOSED = ["createTabWindow", "createTab", "tabs", "windowsById", "pendingDraftFlushes", "initDraftStore", "persistShellState", "requestCloseTab", "registerActivate"];
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -56,6 +56,7 @@ function loadMain(world) {
         world.main.pendingDraftFlushes.delete(reqId);
         world.kept.add(world.idOf(tag));
         log(`flush answered ${tag}`);
+        if (typeof world.onFlushAnswer === "function") world.onFlushAnswer(tag);
         answer({ ok: true });
       }, 5);
     };
@@ -127,6 +128,7 @@ function loadMain(world) {
 
   const dialog = {
     showMessageBoxSync(_parent, options) {
+      world.dialogs.push({ parent: _parent, options });
       const detail = String(options.detail || "").split("\n").filter(Boolean).join(" / ");
       log(`ask ${options.message} [${options.buttons.join("|")}] ${detail}`);
       const answer = world.answers.shift();
@@ -194,6 +196,7 @@ function makeWorld() {
     userData,
     entries: [],
     answers: [],
+    dialogs: [],
     onAsk: null,
     kept: new Set(),
     flushes: new Map(),
@@ -410,6 +413,31 @@ test("review shows the first unsaved tab and keeps the window", async (w) => {
   assert.equal(rec.activeTabId, t1.id);
 });
 
+for (const action of ["close", "quit"]) {
+  test(`Review during ${action} explains a clean file that is gone without discarding it`, async (w) => {
+    const rec = w.window();
+    const gone = w.tab(rec, "Missing script", { file: w.gone });
+    w.tab(rec, "Other script", { dirty: true });
+    w.answers.push("review");
+    w.start();
+    if (action === "quit") w.app.quit();
+    else rec.win.close();
+    await w.until(askMany(2, action === "quit" ? "Quit without saving" : "Close without saving", ["Missing script", "Other script"]));
+    assert.equal(rec.activeTabId, gone.id);
+    assert.equal(rec.win.isDestroyed(), false);
+    assert.equal(gone.dirty, false);
+    assert.equal(w.entries.some((line) => line.startsWith("draft discard") || line.startsWith("flush ")), false);
+    assert.equal(w.dialogs.length, 2, "Review must explain why this clean file needs attention");
+    const notice = w.dialogs[1];
+    assert.equal(notice.parent, rec.win);
+    assert.match(notice.options.message, /file.*(unavailable|found|read)/i);
+    assert.match(notice.options.detail, /Missing script/);
+    assert.match(notice.options.detail, /moved|deleted/);
+    assert.match(notice.options.detail, /Save a copy/);
+    assert.deepEqual(notice.options.buttons, ["OK"]);
+  });
+}
+
 test("closing a tab: question, settle, view closed", async (w) => {
   const rec = w.window();
   w.tab(rec, "T1", { file: w.existing, dirty: true });
@@ -482,16 +510,64 @@ test("quit with file tabs: question, settle, freeze, quit", async (w) => {
   ]);
 });
 
-test("quit without file tabs answers at once", async (w) => {
+for (const withFile of [false, true]) {
+  test(`quit ${withFile ? "with" : "without"} file tabs rechecks an edit queued by another window during the question`, async (w) => {
+    const first = w.window();
+    w.tab(first, "T1", { file: withFile ? w.existing : undefined, dirty: true });
+    const second = w.window();
+    const edited = w.tab(second, "T2");
+    w.answers.push("discard", "cancel");
+    w.onAsk = () => {
+      w.onAsk = null;
+      setTimeout(() => { edited.dirty = true; w.log("edit delivered T2"); }, 0);
+    };
+    w.start();
+    w.app.quit();
+    await w.until("edit delivered T2");
+    assert.equal(w.entries.filter((line) => line === ASK_ONE_LEAVE).length, 2, w.entries.join("\n"));
+    assert.equal(w.entries.some((line) => line.startsWith("draft discard")), false);
+    assert.equal(first.win.isDestroyed(), false);
+    assert.equal(second.win.isDestroyed(), false);
+    w.main.persistShellState();
+    assert.equal(w.entries.at(-1), "state-write");
+  });
+}
+
+test("quit rechecks an edit queued just before a successful keep flush answers", async (w) => {
+  const first = w.window();
+  const kept = w.tab(first, "T1", { file: w.gone, dirty: true });
+  const second = w.window();
+  const edited = w.tab(second, "T2");
+  w.flushes.set("T1", "ok");
+  w.answers.push("discard", "cancel");
+  w.onFlushAnswer = (tag) => {
+    assert.equal(tag, "T1");
+    setTimeout(() => { edited.dirty = true; w.log("edit delivered T2"); }, 0);
+  };
+  w.start();
+  w.app.quit();
+  await w.until("edit delivered T2");
+  assert.equal(w.entries.filter((line) => line === ASK_ONE_LEAVE).length, 2, w.entries.join("\n"));
+  assert.equal(w.entries.some((line) => line.startsWith("draft discard")), false);
+  assert.equal(first.win.isDestroyed(), false);
+  assert.equal(second.win.isDestroyed(), false);
+  assert.equal(w.kept.has(kept.id), true);
+  assert.equal(kept.keepDraftOnClose, false);
+});
+
+test("quit without file tabs rechecks before settling", async (w) => {
   const rec = w.window();
   w.tab(rec, "T1", { dirty: true });
   w.answers.push("discard");
   w.start();
   w.app.quit();
+  await w.until("quit done");
   assert.deepEqual(w.entries, [
     "app.quit",
+    "quit prevented",
     ASK_ONE_LEAVE,
     "draft discard [T1] quit-without-saving",
+    "app.quit",
     "probe quitting",
     "close W1",
     "probe W1 closing",
@@ -581,6 +657,99 @@ test("session end while the quit question waits cancels the quit", async (w) => 
     "flush T1 keep=false"
   ]);
 });
+
+test("macOS dock activation after the last window closes resumes persisted layout writes", async (w) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    w.main.registerActivate();
+    let rec = w.window();
+    w.tab(rec, "T1");
+    await w.main.persistShellState();
+    const statePath = path.join(w.userData, "desktop-state.json");
+    for (let round = 0; round < 2; round++) {
+      const beforeClose = fs.readFileSync(statePath, "utf8");
+      w.start();
+      rec.win.close();
+      assert.equal(w.main.windowsById.size, 0);
+      assert.equal(w.entries.includes("app.quit"), false);
+      assert.equal(await w.main.persistShellState(), false);
+      assert.equal(fs.readFileSync(statePath, "utf8"), beforeClose);
+      w.app.emit("activate");
+      assert.equal(w.main.windowsById.size, 1);
+      rec = [...w.main.windowsById.values()][0];
+      rec.bounds = { x: 50 + round, y: 60, width: 1100, height: 800 };
+      await w.main.persistShellState();
+      const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      assert.equal(state.windows[0].windowId, rec.id);
+      assert.deepEqual(state.windows[0].bounds, rec.bounds);
+      assert.equal(state.windows[0].tabs[0].tabId, rec.activeTabId);
+    }
+  } finally { Object.defineProperty(process, "platform", platform); }
+});
+
+for (const platformName of ["darwin", "win32", "linux"]) {
+  test(`a window attached during final-close teardown on ${platformName} keeps the saved layout frozen`, async (w) => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: platformName });
+    try {
+      const rec = w.window();
+      w.tab(rec, "T1");
+      await w.main.persistShellState();
+      const statePath = path.join(w.userData, "desktop-state.json");
+      const savedState = fs.readFileSync(statePath, "utf8");
+      let duringClose;
+      rec.win.on("close", () => {
+        w.tab(w.window(), "T2");
+        duringClose = w.main.persistShellState();
+      });
+      rec.win.close();
+      assert.equal(await duringClose, false);
+      assert.equal(await w.main.persistShellState(), false);
+      assert.equal(fs.readFileSync(statePath, "utf8"), savedState);
+    } finally { Object.defineProperty(process, "platform", platform); }
+  });
+}
+
+test("a macOS reopen during an asynchronous quit keeps the completed-close snapshot frozen", async (w) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    const rec = w.window();
+    w.tab(rec, "T1", { file: w.existing });
+    await w.main.persistShellState();
+    const statePath = path.join(w.userData, "desktop-state.json");
+    const savedState = fs.readFileSync(statePath, "utf8");
+    let beforeReopen;
+    let duringQuit;
+    rec.win.on("close", (event) => { if (!event.prevented) w.app.quit(); });
+    rec.win.on("closed", () => {
+      beforeReopen = w.main.persistShellState();
+      w.tab(w.window(), "T2");
+      duringQuit = w.main.persistShellState();
+    });
+    w.start();
+    rec.win.close();
+    await w.until("quit done");
+    assert.equal(await beforeReopen, false);
+    assert.equal(await duringQuit, false);
+    assert.equal(fs.readFileSync(statePath, "utf8"), savedState);
+  } finally { Object.defineProperty(process, "platform", platform); }
+});
+
+for (const ending of ["quit", "session-end"]) {
+  test(`creating a window during ${ending} keeps session writes frozen`, async (w) => {
+    const rec = w.window();
+    w.tab(rec, "T1");
+    await w.main.persistShellState();
+    if (ending === "quit") w.app.quit();
+    else rec.win.emit("session-end");
+    w.start();
+    w.tab(w.window(), "T2");
+    assert.equal(await w.main.persistShellState(), false);
+    assert.equal(w.entries.includes("state-write"), false);
+  });
+}
 
 const saved = { test: process.env.SPLITPAGE_TEST, noUpdate: process.env.SPLITPAGE_NO_UPDATE_CHECK, userData: process.env.SPLITPAGE_USER_DATA };
 const restoreEnv = (name, value) => { if (value === undefined) delete process.env[name]; else process.env[name] = value; };

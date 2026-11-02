@@ -440,6 +440,7 @@ export function fakeOnboardingPorts() {
   const recorded: boolean[] = [];
   const choices = new Set<() => void>();
   const ports: OnboardingPorts = {
+    startup: { ready: () => null },
     desktop: () => state.desktop,
     actions: actions.actions, sidePanels: panels.sidePanels,
     preferences: {

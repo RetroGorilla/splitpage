@@ -67,7 +67,7 @@ test("the app's actions start, stop and start again with one key listener and no
   assert.deepEqual(registry.list().map((v) => v.id), ["test-probe"]);
 });
 
-test("while started, a refusal is shown as a toast from every surface but a shortcut, and not once stopped", () => {
+test("while started, button and native refusals share a toast, shortcuts and stopped actions add none", () => {
   const host = document.getElementById("toast-host") as HTMLElement;
   host.replaceChildren();
   const registry = createActionRegistry();
@@ -78,10 +78,10 @@ test("while started, a refusal is shown as a toast from every surface but a shor
     registry.invoke("test-refused", "button");
     registry.invoke("test-refused", "native-menu");
     registry.invoke("test-refused", "shortcut");
-    assert.deepEqual(toasts(), ["Close the open dialog first.", "Close the open dialog first."]);
+    assert.deepEqual(toasts(), ["Close the open dialog first."]);
     stop();
     registry.invoke("test-refused", "button");
-    assert.equal(toasts().length, 2);
+    assert.equal(toasts().length, 1);
   } finally {
     stopActions();
     host.replaceChildren();

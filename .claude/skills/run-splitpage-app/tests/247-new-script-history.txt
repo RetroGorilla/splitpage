@@ -1,5 +1,5 @@
 # The script a new one replaces is in the NEW one's Version history
-# (18b-file-menu.js replaceWithNewDocument). New script from these scenes,
+# (file-menu.ts replaceWithNewDocument). New script from these scenes,
 # File ▸ New script and Open the long demo each say "the one before is in
 # Version history"; the snapshot used to be filed under the old script's id
 # only, while the panel lists the document on screen — "No snapshots of this
@@ -71,7 +71,7 @@ jsclick #btn-file
 sleep 300
 jsclick #file-menu [data-file-action="history"]
 wait !document.getElementById('history-panel').hidden
-wait restores() === 1
+wait histText().indexOf('Before opening the long demo') !== -1
 expect histText().indexOf('Before opening the long demo') !== -1
 jsclick #history-list [data-action="restore-snapshot"]
 wait document.getElementById('history-panel').hidden

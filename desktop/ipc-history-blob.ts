@@ -65,6 +65,8 @@ function createHistoryBlobIpc({
         entries: r.entries.map(historyWireMeta),
         older: r.older.map(historyWireMeta),
         olderExpiresAt: r.olderExpiresAt,
+        ...(r.damaged ? { damaged: r.damaged } : {}),
+        ...(r.olderDamaged ? { olderDamaged: r.olderDamaged } : {}),
         usage
       };
     });
