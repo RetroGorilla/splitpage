@@ -3,7 +3,7 @@
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
-const { writeFileDurableSync } = require("./drafts");
+const { writeFileDurableSync } = require("./drafts.ts");
 
 const DESKTOP_STATE_VERSION = 2;
 const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
