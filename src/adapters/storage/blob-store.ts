@@ -87,7 +87,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
   let backendPromise: Promise<BlobBackend> | null = null;
   let backendGen = 0;
   let preferredFailed = false;
-  let fallbackUnavailable = false;
+  const unavailableFallbacks = new WeakSet<BlobBackend>();
 
   let persistQueue: Record<string, boolean> = Object.create(null);
   let persistQueued = false;
@@ -189,7 +189,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
   function setBackend(next: BlobBackend | null | undefined): void {
     backendGen++;
     backend = next || null;
-    fallbackUnavailable = false;
+    if (next) unavailableFallbacks.delete(next);
     backendPromise = null;
     durable = Object.create(null);
     persisting = new Map();
@@ -209,8 +209,9 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     const p = opened.then(null, function (e: unknown) {
       if (!preferredFailed) host.warn("Image store: IndexedDB unavailable, keeping images in memory", e);
       preferredFailed = true;
-      if (preferred && gen === backendGen) fallbackUnavailable = true;
-      return host.fallback();
+      const fallback = host.fallback();
+      if (preferred) unavailableFallbacks.add(fallback);
+      return fallback;
     }).then(function (b) {
       if (gen === backendGen && !backend) backend = b;
       backendPromise = null;
@@ -226,7 +227,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     const report = function (): string[] { return list.filter(function (sha) { return !has(sha); }); };
     if (!need.length) return Promise.resolve(report());
     const reading = resolveBackend().then(function (b) {
-      if (options?.strict && fallbackUnavailable) throw new Error("Persistent images are unavailable");
+      if (options?.strict && unavailableFallbacks.has(b)) throw new Error("Persistent images are unavailable");
       return Promise.all(need.map(function (sha) { return loadBlob(b, sha); }));
     });
     return options?.strict ? reading.then(report) : reading.then(report, report);
