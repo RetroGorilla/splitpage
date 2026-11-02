@@ -14,7 +14,7 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { maybeAutoTagShortcut } = await import("../features/tags/production-tags.ts");
 const { maybeOpenPlainTag, closePlainTag, cancelPlainTag } = await import("../features/tags/plain-tags.ts");
 const { maybeCaptureBroll } = await import("../bootstrap/wiring/broll.ts");
-const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");
+const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
