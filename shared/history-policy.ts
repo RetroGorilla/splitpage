@@ -26,14 +26,14 @@ function historyClip(v: unknown, n: number) {
   return String(v == null ? "" : v).slice(0, n);
 }
 
-function historyUtf8Length(str: string) {
+function historyUtf8Length(str: unknown) {
   let n = 0, c: number, i: number;
-  for (i = 0; i < str.length; i++) {
-    c = str.charCodeAt(i);
+  for (i = 0; i < (str as string).length; i++) {
+    c = (str as string).charCodeAt(i);
     if (c < 0x80) n += 1;
     else if (c < 0x800) n += 2;
-    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length &&
-             str.charCodeAt(i + 1) >= 0xdc00 && str.charCodeAt(i + 1) <= 0xdfff) { n += 4; i++; }
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < (str as string).length &&
+             (str as string).charCodeAt(i + 1) >= 0xdc00 && (str as string).charCodeAt(i + 1) <= 0xdfff) { n += 4; i++; }
     else n += 3;
   }
   return n;

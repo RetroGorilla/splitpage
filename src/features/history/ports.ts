@@ -1,5 +1,5 @@
 import type { IdSource } from "../../core/document/ports.ts";
-import type { HistoryOwner, HistorySnapshotRead } from "../../application/recovery/history-ports.ts";
+import type { HistoryOwner, HistorySnapshotReply } from "../../application/recovery/history-ports.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { SessionMergeOwner, SnapshotRestoreRequest, SnapshotRestoreResult } from "../../application/session/session-merge-ports.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
@@ -23,6 +23,6 @@ export interface HistoryPanelControl {
   readonly renderHistory: () => Promise<void>;
   readonly restoreSnapshotFromCard: (button: Element | null) => Promise<SnapshotRestoreResult> | undefined;
   readonly toastLastEditor: (loaded: Readonly<Record<string, unknown>>) => void;
-  readonly restored: (snapshot: HistorySnapshotRead, request: SnapshotRestoreRequest) => void;
+  readonly restored: (snapshot: HistorySnapshotReply, request: SnapshotRestoreRequest) => void;
   readonly dispose: () => void;
 }

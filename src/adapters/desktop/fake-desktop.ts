@@ -1,4 +1,5 @@
-import type { HistoryOwner, HistorySnapshotMeta } from "../../application/recovery/history-ports.ts";
+import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
+import type { SharedHistorySnapshotReader } from "../../../shared/history-store.ts";
 import type { DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 import type { DraftPayload } from "../../application/recovery/draft-origin.ts";
 import type { DesktopFileEntry, DesktopPort, DesktopTakenDraft, DesktopTestPort } from "./desktop-port.ts";
@@ -52,16 +53,7 @@ type FakeMalformedHistoryReplies = {
   historyList?: (docId: string | null) => Promise<Omit<DesktopIpcResult<"splitpage:history-list">, "entries" | "older"> & { entries: FakeSanitizedMeta[]; older: FakeSanitizedMeta[] }>;
   historyGet?: (...args: Parameters<DesktopPort["historyGet"]>) => Promise<(Omit<NonNullable<DesktopIpcResult<"splitpage:history-get">>, "meta"> & { meta: FakeSanitizedMeta }) | null>;
 };
-type FakeHistoryStoreBoundary = {
-  put: (docId: string | null, meta: HistorySnapshotMeta, stateJson: string, opts?: { older: boolean }) => Promise<
-    { stored: false; code: string } | { stored: true; duplicate?: boolean; evicted?: number; overCap?: boolean }>;
-  list: (docId: string | null) => Promise<Omit<DesktopIpcResult<"splitpage:history-list">, "usage">>;
-  usage: () => Promise<NonNullable<DesktopIpcResult<"splitpage:history-list">["usage"]>>;
-  get: (bucket: string, id: string) => ReturnType<DesktopPort["historyGet"]>;
-  copy: DesktopPort["historyCopy"];
-  touch: DesktopPort["historyTouch"];
-  listDocs: DesktopPort["historyListDocs"];
-};
+type FakeHistoryStoreBoundary = ReturnType<typeof createHistoryStore<ReturnType<typeof createMemoryHistoryTestBackend>>>;
 type FakeHistoryBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "historyPut" | "historyCopy" | "historyTouch" | "historyListDocs"> & FakeMalformedHistoryReplies & {
   _historyDump?: () => Record<string, unknown[]>;
   _historyStore?: FakeHistoryStoreBoundary;
@@ -80,7 +72,7 @@ import { createMemoryHistoryTestBackend } from "../storage/history-backend-testi
 import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { hashText as historyHashText } from "../storage/03c-history-idb.ts";
-import { createHistoryStore } from "../../../shared/history-store.js";
+import { createHistoryStore } from "../../../shared/history-store.ts";
 import { strBytes } from "../formats/bytes.ts";
 
 export function makeFakeDesktopBackend(opts?: FakeOptions) {
@@ -416,7 +408,7 @@ function addFakeDesktopHistory(backend: FakeHistoryBackend) {
     const raw = mem.inspect(), out: Record<string, unknown[]> = {};
     Object.keys(raw.index).forEach(function (bucket) {
       out[bucket] = ((raw.index[bucket] as NonNullable<typeof raw.index[string]>).snapshots || []).map(function (s) {
-        return { meta: sanitizeHistoryMeta(s), stateJson: raw.bodies[s.sha] };
+        return { meta: sanitizeHistoryMeta(s), stateJson: raw.bodies[(s as SharedHistorySnapshotReader).sha as string] };
       });
     });
     return out;

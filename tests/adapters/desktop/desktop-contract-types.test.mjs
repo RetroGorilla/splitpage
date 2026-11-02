@@ -14,9 +14,17 @@ function errors(source) {
 
 test("the desktop port keeps the wire result shapes and nullable paths", () => {
   assert.deepEqual(errors('export async function read() { const stat = await port.statFile("f"); return stat && stat.size; }'), []);
-  assert.deepEqual(errors('export async function read() { const hit = await port.historyGet({ docId: "d" }, "s"); return hit && hit.stateJson.toUpperCase(); }'), []);
+  assert.deepEqual(errors('export async function read() { const hit = await port.historyGet({ docId: "d" }, "s"); return hit && typeof hit.stateJson === "string" && hit.stateJson.toUpperCase(); }'), []);
   assert.deepEqual(errors('export const checked: Omit<DesktopTestPort, "getSessionInfo" | "openPrompterInBrowser"> = makeFakeDesktopBackend();'), []);
   const cases = [
+    {
+      source: 'export async function read() { const hit = await port.historyGet({ docId: "d" }, "s"); return hit && hit.stateJson.toUpperCase(); }',
+      code: 18048, at: 'hit.stateJson', about: 'undefined'
+    },
+    {
+      source: 'export async function read() { const docs = await port.historyListDocs(); return docs.map(d => d.title.toUpperCase()); }',
+      code: 18046, at: 'd.title', about: 'unknown'
+    },
     {
       "source": "export const wrong: Pick<DesktopPort, \"takeDraft\"> = { takeDraft: async () => ({}) };",
       "code": 2322,
