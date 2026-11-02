@@ -3,7 +3,7 @@
 import * as policy from "./history-policy.ts";
 import { DOC_ID_RE } from "./doc-id-policy.ts";
 
-type HistoryStoreMeta = Omit<NonNullable<ReturnType<typeof policy.sanitizeHistoryMeta>>, "id"> & { id: string; legacyId?: string };
+type HistoryStoreMeta = NonNullable<ReturnType<typeof policy.sanitizeHistoryMeta>>;
 type HistoryStoreEntry = HistoryStoreMeta & { sha: string };
 type HistoryStorePublicMeta = HistoryStoreMeta & { docId: string };
 type HistoryStoreFields = Record<string, unknown>;
