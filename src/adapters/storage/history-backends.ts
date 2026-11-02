@@ -182,7 +182,8 @@ function historyOpenIdb() {
   const openingError = probe?.opening();
   if (openingError) return Promise.reject(openingError);
   let factory;
-  try { factory = window.indexedDB || null; } catch (e) { factory = null; }
+  try { factory = window.indexedDB || null; } catch (e) { return Promise.reject(e); }
+  if (!factory && !probe) return Promise.resolve(historyUseMemory());
   const backend = (probe ? probe.idb : createIdbHistoryBackend)({ indexedDB: factory });
   probe?.arm(backend);
   const store = historyMakeStore(backend, historyIdbCap);
@@ -418,7 +419,7 @@ function resolveHistoryBackend(options?: { strict?: boolean }) {
   }
   if (historyIdbFailed) return options?.strict ? Promise.reject(new Error("Persistent history is unavailable")) : Promise.resolve(historyUseMemory());
   return historyOpenIdb().then(function (adapter) {
-    historyBackendNameNow = "idb";
+    historyBackendNameNow = adapter.name;
     return adapter;
   }, function (e) {
     historyIdbFailed = true;

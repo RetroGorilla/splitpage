@@ -81,6 +81,67 @@ function appHarness(t, owner) {
   return { app, delivered, messages };
 }
 
+function productionHarness(t, indexedDB) {
+  const previous = Object.getOwnPropertyDescriptor(window, "indexedDB");
+  Object.defineProperty(window, "indexedDB", { configurable: true, value: indexedDB });
+  t.after(() => { if (previous) Object.defineProperty(window, "indexedDB", previous); else Reflect.deleteProperty(window, "indexedDB"); });
+  const storage = createHistoryBackends({ now: () => 2000, holds: () => [], desktop: () => null, runningOnDesktop: () => false });
+  const owner = createHistoryOwner();
+  const stop = owner.startHistory({
+    document: { current: () => ({ docId, title: "Current", rows: [] }) },
+    location: { home: () => ({ kind: "none" }) }, preferences: { editorName: () => "Adam" },
+    saving: { changes: () => 0, unsaved: () => false }, recovery: { readRaw: () => null, remove: () => true },
+    effects: { show() {} },
+    pictures: { intern: () => null, persist: async () => [], ensureBytes: async () => [], recordFor: () => null, dataUrlFor: () => null },
+    inlinePictures: (json) => json, ids: { id: () => "snapshot", docId: () => docId }, seed: { passes: () => true },
+    logger: { error() {}, warn() {} }, now: () => 2000, decodeBase64: atob, yield: async () => {},
+    desktop: { history: () => null, running: () => false }, storage: () => storage
+  });
+  t.after(async () => { await stop(); await storage.close(); });
+  return { owner, storage };
+}
+
+test("production memory history exports current-session snapshots when IndexedDB is absent", async (t) => {
+  const h = productionHarness(t, undefined);
+  const captured = h.owner.captureSnapshot("Keep", { docId, title: "Unsaved work", rows: [] });
+  assert.equal((await captured.done).stored, true);
+  assert.equal((await h.owner.listDocHistory(docId)).entries.length, 1);
+  const body = (await h.owner.getHistorySnapshot({ docId, id: captured.id })).stateJson;
+  assert.equal(JSON.parse(body).title, "Unsaved work");
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 2);
+  assert.equal(h.storage.backendName(), "memory");
+  for (const bundle of a.delivered) assert.equal(bundle.history.docs[0].snapshots[0].stateJson, body);
+  assert.equal(a.messages.some((m) => m[1] === "warn" || m[1] === "error"), false);
+});
+
+test("production export can select an empty memory store before the first snapshot", async (t) => {
+  const h = productionHarness(t, null);
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 1);
+  assert.deepEqual(a.delivered[0].history.docs, []);
+  assert.equal((await h.owner.captureSnapshot("Keep", { docId, title: "First", rows: [] }).done).stored, true);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 2);
+  assert.equal(JSON.parse(a.delivered[1].history.docs[0].snapshots[0].stateJson).title, "First");
+  assert.equal(h.storage.backendName(), "memory");
+});
+
+test("production persistent open failure stays distinct from an absent IndexedDB API", async (t) => {
+  const h = productionHarness(t, { open() { throw new Error("locked"); } });
+  assert.equal((await h.owner.captureSnapshot("Keep", { docId, title: "Fallback", rows: [] }).done).stored, true);
+  assert.equal(h.storage.backendName(), "memory");
+  Object.defineProperty(window, "indexedDB", { configurable: true, value: undefined });
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.match(a.messages.at(-1)[0], /Export cancelled/);
+});
+
 for (const kind of ["memory", "idb", "filesystem"]) {
   test(`[${kind}] export keeps intact history and its images beside damaged metadata`, async (t) => {
     const h = await harness(t, kind);
@@ -154,7 +215,7 @@ test("desktop image read rejection cancels delivery through the actual image fal
   const a = appHarness(t, h.owner);
   await a.app.exportAppData();
   assert.equal(a.delivered.length, 0);
-  assert.match(a.messages.at(-1)[0], /Export cancelled/);
+  assert.equal(a.messages.at(-1)[0], "Export cancelled — history or image data could not be read. Nothing was downloaded.");
 });
 
 test("strict image reads preserve confirmed absence while ordinary reads tolerate errors", async () => {

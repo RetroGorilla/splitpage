@@ -3087,7 +3087,7 @@ async function caseHistoryDamagedExport(target) {
     record(tag + ": export does not rewrite the damaged index", fs.readFileSync(indexPath, "utf8") === before, "");
     const otherBody = JSON.stringify({ docId, title: "Other intact", rows: [] });
     await historyCall(app.cdp, "historyPut", [docId, historyMeta({ id: "other", atMs: 2000 }), otherBody]);
-    const rejectExport = () => evalPage(app.cdp, "window.__appDataTest.build().then(function(){return false;},function(e){return /Export cancelled/.test(e.message);})");
+    const rejectExport = () => evalPage(app.cdp, "window.__appDataTest.build().then(function(){return false;},function(e){return e.message === 'Export cancelled — history or image data could not be read. Nothing was downloaded.';})");
     const bodyPath = historyBodyPathOnDisk(userDataDir, historyShaHex(body));
     fs.renameSync(bodyPath, bodyPath + ".held");
     fs.mkdirSync(bodyPath);
