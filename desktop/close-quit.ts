@@ -68,10 +68,10 @@ function createCloseQuit({
       .then((gone) => fileTabs.filter((tab, i) => gone[i] && tabs.get(tab.id) === tab));
   }
 
-  function askAboutUnsaved(list: DesktopMainTab[], verb: string, parentWin: BrowserWindow | undefined) {
+  function askAboutUnsaved(list: DesktopMainTab[], verb: string, parentWin: BrowserWindow | undefined, gone: DesktopMainTab[] = []) {
     if (!list.length) return "discard";
     const decision = buildUnsavedDialog(list, verb, parentWin);
-    if (decision === "review") reviewFirstUnsaved(list);
+    if (decision === "review") reviewFirstUnsaved(list, gone);
     return decision;
   }
 
@@ -111,11 +111,22 @@ function createCloseQuit({
     return decisionFor(spec, dialog.showMessageBoxSync(parentWin, spec.options));
   }
 
-  function reviewFirstUnsaved(list: DesktopMainTab[]) {
+  function reviewFirstUnsaved(list: DesktopMainTab[], gone: DesktopMainTab[]) {
     const first = list[0];
     if (!first || !tabs.has(first.id)) return;
     activateTab(first.id);
     focusWindow(first.windowId);
+    if (!gone.includes(first)) return;
+    const win = windowsById.get(first.windowId)?.win;
+    dialog.showMessageBoxSync(win && !win.isDestroyed() ? win : undefined, {
+      type: "warning",
+      buttons: ["OK"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Splitpage",
+      message: "This file is unavailable",
+      detail: `${first.title || "Untitled"}\n\nThe file may have been moved, deleted, or become unreadable. Your script is still open. Choose Save a copy to save it to a new file.`
+    });
   }
 
   function settleDraftsForClose(tabIds: (string | undefined)[], discardUnsaved: boolean, reason: string) {

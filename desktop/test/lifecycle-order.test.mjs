@@ -127,6 +127,7 @@ function loadMain(world) {
 
   const dialog = {
     showMessageBoxSync(_parent, options) {
+      world.dialogs.push({ parent: _parent, options });
       const detail = String(options.detail || "").split("\n").filter(Boolean).join(" / ");
       log(`ask ${options.message} [${options.buttons.join("|")}] ${detail}`);
       const answer = world.answers.shift();
@@ -194,6 +195,7 @@ function makeWorld() {
     userData,
     entries: [],
     answers: [],
+    dialogs: [],
     onAsk: null,
     kept: new Set(),
     flushes: new Map(),
@@ -409,6 +411,31 @@ test("review shows the first unsaved tab and keeps the window", async (w) => {
   assert.deepEqual(w.entries, ["close W1", askMany(2, "Close without saving", ["T1", "T2"]), "close prevented W1"]);
   assert.equal(rec.activeTabId, t1.id);
 });
+
+for (const action of ["close", "quit"]) {
+  test(`Review during ${action} explains a clean file that is gone without discarding it`, async (w) => {
+    const rec = w.window();
+    const gone = w.tab(rec, "Missing script", { file: w.gone });
+    w.tab(rec, "Other script", { dirty: true });
+    w.answers.push("review");
+    w.start();
+    if (action === "quit") w.app.quit();
+    else rec.win.close();
+    await w.until(askMany(2, action === "quit" ? "Quit without saving" : "Close without saving", ["Missing script", "Other script"]));
+    assert.equal(rec.activeTabId, gone.id);
+    assert.equal(rec.win.isDestroyed(), false);
+    assert.equal(gone.dirty, false);
+    assert.equal(w.entries.some((line) => line.startsWith("draft discard") || line.startsWith("flush ")), false);
+    assert.equal(w.dialogs.length, 2, "Review must explain why this clean file needs attention");
+    const notice = w.dialogs[1];
+    assert.equal(notice.parent, rec.win);
+    assert.match(notice.options.message, /file.*(unavailable|found|read)/i);
+    assert.match(notice.options.detail, /Missing script/);
+    assert.match(notice.options.detail, /moved|deleted/);
+    assert.match(notice.options.detail, /Save a copy/);
+    assert.deepEqual(notice.options.buttons, ["OK"]);
+  });
+}
 
 test("closing a tab: question, settle, view closed", async (w) => {
   const rec = w.window();
