@@ -33,9 +33,9 @@ function chunkBytes(chunk: unknown): Uint8Array | Promise<Uint8Array> {
   return strBytes(String(chunk));
 }
 
-export function makeDesktopHandle(entry: Pick<DesktopFileEntry, "id" | "name">): DesktopFileHandle {
-  const id = entry.id;
-  let name = entry.name;
+export function makeDesktopHandle(entry: Pick<DesktopFileEntry, "id" | "name"> | undefined): DesktopFileHandle {
+  const id = (entry as NonNullable<typeof entry>).id;
+  let name = (entry as NonNullable<typeof entry>).name;
   const handle: DesktopFileHandle = {
     kind: "file",
     name: name,

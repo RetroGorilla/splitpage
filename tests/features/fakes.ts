@@ -216,7 +216,7 @@ export function fakeScreen(initial: Partial<ScreenState> = {}) {
 }
 
 export function fakeActions(registry?: ActionRegistry) {
-  const calls: { id: string; source: ActionSource; input?: unknown }[] = [];
+  const calls: { id: string | null; source: ActionSource; input?: unknown }[] = [];
   const actions: Pick<ActionRegistry, "invoke" | "view"> = {
     invoke: (id, source, input) => {
       calls.push(input === undefined ? { id, source } : { id, source, input });
