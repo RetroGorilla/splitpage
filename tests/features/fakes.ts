@@ -135,7 +135,11 @@ export function fakeTextServices(document: Document) {
     body.innerHTML = String(html ?? "");
     return body;
   };
-  const text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "sanitizeHtml" | "storedHtmlFromDom"> = {
+  const text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "cleanPastedCell" | "sanitizeHtml" | "storedHtmlFromDom"> = {
+    cleanPastedCell: (cell) => {
+      calls.push({ method: "cleanPastedCell", html: cell });
+      return cell.map((run) => ({ ...run }));
+    },
     fromHtml: (html) => {
       calls.push({ method: "fromHtml", html });
       return [{ text: inertBody(html).textContent ?? "", marks: {} }];
