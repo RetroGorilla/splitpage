@@ -504,7 +504,7 @@ function renderSide() {
   exportFormatList().forEach(function (f) {
     const card = document.querySelector('.export-card[data-format="' + f.id + '"]');
     if (!card) return;
-    const actions = f.choices ? f.choices.map(function (c) { return (c as NonNullable<DialogFormat["choices"]>[number]).action; }) : [f.action];
+    const actions = f.choices ? f.choices.map(function (c) { return c.action; }) : [f.action];
     const reasons = actions.map(exportActionReason);
     const none = reasons.every(Boolean);
     card.classList.toggle("is-unavailable", none);
@@ -591,12 +591,12 @@ function trapTab(e: KeyboardEvent) {
   const modal = el("export-modal");
   const focusables = Array.prototype.filter.call(
     (modal as HTMLElement).querySelectorAll('button, input[type="radio"]:checked, input[type="checkbox"], [tabindex]:not([tabindex="-1"])'),
-    function (x: HTMLButtonElement) { return !x.disabled && x.getClientRects().length > 0; }) as HTMLButtonElement[];
+    function (x: HTMLElement & Partial<Pick<HTMLButtonElement, "disabled">>) { return !x.disabled && x.getClientRects().length > 0; }) as HTMLElement[];
   if (!focusables.length) return;
   const first = focusables[0];
   const last = focusables[focusables.length - 1];
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); (last as HTMLButtonElement).focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); (first as HTMLButtonElement).focus(); }
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); (last as HTMLElement).focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); (first as HTMLElement).focus(); }
 }
 
 function syncExportMenu() {
