@@ -56,7 +56,7 @@ function untitledOrigin(): DraftOrigin {
   };
 }
 
-export function desktopDraftOrigin(file: Home | null, importHome: () => Home | null): DraftOrigin {
+export function desktopDraftOrigin(file: Partial<Home> | null, importHome: () => Partial<Home> | null): DraftOrigin {
   const origin = untitledOrigin();
   const handle = file && file["handle"];
   const fileId = (handle && fieldOf(handle, "_desktopId")) || null;

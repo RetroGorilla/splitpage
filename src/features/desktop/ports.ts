@@ -1,3 +1,4 @@
+import type { LocalFileData, LocalFileHandle } from "../../application/files/local-file-access.ts";
 import type { DesktopDocumentStateOwner } from "../../application/desktop/document-state.ts";
 import type { DesktopHandOff, DesktopOpenedFile, DesktopShell, PrompterElsewhere } from "../../application/desktop/shell.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
@@ -9,13 +10,11 @@ import type { ScreenState } from "../../application/screen.ts";
 
 export type DesktopOpening = {
   readonly kind: "file";
-  readonly file: unknown;
+  readonly file: LocalFileData;
   readonly handle: unknown;
 };
 
-interface DesktopFileSource {
-  readonly getFile: () => Promise<unknown>;
-}
+type DesktopFileSource = Pick<LocalFileHandle, "getFile">;
 
 export interface DesktopMount extends DesktopHandOff {
   readonly openPrompterInChromium: () => Promise<PrompterElsewhere>;
