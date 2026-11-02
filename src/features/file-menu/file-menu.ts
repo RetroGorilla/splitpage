@@ -16,7 +16,7 @@ function listen<K extends keyof HTMLElementEventMap>(target: HTMLElement | Windo
   listeners.push(function () { target.removeEventListener(type, listener as EventListener); });
 }
 
-function el(id: string | null) { return document.getElementById(id as string); }
+function el(id: string | null) { return document.getElementById(id); }
 
 const ARIA_KEYS: Record<string, string | undefined> = { mod: IS_MAC ? "Meta" : "Control", shift: "Shift", alt: "Alt" };
 
