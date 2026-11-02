@@ -18,7 +18,9 @@ directions accepted by the registration wrappers. The contract and
 `desktop/ipc-boundaries.d.ts` contain types only and need no packaged copy.
 Install both tooling packages (`npm ci` and `npm ci --prefix desktop`) before
 running lint, typecheck or the full gate: the desktop check uses Electron's
-own declarations. JavaScript services injected by `main.js` remain unchecked
+own declarations. `blob-store.ts` also runs through main-process type
+stripping, checked by the existing `desktop/*.ts` include in that config.
+JavaScript services injected by `main.js` remain unchecked
 boundaries described by narrow interfaces in `ipc-boundaries.d.ts`.
 
 Both `dist` and `dist:win:test` use `electron-builder.yml`; the latter relies
@@ -60,10 +62,10 @@ Everything listed here goes inside the asar.
 | `session-restore.js` | Restoring the last session at launch (`createSessionRestore`): windows and tabs from `desktop-state.json`, crash drafts held and placed, launch files routed, the restore notice, and whether there was a prior session. It also registers macOS `activate`, which opens a window when none is left. `main.js` passes in the state store, window and tab creation, the routing helpers and the draft store getter, and reads back `hadPriorSession` and `isRestoringSession`, which pauses session writes while the restore runs. |
 | `close-keep.js` | The close-time checks for a tab whose file is gone: a file check with a one-second limit, so an unreachable drive can't freeze a close (#497), and whether a kept copy really reached the draft folder (#496). It also runs the close check's question rounds (`runCloseCheck`, with `close-quit.js`'s tabs and helpers passed in) and decides what closing a window that is the last one at "close" settles (`lastWindowClose`, #531). |
 | `quit-watchdog.js` | The update restart's 3 s quit timer, which waits while the quit is still asking the user and starts again once they answer. |
-| `blob-store.js` | The content-addressed folder where images live (#82). |
+| `blob-store.ts` | The content-addressed folder where images live (#82). |
 | `voice-helper.js` | Follow My Voice's listener process (#8). `voice-composition.js` creates it and gives it its command. The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
 | `chromium-browsers.js` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
-| `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.js` itself. |
+| `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.ts` itself. |
 | `desktop-state.js` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.js`. |
 | `update-release.js` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
 | `file-service.js` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry, the atomic write and writing a file entry (the atomic write plus its stamp). |

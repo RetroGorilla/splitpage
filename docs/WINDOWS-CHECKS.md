@@ -45,7 +45,7 @@ and `start.bat`'s bundled-runtime branches (the zip has no `runtime/`).
 - `dist:win` (x64, arm64 and the combined NSIS, 2.1.0) and `verify-dist`
   11/11. Full smoke 1358/1358 — dev and packaged-x64 — with one named skip:
   `packaged-arm64 (whole target)` on this x64 host, as #89's finding wanted.
-  Both asars carry `google-drive.js` and `blob-store.js`.
+  Both asars carry `google-drive.js` and `blob-store.ts`.
 - `run-tests.ps1` 2808/2808 across 63 suites. Its first pass failed
   53-service-worker on a stray, gitignored `update-status.json` a
   `node start.mjs` run had left in the repo root; the suite no longer
@@ -69,7 +69,7 @@ Every automated step passed.
 - `npm test` 326/326, server 405/405, every desktop unit test.
 - Dev smoke 750/750, `SKIPPED (0)`, 2.84 min. Full smoke 1500/1500 with the
   one named arm64 skip, 5.65 min; packaged-x64 ran 42 blob and 182 history
-  checks. `blob-store.js`, `history-fs-backend.js` and
+  checks. `blob-store.ts`, `history-fs-backend.js` and
   `history-v1-migrate.js` are in `app.asar`; `shared/history-store.js` and
   `shared/blob-policy.js` in `resources/splitpage/shared/`.
 - `run-tests.ps1` 3039/3039 across 66 suites.

@@ -12,7 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const {
   createBlobStore, sniffImageMime, imageBlobRefusal, isSha256,
   MAX_IMAGE_BLOB_BYTES, MAX_MISSING_QUERY, FORMAT_VERSION
-} = require(path.join(here, "..", "blob-store.js"));
+} = require(path.join(here, "..", "blob-store.ts"));
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-blobs-test-"));
 

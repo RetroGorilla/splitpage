@@ -7,6 +7,7 @@ import type {
   DesktopWireTakenDraft, DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
+import type { createBlobStore } from "./blob-store.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
 
@@ -153,11 +154,7 @@ export interface DesktopHistoryBlobIpcDependencies {
   historyHolds: Map<number, { docId: string; id: string }[]>;
   historyProtectList: (value: unknown) => { docId: string; id: string }[];
   historyWireMeta: (meta: DesktopWireHistoryMeta) => DesktopWireHistoryMeta;
-  blobStore: () => {
-    put: (sha: string, bytes: Buffer) => Promise<DesktopIpcResult<"splitpage:blob-put">>;
-    get: (sha: string) => Promise<Buffer | null>;
-    missing: (shas: readonly string[]) => Promise<string[]>;
-  } | null;
+  blobStore: () => ReturnType<typeof createBlobStore> | null;
   historyPolicy: {
     HISTORY_OLDER_KEY: string;
     HISTORY_SNAP_ID_RE: RegExp;
