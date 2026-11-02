@@ -558,6 +558,18 @@ function updateTagHint() {
 }
 
 export function openTagComposer(ctx: TagComposerContext) {
+  const selection = window.getSelection();
+  if (selection?.rangeCount && !selection.isCollapsed) {
+    const range = selection.getRangeAt(0);
+    const node = range.startContainer;
+    const element = node.nodeType === 1 ? node as Element : node.parentElement;
+    const cell = element?.closest("#rows .cell-editable");
+    if (cell && cell.getAttribute("data-id") === ctx.rowId && cell.getAttribute("data-field") === ctx.field &&
+      cell.contains(range.endContainer) && Array.from(cell.querySelectorAll(".tag-anchor")).some(tag => range.intersectsNode(tag))) {
+      (showToast as NonNullable<typeof showToast>)("That selection includes an existing tag. Select only untagged words.", "warn");
+      return;
+    }
+  }
   pendingTag = ctx;
   (document.getElementById("tag-quote") as HTMLElement).textContent = ctx.quotedText;
   const nameInput = (document.getElementById("tag-name") as HTMLInputElement);
