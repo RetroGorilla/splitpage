@@ -5,8 +5,9 @@ import type { createDraftStore } from "./drafts.ts";
 import type { DesktopIpcArgs, DesktopWireTestShellResult } from "../shared/desktop-contract.d.ts";
 
 import type { DesktopTestModeIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { TAB_OR_WINDOW_ID_RE as DesktopStateIdPattern } from "./desktop-state.ts";
 
-const { TAB_OR_WINDOW_ID_RE }: { TAB_OR_WINDOW_ID_RE: RegExp } = require("./desktop-state");
+const { TAB_OR_WINDOW_ID_RE }: { TAB_OR_WINDOW_ID_RE: typeof DesktopStateIdPattern } = require("./desktop-state.ts");
 
 type TestTargetTab = Extract<DesktopWireTestShellResult, { windows: unknown }>["windows"][number]["tabs"][number];
 
