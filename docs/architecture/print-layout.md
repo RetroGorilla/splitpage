@@ -279,7 +279,7 @@ over 256 Mi characters, and answers bytes; the renderer saves them through the
 existing `saveFileDialog` and `writeFile` (file ids, never paths), so a
 cancelled dialog is reported exactly as before.
 
-Main (`desktop/print-pdf.js`) owns the print view. Each request gets a new
+Main (`desktop/print-pdf.ts`) owns the print view. Each request gets a new
 sandboxed, context-isolated `WebContentsView` with no preload and no window, in
 the in-memory `splitpage-print` partition. That partition serves the page from
 memory at a one-time `splitpage://print/<random>.html` with the print CSP as a
