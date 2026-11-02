@@ -1,6 +1,6 @@
 import { normalizeBrollProps } from "../../core/document/broll.ts";
 import { mintTagId, normalizeTagName, registryKey } from "../../core/document/tags.ts";
-import { isSha256Hex, refsIn } from "../../../shared/blob-policy.js";
+import { isSha256Hex, refsIn } from "../../../shared/blob-policy.ts";
 import { commentIds, normalizeCell } from "../../core/text/runs.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { toPlainText } from "../../core/text/projections.ts";

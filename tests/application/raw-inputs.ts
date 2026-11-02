@@ -1,4 +1,4 @@
-import { normalizeImageRef } from "../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../shared/blob-policy.ts";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { BROLL_STATUS_IDS } from "../../src/core/document/broll.ts";
 import { SCHEMA_VERSION } from "../../src/core/document/fields.ts";
