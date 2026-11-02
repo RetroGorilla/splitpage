@@ -9,14 +9,17 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
 [desktop app](#desktop-app) for Windows.
 
-## What's new since the 4.0 beta
+## What's new in 0.4.1
 
+- **New version numbers.** 0.4.1 follows 3.1 and the 4.0 beta. Those copies
+  won't offer it as an update, so download it from the
+  [releases page](https://github.com/RetroGorilla/splitpage/releases).
 - Downloads and update checks now use the Splitpage repository releases page.
 - **A title from your first filename.** Save an untouched untitled script as
   `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
   A title you typed stays yours. Download-only browsers leave both unchanged.
 - **Section headers** group scenes without changing their running order.
-  Select a scene and choose **+ Section before selected scene** to name a
+  Open a scene's **⋯** menu and choose **Add Section Header** to name a
   section. Its header shows the scene count and total time, including shot
   scenes. Click the name to rename it; the ⋯ menu moves or removes the header.
   Drag the grip to move the whole section, or drag a scene across a header
@@ -333,7 +336,7 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   the caret into a new scene below, in the same column.
 - **Move a scene**: <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd>,
   or drag it by its number. The scene's **⋯** menu also has **Move up**,
-  **Move down**, **Insert scene** and **Delete**. **Delete** asks for a
+  **Move down**, **Insert scene**, **Add Section Header** and **Delete**. **Delete** asks for a
   second click, unless the scene is empty (no words, pictures, set length
   or comments): then one click does it. <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings
   a deleted scene back.

@@ -645,7 +645,7 @@ compiler API only under `typescript/unstable/*`, which `tools/source-scan.mjs`,
 8.71 supports TypeScript below 6.1. Move to 7 when both have changed.
 
 Supported Node versions are 22 (from 22.22.2), 24 (from 24.15.0) and 26 and later, per
-`package.json`'s `engines`; `.nvmrc` pins Node 24.22.0, the one used locally and in CI.
+`package.json`'s `engines`; `.nvmrc` pins Node 24.22.1, the one used locally and in CI.
 Run `nvm use` before `npm run verify`: on Node 22.22.0, `TextDecoder("latin1")`
 decodes bytes `0x85`, `0x93` and `0x94` as C1 control characters instead of
 `…`, `“` and `”`, so the former generator cases in `list-pdfs.test.mjs` and `pdf-script.test.mjs` failed there
@@ -657,7 +657,7 @@ Outside `engines` it lists the tests but refuses to run them, exiting 2 with the
 range and the pinned version, so an unsupported runtime is not reported as failing
 tests. The Linux cloud containers ship Node 22.22.0, which is outside the range:
 there, install the pinned Node first (for example the
-`node-v24.22.0-linux-x64.tar.xz` build from nodejs.org, put on `PATH`).
+`node-v24.22.1-linux-x64.tar.xz` build from nodejs.org, put on `PATH`).
 
 Browser suites on Linux: `driver.mjs` starts Chromium with a mouse's hover and
 pointer settings off Windows (headless Chromium there otherwise reports
