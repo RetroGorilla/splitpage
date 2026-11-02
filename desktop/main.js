@@ -12,9 +12,9 @@ const { spawn } = require("node:child_process");
 const { createDraftStore, MAX_BODY_BYTES } = require("./drafts");
 const {
   filesToOpenFrom, pathKey, createFileRegistry, readFileEntry
-} = require("./file-service");
-const { createDocClaims } = require("./doc-claims");
-const { createRecents } = require("./recents");
+} = require("./file-service.ts");
+const { createDocClaims } = require("./doc-claims.ts");
+const { createRecents } = require("./recents.ts");
 const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance");
 const { createTabRegistry } = require("./tab-registry");
 const { createRestoreNotice } = require("./restore-notice");
