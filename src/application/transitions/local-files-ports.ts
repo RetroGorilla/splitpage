@@ -45,7 +45,7 @@ export interface LocalFilesOwnerPorts {
   readonly saves: Pick<SaveState, "unsaved">;
   readonly conflicts: Pick<FileConflicts, "close">;
   readonly location: Pick<DocumentLocation, "amendHome" | "setHome" | "fileHome" | "importHome">;
-  readonly lastFile: { readonly load: () => Promise<LocalFileReference | null>; readonly remember: (handle: unknown) => Promise<void> };
+  readonly lastFile: { readonly load: () => Promise<LocalFileReference | null>; readonly remember: (handle: LocalFileReference | null | undefined) => Promise<void> };
   readonly syncIdentity: () => void;
   readonly stamps: Pick<SessionMergeOwner, "stampRow">;
   readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "begin" | "end"> };
@@ -54,7 +54,7 @@ export interface LocalFilesOwnerPorts {
   readonly undo: Pick<UndoControl, "flush">;
   readonly imports: LocalFileImports;
   readonly text: Pick<TextServices, "sanitizeHtml">;
-  readonly resumeNeeded: (handle: unknown) => void;
+  readonly resumeNeeded: (handle: LocalFileReference | null | undefined) => void;
   readonly desktop: {
     readonly running: () => boolean;
     readonly openFileDialog: () => Promise<DesktopIpcResult<"splitpage:open-file-dialog">>;
