@@ -111,19 +111,9 @@ export function commentContentEqual(a: MergeComment | null | undefined, b: Merge
   return true;
 }
 
-function changedCommentRows(base: Record<string, MergeComment>, side: RowSide): Set<string> {
-  const changed = new Set<string>();
-  (side.comments || []).forEach(function (comment) {
-    if (typeof comment.rowId === "string" && !commentContentEqual(base[comment.id], comment)) changed.add(comment.rowId);
-  });
-  return changed;
-}
-
 export function mergeRows(base: RowSide | null | undefined, mine: RowSide, theirs: RowSide, ctx: RowMergeContext): MergeRow[] {
   const conflicts = ctx.conflicts, stats = ctx.stats;
   const baseRows = byId(base && base.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
-  const baseComments = byId(base && base.comments);
-  const mineCommentRows = changedCommentRows(baseComments, mine), theirCommentRows = changedCommentRows(baseComments, theirs);
   const merged: MergeRow[] = [];
   const placed = idMap<boolean>();
 
@@ -188,7 +178,7 @@ export function mergeRows(base: RowSide | null | undefined, mine: RowSide, their
   theirs.rows.forEach(function (t) {
     const b = baseRows[t.id], m = mineRows[t.id];
     if (!m) {
-      if (b && rowContentEqual(b, t) && !theirCommentRows.has(t.id)) return;
+      if (b && rowContentEqual(b, t)) return;
       merged.push(jsonCopy(t));
       placed[t.id] = true;
       return;
@@ -200,8 +190,7 @@ export function mergeRows(base: RowSide | null | undefined, mine: RowSide, their
   mine.rows.forEach(function (m, idxInMine) {
     if (placed[m.id] || theirRows[m.id]) return;
     const b = baseRows[m.id];
-    // why: Keeping a new or edited scene comment requires its scene, even when only the disk identity changed.
-    if (b && rowContentEqual(b, m) && !mineCommentRows.has(m.id)) return;
+    if (b && rowContentEqual(b, m)) return;
     if (!b) stats.rowsAddedByMe++;
     let anchorIdx = -1;
     for (let k = idxInMine - 1; k >= 0; k--) {

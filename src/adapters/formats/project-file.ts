@@ -4,6 +4,7 @@ import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { DocumentRow, DocumentTag, ValidatedDocument } from "../../core/document/validated.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { docIdEmbeddedIn } from "../../core/document/ids.ts";
+import { canonicalSourceJson } from "../../core/document/load-ids.ts";
 import { cappedLongText, legacyMdToHtml, plainText, safeImageSrc } from "../../core/document/text-policy.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
 import { fileKindFromName } from "../../../shared/file-names.ts";
@@ -120,7 +121,7 @@ export function parseMarkdownProject(text: unknown, services: ProjectFileService
   const heading = /^#\s+(.+)$/m.exec(block.before);
   const docIdEmbedded = docIdEmbeddedIn(parsed);
   return {
-    state: services.migrateDocument(parsed, { kind: "file" }),
+    state: services.migrateDocument(docIdEmbedded ? parsed : JSON.parse(canonicalSourceJson(parsed)), { kind: "file" }),
     docIdEmbedded: docIdEmbedded,
     table: parseMarkdownTable(sceneSection, { keepEmpty: true }),
     title: heading ? (heading[1] ?? "").trim() : null

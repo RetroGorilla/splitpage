@@ -244,7 +244,7 @@ test("#1049 review: a comment on the edited first twin stays on that scene", asy
   const { doc } = await recover(disk, base, mine);
   const comment = doc.comments.find(c => c.id === "first-note");
   const anchored = doc.rows.find(r => r.id === comment.rowId);
-  assert.equal(anchored.audioText, mine.rows[0].audioText);
+  assert.equal(anchored.audioText, '<span class="cmt-anchor" data-cmt="' + comment.anchorId + '">Repeat.</span>');
   assert.equal(anchored.id, mine.rows[0].id);
   assert.equal(doc.rows.filter(r => r.audioText === "Repeat.").length, 1);
 });
@@ -314,7 +314,8 @@ test("#1049 review: seeded twin records retain edits on either side in every rep
     const { doc } = await recover(disk, base, mine);
     const note = doc.comments.find(c => c.id === noteId);
     assert.equal(note.rowId, mine.rows[at].id, "comment owner " + run);
-    assert.equal(doc.rows.find(r => r.id === note.rowId).visualText, mine.rows[at].visualText, "comment scene " + run);
+    assert.equal(doc.rows.find(r => r.id === note.rowId).visualText,
+      '<span class="cmt-anchor" data-cmt="' + note.anchorId + '">Original scene note</span>', "comment scene " + run);
     for (const words of [mode !== 0 ? draftText : null, mode !== 1 ? diskText : null].filter(Boolean)) {
       assert.ok(doc.rows.some(r => r.audioText === words), "scene " + words);
       assert.ok(doc.comments.some(c => c.body === words), "comment " + words);
@@ -327,4 +328,111 @@ test("#1049 review: seeded twin records retain edits on either side in every rep
     assert.ok(doc.brollShots.filter(b => b.notes === repeated).length >= count - 1, "untouched shots " + run);
   }
   assert.equal(covered.size, 6);
+});
+
+for (const identified of [false, true]) for (const editScene of [false, true]) {
+  test("#1049 re-review: retained marked scene copies keep their own comments " + JSON.stringify({ identified, editScene }), async () => {
+    const mark = text => '<span class="cmt-anchor" data-cmt="quote">' + text + '</span>';
+    const disk = { ...raw(), rows: [{ audioText: mark("Original first.") }],
+      comments: [{ ...(identified ? { id: "comment" } : {}), anchorId: "quote", field: "audioText", body: "Original note" }] };
+    const base = migrateRows(structuredClone(disk)), mine = structuredClone(base);
+    mine.comments[0].body = "DRAFT NOTE";
+    if (editScene) mine.rows[0].audioText = mark("Draft first.");
+    disk.rows[0].audioText = mark("Disk first.");
+    disk.comments[0].body = "DISK NOTE";
+    const { doc } = await recover(disk, base, mine);
+    assert.equal(doc.rows.length, 2);
+    assert.equal(doc.comments.length, 2);
+    const draftNote = doc.comments.find(c => c.body === "DRAFT NOTE"), diskNote = doc.comments.find(c => c.body === "DISK NOTE");
+    assert.notEqual(draftNote.anchorId, diskNote.anchorId);
+    assert.notEqual(draftNote.id, diskNote.id);
+    assert.equal(doc.rows.find(r => r.id === draftNote.rowId).audioText,
+      '<span class="cmt-anchor" data-cmt="' + draftNote.anchorId + '">' + (editScene ? "Draft first." : "Original first.") + '</span>');
+    assert.equal(doc.rows.find(r => r.id === diskNote.rowId).audioText, mark("Disk first."));
+  });
+}
+
+for (const field of ["resolved", "assignee", "body"]) {
+  test("#1049 re-review: ordinary complete-ID deletion still wins over a comment " + field + " edit", async () => {
+    const base = migrateRows({ ...raw(), rows: [{ id: "a", audioText: "Original." }, { id: "b", audioText: "Survivor." }],
+      comments: [{ id: "c", rowId: "a", field: "visualImage", body: "Note", resolved: false }] });
+    const mine = structuredClone(base), disk = structuredClone(base);
+    mine.comments[0][field] = field === "resolved" ? true : field === "assignee" ? "Sam" : "Edited note";
+    disk.rows.shift(); disk.comments = [];
+    const { doc } = await recover(disk, base, mine);
+    assert.deepEqual(doc.rows.map(r => r.id), ["b"]);
+  });
+}
+
+test("#1049 re-review: Markdown without a docId canonicalizes the appended scene's synthetic identity", async () => {
+  const block = { schema: 2, title: "Markdown", rows: [{ audioText: "Original." }] };
+  const md = data => '# Markdown\n\n| # | Visual | Audio | Status |\n| --- | --- | --- | --- |\n| 1 | | Original. | todo |\n| 2 | | Added. | todo |\n\n~~~~splitpage\n' + JSON.stringify(data) + '\n~~~~\n';
+  const services = { ...projectFileServices(), askMarkdownRows: async () => "table" };
+  const first = await parseProjectFileState({ name: "source.md", text: async () => md(block) }, null, services);
+  const bytes = md({ rows: block.rows, title: block.title, schema: block.schema });
+  const second = await parseProjectFileState({ name: "source.md", text: async () => bytes }, null, services);
+  assert.equal(first.state.docId, second.state.docId);
+  assert.deepEqual(first.state.rows.map(r => r.id), second.state.rows.map(r => r.id));
+  const mine = structuredClone(first.state); mine.rows[1].audioText = "Added unsaved.";
+  const { outcome, doc } = await recover(bytes, first.state, mine, true);
+  assert.equal(outcome, "applied");
+  assert.deepEqual(doc.rows.map(r => r.audioText), ["Original.", "Added unsaved."]);
+});
+
+test("#1049 re-review: a new id-less disk row cannot undo an explicit scene deletion", async () => {
+  const base = migrateRows({ ...raw(), rows: [{ id: "a", audioText: "Original." }, { id: "b", audioText: "Survivor." }],
+    comments: [{ id: "c", rowId: "a", field: "visualImage", body: "Note", resolved: false }] });
+  const mine = structuredClone(base), disk = structuredClone(base);
+  mine.comments[0].assignee = "Sam";
+  disk.rows.shift(); disk.comments = []; disk.rows.push({ audioText: "Added." });
+  const { doc } = await recover(disk, base, mine);
+  assert.deepEqual(doc.rows.map(r => r.audioText), ["Survivor.", "Added."]);
+});
+
+test("#1049 re-review: replace-all draft plus revision-only disk change keeps sixty scenes without conflicts", async () => {
+  const disk = { ...raw(), rows: Array.from({ length: 30 }, (_, at) => ({ audioText: "Original " + at })) };
+  const base = migrateRows(structuredClone(disk)), mine = structuredClone(base);
+  mine.rows.forEach((row, at) => { row.audioText = "Draft " + at; });
+  disk.rev = 1;
+  const { doc } = await recover(disk, base, mine);
+  assert.equal(doc.rows.length, 60);
+  assert.equal(doc.comments.filter(c => c.kind === "conflict").length, 0);
+  for (let at = 0; at < 30; at++) {
+    assert.ok(doc.rows.some(row => row.audioText === "Original " + at));
+    assert.ok(doc.rows.some(row => row.audioText === "Draft " + at));
+  }
+  assert.match(document.getElementById("merge-banner").textContent, /30 added by someone else/);
+});
+
+test("#1049 re-review: seeded recovery retains each marked comment's original scene owner", async () => {
+  let seed = 1049;
+  const next = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0);
+  const mark = (id, text) => '<span class="cmt-anchor" data-cmt="' + id + '">' + text + '</span>';
+  for (let run = 0; run < 100; run++) {
+    const count = 2 + (next() >>> 16) % 5, at = (next() >>> 16) % count, mode = (next() >>> 16) % 3;
+    const disk = { ...raw(), rows: Array.from({ length: count }, (_, i) => ({ audioText: mark("a" + i, "Original " + i) })),
+      comments: Array.from({ length: count }, (_, i) => ({ anchorId: "a" + i, field: "audioText", body: "Comment " + i,
+        replies: [{ body: "Reply original " + i }, { body: "Reply twin " + i }] })),
+      people: Array.from({ length: count }, (_, i) => ({ name: "Person " + i })),
+      brollShots: Array.from({ length: count }, (_, i) => ({ name: "Shot " + i, notes: "Shot note " + i, origin: "list" })) };
+    const base = migrateRows(structuredClone(disk)), mine = structuredClone(base);
+    for (const [side, label] of [[mine, "Mine"], [disk, "Disk"]]) {
+      if ((side === mine && mode === 0) || (side === disk && mode === 1)) continue;
+      side.rows[at].audioText = mark("a" + at, label + " scene " + run);
+      side.comments[at].body = label + " comment " + run;
+      side.comments[at].replies[0].body = label + " reply " + run;
+      side.people[at].name = label + " person " + run;
+      side.brollShots[at].notes = label + " shot " + run;
+    }
+    const { doc } = await recover(disk, base, mine);
+    assert.deepEqual(migrateRows(structuredClone(doc)), doc);
+    for (const label of [mode !== 0 ? "Mine" : null, mode !== 1 ? "Disk" : null].filter(Boolean)) {
+      for (const kind of ["scene", "comment", "reply", "person", "shot"]) {
+        assert.ok(JSON.stringify(doc).includes(label + " " + kind + " " + run), kind + " " + run);
+      }
+      const comment = doc.comments.find(c => c.body === label + " comment " + run);
+      const owner = doc.rows.find(row => row.id === comment.rowId);
+      assert.equal(owner.audioText, mark(comment.anchorId, label + " scene " + run), "owner " + label + " " + run);
+    }
+  }
 });
