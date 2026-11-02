@@ -423,7 +423,7 @@ export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonl
       }
     } else if (s.op === "docField") {
       if (!same(state[s.key], s.before) && !listMergeFor(s.key)) return { ok: false, reason: "it has changed since" };
-      plan.push({ op: "doc", key: s.key, step: s, live: s.ownersOnly || people ? clone(state[s.key]) : undefined });
+      plan.push({ op: "doc", key: s.key, step: s, live: s.ownersOnly || people || OWNED_LISTS[s.key] ? clone(state[s.key]) : undefined });
     } else if (s.op === "insertRow") {
       const id = idKey(s.row.id);
       if (s.index < 0 || s.index > order.length || byId[id] && order.indexOf(s.row.id) !== -1) {
@@ -472,7 +472,9 @@ export function writePlanned(state: UndoState, planned: PlannedSteps, out?: Writ
       return { op: "docField", key: p.key, before: p.scan, after: clone(state[p.key]) };
     });
     const people = plan.some(function (p) { return p.op === "doc" && p.key === "people"; });
-    out.replayed = plan.filter(function (p): p is DocPlan { return p.op === "doc" && !!p.step && (!!p.step.ownersOnly || people); }).map(function (p) {
+    out.replayed = plan.filter(function (p): p is DocPlan {
+      return p.op === "doc" && !!p.step && (!!p.step.ownersOnly || people || !!OWNED_LISTS[p.key] && !same(p.live, state[p.key]));
+    }).map(function (p) {
       return { op: "docField", key: p.key, before: p.live, after: clone(state[p.key]) };
     });
   }
