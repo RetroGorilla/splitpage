@@ -11,7 +11,7 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 
 function fixture(withScene = false) {
-  const doc = fakeDocument(migrateRows({ title: "Render mount", rows: withScene ? [{ id: "r1" }] : [] }, fakeMigration().ports));
+  const doc = fakeDocument(migrateRows({ schema: 2, title: "Render mount", rows: withScene ? [{ id: "r1", audioText: "One" }] : [] }, fakeMigration().ports));
   const notices = fakeNotices();
   const paint = createPaintGuard();
   const selection = createEditorSelection<Element, Range, Element>({ epoch: () => 0, order: () => [], keys: () => [] });
@@ -30,7 +30,7 @@ function fixture(withScene = false) {
     },
     draft: { appendMedia: () => null, model: () => ({ cell: [], media: { markThroughout: () => false, toggleMark: () => [] } }), edit: () => null, isDraft: () => false, isScript: () => false },
     undo: { track: () => { tracks++; } },
-    hiding: () => ({ groups: () => [] }),
+    hiding: () => ({ groups: rows => rows.map((row, index) => ({ row, index })) }),
     sections: () => ({ folded: () => false }),
     pictures: fakePictures().pictures,
     personColors: { personColor: () => "#000000" },
@@ -55,6 +55,27 @@ test("sectionless rendering never requests the fold owner", () => {
     assert.equal(mounted.renderFirstDraw(), true);
     assert.equal(folds, 0);
   } finally { mounted.dispose(); }
+});
+
+test("after-paint callback faults do not hold a successfully drawn screen stale (#513)", () => {
+  document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
+  const h = fixture(true);
+  const mounted = startRowsRender(h.ports);
+  let queued = false;
+  let continued = 0;
+  const off = mounted.onPainted(() => {
+    if (queued) return;
+    queued = true;
+    h.paint.afterThisPaint(() => { throw new Error("callback failed"); });
+    h.paint.afterThisPaint(() => { continued++; });
+  });
+  try {
+    assert.equal(mounted.renderFirstDraw(), true);
+    assert.equal(mounted.screenIsStale(), false);
+    assert.equal(continued, 1);
+    assert.equal(document.body.classList.contains("is-stale-screen"), false);
+    assert.ok(document.querySelector('#rows .row[data-id="r1"]'));
+  } finally { off(); mounted.dispose(); }
 });
 
 test("render mounts without drawing and a disposed queued paint cannot reach the replacement", () => {
