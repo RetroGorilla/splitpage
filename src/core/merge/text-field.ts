@@ -62,10 +62,10 @@ function registryRenamed(sideTags: TagList, mergedTags: Registry): boolean {
   });
 }
 
-export function textMergeContext(decode: MergeDecoder, base: TagSide | null | undefined, mine: TagSide, theirs: TagSide, mergedTags?: Registry): TextMergeContext {
+export function textMergeContext(decode: MergeDecoder, base: TagSide | null | undefined, mine: TagSide | null, theirs: TagSide, mergedTags?: Registry): TextMergeContext {
   const baseTags = base && base.productionTags;
-  if (mergedTags === undefined) mergedTags = mergeProductionTags(baseTags, mine.productionTags, theirs.productionTags);
-  const hb = tagHooksFor(baseTags), hm = tagHooksFor(mine.productionTags), ht = tagHooksFor(theirs.productionTags);
+  if (mergedTags === undefined) mergedTags = mergeProductionTags(baseTags, (mine as TagSide).productionTags, theirs.productionTags);
+  const hb = tagHooksFor(baseTags), hm = tagHooksFor((mine as TagSide).productionTags), ht = tagHooksFor(theirs.productionTags);
   const hout = registryTagHooks(mergedTags);
   return {
     hasBase: !!base,
@@ -77,7 +77,7 @@ export function textMergeContext(decode: MergeDecoder, base: TagSide | null | un
       tagOf: function (id) { return hout.tagOf(id) || ht.tagOf(id) || hm.tagOf(id) || hb.tagOf(id); }
     },
     refit: {
-      mine: registryRenamed(mine.productionTags, mergedTags),
+      mine: registryRenamed((mine as TagSide).productionTags, mergedTags),
       theirs: registryRenamed(theirs.productionTags, mergedTags)
     },
     decode: decode

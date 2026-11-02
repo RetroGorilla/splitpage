@@ -7,7 +7,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { TextServices } from "../../application/text/services.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
-import type { TextMergeContext } from "../../core/merge/text-field.ts";
+import type { TextMergeContext, textMergeContext } from "../../core/merge/text-field.ts";
 import type { DraftParsedFile } from "../../application/recovery/drafts-ports.ts";
 
 type MergeParsedFile = Pick<Extract<DraftParsedFile, { state: ValidatedDocument }>, "state" | "error"> & Partial<Pick<Extract<DraftParsedFile, { state: ValidatedDocument }>, "docIdEmbedded">> | Exclude<DraftParsedFile, { state: ValidatedDocument }>;
@@ -27,7 +27,7 @@ export interface MergeReviewPorts {
   readonly entry: { readonly migrate: (raw: unknown) => ValidatedDocument };
   readonly files: { readonly parse: (file: unknown, opts: MergeFileOptions) => Promise<MergeParsedFile | null> };
   readonly recovery: { readonly applyStashedWork: ApplyStashedWork<ValidatedDocument, MergedStates> };
-  readonly textMergeContext: (base: unknown, mine: unknown, theirs: unknown) => TextMergeContext;
+  readonly textMergeContext: (base: Parameters<typeof textMergeContext>[1], mine: Parameters<typeof textMergeContext>[2], theirs: Parameters<typeof textMergeContext>[3]) => TextMergeContext;
 }
 
 export interface MergeReviewControl {
