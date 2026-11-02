@@ -184,7 +184,7 @@ function galleryProbe(row: DeepReadonly<DocumentRow>): GalleryRow {
 }
 
 function textCells(rowId: string | null, field: string | null, withGallery: boolean): ChangeSet["cells"] {
-  const cells: { rowId: string | null; field: string | null }[] = [{ rowId: rowId, field: field }];
+  const cells: ChangeSet["cells"][number][] = [{ rowId: rowId, field: field }];
   if (withGallery) GALLERY_FIELDS.forEach(function (key) { cells.push({ rowId: rowId, field: key }); });
   cells.push({ rowId: rowId, field: "updatedAt" }, { rowId: rowId, field: "updatedBy" });
   return cells;
