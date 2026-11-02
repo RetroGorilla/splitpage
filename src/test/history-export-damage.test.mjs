@@ -204,7 +204,7 @@ for (const resolveFirst of [false, true]) test(`persistent reopen failure cancel
 for (const failure of ["reject", "timeout"]) test(`desktop body ${failure} cancels rather than delivering partial history`, async (t) => {
   const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
   const get = h.bridge.historyGet;
-  h.storage.controls.setDesktopTimeout(5);
+  if (failure === "timeout") h.storage.controls.setDesktopTimeout(5);
   h.bridge.historyGet = (query, id) => id === "intact" ? (failure === "reject" ? Promise.reject(new Error("locked")) : new Promise(() => {})) : get(query, id);
   const a = appHarness(t, h.owner);
   await a.app.exportAppData();
