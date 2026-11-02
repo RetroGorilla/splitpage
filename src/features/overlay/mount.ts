@@ -1,6 +1,9 @@
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { inFront } from "../../application/screen.ts";
+import type { ScreenState } from "../../application/screen.ts";
 
 export interface OverlayPorts {
+  readonly screen: () => ScreenState;
   readonly closeRowMenus: () => void;
   readonly selectedKeys: () => readonly string[];
   readonly clearProductionSelection: () => void;
@@ -65,10 +68,11 @@ export function mountOverlay(mount: { window: Window; ports: OverlayPorts }): Ov
     mountWriterFocus: () => stage("writer-focus", () => {
       listen(doc, "focusin", function (e) {
         if (!ports.writerOpen() || ports.paintingScreen()) return;
+        if (inFront(["dialog", "launcher", "tour", "prompter"], ports.screen())) return;
         const el = e.target;
         if (!el?.closest) return;
         if (el.closest("#writer")) return;
-        if (el.closest(".modal-backdrop:not([hidden]), .toast")) return;
+        if (el.closest(".toast")) return;
         const back = doc.querySelector<HTMLElement>("#writer-doc .wr-para") || doc.getElementById("wr-close");
         if (back) ports.focus(back);
       });

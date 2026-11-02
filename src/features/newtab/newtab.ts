@@ -7,6 +7,7 @@ import { escapeHtml } from "../../core/document/text-policy.ts";
 import { NO_DESTINATION } from "../../application/transitions/ports.ts";
 import { fileKindFromName } from "../../../shared/file-names.ts";
 import { addListener } from "../common/listeners.ts";
+import { EVERY_OVERLAY, inFront } from "../../application/screen.ts";
 
 
 type RecentEntry = {
@@ -72,7 +73,7 @@ function closeNewTabPage() {
 
 function onNewTabKeydown(e: KeyboardEvent) {
   if (e.key !== "Escape") return;
-  if (document.querySelector(".modal-backdrop:not([hidden]), #tour-overlay:not([hidden])")) return;
+  if (inFront(EVERY_OVERLAY, ports.screen())) return;
   e.stopPropagation();
   e.preventDefault();
   closeNewTabPage();
