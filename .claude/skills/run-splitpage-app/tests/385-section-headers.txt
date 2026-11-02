@@ -12,17 +12,46 @@ expect document.activeElement === document.querySelector('#rows [data-section-id
 expect JSON.stringify(F.state()) === beforeFold
 eval document.querySelector('#rows [data-section-id="s1"] .section-fold').click(); true
 wait document.querySelectorAll('#rows .row').length === 4
-eval document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable').focus(); document.querySelector('[data-section-action="add"]').click(); true
+expect !document.querySelector('.add-row-bar [data-section-action="add"]') && !document.querySelector('.add-row-bar').textContent.includes('Section before selected scene')
+eval document.querySelector('#rows .row[data-id="r1"] .audio-cell .cell-editable').focus(); U.flush(); window.beforeAdd=JSON.stringify(F.state()); window.undoBeforeAdd=U.sizes().undo; true
+eval document.querySelector('#rows .row[data-id="r2"] .row-more').focus(); true
+key none ArrowDown
+expect Array.from(document.querySelectorAll('#rows .row[data-id="r2"] .row-menu-item')).map(function(el){return el.textContent;}).join('|') === 'Move up|Move down|Insert scene|Add Section Header|Delete'
+key none ArrowDown
+key none ArrowDown
+expect document.activeElement.getAttribute('data-action') === 'insert-below'
+key none ArrowDown
+expect document.activeElement.textContent === 'Add Section Header'
+shot section-scene-menu
+key none ArrowDown
+expect document.activeElement.getAttribute('data-action') === 'delete-row'
+key none ArrowUp
+key none Enter
 wait !!document.querySelector('.section-rename input')
+expect document.querySelector('#rows .row[data-id="r2"] .row-menu').hidden
+shot section-scene-name
 press Middle
 key none Enter
 wait F.state().sections.length === 3
 expect F.state().sections[1].name === 'Middle' && F.state().sections[1].firstSceneId === 'r2'
-eval window.middle=F.state().sections[1].id; document.querySelector('#rows [data-section-id="'+middle+'"] .section-name').click(); true
+expect document.querySelector('#rows .row[data-id="r2"]').previousElementSibling.getAttribute('data-section-id') === F.state().sections[1].id
+eval U.flush(); true
+expect U.sizes().undo === undoBeforeAdd+1
+eval document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable').focus(); true
+key ctrl KeyZ
+wait F.state().sections.length === 2
+expect JSON.stringify(F.state()) === beforeAdd
+key ctrl+shift KeyZ
+wait F.state().sections.length === 3
+expect F.state().sections[1].name === 'Middle' && F.state().sections[1].firstSceneId === 'r2'
+
+eval window.middle=F.state().sections[1].id; document.querySelector('#rows .row[data-id="r2"] .row-more').click(); document.querySelector('#rows .row[data-id="r2"] [data-action="add-section"]').click(); true
 wait !!document.querySelector('.section-rename input')
+expect document.querySelector('.section-rename input').value === 'Middle'
 press Bridge
 key none Enter
 wait F.state().sections[1].name === 'Bridge'
+expect F.state().sections.length === 3 && F.state().sections[1].id === middle
 eval document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable').focus(); window.beforeMove=JSON.stringify(F.state()); true
 key alt ArrowDown
 expect JSON.stringify(F.state()) === beforeMove
