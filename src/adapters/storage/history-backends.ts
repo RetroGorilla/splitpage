@@ -13,7 +13,7 @@ type HistoryReplyAlternatives<T, All = T> = T extends object ? T & {
 } : T;
 type HistoryDesktopDoc = Awaited<ReturnType<HistoryDesktopPort["historyListDocs"]>>[number];
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
-import { HISTORY_OLDER_KEY, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
+import { HISTORY_OLDER_KEY, historyOlderExpired, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
 import { createHistoryStore, createMemoryHistoryBackend, projectHistoryBucket } from "../../../shared/history-store.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "./03c-history-idb.ts";
 
@@ -122,6 +122,7 @@ function historyRecordOf(index: HistoryIndex, bucket: string) {
 
 function historyMetasOf(index: HistoryIndex, bucket: string) {
   const rec = index && index[bucket];
+  if (bucket === HISTORY_OLDER_KEY && historyOlderExpired(rec, historyNow())) return [];
   return projectHistoryBucket(rec).entries.map(function (s) { return { ...s.meta, docId: bucket }; });
 }
 
@@ -294,16 +295,27 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
     });
   },
 
-  get: function (bucket, id) {
+  get: function (bucket, id, options) {
     const query = bucket === HISTORY_OLDER_KEY
       ? { older: true, protect: historyProtectedList() }
       : { docId: bucket, protect: historyProtectedList() };
     return historyDesktopCall(function () {
       return desktopPort().historyGet(query, id);
-    }, null, null).then(function (r) {
-      if (!r || typeof r !== "object" || typeof r.stateJson !== "string") return null;
+    }, { failed: true }, { failed: true }).then(function (r) {
+      if (r && r.failed) {
+        if (options?.strict) throw new Error("Could not read version history for export.");
+        return null;
+      }
+      if (r === null) return null;
+      if (!r || typeof r !== "object" || typeof r.stateJson !== "string") {
+        if (options?.strict) throw new Error("Could not read version history for export.");
+        return null;
+      }
       const meta = historyStripMeta(r.meta);
-      if (!meta) return null;
+      if (!meta) {
+        if (options?.strict) throw new Error("Could not read version history for export.");
+        return null;
+      }
       meta.docId = bucket;
       return { meta: meta, stateJson: r.stateJson };
     });
@@ -398,18 +410,19 @@ function historyUseMemory() {
   return historyMemory().adapter;
 }
 
-function resolveHistoryBackend() {
+function resolveHistoryBackend(options?: { strict?: boolean }) {
   if (probe?.choice() === "memory") return Promise.resolve(historyUseMemory());
   if (!probe?.choice() && runningOnDesktop() && typeof desktopPort().historyPut === "function") {
     historyBackendNameNow = "desktop";
     return Promise.resolve(desktopHistoryBackend);
   }
-  if (historyIdbFailed) return Promise.resolve(historyUseMemory());
+  if (historyIdbFailed) return options?.strict ? Promise.reject(new Error("Persistent history is unavailable")) : Promise.resolve(historyUseMemory());
   return historyOpenIdb().then(function (adapter) {
     historyBackendNameNow = "idb";
     return adapter;
   }, function (e) {
     historyIdbFailed = true;
+    if (options?.strict) throw e;
     if (window.console) console.warn("Version history: IndexedDB unavailable, keeping history in memory", e);
     return historyUseMemory();
   });

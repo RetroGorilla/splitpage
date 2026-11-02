@@ -11,6 +11,6 @@ export const pictures: PictureStore = {
   isDurable: isDurableSync,
   queuePersist,
   persist,
-  ensureBytes: (shas) => ensureBytes(shas),
+  ensureBytes: (shas, options) => ensureBytes(shas, options),
   imgHtml: blobImgHtml
 };

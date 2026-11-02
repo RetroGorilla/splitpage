@@ -242,8 +242,9 @@ function createBlobStore(opts: DesktopBlobStoreOptions) {
       let buf;
       try {
         buf = await fsp.readFile(file);
-      } catch (_) {
-        return null;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+        throw error;
       }
       if (hashHex(buf) !== sha) {
         try { await fsp.unlink(file); } catch (_) { }

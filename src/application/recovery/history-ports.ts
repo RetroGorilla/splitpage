@@ -121,7 +121,7 @@ export interface HistoryOwnerPorts {
 }
 
 export interface HistoryStorage {
-  readonly resolveHistoryBackend: () => Promise<HistoryResolvedBackend>;
+  readonly resolveHistoryBackend: (options?: { strict?: boolean }) => Promise<HistoryResolvedBackend>;
   readonly historyIdbNotice: () => { kind: string; text: string } | null;
   readonly backendName: () => string | null;
   readonly close: () => Promise<void>;
@@ -145,7 +145,7 @@ export interface HistoryResolvedBackend {
     olderDamaged?: number;
     usage?: unknown;
   } | null>;
-  readonly get: (bucket: string, id: string) => Promise<HistorySnapshotReply | null>;
+  readonly get: (bucket: string, id: string, options?: { strict?: boolean }) => Promise<HistorySnapshotReply | null>;
   readonly touch: (docId: string, title: string) => Promise<unknown>;
   readonly copy: (from: string, to: string) => Promise<{ ok: boolean; copied: number; code?: string | undefined }>;
   readonly rawDocIds: () => Promise<string[] | null>;

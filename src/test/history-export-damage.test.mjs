@@ -12,6 +12,9 @@ import { createHistoryBackendProbe, createIdbHistoryTestBackend } from "../adapt
 import { createHistoryBackends } from "../adapters/storage/history-backends.ts";
 import { createHistoryOwner } from "../application/recovery/history.ts";
 import { createHistoryStore } from "../../shared/history-store.ts";
+import { createBlobStore, createMemoryBlobBackend } from "../adapters/storage/blob-store.ts";
+import { makeDesktopBlobBackend } from "../adapters/desktop/desktop-blobs.ts";
+import { mountAppData } from "../features/settings/app-data.ts";
 
 const { createHistoryFsBackend } = createRequire(import.meta.url)("../../desktop/history-fs-backend.ts");
 const docId = "d" + "a".repeat(32), image = "b".repeat(64);
@@ -20,11 +23,13 @@ const sha = crypto.createHash("sha256").update(stateJson).digest("hex");
 const good = { id: "intact", atMs: 1000, sha, sizeBytes: stateJson.length, label: "Intact" };
 const bad = { ...good, id: "damaged", atMs: 1e100 };
 
-async function harness(t, kind, snapshots = [good, bad], fields = {}) {
+async function harness(t, kind, snapshots = [good, bad], fields = {}, options = {}) {
   const buckets = { [docId]: { title: "Intact", lastOpenedAt: 1, snapshots, ...fields }, _older: { snapshots: [bad], expiresAt: 100000 } };
+  if (options.older) buckets._older = options.older;
   let bridge = null, inspect;
   const probe = createHistoryBackendProbe();
-  probe.idb = (options) => createIdbHistoryTestBackend({ ...options, indexedDB: new IDBFactory() });
+  const factory = new IDBFactory();
+  probe.idb = (options) => createIdbHistoryTestBackend({ ...options, indexedDB: factory });
   if (kind === "filesystem") {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "splitpage-history-export-"));
     t.after(() => fsp.rm(dir, { recursive: true, force: true }));
@@ -52,13 +57,28 @@ async function harness(t, kind, snapshots = [good, bad], fields = {}) {
     location: { home: () => ({ kind: "none" }) }, preferences: { editorName: () => "Adam" },
     saving: { changes: () => 0, unsaved: () => false }, recovery: { readRaw: () => null, remove: () => true },
     effects: { show() {} },
-    pictures: { intern: () => null, persist: async () => [], ensureBytes: async () => [], recordFor: () => ({ mime: "image/png" }), dataUrlFor: () => "data:image/png;base64,aW1hZ2U=" },
+    pictures: options.pictures || { intern: () => null, persist: async () => [], ensureBytes: async () => [], recordFor: () => ({ mime: "image/png" }), dataUrlFor: () => "data:image/png;base64,aW1hZ2U=" },
     inlinePictures: (json) => json, ids: { id: () => "snapshot", docId: () => docId }, seed: { passes: () => true },
     logger: { error() {}, warn() {} }, now: () => 2000, decodeBase64: atob, yield: async () => {},
     desktop: { history: () => bridge, running: () => !!bridge }, storage: () => storage
   });
   t.after(async () => { await stop(); await storage.close(); });
-  return { owner, backend, bridge, inspect };
+  return { owner, backend, bridge, inspect, storage };
+}
+
+function appHarness(t, owner) {
+  document.body.innerHTML = '<input id="import-app-data-input" type="file">';
+  const delivered = [], messages = [];
+  const app = mountAppData({
+    notices: { show: (...args) => { messages.push(args); return { isConnected: false, dismiss() {}, removeEventListener() {} }; } },
+    fileDelivery: { deliver: (_name, text) => { delivered.push(JSON.parse(text)); return Promise.resolve(true); } },
+    preferences: { appDataExport: () => ({}), appDataImport: () => [], commentsSort: () => "recent" },
+    desktop: () => false, launchFacts: { appVersion: () => "" }, commentSorting: { choose: () => "recent" },
+    history: { exportAll: () => owner.exportHistoryAll(), normalizeSnapshots: () => [], importBundle: (bundle) => owner.importHistoryBundle(bundle) },
+    writer: { size: () => 20, setSize() {} }, embeddedVersion: () => "", useBlobBackend() {}
+  });
+  t.after(() => app.dispose());
+  return { app, delivered, messages };
 }
 
 for (const kind of ["memory", "idb", "filesystem"]) {
@@ -90,7 +110,103 @@ for (const kind of ["memory", "idb", "filesystem"]) {
     assert.equal(out.omittedSnapshots, 4);
     assert.deepEqual(await h.inspect(), before);
   });
+
+  test(`[${kind}] expired intact Older entries export as ordinary empty history`, async (t) => {
+    const h = await harness(t, kind, [], {}, { older: { snapshots: [good], expiresAt: 1000 } });
+    const a = appHarness(t, h.owner);
+    await a.app.exportAppData();
+    assert.equal(a.delivered.length, 1);
+    assert.deepEqual(a.delivered[0].history.older, []);
+    assert.equal(a.delivered[0].history.omittedSnapshots, undefined);
+    assert.equal(a.messages.some((m) => m[1] === "warn" || m[1] === "error"), false);
+  });
 }
+
+for (const resolveFirst of [false, true]) test(`persistent reopen failure cancels export after fallback ${resolveFirst}`, async (t) => {
+  const h = await harness(t, "idb");
+  assert.equal((await h.backend.store.rawIndex())[docId].snapshots.length, 2);
+  h.storage.controls.injectFault("idb-open-fail");
+  if (resolveFirst) assert.equal((await h.storage.resolveHistoryBackend()).name, "memory");
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.match(a.messages.at(-1)[0], /Export cancelled/);
+  h.storage.controls.injectFault(null);
+  await h.storage.controls.forceBackend("idb");
+  assert.equal((await h.owner.exportHistoryAll()).docs[0].snapshots.length, 1);
+});
+
+for (const failure of ["reject", "timeout"]) test(`desktop body ${failure} cancels rather than delivering partial history`, async (t) => {
+  const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
+  const get = h.bridge.historyGet;
+  h.storage.controls.setDesktopTimeout(5);
+  h.bridge.historyGet = (query, id) => id === "intact" ? (failure === "reject" ? Promise.reject(new Error("locked")) : new Promise(() => {})) : get(query, id);
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.match(a.messages.at(-1)[0], /Export cancelled/);
+});
+
+test("desktop image read rejection cancels delivery through the actual image fallback", async (t) => {
+  const pictures = createBlobStore({ preferred: null, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  pictures.setBackend(makeDesktopBlobBackend({ blobGet: async () => { throw new Error("locked"); }, blobPut: async () => ({ ok: true }), blobMissing: async () => [] }));
+  const h = await harness(t, "filesystem", [good], {}, { pictures });
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.match(a.messages.at(-1)[0], /Export cancelled/);
+});
+
+test("strict image reads preserve confirmed absence while ordinary reads tolerate errors", async () => {
+  const pictures = createBlobStore({ preferred: null, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  let rejectRead = false;
+  pictures.setBackend(makeDesktopBlobBackend({ blobGet: async () => { if (rejectRead) throw new Error("locked"); return null; }, blobPut: async () => ({ ok: true }), blobMissing: async () => [] }));
+  assert.deepEqual(await pictures.ensureBytes([image], { strict: true }), [image]);
+  rejectRead = true;
+  assert.deepEqual(await pictures.ensureBytes([image]), [image]);
+  await assert.rejects(pictures.ensureBytes([image], { strict: true }), /locked/);
+});
+
+test("a concurrent ordinary image load cannot hide its read error from export", async () => {
+  let rejectRead;
+  const reading = new Promise((_resolve, reject) => { rejectRead = reject; });
+  const pictures = createBlobStore({ preferred: null, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  pictures.setBackend(makeDesktopBlobBackend({ blobGet: () => reading, blobPut: async () => ({ ok: true }), blobMissing: async () => [] }));
+  const ordinary = pictures.ensureBytes([image]);
+  const strict = pictures.ensureBytes([image], { strict: true });
+  const rejected = assert.rejects(strict, /locked/);
+  rejectRead(new Error("locked"));
+  assert.deepEqual(await ordinary, [image]);
+  await rejected;
+});
+
+test("strict image export refuses both newly selected and cached persistence fallback", async () => {
+  const pictures = createBlobStore({ preferred: { available: () => true, open: async () => { throw new Error("unavailable"); } }, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  await assert.rejects(pictures.ensureBytes([image], { strict: true }), /unavailable/);
+  assert.deepEqual(await pictures.ensureBytes([image]), [image]);
+  await assert.rejects(pictures.ensureBytes([image], { strict: true }), /unavailable/);
+});
+
+test("an obsolete image open failure cannot mark a replacement backend unavailable", async () => {
+  let rejectOpen;
+  const opening = new Promise((_resolve, reject) => { rejectOpen = reject; });
+  const pictures = createBlobStore({ preferred: { available: () => true, open: () => opening }, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  const reading = pictures.ensureBytes([image], { strict: true });
+  pictures.setBackend(createMemoryBlobBackend());
+  rejectOpen(new Error("obsolete"));
+  assert.deepEqual(await reading, [image]);
+});
+
+test("confirmed desktop body absence still permits a partial export", async (t) => {
+  const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
+  const get = h.bridge.historyGet;
+  h.bridge.historyGet = (query, id) => id === "intact" ? Promise.resolve(null) : get(query, id);
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 1);
+  assert.deepEqual(a.delivered[0].history.docs[0].snapshots.map((s) => s.meta.id), ["other"]);
+  assert.equal(a.delivered[0].history.omittedSnapshots, 2);
+});
 
 test("desktop export rejects an unavailable list instead of treating it as empty history", async (t) => {
   const h = await harness(t, "filesystem");

@@ -421,7 +421,7 @@ function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExp
     d.snapshots = [];
     (d.metas || []).forEach(function (m) {
       if (!keep[d.docId + "\n" + m.id]) return;
-      bodyJobs.push(backend.get(d.docId, m.id).then(function (r) {
+      bodyJobs.push(backend.get(d.docId, m.id, { strict: true }).then(function (r) {
         if (r) (d.snapshots as HistoryExportSnapshot[]).push({ meta: r.meta, stateJson: r.stateJson });
         else omittedSnapshots++;
       }));
@@ -430,7 +430,7 @@ function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExp
   const olderOut: HistoryExportSnapshot[] = [];
   (olderMetas || []).forEach(function (m) {
     if (!keep["_older\n" + m.id]) return;
-    bodyJobs.push(backend.get(HISTORY_OLDER_KEY, m.id).then(function (r) {
+    bodyJobs.push(backend.get(HISTORY_OLDER_KEY, m.id, { strict: true }).then(function (r) {
       if (r) olderOut.push({ meta: r.meta, stateJson: r.stateJson });
       else omittedSnapshots++;
     }));
@@ -472,7 +472,7 @@ function historyBuildExport(backend: HistoryResolvedBackend, ids: string[]) {
 
 function exportHistoryAll() {
   return enqueueHistory(function () {
-    return resolveHistoryBackend().then(function (backend) {
+    return resolveHistoryBackend({ strict: true }).then(function (backend) {
       return backend.rawDocIds().then(function (ids) {
         if (ids == null) {
           throw historyExportError("no-enumeration",
@@ -514,7 +514,7 @@ async function historyExportAttachBlobs(out: HistoryExportBundle) {
   for (let i = 0; i < all.length; i++) {
     const snap = (all[i] as typeof all[number]).snap;
     const fresh = historyRefsInJson(snap.stateJson).filter(function (sha) { return !counted[sha]; });
-    const gone = fresh.length ? await ensureBytes(fresh) : [];
+    const gone = fresh.length ? await ensureBytes(fresh, { strict: true }) : [];
     const add: Record<string, HistoryImageData> = {}, addMissing: string[] = [];
     let cost = historyUtf8Length(snap.stateJson);
     fresh.forEach(function (sha) {

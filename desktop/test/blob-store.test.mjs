@@ -331,6 +331,21 @@ function safe(value: string | number) {
   assert.equal(errors[0].length, "toFixed".length);
 });
 
+test("a transient body read error rejects without deleting the stored image", async () => {
+  const dir = freshDir(), bytes = png(), h = sha(bytes);
+  let blocked = null;
+  const s = makeStore(dir, { fsp: { ...fsp, readFile: async (...args) => {
+    if (args[0] === blocked) throw Object.assign(new Error("locked"), { code: "EACCES" });
+    return fsp.readFile(...args);
+  } } });
+  await s.init();
+  await s.put(h, bytes);
+  blocked = s.pathFor(h);
+  await assert.rejects(s.get(h), { code: "EACCES" });
+  assert.ok((await fsp.readFile(blocked)).equals(bytes));
+  assert.equal(await s.get("f".repeat(64)), null);
+});
+
 const failures = [];
 for (const c of cases) {
   try {
