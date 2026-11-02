@@ -66,7 +66,7 @@ import {
 } from "../../features/rows/render.ts";
 import type { ClipboardMediaInput } from "../../features/clipboard/cell-clipboard.ts";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.ts";
-import { pasteScenesAt } from "../../features/clipboard/scene-select.js";
+import { pasteScenesAt } from "../../features/clipboard/scene-select.ts";
 import { thumbnailsAfterPaste } from "./gallery.ts";
 import {
   draftRedo,
