@@ -1,4 +1,4 @@
-import { refsIn } from "../../../shared/blob-policy.js";
+import { refsIn } from "../../../shared/blob-policy.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import type { ConflictStash, StashedWork } from "./conflict-stash.ts";
 

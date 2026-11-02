@@ -1,5 +1,5 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../../shared/video-embed.js";
+import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../../shared/video-embed.ts";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../../core/document/gallery.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 

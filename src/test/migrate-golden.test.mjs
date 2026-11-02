@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { migrateDocument } from "../bootstrap/startup/document-entry.ts";
 import { has, recordFor, setBackend } from "../adapters/storage/02c-blobs.ts";
-import { refsIn } from "../../shared/blob-policy.js";
+import { refsIn } from "../../shared/blob-policy.ts";
 import { createIdMasker, goldenText, idsInHtml, image, mintedId, settleGolden } from "./golden-helpers.mjs";
 
 const SEED_TEXT = readFileSync(new URL("../seed-state.json", import.meta.url), "utf8");

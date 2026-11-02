@@ -1,4 +1,4 @@
-import { normalizeImageRef } from "../../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { rowImage } from "./media.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
 import { cappedLongText, codePointPrefix, plainText, safeHref, safeImageSrc, settledNames, unitSafePrefix } from "./text-policy.ts";

@@ -786,7 +786,7 @@ async function openPrompterInBrowser(tab, opts) {
   return { ok: true, kind: source.kind, voice: relay ? "relay" : "browser" };
 }
 
-const videoEmbed = require(path.join(SHARED_ROOT, "video-embed.js"));
+const videoEmbed = require(path.join(SHARED_ROOT, "video-embed.ts"));
 
 const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
   ? (() => {

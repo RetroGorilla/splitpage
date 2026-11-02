@@ -71,7 +71,7 @@ Every automated step passed.
   one named arm64 skip, 5.65 min; packaged-x64 ran 42 blob and 182 history
   checks. `blob-store.js`, `history-fs-backend.js` and
   `history-v1-migrate.js` are in `app.asar`; `shared/history-store.js` and
-  `shared/blob-policy.js` in `resources/splitpage/shared/`.
+  `shared/blob-policy.ts` in `resources/splitpage/shared/`.
 - `run-tests.ps1` 3039/3039 across 66 suites.
 - **#83's history move on the real profile: passed.** One document with one
   version: the same id, label, date, 90 rows and 96530 bytes after the move;
