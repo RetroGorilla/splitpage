@@ -7,6 +7,7 @@ click #btn-present
 wait !document.getElementById('prompter').hidden
 click #pp-fullscreen
 wait document.fullscreenElement !== null
+sleep 300
 eval D.runMenuCommand('open')
 wait document.querySelector('#toast-host .toast:not(.is-leaving)')
 eval window.__plain=document.querySelector('#toast-host .toast:not(.is-leaving)')
@@ -24,12 +25,15 @@ eval D.runMenuCommand('help')
 wait !document.getElementById('help-modal').hidden
 expect document.fullscreenElement === document.documentElement && document.fullscreenElement.contains(document.getElementById('help-modal'))
 expect __top(document.querySelector('#help-modal .modal-panel'))
+sleep 300
 shot sweep-ui-help-fullscreen
 click #help-close
 eval D.runMenuCommand('settings')
 wait !document.getElementById('settings-modal').hidden
 expect document.fullscreenElement === document.documentElement
 expect __top(document.querySelector('#settings-modal .modal-panel'))
+sleep 300
+shot sweep-ui-settings-fullscreen
 click #settings-modal .modal-close
 click #pp-close
 wait document.fullscreenElement === null
