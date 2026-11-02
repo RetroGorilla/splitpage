@@ -128,7 +128,7 @@ request: lint, types, the dependency and comment gates, the build and its
 [docs/architecture/testing.md](architecture/testing.md#ci) lists the
 jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs
 --only-target dev` against an Xvfb display (#89) on pull requests and pushes that touch app or desktop code — that
-is where `main.js` and `preload.js` are actually executed, ~600 checks of it.
+is where `main.ts` and `preload.js` are actually executed, ~600 checks of it.
 It is its own job because it launches ~60 real Electron processes — 6.3
 minutes on a Windows 11 x64 machine, far longer on a slow shared runner —
 which is more than everything else together. None of this is the full
@@ -157,13 +157,13 @@ NSIS, and anything touching a packaged binary — plus, inside
 `desktop/test/smoke.mjs`, the packaged `dist/*-unpacked/Splitpage.exe`
 targets and the one `MainWindowHandle` probe. The **dev target of the
 desktop smoke suite runs anywhere** since #89, which is what matters: it is
-the only thing that executes `main.js` and `preload.js`. `build.mjs --check`,
+the only thing that executes `main.ts` and `preload.js`. `build.mjs --check`,
 `desktop/test/drafts.test.mjs`, `desktop/test/ipc-table.test.mjs` and
 `tools/test-server.mjs` already ran anywhere before that. The running list of
 what is genuinely left is `docs/WINDOWS-CHECKS.md`.
 
 **Desktop shell:** `desktop/test/smoke.mjs` drives a real Electron window
-over CDP — the only thing exercising `main.js`/`preload.js`. Always launch
+over CDP — the only thing exercising `main.ts`/`preload.js`. Always launch
 through it (`launchApp`, sets `SPLITPAGE_TEST=1` + a temp profile), never the
 app directly.
 
@@ -184,7 +184,7 @@ script selects the machine architecture, including Windows ARM64 with x64
 Node running under emulation:
 
 ```bash
-node build.mjs --test                    # main.js serves index.html from APP_ROOT
+node build.mjs --test                    # main.ts serves index.html from APP_ROOT
 cd desktop
 npm ci
 npm run fetch-electron
@@ -438,7 +438,7 @@ correct rename. Fix: blur before `jsclick`.
 
 ### 3.13 The desktop shell
 
-`desktop/main.js` + `desktop/preload.js` (Electron 44 + electron-builder 26)
+`desktop/main.ts` + `desktop/preload.js` (Electron 44 + electron-builder 26)
 turn the web app into a native Windows app; optional shell. Since the
 2026-09-14 tabs build it manages **multiple windows, each with multiple
 tabs**.
@@ -452,9 +452,9 @@ tabs**.
   `isTrustedTabStripSender` in `ipc-setup.ts`). Renderer never
   sends file paths to main (#34) — main keeps an id → path registry; writes
   are atomic (temp+rename).
-- `createTabWindow` (`main.js:985`) makes a `BrowserWindow` whose primary
+- `createTabWindow` (`main.ts:985`) makes a `BrowserWindow` whose primary
   view loads the tab strip; each tab is a `WebContentsView` from
-  `createTab(windowId, opts)` (`main.js:1104`). `tabId`/`windowId` are
+  `createTab(windowId, opts)` (`main.ts:1104`). `tabId`/`windowId` are
   32-hex, validated at every trust boundary (#42), stable across tear-off
   and relaunch, and double as the crash-draft folder name (§4). A crashed
   tab closes with no prompt, reports `dirty: false` regardless of the
@@ -487,13 +487,13 @@ tabs**.
   (#40): a tab with `hasDraftToRestore` is `hold()`-ed immediately;
   `write()` on a held tab returns `HELD`, touches nothing; released only by
   `splitpage:draft-restore-done` or an explicit user decision — never
-  crash/kill/session-end/quit. `buildDraftHeader` (`main.js:300`) is built
+  crash/kill/session-end/quit. `buildDraftHeader` (`main.ts:300`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
 - **The browser keeps no drafts.** Crash-safe drafts are desktop-only. The
   browser draft store, its writer and its Web Lock were removed with the
   last server leftovers; a browser draft a former server document left in
   IndexedDB is no longer read.
-- **Desktop version history** (#83, `main.js` §8b): one
+- **Desktop version history** (#83, `main.ts` §8b): one
   `shared/history-store.ts` (the store the browser runs too; policy from
   `shared/history-policy.ts`) over `desktop/history-fs-backend.ts`, both
   made once in `whenReady` before `registerIpc`. `<userData>/history/`:
@@ -531,7 +531,7 @@ tabs**.
   it. Test-mode faults:
   `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `enospc-once`/`-always`;
   `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
-- **Content-addressed blobs** (#82, `desktop/blob-store.ts`, `main.js`
+- **Content-addressed blobs** (#82, `desktop/blob-store.ts`, `main.ts`
   §8c). Images leave the document state and live in `<userData>/blobs`:
   `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
   own SHA-256 (`<aa>` = its first two hex digits). Plain CommonJS, no
@@ -565,7 +565,7 @@ tabs**.
   registry's `get`/`put`/`missing` interface; `put` rejects with
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites.
-- **YouTube and Vimeo in the gallery** (#141, #168, `main.js` §9e,
+- **YouTube and Vimeo in the gallery** (#141, #168, `main.ts` §9e,
   `shared/video-embed.ts`). The page's policy is build.mjs's, re-served
   as a header (§10), so its `frame-src` — `'self'` plus YouTube's no-cookie
   embed and Vimeo's player — needed no second edit here; `TABSTRIP_CSP`
@@ -1154,7 +1154,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.ts` over `history-fs-backend.ts`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
+| `desktop/main.ts` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.ts` over `history-fs-backend.ts`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
 | `desktop/desktop-state.ts`, `file-service.ts`, `doc-claims.ts`, `recents.ts`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.ts` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
 | `desktop/close-quit.ts`, `session-restore.ts` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
 | `desktop/ipc-setup.ts`, `ipc-files.ts`, `ipc-shell.ts`, `ipc-document.ts`, `ipc-history-blob.ts`, `ipc-tabstrip.ts`, `ipc-test-mode.ts` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups); the file, file dialog and recents channels; the tab boot, theme, video file, update, teleprompter browser and Follow My Voice channels; the document state, route-open and crash-draft channels; the version history and image blob channels; the tab strip's channels; the `__test` channels, registered only in test mode |
@@ -1166,8 +1166,8 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/drafts.ts` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/history-store.ts` | THE version-history store (#83), synchronous ESM run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.ts`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
 | `shared/history-policy.ts` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
-| `shared/blob-policy.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
-| `shared/video-embed.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
+| `shared/blob-policy.ts` | synchronous ESM shared by the page, `desktop/main.ts` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
+| `shared/video-embed.ts` | synchronous ESM shared by the page, `desktop/main.ts` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
 | `desktop/blob-store.ts` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
 | `desktop/history-fs-backend.ts` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.ts` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
 | `desktop/electron-arch.mjs` | pure architecture selection and the `fetch-electron` entry point; passes the selected architecture to Electron's installer (§2) |

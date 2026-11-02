@@ -46,7 +46,7 @@
     if (tab.crashed) el.className += " tab--crashed";
     el.title = tab.crashed
       ? (tab.fullPathForTooltip || tab.title) + " — this tab stopped responding and was not reloaded"
-      : (tab.fullPathForTooltip || tab.title);
+      : (tab.fullPathForTooltip || tab.title)          ;
     el.dataset.tabId = tab.tabId;
     el.draggable = true;
 

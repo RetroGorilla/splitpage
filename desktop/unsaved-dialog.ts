@@ -3,7 +3,7 @@
 import type { createDraftStore } from "./drafts.ts";
 
 import type { MessageBoxSyncOptions } from "electron";
-import type { DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab } from "./main-types.d.ts";
 
 type UnsavedDecision = "discard" | "cancel" | "review";
 interface UnsavedDialogSpec {

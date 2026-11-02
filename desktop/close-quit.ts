@@ -1,14 +1,16 @@
 "use strict";
 
-import type * as NodeFsPromises from "node:fs/promises";
+import type { DesktopNativeFsPromises } from "./native-inputs.d.ts";
+
 import type * as CloseKeep from "./close-keep.ts";
 import type * as QuitWatchdog from "./quit-watchdog.ts";
 import type * as UnsavedDialog from "./unsaved-dialog.ts";
 import type { BrowserWindow } from "electron";
-import type { DesktopCloseQuitDependencies, DesktopMainTab, DesktopMainWindow } from "./ipc-boundaries.d.ts";
+import type { DesktopCloseQuitDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab, DesktopMainWindow } from "./main-types.d.ts";
 import type { DesktopWireInstall } from "../shared/desktop-contract.d.ts";
 
-const fsp: typeof NodeFsPromises = require("node:fs/promises");
+const fsp: DesktopNativeFsPromises = require("node:fs/promises");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS }: {
   checkFileGone: typeof CloseKeep.checkFileGone;
   copyKept: typeof CloseKeep.copyKept;
@@ -42,7 +44,7 @@ function createCloseQuit({
 
   const TEST_CLOSE_STAT_DELAY_MS = TEST_MODE ? Number(process.env.SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS) || 0 : 0;
 
-  function closeCheckStat(p: string) {
+  function closeCheckStat(p: unknown) {
     if (TEST_CLOSE_STAT_DELAY_MS > 0) return new Promise((r) => setTimeout(r, TEST_CLOSE_STAT_DELAY_MS)).then(() => fsp.stat(p));
     return fsp.stat(p);
   }

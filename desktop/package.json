@@ -6,7 +6,7 @@
   "license": "MIT",
   "description": "Splitpage as a standalone desktop app — own window, native menus and file associations.",
   "author": "RetroGorilla",
-  "main": "main.js",
+  "main": "main.ts",
   "scripts": {
     "start": "electron .",
     "fetch-electron": "node electron-arch.mjs",

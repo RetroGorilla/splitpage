@@ -2,7 +2,7 @@
 # browser can reach.
 #
 # THE BROWSER END. The desktop shell opens one of two addresses in the
-# default browser (desktop/main.js section 9b):
+# default browser (desktop/main.ts section 9b):
 #   ?teleprompter=1#script=<64 hex>   served by the desktop's own loopback
 #                                     listener (desktop/prompter-share.ts)
 #   ?doc=<id>&teleprompter=1          served by its document server
