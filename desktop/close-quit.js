@@ -2,8 +2,8 @@
 
 const fsp = require("node:fs/promises");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
-const { createQuitWatchdog } = require("./quit-watchdog");
-const { unsavedTitles, unsavedDialogFor, decisionFor } = require("./unsaved-dialog");
+const { createQuitWatchdog } = require("./quit-watchdog.ts");
+const { unsavedTitles, unsavedDialogFor, decisionFor } = require("./unsaved-dialog.ts");
 
 function createCloseQuit({
   app, dialog, testMode: TEST_MODE, tabs, windowsById, liveWindows, tabHasFile, tabIsUnsaved, draftsHasDraft,
