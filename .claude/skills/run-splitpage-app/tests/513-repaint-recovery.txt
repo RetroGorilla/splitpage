@@ -1,0 +1,36 @@
+open /index.html?wizard=1
+wait document.getElementById('onboarding-modal').hidden === false
+expect document.querySelectorAll('#rows .row').length > 0
+expect document.activeElement === document.querySelector('#onboarding-modal .modal-close')
+shot sweep-ui-onboarding-ready
+click #onboarding-modal .modal-close
+wait document.getElementById('onboarding-modal').hidden
+eval window.F=window.__splitpageFormats;window.R=window.__renderTest
+click #rows .row:first-child .row-read
+eval window.__length=document.querySelector('.row-read-input');window.__row=__length.closest('.row')
+expect __row.classList.contains('is-setting-length')
+eval R.render()
+expect document.querySelector('.row-read-input') === __length
+expect document.activeElement === __length
+expect __row.classList.contains('is-setting-length')
+shot sweep-ui-length-repaint
+key Escape
+expect !document.querySelector('.row-read-input') && !__row.classList.contains('is-setting-length')
+eval (function(){var doc={schema:2,title:'Writer redraw focus',rows:[{id:'r1',audioText:'First paragraph',visualText:'One'},{id:'r2',audioText:'Second paragraph',visualText:'Two'}]};F.openFile(new File([JSON.stringify(doc)],'writer-redraw.splitpage'));return true;})()
+wait F.state().title === 'Writer redraw focus'
+click #btn-write
+wait !document.getElementById('writer').hidden
+caret #writer-doc .wr-para[data-id="r1"]
+eval (function(){window.__gridFocus=[];document.getElementById('rows').addEventListener('focusin',function(e){__gridFocus.push(e.target);});var title=document.getElementById('doc-title');var p=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');Object.defineProperty(title,'value',{configurable:true,get:function(){return p.get.call(this);},set:function(){throw new Error('sweep-ui-paint-fault');}});localStorage.setItem('splitpage-clock','12h');document.dispatchEvent(new CustomEvent('splitpage:pref',{detail:{key:'splitpage-clock',value:'12h'}}));return true;})()
+wait document.body.classList.contains('is-stale-screen')
+expect document.activeElement.classList.contains('toast-action')
+eval (function(){F.state().rows.splice(0,1);document.querySelector('#writer-doc .wr-para[data-id="r1"]').remove();delete document.getElementById('doc-title').value;return true;})()
+click #toast-host .toast-action
+wait !document.body.classList.contains('is-stale-screen')
+expect document.activeElement === document.querySelector('#writer-doc .wr-para[data-id="r2"]')
+expect __gridFocus.length === 0
+sleep 300
+expect document.activeElement === document.querySelector('#writer-doc .wr-para[data-id="r2"]')
+shot sweep-ui-writer-redraw-focus
+click #wr-close
+wait document.getElementById('writer').hidden

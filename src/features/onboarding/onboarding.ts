@@ -123,7 +123,11 @@ async function onboardEligibleForAutoShow() {
 async function maybeAutoShowOnboarding() {
   const mounted = activeMount;
   let eligible;
-  try { eligible = await onboardEligibleForAutoShow(); } catch (e) { eligible = false; }
+  try {
+    await ports.startup.ready();
+    if (activeMount !== mounted) return;
+    eligible = await onboardEligibleForAutoShow();
+  } catch (e) { eligible = false; }
   if (eligible && activeMount === mounted) openOnboarding();
 }
 

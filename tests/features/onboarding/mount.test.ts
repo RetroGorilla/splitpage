@@ -152,11 +152,44 @@ test("a disposed mount cannot auto-open after a last-file read completes", async
   page();
   const h = fakeOnboardingPorts();
   let resolve: (value: unknown) => void = () => {};
-  const mounted = startOnboarding({ ...h.ports, lastFile: { load: () => new Promise((done) => { resolve = done; }) } });
+  let requested = false;
+  const mounted = startOnboarding({ ...h.ports, lastFile: { load: () => new Promise((done) => { requested = true; resolve = done; }) } });
+  await settled();
+  assert.equal(requested, true);
   mounted.dispose();
   resolve(null);
   await settled();
   assert.equal(modal().hidden, true);
   assert.equal(h.choices.size, 0);
+});
+
+test("automatic onboarding waits to decide until startup is ready", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  let ready = () => {};
+  const waiting = new Promise<void>(resolve => { ready = resolve; });
+  const mounted = startOnboarding({ ...h.ports, startup: { ready: () => waiting } });
+  try {
+    await settled();
+    assert.equal(modal().hidden, true);
+    assert.equal(h.panels.closed(), 0);
+    ready();
+    await settled();
+    assert.equal(modal().hidden, false);
+    assert.equal(h.panels.closed(), 1);
+  } finally { mounted.dispose(); }
+});
+
+test("a mount disposed while startup is pending cannot open after it becomes ready", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  let ready = () => {};
+  const waiting = new Promise<void>(resolve => { ready = resolve; });
+  const mounted = startOnboarding({ ...h.ports, startup: { ready: () => waiting } });
+  mounted.dispose();
+  ready();
+  await settled();
+  assert.equal(modal().hidden, true);
+  assert.equal(h.panels.closed(), 0);
 });
 
