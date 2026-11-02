@@ -1,3 +1,4 @@
+import type { DocumentView } from "../../application/session/document-session.ts";
 import type { LocalFileOpening } from "../../application/transitions/local-files-ports.ts";
 import { createOperations } from "../../application/session/operation.ts";
 import type { OperationContext, Operations } from "../../application/session/operation.ts";
@@ -6,7 +7,6 @@ import type { DocumentSource, DocumentSources } from "../../application/transiti
 import { createTransitions } from "../../application/transitions/transitions.ts";
 import type { Transitions } from "../../application/transitions/transitions.ts";
 import type { DestinationPort, DocumentDestination, HistoryPort, IdentityPort, LiveDocumentPort } from "../../application/transitions/ports.ts";
-import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { migrateRows } from "../document-ports.ts";
 import { currentHome } from "./location-owner.ts";
 import { confirmedGeneration } from "./save-owners.ts";
@@ -101,6 +101,6 @@ export function openDocument(opening: LegacyOpening): Promise<unknown> {
   return Promise.resolve(source.open(opening));
 }
 
-export function keepSnapshot(label: string, doc?: ValidatedDocument | null): unknown {
+export function keepSnapshot(label: string, doc?: DocumentView | null): unknown {
   return running().history.keep(label, doc);
 }
