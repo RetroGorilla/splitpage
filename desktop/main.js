@@ -30,7 +30,7 @@ const {
   normalizeBounds, normalizeTabSource, createDesktopStateStore
 } = require("./desktop-state.ts");
 const {
-  DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
+  DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
 } = require("./update-release.ts");
 const { createIpcSetup } = require("./ipc-setup.ts");
 const { createFileIpc } = require("./ipc-files.ts");
@@ -596,6 +596,7 @@ async function checkForUpdate() {
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const body = await res.json();
+    if (!hasReleaseAssets(body.assets)) throw new Error("the release has no assets");
     const latest = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
     const newer = !!latest && compareVersions(latest, current) > 0;
     updateAssets = Array.isArray(body.assets) ? body.assets : [];
@@ -611,8 +612,14 @@ async function checkForUpdate() {
       error: undefined
     });
   } catch (err) {
+    updateAsset = null;
+    updateAssets = [];
     setUpdateStatus({
       version: current,
+      latest: null,
+      updateAvailable: false,
+      canInstall: false,
+      releaseUrl: null,
       checkedAt: new Date().toISOString(),
       checking: false,
       error: err.message

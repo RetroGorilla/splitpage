@@ -35,7 +35,7 @@ documents is safer. What changed for a person using it is in
 [the implementation plan](docs/IMPLEMENTATION-PLAN.md#8-follow-up-refactors-for-4x).
 
 Installers and the portable zip are on the
-[releases page](https://github.com/RetroGorilla/splitpage-releases/releases):
+[releases page](https://github.com/RetroGorilla/splitpage/releases):
 `SplitpageDesktopSetup-<version>-x64.exe`, `...-arm64.exe` for Windows on ARM,
 and `splitpage-<version>.zip`. The installers are not code-signed, so Windows
 may warn on first run.
