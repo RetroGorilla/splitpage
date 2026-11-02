@@ -816,7 +816,7 @@ const LIST_CASES = [
     [sh("b1")],
     [sh("b1", { notes: "first mine" }), sh("b1", { notes: "second mine", owner: "p1", status: "shot" })],
     [sh("b1", { name: "Their first" }), sh("b1", { name: "Their second", notes: "dup" })]],
-  ["brollShots", "a repeated id in the ancestor: its first copy is the one compared",
+  ["brollShots", "a repeated id in the ancestor: its last copy is the one compared",
     [sh("b1", { props: [K] }), sh("b1", { props: [K, L] })], [sh("b1", { props: [K, L] })], [sh("b1", { props: [K] })]],
   ["brollShots", "entries with no id, and holes, are skipped",
     [sh("b1")], [null, sh(""), { name: "no id" }, sh("b1")], [sh("b1"), null, { id: "", name: "blank" }]],
