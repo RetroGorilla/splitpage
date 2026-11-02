@@ -43,18 +43,40 @@ function localVersion() {
 }
 
 export function updateApiUrl() {
-  if (process.env.SPLITPAGE_UPDATE_API) return process.env.SPLITPAGE_UPDATE_API;
+  if (process.env.SPLITPAGE_TEST === "1" && process.env.SPLITPAGE_UPDATE_API) return process.env.SPLITPAGE_UPDATE_API;
   return DEFAULT_API;
 }
 
+function isAllowedReleasePath(value, apiUrl, kind) {
+  if (typeof value !== "string" || value !== value.trim() || value.includes("\\")) return false;
+  let url;
+  try { url = new URL(value); } catch { return false; }
+  if (url.username || url.password || url.search || url.hash) return false;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  if (process.env.SPLITPAGE_TEST === "1" && apiUrl !== DEFAULT_API) {
+    try { if (url.origin === new URL(apiUrl).origin) return true; } catch { }
+  }
+  const pattern = kind === "download"
+    ? /^\/RetroGorilla\/splitpage\/releases\/download\/[^/]+\/[^/]+$/
+    : /^\/RetroGorilla\/splitpage\/releases\/tag\/[^/]+$/;
+  return url.origin === "https://github.com" && pattern.test(url.pathname);
+}
+
 export async function latestRelease() {
-  const res = await fetch(updateApiUrl(), { headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-updater" } });
+  const apiUrl = updateApiUrl();
+  const res = await fetch(apiUrl, { headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-updater" } });
   if (!res.ok) throw new Error(`update check failed: ${res.status} ${res.statusText}`);
   const body = await res.json();
   if (!Array.isArray(body.assets) || !body.assets.length) throw new Error("the release has no assets");
+  if (!body.assets.every((asset) => asset && typeof asset.name === "string"
+    && /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/.test(asset.name)
+    && isAllowedReleasePath(asset.browser_download_url, apiUrl, "download"))) {
+    throw new Error("the release has invalid assets");
+  }
+  if (!isAllowedReleasePath(body.html_url, apiUrl, "tag")) throw new Error("the release has an untrusted page URL");
   const version = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
   if (!version) throw new Error("the release has no version tag");
-  return { version, url: String(body.html_url || ""), notes: body.body || "" };
+  return { version, url: body.html_url, notes: body.body || "" };
 }
 
 export async function check() {
