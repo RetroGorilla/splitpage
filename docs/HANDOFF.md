@@ -1309,7 +1309,7 @@ kinds and the `import` home kind stay in the code, unused; see
 [saving.md, Deprecated: import save-back](architecture/saving.md#deprecated-import-save-back).
 
 "Draft 2 of the same script" — the workflow that behaviour was useful for —
-is the **Paste/Import modal** (`openImportModal`, `src/features/imports/imports.js`),
+is the **Paste/Import modal** (`openImportModal`, `src/features/imports/imports.ts`),
 which is unchanged in what it keeps and now takes a picked `.docx`/`.md`/
 `.txt`/`.csv` as well as pasted text. A `.docx` or `.csv` picked there
 bypasses the textarea (`pendingFileRows`) so its columns and formatting
