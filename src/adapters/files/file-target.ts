@@ -77,11 +77,11 @@ function permissionRefused(error: unknown): boolean {
   return name === "NotAllowedError" || name === "SecurityError";
 }
 
-export async function checkFileConflict(handle: Pick<FileHandle, "getFile">, lastModified: number | null | undefined): Promise<FileCheck> {
+export async function checkFileConflict(handle: Partial<Pick<FileHandle, "getFile">> | null | undefined, lastModified: number | null | undefined): Promise<FileCheck> {
   if (!lastModified) return { ok: true };
   let current: { readonly lastModified: number };
   try {
-    current = await handle.getFile();
+    current = await (handle as Pick<FileHandle, "getFile">).getFile();
   } catch (error) {
     if (permissionRefused(error)) return { ok: false, current: null, denied: true };
     return { ok: false, current: null };

@@ -60,15 +60,15 @@ export interface LocalFileMenuControls {
   readonly exportBaseName: () => string;
   readonly exportRequest: (kind: string, options?: Readonly<Record<string, unknown>>) => unknown;
   readonly buildFileData: (kind: string, baseName: string, options?: Readonly<Record<string, unknown>>) => Promise<BuiltLocalFile>;
-  readonly showResumeBanner: (handle: unknown) => void;
+  readonly showResumeBanner: (handle: ResumeHandle) => void;
   readonly hideResumeBanner: () => void;
   readonly pendingHandle: () => ResumeHandle | null;
   readonly showFileConflictView: (conflict: FileConflict | null) => void;
   readonly exportAs: (kind: string, more?: Readonly<Record<string, unknown>>) => Promise<void>;
-  readonly runExport: (action: string) => Promise<boolean>;
-  readonly onFileMenuChoice: (listener: (action: string) => void) => () => void;
-  readonly noteFileMenuChoice: (action: string) => void;
-  readonly runExportAction: (action: string) => boolean;
-  readonly handleFileMenuAction: (action: string | null, source?: string) => void;
+  readonly runExport: (action: string | null) => Promise<boolean>;
+  readonly onFileMenuChoice: (listener: (action: string | null) => void) => () => void;
+  readonly noteFileMenuChoice: (action: string | null) => void;
+  readonly runExportAction: (action: string | null) => boolean;
+  readonly handleFileMenuAction: (action: string | null, source?: Parameters<ActionRegistry["invoke"]>[1]) => void;
   readonly dispose: () => void;
 }

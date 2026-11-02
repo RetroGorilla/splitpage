@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { URL } from "node:url";
 import { JSDOM } from "jsdom";
-import { mountImportDialog } from "../../../src/features/imports/imports.js";
+import { mountImportDialog } from "../../../src/features/imports/imports.ts";
 import { parseImportRows, detectTwoColumnFormat } from "../../../src/adapters/formats/import-text.ts";
 
 function harness(storageDisabled = false) {
