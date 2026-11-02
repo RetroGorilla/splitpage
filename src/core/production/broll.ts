@@ -10,6 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
+import { canShareLoadId } from "../document/load-ids.ts";
 import type { Frozen } from "../document/freeze.ts";
 import { cappedLongText, cappedName, plainText, unitCutName } from "../document/text-policy.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
@@ -448,7 +449,8 @@ export function planBrollRecords(
   ids: IdSource,
   plainTextOf: FieldText,
   unkeyedIn: UnkeyedScope,
-  lines?: LineShotIds
+  lines?: LineShotIds,
+  drawLineId?: (key: string, shared: string | undefined) => string
 ): BrollPlan {
   const shots = state.brollShots;
   const live = collectBrollFromRows(state.rows, readers);
@@ -466,7 +468,8 @@ export function planBrollRecords(
 
   function unkeyedId(key: string): string {
     const shared = lines && (lines.held.get(key) || lines.drawn.get(key));
-    const id = shared && !(shared in byId) && !claimed[shared] ? shared : ids.id("bs");
+    const available = shared && !(shared in byId) && !claimed[shared] ? shared : undefined;
+    const id = drawLineId ? drawLineId(key, available) : available || ids.id("bs");
     if (lines && !lines.drawn.has(key)) lines.drawn.set(key, id);
     return id;
   }
@@ -493,7 +496,7 @@ export function planBrollRecords(
 export function alignLineShots(docs: readonly { brollShots: BrollShot[] }[], lines: LineShotIds): void {
   lines.held.forEach(function (keep, key) {
     const drew = lines.drawn.get(key);
-    if (!drew || drew === keep) return;
+    if (!drew || drew === keep || !canShareLoadId(keep, drew)) return;
     docs.forEach(function (doc) {
       const shots = doc.brollShots;
       if (shots.some(function (b) { return b.id === keep; })) return;

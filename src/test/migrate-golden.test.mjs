@@ -290,7 +290,7 @@ async function runScenario(sc) {
   const repeated = sc.migrate(sc.input());
   const stable = new Set(idsInState(repeated).map(a => a.value));
   const masker = createIdMasker(() => started, () => Date.now(), (value, prefix) =>
-    !known.has(value) && stable.has(value) && new RegExp("^" + prefix + "-(?:[0-9a-f]{24}|orphan-[0-9]+)(?:-[0-9]+)*$").test(value));
+    !known.has(value) && stable.has(value) && new RegExp("^" + prefix + "-(?:orphan-)?load-[0-9a-f]{24}-[0-9]+$").test(value));
   await settle();
   const persisted = backend.log.puts.slice();
   const missing = backend.log.missing.slice();
@@ -407,7 +407,7 @@ test("every added id is independently stable or minted in this run and masked; n
     const golden = goldenText(r.golden.output);
     for (const a of ids) {
       assert.ok(mintedId(a.value, a.prefix, r.started, r.ended) ||
-        (r.stable.has(a.value) && new RegExp("^" + a.prefix + "-(?:[0-9a-f]{24}|orphan-[0-9]+)(?:-[0-9]+)*$").test(a.value)),
+        (r.stable.has(a.value) && new RegExp("^" + a.prefix + "-(?:orphan-)?load-[0-9a-f]{24}-[0-9]+$").test(a.value)),
       `${name}: ${a.value} is neither independently stable nor minted in this run`);
       assert.ok(!golden.includes(a.value), `${name}: ${a.value} is left unmasked`);
     }

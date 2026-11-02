@@ -44,7 +44,7 @@ saving bugs. If you open or share scripts on a Splitpage server, read
   **File ▸ Export…** to make a Word, CSV or other file.
 
 ### Fixed
-- Recovering drafts of older or hand-edited files no longer repeats scenes whose IDs were missing.
+- Draft recovery now preserves scenes and unsaved text when older files have missing IDs.
 - Desktop: a save now reaches the disk before it replaces the old file, so
   a power cut during a save can no longer leave an empty script.
 - A save that reached the file is no longer reported as failed when reading
