@@ -35,7 +35,7 @@ function chooseDuplicateLoser(a, b) {
   return a.seq > b.seq ? a : b;
 }
 
-module.exports = {
+export {
   DOC_ID_RE,
   chooseDuplicateLoser,
   decideDuplicateLoser,
