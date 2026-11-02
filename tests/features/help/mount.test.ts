@@ -78,6 +78,24 @@ test("help actions refuse before mount and over dialogs, and the tour reads its 
   }
 });
 
+test("tour refuses every screen overlay and loading without starting, while Help keeps its availability", () => {
+  const h = setup();
+  h.loaded();
+  h.mount();
+  try {
+    for (const blocker of ["loading", "dialog", "launcher", "tour", "prompter", "writer", "shotlist"] as const) {
+      h.view.state[blocker] = true;
+      assert.equal(h.registry.invoke("tour", "native-menu").kind, "unavailable", blocker);
+      assert.equal(h.viewFlags.tourOpen(), false, blocker);
+      assert.equal(h.panels.closed(), 0, blocker);
+      assert.equal(h.registry.view("help")?.enabled, blocker !== "dialog", blocker);
+      h.view.state[blocker] = false;
+    }
+    assert.equal(h.registry.invoke("tour", "menu").kind, "ran");
+    assert.equal(h.viewFlags.tourOpen(), true);
+  } finally { h.dispose(); }
+});
+
 test("disposal removes listeners, clears tour state, and permits a fresh mount", () => {
   const h = setup();
   try {

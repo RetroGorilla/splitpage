@@ -10,6 +10,7 @@ import { closeCommentComposer } from "../../features/comments/comments.ts";
 import { connectWriter } from "./writer.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { sidePanels } from "./ports/panels.ts";
+import { screen } from "./ports/screen.ts";
 
 function inactiveWriterOverlay(): void {}
 
@@ -18,6 +19,7 @@ const overlay = owned<ReturnType<typeof mountOverlay>>();
 export function mountOverlayFeature(): ReturnType<typeof mountOverlay> {
   return overlay.replace(function () {
     const ports: { -readonly [K in keyof OverlayPorts]: OverlayPorts[K] } = {
+      screen,
       closeRowMenus: closeRowMenus,
       selectedKeys: selectedKeys,
       clearProductionSelection: clearProductionSelection,
