@@ -445,8 +445,9 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 ### INV-48 — The app-data bundle carries no credentials
 
 - **History completeness:** Damaged metadata is skipped while intact versions and their available images export.
-  `omittedSnapshots` counts damaged metadata and unreadable bodies, and delivery warns about omissions. A history
-  read failure, or damage with no readable version to export, cancels file delivery.
+  `omittedSnapshots` counts damaged metadata and confirmed missing bodies, and delivery warns about omissions.
+  Persistent history falling back to memory, a history/image read failure, or damage with no readable version to
+  export cancels file delivery. Expired intact Older entries are excluded without counting as unreadable.
 - **Behaviour:** Before any byte of an app-data export is written, the bundle is checked for keys matching `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, and it must contain none. An import carrying such a key is refused. Image bytes count toward the 200 MB export cap. Images whose bytes could not be read are listed in `missingBlobs`, and the export warns about them.
 - **Tests:** browser `27-app-data.txt` (case 2, the "invariant #48" key walk; case 7, a bundle carrying `apiKey`; cases 14, 15 and 19); `34-desktop-app-data-export.txt`.
 - **Owner:** app-data bundle codec under `src/features/settings/app-data.ts` · **Milestone:** 6 · **Class:** keep

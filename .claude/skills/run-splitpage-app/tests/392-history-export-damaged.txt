@@ -18,3 +18,19 @@ expect Array.from(document.querySelectorAll('.toast.warn')).some(function(e){ret
 eval (async function(){ await H.forceBackend(null); window.exportBroken = D.makeFakeBackend({ history: true }); exportBroken.historyListDocs = function(){return Promise.reject(new Error('unavailable'));}; D.setBackend(exportBroken); await A.exportFile(); return A.exportSummary(); })()
 expect A.exportSummary() === null
 expect Array.from(document.querySelectorAll('.toast.error')).some(function(e){return e.textContent.includes('Export cancelled — version history could not be read. Nothing was downloaded.');})
+
+eval (async function(){ D.setBackend(null); await H.forceBackend('idb'); H.injectFault('idb-open-fail'); await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+expect Array.from(document.querySelectorAll('.toast.error')).some(function(e){return e.textContent.includes('Export cancelled — version history could not be read. Nothing was downloaded.');})
+
+eval (async function(){ H.injectFault(null); await H.forceBackend('idb'); window.recoveredExport = await A.build(); return recoveredExport.history.docs.length; })()
+expect recoveredExport.history.docs.find(function(d){return d.docId === exportDoc;}).snapshots.length === 1
+
+eval (async function(){ window.readFailureBackend = D.makeFakeBackend({ history: true, blobs: true }); D.setBackend(readFailureBackend); await H.forceBackend(null); await readFailureBackend.historyPut(exportDoc, { id: 'first', atMs: 1000 }, exportBody); await readFailureBackend.historyPut(exportDoc, { id: 'second', atMs: 2000 }, exportBody); window.readFailureGet = readFailureBackend.historyGet; readFailureBackend.historyGet = function(q,id){ return id === 'first' ? Promise.reject(new Error('locked')) : readFailureGet(q,id); }; await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+
+eval (async function(){ readFailureBackend.historyGet = readFailureGet; var text = atob(exportImageUrl.split(',')[1]); var bytes = new Uint8Array(text.length); for(var i=0;i<text.length;i++) bytes[i]=text.charCodeAt(i); await readFailureBackend.blobPut(exportImage.sha256,bytes); readFailureBackend.blobGet = function(){return Promise.reject(new Error('locked'));}; A.useBlobBackend(D.makeBlobBackend(readFailureBackend)); B.forgetMemory(); await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+
+eval (async function(){ D.setBackend(null); A.useBlobBackend(null); window.expiredResults = []; for(var kind of ['memory','idb']) { await H.resetForTest(); await H.forceBackend(kind); H.setNow(10000000); await H.importBundle({ docs: [], older: [{ meta: { id: 'expired', atMs: 1000 }, stateJson: JSON.stringify({ title: 'Expired', rows: [] }) }] }); H.setNow(10000000 + 91 * 24 * 60 * 60 * 1000); await A.exportFile(); expiredResults.push(A.exportSummary()); } H.setNow(null); return true; })()
+expect expiredResults.length === 2 && expiredResults.every(function(r){return r && r.ok && r.warning === null;})

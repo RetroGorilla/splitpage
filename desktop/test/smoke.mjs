@@ -3079,6 +3079,31 @@ async function caseHistoryDamagedExport(target) {
     record(tag + ": its image bytes export from desktop storage",
       bundle.blobs[imageSha]?.b64 === bytes.toString("base64") && bundle.missingBlobs.length === 0, JSON.stringify(bundle.blobs));
     record(tag + ": export does not rewrite the damaged index", fs.readFileSync(indexPath, "utf8") === before, "");
+    const otherBody = JSON.stringify({ docId, title: "Other intact", rows: [] });
+    await historyCall(app.cdp, "historyPut", [docId, historyMeta({ id: "other", atMs: 2000 }), otherBody]);
+    const rejectExport = () => evalPage(app.cdp, "window.__appDataTest.build().then(function(){return false;},function(e){return /Export cancelled/.test(e.message);})");
+    const bodyPath = historyBodyPathOnDisk(userDataDir, historyShaHex(body));
+    fs.renameSync(bodyPath, bodyPath + ".held");
+    fs.mkdirSync(bodyPath);
+    try {
+      record(tag + ": a transient body read error cancels despite another intact version", await rejectExport(), "");
+    } finally {
+      fs.rmdirSync(bodyPath);
+      fs.renameSync(bodyPath + ".held", bodyPath);
+    }
+    const imagePath = path.join(userDataDir, "blobs", "sha256", imageSha.slice(0, 2), imageSha);
+    fs.renameSync(imagePath, imagePath + ".held");
+    fs.mkdirSync(imagePath);
+    await evalPage(app.cdp, "window.__blobsTest.forgetMemory()");
+    try {
+      record(tag + ": a transient image read error cancels instead of warning about absence", await rejectExport(), "");
+    } finally {
+      fs.rmdirSync(imagePath);
+      fs.renameSync(imagePath + ".held", imagePath);
+    }
+    const recovered = await evalPage(app.cdp, "window.__appDataTest.build()");
+    record(tag + ": retry exports both versions and exact image bytes after the files recover",
+      recovered.history.docs.find((d) => d.docId === docId)?.snapshots.length === 2 && recovered.blobs[imageSha]?.b64 === bytes.toString("base64"), "");
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
