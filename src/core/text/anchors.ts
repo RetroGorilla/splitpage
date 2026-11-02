@@ -11,13 +11,13 @@ export type AnchorState = {
   rows?: readonly (AnchorRow | null | undefined)[] | null | undefined;
 };
 
-type AnchorPlace = { rowId: unknown; field: "visualText" | "audioText" };
+type AnchorPlace = { rowId: ValidatedDocument["rows"][number]["id"]; field: "visualText" | "audioText" };
 
 export function syncCommentAnchors(state: ValidatedDocument | null | undefined, cellOf: CellDecoder): number {
   const comments = state && state.comments;
   if (!Array.isArray(comments) || !comments.length) return 0;
   const where: Record<string, AnchorPlace> = Object.create(null);
-  ((state as AnchorState).rows || []).forEach(function (row) {
+  ((state as ValidatedDocument).rows || []).forEach(function (row) {
     if (!row) return;
     (["visualText", "audioText"] as const).forEach(function (field) {
       const html = row[field];

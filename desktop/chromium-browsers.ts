@@ -1,10 +1,14 @@
 "use strict";
 
-const fs = require("node:fs");
-const path = require("node:path");
-const { execFile, spawn: nodeSpawn } = require("node:child_process");
+import type * as NodeFs from "node:fs";
+import type * as NodePath from "node:path";
+import type * as NodeChildProcess from "node:child_process";
 
-const BROWSERS = [
+const fs: typeof NodeFs = require("node:fs");
+const path: typeof NodePath = require("node:path");
+const { execFile, spawn: nodeSpawn }: typeof NodeChildProcess = require("node:child_process");
+
+const BROWSERS: { id: string; name: string; exe: string; progId: RegExp; win: [string, string][]; mac: string; linux: string[] }[] = [
   {
     id: "edge", name: "Microsoft Edge", exe: "msedge.exe", progId: /^MSEdgeHTM/i,
     win: [["ProgramFiles(x86)", "Microsoft\\Edge\\Application\\msedge.exe"], ["ProgramFiles", "Microsoft\\Edge\\Application\\msedge.exe"]],
@@ -46,10 +50,10 @@ const BROWSERS = [
 const USER_CHOICE_KEY = "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice";
 const APP_PATHS = "\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\";
 
-function defaultRegQuery(env) {
+function defaultRegQuery(env: NodeJS.ProcessEnv) {
   const systemRoot = env.SystemRoot || env.windir || "C:\\Windows";
   const reg = path.join(systemRoot, "System32", "reg.exe");
-  return (key, valueName) => new Promise((resolve) => {
+  return (key: string, valueName: string | null) => new Promise<string | null | undefined>((resolve) => {
     const args = ["query", key].concat(valueName ? ["/v", valueName] : ["/ve"]);
     execFile(reg, args, { windowsHide: true, timeout: 5000 }, (err, stdout) => {
       if (err) { resolve(null); return; }
@@ -59,17 +63,17 @@ function defaultRegQuery(env) {
   });
 }
 
-function isFile(exists, p) {
+function isFile(exists: (file: string) => boolean, p: string) {
   try { return !!p && exists(p); } catch { return false; }
 }
 
-async function windowsCandidates(entry, env, regQuery, exists) {
+async function windowsCandidates(entry: (typeof BROWSERS)[number], env: NodeJS.ProcessEnv, regQuery: ReturnType<typeof defaultRegQuery>, exists: (file: string) => boolean) {
   const found = [];
   for (const hive of ["HKCU", "HKLM"]) {
     let v;
     try { v = await regQuery(hive + APP_PATHS + entry.exe, null); } catch { v = null; }
     if (v) {
-      const expanded = v.replace(/^"|"$/g, "").replace(/%([^%]+)%/g, (all, name) => env[name] || all);
+      const expanded = v.replace(/^"|"$/g, "").replace(/%([^%]+)%/g, (all: string, name: string) => env[name] || all);
       found.push(expanded);
     }
   }
@@ -79,7 +83,7 @@ async function windowsCandidates(entry, env, regQuery, exists) {
   return found.find((p) => isFile(exists, p)) || null;
 }
 
-async function findChromiumBrowsers(options) {
+async function findChromiumBrowsers(options?: { platform?: string; env?: NodeJS.ProcessEnv; exists?: (file: string) => boolean; regQuery?: ReturnType<typeof defaultRegQuery> }) {
   const opts = options || {};
   const platform = opts.platform || process.platform;
   const env = opts.env || process.env;
@@ -87,11 +91,11 @@ async function findChromiumBrowsers(options) {
   const out = [];
   if (platform === "win32") {
     const regQuery = opts.regQuery || defaultRegQuery(env);
-    let progId = null;
+    let progId: Awaited<ReturnType<ReturnType<typeof defaultRegQuery>>> = null;
     try { progId = await regQuery(USER_CHOICE_KEY, "ProgId"); } catch { progId = null; }
     const order = BROWSERS.slice();
-    const def = progId ? order.findIndex((b) => b.progId.test(progId)) : -1;
-    if (def > 0) order.unshift(order.splice(def, 1)[0]);
+    const def = progId ? order.findIndex((b) => b.progId.test(progId as string)) : -1;
+    if (def > 0) order.unshift(order.splice(def, 1)[0] as (typeof BROWSERS)[number]);
     for (const entry of order) {
       const p = await windowsCandidates(entry, env, regQuery, exists);
       if (p) out.push({ id: entry.id, name: entry.name, path: p });
@@ -117,14 +121,14 @@ async function findChromiumBrowsers(options) {
   return out;
 }
 
-function chromiumBrowserName(id) {
+function chromiumBrowserName(id: unknown) {
   const entry = BROWSERS.find((b) => b.id === id);
   return entry ? entry.name : null;
 }
 
-function launchChromiumBrowser(browser, url, spawnFn) {
+function launchChromiumBrowser(browser: Awaited<ReturnType<typeof findChromiumBrowsers>>[number], url: string, spawnFn?: typeof nodeSpawn) {
   const spawn = spawnFn || nodeSpawn;
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     let child;
     try {
       child = spawn(browser.path, [url], { detached: true, stdio: "ignore", windowsHide: false });
@@ -133,5 +137,7 @@ function launchChromiumBrowser(browser, url, spawnFn) {
     child.once("spawn", () => { child.unref(); resolve(); });
   });
 }
+
+export type { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName, BROWSERS };
 
 module.exports = { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName, BROWSERS };
