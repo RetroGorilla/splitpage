@@ -139,7 +139,7 @@ const EXPORTS = `(function () {
 
 export const IMAGES = `(function () {
   if (window.__perfImg) return 'ready';
-  var F = window.__splitpageFormats, B = window.__blobsTest, H = window.__hostedTest;
+  var F = window.__splitpageFormats, B = window.__blobsTest;
   var SIZE = ${PICTURE_BYTES}, COUNT = ${PICTURES};
   var table = [];
   for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1); table.push(c >>> 0); }
@@ -248,25 +248,32 @@ export const IMAGES = `(function () {
         held: shas.filter(function (sha) { return B.has(sha); }).length });
     },
     merge: async function () {
-      await F.openFile(fileOf(seed));
-      H.setSession({ docId: 'perf-doc', rev: 1 });
+      var disk = fileOf(seed), modified = Date.now() - 100000;
+      var handle = { name: disk.name, createWritable: async function () { throw new Error('The merge fixture must not write'); }, getFile: async function () {
+        return new File([disk], disk.name, { type: disk.type, lastModified: modified });
+      } };
+      await F.openFile(await handle.getFile(), handle);
       var st = F.state();
       F.migrate(withComments(comments('m' + next, urls()))).comments.forEach(function (c) { if (c.id.indexOf('c-perf-') === 0) st.comments.push(c); });
       var theirs = withComments(comments('t' + next, urls()));
       var known = await knownIn(made);
       var wanted = st.comments.length + COUNT;
       var shas = shasOf(st);
-      var answer = { state: theirs, rev: 2, updatedBy: 'Perf' };
-      window.fetch = function (url) {
-        var body = String(url).indexOf('api/docs/perf-doc') !== -1 ? answer : {};
-        return Promise.resolve({ status: 200, ok: true, redirected: false, headers: { get: function () { return 'application/json'; } },
-          json: function () { return Promise.resolve(body); } });
-      };
+      disk = fileOf(theirs);
+      modified += 200000;
       var settled = await durable(shas);
       await frame();
       var t = performance.now();
-      H.noteRev({ docId: 'perf-doc', rev: 2 });
+      var saving = F.save();
+      var merge = document.getElementById('file-conflict-merge');
+      while ((document.getElementById('file-conflict-modal').hidden || merge.hidden) && performance.now() - t < ${MERGE_WAIT_MS}) await wait(0);
+      if (document.getElementById('file-conflict-modal').hidden || merge.hidden) throw new Error('The file merge was not offered');
+      merge.click();
+      var review = document.getElementById('merge-review-modal');
+      if (review.hidden) throw new Error('The file merge review did not open');
+      document.getElementById('merge-review-confirm').click();
       while (F.state().comments.length < wanted && performance.now() - t < ${MERGE_WAIT_MS}) await wait(0);
+      await saving;
       await frame();
       var ms = performance.now() - t;
       var after = F.state(), merged = shasOf(after);
