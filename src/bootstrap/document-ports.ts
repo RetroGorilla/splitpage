@@ -32,7 +32,13 @@ export function withDocumentPorts<T>(fields: readonly StateField[], pass: (ports
   try {
     return pass({
       images: images,
-      sanitize: function (html) { return richText().sanitize(html); },
+      sanitize: function (html, ids) {
+        return (ids ? createRichText({ DOMParser: DOMParser, images: images, ids: ids }) : richText()).sanitize(html);
+      },
+      htmlIds: function (html) {
+        return Array.from(richText().inertBody(html).querySelectorAll("[data-cmt], [data-broll-id]"))
+          .flatMap(el => [el.getAttribute("data-cmt") || "", el.getAttribute("data-broll-id") || ""]);
+      },
       decode: function (html, opts) { return richText().decode(html, opts); },
       videoCardHtml: function (href) { return richText().videoCardHtml(href); },
       readers: productionReaders,

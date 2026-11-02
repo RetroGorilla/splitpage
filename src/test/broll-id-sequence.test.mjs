@@ -35,16 +35,16 @@ function load(rows) {
 
 const shots = () => currentDocument().brollShots.map((s) => [s.name, s.id]);
 
-test("entry creates a record for each b-roll line, one draw per line in line order; reading and anchoring then draw nothing", () => {
+test("entry derives a record id for each b-roll line; entry, reading and anchoring draw nothing", () => {
   freezeClockAndRandom(SEED);
   load([row("r1", "Kettle on.", "B-roll: Steam<br>B-roll: Hands")]);
-  assert.deepEqual(shots(), [["Steam", "bsf3o9g5mo5vwtxke"], ["Hands", "bszjm9vjpo5vwtxke"]]);
-  assert.deepEqual(brollEntries().map((e) => e.id), ["bsf3o9g5mo5vwtxke", "bszjm9vjpo5vwtxke"]);
+  assert.deepEqual(shots(), [["Steam", "bs-5d83bb9469d8212ad26318fc"], ["Hands", "bs-a6fc66489ffd5539c78f5bc4"]]);
+  assert.deepEqual(brollEntries().map((e) => e.id), ["bs-5d83bb9469d8212ad26318fc", "bs-a6fc66489ffd5539c78f5bc4"]);
   anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml, declined: () => false });
-  assert.deepEqual(shots(), [["Steam", "bsf3o9g5mo5vwtxke"], ["Hands", "bszjm9vjpo5vwtxke"]]);
+  assert.deepEqual(shots(), [["Steam", "bs-5d83bb9469d8212ad26318fc"], ["Hands", "bs-a6fc66489ffd5539c78f5bc4"]]);
   assert.equal(currentDocument().rows[0].visualText,
-    key("bsf3o9g5mo5vwtxke", "B-roll:") + " Steam<br>" + key("bszjm9vjpo5vwtxke", "B-roll:") + " Hands");
-  assert.equal(makeId("probe"), "probeuz4mfclo5vwtxke");
+    key("bs-5d83bb9469d8212ad26318fc", "B-roll:") + " Steam<br>" + key("bs-a6fc66489ffd5539c78f5bc4", "B-roll:") + " Hands");
+  assert.equal(makeId("probe"), "probef3o9g5mo5vwtxke");
 });
 
 test("entry keeps a key's id for the first line that holds it and gives a second line with the same key an id of its own", () => {
@@ -54,10 +54,10 @@ test("entry keeps a key's id for the first line that holds it and gives a second
     row("r2", "Pour.", key("bskeyed01", "B-roll:") + " Cup<br>B-roll: Spoon<br>" + key("bskeyed01", "B-roll:") + " Saucer")
   ]);
   assert.deepEqual(shots(), [
-    ["Steam", "bsf3o9g5mo5vwtxke"], ["Hands", "bszjm9vjpo5vwtxke"], ["Cup", "bskeyed01"],
-    ["Spoon", "bsuz4mfclo5vwtxke"], ["Saucer", "bss7dow7oo5vwtxke"]
+    ["Steam", "bs-5d83bb9469d8212ad26318fc"], ["Hands", "bs-a6fc66489ffd5539c78f5bc4"], ["Cup", "bskeyed01"],
+    ["Spoon", "bs-66c6c5cf0dc74a99fe85162d"], ["Saucer", "bs-dc05e7b9f581fa2a7ade6050"]
   ]);
-  assert.equal(makeId("probe"), "probeqwyplh9o5vwtxke");
+  assert.equal(makeId("probe"), "probef3o9g5mo5vwtxke");
 });
 
 test("a read of lines typed after entry draws ids it does not keep and writes nothing; the edit's records plan creates the shots", () => {
