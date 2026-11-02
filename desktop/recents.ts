@@ -2,15 +2,20 @@
 
 import type * as NodePath from "node:path";
 import type { createFileRegistry, pathKey as filePathKey } from "./file-service.ts";
-import type { DesktopStateStoreBoundary } from "./ipc-boundaries.d.ts";
+import type {
+  createDesktopStateStore, LAST_KNOWN_TITLE_MAX as DesktopTitleLimit, RECENTS_MAX as DesktopRecentsLimit
+} from "./desktop-state.ts";
 
 const path: typeof NodePath = require("node:path");
-const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX }: { LAST_KNOWN_TITLE_MAX: number; RECENTS_MAX: number } = require("./desktop-state");
+const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX }: {
+  LAST_KNOWN_TITLE_MAX: typeof DesktopTitleLimit; RECENTS_MAX: typeof DesktopRecentsLimit
+} = require("./desktop-state.ts");
 
-type DesktopRecentRecord = ReturnType<DesktopStateStoreBoundary["read"]>["recents"][number];
+type DesktopRecentsStateStore = Pick<ReturnType<typeof createDesktopStateStore>, "read" | "write">;
+type DesktopRecentRecord = ReturnType<DesktopRecentsStateStore["read"]>["recents"][number];
 
 function createRecents({ store, pathKey, fileIds }: {
-  store: Pick<DesktopStateStoreBoundary, "read" | "write">;
+  store: DesktopRecentsStateStore;
   pathKey: typeof filePathKey;
   fileIds: ReturnType<typeof createFileRegistry>;
 }) {
