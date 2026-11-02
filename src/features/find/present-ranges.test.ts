@@ -29,3 +29,15 @@ test("Present search treats punctuation literally and returns non-overlapping ma
     assert.equal(presentFindRanges(content, "aaaabreak", false).length, 0);
   } finally { win.close(); }
 });
+
+test("Present search includes displayed tag words and stage directions without editing either", () => {
+  const win = jsdomWindow() as unknown as Window & typeof globalThis;
+  const content = win.document.createElement("div");
+  content.innerHTML = '<div class="prompter-line">Bring <span class="tag-anchor" contenteditable="false">gaffer tape</span> <span class="stage-dir">hold still</span></div>';
+  const before = content.innerHTML;
+  try {
+    assert.equal(presentFindRanges(content, "gaffer tape", false)[0]?.toString(), "gaffer tape");
+    assert.equal(presentFindRanges(content, "hold still", false)[0]?.toString(), "hold still");
+    assert.equal(content.innerHTML, before);
+  } finally { win.close(); }
+});

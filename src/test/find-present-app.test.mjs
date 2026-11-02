@@ -107,7 +107,7 @@ test("Find changes scope on entering Present, refreshes after skip-shot rebuilds
 
 test("Present Find can jump through a script containing only visible stage directions in scene mode", () => {
   load();
-  loadTestDocument(migrateRows({ rows: [{ id: "r1", audioText: '<span class="stage-dir">hold still</span>' }] }));
+  loadTestDocument(migrateRows({ schema: 2, rows: [{ id: "r1", audioText: '<span class="stage-dir">hold still</span>' }] }));
   const present = prompterControls();
   present.openPrompter();
   present.setPrompterSceneMode(true);

@@ -38,7 +38,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-03 — Text inside a tag is never touched
 
-- **Behaviour:** A tag is one atom. An edit applies a comment or link to all of a tag or to none of it, the caret cannot enter a tag, and find/replace never matches inside or across one.
+- **Behaviour:** A tag is one atom. An edit applies a comment or link to all of a tag or to none of it, the caret cannot enter a tag, and editor find/replace never matches inside or across one. Present's read-only Find searches the text on screen, including displayed tag words.
 - **Tests:** `src/test/doc-model.test.mjs` ("a comment or link covers all of a tag or none of it", "positions: an atom is one character"); `src/test/find-replace.test.mjs` ("find: never inside a tag, never across one or across a b-roll key", "replace never touches a tag…"); browser `04-prompter-find.txt`.
 - **Owner:** `src/core/text` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
