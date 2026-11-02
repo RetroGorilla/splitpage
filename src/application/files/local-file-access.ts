@@ -5,6 +5,7 @@ export type FileSaveCheck =
   | { readonly ok: false; readonly current: null; readonly denied: true };
 
 export interface LocalFileHandle {
+  readonly kind?: "file";
   readonly name?: string;
   readonly _desktopId?: string;
   readonly getFile: () => Promise<LocalFileData>;

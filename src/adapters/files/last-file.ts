@@ -13,7 +13,7 @@ function openHandleDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function rememberLastFileHandle(handle: unknown) {
+export async function rememberLastFileHandle(handle: LocalFileReference | null | undefined) {
   if (!handle) return;
   if (runningOnDesktop()) return;
   try {
