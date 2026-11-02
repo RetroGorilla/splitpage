@@ -10,7 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const {
   DESKTOP_STATE_VERSION, LAST_KNOWN_TITLE_MAX, RECENTS_MAX, TAB_OR_WINDOW_ID_RE,
   normalizeDesktopStateV2, createDesktopStateStore
-} = require(path.join(here, "..", "desktop-state.js"));
+} = require(path.join(here, "..", "desktop-state.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
