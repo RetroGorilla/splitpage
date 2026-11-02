@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
-const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
 
 const argv = process.argv.slice(2);
 const JSON_OUT = argv.includes("--json");
@@ -51,6 +51,7 @@ export async function latestRelease() {
   const res = await fetch(updateApiUrl(), { headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-updater" } });
   if (!res.ok) throw new Error(`update check failed: ${res.status} ${res.statusText}`);
   const body = await res.json();
+  if (!Array.isArray(body.assets) || !body.assets.length) throw new Error("the release has no assets");
   const version = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
   if (!version) throw new Error("the release has no version tag");
   return { version, url: String(body.html_url || ""), notes: body.body || "" };

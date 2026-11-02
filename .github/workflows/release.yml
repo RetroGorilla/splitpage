@@ -95,28 +95,26 @@ jobs:
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: splitpage-release-${{ needs.build.outputs.version }}
           path: release
 
-      - name: Draft the release on splitpage-releases
+      - name: Draft the release on splitpage
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.SPLITPAGE_RELEASES_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::No SPLITPAGE_RELEASES_TOKEN secret: the files are on this run as the splitpage-release-$VERSION artifact. Upload them to splitpage-releases by hand."
-            exit 0
-          fi
           pre=()
           case "$VERSION" in *-*) pre=(--prerelease) ;; esac
           gh release create "v$VERSION" \
-            --repo RetroGorilla/splitpage-releases \
+            --repo RetroGorilla/splitpage \
             --draft "${pre[@]}" \
             --title "Splitpage $VERSION" \
             --notes "Built from RetroGorilla/splitpage at ${GITHUB_SHA} by the Release workflow. What's new is in the app's Help (File ▸ User guide)." \
             release/*
-          echo "Draft release v$VERSION created on RetroGorilla/splitpage-releases — review it and press Publish."
+          echo "Draft release v$VERSION created on RetroGorilla/splitpage — review it and press Publish."

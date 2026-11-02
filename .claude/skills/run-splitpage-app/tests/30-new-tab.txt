@@ -146,7 +146,7 @@ eval (function(){ Object.defineProperty(navigator, 'userAgent', { configurable: 
 expect document.getElementById('newtab-desktop').hidden == true
 eval (function(){ Object.defineProperty(navigator, 'userAgent', { configurable: true, get: function(){ return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120'; } }); window.__newTab.refreshRecents(); return true; })()
 expect document.getElementById('newtab-desktop').hidden == false
-expect document.getElementById('newtab-desktop-link').href.indexOf('https://github.com/RetroGorilla/splitpage-releases') === 0
+expect document.getElementById('newtab-desktop-link').href.indexOf('https://github.com/RetroGorilla/splitpage') === 0
 # the drop zone, and a footer offering the tour and the example script
 # (the tagging cheat sheet's link went in #209: File ▸ Tagging reference and
 # the command menu open it — 14-help and 180-tagging-card)

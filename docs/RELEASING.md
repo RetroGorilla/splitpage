@@ -133,18 +133,16 @@ Electron-built installers, which ship instead:
 - Support both x64 and ARM64 architectures with native binaries
 
 
-## 3. Publishing a release to the mirror
+## 3. Publishing a release
 
 **From CI.** Pushing a `v<version>` tag on the commit that bumped `VERSION`
 runs `.github/workflows/release.yml`. It first refuses a commit with no passed
 CI run (the `verify-ci` job; see
 [ci.md, Release gate](architecture/ci.md#release-gate)), then on a Windows runner
 does the two builds below, `verify-dist`, and `SHA256SUMS.txt`. With the
-`SPLITPAGE_RELEASES_TOKEN` secret (a fine-grained token with Contents
-read/write on `splitpage-releases` only) it opens a **draft** release there
-with the four files, marked pre-release for a version with a `-` in it;
-review it and press Publish. Without the secret the files are left on the
-run as an artifact to upload by hand, as in steps 1–3 below.
+`GITHUB_TOKEN` it opens a **draft** release in this repository with the four
+files, marked pre-release for a version with a `-` in it; review it and press
+Publish.
 
 **By hand.** When it's time to cut a new release for users to update to, build the two pieces
 separately — the portable zip from `tools/package.mjs`, and the Electron installers
@@ -167,7 +165,7 @@ longer installs it by itself — that self-update path is gone, and the portable
 copy is updated by unzipping a newer release over it — but leaving the asset off
 would break the copies still running the old launcher.
 
-On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
+On the GitHub repository (`RetroGorilla/splitpage`):
 
 1. **Create a new release** with tag `v<version>` (where `<version>` matches `VERSION` in the repo).
 2. **Upload the assets** (names must match `desktop/electron-builder.yml`'s
