@@ -7,7 +7,7 @@ application.
 
 ## Working on the code
 
-You need **Node 24.22.0** (the version in `.nvmrc`; CI uses it, and the test
+You need **Node 24.22.1** (the version in `.nvmrc`; CI uses it, and the test
 runner warns on any other and refuses one outside `package.json`'s `engines`).
 
 `index.html` is **generated, and it is not in the repository** — it is in

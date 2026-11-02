@@ -8,15 +8,15 @@ and read the narration from a teleprompter.
 
 ## Get Splitpage
 
-There is no released installer here yet. Check the
-[releases page](https://github.com/RetroGorilla/splitpage/releases) for
-downloads when they are available.
+Download the Windows installer or the portable zip from the
+[latest release](https://github.com/RetroGorilla/splitpage/releases/latest).
+The installers are unsigned, so Windows SmartScreen warns on first run: choose
+**More info**, then **Run anyway**.
 
-To try it now, install the Node version in [.nvmrc](.nvmrc), then build from
-source:
+To build from source, install the Node version in [.nvmrc](.nvmrc), then:
 
 ```sh
-git clone --branch 4.1-development https://github.com/RetroGorilla/splitpage.git
+git clone https://github.com/RetroGorilla/splitpage.git
 cd splitpage
 npm ci
 node build.mjs
