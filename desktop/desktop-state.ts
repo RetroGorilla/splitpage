@@ -1,9 +1,14 @@
 "use strict";
 
-const path = require("node:path");
-const fs = require("node:fs");
-const crypto = require("node:crypto");
-const { writeFileDurableSync } = require("./drafts");
+import type * as NodePath from "node:path";
+import type * as NodeFs from "node:fs";
+import type * as NodeCrypto from "node:crypto";
+import type { Rectangle } from "electron";
+
+const path: typeof NodePath = require("node:path");
+const fs: typeof NodeFs = require("node:fs");
+const crypto: typeof NodeCrypto = require("node:crypto");
+const { writeFileDurableSync }: { writeFileDurableSync: (file: string, text: string) => void } = require("./drafts");
 
 const DESKTOP_STATE_VERSION = 2;
 const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
@@ -13,22 +18,22 @@ const DESKTOP_STATE_TMP_RE = /^\.tmp-[0-9a-f]{12}-desktop-state\.json$/;
 
 function mintTabOrWindowId() { return crypto.randomBytes(16).toString("hex"); }
 
-function normalizeBounds(b) {
+function normalizeBounds(b: unknown): Rectangle | null {
   if (!b || typeof b !== "object") return null;
-  const ok = ["x", "y", "width", "height"].every((k) => typeof b[k] === "number" && Number.isFinite(b[k]));
-  return ok ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
+  const ok = ["x", "y", "width", "height"].every((k) => typeof (b as Record<string, unknown>)[k] === "number" && Number.isFinite((b as Record<string, unknown>)[k]));
+  return ok ? { x: (b as Rectangle).x, y: (b as Rectangle).y, width: (b as Rectangle).width, height: (b as Rectangle).height } : null;
 }
 
-function normalizeTabSource(src) {
+function normalizeTabSource(src: unknown): DesktopStoredTab["source"] {
   if (src && typeof src === "object") {
-    if (src.kind === "file" && typeof src.absPath === "string" && src.absPath && path.isAbsolute(src.absPath)) {
-      return { kind: "file", absPath: src.absPath };
+    if ((src as Record<string, unknown>).kind === "file" && typeof (src as Record<string, unknown>).absPath === "string" && (src as Record<string, unknown>).absPath && path.isAbsolute((src as { absPath: string }).absPath)) {
+      return { kind: "file", absPath: (src as { absPath: string }).absPath };
     }
   }
   return { kind: "blank" };
 }
 
-function blankDesktopWindow(extra) {
+function blankDesktopWindow(extra?: Partial<DesktopStoredWindow>): DesktopStoredWindow {
   const tabId = mintTabOrWindowId();
   return {
     windowId: mintTabOrWindowId(),
@@ -40,13 +45,13 @@ function blankDesktopWindow(extra) {
   };
 }
 
-function freshDesktopState() {
+function freshDesktopState(): DesktopStoredState {
   return { version: DESKTOP_STATE_VERSION, windows: [blankDesktopWindow()], recents: [] };
 }
 
-function migrateDesktopStateV1(v1) {
+function migrateDesktopStateV1(v1: DesktopStateRaw): DesktopStoredState {
   const tabId = mintTabOrWindowId();
-  const source = typeof v1.lastFilePath === "string" && v1.lastFilePath
+  const source: DesktopStoredTab["source"] = typeof v1.lastFilePath === "string" && v1.lastFilePath
     ? { kind: "file", absPath: v1.lastFilePath }
     : { kind: "blank" };
   return {
@@ -62,10 +67,10 @@ function migrateDesktopStateV1(v1) {
   };
 }
 
-function normalizeRecentsList(raw, pathKey) {
+function normalizeRecentsList(raw: unknown, pathKey: (path: string) => string): DesktopStoredState["recents"] {
   const out = [];
   const seen = new Set();
-  for (const r of Array.isArray(raw) ? raw : []) {
+  for (const r of Array.isArray(raw) ? raw as DesktopStateRaw[] : []) {
     if (!r || typeof r !== "object") continue;
     if (typeof r.absPath !== "string" || !r.absPath || !path.isAbsolute(r.absPath)) continue;
     const key = pathKey(r.absPath);
@@ -81,18 +86,18 @@ function normalizeRecentsList(raw, pathKey) {
   return out;
 }
 
-function normalizeDesktopStateV2(raw, pathKey) {
+function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string): DesktopStoredState {
   const seen = new Set();
-  const uniqueId = (id) => {
+  const uniqueId = (id: unknown) => {
     const v = typeof id === "string" && TAB_OR_WINDOW_ID_RE.test(id) && !seen.has(id) ? id : mintTabOrWindowId();
     seen.add(v);
     return v;
   };
-  const windows = [];
-  for (const w of Array.isArray(raw && raw.windows) ? raw.windows : []) {
+  const windows: DesktopStoredWindow[] = [];
+  for (const w of Array.isArray(raw && (raw as DesktopStateRaw).windows) ? (raw as { windows: DesktopStateRaw[] }).windows : []) {
     if (!w || typeof w !== "object") continue;
-    const tabs = [];
-    for (const t of Array.isArray(w.tabs) ? w.tabs : []) {
+    const tabs: DesktopStoredTab[] = [];
+    for (const t of Array.isArray(w.tabs) ? w.tabs as DesktopStateRaw[] : []) {
       if (!t || typeof t !== "object") continue;
       tabs.push({
         tabId: uniqueId(t.tabId),
@@ -105,11 +110,11 @@ function normalizeDesktopStateV2(raw, pathKey) {
       windowId: uniqueId(w.windowId),
       bounds: normalizeBounds(w.bounds),
       maximized: w.maximized === true,
-      activeTabId: tabs.some((t) => t.tabId === w.activeTabId) ? w.activeTabId : tabs[0].tabId,
+      activeTabId: tabs.some((t) => t.tabId === w.activeTabId) ? w.activeTabId as string : (tabs[0] as DesktopStoredTab).tabId,
       tabs
     });
   }
-  const recents = normalizeRecentsList(raw && raw.recents, pathKey);
+  const recents = normalizeRecentsList(raw && (raw as DesktopStateRaw).recents, pathKey);
   if (!windows.length) {
     const fresh = freshDesktopState();
     fresh.recents = recents;
@@ -118,9 +123,13 @@ function normalizeDesktopStateV2(raw, pathKey) {
   return { version: DESKTOP_STATE_VERSION, windows, recents };
 }
 
-function createDesktopStateStore({ filePath, pathKey, onWriteError }) {
-  let synthesized = null;
-  const queue = [];
+function createDesktopStateStore({ filePath, pathKey, onWriteError }: {
+  filePath: () => string;
+  pathKey: (path: string) => string;
+  onWriteError?: (error: unknown) => void;
+}) {
+  let synthesized: { text: string | null; state: DesktopStoredState } | null = null;
+  const queue: { mutator: DesktopStateMutator; resolve: (written: boolean) => void }[] = [];
   let draining = false;
 
   function sweepTempFiles() {
@@ -141,19 +150,19 @@ function createDesktopStateStore({ filePath, pathKey, onWriteError }) {
     if (synthesized && synthesized.text === text) {
       return structuredClone(synthesized.state);
     }
-    let parsed;
+    let parsed: unknown;
     try { parsed = text === null ? undefined : JSON.parse(text); } catch { parsed = undefined; }
 
     const isObject = !!parsed && typeof parsed === "object" && !Array.isArray(parsed);
-    const state = isObject && parsed.version === DESKTOP_STATE_VERSION ? normalizeDesktopStateV2(parsed, pathKey)
-      : isObject && !("version" in parsed) ? migrateDesktopStateV1(parsed)
+    const state = isObject && (parsed as DesktopStateRaw).version === DESKTOP_STATE_VERSION ? normalizeDesktopStateV2(parsed, pathKey)
+      : isObject && !("version" in (parsed as DesktopStateRaw)) ? migrateDesktopStateV1(parsed as DesktopStateRaw)
       : freshDesktopState();
     synthesized = { text, state: structuredClone(state) };
     return state;
   }
 
-  function write(mutator) {
-    return new Promise((resolve) => {
+  function write(mutator: DesktopStateMutator) {
+    return new Promise<boolean>((resolve) => {
       queue.push({ mutator, resolve });
       if (!draining) drain();
     });
@@ -163,7 +172,7 @@ function createDesktopStateStore({ filePath, pathKey, onWriteError }) {
     draining = true;
     try {
       while (queue.length) {
-        const job = queue.shift();
+        const job = queue.shift() as (typeof queue)[number];
         let written = false;
         try {
           const current = read();
@@ -189,6 +198,33 @@ function createDesktopStateStore({ filePath, pathKey, onWriteError }) {
 
   return { read, write, sweepTempFiles };
 }
+
+
+type DesktopStateRaw = Record<string, unknown>;
+export interface DesktopStoredTab {
+  tabId: string;
+  source: { kind: "blank" } | { kind: "file"; absPath: string };
+  lastKnownTitle: string;
+}
+export interface DesktopStoredWindow {
+  windowId: string;
+  bounds: Rectangle | null;
+  maximized: boolean;
+  activeTabId: string;
+  tabs: DesktopStoredTab[];
+}
+export interface DesktopStoredState {
+  version: number;
+  windows: DesktopStoredWindow[];
+  recents: { absPath: string; title: string; at: number }[];
+}
+type DesktopStateMutator = (state: DesktopStoredState) => unknown;
+export type {
+  DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE, LAST_KNOWN_TITLE_MAX, RECENTS_MAX,
+  mintTabOrWindowId, normalizeBounds, normalizeTabSource, blankDesktopWindow,
+  freshDesktopState, migrateDesktopStateV1, normalizeRecentsList, normalizeDesktopStateV2,
+  createDesktopStateStore
+};
 
 module.exports = {
   DESKTOP_STATE_VERSION,

@@ -18,7 +18,9 @@ directions accepted by the registration wrappers. The contract and
 `desktop/ipc-boundaries.d.ts` contain types only and need no packaged copy.
 Install both tooling packages (`npm ci` and `npm ci --prefix desktop`) before
 running lint, typecheck or the full gate: the desktop check uses Electron's
-own declarations. JavaScript services injected by `main.js` remain unchecked
+own declarations. `desktop-state.ts` also runs through main-process type
+stripping, checked by the existing `desktop/*.ts` include in that config.
+JavaScript services injected by `main.js` remain unchecked
 boundaries described by narrow interfaces in `ipc-boundaries.d.ts`.
 
 Both `dist` and `dist:win:test` use `electron-builder.yml`; the latter relies
@@ -64,7 +66,7 @@ Everything listed here goes inside the asar.
 | `voice-helper.js` | Follow My Voice's listener process (#8). `voice-composition.js` creates it and gives it its command. The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
 | `chromium-browsers.js` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
 | `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.js` itself. |
-| `desktop-state.js` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.js`. |
+| `desktop-state.ts` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.js`. |
 | `update-release.js` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
 | `file-service.js` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry, the atomic write and writing a file entry (the atomic write plus its stamp). |
 | `doc-claims.js` | Which tab holds which document id from which file, so that two tabs holding the same document from different files are noticed and the later one is asked to take a new id. The id rules come from `shared/doc-id-policy.js`, which `main.js` passes in, and `main.js` still sends `splitpage:reassign-doc-id` itself, so the IPC table test sees it. |

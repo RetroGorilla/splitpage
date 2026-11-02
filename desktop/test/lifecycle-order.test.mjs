@@ -158,11 +158,11 @@ function loadMain(world) {
     markSessionEnd: () => log("draft markSessionEnd"),
     markCleanExit: () => log("draft markCleanExit")
   };
-  const realState = require(path.join(desktop, "desktop-state.js"));
+  const realState = require(path.join(desktop, "desktop-state.ts"));
   const stubs = {
     electron,
     "./drafts": { ...realDrafts, createDraftStore: () => draftStore },
-    "./desktop-state": {
+    "./desktop-state.ts": {
       ...realState,
       createDesktopStateStore: (opts) => {
         const store = realState.createDesktopStateStore(opts);
