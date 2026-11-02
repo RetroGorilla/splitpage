@@ -32,7 +32,7 @@ function checksumText(str) {
   return (h >>> 0).toString(16);
 }
 
-module.exports = {
+export {
   checksumText,
   driveFormatSize,
   formatVideoLength,
