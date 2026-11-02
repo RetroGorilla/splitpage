@@ -1092,11 +1092,11 @@ STRUCTURE SECTION MUST SAY
 ## AQ-46 [x] History fault injection out of release builds (last in line)
 
 Needs: every other open task done or stopped (Adam, 2026-10-31: last in line). AQ-23 PR 5 (#1014) merged. Read the "Stopped:" comment on #1017 first.
-Files: src/adapters/storage/history-backends.js, src/adapters/storage/03c-history-idb.js, shared/history-store.ts (its memory backend's fault queue), src/application/recovery/history.js, their tests, src/bootstrap/wiring/history.ts, tools/release-hooks.mjs, docs/architecture/testing.md and the docs naming the moved code.
+Files: src/adapters/storage/history-backends.js, src/adapters/storage/03c-history-idb.js, shared/history-store.js (its memory backend's fault queue), src/application/recovery/history.js, their tests, src/bootstrap/wiring/history.ts, tools/release-hooks.mjs, docs/architecture/testing.md and the docs naming the moved code.
 **STOPS FOR ADAM**: history storage and recovery are protected. Run on Opus; independent review for each PR; history, recovery and draft suites.
 
 ```text
-Task: AQ-23's last step. Release builds no longer expose any test hook, but history's fault-injection code (historyFault and controls in history-backends.js, the faults queue in 03c-history-idb.js and in shared/history-store.ts's memory backend, testControls in application/recovery/history.js) still ships in the bundle, unreachable. Move it into modules only the test build imports. History behaviour in both builds must not change, and the test build's faults must behave exactly as before.
+Task: AQ-23's last step. Release builds no longer expose any test hook, but history's fault-injection code (historyFault and controls in history-backends.js, the faults queue in 03c-history-idb.js and in shared/history-store.js's memory backend, testControls in application/recovery/history.js) still ships in the bundle, unreachable. Move it into modules only the test build imports. History behaviour in both builds must not change, and the test build's faults must behave exactly as before.
 
 DO, as three PRs in this order (AGENTS.md rule 11):
 1. Types-only strict TypeScript conversion of history-backends.js and 03c-history-idb.js. No behaviour change; tests unchanged and passing.
