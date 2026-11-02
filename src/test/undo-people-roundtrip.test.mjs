@@ -53,7 +53,7 @@ test("people replay: a merged no-op people step keeps the entry's other edits (#
   assert.deepEqual(live, before);
 });
 
-test("people replay: seeded crew edits, assignments and incoming notes round trip (#529)", () => {
+test("people replay characterization: seeded crew edits, assignments and incoming notes round trip", () => {
   let replays = 0;
   for (let seed = 1; seed <= 3000; seed++) {
     let random = seed;
@@ -91,6 +91,26 @@ test("people replay: seeded crew edits, assignments and incoming notes round tri
   }
   assert.ok(replays > 1000, `${replays} replays`);
 });
+
+for (const key of ["brollShots", "productionTags"]) {
+  test(`ordinary ${key} assignment records its actual replay after a person is removed (#529)`, () => {
+    const { live, history, edit } = setup([person("ada", "Ada"), person("dee", "Dee")]);
+    live[key] = [item("dock", "Dock", "dee")];
+    edit((s) => { s[key][0].owner = "ada"; });
+    edit((s) => { s.people.push(person("bo", "Bo")); s[key][0].owner = "bo"; });
+    const beforeMerge = structuredClone(live);
+    live.people = live.people.filter((p) => p.id !== "ada");
+    history.forget(changedBetween(beforeMerge, live));
+    assert.deepEqual(history.sizes(), { undo: 1, redo: 0 });
+    const before = structuredClone(live);
+    for (let round = 0; round < 3; round++) {
+      assert.equal(history.undo(live).ok, true);
+      assert.equal(live[key][0].owner, "dee");
+      assert.equal(history.redo(live).ok, true);
+      assert.deepEqual(live, before);
+    }
+  });
+}
 
 test("people replay: same-name owner remapping survives repeated undo and redo (#529)", () => {
   const { live, history, edit, remoteNotes } = setup([person("old-cy", "Cy")]);
