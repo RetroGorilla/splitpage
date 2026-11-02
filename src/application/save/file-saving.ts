@@ -1,5 +1,5 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { refsIn } from "../../../shared/blob-policy.js";
+import { refsIn } from "../../../shared/blob-policy.ts";
 import { autoSaveWhere } from "./autosave.ts";
 import { createSaveCompletion } from "./save-completion.ts";
 import { cloneState } from "../../core/document/clone.ts";

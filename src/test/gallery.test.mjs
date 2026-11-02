@@ -18,7 +18,7 @@ import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/prod
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
-import { refsIn } from "../../shared/blob-policy.js";
+import { refsIn } from "../../shared/blob-policy.ts";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";

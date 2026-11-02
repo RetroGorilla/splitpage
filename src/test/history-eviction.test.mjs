@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planHistoryEviction } from "../../shared/history-policy.js";
+import { planHistoryEviction } from "../../shared/history-policy.ts";
 
 const did = (tag) => "d" + tag.repeat(16).slice(0, 32);
 const snap = (id, atMs, sizeBytes) => ({ id, atMs, sizeBytes });
