@@ -22,10 +22,11 @@ expect document.querySelectorAll('#toast-host .toast:not(.is-leaving)').length =
 expect __spoken.filter(function(s){return s === 'Close Present first.';}).length === 1
 expect __plain.querySelector('.toast-dismiss').getAttribute('aria-label') === 'Dismiss'
 shot sweep-ui-toast-fullscreen-light
-eval window.__playingBefore=document.getElementById('pp-play').classList.contains('is-active')
+eval window.__playingBefore=document.getElementById('pp-play').classList.contains('is-active');window.__spaceDismissed=false;__plain.querySelector('.toast-dismiss').addEventListener('click',function(){window.__spaceDismissed=true;},{once:true})
 focus #toast-host .toast-dismiss
 # why: The character driver trims standalone spaces, so harmless x keys surround a real Space press.
 press x x
+expect __spaceDismissed === true
 wait !__plain.isConnected
 expect document.getElementById('pp-play').classList.contains('is-active') === __playingBefore
 expect document.getElementById('prompter').contains(document.activeElement)
