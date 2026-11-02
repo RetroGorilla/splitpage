@@ -278,6 +278,8 @@ eval (function(){return H.injectFault(null);})()
 # a save through the fake desktop backend still works, and clearing the
 # fault drains the pending entries.
 # =============================================================================
+# why: A reused warning must reach the viewport even after later toasts have crowded it out.
+eval (function(){window.__pdMessage='Could not store a version history snapshot. It is kept in this window and will be tried again — closing the window before then loses it.';window.__pdWarnings=function(){return Array.from(document.querySelectorAll('#toast-host .toast.warn:not(.is-leaving)')).filter(function(t){return t.textContent===__pdMessage;});};window.__pdOnscreen=function(t){if(!t)return false;var s=getComputedStyle(t),r=t.getBoundingClientRect();return s.display!=='none'&&s.visibility==='visible'&&Number(s.opacity)===1&&r.width>0&&r.height>0&&t.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));};return true;})()
 eval (async function(){ await H.resetForTest(); window.__pdId = await openFixture(did('ce'), 'Pending Drain'); await H.idle(); window.__pdWarns = []; window.__pdObs = new MutationObserver(function(ms){ ms.forEach(function(m){ m.addedNodes.forEach(function(n){ if (n.classList && n.classList.contains('toast') && n.classList.contains('warn')) window.__pdWarns.push(n.textContent); }); }); }); window.__pdObs.observe(document.getElementById('toast-host'), { childList: true }); return true; })()
 eval (function(){H.injectFault('quota-always'); return true;})()
 eval (async function(){ await pushForeign('pd-1.txt'); await pushForeign('pd-2.txt'); await pushForeign('pd-3.txt'); await H.idle(); return true; })()
@@ -285,6 +287,10 @@ eval (function(){window.__pdPending = H.pending(__pdId); return window.__pdPendi
 expect window.__pdPending.length === 3
 eval (function(){ window.__pdObs.disconnect(); return window.__pdWarns; })()
 expect window.__pdWarns.length === 1
+expect window.__pdWarns[0] === window.__pdMessage
+expect window.__pdWarnings().length === 1
+wait window.__pdOnscreen(window.__pdWarnings()[0])
+shot ui-1148-pending-warning
 eval (function(){window.fakePd = D.makeFakeBackend(); window.__pdFileId = window.fakePd._addFile('pd.splitpage', F.buildSplitpage()); D.setBackend(window.fakePd); return true;})()
 eval (async function(){ var handle = D.makeHandle({id: window.__pdFileId, name: 'pd.splitpage'}); var file = await handle.getFile(); await F.openFile(file, handle); return true; })()
 wait F.docFile().kind === 'splitpage'
@@ -299,6 +305,39 @@ eval (function(){D.restoreBackend(); return true;})()
 eval (async function(){ await openFixture(__pdId, 'Pending Drain'); H.injectFault(null); await H.idle(); window.__pdAfter = H.pending(__pdId); window.__pdRec = await H.docRecord(__pdId); return [window.__pdAfter.length, window.__pdRec ? window.__pdRec.count : 0];})()
 expect window.__pdAfter.length === 0
 expect window.__pdRec.count === 3
+
+# why: Each new pending document must warn even when the previous document's matching toast was reused or removed.
+eval document.querySelectorAll('#toast-host .toast.warn .toast-dismiss').forEach(function(button){button.click();})
+wait document.querySelectorAll('#toast-host .toast.warn').length === 0
+eval (async function(){window.__pdStart=async function(tag){await H.resetForTest();var id=await openFixture(did(tag),'Warning '+tag);H.injectFault('quota-always');await pushForeign('warning-'+tag+'.txt');await H.idle();return id;};window.__pdDrain=async function(id){H.injectFault(null);await H.idle();return [H.pending(id).length,(await H.docRecord(id)).count];};await __pdStart('f8');window.__pdFirstToast=__pdWarnings()[0];window.__pdReusedId=await __pdStart('f9');window.__pdReusedToast=__pdWarnings()[0];return true;})()
+expect window.__pdFirstToast.isConnected
+expect window.__pdReusedToast === window.__pdFirstToast
+expect window.__pdWarnings().length === 1
+wait window.__pdOnscreen(window.__pdReusedToast)
+expect H.pending(window.__pdReusedId).length === 1
+eval (async function(){window.__pdReusedDrain=await __pdDrain(window.__pdReusedId);return true;})()
+expect window.__pdReusedDrain[0] === 0
+expect window.__pdReusedDrain[1] === 1
+click #toast-host .toast.warn:not(.is-leaving) .toast-dismiss
+wait document.querySelectorAll('#toast-host .toast.warn').length === 0
+eval (async function(){window.__pdDismissedId=await __pdStart('fa');window.__pdDismissedToast=__pdWarnings()[0];return true;})()
+expect window.__pdDismissedToast !== window.__pdReusedToast
+expect window.__pdWarnings().length === 1
+wait window.__pdOnscreen(window.__pdDismissedToast)
+expect H.pending(window.__pdDismissedId).length === 1
+eval (async function(){window.__pdDismissedDrain=await __pdDrain(window.__pdDismissedId);return true;})()
+expect window.__pdDismissedDrain[0] === 0
+expect window.__pdDismissedDrain[1] === 1
+wait document.querySelectorAll('#toast-host .toast.warn').length === 0
+expect !window.__pdDismissedToast.isConnected
+eval (async function(){window.__pdExpiredId=await __pdStart('fb');window.__pdExpiredToast=__pdWarnings()[0];return true;})()
+expect window.__pdExpiredToast !== window.__pdDismissedToast
+expect window.__pdWarnings().length === 1
+wait window.__pdOnscreen(window.__pdExpiredToast)
+expect H.pending(window.__pdExpiredId).length === 1
+eval (async function(){window.__pdExpiredDrain=await __pdDrain(window.__pdExpiredId);return true;})()
+expect window.__pdExpiredDrain[0] === 0
+expect window.__pdExpiredDrain[1] === 1
 
 # =============================================================================
 # a failed evict-and-retry is not repeated: under quota-always the first

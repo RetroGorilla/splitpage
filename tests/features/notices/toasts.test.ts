@@ -174,3 +174,42 @@ test("plain, sticky and action messages announce once without their controls or 
   assert.deepEqual(messages, ["Saved", "Paused", "Deleted", "Could not open"]);
   observer.disconnect();
 });
+
+test("a repeated warning returns to the newest position without adding another announcement", () => {
+  const { host, toasts } = setup();
+  const warning = toasts.show("History is pending", "warn");
+  const el = host.firstElementChild as HTMLElement;
+  toasts.show("Opened another document", "ok");
+  const status = document.getElementById("toast-status") as HTMLElement;
+  const announcement = status.firstElementChild;
+  const dismiss = el.querySelector<HTMLButtonElement>(".toast-dismiss");
+  assert.ok(dismiss);
+  dismiss.focus();
+  assert.equal(toasts.show("History is pending", "warn"), warning);
+  assert.equal(host.lastElementChild, warning);
+  assert.equal(host.children.length, 2);
+  assert.equal(status.children.length, 2);
+  assert.equal(status.firstElementChild, announcement);
+  assert.equal(document.activeElement, dismiss);
+  warning.dismiss();
+});
+
+test("a repeated warning gets its full display time and can return after expiry", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { host, toasts } = setup();
+  const warning = toasts.show("History is pending", "warn");
+  const el = host.firstElementChild as HTMLElement;
+  t.mock.timers.tick(2500);
+  assert.equal(toasts.show("History is pending", "warn"), warning);
+  t.mock.timers.tick(200);
+  assert.equal(el.classList.contains("is-leaving"), false);
+  t.mock.timers.tick(2400);
+  assert.equal(el.classList.contains("is-leaving"), true);
+  t.mock.timers.tick(220);
+  assert.equal(warning.isConnected, false);
+  const again = toasts.show("History is pending", "warn");
+  assert.notEqual(again, warning);
+  assert.equal(again.isConnected, true);
+  again.dismiss();
+  t.mock.timers.tick(220);
+});
