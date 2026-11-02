@@ -161,6 +161,8 @@ jobs:
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 25
+    env:
+      SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
     strategy:
       fail-fast: false
       matrix:
@@ -180,6 +182,21 @@ jobs:
 
       - name: sw.js is committed with the current VERSION stamp
         run: git diff --exit-code -- sw.js
+
+      - name: Select persistent Chromium cache
+        run: |
+          test -n "$RUNNER_TOOL_CACHE"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGHT_VERSION" >> "$GITHUB_ENV"
+
+      - name: Install Chromium
+        run: |
+          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+          exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
+          if [ -z "$exe" ]; then
+            echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
+            exit 1
+          fi
+          echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
 
       - name: Unit, desktop and tool test shard
         run: npm run test:all -- --shard "${{ matrix.shard }}/2"

@@ -387,9 +387,9 @@ browser cache, then `google-chrome`/`chrome` on PATH. Missing browsers fail
 the check; no rule or fixture is skipped. Local runtime was 9.2 seconds for
 the check, 10.0 seconds including test startup.
 
-On Unraid, Tests uses `/opt/hostedtoolcache/splitpage-playwright/1.63.0`,
-filled only by `checks`; a new or recreated runner needs one `checks` run
-first, or Chromium in its image. The automatic test deletes its TEMP
+In CI, each Tests shard installs Playwright's pinned Chromium and passes it as
+`SPLITPAGE_CHROME`. Without that step GitHub's runners failed the glyph rule;
+whether the browser or its system libraries caused that wasn't established. The automatic test deletes its TEMP
 directory only after every assertion passes, retaining artifacts on failure.
 
 The inspector inflates PDF streams with `node:zlib`, decodes ToUnicode and
