@@ -152,7 +152,7 @@ const session: DocumentSession = {
   adopt: function (raw: unknown) { return running().current.adopt(unwrapped(raw)); },
   absorbDisk: function (raw: unknown) { return running().current.absorbDisk(unwrapped(raw)); },
   absorbRecovery: function (raw: unknown) { return running().current.absorbRecovery(unwrapped(raw)); },
-  absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument) { return running().current.absorbMerged(kind, unwrapped(merged)); },
+  absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument | null) { return running().current.absorbMerged(kind, unwrapped(merged)); },
   absorbReload: function (content: ReloadedContent) { return running().current.absorbReload(unwrapped(content)); },
   settle: function (kind: AbsorbedKind) { running().current.settle(kind); },
   run: function (command: Command) { return swept(running().current.run(command)); },
@@ -288,7 +288,7 @@ export function noteRecovery(next: unknown): ValidatedDocument | null {
   return session.absorbRecovery(next);
 }
 
-export function noteMerged(kind: "disk" | "recovery", merged: ValidatedDocument): ValidatedDocument | null {
+export function noteMerged(kind: "disk" | "recovery", merged: ValidatedDocument | null): ValidatedDocument | null {
   return session.absorbMerged(kind, merged);
 }
 

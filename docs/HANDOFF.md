@@ -341,7 +341,7 @@ includes the boot stash and the crash-draft file merge, the latter through
 Every other write is "adopt what the other side just confirmed" after a
 successful write or open (or `null`: no ancestor), and goes through
 `setBaseState(next, why)` next to it, each call with its reason — so
-`setBaseState(next, why)` (`src/application/session/session-merge.js`) is the one writer of the base, called through `applyMerge`. `reportMerge(result, {alreadySaved:true})`
+`setBaseState(next, why)` (`src/application/session/session-merge.ts`) is the one writer of the base, called through `applyMerge`. `reportMerge(result, {alreadySaved:true})`
 avoids re-queuing an autosave for a mid-save merge.
 
 ### 3.8 Untagged mentions are painted, never wrapped
@@ -1137,7 +1137,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/bootstrap/wiring/` | one module per feature or owner: builds its ports from the real owners and mounts it; the `*-owner(s).ts` modules hold the app's single owners (session, location, preferences, saves, recovery, editor) |
 | `src/bootstrap/wiring/ports/` | shared ports, one module per responsibility (document, editing, effects, files, saving, screen, text, transitions…) |
 | `src/features/<name>/` | one part of the screen each (rows, writer, prompter, tags, broll, file-menu, find, gallery, comments, history, settings, title…); `features/common/` holds stateless DOM helpers |
-| `src/application/session/` | the document session (`document-session.ts`), change sets, merge (`apply-merge.ts`, `merge-incoming.ts`, `session-merge.js`) |
+| `src/application/session/` | the document session (`document-session.ts`), change sets, merge (`apply-merge.ts`, `merge-incoming.ts`, `session-merge.ts`) |
 | `src/application/commands/` | document edits as session commands: cell text, split and join, clipboard, scene length and status, rows, comments, b-roll and production records |
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
 | `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
