@@ -169,7 +169,7 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     words: "packing list checklist props prop pdf", reason: packingReason("prop"),
     fileName: (base) => base + " - " + packingLabel("prop") + " packing list.pdf",
     printPage: (ctx) => buildPackingListPrintPage({ doc: ctx.doc, services: exportServices() }, "prop") },
-  { id: "b-roll pdf", action: "export-broll-pdf", card: "broll", choice: { value: "pdf", label: "PDF, landscape" },
+  { id: "b-roll pdf", action: "export-broll-pdf", card: "broll", choice: { value: "pdf", label: "PDF" },
     name: "B-roll shot list", menuLabel: "B-roll shot list (.pdf)",
     words: "b-roll broll shot list shots second unit print pdf landscape",
     reason: brollReason, refusal: "There is no b-roll to export yet — start a Visual line with B-roll:",

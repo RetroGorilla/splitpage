@@ -18,6 +18,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { BrollEntry } from "../../core/production/broll.ts";
 import type { FieldHtml } from "../../core/production/ports.ts";
 import type { Run } from "../../core/text/runs.ts";
+import type { ScreenState } from "../../application/screen.ts";
 
 interface BrollHtmlLine {
   readonly nodes: Node[];
@@ -61,6 +62,7 @@ export interface BrollRecordsMount extends BrollRecords {
 }
 
 export interface BrollPanelPorts {
+  readonly screen: () => ScreenState;
   readonly view: Pick<BrollView, "load" | "current" | "setFilter" | "setGroup" | "setPageGroup">;
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "edit">;

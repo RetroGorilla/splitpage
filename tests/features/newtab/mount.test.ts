@@ -8,7 +8,7 @@ import type { NewTabPorts } from "../../../src/features/newtab/ports.ts";
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeActions, fakeNotices } from "../fakes.ts";
+import { fakeActions, fakeNotices, fakeScreen } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -39,9 +39,11 @@ function harness() {
   const state = { home: { kind: "none" } as ReturnType<NewTabPorts["place"]["home"]>, desktop: false, seed: true, pending: false, draft: false, intent: { type: "blank" }, last: null as unknown };
   const actions = fakeActions();
   const notices = fakeNotices();
+  const view = fakeScreen();
   let pasted: Parameters<NewTabPorts["importText"]>[0] | null = null;
   const starter = { id: "sample", name: "Sample", desc: "A starter", state: { title: "Starter", rows: [{ id: "s", audioText: "Hello" }] } };
   const ports: NewTabPorts = {
+    screen: view.screen,
     document: { current: () => null },
     place: { home: () => state.home },
     desktop: () => state.desktop,
@@ -68,8 +70,25 @@ function harness() {
     starters: [starter], findStarter: (id) => id === "sample" ? starter : null,
     recentHandle: (entry) => { calls.push(["makeDesktopHandle", entry]); return { getFile: async () => new win.File(["file"], entry.name) }; }
   };
-  return { ports, state, calls, arrivals, actions, notices, starter, pasted: () => pasted };
+  return { ports, state, calls, arrivals, actions, notices, view, starter, pasted: () => pasted };
 }
+
+test("new-tab Escape yields to overlays reported by the screen", async () => {
+  page();
+  const h = harness();
+  const mounted = startNewTab(h.ports);
+  try {
+    await settled();
+    for (const blocker of ["dialog", "launcher", "tour", "prompter", "writer", "shotlist"] as const) {
+      h.view.state[blocker] = true;
+      win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      assert.equal(win.document.getElementById("newtab-page")?.hidden, false, blocker);
+      h.view.state[blocker] = false;
+    }
+    win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    assert.equal(win.document.getElementById("newtab-page")?.hidden, true);
+  } finally { mounted.dispose(); }
+});
 
 test("blank and starter creation keep preparation, reset, transition, confirmation and identity call order", async () => {
   for (const kind of ["none", "file", "import"] as const) {
