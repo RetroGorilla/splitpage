@@ -149,10 +149,10 @@ function oembedThumbnailUrl(json: unknown, bases?: object | null) {
   return u.href;
 }
 
-function thumbnailRefusal(bytes: Parameters<typeof blobPolicy.sniffImageMime>[0]) {
-  if (!bytes || typeof bytes.length !== "number") return "NOT_AN_IMAGE";
-  if (!bytes.length) return "EMPTY";
-  if (bytes.length > THUMB_MAX_BYTES) return "TOO_LARGE";
+function thumbnailRefusal(bytes: unknown) {
+  if (!bytes || typeof (bytes as ArrayLike<unknown>).length !== "number") return "NOT_AN_IMAGE";
+  if (!(bytes as ArrayLike<unknown>).length) return "EMPTY";
+  if ((bytes as ArrayLike<unknown>).length > THUMB_MAX_BYTES) return "TOO_LARGE";
   const mime = blobPolicy.sniffImageMime(bytes);
   if (!mime || THUMB_MIMES.indexOf(mime) === -1 || !blobPolicy.imageDims(bytes)) return "NOT_AN_IMAGE";
   return null;

@@ -1,7 +1,7 @@
 "use strict";
 
 type BlobPolicyFields = Record<string, unknown>;
-type BlobPolicyBytes = ArrayLike<number>;
+type BlobPolicyBytes = ArrayLike<unknown>;
 type BlobPolicyMime = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 const IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -82,9 +82,9 @@ function ascii(b: BlobPolicyBytes, i: number, s: string) {
   return true;
 }
 
-function sniffImageMime(bytes: BlobPolicyBytes | null | undefined): BlobPolicyMime | null {
-  if (!bytes || typeof bytes.length !== "number") return null;
-  const b = bytes;
+function sniffImageMime(bytes: unknown): BlobPolicyMime | null {
+  if (!bytes || typeof (bytes as BlobPolicyBytes).length !== "number") return null;
+  const b = bytes as BlobPolicyBytes;
   if (b.length >= 8 && u8(b, 0) === 0x89 && ascii(b, 1, "PNG\r\n\x1a\n")) return "image/png";
   if (b.length >= 3 && u8(b, 0) === 0xff && u8(b, 1) === 0xd8 && u8(b, 2) === 0xff) return "image/jpeg";
   if (ascii(b, 0, "GIF87a") || ascii(b, 0, "GIF89a")) return "image/gif";
@@ -189,7 +189,7 @@ function webpDims(b: BlobPolicyBytes) {
   return null;
 }
 
-function imageDims(bytes: BlobPolicyBytes | null | undefined) {
+function imageDims(bytes: unknown) {
   switch (sniffImageMime(bytes)) {
     case "image/png": return pngDims(bytes as BlobPolicyBytes);
     case "image/gif": return gifDims(bytes as BlobPolicyBytes);
