@@ -4,12 +4,19 @@ import type { DocumentShape } from "../../core/document/validated.ts";
 
 export type HomeKind = "none" | "file" | "import";
 
-export type Home<B = Frozen<DocumentShape>> = { readonly diskBase?: B | null; readonly handle?: LocalFileReference | null; readonly lastModified?: number | null } & (
+export type Home<B = Frozen<DocumentShape>> = {
+  readonly diskBase?: B | null;
+  readonly name?: string | null;
+  readonly format?: string | null;
+  readonly handle?: LocalFileReference | null;
+  readonly lastModified?: number | null;
+  readonly dirty?: boolean;
+} & (
   | { readonly kind: "none"; readonly [field: string]: unknown }
   | { readonly kind: "file"; readonly name?: string | null; readonly format?: string | null; readonly lastModified?: number | null; readonly [field: string]: unknown }
   | { readonly kind: "import"; readonly name: string; readonly format: string | null; readonly dirty: boolean; readonly lastModified: number | null; readonly [field: string]: unknown });
 
-export type HomeFields<B = Frozen<DocumentShape>> = Readonly<Record<string, unknown>> & { readonly diskBase?: B | null; readonly handle?: LocalFileReference | null; readonly name?: string | null; readonly format?: string | null; readonly dirty?: boolean; readonly lastModified?: number | null };
+export type HomeFields<B = Frozen<DocumentShape>> = Readonly<Record<string, unknown>> & Pick<Home<B>, "diskBase" | "name" | "format" | "handle" | "lastModified" | "dirty">;
 
 export type LocationChange = "home" | "writtenOut";
 

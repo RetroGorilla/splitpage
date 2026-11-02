@@ -1207,7 +1207,7 @@ closes the wizard and runs where its shortcut is refused under the wizard,
 as in 3.1. The wizard's own Escape/Tab handling listens in the bubble phase
 instead, since it can sit open, unnoticed, during an unrelated test.
 
-Since #145 the menu is a dropdown (`src/features/file-menu/file-menu.js`), but every item is
+Since #145 the menu is a dropdown (`src/features/file-menu/file-menu.ts`), but every item is
 still one `<button data-file-action>` inside `#file-menu`, exactly once. The
 desktop native menu no longer clicks them: `runDesktopMenuCommand` hands the
 command to `nativeMenuRunner()` (`src/bootstrap/native-menu.ts`), which runs a
