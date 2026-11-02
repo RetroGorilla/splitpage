@@ -124,3 +124,59 @@ for (const typed of ["", "new"]) {
     assert.equal(currentDocument().comments[0].anchorId, "c1");
   });
 }
+
+test("immediate Tab stops before a change in stage-direction marks", async () => {
+  const cell = await open(' glow <span class="stage-dir">across</span> the logo');
+  close(cell);
+  assert.equal(cell.querySelector(".tag-anchor").textContent, "glow");
+  assert.equal(cell.querySelector(".stage-dir").textContent, "across");
+});
+
+test("immediate Tab makes no tag when the first following words are a stage direction", async () => {
+  const cell = await open(' <span class="stage-dir">glow across</span> the logo');
+  const before = currentDocument().rows[0].visualText;
+  const size = undoOwner().sizes().undo;
+  close(cell);
+  assert.equal(cell.querySelector(".tag-anchor"), null);
+  assert.equal(cell.querySelector(".plain-tag-keyword"), null);
+  assert.equal(currentDocument().rows[0].visualText, before);
+  assert.equal(cell.querySelector(".stage-dir").textContent, "glow across");
+  assert.equal(undoOwner().sizes().undo, size);
+  assert.match(cell.textContent, /^VFX: /);
+});
+
+test("typed-word close keeps a stage direction beyond its caret boundary", async () => {
+  const cell = await open(' glow <span class="stage-dir">across</span> the logo');
+  const node = cell.querySelector(".plain-tag-keyword").nextSibling;
+  node.insertData(1, "new");
+  const range = document.createRange();
+  range.setStart(node, 4);
+  range.collapse(true);
+  const selected = window.getSelection();
+  selected.removeAllRanges();
+  selected.addRange(range);
+  cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "new" }));
+  close(cell);
+  assert.equal(cell.querySelector(".tag-anchor").textContent, "new");
+  assert.equal(cell.querySelector(".stage-dir").textContent, "across");
+});
+
+for (const typed of ["", "new"]) {
+  test("a keyword inside a stage direction keeps its marks when closed" + (typed ? " after typing" : " immediately"), async () => {
+    const cell = await open('<span class="stage-dir">glow</span> the logo');
+    if (typed) {
+      const node = cell.querySelector(".plain-tag-keyword").nextSibling;
+      node.insertData(1, typed);
+      const range = document.createRange();
+      range.setStart(node, 1 + typed.length);
+      range.collapse(true);
+      const selected = window.getSelection();
+      selected.removeAllRanges();
+      selected.addRange(range);
+      cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: typed }));
+    }
+    close(cell);
+    assert.equal(cell.querySelector(".tag-anchor").textContent, typed || "glow");
+    assert.equal(cell.querySelector(".stage-dir").textContent, typed + "glow");
+  });
+}
