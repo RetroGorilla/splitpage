@@ -401,8 +401,8 @@ export function startFileMenu(given: FileMenuDropdownPorts): FileMenuDropdownMou
   let withdrawHook: (() => void) | null = null;
   wireMenu(function (withdraw) { withdrawHook = withdraw; });
   let disposed = false;
-  function live<A extends unknown[], R>(fn: (...args: A) => R) {
-    return function (...args: A) { return disposed ? undefined : fn(...args); };
+  function live<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R | undefined {
+    return function () { return disposed ? undefined : fn.apply(null, arguments as unknown as A); };
   }
   return {
     toggleFileMenu: live(toggleFileMenu),
