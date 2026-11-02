@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 
 const REAL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
 const OTHER_API = "https://api.github.com/repos/someone-else/splitpage-fork/releases/latest";
 
 let passed = 0;
@@ -58,6 +58,20 @@ eq("...while the env var still overrides it", testUpdateApiUrl(), OTHER_API);
 delete process.env.SPLITPAGE_UPDATE_API;
 
 rmSync(testAppRoot, { recursive: true, force: true });
+
+console.log("\nrelease responses:\n");
+
+const originalFetch = globalThis.fetch;
+try {
+  globalThis.fetch = async () => new Response("missing", { status: 404, statusText: "Not Found" });
+  await mod.latestRelease().then(() => check("404 rejects", false), (err) => check("404 rejects", err.message.includes("404")));
+  globalThis.fetch = async () => Response.json({ tag_name: "v9.9.9", assets: [] });
+  await mod.latestRelease().then(() => check("empty release rejects", false), (err) => eq("empty release rejects", err.message, "the release has no assets"));
+  globalThis.fetch = async () => Response.json({ tag_name: "v9.9.9", assets: [{ name: "splitpage.zip" }] });
+  eq("release with assets returns its version", (await mod.latestRelease()).version, "9.9.9");
+} finally {
+  globalThis.fetch = originalFetch;
+}
 
 console.log("\ncompareVersions():\n");
 
