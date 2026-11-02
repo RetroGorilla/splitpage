@@ -34,7 +34,7 @@ test("the transitions port reaches the running transitions when called, and refu
     assert.equal(currentDocument(), next);
     assert.deepEqual(log, ["destination:none", "baseline:a new script", "writtenOut:false"]);
     assert.equal(transitions.copyId(), next.docId);
-    const source = { kind: "file" as const, file: { name: "File.splitpage" }, handle: null };
+    const source = { kind: "file" as const, file: new File([], "File.splitpage"), handle: null };
     const opened: unknown[] = [];
     const remove = documentSources().register({ id: "newtab-port", takes: () => true, open: (request) => { opened.push(request); return next; } });
     try {

@@ -1,4 +1,4 @@
-import { mountImportDialog } from "../../features/imports/imports.js";
+import { mountImportDialog } from "../../features/imports/imports.ts";
 import { importActions as definitions } from "../../features/imports/actions.ts";
 import type { LegacyOpening } from "./transition-owners.ts";
 import type { ImportDialogControls, ImportDialogPorts } from "../../features/imports/ports.ts";
