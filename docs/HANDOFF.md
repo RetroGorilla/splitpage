@@ -214,7 +214,7 @@ After `npm ci` in `desktop/`, run `npm run fetch-electron` on every machine.
 emulation; elsewhere it uses Node's architecture. Explicit `npm_config_arch`
 or `ELECTRON_ARCH` overrides detection, in that order; unknown values fail.
 Never run `npm run dist`/`dist:win` outside a deliberate release build.
-`desktop/test/drafts.test.mjs` unit-tests `desktop/drafts.js` directly, no
+`desktop/test/drafts.test.mjs` unit-tests `desktop/drafts.ts` directly, no
 Electron. `tools/test-server.mjs` drives real `server.js` processes.
 
 ### The test harness lies to you — suspect the test before the code
@@ -479,7 +479,7 @@ tabs**.
   (`{"theme":"system"|"light"|"dark"}`, written by `splitpage:set-theme`)
   sets `nativeTheme.themeSource` before the first window, so a launch with
   Settings ▸ Theme differing from the OS starts in the right colours.
-- **Crash-safe drafts** (`desktop/drafts.js`, plain CommonJS) live under
+- **Crash-safe drafts** (`desktop/drafts.ts`, plain CommonJS) live under
   `<userData>/drafts/<tabId>/`: two-generation writes, `base-<sha12>.json`,
   `session.json`. Write is fsync then one sync tick renaming
   current→previous, tmp→current. **Hold/discard ordering is load-bearing**
@@ -534,7 +534,7 @@ tabs**.
   §8c). Images leave the document state and live in `<userData>/blobs`:
   `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
   own SHA-256 (`<aa>` = its first two hex digits). Plain CommonJS, no
-  Electron, like `drafts.js`. A put checks the bytes hash to the sha, writes
+  Electron, like `drafts.ts`. A put checks the bytes hash to the sha, writes
   `.tmp-<hex>` in the shard folder, fsyncs, renames (retrying a held target
   on Windows), then fsyncs the folder best-effort (a no-op on NTFS); a sha
   already there at the same size is `stored:false` and nothing is written.
@@ -1162,7 +1162,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/voice-helper.js` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
-| `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
+| `desktop/drafts.ts` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/history-store.js` | THE version-history store (#83), pure CommonJS run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
 | `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
 | `shared/blob-policy.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
@@ -1177,7 +1177,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/verify-dist.mjs` | post-`dist:win` check: PE machine field per binary, NSIS stub arch, installer freshness, installer payload actually extracts (#6) |
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
-| `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.js` alone |
+| `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.ts` alone |
 | `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
 | `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.js` (two-generation write, torn index → prev, deferred unlink, kills via test hooks, a raw v1 tree left untouched) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |

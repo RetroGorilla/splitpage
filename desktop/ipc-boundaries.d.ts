@@ -2,10 +2,11 @@
 
 import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContents, WebContentsView } from "electron";
 import type {
-  DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot, DesktopDraftWriteHeader, DesktopWireDraftStatus,
+  DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
   DesktopWireHistoryMeta, DesktopWireHistoryOptions, DesktopWireHistoryUsage, DesktopWireLaunch,
-  DesktopWireTakenDraft, DesktopWireUpdateStatus
+  DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
+import type { createDraftStore } from "./drafts.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
@@ -54,15 +55,6 @@ export interface DesktopRecentsBoundary {
   persist: () => Promise<unknown>;
 }
 
-export interface DesktopDraftStoreBoundary {
-  write: (id: string, header: Omit<DesktopDraftWriteHeader, "format" | "formatVersion" | "tabId" | "writtenAt" | "state" | "base" | "appVersion" | "seq">, stateJson: string, baseJson: string | null, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-write">>;
-  discardClean: (id: string, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-discard">>;
-  take: (id: string) => Promise<DesktopWireTakenDraft | null>;
-  release: (id: string) => void;
-  hold: (id: string) => void;
-  status: (id: string) => DesktopWireDraftStatus;
-}
-
 export interface DesktopMainCommon {
   tabOf: (event: DesktopIpcEvent) => DesktopMainTab | null;
   tabs: Map<string | undefined, DesktopMainTab>;
@@ -70,7 +62,7 @@ export interface DesktopMainCommon {
   fileIds: DesktopFileRegistryBoundary;
   recents: DesktopRecentsBoundary;
   testMode: boolean;
-  draftStore: () => DesktopDraftStoreBoundary | null;
+  draftStore: () => ReturnType<typeof createDraftStore> | null;
   draftsPreviousSession: () => string;
   shellStateForWindow: (id: string) => DesktopIpcResult<"splitpage:tabstrip-get-state">;
   createTab: (windowId: string, options: { source: { kind: "blank" }; launchIntent: { type: string } }) => DesktopMainTab | null;
@@ -106,7 +98,7 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
   routeOpenPath: (path: string, options: { fromWindowId: string; fromTabId: string }) => DesktopIpcResult<"splitpage:route-open"> | null;
   draftFiniteNumber: (value: unknown) => number | null;
   draftBodyTooLarge: (text: string) => boolean;
-  buildDraftHeader: (tab: DesktopMainTab, payload: Record<string, unknown>) => Parameters<DesktopDraftStoreBoundary["write"]>[1];
+  buildDraftHeader: (tab: DesktopMainTab, payload: Record<string, unknown>) => Parameters<ReturnType<typeof createDraftStore>["write"]>[1];
   pendingDraftFlushes: Map<number, (result: object) => void>;
 }
 
