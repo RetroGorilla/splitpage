@@ -2,6 +2,7 @@ import { newBrollShot } from "../../core/document/broll.ts";
 import { addGalleryPicture, addGalleryVideo } from "../../core/document/gallery.ts";
 import type { GalleryRow } from "../../core/document/gallery.ts";
 import type { IdSource, ImageRef } from "../../core/document/ports.ts";
+import type { StoredImageRef } from "../../core/document/text-policy.ts";
 import type { DocumentRow } from "../../core/document/validated.ts";
 import { brollInCell } from "../../core/production/broll.ts";
 import type { CellDecoder } from "../../core/text/ports.ts";
@@ -24,7 +25,7 @@ export interface TextRange {
 
 export interface ImageAttachment {
   readonly kind: "image";
-  readonly ref: ImageRef;
+  readonly ref: StoredImageRef;
   readonly name?: string | undefined;
 }
 
@@ -54,8 +55,8 @@ export type Pasted =
   | { readonly kind: "text"; readonly text: string };
 
 export interface PasteRequest {
-  readonly rowId: string;
-  readonly field: string;
+  readonly rowId: string | null;
+  readonly field: string | null;
   readonly range: TextRange | null;
   readonly pasted: Pasted | null;
   readonly fromCut: boolean;
@@ -117,8 +118,8 @@ export function attachToGallery(row: GalleryRow, attach: readonly Attachment[]):
 
 export function takenBrollIds(
   scope: BrollScope,
-  rowId: string,
-  field: string,
+  rowId: string | null,
+  field: string | null,
   rest: readonly Run[] | null,
   fromCut: boolean,
   cells: CellDecoder
@@ -169,8 +170,8 @@ function brollKeyIds(cell: readonly Run[]): string[] {
   return ids;
 }
 
-function textOf(row: DeepReadonly<DocumentRow>, field: string): string {
-  const value = row[field];
+function textOf(row: DeepReadonly<DocumentRow>, field: string | null): string {
+  const value = row[field as string];
   return typeof value === "string" ? value : "";
 }
 
@@ -182,8 +183,8 @@ function galleryProbe(row: DeepReadonly<DocumentRow>): GalleryRow {
   return probe;
 }
 
-function textCells(rowId: string, field: string, withGallery: boolean): ChangeSet["cells"] {
-  const cells = [{ rowId: rowId, field: field }];
+function textCells(rowId: string | null, field: string | null, withGallery: boolean): ChangeSet["cells"] {
+  const cells: { rowId: string | null; field: string | null }[] = [{ rowId: rowId, field: field }];
   if (withGallery) GALLERY_FIELDS.forEach(function (key) { cells.push({ rowId: rowId, field: key }); });
   cells.push({ rowId: rowId, field: "updatedAt" }, { rowId: rowId, field: "updatedBy" });
   return cells;
@@ -281,7 +282,7 @@ export function pasteCommand(request: PasteRequest, ports: ClipboardPorts): Repo
             });
           }
           if (textChanged) {
-            target[field] = after;
+            target[field as string] = after;
             stamp();
           }
           if (counts) {
