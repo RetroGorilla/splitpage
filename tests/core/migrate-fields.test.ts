@@ -121,7 +121,7 @@ test("a comment's row and anchor are cleaned ids, the anchor is its own id by de
     { id: "c5" }
   ] }, fakeMigration().ports);
   const cs = list(out, "comments");
-  assert.deepEqual(cs.slice(0, 2).map((c) => [c.rowId, c.anchorId]), [["r1", "ab"], ["r-fake-1", "c2"]]);
+  assert.deepEqual(cs.slice(0, 2).map((c) => [c.rowId, c.anchorId]), [["r1", "ab"], ["r-orphan-load-522f238199b375e7476bdf34-1", "c2"]]);
   assert.deepEqual(only(cs, "field"), ["visualText", "visualImage", "audioText", "audioText", "audioText"]);
   assert.equal(cs[4]?.anchorId, "c5");
 });
@@ -202,13 +202,16 @@ test("a shot's props are matched to the registry's prop of that name", () => {
   assert.deepEqual(props, [{ id: tag.id, name: "Kettle" }, { id: "", name: "spoon" }]);
 });
 
-test("an unkeyed line takes the shot id the caller's line map holds for it, and records the one it drew", () => {
+test("an unkeyed line takes a same-source shot proposal and records the next distinct id it draws", () => {
   const f = fakeMigration();
-  const held = new Map<string, string>(), drawn = new Map<string, string>([["r1\u0000steam\u00001", "bs-shared"]]);
+  const input = { schema: 2, rows: [{ id: "r1", visualText: "B-roll: Steam", audioText: "" }, { id: "r2", visualText: "B-roll: Pour", audioText: "" }] };
+  const original = migrateRows(structuredClone(input), fakeMigration().ports);
+  const steam = original.brollShots[0]?.id as string, pour = original.brollShots[1]?.id as string;
+  const held = new Map<string, string>(), drawn = new Map<string, string>([["r1\u0000steam\u00001", steam]]);
   const ports = Object.assign({}, f.ports, { brollLines: { held: held, drawn: drawn } });
-  const out = migrateRows({ schema: 2, rows: [{ id: "r1", visualText: "B-roll: Steam", audioText: "" }, { id: "r2", visualText: "B-roll: Pour", audioText: "" }] }, ports);
-  assert.deepEqual(list(out, "brollShots").map((b) => [b.id, b.name]), [["bs-shared", "Steam"], ["bs-fake-1", "Pour"]]);
-  assert.deepEqual([...drawn.entries()], [["r1\u0000steam\u00001", "bs-shared"], ["r2\u0000pour\u00001", "bs-fake-1"]]);
+  const out = migrateRows(structuredClone(input), ports);
+  assert.deepEqual(list(out, "brollShots").map((b) => [b.id, b.name]), [[steam, "Steam"], [pour, "Pour"]]);
+  assert.deepEqual([...drawn.entries()], [["r1\u0000steam\u00001", steam], ["r2\u0000pour\u00001", pour]]);
 });
 
 test("migrateDocument: a docId that is not one is replaced, whatever the origin", () => {

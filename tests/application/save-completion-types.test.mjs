@@ -23,7 +23,7 @@ export const landedRev: number | undefined = landed.home.diskBase?.rev;
 export const completedRev: number | undefined = write.landed?.home.diskBase?.rev;
 createSaveCompletion(ports).confirmWrite(write);
 `;
-  assert.deepEqual(ts.getPreEmitDiagnostics(compileFixtures({ [fixture]: source }).program), []);
+  assert.deepEqual(ts.getPreEmitDiagnostics(compileFixtures({ [fixture]: source }).program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
 });
 
 test("a partial save baseline never advertises document rows or accepts an unrelated published type", () => {

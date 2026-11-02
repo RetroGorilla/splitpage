@@ -16,7 +16,7 @@ test("filesystem history implements the real store protocol without promising sa
     'const doc = read(raw);\n' +
     'const title: unknown = doc && doc.buckets["doc"]?.title;\n' +
     'backend.exclusive(tx => tx.commit({ doc: { title: { toString: null }, snapshots: [] } }, []));\n';
-  assert.deepEqual(ts.getPreEmitDiagnostics(compileFixtures({ [file]: good }).program), []);
+  assert.deepEqual(ts.getPreEmitDiagnostics(compileFixtures({ [file]: good }).program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
   const bad = setup + 'const title: string = record.title;\nrecord.snapshots.push({ id: "s01", sha: "bad" });\n';
   const errors = ts.getPreEmitDiagnostics(compileFixtures({ [file]: bad }).program);
   assert.equal(errors.length, 2);

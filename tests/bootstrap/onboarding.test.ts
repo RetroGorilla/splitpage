@@ -8,6 +8,29 @@ import { startPreferences, preferences } from "../../src/bootstrap/wiring/prefer
 import { startSidePanels } from "../../src/bootstrap/wiring/ports/panels.ts";
 import { localFileMenuControls, mountLocalFilesFeature, stopLocalFilesFeature } from "../../src/bootstrap/wiring/local-files.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
+import { domStartup } from "../../src/bootstrap/wiring/ports/startup.ts";
+import { connectStartup } from "../../src/application/startup-signal.ts";
+
+test("onboarding readiness does not settle between DOM readiness and the app's startup listener", async () => {
+  Object.defineProperty(document, "readyState", { configurable: true, get: () => "loading" });
+  let decided = false;
+  const ready = domStartup.ready();
+  assert.ok(ready);
+  void ready.then(() => { decided = true; });
+  document.dispatchEvent(new window.Event("DOMContentLoaded"));
+  await Promise.resolve();
+  await Promise.resolve();
+  let stop = () => {};
+  try {
+    assert.equal(decided, false);
+    stop = connectStartup({ ready: async () => {} });
+    await ready;
+    assert.equal(decided, true);
+  } finally {
+    stop();
+    Reflect.deleteProperty(document, "readyState");
+  }
+});
 
 test("wired onboarding replaces its mount, closes on file choices and disables setup after stopping", () => {
   document.body.innerHTML = '<div id="onboarding-modal" hidden><button data-onboard-action="skip"></button></div>';
