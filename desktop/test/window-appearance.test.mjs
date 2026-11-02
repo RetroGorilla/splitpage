@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require(path.join(here, "..", "window-appearance.js"));
+const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require(path.join(here, "..", "window-appearance.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
