@@ -23,7 +23,7 @@ files:
   - print-pdf.js
   - prompter-share.js
   - close-quit.js
-  - session-restore.js
+  - session-restore.ts
   - close-keep.js
   - quit-watchdog.ts
   - blob-store.js
