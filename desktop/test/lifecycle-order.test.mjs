@@ -612,6 +612,55 @@ test("macOS dock activation after the last window closes resumes persisted layou
   } finally { Object.defineProperty(process, "platform", platform); }
 });
 
+for (const platformName of ["darwin", "win32", "linux"]) {
+  test(`a window attached during final-close teardown on ${platformName} keeps the saved layout frozen`, async (w) => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: platformName });
+    try {
+      const rec = w.window();
+      w.tab(rec, "T1");
+      await w.main.persistShellState();
+      const statePath = path.join(w.userData, "desktop-state.json");
+      const savedState = fs.readFileSync(statePath, "utf8");
+      let duringClose;
+      rec.win.on("close", () => {
+        w.tab(w.window(), "T2");
+        duringClose = w.main.persistShellState();
+      });
+      rec.win.close();
+      assert.equal(await duringClose, false);
+      assert.equal(await w.main.persistShellState(), false);
+      assert.equal(fs.readFileSync(statePath, "utf8"), savedState);
+    } finally { Object.defineProperty(process, "platform", platform); }
+  });
+}
+
+test("a macOS reopen during an asynchronous quit keeps the completed-close snapshot frozen", async (w) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    const rec = w.window();
+    w.tab(rec, "T1", { file: w.existing });
+    await w.main.persistShellState();
+    const statePath = path.join(w.userData, "desktop-state.json");
+    const savedState = fs.readFileSync(statePath, "utf8");
+    let beforeReopen;
+    let duringQuit;
+    rec.win.on("close", (event) => { if (!event.prevented) w.app.quit(); });
+    rec.win.on("closed", () => {
+      beforeReopen = w.main.persistShellState();
+      w.tab(w.window(), "T2");
+      duringQuit = w.main.persistShellState();
+    });
+    w.start();
+    rec.win.close();
+    await w.until("quit done");
+    assert.equal(await beforeReopen, false);
+    assert.equal(await duringQuit, false);
+    assert.equal(fs.readFileSync(statePath, "utf8"), savedState);
+  } finally { Object.defineProperty(process, "platform", platform); }
+});
+
 for (const ending of ["quit", "session-end"]) {
   test(`creating a window during ${ending} keeps session writes frozen`, async (w) => {
     const rec = w.window();
