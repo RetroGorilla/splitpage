@@ -51,8 +51,9 @@ in a unique `splitpage-print-layout-*` TEMP directory. The standalone
 inspector still accepts `<out> --lists --probes` after fixture generation.
 
 In CI, each Tests shard installs Playwright's pinned Chromium and passes it as
-`SPLITPAGE_CHROME`. It must not fall back to the `google-chrome` on GitHub's
-runners, which fails the check with `e: missing glyph on page 1`.
+`SPLITPAGE_CHROME`. Without that step, on 1 November 2026, GitHub's runners
+fell through to PATH's browser and failed with `e: missing glyph on page 1`.
+Whether the browser or its system libraries caused that wasn't established.
 
 While a pull request is being written, run the focused checks for what it
 touches. CI then runs every fast gate on every pull request: lint, types, the
