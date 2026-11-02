@@ -50,6 +50,7 @@ function fixture(cat = "prop") {
       tagExpandedKey: () => null
     },
     document: document.document,
+    lifetime: document.lifetime,
     edits: edits.edits,
     production: createProductionIndex(migration.ports.readers, deepFreeze),
     text: {
@@ -69,7 +70,7 @@ function fixture(cat = "prop") {
     ids: migration.ids,
     bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 })
   };
-  return { ports, calls, edits, doc, pending, deletion, selection };
+  return { ports, calls, edits, doc, document, pending, deletion, selection };
 }
 
 for (const focused of [true, false]) {
@@ -107,6 +108,25 @@ for (const focused of [true, false]) {
     } finally { mounted.dispose(); }
   });
 }
+
+test("gear rename discards its draft when the same document and registry ID enter a new lifetime", () => {
+  const h = fixture("gear");
+  win.document.body.innerHTML = '<div id="gear-panel"><div id="gear-list"></div></div>';
+  const mounted = startTagPanels(h.ports);
+  try {
+    h.ports.view.setTagRenaming(h.ports.production.entries(h.doc)[0]!.key);
+    mounted.renderProduction();
+    const input = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
+    assert.ok(input);
+    input.value = "Camera draft";
+    h.document.replace(h.doc);
+    mounted.renderProduction();
+    const refreshed = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
+    assert.ok(refreshed);
+    assert.notEqual(refreshed, input);
+    assert.equal(refreshed.value, "Hat");
+  } finally { mounted.dispose(); }
+});
 
 test("production panels mount with fake ports and remove both menu listeners on disposal and remount", () => {
   const h = fixture();

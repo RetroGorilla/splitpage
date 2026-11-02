@@ -159,7 +159,10 @@ export function renderGearList() {
   listEl.innerHTML = '<ul class="tag-list" aria-label="Gear items">' +
     entries.map(function (e) { return tagEntityHtml(e, { gear: true }); }).join("") + '</ul>';
   const replacement = listEl.querySelector<HTMLInputElement>(".tag-rename-input");
-  if (keepRename && replacement && replacement.getAttribute("data-key") === rename.getAttribute("data-key")) {
+  if (keepRename && replacement && replacement.getAttribute("data-key") === rename.getAttribute("data-key") &&
+      rename.getAttribute("data-registry-id") &&
+      replacement.getAttribute("data-registry-id") === rename.getAttribute("data-registry-id") &&
+      replacement.getAttribute("data-document-epoch") === rename.getAttribute("data-document-epoch")) {
     replacement.replaceWith(rename);
     if (focused) rename.focus({ preventScroll: true });
     if (selection) rename.setSelectionRange(selection[0], selection[1], selection[2] || undefined);
@@ -373,7 +376,8 @@ function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, 
         ? '<dt><label for="' + renameId + '">Name</label></dt>' +
           '<dd class="tag-rename-row">' +
             '<input type="text" class="tag-rename-input ev-field" id="' + renameId + '" value="' + name +
-              '" data-key="' + k + '">' +
+              '" data-key="' + k + '" data-registry-id="' + escapeHtml(item.id || '') +
+              '" data-document-epoch="' + (ports as TagPanelPorts).lifetime.epoch() + '">' +
             '<button type="button" class="btn-outline is-small" data-action="tag-rename-save" data-key="' + k + '">Save</button>' +
             '<button type="button" class="tag-quiet-btn" data-action="tag-rename-cancel">Cancel</button>' +
           '</dd>'
