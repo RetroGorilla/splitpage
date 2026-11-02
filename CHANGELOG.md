@@ -25,6 +25,14 @@ saving bugs. If you open or share scripts on a Splitpage server, read
   cursor, then type its name as with a typed keyword. Escape or clicking
   outside dismisses the dialog without an edit; selected-text tagging is
   unchanged.
+- Present: Ctrl+F opens Find above the script. Matches are highlighted, and
+  Enter and Shift+Enter jump between them while playback stays paused.
+- Pressing Tab straight after a tag keyword typed before existing words tags
+  the rest of that line, stopping before an existing tag or link.
+- Pasted text links lose known tracking parameters and keep their other
+  parameters. Signed links are left alone.
+- App-data export: when some history or images can't be read, **Export the
+  rest anyway** exports what is readable and says how much was left out.
 
 ### Removed
 - Collaboration and server documents are gone: live collaboration,
@@ -57,8 +65,47 @@ saving bugs. If you open or share scripts on a Splitpage server, read
   works.
 - Settings keeps keyboard focus after **Show the desktop-app notice
   again**, so Escape still closes it.
+- Draft recovery keeps scenes and unsaved text when an older file has missing
+  ids, and row ids stay the same when a file loads.
+- Damaged history entries no longer hide intact snapshots or stop new backups,
+  and History reports how many could not be listed.
+- App-data exports keep intact history and images when a snapshot is damaged,
+  and cancel when stored data can't be read, so a partial file never looks
+  complete.
+- Undo and redo after a crew merge keep removed people removed and restore item
+  assignments correctly. Undo notices no longer count item owners who were
+  already missing from the crew.
+- Cancelling an IME composition after undoing its own update no longer leaves
+  cancelled text in redo.
+- Desktop: quitting checks for edits made in another window while a question or
+  a draft copy was pending, before it discards drafts.
+- Desktop: reviewing a script whose file is missing or unreadable at close now
+  explains the problem and how to save a copy.
+- On macOS, a window reopened after closing the last window saves its layout
+  again.
+- Update checks refuse untrusted release links and downloads, and cancel
+  installation safely if the download is cleared.
+- Toasts announce their messages and have a keyboard-accessible dismiss button
+  that returns focus. They avoid repeating refusals, and stay visible with
+  dialogs in fullscreen Present. A repeated warning comes back to the front for
+  a full display time without being announced twice.
+- Redraw recovery keeps focus in Writer, length editors keep their row
+  highlight, and first-run setup waits for the screen to be ready.
+- The tour waits for open pages and dialogs, app-data pickers wait for dialogs
+  and the tour, and page focus stays with the overlay in front.
+- Closing About returns keyboard focus, and the next Escape reaches the active
+  view.
+- Gear rename drafts keep their text and cursor when script edits refresh the
+  panel.
+- Pasting a gallery picture loads its image, or warns when the picture can't be
+  copied.
+- **Tag** on a selection that includes an existing tag now explains why it can't
+  label it, and leaves the text and tags unchanged. It used to label a later
+  plain copy of the words instead.
 
 ### Changed
+- Export format cards put file extensions beneath the name, so B-roll shot list
+  stays on one line, and its Format selector says **PDF**.
 - Printed PDFs keep each table row on one page.
 - In a browser, PDF exports now open the print dialog. Choose **Save as PDF**
   to save the script, a gear or prop packing list, or the B-roll shot list.
