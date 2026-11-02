@@ -3,14 +3,18 @@
 import type { DesktopWireHistoryPut } from "../shared/desktop-contract.d.ts";
 
 import type { DesktopFileServiceBoundary, DesktopHistoryStoreBoundary, DesktopHistoryBlobIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type {
+  imageBlobRefusal as BlobImageRefusal, sniffImageMime as BlobMimeSniff,
+  isSha256 as BlobShaCheck, MAX_MISSING_QUERY as BlobMissingLimit
+} from "./blob-store.ts";
 
 const { toBuffer }: Pick<DesktopFileServiceBoundary, "toBuffer"> = require("./file-service");
 const { imageBlobRefusal, sniffImageMime, isSha256, MAX_MISSING_QUERY }: {
-  imageBlobRefusal: (bytes: Buffer) => string | null;
-  sniffImageMime: (bytes: Buffer) => string | null;
-  isSha256: (value: unknown) => boolean;
-  MAX_MISSING_QUERY: number;
-} = require("./blob-store");
+  imageBlobRefusal: typeof BlobImageRefusal;
+  sniffImageMime: typeof BlobMimeSniff;
+  isSha256: typeof BlobShaCheck;
+  MAX_MISSING_QUERY: typeof BlobMissingLimit;
+} = require("./blob-store.ts");
 
 function createHistoryBlobIpc({
   historyStore, historyHolds, historyProtectList, historyWireMeta, blobStore, historyPolicy, DOC_ID_RE

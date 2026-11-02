@@ -26,7 +26,7 @@ files:
   - session-restore.js
   - close-keep.js
   - quit-watchdog.js
-  - blob-store.js
+  - blob-store.ts
   - voice-composition.js
   - voice-helper.js
   - chromium-browsers.js

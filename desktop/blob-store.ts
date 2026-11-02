@@ -1,5 +1,21 @@
 "use strict";
 
+import type * as NodeFs from "node:fs";
+import type * as NodeFsPromises from "node:fs/promises";
+import type * as NodePath from "node:path";
+import type * as NodeCrypto from "node:crypto";
+
+interface DesktopBlobStoreOptions {
+  dir: string;
+  fs: typeof NodeFs;
+  fsp: typeof NodeFsPromises;
+  path: typeof NodePath;
+  crypto: typeof NodeCrypto;
+  maxBytes?: number;
+  testHooks?: { beforeRename?: (file: string) => unknown };
+}
+type DesktopBlobPutResult = { ok: true; stored: boolean } | { ok: false; code: string };
+
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const FORMAT_VERSION = "1";
 
@@ -9,20 +25,20 @@ const MAX_IMAGE_BLOB_BYTES = 16 * 1024 * 1024;
 
 const MAX_MISSING_QUERY = 2000;
 
-const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const RENAME_RETRY_CODES = new Set<unknown>(["EPERM", "EACCES", "EBUSY"]);
 const RENAME_ATTEMPTS = 5;
 const RENAME_RETRY_MS = 20;
 
-const WRITE_ERROR_CODES = new Set(["ENOSPC", "EACCES", "EPERM", "EBUSY", "EIO", "EROFS", "EDQUOT"]);
+const WRITE_ERROR_CODES = new Set<unknown>(["ENOSPC", "EACCES", "EPERM", "EBUSY", "EIO", "EROFS", "EDQUOT"]);
 
-function isSha256(v) {
+function isSha256(v: unknown): v is string {
   return typeof v === "string" && SHA256_RE.test(v);
 }
 
-function sniffImageMime(bytes) {
+function sniffImageMime(bytes: ArrayLike<number> | null | undefined) {
   const b = bytes;
   if (!b || typeof b.length !== "number") return null;
-  const at = (i) => b[i];
+  const at = (i: number) => b[i];
   if (b.length >= 8 && at(0) === 0x89 && at(1) === 0x50 && at(2) === 0x4e && at(3) === 0x47 &&
       at(4) === 0x0d && at(5) === 0x0a && at(6) === 0x1a && at(7) === 0x0a) return "image/png";
   if (b.length >= 3 && at(0) === 0xff && at(1) === 0xd8 && at(2) === 0xff) return "image/jpeg";
@@ -33,27 +49,27 @@ function sniffImageMime(bytes) {
   return null;
 }
 
-function imageBlobRefusal(bytes) {
+function imageBlobRefusal(bytes: ArrayLike<number> | null | undefined) {
   if (!bytes || typeof bytes.length !== "number" || bytes.length === 0) return "EMPTY";
   if (bytes.length > MAX_IMAGE_BLOB_BYTES) return "TOO_LARGE";
   if (!sniffImageMime(bytes)) return "NOT_AN_IMAGE";
   return null;
 }
 
-function createBlobStore(opts) {
+function createBlobStore(opts: DesktopBlobStoreOptions) {
   const o = opts || {};
   const { dir, fs, fsp, path, crypto } = o;
   if (typeof dir !== "string" || !dir) throw new TypeError("createBlobStore: dir is required");
   if (!fs || !fsp || !path || !crypto) throw new TypeError("createBlobStore: fs, fsp, path and crypto are required");
-  const maxBytes = Number.isInteger(o.maxBytes) && o.maxBytes > 0 ? o.maxBytes : MAX_BLOB_BYTES;
+  const maxBytes = Number.isInteger(o.maxBytes) && (o.maxBytes as number) > 0 ? o.maxBytes as number : MAX_BLOB_BYTES;
   const hooks = o.testHooks && typeof o.testHooks === "object" ? o.testHooks : null;
 
   const shaRoot = path.join(dir, "sha256");
   let readOnly = false;
   let initialised = false;
 
-  const locks = new Map();
-  function withLock(sha, fn) {
+  const locks = new Map<string, Promise<void>>();
+  function withLock<T>(sha: string, fn: () => Promise<T>): Promise<T> {
     const prev = locks.get(sha) || Promise.resolve();
     const run = prev.then(fn, fn);
     const tail = run.then(() => {}, () => {});
@@ -62,19 +78,19 @@ function createBlobStore(opts) {
     return run;
   }
 
-  function hashHex(buf) {
+  function hashHex(buf: Uint8Array) {
     return crypto.createHash("sha256").update(buf).digest("hex");
   }
 
-  function shardDir(sha) {
+  function shardDir(sha: string) {
     return path.join(shaRoot, sha.slice(0, 2));
   }
 
-  function blobPath(sha) {
+  function blobPath(sha: string) {
     return path.join(shardDir(sha), sha);
   }
 
-  function toBuf(bytes) {
+  function toBuf(bytes: unknown) {
     if (Buffer.isBuffer(bytes)) return bytes;
     if (bytes instanceof Uint8Array) return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     if (bytes instanceof ArrayBuffer) return Buffer.from(bytes);
@@ -82,23 +98,23 @@ function createBlobStore(opts) {
     return null;
   }
 
-  function sleep(ms) {
+  function sleep(ms: number) {
     return new Promise((r) => setTimeout(r, ms));
   }
 
-  async function renameRetry(from, to) {
+  async function renameRetry(from: string, to: string) {
     for (let attempt = 1; ; attempt++) {
       try {
         await fsp.rename(from, to);
         return;
       } catch (err) {
-        if (attempt >= RENAME_ATTEMPTS || !err || !RENAME_RETRY_CODES.has(err.code)) throw err;
+        if (attempt >= RENAME_ATTEMPTS || !err || !RENAME_RETRY_CODES.has((err as NodeJS.ErrnoException).code)) throw err;
         await sleep(RENAME_RETRY_MS);
       }
     }
   }
 
-  async function fsyncDirBestEffort(d) {
+  async function fsyncDirBestEffort(d: string) {
     let fh = null;
     try {
       fh = await fsp.open(d, "r");
@@ -109,7 +125,7 @@ function createBlobStore(opts) {
     }
   }
 
-  function writeSmallDurableSync(file, text) {
+  function writeSmallDurableSync(file: string, text: string) {
     const tmp = path.join(path.dirname(file), `.tmp-${crypto.randomBytes(6).toString("hex")}-${path.basename(file)}`);
     let fd = null;
     try {
@@ -128,7 +144,7 @@ function createBlobStore(opts) {
 
   function sweepTemps() {
     let removed = 0;
-    const sweepIn = (d) => {
+    const sweepIn = (d: string) => {
       let names;
       try { names = fs.readdirSync(d); } catch (_) { return; }
       for (const name of names) {
@@ -137,7 +153,7 @@ function createBlobStore(opts) {
       }
     };
     sweepIn(dir);
-    let shards;
+    let shards: string[];
     try { shards = fs.readdirSync(shaRoot); } catch (_) { shards = []; }
     for (const s of shards) {
       if (/^[0-9a-f]{2}$/.test(s)) sweepIn(path.join(shaRoot, s));
@@ -165,7 +181,7 @@ function createBlobStore(opts) {
     if (!initialised) init();
   }
 
-  async function statSize(file) {
+  async function statSize(file: string) {
     try {
       const st = await fsp.stat(file);
       return st.isFile() ? st.size : -1;
@@ -174,18 +190,18 @@ function createBlobStore(opts) {
     }
   }
 
-  async function has(sha) {
+  async function has(sha: unknown) {
     if (!isSha256(sha)) return false;
     return (await statSize(blobPath(sha))) >= 0;
   }
 
-  function put(sha, bytes) {
+  function put(sha: unknown, bytes: unknown): Promise<DesktopBlobPutResult> {
     if (!isSha256(sha)) return Promise.resolve({ ok: false, code: "BAD_SHA" });
     const buf = toBuf(bytes);
     if (!buf) return Promise.resolve({ ok: false, code: "BAD_BYTES" });
     if (buf.length > maxBytes) return Promise.resolve({ ok: false, code: "TOO_LARGE" });
     if (hashHex(buf) !== sha) return Promise.resolve({ ok: false, code: "HASH_MISMATCH" });
-    return withLock(sha, async () => {
+    return withLock<DesktopBlobPutResult>(sha, async () => {
       ensureInit();
       const target = blobPath(sha);
       if ((await statSize(target)) === buf.length) return { ok: true, stored: false };
@@ -210,7 +226,7 @@ function createBlobStore(opts) {
         if (fh) { try { await fh.close(); } catch (_) { } }
         try { await fsp.unlink(tmp); } catch (_) { }
         if ((await statSize(target)) === buf.length) return { ok: true, stored: false };
-        const code = err && WRITE_ERROR_CODES.has(err.code) ? err.code : "WRITE_FAILED";
+        const code = err && WRITE_ERROR_CODES.has((err as NodeJS.ErrnoException).code) ? (err as NodeJS.ErrnoException).code as string : "WRITE_FAILED";
         return { ok: false, code };
       }
       await fsyncDirBestEffort(shard);
@@ -218,7 +234,7 @@ function createBlobStore(opts) {
     });
   }
 
-  function get(sha) {
+  function get(sha: unknown) {
     if (!isSha256(sha)) return Promise.resolve(null);
     return withLock(sha, async () => {
       const file = blobPath(sha);
@@ -236,10 +252,10 @@ function createBlobStore(opts) {
     });
   }
 
-  async function missing(shas) {
+  async function missing<T>(shas: readonly T[] | null | undefined): Promise<T[]> {
     const out = [];
     const seen = new Set();
-    for (const sha of Array.isArray(shas) ? shas : []) {
+    for (const sha of Array.isArray(shas) ? shas as readonly T[] : []) {
       if (seen.has(sha)) continue;
       seen.add(sha);
       if (!(await has(sha))) out.push(sha);
@@ -248,7 +264,7 @@ function createBlobStore(opts) {
   }
 
   async function list() {
-    const out = [];
+    const out: string[] = [];
     let shards;
     try { shards = await fsp.readdir(shaRoot); } catch (_) { return out; }
     for (const s of shards) {
@@ -260,7 +276,7 @@ function createBlobStore(opts) {
     return out;
   }
 
-  function del(sha) {
+  function del(sha: unknown) {
     if (!isSha256(sha)) return Promise.resolve(false);
     return withLock(sha, async () => {
       try {
@@ -282,9 +298,14 @@ function createBlobStore(opts) {
     list,
     delete: del,
     get readOnly() { return readOnly; },
-    pathFor: (sha) => (isSha256(sha) ? blobPath(sha) : null)
+    pathFor: (sha: unknown) => (isSha256(sha) ? blobPath(sha) : null)
   };
 }
+
+export type {
+  createBlobStore, sniffImageMime, imageBlobRefusal, isSha256, SHA256_RE,
+  MAX_BLOB_BYTES, MAX_IMAGE_BLOB_BYTES, MAX_MISSING_QUERY, FORMAT_VERSION
+};
 
 module.exports = {
   createBlobStore,
