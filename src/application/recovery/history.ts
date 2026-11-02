@@ -391,10 +391,14 @@ function historyExportError(code: string, message: string) {
 function historyReadIsTemporary(error: unknown) {
   const failure = (error && typeof error === "object" ? error : { message: error }) as { code?: unknown; name?: unknown; message?: unknown; cause?: unknown };
   const cause = (failure.cause && typeof failure.cause === "object" ? failure.cause : { message: failure.cause }) as typeof failure;
+  const permanent = /(?:^|[\s:(])(?:EACCES|EPERM|ENOENT|ENOTDIR|EISDIR|EROFS|ENOSPC|EDQUOT|EINVAL|ENAMETOOLONG|ELOOP)(?=$|[\s:),.;])/i;
+  if ([failure.code, failure.name, failure.message, cause.code, cause.name, cause.message].some(function (value) {
+    return typeof value === "string" && permanent.test(value);
+  })) return false;
   return [failure.code, failure.name, cause.code, cause.name].some(function (value) {
     return typeof value === "string" && /^(?:timeout|ETIMEDOUT|ESOCKETTIMEDOUT|EAGAIN|EWOULDBLOCK|EBUSY|EINTR|ECONNRESET|ECONNABORTED|ENETDOWN|ENETUNREACH|EHOSTUNREACH|AbortError|TimeoutError|NetworkError)$/i.test(value);
   }) || [failure.message, cause.message].some(function (value) {
-    return typeof value === "string" && /\b(?:ETIMEDOUT|ESOCKETTIMEDOUT|EAGAIN|EWOULDBLOCK|EBUSY|EINTR|ECONNRESET|ECONNABORTED|ENETDOWN|ENETUNREACH|EHOSTUNREACH|AbortError|TimeoutError|NetworkError)\b|\btimed out\b|\btemporar(?:y|ily)\b|(?:^|:\s*)timeout[.!]?$/i.test(value);
+    return typeof value === "string" && (/(?:^|[\s:(])(?:ETIMEDOUT|ESOCKETTIMEDOUT|EAGAIN|EWOULDBLOCK|EBUSY|EINTR|ECONNRESET|ECONNABORTED|ENETDOWN|ENETUNREACH|EHOSTUNREACH|AbortError|TimeoutError|NetworkError)(?=$|[\s:),.;])/i.test(value) || /(?:^|:\s*)(?:Error:\s*)?History request timed out\.$/i.test(value));
   });
 }
 

@@ -306,11 +306,39 @@ test("choosing export rest rereads fresh history and includes recovered versions
 });
 
 const temporaryFailures = [
+  new Error("History request timed out."),
   Object.assign(new Error("read failed"), { code: "ETIMEDOUT" }),
   Object.assign(new Error("read aborted"), { name: "AbortError" }),
   new Error("Error invoking remote method 'history-get': Error: EAGAIN: resource temporarily unavailable"),
   new Error("read failed", { cause: Object.assign(new Error("interrupted"), { code: "EINTR" }) })
 ];
+
+const permanentPathFailures = [
+  new Error("Error invoking remote method 'blob-get': Error: EACCES: permission denied, open 'C:\\Users\\Temporary\\ETIMEDOUT\\image.png'"),
+  Object.assign(new Error("History request timed out."), { code: "EACCES" }),
+  new Error("ETIMEDOUT: read failed", { cause: Object.assign(new Error("missing"), { code: "ENOENT" }) }),
+  new Error("ENOENT: no such file, open 'C:\\Users\\Temporary\\image.png'"),
+  new Error("Could not read 'C:\\Users\\Temporary\\EBUSY\\image.png'"),
+  new Error("Could not read 'C:\\Users\\timed out\\image.png'")
+];
+
+for (const [index, failure] of permanentPathFailures.entries()) test(`permanent image failure or path marker ${index} preserves the explicit offer`, async (t) => {
+  const pictures = createBlobStore({ preferred: null, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  pictures.setBackend(makeDesktopBlobBackend({ blobGet: async () => { throw failure; }, blobPut: async () => ({ ok: true }), blobMissing: async () => [] }));
+  const h = await harness(t, "filesystem", [good], {}, { pictures });
+  await assert.rejects(h.owner.exportHistoryAll(), (error) => {
+    assert.equal(error.code, "read-failed");
+    assert.equal(error.canExportRest, true);
+    return true;
+  });
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 1);
+  await a.choices[0].action();
+  assert.equal(a.delivered.length, 1);
+  assert.deepEqual(a.delivered[0].missingBlobs, [image]);
+});
 
 for (const [index, failure] of temporaryFailures.entries()) {
   test(`temporary body rejection ${index} cancels both export modes without a choice`, async (t) => {
