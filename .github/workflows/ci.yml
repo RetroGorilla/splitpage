@@ -68,8 +68,8 @@ jobs:
       - name: Install tooling
         run: npm ci && npm ci --prefix desktop
 
-      - name: Desktop preload is generated from its checked source
-        run: node tools/build-preload.mjs && git diff --exit-code -- desktop/preload.js
+      - name: Desktop preloads are generated from their checked sources
+        run: node tools/build-preload.mjs && git diff --exit-code -- desktop/preload.js desktop/tabstrip-preload.js
 
       - name: Lint
         run: npm run lint

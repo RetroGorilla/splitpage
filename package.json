@@ -17,7 +17,7 @@
     "check:comments": "node tools/comment-gate.mjs",
     "typecheck": "node tools/typecheck.mjs",
     "mutants": "node tools/mutants.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run check:deps && npm run check:comments && node build.mjs && node tools/build-preload.mjs && git diff --exit-code -- sw.js desktop/preload.js && npm run test:all"
+    "verify": "npm run lint && npm run typecheck && npm run check:deps && npm run check:comments && node build.mjs && node tools/build-preload.mjs && git diff --exit-code -- sw.js desktop/preload.js desktop/tabstrip-preload.js && npm run test:all"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
