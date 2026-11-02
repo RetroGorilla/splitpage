@@ -4,7 +4,7 @@
 # (Windows' recogniser), the address it opens carries `voice=<port>-<hex>` in
 # the fragment beside `script=`. The page then follows through the desktop
 # app — an EventSource on http://127.0.0.1:<port>/prompter-voice/<hex>
-# (desktop/prompter-share.js) — instead of the browser's Web Speech, so any
+# (desktop/prompter-share.ts) — instead of the browser's Web Speech, so any
 # browser will do, and it never asks the browser for the microphone.
 #
 # No desktop listener answers here, so window.EventSource is replaced by a

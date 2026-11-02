@@ -29,9 +29,9 @@ export type TextRun = { atom?: undefined; text: string; marks: Marks };
 
 export type BrollRun = { atom: "broll"; id: string; text: string; marks: Marks };
 
-export type ImageRun = { atom: "image"; ref: StoredImageRef; text: ""; marks: Marks };
+export type ImageRun = { atom: "image"; id?: undefined; ref: StoredImageRef; text: ""; marks: Marks };
 
-export type VideoRun = { atom: "video"; href: string; host: string; text: ""; marks: Marks };
+export type VideoRun = { atom: "video"; id?: undefined; href: string; host: string; text: ""; marks: Marks };
 
 type MediaRun = ImageRun | VideoRun;
 
