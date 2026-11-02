@@ -389,6 +389,19 @@ test("#1049 re-review: a new id-less disk row cannot undo an explicit scene dele
   assert.deepEqual(doc.rows.map(r => r.audioText), ["Survivor.", "Added."]);
 });
 
+for (const action of ["resolved", "assignee"]) {
+  test("#1049 fourth review: a surviving explicit identity prevents random-ID fallback for " + action, async () => {
+    const base = migrateRows({ ...raw(), rows: [{ id: "rabcdefghi123456", audioText: "Deleted original." },
+      { id: "rsurvivor123456", audioText: "Survivor." }],
+    comments: [{ id: "c", rowId: "rabcdefghi123456", field: "visualImage", body: "Note", resolved: false }] });
+    const mine = structuredClone(base), disk = structuredClone(base);
+    mine.comments[0][action] = action === "resolved" ? true : "Sam";
+    disk.rows.shift(); disk.comments = []; disk.rows.push({ audioText: "New disk scene." });
+    const { doc } = await recover(disk, base, mine);
+    assert.deepEqual(doc.rows.map(row => row.audioText), ["Survivor.", "New disk scene."]);
+  });
+}
+
 test("#1049 re-review: replace-all draft plus revision-only disk change keeps sixty scenes without conflicts", async () => {
   const disk = { ...raw(), rows: Array.from({ length: 30 }, (_, at) => ({ audioText: "Original " + at })) };
   const base = migrateRows(structuredClone(disk)), mine = structuredClone(base);

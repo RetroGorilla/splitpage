@@ -40,3 +40,17 @@ test("identity-replacement recovery reserves other records and leaves all origin
   assert.deepEqual(got.base?.rows, []);
   assert.deepEqual(got.base?.comments, []);
 });
+
+test("a surviving explicit scene prevents legacy fallback for production-shaped IDs", () => {
+  const base = migrateRows({ rows: [{ id: "rabcdefghi123456", audioText: "Deleted." },
+    { id: "rsurvivor123456", audioText: "Survivor." }],
+  comments: [{ id: "c", rowId: "rabcdefghi123456", body: "Note" }] }, fakeMigration().ports);
+  const mine = structuredClone(base), disk = structuredClone(base);
+  mine.comments[0]!.assignee = "Sam";
+  disk.rows.shift(); disk.comments = [];
+  disk.rows.push({ id: "r-load-" + "b".repeat(24) + "-1", audioText: "New disk scene." });
+  const got = prepareIdentityReplacement(base, mine, disk, () => { throw new Error("The surviving ID rules out replacement"); });
+  assert.equal(got.base, base);
+  assert.equal(got.mine, mine);
+  assert.equal(got.disk, disk);
+});
