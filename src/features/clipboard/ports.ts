@@ -24,7 +24,7 @@ export interface CellClipboardPorts {
   readonly ids: Pick<IdSource, "id">;
   readonly nonce: () => string;
   readonly selection: (cell: Element) => CellRange | null;
-  readonly cells: Pick<CellEditing<Element>, "open" | "close">;
+  readonly cells: Pick<CellEditing<Element, unknown>, "open" | "close">;
   readonly paintGuard: Pick<PaintGuard, "whileShown">;
   readonly brollSeed: (row: DeepReadonly<DocumentRow>) => BrollSeedPlace;
 }
