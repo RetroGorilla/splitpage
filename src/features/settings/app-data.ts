@@ -125,7 +125,8 @@ async function exportAppData() {
   }
 
   const omitted = bundle.history?.omittedSnapshots || 0;
-  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: omitted ? "Exported your Splitpage app data with omissions" : "Exported your Splitpage app data" });
+  const truncated = !!bundle.history?.truncated;
+  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: omitted || truncated ? "Exported your Splitpage app data with omissions" : "Exported your Splitpage app data" });
   const missing = bundle.missingBlobs || [];
   appDataLastExport = {
     ok: !!saved,
@@ -144,6 +145,11 @@ async function exportAppData() {
   if (saved && omitted) {
     const warning = "Exported, but " + appDataPlural(omitted, "damaged or unreadable history snapshot", "damaged or unreadable history snapshots") +
       " could not be included. Intact versions and their available images are included.";
+    appDataLastExport.warning = [appDataLastExport.warning, warning].filter(Boolean).join(" ");
+    ports.notices.show(appDataLastExport.warning, "warn", true);
+  }
+  if (saved && truncated) {
+    const warning = "Exported, but some older history snapshots were left out to keep the file within the export size limit.";
     appDataLastExport.warning = [appDataLastExport.warning, warning].filter(Boolean).join(" ");
     ports.notices.show(appDataLastExport.warning, "warn", true);
   }
