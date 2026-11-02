@@ -137,7 +137,7 @@ test("the derived replacement id is FROZEN (invariant #37)", () => {
   assert.notEqual(derive(ID, "file:a.md"), derive(ID, "file:b.md"));
 });
 
-test("a require() sees exactly what an import does — this file is CommonJS on purpose", () => {
+test("require() and import see the same named exports", () => {
   const require = createRequire(import.meta.url);
   const cjs = require("../../shared/doc-id-policy.js");
   assert.equal(cjs.chooseDuplicateLoser, chooseDuplicateLoser);
