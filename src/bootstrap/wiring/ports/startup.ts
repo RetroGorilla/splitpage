@@ -13,8 +13,11 @@ export const startup: StartupSignal = {
 
 export const domStartup: StartupSignal = {
   ready: async () => {
-    await new Promise<void>(resolve => { whenDocumentReady(document, resolve); });
-    return startupReady();
+    // why: Native readiness events can run promise continuations before later startup listeners.
+    await new Promise<void>(resolve => { whenDocumentReady(document, () => { setTimeout(resolve, 0); }); });
+    const ready = startupReady();
+    if (!ready) throw new Error("The app has not started yet");
+    return ready;
   }
 };
 
