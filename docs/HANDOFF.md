@@ -494,7 +494,7 @@ tabs**.
   last server leftovers; a browser draft a former server document left in
   IndexedDB is no longer read.
 - **Desktop version history** (#83, `main.js` §8b): one
-  `shared/history-store.js` (the store the browser runs too; policy from
+  `shared/history-store.ts` (the store the browser runs too; policy from
   `shared/history-policy.ts`) over `desktop/history-fs-backend.ts`, both
   made once in `whenReady` before `registerIpc`. `<userData>/history/`:
   `FORMAT` `"2"` (higher → read-only), `index.json` + `index.prev.json`
@@ -1006,7 +1006,7 @@ Never in the seed, `#state-data`, or Standalone HTML export. Join key for
 per-document history, drafts, duplicate-tab detection. Invariants #35–#37.
 
 **Per-document version history**, capped 50 snapshots/document, keyed by
-`docId`. ONE store since #83, `shared/history-store.js` (put-if-absent by
+`docId`. ONE store since #83, `shared/history-store.ts` (put-if-absent by
 snapshot id, the stamp after the bucket's newest, the trim to 50, cap
 eviction, the quota retry, Older's creation and expiry, holds, index-only
 copy, which bodies may go), run over a backend per place: in the browser
@@ -1154,7 +1154,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.js` over `history-fs-backend.ts`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
+| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.ts` over `history-fs-backend.ts`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
 | `desktop/desktop-state.ts`, `file-service.ts`, `doc-claims.ts`, `recents.ts`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.ts` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
 | `desktop/close-quit.ts`, `session-restore.ts` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
 | `desktop/ipc-setup.ts`, `ipc-files.ts`, `ipc-shell.ts`, `ipc-document.ts`, `ipc-history-blob.ts`, `ipc-tabstrip.ts`, `ipc-test-mode.ts` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups); the file, file dialog and recents channels; the tab boot, theme, video file, update, teleprompter browser and Follow My Voice channels; the document state, route-open and crash-draft channels; the version history and image blob channels; the tab strip's channels; the `__test` channels, registered only in test mode |
@@ -1164,12 +1164,12 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/voice-helper.ts` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
 | `desktop/drafts.ts` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
-| `shared/history-store.js` | THE version-history store (#83), synchronous ESM run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.ts`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
+| `shared/history-store.ts` | THE version-history store (#83), synchronous ESM run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.ts`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
 | `shared/history-policy.ts` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
 | `shared/blob-policy.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
 | `shared/video-embed.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
 | `desktop/blob-store.ts` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
-| `desktop/history-fs-backend.ts` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
+| `desktop/history-fs-backend.ts` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.ts` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
 | `desktop/electron-arch.mjs` | pure architecture selection and the `fetch-electron` entry point; passes the selected architecture to Electron's installer (§2) |
 | `desktop/electron-arch.test.mjs` | pure architecture and override tests, including Windows ARM64 under x64 Node emulation |
 | `desktop/electron-builder.yml` | packaging config, x64 + ARM64 Windows |

@@ -42,9 +42,10 @@ dialog signatures from the converted helpers and keeps its existing
 question, draft flush, settlement and quit order.
 
 `history-fs-backend.ts` also uses main-process type stripping and the existing
-`desktop/*.ts` strict check. Its reader view derives from the current history
-record type but promises only string snapshot ids and valid SHA hashes; other
-metadata stays unknown until the shared store supplies its own checked types.
+`desktop/*.ts` strict check. Its transactions and disk reader use the shared
+store's real types. The filesystem reader checks snapshot ids and SHA hashes;
+other metadata stays unknown until the shared store sanitizes it. The shared
+reader also covers IndexedDB, whose snapshot headers are not validated there.
 
 `session-restore.ts` uses the same strict desktop check and main-process
 type stripping. Its draft initialization and listing types come from the

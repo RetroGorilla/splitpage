@@ -41,7 +41,7 @@ A PR that moves code keeps the bugs it moves. Each one is filed as an issue and 
   | Change touches | Groups |
   |---|---|
   | The action registry, menu items, or the screen and overlay rules (`src/bootstrap/actions.ts`, `src/features/*/actions.ts`, `src/application/screen.ts`, `screen-state.ts`) | `open/`, `unsaved-changes close`, `teleprompter` |
-  | Saving, document ids, drafts, history or recovery (`02b-doc-id.js`, `14-export.js`, `18-local-files.js`, `20g-drafts.js`, `src/adapters/storage/draft-store-*.ts`, `src/application/recovery/`, `03a-history-store.js`, `03c-history-idb.ts`) | `open/save`, `save-in-place`, `duplicate document id`, `draft:`, `history:` |
+  | Saving, document ids, drafts, history or recovery (`02b-doc-id.js`, `14-export.js`, `18-local-files.js`, `20g-drafts.js`, `src/adapters/storage/draft-store-*.ts`, `src/application/recovery/`, `shared/history-store.ts`, `03c-history-idb.ts`) | `open/save`, `save-in-place`, `duplicate document id`, `draft:`, `history:` |
 
   When code moves to a new owner, the rule follows the code, not the old file name. The PR records the groups run and their counts. A failure that also fails on the base becomes an issue, as in §6.
 - Milestone gates follow §8.

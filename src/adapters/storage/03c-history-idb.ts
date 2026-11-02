@@ -1,4 +1,5 @@
 import type { HistoryBackendTransaction, HistoryIndex, HistoryIndexRecord } from "./history-backend-types.ts";
+import type { SharedHistoryBucketReader } from "../../../shared/history-store.ts";
 
 type IdbHistoryError = { name?: string; code?: string | number; cause?: unknown };
 type IdbHistoryRow = HistoryIndexRecord & { bucket: string };
@@ -56,7 +57,7 @@ function recordOf(row: IdbHistoryRow) {
   return out;
 }
 
-function rowOf(bucket: string, rec: HistoryIndexRecord) {
+function rowOf(bucket: string, rec: SharedHistoryBucketReader) {
   const row = JSON.parse(JSON.stringify(rec)) as IdbHistoryRow;
   row.bucket = bucket;
   return row;
@@ -229,9 +230,9 @@ export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; nam
           return out;
         });
       },
-      get: function (sha: string) {
+      get: function (sha: unknown) {
         if (typeof sha !== "string") return Promise.resolve(null);
-        return idbReq(bodies.get(sha) as IDBRequest<{ stateJson?: unknown } | undefined>).then(function (row) {
+        return idbReq(bodies.get(sha as IDBValidKey) as IDBRequest<{ stateJson?: unknown } | undefined>).then(function (row) {
           return row && typeof row.stateJson === "string" ? row.stateJson : null;
         });
       },
@@ -247,7 +248,7 @@ export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; nam
           return idbReq(bodies.put({ sha: sha, stateJson: text })).then(noop);
         });
       },
-      commit: function (changes: Record<string, HistoryIndexRecord | null>, dropped: string[]) {
+      commit: function (changes: Parameters<HistoryBackendTransaction["commit"]>[0], dropped: string[]) {
         try {
           mustWrite();
           if (committed) throw codedError("io", "history: commit called twice in one transaction");

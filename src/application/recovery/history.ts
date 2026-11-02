@@ -1,11 +1,12 @@
 import type { HistoryInstrumentation, HistoryPendingSnapshot } from "./history-instrumentation.ts";
-import type { HistoryOwner, HistoryOwnerPorts, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult, HistoryResolvedBackend, HistoryImportResult } from "./history-ports.ts";
+import type { HistoryOwner, HistoryOwnerPorts, HistorySnapshotMeta, HistorySnapshotRead, HistorySnapshotReply, HistoryWriteResult, HistoryResolvedBackend, HistoryImportResult } from "./history-ports.ts";
 
 
 type HistoryAddress = { id?: string; docId?: string | null; older?: boolean };
 type HistoryMigrationResult = { migrated: number; removedKey: boolean };
-type HistoryExportDoc = { docId: string; title: string; lastOpenedAt: number; metas: HistorySnapshotMeta[]; snapshots?: HistorySnapshotRead[] };
-type HistoryExportBundle = { docs: { docId: string; title: string; lastOpenedAt: number; snapshots: HistorySnapshotRead[] }[]; older: HistorySnapshotRead[]; truncated: boolean; blobs?: Record<string, HistoryImageData>; missingBlobs?: string[] };
+type HistoryExportSnapshot = { meta: HistorySnapshotReply["meta"]; stateJson: HistorySnapshotReply["stateJson"] };
+type HistoryExportDoc = { docId: string; title: unknown; lastOpenedAt: number; metas: HistorySnapshotMeta[]; snapshots?: HistoryExportSnapshot[] };
+type HistoryExportBundle = { docs: { docId: string; title: unknown; lastOpenedAt: number; snapshots: HistoryExportSnapshot[] }[]; older: HistoryExportSnapshot[]; truncated: boolean; blobs?: Record<string, HistoryImageData>; missingBlobs?: string[] };
 type HistoryImageData = { mime: string; b64: string };
 type HistoryImportCandidate = { atMs: number; id: string; entry: HistorySnapshotRead | null };
 type HistoryImportCounts = { -readonly [K in keyof HistoryImportResult]: HistoryImportResult[K] };
@@ -418,11 +419,11 @@ function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExp
     (d.metas || []).forEach(function (m) {
       if (!keep[d.docId + "\n" + m.id]) return;
       bodyJobs.push(backend.get(d.docId, m.id).then(function (r) {
-        if (r) (d.snapshots as HistorySnapshotRead[]).push({ meta: r.meta, stateJson: r.stateJson });
+        if (r) (d.snapshots as HistoryExportSnapshot[]).push({ meta: r.meta, stateJson: r.stateJson });
       }));
     });
   });
-  const olderOut: HistorySnapshotRead[] = [];
+  const olderOut: HistoryExportSnapshot[] = [];
   (olderMetas || []).forEach(function (m) {
     if (!keep["_older\n" + m.id]) return;
     bodyJobs.push(backend.get(HISTORY_OLDER_KEY, m.id).then(function (r) {
@@ -430,12 +431,12 @@ function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExp
     }));
   });
   return Promise.all(bodyJobs).then(function () {
-    function newestFirst(a: HistorySnapshotRead, b: HistorySnapshotRead) { return b.meta.atMs - a.meta.atMs; }
-    docs.forEach(function (d) { (d.snapshots as HistorySnapshotRead[]).sort(newestFirst); });
+    function newestFirst(a: HistoryExportSnapshot, b: HistoryExportSnapshot) { return (b.meta as HistorySnapshotMeta).atMs - (a.meta as HistorySnapshotMeta).atMs; }
+    docs.forEach(function (d) { (d.snapshots as HistoryExportSnapshot[]).sort(newestFirst); });
     olderOut.sort(newestFirst);
     return {
       docs: docs.map(function (d) {
-        return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots as HistorySnapshotRead[] };
+        return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots as HistoryExportSnapshot[] };
       }),
       older: olderOut,
       truncated: truncated
@@ -491,13 +492,13 @@ function historyBlobCost(sha: string, entry: HistoryImageData) {
 
 async function historyExportAttachBlobs(out: HistoryExportBundle) {
   const cap = historyExportCap();
-  const all: { snap: HistorySnapshotRead; owner: HistorySnapshotRead[] }[] = [];
+  const all: { snap: HistoryExportSnapshot; owner: HistoryExportSnapshot[] }[] = [];
   out.docs.forEach(function (d) {
     d.snapshots.forEach(function (s) { all.push({ snap: s, owner: d.snapshots }); });
   });
   out.older.forEach(function (s) { all.push({ snap: s, owner: out.older }); });
   all.sort(function (a, b) {
-    return (b.snap.meta.atMs - a.snap.meta.atMs) || (a.snap.meta.id < b.snap.meta.id ? 1 : -1);
+    return ((b.snap.meta as HistorySnapshotMeta).atMs - (a.snap.meta as HistorySnapshotMeta).atMs) || ((a.snap.meta as HistorySnapshotMeta).id < (b.snap.meta as HistorySnapshotMeta).id ? 1 : -1);
   });
 
   const blobs: Record<string, HistoryImageData> = {}, missing: string[] = [], counted: Record<string, boolean> = {};

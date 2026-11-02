@@ -7,7 +7,7 @@ import type { StateField } from "../../core/document/fields.ts";
 import type { MigratePorts } from "../../core/migrate.ts";
 import type { LineShotIds } from "../../core/production/broll.ts";
 import type { textMergeContext } from "../../core/merge/text-field.ts";
-import type { HistoryOwner, HistorySnapshotRead } from "../recovery/history-ports.ts";
+import type { HistoryOwner, HistorySnapshotReply } from "../recovery/history-ports.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
 import type { TextServices } from "../text/services.ts";
 import type { SaveCoordinator } from "../save/coordinator.ts";
@@ -56,7 +56,7 @@ export interface SessionMergeOwnerPorts {
   readonly location: Pick<DocumentLocation, "setHome">;
   readonly undo: Pick<MergeUndo, "arm">;
   readonly production: { readonly reset: () => void };
-  readonly onRestored: (snapshot: HistorySnapshotRead, request: SnapshotRestoreRequest) => void;
+  readonly onRestored: (snapshot: HistorySnapshotReply, request: SnapshotRestoreRequest) => void;
 }
 
 export interface SessionMergeOwner {
