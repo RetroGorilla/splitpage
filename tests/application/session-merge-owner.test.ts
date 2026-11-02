@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSessionMergeOwner } from "../../src/application/session/session-merge.js";
+import { createSessionMergeOwner } from "../../src/application/session/session-merge.ts";
 import type { SessionMergeOwner, SessionMergeOwnerPorts } from "../../src/application/session/session-merge-ports.ts";
 import type { HistorySnapshotRead, HistoryWriteResult } from "../../src/application/recovery/history-ports.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
