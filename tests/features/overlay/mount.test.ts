@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mountOverlay } from "../../../src/features/overlay/mount.ts";
 import type { OverlayPorts, OverlayMount } from "../../../src/features/overlay/mount.ts";
 import { jsdomWindow } from "../editing/jsdom.mjs";
+import { fakeScreen } from "../fakes.ts";
 
 type Realm = Window & typeof globalThis;
 const expectedOrder = ["document:mousedown/C", "toolbar:mousedown/B", "window:keydown/B", "writer-bar:mousedown/B", "document:focusin/B", "window:keydown/B"];
@@ -23,9 +24,11 @@ function harness() {
   };
   doc.querySelector(".toolbar");
   const calls: string[] = [];
+  const view = fakeScreen();
   const state = { selected: false, writer: false, painting: false, ghost: false };
   const log = (name: string) => (): void => { calls.push(name); };
   const ports: OverlayPorts = {
+    screen: view.screen,
     closeRowMenus: log("close-menus"), selectedKeys: () => state.selected ? ["tag"] : [],
     clearProductionSelection: () => { calls.push("clear-selection"); state.selected = false; },
     renderProduction: log("render"), closeCommentComposer: (cancelled) => { calls.push("composer:" + cancelled); },
@@ -71,8 +74,25 @@ function harness() {
     owner.mountToolbar(); owner.mountCommentsEscape(); owner.mountWriterBar(); owner.mountWriterFocus();
   }
   const mount = () => { const owner = begin(); stages(owner); return owner; };
-  return { win, doc, el, calls, state, ports, order, records, fire, begin, stages, mount };
+  return { win, doc, el, calls, state, ports, view, order, records, fire, begin, stages, mount };
 }
+
+test("Writer focus yields to the screen overlay in front", () => {
+  const h = harness();
+  const owner = h.mount();
+  h.state.writer = true;
+  try {
+    for (const blocker of ["dialog", "launcher", "tour", "prompter"] as const) {
+      h.view.state[blocker] = true;
+      h.el("outside").focus();
+      assert.equal(h.doc.activeElement, h.el("outside"), blocker);
+      h.el("outside").blur();
+      h.view.state[blocker] = false;
+    }
+    h.el("outside").focus();
+    assert.equal(h.doc.activeElement, h.el("first"));
+  } finally { owner.dispose(); h.win.close(); }
+});
 
 test("overlay: all six registrations retain target, order, phase and multiplicity across disposal and remount", () => {
   const h = harness();
@@ -160,7 +180,10 @@ test("overlay: Writer focus trap preserves paint, closed Writer, modal, toast an
     h.state.writer = true; h.state.painting = true;
     h.fire(h.el("outside"), "focusin");
     h.state.painting = false;
-    for (const id of ["first", "second", "wr-close", "writer-input", "modal-input", "toast-button"]) h.fire(h.el(id), "focusin");
+    for (const id of ["first", "second", "wr-close", "writer-input", "toast-button"]) h.fire(h.el(id), "focusin");
+    h.view.state.dialog = true;
+    h.fire(h.el("modal-input"), "focusin");
+    h.view.state.dialog = false;
     h.fire(h.doc, "focusin");
     assert.deepEqual(h.calls, []);
     h.el("outside").focus();

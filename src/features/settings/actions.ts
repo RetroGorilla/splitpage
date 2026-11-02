@@ -1,7 +1,7 @@
 import type { ActionDefinition } from "../../application/actions.ts";
 import { settingsAction } from "../../application/settings-actions.ts";
 import type { SettingsControls } from "../../application/settings-actions.ts";
-import { availableUnless } from "../../application/screen.ts";
+import { availableUnless, OPENS_A_DIALOG } from "../../application/screen.ts";
 import type { AppDataActionPorts, AppDataMount, SettingsActionPorts } from "./ports.ts";
 
 export function settingsActions(current: () => SettingsControls | null, ports: SettingsActionPorts): ActionDefinition[] {
@@ -16,7 +16,7 @@ export function appDataActions(current: () => AppDataMount | null, ports: AppDat
       group: "Help",
       icon: "i-box",
       words: "backup move desktop app data history",
-      availability: () => current() ? availableUnless(["loading"], ports.screen()) : { enabled: false },
+      availability: () => current() ? availableUnless(["loading", ...OPENS_A_DIALOG], ports.screen()) : { enabled: false },
       run: () => current()?.exportAppData()
     },
     {
@@ -27,7 +27,7 @@ export function appDataActions(current: () => AppDataMount | null, ports: AppDat
       words: "restore move desktop app data history",
       availability: () => {
         if (!current()) return { enabled: false };
-        const screen = availableUnless(["loading"], ports.screen());
+        const screen = availableUnless(["loading", ...OPENS_A_DIALOG], ports.screen());
         return ports.importShown() ? screen : { ...screen, visible: false };
       },
       run: () => { current()?.openImportAppData(); }

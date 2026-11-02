@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
 import { startBrollPanel, mountBrollPanel } from "../../../src/features/broll/panel.ts";
 import type { BrollPanelPorts } from "../../../src/features/broll/ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeScreen } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -26,6 +26,7 @@ function fixture() {
   let open = false;
   const view = createBrollView({ read: () => storage.getItem("splitpage-broll-view"), write: (value) => { storage.setItem("splitpage-broll-view", value); } });
   const ports: BrollPanelPorts = {
+    screen: fakeScreen().screen,
     view,
     document: fakeDocument().document,
     edits: fakeEdits().edits,

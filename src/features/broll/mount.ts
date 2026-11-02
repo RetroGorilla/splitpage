@@ -1,8 +1,11 @@
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { inFront } from "../../application/screen.ts";
+import type { ScreenState } from "../../application/screen.ts";
 
 type BrollEvent = Event & { readonly target: HTMLElement & { value: string }; readonly key: string };
 
 export interface BrollPorts {
+  readonly screen: () => ScreenState;
   readonly click: (event: BrollEvent, root: HTMLElement) => void;
   readonly change: (event: BrollEvent) => void;
   readonly focusout: (event: BrollEvent) => void;
@@ -56,15 +59,16 @@ export function mountBroll(mount: { window: Window; ports: BrollPorts }): { disp
       });
       listen(win, "keydown", (event) => {
         if (!current(page) || event.key !== "Escape" || !ports.pageOpen() || event.defaultPrevented) return;
-        if (doc.querySelector(".modal-backdrop:not([hidden])")) return;
+        if (inFront(["dialog", "launcher", "tour", "prompter", "writer"], ports.screen())) return;
         event.preventDefault();
         ports.closePage();
       });
       listen(doc, "focusin", (event) => {
         if (!current(page) || !ports.pageOpen()) return;
+        if (inFront(["dialog", "launcher", "tour", "prompter", "writer"], ports.screen())) return;
         const el = event.target;
         if (!el || !el.closest || el.closest("#broll-page")) return;
-        if (el.closest(".modal-backdrop:not([hidden]), .toast")) return;
+        if (el.closest(".toast")) return;
         doc.getElementById("broll-page-close")?.focus();
       });
     }
