@@ -40,4 +40,3 @@ export interface DesktopMainWindow {
   maximized: boolean;
   closeKeepingDrafts?: boolean;
 }
-
