@@ -846,7 +846,7 @@ Task: roadmap B1, step 2. Move process lifecycle (start, close, quit) out of des
 FILES TO READ
 - AGENTS.md, docs/HANDOFF.md (desktop shell), docs/architecture/invariants.md (especially drafts and close/quit), docs/architecture/desktop-build.md.
 - desktop/main.js: createTabWindow's close and session-end handlers, requestCloseTab, askBeforeClosing, settleDraftsForClose, restoreSessionAtLaunch, the app startup and quit handlers, and the flags they share. Read the IPC module produced by AQ-35 for the calls it makes into lifecycle code.
-- desktop/close-keep.js, quit-watchdog.js, unsaved-dialog.js, tab-registry.js, desktop-state.js, drafts.js; desktop/test/close-keep.test.mjs, quit-watchdog.test.mjs, desktop-state.test.mjs, ipc-table.test.mjs and smoke.mjs.
+- desktop/close-keep.ts, quit-watchdog.js, unsaved-dialog.js, tab-registry.js, desktop-state.js, drafts.js; desktop/test/close-keep.test.mjs, quit-watchdog.test.mjs, desktop-state.test.mjs, ipc-table.test.mjs and smoke.mjs.
 - desktop/electron-builder.yml, desktop/package.json, desktop/verify-dist.mjs.
 
 DO

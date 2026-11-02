@@ -21,6 +21,9 @@ export interface DesktopMainTab {
   source: { kind: "file"; absPath: string } | { kind: "blank" };
   ready: boolean;
   keepDraftOnClose?: boolean;
+  keepHolders?: Set<object>;
+  crashedNotReloaded?: boolean;
+  closeKeepingDraft?: boolean;
   pendingPayload: unknown;
   launchIntent: DesktopWireLaunch;
   firstTabOfLaunch?: boolean;
@@ -32,6 +35,7 @@ export interface DesktopMainWindow {
   win: BrowserWindow;
   activeTabId: string | null;
   tabIds: string[];
+  closeKeepingDrafts?: boolean;
 }
 
 export interface DesktopFileRegistryBoundary {
@@ -55,6 +59,9 @@ export interface DesktopRecentsBoundary {
 }
 
 export interface DesktopDraftStoreBoundary {
+  list: () => { tabId: string; title: string }[];
+  markSessionEnd: () => boolean;
+  markCleanExit: () => boolean;
   write: (id: string, header: Omit<DesktopDraftWriteHeader, "format" | "formatVersion" | "tabId" | "writtenAt" | "state" | "base" | "appVersion" | "seq">, stateJson: string, baseJson: string | null, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-write">>;
   discardClean: (id: string, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-discard">>;
   take: (id: string) => Promise<DesktopWireTakenDraft | null>;
@@ -111,6 +118,7 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
 }
 
 export interface DesktopVoiceBoundary {
+  stopAll: () => void;
   available: () => boolean;
   start: (id: string) => DesktopIpcResult<"splitpage:voice-start">;
   stop: (id: string) => DesktopIpcResult<"splitpage:voice-stop">;
@@ -181,7 +189,7 @@ export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, 
   testExternalOpens: string[];
   testChromiumLaunches: { browser: string; url: string }[];
   testVideoOpens: string[];
-  prompterShare: () => { status: () => { listening: boolean; port: number | null; shares: string[]; voiceStreams: number } } | null;
+  prompterShare: () => { status: () => { listening: boolean; port: number | null; shares: string[]; voiceStreams: number }; closeAll: () => void } | null;
   voiceHelperInstance: () => DesktopVoiceBoundary;
 }
 
@@ -190,3 +198,23 @@ export interface DesktopPrintIpcDependencies {
 }
 
 export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;
+
+export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "testMode" | "tabs" | "windowsById" | "draftStore" | "activateTab">, Pick<DesktopTestModeIpcDependencies, "app" | "liveWindows"> {
+  app: Pick<App, "on" | "quit">;
+  dialog: Pick<DesktopFileIpcDependencies["dialog"], "showMessageBoxSync">;
+  tabHasFile: (tab: DesktopMainTab | null | undefined) => tab is DesktopMainTab & { source: Extract<DesktopMainTab["source"], { kind: "file" }> };
+  tabIsUnsaved: (tab: DesktopMainTab | null | undefined) => tab is DesktopMainTab;
+  draftsHasDraft: (id: string) => boolean;
+  requestDraftFlush: (tab: DesktopMainTab | null | undefined, budgetMs: number, keep?: boolean) => Promise<object>;
+  draftFlushBudgetMs: number;
+  draftsList: DesktopDraftStoreBoundary["list"];
+  draftsDiscardForUserDecision: (ids: (string | undefined)[], reason: string) => void;
+  draftsDiscardClean: (id: string | undefined) => void;
+  consumeTestDialogAnswer: DesktopFileIpcDependencies["consumeTestDialogAnswer"];
+  focusWindow: (id: string) => void;
+  destroyTabView: (id: string | undefined) => void;
+  startInstallerNow: () => DesktopIpcResult<"splitpage:update-install">;
+  prompterShare: DesktopTestModeIpcDependencies["prompterShare"];
+  voiceHelper: () => Pick<DesktopVoiceBoundary, "stopAll"> | null;
+}
+
