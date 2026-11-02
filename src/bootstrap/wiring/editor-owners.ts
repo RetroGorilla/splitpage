@@ -29,7 +29,7 @@ interface Started {
   readonly merge: MergeUndo;
   readonly selection: CellSelection;
   picker: PicturePicker | null;
-  editing: CellEditing<Element> | null;
+  editing: CellEditing<Element, unknown> | null;
 }
 
 let started: Started | null = null;
@@ -118,7 +118,7 @@ export function pickPictureFor(rowId: string): void {
   if (pick) pick(rowId);
 }
 
-export function installCellEditing(editing: CellEditing<Element>): () => void {
+export function installCellEditing(editing: CellEditing<Element, unknown>): () => void {
   const mine = running();
   if (mine.editing) throw new Error("Cell editing is already installed; stop it first");
   mine.editing = editing;
@@ -127,7 +127,7 @@ export function installCellEditing(editing: CellEditing<Element>): () => void {
   };
 }
 
-export function cellEditing(): CellEditing<Element> {
+export function cellEditing(): CellEditing<Element, unknown> {
   const editing = running().editing;
   if (!editing) throw new Error("Cell editing is not installed yet");
   return editing;

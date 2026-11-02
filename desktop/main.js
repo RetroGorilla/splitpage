@@ -23,7 +23,7 @@ const { createCloseQuit } = require("./close-quit");
 const { createSessionRestore } = require("./session-restore.ts");
 const { createVoiceComposition } = require("./voice-composition");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
-const { createBlobStore } = require("./blob-store");
+const { createBlobStore } = require("./blob-store.ts");
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
 const {
   DESKTOP_STATE_VERSION,
@@ -114,7 +114,7 @@ const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
 const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.js"));
 const {
   DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
-} = require(path.join(SHARED_ROOT, "doc-id-policy.js"));
+} = require(path.join(SHARED_ROOT, "doc-id-policy.ts"));
 
 const STATIC_ALLOWLIST = {
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },

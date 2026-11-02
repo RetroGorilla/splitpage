@@ -1,4 +1,4 @@
-import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../../shared/clock.js";
+import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../../shared/clock.ts";
 import { saveButtonView, saveStatus } from "../../application/save/status.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import type { SaveStatusPorts, SaveStatusListeners, SaveStatusMount } from "./ports.ts";

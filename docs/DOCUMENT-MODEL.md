@@ -203,7 +203,7 @@ ledger's INV-18.
   again when joined back.
 - **Copy** never copies a `cmt` mark. **Cut then paste** in the same tab
   moves it (D6).
-  **Built** (`src/features/clipboard/cell-clipboard.js`): a copy's clipboard HTML is the
+  **Built** (`src/features/clipboard/cell-clipboard.ts`): a copy's clipboard HTML is the
   slice's `toHtml` with every `cmt` mark stripped. A cut keeps them and
   wraps the HTML in `<span data-splitpage-cut="nonce">`, the nonce random
   and held only in that tab's memory. A paste keeps `cmt` marks only when
@@ -238,7 +238,7 @@ is special. **It is the only atom.**
   location comes with it. Split and join move a key rather than copy it,
   and import brings only plain-text markers, which the anchoring pass keys.
   **Built:** `freshBrollIds` / `takenBrollIds` and `pastedShots`
-  (`src/application/commands/clipboard.ts`; `src/features/clipboard/cell-clipboard.js`
+  (`src/application/commands/clipboard.ts`; `src/features/clipboard/cell-clipboard.ts`
   keeps thin wrappers), and `recordPastedBroll`
   (`src/application/production/broll-records.ts`) for a scene paste
   (`src/features/clipboard/scene-clip.js`). A document that already has two keys
@@ -275,7 +275,7 @@ is special. **It is the only atom.**
   - Nothing is lost: version history still has the original.
   - **Built:** paste and drop go through `fromHtml` with pictures and video
     cards taken out first and put in the scene's gallery (`pasteIntoCell`
-    in `src/features/clipboard/cell-clipboard.js`, `attachToGallery` in `clipboard.ts`, #135), with a "Picture added to scene N" toast
+    in `src/features/clipboard/cell-clipboard.ts`, `attachToGallery` in `clipboard.ts`, #135), with a "Picture added to scene N" toast
     whose Undo takes back that paste's entry while it is still the last.
     `migrateRows` (`src/core/migrate.ts`, `moveMediaOutOfCell`) does the move: the
     comment is by "Splitpage", dated the row's `updatedAt`, with an empty

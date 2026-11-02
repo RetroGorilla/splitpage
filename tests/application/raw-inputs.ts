@@ -1,5 +1,5 @@
 import { normalizeImageRef } from "../../shared/blob-policy.ts";
-import { normalizeDocId } from "../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../shared/doc-id-policy.ts";
 import { BROLL_STATUS_IDS } from "../../src/core/document/broll.ts";
 import { SCHEMA_VERSION } from "../../src/core/document/fields.ts";
 import { TAG_CATEGORY_IDS, TAG_STATUS_IDS } from "../../src/core/document/tags.ts";
