@@ -133,18 +133,16 @@ Electron-built installers, which ship instead:
 - Support both x64 and ARM64 architectures with native binaries
 
 
-## 3. Publishing a release to the mirror
+## 3. Publishing a release
 
 **From CI.** Pushing a `v<version>` tag on the commit that bumped `VERSION`
 runs `.github/workflows/release.yml`. It first refuses a commit with no passed
 CI run (the `verify-ci` job; see
 [ci.md, Release gate](architecture/ci.md#release-gate)), then on a Windows runner
 does the two builds below, `verify-dist`, and `SHA256SUMS.txt`. With the
-`SPLITPAGE_RELEASES_TOKEN` secret (a fine-grained token with Contents
-read/write on `splitpage-releases` only) it opens a **draft** release there
-with the four files, marked pre-release for a version with a `-` in it;
-review it and press Publish. Without the secret the files are left on the
-run as an artifact to upload by hand, as in steps 1–3 below.
+`GITHUB_TOKEN` it opens a **draft** release in this repository with the four
+files, marked pre-release for a version with a `-` in it; review it and press
+Publish.
 
 **By hand.** When it's time to cut a new release for users to update to, build the two pieces
 separately — the portable zip from `tools/package.mjs`, and the Electron installers
@@ -167,7 +165,7 @@ longer installs it by itself — that self-update path is gone, and the portable
 copy is updated by unzipping a newer release over it — but leaving the asset off
 would break the copies still running the old launcher.
 
-On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
+On the GitHub repository (`RetroGorilla/splitpage`):
 
 1. **Create a new release** with tag `v<version>` (where `<version>` matches `VERSION` in the repo).
 2. **Upload the assets** (names must match `desktop/electron-builder.yml`'s
@@ -191,15 +189,15 @@ The 2.0.0 installer also removes a detected 1.0.x install from
 data folder untouched; see the `customInit` macro committed in
 `desktop/build/installer.nsh`.
 
-Existing installations check the mirror on startup and say when there is
-something newer; the desktop app offers to install it.
+Existing installations check this repository's latest release on startup and
+say when there is something newer; the desktop app offers to install it.
 
-**Where that mirror URL comes from.** `SPLITPAGE_UPDATE_API` (the desktop app
+**Where that update URL comes from.** `SPLITPAGE_UPDATE_API` (the desktop app
 honours it only with `SPLITPAGE_TEST=1`), or the default
 compiled into `update.mjs` and `desktop/main.js`, and nothing else. `release.json`
 used to be copied into each release's `.splitpage-release.json` as an
 `updateApi` field that the next update check would follow; #64 made that field
 ignored (a release naming where the next release comes from is a redirect
-nobody could revoke) and #75 stopped writing it, and the file itself is gone. To move the mirror, change the
+nobody could revoke) and #75 stopped writing it, and the file itself is gone. To move it, change the
 default in those two files and cut a release from it.
 

@@ -108,16 +108,13 @@ function writeStatus(extra) {
 }
 
 const willCheck = !has("--no-update-check") && !!updater;
-writeStatus({ checking: willCheck });
+writeStatus({ checking: willCheck, ...(willCheck ? { latest: null, updateAvailable: false } : {}) });
 
 if (willCheck) {
   (async () => {
     try {
-      const res = await fetch(updater.updateApiUrl(),
-        { headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-launcher" } });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      const body = await res.json();
-      const latest = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
+      const release = await updater.latestRelease();
+      const latest = release.version;
       const current = readVersion() || "0.0.0";
       writeStatus({
         latest,
@@ -126,7 +123,7 @@ if (willCheck) {
         error: undefined
       });
     } catch (err) {
-      writeStatus({ error: err.message, checking: false });
+      writeStatus({ latest: null, updateAvailable: false, error: err.message, checking: false });
     }
   })();
 }

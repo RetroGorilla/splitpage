@@ -66,7 +66,7 @@ drafts a release; the `draft` job runs only for a tag.
 | `build` job, step `Read VERSION and check the tag` | `VERSION` is the single source of truth (`desktop/stage.mjs` checks `desktop/package.json` against it). A tag naming another version would publish files whose names and update checks disagree with it. |
 | `build` job, step `Desktop installers (dist:win, with verify-dist)` | `dist:win` runs `stage.mjs`, electron-builder for x64 and arm64, then `verify-dist.mjs`: the architecture checks and the payload extraction that caught 2.0.1's empty ARM64 installer. A mismatch fails the job there. |
 | `build` job, step `Collect the release files and their checksums` | Only the per-arch installers are published, not the combined one (docs/RELEASING.md §3). The `sha256sum` output format is the one `desktop/main.js` reads to check a downloaded update. |
-| `draft` job, `SPLITPAGE_RELEASES_TOKEN` | A fine-grained personal access token with Contents read and write on `RetroGorilla/splitpage-releases` and nothing else. This repository's own `GITHUB_TOKEN` cannot write to another repository. Without the secret the job leaves the files on the run as an artifact and says so. |
+| `draft` job, `permissions` | This job alone grants `contents: write` to `GITHUB_TOKEN`, so it can create a draft release in this repository for review and publication. |
 
 ### Release gate
 

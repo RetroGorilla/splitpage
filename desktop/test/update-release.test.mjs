@@ -8,7 +8,7 @@ import { compileFixtures } from "../../tools/ts-fixtures.mjs";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const {
-  DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
+  DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
 } = require(path.join(here, "..", "update-release.ts"));
 
 const cases = [];
@@ -16,12 +16,19 @@ const test = (name, fn) => cases.push({ name, fn });
 
 const API = DEFAULT_UPDATE_API;
 const LOCAL_API = "http://127.0.0.1:4567/releases/latest";
-const gh = (name) => "https://github.com/RetroGorilla/splitpage-releases/releases/download/v9.9.9/" + name;
+const gh = (name) => "https://github.com/RetroGorilla/splitpage/releases/download/v9.9.9/" + name;
 const asset = (name, url, size) => ({ name, browser_download_url: url === undefined ? gh(name) : url, size });
 const HASH = "ab".repeat(32);
 
 test("the default update API is the releases repository's latest release", () => {
-  assert.equal(API, "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest");
+  assert.equal(API, "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest");
+});
+
+test("a release needs assets before it can be announced", () => {
+  assert.equal(hasReleaseAssets([]), false);
+  assert.equal(hasReleaseAssets(null), false);
+  assert.equal(hasReleaseAssets({ length: 1 }), false);
+  assert.equal(hasReleaseAssets([asset("Splitpage.exe")]), true);
 });
 
 test("versions order by their numbers, with missing parts as zero", () => {
