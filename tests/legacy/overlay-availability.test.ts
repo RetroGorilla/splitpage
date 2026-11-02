@@ -133,12 +133,12 @@ const NO_DIALOG_COMMANDS = ["prompter-open-in-browser", "prompter-open-in-chromi
 
 const PAGE_COMMANDS =["open", "export", "command-menu", "find", "history", "panel-production", "panel-gear", "panel-comments"];
 
-test("in Present, what would open behind it is refused, and Save, Hide shot scenes and Present itself are not", () => {
+test("in Present, what would open behind it is refused, and Find, Save, Hide shot scenes and Present itself are not", () => {
   const { registry, restore } = loadedRegistry();
   try {
     prompterState.setOpen(true);
-    for (const id of [...PAGE_COMMANDS, "write"]) assert.equal(refusal(registry, id), "Close Present first", id);
-    for (const id of ["save", "save-as", "toggle-hide-shot", "present"]) assert.equal(refusal(registry, id), null, id);
+    for (const id of [...PAGE_COMMANDS.filter((id) => id !== "find"), "write"]) assert.equal(refusal(registry, id), "Close Present first", id);
+    for (const id of ["find", "save", "save-as", "toggle-hide-shot", "present"]) assert.equal(refusal(registry, id), null, id);
   } finally {
     restore();
   }

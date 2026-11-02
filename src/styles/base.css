@@ -1,6 +1,7 @@
 [hidden] { display: none !important; }
 :root {
   --white: #FFFFFF;
+  --present-find-highlight: #735b00;
   --media-scrim: rgba(15,14,12,.72);
   --media-ink: #ECEBE7;
   --media-more-scrim: rgba(15,14,12,.64);
