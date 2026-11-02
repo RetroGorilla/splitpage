@@ -117,7 +117,7 @@ export function attachToGallery(row: GalleryRow, attach: readonly Attachment[]):
 }
 
 export function takenBrollIds(
-  scope: BrollScope,
+  scope: BrollScope | null,
   rowId: string | null,
   field: string | null,
   rest: readonly Run[] | null,
@@ -128,7 +128,7 @@ export function takenBrollIds(
   function keysOf(cell: readonly Run[]): void {
     cell.forEach(function (r) { if (r.atom === "broll" && r.id) taken[r.id] = true; });
   }
-  (scope.rows || []).forEach(function (row) {
+  ((scope as BrollScope).rows || []).forEach(function (row) {
     if (!row) return;
     (["visualText", "audioText"] as const).forEach(function (f) {
       if (row.id === rowId && f === field && rest) keysOf(rest);
@@ -136,7 +136,7 @@ export function takenBrollIds(
     });
   });
   if (!fromCut) {
-    (scope.brollShots || []).forEach(function (rec) {
+    ((scope as BrollScope).brollShots || []).forEach(function (rec) {
       if (rec && typeof rec.id === "string" && rec.id) taken[rec.id] = true;
     });
   }

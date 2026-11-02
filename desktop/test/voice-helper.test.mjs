@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createVoiceHelper, parseHelperLine } = require(path.join(here, "..", "voice-helper.js"));
+const { createVoiceHelper, parseHelperLine } = require(path.join(here, "..", "voice-helper.ts"));
 const FAKE = path.join(here, "fake-voice-helper.mjs");
 
 const cases = [];

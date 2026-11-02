@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
+import { compileFixtures } from "../../tools/ts-fixtures.mjs";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
-} = require(path.join(here, "..", "update-release.js"));
+} = require(path.join(here, "..", "update-release.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -111,6 +113,38 @@ test("an oversized checksums file gives no checksum", () => {
   const line = HASH + "  Splitpage-Setup.exe\n";
   assert.equal(checksumFor(line + "x".repeat(200000 - line.length), "Splitpage-Setup.exe"), HASH);
   assert.equal(checksumFor(line + "x".repeat(200001 - line.length), "Splitpage-Setup.exe"), null);
+});
+
+test("release JSON keeps raw fields unknown while existing coercions normalize an installer", () => {
+  const apiUrl = "https://api.github.com/releases";
+  const url = "https://github.com/example/setup-x64.exe";
+  assert.deepEqual(pickUpdateAsset([null, 1, "x", { name: ["setup-x64.exe"], browser_download_url: [url], size: "10" }], {
+    platform: "win32", arch: "x64", apiUrl
+  }), { name: "setup-x64.exe", url, size: 0 });
+  const checksum = { name: ["SHA256SUMS.txt"], browser_download_url: [url] };
+  assert.equal(findChecksumsAsset([null, 1, "x", checksum], apiUrl), checksum);
+  assert.equal(isAllowedDownloadHost([url], apiUrl), true);
+});
+
+test("release input compiles as unknown and a raw checksum result requires narrowing", () => {
+  const fixture = "desktop/update-release-input-check.ts";
+  const source = `import type { pickUpdateAsset as PickAsset, findChecksumsAsset as FindAsset } from "./update-release.ts";
+declare const pick: typeof PickAsset;
+declare const find: typeof FindAsset;
+const assets: unknown[] = [null, 1, "x", { name: ["setup-x64.exe"], browser_download_url: ["https://github.com/a"], size: "10" }];
+const picked = pick(assets, { platform: "win32", arch: "x64", apiUrl: "https://api.github.com" });
+if (picked) { const name: string = picked.name; const url: string = picked.url; const size: number = picked.size; }
+const raw = find(assets, "https://api.github.com");
+`;
+  const diagnostics = (text) => ts.getPreEmitDiagnostics(compileFixtures({ [fixture]: text }, { config: "tsconfig.desktop.json" }).program);
+  assert.deepEqual(diagnostics(source), []);
+  const broken = source + "raw.browser_download_url;";
+  const errors = diagnostics(broken);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].code, 18046);
+  assert.ok(errors[0].file.fileName.replaceAll("\\", "/").endsWith("/" + fixture));
+  assert.equal(errors[0].start, source.length);
+  assert.equal(errors[0].length, 3);
 });
 
 let failed = 0;

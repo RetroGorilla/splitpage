@@ -1,7 +1,7 @@
 import type { DocumentView, SessionListener } from "./document-session.ts";
 
-export interface DocumentReader {
-  readonly current: () => DocumentView | null;
+export interface DocumentReader<Current extends DocumentView = DocumentView> {
+  readonly current: () => Current | null;
   readonly read: <T>(select: (doc: DocumentView | null) => T) => T;
   readonly onChange: (listener: SessionListener) => () => void;
   readonly onReplaced: (listener: () => void) => () => void;
