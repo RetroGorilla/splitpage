@@ -94,6 +94,14 @@ Two things `main.js` needs at startup are deliberately left out of `files`:
   `shared/` out of `stage.mjs` would stop the app launching, not just break one
   feature.
 
+  Shared modules are synchronous ES modules. `main.js` keeps its `require`
+  calls: Electron 44.4.5 returns their namespace objects before and after
+  `app.whenReady`, including when the requiring code runs from an asar.
+  `stage.mjs` copies their ESM `package.json` with the five modules the main
+  process reaches. They have no top-level await or observable initialization
+  effects, and their dependency graph has no cycles. The renderer bundles the
+  same named exports directly; it needs no CommonJS wrappers.
+
 ## `extraResources`
 
 `.stage/splitpage` → `resources/splitpage` is the folder `stage.mjs` fills: the
