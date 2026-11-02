@@ -246,4 +246,20 @@ assert.equal(tabIdError.start, brokenTabId.indexOf('123);'));
 assert.equal(tabIdError.length, 3);
 assert.ok(ts.flattenDiagnosticMessageText(tabIdError.messageText, " ").includes("string"));
 
+const tabstripPagePath = "desktop/tabstrip/tabstrip.ts";
+const tabstripPageSource = readFileSync(new URL("../tabstrip/tabstrip.ts", import.meta.url), "utf8");
+for (const name of ["reorderTab", "moveTabHere"]) {
+  const original = `.${name}((payload as Record<string, unknown>).tabId as string, dropIndex)`;
+  const broken = tabstripPageSource.replace(original, `.${name}(123, dropIndex)`);
+  assert.notEqual(broken, tabstripPageSource);
+  const errors = ts.getPreEmitDiagnostics(compileFixtures({ [tabstripPagePath]: broken }, { config: "tsconfig.desktop.json" }).program);
+  assert.equal(errors.length, 1);
+  const error = errors[0];
+  assert.ok(error.file?.fileName.replaceAll("\\", "/").endsWith("/" + tabstripPagePath));
+  assert.equal(error.code, 2345);
+  assert.equal(error.start, broken.indexOf(`.${name}(123, dropIndex)`) + name.length + 2);
+  assert.equal(error.length, 3);
+  assert.ok(ts.flattenDiagnosticMessageText(error.messageText, " ").includes("string"));
+}
+
 console.log("ALL PASS (strict IPC arguments, results, directions, contract coverage and file revival)");

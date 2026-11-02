@@ -291,3 +291,16 @@ export type DesktopIpcResult<C extends keyof DesktopIpcContract> = DesktopIpcCon
 export type DesktopIpcReceiveArgs<C extends keyof DesktopIpcContract> = DesktopIpcContract[C] extends {
   receive: infer A extends readonly unknown[];
 } ? A : DesktopIpcArgs<C>;
+
+export interface DesktopTabStripBridge {
+  windowId: DesktopIpcResult<"splitpage:tabstrip-window-id-sync">;
+  platform: string;
+  getShellState: () => Promise<DesktopIpcResult<"splitpage:tabstrip-get-state">>;
+  onShellStateChanged: (callback: (state: DesktopIpcArgs<"splitpage:tabstrip-state">[0]) => void) => void;
+  newTab: (...args: DesktopIpcArgs<"splitpage:tabstrip-new-tab">) => DesktopIpcResult<"splitpage:tabstrip-new-tab">;
+  activateTab: (...args: DesktopIpcArgs<"splitpage:tabstrip-activate">) => DesktopIpcResult<"splitpage:tabstrip-activate">;
+  closeTab: (...args: DesktopIpcArgs<"splitpage:tabstrip-close">) => DesktopIpcResult<"splitpage:tabstrip-close">;
+  reorderTab: (...args: DesktopIpcArgs<"splitpage:tabstrip-reorder">) => DesktopIpcResult<"splitpage:tabstrip-reorder">;
+  moveTabHere: (...args: DesktopIpcArgs<"splitpage:tabstrip-move-here">) => DesktopIpcResult<"splitpage:tabstrip-move-here">;
+  tearOffToNewWindow: (...args: DesktopIpcArgs<"splitpage:tabstrip-tear-off">) => DesktopIpcResult<"splitpage:tabstrip-tear-off">;
+}
