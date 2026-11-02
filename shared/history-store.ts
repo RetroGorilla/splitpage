@@ -3,116 +3,168 @@
 import * as policy from "./history-policy.js";
 import { DOC_ID_RE } from "./doc-id-policy.js";
 
-var HISTORY_OLDER_KEY = policy.HISTORY_OLDER_KEY;
-var HISTORY_OLDER_TTL_MS = policy.HISTORY_OLDER_TTL_MS;
-var HISTORY_PER_DOC = policy.HISTORY_PER_DOC;
-var HISTORY_SNAP_ID_RE = policy.HISTORY_SNAP_ID_RE;
-var historyClip = policy.historyClip;
-var historyOlderExpired = policy.historyOlderExpired;
-var historyStampAfter = policy.historyStampAfter;
-var historyUtf8Length = policy.historyUtf8Length;
-var planHistoryEviction = policy.planHistoryEviction;
-var sanitizeHistoryMeta = policy.sanitizeHistoryMeta;
+type HistoryStoreMeta = Omit<NonNullable<ReturnType<typeof policy.sanitizeHistoryMeta>>, "id"> & { id: string; legacyId?: string };
+type HistoryStoreEntry = HistoryStoreMeta & { sha: string };
+type HistoryStorePublicMeta = HistoryStoreMeta & { docId: string };
+type HistoryStoreFields = Record<string, unknown>;
+export interface SharedHistorySnapshotReader {
+  readonly [key: string]: unknown;
+  readonly id: string;
+  readonly sha: string;
+}
+export interface SharedHistoryBucketReader {
+  readonly [key: string]: unknown;
+  readonly snapshots: readonly SharedHistorySnapshotReader[];
+}
+export type SharedHistoryIndex = Record<string, SharedHistoryBucketReader | null | undefined>;
+export type SharedHistoryBucket = { [key: string]: unknown; snapshots: SharedHistorySnapshotReader[] };
+type HistoryStoreMutableBucket = SharedHistoryBucket;
+type HistoryStoreChanges = Record<string, SharedHistoryBucketReader | null | undefined>;
+type HistoryStoreHold = { docId: string; id: string };
+type HistoryStoreFlags = Record<string, true | undefined>;
+type HistoryStoreError = "quota" | "enospc" | "io" | "read-only";
+export interface SharedHistoryTransaction {
+  readonly list: () => Promise<SharedHistoryIndex>;
+  readonly get: (sha: string) => Promise<string | null | undefined>;
+  readonly put: (sha: string, text: string) => Promise<void>;
+  readonly commit: (changes: HistoryStoreChanges, dropped: string[]) => Promise<void>;
+}
+export interface SharedHistoryBackend {
+  readonly name: string;
+  readonly persistent?: boolean;
+  readOnly?: boolean;
+  readonly exclusive: <T>(fn: (tx: SharedHistoryTransaction) => T | PromiseLike<T>, options?: { write?: boolean }) => Promise<T>;
+}
+type HistoryStoreOptions<B extends SharedHistoryBackend> = {
+  backend?: B | null; now?: (() => number) | null; hashText?: ((text: string) => unknown) | null;
+  capBytes?: number | null | ((total: number | null) => unknown); maxBodyBytes?: unknown; holds?: (() => unknown) | null;
+};
+type HistoryStoreOperationOptions = { older?: unknown; protect?: unknown };
+type HistoryStorePutSuccess = { stored: true; duplicate?: boolean; evicted: number; overCap: boolean };
+type HistoryStorePutResult = HistoryStorePutSuccess | { stored: false; code: string; evicted?: number; overCap?: boolean };
+type HistoryStorePutOnceResult = { duplicate: true; evicted?: undefined; overCap?: undefined } |
+  { duplicate: false; evicted: number; overCap: boolean };
+type HistoryStoreImportResult = { ok: boolean; count: number; added: number; code?: string };
+type HistoryMemoryAccess = {
+  index: SharedHistoryIndex; bodies: Record<string, string | undefined>;
+  clone: typeof plainCopy; freeze: typeof deepFreeze;
+};
+type HistoryMemoryOptions<E extends object> = {
+  strict?: boolean; macrotask?: (callback: () => void) => unknown; before?: (op: "put" | "commit") => unknown;
+  observe?: (op: "put" | "commit" | "exclusive") => unknown; name?: string; persistent?: boolean;
+  readOnly?: boolean; extend?: (access: HistoryMemoryAccess) => E;
+};
+
+const HISTORY_OLDER_KEY = policy.HISTORY_OLDER_KEY;
+const HISTORY_OLDER_TTL_MS = policy.HISTORY_OLDER_TTL_MS;
+const HISTORY_PER_DOC = policy.HISTORY_PER_DOC;
+const HISTORY_SNAP_ID_RE = policy.HISTORY_SNAP_ID_RE;
+const historyClip = policy.historyClip;
+const historyOlderExpired = policy.historyOlderExpired;
+const historyStampAfter = policy.historyStampAfter;
+const historyUtf8Length = policy.historyUtf8Length;
+const planHistoryEviction = policy.planHistoryEviction;
+const sanitizeHistoryMeta = policy.sanitizeHistoryMeta;
 
 function noop() {}
 
-function isDocId(v) { return typeof v === "string" && DOC_ID_RE.test(v); }
-function isBucket(v) { return v === HISTORY_OLDER_KEY || isDocId(v); }
+function isDocId(v: unknown): boolean { return typeof v === "string" && DOC_ID_RE.test(v); }
+function isBucket(v: unknown): boolean { return v === HISTORY_OLDER_KEY || isDocId(v); }
 
-function byAtAscending(a, b) {
-  return (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+function byAtAscending(a: SharedHistorySnapshotReader | HistoryStorePublicMeta, b: SharedHistorySnapshotReader | HistoryStorePublicMeta) {
+  return ((a.atMs as number) - (b.atMs as number)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
-function byAtDescending(a, b) {
+function byAtDescending(a: HistoryStorePublicMeta, b: HistoryStorePublicMeta) {
   return (b.atMs - a.atMs) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 }
 
-function entryOf(meta, sha) {
-  var m = sanitizeHistoryMeta(meta);
+function entryOf(meta: unknown, sha: string) {
+  const m: (HistoryStoreMeta & { sha?: string }) | null = sanitizeHistoryMeta(meta);
   if (!m) return null;
   m.sha = sha;
-  return m;
+  return m as HistoryStoreEntry;
 }
 
-function cloneRecord(rec) {
-  var out = {};
+function cloneRecord(rec: SharedHistoryBucketReader) {
+  const out = {} as HistoryStoreMutableBucket;
   Object.keys(rec).forEach(function (k) { if (k !== "snapshots") out[k] = rec[k]; });
   out.snapshots = Array.isArray(rec.snapshots) ? rec.snapshots.slice() : [];
   return out;
 }
 
-function snapshotsOf(rec) {
+function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonly SharedHistorySnapshotReader[] {
   return rec && Array.isArray(rec.snapshots) ? rec.snapshots : [];
 }
 
-function findEntry(rec, id) {
-  var list = snapshotsOf(rec);
-  for (var i = 0; i < list.length; i++) if (list[i] && list[i].id === id) return list[i];
+function findEntry(rec: SharedHistoryBucketReader | null | undefined, id: string) {
+  const list = snapshotsOf(rec);
+  for (let i = 0; i < list.length; i++) if (list[i] && (list[i] as SharedHistorySnapshotReader).id === id) return list[i];
   return null;
 }
 
-function newestAtMs(rec) {
-  var n = null;
+function newestAtMs(rec: SharedHistoryBucketReader | null | undefined) {
+  let n: number | null = null;
   snapshotsOf(rec).forEach(function (s) {
-    var v = Number(s && s.atMs);
+    const v = Number(s && s.atMs);
     if (isFinite(v) && (n == null || v > n)) n = v;
   });
   return n;
 }
 
-function totalOf(index) {
-  var total = 0;
+function totalOf(index: SharedHistoryIndex | null | undefined) {
+  let total = 0;
   Object.keys(index || {}).forEach(function (b) {
-    snapshotsOf(index[b]).forEach(function (s) { total += Number(s && s.sizeBytes) || 0; });
+    snapshotsOf((index as SharedHistoryIndex)[b]).forEach(function (s) { total += Number(s && s.sizeBytes) || 0; });
   });
   return total;
 }
 
-function publicMeta(entry, bucket) {
-  var m = sanitizeHistoryMeta(entry);
+function publicMeta(entry: unknown, bucket: string) {
+  const m: (HistoryStoreMeta & { docId?: string }) | null = sanitizeHistoryMeta(entry);
   if (m) m.docId = bucket;
-  return m;
+  return m as HistoryStorePublicMeta | null;
 }
 
-function errorCode(e) {
-  var c = e && e.code;
+function errorCode(e: unknown): HistoryStoreError {
+  const c = e && (e as HistoryStoreFields).code;
   if (c === "quota" || c === "enospc" || c === "io" || c === "read-only") return c;
-  if (e && e.name === "QuotaExceededError") return "quota";
+  if (e && (e as HistoryStoreFields).name === "QuotaExceededError") return "quota";
   if (c === "ENOSPC" || c === "EDQUOT") return "enospc";
   return "io";
 }
-function isNoRoom(code) { return code === "quota" || code === "enospc"; }
+function isNoRoom(code: unknown): boolean { return code === "quota" || code === "enospc"; }
 
-function protectList(list, out, seen) {
-  (Array.isArray(list) ? list : []).forEach(function (p) {
+function protectList(list: unknown, out: HistoryStoreHold[], seen: HistoryStoreFlags) {
+  (Array.isArray(list) ? list as unknown[] : []).forEach(function (p) {
     if (!p || typeof p !== "object") return;
-    if (!isBucket(p.docId) || typeof p.id !== "string" || !HISTORY_SNAP_ID_RE.test(p.id)) return;
-    var key = p.docId + "\n" + p.id;
+    if (!isBucket((p as HistoryStoreFields).docId) || typeof (p as HistoryStoreFields).id !== "string" || !HISTORY_SNAP_ID_RE.test((p as HistoryStoreFields).id as string)) return;
+    const key = (p as HistoryStoreFields).docId + "\n" + (p as HistoryStoreFields).id;
     if (seen[key]) return;
     seen[key] = true;
-    out.push({ docId: p.docId, id: p.id });
+    out.push({ docId: (p as HistoryStoreFields).docId as string, id: (p as HistoryStoreFields).id as string });
   });
   return out;
 }
 
-function namedShas(index, changes) {
-  var named = Object.create(null);
-  var buckets = Object.keys(index || {});
+function namedShas(index: SharedHistoryIndex, changes: HistoryStoreChanges | null) {
+  const named: HistoryStoreFlags = Object.create(null);
+  const buckets = Object.keys(index || {});
   Object.keys(changes || {}).forEach(function (b) { if (!(b in (index || {}))) buckets.push(b); });
   buckets.forEach(function (b) {
-    var rec = changes && Object.prototype.hasOwnProperty.call(changes, b) ? changes[b] : index[b];
+    const rec = changes && Object.prototype.hasOwnProperty.call(changes, b) ? changes[b] : index[b];
     snapshotsOf(rec).forEach(function (s) { if (s && typeof s.sha === "string") named[s.sha] = true; });
   });
   return named;
 }
 
-function planChanges(index, changes, capBytes, nowMs, protect, putShas) {
-  var out = {};
+function planChanges(index: SharedHistoryIndex, changes: HistoryStoreChanges, capBytes: number, nowMs: number, protect: HistoryStoreHold[], putShas: string[]) {
+  const out: HistoryStoreChanges = {};
   Object.keys(changes).forEach(function (b) { out[b] = changes[b]; });
-  var docs = [];
-  var buckets = Object.keys(index);
+  const docs: { docId: string; lastOpenedAt: unknown; expiresAt: unknown; snapshots: { id: string; atMs: unknown; sizeBytes: unknown }[] }[] = [];
+  const buckets = Object.keys(index);
   Object.keys(out).forEach(function (b) { if (!(b in index)) buckets.push(b); });
   buckets.forEach(function (b) {
-    var rec = Object.prototype.hasOwnProperty.call(out, b) ? out[b] : index[b];
+    const rec = Object.prototype.hasOwnProperty.call(out, b) ? out[b] : index[b];
     if (!rec) return;
     docs.push({
       docId: b,
@@ -121,25 +173,25 @@ function planChanges(index, changes, capBytes, nowMs, protect, putShas) {
       snapshots: snapshotsOf(rec).map(function (s) { return { id: s.id, atMs: s.atMs, sizeBytes: s.sizeBytes }; })
     });
   });
-  var plan = planHistoryEviction(docs, capBytes, nowMs, {
+  const plan = planHistoryEviction(docs, capBytes, nowMs, {
     perDoc: HISTORY_PER_DOC, olderKey: HISTORY_OLDER_KEY, protect: protect
   });
-  var gone = Object.create(null);
+  const gone: Record<string, HistoryStoreFlags | undefined> = Object.create(null);
   plan.deletes.forEach(function (d) {
     (gone[d.docId] || (gone[d.docId] = Object.create(null)))[d.id] = true;
   });
   Object.keys(gone).forEach(function (b) {
-    var rec = Object.prototype.hasOwnProperty.call(out, b) ? out[b] : cloneRecord(index[b]);
-    rec.snapshots = rec.snapshots.filter(function (s) { return !gone[b][s.id]; });
+    const rec = Object.prototype.hasOwnProperty.call(out, b) ? out[b] : cloneRecord(index[b] as SharedHistoryBucketReader);
+    (rec as HistoryStoreMutableBucket).snapshots = (rec as SharedHistoryBucketReader).snapshots.filter(function (s) { return !(gone[b] as HistoryStoreFlags)[s.id]; });
     out[b] = rec;
   });
   Object.keys(out).forEach(function (b) {
     if (out[b] && !snapshotsOf(out[b]).length) out[b] = null;
   });
-  var before = namedShas(index, null);
+  const before = namedShas(index, null);
   (putShas || []).forEach(function (sha) { before[sha] = true; });
-  var after = namedShas(index, out);
-  var dropped = Object.keys(before).filter(function (sha) { return !after[sha]; });
+  const after = namedShas(index, out);
+  const dropped = Object.keys(before).filter(function (sha) { return !after[sha]; });
   return {
     changes: out,
     dropped: dropped,
@@ -150,33 +202,33 @@ function planChanges(index, changes, capBytes, nowMs, protect, putShas) {
   };
 }
 
-function hasChanges(changes) { return Object.keys(changes).length > 0; }
+function hasChanges(changes: HistoryStoreChanges) { return Object.keys(changes).length > 0; }
 
-function createHistoryStore(opts) {
+function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreOptions<B> | null) {
   opts = opts || {};
-  var backend = opts.backend;
+  const backend = opts.backend;
   if (!backend || typeof backend.exclusive !== "function") throw new TypeError("createHistoryStore: backend.exclusive is required");
   if (typeof opts.now !== "function") throw new TypeError("createHistoryStore: now() is required");
   if (typeof opts.hashText !== "function") throw new TypeError("createHistoryStore: hashText() is required");
-  var now = opts.now;
-  var hashText = opts.hashText;
-  var capOption = opts.capBytes;
-  var maxBodyBytes = Number(opts.maxBodyBytes) > 0 ? Number(opts.maxBodyBytes) : Infinity;
-  var holdsProvider = typeof opts.holds === "function" ? opts.holds : null;
+  const now = opts.now;
+  const hashText = opts.hashText;
+  const capOption = opts.capBytes;
+  const maxBodyBytes = Number(opts.maxBodyBytes) > 0 ? Number(opts.maxBodyBytes) : Infinity;
+  const holdsProvider = typeof opts.holds === "function" ? opts.holds : null;
 
-  var quotaStuck = false;
-  var lastTotal = null;
-  var ownHolds = Object.create(null);
+  let quotaStuck = false;
+  let lastTotal: number | null = null;
+  const ownHolds: Record<string, number | undefined> = Object.create(null);
 
   function readOnly() { return !!backend.readOnly; }
 
-  function run(write, fn) {
+  function run<T>(write: boolean, fn: (tx: SharedHistoryTransaction) => T | PromiseLike<T>): Promise<T> {
     return Promise.resolve().then(function () {
       return backend.exclusive(fn, { write: !!write });
     });
   }
 
-  function listIndex(tx) {
+  function listIndex(tx: SharedHistoryTransaction) {
     return tx.list().then(function (index) {
       index = index || {};
       lastTotal = totalOf(index);
@@ -184,16 +236,16 @@ function createHistoryStore(opts) {
     });
   }
 
-  function commitAndNote(tx, index, changes, dropped) {
+  function commitAndNote(tx: SharedHistoryTransaction, index: SharedHistoryIndex, changes: HistoryStoreChanges, dropped: string[]) {
     return tx.commit(changes, dropped).then(function () {
-      var next = {};
+      const next: SharedHistoryIndex = {};
       Object.keys(index).forEach(function (b) { next[b] = index[b]; });
       Object.keys(changes).forEach(function (b) { next[b] = changes[b]; });
       lastTotal = totalOf(next);
     });
   }
 
-  function readCap(total) {
+  function readCap(total: number | null) {
     return Promise.resolve().then(function () {
       return typeof capOption === "function" ? capOption(total) : capOption;
     }).then(function (v) {
@@ -201,66 +253,66 @@ function createHistoryStore(opts) {
     }, function () { return Infinity; });
   }
 
-  function allHolds(protect) {
-    var out = [], seen = Object.create(null);
+  function allHolds(protect: unknown) {
+    const out: HistoryStoreHold[] = [], seen: HistoryStoreFlags = Object.create(null);
     protectList(protect, out, seen);
     Object.keys(ownHolds).forEach(function (k) {
-      var i = k.indexOf("\n");
+      const i = k.indexOf("\n");
       protectList([{ docId: k.slice(0, i), id: k.slice(i + 1) }], out, seen);
     });
     if (holdsProvider) {
-      var provided;
+      let provided: unknown;
       try { provided = holdsProvider(); } catch (e) { provided = null; }
       protectList(provided, out, seen);
     }
     return out;
   }
 
-  function hash(text) {
+  function hash(text: string) {
     return Promise.resolve().then(function () { return hashText(text); }).then(function (sha) {
       if (typeof sha !== "string" || !sha) throw new Error("history store: hashText gave no sha");
       return sha;
     });
   }
 
-  function hold(q) {
+  function hold(q?: { id?: unknown; older?: unknown; docId?: unknown } | null) {
     q = q || {};
-    var id = typeof q.id === "string" ? q.id : "";
-    var bucket = q.older ? HISTORY_OLDER_KEY : (isDocId(q.docId) ? q.docId : "");
+    const id = typeof q.id === "string" ? q.id : "";
+    const bucket = q.older ? HISTORY_OLDER_KEY : (isDocId(q.docId) ? q.docId : "");
     if (!bucket || !HISTORY_SNAP_ID_RE.test(id)) return noop;
-    var key = bucket + "\n" + id;
+    const key = bucket + "\n" + id;
     ownHolds[key] = (ownHolds[key] || 0) + 1;
-    var released = false;
+    let released = false;
     return function () {
       if (released) return;
       released = true;
-      if (ownHolds[key] > 1) ownHolds[key]--; else delete ownHolds[key];
+      if ((ownHolds[key] as number) > 1) (ownHolds[key] as number)--; else delete ownHolds[key];
     };
   }
 
-  function evictWith(capFor, protect) {
-    var held = allHolds(protect);
+  function evictWith(capFor: (total: number) => number, protect: unknown) {
+    const held = allHolds(protect);
     if (readOnly()) {
       return run(false, function (tx) {
         return listIndex(tx).then(function (index) {
-          var plan = planChanges(index, {}, capFor(totalOf(index)), now(), held, []);
+          const plan = planChanges(index, {}, capFor(totalOf(index)), now(), held, []);
           return { evicted: 0, overCap: plan.overCap, totalBefore: plan.totalBefore, totalAfter: plan.totalBefore };
         });
       });
     }
     return run(true, function (tx) {
       return listIndex(tx).then(function (index) {
-        var plan = planChanges(index, {}, capFor(totalOf(index)), now(), held, []);
-        var result = { evicted: plan.evicted, overCap: plan.overCap, totalBefore: plan.totalBefore, totalAfter: plan.totalAfter };
+        const plan = planChanges(index, {}, capFor(totalOf(index)), now(), held, []);
+        const result = { evicted: plan.evicted, overCap: plan.overCap, totalBefore: plan.totalBefore, totalAfter: plan.totalAfter };
         if (!hasChanges(plan.changes)) return result;
         return commitAndNote(tx, index, plan.changes, plan.dropped).then(function () { return result; });
       });
     });
   }
 
-  function evict(cap, o) {
-    var protect = o && o.protect;
-    var capP = cap == null ? readCap(lastTotal) : Promise.resolve(typeof cap === "number" && cap >= 0 ? cap : Infinity);
+  function evict(cap?: unknown, o?: HistoryStoreOperationOptions | null) {
+    const protect = o && o.protect;
+    const capP = cap == null ? readCap(lastTotal) : Promise.resolve(typeof cap === "number" && cap >= 0 ? cap : Infinity);
     return capP.then(function (c) {
       return evictWith(function () { return c; }, protect);
     }).then(null, function (e) {
@@ -268,23 +320,23 @@ function createHistoryStore(opts) {
     });
   }
 
-  function putOnce(bucket, clean, stateJson, sha, size, cap, held) {
+  function putOnce(bucket: string, clean: HistoryStoreMeta, stateJson: string, sha: string, size: number, cap: number, held: HistoryStoreHold[]): Promise<HistoryStorePutOnceResult> {
     return run(true, function (tx) {
       return listIndex(tx).then(function (index) {
-        var rec = index[bucket] || null;
+        const rec = index[bucket] || null;
         if (findEntry(rec, clean.id)) return { duplicate: true };
-        var m = historyStampAfter(entryOf(clean, sha), newestAtMs(rec));
+        const m = historyStampAfter(entryOf(clean, sha) as HistoryStoreEntry, newestAtMs(rec));
         m.sizeBytes = size;
         return tx.put(sha, stateJson).then(function () {
-          var t = now();
-          var next = rec ? cloneRecord(rec) : { title: "", lastOpenedAt: t, snapshots: [] };
+          const t = now();
+          const next: HistoryStoreMutableBucket = rec ? cloneRecord(rec) : { title: "", lastOpenedAt: t, snapshots: [] };
           next.snapshots.push(m);
           next.snapshots.sort(byAtAscending);
           if (m.title) next.title = m.title;
           next.lastOpenedAt = t;
-          var changes = {};
+          const changes: HistoryStoreChanges = {};
           changes[bucket] = next;
-          var plan = planChanges(index, changes, cap, t, held, [sha]);
+          const plan = planChanges(index, changes, cap, t, held, [sha]);
           return commitAndNote(tx, index, plan.changes, plan.dropped).then(function () {
             return { duplicate: false, evicted: plan.evicted, overCap: plan.overCap };
           });
@@ -293,9 +345,9 @@ function createHistoryStore(opts) {
     });
   }
 
-  function put(docId, meta, stateJson, o) {
+  function put(docId: unknown, meta: unknown, stateJson: unknown, o?: HistoryStoreOperationOptions | null): Promise<HistoryStorePutResult> {
     o = o || {};
-    var clean = sanitizeHistoryMeta(meta);
+    const clean = sanitizeHistoryMeta(meta);
     if (o.older) {
       if ((docId != null && docId !== HISTORY_OLDER_KEY) || !clean || typeof stateJson !== "string") {
         return Promise.resolve({ stored: false, code: "invalid" });
@@ -304,7 +356,7 @@ function createHistoryStore(opts) {
       if (historyUtf8Length(stateJson) > maxBodyBytes) return Promise.resolve({ stored: false, code: "too-large" });
       return importOlder([{ meta: clean, stateJson: stateJson }]).then(function (r) {
         if (!r.ok) return { stored: false, code: r.code || "io" };
-        var out = { stored: true, evicted: 0, overCap: false };
+        const out: HistoryStorePutSuccess = { stored: true, evicted: 0, overCap: false };
         if (!r.added) out.duplicate = true;
         return out;
       });
@@ -313,15 +365,15 @@ function createHistoryStore(opts) {
       return Promise.resolve({ stored: false, code: "invalid" });
     }
     if (readOnly()) return Promise.resolve({ stored: false, code: "read-only" });
-    var size = historyUtf8Length(stateJson);
+    const size = historyUtf8Length(stateJson);
     if (size > maxBodyBytes) return Promise.resolve({ stored: false, code: "too-large" });
-    var held = allHolds(o.protect);
+    const held = allHolds(o.protect);
 
     return Promise.all([hash(stateJson), readCap(lastTotal)]).then(function (pre) {
-      var sha = pre[0], cap = pre[1];
-      function attempt() { return putOnce(docId, clean, stateJson, sha, size, cap, held); }
-      function stored(r, evictedBefore) {
-        var out = { stored: true, evicted: evictedBefore, overCap: false };
+      const sha = pre[0], cap = pre[1];
+      function attempt() { return putOnce(docId as string, clean as HistoryStoreMeta, stateJson as string, sha, size, cap, held); }
+      function stored(r: HistoryStorePutOnceResult, evictedBefore: number) {
+        const out: HistoryStorePutSuccess = { stored: true, evicted: evictedBefore, overCap: false };
         if (r.duplicate) { out.duplicate = true; return out; }
         quotaStuck = false;
         out.evicted += r.evicted;
@@ -329,19 +381,19 @@ function createHistoryStore(opts) {
         return out;
       }
       return attempt().then(function (r) { return stored(r, 0); }, function (e) {
-        var code = errorCode(e);
+        const code = errorCode(e);
         if (!isNoRoom(code)) return { stored: false, code: code === "read-only" ? code : "io" };
         if (quotaStuck) return { stored: false, code: code, evicted: 0, overCap: true };
         return evictWith(function (total) { return Math.min(cap, Math.max(0, total - size)); }, o.protect)
           .then(null, function () { return { evicted: 0 }; })
           .then(function (ev) {
-            var evicted = ev.evicted || 0;
+            const evicted = ev.evicted || 0;
             if (!evicted) {
               quotaStuck = true;
               return { stored: false, code: code, evicted: 0, overCap: true };
             }
             return attempt().then(function (r) { return stored(r, evicted); }, function (e2) {
-              var code2 = errorCode(e2);
+              const code2 = errorCode(e2);
               if (isNoRoom(code2)) quotaStuck = true;
               return { stored: false, code: isNoRoom(code2) ? code2 : "io", evicted: evicted, overCap: true };
             });
@@ -352,18 +404,18 @@ function createHistoryStore(opts) {
     });
   }
 
-  function healMissing(sha) {
+  function healMissing(sha: string) {
     if (readOnly()) return Promise.resolve();
     return run(true, function (tx) {
       return listIndex(tx).then(function (index) {
         if (!namedShas(index, null)[sha]) return null;
         return tx.get(sha).then(function (text) {
           if (typeof text === "string") return null;
-          var changes = {};
+          const changes: HistoryStoreChanges = {};
           Object.keys(index).forEach(function (b) {
-            var list = snapshotsOf(index[b]);
+            const list = snapshotsOf(index[b]);
             if (!list.some(function (s) { return s && s.sha === sha; })) return;
-            var next = cloneRecord(index[b]);
+            const next = cloneRecord(index[b] as SharedHistoryBucketReader);
             next.snapshots = next.snapshots.filter(function (s) { return !s || s.sha !== sha; });
             changes[b] = next.snapshots.length ? next : null;
           });
@@ -373,17 +425,17 @@ function createHistoryStore(opts) {
     }).then(noop, noop);
   }
 
-  function get(bucket, id) {
+  function get(bucket: unknown, id: unknown) {
     if (!isBucket(bucket) || typeof id !== "string" || !HISTORY_SNAP_ID_RE.test(id)) return Promise.resolve(null);
     return run(false, function (tx) {
       return listIndex(tx).then(function (index) {
-        var rec = index[bucket];
-        var e = findEntry(rec, id);
+        const rec = index[bucket as string];
+        const e = findEntry(rec, id);
         if (!e) return null;
         if (bucket === HISTORY_OLDER_KEY && historyOlderExpired(rec, now())) return null;
         return tx.get(e.sha).then(function (text) {
           if (typeof text !== "string") return { missing: e.sha };
-          return { meta: publicMeta(e, bucket), stateJson: text };
+          return { meta: publicMeta(e, bucket as string), stateJson: text };
         });
       });
     }).then(function (r) {
@@ -395,17 +447,17 @@ function createHistoryStore(opts) {
     });
   }
 
-  function list(docId) {
-    var id = isDocId(docId) ? docId : null;
+  function list(docId?: unknown) {
+    const id = isDocId(docId) ? docId as string : null;
     return run(false, function (tx) { return listIndex(tx); }).then(function (index) {
-      var entries = id ? snapshotsOf(index[id]).map(function (s) { return publicMeta(s, id); }).filter(Boolean) : [];
-      var olderRec = index[HISTORY_OLDER_KEY] || null;
-      var older = [], olderExpiresAt = null;
+      const entries = id ? snapshotsOf(index[id]).map(function (s) { return publicMeta(s, id); }).filter(Boolean as unknown as (m: HistoryStorePublicMeta | null) => m is HistoryStorePublicMeta) : [];
+      const olderRec = index[HISTORY_OLDER_KEY] || null;
+      let older: HistoryStorePublicMeta[] = [], olderExpiresAt: number | null = null;
       if (olderRec && historyOlderExpired(olderRec, now())) {
         if (!readOnly()) evictWith(function () { return Infinity; }, null).then(noop, noop);
       } else if (olderRec) {
-        older = snapshotsOf(olderRec).map(function (s) { return publicMeta(s, HISTORY_OLDER_KEY); }).filter(Boolean);
-        var exp = Number(olderRec.expiresAt);
+        older = snapshotsOf(olderRec).map(function (s) { return publicMeta(s, HISTORY_OLDER_KEY); }).filter(Boolean as unknown as (m: HistoryStorePublicMeta | null) => m is HistoryStorePublicMeta);
+        const exp = Number(olderRec.expiresAt);
         olderExpiresAt = isFinite(exp) && exp > 0 ? exp : null;
       }
       return { entries: entries.sort(byAtDescending), older: older.sort(byAtDescending), olderExpiresAt: olderExpiresAt };
@@ -414,8 +466,8 @@ function createHistoryStore(opts) {
 
   function usage() {
     return run(false, function (tx) { return listIndex(tx); }).then(function (index) {
-      var total = totalOf(index);
-      var docCount = Object.keys(index).filter(function (b) { return b !== HISTORY_OLDER_KEY && index[b]; }).length;
+      const total = totalOf(index);
+      const docCount = Object.keys(index).filter(function (b) { return b !== HISTORY_OLDER_KEY && index[b]; }).length;
       return readCap(total).then(function (cap) {
         return { totalBytes: total, capBytes: cap, overCap: total > cap, docCount: docCount, readOnly: readOnly() };
       });
@@ -425,35 +477,35 @@ function createHistoryStore(opts) {
   function listDocs() {
     return run(false, function (tx) { return listIndex(tx); }).then(function (index) {
       return Object.keys(index).filter(function (b) { return b !== HISTORY_OLDER_KEY && index[b]; }).sort().map(function (b) {
-        return { docId: b, title: index[b].title || "", lastOpenedAt: Number(index[b].lastOpenedAt) || 0 };
+        return { docId: b, title: (index[b] as SharedHistoryBucketReader).title || "", lastOpenedAt: Number((index[b] as SharedHistoryBucketReader).lastOpenedAt) || 0 };
       });
     });
   }
 
-  function rawIndex() {
+  function rawIndex(): Promise<SharedHistoryIndex> {
     return run(false, function (tx) { return listIndex(tx); }).then(function (index) {
-      return JSON.parse(JSON.stringify(index));
+      return JSON.parse(JSON.stringify(index)) as SharedHistoryIndex;
     });
   }
 
-  function copy(from, to, o) {
+  function copy(from: unknown, to: unknown, o?: HistoryStoreOperationOptions | null) {
     if (!isDocId(from) || !isDocId(to)) return Promise.resolve({ ok: false, copied: 0, code: "invalid" });
     if (from === to) return Promise.resolve({ ok: true, copied: 0 });
     if (readOnly()) return Promise.resolve({ ok: false, copied: 0, code: "read-only" });
-    var held = allHolds(o && o.protect);
+    const held = allHolds(o && o.protect);
     return readCap(lastTotal).then(function (cap) {
       return run(true, function (tx) {
         return listIndex(tx).then(function (index) {
-          var src = index[from] || null, dst = index[to] || null;
+          const src = index[from as string] || null, dst = index[to as string] || null;
           if (!snapshotsOf(src).length && !dst) return { ok: true, copied: 0 };
-          var t = now();
-          var next = dst ? cloneRecord(dst) : { title: "", lastOpenedAt: t, snapshots: [] };
-          var have = Object.create(null);
+          const t = now();
+          const next: HistoryStoreMutableBucket = dst ? cloneRecord(dst) : { title: "", lastOpenedAt: t, snapshots: [] };
+          const have: HistoryStoreFlags = Object.create(null);
           next.snapshots.forEach(function (s) { if (s) have[s.id] = true; });
-          var copied = 0;
+          let copied = 0;
           snapshotsOf(src).forEach(function (s) {
             if (!s || have[s.id] || typeof s.sha !== "string") return;
-            var m = entryOf(s, s.sha);
+            const m = entryOf(s, s.sha);
             if (!m) return;
             next.snapshots.push(m);
             have[m.id] = true;
@@ -462,9 +514,9 @@ function createHistoryStore(opts) {
           next.snapshots.sort(byAtAscending);
           if (!next.title && src && src.title) next.title = src.title;
           next.lastOpenedAt = t;
-          var changes = {};
-          changes[to] = next;
-          var plan = planChanges(index, changes, cap, t, held, []);
+          const changes: HistoryStoreChanges = {};
+          changes[to as string] = next;
+          const plan = planChanges(index, changes, cap, t, held, []);
           return commitAndNote(tx, index, plan.changes, plan.dropped).then(function () { return { ok: true, copied: copied }; });
         });
       });
@@ -473,72 +525,72 @@ function createHistoryStore(opts) {
     });
   }
 
-  function touch(docId, title) {
+  function touch(docId: unknown, title: unknown) {
     if (!isDocId(docId) || readOnly()) return Promise.resolve();
     return run(true, function (tx) {
       return listIndex(tx).then(function (index) {
-        var rec = index[docId];
+        const rec = index[docId as string];
         if (!rec) return null;
-        var next = cloneRecord(rec);
+        const next = cloneRecord(rec);
         next.lastOpenedAt = now();
-        var t = historyClip(title, 300);
+        const t = historyClip(title, 300);
         if (t) next.title = t;
-        var changes = {};
-        changes[docId] = next;
+        const changes: HistoryStoreChanges = {};
+        changes[docId as string] = next;
         return tx.commit(changes, []);
       });
     }).then(noop, noop);
   }
 
-  function importOlder(entries) {
+  function importOlder(entries: unknown): Promise<HistoryStoreImportResult> {
     if (!Array.isArray(entries)) return Promise.resolve({ ok: false, count: 0, added: 0, code: "invalid" });
     if (readOnly()) return Promise.resolve({ ok: false, count: 0, added: 0, code: "read-only" });
-    var clean = [], seen = Object.create(null);
-    entries.forEach(function (e) {
-      var meta = e && typeof e === "object" ? sanitizeHistoryMeta(e.meta) : null;
-      if (!meta || typeof e.stateJson !== "string" || seen[meta.id]) return;
-      var size = historyUtf8Length(e.stateJson);
+    const clean: { meta: HistoryStoreMeta; stateJson: string }[] = [], seen: HistoryStoreFlags = Object.create(null);
+    (entries as unknown[]).forEach(function (e) {
+      const meta: HistoryStoreMeta | null = e && typeof e === "object" ? sanitizeHistoryMeta((e as HistoryStoreFields).meta) : null;
+      if (!meta || typeof (e as HistoryStoreFields).stateJson !== "string" || seen[meta.id]) return;
+      const size = historyUtf8Length((e as HistoryStoreFields).stateJson as string);
       if (size > maxBodyBytes) return;
       seen[meta.id] = true;
       meta.sizeBytes = size;
-      clean.push({ meta: meta, stateJson: e.stateJson });
+      clean.push({ meta: meta, stateJson: (e as HistoryStoreFields).stateJson as string });
     });
-    var held = allHolds(null);
-    var heldKey = Object.create(null);
+    const held = allHolds(null);
+    const heldKey: HistoryStoreFlags = Object.create(null);
     held.forEach(function (p) { heldKey[p.docId + "\n" + p.id] = true; });
     return Promise.all(clean.map(function (e) { return hash(e.stateJson); })).then(function (shas) {
       return run(true, function (tx) {
         return listIndex(tx).then(function (index) {
-          var t = now();
-          var rec = index[HISTORY_OLDER_KEY] || null;
-          var expired = !!rec && historyOlderExpired(rec, t);
+          const t = now();
+          const rec = index[HISTORY_OLDER_KEY] || null;
+          const expired = !!rec && historyOlderExpired(rec, t);
           if (!clean.length) return { ok: true, count: rec && !expired ? snapshotsOf(rec).length : 0, added: 0 };
-          var next = (rec && !expired) ? cloneRecord(rec) : {
+          const next: HistoryStoreMutableBucket = (rec && !expired) ? cloneRecord(rec) : {
             title: "", lastOpenedAt: 0, migratedAt: t, expiresAt: t + HISTORY_OLDER_TTL_MS,
             snapshots: snapshotsOf(rec).filter(function (s) { return s && heldKey[HISTORY_OLDER_KEY + "\n" + s.id]; })
           };
-          var have = Object.create(null);
+          const have: HistoryStoreFlags = Object.create(null);
           next.snapshots.forEach(function (s) { if (s) have[s.id] = true; });
-          var fresh = [];
+          const fresh: { entry: HistoryStoreEntry; stateJson: string }[] = [];
           clean.forEach(function (e, i) {
             if (have[e.meta.id]) return;
             have[e.meta.id] = true;
-            fresh.push({ entry: entryOf(e.meta, shas[i]), stateJson: e.stateJson });
+            fresh.push({ entry: entryOf(e.meta, shas[i] as string) as HistoryStoreEntry, stateJson: e.stateJson });
           });
           if (!fresh.length && rec && !expired) return { ok: true, count: next.snapshots.length, added: 0 };
-          var chain = Promise.resolve();
+          let chain = Promise.resolve();
           fresh.forEach(function (f) {
             chain = chain.then(function () { return tx.put(f.entry.sha, f.stateJson); });
           });
           return chain.then(function () {
             fresh.forEach(function (f) { next.snapshots.push(f.entry); });
             next.snapshots.sort(byAtAscending);
-            var changes = {};
+            const changes: HistoryStoreChanges = {};
             changes[HISTORY_OLDER_KEY] = next.snapshots.length ? next : null;
-            var before = namedShas(index, null);
+            const before = namedShas(index, null);
             fresh.forEach(function (f) { before[f.entry.sha] = true; });
-            var after = namedShas(index, changes);
-            var dropped = Object.keys(before).filter(function (sha) { return !after[sha]; });
+            const after = namedShas(index, changes);
+            const dropped = Object.keys(before).filter(function (sha) { return !after[sha]; });
             return commitAndNote(tx, index, changes, dropped).then(function () {
               return { ok: true, count: next.snapshots.length, added: fresh.length };
             });
@@ -569,71 +621,71 @@ function createHistoryStore(opts) {
   };
 }
 
-function deepFreeze(v) {
+function deepFreeze<T>(v: T): Readonly<T> {
   if (v && typeof v === "object" && !Object.isFrozen(v)) {
     Object.freeze(v);
-    Object.keys(v).forEach(function (k) { deepFreeze(v[k]); });
+    Object.keys(v).forEach(function (k) { deepFreeze((v as HistoryStoreFields)[k]); });
   }
   return v;
 }
 
-function plainCopy(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
+function plainCopy<T>(v: T): T { return v == null ? v : JSON.parse(JSON.stringify(v)) as T; }
 
-function codedError(code, message, name) {
-  var e = new Error(message);
+function codedError(code: string, message: string, name?: string) {
+  const e: Error & { code: string } = new Error(message) as Error & { code: string };
   e.code = code;
   if (name) e.name = name;
   return e;
 }
 
-function createMemoryHistoryBackend(o) {
+function createMemoryHistoryBackend<E extends object>(o?: HistoryMemoryOptions<E> | null) {
   o = o || {};
-  var strict = !!o.strict;
-  var macrotask = o.macrotask;
+  const strict = !!o.strict;
+  const macrotask = o.macrotask;
   if (strict && typeof macrotask !== "function") {
     throw new TypeError("createMemoryHistoryBackend: strict mode needs a macrotask(cb) scheduler");
   }
-  var index = Object.create(null);
-  var bodies = Object.create(null);
-  var chain = Promise.resolve();
-  var before = o.before || noop;
-  var observe = o.observe || noop;
+  let index: SharedHistoryIndex = Object.create(null);
+  let bodies: Record<string, string | undefined> = Object.create(null);
+  let chain = Promise.resolve();
+  const before = o.before || noop;
+  const observe = o.observe || noop;
 
-  function isNamed(sha, idx) {
+  function isNamed(sha: string, idx: SharedHistoryIndex) {
     return Object.keys(idx).some(function (b) {
       return snapshotsOf(idx[b]).some(function (s) { return s && s.sha === sha; });
     });
   }
 
-  function runTx(fn, write) {
-    var active = true, pending = 0, done = false;
-    var stagedBodies = Object.create(null);
-    var staged = null;
+  function runTx<T>(fn: (tx: SharedHistoryTransaction) => T | PromiseLike<T>, write: boolean) {
+    let active = true, pending = 0, done = false;
+    const stagedBodies: Record<string, string | undefined> = Object.create(null);
+    let staged: { changes: HistoryStoreChanges; dropped: string[] } | null = null;
 
     function scheduleCheck() {
-      macrotask(function () { if (!done && pending === 0) active = false; });
+      (macrotask as NonNullable<typeof macrotask>)(function () { if (!done && pending === 0) active = false; });
     }
-    function op(body) {
+    function op<R>(body: () => R): Promise<R> {
       if (!active) throw codedError("inactive", "The history transaction has finished (a non-tx await inside exclusive()?)", "TransactionInactiveError");
       if (!strict) return Promise.resolve().then(body);
       pending++;
-      return new Promise(function (resolve, reject) {
-        macrotask(function () {
+      return new Promise<R>(function (resolve, reject) {
+        (macrotask as NonNullable<typeof macrotask>)(function () {
           pending--;
           try { resolve(body()); } catch (e) { reject(e); }
           scheduleCheck();
         });
       });
     }
-    function mustWrite(what) {
+    function mustWrite(what: string) {
       if (strict && !write) throw codedError("io", "history: " + what + " in a read-only job");
       if (backend.readOnly) throw codedError("read-only", "history: the store is read-only");
     }
 
-    var tx = {
+    const tx: SharedHistoryTransaction = {
       list: function () {
         return op(function () {
-          var out = {};
+          let out: SharedHistoryIndex = {};
           Object.keys(index).forEach(function (b) { out[b] = index[b]; });
           return strict ? Object.freeze(out) : plainCopy(out);
         });
@@ -669,15 +721,15 @@ function createMemoryHistoryBackend(o) {
     return Promise.resolve().then(function () { return fn(tx); }).then(function (result) {
       done = true;
       active = false;
-      var nextIndex = Object.create(null);
+      const nextIndex: SharedHistoryIndex = Object.create(null);
       Object.keys(index).forEach(function (b) { nextIndex[b] = index[b]; });
       if (staged) {
         Object.keys(staged.changes).forEach(function (b) {
-          if (staged.changes[b]) nextIndex[b] = deepFreeze(staged.changes[b]);
+          if ((staged as NonNullable<typeof staged>).changes[b]) nextIndex[b] = deepFreeze((staged as NonNullable<typeof staged>).changes[b]);
           else delete nextIndex[b];
         });
       }
-      var drop = staged ? staged.dropped.filter(function (sha) {
+      const drop = staged ? staged.dropped.filter(function (sha) {
         if (!isNamed(sha, nextIndex)) return true;
         if (strict) throw codedError("io", "history: asked to drop body " + sha + " that the index still names");
         return false;
@@ -693,15 +745,15 @@ function createMemoryHistoryBackend(o) {
     });
   }
 
-  var backend = {
+  const backend = {
     name: typeof o.name === "string" ? o.name : "memory",
     persistent: !!o.persistent,
     readOnly: !!o.readOnly,
 
-    exclusive: function (fn, xo) {
-      var write = !(xo && xo.write === false);
+    exclusive: function <T>(fn: (tx: SharedHistoryTransaction) => T | PromiseLike<T>, xo?: { write?: boolean }) {
+      let write = !(xo && xo.write === false);
       observe("exclusive");
-      var job = chain.then(function () { return runTx(fn, write); });
+      let job = chain.then(function () { return runTx(fn, write); });
       chain = job.then(noop, noop);
       return job;
     },

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { createHistoryFsBackend, FORMAT_VERSION } = require(path.join(here, "..", "history-fs-backend.js"));
-const { createHistoryStore } = require(path.join(here, "..", "..", "shared", "history-store.js"));
+const { createHistoryStore } = require(path.join(here, "..", "..", "shared", "history-store.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_OLDER_TTL_MS, historyUtf8Length } = require(path.join(here, "..", "..", "shared", "history-policy.js"));
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-history-fs-test-"));

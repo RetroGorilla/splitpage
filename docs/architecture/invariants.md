@@ -351,7 +351,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 - **Behaviour:** Renderer and main address version history only by a validated `(docId, snapshot id)`, and every resolved path stays inside the history folder. The Older bucket is reachable only through `{older: true}`. The shared store itself refuses a `docId` alongside that flag, and refuses `"_older"` as a `docId`.
 - **Tests:** `src/test/history-store.test.mjs` ("put refuses what can never succeed with 'invalid', and the Older bucket by name", "get validates both halves of the address…"); `src/test/history-policy.test.mjs` ("HISTORY_SNAP_ID_RE: what may become a file name on disk"); `desktop/test/ipc-table.test.mjs` ("version history is exactly six app-only invoke channels"); `desktop/test/smoke.mjs` ("history: id validation — nothing outside history/…"); browser `27-app-data.txt` (case 10, bad docIds).
-- **Owner:** `shared/` (`history-store.js`), `desktop/` · **Milestone:** 4.x · **Class:** keep
+- **Owner:** `shared/` (`history-store.ts`), `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the checks pass after desktop IPC composition is extracted.
 

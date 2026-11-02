@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { createMemoryHistoryTestBackend } from "../adapters/storage/history-backend-testing.ts";
-import { createHistoryStore } from "../../shared/history-store.js";
+import { createHistoryStore } from "../../shared/history-store.ts";
 import {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
@@ -566,7 +566,7 @@ test("strict mode needs a scheduler; the default memory backend is lenient", () 
 
 test("the store runs clean on a lenient backend too, and loads through require like main.js does", async () => {
   const require = createRequire(import.meta.url);
-  const cjs = require("../../shared/history-store.js");
+  const cjs = require("../../shared/history-store.ts");
   const backend = cjs.createMemoryHistoryBackend();
   const store = cjs.createHistoryStore({ backend, now: () => 5, hashText: (s) => Promise.resolve(sha(s)) });
   assert.deepEqual(await store.put(DOC_A, meta("s01", 1), body("a")), { stored: true, evicted: 0, overCap: false });
