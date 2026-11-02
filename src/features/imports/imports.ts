@@ -5,7 +5,7 @@ import type { DocumentRow, ValidatedDocument } from "../../core/document/validat
 import { importRowsCommand } from "../../application/commands/import-rows.ts";
 import { escapeHtml, truncateForPreview } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
-import { fileKindFromName } from "../../../shared/file-names.js";
+import { fileKindFromName } from "../../../shared/file-names.ts";
 
 let ports: ImportDialogPorts | null = null;
 let window: Window | null = null, document: Document | null = null;

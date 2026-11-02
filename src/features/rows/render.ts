@@ -41,7 +41,7 @@ import {
 } from "../../core/text/edits.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
 import { cellSelection, placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
-import { formatVideoLength } from "../../../shared/text.js";
+import { formatVideoLength } from "../../../shared/text.ts";
 
 type Ports = RowsRenderPorts;
 type Row = DocumentView["rows"][number];

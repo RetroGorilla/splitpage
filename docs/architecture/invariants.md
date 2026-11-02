@@ -323,7 +323,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 - **Behaviour:** Every loaded document carries a `state.docId` matching `/^d[0-9a-f]{32}$/`. The seed, `#state-data` and the Standalone HTML export carry none. `SCHEMA_VERSION` was not bumped for it. A missing or invalid id is treated as unique, never as shared.
 - **Tests:** `src/test/doc-id.test.mjs` ("normalizeDocId treats anything but the canonical shape as absent", "a hostile or missing id is re-minted…"); `src/test/doc-id-policy.test.mjs`; `src/test/starters.test.mjs` ("…has no missing STATE_FIELDS and no docId"); browser `22-doc-id.txt` (`#state-data` carries no `docId`).
-- **Owner:** `src/core/document` (`shared/doc-id-policy.js` stays shared) · **Milestone:** 2 · **Class:** keep
+- **Owner:** `src/core/document` (`shared/doc-id-policy.ts` stays shared) · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the named tests pass against `src/core/document`.
 

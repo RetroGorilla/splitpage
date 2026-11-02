@@ -1,10 +1,10 @@
 import type { HistoryPanelPorts, HistoryPanelControl } from "./ports.ts";
 type HistoryCardMeta = Pick<HistorySnapshotMeta, "id" | "at" | "by" | "rows" | "title" | "label"> & Partial<Pick<HistorySnapshotMeta, "status" | "atMs" | "sizeBytes">>;
 import type { HistorySnapshotMeta } from "../../application/recovery/history-ports.ts";
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
-import { driveFormatSize } from "../../../shared/text.js";
-import { formatClock } from "../../../shared/clock.js";
+import { driveFormatSize } from "../../../shared/text.ts";
+import { formatClock } from "../../../shared/clock.ts";
 import { formatTimestamp } from "../common/comment-time.ts";
 
 export function startHistoryPanel(ports: HistoryPanelPorts) {

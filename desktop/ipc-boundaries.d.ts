@@ -1,6 +1,7 @@
 "use strict";
 
 import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContentsView } from "electron";
+import type { chooseDuplicateLoser } from "../shared/doc-id-policy.ts";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
   DesktopWireHistoryMeta, DesktopWireHistoryOptions, DesktopWireHistoryUsage, DesktopWireLaunch,
@@ -154,7 +155,7 @@ export interface DesktopTabStripIpcDependencies extends Pick<DesktopMainCommon, 
 export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, "testMode" | "tabOf" | "tabs" | "windowsById" | "requestCloseTab" | "draftStore" | "draftsPreviousSession" | "shellStateForWindow" | "createTab" | "activateTab" | "reorderTab" | "moveTabToWindow"> {
   app: Pick<App, "quit">;
   BrowserWindow: Pick<typeof BrowserWindow, "fromWebContents">;
-  chooseDuplicateLoser: <T extends { docId: string; homeKey: string; seq: number }>(a: T, b: T) => T | null;
+  chooseDuplicateLoser: typeof chooseDuplicateLoser;
   createTabWindow: (options: object) => DesktopMainWindow;
   liveWindows: () => DesktopMainWindow[];
   testExternalOpens: string[];

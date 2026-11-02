@@ -3,7 +3,7 @@ import type { LocalFileMenuPorts, LocalFileMenuControls } from "./local-files-po
 import { formatTimestamp } from "../common/comment-time.ts";
 import { exportToggleOptions } from "../../application/export/registry.ts";
 import { unshownCharactersText } from "../../application/export/diagnostics.ts";
-import { slugify } from "../../../shared/text.js";
+import { slugify } from "../../../shared/text.ts";
 
 let mounted: LocalFileMenuControls | null = null;
 
