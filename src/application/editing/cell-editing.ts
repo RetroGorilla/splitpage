@@ -19,12 +19,12 @@ export interface CellAddress {
   readonly field: string | null;
 }
 
-export interface CellPage<E> {
+export interface CellPage<E, Html = never> {
   readonly address: (cell: E) => CellAddress;
   readonly attached: (cell: E) => boolean;
   readonly html: (cell: E) => string;
   readonly selection: (cell: E) => CellRange | null;
-  readonly write: (cell: E, html: string) => void;
+  readonly write: (cell: E, html: string | Html) => void;
   readonly focus: (cell: E, sel: CellRange | null | undefined) => void;
 }
 
@@ -42,8 +42,8 @@ export interface CellUndoPorts {
 
 export type ShownRow = DocumentView["rows"][number];
 
-export interface CellEditingPorts<E> {
-  readonly page: CellPage<E>;
+export interface CellEditingPorts<E, Html = never> {
+  readonly page: CellPage<E, Html>;
   readonly document: () => DocumentView | null;
   readonly run: (command: Command) => CommandOutcome;
   readonly text: CellTextPorts;
@@ -70,9 +70,9 @@ export interface CellEditResult {
 
 export type CellEdit = (cell: Run[], sel: CellRange | null) => CellEditResult | null | undefined;
 
-export interface CellEditing<E> {
+export interface CellEditing<E, Html = never> {
   readonly open: (cell: E) => OpenCell | null;
-  readonly close: (cell: E, html: string, sel: CellRange | null | undefined) => E;
+  readonly close: (cell: E, html: string | Html, sel: CellRange | null | undefined) => E;
   readonly edit: (cell: E, change: CellEdit) => E | null;
   readonly sync: (cell: E) => void;
   readonly editGallery: (rowId: string, message: string, edit: GalleryEdit) => boolean;
@@ -92,7 +92,7 @@ function took(outcome: CommandOutcome): boolean {
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
-export function createCellEditing<E>(ports: CellEditingPorts<E>): CellEditing<E> {
+export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Html>): CellEditing<E, Html> {
   const page = ports.page;
 
   function sync(cell: E): void {
@@ -126,7 +126,7 @@ export function createCellEditing<E>(ports: CellEditingPorts<E>): CellEditing<E>
     return { rowId: at.rowId as string, field: at.field, html: html, sel: sel };
   }
 
-  function close(cell: E, html: string, sel: CellRange | null | undefined): E {
+  function close(cell: E, html: string | Html, sel: CellRange | null | undefined): E {
     page.write(cell, html);
     sync(cell);
     page.focus(cell, sel);

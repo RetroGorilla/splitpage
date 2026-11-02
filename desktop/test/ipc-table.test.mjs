@@ -512,10 +512,10 @@ test("packaging: every ./module main.js requires, directly or through another mo
   assert.ok(required.has("ipc-channels.ts"), "ipc-setup.ts requires ./ipc-channels");
   for (const f of ["close-keep.js", "quit-watchdog.ts", "unsaved-dialog.ts"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
   for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
-  for (const f of ["close-quit.js", "session-restore.js"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
+  for (const f of ["close-quit.js", "session-restore.ts"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
   assert.ok(requiredBy(MAIN).includes("voice-composition.js"), "main.js requires ./voice-composition");
   assert.ok(required.has("voice-helper.js") && required.has("prompter-share.js"), "voice-composition.js requires ./voice-helper and ./prompter-share");
-  assert.ok(requiredBy(MAIN).includes("print-pdf.js"), "main.js requires ./print-pdf");
+  assert.ok(requiredBy(MAIN).includes("print-pdf.ts"), "main.js requires ./print-pdf.ts");
   for (const f of required) assert.ok(listed.has(f), f + " is required from main.js but not in electron-builder.yml files");
 });
 

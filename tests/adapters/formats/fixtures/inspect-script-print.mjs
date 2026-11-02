@@ -393,7 +393,7 @@ export function checkPrintedLayout(report, model, only = null) {
   });
   check("e", () => {
     for (const page of report.pages) for (const line of page.lines) {
-      assert.ok(!line.notdef && !line.text.includes(String.fromCharCode(0)) && !line.text.includes("\uFFFD"), `e: missing glyph on page ${page.number}`);
+      assert.ok(!line.notdef && !line.text.includes(String.fromCharCode(0)) && !line.text.includes("\uFFFD"), `e: missing glyph on page ${page.number}; font=${line.font}; text=${JSON.stringify(line.text)}`);
     }
     const text = leaves.map((element) => {
       let lines = elementLines(report, element);
