@@ -3,10 +3,11 @@
 import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContents, WebContentsView } from "electron";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
-  DesktopWireHistoryMeta, DesktopWireHistoryOptions, DesktopWireHistoryUsage, DesktopWireLaunch,
+  DesktopWireHistoryMeta, DesktopWireLaunch,
   DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
 import type { createDraftStore } from "./drafts.ts";
+import type { createHistoryStore } from "../shared/history-store.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { createFileRegistry } from "./file-service.ts";
 import type { createRecents } from "./recents.ts";
@@ -115,21 +116,13 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   voiceHelperInstance: () => DesktopVoiceBoundary;
 }
 
-export interface DesktopHistoryStoreBoundary {
-  put: (docId: string | null, meta: DesktopWireHistoryMeta, state: string, opts: DesktopWireHistoryOptions) => Promise<{ stored: boolean; code?: string; duplicate?: boolean; evicted?: number; overCap?: boolean }>;
-  list: (docId: string | null) => Promise<Omit<DesktopIpcResult<"splitpage:history-list">, "usage">>;
-  usage: () => Promise<DesktopWireHistoryUsage>;
-  get: (bucket: string, id: string) => Promise<DesktopIpcResult<"splitpage:history-get">>;
-  copy: (...args: DesktopIpcArgs<"splitpage:history-copy">) => Promise<DesktopIpcResult<"splitpage:history-copy">>;
-  touch: (...args: DesktopIpcArgs<"splitpage:history-touch">) => Promise<void>;
-  listDocs: () => Promise<DesktopIpcResult<"splitpage:history-list-docs">>;
-}
+export type DesktopHistoryStoreBoundary = ReturnType<typeof createHistoryStore>;
 
 export interface DesktopHistoryBlobIpcDependencies {
   historyStore: () => DesktopHistoryStoreBoundary | null;
   historyHolds: Map<number, { docId: string; id: string }[]>;
   historyProtectList: (value: unknown) => { docId: string; id: string }[];
-  historyWireMeta: (meta: DesktopWireHistoryMeta) => DesktopWireHistoryMeta;
+  historyWireMeta: <M extends DesktopWireHistoryMeta | null | undefined>(meta: M) => M extends DesktopWireHistoryMeta ? DesktopWireHistoryMeta : M;
   blobStore: () => {
     put: (sha: string, bytes: Buffer) => Promise<DesktopIpcResult<"splitpage:blob-put">>;
     get: (sha: string) => Promise<Buffer | null>;

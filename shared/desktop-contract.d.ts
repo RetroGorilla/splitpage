@@ -143,8 +143,8 @@ export interface DesktopWireHistoryList {
 }
 
 export interface DesktopWireHistoryRead {
-  meta: DesktopWireHistoryMeta;
-  stateJson: string;
+  meta: DesktopWireHistoryMeta | null | undefined;
+  stateJson: string | undefined;
 }
 
 export interface DesktopWireHistoryDoc {

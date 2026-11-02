@@ -1,20 +1,7 @@
 import type { HistoryBackendOptions, HistoryTestingStorage, HistorySnapshotMeta, HistorySnapshotRead, HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
-import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult, HistoryStoreUsage } from "./history-backend-types.ts";
+import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult } from "./history-backend-types.ts";
 
-type HistoryStore = {
-  name: string;
-  persistent: boolean;
-  put: HistoryBackendAdapter["put"];
-  get: HistoryBackendAdapter["get"];
-  copy: HistoryBackendAdapter["copy"];
-  touch: HistoryBackendAdapter["touch"];
-  importOlder: HistoryBackendAdapter["importOlder"];
-  evict: HistoryBackendAdapter["evict"];
-  list: (docId: string | null) => Promise<HistoryBackendList>;
-  usage: () => Promise<HistoryStoreUsage>;
-  rawIndex: () => Promise<HistoryIndex>;
-  listDocs: () => Promise<{ docId: string }[]>;
-};
+type HistoryStore = ReturnType<typeof createHistoryStore<HistoryBrowserBackend>>;
 type HistoryBrowserBackend = Pick<ReturnType<typeof createIdbHistoryBackend>, "name" | "persistent" | "exclusive">;
 type HistoryLocalEntry = { backend: HistoryBrowserBackend; store: HistoryStore; adapter: HistoryBackendAdapter };
 type HistoryIdbEntry = HistoryLocalEntry & { backend: ReturnType<typeof createIdbHistoryBackend>; ready: Promise<HistoryBackendAdapter> | null };
@@ -113,13 +100,13 @@ function historyMakeStore(backend: HistoryBrowserBackend, capBytes: (lastTotal?:
     hashText: historyHashText,
     capBytes: capBytes,
     holds: historyProtectedList
-  }) as unknown as HistoryStore;
+  });
 }
 
 function historyRecordOf(index: HistoryIndex, bucket: string) {
   const rec = index && index[bucket];
   if (!rec) return null;
-  const snaps = Array.isArray(rec.snapshots) ? rec.snapshots : [];
+  const snaps: NonNullable<typeof rec>["snapshots"] = Array.isArray(rec.snapshots) ? rec.snapshots : [];
   const out: HistoryBackendDoc = {
     docId: bucket,
     title: rec.title || "",
@@ -152,7 +139,7 @@ function historyStoreAdapter(store: HistoryStore): HistoryBackendAdapter & { sto
       });
     },
     list: function (docId) {
-      return store.list(docId || null).then(function (r) {
+      return store.list(docId || null).then(function (r: HistoryBackendList) {
         return store.usage().then(function (u) { r.usage = u; return r; }, function () { r.usage = null; return r; });
       });
     },
