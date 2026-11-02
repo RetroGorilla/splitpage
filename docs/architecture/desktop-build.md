@@ -10,7 +10,7 @@ covers the release workflow that runs `npm run dist:win`.
 The nine `ipc-*.ts` modules run directly through Electron's main-process
 type stripping. They use erasable syntax and keep CommonJS `require` and
 `module.exports`; `main.ts` names their `.ts` extensions explicitly. Electron
-44.4.5 loads these files from the checkout and from the packaged asar.
+44.10.0 loads these files from the checkout and from the packaged asar.
 `tsconfig.desktop.json` checks them with strict TypeScript, including the
 channel-specific arguments and results in `shared/desktop-contract.d.ts`.
 The channel table constrains contract coverage and supplies the names and
@@ -61,8 +61,8 @@ Both `dist` and `dist:win:test` use `electron-builder.yml`; the latter relies
 on electron-builder's default config discovery and changes the output folder
 and staged app to a test build. Both therefore ship the same IPC modules.
 
-The sandboxed renderer cannot strip TypeScript: Electron 44.4.5 reports a
-syntax error when a sandbox:true preload contains a type annotation.
+The sandboxed renderer cannot strip TypeScript: when last tried, on Electron
+44.4.5, a sandbox:true preload containing a type annotation was a syntax error.
 `desktop/preload.ts` is therefore the checked source, whose bridge object
 must implement `DesktopPort`. `node tools/build-preload.mjs` strips it with
 Node's stripTypeScriptTypes and writes the committed `desktop/preload.js` that the sandbox runs.
@@ -142,7 +142,7 @@ Two things `main.ts` needs at startup are deliberately left out of `files`:
   feature.
 
   Shared modules are synchronous ES modules. `main.ts` keeps its `require`
-  calls: Electron 44.4.5 returns their namespace objects before and after
+  calls: Electron 44.10.0 returns their namespace objects before and after
   `app.whenReady`, including when the requiring code runs from an asar.
   `stage.mjs` copies their ESM `package.json` with the five modules the main
   process reaches. They have no top-level await or observable initialization
