@@ -58,10 +58,10 @@ export interface HistoryOwner {
   readonly startHistory: (ports: HistoryOwnerPorts) => () => Promise<void> | undefined;
   readonly isPristineSeedDocument: () => boolean;
   readonly onHistoryChange: (listener: () => void) => () => void;
-  readonly captureSnapshot: (label: string, src: unknown, opts?: { allowSeedSkip?: boolean }) => { id: string; docId: string; done: Promise<HistoryWriteResult> } | null;
-  readonly protectHistorySnapshot: (query: { id?: string; docId?: string; older?: boolean }) => () => void;
+  readonly captureSnapshot: (label: string | undefined, src: unknown, opts?: { allowSeedSkip?: boolean }) => { id: string; docId: string; done: Promise<HistoryWriteResult> } | null;
+  readonly protectHistorySnapshot: (query: { id?: string; docId?: string | null; older?: boolean }) => () => void;
   readonly listDocHistory: (docId?: string | null) => Promise<{ entries: HistorySnapshotMeta[]; older: HistorySnapshotMeta[]; olderExpiresAt: number | null; backend: string | null; persistent: boolean; usage: unknown; notice: string | null }>;
-  readonly getHistorySnapshot: (query: { id?: string; docId?: string; older?: boolean }) => Promise<HistorySnapshotRead | null>;
+  readonly getHistorySnapshot: (query: { id?: string; docId?: string | null; older?: boolean }) => Promise<HistorySnapshotRead | null>;
   readonly historyDocumentChanged: () => void;
   readonly copyHistory: (from: string, to: string) => Promise<{ ok: boolean; copied: number; code?: string }>;
   readonly exportHistoryAll: () => Promise<HistoryBundleData>;
