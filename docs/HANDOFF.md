@@ -341,7 +341,7 @@ includes the boot stash and the crash-draft file merge, the latter through
 Every other write is "adopt what the other side just confirmed" after a
 successful write or open (or `null`: no ancestor), and goes through
 `setBaseState(next, why)` next to it, each call with its reason — so
-`setBaseState(next, why)` (`src/application/session/session-merge.js`) is the one writer of the base, called through `applyMerge`. `reportMerge(result, {alreadySaved:true})`
+`setBaseState(next, why)` (`src/application/session/session-merge.ts`) is the one writer of the base, called through `applyMerge`. `reportMerge(result, {alreadySaved:true})`
 avoids re-queuing an autosave for a mid-save merge.
 
 ### 3.8 Untagged mentions are painted, never wrapped
@@ -1137,7 +1137,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/bootstrap/wiring/` | one module per feature or owner: builds its ports from the real owners and mounts it; the `*-owner(s).ts` modules hold the app's single owners (session, location, preferences, saves, recovery, editor) |
 | `src/bootstrap/wiring/ports/` | shared ports, one module per responsibility (document, editing, effects, files, saving, screen, text, transitions…) |
 | `src/features/<name>/` | one part of the screen each (rows, writer, prompter, tags, broll, file-menu, find, gallery, comments, history, settings, title…); `features/common/` holds stateless DOM helpers |
-| `src/application/session/` | the document session (`document-session.ts`), change sets, merge (`apply-merge.ts`, `merge-incoming.ts`, `session-merge.js`) |
+| `src/application/session/` | the document session (`document-session.ts`), change sets, merge (`apply-merge.ts`, `merge-incoming.ts`, `session-merge.ts`) |
 | `src/application/commands/` | document edits as session commands: cell text, split and join, clipboard, scene length and status, rows, comments, b-roll and production records |
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
 | `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
@@ -1155,7 +1155,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | --- | --- |
 | `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.js` over `history-fs-backend.js`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
 | `desktop/desktop-state.ts`, `file-service.ts`, `doc-claims.ts`, `recents.ts`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
-| `desktop/close-quit.js`, `session-restore.js` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
+| `desktop/close-quit.js`, `session-restore.ts` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
 | `desktop/ipc-setup.ts`, `ipc-files.ts`, `ipc-shell.ts`, `ipc-document.ts`, `ipc-history-blob.ts`, `ipc-tabstrip.ts`, `ipc-test-mode.ts` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups); the file, file dialog and recents channels; the tab boot, theme, video file, update, teleprompter browser and Follow My Voice channels; the document state, route-open and crash-draft channels; the version history and image blob channels; the tab strip's channels; the `__test` channels, registered only in test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/ipc-channels.ts` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
