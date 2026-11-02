@@ -109,7 +109,7 @@ const APP_ROOT = app.isPackaged
   : path.resolve(__dirname, "..");
 
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
-const historyPolicy = require(path.join(SHARED_ROOT, "history-policy.js"));
+const historyPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
 const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.js"));
 const {

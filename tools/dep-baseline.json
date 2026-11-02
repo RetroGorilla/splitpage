@@ -8,7 +8,7 @@
     {"rule":"platform-global","source":"shared/video-embed.js","target":"global:setTimeout"},
     {"rule":"platform-global","source":"src/core/document/validated.ts","target":"ambient:validated","reason":"src/core/document/validated.ts declares the type-only unique symbol that brands ValidatedDocument; it is module-scoped and never read at run time"},
     {"rule":"unresolved-dynamic","source":"desktop/main.js","target":"require(path.join(SHARED_ROOT, \"doc-id-policy.js\"))"},
-    {"rule":"unresolved-dynamic","source":"desktop/main.js","target":"require(path.join(SHARED_ROOT, \"history-policy.js\"))"},
+    {"rule":"unresolved-dynamic","source":"desktop/main.js","target":"require(path.join(SHARED_ROOT, \"history-policy.ts\"))"},
     {"rule":"unresolved-dynamic","source":"desktop/main.js","target":"require(path.join(SHARED_ROOT, \"history-store.js\"))"},
     {"rule":"unresolved-dynamic","source":"desktop/main.js","target":"require(path.join(SHARED_ROOT, \"video-embed.js\"))"},
     {"rule":"unresolved-dynamic","source":"desktop/test/verify-dist-payload.test.mjs","target":"import( pathToFileURL(path.join(here, \"..\", \"verify-dist-payload.mjs\")) )"},

@@ -7,7 +7,7 @@ import type { PictureStore } from "../media/picture-store.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { SeedCheck } from "../preferences/seed-check.ts";
 import type { LegacySnapshots } from "./legacy-snapshots.ts";
-import type { sanitizeHistoryMeta } from "../../../shared/history-policy.js";
+import type { sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
 
 export type HistorySnapshotMeta = Omit<NonNullable<ReturnType<typeof sanitizeHistoryMeta>>, "id"> & { id: string; docId?: string; status?: string };
 
