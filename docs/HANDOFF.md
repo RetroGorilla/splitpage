@@ -10,9 +10,9 @@ first; this file deliberately does not repeat it.
 the top list in `docs/help.md`, "What's new since <last release>", above the
 last release's own list. When a release is cut, that heading becomes
 "What's new in <version>" (a release's notes are built from it) and a fresh
-"since" list starts with the next change. `README.md` is the
-repo-facing half of what used to be one file (#80): building, releasing, and
-the map of the tree.
+"since" list starts with the next change. [DEVELOPING.md](DEVELOPING.md)
+holds building, releasing and the map of the tree. `README.md` introduces
+the app with screenshots and download instructions.
 
 ---
 
@@ -50,7 +50,8 @@ breakdown for props/locations/cast/VFX/sound.
   `"<!doctype html>" + document.documentElement.outerHTML` with the document
   spliced into `#state-data` (`buildPublishHtml`, `PAGE_SHELL`). That's why
   there's an inlining build step instead of `<script src>`.
-- Supporting files: `README.md` (repo-facing) and `docs/help.md` (the user
+- Supporting files: `README.md` (project overview), `docs/DEVELOPING.md`
+  (development setup) and `docs/help.md` (the user
   guide, and a build input — it becomes the in-app Help page), `start.mjs`
   with thin `start.bat`/`start.sh`
   wrappers (local launcher), `update.mjs` (says whether a newer release

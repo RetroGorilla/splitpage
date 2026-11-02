@@ -16,7 +16,7 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
 ## Sending a change
 
 1. One issue per pull request, and link it (`Closes #123`).
-2. Build and check locally. [README.md](README.md#working-on-the-code) has the
+2. Build and check locally. [DEVELOPING.md](docs/DEVELOPING.md#working-on-the-code) has the
    setup; the short version is:
    ```
    npm ci
@@ -56,5 +56,5 @@ them in place.
 
 ## Releases
 
-`VERSION` is the one place the version lives. See README's
-[Building a release](README.md#building-a-release) and the Release workflow.
+`VERSION` is the one place the version lives. See the development guide's
+[Building a release](docs/DEVELOPING.md#building-a-release) and the Release workflow.
