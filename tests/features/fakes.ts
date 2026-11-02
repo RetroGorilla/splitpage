@@ -308,12 +308,12 @@ function listenerSet<L>() {
   };
 }
 
-export function fakeDocument(initial: DocumentView | null = null) {
+export function fakeDocument<Current extends DocumentView = DocumentView>(initial: Current | null = null) {
   let held = initial;
   const changes = listenerSet<SessionListener>();
   const replaced = listenerSet<() => void>();
   const refreshes = listenerSet<(jobs: ReadonlySet<string>) => void>();
-  const document: DocumentReader = {
+  const document: DocumentReader<Current> = {
     current: () => held,
     read: (select) => select(held),
     onChange: changes.add,
@@ -322,7 +322,7 @@ export function fakeDocument(initial: DocumentView | null = null) {
   };
   return {
     document,
-    replace: (doc: DocumentView | null): void => {
+    replace: (doc: Current | null): void => {
       held = doc;
       for (const listener of [...replaced.listeners]) listener();
     },

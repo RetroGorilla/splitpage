@@ -14,6 +14,9 @@ export type DocumentReply = {
 };
 
 export type DocumentComment = {
+  rowId?: string | null | undefined;
+  field?: string | null | undefined;
+  anchorId?: string | null | undefined;
   id: string;
   resolvedAt?: string | null | undefined;
   createdAt?: string | null | undefined;
