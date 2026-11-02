@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createPrompterShare, isShareableName } = require(path.join(here, "..", "prompter-share.js"));
+const { createPrompterShare, isShareableName } = require(path.join(here, "..", "prompter-share.ts"));
 
 const STATIC = {
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
