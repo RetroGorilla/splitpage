@@ -1,6 +1,6 @@
 "use strict";
 
-import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Rectangle, Shell, WebContents, WebContentsView } from "electron";
+import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContents, WebContentsView } from "electron";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
   DesktopWireHistoryMeta, DesktopWireHistoryOptions, DesktopWireHistoryUsage, DesktopWireLaunch,
@@ -14,6 +14,7 @@ import type { createDocClaims } from "./doc-claims.ts";
 import type { createRestoreNotice } from "./restore-notice.ts";
 import type { createThemeChoice } from "./window-appearance.ts";
 import type { createTabRegistry } from "./tab-registry.ts";
+import type { createDesktopStateStore } from "./desktop-state.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
 
@@ -39,20 +40,6 @@ export interface DesktopMainWindow {
   win: BrowserWindow;
   activeTabId: string | null;
   tabIds: string[];
-}
-
-export interface DesktopStateStoreBoundary {
-  read: () => {
-    recents: { absPath: string; title: string; at: number }[];
-    windows: {
-      windowId: string;
-      bounds: Rectangle | null;
-      maximized: boolean;
-      activeTabId: string;
-      tabs: { tabId: string; source: DesktopMainTab["source"]; lastKnownTitle: string }[];
-    }[];
-  };
-  write: (mutator: (state: ReturnType<DesktopStateStoreBoundary["read"]>) => ReturnType<DesktopStateStoreBoundary["read"]>) => Promise<boolean>;
 }
 
 export interface DesktopMainCommon {
@@ -189,9 +176,9 @@ export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;
 export interface DesktopSessionRestoreDependencies extends Pick<DesktopMainCommon, "tabs" | "windowsById" | "draftStore" | "createTab" | "activateTab">, Pick<ReturnType<typeof createTabRegistry>, "pathToTabId" | "claimRoutingKey" | "firstWindowRecord"> {
   app: Pick<App, "on">;
   BrowserWindow: Pick<typeof BrowserWindow, "getAllWindows">;
-  desktopState: Pick<DesktopStateStoreBoundary, "read">;
+  desktopState: Pick<ReturnType<typeof createDesktopStateStore>, "read">;
   draftsList: ReturnType<typeof createDraftStore>["list"];
-  createTabWindow: (options: Partial<Pick<ReturnType<DesktopStateStoreBoundary["read"]>["windows"][number], "windowId" | "bounds" | "maximized">>) => DesktopMainWindow;
+  createTabWindow: (options: Partial<Pick<ReturnType<ReturnType<typeof createDesktopStateStore>["read"]>["windows"][number], "windowId" | "bounds" | "maximized">>) => DesktopMainWindow;
   liveWindows: DesktopTestModeIpcDependencies["liveWindows"];
   payloadForSource: (source: DesktopMainTab["source"]) => DesktopMainTab["pendingPayload"];
   routeLaunchFile: (file: string) => void;
