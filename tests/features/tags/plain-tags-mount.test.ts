@@ -56,6 +56,12 @@ function typedColon(): Pick<InputEvent, "inputType" | "data"> {
 for (const [html, words] of [
   ["VFX: explosion in the background", "explosion in the background"],
   ["VFX: glow <strong>across</strong> the logo", "glow across the logo"],
+  ["VFX: glow <em>across</em> the logo", "glow across the logo"],
+  ["VFX: glow <u>across</u> the logo", "glow across the logo"],
+  ["VFX: glow <s>across</s> the logo", "glow across the logo"],
+  ["VFX: glow <mark>across</mark> the logo", "glow across the logo"],
+  ['VFX: glow <span class="stage-dir">across</span> the logo', "glow"],
+  ['VFX: glow<br><span class="audio-cue">SFX: wind</span>', "glow"],
   ["VFX: flare<br>next line", "flare"],
   ["VFX: flare<br>next paragraph<br>", "flare"],
   ['VFX: rain <span class="tag-anchor" data-tag-cat="prop" data-tag-name="umbrella">umbrella</span> roof', "rain"],
