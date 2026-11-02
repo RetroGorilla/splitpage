@@ -206,7 +206,7 @@ export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirS
   };
   const dropped = droppedListKeys(baseShots, mineShots, theirShots, shotKey, shotPrint);
   const baseById = idMap<BrollShotEntry>();
-  (baseShots || []).forEach(function (b) { if (b && b.id && !baseById[b.id]) baseById[b.id] = b; });
+  (baseShots || []).forEach(function (b) { if (b && b.id) baseById[b.id] = b; });
   const out: BrollShotEntry[] = [], byId = idMap<BrollShotEntry>(), theirIds = idMap<boolean>();
   (theirShots || []).forEach(function (b) {
     if (!b || !b.id || byId[b.id] || dropped[b.id]) return;

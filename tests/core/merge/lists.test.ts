@@ -21,6 +21,23 @@ const tag = (id: string, name: string, extra?: TagInput): TagInput =>
   Object.assign({ id: id, cat: "prop", name: name, owner: "", notes: "", status: "needed" }, extra || {});
 const prop = (id: string, name: string) => ({ id: id, name: name });
 
+test("production tags: the last duplicate base id determines which owner changed (#519)", () => {
+  const first = tag("b", "Tripod", { owner: "p1" });
+  const last = tag("b", "Tripod", { owner: "p2" });
+  const mine = tag("b", "Tripod", { owner: "p3" });
+  assert.deepEqual(mergeProductionTags([first, last], [mine], [last]), [mine]);
+  assert.deepEqual(mergeProductionTags([last, first], [mine], [last]), [last]);
+});
+
+test("b-roll shots: the last duplicate base id determines which owner changed and props were removed (#519)", () => {
+  const kettle = prop("k", "Kettle"), lamp = prop("l", "Lamp");
+  const first = shot("b", { owner: "p1", props: [kettle] });
+  const last = shot("b", { owner: "p2", props: [lamp] });
+  const mine = shot("b", { owner: "p3", props: [] });
+  assert.deepEqual(mergeBrollShots([first, last], [mine], [last]), [shot("b", { owner: "p3", props: [] })]);
+  assert.deepEqual(mergeBrollShots([last, first], [mine], [last]), [last]);
+});
+
 test("LIST_MERGERS holds a merger for exactly the fields merged as lists", () => {
   assert.ok(Object.isFrozen(LIST_MERGERS));
   assert.deepEqual(Object.keys(LIST_MERGERS),
