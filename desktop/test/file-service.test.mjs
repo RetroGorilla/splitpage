@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const {
   filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite, writeFileEntry
-} = require(path.join(here, "..", "file-service.js"));
+} = require(path.join(here, "..", "file-service.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });

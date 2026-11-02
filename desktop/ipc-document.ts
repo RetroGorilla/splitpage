@@ -6,11 +6,12 @@ import type { DesktopWireFailure } from "../shared/desktop-contract.d.ts";
 
 import type * as NodeFs from "node:fs";
 
-import type { DesktopFileServiceBoundary, DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopFileService } from "./file-service.ts";
 import type { LAST_KNOWN_TITLE_MAX as DesktopTitleLimit } from "./desktop-state.ts";
 
 const fs: typeof NodeFs = require("node:fs");
-const { readFileEntry }: Pick<DesktopFileServiceBoundary, "readFileEntry"> = require("./file-service");
+const { readFileEntry }: DesktopFileService = require("./file-service.ts");
 const { restoreDoneAction }: { restoreDoneAction: typeof RestoreDoneAction } = require("./drafts.ts");
 const { LAST_KNOWN_TITLE_MAX }: { LAST_KNOWN_TITLE_MAX: typeof DesktopTitleLimit } = require("./desktop-state.ts");
 

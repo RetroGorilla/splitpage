@@ -1,13 +1,28 @@
 "use strict";
 
-const path = require("node:path");
-const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX } = require("./desktop-state.ts");
+import type * as NodePath from "node:path";
+import type { createFileRegistry, pathKey as filePathKey } from "./file-service.ts";
+import type {
+  createDesktopStateStore, LAST_KNOWN_TITLE_MAX as DesktopTitleLimit, RECENTS_MAX as DesktopRecentsLimit
+} from "./desktop-state.ts";
 
-function createRecents({ store, pathKey, fileIds }) {
-  let recentDocuments = [];
-  const recentFileIdByPath = new Map();
+const path: typeof NodePath = require("node:path");
+const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX }: {
+  LAST_KNOWN_TITLE_MAX: typeof DesktopTitleLimit; RECENTS_MAX: typeof DesktopRecentsLimit
+} = require("./desktop-state.ts");
 
-  function fileIdForPath(absPath) {
+type DesktopRecentsStateStore = Pick<ReturnType<typeof createDesktopStateStore>, "read" | "write">;
+type DesktopRecentRecord = ReturnType<DesktopRecentsStateStore["read"]>["recents"][number];
+
+function createRecents({ store, pathKey, fileIds }: {
+  store: DesktopRecentsStateStore;
+  pathKey: typeof filePathKey;
+  fileIds: ReturnType<typeof createFileRegistry>;
+}) {
+  let recentDocuments: DesktopRecentRecord[] = [];
+  const recentFileIdByPath = new Map<string, string>();
+
+  function fileIdForPath(absPath: string) {
     const key = pathKey(absPath);
     const existing = recentFileIdByPath.get(key);
     if (existing && fileIds.pathOf(existing) === absPath) return existing;
@@ -25,14 +40,14 @@ function createRecents({ store, pathKey, fileIds }) {
     return store.write((current) => { current.recents = snapshot; return current; });
   }
 
-  function note(absPath, title) {
+  function note(absPath: unknown, title: unknown) {
     if (typeof absPath !== "string" || !absPath) return false;
     const key = pathKey(absPath);
     const name = typeof title === "string" ? title.slice(0, LAST_KNOWN_TITLE_MAX) : "";
     const at = Date.now();
     const existingIndex = recentDocuments.findIndex((r) => pathKey(r.absPath) === key);
     if (existingIndex === 0) {
-      const head = recentDocuments[0];
+      const head = recentDocuments[0] as DesktopRecentRecord;
       head.at = at;
       if (!name || head.title === name) return false;
       head.title = name;
@@ -48,7 +63,7 @@ function createRecents({ store, pathKey, fileIds }) {
     return true;
   }
 
-  function removeByFileId(fileId) {
+  function removeByFileId(fileId: unknown) {
     const absPath = typeof fileId === "string" ? fileIds.pathOf(fileId) : null;
     if (!absPath) return false;
     const key = pathKey(absPath);
@@ -76,5 +91,7 @@ function createRecents({ store, pathKey, fileIds }) {
 
   return { load, persist, note, removeByFileId, clear, forRenderer, list };
 }
+
+export type { createRecents };
 
 module.exports = { createRecents };

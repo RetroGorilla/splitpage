@@ -1154,7 +1154,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | File | What is in it |
 | --- | --- |
 | `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.js` over `history-fs-backend.js`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
-| `desktop/desktop-state.ts`, `file-service.js`, `doc-claims.js`, `recents.js`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
+| `desktop/desktop-state.ts`, `file-service.ts`, `doc-claims.ts`, `recents.ts`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
 | `desktop/close-quit.js`, `session-restore.js` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
 | `desktop/ipc-setup.ts`, `ipc-files.ts`, `ipc-shell.ts`, `ipc-document.ts`, `ipc-history-blob.ts`, `ipc-tabstrip.ts`, `ipc-test-mode.ts` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups); the file, file dialog and recents channels; the tab boot, theme, video file, update, teleprompter browser and Follow My Voice channels; the document state, route-open and crash-draft channels; the version history and image blob channels; the tab strip's channels; the `__test` channels, registered only in test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
@@ -1322,7 +1322,7 @@ under us is the same document with newer bytes.
 **Recent documents (issue #15), contract DESKTOP-RECENTS.** Desktop only.
 `recents: [{absPath, title, at}]` sits beside `windows` in
 `desktop-state.json`, most recent first, capped at 20 and de-duplicated by
-path on read. The list held by `createRecents` in `desktop/recents.js` is the
+path on read. The list held by `createRecents` in `desktop/recents.ts` is the
 authority once the process is up (`recents.load()` at `whenReady`, and
 `shellStateAsV2()` carries it into every session write, because that object
 REPLACES the file). It is recorded on `deliverOpenFile` and refreshed on

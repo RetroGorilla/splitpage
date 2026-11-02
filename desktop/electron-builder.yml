@@ -33,9 +33,9 @@ files:
   - history-fs-backend.js
   - desktop-state.ts
   - update-release.js
-  - file-service.js
-  - doc-claims.js
-  - recents.js
+  - file-service.ts
+  - doc-claims.ts
+  - recents.ts
   - window-appearance.ts
   - tab-registry.ts
   - restore-notice.ts
