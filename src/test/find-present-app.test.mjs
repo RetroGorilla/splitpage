@@ -104,3 +104,18 @@ test("Find changes scope on entering Present, refreshes after skip-shot rebuilds
   assert.equal(el("findbar").classList.contains("is-present"), false);
   closeFindBar();
 });
+
+test("Present Find can jump through a script containing only visible stage directions in scene mode", () => {
+  load();
+  loadTestDocument(migrateRows({ rows: [{ id: "r1", audioText: '<span class="stage-dir">hold still</span>' }] }));
+  const present = prompterControls();
+  present.openPrompter();
+  present.setPrompterSceneMode(true);
+  assert.equal(document.querySelectorAll("#prompter-content .w").length, 0);
+  openFindBar(); query("hold");
+  assert.equal(el("find-count").textContent, "1 of 1");
+  assert.doesNotThrow(() => key(el("find-input"), "Enter"));
+  assert.equal(present.playing(), false);
+  closeFindBar(); present.closePrompter();
+  present.setPrompterSceneMode(false);
+});

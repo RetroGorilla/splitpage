@@ -1166,7 +1166,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
       voiceFromReadingLine = true;
       clearSpokenHighlights();
       if (state.promptSceneMode) {
-        const scene = state.sceneWordEnd.findIndex((end) => end > index);
+        const scene = index < 0 ? -1 : state.sceneWordEnd.findIndex((end) => end > index);
         state.promptSceneIndex = scene;
         state.promptSceneGuideOffset = scroller.clientHeight / 2;
         state.promptSceneEndWordOffset = scene < 0 ? null : (state.promptWords[(state.sceneWordEnd[scene] as number) - 1] as PromptWord).el.offsetTop;
