@@ -13,9 +13,9 @@ function errors(source) {
 }
 
 test("the desktop port keeps the wire result shapes and nullable paths", () => {
-  assert.deepEqual(errors('export async function read() { const stat = await port.statFile("f"); return stat && stat.size; }'), []);
-  assert.deepEqual(errors('export async function read() { const hit = await port.historyGet({ docId: "d" }, "s"); return hit && typeof hit.stateJson === "string" && hit.stateJson.toUpperCase(); }'), []);
-  assert.deepEqual(errors('export const checked: Omit<DesktopTestPort, "getSessionInfo" | "openPrompterInBrowser"> = makeFakeDesktopBackend();'), []);
+  assert.deepEqual(errors('export async function read() { const stat = await port.statFile("f"); return stat && stat.size; }').map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
+  assert.deepEqual(errors('export async function read() { const hit = await port.historyGet({ docId: "d" }, "s"); return hit && typeof hit.stateJson === "string" && hit.stateJson.toUpperCase(); }').map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
+  assert.deepEqual(errors('export const checked: Omit<DesktopTestPort, "getSessionInfo" | "openPrompterInBrowser"> = makeFakeDesktopBackend();').map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
   const cases = [
     {
       source: 'export async function read() { const hit = await port.historyGet({ docId: "d" }, "s"); return hit && hit.stateJson.toUpperCase(); }',
