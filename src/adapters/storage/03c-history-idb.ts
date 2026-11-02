@@ -4,7 +4,7 @@ type IdbHistoryError = { name?: string; code?: string | number; cause?: unknown 
 type IdbHistoryRow = HistoryIndexRecord & { bucket: string };
 
 import { DOC_ID_RE } from "../../../shared/doc-id-policy.js";
-import { HISTORY_OLDER_KEY } from "../../../shared/history-policy.js";
+import { HISTORY_OLDER_KEY } from "../../../shared/history-policy.ts";
 import { sha256Bytes } from "../../core/document/ids.ts";
 
 export const HISTORY_IDB_NAME = "splitpage-history";

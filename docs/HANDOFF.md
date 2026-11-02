@@ -494,7 +494,7 @@ tabs**.
   IndexedDB is no longer read.
 - **Desktop version history** (#83, `main.js` §8b): one
   `shared/history-store.js` (the store the browser runs too; policy from
-  `shared/history-policy.js`) over `desktop/history-fs-backend.js`, both
+  `shared/history-policy.ts`) over `desktop/history-fs-backend.js`, both
   made once in `whenReady` before `registerIpc`. `<userData>/history/`:
   `FORMAT` `"2"` (higher → read-only), `index.json` + `index.prev.json`
   (every bucket in one index, two durable generations; a torn current
@@ -1164,7 +1164,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/voice-helper.js` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
 | `desktop/drafts.ts` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/history-store.js` | THE version-history store (#83), synchronous ESM run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
-| `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
+| `shared/history-policy.ts` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
 | `shared/blob-policy.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
 | `shared/video-embed.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
 | `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |

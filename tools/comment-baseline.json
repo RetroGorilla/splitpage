@@ -226,7 +226,7 @@
       "# {\"type\":\"start\",\"lang\":\"en-US\"} listening",
       "# {\"type\":\"warning\",\"code\":\"...\"} no-signal / too-quiet / too-noisy /"
     ],
-    "shared/history-policy.js": [
+    "shared/history-policy.ts": [
       "/* condition does the work */",
       "/* condition does the work */",
       "/* condition does the work */",
