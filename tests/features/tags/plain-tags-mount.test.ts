@@ -4,9 +4,10 @@ import { jsdomWindow } from "../editing/jsdom.mjs";
 import { startPlainTags } from "../../../src/features/tags/plain-tags.ts";
 import type { PlainTagPorts } from "../../../src/features/tags/ports.ts";
 import type { CellEditResult, CellEdit } from "../../../src/application/editing/cell-editing.ts";
-import { projection } from "../../../src/core/text/runs.ts";
+import { namedTagId, projection } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
 import { fakeDocument, fakeTagCategories, fakeTextServices } from "../fakes.ts";
+import { createRichText } from "../../../src/adapters/richtext/richtext.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -16,7 +17,7 @@ realm.CSS = win.CSS;
 
 const ZWSP = String.fromCharCode(0x200B);
 
-function fixture(html: string, model: string) {
+function fixture(html: string, model: string | Run[]) {
   win.document.body.innerHTML = '<div id="rows"><div class="cell-editable" data-field="visualText" tabindex="0">' + html + "</div></div>";
   const cell = win.document.querySelector(".cell-editable") as HTMLElement;
   const text = fakeTextServices(win.document);
@@ -27,7 +28,7 @@ function fixture(html: string, model: string) {
     cells: {
       edit: (target: Element, change: CellEdit) => {
         assert.equal(target, cell);
-        const runs: Run[] = [{ text: model, marks: {} }];
+        const runs: Run[] = typeof model === "string" ? [{ text: model, marks: {} }] : model;
         const res = change(runs, null);
         if (!res) return null;
         changes.push(res);
@@ -50,6 +51,65 @@ function caretAt(node: Node, offset: number): void {
 
 function typedColon(): Pick<InputEvent, "inputType" | "data"> {
   return { inputType: "insertText", data: ":" };
+}
+
+for (const [html, words] of [
+  ["VFX: explosion in the background", "explosion in the background"],
+  ["VFX: glow <strong>across</strong> the logo", "glow across the logo"],
+  ["VFX: glow <em>across</em> the logo", "glow across the logo"],
+  ["VFX: glow <u>across</u> the logo", "glow across the logo"],
+  ["VFX: glow <s>across</s> the logo", "glow across the logo"],
+  ["VFX: glow <mark>across</mark> the logo", "glow across the logo"],
+  ['VFX: glow <span class="stage-dir">across</span> the logo', "glow"],
+  ['VFX: glow<br><span class="audio-cue">SFX: wind</span>', "glow"],
+  ["VFX: flare<br>next line", "flare"],
+  ["VFX: flare<br>next paragraph<br>", "flare"],
+  ['VFX: rain <span class="tag-anchor" data-tag-cat="prop" data-tag-name="umbrella">umbrella</span> roof', "rain"],
+  ['VFX: glow <a href="https://example.com/">link</a> after', "glow"]
+] as const) {
+  test("immediate Tab tags existing words up to the line boundary: " + html, () => {
+    const rich = createRichText({ DOMParser: win.DOMParser, images: { known: () => null, fromDataUrl: () => null }, ids: { id: () => "unused", docId: () => "unused" } });
+    const h = fixture(html, rich.decode(html));
+    const control = startPlainTags({ ...h.ports, text: { fromHtml: rich.decode, storedHtmlFromDom: rich.storedHtmlFromDom } });
+    try {
+      h.cell.focus();
+      caretAt(h.cell.firstChild as Node, 4);
+      control.maybeOpen(typedColon(), h.cell);
+      assert.equal(control.isOpen(), true);
+      assert.equal(control.close(), true);
+      assert.equal(h.changes.length, 1);
+      const result = h.changes[0] as CellEditResult;
+      assert.deepEqual(result.records, { tags: [{ cat: "vfx", name: words }] });
+      assert.equal(result.cell.filter(run => run.marks.tag === namedTagId("vfx", words)).map(run => run.text).join(""), words);
+    } finally {
+      control.dispose();
+    }
+  });
+}
+
+for (const typed of [" new", " "]) {
+  test("typing before existing words keeps Tab's current caret boundary: " + JSON.stringify(typed), () => {
+    const h = fixture("VFX: old words", "VFX:" + typed + " old words");
+    const control = startPlainTags(h.ports);
+    try {
+      h.cell.focus();
+      caretAt(h.cell.firstChild as Node, 4);
+      control.maybeOpen(typedColon(), h.cell);
+      const tail = h.cell.querySelector(".plain-tag-keyword")?.nextSibling as Text;
+      tail.insertData(1, typed);
+      caretAt(tail, 1 + typed.length);
+      assert.equal(control.close(), true);
+      assert.equal(control.isOpen(), false);
+      assert.equal(h.changes.length, typed.trim() ? 1 : 0);
+      if (h.changes.length) {
+        const result = h.changes[0] as CellEditResult;
+        assert.deepEqual(result.records, { tags: [{ cat: "vfx", name: "new" }] });
+        assert.equal(projection(result.cell), "new old words");
+      }
+    } finally {
+      control.dispose();
+    }
+  });
 }
 
 test("plain tags mount with fake ports: the keyword opens, Tab edits through the cells port and the listeners hear it", () => {
