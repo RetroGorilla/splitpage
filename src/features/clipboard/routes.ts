@@ -4,6 +4,7 @@ interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly afterCut: (cell: Element) => void;
   readonly pasteScenes: (data: DataTransfer | null, cell: Element) => boolean;
   readonly pasteDraft: (cell: Element, html: string, text: string) => void;
+  readonly acceptHtml: (html: string) => boolean;
   readonly hasMedia: (files: FileList | readonly File[] | null | undefined, html: string) => boolean;
   readonly readMedia: (files: FileList | readonly File[], html: string) => Promise<Extra>;
   readonly capture: () => Owner;
@@ -54,6 +55,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
 
   function insert(cell: Element, html: string, text: string, files: FileList | readonly File[] | null | undefined): void {
     if (!open) return;
+    if (!ports.acceptHtml(html)) return;
     if (!ports.hasMedia(files, html)) {
       ports.insertNow(cell, html, text, null);
       return;
@@ -79,7 +81,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
     e.preventDefault();
     const data = e.clipboardData || realm.clipboardData || null;
     if (!ports.scriptCell(cell)) {
-      if (data) ports.pasteDraft(cell, data.getData("text/html"), data.getData("text/plain"));
+      if (data && ports.acceptHtml(data.getData("text/html"))) ports.pasteDraft(cell, data.getData("text/html"), data.getData("text/plain"));
       return;
     }
     if (ports.pasteScenes(data, cell)) return;

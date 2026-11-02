@@ -61,6 +61,23 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+test("a richtext depth refusal warns without adopting, importing or falling back to another picker (#461)", async () => {
+  const h = harness();
+  const shown: string[] = [];
+  const message = 'This content has more than 2,048 nested blocks and cannot be opened or pasted.';
+  const stop = h.owner.startLocalFiles({
+    ...h.ports,
+    imports: { ...h.ports.imports, parseProjectFileState: async () => ({ error: 'richtext-depth', message }) },
+    notices: { ...h.ports.notices, show: (text) => { shown.push(text); return h.ports.notices.show(text); } }
+  });
+  const before = JSON.stringify(h.doc);
+  assert.equal(await h.owner.projectFileSource().open({ kind: 'file', file: h.file }), false);
+  assert.deepEqual(shown, [message]);
+  assert.deepEqual(h.log, []);
+  assert.equal(JSON.stringify(h.doc), before);
+  stop();
+});
+
 for (const stage of ["parse", "last handle", "permission", "read", "dialog", "route", "picker", "text", "docx", "reload import", "reload project"]) {
   test("opening stopped during " + stage + " cannot affect a replacement owner", async () => {
     const h = harness();

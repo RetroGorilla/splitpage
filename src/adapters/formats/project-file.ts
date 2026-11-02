@@ -28,6 +28,7 @@ type ProjectFileKind = "splitpage" | "html" | "md";
 type ParsedProjectFile =
   | { readonly state: ValidatedDocument; readonly kind: ProjectFileKind; readonly docIdEmbedded: boolean }
   | { readonly error: "unreadable" }
+  | { readonly error: "richtext-depth"; readonly message: string }
   | { readonly error: "not-splitpage" };
 
 interface ProjectFileOptions {
@@ -305,6 +306,19 @@ function stateDataFromRawText(text: string): Record<string, unknown> | null {
 }
 
 export async function parseProjectFileState(file: ReadableFile, opts?: ProjectFileOptions | null, services: ProjectFileServices = projectFileServices()): Promise<ParsedProjectFile | null> {
+  try {
+    return await parsedProjectFileState(file, opts, services);
+  } catch (error) {
+    if (!isRichTextDepthError(error)) throw error;
+    return { error: "richtext-depth", message: error.message };
+  }
+}
+
+function isRichTextDepthError(error: unknown): error is RangeError {
+  return error instanceof RangeError && error.name === "RichTextDepthError";
+}
+
+async function parsedProjectFileState(file: ReadableFile, opts: ProjectFileOptions | null | undefined, services: ProjectFileServices): Promise<ParsedProjectFile | null> {
   const kind = fileKindFromName(file.name);
   if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
 
@@ -344,7 +358,8 @@ export async function parseProjectFileState(file: ReadableFile, opts?: ProjectFi
   let project: MarkdownProject | null;
   try {
     project = parseMarkdownProject(text, services);
-  } catch {
+  } catch (error) {
+    if (isRichTextDepthError(error)) throw error;
     project = null;
   }
   if (!project) return null;

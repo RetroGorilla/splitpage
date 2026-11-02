@@ -54,6 +54,10 @@ async function openProjectFile(file: LocalFileData | null | undefined, handle: L
   const parsed = await parseProjectFileState(file);
   if (!active) return false;
   if (!parsed) return loadFileIntoEditor(file, handle);
+  if (parsed.error === "richtext-depth") {
+    showToast(parsed.message, "warn");
+    return false;
+  }
   if (parsed.error === "unreadable") {
     showToast("Could not read " + (file as LocalFileData).name + ".", "error");
     return false;

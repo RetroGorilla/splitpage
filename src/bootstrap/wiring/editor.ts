@@ -42,7 +42,7 @@ import { restoreMergeSnapshot } from "./session-merge.ts";
 import { installMergeBanner } from "./document-merge.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { safeId } from "../../adapters/identity/safe-id.ts";
-import { sanitizeHtml, storedHtmlFromDom } from "../richtext.ts";
+import { richTextInputProblem, sanitizeHtml, storedHtmlFromDom } from "../richtext.ts";
 import { cssAttr } from "../../features/common/dom.ts";
 import { announceGalleryEdit } from "../../features/gallery/overlay.ts";
 import {
@@ -630,7 +630,15 @@ export const stopFocusFeature = editorFocus.stop;
 
 const clipboardRoutes = owned<ReturnType<typeof mountClipboardRoutes>>();
 
+function acceptClipboardHtml(html: string): boolean {
+  const problem = richTextInputProblem(html);
+  if (!problem) return true;
+  showToast(problem, "warn");
+  return false;
+}
+
 const clipboardRoutePorts = {
+  acceptHtml: acceptClipboardHtml,
   scriptCell: isScriptCell,
   copy: copyFromCell,
   afterCut: afterScriptCellChange,
