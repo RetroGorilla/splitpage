@@ -321,7 +321,7 @@ function safe(value: string | number) {
 }
 `;
   const diagnostics = (text) => ts.getPreEmitDiagnostics(compileFixtures({ [fixture]: text }, { config: "tsconfig.desktop.json" }).program);
-  assert.deepEqual(diagnostics(source), []);
+  assert.deepEqual(diagnostics(source).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), []);
   const broken = source + "function unsafe(value: string | number) { if (check(value)) return null; return value.toFixed(0); }";
   const errors = diagnostics(broken);
   assert.equal(errors.length, 1);

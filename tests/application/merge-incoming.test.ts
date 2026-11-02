@@ -50,10 +50,10 @@ function legacyScript(title: string): Record<string, unknown> {
   };
 }
 
-function mergedShots(mine: unknown): string[] {
+function mergedShots(mine: unknown, commonTitle?: string): string[] {
   const sides = ["theirs", "mine", "base"];
   const migration = fakeMigration();
-  const got = mergeIncoming({ base: legacyScript("Base"), mine: mine, theirs: legacyScript("Theirs") }, isDoc, {
+  const got = mergeIncoming({ base: legacyScript(commonTitle || "Base"), mine: mine, theirs: legacyScript(commonTitle || "Theirs") }, isDoc, {
     entry: function (raw: unknown, lines: LineShotIds) {
       return migrateRows(raw, { ...fakeMigration().ports, ids: drawsFor(sides.shift() || "late"), brollLines: lines });
     },
@@ -66,15 +66,21 @@ function mergedShots(mine: unknown): string[] {
   return got.merged.brollShots.map(function (b) { return b.id + " " + String(b.name); });
 }
 
-test("6.5 follow-up: an unkeyed b-roll line with no record on any side merges into one record, not one per side", () => {
-  const shots = mergedShots(legacyScript("Mine"));
+test("6.5 follow-up: the same source's unkeyed b-roll line with no record merges into one record", () => {
+  const shots = mergedShots(legacyScript("Same"), "Same");
   assert.equal(shots.length, 1, shots.join(", "));
   assert.match(shots[0] as string, / Steam$/);
 });
 
-test("6.5 follow-up: when one side already holds the line's record, the sides that draw one for it take that record's id", () => {
-  const live = migrateRows(legacyScript("Mine"), { ...fakeMigration().ports, ids: drawsFor("live") });
+test("#1049: a changed source cannot lend a repaired b-roll identity to another side", () => {
+  assert.deepEqual(mergedShots(legacyScript("Mine")), [
+    "bs-load-1c06b15b41a89a186057b6a8-1 Steam", "bs-load-8ea14f591346e614d8563de6-1 Steam"
+  ]);
+});
+
+test("#1049: an explicit b-roll record and a changed source's repaired record both survive", () => {
+  const live = migrateRows({ ...legacyScript("Mine"), brollShots: [{ id: "bs-live-1", name: "Steam" }] }, { ...fakeMigration().ports, ids: drawsFor("live") });
   const held = live.brollShots.map(function (b) { return b.id; });
   assert.deepEqual(held, ["bs-live-1"]);
-  assert.deepEqual(mergedShots(live), ["bs-live-1 Steam"]);
+  assert.deepEqual(mergedShots(live), ["bs-load-1c06b15b41a89a186057b6a8-1 Steam", "bs-live-1 Steam"]);
 });
