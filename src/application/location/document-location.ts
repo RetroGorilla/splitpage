@@ -1,3 +1,4 @@
+import type { LocalFileReference } from "../files/local-file-access.ts";
 import type { Frozen } from "../../core/document/freeze.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
 
@@ -5,11 +6,13 @@ export type HomeKind = "none" | "file" | "import";
 
 export interface Home<B = Frozen<DocumentShape>> {
   readonly diskBase?: B | null;
+  readonly handle?: LocalFileReference | null;
+  readonly lastModified?: number | null;
   readonly kind: HomeKind;
   readonly [field: string]: unknown;
 }
 
-export type HomeFields<B = Frozen<DocumentShape>> = Readonly<Record<string, unknown>> & { readonly diskBase?: B | null };
+export type HomeFields<B = Frozen<DocumentShape>> = Readonly<Record<string, unknown>> & { readonly diskBase?: B | null; readonly handle?: LocalFileReference | null; readonly lastModified?: number | null };
 
 export type LocationChange = "home" | "writtenOut";
 

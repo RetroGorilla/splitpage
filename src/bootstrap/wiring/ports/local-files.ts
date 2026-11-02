@@ -2,7 +2,7 @@ import type { LocalFilesOwnerPorts } from "../../../application/transitions/loca
 import type { LocalFileMenuPorts, LocalFileMenuControls } from "../../../features/file-menu/local-files-ports.ts";
 import type { ImportSavingPorts } from "../../../application/save/import-saving-ports.ts";
 import type { LocalFileAccess } from "../../../application/files/local-file-access.ts";
-import { localFileAccess } from "../../../adapters/files/local-files.js";
+import { localFileAccess } from "../../../adapters/files/local-files.ts";
 import { loadLastFileHandle, rememberLastFileHandle } from "../../../adapters/files/last-file.ts";
 import { detectTwoColumnFormat, parseImportRows } from "../../../adapters/formats/import-text.ts";
 import { docxToRows } from "../../../adapters/formats/docx.ts";

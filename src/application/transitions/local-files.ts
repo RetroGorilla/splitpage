@@ -4,7 +4,7 @@ import { fileKindFromName } from "../../../shared/file-names.ts";
 import { createAdoptionCompletion } from "../save/save-completion.ts";
 import { NO_DESTINATION } from "./ports.ts";
 import type { LocalFileOpening, LocalFilesOwner, LocalFilesOwnerPorts } from "./local-files-ports.ts";
-import type { LocalFileData, LocalFileHandle } from "../files/local-file-access.ts";
+import type { LocalFileData, LocalFileHandle, LocalFileReference } from "../files/local-file-access.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { ImportedRow } from "../formats/import-formats.ts";
 
@@ -49,7 +49,7 @@ function projectFileSource(): ReturnType<LocalFilesOwner["projectFileSource"]> {
   };
 }
 
-async function openProjectFile(file: LocalFileData | null | undefined, handle: unknown, opts?: FileOptions | null) {
+async function openProjectFile(file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, opts?: FileOptions | null) {
   opts = opts || {};
   const parsed = await parseProjectFileState(file);
   if (!active) return false;
@@ -65,7 +65,7 @@ async function openProjectFile(file: LocalFileData | null | undefined, handle: u
   return adoptProjectState(parsed.state, file, handle, parsed.kind, opts);
 }
 
-function adoptProjectState(newState: ValidatedDocument, file: LocalFileData | null | undefined, handle: unknown, kind: unknown, opts?: FileOptions | null) {
+function adoptProjectState(newState: ValidatedDocument, file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, kind: unknown, opts?: FileOptions | null) {
   if (!active) return false;
   opts = opts || {};
   sidePanels().close("newtab-page");
@@ -109,7 +109,7 @@ async function tryResumeLastProject() {
   }
 }
 
-async function resumeFromHandle(handle: unknown) {
+async function resumeFromHandle(handle: LocalFileReference | null | undefined) {
   try {
     const file = await ports.files.read(handle);
     if (!active) return;
@@ -118,7 +118,7 @@ async function resumeFromHandle(handle: unknown) {
   }
 }
 
-async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle: unknown, opts?: FileOptions) {
+async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle: LocalFileReference | null | undefined, opts?: FileOptions) {
   if (!active) return;
   opts = opts || {};
   let kind = fileKindFromName((file as LocalFileData).name);
