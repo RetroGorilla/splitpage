@@ -8,6 +8,10 @@ wait !document.getElementById('prompter').hidden
 click #pp-fullscreen
 wait document.fullscreenElement !== null
 sleep 300
+eval window.__titleBefore=document.getElementById('doc-title').value;document.getElementById('doc-title').focus()
+expect document.getElementById('prompter').contains(document.activeElement)
+press z
+expect document.getElementById('doc-title').value === __titleBefore && F.state().title === __titleBefore
 eval D.runMenuCommand('open')
 wait document.querySelector('#toast-host .toast:not(.is-leaving)')
 eval window.__plain=document.querySelector('#toast-host .toast:not(.is-leaving)')
@@ -18,13 +22,28 @@ expect document.querySelectorAll('#toast-host .toast:not(.is-leaving)').length =
 expect __spoken.filter(function(s){return s === 'Close Present first.';}).length === 1
 expect __plain.querySelector('.toast-dismiss').getAttribute('aria-label') === 'Dismiss'
 shot sweep-ui-toast-fullscreen-light
+eval window.__playingBefore=document.getElementById('pp-play').classList.contains('is-active')
+focus #toast-host .toast-dismiss
+# why: The character driver trims standalone spaces, so harmless x keys surround a real Space press.
+press x x
+wait !__plain.isConnected
+expect document.getElementById('pp-play').classList.contains('is-active') === __playingBefore
+expect document.getElementById('prompter').contains(document.activeElement)
+eval D.runMenuCommand('open')
+wait document.querySelector('#toast-host .toast:not(.is-leaving)')
+eval window.__again=document.querySelector('#toast-host .toast:not(.is-leaving)')
 focus #toast-host .toast-dismiss
 key Enter
-wait !__plain.isConnected
+wait !__again.isConnected
+expect document.getElementById('prompter').contains(document.activeElement)
 eval D.runMenuCommand('help')
 wait !document.getElementById('help-modal').hidden
 expect document.fullscreenElement === document.documentElement && document.fullscreenElement.contains(document.getElementById('help-modal'))
 expect __top(document.querySelector('#help-modal .modal-panel'))
+eval window.__speedBefore=document.getElementById('pp-speed').value
+focus #help-close
+key ArrowDown
+expect document.getElementById('pp-speed').value === __speedBefore
 sleep 300
 shot sweep-ui-help-fullscreen
 click #help-close
@@ -35,6 +54,12 @@ expect __top(document.querySelector('#settings-modal .modal-panel'))
 sleep 300
 shot sweep-ui-settings-fullscreen
 click #settings-modal .modal-close
+focus #pp-play
+key Escape
+wait document.fullscreenElement === null
+expect !document.getElementById('prompter').hidden
+click #pp-fullscreen
+wait document.fullscreenElement === document.documentElement
 click #pp-close
 wait document.fullscreenElement === null
 wait document.getElementById('prompter').hidden

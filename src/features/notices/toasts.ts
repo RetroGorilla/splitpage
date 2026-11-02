@@ -10,9 +10,27 @@ export function createToasts(window: Window): NoticePort {
   const document = window.document;
   const repeated = new Map<string, Toast>();
 
+  function restoreFocus(origin: HTMLElement | null): void {
+    const scope = document.querySelector<HTMLElement>('.modal-backdrop:not([hidden]), #cmdk:not([hidden])') ||
+      document.querySelector<HTMLElement>('#prompter:not([hidden]), #writer:not([hidden])');
+    const available = (el: HTMLElement | null): el is HTMLElement => {
+      if (!el?.isConnected || el === document.body || el.closest('[hidden], [inert], .is-leaving') || el.matches(':disabled')) return false;
+      for (let parent: HTMLElement | null = el; parent; parent = parent.parentElement) {
+        const style = window.getComputedStyle(parent);
+        if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
+      }
+      return true;
+    };
+    const candidates = [origin, ...(scope || document).querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), textarea, select, a[href], [contenteditable="true"], [tabindex="0"]')];
+    const back = candidates.find(el => available(el) && (!scope || scope.contains(el)));
+    back?.focus({ preventScroll: true });
+  }
+
   function add(message: string, kind: NoticeKind | undefined, sticky: boolean | undefined,
     action?: { label: string; run: () => void }, onDismiss?: () => void): Toast {
     const host = document.getElementById("toast-host") as HTMLElement;
+    const origin = document.activeElement as HTMLElement | null;
     const el = document.createElement("div") as unknown as Toast;
     el.className = "toast" + (kind ? " " + kind : "") + (sticky ? " is-sticky" : "") + (action ? " has-action" : "");
     el.textContent = message;
@@ -26,7 +44,12 @@ export function createToasts(window: Window): NoticePort {
       onDismiss?.();
       window.clearTimeout(timer);
       el.classList.add("is-leaving");
-      window.setTimeout(() => { el.remove(); announcement.remove(); }, LEAVE_MS);
+      window.setTimeout(() => {
+        const ownedFocus = el.contains(document.activeElement);
+        el.remove();
+        announcement.remove();
+        if (ownedFocus) restoreFocus(origin);
+      }, LEAVE_MS);
     };
     if (action) {
       const button = document.createElement("button");

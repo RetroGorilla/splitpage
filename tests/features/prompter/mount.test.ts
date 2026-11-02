@@ -89,6 +89,10 @@ const expected: readonly Registration[] = [
     "click"
   ],
   [
+    "document",
+    "focusin"
+  ],
+  [
     "window",
     "keydown"
   ]
@@ -170,6 +174,65 @@ test("prompter: fullscreen includes the document's toast and dialog layers", asy
   h.fire(h.el("pp-fullscreen"), "click");
   await Promise.resolve();
   assert.equal(requested, h.document.documentElement);
+  owner.dispose();
+  h.window.close();
+});
+
+test("prompter: focus stays in Present except for foreground dialogs and toasts", () => {
+  const h = setup();
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  h.el("prompter").hidden = false;
+  h.el("pp-play").focus();
+  h.el("doc-title").focus();
+  assert.equal(h.document.activeElement, h.el("pp-play"));
+  const toast = h.document.createElement("div");
+  toast.className = "toast";
+  const dismiss = h.document.createElement("button");
+  toast.append(dismiss);
+  h.el("toast-host").append(toast);
+  dismiss.focus();
+  assert.equal(h.document.activeElement, dismiss);
+  h.el("help-modal").hidden = false;
+  h.el("help-close").focus();
+  assert.equal(h.document.activeElement, h.el("help-close"));
+  h.el("doc-title").focus();
+  assert.equal(h.document.activeElement, h.el("help-close"));
+  owner.dispose();
+  h.el("doc-title").focus();
+  assert.equal(h.document.activeElement, h.el("doc-title"));
+  h.window.close();
+});
+
+test("prompter: foreground toast controls and dialogs keep their keys", () => {
+  const h = setup();
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  const toast = h.document.createElement("div");
+  toast.className = "toast";
+  const dismiss = h.document.createElement("button");
+  toast.append(dismiss);
+  h.el("toast-host").append(toast);
+  assert.equal(h.fire(dismiss, "keydown", { key: " " }).defaultPrevented, false);
+  h.el("help-modal").hidden = false;
+  assert.equal(h.fire(h.el("help-close"), "keydown", { key: "ArrowDown" }).defaultPrevented, false);
+  h.fire(h.el("help-close"), "keydown", { key: "m" });
+  h.fire(h.el("pp-play"), "keydown", { key: "ArrowDown" });
+  assert.deepEqual(h.calls, []);
+  owner.dispose();
+  h.window.close();
+});
+
+test("prompter: first Escape exits fullscreen and the next closes Present", async () => {
+  const h = setup();
+  let fullscreen: Element | null = h.document.documentElement;
+  Object.defineProperty(h.document, "fullscreenElement", { configurable: true, get: () => fullscreen });
+  h.document.exitFullscreen = async () => { fullscreen = null; };
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  h.fire(h.el("pp-play"), "keydown", { key: "Escape" });
+  await Promise.resolve();
+  assert.equal(fullscreen, null);
+  assert.deepEqual(h.calls, []);
+  h.fire(h.el("pp-play"), "keydown", { key: "Escape" });
+  assert.deepEqual(h.calls, [{ name: "closePrompter", args: [] }]);
   owner.dispose();
   h.window.close();
 });

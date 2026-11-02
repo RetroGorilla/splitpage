@@ -501,6 +501,7 @@ export function openPrompter(): void {
   updateVoiceAvailability();
   syncSpeedReadout();
   updatePrompterStatus();
+  document.getElementById("pp-play")?.focus({ preventScroll: true });
   acquireWakeLock();
 }
 
