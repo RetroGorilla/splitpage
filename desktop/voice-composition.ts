@@ -1,20 +1,27 @@
 "use strict";
 
-const path = require("node:path");
-const fs = require("node:fs");
-const fsp = require("node:fs/promises");
-const { createPrompterShare } = require("./prompter-share");
-const { createVoiceHelper } = require("./voice-helper");
+import type * as NodePath from "node:path";
+import type * as NodeFs from "node:fs";
+import type * as NodeFsPromises from "node:fs/promises";
+import type { createPrompterShare as CreatePrompterShare } from "./prompter-share.ts";
+import type { createVoiceHelper as CreateVoiceHelper } from "./voice-helper.ts";
+import type { DesktopMainCommon } from "./ipc-boundaries.d.ts";
+
+const path: typeof NodePath = require("node:path");
+const fs: typeof NodeFs = require("node:fs");
+const fsp: typeof NodeFsPromises = require("node:fs/promises");
+const { createPrompterShare }: { createPrompterShare: typeof CreatePrompterShare } = require("./prompter-share.ts");
+const { createVoiceHelper }: { createVoiceHelper: typeof CreateVoiceHelper } = require("./voice-helper.ts");
 
 const VOICE_RELAY_PREFIX = "relay:";
 
-function createVoiceComposition({ isPackaged, appRoot, testMode, tabs, staticAllowlist, cspHeader }) {
+function createVoiceComposition({ isPackaged, appRoot, testMode, tabs, staticAllowlist, cspHeader }: Pick<DesktopMainCommon, "testMode" | "tabs"> & Pick<NonNullable<Parameters<typeof createPrompterShare>[0]>, "staticAllowlist" | "cspHeader"> & { isPackaged: boolean; appRoot: string }) {
   const VOICE_SCRIPT = isPackaged
     ? path.join(appRoot, "voice", "listen.ps1")
     : path.join(__dirname, "voice", "listen.ps1");
 
-  let prompterShare = null;
-  let voiceHelper = null;
+  let prompterShare: ReturnType<typeof createPrompterShare> | null = null;
+  let voiceHelper: ReturnType<typeof createVoiceHelper> | null = null;
 
   function prompterShareInstance() {
     if (!prompterShare) {
@@ -81,7 +88,7 @@ function createVoiceComposition({ isPackaged, appRoot, testMode, tabs, staticAll
     return voiceHelper;
   }
 
-  function forgetTab(tabId) {
+  function forgetTab(tabId: string) {
     if (prompterShare) prompterShare.revoke(tabId);
     if (voiceHelper) { voiceHelper.forget(tabId); voiceHelper.forget(VOICE_RELAY_PREFIX + tabId); }
   }
@@ -95,5 +102,7 @@ function createVoiceComposition({ isPackaged, appRoot, testMode, tabs, staticAll
     forgetTab
   };
 }
+
+export type { createVoiceComposition, VOICE_RELAY_PREFIX };
 
 module.exports = { createVoiceComposition, VOICE_RELAY_PREFIX };
