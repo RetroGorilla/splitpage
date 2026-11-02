@@ -22,11 +22,11 @@ const key = (target, value, shiftKey = false) => target.dispatchEvent(new window
 function load() {
   prompterControls().closePrompter();
   closeFindBar();
-  loadTestDocument(migrateRows({ title: "Present find", rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Present find", rows: [
     { id: "r1", visualText: "visual secret", audioText: "First needle. A <strong>nee</strong>dle again." },
     { id: "r2", audioText: "Shot secret needle.", status: "shot" },
     { id: "r3", audioText: "Last needle." }
-  ], comments: [{ id: "c1", text: "comment secret" }] }));
+  ], comments: [{ id: "c1", rowId: "r1", field: "audioText", body: "comment secret", author: "Test" }] }));
 }
 
 function query(text) {
@@ -47,6 +47,7 @@ test("Present Find pauses, searches its projection, wraps, refuses mutations and
   const dirty = unsavedChanges();
   const drafts = draftsTesting().status();
   const content = el("prompter-content").innerHTML;
+  assert.equal(currentDocument().comments[0].body, "comment secret");
   openFindBar();
   assert.equal(document.activeElement, el("find-input"));
   assert.equal(present.playing(), false);
