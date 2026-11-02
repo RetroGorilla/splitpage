@@ -1,5 +1,6 @@
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { HISTORY_OLDER_KEY } from "../../../shared/history-policy.ts";
+import type { SharedHistorySnapshotReader } from "../../../shared/history-store.ts";
 import type { HistoryInstrumentation } from "../../application/recovery/history-instrumentation.ts";
 import type { HistoryResolvedBackend, HistoryTestingStorage } from "../../application/recovery/history-ports.ts";
 
@@ -29,7 +30,7 @@ export function createHistoryOwnerInstrumentation(): HistoryInstrumentation {
         return adapter.store.rawIndex().then(function (index) {
           const shas: Record<string, boolean> = {};
           ((index[bucket] && index[bucket].snapshots) || []).forEach(function (s) {
-            if (s && typeof s.sha === "string") shas[s.sha] = true;
+            if (s && typeof (s as SharedHistorySnapshotReader).sha === "string") shas[(s as SharedHistorySnapshotReader).sha as string] = true;
           });
           return Promise.all(Object.keys(shas).map(function (sha) {
             return Promise.resolve(backend.hasBody(sha));

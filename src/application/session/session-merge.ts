@@ -61,7 +61,7 @@ async function restoreSnapshot(id: string, opts?: SnapshotRestoreRequest): Promi
     if (moved()) return "changed";
     if (!snap) return "missing";
     let parsed: unknown = null;
-    try { parsed = JSON.parse(snap.stateJson); } catch (e) { parsed = null; }
+    try { parsed = JSON.parse(snap.stateJson as string); } catch (e) { parsed = null; }
     if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { rows?: unknown }).rows)) return "corrupt";
 
     let stored = false;

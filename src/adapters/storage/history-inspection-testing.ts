@@ -1,12 +1,8 @@
 import type { HistoryIdbInspectionAccess } from "./03c-history-idb.ts";
 import type { HistoryIndex, HistoryIndexRecord } from "./history-backend-types.ts";
+import type { createMemoryHistoryBackend } from "../../../shared/history-store.ts";
 
-type HistoryMemoryInspectionAccess = {
-  index: HistoryIndex;
-  bodies: Record<string, string>;
-  clone: <T>(value: T) => T;
-  freeze: <T>(value: T) => T;
-};
+type HistoryMemoryInspectionAccess = Parameters<NonNullable<NonNullable<Parameters<typeof createMemoryHistoryBackend>[0]>["extend"]>>[0];
 
 export function historyMemoryInspection(access: HistoryMemoryInspectionAccess) {
   return {

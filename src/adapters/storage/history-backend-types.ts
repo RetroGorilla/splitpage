@@ -1,22 +1,9 @@
-import type { HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult } from "../../application/recovery/history-ports.ts";
+import type { HistorySnapshotMeta, HistorySnapshotRead, HistorySnapshotReply, HistoryWriteResult } from "../../application/recovery/history-ports.ts";
+import type { SharedHistoryBucket, SharedHistoryIndex, SharedHistoryTransaction } from "../../../shared/history-store.ts";
 
-export interface HistoryIndexRecord {
-  [key: string]: unknown;
-  title?: string;
-  lastOpenedAt?: number;
-  migratedAt?: number;
-  expiresAt?: number;
-  snapshots: (HistorySnapshotMeta & { sha: string })[];
-}
-
-export type HistoryIndex = Record<string, HistoryIndexRecord>;
-
-export interface HistoryBackendTransaction {
-  readonly list: () => Promise<HistoryIndex>;
-  readonly get: (sha: string) => Promise<string | null>;
-  readonly put: (sha: string, text: string) => Promise<void>;
-  readonly commit: (changes: Record<string, HistoryIndexRecord | null>, dropped: string[]) => Promise<void>;
-}
+export type HistoryIndexRecord = SharedHistoryBucket;
+export type HistoryIndex = SharedHistoryIndex;
+export type HistoryBackendTransaction = SharedHistoryTransaction;
 
 export interface HistoryFaultBackend {
   readonly failNext: (op: "put" | "commit", code: string, times?: number) => void;
@@ -46,13 +33,13 @@ export interface HistoryOlderImportResult {
 }
 
 export interface HistoryBackendDoc {
-  title: string;
+  title: unknown;
   lastOpenedAt: number;
   docId?: string;
   count?: number;
   bytes?: number;
-  migratedAt?: number;
-  expiresAt?: number;
+  migratedAt?: unknown;
+  expiresAt?: unknown;
 }
 
 export interface HistoryBackendAdapter {
@@ -60,7 +47,7 @@ export interface HistoryBackendAdapter {
   persistent: boolean;
   readonly put: (docId: string, meta: unknown, stateJson: string) => Promise<HistoryWriteResult & { evicted?: number; overCap?: boolean }>;
   readonly list: (docId?: string | null, opts?: { strict?: boolean }) => Promise<HistoryBackendList | null>;
-  readonly get: (bucket: string, id: string) => Promise<HistorySnapshotRead | null>;
+  readonly get: (bucket: string, id: string) => Promise<HistorySnapshotReply | null>;
   readonly copy: (from: string, to: string) => Promise<{ ok: boolean; copied: number; code?: string | undefined }>;
   readonly touch: (docId: string, title: string) => Promise<unknown>;
   readonly importOlder: (entries: HistorySnapshotRead[]) => Promise<HistoryOlderImportResult>;
