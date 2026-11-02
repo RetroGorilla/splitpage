@@ -145,6 +145,10 @@ async function exportAppData() {
 }
 
 async function deliverAppDataBundle(bundle: DataBundle) {
+  try { assertNoSecrets(bundle); } catch (e) {
+    ports.notices.show((e as Error).message, "error");
+    return;
+  }
   let json;
   try {
     json = JSON.stringify(bundle, null, 2);
