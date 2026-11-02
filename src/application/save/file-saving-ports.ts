@@ -1,4 +1,5 @@
 import type { FileSaveCheck } from "../files/local-file-access.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { Clock, IdSource } from "../../core/document/ports.ts";
 import type { NoticePort } from "../effects/ports.ts";
@@ -41,10 +42,10 @@ export interface FileSaveTargets {
   readonly isAbort: (error: unknown) => boolean;
 }
 
-export interface FileSavingDeferredPorts {
+export interface FileSavingDeferredPorts<B = ValidatedDocument> {
   readonly copyHistory: (fromId: string, toId: string) => void;
   readonly syncIdentity: () => void;
-  readonly setBaseline: (state: unknown, reason: string) => void;
+  readonly setBaseline: (state: B | null, reason: string) => void;
 }
 
 export interface AutoSaveMenuItem {
