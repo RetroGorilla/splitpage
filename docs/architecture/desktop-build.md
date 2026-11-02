@@ -45,9 +45,9 @@ syntax error when a sandbox:true preload contains a type annotation.
 must implement `DesktopPort`. `node tools/build-preload.mjs` strips it with
 Node's stripTypeScriptTypes and writes the committed `desktop/preload.js` that the sandbox runs.
 The generated script still requires only Electron. Both `npm run verify`
-and CI regenerate it and require
-`git diff --exit-code -- desktop/preload.js desktop/tabstrip-preload.js`
-to pass. Run the generator after editing the source, and commit both files.
+and CI regenerate it and run `node tools/check-preload.mjs`, which requires
+`git status --porcelain` to be empty for both generated scripts, including
+untracked files. Run the generator after editing the source, and commit both files.
 The TypeScript source and its type-only imports are not packaged;
 `preload.js` remains the preload path in `main.js` and the builder file list.
 `desktop/tabstrip-preload.ts` follows the same checked-source pattern, and
