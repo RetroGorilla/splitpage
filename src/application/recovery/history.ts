@@ -2,7 +2,7 @@ import type { HistoryInstrumentation, HistoryPendingSnapshot } from "./history-i
 import type { HistoryOwner, HistoryOwnerPorts, HistorySnapshotMeta, HistorySnapshotRead, HistoryWriteResult, HistoryResolvedBackend, HistoryImportResult } from "./history-ports.ts";
 
 
-type HistoryAddress = { id?: string; docId?: string; older?: boolean };
+type HistoryAddress = { id?: string; docId?: string | null; older?: boolean };
 type HistoryMigrationResult = { migrated: number; removedKey: boolean };
 type HistoryExportDoc = { docId: string; title: string; lastOpenedAt: number; metas: HistorySnapshotMeta[]; snapshots?: HistorySnapshotRead[] };
 type HistoryExportBundle = { docs: { docId: string; title: string; lastOpenedAt: number; snapshots: HistorySnapshotRead[] }[]; older: HistorySnapshotRead[]; truncated: boolean; blobs?: Record<string, HistoryImageData>; missingBlobs?: string[] };
@@ -187,7 +187,7 @@ function historyStoreEntry(backend: HistoryResolvedBackend, entry: HistoryPendin
   });
 }
 
-function captureSnapshot(label: string, src: unknown, opts?: { allowSeedSkip?: boolean }) {
+function captureSnapshot(label: string | undefined, src: unknown, opts?: { allowSeedSkip?: boolean }) {
   opts = opts || {};
   if (!src || typeof src !== "object" || !Array.isArray((src as { rows?: unknown }).rows)) return null;
   if (opts.allowSeedSkip && src === currentDocument() && isPristineSeedDocument()) return null;
