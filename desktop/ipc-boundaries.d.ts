@@ -7,6 +7,7 @@ import type {
   DesktopWireTakenDraft, DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
+import type { createCloseQuit } from "./close-quit.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
 
@@ -82,7 +83,7 @@ export interface DesktopMainCommon {
   shellStateForWindow: (id: string) => DesktopIpcResult<"splitpage:tabstrip-get-state">;
   createTab: (windowId: string, options: { source: { kind: "blank" }; launchIntent: { type: string } }) => DesktopMainTab | null;
   activateTab: (id: string | undefined) => void;
-  requestCloseTab: (id: string | undefined) => void;
+  requestCloseTab: ReturnType<typeof createCloseQuit>["requestCloseTab"];
   reorderTab: (id: string | undefined, index: number | undefined) => boolean;
   moveTabToWindow: (tabId: string, windowId: string, index?: number) => boolean;
 }
