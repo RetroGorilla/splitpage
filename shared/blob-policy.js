@@ -195,7 +195,7 @@ function imageDims(bytes) {
   }
 }
 
-module.exports = {
+export {
   IMAGE_DIM_MAX,
   IMAGE_MIMES,
   SHA256_RE,
