@@ -214,7 +214,7 @@ After `npm ci` in `desktop/`, run `npm run fetch-electron` on every machine.
 emulation; elsewhere it uses Node's architecture. Explicit `npm_config_arch`
 or `ELECTRON_ARCH` overrides detection, in that order; unknown values fail.
 Never run `npm run dist`/`dist:win` outside a deliberate release build.
-`desktop/test/drafts.test.mjs` unit-tests `desktop/drafts.js` directly, no
+`desktop/test/drafts.test.mjs` unit-tests `desktop/drafts.ts` directly, no
 Electron. `tools/test-server.mjs` drives real `server.js` processes.
 
 ### The test harness lies to you — suspect the test before the code
@@ -479,7 +479,7 @@ tabs**.
   (`{"theme":"system"|"light"|"dark"}`, written by `splitpage:set-theme`)
   sets `nativeTheme.themeSource` before the first window, so a launch with
   Settings ▸ Theme differing from the OS starts in the right colours.
-- **Crash-safe drafts** (`desktop/drafts.js`, plain CommonJS) live under
+- **Crash-safe drafts** (`desktop/drafts.ts`, plain CommonJS) live under
   `<userData>/drafts/<tabId>/`: two-generation writes, `base-<sha12>.json`,
   `session.json`. Write is fsync then one sync tick renaming
   current→previous, tmp→current. **Hold/discard ordering is load-bearing**
@@ -534,7 +534,7 @@ tabs**.
   §8c). Images leave the document state and live in `<userData>/blobs`:
   `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
   own SHA-256 (`<aa>` = its first two hex digits). Plain CommonJS, no
-  Electron, like `drafts.js`. A put checks the bytes hash to the sha, writes
+  Electron, like `drafts.ts`. A put checks the bytes hash to the sha, writes
   `.tmp-<hex>` in the shard folder, fsyncs, renames (retrying a held target
   on Windows), then fsyncs the folder best-effort (a no-op on NTFS); a sha
   already there at the same size is `stored:false` and nothing is written.
@@ -1154,7 +1154,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | File | What is in it |
 | --- | --- |
 | `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.js` over `history-fs-backend.ts`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
-| `desktop/desktop-state.js`, `file-service.js`, `doc-claims.js`, `recents.js`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
+| `desktop/desktop-state.js`, `file-service.ts`, `doc-claims.ts`, `recents.ts`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
 | `desktop/close-quit.js`, `session-restore.js` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
 | `desktop/ipc-setup.ts`, `ipc-files.ts`, `ipc-shell.ts`, `ipc-document.ts`, `ipc-history-blob.ts`, `ipc-tabstrip.ts`, `ipc-test-mode.ts` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups); the file, file dialog and recents channels; the tab boot, theme, video file, update, teleprompter browser and Follow My Voice channels; the document state, route-open and crash-draft channels; the version history and image blob channels; the tab strip's channels; the `__test` channels, registered only in test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
@@ -1162,7 +1162,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/voice-helper.js` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
-| `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
+| `desktop/drafts.ts` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/history-store.js` | THE version-history store (#83), pure CommonJS run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.ts`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
 | `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
 | `shared/blob-policy.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
@@ -1177,7 +1177,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/verify-dist.mjs` | post-`dist:win` check: PE machine field per binary, NSIS stub arch, installer freshness, installer payload actually extracts (#6) |
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
-| `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.js` alone |
+| `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.ts` alone |
 | `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
 | `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.ts` (two-generation write, torn index → prev, deferred unlink, kills via test hooks, a raw v1 tree left untouched) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |
@@ -1322,7 +1322,7 @@ under us is the same document with newer bytes.
 **Recent documents (issue #15), contract DESKTOP-RECENTS.** Desktop only.
 `recents: [{absPath, title, at}]` sits beside `windows` in
 `desktop-state.json`, most recent first, capped at 20 and de-duplicated by
-path on read. The list held by `createRecents` in `desktop/recents.js` is the
+path on read. The list held by `createRecents` in `desktop/recents.ts` is the
 authority once the process is up (`recents.load()` at `whenReady`, and
 `shellStateAsV2()` carries it into every session write, because that object
 REPLACES the file). It is recorded on `deliverOpenFile` and refreshed on
