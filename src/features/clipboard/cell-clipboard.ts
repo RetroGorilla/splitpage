@@ -2,6 +2,7 @@ import type { CellClipboardPorts } from "./ports.ts";
 import type { Attachment, AttachedCount, BrollScope, ClipboardPorts, PasteRequest, Pasted, TextRange, VideoFileAttachment } from "../../application/commands/clipboard.ts";
 import type { CellInput, NormalizeOptions, Run } from "../../core/text/runs.ts";
 import type { VideoFiles, VideoPosterFrame } from "../../application/media/video-files.ts";
+import type { StoredImageRef } from "../../core/document/text-policy.ts";
 
 type ClipboardOptions = NormalizeOptions & { keepComments?: boolean | undefined; nonce?: string | null | undefined; skipImages?: boolean | undefined };
 export interface ClipboardMediaInput {
@@ -117,11 +118,21 @@ function prepareHtml(html: string, opts?: ClipboardOptions) {
   const body = (ports as CellClipboardPorts).text.inertBody(html);
   let media = 0, lost = 0;
   const attach: Attachment[] = [];
-  Array.prototype.forEach.call(body.querySelectorAll("img"), function (el: HTMLImageElement) {
+  const available = new Map<string, StoredImageRef | null>();
+  const images = Array.from(body.querySelectorAll("img"), function (el) {
+    const ref = opts.skipImages ? null : (ports as CellClipboardPorts).imageRefOf(el);
+    if (ref) available.set(ref.sha256, ref);
+    return { el: el, ref: ref };
+  });
+  available.forEach(function (ref, sha) {
+    available.set(sha, (ports as CellClipboardPorts).pictures.has(sha) ? ref : null);
+  });
+  images.forEach(function (image) {
+    const el = image.el;
     media++;
     if (!opts.skipImages) {
-      const ref = (ports as CellClipboardPorts).imageRefOf(el);
-      if (ref && (ports as CellClipboardPorts).pictures.bytesFor(ref.sha256)) addAttachment(attach, { kind: "image", ref: ref });
+      const ref = image.ref && available.get(image.ref.sha256);
+      if (ref) addAttachment(attach, { kind: "image", ref: ref });
       else lost++;
     }
     if (el.parentNode) el.parentNode.removeChild(el);
