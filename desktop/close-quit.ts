@@ -132,6 +132,9 @@ function createCloseQuit({
   }
 
   function attachWindowClose(win: BrowserWindow, rec: DesktopMainWindow) {
+    // why: The old window record must finish teardown before a fresh macOS window can replace its saved layout.
+    if (process.platform === "darwin" && !quitKeepingDrafts && !quitConfirmed && !sessionEnding
+      && windowsById.size === 1 && windowsById.get(rec.id) === rec) sessionWritesFrozen = false;
     win.on("close", (event) => {
       if (quitConfirmed || sessionEnding) {
         closeConfirmedWindows.add(win);
