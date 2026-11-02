@@ -62,7 +62,7 @@ function savedWhenText(savedAt, now, mode) {
     ? formatClock(at, mode) : formatDateClock(at, null, mode);
 }
 
-module.exports = {
+export {
   SAVED_JUST_NOW_MS,
   clockCycle,
   formatClock,

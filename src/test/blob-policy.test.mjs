@@ -235,7 +235,7 @@ test("refsIn is empty for anything that is not a state", () => {
   assert.deepEqual(refsIn({ rows: [{ visualImage: "data:image/png;base64,AAAA", visualText: '<img src="data:image/png;base64,AAAA">' }] }), []);
 });
 
-test("a require() sees exactly what an import does — this file is CommonJS on purpose", () => {
+test("require() and import see the same named exports", () => {
   const require = createRequire(import.meta.url);
   const cjs = require("../../shared/blob-policy.js");
   assert.equal(cjs.refsIn, refsIn);
