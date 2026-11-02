@@ -1100,6 +1100,7 @@ export function mountBrollPanel(exportPort: BrollPanelEventsPorts) {
       openPanel: function () { (ports as PanelPortUse).actions.invoke("panel-broll", "button"); },
       closePage: closeBrollPage,
       pageOpen: function () { return (ports as PanelPortUse).flags.brollPageOpen(); },
+      screen: (ports as PanelPortUse).screen,
       setPageGroup: function (value) {
         (ports as PanelPortUse).view.setPageGroup(value);
         renderBrollPage();
