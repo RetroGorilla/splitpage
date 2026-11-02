@@ -29,7 +29,10 @@ test("find retains shortcuts, overlay rules, selection and close routing", () =>
   registry.invoke("find", "shortcut");
   assert.equal(opened, 1);
   assert.equal(field.selectionEnd, 6);
-  for (const blocker of ["loading", "dialog", "tour", "prompter", "writer", "shotlist"] as const) {
+  screen.state.prompter = true;
+  assert.equal(registry.invoke("find", "menu").kind, "ran", "Present supports search and navigation");
+  screen.state.prompter = false;
+  for (const blocker of ["loading", "dialog", "tour", "writer", "shotlist"] as const) {
     screen.state[blocker] = true;
     assert.equal(registry.invoke("find", "menu").kind, "unavailable", blocker);
     screen.state[blocker] = false;

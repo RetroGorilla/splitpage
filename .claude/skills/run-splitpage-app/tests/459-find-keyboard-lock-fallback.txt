@@ -1,0 +1,35 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval Object.defineProperty(navigator,'keyboard',{value:undefined,configurable:true})
+click #btn-present
+wait !document.getElementById('prompter').hidden
+click #pp-fullscreen
+wait document.fullscreenElement !== null
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+key Escape
+wait document.fullscreenElement === null
+expect !document.getElementById('findbar').hidden && !document.getElementById('prompter').hidden
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('prompter').hidden
+key Escape
+wait document.getElementById('prompter').hidden
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval Object.defineProperty(navigator,'keyboard',{value:{lock:function(){return Promise.reject(new DOMException('Refused by test','NotAllowedError'));},unlock:function(){window.__unexpectedUnlock=true;}},configurable:true});window.__unexpectedUnlock=false
+click #btn-present
+wait !document.getElementById('prompter').hidden
+click #pp-fullscreen
+wait document.fullscreenElement !== null
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+sleep 100
+key Escape
+wait document.fullscreenElement === null
+expect !document.getElementById('findbar').hidden && !document.getElementById('prompter').hidden
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('prompter').hidden
+expect !window.__unexpectedUnlock
+key Escape
+wait document.getElementById('prompter').hidden
+quit

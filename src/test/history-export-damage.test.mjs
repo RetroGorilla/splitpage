@@ -11,7 +11,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { createHistoryBackendProbe, createIdbHistoryTestBackend } from "../adapters/storage/history-backend-testing.ts";
 import { createHistoryBackends } from "../adapters/storage/history-backends.ts";
 import { createHistoryOwner } from "../application/recovery/history.ts";
-import { createHistoryStore } from "../../shared/history-store.ts";
+import { createHistoryStore, projectHistoryBucket } from "../../shared/history-store.ts";
 import { createBlobStore, createMemoryBlobBackend } from "../adapters/storage/blob-store.ts";
 import { makeDesktopBlobBackend } from "../adapters/desktop/desktop-blobs.ts";
 import { mountAppData } from "../features/settings/app-data.ts";
@@ -33,7 +33,7 @@ async function harness(t, kind, snapshots = [good, bad], fields = {}, options = 
   if (kind === "filesystem") {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "splitpage-history-export-"));
     t.after(() => fsp.rm(dir, { recursive: true, force: true }));
-    const backend = createHistoryFsBackend({ dir, fs, fsp, path, crypto });
+    const backend = createHistoryFsBackend({ dir, fs, fsp, path, crypto, projectHistoryBucket });
     await backend.exclusive(async (tx) => { await tx.put(sha, stateJson); await tx.commit(buckets, []); });
     const store = createHistoryStore({ backend, now: () => 2000, hashText: (body) => crypto.createHash("sha256").update(body).digest("hex") });
     bridge = {
