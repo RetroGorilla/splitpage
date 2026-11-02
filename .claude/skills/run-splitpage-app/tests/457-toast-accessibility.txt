@@ -7,12 +7,12 @@ click #btn-present
 wait !document.getElementById('prompter').hidden
 click #pp-fullscreen
 wait document.fullscreenElement !== null
-key ctrl KeyF
+eval D.runMenuCommand('open')
 wait document.querySelector('#toast-host .toast:not(.is-leaving)')
 eval window.__plain=document.querySelector('#toast-host .toast:not(.is-leaving)')
 expect __top(__plain)
-key ctrl KeyF
-key ctrl KeyF
+eval D.runMenuCommand('open')
+eval D.runMenuCommand('open')
 expect document.querySelectorAll('#toast-host .toast:not(.is-leaving)').length === 1
 expect __spoken.filter(function(s){return s === 'Close Present first.';}).length === 1
 expect __plain.querySelector('.toast-dismiss').getAttribute('aria-label') === 'Dismiss'
@@ -50,8 +50,22 @@ wait document.querySelector('#toast-host .toast.has-action:not(.is-leaving)')
 eval window.__action=document.querySelector('#toast-host .toast.has-action:not(.is-leaving)');window.__media=JSON.stringify(F.state().rows[0].imageLinks)
 expect __spoken.filter(function(s){return s.indexOf('Video added to scene') === 0;}).length === 1
 eval document.documentElement.setAttribute('data-theme','dark')
+sleep 300
 shot sweep-ui-toast-action-dark
 click #toast-host .toast.has-action .toast-dismiss
 wait !__action.isConnected
 expect JSON.stringify(F.state().rows[0].imageLinks) === __media
+eval (function(){window.__open=window.open;window.open=function(){return {opener:null};};D.runMenuCommand('gdoc-import');return true;})()
+wait !document.getElementById('gdoc-modal').hidden
+eval document.getElementById('gdoc-url-input').value='1234567890abcdefghijklmnopqrstuvwxyz'
+click #gdoc-confirm
+wait document.querySelector('#toast-host .toast.is-sticky:not(.has-action):not(.is-leaving)')
+eval window.__message=document.querySelector('#toast-host .toast.is-sticky:not(.has-action):not(.is-leaving)')
+expect __message.querySelector('.toast-dismiss').getAttribute('aria-label') === 'Dismiss'
+eval __message.click()
+expect !__message.classList.contains('is-leaving')
+expect __spoken.filter(function(s){return s.indexOf('Downloading the Doc as .docx') === 0;}).length === 1
+click #toast-host .toast.is-sticky:not(.has-action) .toast-dismiss
+wait !__message.isConnected
+eval window.open=__open
 eval (function(){__speech.disconnect();return true;})()
