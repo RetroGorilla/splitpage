@@ -26,7 +26,7 @@ export interface CommentsPorts {
   readonly beforeInput: (box: HTMLElement, event: CommentEvent) => void;
   readonly focusDraft: (box: HTMLElement) => void;
   readonly composeDraft: (box: HTMLElement, composing: boolean) => void;
-  readonly pasteDraft: (box: HTMLElement, html: string, text: string) => void;
+  readonly pasteDraft: (box: HTMLElement, html: string, text: string, fromPaste: boolean) => void;
   readonly toggleResolve: (id: string | null) => void;
   readonly filter: (value: string | null) => void;
   readonly toggleReply: (id: string | null) => void;
@@ -108,7 +108,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
         selection?.addRange(range);
       }
     } catch {}
-    ports.pasteDraft(box, html, text);
+    ports.pasteDraft(box, html, text, false);
   }
   listen(doc, "input", (event) => {
     if (event.isComposing) return;

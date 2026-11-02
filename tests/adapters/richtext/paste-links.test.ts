@@ -23,6 +23,23 @@ test("untouched URL components keep their exact spelling and order", () => {
   assert.equal(cleanPastedHref("https://e.test/?a=1#?utm_source=x"), "https://e.test/?a=1#?utm_source=x");
 });
 
+test("recognized signature parameter names preserve the entire signed URL", () => {
+  for (const name of ["Signature", "Key-Pair-Id", "Policy", "X-Amz-Signature", "X-Goog-Signature", "%53ignature", "x-goog-signature"]) {
+    for (const param of [name, name + "=", name + "=signed%2f+bytes"]) {
+      for (const query of [param + "&utm_source=mail&keep=1", "keep=1&utm_source=mail&" + param]) {
+        const href = "HTTPS://EXAMPLE.COM:443/%7e?" + query + "#part";
+        assert.equal(cleanPastedHref(href), href, href);
+        assert.equal(cleanPastedHref(cleanPastedHref(href)), href);
+      }
+    }
+  }
+});
+
+test("signature names in paths, values, fragments or longer parameter names do not prevent cleanup", () => {
+  const href = "https://e.test/Signature?not_Signature=1&X-Amz-Signature_extra=2&next=Policy&ref=X-Goog-Signature&utm_source=mail#Key-Pair-Id";
+  assert.equal(cleanPastedHref(href), href.replace("&utm_source=mail", ""));
+});
+
 test("names containing a tracking name and values containing tracking syntax are left alone", () => {
   const href = "https://e.test/utm_source?not_utm_source=1&fbclidx=2&gclid_extra=3&mc_eid_extra=4&msclkid_extra=5&ref=utm_source=x";
   assert.equal(cleanPastedHref(href), href);
