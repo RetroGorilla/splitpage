@@ -530,7 +530,7 @@ tabs**.
   it. Test-mode faults:
   `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `enospc-once`/`-always`;
   `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
-- **Content-addressed blobs** (#82, `desktop/blob-store.js`, `main.js`
+- **Content-addressed blobs** (#82, `desktop/blob-store.ts`, `main.js`
   §8c). Images leave the document state and live in `<userData>/blobs`:
   `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
   own SHA-256 (`<aa>` = its first two hex digits). Plain CommonJS, no
@@ -1167,7 +1167,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
 | `shared/blob-policy.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
 | `shared/video-embed.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
-| `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
+| `desktop/blob-store.ts` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
 | `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
 | `desktop/electron-arch.mjs` | pure architecture selection and the `fetch-electron` entry point; passes the selected architecture to Electron's installer (§2) |
 | `desktop/electron-arch.test.mjs` | pure architecture and override tests, including Windows ARM64 under x64 Node emulation |
@@ -1178,7 +1178,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
 | `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.ts` alone |
-| `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
+| `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.ts` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
 | `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.js` (two-generation write, torn index → prev, deferred unlink, kills via test hooks, a raw v1 tree left untouched) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |
 | `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
@@ -1309,7 +1309,7 @@ kinds and the `import` home kind stay in the code, unused; see
 [saving.md, Deprecated: import save-back](architecture/saving.md#deprecated-import-save-back).
 
 "Draft 2 of the same script" — the workflow that behaviour was useful for —
-is the **Paste/Import modal** (`openImportModal`, `src/features/imports/imports.js`),
+is the **Paste/Import modal** (`openImportModal`, `src/features/imports/imports.ts`),
 which is unchanged in what it keeps and now takes a picked `.docx`/`.md`/
 `.txt`/`.csv` as well as pasted text. A `.docx` or `.csv` picked there
 bypasses the textarea (`pendingFileRows`) so its columns and formatting

@@ -3,7 +3,7 @@
     "src/features/file-menu/browser-pdf.ts",
     "src/adapters/print/browser-print.ts",
     "src/bootstrap/wiring/ports/printing.ts",
-    "src/features/file-menu/export-dialog.js",
+    "src/features/file-menu/export-dialog.ts",
     "src/features/file-menu/file-menu.js",
     "src/features/file-menu/actions.ts",
     "src/features/file-menu/ports.ts",

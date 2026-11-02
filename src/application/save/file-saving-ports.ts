@@ -1,3 +1,4 @@
+import type { FileSaveCheck } from "../files/local-file-access.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { Clock, IdSource } from "../../core/document/ports.ts";
@@ -30,11 +31,6 @@ export interface FileSaveDialogs {
 export type FileSaveTarget =
   | { readonly kind: "handle"; readonly handle: FileSaveHandle; readonly picked: boolean }
   | { readonly kind: "download" };
-
-export type FileSaveCheck =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly current: { readonly lastModified: number } | null }
-  | { readonly ok: false; readonly current: null; readonly denied: true };
 
 export interface FileSaveTargets {
   readonly dialogs: (slug: string) => FileSaveDialogs;

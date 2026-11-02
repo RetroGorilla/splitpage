@@ -1,8 +1,13 @@
-import type { FileSaveCheck } from "../save/file-saving-ports.ts";
+import type { DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
+export type FileSaveCheck =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly current: { readonly lastModified: number } | null }
+  | { readonly ok: false; readonly current: null; readonly denied: true };
 
 export interface LocalFileHandle {
   readonly kind?: "file";
   readonly name?: string;
+  readonly _desktopId?: string;
   readonly getFile: () => Promise<LocalFileData>;
   readonly queryPermission: (options: { mode: "readwrite" }) => Promise<string>;
   readonly requestPermission: (options: { mode: "readwrite" }) => Promise<string>;
@@ -18,13 +23,13 @@ export interface LocalFileWritable {
 }
 
 export interface LocalFileAccess {
-  readonly read: (handle: unknown) => Promise<LocalFileData>;
+  readonly read: (handle: LocalFileReference | null | undefined) => Promise<LocalFileData>;
   readonly text: (file: LocalFileData) => Promise<string>;
-  readonly permission: (handle: unknown, options: { mode: "readwrite" }) => Promise<string>;
+  readonly permission: (handle: LocalFileReference | null | undefined, options: { mode: "readwrite" }) => Promise<string>;
   readonly openPicker: ((options: unknown) => Promise<LocalFileHandle[]>) | null;
-  readonly desktopHandle: (entry: unknown) => LocalFileHandle;
-  readonly checkConflict: (handle: unknown, lastModified: unknown) => Promise<FileSaveCheck>;
-  readonly createWritable: (handle: unknown) => Promise<LocalFileWritable>;
+  readonly desktopHandle: (entry: Pick<DesktopIpcResult<"splitpage:read-file">, "id" | "name">) => LocalFileHandle;
+  readonly checkConflict: (handle: LocalFileReference | null | undefined, lastModified: number | null | undefined) => Promise<FileSaveCheck>;
+  readonly createWritable: (handle: LocalFileReference | null | undefined) => Promise<LocalFileWritable>;
 }
 
 export interface LocalFileData {

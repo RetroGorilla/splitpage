@@ -1,5 +1,10 @@
 import type { VideoLink } from "../../core/document/gallery.ts";
 
+export interface VideoPosterFrame {
+  readonly dataUrl: string;
+  readonly duration: number;
+}
+
 export interface VideoFiles {
   readonly grant: (file: unknown, link: VideoLink) => void;
   readonly has: (link: VideoLink | null | undefined) => boolean;

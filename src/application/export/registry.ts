@@ -16,7 +16,7 @@ export interface ExportCardDecl {
   readonly ext: string;
   readonly icon: string;
   readonly purpose: string;
-  readonly option?: string;
+  readonly option?: string | undefined;
   readonly pictures?: boolean;
   readonly extras?: boolean;
   readonly toggle?: ExportToggle;
@@ -158,7 +158,7 @@ export function createExportRegistry<Request = unknown, Doc = unknown>(): Export
     exporters: () => entries.filter((e) => e.action !== undefined),
     byId: (id) => entries.find((e) => e.id === id),
     byAction: (action) => entries.find((e) => e.action === action),
-    isAction: (action) => typeof action === "string" && action !== "" && entries.some((e) => e.action === action),
+    isAction: (action): boolean => typeof action === "string" && action !== "" && entries.some((e) => e.action === action),
     onChange: (listener) => {
       listeners.push(listener);
       return () => {
