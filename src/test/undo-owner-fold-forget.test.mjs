@@ -199,7 +199,7 @@ test("the folded owner change leaves alone an owner I unassigned later, and does
   const back = undo();
   assert.equal(back.ok, true);
   assert.equal(back.cleared, 1, "only Pier, which the undo gave back to a person no longer in the crew");
-  assert.deepEqual(crew(), ["Cy"]);
+  assert.deepEqual(crew(), ["Cy", "ADA"]);
   assert.equal(ownerOf("brollShots", "Dock"), "");
   assert.equal(ownerOf("brollShots", "Pier"), "");
   assert.equal(itemOf(currentDocument(), "brollShots", "Quay").notes, "from them");
