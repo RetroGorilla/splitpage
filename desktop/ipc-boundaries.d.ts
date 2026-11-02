@@ -7,6 +7,7 @@ import type {
   DesktopWireTakenDraft, DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
+import type { createPdfPrinter } from "./print-pdf.ts";
 import type { createRestoreNotice } from "./restore-notice.ts";
 import type { createThemeChoice } from "./window-appearance.ts";
 
@@ -189,7 +190,7 @@ export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, 
 }
 
 export interface DesktopPrintIpcDependencies {
-  pdfPrinter: { print: (sender: WebContents, html: string) => Promise<DesktopIpcResult<"splitpage:print-to-pdf">> };
+  pdfPrinter: ReturnType<typeof createPdfPrinter>;
 }
 
 export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;

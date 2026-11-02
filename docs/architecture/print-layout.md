@@ -279,7 +279,7 @@ over 256 Mi characters, and answers bytes; the renderer saves them through the
 existing `saveFileDialog` and `writeFile` (file ids, never paths), so a
 cancelled dialog is reported exactly as before.
 
-Main (`desktop/print-pdf.js`) owns the print view. Each request gets a new
+Main (`desktop/print-pdf.ts`) owns the print view. Each request gets a new
 sandboxed, context-isolated `WebContentsView` with no preload and no window, in
 the in-memory `splitpage-print` partition. That partition serves the page from
 memory at a one-time `splitpage://print/<random>.html` with the print CSP as a
@@ -329,12 +329,12 @@ dev target passed 813/813 checks, 18 of them in the desktop PDF group. Fifteen
 `print|export|desktop` suites passed 994/994 checks on the test build with
 three lanes, including 65 (55/55) and 384 (36/36). The fresh `dist:win` build
 passed its 15/15 architecture checks, and both `app.asar` files list
-`print-pdf.js` and `ipc-print.ts`. The real `print-pdf.js` printed all 18 P1/P2
+`print-pdf.ts` and `ipc-print.ts`. The real `print-pdf.ts` printed all 18 P1/P2
 fixture pages in Electron in 188–489 ms each (long script 24 pages, long shot
 list 12, long packing lists 4 and 7) with no missing glyph and no line outside
 its page; rasterized pages showed pictures, Unicode, repeated table heads,
 split long rows, landscape pages and footers. After the printed-layout rules
-merged, the same 18 pages printed by `print-pdf.js` passed `checkPrintedLayout`
+merged, the same 18 pages printed by `print-pdf.ts` passed `checkPrintedLayout`
 rules a–g against the inspector's page models, with five oversized rows split
 as permitted.
 

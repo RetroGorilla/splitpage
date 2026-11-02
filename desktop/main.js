@@ -40,7 +40,7 @@ const { createHistoryBlobIpc } = require("./ipc-history-blob.ts");
 const { createTabStripIpc } = require("./ipc-tabstrip.ts");
 const { createTestModeIpc } = require("./ipc-test-mode.ts");
 const { createPrintIpc } = require("./ipc-print.ts");
-const { createPdfPrinter } = require("./print-pdf");
+const { createPdfPrinter } = require("./print-pdf.ts");
 
 protocol.registerSchemesAsPrivileged([
   {

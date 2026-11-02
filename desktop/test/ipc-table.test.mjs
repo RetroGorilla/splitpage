@@ -515,7 +515,7 @@ test("packaging: every ./module main.js requires, directly or through another mo
   for (const f of ["close-quit.js", "session-restore.js"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
   assert.ok(requiredBy(MAIN).includes("voice-composition.js"), "main.js requires ./voice-composition");
   assert.ok(required.has("voice-helper.js") && required.has("prompter-share.js"), "voice-composition.js requires ./voice-helper and ./prompter-share");
-  assert.ok(requiredBy(MAIN).includes("print-pdf.js"), "main.js requires ./print-pdf");
+  assert.ok(requiredBy(MAIN).includes("print-pdf.ts"), "main.js requires ./print-pdf.ts");
   for (const f of required) assert.ok(listed.has(f), f + " is required from main.js but not in electron-builder.yml files");
 });
 
