@@ -10,12 +10,13 @@ import { moveSceneCommand } from "../../application/commands/rows.ts";
 import { sectionBeforeScene, sectionForScene, sectionGroups } from "../../core/document/sections.ts";
 import { cssAttr } from "../common/dom.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { closeRowMenus } from "./row-menu.ts";
 
 export interface SectionControlsPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly edits: Pick<DocumentEdits, "allowed" | "run">;
   readonly sections: SectionView;
-  readonly focus: Pick<FocusMemory<Element>, "lastRow" | "focusedRow">;
+  readonly focus: Pick<FocusMemory<Element>, "focusedRow">;
   readonly drag: Pick<RowDrag, "dragging" | "end">;
   readonly ids: Pick<IdSource, "id">;
   readonly notices: Pick<NoticePort, "show">;
@@ -85,8 +86,8 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     const target = event.target;
     const scene = target.closest(".row[data-id]");
     if (scene) ports.focus.focusedRow(scene.getAttribute("data-id") ?? "");
-    const add = target.closest('[data-section-action="add"]');
-    const button = target.closest("[data-section-action]");
+    const add = target.closest('[data-action="add-section"]');
+    const button = add ?? target.closest("[data-section-action]");
     if (!button) {
       if (!target.closest(".section-more")) doc.querySelectorAll<HTMLDetailsElement>(".section-more[open]").forEach(menu => { menu.open = false; });
       return;
@@ -103,11 +104,13 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     }
     if (!ports.edits.allowed()) return;
     if (add) {
-      const row = state.rows.find(item => item.id === ports.focus.lastRow()) ?? state.rows[0];
+      const row = state.rows.find(item => item.id === add.getAttribute("data-id"));
       if (!row) { ports.notices.show("Add a scene before creating a section.", "warn"); return; }
+      closeRowMenus();
+      scene?.querySelector<HTMLElement>(".row-more")?.focus();
       const existing = sectionBeforeScene(state, row.id);
       if (existing) { const parent = header(existing.id); if (parent) rename(existing.id, parent); return; }
-      nameAt(add.parentElement ?? add, "", name => {
+      nameAt(scene ?? add.parentElement ?? add, "", name => {
         const created = ports.ids.id("section");
         ports.edits.run(addSectionCommand(row.id, created, name));
         header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();

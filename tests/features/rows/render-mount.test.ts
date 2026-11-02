@@ -9,6 +9,7 @@ import { startRowsRender } from "../../../src/features/rows/render.ts";
 import { fakeDocument, fakeNotices, fakePictures, fakeTextServices } from "../fakes.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
+import { rowMenuKeydown, toggleRowMenu } from "../../../src/features/rows/row-menu.ts";
 
 function fixture(withScene = false) {
   const doc = fakeDocument(migrateRows({ schema: 2, title: "Render mount", rows: withScene ? [{ id: "r1", audioText: "One" }] : [] }, fakeMigration().ports));
@@ -54,6 +55,30 @@ test("sectionless rendering never requests the fold owner", () => {
   try {
     assert.equal(mounted.renderFirstDraw(), true);
     assert.equal(folds, 0);
+  } finally { mounted.dispose(); }
+});
+
+test("scene menus place Add Section Header between Insert scene and Delete and include it in keyboard navigation", () => {
+  document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
+  const mounted = startRowsRender(fixture(true).ports);
+  try {
+    assert.equal(mounted.renderFirstDraw(), true);
+    const more = document.querySelector<HTMLElement>(".row-more");
+    assert.ok(more);
+    toggleRowMenu(more, true);
+    const items = Array.from(document.querySelectorAll<HTMLButtonElement>(".row-menu-item"));
+    assert.deepEqual(items.map(item => item.textContent), ["Move up", "Move down", "Insert scene", "Add Section Header", "Delete"]);
+    const insert = items[2], section = items[3], remove = items[4];
+    assert.ok(insert && section && remove);
+    assert.equal(section.getAttribute("role"), "menuitem");
+    assert.equal(section.getAttribute("data-id"), "r1");
+    assert.equal(section.querySelector(".mi-icon use")?.getAttribute("href"), "#i-plus");
+    const down = (target: Element) => rowMenuKeydown({ target, key: "ArrowDown", preventDefault() {} } as unknown as KeyboardEvent);
+    insert.focus();
+    assert.equal(down(insert), true);
+    assert.equal(document.activeElement, section);
+    assert.equal(down(section), true);
+    assert.equal(document.activeElement, remove);
   } finally { mounted.dispose(); }
 });
 
