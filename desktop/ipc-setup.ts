@@ -4,7 +4,8 @@ import type { DesktopIpcContract } from "../shared/desktop-contract.d.ts";
 
 import type { App, IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import type { DesktopChannelRow, DesktopIpcArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
-import type { DesktopIpcEvent, DesktopMainWindow, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopIpcEvent, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopMainWindow } from "./main-types.d.ts";
 import type { DesktopChannel, DesktopChannelModule } from "./ipc-channels.ts";
 
 type ChannelName<D extends DesktopChannelRow["direction"]> = Extract<DesktopChannel, { direction: D }>["name"];

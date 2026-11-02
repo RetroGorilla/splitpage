@@ -187,7 +187,7 @@
 ; --- Never force-close an app that may be asking a question (#198) ---------
 ;
 ; The polite taskkill posts WM_CLOSE, and a window with unsaved work answers
-; it with a modal "You have unsaved changes" dialog (main.js, win.on("close")).
+; it with a modal "You have unsaved changes" dialog (main.ts, win.on("close")).
 ; The original shape forced `taskkill /F` ~1.3 s later, while that dialog was
 ; still up, and the work was lost. Now what the installer does next depends
 ; on what the app is showing, re-read every 500 ms:

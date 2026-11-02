@@ -12,7 +12,7 @@ type HistoryFsOptions = {
   dir: string; fs: typeof NodeFs; fsp: typeof NodeFs.promises;
   path: typeof NodePath; crypto: typeof NodeCrypto;
   now?: () => number; name?: string; maxBodyBytes?: number;
-  testHooks?: Record<string, (...args: string[]) => unknown>;
+  testHooks?: Record<string, (...args: string[]) => unknown> | undefined;
 };
 type HistoryFsIndexRead = { doc: HistoryFsDocument; bad?: undefined; missing?: undefined } |
   { doc?: undefined; bad?: true; missing?: true };

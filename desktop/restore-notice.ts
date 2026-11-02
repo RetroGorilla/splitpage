@@ -1,7 +1,8 @@
 "use strict";
 
 import type { WebContents } from "electron";
-import type { DesktopMainTab, DesktopMainWindow, DesktopTestModeIpcDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopTestModeIpcDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab, DesktopMainWindow } from "./main-types.d.ts";
 import type { DesktopIpcReceiveArgs } from "../shared/desktop-contract.d.ts";
 
 type RestoreNoticePayload = DesktopIpcReceiveArgs<"splitpage:restore-notice">[0];
@@ -28,7 +29,7 @@ function createRestoreNotice({ tabs, liveWindows, send }: RestoreNoticeDependenc
     catch { }
   }
 
-  function retarget(deadTabId: string, deadWindow: Pick<DesktopMainWindow, "activeTabId"> | null | undefined) {
+  function retarget(deadTabId: string | undefined, deadWindow: Pick<DesktopMainWindow, "activeTabId"> | null | undefined) {
     if (!pending || pending.tabId !== deadTabId) return;
     let next = deadWindow && deadWindow.activeTabId ? tabs.get(deadWindow.activeTabId) : null;
     if (!next) {

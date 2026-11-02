@@ -1,6 +1,6 @@
-"use strict";
+import type { DesktopMainTab, DesktopMainWindow, DesktopLookupMap } from "./main-types.d.ts";
 
-import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContentsView } from "electron";
+import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell } from "electron";
 import type { chooseDuplicateLoser } from "../shared/doc-id-policy.ts";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
@@ -25,38 +25,13 @@ import type { createDesktopStateStore } from "./desktop-state.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
 
-export interface DesktopMainTab {
-  id: string;
-  windowId: string;
-  title: string;
-  dirty: boolean;
-  pristine: boolean;
-  docId: string | null;
-  fileId: string | null | undefined;
-  source: { kind: "file"; absPath: string } | { kind: "blank" };
-  ready: boolean;
-  keepDraftOnClose?: boolean;
-  keepHolders?: Set<object>;
-  crashedNotReloaded?: boolean;
-  closeKeepingDraft?: boolean;
-  pendingPayload: unknown;
-  launchIntent: DesktopWireLaunch;
-  firstTabOfLaunch?: boolean;
-  view: WebContentsView;
-}
 
-export interface DesktopMainWindow {
-  id: string;
-  win: BrowserWindow;
-  activeTabId: string | null;
-  tabIds: string[];
-  closeKeepingDrafts?: boolean;
-}
+
 
 export interface DesktopMainCommon {
   tabOf: (event: DesktopIpcEvent) => DesktopMainTab | null;
-  tabs: Map<string | undefined, DesktopMainTab>;
-  windowsById: Map<string, DesktopMainWindow>;
+  tabs: DesktopLookupMap<string, DesktopMainTab>;
+  windowsById: DesktopLookupMap<string, DesktopMainWindow>;
   fileIds: ReturnType<typeof createFileRegistry>;
   recents: ReturnType<typeof createRecents>;
   testMode: boolean;
@@ -83,7 +58,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
   };
   dialogParentFor: (event: DesktopIpcEvent) => BrowserWindow | undefined;
   pathToTabId: Map<string, string>;
-  consumeTestDialogAnswer: () => string | null | undefined;
+  consumeTestDialogAnswer: () => unknown;
   testDialogsSeen: () => number;
 }
 
@@ -96,7 +71,7 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
   docClaims: ReturnType<typeof createDocClaims>;
   flushPendingPayload: (tab: DesktopMainTab, options?: { force: boolean }) => void;
   restoreNotice: Pick<ReturnType<typeof createRestoreNotice>, "isFor" | "deliver">;
-  routeOpenPath: (path: string, options: { fromWindowId: string; fromTabId: string }) => DesktopIpcResult<"splitpage:route-open"> | null;
+  routeOpenPath: (path: unknown, options: { fromWindowId: string; fromTabId: string }) => DesktopIpcResult<"splitpage:route-open"> | null;
   draftFiniteNumber: (value: unknown) => number | null;
   draftBodyTooLarge: (text: string) => boolean;
   buildDraftHeader: (tab: DesktopMainTab, payload: Record<string, unknown>) => Parameters<ReturnType<typeof createDraftStore>["write"]>[1];

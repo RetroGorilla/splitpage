@@ -88,7 +88,7 @@ function createVoiceComposition({ isPackaged, appRoot, testMode, tabs, staticAll
     return voiceHelper;
   }
 
-  function forgetTab(tabId: string) {
+  function forgetTab(tabId: string | undefined) {
     if (prompterShare) prompterShare.revoke(tabId);
     if (voiceHelper) { voiceHelper.forget(tabId); voiceHelper.forget(VOICE_RELAY_PREFIX + tabId); }
   }

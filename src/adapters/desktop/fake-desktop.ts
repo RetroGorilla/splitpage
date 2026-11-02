@@ -11,7 +11,7 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _routeMissing?: boolean;
   _lastRoute?: unknown;
   _routeAnswer?: NonNullable<Awaited<ReturnType<DesktopPort["routeOpen"]>>>;
-  _externalOpens?: string[];
+  _externalOpens?: unknown[];
   _videoGrants?: Record<string, unknown>;
   _videoOpens?: unknown[];
   _printed?: string[];
@@ -160,7 +160,7 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
     getSessionInfo: function () {
       return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
     },
-    openExternal: function (url: string) { (this._externalOpens = this._externalOpens || []).push(url); },
+    openExternal: function (url: unknown) { (this._externalOpens = this._externalOpens || []).push(url); },
     grantVideoFile: function (file: unknown) {
       this._videoGrants = this._videoGrants || {};
       const token = "t" + Object.keys(this._videoGrants).length;

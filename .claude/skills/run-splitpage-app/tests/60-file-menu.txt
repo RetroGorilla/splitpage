@@ -194,7 +194,7 @@ expect window.__hits.join(',') == write,save,open
 expect document.getElementById('file-menu').hidden
 
 # --- the desktop app: its menu accelerators already send these -------------
-# (desktop/main.js), so the page stands down and nothing fires twice; and
+# (desktop/main.ts), so the page stands down and nothing fires twice; and
 # the chips follow the build — F1 and Ctrl+Shift+P appear.
 eval (function(){ window.fake = D.makeFakeBackend(); D.setBackend(window.fake); window.__idA = window.fake._addFile('script-a.md', F.buildMarkdown()); window.fake._addRecent(window.__idA, 'script-a.md', 'Script A', Date.now() - 3 * 86400000); var save = window.fake.saveFileDialog, open = window.fake.openFileDialog; window.fake.saveFileDialog = function () { window.__hits.push('desktop-save'); return save.apply(this, arguments); }; window.fake.openFileDialog = function () { window.__hits.push('desktop-open'); return open.apply(this, arguments); }; return true; })()
 key ctrl KeyS

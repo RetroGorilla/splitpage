@@ -1,3 +1,4 @@
+import { stripTypeScriptTypes } from "node:module";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -5,11 +6,11 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.join(here, "..");
-const MAIN = fs.readFileSync(path.join(desktop, "main.js"), "utf8");
+const MAIN = stripTypeScriptTypes(fs.readFileSync(path.join(desktop, "main.ts"), "utf8"));
 
 function functionBody(src, name) {
   const at = src.indexOf(`function ${name}(`);
-  assert.ok(at >= 0, `function ${name} found in main.js`);
+  assert.ok(at >= 0, `function ${name} found in main.ts`);
   const openAt = src.indexOf("{", at);
   let depth = 0;
   for (let i = openAt; i < src.length; i++) {

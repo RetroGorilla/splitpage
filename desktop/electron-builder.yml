@@ -7,7 +7,7 @@ directories:
   buildResources: build
 
 files:
-  - main.js
+  - main.ts
   - preload.js
   - tabstrip-preload.js
   - drafts.ts

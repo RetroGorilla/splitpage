@@ -53,7 +53,7 @@ export interface DesktopDraftWriteHeader {
   seq: number;
   origin: {
     kind: string;
-    filePath: string | null;
+    filePath: unknown;
     fileName: string | null;
     fileKind: string | null;
     importName: string | null;
@@ -163,7 +163,7 @@ export interface DesktopWireUpdateStatus {
   justUpdated: null;
   desktop: boolean;
   canInstall: boolean;
-  releaseUrl: string | null;
+  releaseUrl: unknown;
   error?: string | undefined;
   download: { state: "idle" | "downloading" | "ready" | "failed"; received: number; total: number; error: string | null; verified?: boolean };
 }
@@ -185,7 +185,7 @@ export interface DesktopWireVoiceEvent {
 export interface DesktopWireShellState {
   windowId: string;
   activeTabId: string | null;
-  tabs: { tabId: string; title: string; dirty: boolean; crashed: boolean; pristine: boolean; fullPathForTooltip: string | null }[];
+  tabs: { tabId: string; title: string; dirty: boolean; crashed: boolean; pristine: boolean; fullPathForTooltip: unknown }[];
 }
 
 export interface DesktopWireTestShellArgs {
@@ -196,7 +196,7 @@ export interface DesktopWireTestShellArgs {
 
 export type DesktopWireTestShellResult = DesktopWireShellState | string | boolean | null | string[] |
   { browser: string; url: string }[] |
-  { windows: { windowId: string; activeTabId: string | null; tabs: { tabId: string; title: string; dirty: boolean; pristine: boolean; path: string | null }[] }[] } |
+  { windows: { windowId: string; activeTabId: string | null; tabs: { tabId: string; title: string; dirty: boolean; pristine: boolean; path: unknown }[] }[] } |
   { listening: boolean; port: number | null; shares: string[]; voiceStreams?: number } |
   { available: boolean; running: boolean; tabId: string | null; session: number | null; pid: number | null | undefined; started: number };
 
@@ -230,7 +230,7 @@ export interface DesktopIpcContract {
   "splitpage:get-app-version-sync": DesktopChannelCall<[], string | null>;
   "splitpage:tab-boot-sync": DesktopChannelCall<[], DesktopWireBoot | null>;
   "splitpage:is-test-mode-sync": DesktopChannelCall<[], boolean>;
-  "splitpage:open-external": DesktopChannelCall<[string], void>;
+  "splitpage:open-external": DesktopChannelCall<[unknown], void>;
   "splitpage:set-theme": DesktopChannelCall<[string], void>;
   "splitpage:video-file-grant": DesktopChannelCall<[string], string | null>;
   "splitpage:video-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;

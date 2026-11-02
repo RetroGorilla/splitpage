@@ -1,5 +1,7 @@
 "use strict";
 
+import type { DesktopLookupMap } from "./main-types.d.ts";
+
 import type * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
 import type * as NodeCrypto from "node:crypto";
@@ -88,12 +90,12 @@ function createPrompterShare(options?: DesktopPrompterShareOptions) {
     staticTable[route] = entry;
   }
 
-  const shares = new Map<string, DesktopPrompterShareEntry>();
+  const shares: DesktopLookupMap<string, DesktopPrompterShareEntry> = new Map();
   let server: NodeHttp.Server | null = null;
   let port: number | null = null;
   let starting: Promise<number> | null = null;
 
-  function dropShare(ownerId: string) {
+  function dropShare(ownerId: string | undefined) {
     const share = shares.get(ownerId);
     if (!share) return false;
     clearTimeout(share.timer as NodeJS.Timeout | undefined);

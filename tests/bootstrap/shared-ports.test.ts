@@ -34,7 +34,7 @@ import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 
 test("external links check the current desktop capability and forward each address to the current bridge", () => {
   const externalLinks: ExternalLinks = portExternalLinks;
-  const opened: string[][] = [];
+  const opened: unknown[][] = [];
   const url = "https://splitpage.test/releases?version=4.2#download";
   try {
     useDesktopForTest(null);

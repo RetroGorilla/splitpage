@@ -104,7 +104,7 @@ test("the app page is served with its CSP; sw.js is not; /api answers the no-ser
     const api = await request(port, "/api/health");
     assert.equal(api.status, 404);
     assert.deepEqual(JSON.parse(api.body), { error: "no server" });
-    assert.equal((await request(port, "/../desktop/main.js")).status, 404);
+    assert.equal((await request(port, "/../desktop/main.ts")).status, 404);
     assert.equal((await request(port, "/%2e%2e/VERSION")).status, 404);
   } finally { share.closeAll(); }
 });

@@ -17,10 +17,10 @@ const read = (name) => {
   const text = fs.readFileSync(path.join(desktop, name), "utf8");
   return name.endsWith(".ts") ? stripTypeScriptTypes(text) : text;
 };
-const MAIN = read("main.js");
+const MAIN = read("main.ts");
 const SETUP = read("ipc-setup.ts");
 const IPC_MODULES = fs.readdirSync(desktop).filter((f) => /^ipc-[a-z-]+\.ts$/.test(f) && f !== "ipc-channels.ts").sort();
-const SOURCES = [["main.js", MAIN], ...IPC_MODULES.map((f) => [f, read(f)])];
+const SOURCES = [["main.ts", MAIN], ...IPC_MODULES.map((f) => [f, read(f)])];
 const SENDERS = [...SOURCES, ["voice-composition.ts", read("voice-composition.ts")]];
 const { createIpcSetup } = require(path.join(desktop, "ipc-setup.ts"));
 const PRELOADS = [
@@ -151,9 +151,9 @@ function registerThroughMain({ testMode }) {
   const ipcMain = fakeIpcMain();
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "ipc-table-"));
   const electron = fakeElectron(ipcMain, userData);
-  const mainPath = path.join(desktop, "main.js");
+  const mainPath = path.join(desktop, "main.ts");
   const lockElseEnd = MAIN.lastIndexOf("\n}");
-  assert.ok(/\n\} else \{\n/.test(MAIN) && MAIN.slice(lockElseEnd).trim() === "}", "main.js ends with its single-instance else block");
+  assert.ok(/\n\} else \{\n/.test(MAIN) && MAIN.slice(lockElseEnd).trim() === "}", "main.ts ends with its single-instance else block");
   const body = MAIN.slice(0, lockElseEnd) + `\nreturn { registerIpc, ${GROUPS_PASSED.join(", ")} };` + MAIN.slice(lockElseEnd);
   const load = vm.runInThisContext(
     `(function (exports, require, module, __filename, __dirname) {${body}\n})`,
@@ -259,7 +259,7 @@ test("neither preload can reach the other's channels", () => {
   }
 });
 
-test("main.js and the ipc-*.ts modules register nothing through ipcMain directly", () => {
+test("main.ts and the ipc-*.ts modules register nothing through ipcMain directly", () => {
   for (const [file, src] of SOURCES) {
     const direct = [...src.matchAll(/ipcMain\.(handle|on)\(\s*"/g)];
     assert.deepEqual(direct.map((m) => m[0]), [], `${file}: every registration goes through ipcHandle/ipcOn/ipcOnSync`);
@@ -269,7 +269,7 @@ test("main.js and the ipc-*.ts modules register nothing through ipcMain directly
   }
 });
 
-test("every channel main.js and the ipc-*.ts modules register is in the table, with that direction", () => {
+test("every channel main.ts and the ipc-*.ts modules register is in the table, with that direction", () => {
   for (const r of registrations) {
     const row = channelFor(r.name, r.direction);
     assert.ok(row, `${r.file} registers ${key(r.name, r.direction)}, which is not in the table`);
@@ -277,11 +277,11 @@ test("every channel main.js and the ipc-*.ts modules register is in the table, w
   }
 });
 
-test("main.js and the ipc-*.ts modules register a handler for every inbound row, exactly once", () => {
+test("main.ts and the ipc-*.ts modules register a handler for every inbound row, exactly once", () => {
   for (const row of IPC_CHANNELS) {
     if (row.direction === "receive") continue;
     const hits = registrations.filter((r) => r.name === row.name && r.direction === row.direction);
-    assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.js and the ipc-*.ts modules`);
+    assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.ts and the ipc-*.ts modules`);
   }
 });
 
@@ -299,21 +299,21 @@ test("every registration outside ipc-setup.ts sits in a handler group that ipc-s
   }
 });
 
-test("main.js passes registerIpc every handler group, and each group's module is required by main.js", () => {
-  assert.ok(REGISTER_IPC_CALL, "main.js calls registerIpc({ ...groups })");
+test("main.ts passes registerIpc every handler group, and each group's module is required by main.ts", () => {
+  assert.ok(REGISTER_IPC_CALL, "main.ts calls registerIpc({ ...groups })");
   const groups = handlerGroups();
   assert.deepEqual([...GROUPS_PASSED].sort(), groups.map((g) => g.name).sort());
   for (const g of groups) {
-    if (g.file === "main.js") continue;
-    assert.ok(MAIN.includes(`require("./${g.file.replace(/\.js$/, "")}")`), `main.js does not require ./${g.file}`);
+    if (g.file === "main.ts") continue;
+    assert.ok(MAIN.includes(`require("./${g.file.replace(/\.js$/, "")}")`), `main.ts does not require ./${g.file}`);
   }
 });
 
-test("in test mode, main.js's real groups register the 59 pairs in the order they had before the split, then the print channel", () => {
+test("in test mode, main.ts's real groups register the 59 pairs in the order they had before the split, then the print channel", () => {
   assert.deepEqual(registerThroughMain({ testMode: true }), [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT]);
 });
 
-test("outside test mode, main.js's real groups register the same pairs in order, minus every test-only channel", () => {
+test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
   const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
   assert.equal(expected.length, 53);
@@ -367,7 +367,7 @@ test("the main process sends every main -> renderer row and registers none of th
   const inbound = new Set(IPC_CHANNELS.filter((c) => c.direction !== "receive").map((c) => c.name));
   for (const row of IPC_CHANNELS) {
     if (row.direction !== "receive") continue;
-    assert.ok(sends.has(row.name), `${row.name} is in the table and none of main.js, the ipc-*.ts modules or voice-composition.ts sends it`);
+    assert.ok(sends.has(row.name), `${row.name} is in the table and none of main.ts, the ipc-*.ts modules or voice-composition.ts sends it`);
     if (!inbound.has(row.name)) {
       assert.equal(
         registrations.some((r) => r.name === row.name),
@@ -494,7 +494,7 @@ test("Follow My Voice takes no argument, from the app page only", () => {
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
 });
 
-test("packaging: every ./module main.js requires, directly or through another module, is in electron-builder.yml's files", () => {
+test("packaging: every ./module main.ts requires, directly or through another module, is in electron-builder.yml's files", () => {
   const yml = read("electron-builder.yml");
   const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.(?:js|ts))\s*$/gm)].map((m) => m[1]));
   const requiredBy = (src) => [...src.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(\.(?:js|ts))?"\)/g)].map((m) => m[1] + (m[2] || ".js"));
@@ -507,16 +507,16 @@ test("packaging: every ./module main.js requires, directly or through another mo
       pending.push(read(f));
     }
   }
-  assert.ok(required.has("drafts.ts"), "main.js requires ./drafts");
-  assert.ok(required.has("ipc-setup.ts"), "main.js requires ./ipc-setup");
+  assert.ok(required.has("drafts.ts"), "main.ts requires ./drafts");
+  assert.ok(required.has("ipc-setup.ts"), "main.ts requires ./ipc-setup");
   assert.ok(required.has("ipc-channels.ts"), "ipc-setup.ts requires ./ipc-channels");
   for (const f of ["close-keep.ts", "quit-watchdog.ts", "unsaved-dialog.ts"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
-  for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
-  for (const f of ["close-quit.ts", "session-restore.ts"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
-  assert.ok(requiredBy(MAIN).includes("voice-composition.ts"), "main.js requires ./voice-composition.ts");
+  for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.ts does not require");
+  for (const f of ["close-quit.ts", "session-restore.ts"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.ts does not require");
+  assert.ok(requiredBy(MAIN).includes("voice-composition.ts"), "main.ts requires ./voice-composition.ts");
   assert.ok(required.has("voice-helper.ts") && required.has("prompter-share.ts"), "voice-composition.ts requires ./voice-helper and ./prompter-share.ts");
-  assert.ok(requiredBy(MAIN).includes("print-pdf.ts"), "main.js requires ./print-pdf.ts");
-  for (const f of required) assert.ok(listed.has(f), f + " is required from main.js but not in electron-builder.yml files");
+  assert.ok(requiredBy(MAIN).includes("print-pdf.ts"), "main.ts requires ./print-pdf.ts");
+  for (const f of required) assert.ok(listed.has(f), f + " is required from main.ts but not in electron-builder.yml files");
 });
 
 test("the blob channels: a typed sha256, app page only", () => {

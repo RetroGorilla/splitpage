@@ -3,7 +3,8 @@
 import type * as NodeCrypto from "node:crypto";
 import type { WebContents } from "electron";
 import type * as DocIdPolicy from "../shared/doc-id-policy.ts";
-import type { DesktopMainTab, DesktopTestModeIpcDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopTestModeIpcDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab } from "./main-types.d.ts";
 import type { DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
 
 const crypto: typeof NodeCrypto = require("node:crypto");

@@ -3,7 +3,7 @@
 Running list for the 3.0 work on `claude/concurrent-lanes-phases-ea0b4t`.
 
 **#89 closed most of this file.** `desktop/test/smoke.mjs` — the only thing
-that executes `main.js` and `preload.js` — now runs its `dev` target on Linux
+that executes `main.ts` and `preload.js` — now runs its `dev` target on Linux
 as well as Windows, so a desktop change made in the cloud container is
 exercised where it is made instead of shipped on a reading. (macOS should
 work too: the dev binary is read from Electron's own `path.txt` and the
@@ -161,7 +161,7 @@ sets `SPLITPAGE_TEST=1` and a temp profile.
 ### The same suite, on Linux
 
 ```
-node build.mjs --test                   # main.js serves index.html from APP_ROOT
+node build.mjs --test                   # main.ts serves index.html from APP_ROOT
 cd desktop
 npm ci
 npm run fetch-electron
@@ -180,7 +180,7 @@ Three things to know:
   containers have no unprivileged user namespaces, so Chromium refuses to
   start without it. It is scoped in `platformFlagsFor()` to `kind === "dev"`
   on `linux`, so it can never reach a packaged binary, and nothing in
-  `main.js`, `electron-builder.yml` or the installer passes it — how the app
+  `main.ts`, `electron-builder.yml` or the installer passes it — how the app
   ships is untouched.
 
 Every check the running platform cannot answer prints a `SKIP - <name> ::
@@ -225,7 +225,7 @@ would turn a green suite red for a reason unrelated to the app.
 
 The dev target's ~600 checks now run on Linux and in CI — one skip, the rest
 executed — which covers
-`main.js` and `preload.js` end to end: boot and CSP, save/Save As/export,
+`main.ts` and `preload.js` end to end: boot and CSP, save/Save As/export,
 second instance and argv routing, session restore, `--library`/`--host`, the
 updater, close/quit authority, the tab shell, document ids and history, and
 the crash-safe drafts. That includes everything the three items below used to
@@ -236,7 +236,7 @@ be listed for:
   under a real sender all execute on every launch in the suite: no bridge
   means no `window.splitpageDesktop`, and the first case asserts it is there.
   The tab strip's structural gate is covered by the `tabstrip origin` case.
-- **#76 — shared policy modules.** `main.js` requires them out of `APP_ROOT`
+- **#76 — shared policy modules.** `main.ts` requires them out of `APP_ROOT`
   at startup, so every launch proves the dev resolution path.
   `caseAtomicSaveKeepsBirthtime` and `caseDuplicateDocIdAcrossTabs` run
   against the shared `chooseDuplicateLoser`. The packaged half, which
@@ -271,7 +271,7 @@ making this run, because they were asking Windows-shaped questions about
 platform-independent behaviour:
 
 - the DOC-CLAIMS replacement id predicted `file:<path>.toLowerCase()`
-  unconditionally; `main.js` lower-cases only on win32 (NTFS is
+  unconditionally; `main.ts` lower-cases only on win32 (NTFS is
   case-insensitive, ext4 is not), so the harness now mirrors that rule.
 - `caseHistoryCrashAfterBody` pinned exit code 1 for a self-inflicted
   `SIGKILL`, which is how Windows reports it. On POSIX the same call is a
@@ -461,7 +461,7 @@ That is the only thing that proves #76's `shared/` staging and #77's `files` ent
   picture back together. Click each tile, press ▶: the video plays in the
   dialog. YouTube in particular: it refuses a player page asked for with
   no Referer ("Video player configuration error", Error 153), and main
-  adds one for the app's own tabs (`installPlayerReferer`, main.js §9e) —
+  adds one for the app's own tabs (`installPlayerReferer`, main.ts §9e) —
   if Error 153 shows, that is what failed. Close the dialog while one
   plays: the sound stops. With Settings ▸ Fetch video thumbnails off, a
   pasted link stays a placeholder.
