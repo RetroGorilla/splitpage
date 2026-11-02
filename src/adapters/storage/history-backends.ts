@@ -1,20 +1,8 @@
 import type { HistoryBackendOptions, HistoryTestingStorage, HistorySnapshotMeta, HistorySnapshotRead, HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
-import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult, HistoryStoreUsage } from "./history-backend-types.ts";
+import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult } from "./history-backend-types.ts";
+import type { SharedHistorySnapshotReader } from "../../../shared/history-store.ts";
 
-type HistoryStore = {
-  name: string;
-  persistent: boolean;
-  put: HistoryBackendAdapter["put"];
-  get: HistoryBackendAdapter["get"];
-  copy: HistoryBackendAdapter["copy"];
-  touch: HistoryBackendAdapter["touch"];
-  importOlder: HistoryBackendAdapter["importOlder"];
-  evict: HistoryBackendAdapter["evict"];
-  list: (docId: string | null) => Promise<HistoryBackendList>;
-  usage: () => Promise<HistoryStoreUsage>;
-  rawIndex: () => Promise<HistoryIndex>;
-  listDocs: () => Promise<{ docId: string }[]>;
-};
+type HistoryStore = ReturnType<typeof createHistoryStore<HistoryBrowserBackend>>;
 type HistoryBrowserBackend = Pick<ReturnType<typeof createIdbHistoryBackend>, "name" | "persistent" | "exclusive">;
 type HistoryLocalEntry = { backend: HistoryBrowserBackend; store: HistoryStore; adapter: HistoryBackendAdapter };
 type HistoryIdbEntry = HistoryLocalEntry & { backend: ReturnType<typeof createIdbHistoryBackend>; ready: Promise<HistoryBackendAdapter> | null };
@@ -27,7 +15,7 @@ type HistoryReplyAlternatives<T, All = T> = T extends object ? T & {
 type HistoryDesktopDoc = Awaited<ReturnType<HistoryDesktopPort["historyListDocs"]>>[number];
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { HISTORY_OLDER_KEY, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
-import { createHistoryStore, createMemoryHistoryBackend } from "../../../shared/history-store.js";
+import { createHistoryStore, createMemoryHistoryBackend } from "../../../shared/history-store.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "./03c-history-idb.ts";
 
 export interface HistoryBackendProbe {
@@ -113,19 +101,19 @@ function historyMakeStore(backend: HistoryBrowserBackend, capBytes: (lastTotal?:
     hashText: historyHashText,
     capBytes: capBytes,
     holds: historyProtectedList
-  }) as unknown as HistoryStore;
+  });
 }
 
 function historyRecordOf(index: HistoryIndex, bucket: string) {
   const rec = index && index[bucket];
   if (!rec) return null;
-  const snaps = Array.isArray(rec.snapshots) ? rec.snapshots : [];
+  const snaps: NonNullable<typeof rec>["snapshots"] = Array.isArray(rec.snapshots) ? rec.snapshots : [];
   const out: HistoryBackendDoc = {
     docId: bucket,
     title: rec.title || "",
     lastOpenedAt: Number(rec.lastOpenedAt) || 0,
     count: snaps.length,
-    bytes: snaps.reduce(function (n, s) { return n + (Number(s && s.sizeBytes) || 0); }, 0)
+    bytes: snaps.reduce<number>(function (n, s) { return n + (Number(s && (s as SharedHistorySnapshotReader).sizeBytes) || 0); }, 0)
   };
   if (rec.migratedAt != null) out.migratedAt = rec.migratedAt;
   if (rec.expiresAt != null) out.expiresAt = rec.expiresAt;
@@ -152,7 +140,7 @@ function historyStoreAdapter(store: HistoryStore): HistoryBackendAdapter & { sto
       });
     },
     list: function (docId) {
-      return store.list(docId || null).then(function (r) {
+      return store.list(docId || null).then(function (r: HistoryBackendList) {
         return store.usage().then(function (u) { r.usage = u; return r; }, function () { r.usage = null; return r; });
       });
     },
