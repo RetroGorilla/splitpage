@@ -89,3 +89,16 @@ test("applyMarkdownProject: a table with a different number of scenes asks the s
   assert.equal((await applyMarkdownProject(project(), { noAsk: true }, quiet.services)).rows.length, 1);
   assert.deepEqual(quiet.calls.asked, []);
 });
+
+test("#1049: accepting the same hand-added Markdown scenes twice preserves their ids", async () => {
+  const project = (): MarkdownProject => ({
+    state: migrateRows({ schema: 2, docId: "d" + "a".repeat(32), title: "T", rows: [] }), docIdEmbedded: false, title: null,
+    table: [{ visualText: "v", audioText: "a", statusText: "" }, { visualText: "new", audioText: "added", statusText: "" }]
+  });
+  const { services, calls } = fakes(null, "table");
+  const first = await applyMarkdownProject(project(), null, services);
+  const second = await applyMarkdownProject(project(), null, services);
+  assert.deepEqual(first.rows, second.rows);
+  assert.deepEqual(first.rows.map(r => [r.visualText, r.audioText]), [["v", "a"], ["new", "added"]]);
+  assert.deepEqual(calls.asked, [[0, 2], [0, 2]]);
+});
