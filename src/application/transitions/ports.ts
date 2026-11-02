@@ -1,10 +1,11 @@
+import type { HomeFields } from "../location/document-location.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { CommandOutcome, Stamp } from "../session/document-session.ts";
 import type { DocumentEntry } from "../session/ports.ts";
 
 export interface DocumentDestination {
   readonly kind: string;
-  readonly fields?: Readonly<Record<string, unknown>> | undefined;
+  readonly fields?: HomeFields | undefined;
 }
 
 export const NO_DESTINATION: DocumentDestination = Object.freeze({ kind: "none" });
