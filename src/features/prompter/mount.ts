@@ -111,12 +111,13 @@ export function mountPrompter(mount: { window: Window; ports: PrompterPorts }): 
       if (!modal.contains(e.target)) modal.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled])')?.focus({ preventScroll: true });
       return;
     }
-    if (!e.target.closest?.('#prompter')) element("pp-play").focus({ preventScroll: true });
+    if (!e.target.closest?.('#prompter, #findbar.is-present:not([hidden])')) element("pp-play").focus({ preventScroll: true });
   });
 
   life.listen(window, "keydown", function (e) {
     if (!ports.isOpen() || e.defaultPrevented) return;
     const target = e.target;
+    if (target?.closest?.('#findbar.is-present')) return;
     if (target?.closest?.('.toast') || document.querySelector('.modal-backdrop:not([hidden]), #cmdk:not([hidden])')) return;
     if (target && target.closest && !target.closest("#rows") && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
     const chord = e.ctrlKey || e.metaKey || e.altKey;

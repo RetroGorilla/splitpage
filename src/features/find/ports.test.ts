@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../../../tests/features/editing/jsdom.mjs";
-import { fakeDocument, fakeNotices } from "../../../tests/features/fakes.ts";
+import { fakeDocument, fakeNotices, fakeFindPresent } from "../../../tests/features/fakes.ts";
 import { fakeMigration } from "../../../tests/core/migrate-ports.ts";
 import { migrateRows } from "../../core/migrate.ts";
 import type { FindPorts } from "./ports.ts";
@@ -31,7 +31,8 @@ test("find uses owner ports to reveal matches", () => {
     notices: fakeNotices().notices,
     flags: { setFindOpen: (value) => { open = value; } },
     options: { matchesCase: () => false },
-    bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 })
+    bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 }),
+    present: fakeFindPresent().present
   };
   const mounted = startFind(ports);
   mounted.openFindBar();

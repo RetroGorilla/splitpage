@@ -43,6 +43,7 @@ expect localStorage.getItem('splitpage-prompter-mirror') != '1'
 key alt KeyF
 sleep 300
 expect !document.getElementById('prompter-scroll').classList.contains('flip')
+click #find-close
 
 # --- the bare letters, and Shift, still work -----------------------------------
 # Find is refused in Present (#274), so Ctrl+F opened nothing; make sure the
@@ -69,12 +70,15 @@ key KeyM
 sleep 300
 expect !document.getElementById('prompter-scroll').classList.contains('mirror')
 
-# --- Ctrl+F in Present: Find is refused, so nothing opens and nothing flips ------
+# why: #350 makes the real Find field available above Present.
 key ctrl KeyF
 sleep 300
-expect document.getElementById('findbar').hidden || getComputedStyle(document.getElementById('findbar')).display === 'none'
-expect document.activeElement.id !== 'find-input'
+expect !document.getElementById('findbar').hidden && getComputedStyle(document.getElementById('findbar')).display !== 'none'
+expect document.activeElement.id === 'find-input'
 expect !document.getElementById('prompter-scroll').classList.contains('flip')
+press foo mix
+expect document.getElementById('find-input').value === 'foo mix'
+click #find-close
 
 # --- typing in a field while Present is open: "foo mix" ------------------------
 # The f and m are typed into the field, not taken as the shortcuts, and the

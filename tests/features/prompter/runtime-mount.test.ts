@@ -52,6 +52,56 @@ test("prompter runtime uses fake document, preferences, panels and tag container
   }
 });
 
+test("Find pauses voice and playback, cues the matched scene, and resumes voice near a distant match", async () => {
+  harness();
+  const words = Array.from({ length: 220 }, (_, i) => "word" + i);
+  const doc = migrateRows({ rows: [{ id: "r1", audioText: words.slice(0, 110).join(" ") + "." }, { id: "r2", audioText: words.slice(110).join(" ") + "." }] }, fakeMigration().ports);
+  const h = fakePrompterPorts(doc);
+  h.flags.prompterSceneMode = true;
+  class Recognition {
+    onstart: (() => void) | null = null;
+    onresult: ((event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => void) | null = null;
+    stopped = 0;
+    start() { this.onstart?.(); }
+    stop() { this.stopped++; }
+  }
+  const recognitions: Recognition[] = [];
+  const runtime = startPrompter({ ...h.ports, voice: { ...h.ports.voice, available: () => true, hasRelay: () => true, createRelay: () => {
+    const recognition = new Recognition(); recognitions.push(recognition); return recognition;
+  } } });
+  const scroller = document.getElementById("prompter-scroll") as HTMLElement;
+  scroller.scrollTo = () => {};
+  try {
+    runtime.openPrompter();
+    const rendered = Array.from(document.querySelectorAll<HTMLElement>("#prompter-content .w"));
+    for (let i = 0; i < rendered.length; i++) Object.defineProperty(rendered[i], "offsetTop", { value: i * 20 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    await runtime.startVoiceFollow();
+    assert.equal(h.state.voice, true);
+    runtime.setSearching(true);
+    assert.equal(h.state.voice, false);
+    assert.equal(recognitions[0]?.stopped, 1);
+    await runtime.startVoiceFollow();
+    runtime.setPrompterPlaying(true);
+    assert.equal(recognitions.length, 1);
+    assert.equal(h.state.playing, false);
+    const range = document.createRange();
+    range.selectNodeContents(rendered[175] as HTMLElement);
+    range.getClientRects = () => [] as unknown as DOMRectList;
+    runtime.jumpToFind(range);
+    assert.equal(scroller.scrollTop, 3300);
+    assert.equal(document.getElementById("pp-scene-readout")?.textContent, "Scene 2 of 2");
+    runtime.setSearching(false);
+    assert.equal(h.state.playing, false);
+    await runtime.startVoiceFollow();
+    recognitions[1]?.onresult?.({ resultIndex: 0, results: [{ isFinal: false, 0: { transcript: "word175 word176" } }] });
+    assert.equal(rendered[176]?.classList.contains("current-word"), true);
+    runtime.stopVoiceFollow();
+    runtime.setPrompterPlaying(true);
+    assert.equal(h.state.playing, true);
+  } finally { runtime.dispose(); }
+});
+
 test("closing Present restores its editor origin without scrolling, including after a repeated open", () => {
   const h = harness();
   const origin = document.createElement("div");

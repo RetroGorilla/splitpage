@@ -221,6 +221,25 @@ test("prompter: foreground toast controls and dialogs keep their keys", () => {
   h.window.close();
 });
 
+test("prompter: visible Present Find participates in focus containment and owns every field and button key", () => {
+  const h = setup();
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  h.el("prompter").hidden = false;
+  h.el("findbar").hidden = false;
+  h.el("findbar").classList.add("is-present");
+  for (const id of ["find-input", "find-next", "find-case", "find-close"]) {
+    h.el(id).focus();
+    assert.equal(h.document.activeElement, h.el(id));
+    for (const key of [" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "f", "m", "Escape"]) h.fire(h.el(id), "keydown", { key });
+  }
+  assert.deepEqual(h.calls, []);
+  h.el("findbar").hidden = true;
+  h.el("doc-title").focus();
+  assert.equal(h.document.activeElement, h.el("pp-play"));
+  owner.dispose();
+  h.window.close();
+});
+
 test("prompter: first Escape exits fullscreen and the next closes Present", async () => {
   const h = setup();
   let fullscreen: Element | null = h.document.documentElement;
