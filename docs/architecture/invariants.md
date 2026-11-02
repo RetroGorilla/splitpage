@@ -349,7 +349,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-38 — History is addressed only by `(docId, snapshot id)`
 
-- **Behaviour:** Renderer and main address version history only by a validated `(docId, snapshot id)`, and every resolved path stays inside the history folder. The Older bucket is reachable only through `{older: true}`. The shared store itself refuses a `docId` alongside that flag, and refuses `"_older"` as a `docId`.
+- **Behaviour:** Renderer and main address version history only by a validated `(docId, snapshot id)`, and every resolved path stays inside the history folder. At the renderer/IPC boundary, Older is addressed through `{older: true}`; an Older put requires a null document id. Internally the shared store accepts `"_older"` for reads, holds and repair, and for a put carrying the older flag; a normal put still refuses it. Missing-body repair uses the stored SHA to remove references across buckets only after rechecking that the body is absent. Damaged metadata or an invalid SHA never triggers repair: reads report damage, retain intact versions and leave the stored records unchanged.
 - **Tests:** `src/test/history-store.test.mjs` ("put refuses what can never succeed with 'invalid', and the Older bucket by name", "get validates both halves of the address…"); `src/test/history-policy.test.mjs` ("HISTORY_SNAP_ID_RE: what may become a file name on disk"); `desktop/test/ipc-table.test.mjs` ("version history is exactly six app-only invoke channels"); `desktop/test/smoke.mjs` ("history: id validation — nothing outside history/…"); browser `27-app-data.txt` (case 10, bad docIds).
 - **Owner:** `shared/` (`history-store.ts`), `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** —

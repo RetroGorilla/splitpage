@@ -67,14 +67,8 @@ function cleanIndexDoc(raw: unknown): HistoryFsDocument | null {
   if (!isPlainObject(raw) || !isPlainObject((raw as HistoryFsFields).buckets)) return null;
   const formatVersion = Number((raw as HistoryFsFields).formatVersion);
   if (!Number.isFinite(formatVersion)) return null;
-  const buckets: SharedHistoryIndex = {};
-  for (const b of Object.keys((raw as HistoryFsFields).buckets as HistoryFsFields)) {
-    const rec = ((raw as HistoryFsFields).buckets as HistoryFsFields)[b];
-    if (!isPlainObject(rec) || !Array.isArray((rec as HistoryFsFields).snapshots)) continue;
-    const snaps = ((rec as HistoryFsFields).snapshots as unknown[]).filter((s: unknown): boolean => isPlainObject(s) && typeof (s as HistoryFsFields).id === "string" && isSha256((s as HistoryFsFields).sha)) as SharedHistorySnapshotReader[];
-    if (!snaps.length) continue;
-    buckets[b] = snaps.length === ((rec as HistoryFsFields).snapshots as unknown[]).length ? rec as SharedHistoryBucketReader : Object.assign({}, rec, { snapshots: snaps });
-  }
+  // why: Shared read validation keeps damage visible without rewriting stored history.
+  const buckets = (raw as HistoryFsFields).buckets as SharedHistoryIndex;
   const trash = Array.isArray((raw as HistoryFsFields).trash) ? ((raw as HistoryFsFields).trash as unknown[]).filter(isSha256) : [];
   const doc: HistoryFsDocument = { formatVersion, buckets, trash };
   if (Number.isFinite(Number((raw as HistoryFsFields).migratedFrom)) && (raw as HistoryFsFields).migratedFrom != null) doc.migratedFrom = Number((raw as HistoryFsFields).migratedFrom);
