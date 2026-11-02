@@ -6,7 +6,7 @@ import { cloneState } from "../../core/document/clone.ts";
 import { docIdEmbeddedIn } from "../../core/document/ids.ts";
 import { cappedLongText, legacyMdToHtml, plainText, safeImageSrc } from "../../core/document/text-policy.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
-import { fileKindFromName } from "../../../shared/file-names.js";
+import { fileKindFromName } from "../../../shared/file-names.ts";
 import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "../storage/02c-blobs.ts";
 import { makeId } from "../identity/ids.ts";
 import { audioDirectionsHtml } from "./docx.ts";

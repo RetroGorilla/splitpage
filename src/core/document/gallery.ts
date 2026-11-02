@@ -1,5 +1,6 @@
 import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { rowImage } from "./media.ts";
+import type { StoredImageRef } from "./text-policy.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
 import { cappedLongText, codePointPrefix, plainText, safeHref, safeImageSrc, settledNames, unitSafePrefix } from "./text-policy.ts";
 
@@ -34,15 +35,15 @@ interface Annotation {
   marks: unknown[];
 }
 
-export interface GalleryItem {
-  imageRef?: ImageRef;
+export interface GalleryItem<Ref extends StoredImageRef = ImageRef> {
+  imageRef?: Ref;
   name?: string;
   links?: VideoLink[];
   annotation?: Annotation;
 }
 
-export interface Slot {
-  ref: ImageRef | null;
+export interface Slot<Ref extends StoredImageRef = ImageRef> {
+  ref: Ref | null;
   dataUrl?: string | null | undefined;
   links: VideoLink[];
   name: string;
@@ -303,7 +304,7 @@ function readAnnotation(input: unknown): Annotation | null {
   return ref && Array.isArray(a.marks) && a.marks.length ? { imageRef: ref, marks: a.marks as unknown[] } : null;
 }
 
-function isVideoSlot(s: Slot): boolean {
+function isVideoSlot(s: Slot<StoredImageRef>): boolean {
   return s.links.some(function (l) { return l.poster; });
 }
 
@@ -323,17 +324,17 @@ export function rowVideoLinks(row: unknown): VideoLink[] {
 
 function copy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
-export function setRowSlots(row: GalleryRow, slots: readonly (Slot | null | undefined)[]): void {
+export function setRowSlots(row: GalleryRow, slots: readonly (Slot<StoredImageRef> | null | undefined)[]): void {
   delete row.visualImage;
   const first = slots[0] || null;
   row.imageRef = first && first.ref ? copy(first.ref) : null;
   if (first && first.ref && first.name) row.imageName = first.name; else delete row.imageName;
   if (first && first.links && first.links.length) row.imageLinks = copy(first.links); else delete row.imageLinks;
   if (first && first.ref && first.annotation) row.imageAnnotation = copy(first.annotation); else delete row.imageAnnotation;
-  const more: GalleryItem[] = [];
+  const more: GalleryItem<StoredImageRef>[] = [];
   slots.slice(1).forEach(function (s) {
     if (!s || (!s.ref && !isVideoSlot(s))) return;
-    const it: GalleryItem = {};
+    const it: GalleryItem<StoredImageRef> = {};
     if (s.ref) it.imageRef = copy(s.ref);
     if (s.ref && s.name) it.name = s.name;
     if (s.links && s.links.length) it.links = copy(s.links);
@@ -349,15 +350,15 @@ function slotsOf(row: GalleryRow): Slot[] {
   });
 }
 
-export function addGalleryPicture(row: GalleryRow, ref: ImageRef, name: unknown): number {
-  const slots = slotsOf(row);
+export function addGalleryPicture(row: GalleryRow, ref: StoredImageRef, name: unknown): number {
+  const slots: Slot<StoredImageRef>[] = slotsOf(row);
   for (let i = 0; i < slots.length; i++) {
-    const s = slots[i] as Slot;
+    const s = slots[i] as Slot<StoredImageRef>;
     if (s.ref && s.ref.sha256 === ref.sha256) return i;
   }
   let at;
   const clean = normalizePictureName(name);
-  const head = slots[0] as Slot;
+  const head = slots[0] as Slot<StoredImageRef>;
   if (!slots.length) { slots.push({ ref: ref, links: [], name: clean }); at = 0; }
   else if (!head.ref && !isVideoSlot(head)) { head.ref = ref; head.name = clean; at = 0; }
   else { slots.push({ ref: ref, links: [], name: clean }); at = slots.length - 1; }

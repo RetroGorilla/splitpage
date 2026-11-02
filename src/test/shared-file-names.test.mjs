@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fileKindFromName, mimeForFilename } from "../../shared/file-names.js";
+import { fileKindFromName, mimeForFilename } from "../../shared/file-names.ts";
 
 test("fileKindFromName reads the kind from the extension in any case, and null for the rest", () => {
   assert.equal(fileKindFromName("a.docx"), "docx");

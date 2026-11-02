@@ -1,6 +1,7 @@
 "use strict";
 
 import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContents, WebContentsView } from "electron";
+import type { chooseDuplicateLoser } from "../shared/doc-id-policy.ts";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
   DesktopWireHistoryMeta, DesktopWireHistoryOptions, DesktopWireHistoryUsage, DesktopWireLaunch,
@@ -8,6 +9,7 @@ import type {
 } from "../shared/desktop-contract.d.ts";
 import type { createDraftStore } from "./drafts.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
+import type { createBlobStore } from "./blob-store.ts";
 import type { createFileRegistry } from "./file-service.ts";
 import type { createRecents } from "./recents.ts";
 import type { createDocClaims } from "./doc-claims.ts";
@@ -135,11 +137,7 @@ export interface DesktopHistoryBlobIpcDependencies {
   historyHolds: Map<number, { docId: string; id: string }[]>;
   historyProtectList: (value: unknown) => { docId: string; id: string }[];
   historyWireMeta: (meta: DesktopWireHistoryMeta) => DesktopWireHistoryMeta;
-  blobStore: () => {
-    put: (sha: string, bytes: Buffer) => Promise<DesktopIpcResult<"splitpage:blob-put">>;
-    get: (sha: string) => Promise<Buffer | null>;
-    missing: (shas: readonly string[]) => Promise<string[]>;
-  } | null;
+  blobStore: () => ReturnType<typeof createBlobStore> | null;
   historyPolicy: {
     HISTORY_OLDER_KEY: string;
     HISTORY_SNAP_ID_RE: RegExp;
@@ -157,7 +155,7 @@ export interface DesktopTabStripIpcDependencies extends Pick<DesktopMainCommon, 
 export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, "testMode" | "tabOf" | "tabs" | "windowsById" | "requestCloseTab" | "draftStore" | "draftsPreviousSession" | "shellStateForWindow" | "createTab" | "activateTab" | "reorderTab" | "moveTabToWindow"> {
   app: Pick<App, "quit">;
   BrowserWindow: Pick<typeof BrowserWindow, "fromWebContents">;
-  chooseDuplicateLoser: <T extends { docId: string; homeKey: string; seq: number }>(a: T, b: T) => T | null;
+  chooseDuplicateLoser: typeof chooseDuplicateLoser;
   createTabWindow: (options: object) => DesktopMainWindow;
   liveWindows: () => DesktopMainWindow[];
   testExternalOpens: string[];

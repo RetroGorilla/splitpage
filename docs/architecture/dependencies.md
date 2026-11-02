@@ -239,7 +239,7 @@ The baseline is a list of `{ rule, source, target }`. An entry may carry a
   `setTimeout`, `clearTimeout`, `TextDecoder`). It fetches oEmbed data and
   thumbnails for the desktop shell. Moving the fetch behind an injected
   transport is 4.x desktop work (plan section 8).
-- **`desktop/main.js` computed `require`** of `shared/doc-id-policy.js`,
+- **`desktop/main.js` computed `require`** of `shared/doc-id-policy.ts`,
   `history-policy.js`, `history-store.js` and `video-embed.ts` through
   `SHARED_ROOT`. The packaged app and the checkout keep `shared/` in different
   places; the path is chosen at start-up.

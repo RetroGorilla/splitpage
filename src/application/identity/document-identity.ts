@@ -1,7 +1,7 @@
 import { documentIdStamp } from "../commands/save-stamps.ts";
 import { sha256Hex } from "../../core/document/ids.ts";
 import { cappedLongText, plainText } from "../../core/document/text-policy.ts";
-import { decideDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput, normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { decideDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput, normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import type { DocumentIdentityPorts, DocumentIdentityOwner, IdentityChannel } from "./ports.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { LocalFileHandle } from "../files/local-file-access.ts";

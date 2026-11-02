@@ -2,7 +2,7 @@
 
 import type * as NodeCrypto from "node:crypto";
 import type { WebContents } from "electron";
-import type * as DocIdPolicy from "../shared/doc-id-policy.js";
+import type * as DocIdPolicy from "../shared/doc-id-policy.ts";
 import type { DesktopMainTab, DesktopTestModeIpcDependencies } from "./ipc-boundaries.d.ts";
 import type { DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
 
