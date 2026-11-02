@@ -1,3 +1,4 @@
+import type { ImportIntoNewDocument } from "../../application/formats/import-formats.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { LaunchFacts } from "../../application/desktop-presence.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
@@ -50,7 +51,7 @@ export interface NewTabPorts {
   readonly ids: Pick<IdSource, "id">;
   readonly prepareDocument: (raw: unknown) => ValidatedDocument;
   readonly syncIdentity: () => void;
-  readonly importText: (options: { readonly intoNewDocument: (rows: unknown[], scan: (document: ValidatedDocument) => void) => void }) => void;
+  readonly importText: (options: { readonly intoNewDocument: ImportIntoNewDocument }) => void;
   readonly openFile: () => Promise<unknown>;
   readonly desktopDownload: { readonly url: () => string; readonly offered: () => boolean };
   readonly starters: readonly StarterChoice[];

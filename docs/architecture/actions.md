@@ -86,7 +86,7 @@ and both the menu's painting and the action's availability call it:
 
 | State | Function |
 | --- | --- |
-| Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.js` |
+| Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.ts` |
 | Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `src/adapters/desktop/desktop-port.ts`; `appDataImportShown()`, `src/features/desktop/desktop.ts` |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
@@ -250,7 +250,7 @@ reaches the registry as its presenter, and the native menu's routing (which
 needs the File menu's close and `handleFileMenuAction`) reaches `20f-desktop.js`
 as a runner. Two more rules follow the same principle. The setup wizard closes
 when a File menu item is chosen by registering with `onFileMenuChoice()` in
-`src/features/file-menu/local-files.js`, which it already imported. The Settings dialog shows
+`src/features/file-menu/local-files.ts`, which it already imported. The Settings dialog shows
 Import app data when the `import-app-data` action is visible, asking the
 registry rather than `20f-desktop.js`.
 `startApp(wiring)` in `src/bootstrap/app.ts` calls
@@ -313,7 +313,7 @@ these overlays, and the command menu cannot open over them.
 
 One order from 3.1 is kept against the rule, for the setup wizard. Choosing
 a File menu item, from the File menu or from the desktop app's native menu,
-runs the `onFileMenuChoice()` listeners (`src/features/file-menu/local-files.js`) before the
+runs the `onFileMenuChoice()` listeners (`src/features/file-menu/local-files.ts`) before the
 action is asked whether it can run, and the wizard's listener closes the
 wizard. So with the wizard open, the native menu's Open (or any other File
 menu item, Save a copy and Export among them) closes the wizard and runs,
@@ -347,7 +347,7 @@ formats are not actions yet (milestone 5) and keep the File menu item's own
 dispatch, but the runner refuses one under a dialog or the command menu
 first, through the presenter the bootstrap gives it, so a refused format is
 neither run nor remembered for Export again. Before that check it runs the
-`onFileMenuChoice()` listeners (`noteFileMenuChoice()`, `src/features/file-menu/local-files.js`),
+`onFileMenuChoice()` listeners (`noteFileMenuChoice()`, `src/features/file-menu/local-files.ts`),
 as choosing any File menu item does, so a format chosen over the setup
 wizard closes the wizard and exports (`275-menu-refused-under-overlay.txt`).
 

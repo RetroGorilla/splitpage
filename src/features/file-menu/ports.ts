@@ -74,18 +74,18 @@ export interface FileMenuExportControls {
 }
 
 interface ExportDialogFormat extends ExportCardDecl {
-  readonly action?: string;
-  readonly choices?: readonly (ExportChoice & { readonly action: string })[];
+  readonly action?: string | undefined;
+  readonly choices?: readonly (ExportChoice & { readonly action: string | undefined })[];
 }
 
 export interface FileMenuExportMount extends FileMenuExportControls {
   readonly captureExportDocument: (options?: ExportCaptureOptions) => ExportDocument;
   readonly exportFormatList: () => ExportDialogFormat[];
-  readonly exportActionName: (action: string) => string;
+  readonly exportActionName: (action: string | null | undefined) => string | undefined;
   readonly isExportAction: (action: unknown) => boolean;
   readonly lastExportAction: () => string | null;
-  readonly rememberExport: (action: string) => void;
-  readonly exportActionReason: (action: string) => string;
+  readonly rememberExport: (action: string | null | undefined) => void;
+  readonly exportActionReason: (action: string | null | undefined) => string;
   readonly exportSummary: (action: string) => string;
   readonly exportFileNameFor: (action: string) => string;
   readonly exportDialogOpen: () => boolean;

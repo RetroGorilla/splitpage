@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startLocalFileMenu } from "../../../src/features/file-menu/local-files.js";
+import { startLocalFileMenu } from "../../../src/features/file-menu/local-files.ts";
 import type { LocalFileMenuPorts } from "../../../src/features/file-menu/local-files-ports.ts";
 import { createActionRegistry } from "../../../src/application/actions.ts";
 import { createExportRegistry } from "../../../src/application/export/registry.ts";
@@ -29,8 +29,8 @@ test("local file menu mounts with named fakes, paints the chip, announces choice
   mounted.updateFileChip();
   assert.equal(document.getElementById("file-chip-name")?.textContent, "draft.txt");
   assert.equal(document.getElementById("file-chip-state")?.textContent, "· unsaved changes");
-  const choices: string[] = [];
-  const unsubscribe = mounted.onFileMenuChoice((action: string) => choices.push(action));
+  const choices: (string | null)[] = [];
+  const unsubscribe = mounted.onFileMenuChoice((action: string | null) => choices.push(action));
   mounted.noteFileMenuChoice("save");
   unsubscribe();
   mounted.noteFileMenuChoice("open");

@@ -32,7 +32,6 @@ export type FileSaveTarget =
   | { readonly kind: "handle"; readonly handle: FileSaveHandle; readonly picked: boolean }
   | { readonly kind: "download" };
 
-
 export interface FileSaveTargets {
   readonly dialogs: (slug: string) => FileSaveDialogs;
   readonly pick: (dialogs: FileSaveDialogs) => Promise<FileSaveTarget | { readonly kind: "cancelled" }>;

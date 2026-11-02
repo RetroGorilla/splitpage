@@ -177,7 +177,7 @@ P1's `videoHostLabel` and `videoLinkText` helpers for video references.
 
 ## Browser print workflow (P4)
 
-The browser entry points all meet at `local-files.js`'s `exportAs`: the export
+The browser entry points all meet at `local-files.ts`'s `exportAs`: the export
 dialog button, the hidden File menu actions, the command menu and Export again.
 The Gear panel's packing button runs the gear action; the B-roll full page's
 Print button calls `exportAs("b-roll pdf")` with its current filter/page group.
@@ -349,7 +349,7 @@ absent, desktop otherwise), so the old builders had no caller left.
 
 The four PDF exporters (`pdf`, `packing-gear`, `packing-prop`, `b-roll pdf`)
 register only a `printPage`. `build` is optional in the registry, which
-refuses an exporter that has neither. `buildFileData` (`local-files.js`)
+refuses an exporter that has neither. `buildFileData` (`local-files.ts`)
 refuses a print-only kind; its other callers, import write-back and "save a
 separate copy", only ask for an imported file's own kind (`.docx`, `.md`,
 `.txt`, `.csv`). The export dialog's `printWorkflow` still reads the desktop
@@ -387,9 +387,9 @@ browser cache, then `google-chrome`/`chrome` on PATH. Missing browsers fail
 the check; no rule or fixture is skipped. Local runtime was 9.2 seconds for
 the check, 10.0 seconds including test startup.
 
-On Unraid, Tests uses `/opt/hostedtoolcache/splitpage-playwright/1.63.0`,
-filled only by `checks`; a new or recreated runner needs one `checks` run
-first, or Chromium in its image. The automatic test deletes its TEMP
+In CI, each Tests shard installs Playwright's pinned Chromium and passes it as
+`SPLITPAGE_CHROME`. Without that step GitHub's runners failed the glyph rule;
+whether the browser or its system libraries caused that wasn't established. The automatic test deletes its TEMP
 directory only after every assertion passes, retaining artifacts on failure.
 
 The inspector inflates PDF streams with `node:zlib`, decodes ToUnicode and

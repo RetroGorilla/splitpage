@@ -1,3 +1,4 @@
+import type { LocalFileData } from "../../application/files/local-file-access.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { StartupSignal } from "../../application/startup-signal.ts";
@@ -13,7 +14,7 @@ import type { ScreenState } from "../../application/screen.ts";
 
 interface PrompterOpening {
   readonly kind: "file";
-  readonly file: unknown;
+  readonly file: LocalFileData;
   readonly handle: unknown;
   readonly parsed: unknown;
   readonly options: { readonly skipSnapshot: boolean; readonly silent: boolean };

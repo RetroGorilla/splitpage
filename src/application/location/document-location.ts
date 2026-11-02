@@ -1,19 +1,20 @@
-import type { LocalFileHandle } from "../files/local-file-access.ts";
+import type { LocalFileReference } from "../files/local-file-access.ts";
 import type { Frozen } from "../../core/document/freeze.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
 
 export type HomeKind = "none" | "file" | "import";
 
-export interface Home<B = Frozen<DocumentShape>> {
+export type Home<B = Frozen<DocumentShape>> = {
   readonly diskBase?: B | null;
-  readonly kind: HomeKind;
   readonly name?: string | null;
   readonly format?: string | null;
-  readonly handle?: Partial<LocalFileHandle> | null;
+  readonly handle?: LocalFileReference | null;
   readonly lastModified?: number | null;
   readonly dirty?: boolean;
-  readonly [field: string]: unknown;
-}
+} & (
+  | { readonly kind: "none"; readonly [field: string]: unknown }
+  | { readonly kind: "file"; readonly name?: string | null; readonly format?: string | null; readonly lastModified?: number | null; readonly [field: string]: unknown }
+  | { readonly kind: "import"; readonly name: string; readonly format: string | null; readonly dirty: boolean; readonly lastModified: number | null; readonly [field: string]: unknown });
 
 export type HomeFields<B = Frozen<DocumentShape>> = Readonly<Record<string, unknown>> & Pick<Home<B>, "diskBase" | "name" | "format" | "handle" | "lastModified" | "dirty">;
 
@@ -25,7 +26,7 @@ export interface DocumentLocation<B = Frozen<DocumentShape>> {
   readonly restoreHome: (record: Home<B>) => Home<B>;
   readonly amendHome: (record: Home<B>, fields: HomeFields<B>) => Home<B>;
   readonly fileHome: () => Home<B> | null;
-  readonly importHome: () => Home<B> | null;
+  readonly importHome: () => Extract<Home<B>, { readonly kind: "import" }> | null;
   readonly writtenOut: () => boolean;
   readonly markWrittenOut: (writtenOut: boolean) => void;
   readonly onChange: (listener: (change: LocationChange) => void) => () => void;

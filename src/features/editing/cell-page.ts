@@ -8,7 +8,7 @@ export interface CellPagePorts {
 
 const ZWSP = /\u200B/g;
 
-export function createCellPage(ports: CellPagePorts): CellPage<Element> {
+export function createCellPage(ports: CellPagePorts): CellPage<Element, unknown> {
   return {
     address: function (cellEl) {
       return { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };
@@ -20,7 +20,7 @@ export function createCellPage(ports: CellPagePorts): CellPage<Element> {
     },
     selection: cellSelection,
     write: function (cellEl, html) {
-      cellEl.innerHTML = html;
+      cellEl.innerHTML = html as string;
       ports.caretSpot(cellEl);
     },
     focus: function (cellEl, sel) {

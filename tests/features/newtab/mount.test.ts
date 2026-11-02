@@ -75,7 +75,7 @@ test("blank and starter creation keep preparation, reset, transition, confirmati
   for (const kind of ["none", "file", "import"] as const) {
     page();
     const h = harness();
-    h.state.home = { kind };
+    h.state.home = kind === "import" ? { kind, name: "fixture.txt", format: null, dirty: false, lastModified: null } : { kind };
     const mounted = startNewTab(h.ports);
     try {
       await settled();
