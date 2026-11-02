@@ -227,7 +227,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     const report = function (): string[] { return list.filter(function (sha) { return !has(sha); }); };
     if (!need.length) return Promise.resolve(report());
     const reading = resolveBackend().then(function (b) {
-      if (options?.strict && unavailableFallbacks.has(b)) throw new Error("Persistent images are unavailable");
+      if (options?.strict && unavailableFallbacks.has(b)) throw Object.assign(new Error("Persistent images are unavailable"), { code: "storage-unavailable" });
       return Promise.all(need.map(function (sha) { return loadBlob(b, sha); }));
     });
     return options?.strict ? reading.then(report) : reading.then(report, report);

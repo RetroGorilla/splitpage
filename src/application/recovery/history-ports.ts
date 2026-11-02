@@ -69,7 +69,7 @@ export interface HistoryOwner {
   readonly getHistorySnapshot: (query: { id?: string; docId?: string | null; older?: boolean }) => Promise<HistorySnapshotReply | null>;
   readonly historyDocumentChanged: () => void;
   readonly copyHistory: (from: string, to: string) => Promise<{ ok: boolean; copied: number; code?: string }>;
-  readonly exportHistoryAll: () => Promise<HistoryBundleData>;
+  readonly exportHistoryAll: (options?: { allowOmissions?: boolean }) => Promise<HistoryBundleData>;
   readonly importHistoryBundle: (bundle: unknown) => Promise<HistoryImportResult>;
   readonly normalizeLegacySnapshots: (raw: unknown) => HistorySnapshotRead[] | null;
   readonly startHistoryMigration: () => Promise<{ migrated: number; removedKey: boolean }>;

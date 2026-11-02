@@ -3,7 +3,7 @@ type HistoryImport = Awaited<ReturnType<AppDataPorts["history"]["importBundle"]>
 type DataBundle = { format: string; version: number; exportedAt: string; appVersion: string | null | undefined; snapshots?: unknown; history?: HistoryExport | null; blobs?: Record<string, unknown>; missingBlobs?: readonly string[]; prefs?: unknown };
 type ExportSummary = { ok: boolean; images: number; missingBlobs: string[]; truncated: boolean; warning: string | null };
 type ImportSummary = { ok: boolean; history: HistoryImport | null; blobs: HistoryImport["blobs"] | null; prefs: string[]; legacy: number | null; toast: string; warning: string | null };
-type DataError = Error & { code: string; secretKey?: string | null | undefined };
+type DataError = Error & { code: string; secretKey?: string | null | undefined; canExportRest?: boolean };
 import type { AppDataPorts } from "./ports.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { settingsAppData } from "../../application/preferences/preferences.ts";
@@ -14,6 +14,8 @@ export function mountAppData(ports: AppDataPorts) {
 const APPDATA_FORMAT = "splitpage-app-data";
 const APPDATA_VERSION = 1;
 const APPDATA_SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i;
+const HISTORY_READ_ERROR = "Export cancelled — history or image data could not be read. Nothing was downloaded.";
+const TEMPORARY_READ_ERROR = "Export cancelled — history or image data could not be read right now. Please try again. Nothing was downloaded.";
 
 function appDataReadRaw(key: string) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -34,7 +36,7 @@ function appDataVersionString() {
   return embedded || "";
 }
 
-async function buildAppDataBundle() {
+async function buildAppDataBundle(allowOmissions = false) {
   const bundle: DataBundle = {
     format: APPDATA_FORMAT,
     version: APPDATA_VERSION,
@@ -49,7 +51,7 @@ async function buildAppDataBundle() {
   }
 
   try {
-    const history = await ports.history.exportAll();
+    const history = await ports.history.exportAll({ allowOmissions });
     if (!history || !Array.isArray(history.docs) || !Array.isArray(history.older)) throw new Error("Invalid history export");
     if (history.omittedSnapshots && !history.older.length && !history.docs.some(function (doc) {
       return appDataIsPlainObject(doc) && Array.isArray(doc.snapshots) && doc.snapshots.length;
@@ -60,7 +62,9 @@ async function buildAppDataBundle() {
     Reflect.deleteProperty(history, "blobs");
     Reflect.deleteProperty(history, "missingBlobs");
   } catch (e) {
-    throw appDataError("history", "Export cancelled — history or image data could not be read. Nothing was downloaded.");
+    const failure = e as { code?: unknown; canExportRest?: unknown } | null;
+    if (failure?.code === "temporary-read-failed") throw appDataError("temporary-read-failed", TEMPORARY_READ_ERROR);
+    throw Object.assign(appDataError("history", HISTORY_READ_ERROR), { canExportRest: failure?.code === "read-failed" && failure.canExportRest === true });
   }
 
   try {
@@ -101,21 +105,45 @@ function appDataFilename() {
 }
 
 let appDataLastExport: ExportSummary | null = null;
+let readableExportNotice: WeakRef<ReturnType<AppDataPorts["notices"]["showAction"]>> | null = null;
+let exporting = false;
+let exportAttempt = 0;
 
-async function exportAppData() {
-  appDataLastExport = null;
-  ports.notices.show("Gathering your Splitpage data…");
-  await new Promise(function (resolve) { setTimeout(resolve, 0); });
-
-  let bundle;
+async function exportAppData(allowOmissions = false) {
+  if (exporting || disposed) return;
+  exporting = true;
+  const attempt = ++exportAttempt;
   try {
-    bundle = await buildAppDataBundle();
-    assertNoSecrets(bundle);
-  } catch (e) {
-    ports.notices.show(((e as Error | null) && (e as Error).message) || "Export cancelled — something went wrong building your app data.", "error");
+    readableExportNotice?.deref()?.dismiss();
+    readableExportNotice = null;
+    appDataLastExport = null;
+    ports.notices.show("Gathering your Splitpage data…");
+    await new Promise(function (resolve) { setTimeout(resolve, 0); });
+
+    let bundle;
+    try {
+      bundle = await buildAppDataBundle(allowOmissions);
+      assertNoSecrets(bundle);
+    } catch (e) {
+      const message = (e as Error | null)?.message || "Export cancelled — something went wrong building your app data.";
+      if (!allowOmissions && (e as DataError | null)?.canExportRest && !disposed && attempt === exportAttempt) {
+        readableExportNotice = new WeakRef(ports.notices.showAction(message, "error", "Export the rest anyway", function () {
+          if (exporting || disposed || attempt !== exportAttempt) return;
+          return exportAppData(true);
+        }, true));
+      } else ports.notices.show(message, "error");
+      return;
+    }
+    if (allowOmissions && (disposed || attempt !== exportAttempt)) return;
+    await deliverAppDataBundle(bundle);
+  } finally { exporting = false; }
+}
+
+async function deliverAppDataBundle(bundle: DataBundle) {
+  try { assertNoSecrets(bundle); } catch (e) {
+    ports.notices.show((e as Error).message, "error");
     return;
   }
-
   let json;
   try {
     json = JSON.stringify(bundle, null, 2);
@@ -126,8 +154,8 @@ async function exportAppData() {
 
   const omitted = bundle.history?.omittedSnapshots || 0;
   const truncated = !!bundle.history?.truncated;
-  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: omitted || truncated ? "Exported your Splitpage app data with omissions" : "Exported your Splitpage app data" });
   const missing = bundle.missingBlobs || [];
+  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: omitted || truncated || missing.length ? "Exported your Splitpage app data with omissions" : "Exported your Splitpage app data" });
   appDataLastExport = {
     ok: !!saved,
     images: Object.keys(bundle.blobs || {}).length,
@@ -137,7 +165,7 @@ async function exportAppData() {
   };
   if (saved && missing.length) {
     appDataLastExport.warning = "Exported, but " + appDataPlural(missing.length, "image was", "images were") +
-      " missing from this device and could not be included. The snapshots that use " +
+      " missing or unreadable and could not be included. The snapshots that use " +
       (missing.length === 1 ? "it" : "them") + " will show a placeholder.";
     if (window.console) console.warn("Export app data: images not included (bytes not found):", missing);
     ports.notices.show(appDataLastExport.warning, "warn", true);
@@ -390,6 +418,8 @@ async function onImportAppDataChosen(e: Event) {
     dispose: function () {
       if (disposed) return;
       disposed = true;
+      readableExportNotice?.deref()?.dismiss();
+      readableExportNotice = null;
       if (appDataInput) appDataInput.removeEventListener("change", onImportAppDataChosen);
       appDataInput = null;
       appDataInputWired = false;

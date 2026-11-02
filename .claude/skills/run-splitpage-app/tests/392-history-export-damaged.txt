@@ -22,6 +22,7 @@ expect Array.from(document.querySelectorAll('.toast.error')).some(function(e){re
 eval (async function(){ D.setBackend(null); await H.forceBackend('idb'); H.injectFault('idb-open-fail'); await A.exportFile(); return A.exportSummary(); })()
 expect A.exportSummary() === null
 expect Array.from(document.querySelectorAll('.toast.error')).some(function(e){return e.textContent.includes('Export cancelled — history or image data could not be read. Nothing was downloaded.');})
+expect document.querySelectorAll('.toast.has-action:not(.is-leaving) .toast-action').length === 0
 
 eval (async function(){ H.injectFault(null); await H.forceBackend('idb'); window.recoveredExport = await A.build(); return recoveredExport.history.docs.length; })()
 expect recoveredExport.history.docs.find(function(d){return d.docId === exportDoc;}).snapshots.length === 1
@@ -38,3 +39,45 @@ eval (async function(){ D.setBackend(null); A.useBlobBackend(null); window.expir
 expect expiredResults.length === 2 && expiredResults.every(function(r){return r && r.ok && r.warning === null;})
 
 expect expiredCounts.length === 2 && expiredCounts.every(function(n){return n === 0;})
+
+eval (async function(){ document.querySelectorAll('.toast-dismiss').forEach(function(b){b.click();}); window.partialBackend = D.makeFakeBackend({ history: true, blobs: true }); D.setBackend(partialBackend); await H.forceBackend(null); await partialBackend.historyPut(exportDoc,{id:'readable',atMs:1000},exportBody); await partialBackend.historyPut(exportDoc,{id:'blocked',atMs:2000},JSON.stringify({title:'Blocked',rows:[]})); window.partialGet = partialBackend.historyGet; partialBackend.historyGet = function(q,id){return id === 'blocked' ? Promise.reject(new Error('locked')) : partialGet(q,id);}; partialBackend.blobGet = function(){return Promise.reject(new Error('locked'));}; A.useBlobBackend(D.makeBlobBackend(partialBackend)); B.forgetMemory(); await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+wait document.querySelector('.toast.has-action:not(.is-leaving) .toast-action')?.textContent === 'Export the rest anyway'
+jsclick .toast.has-action:not(.is-leaving) .toast-dismiss
+expect A.exportSummary() === null
+expect document.querySelectorAll('.toast.has-action:not(.is-leaving) .toast-action').length === 0
+
+eval (async function(){ await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+jsclick .toast.has-action:not(.is-leaving) .toast-action
+wait A.exportSummary() && A.exportSummary().ok
+expect A.exportSummary().warning === 'Exported, but 1 image was missing or unreadable and could not be included. The snapshots that use it will show a placeholder. Exported, but 1 damaged or unreadable history snapshot could not be included. Intact versions and their available images are included.'
+expect A.exportSummary().missingBlobs.length === 1 && A.exportSummary().missingBlobs[0] === exportImage.sha256
+
+eval (async function(){ partialBackend.historyGet = function(){return Promise.reject(new Error('locked'));}; await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+expect document.querySelectorAll('.toast.has-action:not(.is-leaving) .toast-action').length === 0
+
+eval (async function(){ document.querySelectorAll('.toast-dismiss').forEach(function(b){b.click();}); partialBackend.historyGet = function(q,id){return id === 'blocked' ? Promise.reject(new Error('locked')) : partialGet(q,id);}; await Promise.all([A.exportFile(),A.exportFile()]); window.oldExportAction = document.querySelector('.toast.has-action:not(.is-leaving) .toast-action'); return A.exportSummary(); })()
+expect A.exportSummary() === null
+expect document.querySelectorAll('.toast.has-action:not(.is-leaving) .toast-action').length === 1
+eval (async function(){ await A.exportFile(); oldExportAction.click(); return A.exportSummary(); })()
+wait !oldExportAction.isConnected
+expect A.exportSummary() === null
+expect document.querySelectorAll('.toast.has-action:not(.is-leaving) .toast-action').length === 1
+
+eval (async function(){ await partialBackend.historyPut(exportDoc,{id:'new-blocked-1',atMs:3000},JSON.stringify({title:'New blocked one',rows:[]})); await partialBackend.historyPut(exportDoc,{id:'new-blocked-2',atMs:4000},JSON.stringify({title:'New blocked two',rows:[]})); partialBackend.historyGet = function(q,id){return id.startsWith('new-blocked-') ? Promise.reject(new Error('locked')) : partialGet(q,id);}; var data=atob(exportImageUrl.split(',')[1]); window.recoveredImageBytes=Uint8Array.from(data,function(c){return c.charCodeAt(0);}); partialBackend.blobGet=function(){return Promise.resolve({bytes:recoveredImageBytes,mime:'image/png'});}; return true; })()
+jsclick .toast.has-action:not(.is-leaving) .toast-action
+wait A.exportSummary() && A.exportSummary().ok
+expect A.exportSummary().warning === 'Exported, but 2 damaged or unreadable history snapshots could not be included. Intact versions and their available images are included.'
+expect A.exportSummary().missingBlobs.length === 0 && A.exportSummary().images === 1
+
+eval (async function(){ partialBackend.historyGet=function(q,id){return id === 'blocked' ? Promise.reject(new Error('ETIMEDOUT: history read timed out')) : partialGet(q,id);}; await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+expect document.querySelectorAll('.toast.has-action:not(.is-leaving) .toast-action').length === 0
+expect Array.from(document.querySelectorAll('.toast.error')).some(function(e){return e.textContent.includes('Please try again. Nothing was downloaded.');})
+
+eval (async function(){ partialBackend.historyGet=partialGet; partialBackend.blobGet=function(){return Promise.reject(new Error("Error invoking remote method 'blob-get': Error: EAGAIN: resource temporarily unavailable"));}; B.forgetMemory(); await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+expect document.querySelectorAll('.toast.has-action:not(.is-leaving) .toast-action').length === 0
+expect Array.from(document.querySelectorAll('.toast.error')).some(function(e){return e.textContent.includes('Please try again. Nothing was downloaded.');})
