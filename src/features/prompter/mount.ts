@@ -98,17 +98,32 @@ export function mountPrompter(mount: { window: Window; ports: PrompterPorts }): 
   life.listen(element("pp-scene-prev"), "click", function () { ports.stepScene(-1); });
   life.listen(element("pp-scene-next"), "click", function () { ports.stepScene(1); });
   life.listen(element("pp-fullscreen"), "click", function () {
-    const el = element("prompter");
+    const el = document.documentElement;
     if (document.fullscreenElement) { document.exitFullscreen().catch(function () {}); }
     else if (el.requestFullscreen) { el.requestFullscreen().catch(function () {}); }
   });
 
-  life.listen(window, "keydown", function (e) {
+  life.listen(document, "focusin", function (e) {
     if (!ports.isOpen()) return;
+    if (e.target.closest?.('.toast:not(.is-leaving)')) return;
+    const modal = document.querySelector<HTMLElement>('.modal-backdrop:not([hidden]), #cmdk:not([hidden])');
+    if (modal) {
+      if (!modal.contains(e.target)) modal.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled])')?.focus({ preventScroll: true });
+      return;
+    }
+    if (!e.target.closest?.('#prompter')) element("pp-play").focus({ preventScroll: true });
+  });
+
+  life.listen(window, "keydown", function (e) {
+    if (!ports.isOpen() || e.defaultPrevented) return;
     const target = e.target;
+    if (target?.closest?.('.toast') || document.querySelector('.modal-backdrop:not([hidden]), #cmdk:not([hidden])')) return;
     if (target && target.closest && !target.closest("#rows") && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
     const chord = e.ctrlKey || e.metaKey || e.altKey;
-    if (e.key === "Escape") { ports.closePrompter(); }
+    if (e.key === "Escape") {
+      if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+      else ports.closePrompter();
+    }
     else if (e.key === " ") { if (!chord) { e.preventDefault(); ports.setPrompterPlaying(!ports.playing()); } }
     else if (e.key === "ArrowUp") { if (!chord) e.preventDefault(); ports.stepPrompterSpeed(1); }
     else if (e.key === "ArrowDown") { if (!chord) e.preventDefault(); ports.stepPrompterSpeed(-1); }

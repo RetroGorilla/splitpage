@@ -61,9 +61,8 @@ test("bulk tag: Go with a lone half tags nothing and registers nothing, like an 
   const emptyToast = toasts().slice(seenBefore);
   assert.deepEqual(emptyToast, [BLANK]);
   typeIntoFind(high);
-  const mark = toasts().length;
   runBulkTag();
-  assert.deepEqual(toasts().slice(mark), emptyToast);
+  assert.deepEqual(toasts().slice(seenBefore), emptyToast, "the equivalent refusal reuses the existing toast");
   assert.equal(JSON.stringify(currentDocument()), before);
   assert.deepEqual(currentDocument().productionTags, []);
 });
