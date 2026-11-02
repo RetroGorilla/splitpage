@@ -7,6 +7,7 @@ import { createActionRegistry } from "../../../src/application/actions.ts";
 import { appDataActions as wiredAppDataActions, mountAppDataFeature, stopAppDataFeature } from "../../../src/bootstrap/wiring/settings.ts";
 import type { AppDataMount, AppDataPorts } from "../../../src/features/settings/ports.ts";
 import type { ScreenState } from "../../../src/application/screen.ts";
+import { fakeScreen } from "../fakes.ts";
 
 interface Probe {
   readonly build: () => Promise<{ readonly appVersion: string }>;
@@ -139,6 +140,29 @@ test("app data actions invoke their mounted controls and retain import visibilit
   assert.equal(availability("button").visible, false);
   shown = true;
   assert.notEqual(availability("button").visible, false);
+});
+
+test("app data pickers refuse dialogs and tours while retaining loading and import visibility safeguards", () => {
+  const view = fakeScreen();
+  let shown = true;
+  const calls: string[] = [];
+  const current: AppDataMount = { exportAppData: async () => { calls.push("export"); }, openImportAppData: () => { calls.push("import"); }, dispose: () => undefined };
+  const registry = createActionRegistry();
+  for (const action of appDataActions(() => current, { screen: view.screen, importShown: () => shown })) registry.register(action);
+  for (const blocker of ["dialog", "tour", "loading"] as const) {
+    view.state[blocker] = true;
+    for (const id of ["export-app-data", "import-app-data"]) assert.equal(registry.invoke(id, "native-menu").kind, "unavailable", blocker + ":" + id);
+    view.state[blocker] = false;
+  }
+  assert.deepEqual(calls, []);
+  shown = false;
+  assert.equal(registry.view("import-app-data")?.visible, false);
+  shown = true;
+  for (const blocker of ["writer", "prompter", "shotlist"] as const) {
+    view.state[blocker] = true;
+    for (const id of ["export-app-data", "import-app-data"]) assert.equal(registry.view(id)?.enabled, true);
+    view.state[blocker] = false;
+  }
 });
 
 function deferred<T>() {

@@ -147,6 +147,12 @@ function historyScenesHtml(n: number) {
   return historyFig(String(n)) + " scene" + (n === 1 ? "" : "s");
 }
 
+function historyDamageHtml(count: number | undefined) {
+  if (!count) return "";
+  return '<p class="history-empty history-notice">' + count + ' damaged snapshot' + (count === 1 ? '' : 's') +
+    ' could not be listed. Stored history has been kept.</p>';
+}
+
 function historySizeText(bytes: unknown) {
   const n = Number(bytes);
   const gb = 1024 * 1024 * 1024;
@@ -314,7 +320,10 @@ async function renderHistory() {
 
   const entries = Array.isArray(data.entries) ? data.entries : [];
   const notice = typeof data.notice === "string" ? data.notice : "";
-  if (!entries.length && notice) {
+  const damage = historyDamageHtml(data.damaged);
+  if (damage) {
+    listEl.innerHTML = damage + historyDaysHtml(entries);
+  } else if (!entries.length && notice) {
     listEl.innerHTML = '<p class="history-empty history-notice">' + escapeHtml(notice) + '</p>';
   } else if (!entries.length) {
     listEl.innerHTML = '<p class="history-empty">No snapshots of this document yet. Splitpage saves one automatically before anything that could overwrite your work — opening a document, replacing rows, or merging someone else\'s changes.</p>';
@@ -326,10 +335,10 @@ async function renderHistory() {
   const olderCount = document.getElementById("history-older-count");
   const olderList = document.getElementById("history-older-list");
   const older = Array.isArray(data.older) ? data.older : [];
-  if (olderEl) olderEl.hidden = !older.length;
+  if (olderEl) olderEl.hidden = !older.length && !data.olderDamaged;
   if (olderCount) olderCount.textContent = String(older.length);
   if (olderList) {
-    olderList.innerHTML = older.map(function (m) {
+    olderList.innerHTML = historyDamageHtml(data.olderDamaged) + older.map(function (m) {
       return historyCardHtml({
         id: m.id, label: m.label, at: m.at, by: m.by, rows: m.rows, title: m.title, status: "stored"
       }, "older");

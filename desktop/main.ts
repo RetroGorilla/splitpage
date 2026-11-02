@@ -88,8 +88,8 @@ const {
   normalizeBounds, normalizeTabSource, createDesktopStateStore
 }: { DESKTOP_STATE_VERSION: typeof DesktopState.DESKTOP_STATE_VERSION; normalizeBounds: typeof DesktopState.normalizeBounds; normalizeTabSource: typeof DesktopState.normalizeTabSource; createDesktopStateStore: typeof DesktopState.createDesktopStateStore } = require("./desktop-state.ts");
 const {
-  DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
-}: { DEFAULT_UPDATE_API: typeof UpdateRelease.DEFAULT_UPDATE_API; hasReleaseAssets: typeof UpdateRelease.hasReleaseAssets; compareVersions: typeof UpdateRelease.compareVersions; isAllowedDownloadHost: typeof UpdateRelease.isAllowedDownloadHost; pickUpdateAsset: typeof UpdateRelease.pickUpdateAsset; findChecksumsAsset: typeof UpdateRelease.findChecksumsAsset; checksumFor: typeof UpdateRelease.checksumFor } = require("./update-release.ts");
+  DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, isAllowedReleaseUrl, pickUpdateAsset, findChecksumsAsset, checksumFor
+}: { DEFAULT_UPDATE_API: typeof UpdateRelease.DEFAULT_UPDATE_API; hasReleaseAssets: typeof UpdateRelease.hasReleaseAssets; compareVersions: typeof UpdateRelease.compareVersions; isAllowedDownloadHost: typeof UpdateRelease.isAllowedDownloadHost; isAllowedReleaseUrl: typeof UpdateRelease.isAllowedReleaseUrl; pickUpdateAsset: typeof UpdateRelease.pickUpdateAsset; findChecksumsAsset: typeof UpdateRelease.findChecksumsAsset; checksumFor: typeof UpdateRelease.checksumFor } = require("./update-release.ts");
 const { createIpcSetup }: { createIpcSetup: typeof IpcSetup.createIpcSetup } = require("./ipc-setup.ts");
 const { createFileIpc }: { createFileIpc: typeof IpcFiles.createFileIpc } = require("./ipc-files.ts");
 const { createShellIpc }: { createShellIpc: typeof IpcShell.createShellIpc } = require("./ipc-shell.ts");
@@ -169,7 +169,7 @@ const APP_ROOT = app.isPackaged
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
 const historyPolicy: typeof HistoryPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
-const { createHistoryStore }: typeof HistoryStore = require(path.join(SHARED_ROOT, "history-store.ts"));
+const { createHistoryStore, projectHistoryBucket }: typeof HistoryStore = require(path.join(SHARED_ROOT, "history-store.ts"));
 const {
   DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
 }: typeof DocIdPolicy = require(path.join(SHARED_ROOT, "doc-id-policy.ts"));
@@ -548,7 +548,7 @@ function initHistoryStore() {
   const historyDir = path.join(app.getPath("userData"), "history");
   const backend = createHistoryFsBackend({
     dir: historyDir,
-    fs, fsp, path, crypto,
+    fs, fsp, path, crypto, projectHistoryBucket,
     testHooks: historyTestBackendHooks()
   });
   historyStore = createHistoryStore({
@@ -597,10 +597,12 @@ function updateApiUrl() {
 }
 
 async function fetchPublishedChecksum(assets: Parameters<typeof findChecksumsAsset>[0], assetName: Parameters<typeof checksumFor>[1]) {
-  const entry = findChecksumsAsset(assets, updateApiUrl());
+  const entry = findChecksumsAsset(assets, updateApiUrl(), TEST_MODE);
   if (!entry) return null;
+  const url = (entry as Record<string, unknown>).browser_download_url;
+  if (typeof url !== "string") return null;
   try {
-    const res = await net.fetch((entry as Record<string, unknown>).browser_download_url, { headers: { "User-Agent": "splitpage-desktop" } });
+    const res = await net.fetch(url, { headers: { "User-Agent": "splitpage-desktop" } });
     if (!res.ok) return null;
     return checksumFor(await res.text(), assetName);
   } catch { }
@@ -656,11 +658,12 @@ async function checkForUpdate() {
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const body = await res.json() as Record<string, unknown>;
-    if (!hasReleaseAssets(body.assets)) throw new Error("the release has no assets");
+    if (!hasReleaseAssets(body.assets, apiUrl, TEST_MODE)) throw new Error("the release has no valid assets");
+    if (!isAllowedReleaseUrl(body.html_url, apiUrl, TEST_MODE)) throw new Error("the release has an untrusted page URL");
     const latest = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
     const newer = !!latest && compareVersions(latest, current) > 0;
     updateAssets = Array.isArray(body.assets) ? body.assets : [];
-    updateAsset = newer ? pickUpdateAsset(updateAssets, { platform: process.platform, arch: process.arch, apiUrl }) : null;
+    updateAsset = newer ? pickUpdateAsset(updateAssets, { platform: process.platform, arch: process.arch, apiUrl, testMode: TEST_MODE }) : null;
     setUpdateStatus({
       version: current,
       checkedAt: new Date().toISOString(),
@@ -694,7 +697,7 @@ function downloadUpdate(): Promise<DesktopIpcResult<"splitpage:update-download">
   }
   const asset = updateAsset;
   if (!asset) return Promise.resolve({ ok: false, error: "no-installer" });
-  if (!isAllowedDownloadHost(asset.url, updateApiUrl())) return Promise.resolve({ ok: false, error: "bad-url" });
+  if (!isAllowedDownloadHost(asset.url, updateApiUrl(), TEST_MODE)) return Promise.resolve({ ok: false, error: "bad-url" });
 
   updateDownloadPromise = (async (): Promise<DesktopIpcResult<"splitpage:update-download">> => {
     const dir = updateDir();
@@ -758,12 +761,14 @@ function downloadUpdate(): Promise<DesktopIpcResult<"splitpage:update-download">
 }
 
 function startInstallerNow(): DesktopIpcResult<"splitpage:update-install"> {
+  const installer = updateFile;
+  if (!installer) return { ok: false, error: "not-downloaded" };
   try {
     if (process.platform === "win32") {
-      const child = spawn(updateFile, [], { detached: true, stdio: "ignore", windowsHide: false });
+      const child = spawn(installer, [], { detached: true, stdio: "ignore", windowsHide: false });
       child.unref();
     } else {
-      shell.openPath(updateFile);
+      shell.openPath(installer);
     }
     return { ok: true };
   } catch (err) {

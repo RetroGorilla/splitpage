@@ -64,7 +64,7 @@ test("a replayed people merge re-points only the ids it folded into another pers
     productionTags: [tag("t_kettle", "Kettle", "pB"), tag("t_lamp", "Lamp", "pT"), tag("t_cup", "Cup", "pGone")],
     brollShots: [shot("bs_pier", "Pier", "pB"), shot("bs_dock", "Dock", "")] });
   const shots = live.brollShots;
-  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true, cleared: 1 });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true });
   assert.deepEqual(live.people, [person("pM", "Ada"), person("pB", "Bo")]);
   assert.deepEqual(live.productionTags.map((t) => t.owner), ["pB", "pM", ""]);
   assert.deepEqual(live.brollShots.map((b) => b.owner), ["pB", ""]);

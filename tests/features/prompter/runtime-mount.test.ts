@@ -52,6 +52,57 @@ test("prompter runtime uses fake document, preferences, panels and tag container
   }
 });
 
+test("closing Present restores its editor origin without scrolling, including after a repeated open", () => {
+  const h = harness();
+  const origin = document.createElement("div");
+  origin.setAttribute("contenteditable", "true");
+  origin.tabIndex = 0;
+  document.getElementById("rows")?.append(origin);
+  origin.focus();
+  const runtime = startPrompter(h.ports);
+  let options: FocusOptions | undefined;
+  const focus = origin.focus.bind(origin);
+  origin.focus = (given?: FocusOptions) => { options = given; focus(given); };
+  try {
+    runtime.openPrompter();
+    runtime.openPrompter();
+    assert.equal(document.activeElement, document.getElementById("pp-play"));
+    runtime.closePrompter();
+    assert.equal(document.activeElement, origin);
+    assert.deepEqual(options, { preventScroll: true });
+  } finally { runtime.dispose(); }
+});
+
+test("closing Present skips an unavailable origin and preserves foreground toast focus", () => {
+  for (const unavailable of ["removed", "hidden", "foreground"]) {
+    const h = harness();
+    const origin = document.getElementById("doc-title") as HTMLInputElement;
+    origin.focus();
+    const runtime = startPrompter(h.ports);
+    try {
+      runtime.openPrompter();
+      const focus = origin.focus.bind(origin);
+      let attempts = 0;
+      origin.focus = (options?: FocusOptions) => { attempts++; focus(options); };
+      let expected: Element = document.body;
+      if (unavailable === "removed") origin.remove();
+      else if (unavailable === "hidden") origin.hidden = true;
+      else {
+        const toast = document.createElement("div");
+        toast.className = "toast";
+        const button = document.createElement("button");
+        toast.append(button);
+        document.getElementById("toast-host")?.append(toast);
+        button.focus();
+        expected = button;
+      }
+      runtime.closePrompter();
+      assert.equal(document.activeElement, expected, unavailable);
+      assert.equal(attempts, 0, unavailable);
+    } finally { runtime.dispose(); }
+  }
+});
+
 test("prompter runtime disposal stops playback and releases a wake lock that arrives late", async () => {
   const h = harness();
   const runtime = startPrompter(h.ports);

@@ -62,20 +62,24 @@ wait document.getElementById('doc-title').value === 'Script A'
 expect document.getElementById('file-chip').hidden === true
 
 # --- a missing file says so and leaves the entry to be forgotten ---------
-eval (function(){ window.__newTab.open(); window.fake._routeMissing = true; return true; })()
+eval (function(){ window.__newTab.open(); window.fake._routeMissing = true; window.__missingRoutes = 0; var route = window.fake.routeOpen; window.fake.routeOpen = function(){ window.__missingRoutes++; return route.apply(this, arguments); }; return true; })()
 wait document.getElementById('newtab-page').hidden == false
 eval (function(){ window.__toastsBefore = document.querySelectorAll('.toast.warn').length; return window.__toastsBefore; })()
 click #newtab-recents-list [data-newtab-action="open-recent"]
 wait document.querySelectorAll('.toast.warn').length > window.__toastsBefore
 eval (function(){ var t = document.querySelectorAll('.toast.warn'); window.__missingText = t[t.length - 1].textContent; return window.__missingText; })()
 expect window.__missingText.indexOf("isn't there any more") !== -1
+expect window.__missingRoutes === 1
+eval window.__missingToast = Array.from(document.querySelectorAll('.toast.warn:not(.is-leaving)')).find(function(t){return t.textContent === window.__missingText;})
 # the page stays up, the entry stays on the list — it is the user's to forget
 expect document.getElementById('newtab-page').hidden == false
 expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 2
 # Continue is that same open, so it says the same thing
-eval (function(){ window.__toastsBefore = document.querySelectorAll('.toast.warn').length; return window.__toastsBefore; })()
 click #newtab-continue-btn
-wait document.querySelectorAll('.toast.warn').length > window.__toastsBefore
+wait window.__missingRoutes === 2
+expect Array.from(document.querySelectorAll('.toast.warn:not(.is-leaving)')).filter(function(t){return t.textContent === window.__missingText;}).length === 1
+expect window.__missingToast.isConnected && !window.__missingToast.classList.contains('is-leaving')
+wait (function(){var t=window.__missingToast,r=t.getBoundingClientRect();return Number(getComputedStyle(t).opacity)===1&&t.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()
 expect document.getElementById('newtab-page').hidden == false
 eval (function(){ window.fake._routeMissing = false; return true; })()
 

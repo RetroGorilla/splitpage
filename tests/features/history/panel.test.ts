@@ -80,6 +80,22 @@ test("a history listing that finishes after disposal cannot repaint a new mount"
   remounted.owner.dispose();
 });
 
+test("damaged history is visible beside intact versions and never reads as no history", async () => {
+  const f = setup();
+  Object.assign(f.listing, { damaged: 2, olderDamaged: 1 });
+  f.owner.openHistoryPanel();
+  await f.owner.renderHistory();
+  assert.match(document.getElementById("history-list")?.textContent ?? "", /2 damaged snapshots could not be listed/);
+  assert.equal(document.querySelectorAll('[data-action="restore-snapshot"]').length, 1);
+  assert.match(document.getElementById("history-older-list")?.textContent ?? "", /1 damaged snapshot could not be listed/);
+  assert.equal(document.getElementById("history-older")?.hidden, false);
+  f.listing.entries = [];
+  await f.owner.renderHistory();
+  assert.doesNotMatch(document.getElementById("history-list")?.textContent ?? "", /No snapshots/);
+  assert.match(document.getElementById("history-list")?.textContent ?? "", /damaged/);
+  f.owner.dispose();
+});
+
 test("a restore result that arrives after disposal cannot arm or notify from the old panel", async () => {
   const f = setup();
   f.owner.openHistoryPanel();
