@@ -3,7 +3,7 @@
 import type * as NodeCrypto from "node:crypto";
 import type { WebContents } from "electron";
 import type * as DocIdPolicy from "../shared/doc-id-policy.js";
-import type { DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab, DesktopTestModeIpcDependencies } from "./ipc-boundaries.d.ts";
 import type { DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
 
 const crypto: typeof NodeCrypto = require("node:crypto");
@@ -18,7 +18,7 @@ type DesktopDocumentClaim = {
 
 function createDocClaims({ policy, homeKeyOf, contentsFor, askToReassign }: {
   policy: Pick<typeof DocIdPolicy, "DOC_ID_RE" | "docIdFromSha256Hex" | "duplicateReplacementInput"> & {
-    chooseDuplicateLoser: (a: DesktopDocumentClaim, b: DesktopDocumentClaim) => DesktopDocumentClaim | null;
+    chooseDuplicateLoser: DesktopTestModeIpcDependencies["chooseDuplicateLoser"];
   };
   homeKeyOf: (tab: DesktopMainTab) => string | null;
   contentsFor: (id: number) => WebContents | null;
