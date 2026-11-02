@@ -18,9 +18,9 @@ import type { DesktopIpcArgs, DesktopIpcResult } from "../../../shared/desktop-c
 
 export interface LocalFileOpening {
   readonly kind: string;
-  readonly file?: LocalFileData | null;
+  readonly file?: LocalFileData | null | undefined;
   readonly handle?: LocalFileReference | null;
-  readonly parsed?: { readonly state: ValidatedDocument; readonly kind: unknown };
+  readonly parsed?: { readonly state: ValidatedDocument; readonly kind: string };
   readonly options?: { readonly skipSnapshot?: boolean; readonly silent?: boolean; readonly resumed?: boolean; readonly reload?: boolean } | null;
 }
 
@@ -54,7 +54,7 @@ export interface LocalFilesOwnerPorts {
   readonly undo: Pick<UndoControl, "flush">;
   readonly imports: LocalFileImports;
   readonly text: Pick<TextServices, "sanitizeHtml">;
-  readonly resumeNeeded: (handle: LocalFileReference | null | undefined) => void;
+  readonly resumeNeeded: (handle: LocalFileReference) => void;
   readonly desktop: {
     readonly running: () => boolean;
     readonly openFileDialog: () => Promise<DesktopIpcResult<"splitpage:open-file-dialog">>;
