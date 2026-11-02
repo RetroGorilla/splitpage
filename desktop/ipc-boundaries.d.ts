@@ -7,6 +7,8 @@ import type {
   DesktopWireTakenDraft, DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
+import type { createRestoreNotice } from "./restore-notice.ts";
+import type { createThemeChoice } from "./window-appearance.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
 
@@ -55,6 +57,7 @@ export interface DesktopRecentsBoundary {
 }
 
 export interface DesktopDraftStoreBoundary {
+  list: () => { tabId: string; title: string }[];
   write: (id: string, header: Omit<DesktopDraftWriteHeader, "format" | "formatVersion" | "tabId" | "writtenAt" | "state" | "base" | "appVersion" | "seq">, stateJson: string, baseJson: string | null, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-write">>;
   discardClean: (id: string, seq: number) => Promise<DesktopIpcResult<"splitpage:draft-discard">>;
   take: (id: string) => Promise<DesktopWireTakenDraft | null>;
@@ -102,7 +105,7 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
   persistShellState: () => void;
   docClaims: { record: (sender: WebContents, tab: DesktopMainTab) => void };
   flushPendingPayload: (tab: DesktopMainTab, options?: { force: boolean }) => void;
-  restoreNotice: { isFor: (id: string) => boolean; deliver: (tab: DesktopMainTab) => void };
+  restoreNotice: Pick<ReturnType<typeof createRestoreNotice>, "isFor" | "deliver">;
   routeOpenPath: (path: string, options: { fromWindowId: string; fromTabId: string }) => DesktopIpcResult<"splitpage:route-open"> | null;
   draftFiniteNumber: (value: unknown) => number | null;
   draftBodyTooLarge: (text: string) => boolean;
@@ -123,7 +126,7 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   hadPriorSession: () => boolean;
   shell: Pick<Shell, "openExternal" | "openPath">;
   nativeTheme: Pick<NativeTheme, "themeSource">;
-  themeChoice: { write: (mode: "system" | "dark" | "light") => void };
+  themeChoice: Pick<ReturnType<typeof createThemeChoice>, "write">;
   videoFileGrants: Map<string, string>;
   VIDEO_FILE_EXT: RegExp;
   testVideoOpens: string[];
