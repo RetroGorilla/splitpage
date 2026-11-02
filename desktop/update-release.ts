@@ -4,7 +4,7 @@ import type * as NodePath from "node:path";
 
 const path: typeof NodePath = require("node:path");
 
-interface DesktopReleaseAsset { name: string; browser_download_url: string; size?: number; }
+type DesktopReleaseAsset = Record<string, unknown>;
 
 const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
 
@@ -44,11 +44,11 @@ function compareVersions(a: unknown, b: unknown) {
   return 0;
 }
 
-function isAllowedDownloadHost(urlString: string, apiUrl: string) {
+function isAllowedDownloadHost(urlString: unknown, apiUrl: unknown) {
   let parsed;
-  try { parsed = new URL(urlString); } catch { return false; }
+  try { parsed = new URL(urlString as string); } catch { return false; }
   let api;
-  try { api = new URL(apiUrl); } catch { api = null; }
+  try { api = new URL(apiUrl as string); } catch { api = null; }
   if (api && parsed.origin === api.origin) return true;
   if (parsed.protocol !== "https:") return false;
   const host = parsed.hostname.toLowerCase();
@@ -57,40 +57,40 @@ function isAllowedDownloadHost(urlString: string, apiUrl: string) {
     || host.endsWith(".githubusercontent.com");
 }
 
-function describeAsset(asset: DesktopReleaseAsset) {
+function describeAsset(asset: unknown) {
   return {
-    name: path.basename(String(asset.name)),
-    url: String(asset.browser_download_url),
-    size: Number.isFinite(asset.size) ? asset.size as number : 0
+    name: path.basename(String((asset as DesktopReleaseAsset).name)),
+    url: String((asset as DesktopReleaseAsset).browser_download_url),
+    size: Number.isFinite((asset as DesktopReleaseAsset).size) ? (asset as DesktopReleaseAsset).size as number : 0
   };
 }
 
-function pickUpdateAsset(assets: DesktopReleaseAsset[] | null | undefined, { platform, arch, apiUrl }: { platform: string; arch: string; apiUrl: string }) {
+function pickUpdateAsset(assets: readonly unknown[] | null | undefined, { platform, arch, apiUrl }: { platform: string; arch: string; apiUrl: string }) {
   const ext = INSTALLER_EXT[platform];
   if (!ext) return null;
   const candidates = (assets || []).filter((a) => {
-    const name = String((a && a.name) || "");
+    const name = String((a && (a as DesktopReleaseAsset).name) || "");
     return SAFE_ASSET_NAME.test(name)
       && name.toLowerCase().endsWith(ext)
-      && isAllowedDownloadHost(String((a && a.browser_download_url) || ""), apiUrl);
+      && isAllowedDownloadHost(String((a && (a as DesktopReleaseAsset).browser_download_url) || ""), apiUrl);
   });
   if (!candidates.length) return null;
 
   const other = ["x64", "arm64", "ia32", "armv7l"].filter((a) => a !== arch);
-  const mentions = (name: string, token: string) => new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`, "i").test(name);
+  const mentions = (name: unknown, token: string) => new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`, "i").test(name as string);
 
-  const mine = candidates.filter((a) => mentions(a.name, arch));
-  if (mine.length === 1) return describeAsset(mine[0] as DesktopReleaseAsset);
+  const mine = candidates.filter((a) => mentions((a as DesktopReleaseAsset).name, arch));
+  if (mine.length === 1) return describeAsset(mine[0]);
   if (mine.length > 1) return null;
 
-  const neutral = candidates.filter((a) => !other.some((o) => mentions(a.name, o)));
-  if (neutral.length === 1) return describeAsset(neutral[0] as DesktopReleaseAsset);
+  const neutral = candidates.filter((a) => !other.some((o) => mentions((a as DesktopReleaseAsset).name, o)));
+  if (neutral.length === 1) return describeAsset(neutral[0]);
   return null;
 }
 
-function findChecksumsAsset(assets: DesktopReleaseAsset[] | null | undefined, apiUrl: string) {
-  return (assets || []).find((a) => CHECKSUMS_ASSET.test(String((a && a.name) || ""))
-    && isAllowedDownloadHost(String((a && a.browser_download_url) || ""), apiUrl)) || null;
+function findChecksumsAsset(assets: readonly unknown[] | null | undefined, apiUrl: string): unknown {
+  return (assets || []).find((a) => CHECKSUMS_ASSET.test(String((a && (a as DesktopReleaseAsset).name) || ""))
+    && isAllowedDownloadHost(String((a && (a as DesktopReleaseAsset).browser_download_url) || ""), apiUrl)) || null;
 }
 
 function checksumFor(text: string, assetName: string) {
