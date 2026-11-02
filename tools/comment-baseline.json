@@ -232,7 +232,7 @@
       "/* condition does the work */",
       "/* condition does the work */"
     ],
-    "shared/video-embed.js": [
+    "shared/video-embed.ts": [
       "/* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */"
     ],
     "start.bat": [

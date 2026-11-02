@@ -1,4 +1,4 @@
-import { mimeForFilename } from "../../../shared/file-names.js";
+import { mimeForFilename } from "../../../shared/file-names.ts";
 import { concatBytes, strBytes } from "../formats/bytes.ts";
 import { desktopPort } from "./desktop-port.ts";
 import type { DesktopFileEntry, DesktopPort } from "./desktop-port.ts";

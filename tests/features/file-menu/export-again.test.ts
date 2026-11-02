@@ -1,12 +1,15 @@
+import { buildExportDocument } from "../../../src/core/document/export-document.ts";
 import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { startExportDialog } from "../../../src/features/file-menu/export-dialog.js";
+import { startExportDialog } from "../../../src/features/file-menu/export-dialog.ts";
 import { createExportRegistry } from "../../../src/application/export/registry.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeNotices } from "../fakes.ts";
+
+function unused(): never { throw new Error("preview is unused here"); }
 
 function scriptDoc() {
   return migrateRows({ title: "Export", rows: [{ id: "r1", visualText: "One", audioText: "" }] }, fakeMigration().ports);
@@ -38,15 +41,19 @@ function mount(t: TestContext, options: { loaded?: boolean; reasons?: Reasons } 
   registry.register({ ...base, id: "hidden-helper" });
   const ports = {
     document: fakeDocument(options.loaded === false ? null : scriptDoc()).document,
-    capture: () => ({}),
+    capture: () => buildExportDocument(scriptDoc(), "2026-01-01T00:00:00Z", { production: [], commentNumbers: {}, broll: [] }),
+    fileName: () => { throw new Error("fileName is unused here"); },
     notices: fakeNotices().notices,
     exports: registry,
     exportAction: () => true,
     printWorkflow: () => false,
     onMenuRefresh: () => () => undefined,
     menuItems: { setLabel: () => undefined, setReason: () => undefined },
-    text: { cellOf: () => null },
-    preview: {}
+    text: { cellOf: unused },
+    preview: {
+      facts: unused, shots: unused, breakdown: unused, scenes: unused, narration: unused, runs: unused,
+      meta: unused, shotSummary: unused, commentCount: unused, markdown: unused, markdownTable: unused, tagColor: unused
+    }
   };
   const controls = startExportDialog(ports);
   t.after(() => {

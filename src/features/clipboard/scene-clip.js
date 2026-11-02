@@ -1,11 +1,11 @@
 import { normalizeBrollProps } from "../../core/document/broll.ts";
 import { mintTagId, normalizeTagName, registryKey } from "../../core/document/tags.ts";
-import { isSha256Hex, refsIn } from "../../../shared/blob-policy.js";
+import { isSha256Hex, refsIn } from "../../../shared/blob-policy.ts";
 import { commentIds, normalizeCell } from "../../core/text/runs.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import { syncCommentAnchors } from "../../core/text/anchors.ts";
-import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./cell-clipboard.js";
+import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./cell-clipboard.ts";
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { cappedLongText } from "../../core/document/text-policy.ts";
 import { isBlankScene } from "../../application/commands/rows.ts";

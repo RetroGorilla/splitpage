@@ -1,4 +1,4 @@
-import { normalizeImageRef } from "../../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { GALLERY_FIELDS, ROW_FIELDS } from "../document/fields.ts";
 import { galleryFieldKey, mergeGalleryField } from "../document/gallery.ts";
 import type { GallerySide } from "../document/gallery.ts";

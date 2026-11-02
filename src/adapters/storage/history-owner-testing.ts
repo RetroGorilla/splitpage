@@ -1,4 +1,4 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { HISTORY_OLDER_KEY } from "../../../shared/history-policy.ts";
 import type { HistoryInstrumentation } from "../../application/recovery/history-instrumentation.ts";
 import type { HistoryResolvedBackend, HistoryTestingStorage } from "../../application/recovery/history-ports.ts";

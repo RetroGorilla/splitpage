@@ -1,10 +1,10 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { refsIn } from "../../../shared/blob-policy.js";
+import { refsIn } from "../../../shared/blob-policy.ts";
 import { autoSaveWhere } from "./autosave.ts";
 import { createSaveCompletion } from "./save-completion.ts";
 import { cloneState } from "../../core/document/clone.ts";
-import { fileKindFromName } from "../../../shared/file-names.js";
-import { slugify } from "../../../shared/text.js";
+import { fileKindFromName } from "../../../shared/file-names.ts";
+import { slugify } from "../../../shared/text.ts";
 import { fileTitleChange } from "../../core/document/file-title.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
 import { deepFreeze } from "../../core/document/freeze.ts";

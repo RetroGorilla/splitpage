@@ -4,7 +4,7 @@ import type { ImageRef } from "../../core/document/ports.ts";
 import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "../storage/02c-blobs.ts";
 import { exportAssetRequest, heldExportAssets } from "../../application/export/assets.ts";
 import { rowImage } from "../../core/document/media.ts";
-import { refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
+import { refsIn, sniffImageMime } from "../../../shared/blob-policy.ts";
 
 export const assetPorts: ExportAssetPorts = {
   load: function (shas) { return ensureBytes(shas); },

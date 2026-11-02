@@ -530,7 +530,7 @@ tabs**.
   it. Test-mode faults:
   `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `enospc-once`/`-always`;
   `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
-- **Content-addressed blobs** (#82, `desktop/blob-store.js`, `main.js`
+- **Content-addressed blobs** (#82, `desktop/blob-store.ts`, `main.js`
   §8c). Images leave the document state and live in `<userData>/blobs`:
   `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
   own SHA-256 (`<aa>` = its first two hex digits). Plain CommonJS, no
@@ -565,7 +565,7 @@ tabs**.
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites.
 - **YouTube and Vimeo in the gallery** (#141, #168, `main.js` §9e,
-  `shared/video-embed.js`). The page's policy is build.mjs's, re-served
+  `shared/video-embed.ts`). The page's policy is build.mjs's, re-served
   as a header (§10), so its `frame-src` — `'self'` plus YouTube's no-cookie
   embed and Vimeo's player — needed no second edit here; `TABSTRIP_CSP`
   keeps `frame-src 'none'`. Three things main does for it: (1)
@@ -591,7 +591,7 @@ tabs**.
   machine (no Electron binary for x64 here) — first run is CI's
   desktop-smoke job.
 - Duplicate document-id claims reassign in memory only (§4, #36).
-  `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.js`, #76): server
+  `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
   `atomicWrite` measurably moves NTFS birthtime on save — so the loser is
   decided by claim order instead. #76 deleted the `DUP_TRUST_BIRTHTIME =
@@ -966,7 +966,7 @@ image bytes; the bytes live once, content-addressed by SHA-256, in a blob
 store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
 server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
 - A row's picture is `imageRef`, a record gated by `normalizeImageRef()`
-  (`shared/blob-policy.js`): exactly those four fields, the type sniffed
+  (`shared/blob-policy.ts`): exactly those four fields, the type sniffed
   from the bytes, never SVG. The old key `visualImage` (a `data:` URI) is
   read, interned and deleted by `migrateRows()`; a valid one wins over an
   `imageRef` on the same row. The comment `field` value `"visualImage"` keeps
@@ -990,7 +990,7 @@ server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
   user's picture as `imageValue`; its `body` shows the same picture in the
   stored form. `imageValue` is the source of truth: "Use my version" puts
   it back, and the card draws it.
-- `refsIn(state)` (`shared/blob-policy.js`; the server keeps its own copy)
+- `refsIn(state)` (`shared/blob-policy.ts`; the server keeps its own copy)
   lists every sha a state names: `imageRef`, `imageValue`, and `data-blob`
   on an `<img>` in any row, comment or reply HTML. Every writer that must
   not name an unstored blob persists `refsIn` first (#52).
@@ -1098,7 +1098,7 @@ bytes, #82 — nothing deletes them yet, D4).
 localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
 absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 `nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
-(`12`/`24`, absent = system; `formatClock()` in `shared/clock.js` is the one
+(`12`/`24`, absent = system; `formatClock()` in `shared/clock.ts` is the one
 clock formatter, #180), `splitpage-person-color` (#194),
 `splitpage-default-wpm` (the reading speed a NEW script starts at),
 `splitpage-video-thumbs` (#141: `"0"` = don't fetch a pasted YouTube or
@@ -1165,9 +1165,9 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/drafts.ts` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/history-store.js` | THE version-history store (#83), synchronous ESM run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
 | `shared/history-policy.ts` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
-| `shared/blob-policy.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
-| `shared/video-embed.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
-| `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
+| `shared/blob-policy.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
+| `shared/video-embed.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
+| `desktop/blob-store.ts` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
 | `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
 | `desktop/electron-arch.mjs` | pure architecture selection and the `fetch-electron` entry point; passes the selected architecture to Electron's installer (§2) |
 | `desktop/electron-arch.test.mjs` | pure architecture and override tests, including Windows ARM64 under x64 Node emulation |
@@ -1178,7 +1178,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
 | `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.ts` alone |
-| `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
+| `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.ts` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
 | `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.js` (two-generation write, torn index → prev, deferred unlink, kills via test hooks, a raw v1 tree left untouched) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |
 | `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
