@@ -62,15 +62,21 @@ must implement `DesktopPort`. `node tools/build-preload.mjs` strips it with
 Node's stripTypeScriptTypes and writes the committed `desktop/preload.js` that the sandbox runs.
 The generated script still requires only Electron. Both `npm run verify`
 and CI regenerate it and run `node tools/check-preload.mjs`, which requires
-`git status --porcelain` to be empty for both generated scripts, including
+`git status --porcelain` to be empty for all generated scripts, including
 untracked files. Run the generator after editing the source, and commit both files.
 The TypeScript source and its type-only imports are not packaged;
 `preload.js` remains the preload path in `main.js` and the builder file list.
 `desktop/tabstrip-preload.ts` follows the same checked-source pattern, and
-the generator writes both committed preload scripts. The tab strip still
+the generator writes both committed preload scripts and the tab strip page script. The tab strip still
 runs `tabstrip-preload.js`, which reads the same channel table over IPC;
 its TypeScript source and type-only imports are not packaged. Both the
-verify command and CI check freshness of both generated JavaScript files.
+verify command and CI check freshness of all three generated JavaScript files.
+
+`desktop/tabstrip/tabstrip.ts` is the checked source for the page script served
+as `tabstrip.js` over `splitpage://tabstrip`. The generator erases types,
+and `stage.mjs` copies only the HTML, generated JS and CSS into the package.
+Its bridge and the preload share `DesktopTabStripBridge` in the IPC contract;
+the typed page source and type-only imports stay outside the package.
 
 ## `files`
 
