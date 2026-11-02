@@ -4,7 +4,7 @@ import vm from "node:vm";
 import { crc32, inflateSync } from "node:zlib";
 import { IMAGES, SCENES, buildArgs, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
 
-const { imageDims, sniffImageMime } = createRequire(import.meta.url)("../shared/blob-policy.js");
+const { imageDims, sniffImageMime } = createRequire(import.meta.url)("../shared/blob-policy.ts");
 
 let passed = 0;
 const failures = [];

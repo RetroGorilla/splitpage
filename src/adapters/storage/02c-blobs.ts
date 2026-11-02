@@ -9,7 +9,7 @@ import {
   forgivingBase64Decode,
   rowImage
 } from "../../core/document/media.ts";
-import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
+import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../../shared/blob-policy.ts";
 
 const idbBlobs = createIdbBlobBackend(function () {
   return typeof window !== "undefined" && "indexedDB" in window && window.indexedDB ? window.indexedDB : null;

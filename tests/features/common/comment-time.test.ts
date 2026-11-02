@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatClock, formatDateClock } from "../../../shared/clock.js";
+import { formatClock, formatDateClock } from "../../../shared/clock.ts";
 import { formatTimestamp } from "../../../src/features/common/comment-time.ts";
 
 test("formatTimestamp: shows only the clock time for a moment today", () => {

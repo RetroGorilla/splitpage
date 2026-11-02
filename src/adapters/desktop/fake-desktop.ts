@@ -78,7 +78,7 @@ type FakeRecent = { fileId: string; name: string; title: string; at: number };
 
 import { createMemoryHistoryTestBackend } from "../storage/history-backend-testing.ts";
 import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { hashText as historyHashText } from "../storage/03c-history-idb.ts";
 import { createHistoryStore } from "../../../shared/history-store.js";
 import { strBytes } from "../formats/bytes.ts";

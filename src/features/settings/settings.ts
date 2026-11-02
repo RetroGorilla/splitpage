@@ -3,7 +3,7 @@ import { getSavedAuthorName } from "../../application/comment-author.ts";
 import { SCRIPT_SCALE_MAX, SCRIPT_SCALE_MIN, WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
-import { formatClock } from "../../../shared/clock.js";
+import { formatClock } from "../../../shared/clock.ts";
 import { applyTagIcons, applyTheme } from "./appearance.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 
