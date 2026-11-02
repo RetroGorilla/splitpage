@@ -11,7 +11,7 @@ assert.ok(config);
 assert.deepEqual(config.errors, []);
 
 const prelude = `import type { DesktopIpcWrappers } from "./ipc-setup.ts";
-import type { DesktopChannelRow, DesktopDraftReadHeader } from "../shared/desktop-contract.d.ts";
+import type { DesktopChannelRow, DesktopDraftReadHeader, DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
 import type { DesktopIpcEvent, DesktopFileIpcDependencies, DesktopMainTab } from "./ipc-boundaries.d.ts";
 import type { BrowserWindow } from "electron";
 declare const wrappers: DesktopIpcWrappers;
@@ -43,10 +43,22 @@ deps.dialog.showOpenDialog(undefined, {});
 deps.dialog.showSaveDialog(undefined, { defaultPath: undefined, filters: undefined });
 deps.dialog.showMessageBoxSync(undefined, { message: "x" });
 const absentKeep: Pick<DesktopMainTab, "keepDraftOnClose"> = {};
-const refusal: DesktopChannelRow = { name: "splitpage:get-app-version-sync", direction: "sendSync", argsSchema: [], allowedOrigins: [], refusal: null };`;
+const refusal: DesktopChannelRow = { name: "splitpage:get-app-version-sync", direction: "sendSync", argsSchema: [], allowedOrigins: [], refusal: null };
+const textBytes: DesktopIpcArgs<"splitpage:write-file">[1] = "text";
+const arrayBufferBytes: DesktopIpcArgs<"splitpage:write-file">[1] = new ArrayBuffer(8);
+const uint8Bytes: DesktopIpcArgs<"splitpage:write-file">[1] = new Uint8Array(8);
+const blobBytes: DesktopIpcArgs<"splitpage:blob-put">[1] = new Uint8Array(8);`;
 assert.deepEqual(diagnostics(valid), []);
 
 const CASES = [
+  ...["splitpage:write-file", "splitpage:blob-put"].flatMap((channel) => [
+    "new DataView(new ArrayBuffer(8))", "new Uint16Array(8)", "new Uint8ClampedArray(8)"
+  ].map((value) => ({
+    source: `const bytes: DesktopIpcArgs<"${channel}">[1] = ${value};`,
+    code: 2322,
+    at: "bytes",
+    about: "Uint8Array"
+  }))),
   {
     "source": "wrappers.ipcHandle(\"splitpage:draft-take\", async () => ({}));",
     "code": 2322,
