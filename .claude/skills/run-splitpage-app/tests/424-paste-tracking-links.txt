@@ -32,5 +32,5 @@ expect true
 wait document.querySelector('#comment-body-editable a')?.getAttribute('href') === cleaned
 jsclick #comment-post
 wait document.getElementById('comment-modal').hidden
-expect F.state().comments.some(function (c) { return c.text.includes('keep=%2f+X#part') && !c.text.includes('utm_source'); })
+expect F.state().comments.some(function (c) { return c.body.includes('keep=%2f+X#part') && !c.body.includes('utm_source'); })
 quit
