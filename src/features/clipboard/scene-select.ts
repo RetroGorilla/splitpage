@@ -1,6 +1,6 @@
 import type { SceneSelectPorts } from "./ports.ts";
 import type { DocumentView, Command } from "../../application/session/document-session.ts";
-import { refsIn } from "../../../shared/blob-policy.js";
+import { refsIn } from "../../../shared/blob-policy.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { cssAttr } from "../common/dom.ts";
 import {

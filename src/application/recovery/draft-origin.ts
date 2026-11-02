@@ -1,5 +1,5 @@
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
-import { refsIn } from "../../../shared/blob-policy.js";
+import { refsIn } from "../../../shared/blob-policy.ts";
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import type { Home } from "../location/document-location.ts";
 import type { DocumentView } from "../session/document-session.ts";

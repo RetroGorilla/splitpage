@@ -1,6 +1,6 @@
 "use strict";
 
-import * as policy from "./history-policy.js";
+import * as policy from "./history-policy.ts";
 import { DOC_ID_RE } from "./doc-id-policy.ts";
 
 var HISTORY_OLDER_KEY = policy.HISTORY_OLDER_KEY;

@@ -423,7 +423,7 @@ stored format for this release.**
   memoised by string) and once on save.
 - **What that keeps working, unchanged:**
   - older clients (2.x, 3.0) reading and writing the same file
-  - `shared/blob-policy.js`
+  - `shared/blob-policy.ts`
   - history snapshots, drafts, the app-data bundle and the `.md` project
     format
   - every existing document, with no migration step to go wrong
@@ -620,7 +620,7 @@ changes are combined"). What building it settled:
 | `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | `src/adapters/formats/` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` (the `.md` project's table stays `htmlToMarkdown`, step 3) |
 | `20-teleprompter.js` | `src/features/prompter/` | word spans from runs |
 | editor wiring | `src/bootstrap/wiring/editor.ts`, `src/features/editing/` | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
-| `server/server.js` (now only a static file server), `shared/blob-policy.js` | `shared/blob-policy.js` | unchanged (D2: HTML stays the stored format) |
+| `server/server.js` (now only a static file server), `shared/blob-policy.ts` | `shared/blob-policy.ts` | unchanged (D2: HTML stays the stored format) |
 
 `execCommand` goes from 17 editing calls to none.
 

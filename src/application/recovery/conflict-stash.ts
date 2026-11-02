@@ -1,4 +1,4 @@
-import { isSha256Hex } from "../../../shared/blob-policy.js";
+import { isSha256Hex } from "../../../shared/blob-policy.ts";
 import { byId } from "../../core/merge/rows.ts";
 
 const STASH_KEY = "splitpage-conflict-stash";

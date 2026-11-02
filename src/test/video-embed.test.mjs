@@ -10,7 +10,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.ts";
 import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
-import * as videoEmbed from "../../shared/video-embed.js";
+import * as videoEmbed from "../../shared/video-embed.ts";
 import { loadTestDocument } from "./_document.mjs";
 const flushEdits = () => undoOwner().flush();
 const foldIntoEdit = (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change);
