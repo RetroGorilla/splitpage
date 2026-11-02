@@ -263,13 +263,7 @@ function createCloseQuit({
         sessionWritesFrozen = true;
       };
 
-      if (!tabIds.some((id) => tabHasFile(tabs.get(id)))) {
-        const unsaved = unsavedTabsOf(tabIds, []);
-        if (askAboutUnsaved(unsaved, "Quit", parentOf(unsaved)) !== "discard") {
-          stayOpen();
-          event.preventDefault();
-          return;
-        }
+      if (!tabIds.some((id) => tabHasFile(tabs.get(id))) && !unsavedTabsOf(tabIds, []).length) {
         confirmQuit(tabIds);
         return;
       }

@@ -56,6 +56,7 @@ function loadMain(world) {
         world.main.pendingDraftFlushes.delete(reqId);
         world.kept.add(world.idOf(tag));
         log(`flush answered ${tag}`);
+        if (typeof world.onFlushAnswer === "function") world.onFlushAnswer(tag);
         answer({ ok: true });
       }, 5);
     };
@@ -482,16 +483,64 @@ test("quit with file tabs: question, settle, freeze, quit", async (w) => {
   ]);
 });
 
-test("quit without file tabs answers at once", async (w) => {
+for (const withFile of [false, true]) {
+  test(`quit ${withFile ? "with" : "without"} file tabs rechecks an edit queued by another window during the question`, async (w) => {
+    const first = w.window();
+    w.tab(first, "T1", { file: withFile ? w.existing : undefined, dirty: true });
+    const second = w.window();
+    const edited = w.tab(second, "T2");
+    w.answers.push("discard", "cancel");
+    w.onAsk = () => {
+      w.onAsk = null;
+      setTimeout(() => { edited.dirty = true; w.log("edit delivered T2"); }, 0);
+    };
+    w.start();
+    w.app.quit();
+    await w.until("edit delivered T2");
+    assert.equal(w.entries.filter((line) => line === ASK_ONE_LEAVE).length, 2, w.entries.join("\n"));
+    assert.equal(w.entries.some((line) => line.startsWith("draft discard")), false);
+    assert.equal(first.win.isDestroyed(), false);
+    assert.equal(second.win.isDestroyed(), false);
+    w.main.persistShellState();
+    assert.equal(w.entries.at(-1), "state-write");
+  });
+}
+
+test("quit rechecks an edit queued just before a successful keep flush answers", async (w) => {
+  const first = w.window();
+  const kept = w.tab(first, "T1", { file: w.gone, dirty: true });
+  const second = w.window();
+  const edited = w.tab(second, "T2");
+  w.flushes.set("T1", "ok");
+  w.answers.push("discard", "cancel");
+  w.onFlushAnswer = (tag) => {
+    assert.equal(tag, "T1");
+    setTimeout(() => { edited.dirty = true; w.log("edit delivered T2"); }, 0);
+  };
+  w.start();
+  w.app.quit();
+  await w.until("edit delivered T2");
+  assert.equal(w.entries.filter((line) => line === ASK_ONE_LEAVE).length, 2, w.entries.join("\n"));
+  assert.equal(w.entries.some((line) => line.startsWith("draft discard")), false);
+  assert.equal(first.win.isDestroyed(), false);
+  assert.equal(second.win.isDestroyed(), false);
+  assert.equal(w.kept.has(kept.id), true);
+  assert.equal(kept.keepDraftOnClose, false);
+});
+
+test("quit without file tabs rechecks before settling", async (w) => {
   const rec = w.window();
   w.tab(rec, "T1", { dirty: true });
   w.answers.push("discard");
   w.start();
   w.app.quit();
+  await w.until("quit done");
   assert.deepEqual(w.entries, [
     "app.quit",
+    "quit prevented",
     ASK_ONE_LEAVE,
     "draft discard [T1] quit-without-saving",
+    "app.quit",
     "probe quitting",
     "close W1",
     "probe W1 closing",
