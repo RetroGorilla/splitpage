@@ -88,6 +88,7 @@ const panelEvents = owned<{ dispose: () => void }>();
 export function mountBrollPanelStateFeature(): BrollPanelState {
   return panelState.replace(() => {
     const ports: BrollPanelPorts = {
+      screen: portScreen,
       view: portBrollView,
       document: portDocument,
       edits: portEdits,
