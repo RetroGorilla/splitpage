@@ -1115,6 +1115,11 @@ export function wireTagEntityContainer(id: string, rootClick: (event: MouseEvent
 
 export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime {
   let dismissSearch: (() => void) | null = null;
+  function disposeRuntime() {
+    dismissSearch?.();
+    dismissSearch = null;
+    disposePrompterView();
+  }
   ports = nextPorts;
   prompterMirror = ports.preferences.prompterFlag("prompterMirror");
 
@@ -1191,7 +1196,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     updatePrompterStatus, buildPrompterContent, updateVoiceAvailability,
     cueSceneForCurrentPosition, updateSceneReadout, setPrompterMirror, setPrompterFlip,
     setPrompterSceneMode, stepScene, acquireWakeLock, wireTagEntityContainer,
-    disposeRuntime: disposePrompterView,
+    disposeRuntime,
     voiceActive: function () { return ports.state.voiceFollowing(); },
     playing: function () { return ports.state.isPlaying(); },
     isOpen: function () { return ports.state.isOpen(); },
@@ -1202,7 +1207,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     sceneMode: function () { return !!state.promptSceneMode; },
     dispose: function () {
       if (ports !== nextPorts) return;
-      disposePrompterView();
+      disposeRuntime();
       clearTimeout(initialReadyTimer as TimerHandle);
       initialReadyTimer = null;
       withdrawHook?.();
