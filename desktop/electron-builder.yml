@@ -31,7 +31,7 @@ files:
   - voice-helper.js
   - chromium-browsers.ts
   - history-fs-backend.js
-  - desktop-state.js
+  - desktop-state.ts
   - update-release.ts
   - file-service.ts
   - doc-claims.ts
