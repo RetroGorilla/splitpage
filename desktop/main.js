@@ -114,7 +114,7 @@ const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
 const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.js"));
 const {
   DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
-} = require(path.join(SHARED_ROOT, "doc-id-policy.js"));
+} = require(path.join(SHARED_ROOT, "doc-id-policy.ts"));
 
 const STATIC_ALLOWLIST = {
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },

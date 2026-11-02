@@ -1,4 +1,4 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { DocumentView } from "../session/document-session.ts";

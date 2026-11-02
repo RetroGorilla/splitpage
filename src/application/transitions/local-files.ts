@@ -1,6 +1,6 @@
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { cloneState } from "../../core/document/clone.ts";
-import { fileKindFromName } from "../../../shared/file-names.js";
+import { fileKindFromName } from "../../../shared/file-names.ts";
 import { createAdoptionCompletion } from "../save/save-completion.ts";
 import { NO_DESTINATION } from "./ports.ts";
 import type { LocalFileOpening, LocalFilesOwner, LocalFilesOwnerPorts } from "./local-files-ports.ts";

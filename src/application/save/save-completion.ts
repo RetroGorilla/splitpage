@@ -1,4 +1,4 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
 import { fileTitleCommand } from "../commands/title.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
