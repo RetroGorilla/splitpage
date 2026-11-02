@@ -762,7 +762,6 @@ function offerRedraw(failed: string): void {
   toast.removeEventListener("click", toast.dismiss);
   toast.removeAttribute("title");
   toast.classList.add("is-held");
-  toast.setAttribute("role", "alert");
 }
 
 function focusPlace(el: Element): StalePlace | null {
@@ -814,6 +813,10 @@ function releaseStaleScreen(): void {
 
 function refuseOnStaleScreen(e: Event): void {
   if (!state.screenStale) return;
+  if (!state.redrawToast?.isConnected || state.redrawToast.classList.contains("is-leaving")) {
+    offerRedraw(state.redrawToast?.firstChild?.textContent || REDRAW_FAILED);
+    state.redrawToast?.querySelector<HTMLElement>(".toast-action")?.focus();
+  }
   const t = e.target as Element | null;
   if (!(t && t.closest && t.closest(STALE_PARTS))) return;
   e.preventDefault();

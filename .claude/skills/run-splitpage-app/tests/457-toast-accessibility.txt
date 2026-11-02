@@ -1,0 +1,57 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.D=window.__desktopTest;window.__spoken=[];window.__speech=new MutationObserver(function(rs){rs.forEach(function(r){r.addedNodes.forEach(function(n){__spoken.push(n.textContent);});});});['toast-status','toast-alert'].forEach(function(id){__speech.observe(document.getElementById(id),{childList:true,subtree:true,characterData:true});});window.__top=function(el){var r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));};return true;})()
+expect document.getElementById('toast-status').getAttribute('role') === 'status'
+expect document.getElementById('toast-alert').getAttribute('role') === 'alert'
+click #btn-present
+wait !document.getElementById('prompter').hidden
+click #pp-fullscreen
+wait document.fullscreenElement !== null
+key ctrl KeyF
+wait document.querySelector('#toast-host .toast:not(.is-leaving)')
+eval window.__plain=document.querySelector('#toast-host .toast:not(.is-leaving)')
+expect __top(__plain)
+key ctrl KeyF
+key ctrl KeyF
+expect document.querySelectorAll('#toast-host .toast:not(.is-leaving)').length === 1
+expect __spoken.filter(function(s){return s === 'Close Present first.';}).length === 1
+expect __plain.querySelector('.toast-dismiss').getAttribute('aria-label') === 'Dismiss'
+shot sweep-ui-toast-fullscreen-light
+focus #toast-host .toast-dismiss
+key Enter
+wait !__plain.isConnected
+eval D.runMenuCommand('help')
+wait !document.getElementById('help-modal').hidden
+expect document.fullscreenElement.contains(document.getElementById('help-modal'))
+expect __top(document.querySelector('#help-modal .modal-panel'))
+shot sweep-ui-help-fullscreen
+click #help-close
+eval D.runMenuCommand('settings')
+wait !document.getElementById('settings-modal').hidden
+expect __top(document.querySelector('#settings-modal .modal-panel'))
+click #settings-modal .modal-close
+click #pp-close
+wait document.fullscreenElement === null
+wait document.getElementById('prompter').hidden
+eval (function(){var title=document.getElementById('doc-title');var p=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');Object.defineProperty(title,'value',{configurable:true,get:function(){return p.get.call(this);},set:function(){throw new Error('sweep-ui-render-fault');}});var doc=JSON.parse(JSON.stringify(F.state()));doc.title='Toast recovery';F.openFile(new File([JSON.stringify(doc)],'toast-recovery.splitpage'));return true;})()
+wait document.querySelector('#toast-host .toast.error.is-sticky.has-action')
+eval window.__sticky=document.querySelector('#toast-host .toast.error.is-sticky.has-action')
+expect __sticky.querySelector('.toast-dismiss').getAttribute('aria-label') === 'Dismiss'
+eval (function(){var r=document.createRange();r.selectNodeContents(__sticky.firstChild);getSelection().removeAllRanges();getSelection().addRange(r);__sticky.click();return true;})()
+expect !__sticky.classList.contains('is-leaving') && getSelection().toString().indexOf('Nothing was lost') !== -1
+expect __spoken.filter(function(s){return s.indexOf('Could not redraw') === 0;}).length === 1
+expect __spoken.every(function(s){return s.indexOf('RedrawRedraw') === -1 && s.indexOf('Dismiss') === -1;})
+eval delete document.getElementById('doc-title').value
+click #toast-host .toast-action
+wait !document.body.classList.contains('is-stale-screen')
+wait !__sticky.isConnected
+eval (function(){var cell=document.querySelector('#rows .row .audio-cell .cell-editable');cell.focus();var dt=new DataTransfer();dt.setData('text/plain','https://www.youtube.com/watch?v=dQw4w9WgXcQ');cell.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+wait document.querySelector('#toast-host .toast.has-action:not(.is-leaving)')
+eval window.__action=document.querySelector('#toast-host .toast.has-action:not(.is-leaving)');window.__media=JSON.stringify(F.state().rows[0].imageLinks)
+expect __spoken.filter(function(s){return s.indexOf('Video added to scene') === 0;}).length === 1
+eval document.documentElement.setAttribute('data-theme','dark')
+shot sweep-ui-toast-action-dark
+click #toast-host .toast.has-action .toast-dismiss
+wait !__action.isConnected
+expect JSON.stringify(F.state().rows[0].imageLinks) === __media
+eval (function(){__speech.disconnect();return true;})()

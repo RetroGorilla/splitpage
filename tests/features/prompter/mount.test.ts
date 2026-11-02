@@ -161,6 +161,19 @@ test("prompter: visibility requires an open prompter and stops after disposal", 
   h.window.close();
 });
 
+test("prompter: fullscreen includes the document's toast and dialog layers", async () => {
+  const h = setup();
+  let requested: Element | null = null;
+  h.document.documentElement.requestFullscreen = async () => { requested = h.document.documentElement; };
+  h.el("prompter").requestFullscreen = async () => { requested = h.el("prompter"); };
+  const owner = mountPrompter({ window: h.window, ports: h.p2 });
+  h.fire(h.el("pp-fullscreen"), "click");
+  await Promise.resolve();
+  assert.equal(requested, h.document.documentElement);
+  owner.dispose();
+  h.window.close();
+});
+
 test("prompter: shot skip rebuild order, scene readout and playback stay unchanged", () => {
   const h = setup();
   let skip = false;
