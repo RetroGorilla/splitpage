@@ -36,11 +36,16 @@ syntax error when a sandbox:true preload contains a type annotation.
 must implement `DesktopPort`. `node tools/build-preload.mjs` strips it with
 Node's stripTypeScriptTypes and writes the committed `desktop/preload.js` that the sandbox runs.
 The generated script still requires only Electron. Both `npm run verify`
-and CI regenerate it and require `git diff --exit-code -- desktop/preload.js`
+and CI regenerate it and require
+`git diff --exit-code -- desktop/preload.js desktop/tabstrip-preload.js`
 to pass. Run the generator after editing the source, and commit both files.
 The TypeScript source and its type-only imports are not packaged;
 `preload.js` remains the preload path in `main.js` and the builder file list.
-`tabstrip-preload.js` continues to read the same channel table over IPC.
+`desktop/tabstrip-preload.ts` follows the same checked-source pattern, and
+the generator writes both committed preload scripts. The tab strip still
+runs `tabstrip-preload.js`, which reads the same channel table over IPC;
+its TypeScript source and type-only imports are not packaged. Both the
+verify command and CI check freshness of both generated JavaScript files.
 
 ## `files`
 
