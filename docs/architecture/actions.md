@@ -86,7 +86,7 @@ and both the menu's painting and the action's availability call it:
 
 | State | Function |
 | --- | --- |
-| Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.js` |
+| Export again, and its label | `exportAgainItemState()`, `src/features/file-menu/export-dialog.ts` |
 | Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `src/adapters/desktop/desktop-port.ts`; `appDataImportShown()`, `src/features/desktop/desktop.ts` |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
