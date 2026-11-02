@@ -322,22 +322,37 @@ function showAbout() {
 }
 
 let aboutWired = false;
+let aboutReturnFocus: HTMLElement | null = null;
 
 function closeAboutDialog() {
   const modal = document.getElementById("about-modal");
-  if (modal) modal.hidden = true;
+  if (!modal || modal.hidden) return;
+  modal.hidden = true;
+  const origin = aboutReturnFocus;
+  aboutReturnFocus = null;
+  const candidates = [origin, ...document.querySelectorAll<HTMLElement>('#rows .cell-editable[contenteditable="true"]')];
+  const back = candidates.find((el): el is HTMLElement => {
+    if (!el?.isConnected || el === document.body || el.closest('[hidden], [inert]') || el.matches(':disabled')) return false;
+    for (let parent: HTMLElement | null = el; parent; parent = parent.parentElement) {
+      const style = window.getComputedStyle(parent);
+      if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
+    }
+    return true;
+  });
+  back?.focus({ preventScroll: true });
 }
 
 function openAboutDialog(version: string | null, lines: string[], link: unknown) {
   const modal = document.getElementById("about-modal");
   if (!modal) return;
+  if (modal.hidden) aboutReturnFocus = document.activeElement as HTMLElement | null;
   if (!aboutWired) {
     aboutWired = true;
     aboutListeners.push(addListener(modal, "click", function (e) {
       if (e.target === modal || (e.target as Element).closest("[data-about-close]")) closeAboutDialog();
     }));
     aboutListeners.push(addListener(modal, "keydown", function (e) {
-      if (e.key === "Escape") { e.stopPropagation(); closeAboutDialog(); }
+      if (e.key === "Escape" && !modal.hidden) { e.stopPropagation(); closeAboutDialog(); }
     }));
   }
   (document.getElementById("about-version") as HTMLElement).textContent =
@@ -411,6 +426,7 @@ export function mountUpdate(nextPorts: UpdateFeaturePorts): UpdateMount {
       while (noticeDisposers.length) (noticeDisposers.pop() as () => void)();
       while (aboutListeners.length) (aboutListeners.pop() as () => void)();
       closeAboutDialog();
+      aboutReturnFocus = null;
       aboutWired = false;
       updateStatus = null;
       updateNotice = null;
