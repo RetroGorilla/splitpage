@@ -1,14 +1,14 @@
 open
 wait document.querySelectorAll('#rows .row').length > 1
-eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.cell=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.st=function(i){return F.state().rows[i].visualText;}; window.kw=function(){return document.querySelectorAll('#rows .plain-tag-keyword').length;}; window.snap=function(){var s=F.state();return JSON.stringify({rows:s.rows,tags:s.productionTags});}; window.refusal=function(){return Array.from(document.querySelectorAll('#toast-host .toast')).some(function(t){return t.textContent==='That selection includes an existing tag. Select only untagged words.';});}; var s=JSON.parse(F.buildSplitpage()); s.title='Mixed tag selections'; var tag='<span class="tag-anchor" data-tag-cat="prop" data-tag-name="umbrella" contenteditable="false">umbrella</span>'; s.rows=['rain on the '+tag+' roof. the umbr elsewhere','rain on the '+tag+' roof. rella roof elsewhere','rain on the '+tag+' roof','rain on the '+tag+' roof','',''].map(function(html,i){return {id:'r'+(i+1),status:'todo',visualText:html,audioText:''};}); s.comments=[]; s.brollShots=[]; F.openFile(new File([JSON.stringify(s)],'mixed.splitpage')); return true; })()
+eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.cell=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.st=function(i){return F.state().rows[i].visualText;}; window.kw=function(){return document.querySelectorAll('#rows .plain-tag-keyword').length;}; window.snap=function(){var s=F.state();return JSON.stringify({rows:s.rows,tags:s.productionTags});}; window.refusal=function(){return Array.from(document.querySelectorAll('#toast-host .toast')).some(function(t){return t.textContent==='That selection includes an existing tag. Select only untagged words.';});}; var s=JSON.parse(F.buildSplitpage()); s.title='Mixed tag selections'; var tag='<span class="tag-anchor" data-tag-cat="prop" data-tag-name="umbrella" contenteditable="false">umbrella</span>'; s.rows=['rain on the '+tag+' roof. the umbrella elsewhere','rain on the '+tag+' roof. umbrella roof elsewhere','rain on the '+tag+' roof','rain on the '+tag+' roof','',''].map(function(html,i){return {id:'r'+(i+1),status:'todo',visualText:html,audioText:''};}); s.comments=[]; s.brollShots=[]; F.openFile(new File([JSON.stringify(s)],'mixed.splitpage')); return true; })()
 wait F.state().title === 'Mixed tag selections' && document.querySelectorAll('#rows .row').length === 6
-eval (function(){var c=cell(0);c.focus();var r=document.createRange();r.setStart(c.firstChild,8);r.setEnd(c.querySelector('.tag-anchor').firstChild,4);var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();window.steps=U.sizes().undo;return s.toString();})()
+eval (function(){var c=cell(0);c.focus();var r=document.createRange();r.setStart(c.firstChild,8);r.setEndAfter(c.querySelector('.tag-anchor'));var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();window.steps=U.sizes().undo;return s.toString();})()
 click #rows .row:nth-child(1) .visual-cell button.tb-tag
 expect document.getElementById('tag-modal').hidden
 expect refusal()
 expect snap() === window.before && U.sizes().undo === window.steps
 expect cell(0).querySelectorAll('.tag-anchor').length === 1
-eval (function(){var c=cell(1);c.focus();var r=document.createRange();r.setStart(c.querySelector('.tag-anchor').firstChild,3);r.setEnd(c.lastChild,5);var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();window.steps=U.sizes().undo;return s.toString();})()
+eval (function(){var c=cell(1);c.focus();var r=document.createRange();r.setStartBefore(c.querySelector('.tag-anchor'));r.setEnd(c.lastChild,5);var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();window.steps=U.sizes().undo;return s.toString();})()
 click #rows .row:nth-child(2) .visual-cell button.tb-tag
 expect document.getElementById('tag-modal').hidden
 expect refusal()
@@ -18,7 +18,7 @@ click #rows .row:nth-child(3) .visual-cell button.tb-tag
 expect document.getElementById('tag-modal').hidden
 expect refusal()
 expect snap() === window.before && U.sizes().undo === window.steps
-eval (function(){var c=cell(3);c.focus();var r=document.createRange();r.selectNodeContents(c.querySelector('.tag-anchor'));var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();return s.toString();})()
+eval (function(){var c=cell(3);c.focus();var r=document.createRange();r.selectNode(c.querySelector('.tag-anchor'));var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();return s.toString();})()
 click #rows .row:nth-child(4) .visual-cell button.tb-tag
 expect document.getElementById('tag-modal').hidden && refusal()
 expect snap() === window.before
