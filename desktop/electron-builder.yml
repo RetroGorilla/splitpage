@@ -10,7 +10,7 @@ files:
   - main.js
   - preload.js
   - tabstrip-preload.js
-  - drafts.js
+  - drafts.ts
   - ipc-channels.ts
   - ipc-setup.ts
   - ipc-files.ts
@@ -33,9 +33,9 @@ files:
   - history-fs-backend.ts
   - desktop-state.js
   - update-release.js
-  - file-service.js
-  - doc-claims.js
-  - recents.js
+  - file-service.ts
+  - doc-claims.ts
+  - recents.ts
   - window-appearance.ts
   - tab-registry.ts
   - restore-notice.ts
