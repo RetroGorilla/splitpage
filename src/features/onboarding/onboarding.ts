@@ -124,7 +124,10 @@ async function maybeAutoShowOnboarding() {
   const mounted = activeMount;
   let eligible;
   try {
-    await ports.startup.ready();
+    const ready = ports.startup.ready()?.then(() => true, () => false);
+    eligible = await onboardEligibleForAutoShow();
+    if (!eligible || activeMount !== mounted) return;
+    if (ready && !(await ready)) return;
     if (activeMount !== mounted) return;
     eligible = await onboardEligibleForAutoShow();
   } catch (e) { eligible = false; }
