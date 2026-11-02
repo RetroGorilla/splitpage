@@ -1,4 +1,5 @@
 import type { HomeFields } from "../location/document-location.ts";
+import type { DocumentView } from "../session/document-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { CommandOutcome, Stamp } from "../session/document-session.ts";
 import type { DocumentEntry } from "../session/ports.ts";
@@ -28,7 +29,7 @@ export interface IdentityPort {
 }
 
 export interface HistoryPort {
-  readonly keep: (label: string, doc?: ValidatedDocument | null) => unknown;
+  readonly keep: (label: string, doc?: DocumentView | null) => unknown;
 }
 
 export interface TransitionPorts<D> {

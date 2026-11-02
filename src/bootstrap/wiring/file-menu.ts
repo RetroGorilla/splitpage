@@ -2,7 +2,7 @@ import type { ActionDefinition } from "../../application/actions.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { autosaveActions as autosaveDefinitions, fileMenuActions as definitions } from "../../features/file-menu/actions.ts";
-import { startFileMenu as mountFileMenuDropdown } from "../../features/file-menu/file-menu.js";
+import { startFileMenu as mountFileMenuDropdown } from "../../features/file-menu/file-menu.ts";
 import type { FileMenuDropdownMount, FileMenuDropdownPorts } from "../../features/file-menu/ports.ts";
 import { autoSavePolicy, saveDoc, savesStarted, toggleAutoSave } from "./save-owners.ts";
 import { documentReader } from "./ports/document.ts";

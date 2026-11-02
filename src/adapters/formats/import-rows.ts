@@ -18,13 +18,13 @@ interface ImportedRow {
   audioText: string;
 }
 
-export function normalizeImportedRows(rows: readonly ImportRow[], sanitizeHtml: (html: string) => string): ImportedRow[] {
+export function normalizeImportedRows(rows: readonly ImportRow[] | null, sanitizeHtml: (html: string) => string): ImportedRow[] {
   function importedImageRef(dataUrl: string | null): ImageRef | null {
     const rec = dataUrl ? internDataUrl(dataUrl) : null;
     if (rec) queuePersist([rec.sha256]);
     return rec;
   }
-  return rows.map(function (r) {
+  return (rows as NonNullable<typeof rows>).map(function (r) {
     let visual = String(r.visualText || "");
     let image: string | null = null;
     const m = MD_IMAGE_PREFIX_RE.exec(visual);
