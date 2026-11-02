@@ -68,7 +68,7 @@ export default [
   {
     files: ["shared/**/*.js"],
     languageOptions: {
-      sourceType: "commonjs"
+      sourceType: "module"
     }
   },
 
