@@ -22,7 +22,7 @@ const { isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { createCloseQuit } = require("./close-quit");
 const { createSessionRestore } = require("./session-restore");
 const { createVoiceComposition } = require("./voice-composition");
-const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
+const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers.ts");
 const { createBlobStore } = require("./blob-store");
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
 const {
@@ -31,7 +31,7 @@ const {
 } = require("./desktop-state");
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
-} = require("./update-release");
+} = require("./update-release.ts");
 const { createIpcSetup } = require("./ipc-setup.ts");
 const { createFileIpc } = require("./ipc-files.ts");
 const { createShellIpc } = require("./ipc-shell.ts");
