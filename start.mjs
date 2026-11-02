@@ -128,7 +128,7 @@ if (willCheck) {
   })();
 }
 
-const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
+const server = spawn(process.execPath, [join(ROOT, "server", "server.ts")], {
   cwd: ROOT,
   stdio: ["ignore", "inherit", "inherit"],
   env: {
