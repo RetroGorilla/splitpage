@@ -20,7 +20,7 @@ files:
   - ipc-tabstrip.ts
   - ipc-test-mode.ts
   - ipc-print.ts
-  - print-pdf.js
+  - print-pdf.ts
   - prompter-share.js
   - close-quit.js
   - session-restore.js

@@ -1,6 +1,9 @@
 "use strict";
 
-const crypto = require("node:crypto");
+import type * as NodeCrypto from "node:crypto";
+import type * as Electron from "electron";
+
+const crypto: typeof NodeCrypto = require("node:crypto");
 
 const PRINT_PARTITION = "splitpage-print";
 const PRINT_ORIGIN = "splitpage://print";
@@ -16,10 +19,16 @@ const PDF_OPTIONS = Object.freeze({
 // why: img.decode() never settles in a view no window shows, so readiness reads the load state the load event left
 const READY_SCRIPT = "document.fonts.ready.then(() => Array.from(document.images).every((img) => img.complete && img.naturalWidth > 0))";
 
-function createPdfPrinter({ app, session, WebContentsView, timeoutMs = PRINT_TIMEOUT_MS, maxChars = MAX_PRINT_HTML_CHARS }) {
-  const pages = new Map();
-  const jobs = new Set();
-  let printSession = null;
+function createPdfPrinter({ app, session, WebContentsView, timeoutMs = PRINT_TIMEOUT_MS, maxChars = MAX_PRINT_HTML_CHARS }: {
+  app: Pick<Electron.App, "on">;
+  session: Pick<typeof Electron.session, "fromPartition">;
+  WebContentsView: typeof Electron.WebContentsView;
+  timeoutMs?: number;
+  maxChars?: number;
+}) {
+  const pages = new Map<string, string>();
+  const jobs = new Set<{ view: Electron.WebContentsView; cancel: () => void }>();
+  let printSession: Electron.Session | null = null;
   let quitting = false;
 
   function sessionForPrint() {
@@ -42,7 +51,7 @@ function createPdfPrinter({ app, session, WebContentsView, timeoutMs = PRINT_TIM
     return ses;
   }
 
-  function print(owner, html) {
+  function print(owner: Pick<Electron.WebContents, "once" | "removeListener">, html: unknown) {
     if (quitting) return Promise.reject(new Error("Splitpage is quitting"));
     if (typeof html !== "string" || !html.length || html.length > maxChars) {
       return Promise.reject(new Error("The print page is empty or too large"));
@@ -61,9 +70,9 @@ function createPdfPrinter({ app, session, WebContentsView, timeoutMs = PRINT_TIM
     });
     const contents = view.webContents;
     pages.set(url, html);
-    return new Promise((resolve, reject) => {
+    return new Promise<Buffer>((resolve, reject) => {
       let done = false;
-      const finish = (error, pdf) => {
+      const finish = (error: unknown, pdf?: Buffer) => {
         if (done) return;
         done = true;
         clearTimeout(timer);
@@ -71,7 +80,7 @@ function createPdfPrinter({ app, session, WebContentsView, timeoutMs = PRINT_TIM
         pages.delete(url);
         jobs.delete(job);
         if (!contents.isDestroyed()) contents.close();
-        if (error) reject(error); else resolve(pdf);
+        if (error) reject(error); else resolve(pdf as Buffer);
       };
       const ownerGone = () => finish(new Error("The page that asked to print has closed"));
       // why: a WebContentsView in no window is garbage once unreferenced, and collecting it stops the page mid-load
@@ -101,5 +110,7 @@ function createPdfPrinter({ app, session, WebContentsView, timeoutMs = PRINT_TIM
 
   return { print, cancelAll, openJobs: () => jobs.size };
 }
+
+export type { createPdfPrinter, PDF_OPTIONS, PRINT_CSP, PRINT_ORIGIN, PRINT_PARTITION, MAX_PRINT_HTML_CHARS };
 
 module.exports = { createPdfPrinter, PDF_OPTIONS, PRINT_CSP, PRINT_ORIGIN, PRINT_PARTITION, MAX_PRINT_HTML_CHARS };
