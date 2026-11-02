@@ -1,9 +1,9 @@
-import { normalizeDocId } from "../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../shared/doc-id-policy.ts";
 import { deriveDocId, docIdEmbeddedIn, sha256Bytes } from "../core/document/ids.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decideDuplicateLoser } from "../../shared/doc-id-policy.js";
+import { decideDuplicateLoser } from "../../shared/doc-id-policy.ts";
 import { mergedDocId, sha256Hex } from "../core/document/ids.ts";
 import { migrateDocument } from "../bootstrap/startup/document-entry.ts";
 import { createHash } from "node:crypto";

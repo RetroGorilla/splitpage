@@ -25,7 +25,7 @@ type HistoryReplyAlternatives<T, All = T> = T extends object ? T & {
   [K in Exclude<HistoryReplyKeys<All>, keyof T>]?: never;
 } : T;
 type HistoryDesktopDoc = Awaited<ReturnType<HistoryDesktopPort["historyListDocs"]>>[number];
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { HISTORY_OLDER_KEY, sanitizeHistoryMeta } from "../../../shared/history-policy.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../../shared/history-store.js";
 import { createIdbHistoryBackend, hashText as historyHashText } from "./03c-history-idb.ts";

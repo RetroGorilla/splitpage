@@ -5,7 +5,7 @@ import { DEFAULT_WPM } from "../../core/document/timing.ts";
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { NO_DESTINATION } from "../../application/transitions/ports.ts";
-import { fileKindFromName } from "../../../shared/file-names.js";
+import { fileKindFromName } from "../../../shared/file-names.ts";
 import { addListener } from "../common/listeners.ts";
 
 
