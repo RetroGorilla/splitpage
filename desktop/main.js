@@ -20,7 +20,7 @@ const { createTabRegistry } = require("./tab-registry.ts");
 const { createRestoreNotice } = require("./restore-notice.ts");
 const { isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { createCloseQuit } = require("./close-quit");
-const { createSessionRestore } = require("./session-restore");
+const { createSessionRestore } = require("./session-restore.ts");
 const { createVoiceComposition } = require("./voice-composition");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
 const { createBlobStore } = require("./blob-store");
@@ -28,7 +28,7 @@ const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = requi
 const {
   DESKTOP_STATE_VERSION,
   normalizeBounds, normalizeTabSource, createDesktopStateStore
-} = require("./desktop-state");
+} = require("./desktop-state.ts");
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
 } = require("./update-release");

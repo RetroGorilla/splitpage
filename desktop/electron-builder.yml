@@ -23,7 +23,7 @@ files:
   - print-pdf.js
   - prompter-share.js
   - close-quit.js
-  - session-restore.js
+  - session-restore.ts
   - close-keep.js
   - quit-watchdog.ts
   - blob-store.js
@@ -31,7 +31,7 @@ files:
   - voice-helper.js
   - chromium-browsers.js
   - history-fs-backend.js
-  - desktop-state.js
+  - desktop-state.ts
   - update-release.js
   - file-service.ts
   - doc-claims.ts

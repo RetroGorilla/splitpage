@@ -20,7 +20,7 @@ export interface MergeOutcomeView {
   readonly toast: (text: string, tone: NoticeKind, sticky: boolean) => void;
 }
 
-export interface DocumentMergePorts<Ctx> extends Omit<ApplyMergePorts<Ctx, ValidatedDocument>, "merge" | "view"> {
+export interface DocumentMergePorts<Ctx> extends Omit<ApplyMergePorts<Ctx, ValidatedDocument, ValidatedDocument, ValidatedDocument | null>, "merge" | "view"> {
   readonly states: (base: ValidatedDocument | null, mine: ValidatedDocument, theirs: ValidatedDocument) => MergedStates;
   readonly entry: (raw: unknown, lines?: LineShotIds) => ValidatedDocument;
   readonly view: MergeOutcomeView;
@@ -28,7 +28,7 @@ export interface DocumentMergePorts<Ctx> extends Omit<ApplyMergePorts<Ctx, Valid
 
 export interface DocumentMerge {
   readonly states: (base: ValidatedDocument | null, mine: ValidatedDocument, theirs: ValidatedDocument) => MergedStates;
-  readonly apply: <T>(opts?: ApplyMergeOptions<T> | null) => MergeOutcome<ValidatedDocument | T> | Promise<MergeOutcome<ValidatedDocument | T>>;
+  readonly apply: <T extends ValidatedDocument | null>(opts?: ApplyMergeOptions<T, ValidatedDocument> | null) => MergeOutcome<ValidatedDocument | T> | Promise<MergeOutcome<ValidatedDocument | T>>;
   readonly report: (result: MergedStates, opts?: MergeReportOptions | null) => void;
 }
 
@@ -41,7 +41,7 @@ export function createDocumentMerge<Ctx>(ports: DocumentMergePorts<Ctx>): Docume
     ports.view.autoSave(!!o.noAutoSave);
   }
 
-  const applying: ApplyMergePorts<Ctx, ValidatedDocument> = {
+  const applying: ApplyMergePorts<Ctx, ValidatedDocument, ValidatedDocument, ValidatedDocument | null> = {
     ...ports,
     merge: function (input) {
       return mergeIncoming(input, ports.isDocument, { entry: ports.entry, merge: ports.states });
@@ -55,7 +55,7 @@ export function createDocumentMerge<Ctx>(ports: DocumentMergePorts<Ctx>): Docume
 
   return Object.freeze({
     states: function (base: ValidatedDocument | null, mine: ValidatedDocument, theirs: ValidatedDocument) { return ports.states(base, mine, theirs); },
-    apply: function <T>(opts?: ApplyMergeOptions<T> | null): MergeOutcome<ValidatedDocument | T> | Promise<MergeOutcome<ValidatedDocument | T>> {
+    apply: function <T extends ValidatedDocument | null>(opts?: ApplyMergeOptions<T, ValidatedDocument> | null): MergeOutcome<ValidatedDocument | T> | Promise<MergeOutcome<ValidatedDocument | T>> {
       if (!opts) return { state: applying.current(), result: null, snapshot: null };
       return applyIncomingMerge(opts, applying);
     },
