@@ -52,6 +52,7 @@ export interface CellMark {
   readonly key: string;
   ended: boolean;
   n: number;
+  redo: UndoEntry[];
   value: unknown;
   top: UndoEntry | null;
   after: unknown;
@@ -326,19 +327,23 @@ function resolveDocFields(state: UndoState, plan: PlanStep[]): Resolved {
   docs.forEach(function (p) { if (p !== people) resolveDoc(state, p, survives, remap); });
   const crew = idMap<true>();
   listOf(kept).forEach(function (e) { if (e && e.id) crew[idKey(e.id)] = true; });
+  const previousCrew = idMap<true>();
+  listOf(state["people"]).forEach(function (e) { if (e && e.id) previousCrew[idKey(e.id)] = true; });
   const cleared: string[] = [];
   let touched = false;
   const rescue = remap || personIdRemap(sides as PersonList, kept);
   function orphansCleared(key: string, list: Owned[]): Owned[] {
+    const previous = idMap<unknown>();
+    listOf(state[key]).forEach(function (e) { if (e) previous[itemKey(key, e)] = e.owner; });
     return list.map(function (e) {
       if (!e || typeof e.owner !== "string" || !e.owner || crew[e.owner]) return e;
       const moved = rescue[e.owner];
       if (crew[String(moved)]) {
-        if (remap) return e;
         touched = true;
         return Object.assign({}, e, { owner: moved });
       }
-      cleared.push(itemKey(key, e));
+      const was = previous[itemKey(key, e)];
+      if (!was || previousCrew[String(was)]) cleared.push(itemKey(key, e));
       touched = true;
       return Object.assign({}, e, { owner: "" });
     });
@@ -367,8 +372,13 @@ function foldScan(entry: UndoEntry, scanned: DocFieldStep[], replayed: DocFieldS
     entry.steps.push(s);
   });
   replayed.forEach(function (s) {
-    const at = entry.steps.findIndex(function (e) { return e.op === "docField" && e.ownersOnly && e.key === s.key; });
-    entry.steps[at] = { op: "docField", key: s.key, before: clone(invert ? s.after : s.before), after: clone(invert ? s.before : s.after), ownersOnly: true };
+    const at = entry.steps.findIndex(function (e) { return e.op === "docField" && e.key === s.key; });
+    const original = entry.steps[at] as DocFieldStep;
+    const recorded: DocFieldStep = { op: "docField", key: s.key, before: clone(invert ? s.after : s.before), after: clone(invert ? s.before : s.after) };
+    if (original.ownersOnly) recorded.ownersOnly = true;
+    if (original.owners) recorded.owners = original.owners;
+    if (same(recorded.before, recorded.after)) entry.steps.splice(at, 1);
+    else entry.steps[at] = recorded;
   });
   entry.cell = null;
   const watch = entry.unassigned || (entry.unassigned = []);
@@ -401,6 +411,7 @@ export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonl
   const byId = idMap<StepRow>();
   state.rows.forEach(function (r) { byId[idKey(r.id)] = r; });
   const plan: PlanStep[] = [];
+  const people = steps.some(function (s) { return s.op === "docField" && s.key === "people"; });
   for (let n = 0; n < steps.length; n++) {
     const s = steps[n] as Step;
     if (s.op === "rowField") {
@@ -418,7 +429,7 @@ export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonl
       }
     } else if (s.op === "docField") {
       if (!same(state[s.key], s.before) && !listMergeFor(s.key)) return { ok: false, reason: "it has changed since" };
-      plan.push({ op: "doc", key: s.key, step: s, live: s.ownersOnly ? clone(state[s.key]) : undefined });
+      plan.push({ op: "doc", key: s.key, step: s, live: s.ownersOnly || people || OWNED_LISTS[s.key] ? clone(state[s.key]) : undefined });
     } else if (s.op === "insertRow") {
       const id = idKey(s.row.id);
       if (s.index < 0 || s.index > order.length || byId[id] && order.indexOf(s.row.id) !== -1) {
@@ -466,7 +477,10 @@ export function writePlanned(state: UndoState, planned: PlannedSteps, out?: Writ
     out.scanned = plan.filter(function (p): p is DocPlan { return p.op === "doc" && !!p.scan; }).map(function (p) {
       return { op: "docField", key: p.key, before: p.scan, after: clone(state[p.key]) };
     });
-    out.replayed = plan.filter(function (p): p is DocPlan { return p.op === "doc" && !!p.step && !!p.step.ownersOnly; }).map(function (p) {
+    const people = plan.some(function (p) { return p.op === "doc" && p.key === "people"; });
+    out.replayed = plan.filter(function (p): p is DocPlan {
+      return p.op === "doc" && !!p.step && (!!p.step.ownersOnly || people || !!OWNED_LISTS[p.key] && !same(p.live, state[p.key]));
+    }).map(function (p) {
       return { op: "docField", key: p.key, before: p.live, after: clone(state[p.key]) };
     });
   }
@@ -620,6 +634,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
   function fill(mark: CellMark, value: unknown): CellMark {
     const top = done[done.length - 1] || null;
     mark.n = serial;
+    mark.redo = undone.slice();
     mark.value = value;
     mark.top = top;
     mark.after = top && headAfter(top);
@@ -630,7 +645,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
   }
 
   function markCell(rowId: string, key: string, value: unknown): CellMark {
-    current = fill({ rowId: rowId, cell: rowId + "\u0000" + key, key: key, ended: false, n: 0, value: undefined, top: null, after: null, at: null, endsInSpace: null, lost: null }, value);
+    current = fill({ rowId: rowId, cell: rowId + "\u0000" + key, key: key, ended: false, n: 0, redo: [], value: undefined, top: null, after: null, at: null, endsInSpace: null, lost: null }, value);
     return current;
   }
 
@@ -660,13 +675,22 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
   function dropEmptySince(mark: CellMark, cancelled?: boolean): boolean {
     if (mark !== current) return false;
     mark.ended = true;
+    if (cancelled) {
+      const keep = (entry: UndoEntry): boolean => entry.n <= mark.n || onlyCell(entry.steps) !== mark.cell;
+      undone.splice(0, undone.length, ...undone.filter(keep));
+      if (parked) parked.redo = parked.redo.filter(keep);
+      if (mark.redo.length) parked = {
+        redo: mark.redo.slice(), top: mark.top, after: mark.after,
+        text: mark.top && onlyCell(mark.top.steps) ? projectionOf(runs, mark.after) : null
+      };
+    }
     let k = done.length;
     while (k > 0 && (done[k - 1] as UndoEntry).n > mark.n) k--;
     const top = mark.top;
     const joined = done[k - 1] === top && joinedTop(mark);
     const lost = !!mark.lost && (done[k - 1] || null) === mark.lost.under &&
       (!mark.lost.under || headAfter(mark.lost.under) === mark.lost.after);
-    if (k === done.length && !joined) return false;
+    if (k === done.length && !joined) { if (cancelled) unpark(); return false; }
     if (!joined && !lost && !cosmetic(runs, { op: "rowField", key: mark.key, before: mark.value, after: ((done[k] as UndoEntry).steps[0] as RowFieldStep).before })) return false;
     for (let i = k; i < done.length; i++) if (onlyCell((done[i] as UndoEntry).steps) !== mark.cell) return false;
     const end = (k < done.length ? done[done.length - 1] : top) as UndoEntry;
@@ -715,7 +739,10 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
       };
     }
     const watch = entry.unassigned || [];
-    const had = watch.map(function (w) { return ownerAt(state, w); });
+    const had = watch.map(function (w) {
+      const owner = ownerAt(state, w);
+      return !!owner && listOf(state["people"]).some(function (p) { return p && p.id === owner; });
+    });
     let out: WriteReport = {};
     return {
       steps: steps,
@@ -731,7 +758,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
         const scanned = out.scanned as DocFieldStep[], replayed = out.replayed as DocFieldStep[];
         if (scanned.length || replayed.length) foldScan(entry, scanned, replayed, invert);
         from.pop();
-        to.push(entry);
+        if (entry.steps.length) to.push(entry);
         marked(true);
         const count = Object.keys(ids).length;
         return count ? { ok: true, steps: steps, cleared: count } : { ok: true, steps: steps };
@@ -766,6 +793,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     const had = done.length + undone.length;
     keep(done);
     keep(undone);
+    if (current) keep(current.redo);
     if (done.length + undone.length !== had) parked = null;
     if (parked) keep(parked.redo);
     done.forEach(function (e) { if (e.evicted && hits(e.evicted)) e.evicted = null; });

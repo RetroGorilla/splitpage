@@ -322,6 +322,30 @@ test("close check: with no file gone, nothing is waited on and a clean tab is no
   assert.deepEqual([r.answer, r.questions], ["discard", [["b"]]]);
 });
 
+test("quit rechecks queued edits after each question, including a later question", async () => {
+  const queueEdit = (id) => ({ tabs }) => {
+    setTimeout(() => { tabs.get(id).dirty = true; }, 0);
+    return "discard";
+  };
+  const r = await closeCheck({
+    verb: "Quit", tabs: [tab("a", { dirty: true }), tab("b"), tab("c")],
+    answers: [queueEdit("b"), queueEdit("c"), "cancel"]
+  });
+  assert.deepEqual([r.answer, r.questions], ["cancel", [["a"], ["b"], ["c"]]]);
+});
+
+test("quit rechecks queued edits after the failed-copy question and releases the keep on cancellation", async () => {
+  const r = await closeCheck({
+    verb: "Quit", tabs: [tab("a", { gone: true, keepFails: true }), tab("b")],
+    answers: ["discard", ({ tabs }) => {
+      setTimeout(() => { tabs.get("b").dirty = true; }, 0);
+      return "discard";
+    }, "cancel"]
+  });
+  assert.deepEqual([r.answer, r.questions], ["cancel", [["a"], ["a"], ["b"]]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, false);
+});
+
 test("closing window: only a window still the last one at 'close' freezes the session (#531)", () => {
   assert.deepEqual(lastWindowClose(false), { freezeSession: true });
   assert.deepEqual(lastWindowClose(true), { freezeSession: false });

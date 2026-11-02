@@ -31,6 +31,40 @@ test("work queued during a paint runs once, after the outermost paint, and at on
   assert.equal(runs.length, 3, "nothing runs twice");
 });
 
+test("a throwing after-paint callback leaves the successful paint and remaining queue intact", () => {
+  const guard = createPaintGuard();
+  const runs: string[] = [];
+  assert.equal(guard.whilePainting(() => {
+    guard.afterThisPaint(() => { throw new Error("callback failed"); });
+    guard.afterThisPaint(() => { runs.push("second"); });
+    return 7;
+  }), 7);
+  assert.deepEqual(runs, ["second"]);
+  assert.equal(guard.painting(), false);
+  guard.whilePainting(() => {});
+  assert.deepEqual(runs, ["second"]);
+});
+
+test("after-paint errors are reported even when the reporter throws, without replacing a draw failure", () => {
+  const errors: unknown[] = [];
+  const guard = createPaintGuard(error => { errors.push(error); throw new Error("reporter failed"); });
+  const callback = new Error("callback failed");
+  const draw = new Error("draw failed");
+  const ran: string[] = [];
+  assert.doesNotThrow(() => guard.whilePainting(() => {
+    guard.afterThisPaint(() => { throw callback; });
+    guard.afterThisPaint(() => { ran.push("drawn"); });
+  }));
+  assert.throws(() => guard.whilePainting(() => {
+    guard.afterThisPaint(() => {}, () => { throw callback; });
+    guard.afterThisPaint(() => {}, () => { ran.push("failed"); });
+    throw draw;
+  }), error => error === draw);
+  assert.deepEqual(errors, [callback, callback]);
+  assert.deepEqual(ran, ["drawn", "failed"]);
+  assert.equal(guard.painting(), false);
+});
+
 test("a paint that throws runs each failure handler, keeps work that has none for the next paint that finishes, and ends the guard", () => {
   const guard = createPaintGuard();
   const runs: string[] = [];

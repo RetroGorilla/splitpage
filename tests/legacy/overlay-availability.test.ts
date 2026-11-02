@@ -191,7 +191,7 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
   }
 });
 
-test("the tour is refused over a dialog and starts over Present and the shot list", () => {
+test("the tour is refused over dialogs, Present, Writer and the shot list", () => {
   const { registry, restore } = loadedRegistry();
   const help = registerAll(registry, [...settingsActions(), ...helpActions(), ...fileMenuActions().slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]);
   try {
@@ -203,11 +203,17 @@ test("the tour is refused over a dialog and starts over Present and the shot lis
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = "";
     prompterState.setOpen(true);
-    assert.equal(refusal(registry, "tour", "menu"), null);
+    assert.equal(refusal(registry, "tour", "menu"), "Close Present first");
     prompterState.setOpen(false);
+    viewFlags().setWriterOpen(true);
+    assert.equal(refusal(registry, "tour", "menu"), "Close the writer first");
+    viewFlags().setWriterOpen(false);
     document.body.innerHTML = '<div id="broll-page"></div>';
-    assert.equal(refusal(registry, "tour", "menu"), null);
+    viewFlags().setBrollPageOpen(true);
+    assert.equal(refusal(registry, "tour", "menu"), "Close the shot list first");
   } finally {
+    viewFlags().setWriterOpen(false);
+    viewFlags().setBrollPageOpen(false);
     help();
     restore();
   }

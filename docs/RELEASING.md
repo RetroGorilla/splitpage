@@ -192,9 +192,17 @@ data folder untouched; see the `customInit` macro committed in
 Existing installations check this repository's latest release on startup and
 say when there is something newer; the desktop app offers to install it.
 
-**Where that update URL comes from.** `SPLITPAGE_UPDATE_API` (the desktop app
-honours it only with `SPLITPAGE_TEST=1`), or the default
-compiled into `update.mjs` and `desktop/main.ts`, and nothing else. `release.json`
+**Where that update URL comes from.** `SPLITPAGE_UPDATE_API` is honoured only
+with `SPLITPAGE_TEST=1`, in both the desktop app and the portable update checker.
+Otherwise they use the default compiled into `update.mjs` and
+`desktop/update-release.ts`, and nothing else. Release page links must use
+`https://github.com/RetroGorilla/splitpage/releases/tag/<tag>`; asset and checksum
+URLs must use `https://github.com/RetroGorilla/splitpage/releases/download/<tag>/<asset>`.
+Feed URLs pointing directly at GitHub's asset host are refused. After validating
+the repository download URL, the desktop app follows GitHub's redirect to its
+asset host normally. Test feeds may use their own HTTP or HTTPS origin only
+under the test switch. Malformed or untrusted release fields fail the update check.
+`release.json`
 used to be copied into each release's `.splitpage-release.json` as an
 `updateApi` field that the next update check would follow; #64 made that field
 ignored (a release naming where the next release comes from is a redirect

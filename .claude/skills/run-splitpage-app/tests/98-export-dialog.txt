@@ -51,6 +51,9 @@ expect Array.prototype.map.call(document.querySelectorAll('#export-formats .expo
 expect Array.prototype.map.call(document.querySelectorAll('#export-formats .export-card'), function(c){return c.getAttribute('data-format');}).join(',') === 'pdf,docx,md,csv,html,narration,breakdown,packing,broll'
 expect Array.prototype.every.call(document.querySelectorAll('#export-formats .export-card'), function(c){return c.querySelector('.export-card-name').textContent && c.querySelector('.export-card-purpose').textContent && /^\./.test(c.querySelector('.export-card-ext').textContent) && c.querySelector('input[type="radio"]');})
 expect getComputedStyle(document.querySelector('.export-card-ext')).fontFamily.indexOf('Mono') !== -1
+eval window.__cardLines = function () { return Array.from(document.querySelectorAll('.export-card')).every(function (c) { var n = c.querySelector('.export-card-name'), e = c.querySelector('.export-card-ext'), p = c.querySelector('.export-card-purpose'), r = document.createRange(); r.selectNodeContents(n); var lines = r.getClientRects(), nr = n.getBoundingClientRect(), er = e.getBoundingClientRect(), pr = p.getBoundingClientRect(), cr = c.getBoundingClientRect(); r.selectNodeContents(e); var ex = r.getClientRects(); return lines.length === 1 && ex.length === 1 && er.top >= nr.bottom && pr.top >= er.bottom && Math.abs(er.left - nr.left) < 1 && lines[0].right <= cr.right && ex[0].right <= cr.right; }); };
+expect __cardLines()
+expect (function () { var r = document.createRange(); r.selectNodeContents(document.querySelector('.export-card[data-format="broll"] .export-card-name')); return r.getClientRects().length === 1; })()
 # the right-hand side for PDF: a sketch with the real title, a summary, the name
 expect document.getElementById('export-preview').textContent.indexOf('Untitled Script') !== -1
 expect document.getElementById('export-summary').textContent.indexOf('2 scenes') === 0
@@ -73,7 +76,7 @@ expect X.reason('export-packing-gear') !== ''
 jsclick .export-card[data-format="broll"]
 wait document.querySelector('input[name="export-format"]:checked').value === 'broll' && document.getElementById('export-preview').classList.contains('is-landscape') && document.getElementById('export-go').disabled === true
 expect document.querySelector('input[name="export-format"]:checked').value == broll
-expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'PDF, landscape|Excel (.xlsx)|CSV (.csv)'
+expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'PDF|Excel (.xlsx)|CSV (.csv)'
 expect document.getElementById('export-why').textContent == No b-roll yet — start a Visual line with "B-roll:"
 expect document.getElementById('export-go').disabled === true
 expect document.getElementById('export-preview').classList.contains('is-landscape')
@@ -276,4 +279,107 @@ expect document.getElementById('export-modal').hidden
 eval (function(){var rows=window.__splitpageFormats.state().rows.length;return rows;})()
 expect window.__splitpageFormats.state().rows.length === 2
 
+jsclick #menu-export
+wait !document.getElementById('export-modal').hidden
+jsclick .export-card[data-format="broll"]
+jsclick .export-seg input[value="pdf"]
+expect document.getElementById('export-preview').classList.contains('is-landscape')
+eval document.documentElement.setAttribute('data-theme', 'light')
+viewport 1280 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-light-1280
+viewport 940 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-light-940
+viewport 1024 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-light-1024
+viewport 800 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-light-800
+viewport 761 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-light-761
+viewport 760 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-light-760
+viewport 390 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-light-390
+viewport 320 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-light-320
+eval document.documentElement.setAttribute('data-theme', 'dark')
+viewport 1280 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-dark-1280
+viewport 940 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-dark-940
+viewport 1024 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-dark-1024
+viewport 800 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-dark-800
+viewport 761 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-dark-761
+viewport 760 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-dark-760
+viewport 390 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-dark-390
+viewport 320 1000
+wait __settled()
+expect __cardLines()
+expect (function () { var r = document.querySelector('#export-modal .export-panel').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()
+eval document.querySelector('.export-card[data-format="broll"]').scrollIntoView({ block: 'center' })
+shot 238-export-dark-320
 quit

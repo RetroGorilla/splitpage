@@ -310,6 +310,7 @@ function listenerSet<L>() {
 
 export function fakeDocument<Current extends DocumentView = DocumentView>(initial: Current | null = null) {
   let held = initial;
+  let epoch = 0;
   const changes = listenerSet<SessionListener>();
   const replaced = listenerSet<() => void>();
   const refreshes = listenerSet<(jobs: ReadonlySet<string>) => void>();
@@ -322,8 +323,10 @@ export function fakeDocument<Current extends DocumentView = DocumentView>(initia
   };
   return {
     document,
+    lifetime: { epoch: () => epoch },
     replace: (doc: Current | null): void => {
       held = doc;
+      epoch++;
       for (const listener of [...replaced.listeners]) listener();
     },
     refresh: (jobs: readonly string[]): void => {
@@ -402,6 +405,7 @@ export function fakePictures() {
     return ref;
   };
   const pictures: PictureStore = {
+    has: (sha) => !!held.get(sha)?.bytes,
     intern: (bytes) => bytes.length ? add(bytes, "image/png") : null,
     internDataUrl: (dataUrl) => dataUrl.startsWith("data:image/") ? add(new Uint8Array([1]), dataUrl.slice(5, dataUrl.indexOf(";"))) : null,
     recordFor: (sha) => held.get(sha)?.ref ?? null,
@@ -439,6 +443,7 @@ export function fakeOnboardingPorts() {
   const recorded: boolean[] = [];
   const choices = new Set<() => void>();
   const ports: OnboardingPorts = {
+    startup: { ready: () => null },
     desktop: () => state.desktop,
     actions: actions.actions, sidePanels: panels.sidePanels,
     preferences: {

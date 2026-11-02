@@ -10,6 +10,7 @@ import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-p
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
+localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
 
 const { currentDocument, liveSession, mergeBase } = await import("../bootstrap/wiring/session-owner.ts");
@@ -28,6 +29,8 @@ const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
+const { screen } = await import("../bootstrap/wiring/ports/screen.ts");
+const { EVERY_OVERLAY, inFront } = await import("../application/screen.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const find = await import("../features/find/find.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
@@ -507,6 +510,20 @@ async function pressRedraw() {
   assert.equal(redrawToasts().length, 0);
 }
 
+test("dismissing a redraw toast keeps editing blocked and offers recovery on the next interaction", async () => {
+  await staleScreen();
+  const toast = redrawToasts()[0];
+  toast.querySelector(".toast-dismiss").click();
+  assert.ok(toast.classList.contains("is-leaving"));
+  assert.equal(rowsInert(), true);
+  document.body.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+  assert.equal(redrawToasts().length, 1);
+  assert.notEqual(redrawToasts()[0], toast);
+  assert.equal(document.activeElement, redrawToasts()[0].querySelector(".toast-action"));
+  await pressRedraw();
+  assert.equal(rowsInert(), false);
+});
+
 function typedOnce() {
   typeChar(cellOf("r1", "visualText"), "!");
   flushEdits();
@@ -576,7 +593,8 @@ test("a stale screen makes the script, the titles and the editing controls inert
   assert.deepEqual(parts.filter((p) => !p[1]), [], "every part is inert");
   assert.deepEqual(dimmedParts().filter((p) => !p[1]), [], "every part is dimmed");
   const toast = redrawToasts()[0];
-  assert.equal(toast.getAttribute("role"), "alert");
+  assert.equal(toast.hasAttribute("role"), false);
+  assert.ok(Array.from(document.querySelectorAll('#toast-alert[role="alert"] > span')).some(el => el.textContent === REDRAW));
   assert.equal(toast.hasAttribute("title"), false);
   assert.equal(document.activeElement, toast.querySelector(".toast-action"));
   toast.click();
@@ -702,6 +720,7 @@ for (const place of WRITER_OPEN) {
         openTheWriter();
         redrawToasts()[0].querySelector(".toast-action").focus();
       }
+      assert.equal(inFront(EVERY_OVERLAY, screen()), "writer", "the Writer is the top overlay for the redraw focus scenario");
       await pressRedraw();
       const active = document.activeElement;
       assert.notEqual(active, document.body, "the focus is not left on the page");

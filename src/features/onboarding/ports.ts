@@ -7,6 +7,7 @@ import type { SeedCheck } from "../../application/preferences/seed-check.ts";
 import type { DraftResume } from "../../application/recovery/draft-resume.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
+import type { StartupSignal } from "../../application/startup-signal.ts";
 
 export interface OnboardingMount {
   readonly openOnboarding: () => void;
@@ -14,6 +15,7 @@ export interface OnboardingMount {
 }
 
 export interface OnboardingPorts {
+  readonly startup: StartupSignal;
   readonly desktop: () => boolean;
   readonly actions: Pick<ActionRegistry, "invoke">;
   readonly preferences: Pick<Preferences, "onboarding" | "recordOnboarding">;

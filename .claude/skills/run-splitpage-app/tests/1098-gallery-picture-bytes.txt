@@ -1,0 +1,19 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (async function(){ window.F = window.__splitpageFormats; window.B = window.__blobsTest; var c = document.createElement('canvas'); c.width = 17; c.height = 13; c.getContext('2d').fillRect(0, 0, 17, 13); window.ref = B.internDataUrl(c.toDataURL()); await B.persist([ref.sha256]); await F.openFile(new File([JSON.stringify({schema: 2, title: 'Gallery clipboard bytes', rows: [{id: 'r1', visualText: 'source', audioText: 'Alpha', imageRef: ref, status: 'todo'}, {id: 'r2', visualText: 'destination', audioText: 'Bravo', status: 'todo'}], comments: []})], 'clipboard.splitpage')); return true; })()
+wait F.state().title === 'Gallery clipboard bytes' && document.querySelector('#rows .row[data-id="r1"] img[data-blob]')
+eval (function(){ window.html = document.querySelector('#rows .row[data-id="r1"] img[data-blob]').outerHTML; window.row = function(id){ return F.state().rows.find(function(r){ return r.id === id; }); }; window.toasts = function(){ return Array.from(document.querySelectorAll('#toast-host .toast:not(.is-leaving)')).map(function(t){ return t.textContent; }); }; window.paste = function(id, markup){ var el = document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="audioText"]'); el.focus(); var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); getSelection().removeAllRanges(); getSelection().addRange(r); var dt = new DataTransfer(); dt.setData('text/html', markup); el.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true})); return true; }; B.forgetMemory(); return true; })()
+expect B.recordFor(ref.sha256) === null
+expect html.indexOf('data-w=') === -1
+eval paste('r2', html)
+wait row('r2').imageRef && row('r2').imageRef.sha256 === ref.sha256
+expect row('r2').imageRef.width === 17 && row('r2').imageRef.height === 13
+wait document.querySelector('#rows .row[data-id="r2"] .scene-gallery-tile img[data-blob]')
+expect !toasts().some(function(t){ return t.indexOf("couldn't be added") !== -1; })
+eval document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); })
+eval paste('r2', 'before ' + html.replaceAll(ref.sha256, 'e'.repeat(64)) + ' after')
+wait row('r2').audioText === 'Bravobefore  after'
+wait toasts().some(function(t){ return t.indexOf("A picture couldn't be added") === 0; })
+expect row('r2').imageRef.sha256 === ref.sha256 && !(row('r2').moreImages || []).length
+expect !toasts().some(function(t){ return t.indexOf('Picture added') === 0; })
+logs
