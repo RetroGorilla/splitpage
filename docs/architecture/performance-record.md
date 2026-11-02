@@ -291,6 +291,36 @@ Against `d18adde`:
 
 The direction matches the 4.5 record: the two cases that ingest new pictures were slower on `c4d5944` than on `d18adde` (here by 18% and 14%, against 35% and 32% on Windows; a different machine, so the sizes are not comparable). The closing tree is not slower than `d18adde` on either: open -1.4% and merge -4.4%, well inside the 10% line of E14, which is what 4.19's trim of the second hash and copy (`905a5d03`) was for. The load from IndexedDB reads +2.6%, inside the spread of the `d18adde` runs themselves (141 to 169 ms); the plan's note that this path hashes once more than ingestion stands, and 4.19 left it as it was. The spread within a build is large on this machine (the `d18adde` merge runs span 662 to 867 ms), so the figures show "not slower", not a gain.
 
+## TypeScript conversion, e44e1d03 to fd29b083
+
+Recorded 2026-11-02 on the Windows PC by `node tools/perf-ab.mjs e44e1d03 fd29b083 --only short,long --rounds 15`, comparing the start of the conversion of `shared/`, `desktop/` and the remaining app files with the commit that finished it. All three test locks were held, so no suite or verify overlapped it. It was not fully quiet: other agents started reading code during the last rounds, and one short `npm ci` (about 3 s) ran during them. Medians of 15 rounds absorb this; the images fixture was left out because of #1039.
+
+### Input latency, median of 15 rounds (ms)
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 | Limit |
+| --- | --- | --- | --- | --- | --- |
+| short typing | 2.7 | 2.8 | 14.3 | 15.4 | 8 |
+| long typing | 3.9 | 3.9 | 16.1 | 15.8 | 8 |
+| short new scene | 17.1 | 17.3 | 23.5 | 24.4 | 65 |
+| long new scene | 28.2 | 27.9 | 31.6 | 31.9 | 65 |
+| short undo the delete | 10.7 | 10.7 | 10.7 | 10.7 | 45 |
+| long undo the delete | 27.1 | 27.6 | 27.1 | 27.6 | 70 |
+
+The other cases (delete every scene, stamp, hide shot scenes, display preference, the three exports) moved between -5.3% and +2.7% at p50. Limits apply to the p50.
+
+### Desktop startup, 7 interleaved pairs of real launches (ms)
+
+From #1118, on the same PC.
+
+| Comparison | Synchronous entry load | Process to renderer ready |
+| --- | --- | --- |
+| Whole conversion, e44e1d03 to final | 44.78 to 63.74 | 508.89 to 526.30 |
+| `desktop/main` alone | 59.96 to 61.37 | 514.45 to 523.44 |
+
+### Reading it
+
+Input is unchanged within noise, as expected: the renderer bundle's stripped output is the same apart from the documented exceptions. The cost is at desktop launch, about 17 ms or 3%, because Electron strips types as it loads each file.
+
 ## Comparing two commits
 
 Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs --test` (or a plain build when the old build script lacks `--test`, reported in the output), and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. A standalone `node tools/perf-record.mjs` also builds the test variant before measuring, with the same fallback for older build scripts. Use compatible installed dependencies for the two commits; no install or network access is performed.
