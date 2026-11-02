@@ -1,5 +1,5 @@
 open
-eval (async function(){ window.F = window.__splitpageFormats; window.H = window.__historyTest; await F.openFile(new File([JSON.stringify(Object.assign(F.clone(F.state()), { title: 'Current document' }))], 'history-damage.splitpage')); await H.resetForTest(); await H.forceBackend('idb'); window.damageDoc = F.docId(); var state = F.clone(F.state()); state.title = 'Intact version'; window.damageBody = JSON.stringify(state); var hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(damageBody))); window.damageSha = Array.from(hash, function(b){ return b.toString(16).padStart(2, '0'); }).join(''); window.damageGood = { id: 'intact', sha: damageSha, atMs: 1000, label: 'Intact version', sizeBytes: damageBody.length }; window.damageBad = { id: 'damaged', sha: damageSha, atMs: 1e100 }; window.seedDamage = async function(snaps){ var db = await new Promise(function(resolve,reject){ var q = indexedDB.open('splitpage-history'); q.onsuccess = function(){ resolve(q.result); }; q.onerror = function(){ reject(q.error); }; }); await new Promise(function(resolve,reject){ var t = db.transaction(['index','bodies'], 'readwrite'); t.objectStore('index').put({ bucket: damageDoc, title: '', lastOpenedAt: 1, snapshots: snaps }); t.objectStore('bodies').put({ sha: damageSha, stateJson: damageBody }); t.oncomplete = resolve; t.onabort = function(){ reject(t.error); }; }); db.close(); }; await seedDamage([damageGood, damageBad]); window.damageBefore = JSON.stringify(await H.inspect()); return true; })()
+eval (async function(){ window.F = window.__splitpageFormats; window.H = window.__historyTest; await F.openFile(new File([JSON.stringify(Object.assign(F.clone(F.state()), { title: 'Current document' }))], 'history-damage.splitpage')); await H.resetForTest(); await H.forceBackend('idb'); H.setCapOverride(5 * 1024 * 1024); window.damageDoc = F.docId(); var state = F.clone(F.state()); state.title = 'Intact version'; window.damageBody = JSON.stringify(state); var hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(damageBody))); window.damageSha = Array.from(hash, function(b){ return b.toString(16).padStart(2, '0'); }).join(''); window.damageGood = { id: 'intact', sha: damageSha, atMs: 1000, label: 'Intact version', sizeBytes: damageBody.length }; window.damageBad = { id: 'damaged', sha: damageSha, atMs: 1e100, sizeBytes: 5 * 1024 * 1024 }; window.seedDamage = async function(snaps){ var db = await new Promise(function(resolve,reject){ var q = indexedDB.open('splitpage-history'); q.onsuccess = function(){ resolve(q.result); }; q.onerror = function(){ reject(q.error); }; }); await new Promise(function(resolve,reject){ var t = db.transaction(['index','bodies'], 'readwrite'); t.objectStore('index').put({ bucket: damageDoc, title: '', lastOpenedAt: 1, snapshots: snaps }); t.objectStore('bodies').put({ sha: damageSha, stateJson: damageBody }); t.oncomplete = resolve; t.onabort = function(){ reject(t.error); }; }); db.close(); }; await seedDamage([damageGood, damageBad]); window.damageBefore = JSON.stringify(await H.inspect()); return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.getElementById('history-list').textContent.includes('1 damaged snapshot could not be listed')
@@ -10,6 +10,9 @@ expect true
 jsclick #history-list [data-action="restore-snapshot"]
 wait F.state().title === 'Intact version'
 wait document.getElementById('history-panel').hidden
+eval (async function(){ await H.idle(); var raw = await H.inspect(); window.keptBackup = raw.index[damageDoc].snapshots.find(function(entry){ return entry && entry.label === 'Before restoring an earlier version'; }); window.backupRead = keptBackup ? await H.read({ docId: damageDoc, id: keptBackup.id }) : null; return !!backupRead; })()
+expect !!keptBackup
+expect JSON.parse(backupRead.stateJson).title === 'Current document'
 eval (async function(){ await H.idle(); await seedDamage([damageBad]); return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
@@ -17,3 +20,10 @@ wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]')
 wait document.getElementById('history-list').textContent.includes('1 damaged snapshot could not be listed')
 expect !document.getElementById('history-list').textContent.includes('No snapshots')
 expect document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 0
+eval (async function(){ window.rawDamagePayload = { raw: ['  unchanged  ', null, { atMs: 1e100 }] }; await seedDamage(rawDamagePayload); await F.openFile(new File([JSON.stringify(F.clone(F.state()))], 'history-damage.splitpage')); await H.idle(); window.quarantined = (await H.inspect()).index[damageDoc]; return true; })()
+expect JSON.stringify(quarantined.damagedSnapshots) === JSON.stringify(rawDamagePayload)
+expect Array.isArray(quarantined.snapshots)
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.getElementById('history-list').textContent.includes('1 damaged snapshot could not be listed')
+expect !document.getElementById('history-list').textContent.includes('No snapshots')
