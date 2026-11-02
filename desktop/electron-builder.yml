@@ -10,7 +10,7 @@ files:
   - main.js
   - preload.js
   - tabstrip-preload.js
-  - drafts.js
+  - drafts.ts
   - ipc-channels.ts
   - ipc-setup.ts
   - ipc-files.ts
