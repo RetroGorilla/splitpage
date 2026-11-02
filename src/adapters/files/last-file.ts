@@ -31,7 +31,7 @@ export async function loadLastFileHandle() {
   try {
     const db = await openHandleDb();
     return await new Promise<LocalFileReference | null>(function (resolve, reject) {
-      const req = db.transaction(LAST_FILE_STORE, "readonly").objectStore(LAST_FILE_STORE).get(LAST_FILE_KEY);
+      const req: IDBRequest<LocalFileReference | null> = db.transaction(LAST_FILE_STORE, "readonly").objectStore(LAST_FILE_STORE).get(LAST_FILE_KEY);
       req.onsuccess = function () { resolve(req.result || null); };
       req.onerror = function () { reject(req.error); };
     });
