@@ -25,7 +25,7 @@ function mimeForFilename(filename) {
   return "text/plain";
 }
 
-module.exports = {
+export {
   fileKindFromName,
   mimeForFilename
 };

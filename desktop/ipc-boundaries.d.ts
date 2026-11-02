@@ -45,11 +45,6 @@ export interface DesktopMainWindow {
   closeKeepingDrafts?: boolean;
 }
 
-export interface DesktopStateStoreBoundary {
-  read: () => { recents: { absPath: string; title: string; at: number }[] };
-  write: (mutator: (state: ReturnType<DesktopStateStoreBoundary["read"]>) => ReturnType<DesktopStateStoreBoundary["read"]>) => Promise<boolean>;
-}
-
 export interface DesktopMainCommon {
   tabOf: (event: DesktopIpcEvent) => DesktopMainTab | null;
   tabs: Map<string | undefined, DesktopMainTab>;
