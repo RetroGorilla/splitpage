@@ -4,7 +4,7 @@ import { createImportSavingOwner } from "../../application/save/import-saving.ts
 import type { ImportSavingOwner, ImportSaveRequest } from "../../application/save/import-saving-ports.ts";
 import type { DocumentSource } from "../../application/transitions/sources.ts";
 import type { SaveDestination } from "../../application/save/destinations.ts";
-import { startLocalFileMenu } from "../../features/file-menu/local-files.js";
+import { startLocalFileMenu } from "../../features/file-menu/local-files.ts";
 import type { LocalFileMenuControls } from "../../features/file-menu/local-files-ports.ts";
 import { localFilesOwnerPorts, importSavingPorts, localFileMenuPorts } from "./ports/local-files.ts";
 

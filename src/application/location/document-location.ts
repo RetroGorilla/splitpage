@@ -1,11 +1,11 @@
 export type HomeKind = "none" | "file" | "import";
 
-export interface Home {
-  readonly kind: HomeKind;
-  readonly [field: string]: unknown;
-}
+export type Home =
+  | { readonly kind: "none"; readonly [field: string]: unknown }
+  | { readonly kind: "file"; readonly name?: string | null; readonly format?: string | null; readonly lastModified?: number | null; readonly [field: string]: unknown }
+  | { readonly kind: "import"; readonly name: string; readonly format: string | null; readonly dirty: boolean; readonly lastModified: number | null; readonly [field: string]: unknown };
 
-export type HomeFields = Readonly<Record<string, unknown>>;
+export type HomeFields = Readonly<Record<string, unknown>> & { readonly name?: string | null; readonly format?: string | null; readonly dirty?: boolean; readonly lastModified?: number | null };
 
 export type LocationChange = "home" | "writtenOut";
 
@@ -15,7 +15,7 @@ export interface DocumentLocation {
   readonly restoreHome: (record: Home) => Home;
   readonly amendHome: (record: Home, fields: HomeFields) => Home;
   readonly fileHome: () => Home | null;
-  readonly importHome: () => Home | null;
+  readonly importHome: () => Extract<Home, { readonly kind: "import" }> | null;
   readonly writtenOut: () => boolean;
   readonly markWrittenOut: (writtenOut: boolean) => void;
   readonly onChange: (listener: (change: LocationChange) => void) => () => void;

@@ -8,6 +8,8 @@ export interface LocalFileHandle {
   readonly createWritable?: () => Promise<LocalFileWritable>;
 }
 
+export type LocalFileReference = Partial<LocalFileHandle>;
+
 export interface LocalFileWritable {
   readonly abort?: () => Promise<void>;
   readonly write: (data: unknown) => Promise<void>;

@@ -1195,7 +1195,7 @@ visible text on the Help page — keep any inside a fenced code block.
 
 **Choosing a File menu item:** one click listener on `#file-menu`
 (`mountFileMenu` in `src/features/file-menu/mount.ts`, wired by `src/bootstrap/wiring/views.ts`) hands an enabled item's id to `handleFileMenuAction()`
-(`src/features/file-menu/local-files.js`), which runs the `onFileMenuChoice()` listeners, closes
+(`src/features/file-menu/local-files.ts`), which runs the `onFileMenuChoice()` listeners, closes
 the menu, remembers an export and invokes the action from the registry
 (`docs/architecture/actions.md`). Help, Tour and Set up are actions
 like the rest; the capture-phase listeners `20c-help.js`, `20e-connect.js`
