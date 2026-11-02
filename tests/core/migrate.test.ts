@@ -516,7 +516,7 @@ test("a value whose toString or valueOf is not a function is no text: it migrate
   const row = list(out, "rows")[0] as Item;
   const c = list(out, "comments")[0] as Item;
   assert.equal(out.title, "");
-  assert.match(row.id as string, /^r-[0-9a-f]{24}$/);
+  assert.equal(row.id, "r-15bd0416528bfc5a4640ea09");
   assert.deepEqual([row.updatedBy, row.audioText, row.visualText], ["Anonymous", "", ""]);
   assert.deepEqual([c.rowId, c.author, c.quotedText, c.body], ["r-orphan-0", "Anonymous", "", ""]);
   assert.deepEqual((c.replies as Item[]).map((r) => [r.id, r.author, r.body]), [["rp-85f46f02a8b7da2a91fb56e6", "Anonymous", ""]]);
@@ -580,12 +580,10 @@ test("6.5: entry gives each named b-roll line a record, renames the one a line m
     ],
     brollShots: [{ id: "b_pour", name: "the pour" }]
   }, f.ports);
-  assert.deepEqual(list(out, "brollShots").map((b) => [b.name, b.audioRef]), [
-    ["The Pour", ""],
-    ["Steam", "Say now"]
+  assert.deepEqual(list(out, "brollShots").map((b) => [b.id, b.name, b.audioRef]), [
+    ["b_pour", "The Pour", ""],
+    ["bs-5d83bb9469d8212ad26318fc", "Steam", "Say now"]
   ]);
-  assert.equal(out.brollShots[0]?.id, "b_pour");
-  assert.match(out.brollShots[1]?.id || "", /^bs-[0-9a-f]{24}$/);
   assert.deepEqual(f.ids.minted, []);
   const again = migrateRows(jsonCopy(out), fakeMigration().ports);
   assert.deepEqual(again.brollShots, out.brollShots, "entering it again changes nothing");
