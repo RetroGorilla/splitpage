@@ -67,6 +67,7 @@ for (const stage of ["parse", "last handle", "permission", "read", "dialog", "ro
     const replacement = harness();
     const entered = deferred<undefined>();
     const gate = deferred<unknown>();
+    const handleGate = deferred<Awaited<ReturnType<LocalFilesOwnerPorts["lastFile"]["load"]>>>();
     const hold = () => { entered.resolve(undefined); return gate.promise; };
     let ports = h.ports;
     let finish: unknown = h.file;
@@ -77,7 +78,7 @@ for (const stage of ["parse", "last handle", "permission", "read", "dialog", "ro
       open = async () => { await h.owner.projectFileSource().open({ kind: "file", file: h.file, handle: {} }); };
     } else if (stage === "last handle" || stage === "permission") {
       ports = stage === "last handle"
-        ? { ...ports, lastFile: { ...ports.lastFile, load: hold as LocalFilesOwnerPorts["lastFile"]["load"] } }
+        ? { ...ports, lastFile: { ...ports.lastFile, load: () => { entered.resolve(undefined); return handleGate.promise; } } }
         : { ...ports, files: { ...ports.files, permission: async () => String(await hold()) } };
       finish = stage === "permission" ? "prompt" : {};
       open = () => h.owner.tryResumeLastProject();
@@ -109,7 +110,8 @@ for (const stage of ["parse", "last handle", "permission", "read", "dialog", "ro
     stop();
     const stopReplacement = h.owner.startLocalFiles(replacement.ports);
     const before = [...h.log];
-    gate.resolve(finish);
+    if (stage === "last handle") handleGate.resolve({});
+    else gate.resolve(finish);
     await pending;
     assert.deepEqual(h.log, before);
     assert.deepEqual(replacement.log, []);
