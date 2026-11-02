@@ -240,7 +240,7 @@ test("a crew-only redo that clears one owner and re-points another records both,
   currentDocument().brollShots.push(shot("bs_pier", "Pier", "p_Gone"));
   const res = redo();
   assert.equal(res.ok, true);
-  assert.equal(res.cleared, 1);
+  assert.equal(res.cleared, undefined);
   assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Ada");
   assert.equal(ownerOf(currentDocument().brollShots, "Pier"), "");
   assert.deepEqual(dangling(), []);

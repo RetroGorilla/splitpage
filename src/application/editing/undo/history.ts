@@ -327,10 +327,14 @@ function resolveDocFields(state: UndoState, plan: PlanStep[]): Resolved {
   docs.forEach(function (p) { if (p !== people) resolveDoc(state, p, survives, remap); });
   const crew = idMap<true>();
   listOf(kept).forEach(function (e) { if (e && e.id) crew[idKey(e.id)] = true; });
+  const previousCrew = idMap<true>();
+  listOf(state["people"]).forEach(function (e) { if (e && e.id) previousCrew[idKey(e.id)] = true; });
   const cleared: string[] = [];
   let touched = false;
   const rescue = remap || personIdRemap(sides as PersonList, kept);
   function orphansCleared(key: string, list: Owned[]): Owned[] {
+    const previous = idMap<unknown>();
+    listOf(state[key]).forEach(function (e) { if (e) previous[itemKey(key, e)] = e.owner; });
     return list.map(function (e) {
       if (!e || typeof e.owner !== "string" || !e.owner || crew[e.owner]) return e;
       const moved = rescue[e.owner];
@@ -338,7 +342,8 @@ function resolveDocFields(state: UndoState, plan: PlanStep[]): Resolved {
         touched = true;
         return Object.assign({}, e, { owner: moved });
       }
-      cleared.push(itemKey(key, e));
+      const was = previous[itemKey(key, e)];
+      if (!was || previousCrew[String(was)]) cleared.push(itemKey(key, e));
       touched = true;
       return Object.assign({}, e, { owner: "" });
     });
@@ -734,7 +739,10 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
       };
     }
     const watch = entry.unassigned || [];
-    const had = watch.map(function (w) { return ownerAt(state, w); });
+    const had = watch.map(function (w) {
+      const owner = ownerAt(state, w);
+      return !!owner && listOf(state["people"]).some(function (p) { return p && p.id === owner; });
+    });
     let out: WriteReport = {};
     return {
       steps: steps,
