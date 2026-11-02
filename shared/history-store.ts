@@ -73,6 +73,22 @@ function noop() {}
 function isDocId(v: unknown): boolean { return typeof v === "string" && DOC_ID_RE.test(v); }
 function isBucket(v: unknown): boolean { return v === HISTORY_OLDER_KEY || isDocId(v); }
 
+function finiteNumber(v: unknown): number {
+  try { const n = Number(v); return Number.isFinite(n) ? n : 0; } catch { return 0; }
+}
+
+function storedEntry(entry: unknown): HistoryStoreEntry | null {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const sha = (entry as SharedHistorySnapshotReader).sha;
+  if (typeof sha !== "string" || !/^[0-9a-f]{64}$/.test(sha)) return null;
+  try {
+    const meta = sanitizeHistoryMeta(entry);
+    if (!meta || !Number.isFinite(new Date(meta.atMs).getTime()) ||
+        !Number.isFinite(meta.rows) || !Number.isFinite(meta.sizeBytes)) return null;
+    return { ...meta, sha };
+  } catch { return null; }
+}
+
 function byAtAscending(a: unknown, b: unknown) {
   return (((a as SharedHistorySnapshotReader).atMs as number) - ((b as SharedHistorySnapshotReader).atMs as number)) || (((a as SharedHistorySnapshotReader).id as string) < ((b as SharedHistorySnapshotReader).id as string) ? -1 : ((a as SharedHistorySnapshotReader).id as string) > ((b as SharedHistorySnapshotReader).id as string) ? 1 : 0);
 }
@@ -90,6 +106,7 @@ function entryOf(meta: unknown, sha: string) {
 function cloneRecord(rec: SharedHistoryBucketReader | null | undefined) {
   const out = {} as HistoryStoreMutableBucket;
   Object.keys(rec as SharedHistoryBucketReader).forEach(function (k) { if (k !== "snapshots") out[k] = (rec as SharedHistoryBucketReader)[k]; });
+  out.title = typeof out.title === "string" ? historyClip(out.title, 300) : "";
   out.snapshots = Array.isArray((rec as SharedHistoryBucketReader).snapshots) ? ((rec as SharedHistoryBucketReader).snapshots as readonly unknown[]).slice() : [];
   return out;
 }
@@ -100,7 +117,11 @@ function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonl
 
 function findEntry(rec: SharedHistoryBucketReader | null | undefined, id: string) {
   const list = snapshotsOf(rec);
-  for (let i = 0; i < list.length; i++) if (list[i] && (list[i] as SharedHistorySnapshotReader).id === id) return list[i];
+  for (let i = 0; i < list.length; i++) {
+    if (!list[i] || (list[i] as SharedHistorySnapshotReader).id !== id) continue;
+    const entry = storedEntry(list[i]);
+    if (entry) return entry;
+  }
   return null;
 }
 
@@ -116,13 +137,14 @@ function newestAtMs(rec: SharedHistoryBucketReader | null | undefined) {
 function totalOf(index: SharedHistoryIndex | null | undefined) {
   let total = 0;
   Object.keys(index || {}).forEach(function (b) {
-    snapshotsOf((index as SharedHistoryIndex)[b]).forEach(function (s) { total += Number(s && (s as SharedHistorySnapshotReader).sizeBytes) || 0; });
+    snapshotsOf((index as SharedHistoryIndex)[b]).forEach(function (s) { total += Math.max(0, finiteNumber(s && (s as SharedHistorySnapshotReader).sizeBytes)); });
   });
   return total;
 }
 
 function publicMeta(entry: unknown, bucket: string) {
-  const m: (HistoryStoreMeta & { docId?: string }) | null = sanitizeHistoryMeta(entry);
+  const clean = storedEntry(entry);
+  const m: (HistoryStoreMeta & { docId?: string }) | null = clean ? sanitizeHistoryMeta(clean) : null;
   if (m) m.docId = bucket;
   return m as HistoryStorePublicMeta | null;
 }
@@ -172,7 +194,7 @@ function planChanges(index: SharedHistoryIndex, changes: HistoryStoreChanges, ca
       docId: b,
       lastOpenedAt: rec.lastOpenedAt || 0,
       expiresAt: rec.expiresAt || 0,
-      snapshots: snapshotsOf(rec).map(function (s) { return { id: (s as SharedHistorySnapshotReader).id, atMs: (s as SharedHistorySnapshotReader).atMs, sizeBytes: (s as SharedHistorySnapshotReader).sizeBytes }; })
+      snapshots: snapshotsOf(rec).filter(Boolean).map(function (s) { return { id: (s as SharedHistorySnapshotReader).id, atMs: (s as SharedHistorySnapshotReader).atMs, sizeBytes: finiteNumber((s as SharedHistorySnapshotReader).sizeBytes) }; })
     });
   });
   const plan = planHistoryEviction(docs, capBytes, nowMs, {
@@ -435,8 +457,8 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
         const e = findEntry(rec, id);
         if (!e) return null;
         if (bucket === HISTORY_OLDER_KEY && historyOlderExpired(rec, now())) return null;
-        return tx.get((e as SharedHistorySnapshotReader).sha).then(function (text) {
-          if (typeof text !== "string") return { missing: (e as SharedHistorySnapshotReader).sha };
+        return tx.get(e.sha).then(function (text) {
+          if (typeof text !== "string") return { missing: e.sha };
           return { meta: publicMeta(e, bucket as string), stateJson: text };
         });
       });
@@ -452,17 +474,27 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
   function list(docId?: unknown) {
     const id = isDocId(docId) ? docId as string : null;
     return run(false, function (tx) { return listIndex(tx); }).then(function (index) {
-      const entries = id ? snapshotsOf(index[id]).map(function (s) { return publicMeta(s, id); }).filter(Boolean as unknown as (m: HistoryStorePublicMeta | null) => m is HistoryStorePublicMeta) : [];
+      function readBucket(bucket: string) {
+        const rec = index[bucket];
+        const entries = snapshotsOf(rec).map(function (s) { return publicMeta(s, bucket); }).filter((m): m is HistoryStorePublicMeta => m !== null);
+        const damaged = rec && !Array.isArray(rec.snapshots) ? 1 : snapshotsOf(rec).length - entries.length;
+        return { entries, damaged };
+      }
+      const current = id ? readBucket(id) : { entries: [], damaged: 0 };
+      const entries = current.entries;
       const olderRec = index[HISTORY_OLDER_KEY] || null;
-      let older: HistoryStorePublicMeta[] = [], olderExpiresAt: number | null = null;
-      if (olderRec && historyOlderExpired(olderRec, now())) {
+      let older: HistoryStorePublicMeta[] = [], olderExpiresAt: number | null = null, olderDamaged = 0;
+      if (olderRec && historyOlderExpired({ expiresAt: finiteNumber(olderRec.expiresAt) }, now())) {
         if (!readOnly()) evictWith(function () { return Infinity; }, null).then(noop, noop);
       } else if (olderRec) {
-        older = snapshotsOf(olderRec).map(function (s) { return publicMeta(s, HISTORY_OLDER_KEY); }).filter(Boolean as unknown as (m: HistoryStorePublicMeta | null) => m is HistoryStorePublicMeta);
-        const exp = Number(olderRec.expiresAt);
+        const listed = readBucket(HISTORY_OLDER_KEY);
+        older = listed.entries;
+        olderDamaged = listed.damaged;
+        const exp = finiteNumber(olderRec.expiresAt);
         olderExpiresAt = isFinite(exp) && exp > 0 ? exp : null;
       }
-      return { entries: entries.sort(byAtDescending), older: older.sort(byAtDescending), olderExpiresAt: olderExpiresAt };
+      return { entries: entries.sort(byAtDescending), older: older.sort(byAtDescending), olderExpiresAt: olderExpiresAt,
+        ...(current.damaged ? { damaged: current.damaged } : {}), ...(olderDamaged ? { olderDamaged } : {}) };
     });
   }
 
@@ -479,7 +511,8 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
   function listDocs() {
     return run(false, function (tx) { return listIndex(tx); }).then(function (index) {
       return Object.keys(index).filter(function (b) { return b !== HISTORY_OLDER_KEY && index[b]; }).sort().map(function (b) {
-        return { docId: b, title: (index[b] as SharedHistoryBucketReader).title || "", lastOpenedAt: Number((index[b] as SharedHistoryBucketReader).lastOpenedAt) || 0 };
+        const rec = index[b] as SharedHistoryBucketReader;
+        return { docId: b, title: typeof rec.title === "string" ? historyClip(rec.title, 300) : "", lastOpenedAt: finiteNumber(rec.lastOpenedAt) };
       });
     });
   }
@@ -507,14 +540,14 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
           let copied = 0;
           snapshotsOf(src).forEach(function (s) {
             if (!s || have[(s as SharedHistorySnapshotReader).id as string] || typeof (s as SharedHistorySnapshotReader).sha !== "string") return;
-            const m = entryOf(s, (s as SharedHistorySnapshotReader).sha as string);
+            const m = storedEntry(s);
             if (!m) return;
             next.snapshots.push(m);
             have[m.id] = true;
             copied++;
           });
           next.snapshots.sort(byAtAscending);
-          if (!next.title && src && src.title) next.title = src.title;
+          if (!next.title && src && typeof src.title === "string") next.title = historyClip(src.title, 300);
           next.lastOpenedAt = t;
           const changes: HistoryStoreChanges = {};
           changes[to as string] = next;

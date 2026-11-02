@@ -2977,6 +2977,42 @@ async function caseHistoryKillAfterBody(target) {
   }
 }
 
+async function caseHistoryDamagedEntries(target) {
+  const tag = target.name + " history: damaged entries preserve intact versions";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const docId = randDocId(), damagedDocId = randDocId();
+  const meta = historyMeta({ label: "Intact version", atMs: 1000 });
+  const body = JSON.stringify({ rows: [], title: "Intact version" });
+  const index = seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta, body }] });
+  const damaged = { id: "damaged", sha: index.buckets[docId].snapshots[0].sha, atMs: 1e100 };
+  index.buckets[docId].snapshots.push(damaged, { id: "empty", sha: "", atMs: 1 });
+  index.buckets[damagedDocId] = { title: "", lastOpenedAt: 1, snapshots: [damaged] };
+  const indexPath = path.join(historyDirOnDisk(userDataDir), "index.json");
+  const before = JSON.stringify(index);
+  fs.writeFileSync(indexPath, before, "utf8");
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-damaged-entries", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const list = await historyCall(app.cdp, "historyList", [docId]);
+    record(tag + ": intact version remains listed beside a damage count",
+      list.entries.length === 1 && list.entries[0].id === meta.id && list.damaged === 2, JSON.stringify(list));
+    const got = await historyCall(app.cdp, "historyGet", [{ docId }, meta.id]);
+    record(tag + ": intact version remains readable", got && got.stateJson === body, "");
+    const bad = await historyCall(app.cdp, "historyGet", [{ docId }, "damaged"]);
+    const empty = await historyCall(app.cdp, "historyGet", [{ docId }, "empty"]);
+    record(tag + ": damaged entries return null", bad === null && empty === null, JSON.stringify({ bad, empty }));
+    const onlyBad = await historyCall(app.cdp, "historyList", [damagedDocId]);
+    record(tag + ": damaged-only history reports damage", onlyBad.entries.length === 0 && onlyBad.damaged === 1, JSON.stringify(onlyBad));
+    record(tag + ": reads leave the index bytes unchanged", fs.readFileSync(indexPath, "utf8") === before, "");
+    const again = await historyCall(app.cdp, "historyGet", [{ docId }, meta.id]);
+    record(tag + ": reads keep the shared body", again && again.stateJson === body, "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
 async function caseHistoryTornIndex(target) {
   const tag = target.name + " history: torn index.json falls back to index.prev.json";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -5567,6 +5603,7 @@ async function runTargetSuite(target, groupFilter) {
     ["history: id validation", () => caseHistoryIdValidation(target), hookFree],
     ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target), hookFree],
     ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target), hookFree],
+    ["history: damaged entries preserve intact versions", () => caseHistoryDamagedEntries(target), hookFree],
     ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target), hookFree],
     ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target), hookFree],
     ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target), hookFree],
