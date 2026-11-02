@@ -38,11 +38,15 @@ for (const text of ["Repeat.", ""]) {
 
 test("#1049: missing ids skip section ids and normalized row ids on either side", () => {
   const id = "r-c28a57430b578cccb2ea23d7";
-  for (const rows of [
-    [{ audioText: "one" }, { id: id + "!", audioText: "held" }, { audioText: "one" }],
-    [{ id: id + "!", audioText: "held" }, { audioText: "one" }, { audioText: "one" }]
-  ]) {
+  const cases = [
+    { rows: [{ audioText: "one" }, { id: id + "!", audioText: "held" }, { audioText: "one" }],
+      expected: ["r-load-b5e9a2159136e1cdeecca1d5-1", id, "r-load-b5e9a2159136e1cdeecca1d5-2"] },
+    { rows: [{ id: id + "!", audioText: "held" }, { audioText: "one" }, { audioText: "one" }],
+      expected: [id, "r-load-dcef959eed89d3e0f767eec8-1", "r-load-dcef959eed89d3e0f767eec8-2"] }
+  ];
+  for (const { rows, expected } of cases) {
     const out = migrateRows({ schema: 2, rows, sections: [{ id: id + "-1", name: "Part", firstSceneId: id }] }, fakeMigration().ports);
+    assert.deepEqual(out.rows.map(r => r.id), expected);
     const repaired = out.rows.filter(r => r.audioText === "one").map(r => r.id);
     assert.equal(new Set(repaired).size, 2);
     assert.ok(repaired.every(value => value !== id && value !== id + "-1"));
@@ -107,8 +111,13 @@ test("#1041: ids that collide after stripping keep the first row and all later c
 test("#1041: missing ids cannot take a later row's existing id or a previously derived id", () => {
   const f = fakeMigration();
   const id = "r-4f53cda18c2baa0c0354bb5f";
-  for (const rows of [[{}, { id }, { id: "!?" }, { id: id + "-1" }], [{ id }, {}, { id: "!?" }, { id: id + "-1" }]]) {
+  const cases = [
+    { rows: [{}, { id }, { id: "!?" }, { id: id + "-1" }], expected: ["r-load-f899655df7d4c8e67d1cc89c-1", id, "r-load-f899655df7d4c8e67d1cc89c-2", id + "-1"] },
+    { rows: [{ id }, {}, { id: "!?" }, { id: id + "-1" }], expected: [id, "r-load-4b806be4d5009870a675ab7d-1", "r-load-4b806be4d5009870a675ab7d-2", id + "-1"] }
+  ];
+  for (const { rows, expected } of cases) {
     const out = migrateRows({ schema: 2, rows }, f.ports);
+    assert.deepEqual(out.rows.map(r => r.id), expected);
     const repaired = out.rows.filter(r => r.id !== id && r.id !== id + "-1");
     assert.equal(repaired.length, 2);
     assert.ok(repaired.every(r => /^r-load-[0-9a-f]{24}-[0-9]+$/.test(r.id)));
