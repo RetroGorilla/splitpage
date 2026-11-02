@@ -105,4 +105,13 @@ for (const kind of ["memory", "idb", "filesystem"]) {
     assert.equal((await store.get(DOC, "good")).stateJson, text);
     assert.deepEqual(await inspect(), before);
   });
+
+  test(`[${kind}] damaged timestamps cannot poison a restore backup's stamp`, async (t) => {
+    const { store } = await fixture(t, [good, damaged]);
+    assert.equal((await store.put(DOC, { id: "backup", atMs: 2000, label: "Before restoring" }, text)).stored, true);
+    const listed = await store.list(DOC);
+    assert.deepEqual(listed.entries.map((m) => [m.id, m.atMs]), [["backup", 2000], ["good", 1000]]);
+    assert.equal(listed.damaged, 1);
+    assert.equal((await store.get(DOC, "backup")).stateJson, text);
+  });
 }
