@@ -545,6 +545,7 @@ export function startFind(given: FindPorts): FindControls {
       else {
         stopViewChange?.();
         stopViewChange = null;
+        given.present.setSearching(false);
         (ports as FindRuntimePorts).flags.setFindOpen(false);
         findMatches = [];
         findIndex = -1;
