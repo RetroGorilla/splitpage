@@ -36,7 +36,7 @@ export function withDocumentPorts<T>(fields: readonly StateField[], pass: (ports
         return (ids ? createRichText({ DOMParser: DOMParser, images: images, ids: ids }) : richText()).sanitize(html);
       },
       htmlIds: function (html) {
-        return Array.from(richText().inertBody(html).querySelectorAll("[data-cmt], [data-broll-id]"))
+        return Array.from(richText().inertBody(html).getElementsByTagName("*"))
           .flatMap(el => [el.getAttribute("data-cmt") || "", el.getAttribute("data-broll-id") || ""]);
       },
       decode: function (html, opts) { return richText().decode(html, opts); },
