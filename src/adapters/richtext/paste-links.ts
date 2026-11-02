@@ -2,6 +2,7 @@ import { normalizeCell } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 
 const TRACKING_NAME = /^(?:utm_[\s\S]*|fbclid|gclid|mc_eid|mc_cid|msclkid)$/i;
+const SIGNATURE_NAME = /^(?:Signature|Key-Pair-Id|Policy|X-Amz-Signature|X-Goog-Signature)$/i;
 
 export function cleanPastedHref(href: string): string {
   if (!/^https?:\/\/[^/?#\\]/i.test(href)) return href;
@@ -15,6 +16,7 @@ export function cleanPastedHref(href: string): string {
     for (const param of params) {
       const equals = param.indexOf("=");
       const name = decodeURIComponent(equals < 0 ? param : param.slice(0, equals));
+      if (SIGNATURE_NAME.test(name)) return href;
       if (!TRACKING_NAME.test(name)) kept.push(param);
     }
     if (kept.length === params.length) return href;

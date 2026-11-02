@@ -34,6 +34,24 @@ test("non-paste insertion retains tracking hrefs", () => {
   assert.equal(cell[0].marks.href, tracked);
 });
 
+test("pasting signed text links retains their complete query", () => {
+  for (const name of ["Signature", "Key-Pair-Id", "Policy", "X-Amz-Signature", "X-Goog-Signature"]) {
+    const href = "https://example.com/story?keep=1&utm_source=mail&" + name + "=example#part";
+    assert.equal(pastedHref(href), href);
+  }
+});
+
+test("dropping HTML into a draft retains tracking hrefs", () => {
+  const box = document.createElement("div");
+  box.className = "cell-editable";
+  box.setAttribute("contenteditable", "true");
+  document.body.append(box);
+  const href = "https://example.com/story?keep=1&utm_source=mail";
+  pasteIntoDraft(box, link(href), "Read this", false);
+  assert.equal(box.querySelector("a").getAttribute("href"), href);
+  box.remove();
+});
+
 test("pasting into a comment cleans the incoming link and keeps existing links", () => {
   const box = document.createElement("div");
   box.className = "cell-editable";

@@ -318,7 +318,7 @@ export function noteDraftFocus(box: Element) {
   if (isDraftBox(box)) historyFor(box);
 }
 
-export function pasteIntoDraft(box: Element, html: string, text: string) {
+export function pasteIntoDraft(box: Element, html: string, text: string, fromPaste = true) {
   const textPort = (ports as DraftEditPorts).text;
   const clean = html ? textPort.sanitizeHtml(html) : "";
   if (!clean && !text) return null;
@@ -326,7 +326,8 @@ export function pasteIntoDraft(box: Element, html: string, text: string) {
     const r = sel ? clampRange(cell, sel.from, sel.to) : { from: cellLength(cell), to: cellLength(cell) };
     const rest = deleteRange(cell, r.from, r.to);
     const from = clamp(rest, r.from);
-    const next = clean ? insertCell(rest, from, textPort.cleanPastedCell(media.cell(clean))).cell : insertText(rest, from, text);
+    const incoming = clean ? media.cell(clean) : [];
+    const next = clean ? insertCell(rest, from, fromPaste ? textPort.cleanPastedCell(incoming) : incoming).cell : insertText(rest, from, text);
     const at = from + cellLength(next) - cellLength(rest);
     return { cell: next, sel: { from: at, to: at } };
   }, [clean, text]);
