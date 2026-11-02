@@ -22,6 +22,8 @@ export interface HistoryBackendList {
   entries: HistorySnapshotMeta[];
   older: HistorySnapshotMeta[];
   olderExpiresAt: number | null;
+  damaged?: number;
+  olderDamaged?: number;
   usage?: HistoryStoreUsage | null;
 }
 

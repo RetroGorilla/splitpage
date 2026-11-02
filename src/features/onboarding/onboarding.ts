@@ -123,8 +123,15 @@ async function onboardEligibleForAutoShow() {
 async function maybeAutoShowOnboarding() {
   const mounted = activeMount;
   let eligible;
-  try { eligible = await onboardEligibleForAutoShow(); } catch (e) { eligible = false; }
-  if (eligible && activeMount === mounted) openOnboarding();
+  try {
+    const ready = ports.startup.ready()?.then(() => true, () => false);
+    eligible = await onboardEligibleForAutoShow();
+    if (!eligible || activeMount !== mounted) return;
+    if (ready && !(await ready)) return;
+    if (activeMount !== mounted) return;
+    eligible = await onboardEligibleForAutoShow();
+  } catch (e) { eligible = false; }
+  if (eligible && activeMount === mounted && onboardModal()?.hidden) openOnboarding();
 }
 
 export function startOnboarding(given: OnboardingPorts): OnboardingMount {

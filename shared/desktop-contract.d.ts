@@ -139,6 +139,8 @@ export interface DesktopWireHistoryList {
   entries: DesktopWireHistoryMeta[];
   older: DesktopWireHistoryMeta[];
   olderExpiresAt: number | null;
+  damaged?: number;
+  olderDamaged?: number;
   usage: DesktopWireHistoryUsage | null;
 }
 
