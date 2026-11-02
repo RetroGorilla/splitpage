@@ -60,7 +60,7 @@ async function buildAppDataBundle() {
     Reflect.deleteProperty(history, "blobs");
     Reflect.deleteProperty(history, "missingBlobs");
   } catch (e) {
-    throw appDataError("history", "Export cancelled — version history could not be read. Nothing was downloaded.");
+    throw appDataError("history", "Export cancelled — history or image data could not be read. Nothing was downloaded.");
   }
 
   try {

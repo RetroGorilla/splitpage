@@ -61,7 +61,7 @@ test("history read failures cancel app-data delivery", async () => {
   try {
     await mounted.exportAppData();
     assert.equal(deliveries, 0);
-    assert.deepEqual(shown.at(-1), ["Export cancelled — version history could not be read. Nothing was downloaded.", "error"]);
+    assert.deepEqual(shown.at(-1), ["Export cancelled — history or image data could not be read. Nothing was downloaded.", "error"]);
   } finally { mounted.dispose(); }
 });
 
@@ -92,7 +92,7 @@ test("damage without any exportable history cancels delivery", async () => {
   try {
     await mounted.exportAppData();
     assert.equal(deliveries, 0);
-    assert.deepEqual(shown.at(-1), ["Export cancelled — version history could not be read. Nothing was downloaded.", "error"]);
+    assert.deepEqual(shown.at(-1), ["Export cancelled — history or image data could not be read. Nothing was downloaded.", "error"]);
   } finally { mounted.dispose(); }
 });
 
