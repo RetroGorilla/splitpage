@@ -22,12 +22,13 @@ key Enter
 wait !__plain.isConnected
 eval D.runMenuCommand('help')
 wait !document.getElementById('help-modal').hidden
-expect document.fullscreenElement.contains(document.getElementById('help-modal'))
+expect document.fullscreenElement === document.documentElement && document.fullscreenElement.contains(document.getElementById('help-modal'))
 expect __top(document.querySelector('#help-modal .modal-panel'))
 shot sweep-ui-help-fullscreen
 click #help-close
 eval D.runMenuCommand('settings')
 wait !document.getElementById('settings-modal').hidden
+expect document.fullscreenElement === document.documentElement
 expect __top(document.querySelector('#settings-modal .modal-panel'))
 click #settings-modal .modal-close
 click #pp-close
