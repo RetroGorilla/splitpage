@@ -1,7 +1,7 @@
 "use strict";
 /* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */
 
-var blobPolicy = require("./blob-policy.js");
+import * as blobPolicy from "./blob-policy.js";
 
 var YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 var VIMEO_ID_RE = /^[0-9]{1,12}$/;
@@ -236,7 +236,7 @@ function embeddableVideo(link) {
   return link && link.href ? parseVideoLink(link.href) : null;
 }
 
-module.exports = {
+export {
   FETCH_TIMEOUT_MS,
   PLAYER_ORIGINS,
   THUMB_MAX_BYTES,
