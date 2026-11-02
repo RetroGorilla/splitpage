@@ -118,7 +118,7 @@ export interface FileMenuDropdownPorts {
   readonly place: Pick<DocumentPlace, "home">;
   readonly desktop: () => boolean;
   readonly recents: Pick<RecentFiles, "available" | "list" | "routeOpen" | "read">;
-  readonly recentHandle: (entry: RecentFileData) => { readonly getFile: () => Promise<File> };
+  readonly recentHandle: (entry: RecentFileData | undefined) => { readonly getFile: () => Promise<File> };
   readonly canOpenPrompter: { readonly browser: () => boolean; readonly chromium: () => boolean };
   readonly opening: DocumentOpening;
   readonly transitions: Pick<Transitions<DocumentDestination>, "startNew">;

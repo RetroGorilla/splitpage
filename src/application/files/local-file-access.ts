@@ -1,7 +1,12 @@
-import type { FileSaveCheck } from "../save/file-saving-ports.ts";
+export type FileSaveCheck =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly current: { readonly lastModified: number } | null }
+  | { readonly ok: false; readonly current: null; readonly denied: true };
+
 
 export interface LocalFileHandle {
   readonly name?: string;
+  readonly _desktopId?: string;
   readonly getFile: () => Promise<LocalFileData>;
   readonly queryPermission: (options: { mode: "readwrite" }) => Promise<string>;
   readonly requestPermission: (options: { mode: "readwrite" }) => Promise<string>;

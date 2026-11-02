@@ -65,7 +65,7 @@ async function openProjectFile(file: LocalFileData | null | undefined, handle: u
   return adoptProjectState(parsed.state, file, handle, parsed.kind, opts);
 }
 
-function adoptProjectState(newState: ValidatedDocument, file: LocalFileData | null | undefined, handle: unknown, kind: unknown, opts?: FileOptions | null) {
+function adoptProjectState(newState: ValidatedDocument, file: LocalFileData | null | undefined, handle: unknown, kind: string, opts?: FileOptions | null) {
   if (!active) return false;
   opts = opts || {};
   sidePanels().close("newtab-page");
