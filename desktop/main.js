@@ -24,7 +24,7 @@ const { createSessionRestore } = require("./session-restore.ts");
 const { createVoiceComposition } = require("./voice-composition.ts");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers.ts");
 const { createBlobStore } = require("./blob-store.ts");
-const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
+const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend.ts");
 const {
   DESKTOP_STATE_VERSION,
   normalizeBounds, normalizeTabSource, createDesktopStateStore

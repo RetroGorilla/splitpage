@@ -36,6 +36,11 @@ and `window-appearance.ts` use the same main-process type stripping and
 strict desktop check. Their callers name `.ts` explicitly; the restore
 notice and theme-choice IPC dependencies derive from their implementations.
 
+`history-fs-backend.ts` also uses main-process type stripping and the existing
+`desktop/*.ts` strict check. Its reader view derives from the current history
+record type but promises only string snapshot ids and valid SHA hashes; other
+metadata stays unknown until the shared store supplies its own checked types.
+
 `session-restore.ts` uses the same strict desktop check and main-process
 type stripping. Its draft initialization and listing types come from the
 real store, and its routing and notice functions come from their owners.
@@ -88,7 +93,7 @@ Everything listed here goes inside the asar.
 | `blob-store.ts` | The content-addressed folder where images live (#82). |
 | `voice-helper.ts` | Follow My Voice's listener process (#8). `voice-composition.ts` creates it and gives it its command. The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
 | `chromium-browsers.ts` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
-| `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.ts` itself. |
+| `history-fs-backend.ts` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.ts` itself. |
 | `desktop-state.ts` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.ts`. |
 | `update-release.ts` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
 | `file-service.ts` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry, the atomic write and writing a file entry (the atomic write plus its stamp). |
