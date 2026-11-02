@@ -5,7 +5,7 @@ import { pictures as portPictures } from "./ports/pictures.ts";
 import { text as portText } from "./ports/text.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { brollSeedOf, recordPastedBroll } from "../../application/production/broll-records.ts";
-import { startCellClipboard as mountCellClipboard } from "../../features/clipboard/cell-clipboard.js";
+import { startCellClipboard as mountCellClipboard } from "../../features/clipboard/cell-clipboard.ts";
 import type { CellClipboardPorts, CopyPasteMount, SceneClipPorts, SceneSelectPorts } from "../../features/clipboard/ports.ts";
 import { startSceneClip as mountSceneClip } from "../../features/clipboard/scene-clip.js";
 import { startSceneSelect as mountSceneSelect } from "../../features/clipboard/scene-select.js";

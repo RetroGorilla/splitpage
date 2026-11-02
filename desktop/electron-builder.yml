@@ -20,13 +20,13 @@ files:
   - ipc-tabstrip.ts
   - ipc-test-mode.ts
   - ipc-print.ts
-  - print-pdf.js
+  - print-pdf.ts
   - prompter-share.js
   - close-quit.js
   - session-restore.ts
   - close-keep.js
   - quit-watchdog.ts
-  - blob-store.js
+  - blob-store.ts
   - voice-composition.js
   - voice-helper.js
   - chromium-browsers.js

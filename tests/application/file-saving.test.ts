@@ -1,7 +1,8 @@
+import type { FileSaveCheck } from "../../src/application/files/local-file-access.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mountFileSaving, obsoleteSaveText } from "../../src/application/save/file-saving.ts";
-import type { FileSaveCheck, FileSaveHandle, FileSaveTarget, FileSavingMount, FileSavingPorts } from "../../src/application/save/file-saving-ports.ts";
+import type { FileSaveHandle, FileSaveTarget, FileSavingMount, FileSavingPorts } from "../../src/application/save/file-saving-ports.ts";
 import type { Home } from "../../src/application/location/document-location.ts";
 import { buildExportDocument } from "../../src/core/document/export-document.ts";
 import type { ExportDocument, ExportReadModels } from "../../src/core/document/export-document.ts";

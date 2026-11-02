@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/clipboard/cell-clipboard.js",
+    "src/features/clipboard/cell-clipboard.ts",
     "src/features/clipboard/scene-clip.js",
     "src/features/clipboard/scene-select.js",
     "src/bootstrap/wiring/clipboard.ts"
