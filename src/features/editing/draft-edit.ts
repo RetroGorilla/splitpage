@@ -319,13 +319,14 @@ export function noteDraftFocus(box: Element) {
 }
 
 export function pasteIntoDraft(box: Element, html: string, text: string) {
-  const clean = html ? (ports as DraftEditPorts).text.sanitizeHtml(html) : "";
+  const textPort = (ports as DraftEditPorts).text;
+  const clean = html ? textPort.sanitizeHtml(html) : "";
   if (!clean && !text) return null;
   return editDraft(box, function (cell, sel, media) {
     const r = sel ? clampRange(cell, sel.from, sel.to) : { from: cellLength(cell), to: cellLength(cell) };
     const rest = deleteRange(cell, r.from, r.to);
     const from = clamp(rest, r.from);
-    const next = clean ? insertCell(rest, from, media.cell(clean)).cell : insertText(rest, from, text);
+    const next = clean ? insertCell(rest, from, textPort.cleanPastedCell(media.cell(clean))).cell : insertText(rest, from, text);
     const at = from + cellLength(next) - cellLength(rest);
     return { cell: next, sel: { from: at, to: at } };
   }, [clean, text]);

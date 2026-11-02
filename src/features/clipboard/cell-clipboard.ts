@@ -171,7 +171,8 @@ export function cellFromClipboard(html: unknown, text: unknown, opts?: Clipboard
     media = prep.media;
     lost = prep.lost;
     attach = prep.attach;
-    let cell = (ports as CellClipboardPorts).text.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
+    const textPort = (ports as CellClipboardPorts).text;
+    let cell = textPort.cleanPastedCell(textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never }));
     if (prep.endsInBlock && projection(cell).slice(-1) === "\n") cell = sliceCell(cell, 0, cellLength(cell) - 1);
     if (cellLength(cell)) {
       return { cell: cell, text: null, media: media, lost: lost, attach: attach, fromCut: fromCut, comments: fromCut ? commentIds(cell) : [] };
