@@ -237,6 +237,23 @@ test("prompter: first Escape exits fullscreen and the next closes Present", asyn
   h.window.close();
 });
 
+test("prompter: Help's earlier Escape handler can hide its modal and consume the key", () => {
+  const h = setup();
+  h.el("help-modal").hidden = false;
+  const earlier = (event: Event): void => { h.el("help-modal").hidden = true; event.preventDefault(); };
+  h.window.addEventListener("keydown", earlier);
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  try {
+    assert.equal(h.fire(h.el("help-close"), "keydown", { key: "Escape" }).defaultPrevented, true);
+    assert.equal(h.el("help-modal").hidden, true);
+    assert.deepEqual(h.calls, []);
+  } finally {
+    owner.dispose();
+    h.window.removeEventListener("keydown", earlier);
+    h.window.close();
+  }
+});
+
 test("prompter: shot skip rebuild order, scene readout and playback stay unchanged", () => {
   const h = setup();
   let skip = false;

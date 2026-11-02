@@ -3,6 +3,8 @@ wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){window.F=window.__splitpageFormats;window.D=window.__desktopTest;window.__spoken=[];window.__speech=new MutationObserver(function(rs){rs.forEach(function(r){r.addedNodes.forEach(function(n){__spoken.push(n.textContent);});});});['toast-status','toast-alert'].forEach(function(id){__speech.observe(document.getElementById(id),{childList:true,subtree:true,characterData:true});});window.__top=function(el){var r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));};return true;})()
 expect document.getElementById('toast-status').getAttribute('role') === 'status'
 expect document.getElementById('toast-alert').getAttribute('role') === 'alert'
+caret #rows .row:first-child .audio-cell .cell-editable
+eval window.__editorOrigin=document.activeElement;window.__editorTextLength=__editorOrigin.textContent.length
 click #btn-present
 wait !document.getElementById('prompter').hidden
 click #pp-fullscreen
@@ -59,11 +61,27 @@ focus #pp-play
 key Escape
 wait document.fullscreenElement === null
 expect !document.getElementById('prompter').hidden
+eval D.runMenuCommand('help')
+wait !document.getElementById('help-modal').hidden
+focus #help-close
+key Escape
+wait document.getElementById('help-modal').hidden
+expect !document.getElementById('prompter').hidden
+key Escape
+wait document.getElementById('prompter').hidden
+expect document.activeElement === __editorOrigin
+press z
+expect __editorOrigin.textContent.length === __editorTextLength + 1
+wait document.getElementById('prompter').getAnimations().every(function(a){return a.playState !== 'running';})
+shot sweep-ui-present-close-focus
+click #btn-present
+wait !document.getElementById('prompter').hidden
 click #pp-fullscreen
 wait document.fullscreenElement === document.documentElement
 click #pp-close
 wait document.fullscreenElement === null
 wait document.getElementById('prompter').hidden
+expect document.activeElement === __editorOrigin
 eval (function(){var title=document.getElementById('doc-title');var p=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');Object.defineProperty(title,'value',{configurable:true,get:function(){return p.get.call(this);},set:function(){throw new Error('sweep-ui-render-fault');}});var doc=JSON.parse(JSON.stringify(F.state()));doc.title='Toast recovery';F.openFile(new File([JSON.stringify(doc)],'toast-recovery.splitpage'));return true;})()
 wait document.querySelector('#toast-host .toast.error.is-sticky.has-action')
 eval window.__sticky=document.querySelector('#toast-host .toast.error.is-sticky.has-action')

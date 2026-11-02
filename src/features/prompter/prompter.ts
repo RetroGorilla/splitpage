@@ -119,6 +119,7 @@ let initialReadyTimer: TimerHandle | null = null;
 let voiceSession = 0;
 let wakeLockGen = 0;
 let prompterLeaveSeq = 0;
+let prompterReturnFocus: HTMLElement | null = null;
 
 export let prompterMirror: boolean;
 export let prompterFlip: boolean;
@@ -362,6 +363,7 @@ export function disposePrompterView(): void {
   setPrompterPlaying(false);
   stopVoiceFollow();
   releaseWakeLock();
+  prompterReturnFocus = null;
 }
 
 function applyPrompterOrientation(): void {
@@ -482,6 +484,7 @@ function lockPageScrollWhenArrived(el: HTMLElement): void {
 }
 
 export function openPrompter(): void {
+  if (!ports.state.isOpen()) prompterReturnFocus = document.activeElement as HTMLElement | null;
   ports.panels.closeAll();
   buildPrompterContent();
   const el = document.getElementById("prompter") as HTMLElement;
@@ -522,6 +525,10 @@ export function closePrompter(): void {
   }
   el.hidden = true;
   document.body.classList.remove("prompter-open");
+  const origin = prompterReturnFocus;
+  prompterReturnFocus = null;
+  if (document.activeElement === document.body && origin?.isConnected && origin !== document.body &&
+      !origin.closest("[hidden], [inert]") && !origin.matches(":disabled")) origin.focus({ preventScroll: true });
 }
 
 export function setPrompterPlaying(on: boolean): void {

@@ -115,7 +115,7 @@ export function mountPrompter(mount: { window: Window; ports: PrompterPorts }): 
   });
 
   life.listen(window, "keydown", function (e) {
-    if (!ports.isOpen()) return;
+    if (!ports.isOpen() || e.defaultPrevented) return;
     const target = e.target;
     if (target?.closest?.('.toast') || document.querySelector('.modal-backdrop:not([hidden]), #cmdk:not([hidden])')) return;
     if (target && target.closest && !target.closest("#rows") && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
