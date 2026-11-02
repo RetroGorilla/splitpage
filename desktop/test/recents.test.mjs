@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { createRecents } = require(path.join(here, "..", "recents.js"));
 const { createFileRegistry } = require(path.join(here, "..", "file-service.js"));
-const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX } = require(path.join(here, "..", "desktop-state.js"));
+const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX } = require(path.join(here, "..", "desktop-state.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });

@@ -5,11 +5,12 @@ import type { DesktopWireFailure } from "../shared/desktop-contract.d.ts";
 import type * as NodeFs from "node:fs";
 
 import type { DesktopDraftStoreBoundary, DesktopFileServiceBoundary, DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { LAST_KNOWN_TITLE_MAX as DesktopTitleLimit } from "./desktop-state.ts";
 
 const fs: typeof NodeFs = require("node:fs");
 const { readFileEntry }: Pick<DesktopFileServiceBoundary, "readFileEntry"> = require("./file-service");
 const { restoreDoneAction }: { restoreDoneAction: (outcome: string) => "open" | "drop" | "release" } = require("./drafts");
-const { LAST_KNOWN_TITLE_MAX }: { LAST_KNOWN_TITLE_MAX: number } = require("./desktop-state");
+const { LAST_KNOWN_TITLE_MAX }: { LAST_KNOWN_TITLE_MAX: typeof DesktopTitleLimit } = require("./desktop-state.ts");
 
 function createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,

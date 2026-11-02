@@ -1,7 +1,7 @@
 "use strict";
 
 const path = require("node:path");
-const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX } = require("./desktop-state");
+const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX } = require("./desktop-state.ts");
 
 function createRecents({ store, pathKey, fileIds }) {
   let recentDocuments = [];

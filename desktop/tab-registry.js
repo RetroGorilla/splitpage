@@ -1,6 +1,6 @@
 "use strict";
 
-const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId } = require("./desktop-state");
+const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId } = require("./desktop-state.ts");
 
 function createTabRegistry({ pathKey }) {
   const tabs = new Map();
