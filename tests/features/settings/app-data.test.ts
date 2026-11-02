@@ -131,6 +131,27 @@ test("disposing the feature dismisses its partial-export choice and prevents sta
   assert.equal(deliveries, 0);
 });
 
+test("the partial export is checked for credentials again when the user chooses it", async () => {
+  const { ports, choices, shown } = setup();
+  const prefs: Record<string, unknown> = {};
+  let deliveries = 0;
+  const partial = { docs: [], older: [{ stateJson: "readable" }], omittedSnapshots: 1 };
+  const mounted = mountAppData({ ...ports,
+    preferences: { ...ports.preferences, appDataExport: () => prefs },
+    history: { ...ports.history, exportAll: () => Promise.reject(Object.assign(new Error("locked"), { code: "read-failed", partial })) },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    const choice = choices[0];
+    assert.ok(choice?.action);
+    prefs.apiKey = "must not leave the app";
+    await choice.action();
+    assert.equal(deliveries, 0);
+    assert.match(shown.at(-1)?.[0] || "", /credential \(apiKey\)/);
+  } finally { mounted.dispose(); }
+});
+
 test("history read failures cancel app-data delivery", async () => {
   const { ports, shown } = setup();
   let deliveries = 0;
