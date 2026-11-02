@@ -1,6 +1,7 @@
 import type { FileSaveCheck } from "../save/file-saving-ports.ts";
 
 export interface LocalFileHandle {
+  readonly kind?: "file";
   readonly name?: string;
   readonly getFile: () => Promise<LocalFileData>;
   readonly queryPermission: (options: { mode: "readwrite" }) => Promise<string>;
