@@ -1,9 +1,41 @@
 "use strict";
 
-const http = require("node:http");
-const net = require("node:net");
-const crypto = require("node:crypto");
-const path = require("node:path");
+import type * as NodeHttp from "node:http";
+import type * as NodeNet from "node:net";
+import type * as NodeCrypto from "node:crypto";
+import type * as NodePath from "node:path";
+import type { createVoiceHelper } from "./voice-helper.ts";
+
+const http: typeof NodeHttp = require("node:http");
+const net: typeof NodeNet = require("node:net");
+const crypto: typeof NodeCrypto = require("node:crypto");
+const path: typeof NodePath = require("node:path");
+
+interface DesktopPrompterVoiceStream {
+  res: NodeHttp.ServerResponse;
+  session: number | null;
+  closed: boolean;
+  heartbeat: NodeJS.Timeout | null;
+  close: () => void;
+}
+interface DesktopPrompterShareEntry {
+  token: string;
+  voiceToken: string | null;
+  name: string;
+  text: string;
+  expiresAt: number;
+  timer: NodeJS.Timeout | null;
+  streams: Set<DesktopPrompterVoiceStream>;
+}
+interface DesktopPrompterShareOptions {
+  staticAllowlist?: Record<string, { file: string; type: string }> | undefined;
+  readStatic?: (entry: NonNullable<DesktopPrompterShareOptions["staticAllowlist"]>[string]) => Promise<Buffer>;
+  cspHeader?: (() => Promise<string>) | undefined;
+  preferredPort?: number;
+  ttlMs?: number;
+  now?: () => number;
+  voice?: { start: ReturnType<typeof createVoiceHelper>["start"]; stop: (ownerId: string, session: number) => void };
+}
 
 const SHARE_TTL_MS = 60 * 60 * 1000;
 
@@ -20,19 +52,19 @@ const VOICE_PATH_RE = /^\/prompter-voice\/([0-9a-f]{64})$/;
 
 const VOICE_HEARTBEAT_MS = 15000;
 
-const VOICE_START_ERRORS = { UNAVAILABLE: "unavailable", SPAWN_FAILED: "helper-failed" };
+const VOICE_START_ERRORS: Record<string, string> = { UNAVAILABLE: "unavailable", SPAWN_FAILED: "helper-failed" };
 
-function isShareableName(name) {
+function isShareableName(name: unknown) {
   return SHAREABLE_EXTENSIONS.includes(path.extname(String(name || "")).toLowerCase());
 }
 
-function tokensEqual(a, b) {
+function tokensEqual(a: unknown, b: unknown) {
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-function portIsFree(port, host) {
-  return new Promise((resolve) => {
+function portIsFree(port: number, host: string) {
+  return new Promise<boolean>((resolve) => {
     const probe = net.createServer();
     probe.once("error", () => resolve(false));
     probe.once("listening", () => probe.close(() => resolve(true)));
@@ -40,7 +72,7 @@ function portIsFree(port, host) {
   });
 }
 
-function createPrompterShare(options) {
+function createPrompterShare(options?: DesktopPrompterShareOptions) {
   const opts = options || {};
   const host = "127.0.0.1";
   const readStatic = opts.readStatic;
@@ -50,29 +82,29 @@ function createPrompterShare(options) {
   const now = typeof opts.now === "function" ? opts.now : Date.now;
   const voice = opts.voice && typeof opts.voice.start === "function" ? opts.voice : null;
 
-  const staticTable = {};
+  const staticTable: NonNullable<DesktopPrompterShareOptions["staticAllowlist"]> = {};
   for (const [route, entry] of Object.entries(opts.staticAllowlist || {})) {
     if (route === "/sw.js") continue;
     staticTable[route] = entry;
   }
 
-  const shares = new Map();
-  let server = null;
-  let port = null;
-  let starting = null;
+  const shares = new Map<string, DesktopPrompterShareEntry>();
+  let server: NodeHttp.Server | null = null;
+  let port: number | null = null;
+  let starting: Promise<number> | null = null;
 
-  function dropShare(ownerId) {
+  function dropShare(ownerId: string) {
     const share = shares.get(ownerId);
     if (!share) return false;
-    clearTimeout(share.timer);
+    clearTimeout(share.timer as NodeJS.Timeout | undefined);
     shares.delete(ownerId);
     endStreams(share, "revoked");
     if (!shares.size) stopServer();
     return true;
   }
 
-  function armExpiry(ownerId, share) {
-    clearTimeout(share.timer);
+  function armExpiry(ownerId: string, share: DesktopPrompterShareEntry) {
+    clearTimeout(share.timer as NodeJS.Timeout | undefined);
     share.timer = setTimeout(() => {
       if (shares.get(ownerId) !== share) return;
       if (share.streams.size) { share.expiresAt = now() + ttlMs; armExpiry(ownerId, share); return; }
@@ -81,18 +113,18 @@ function createPrompterShare(options) {
     if (typeof share.timer.unref === "function") share.timer.unref();
   }
 
-  function writeVoice(stream, event) {
+  function writeVoice(stream: DesktopPrompterVoiceStream, event: object) {
     try { stream.res.write("data: " + JSON.stringify(event) + "\n\n"); } catch { }
   }
 
-  function endStreams(share, reason) {
+  function endStreams(share: DesktopPrompterShareEntry, reason: string) {
     for (const stream of [...share.streams]) {
       writeVoice(stream, { type: "end", session: stream.session, reason });
       stream.close();
     }
   }
 
-  function shareForToken(token, field) {
+  function shareForToken(token: string | undefined, field?: "token" | "voiceToken") {
     const key = field || "token";
     for (const [ownerId, share] of shares) {
       if (tokensEqual(share[key], token)) return { ownerId, share, expired: share.expiresAt <= now() };
@@ -100,7 +132,7 @@ function createPrompterShare(options) {
     return null;
   }
 
-  function openVoiceStream(req, res, found) {
+  function openVoiceStream(req: NodeHttp.IncomingMessage, res: NodeHttp.ServerResponse, found: NonNullable<ReturnType<typeof shareForToken>>) {
     const headers = {
       "content-type": "text/event-stream; charset=utf-8",
       "x-content-type-options": "nosniff",
@@ -110,7 +142,7 @@ function createPrompterShare(options) {
     res.writeHead(200, headers);
     if (req.method === "HEAD") { res.end(); return; }
     const { ownerId, share } = found;
-    const stream = {
+    const stream: DesktopPrompterVoiceStream = {
       res,
       session: null,
       closed: false,
@@ -118,13 +150,13 @@ function createPrompterShare(options) {
       close() {
         if (stream.closed) return;
         stream.closed = true;
-        clearInterval(stream.heartbeat);
+        clearInterval(stream.heartbeat as NodeJS.Timeout | undefined);
         share.streams.delete(stream);
         try { res.end(); } catch { }
         const session = stream.session;
         stream.session = null;
         if (session != null) {
-          try { voice.stop(ownerId, session); } catch { }
+          try { (voice as NonNullable<typeof voice>).stop(ownerId, session); } catch { }
         }
       }
     };
@@ -136,11 +168,11 @@ function createPrompterShare(options) {
     }, VOICE_HEARTBEAT_MS);
     if (typeof stream.heartbeat.unref === "function") stream.heartbeat.unref();
     share.expiresAt = now() + ttlMs;
-    let answer;
-    try { answer = voice.start(ownerId); } catch { answer = { ok: false, code: "SPAWN_FAILED" }; }
+    let answer: ReturnType<ReturnType<typeof createVoiceHelper>["start"]>;
+    try { answer = (voice as NonNullable<typeof voice>).start(ownerId); } catch { answer = { ok: false, code: "SPAWN_FAILED" }; }
     if (stream.closed) return;
     if (!answer || !answer.ok || typeof answer.session !== "number") {
-      writeVoice(stream, { type: "error", code: VOICE_START_ERRORS[answer && answer.code] || "helper-failed" });
+      writeVoice(stream, { type: "error", code: VOICE_START_ERRORS[(answer && (answer as Partial<Extract<typeof answer, { ok: false }>>).code) as string] || "helper-failed" });
       writeVoice(stream, { type: "end", reason: "exited" });
       stream.close();
       return;
@@ -148,7 +180,7 @@ function createPrompterShare(options) {
     stream.session = answer.session;
   }
 
-  function pushVoice(ownerId, event) {
+  function pushVoice(ownerId: string, event: Parameters<Parameters<typeof createVoiceHelper>[0]["onEvent"]>[1]) {
     const share = shares.get(ownerId);
     if (!share || !event || typeof event !== "object") return;
     for (const stream of [...share.streams]) {
@@ -158,13 +190,13 @@ function createPrompterShare(options) {
     }
   }
 
-  function hostAllowed(hostHeader) {
+  function hostAllowed(hostHeader: string | undefined) {
     if (typeof hostHeader !== "string" || port == null) return false;
     const h = hostHeader.toLowerCase();
     return h === `${host}:${port}` || h === `localhost:${port}`;
   }
 
-  function send(res, status, headers, body) {
+  function send(res: NodeHttp.ServerResponse, status: number, headers: NodeHttp.OutgoingHttpHeaders, body: string | Buffer | undefined) {
     res.writeHead(status, Object.assign({
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
@@ -173,12 +205,12 @@ function createPrompterShare(options) {
     res.end(body);
   }
 
-  function notFound(res, json) {
+  function notFound(res: NodeHttp.ServerResponse, json: boolean) {
     if (json) send(res, 404, { "content-type": "application/json" }, JSON.stringify({ error: "no server" }));
     else send(res, 404, { "content-type": "text/plain; charset=utf-8" }, "not found");
   }
 
-  async function handle(req, res) {
+  async function handle(req: NodeHttp.IncomingMessage, res: NodeHttp.ServerResponse) {
     if (!hostAllowed(req.headers.host)) {
       send(res, 403, { "content-type": "text/plain; charset=utf-8" }, "forbidden");
       return;
@@ -188,7 +220,7 @@ function createPrompterShare(options) {
       return;
     }
     let pathname;
-    try { pathname = decodeURIComponent(new URL(req.url, "http://" + host).pathname); }
+    try { pathname = decodeURIComponent(new URL(req.url as string, "http://" + host).pathname); }
     catch { notFound(res, false); return; }
 
     if (pathname.startsWith("/api/")) { notFound(res, true); return; }
@@ -223,7 +255,7 @@ function createPrompterShare(options) {
     if (!entry || typeof readStatic !== "function") { notFound(res, false); return; }
     let body;
     try { body = await readStatic(entry); } catch { notFound(res, false); return; }
-    const headers = { "content-type": entry.type, "cache-control": "no-cache" };
+    const headers: NodeHttp.OutgoingHttpHeaders = { "content-type": entry.type, "cache-control": "no-cache" };
     if (entry.type.startsWith("text/html")) {
       const csp = await cspHeader().catch(() => "");
       if (csp) headers["content-security-policy"] = csp;
@@ -231,7 +263,7 @@ function createPrompterShare(options) {
     send(res, 200, headers, req.method === "HEAD" ? undefined : body);
   }
 
-  async function ensureServer() {
+  async function ensureServer(): Promise<number> {
     if (server && port != null) return port;
     if (starting) return starting;
     starting = (async () => {
@@ -249,13 +281,13 @@ function createPrompterShare(options) {
           try { if (!res.headersSent) notFound(res, false); else res.end(); } catch { }
         });
       });
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         srv.once("error", reject);
         srv.listen(chosen, host, () => { srv.removeListener("error", reject); resolve(); });
       });
       srv.keepAliveTimeout = 2000;
       server = srv;
-      port = srv.address().port;
+      port = (srv.address() as NodeNet.AddressInfo).port;
       return port;
     })();
     try { return await starting; }
@@ -271,21 +303,21 @@ function createPrompterShare(options) {
     try { if (typeof srv.closeAllConnections === "function") srv.closeAllConnections(); } catch { }
   }
 
-  function replaceShare(ownerId, share) {
+  function replaceShare(ownerId: string, share: DesktopPrompterShareEntry) {
     const previous = shares.get(ownerId);
     if (previous) {
-      clearTimeout(previous.timer);
+      clearTimeout(previous.timer as NodeJS.Timeout | undefined);
       endStreams(previous, "revoked");
     }
     shares.set(ownerId, share);
     armExpiry(ownerId, share);
   }
 
-  function voiceParam(listening, share) {
+  function voiceParam(listening: number, share: DesktopPrompterShareEntry) {
     return share.voiceToken ? `voice=${listening}-${share.voiceToken}` : "";
   }
 
-  async function publish(ownerId, name, text, publishOpts) {
+  async function publish(ownerId: string, name: string, text: string, publishOpts?: { voice?: boolean }) {
     if (typeof ownerId !== "string" || !ownerId) throw new Error("prompter-share: no owner");
     if (!isShareableName(name)) throw new Error("prompter-share: not a project file");
     if (typeof text !== "string") throw new Error("prompter-share: no text");
@@ -293,7 +325,7 @@ function createPrompterShare(options) {
     const listening = await ensureServer();
     const withVoice = !!(voice && publishOpts && publishOpts.voice);
     const token = crypto.randomBytes(32).toString("hex");
-    const share = {
+    const share: DesktopPrompterShareEntry = {
       token,
       voiceToken: withVoice ? crypto.randomBytes(32).toString("hex") : null,
       name: path.basename(name), text, expiresAt: now() + ttlMs, timer: null, streams: new Set()
@@ -305,8 +337,8 @@ function createPrompterShare(options) {
 
   function closeAll() {
     for (const ownerId of [...shares.keys()]) {
-      const share = shares.get(ownerId);
-      clearTimeout(share.timer);
+      const share = shares.get(ownerId) as DesktopPrompterShareEntry;
+      clearTimeout(share.timer as NodeJS.Timeout | undefined);
       shares.delete(ownerId);
       endStreams(share, "quit");
     }
@@ -325,6 +357,8 @@ function createPrompterShare(options) {
     }
   };
 }
+
+export type { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES, PREFERRED_PORT, SHARE_TTL_MS, TOKEN_RE };
 
 module.exports = {
   createPrompterShare,

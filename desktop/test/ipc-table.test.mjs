@@ -21,7 +21,7 @@ const MAIN = read("main.js");
 const SETUP = read("ipc-setup.ts");
 const IPC_MODULES = fs.readdirSync(desktop).filter((f) => /^ipc-[a-z-]+\.ts$/.test(f) && f !== "ipc-channels.ts").sort();
 const SOURCES = [["main.js", MAIN], ...IPC_MODULES.map((f) => [f, read(f)])];
-const SENDERS = [...SOURCES, ["voice-composition.js", read("voice-composition.js")]];
+const SENDERS = [...SOURCES, ["voice-composition.ts", read("voice-composition.ts")]];
 const { createIpcSetup } = require(path.join(desktop, "ipc-setup.ts"));
 const PRELOADS = [
   { file: "preload.js", origin: APP_ORIGIN, src: read("preload.js") },
@@ -367,7 +367,7 @@ test("the main process sends every main -> renderer row and registers none of th
   const inbound = new Set(IPC_CHANNELS.filter((c) => c.direction !== "receive").map((c) => c.name));
   for (const row of IPC_CHANNELS) {
     if (row.direction !== "receive") continue;
-    assert.ok(sends.has(row.name), `${row.name} is in the table and none of main.js, the ipc-*.ts modules or voice-composition.js sends it`);
+    assert.ok(sends.has(row.name), `${row.name} is in the table and none of main.js, the ipc-*.ts modules or voice-composition.ts sends it`);
     if (!inbound.has(row.name)) {
       assert.equal(
         registrations.some((r) => r.name === row.name),
@@ -513,8 +513,8 @@ test("packaging: every ./module main.js requires, directly or through another mo
   for (const f of ["close-keep.js", "quit-watchdog.ts", "unsaved-dialog.ts"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
   for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
   for (const f of ["close-quit.js", "session-restore.ts"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
-  assert.ok(requiredBy(MAIN).includes("voice-composition.js"), "main.js requires ./voice-composition");
-  assert.ok(required.has("voice-helper.js") && required.has("prompter-share.js"), "voice-composition.js requires ./voice-helper and ./prompter-share");
+  assert.ok(requiredBy(MAIN).includes("voice-composition.ts"), "main.js requires ./voice-composition.ts");
+  assert.ok(required.has("voice-helper.ts") && required.has("prompter-share.ts"), "voice-composition.ts requires ./voice-helper and ./prompter-share.ts");
   assert.ok(requiredBy(MAIN).includes("print-pdf.ts"), "main.js requires ./print-pdf.ts");
   for (const f of required) assert.ok(listed.has(f), f + " is required from main.js but not in electron-builder.yml files");
 });

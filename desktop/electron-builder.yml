@@ -21,14 +21,14 @@ files:
   - ipc-test-mode.ts
   - ipc-print.ts
   - print-pdf.ts
-  - prompter-share.js
+  - prompter-share.ts
   - close-quit.js
   - session-restore.ts
   - close-keep.js
   - quit-watchdog.ts
   - blob-store.ts
-  - voice-composition.js
-  - voice-helper.js
+  - voice-composition.ts
+  - voice-helper.ts
   - chromium-browsers.ts
   - history-fs-backend.js
   - desktop-state.ts
