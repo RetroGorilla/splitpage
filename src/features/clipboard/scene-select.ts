@@ -183,9 +183,9 @@ function prefetchPictures() {
   if (!ids.length) return;
   const want = Object.create(null);
   ids.forEach(function (id) { want[id] = true; });
-  const doc = (ports as SceneSelectPorts).document.current() as DocumentView;
-  const rows = doc.rows.filter(function (r) { return want[r.id]; });
-  const comments = (doc.comments || []).filter(function (c) { return c && want[c.rowId as string]; });
+  const doc = (ports as SceneSelectPorts).document.current();
+  const rows = (doc as DocumentView).rows.filter(function (r) { return want[r.id]; });
+  const comments = ((doc as DocumentView).comments || []).filter(function (c) { return c && want[c.rowId as string]; });
   const shas = refsIn({ rows: rows, comments: comments });
   if (shas.length) (ports as SceneSelectPorts).pictures.ensureBytes(shas);
 }
@@ -356,8 +356,8 @@ export function newScriptFromSelection() {
   const ids = selectedSceneIds();
   if (!ids.length) return;
   closeSceneMenu();
-  const source = (ports as SceneSelectPorts).document.current() as DocumentView;
-  const title = source.title || "Untitled Script";
+  const source = (ports as SceneSelectPorts).document.current();
+  const title = (source as DocumentView).title || "Untitled Script";
   const clip = parseScenePayload(buildScenePayload(source, ids).json);
   if (!clip || !(ports as SceneSelectPorts).startNewScript()) return;
   const first = ((ports as SceneSelectPorts).document.current() as DocumentView).rows[0];
