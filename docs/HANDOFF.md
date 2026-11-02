@@ -1196,7 +1196,7 @@ visible text on the Help page — keep any inside a fenced code block.
 
 **Choosing a File menu item:** one click listener on `#file-menu`
 (`mountFileMenu` in `src/features/file-menu/mount.ts`, wired by `src/bootstrap/wiring/views.ts`) hands an enabled item's id to `handleFileMenuAction()`
-(`src/features/file-menu/local-files.js`), which runs the `onFileMenuChoice()` listeners, closes
+(`src/features/file-menu/local-files.ts`), which runs the `onFileMenuChoice()` listeners, closes
 the menu, remembers an export and invokes the action from the registry
 (`docs/architecture/actions.md`). Help, Tour and Set up are actions
 like the rest; the capture-phase listeners `20c-help.js`, `20e-connect.js`
@@ -1208,7 +1208,7 @@ closes the wizard and runs where its shortcut is refused under the wizard,
 as in 3.1. The wizard's own Escape/Tab handling listens in the bubble phase
 instead, since it can sit open, unnoticed, during an unrelated test.
 
-Since #145 the menu is a dropdown (`src/features/file-menu/file-menu.js`), but every item is
+Since #145 the menu is a dropdown (`src/features/file-menu/file-menu.ts`), but every item is
 still one `<button data-file-action>` inside `#file-menu`, exactly once. The
 desktop native menu no longer clicks them: `runDesktopMenuCommand` hands the
 command to `nativeMenuRunner()` (`src/bootstrap/native-menu.ts`), which runs a
@@ -1310,7 +1310,7 @@ kinds and the `import` home kind stay in the code, unused; see
 [saving.md, Deprecated: import save-back](architecture/saving.md#deprecated-import-save-back).
 
 "Draft 2 of the same script" — the workflow that behaviour was useful for —
-is the **Paste/Import modal** (`openImportModal`, `src/features/imports/imports.js`),
+is the **Paste/Import modal** (`openImportModal`, `src/features/imports/imports.ts`),
 which is unchanged in what it keeps and now takes a picked `.docx`/`.md`/
 `.txt`/`.csv` as well as pasted text. A `.docx` or `.csv` picked there
 bypasses the textarea (`pendingFileRows`) so its columns and formatting
