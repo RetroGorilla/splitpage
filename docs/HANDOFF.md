@@ -1026,6 +1026,14 @@ Eviction order: expired Older, trim every doc to 50, Older oldest-first,
 then docs by `lastOpenedAt` ascending — a doc's newest snapshot is never
 evicted.
 
+Damaged entries are opaque: writes preserve their values and body references,
+and exclude them from sorting, counts and sizes. A first write to a malformed
+`snapshots` value keeps it in `damagedSnapshots` and creates a normal array for
+new backups. An existing quarantine is never replaced; a later malformed
+payload is retained as an opaque array element. Reads alone do not quarantine.
+Storage versions stay unchanged. Older builds can read the ordinary array,
+but an older build's write may discard the quarantined payload.
+
 3.0.0 moved the browser's v1 layout (`docs`, `snapMeta`, `snapBody`,
 `meta`) into v2 with a one-time migrator; #100 deleted it. The v3 upgrade
 (`upgradeDb`) counts `snapMeta` and `snapBody` inside the versionchange
