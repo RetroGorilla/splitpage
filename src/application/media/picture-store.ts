@@ -1,6 +1,7 @@
 import type { ImageRef } from "../../core/document/ports.ts";
 
 export interface PictureStore {
+  readonly has: (sha: string) => boolean;
   readonly intern: (bytes: Uint8Array) => ImageRef | null;
   readonly internDataUrl: (dataUrl: string) => ImageRef | null;
   readonly recordFor: (sha: string) => ImageRef | null;
