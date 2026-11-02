@@ -1,0 +1,53 @@
+open
+wait document.querySelectorAll('#rows .row').length > 1
+eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.cell=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.st=function(i){return F.state().rows[i].visualText;}; window.kw=function(){return document.querySelectorAll('#rows .plain-tag-keyword').length;}; var s=JSON.parse(F.buildSplitpage()); s.title='Existing tag words'; s.rows=[' explosion in the background',' flare<br>next line',' glow <strong>across</strong> the logo',' rain <span class="tag-anchor" data-tag-cat="prop" data-tag-name="umbrella" contenteditable="false">umbrella</span> roof',' glow <a href="https://example.com/">link</a> after',' old words','<span class="tag-anchor" data-tag-cat="prop" data-tag-name="cup" contenteditable="false">cup</span> shine',' flare<br>next paragraph'].map(function(html,i){return {id:'r'+(i+1),status:'todo',visualText:html,audioText:''};}); s.comments=[]; s.brollShots=[]; F.openFile(new File([JSON.stringify(s)],'existing.splitpage')); return true; })()
+wait F.state().title === 'Existing tag words' && document.querySelectorAll('#rows .row').length === 8
+caret #rows .row:nth-child(1) .visual-cell .cell-editable start
+press VFX:
+expect kw() === 1
+eval (function(){ U.flush(); window.before=st(0); window.steps=U.sizes().undo; return true; })()
+key Tab
+expect cell(0).querySelector('.tag-anchor[data-tag-cat="vfx"]').textContent === 'explosion in the background'
+expect kw() === 0 && U.sizes().undo === window.steps + 1
+expect document.activeElement === cell(0)
+key ctrl KeyZ
+expect st(0) === window.before && !cell(0).querySelector('.tag-anchor')
+key ctrl+shift KeyZ
+expect cell(0).querySelector('.tag-anchor[data-tag-name="explosion in the background"]') !== null
+caret #rows .row:nth-child(2) .visual-cell .cell-editable start
+press VFX:
+key shift Tab
+expect cell(1).querySelector('.tag-anchor').textContent === 'flare'
+expect /<\/span><br>next line$/.test(st(1))
+caret #rows .row:nth-child(3) .visual-cell .cell-editable start
+press VFX:
+key Tab
+expect cell(2).querySelector('.tag-anchor').textContent === 'glow across the logo'
+caret #rows .row:nth-child(4) .visual-cell .cell-editable start
+press SFX:
+key Tab
+expect cell(3).querySelectorAll('.tag-anchor').length === 2
+expect cell(3).querySelector('[data-tag-cat="sound"]').textContent === 'rain'
+expect cell(3).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+expect /umbrella<\/span> roof$/.test(st(3))
+caret #rows .row:nth-child(5) .visual-cell .cell-editable start
+press VFX:
+key Tab
+expect cell(4).querySelector('.tag-anchor').textContent === 'glow'
+expect cell(4).querySelector('a').textContent === 'link'
+caret #rows .row:nth-child(6) .visual-cell .cell-editable start
+press VFX: new
+key Tab
+expect cell(5).querySelector('.tag-anchor').textContent === 'new'
+expect /<\/span> old words$/.test(st(5))
+caret #rows .row:nth-child(7) .visual-cell .cell-editable start
+press VFX:
+key Tab
+expect cell(6).querySelectorAll('.tag-anchor').length === 1
+expect /^VFX:/.test(st(6)) && kw() === 0
+caret #rows .row:nth-child(8) .visual-cell .cell-editable start
+press VFX:
+key Tab
+expect cell(7).querySelector('.tag-anchor').textContent === 'flare'
+expect cell(7).textContent.endsWith('next paragraph')
+quit
