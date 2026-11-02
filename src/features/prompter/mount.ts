@@ -30,6 +30,7 @@ export function mountPrompterOpen(mount: { window: Window; ports: PrompterOpenPo
 export interface PrompterPorts {
   readonly disposeRuntime: () => void;
   readonly closePrompter: () => void;
+  readonly closeFind: () => boolean;
   readonly stopVoiceFollow: () => void;
   readonly startVoiceFollow: () => void;
   readonly setPrompterPlaying: (value: boolean) => void;
@@ -117,8 +118,9 @@ export function mountPrompter(mount: { window: Window; ports: PrompterPorts }): 
   life.listen(window, "keydown", function (e) {
     if (!ports.isOpen() || e.defaultPrevented) return;
     const target = e.target;
-    if (target?.closest?.('#findbar.is-present')) return;
     if (target?.closest?.('.toast') || document.querySelector('.modal-backdrop:not([hidden]), #cmdk:not([hidden])')) return;
+    if (e.key === "Escape" && ports.closeFind()) { e.preventDefault(); return; }
+    if (target?.closest?.('#findbar.is-present')) return;
     if (target && target.closest && !target.closest("#rows") && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
     const chord = e.ctrlKey || e.metaKey || e.altKey;
     if (e.key === "Escape") {

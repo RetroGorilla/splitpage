@@ -106,6 +106,23 @@ test("Find changes scope on entering Present, refreshes after skip-shot rebuilds
   closeFindBar();
 });
 
+test("Escape closes Find before Present after focus moves to a Present control", () => {
+  load();
+  const present = prompterControls();
+  present.openPrompter();
+  for (const id of ["pp-mirror", "pp-speed"]) {
+    openFindBar();
+    el(id).click();
+    el(id).focus();
+    key(el(id), "Escape");
+    assert.equal(present.isOpen(), true, id);
+    assert.equal(el("findbar").hidden, true, id);
+    assert.equal(document.activeElement, el("pp-play"));
+  }
+  key(el("pp-play"), "Escape");
+  assert.equal(present.isOpen(), false);
+});
+
 test("Present Find can jump through a script containing only visible stage directions in scene mode", () => {
   load();
   loadTestDocument(migrateRows({ schema: 2, rows: [{ id: "r1", audioText: '<span class="stage-dir">hold still</span>' }] }));

@@ -265,6 +265,7 @@ export function mountPrompterFeature(): ReturnType<typeof mountPrompter> {
     const ports: PrompterPorts = {
       disposeRuntime: () => { prompterControls()?.disposeRuntime(); },
       closePrompter: () => { prompterControls()?.closePrompter(); },
+      closeFind: () => prompterControls()?.closeFind() ?? false,
       stopVoiceFollow: () => { prompterControls()?.stopVoiceFollow(); },
       startVoiceFollow: () => { prompterControls()?.startVoiceFollow(); },
       applyPrompterSize: () => { prompterControls()?.applyPrompterSize(); },

@@ -31,7 +31,7 @@ export function mountFindFeature(): FindControls {
       bulkTag: bulkTagRows,
       present: {
         isOpen: prompterState.isOpen,
-        setSearching: (value) => prompterControls()?.setSearching(value),
+        setSearching: (value, dismiss) => prompterControls()?.setSearching(value, dismiss),
         jump: (range) => prompterControls()?.jumpToFind(range),
         onViewChange: (listener) => prompterControls()?.onViewChange(listener) ?? (() => {})
       }
