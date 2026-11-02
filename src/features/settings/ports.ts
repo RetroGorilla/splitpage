@@ -77,7 +77,7 @@ interface AppDataHistoryImport {
 }
 
 export interface AppDataPorts {
-  readonly notices: Pick<NoticePort, "show">;
+  readonly notices: Pick<NoticePort, "show" | "showAction">;
   readonly fileDelivery: FileDelivery;
   readonly preferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort">;
   readonly desktop: () => boolean;

@@ -3,7 +3,7 @@ type HistoryImport = Awaited<ReturnType<AppDataPorts["history"]["importBundle"]>
 type DataBundle = { format: string; version: number; exportedAt: string; appVersion: string | null | undefined; snapshots?: unknown; history?: HistoryExport | null; blobs?: Record<string, unknown>; missingBlobs?: readonly string[]; prefs?: unknown };
 type ExportSummary = { ok: boolean; images: number; missingBlobs: string[]; truncated: boolean; warning: string | null };
 type ImportSummary = { ok: boolean; history: HistoryImport | null; blobs: HistoryImport["blobs"] | null; prefs: string[]; legacy: number | null; toast: string; warning: string | null };
-type DataError = Error & { code: string; secretKey?: string | null | undefined };
+type DataError = Error & { code: string; secretKey?: string | null | undefined; partial?: DataBundle };
 import type { AppDataPorts } from "./ports.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { settingsAppData } from "../../application/preferences/preferences.ts";
@@ -14,6 +14,7 @@ export function mountAppData(ports: AppDataPorts) {
 const APPDATA_FORMAT = "splitpage-app-data";
 const APPDATA_VERSION = 1;
 const APPDATA_SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i;
+const HISTORY_READ_ERROR = "Export cancelled — history or image data could not be read. Nothing was downloaded.";
 
 function appDataReadRaw(key: string) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -48,10 +49,16 @@ async function buildAppDataBundle() {
     bundle.snapshots = null;
   }
 
+  let readFailure = false;
   try {
-    const history = await ports.history.exportAll();
+    const history = await ports.history.exportAll().catch(function (e: unknown) {
+      const failure = e as { code?: unknown; partial?: HistoryExport } | null;
+      if (failure?.code !== "read-failed" || !failure.partial) throw e;
+      readFailure = true;
+      return failure.partial;
+    });
     if (!history || !Array.isArray(history.docs) || !Array.isArray(history.older)) throw new Error("Invalid history export");
-    if (history.omittedSnapshots && !history.older.length && !history.docs.some(function (doc) {
+    if ((history.omittedSnapshots || readFailure) && !history.older.length && !history.docs.some(function (doc) {
       return appDataIsPlainObject(doc) && Array.isArray(doc.snapshots) && doc.snapshots.length;
     })) throw new Error("No readable history could be exported");
     bundle.history = history;
@@ -60,7 +67,7 @@ async function buildAppDataBundle() {
     Reflect.deleteProperty(history, "blobs");
     Reflect.deleteProperty(history, "missingBlobs");
   } catch (e) {
-    throw appDataError("history", "Export cancelled — history or image data could not be read. Nothing was downloaded.");
+    throw appDataError("history", HISTORY_READ_ERROR);
   }
 
   try {
@@ -69,6 +76,7 @@ async function buildAppDataBundle() {
     bundle.prefs = {};
   }
 
+  if (readFailure) throw Object.assign(appDataError("history", HISTORY_READ_ERROR), { partial: bundle });
   return bundle;
 }
 
@@ -101,8 +109,11 @@ function appDataFilename() {
 }
 
 let appDataLastExport: ExportSummary | null = null;
+let readableExportNotice: ReturnType<AppDataPorts["notices"]["showAction"]> | null = null;
 
 async function exportAppData() {
+  readableExportNotice?.dismiss();
+  readableExportNotice = null;
   appDataLastExport = null;
   ports.notices.show("Gathering your Splitpage data…");
   await new Promise(function (resolve) { setTimeout(resolve, 0); });
@@ -112,10 +123,28 @@ async function exportAppData() {
     bundle = await buildAppDataBundle();
     assertNoSecrets(bundle);
   } catch (e) {
-    ports.notices.show(((e as Error | null) && (e as Error).message) || "Export cancelled — something went wrong building your app data.", "error");
+    const message = (e as Error | null)?.message || "Export cancelled — something went wrong building your app data.";
+    const partial = (e as DataError | null)?.partial;
+    if (partial) {
+      if (disposed) return;
+      try { assertNoSecrets(partial); } catch (error) {
+        ports.notices.show((error as Error).message, "error");
+        return;
+      }
+      let chosen = false;
+      readableExportNotice = ports.notices.showAction(message, "error", "Export the rest anyway", function () {
+        if (chosen || disposed) return;
+        chosen = true;
+        return deliverAppDataBundle(partial);
+      }, true);
+    } else ports.notices.show(message, "error");
     return;
   }
 
+  await deliverAppDataBundle(bundle);
+}
+
+async function deliverAppDataBundle(bundle: DataBundle) {
   let json;
   try {
     json = JSON.stringify(bundle, null, 2);
@@ -126,8 +155,8 @@ async function exportAppData() {
 
   const omitted = bundle.history?.omittedSnapshots || 0;
   const truncated = !!bundle.history?.truncated;
-  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: omitted || truncated ? "Exported your Splitpage app data with omissions" : "Exported your Splitpage app data" });
   const missing = bundle.missingBlobs || [];
+  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: omitted || truncated || missing.length ? "Exported your Splitpage app data with omissions" : "Exported your Splitpage app data" });
   appDataLastExport = {
     ok: !!saved,
     images: Object.keys(bundle.blobs || {}).length,
@@ -137,7 +166,7 @@ async function exportAppData() {
   };
   if (saved && missing.length) {
     appDataLastExport.warning = "Exported, but " + appDataPlural(missing.length, "image was", "images were") +
-      " missing from this device and could not be included. The snapshots that use " +
+      " missing or unreadable and could not be included. The snapshots that use " +
       (missing.length === 1 ? "it" : "them") + " will show a placeholder.";
     if (window.console) console.warn("Export app data: images not included (bytes not found):", missing);
     ports.notices.show(appDataLastExport.warning, "warn", true);
@@ -390,6 +419,8 @@ async function onImportAppDataChosen(e: Event) {
     dispose: function () {
       if (disposed) return;
       disposed = true;
+      readableExportNotice?.dismiss();
+      readableExportNotice = null;
       if (appDataInput) appDataInput.removeEventListener("change", onImportAppDataChosen);
       appDataInput = null;
       appDataInputWired = false;
