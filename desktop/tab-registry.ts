@@ -1,13 +1,14 @@
 "use strict";
 
-import type { DesktopFileServiceBoundary, DesktopMainCommon, DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopMainCommon, DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopFileService } from "./file-service.ts";
 
 const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId }: {
   TAB_OR_WINDOW_ID_RE: RegExp;
   mintTabOrWindowId: () => string;
 } = require("./desktop-state");
 
-function createTabRegistry({ pathKey }: Pick<DesktopFileServiceBoundary, "pathKey">) {
+function createTabRegistry({ pathKey }: Pick<DesktopFileService, "pathKey">) {
   const tabs: DesktopMainCommon["tabs"] = new Map();
   const windowsById: DesktopMainCommon["windowsById"] = new Map();
   const webContentsIdToTabId = new Map<number, string>();
