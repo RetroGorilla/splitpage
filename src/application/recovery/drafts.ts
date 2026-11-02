@@ -323,9 +323,10 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       if (!ports) return null;
       return captureAndSendDraft(keepClean);
     }).then(function (r) {
+      if (!ports) return { ok: false, code: "CANCELLED" };
       return r || { ok: true };
     }, function (err) {
-      if (!ports) return { ok: true };
+      if (!ports) return { ok: false, code: "CANCELLED" };
       reportError(err);
       return { ok: false, code: "EIO" };
     });
