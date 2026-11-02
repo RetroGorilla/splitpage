@@ -89,6 +89,10 @@ const expected: readonly Registration[] = [
     "click"
   ],
   [
+    "document",
+    "focusin"
+  ],
+  [
     "window",
     "keydown"
   ]
@@ -159,6 +163,95 @@ test("prompter: visibility requires an open prompter and stops after disposal", 
   const owns = h.calls[0]?.args[0] as () => boolean;
   assert.equal(owns(), false);
   h.window.close();
+});
+
+test("prompter: fullscreen includes the document's toast and dialog layers", async () => {
+  const h = setup();
+  let requested: Element | null = null;
+  h.document.documentElement.requestFullscreen = async () => { requested = h.document.documentElement; };
+  h.el("prompter").requestFullscreen = async () => { requested = h.el("prompter"); };
+  const owner = mountPrompter({ window: h.window, ports: h.p2 });
+  h.fire(h.el("pp-fullscreen"), "click");
+  await Promise.resolve();
+  assert.equal(requested, h.document.documentElement);
+  owner.dispose();
+  h.window.close();
+});
+
+test("prompter: focus stays in Present except for foreground dialogs and toasts", () => {
+  const h = setup();
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  h.el("prompter").hidden = false;
+  h.el("pp-play").focus();
+  h.el("doc-title").focus();
+  assert.equal(h.document.activeElement, h.el("pp-play"));
+  const toast = h.document.createElement("div");
+  toast.className = "toast";
+  const dismiss = h.document.createElement("button");
+  toast.append(dismiss);
+  h.el("toast-host").append(toast);
+  dismiss.focus();
+  assert.equal(h.document.activeElement, dismiss);
+  h.el("help-modal").hidden = false;
+  h.el("help-close").focus();
+  assert.equal(h.document.activeElement, h.el("help-close"));
+  h.el("doc-title").focus();
+  assert.equal(h.document.activeElement, h.el("help-close"));
+  owner.dispose();
+  h.el("doc-title").focus();
+  assert.equal(h.document.activeElement, h.el("doc-title"));
+  h.window.close();
+});
+
+test("prompter: foreground toast controls and dialogs keep their keys", () => {
+  const h = setup();
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  const toast = h.document.createElement("div");
+  toast.className = "toast";
+  const dismiss = h.document.createElement("button");
+  toast.append(dismiss);
+  h.el("toast-host").append(toast);
+  assert.equal(h.fire(dismiss, "keydown", { key: " " }).defaultPrevented, false);
+  h.el("help-modal").hidden = false;
+  assert.equal(h.fire(h.el("help-close"), "keydown", { key: "ArrowDown" }).defaultPrevented, false);
+  h.fire(h.el("help-close"), "keydown", { key: "m" });
+  h.fire(h.el("pp-play"), "keydown", { key: "ArrowDown" });
+  assert.deepEqual(h.calls, []);
+  owner.dispose();
+  h.window.close();
+});
+
+test("prompter: first Escape exits fullscreen and the next closes Present", async () => {
+  const h = setup();
+  let fullscreen: Element | null = h.document.documentElement;
+  Object.defineProperty(h.document, "fullscreenElement", { configurable: true, get: () => fullscreen });
+  h.document.exitFullscreen = async () => { fullscreen = null; };
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  h.fire(h.el("pp-play"), "keydown", { key: "Escape" });
+  await Promise.resolve();
+  assert.equal(fullscreen, null);
+  assert.deepEqual(h.calls, []);
+  h.fire(h.el("pp-play"), "keydown", { key: "Escape" });
+  assert.deepEqual(h.calls, [{ name: "closePrompter", args: [] }]);
+  owner.dispose();
+  h.window.close();
+});
+
+test("prompter: Help's earlier Escape handler can hide its modal and consume the key", () => {
+  const h = setup();
+  h.el("help-modal").hidden = false;
+  const earlier = (event: Event): void => { h.el("help-modal").hidden = true; event.preventDefault(); };
+  h.window.addEventListener("keydown", earlier);
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  try {
+    assert.equal(h.fire(h.el("help-close"), "keydown", { key: "Escape" }).defaultPrevented, true);
+    assert.equal(h.el("help-modal").hidden, true);
+    assert.deepEqual(h.calls, []);
+  } finally {
+    owner.dispose();
+    h.window.removeEventListener("keydown", earlier);
+    h.window.close();
+  }
 });
 
 test("prompter: shot skip rebuild order, scene readout and playback stay unchanged", () => {

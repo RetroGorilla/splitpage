@@ -60,7 +60,7 @@ export function startEditor(live: LiveDocumentPort): () => void {
     drag: createRowDrag(),
     sections: createSectionView(),
     undo: createUndoGuard(),
-    paint: createPaintGuard(),
+    paint: createPaintGuard(error => { console.error(error); }),
     focus: createFocusMemory<Element>(),
     merge: createMergeUndo(),
     selection: createEditorSelection<Element, Range, Element>(selectionPorts(live)),

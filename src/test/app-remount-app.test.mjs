@@ -105,6 +105,7 @@ const RESOURCE_ROWS = {
     "#doc-title mouseenter/B", "window resize/B", "window scroll/B"
   ],
   cellReach: ["#rows mousedown/B"],
+  prompterFocus: ["document focusin/B"],
   sectionControls: ["document click/B", "document dragstart/C", "document dragover/C", "document drop/C", "document dragend/C", "document keydown/B"],
   phoneBar: ["#phone-bar click/B"],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
