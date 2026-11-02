@@ -5,7 +5,7 @@ import { domToPos } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { isInsideTagOrLink } from "../common/dom.ts";
 import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
-import { insertText, replaceText, replaceWithTag } from "../../core/text/edits.ts";
+import { insertText, marksAt, replaceText, replaceWithTag } from "../../core/text/edits.ts";
 import { namedTagId, projection } from "../../core/text/runs.ts";
 import { registryEntryOf } from "../../core/production/records.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
@@ -326,11 +326,13 @@ function onPlainTagged(listener: () => void) {
 }
 
 function existingPlainTagEnd(cell: readonly Run[], from: number) {
+  const comments = (marksAt(cell, from).cmt || []).join("\u0000");
   let pos = 0;
   for (const run of cell) {
     const end = pos + (run.atom ? 1 : run.text.length);
     if (end <= from) { pos = end; continue; }
     if (run.atom || run.marks.tag || run.marks.href) return Math.max(from, pos);
+    if ((run.marks.cmt || []).join("\u0000") !== comments) return Math.max(from, pos);
     const lineEnd = run.text.indexOf("\n", Math.max(0, from - pos));
     if (lineEnd !== -1) return pos + lineEnd;
     pos = end;
