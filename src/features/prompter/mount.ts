@@ -98,7 +98,7 @@ export function mountPrompter(mount: { window: Window; ports: PrompterPorts }): 
   life.listen(element("pp-scene-prev"), "click", function () { ports.stepScene(-1); });
   life.listen(element("pp-scene-next"), "click", function () { ports.stepScene(1); });
   life.listen(element("pp-fullscreen"), "click", function () {
-    const el = element("prompter");
+    const el = document.documentElement;
     if (document.fullscreenElement) { document.exitFullscreen().catch(function () {}); }
     else if (el.requestFullscreen) { el.requestFullscreen().catch(function () {}); }
   });
