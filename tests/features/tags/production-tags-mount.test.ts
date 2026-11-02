@@ -24,6 +24,7 @@ function fixture() {
   const edits = fakeEdits();
   const jobs: string[] = [];
   const index = createProductionIndex(migration.ports.readers, deepFreeze);
+  const notices = fakeNotices();
   const ports: ProductionTagPorts = {
     document: reader.document,
     edits: edits.edits,
@@ -40,10 +41,51 @@ function fixture() {
     },
     undo: { breakCoalescing: () => { throw new Error("No undo break expected"); } },
     view: () => ({ writerOpen: () => false }),
-    notices: fakeNotices().notices,
+    notices: notices.notices,
     ids: migration.ids
   };
-  return { ports, jobs, edits, migration };
+  return { ports, jobs, edits, migration, notices };
+}
+
+for (const selection of ["partial-end", "partial-start", "enclosing", "inside", "before", "after"] as const) {
+  test("the Tag button checks the selected range for an existing tag: " + selection, () => {
+    const h = fixture();
+    document.body.innerHTML = '<div id="rows"><div class="row" data-id="r1"><div class="visual-cell">' +
+      '<div class="cell-editable" data-id="r1" data-field="visualText" tabindex="0">rain on the ' +
+      '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="umbrella" contenteditable="false">umbrella</span> roof</div></div></div></div>' +
+      '<div id="tag-quote"></div><input id="tag-name"><div id="tag-cats"></div><div id="tag-name-list"></div>' +
+      '<input id="tag-all" type="checkbox"><div id="tag-hint"></div><div id="tag-modal" hidden></div>';
+    const cell = document.querySelector(".cell-editable") as HTMLElement;
+    const tag = cell.querySelector(".tag-anchor") as HTMLElement;
+    const range = document.createRange();
+    if (selection === "partial-end") { range.setStart(cell.firstChild as Node, 0); range.setEnd(tag.firstChild as Node, 4); }
+    if (selection === "partial-start") { range.setStart(tag.firstChild as Node, 3); range.setEnd(cell.lastChild as Node, 5); }
+    if (selection === "enclosing") { range.selectNodeContents(cell); }
+    if (selection === "inside") { range.selectNodeContents(tag); }
+    if (selection === "before") { range.setStart(cell.firstChild as Node, 0); range.setEnd(cell.firstChild as Node, 11); }
+    if (selection === "after") { range.setStart(cell.lastChild as Node, 0); range.setEnd(cell.lastChild as Node, 5); }
+    cell.focus();
+    const selected = win.getSelection() as Selection;
+    selected.removeAllRanges();
+    selected.addRange(range);
+    const before = cell.innerHTML;
+    const quote = selected.toString();
+    const mounted = startProductionTags(h.ports);
+    try {
+      openTagComposer({ rowId: "r1", field: "visualText", quotedText: quote, occurrenceIndex: 0 });
+      const refused = selection !== "before" && selection !== "after";
+      assert.equal(document.getElementById("tag-modal")?.hidden, refused);
+      assert.equal(cell.innerHTML, before);
+      assert.equal(selected.toString(), quote);
+      assert.equal(h.edits.ran.length, 0);
+      assert.deepEqual(h.notices.shown.map(({ message, kind }) => ({ message, kind })), refused ? [
+        { message: "That selection includes an existing tag. Select only untagged words.", kind: "warn" }
+      ] : []);
+    } finally {
+      mounted.dispose();
+      selected.removeAllRanges();
+    }
+  });
 }
 
 test("production tags mount with fake ports and keep reader identity, edit commands and refresh jobs", () => {
