@@ -24,6 +24,7 @@ export function appJs(testHooks) {
     entryPoints: [join(ROOT, "src", "bootstrap", "main.ts")],
     bundle: true,
     format: "iife",
+    banner: { js: '"use strict";' },
     minify: true,
     charset: "utf8",
     legalComments: "none",
