@@ -73,7 +73,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   of a line and press <kbd>Tab</kbd> to tag the rest of the line. **Tag** refuses
   a selection that includes an existing tag and tells you why.
 - **Cleaner pasted links.** Pasted text links lose known tracking parameters.
-  Signed links are left alone.
+  Links with a recognised signature parameter are left alone.
 - **Damaged history.** History still lists intact snapshots and tells you how
   many damaged ones it couldn't list. If an app-data export can't read some
   history or images, it cancels and downloads nothing. When the failure isn't a
