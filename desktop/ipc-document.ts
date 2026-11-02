@@ -1,14 +1,17 @@
 "use strict";
 
+import type { createDraftStore, restoreDoneAction as RestoreDoneAction } from "./drafts.ts";
+
 import type { DesktopWireFailure } from "../shared/desktop-contract.d.ts";
 
 import type * as NodeFs from "node:fs";
 
-import type { DesktopDraftStoreBoundary, DesktopFileServiceBoundary, DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopFileService } from "./file-service.ts";
 
 const fs: typeof NodeFs = require("node:fs");
-const { readFileEntry }: Pick<DesktopFileServiceBoundary, "readFileEntry"> = require("./file-service");
-const { restoreDoneAction }: { restoreDoneAction: (outcome: string) => "open" | "drop" | "release" } = require("./drafts");
+const { readFileEntry }: DesktopFileService = require("./file-service.ts");
+const { restoreDoneAction }: { restoreDoneAction: typeof RestoreDoneAction } = require("./drafts.ts");
 const { LAST_KNOWN_TITLE_MAX }: { LAST_KNOWN_TITLE_MAX: number } = require("./desktop-state");
 
 function createDocumentIpc({
@@ -86,7 +89,7 @@ function createDocumentIpc({
       if (draftBodyTooLarge(p.stateJson) || (baseJson !== null && draftBodyTooLarge(baseJson))) {
         return { ok: false, code: "TOO_LARGE" };
       }
-      return await (draftStore() as DesktopDraftStoreBoundary).write(tab.id, buildDraftHeader(tab, p), p.stateJson, baseJson, seq);
+      return await (draftStore() as ReturnType<typeof createDraftStore>).write(tab.id, buildDraftHeader(tab, p), p.stateJson, baseJson, seq);
     });
 
     ipcHandle("splitpage:draft-discard", async (event, payload) => {
@@ -96,13 +99,13 @@ function createDocumentIpc({
       const seq = draftFiniteNumber(payload && (payload as { seq?: unknown }).seq);
       if (seq === null) return { ok: false, code: "BAD_PAYLOAD" };
       if (tab.keepDraftOnClose) return { ok: false, code: "HELD" };
-      return await (draftStore() as DesktopDraftStoreBoundary).discardClean(tab.id, seq);
+      return await (draftStore() as ReturnType<typeof createDraftStore>).discardClean(tab.id, seq);
     });
 
     ipcHandle("splitpage:draft-take", async (event) => {
       const tab = tabOf(event);
       if (!tab || !draftStore()) return null;
-      const taken = await (draftStore() as DesktopDraftStoreBoundary).take(tab.id);
+      const taken = await (draftStore() as ReturnType<typeof createDraftStore>).take(tab.id);
       if (!taken || taken.corrupt || taken.unsupported) return taken || null;
 
       const origin = (taken.header && taken.header.origin) || null;
@@ -142,7 +145,7 @@ function createDocumentIpc({
         return;
       }
       if (action === "release") {
-        try { (draftStore() as DesktopDraftStoreBoundary).release(tab.id); } catch { }
+        try { (draftStore() as ReturnType<typeof createDraftStore>).release(tab.id); } catch { }
       }
       tab.pendingPayload = null;
     });
