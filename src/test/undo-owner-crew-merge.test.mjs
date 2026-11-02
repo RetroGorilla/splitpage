@@ -3,7 +3,9 @@ import "./_preferences-started.mjs";
 import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { currentDocument, liveSession } from "../bootstrap/wiring/session-owner.ts";
+import { setShotsCommand } from "../application/commands/broll-records.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
@@ -58,6 +60,40 @@ function dangling() {
   return [].concat(currentDocument().productionTags, currentDocument().brollShots)
     .filter((e) => e.owner && !ids.has(e.owner)).map((e) => e.name + ":" + e.owner);
 }
+
+test("owner-picker assignment round trips after an incoming person removal (#529)", () => {
+  const key = "brollShots";
+  boot(["Ada", "Dee"]);
+  currentDocument()[key][0].owner = "p_Dee";
+  loadTestDocument(clone(currentDocument()));
+  const base = clone(currentDocument());
+  const ids = { id: () => "p_Bo", docId: () => "d" + "1".repeat(32) };
+  function choose(owner) {
+    const command = setShotsCommand(["bs_dock"], {}, owner, ids);
+    assert.equal(liveSession().run(command).kind, "applied");
+    flushEdits();
+  }
+  choose({ id: "p_Ada" });
+  choose({ name: "Bo" });
+  const incoming = clone(base);
+  incoming.people = incoming.people.filter((p) => p.id !== "p_Ada");
+  const merged = mergeStates(base, clone(currentDocument()), incoming).merged;
+  liveSession().absorbMerged("disk", merged);
+  assert.equal(currentDocument()[key][0].owner, "p_Bo");
+  assert.deepEqual(undoOwner().sizes(), { undo: 1, redo: 0 });
+  const entry = undoOwner().last();
+  assert.equal(entry.steps.some((s) => s.ownersOnly || s.key === "people"), false);
+  const before = clone(currentDocument());
+  for (let round = 0; round < 3; round++) {
+    assert.equal(undo().ok, true);
+    assert.equal(currentDocument()[key][0].owner, "p_Dee");
+    assert.equal(redo().ok, true);
+    assert.equal(currentDocument()[key][0].owner, "p_Bo");
+    assert.deepEqual(currentDocument()[key], before[key]);
+    assert.deepEqual(currentDocument().people, before.people);
+    assert.equal(unsavedChanges(), true);
+  }
+});
 
 test("redo of an older assignment after a crew-changing merge forgot the removal does not re-assign the removed person (#476)", () => {
   boot(["Ada", "Cy"]);
@@ -204,14 +240,14 @@ test("a crew-only redo that clears one owner and re-points another records both,
   currentDocument().brollShots.push(shot("bs_pier", "Pier", "p_Gone"));
   const res = redo();
   assert.equal(res.ok, true);
-  assert.equal(res.cleared, 1);
+  assert.equal(res.cleared, undefined);
   assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Ada");
   assert.equal(ownerOf(currentDocument().brollShots, "Pier"), "");
   assert.deepEqual(dangling(), []);
   const back = undo();
   assert.equal(back.ok, true);
-  assert.deepEqual(currentDocument().people.map((p) => p.id), ["p_Cy"]);
-  assert.deepEqual(currentDocument().brollShots.map((b) => b.owner), ["", ""]);
+  assert.deepEqual(currentDocument().people.map((p) => p.id), ["p_Cy", "pT_ada"]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => b.owner), ["pT_ada", ""]);
   assert.deepEqual(dangling(), []);
   assert.equal(redo().ok, true);
   assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Ada");
