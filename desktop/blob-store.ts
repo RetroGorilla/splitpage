@@ -15,6 +15,7 @@ interface DesktopBlobStoreOptions {
   testHooks?: { beforeRename?: (file: string) => unknown };
 }
 type DesktopBlobPutResult = { ok: true; stored: boolean } | { ok: false; code: string };
+type DesktopValidatedBlobSha = string & { readonly __desktopValidatedBlobSha: unique symbol };
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const FORMAT_VERSION = "1";
@@ -31,7 +32,7 @@ const RENAME_RETRY_MS = 20;
 
 const WRITE_ERROR_CODES = new Set<unknown>(["ENOSPC", "EACCES", "EPERM", "EBUSY", "EIO", "EROFS", "EDQUOT"]);
 
-function isSha256(v: unknown): v is string {
+function isSha256(v: unknown): v is DesktopValidatedBlobSha {
   return typeof v === "string" && SHA256_RE.test(v);
 }
 
