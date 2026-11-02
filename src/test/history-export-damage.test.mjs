@@ -11,7 +11,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { createHistoryBackendProbe, createIdbHistoryTestBackend } from "../adapters/storage/history-backend-testing.ts";
 import { createHistoryBackends } from "../adapters/storage/history-backends.ts";
 import { createHistoryOwner } from "../application/recovery/history.ts";
-import { createHistoryStore } from "../../shared/history-store.ts";
+import { createHistoryStore, projectHistoryBucket } from "../../shared/history-store.ts";
 import { createBlobStore, createMemoryBlobBackend } from "../adapters/storage/blob-store.ts";
 import { makeDesktopBlobBackend } from "../adapters/desktop/desktop-blobs.ts";
 import { mountAppData } from "../features/settings/app-data.ts";
@@ -33,7 +33,7 @@ async function harness(t, kind, snapshots = [good, bad], fields = {}, options = 
   if (kind === "filesystem") {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "splitpage-history-export-"));
     t.after(() => fsp.rm(dir, { recursive: true, force: true }));
-    const backend = createHistoryFsBackend({ dir, fs, fsp, path, crypto });
+    const backend = createHistoryFsBackend({ dir, fs, fsp, path, crypto, projectHistoryBucket });
     await backend.exclusive(async (tx) => { await tx.put(sha, stateJson); await tx.commit(buckets, []); });
     const store = createHistoryStore({ backend, now: () => 2000, hashText: (body) => crypto.createHash("sha256").update(body).digest("hex") });
     bridge = {
@@ -68,9 +68,12 @@ async function harness(t, kind, snapshots = [good, bad], fields = {}, options = 
 
 function appHarness(t, owner) {
   document.body.innerHTML = '<input id="import-app-data-input" type="file">';
-  const delivered = [], messages = [];
+  const delivered = [], messages = [], choices = [];
   const app = mountAppData({
-    notices: { show: (...args) => { messages.push(args); return { isConnected: false, dismiss() {}, removeEventListener() {} }; } },
+    notices: {
+      show: (...args) => { messages.push(args); return { isConnected: false, dismiss() {}, removeEventListener() {} }; },
+      showAction: (message, kind, label, action) => { messages.push([message, kind]); choices.push({ label, action }); return { isConnected: true, dismiss() {}, removeEventListener() {} }; }
+    },
     fileDelivery: { deliver: (_name, text) => { delivered.push(JSON.parse(text)); return Promise.resolve(true); } },
     preferences: { appDataExport: () => ({}), appDataImport: () => [], commentsSort: () => "recent" },
     desktop: () => false, launchFacts: { appVersion: () => "" }, commentSorting: { choose: () => "recent" },
@@ -78,7 +81,7 @@ function appHarness(t, owner) {
     writer: { size: () => 20, setSize() {} }, embeddedVersion: () => "", useBlobBackend() {}
   });
   t.after(() => app.dispose());
-  return { app, delivered, messages };
+  return { app, delivered, messages, choices };
 }
 
 function productionHarness(t, indexedDB) {
@@ -191,6 +194,7 @@ for (const resolveFirst of [false, true]) test(`persistent reopen failure cancel
   const a = appHarness(t, h.owner);
   await a.app.exportAppData();
   assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 0);
   assert.match(a.messages.at(-1)[0], /Export cancelled/);
   h.storage.controls.injectFault(null);
   await h.storage.controls.forceBackend("idb");
@@ -216,6 +220,88 @@ test("desktop image read rejection cancels delivery through the actual image fal
   await a.app.exportAppData();
   assert.equal(a.delivered.length, 0);
   assert.equal(a.messages.at(-1)[0], "Export cancelled — history or image data could not be read. Nothing was downloaded.");
+});
+
+test("a failed body read retains the readable remainder and counts each omission", async (t) => {
+  const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
+  const get = h.bridge.historyGet;
+  h.bridge.historyGet = (query, id) => id === "intact" ? Promise.reject(new Error("locked")) : get(query, id);
+  const before = await h.inspect();
+  await assert.rejects(h.owner.exportHistoryAll(), (error) => {
+    assert.equal(error.code, "read-failed");
+    assert.deepEqual(error.partial.docs[0].snapshots.map((s) => s.meta.id), ["other"]);
+    assert.equal(error.partial.omittedSnapshots, 2);
+    assert.deepEqual(error.partial.blobs[image], { mime: "image/png", b64: "aW1hZ2U=" });
+    return true;
+  });
+  assert.equal(await h.inspect(), before);
+});
+
+test("image read failures retain other images and count shared unreadable images once", async (t) => {
+  const otherImage = "c".repeat(64);
+  const otherBody = JSON.stringify({ docId, rows: [{ imageRef: { sha256: otherImage } }, { imageRef: { sha256: image } }] });
+  const otherSha = crypto.createHash("sha256").update(otherBody).digest("hex");
+  const pictures = { intern: () => null, persist: async () => [],
+    ensureBytes: async (shas) => { if (shas.includes(image)) throw new Error("locked"); return []; },
+    recordFor: () => ({ mime: "image/png" }), dataUrlFor: () => "data:image/png;base64,aW1hZ2U=" };
+  const h = await harness(t, "memory", [good, { ...good, id: "other", sha: otherSha }], {}, { pictures });
+  await h.backend.store.backend.seed(await h.backend.store.rawIndex(), { [sha]: stateJson, [otherSha]: otherBody });
+  await assert.rejects(h.owner.exportHistoryAll(), (error) => {
+    assert.equal(error.code, "read-failed");
+    assert.equal(error.partial.docs[0].snapshots.length, 2);
+    assert.equal(error.partial.omittedSnapshots, 1);
+    assert.deepEqual(error.partial.missingBlobs, [image]);
+    assert.deepEqual(error.partial.blobs, { [otherImage]: { mime: "image/png", b64: "aW1hZ2U=" } });
+    return true;
+  });
+});
+
+test("no readable history means no partial-export choice", async (t) => {
+  const h = await harness(t, "filesystem", [good]);
+  h.bridge.historyGet = async () => { throw new Error("locked"); };
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 0);
+});
+
+test("an unavailable persistent image store never offers a partial export", async (t) => {
+  const pictures = createBlobStore({ preferred: { available: () => true, open: async () => { throw new Error("locked"); } }, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  const h = await harness(t, "memory", [good], {}, { pictures });
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 0);
+});
+
+test("choosing the readable remainder performs no new storage reads", async (t) => {
+  const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
+  const get = h.bridge.historyGet;
+  h.bridge.historyGet = (query, id) => id === "intact" ? Promise.reject(new Error("locked")) : get(query, id);
+  const before = await h.inspect();
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 1);
+  h.bridge.historyGet = async () => { throw new Error("must not reread"); };
+  await a.choices[0].action();
+  assert.equal(a.delivered.length, 1);
+  assert.equal(a.delivered[0].history.omittedSnapshots, 2);
+  assert.deepEqual(a.delivered[0].history.docs[0].snapshots.map((s) => s.meta.id), ["other"]);
+  assert.equal(await h.inspect(), before);
+});
+
+test("an unreadable large version cannot consume the readable remainder's export budget", async (t) => {
+  const h = await harness(t, "filesystem", [{ ...good, id: "blocked", atMs: 2000, sizeBytes: 250 * 1024 * 1024 }, { ...good, id: "other" }]);
+  const get = h.bridge.historyGet;
+  h.bridge.historyGet = (query, id) => id === "blocked" ? Promise.reject(new Error("locked")) : get(query, id);
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.choices.length, 1);
+  await a.choices[0].action();
+  assert.deepEqual(a.delivered[0].history.docs[0].snapshots.map((s) => s.meta.id), ["other"]);
+  assert.equal(a.delivered[0].history.omittedSnapshots, 2);
+  assert.equal(a.delivered[0].history.truncated, false);
 });
 
 test("strict image reads preserve confirmed absence while ordinary reads tolerate errors", async () => {
