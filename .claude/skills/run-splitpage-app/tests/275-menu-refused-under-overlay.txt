@@ -303,8 +303,7 @@ jsclick #wr-close
 wait document.getElementById('writer').hidden
 wait __settled()
 
-# --- under Present: Open, Export, Search commands, Find, Write, the panels ---
-# --- and History are refused -------------------------------------------------
+# why: #350 permits Find in Present; the other foreground restrictions still apply.
 jsclick #btn-present
 wait !document.getElementById('prompter').hidden
 wait __settled()
@@ -324,9 +323,9 @@ expect !__shown('cmdk')
 expect __toasts() === 'Close Present first.'
 eval __tidy()
 eval __run('find')
-wait __toastUp()
-expect !__shown('findbar')
-expect __toasts() === 'Close Present first.'
+wait __shown('findbar')
+expect document.activeElement.id === 'find-input'
+expect __toasts() === ''
 eval __tidy()
 eval __run('write')
 wait __toastUp()
@@ -346,13 +345,12 @@ wait __toastUp()
 expect __toasts() === 'Close Present first.'
 expect __panels() === ''
 eval __tidy()
-# the in-page Ctrl+F refuses here too, and says nothing (since #309 it no
-# longer flips Present either)
+# why: The owner's #350 decision replaces the later refusal pin with visible search.
 key ctrl KeyF
 sleep 200
 key ctrl KeyF
 sleep 200
-expect !__shown('findbar')
+expect __shown('findbar') && document.activeElement.id === 'find-input'
 expect __toasts() === ''
 eval __tidy()
 # ...and Save, Save a copy and Hide shot scenes still act there

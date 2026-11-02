@@ -40,6 +40,9 @@ export interface PrompterFeaturePorts {
 }
 
 export interface PrompterRuntime extends PrompterPorts {
+  readonly setSearching: (value: boolean, dismiss?: () => void) => void;
+  readonly jumpToFind: (range: Range) => void;
+  readonly onViewChange: (listener: () => void) => () => void;
   readonly openPrompter: () => void;
   readonly startVoiceFollow: () => Promise<void>;
   readonly acquireWakeLock: (owns?: () => boolean) => void;

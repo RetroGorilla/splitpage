@@ -11,6 +11,8 @@ import type { FindControls, FindPorts } from "../../features/find/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { shotHiding } from "./ports/shot-hiding.ts";
 import { bulkTagRows } from "./production-index.ts";
+import { prompterControls } from "./prompter.ts";
+import { prompterState } from "./ports/preferences.ts";
 
 const find = owned<FindControls>();
 const events = owned<ReturnType<typeof mountFindEvents>>();
@@ -26,7 +28,13 @@ export function mountFindFeature(): FindControls {
       notices: portNotices,
       flags: portFlags,
       options: findOptions,
-      bulkTag: bulkTagRows
+      bulkTag: bulkTagRows,
+      present: {
+        isOpen: prompterState.isOpen,
+        setSearching: (value, dismiss) => prompterControls()?.setSearching(value, dismiss),
+        jump: (range) => prompterControls()?.jumpToFind(range),
+        onViewChange: (listener) => prompterControls()?.onViewChange(listener) ?? (() => {})
+      }
     };
     const mounted: FindControls = startFind(ports);
     let disposed = false;

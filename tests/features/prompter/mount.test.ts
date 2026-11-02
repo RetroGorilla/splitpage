@@ -110,6 +110,7 @@ export function setup() {
   const p2: PrompterPorts = {
     disposeRuntime: h.log("disposeRuntime"),
     closePrompter: h.log("closePrompter"),
+    closeFind: () => false,
     stopVoiceFollow: h.log("stopVoiceFollow"),
     startVoiceFollow: h.log("startVoiceFollow"),
     setPrompterPlaying: h.log("setPrompterPlaying"),
@@ -205,18 +206,42 @@ test("prompter: focus stays in Present except for foreground dialogs and toasts"
 
 test("prompter: foreground toast controls and dialogs keep their keys", () => {
   const h = setup();
-  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  let dismissals = 0;
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true, closeFind: () => { dismissals++; return true; } } });
   const toast = h.document.createElement("div");
   toast.className = "toast";
   const dismiss = h.document.createElement("button");
   toast.append(dismiss);
   h.el("toast-host").append(toast);
   assert.equal(h.fire(dismiss, "keydown", { key: " " }).defaultPrevented, false);
+  h.fire(dismiss, "keydown", { key: "Escape" });
   h.el("help-modal").hidden = false;
   assert.equal(h.fire(h.el("help-close"), "keydown", { key: "ArrowDown" }).defaultPrevented, false);
   h.fire(h.el("help-close"), "keydown", { key: "m" });
   h.fire(h.el("pp-play"), "keydown", { key: "ArrowDown" });
+  h.fire(h.el("help-close"), "keydown", { key: "Escape" });
+  h.fire(h.el("pp-play"), "keydown", { key: "Escape" });
+  assert.equal(dismissals, 0);
   assert.deepEqual(h.calls, []);
+  owner.dispose();
+  h.window.close();
+});
+
+test("prompter: visible Present Find participates in focus containment and owns every field and button key", () => {
+  const h = setup();
+  const owner = mountPrompter({ window: h.window, ports: { ...h.p2, isOpen: () => true } });
+  h.el("prompter").hidden = false;
+  h.el("findbar").hidden = false;
+  h.el("findbar").classList.add("is-present");
+  for (const id of ["find-input", "find-next", "find-case", "find-close"]) {
+    h.el(id).focus();
+    assert.equal(h.document.activeElement, h.el(id));
+    for (const key of [" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "f", "m", "Escape"]) h.fire(h.el(id), "keydown", { key });
+  }
+  assert.deepEqual(h.calls, []);
+  h.el("findbar").hidden = true;
+  h.el("doc-title").focus();
+  assert.equal(h.document.activeElement, h.el("pp-play"));
   owner.dispose();
   h.window.close();
 });
