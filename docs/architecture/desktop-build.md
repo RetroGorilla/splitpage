@@ -18,9 +18,10 @@ directions accepted by the registration wrappers. The contract and
 `desktop/ipc-boundaries.d.ts` contain types only and need no packaged copy.
 Install both tooling packages (`npm ci` and `npm ci --prefix desktop`) before
 running lint, typecheck or the full gate: the desktop check uses Electron's
-own declarations. The file service, recents and document claims also run as
-strictly checked `.ts` modules through the same main-process type stripping.
-The desktop config's `desktop/*.ts` include checks each converted module.
+own declarations. `desktop-state.ts` also runs through main-process type
+stripping, checked by the existing `desktop/*.ts` include in that config.
+The file service, recents and document claims use the same strict check and
+main-process type stripping, with real types at their IPC dependencies.
 JavaScript services injected by `main.js` remain unchecked
 boundaries described by narrow interfaces in `ipc-boundaries.d.ts`.
 
@@ -82,7 +83,7 @@ Everything listed here goes inside the asar.
 | `voice-helper.js` | Follow My Voice's listener process (#8). `voice-composition.js` creates it and gives it its command. The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
 | `chromium-browsers.js` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
 | `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.js` itself. |
-| `desktop-state.js` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.ts`. |
+| `desktop-state.ts` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.ts`. |
 | `update-release.js` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
 | `file-service.ts` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry, the atomic write and writing a file entry (the atomic write plus its stamp). |
 | `doc-claims.ts` | Which tab holds which document id from which file, so that two tabs holding the same document from different files are noticed and the later one is asked to take a new id. The id rules come from `shared/doc-id-policy.js`, which `main.js` passes in, and `main.js` still sends `splitpage:reassign-doc-id` itself, so the IPC table test sees it. |
@@ -111,6 +112,14 @@ Two things `main.js` needs at startup are deliberately left out of `files`:
   plain file from outside the asar works like any other `require`. Taking
   `shared/` out of `stage.mjs` would stop the app launching, not just break one
   feature.
+
+  Shared modules are synchronous ES modules. `main.js` keeps its `require`
+  calls: Electron 44.4.5 returns their namespace objects before and after
+  `app.whenReady`, including when the requiring code runs from an asar.
+  `stage.mjs` copies their ESM `package.json` with the five modules the main
+  process reaches. They have no top-level await or observable initialization
+  effects, and their dependency graph has no cycles. The renderer bundles the
+  same named exports directly; it needs no CommonJS wrappers.
 
 ## `extraResources`
 

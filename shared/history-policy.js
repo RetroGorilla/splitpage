@@ -118,7 +118,7 @@ function planHistoryEviction(docs, capBytes, nowMs, opts) {
   return { deletes: deletes, totalBefore: totalBefore, totalAfter: total, overCap: total > cap };
 }
 
-module.exports = {
+export {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
   HISTORY_PER_DOC,
