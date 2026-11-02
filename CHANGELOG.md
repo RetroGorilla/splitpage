@@ -30,7 +30,7 @@ saving bugs. If you open or share scripts on a Splitpage server, read
 - Pressing Tab straight after a tag keyword typed before existing words tags
   the rest of that line, stopping before an existing tag or link.
 - Pasted text links lose known tracking parameters and keep their other
-  parameters. Signed links are left alone.
+  parameters. Links with a recognised signature parameter are left alone.
 - App-data export: when some history or images can't be read, **Export the
   rest anyway** exports what is readable and says how much was left out.
 
@@ -70,8 +70,8 @@ saving bugs. If you open or share scripts on a Splitpage server, read
 - Damaged history entries no longer hide intact snapshots or stop new backups,
   and History reports how many could not be listed.
 - App-data exports keep intact history and images when a snapshot is damaged,
-  and cancel when stored data can't be read, so a partial file never looks
-  complete.
+  cancel by default when stored data can't be read, and say what a partial
+  export left out.
 - Undo and redo after a crew merge keep removed people removed and restore item
   assignments correctly. Undo notices no longer count item owners who were
   already missing from the crew.
