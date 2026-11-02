@@ -58,12 +58,12 @@ function readFailure() {
 
 test("only one export gathers data at a time", async () => {
   const { ports } = setup();
-  const gate = deferred<void>();
-  const started = deferred<void>();
+  const gate = deferred<undefined>();
+  const started = deferred<undefined>();
   let reads = 0;
   const mounted = mountAppData({ ...ports, history: { ...ports.history, exportAll: async () => {
     reads++;
-    started.resolve();
+    started.resolve(undefined);
     await gate.promise;
     throw new Error("unavailable");
   } } });
@@ -74,7 +74,7 @@ test("only one export gathers data at a time", async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(reads, 1);
   } finally {
-    gate.resolve();
+    gate.resolve(undefined);
     await Promise.all([first, second]);
     mounted.dispose();
   }
@@ -106,10 +106,10 @@ test("a new export dismisses the older prompt and invalidates its action", async
 
 test("an export stays exclusive until file delivery finishes", async () => {
   const { ports } = setup();
-  const started = deferred<void>();
+  const started = deferred<undefined>();
   const delivery = deferred<boolean>();
   let deliveries = 0;
-  const mounted = mountAppData({ ...ports, fileDelivery: { deliver: () => { deliveries++; started.resolve(); return delivery.promise; } } });
+  const mounted = mountAppData({ ...ports, fileDelivery: { deliver: () => { deliveries++; started.resolve(undefined); return delivery.promise; } } });
   const first = mounted.exportAppData();
   await started.promise;
   try {
@@ -224,12 +224,12 @@ test("disposing the feature dismisses its partial-export choice and prevents sta
 test("disposing while the opt-in rerun gathers prevents delivery after its reads finish", async () => {
   const { ports, choices } = setup();
   const reading = deferred<Awaited<ReturnType<AppDataPorts["history"]["exportAll"]>>>();
-  const started = deferred<void>();
+  const started = deferred<undefined>();
   let deliveries = 0;
   const mounted = mountAppData({ ...ports,
     history: { ...ports.history, exportAll: (options) => {
       if (!options?.allowOmissions) return Promise.reject(readFailure());
-      started.resolve();
+      started.resolve(undefined);
       return reading.promise;
     } },
     fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
