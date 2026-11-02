@@ -73,7 +73,7 @@ test("6.5 follow-up: an unkeyed b-roll line with no record on any side merges in
 });
 
 test("6.5 follow-up: when one side already holds the line's record, the sides that draw one for it take that record's id", () => {
-  const live = migrateRows(legacyScript("Mine"), { ...fakeMigration().ports, ids: drawsFor("live") });
+  const live = migrateRows({ ...legacyScript("Mine"), brollShots: [{ id: "bs-live-1", name: "Steam" }] }, { ...fakeMigration().ports, ids: drawsFor("live") });
   const held = live.brollShots.map(function (b) { return b.id; });
   assert.deepEqual(held, ["bs-live-1"]);
   assert.deepEqual(mergedShots(live), ["bs-live-1 Steam"]);
