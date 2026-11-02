@@ -1,5 +1,6 @@
 import { randomIds } from "../adapters/identity/ids.ts";
 import { createRichText } from "../adapters/richtext/richtext.ts";
+import { cleanPastedLinks } from "../adapters/richtext/paste-links.ts";
 import type { CellReader, RichText } from "../adapters/richtext/richtext.ts";
 import type { Frozen } from "../core/document/freeze.ts";
 import type { StoredImageRef } from "../core/document/text-policy.ts";
@@ -19,6 +20,10 @@ function richText(): RichText {
 
 export function inertBody(html: unknown): HTMLElement {
   return richText().inertBody(html);
+}
+
+export function cleanPastedCell(cell: readonly Run[]): Run[] {
+  return cleanPastedLinks(cell);
 }
 
 export function sanitizeHtml(html: unknown): string {
