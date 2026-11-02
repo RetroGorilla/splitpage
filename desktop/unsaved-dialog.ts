@@ -1,7 +1,18 @@
 "use strict";
 
-function unsavedTitles(list, draftsList) {
-  let listing = null;
+import type { createDraftStore } from "./drafts.ts";
+
+import type { MessageBoxSyncOptions } from "electron";
+import type { DesktopMainTab } from "./ipc-boundaries.d.ts";
+
+type UnsavedDecision = "discard" | "cancel" | "review";
+interface UnsavedDialogSpec {
+  options: MessageBoxSyncOptions;
+  decisions: UnsavedDecision[];
+}
+
+function unsavedTitles(list: Pick<DesktopMainTab, "id" | "title">[], draftsList: ReturnType<typeof createDraftStore>["list"]) {
+  let listing: ReturnType<typeof draftsList> | null = null;
   return list.map((tab) => {
     if (tab.title) return tab.title;
     if (!listing) listing = draftsList();
@@ -10,7 +21,7 @@ function unsavedTitles(list, draftsList) {
   });
 }
 
-function unsavedDialogFor(count, verb, titles) {
+function unsavedDialogFor(count: number, verb: string, titles: string[]): UnsavedDialogSpec {
   if (count === 1) {
     return {
       options: {
@@ -43,8 +54,10 @@ function unsavedDialogFor(count, verb, titles) {
   };
 }
 
-function decisionFor(dialogSpec, choice) {
+function decisionFor(dialogSpec: UnsavedDialogSpec, choice: number) {
   return dialogSpec.decisions[choice] || "cancel";
 }
+
+export type { unsavedTitles, unsavedDialogFor, decisionFor };
 
 module.exports = { unsavedTitles, unsavedDialogFor, decisionFor };

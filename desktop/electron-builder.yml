@@ -10,7 +10,7 @@ files:
   - main.js
   - preload.js
   - tabstrip-preload.js
-  - drafts.js
+  - drafts.ts
   - ipc-channels.ts
   - ipc-setup.ts
   - ipc-files.ts
@@ -25,7 +25,7 @@ files:
   - close-quit.js
   - session-restore.js
   - close-keep.js
-  - quit-watchdog.js
+  - quit-watchdog.ts
   - blob-store.ts
   - voice-composition.js
   - voice-helper.js
@@ -33,13 +33,13 @@ files:
   - history-fs-backend.js
   - desktop-state.js
   - update-release.js
-  - file-service.js
-  - doc-claims.js
-  - recents.js
-  - window-appearance.js
-  - tab-registry.js
-  - restore-notice.js
-  - unsaved-dialog.js
+  - file-service.ts
+  - doc-claims.ts
+  - recents.ts
+  - window-appearance.ts
+  - tab-registry.ts
+  - restore-notice.ts
+  - unsaved-dialog.ts
   - package.json
 
 extraResources:
