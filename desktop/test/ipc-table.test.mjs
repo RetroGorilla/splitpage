@@ -510,9 +510,9 @@ test("packaging: every ./module main.js requires, directly or through another mo
   assert.ok(required.has("drafts.ts"), "main.js requires ./drafts");
   assert.ok(required.has("ipc-setup.ts"), "main.js requires ./ipc-setup");
   assert.ok(required.has("ipc-channels.ts"), "ipc-setup.ts requires ./ipc-channels");
-  for (const f of ["close-keep.js", "quit-watchdog.ts", "unsaved-dialog.ts"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
+  for (const f of ["close-keep.ts", "quit-watchdog.ts", "unsaved-dialog.ts"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
   for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
-  for (const f of ["close-quit.js", "session-restore.ts"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
+  for (const f of ["close-quit.ts", "session-restore.ts"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
   assert.ok(requiredBy(MAIN).includes("voice-composition.ts"), "main.js requires ./voice-composition.ts");
   assert.ok(required.has("voice-helper.ts") && required.has("prompter-share.ts"), "voice-composition.ts requires ./voice-helper and ./prompter-share.ts");
   assert.ok(requiredBy(MAIN).includes("print-pdf.ts"), "main.js requires ./print-pdf.ts");

@@ -16,6 +16,7 @@ import type { createRecents } from "./recents.ts";
 import type { createDocClaims } from "./doc-claims.ts";
 import type { createRestoreNotice } from "./restore-notice.ts";
 import type { createThemeChoice } from "./window-appearance.ts";
+import type { createCloseQuit } from "./close-quit.ts";
 import type { createTabRegistry } from "./tab-registry.ts";
 import type { createDesktopStateStore } from "./desktop-state.ts";
 
@@ -32,6 +33,9 @@ export interface DesktopMainTab {
   source: { kind: "file"; absPath: string } | { kind: "blank" };
   ready: boolean;
   keepDraftOnClose?: boolean;
+  keepHolders?: Set<object>;
+  crashedNotReloaded?: boolean;
+  closeKeepingDraft?: boolean;
   pendingPayload: unknown;
   launchIntent: DesktopWireLaunch;
   firstTabOfLaunch?: boolean;
@@ -43,6 +47,7 @@ export interface DesktopMainWindow {
   win: BrowserWindow;
   activeTabId: string | null;
   tabIds: string[];
+  closeKeepingDrafts?: boolean;
 }
 
 export interface DesktopMainCommon {
@@ -60,7 +65,7 @@ export interface DesktopMainCommon {
     tabId?: string | undefined; pendingPayload?: DesktopMainTab["pendingPayload"]; index?: unknown;
   }) => DesktopMainTab | null;
   activateTab: (id: string | undefined) => void;
-  requestCloseTab: (id: string | undefined) => void;
+  requestCloseTab: ReturnType<typeof createCloseQuit>["requestCloseTab"];
   reorderTab: (id: string | undefined, index: number | undefined) => boolean;
   moveTabToWindow: (tabId: string, windowId: string, index?: number) => boolean;
 }
@@ -164,6 +169,25 @@ export interface DesktopPrintIpcDependencies {
 }
 
 export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;
+
+export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "testMode" | "tabs" | "windowsById" | "draftStore" | "activateTab">, Pick<DesktopTestModeIpcDependencies, "app" | "liveWindows"> {
+  app: Pick<App, "on" | "quit">;
+  dialog: Pick<DesktopFileIpcDependencies["dialog"], "showMessageBoxSync">;
+  tabHasFile: (tab: DesktopMainTab | null | undefined) => boolean;
+  tabIsUnsaved: (tab: DesktopMainTab | null | undefined) => boolean;
+  draftsHasDraft: (id: string) => boolean;
+  requestDraftFlush: (tab: DesktopMainTab | null | undefined, budgetMs: number, keep?: boolean) => Promise<object>;
+  draftFlushBudgetMs: number;
+  draftsList: ReturnType<typeof createDraftStore>["list"];
+  draftsDiscardForUserDecision: (ids: (string | undefined)[], reason: string) => void;
+  draftsDiscardClean: (id: string | undefined) => void;
+  consumeTestDialogAnswer: () => unknown;
+  focusWindow: (id: string) => void;
+  destroyTabView: (id: string | undefined) => void;
+  startInstallerNow: () => DesktopIpcResult<"splitpage:update-install">;
+  prompterShare: DesktopTestModeIpcDependencies["prompterShare"];
+  voiceHelper: () => Pick<ReturnType<DesktopTestModeIpcDependencies["voiceHelperInstance"]>, "stopAll"> | null;
+}
 
 export interface DesktopSessionRestoreDependencies extends Pick<DesktopMainCommon, "tabs" | "windowsById" | "draftStore" | "createTab" | "activateTab">, Pick<ReturnType<typeof createTabRegistry>, "pathToTabId" | "claimRoutingKey" | "firstWindowRecord"> {
   app: Pick<App, "on">;
