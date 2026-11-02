@@ -28,7 +28,7 @@ const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = requi
 const {
   DESKTOP_STATE_VERSION,
   normalizeBounds, normalizeTabSource, createDesktopStateStore
-} = require("./desktop-state");
+} = require("./desktop-state.ts");
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
 } = require("./update-release");

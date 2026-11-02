@@ -2,11 +2,12 @@
 
 import type { DesktopMainCommon, DesktopMainTab } from "./ipc-boundaries.d.ts";
 import type { DesktopFileService } from "./file-service.ts";
+import type { TAB_OR_WINDOW_ID_RE as DesktopStateIdPattern, mintTabOrWindowId as MintDesktopStateId } from "./desktop-state.ts";
 
 const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId }: {
-  TAB_OR_WINDOW_ID_RE: RegExp;
-  mintTabOrWindowId: () => string;
-} = require("./desktop-state");
+  TAB_OR_WINDOW_ID_RE: typeof DesktopStateIdPattern;
+  mintTabOrWindowId: typeof MintDesktopStateId;
+} = require("./desktop-state.ts");
 
 function createTabRegistry({ pathKey }: Pick<DesktopFileService, "pathKey">) {
   const tabs: DesktopMainCommon["tabs"] = new Map();
