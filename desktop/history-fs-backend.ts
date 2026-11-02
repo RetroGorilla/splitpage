@@ -304,7 +304,9 @@ function createHistoryFsBackend(opts?: HistoryFsOptions | null) {
       get: async (sha: unknown) => {
         check("get", false);
         if (!isSha256(sha)) return null;
-        const buf = await bodies.get(sha);
+        let buf;
+        try { buf = await bodies.get(sha); }
+        catch (error) { throw codedError("io", `history: body ${sha} unreadable (${(error as NodeJS.ErrnoException)?.code})`); }
         if (buf) return buf.toString("utf8");
         try {
           await fsp.stat(bodies.pathFor(sha) as string);
