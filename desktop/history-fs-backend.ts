@@ -51,14 +51,14 @@ function bodyErrorCode(code: unknown) {
   return "io";
 }
 
-function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonly SharedHistorySnapshotReader[] {
-  return rec && Array.isArray(rec.snapshots) ? rec.snapshots as readonly SharedHistorySnapshotReader[] : [];
+function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonly unknown[] {
+  return rec && Array.isArray(rec.snapshots) ? rec.snapshots as readonly unknown[] : [];
 }
 
 function namedShas(buckets: SharedHistoryIndex) {
   const named = new Set<string>();
   for (const b of Object.keys(buckets)) {
-    for (const s of snapshotsOf(buckets[b])) if (s && typeof s.sha === "string") named.add(s.sha);
+    for (const s of snapshotsOf(buckets[b])) if (s && typeof (s as SharedHistorySnapshotReader).sha === "string") named.add((s as SharedHistorySnapshotReader).sha as string);
   }
   return named;
 }
@@ -310,7 +310,7 @@ function createHistoryFsBackend(opts?: HistoryFsOptions | null) {
         return Object.assign({}, doc.buckets);
       },
 
-      get: async (sha: string) => {
+      get: async (sha: unknown) => {
         check("get", false);
         if (!isSha256(sha)) return null;
         const buf = await bodies.get(sha);

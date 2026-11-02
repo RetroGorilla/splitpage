@@ -1,4 +1,5 @@
 import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
+import type { SharedHistorySnapshotReader } from "../../../shared/history-store.ts";
 import type { DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 import type { DraftPayload } from "../../application/recovery/draft-origin.ts";
 import type { DesktopFileEntry, DesktopPort, DesktopTakenDraft, DesktopTestPort } from "./desktop-port.ts";
@@ -407,7 +408,7 @@ function addFakeDesktopHistory(backend: FakeHistoryBackend) {
     const raw = mem.inspect(), out: Record<string, unknown[]> = {};
     Object.keys(raw.index).forEach(function (bucket) {
       out[bucket] = ((raw.index[bucket] as NonNullable<typeof raw.index[string]>).snapshots || []).map(function (s) {
-        return { meta: sanitizeHistoryMeta(s), stateJson: raw.bodies[s.sha] };
+        return { meta: sanitizeHistoryMeta(s), stateJson: raw.bodies[(s as SharedHistorySnapshotReader).sha as string] };
       });
     });
     return out;
