@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createRestoreNotice } = require(path.join(here, "..", "restore-notice.js"));
+const { createRestoreNotice } = require(path.join(here, "..", "restore-notice.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });

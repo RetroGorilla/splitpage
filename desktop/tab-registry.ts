@@ -1,21 +1,27 @@
 "use strict";
 
-const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId } = require("./desktop-state.ts");
+import type { DesktopFileServiceBoundary, DesktopMainCommon, DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { TAB_OR_WINDOW_ID_RE as DesktopStateIdPattern, mintTabOrWindowId as MintDesktopStateId } from "./desktop-state.ts";
 
-function createTabRegistry({ pathKey }) {
-  const tabs = new Map();
-  const windowsById = new Map();
-  const webContentsIdToTabId = new Map();
-  const pathToTabId = new Map();
+const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId }: {
+  TAB_OR_WINDOW_ID_RE: typeof DesktopStateIdPattern;
+  mintTabOrWindowId: typeof MintDesktopStateId;
+} = require("./desktop-state.ts");
 
-  function mintUniqueTabId(preferred) {
+function createTabRegistry({ pathKey }: Pick<DesktopFileServiceBoundary, "pathKey">) {
+  const tabs: DesktopMainCommon["tabs"] = new Map();
+  const windowsById: DesktopMainCommon["windowsById"] = new Map();
+  const webContentsIdToTabId = new Map<number, string>();
+  const pathToTabId = new Map<string, string>();
+
+  function mintUniqueTabId(preferred?: unknown) {
     if (typeof preferred === "string" && TAB_OR_WINDOW_ID_RE.test(preferred) && !tabs.has(preferred)) return preferred;
     let id = mintTabOrWindowId();
     while (tabs.has(id)) id = mintTabOrWindowId();
     return id;
   }
 
-  function mintUniqueWindowId(preferred) {
+  function mintUniqueWindowId(preferred?: unknown) {
     if (typeof preferred === "string" && TAB_OR_WINDOW_ID_RE.test(preferred) && !windowsById.has(preferred)) return preferred;
     let id = mintTabOrWindowId();
     while (windowsById.has(id)) id = mintTabOrWindowId();
@@ -27,18 +33,18 @@ function createTabRegistry({ pathKey }) {
     return it.done ? null : it.value;
   }
 
-  function claimRoutingKey(map, key, tabId) {
+  function claimRoutingKey<K>(map: Map<K, string>, key: K, tabId: string) {
     const owner = map.get(key);
     if (owner && owner !== tabId && tabs.has(owner)) return false;
     map.set(key, tabId);
     return true;
   }
 
-  function indexTabSource(tab) {
+  function indexTabSource(tab: Pick<DesktopMainTab, "id" | "source">) {
     if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
   }
 
-  function unindexTabSource(tab) {
+  function unindexTabSource(tab: Pick<DesktopMainTab, "id">) {
     for (const [key, id] of pathToTabId) if (id === tab.id) pathToTabId.delete(key);
   }
 
@@ -55,5 +61,7 @@ function createTabRegistry({ pathKey }) {
     unindexTabSource
   };
 }
+
+export type { createTabRegistry };
 
 module.exports = { createTabRegistry };

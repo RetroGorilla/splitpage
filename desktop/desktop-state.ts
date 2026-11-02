@@ -4,11 +4,12 @@ import type * as NodePath from "node:path";
 import type * as NodeFs from "node:fs";
 import type * as NodeCrypto from "node:crypto";
 import type { Rectangle } from "electron";
+import type { writeFileDurableSync as WriteDesktopStateFile } from "./drafts.ts";
 
 const path: typeof NodePath = require("node:path");
 const fs: typeof NodeFs = require("node:fs");
 const crypto: typeof NodeCrypto = require("node:crypto");
-const { writeFileDurableSync }: { writeFileDurableSync: (file: string, text: string) => void } = require("./drafts");
+const { writeFileDurableSync }: { writeFileDurableSync: typeof WriteDesktopStateFile } = require("./drafts.ts");
 
 const DESKTOP_STATE_VERSION = 2;
 const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
