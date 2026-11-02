@@ -79,6 +79,64 @@ test("a plain toast has a keyboard focusable dismiss button", () => {
   assert.ok(host.firstElementChild?.classList.contains("is-leaving"));
 });
 
+test("dismissing a focused toast returns to its connected origin", async () => {
+  const { host, toasts } = setup();
+  const origin = document.createElement("input");
+  document.body.append(origin);
+  origin.focus();
+  toasts.show("Paused", "warn", true);
+  const dismiss = host.querySelector<HTMLButtonElement>(".toast-dismiss");
+  assert.ok(dismiss);
+  dismiss.focus();
+  dismiss.click();
+  await new Promise(resolve => setTimeout(resolve, 260));
+  assert.equal(host.children.length, 0);
+  assert.equal(document.activeElement, origin);
+});
+
+test("a focused toast returns inside Present when its origin is behind it", async () => {
+  const { host, toasts } = setup();
+  document.body.insertAdjacentHTML("beforeend", '<input id="origin"><div id="prompter"><button id="pp-play">Play</button></div>');
+  document.getElementById("origin")?.focus();
+  toasts.show("Close Present first.", "warn", true);
+  const dismiss = host.querySelector<HTMLButtonElement>(".toast-dismiss");
+  assert.ok(dismiss);
+  dismiss.focus();
+  dismiss.click();
+  await new Promise(resolve => setTimeout(resolve, 260));
+  assert.equal(document.activeElement, document.getElementById("pp-play"));
+});
+
+test("toast focus recovery skips an origin whose view is now hidden", async () => {
+  const { host, toasts } = setup();
+  document.body.insertAdjacentHTML("beforeend", '<div id="old-view"><input id="origin"></div><button id="destination">Continue</button>');
+  document.getElementById("origin")?.focus();
+  toasts.show("Paused", "warn", true);
+  const oldView = document.getElementById("old-view") as HTMLElement;
+  oldView.style.display = "none";
+  const dismiss = host.querySelector<HTMLButtonElement>(".toast-dismiss");
+  assert.ok(dismiss);
+  dismiss.focus();
+  dismiss.click();
+  await new Promise(resolve => setTimeout(resolve, 260));
+  assert.equal(document.activeElement, document.getElementById("destination"));
+});
+
+test("a disappearing toast preserves focus moved by its action or the user", async () => {
+  const { host, toasts } = setup();
+  const origin = document.createElement("input");
+  const destination = document.createElement("input");
+  document.body.append(origin, destination);
+  origin.focus();
+  toasts.showAction("Retry", "error", "Retry", () => { destination.focus(); }, true);
+  const action = host.querySelector<HTMLButtonElement>(".toast-action");
+  assert.ok(action);
+  action.focus();
+  action.click();
+  await new Promise(resolve => setTimeout(resolve, 260));
+  assert.equal(document.activeElement, destination);
+});
+
 test("repeated plain refusals share a notice but distinct kinds, persistence and actions do not", () => {
   const { host, toasts } = setup();
   const first = toasts.show("Close Present first.", "warn");
