@@ -8,11 +8,12 @@ import type * as NodeFs from "node:fs";
 
 import type { DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
 import type { DesktopFileService } from "./file-service.ts";
+import type { LAST_KNOWN_TITLE_MAX as DesktopTitleLimit } from "./desktop-state.ts";
 
 const fs: typeof NodeFs = require("node:fs");
 const { readFileEntry }: DesktopFileService = require("./file-service.ts");
 const { restoreDoneAction }: { restoreDoneAction: typeof RestoreDoneAction } = require("./drafts.ts");
-const { LAST_KNOWN_TITLE_MAX }: { LAST_KNOWN_TITLE_MAX: number } = require("./desktop-state");
+const { LAST_KNOWN_TITLE_MAX }: { LAST_KNOWN_TITLE_MAX: typeof DesktopTitleLimit } = require("./desktop-state.ts");
 
 function createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
