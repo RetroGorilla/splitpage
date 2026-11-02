@@ -109,10 +109,10 @@ function appDataFilename() {
 }
 
 let appDataLastExport: ExportSummary | null = null;
-let readableExportNotice: ReturnType<AppDataPorts["notices"]["showAction"]> | null = null;
+let readableExportNotice: WeakRef<ReturnType<AppDataPorts["notices"]["showAction"]>> | null = null;
 
 async function exportAppData() {
-  readableExportNotice?.dismiss();
+  readableExportNotice?.deref()?.dismiss();
   readableExportNotice = null;
   appDataLastExport = null;
   ports.notices.show("Gathering your Splitpage data…");
@@ -132,11 +132,11 @@ async function exportAppData() {
         return;
       }
       let chosen = false;
-      readableExportNotice = ports.notices.showAction(message, "error", "Export the rest anyway", function () {
+      readableExportNotice = new WeakRef(ports.notices.showAction(message, "error", "Export the rest anyway", function () {
         if (chosen || disposed) return;
         chosen = true;
         return deliverAppDataBundle(partial);
-      }, true);
+      }, true));
     } else ports.notices.show(message, "error");
     return;
   }
@@ -423,7 +423,7 @@ async function onImportAppDataChosen(e: Event) {
     dispose: function () {
       if (disposed) return;
       disposed = true;
-      readableExportNotice?.dismiss();
+      readableExportNotice?.deref()?.dismiss();
       readableExportNotice = null;
       if (appDataInput) appDataInput.removeEventListener("change", onImportAppDataChosen);
       appDataInput = null;
