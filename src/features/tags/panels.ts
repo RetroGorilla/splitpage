@@ -152,8 +152,18 @@ export function renderGearList() {
     return;
   }
 
+  const rename = listEl.querySelector<HTMLInputElement>(".tag-rename-input");
+  const keepRename = rename && rename.getAttribute("data-key") === (ports as TagPanelPorts).view.tagRenamingKey();
+  const focused = rename && document.activeElement === rename;
+  const selection = rename && [rename.selectionStart, rename.selectionEnd, rename.selectionDirection] as const;
   listEl.innerHTML = '<ul class="tag-list" aria-label="Gear items">' +
     entries.map(function (e) { return tagEntityHtml(e, { gear: true }); }).join("") + '</ul>';
+  const replacement = listEl.querySelector<HTMLInputElement>(".tag-rename-input");
+  if (keepRename && replacement && replacement.getAttribute("data-key") === rename.getAttribute("data-key")) {
+    replacement.replaceWith(rename);
+    if (focused) rename.focus({ preventScroll: true });
+    if (selection) rename.setSelectionRange(selection[0], selection[1], selection[2] || undefined);
+  }
 }
 
 function fillGearQuickAdd() {
