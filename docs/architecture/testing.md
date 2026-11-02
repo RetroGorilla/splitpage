@@ -140,18 +140,19 @@ run stays small. The logic is `tools/failure-digest.mjs`, tested by
 A cache owns what it stores and hands the same value to every caller. A
 caller that needs to change it copies it first. Return types are `readonly`
 all the way down (`Frozen<T>` in `src/core/document/freeze.ts`), so a write
-from TypeScript is a type error. A write from legacy JavaScript is caught only
-under the test-only freeze flag (milestone 3, decisions D2 and D3).
+from TypeScript is a type error. The freeze flag locks the cached values at
+runtime (milestone 3, decisions D2 and D3).
 
 - **The switch.** `src/bootstrap/cache-freeze.ts` reads the page's query once,
   when the bundle starts: `freeze-caches=1`, and nothing else, makes
   `cacheSeal` core's `deepLock`; otherwise it is `noFreeze`, which hands the
   value back untouched, so a build without the flag behaves and saves exactly
   as before. It works in any build, like `?teleprompter=1`.
-- **Why `deepLock` and not `Object.freeze`.** The bundle is an IIFE with no
-  `"use strict"`, so the app runs in sloppy mode, where an assignment, a
-  `delete` or a `length` write into a frozen object is dropped without a
-  throw; only built-in methods such as `push` throw. `deepLock` hands out a
+- **Why `deepLock` and not `Object.freeze`.** The bundle starts with a
+  `"use strict"` directive, so writes into frozen objects throw in the app
+  just as they do in source-module tests. Sloppy callers, including browser
+  harness evaluations, can still silently lose assignments, deletions and
+  array length writes with plain `Object.freeze`. `deepLock` hands out a
   frozen copy of the value behind a `Proxy` whose `set`, `deleteProperty`,
   `defineProperty` (unless the definition changes nothing) and
   `setPrototypeOf` traps throw a `TypeError` in any mode. Nested objects and
