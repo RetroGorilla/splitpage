@@ -32,6 +32,11 @@ assert.ok(cache.run.includes("$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGH
 assert.ok(!cache.run.includes("github.workspace"));
 assert.ok(steps.findIndex((s) => s.name === cache.name) < steps.findIndex((s) => s.name === "Install Chromium"));
 assert.ok(steps.find((s) => s.name === "Install Chromium").run.includes("--with-deps"));
+const testSteps = ci.jobs.tests.steps;
+assert.equal(testSteps.find((s) => s.name === cache.name)?.run, cache.run);
+assert.ok(testSteps.find((s) => s.name === "Install Chromium")?.run.includes("--with-deps"));
+assert.ok(testSteps.findIndex((s) => s.name === "Install Chromium") < testSteps.findIndex((s) => s.run?.includes("npm run test:all")));
+assert.equal(ci.jobs.tests.env.SPLITPAGE_CHROME_ARGS, ci.jobs.checks.env.SPLITPAGE_CHROME_ARGS);
 
 const gitPath = process.platform === "win32" ? spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim() : null;
 const bash = process.platform === "win32" ? resolve(gitPath, "../../../bin/bash.exe") : "bash";
