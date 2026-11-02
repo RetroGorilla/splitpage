@@ -329,12 +329,12 @@ dev target passed 813/813 checks, 18 of them in the desktop PDF group. Fifteen
 `print|export|desktop` suites passed 994/994 checks on the test build with
 three lanes, including 65 (55/55) and 384 (36/36). The fresh `dist:win` build
 passed its 15/15 architecture checks, and both `app.asar` files list
-`print-pdf.ts` and `ipc-print.ts`. The real `print-pdf.ts` printed all 18 P1/P2
+`print-pdf.js` and `ipc-print.ts`. The real `print-pdf.js` printed all 18 P1/P2
 fixture pages in Electron in 188–489 ms each (long script 24 pages, long shot
 list 12, long packing lists 4 and 7) with no missing glyph and no line outside
 its page; rasterized pages showed pictures, Unicode, repeated table heads,
 split long rows, landscape pages and footers. After the printed-layout rules
-merged, the same 18 pages printed by `print-pdf.ts` passed `checkPrintedLayout`
+merged, the same 18 pages printed by `print-pdf.js` passed `checkPrintedLayout`
 rules a–g against the inspector's page models, with five oversized rows split
 as permitted.
 
