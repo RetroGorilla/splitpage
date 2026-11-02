@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import {
   attachToGallery, brollIdsTaken, cellFromClipboard, clipboardOfCell, cutNonceIn, freshBrollIds, stripComments,
   videoLink, videoLinksInText
-} from "../features/clipboard/cell-clipboard.js";
+} from "../features/clipboard/cell-clipboard.ts";
 import { commentIds, projection } from "../core/text/runs.ts";
 import { fromHtml } from "../bootstrap/richtext.ts";
 import { sliceCell } from "../core/text/edits.ts";
