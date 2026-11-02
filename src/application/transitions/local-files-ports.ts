@@ -1,6 +1,6 @@
 import type { BusyNotices, NoticePort } from "../effects/ports.ts";
 import type { UndoControl } from "../editing/undo-control.ts";
-import type { LocalFileAccess, LocalFileData } from "../files/local-file-access.ts";
+import type { LocalFileAccess, LocalFileData, LocalFileReference } from "../files/local-file-access.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
 import type { FileConflicts } from "../save/file-conflict.ts";
 import type { SaveConfirmation, SaveState } from "../save/save-state.ts";
@@ -19,7 +19,7 @@ import type { DesktopIpcArgs, DesktopIpcResult } from "../../../shared/desktop-c
 export interface LocalFileOpening {
   readonly kind: string;
   readonly file?: LocalFileData | null;
-  readonly handle?: unknown;
+  readonly handle?: LocalFileReference | null;
   readonly parsed?: { readonly state: ValidatedDocument; readonly kind: unknown };
   readonly options?: { readonly skipSnapshot?: boolean; readonly silent?: boolean; readonly resumed?: boolean; readonly reload?: boolean } | null;
 }
@@ -45,7 +45,7 @@ export interface LocalFilesOwnerPorts {
   readonly saves: Pick<SaveState, "unsaved">;
   readonly conflicts: Pick<FileConflicts, "close">;
   readonly location: Pick<DocumentLocation, "amendHome" | "setHome" | "fileHome" | "importHome">;
-  readonly lastFile: { readonly load: () => Promise<unknown>; readonly remember: (handle: unknown) => Promise<void> };
+  readonly lastFile: { readonly load: () => Promise<LocalFileReference | null>; readonly remember: (handle: unknown) => Promise<void> };
   readonly syncIdentity: () => void;
   readonly stamps: Pick<SessionMergeOwner, "stampRow">;
   readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "begin" | "end"> };
@@ -68,7 +68,7 @@ export interface LocalFilesOwner {
   readonly startLocalFiles: (ports: LocalFilesOwnerPorts) => () => void;
   readonly projectFileSource: () => DocumentSource<LocalFileOpening>;
   readonly tryResumeLastProject: () => Promise<void>;
-  readonly resumeFromHandle: (handle: unknown) => Promise<void>;
+  readonly resumeFromHandle: (handle: LocalFileReference | null | undefined) => Promise<void>;
   readonly openLocalFile: () => Promise<void>;
   readonly reloadFileFromDisk: () => Promise<void>;
   readonly reloadProjectFromDisk: () => Promise<void>;

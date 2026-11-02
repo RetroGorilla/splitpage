@@ -1,11 +1,14 @@
+import type { LocalFileReference } from "../files/local-file-access.ts";
 export type HomeKind = "none" | "file" | "import";
 
 export interface Home {
+  readonly handle?: LocalFileReference | null;
+  readonly lastModified?: number | null;
   readonly kind: HomeKind;
   readonly [field: string]: unknown;
 }
 
-export type HomeFields = Readonly<Record<string, unknown>>;
+export type HomeFields = Readonly<Record<string, unknown>> & { readonly handle?: LocalFileReference | null; readonly lastModified?: number | null };
 
 export type LocationChange = "home" | "writtenOut";
 
