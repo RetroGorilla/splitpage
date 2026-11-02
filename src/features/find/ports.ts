@@ -21,7 +21,7 @@ export interface FindPorts {
   readonly options: Pick<FindOptions, "matchesCase">;
   readonly bulkTag: BulkTagRows;
   readonly present: Pick<PrompterState, "isOpen"> & {
-    readonly setSearching: (value: boolean) => void;
+    readonly setSearching: (value: boolean, dismiss?: () => void) => void;
     readonly jump: (range: Range) => void;
     readonly onViewChange: (listener: () => void) => () => void;
   };

@@ -839,7 +839,8 @@ export async function startVoiceFollow(): Promise<void> {
   state.finalTranscript = "";
   state.interimTranscript = "";
   const readingWord = voiceFromReadingLine ? Math.floor(readingPosition(document.getElementById("prompter-scroll") as HTMLElement)) : -1;
-  state.speakCursor = readingWord < 0 ? -1 : state.speakable.findIndex((at) => at >= readingWord);
+  const restart = state.speakable.findIndex((at) => at >= readingWord);
+  state.speakCursor = readingWord < 0 ? -1 : restart < 0 ? state.speakable.length - 1 : restart;
   state.wordCursor = state.speakable[state.speakCursor] ?? -1;
   state.voiceRestarts = 0;
   state.voiceMicName = "";
@@ -1113,6 +1114,7 @@ export function wireTagEntityContainer(id: string, rootClick: (event: MouseEvent
 }
 
 export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime {
+  let dismissSearch: (() => void) | null = null;
   ports = nextPorts;
   prompterMirror = ports.preferences.prompterFlag("prompterMirror");
 
@@ -1145,8 +1147,14 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
   if (launch) startPrompterLaunch(launch);
 
   return {
-    setSearching: function (value) {
+    closeFind: function () {
+      if (!searching || !dismissSearch) return false;
+      dismissSearch();
+      return true;
+    },
+    setSearching: function (value, dismiss) {
       searching = value;
+      dismissSearch = value ? dismiss ?? null : null;
       if (value) { setPrompterPlaying(false); stopVoiceFollow(); }
     },
     jumpToFind: function (range) {
@@ -1198,6 +1206,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
       clearTimeout(initialReadyTimer as TimerHandle);
       initialReadyTimer = null;
       withdrawHook?.();
+      dismissSearch = null;
       viewListeners.clear();
       (ports as unknown) = null;
     }

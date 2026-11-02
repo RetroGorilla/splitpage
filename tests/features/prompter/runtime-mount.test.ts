@@ -108,6 +108,43 @@ test("Find pauses voice and playback, cues the matched scene, and resumes voice 
   } finally { runtime.dispose(); }
 });
 
+test("voice restart after a trailing stage direction stays at the final spoken position", async () => {
+  harness();
+  const words = Array.from({ length: 220 }, (_, i) => "word" + i);
+  const h = fakePrompterPorts(migrateRows({ rows: [{ id: "r1", audioText: "script" }] }, fakeMigration().ports));
+  class Recognition {
+    onstart: (() => void) | null = null;
+    onresult: ((event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => void) | null = null;
+    start() { this.onstart?.(); }
+    stop() {}
+  }
+  const recognition = new Recognition();
+  const runtime = startPrompter({ ...h.ports,
+    text: { ...h.ports.text, cellOf: () => [{ text: words.join(" ") + "\n", marks: {} }, { text: "hold still", marks: { dir: true } }] },
+    voice: { ...h.ports.voice, available: () => true, hasRelay: () => true, createRelay: () => recognition }
+  });
+  try {
+    runtime.openPrompter();
+    const rendered = Array.from(document.querySelectorAll<HTMLElement>("#prompter-content .w"));
+    for (let i = 0; i < rendered.length; i++) Object.defineProperty(rendered[i], "offsetTop", { value: i * 20 });
+    const scroller = document.getElementById("prompter-scroll") as HTMLElement;
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    scroller.scrollTo = (options?: ScrollToOptions | number) => { if (typeof options === "object") scroller.scrollTop = options.top ?? 0; };
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector("#prompter-content .stage-dir") as HTMLElement);
+    range.getClientRects = () => [{ top: 4800, bottom: 4820 }] as unknown as DOMRectList;
+    runtime.setSearching(true);
+    runtime.jumpToFind(range);
+    assert.equal(scroller.scrollTop, 4600);
+    runtime.setSearching(false);
+    await runtime.startVoiceFollow();
+    recognition.onresult?.({ resultIndex: 0, results: [{ isFinal: false, 0: { transcript: "word0 word1" } }] });
+    assert.equal(scroller.scrollTop, 4600);
+    recognition.onresult?.({ resultIndex: 0, results: [{ isFinal: false, 0: { transcript: "word216 word217 word218" } }] });
+    assert.equal(rendered[218]?.classList.contains("current-word"), true);
+  } finally { runtime.dispose(); }
+});
+
 test("closing Present restores its editor origin without scrolling, including after a repeated open", () => {
   const h = harness();
   const origin = document.createElement("div");

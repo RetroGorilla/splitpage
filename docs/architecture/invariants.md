@@ -181,7 +181,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 ### INV-19 — A full-screen overlay owns focus and stacking
 
 - **Behaviour:** While the Writer or Present is open, focus cannot leave it except to modals and toasts, and to Find while searching Present. Anything meant to show above it, such as `.tag-ghost-hint` at z-index 146, does.
-- **Tests:** partial. Browser `150-mode-transitions.txt` (z-index 145; a Writer that is fading out holds no focus), `457-toast-accessibility.txt` (Present focus, dialogs and toasts in fullscreen), `458-find-in-present.txt` (Find stacking, focus and Escape); `tests/features/prompter/mount.test.ts` (focus containment and shortcut ownership). No test covers the stacking of `.tag-ghost-hint`.
+- **Tests:** partial. Browser `150-mode-transitions.txt` (z-index 145; a Writer that is fading out holds no focus), `457-toast-accessibility.txt` (Present focus, dialogs and toasts in fullscreen), `458-find-in-present.txt` (Find stacking, focus and Escape), `459-find-keyboard-lock-fallback.txt` (unsupported/refused capture); `tests/features/prompter/mount.test.ts` (focus containment and shortcut ownership), `src/features/find/keyboard-lock.test.ts` (Find-scoped capture lifetime). No test covers the stacking of `.tag-ghost-hint`.
 - **Owner:** `src/features/overlay` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** the overlay and focus owner (M6). Escape and Tab handling, focus containment and stacking are set when an overlay registers, not by per-view CSS and listeners.
 - **Acceptance:** browser: with the Writer open, Tab and focus moved programmatically to `#rows` both stay inside the Writer, while a modal and a toast stay reachable. The completion ghost draws above the Writer.

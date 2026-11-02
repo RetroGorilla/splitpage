@@ -30,6 +30,14 @@ expect __count() === 'No matches'
 eval __query('needle')
 expect __count() === '1 of 3' && __all().size === 3
 expect Array.from(__all()).every(function(r){return r.toString() === 'needle' && document.getElementById('prompter-content').contains(r.startContainer);})
+click #pp-mirror
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('prompter').hidden
+expect document.activeElement.id === 'pp-play'
+key ctrl KeyF
+wait document.activeElement.id === 'find-input'
+click #pp-mirror
+focus #find-input
 eval window.__scrollBefore=document.getElementById('prompter-scroll').scrollTop
 key Enter
 expect __count() === '2 of 3' && __aligned()
@@ -68,10 +76,14 @@ expect JSON.stringify(F.state()) === __before
 expect document.getElementById('btn-save').textContent === __dirtyBefore
 click #btn-present
 wait !document.getElementById('prompter').hidden
+eval (function(){window.__locks=[];window.__unlocks=0;var k=navigator.keyboard;if(k&&k.lock){var l=k.lock.bind(k),u=k.unlock.bind(k);k.lock=function(keys){var r={keys:keys,state:'pending'};__locks.push(r);return l(keys).then(function(){r.state='granted';},function(e){r.state=e.name;throw e;});};k.unlock=function(){__unlocks++;return u();};}return true;})()
 click #pp-fullscreen
 wait document.fullscreenElement === document.documentElement
 key ctrl KeyF
 wait !document.getElementById('findbar').hidden
+wait !navigator.keyboard || !navigator.keyboard.lock || (__locks.length > 0 && __locks[__locks.length-1].state !== 'pending')
+eval window.__locked=__locks.length > 0 && __locks[__locks.length-1].state === 'granted';JSON.stringify({requests:__locks,locked:__locked})
+expect __locks.every(function(r){return JSON.stringify(r.keys) === '["Escape"]';})
 expect document.activeElement.id === 'find-input' && __top(document.getElementById('find-input'))
 eval __query('needle')
 key Enter
@@ -81,10 +93,12 @@ key Escape
 sleep 300
 eval JSON.stringify({escape:1,fullscreen:!!document.fullscreenElement,findOpen:!document.getElementById('findbar').hidden,presentOpen:!document.getElementById('prompter').hidden,focus:document.activeElement.id})
 expect !document.getElementById('prompter').hidden
+expect __locked ? (document.getElementById('findbar').hidden && !document.fullscreenElement && __unlocks === 1) : (!document.getElementById('findbar').hidden && !document.fullscreenElement)
 key Escape
 sleep 300
 eval JSON.stringify({escape:2,fullscreen:!!document.fullscreenElement,findOpen:!document.getElementById('findbar').hidden,presentOpen:!document.getElementById('prompter').hidden,focus:document.activeElement.id})
 expect document.getElementById('findbar').hidden
+expect !document.fullscreenElement && (document.getElementById('prompter').hidden === __locked)
 key Escape
 wait document.getElementById('prompter').hidden
 expect document.fullscreenElement === null

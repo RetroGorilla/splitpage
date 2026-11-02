@@ -34,6 +34,7 @@ import { replaceText } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
 import { presentFindRanges } from "./present-ranges.ts";
+import { captureFindEscape } from "./keyboard-lock.ts";
 
 let ports: FindRuntimePorts | null = null;
 
@@ -42,6 +43,7 @@ let findIndex = -1;
 let findInTags = 0;
 let presentRanges: Range[] = [];
 let stopViewChange: (() => void) | null = null;
+let releaseEscapeLock: (() => void) | null = null;
 
 function findingInPresent() {
   return !!document.getElementById("findbar")?.classList.contains("is-present");
@@ -455,7 +457,8 @@ export function openFindBar() {
   bar.hidden = false;
   if (present) {
     closeBulkTag();
-    (ports as FindRuntimePorts).present.setSearching(true);
+    (ports as FindRuntimePorts).present.setSearching(true, closeFindBar);
+    releaseEscapeLock ??= captureFindEscape(window);
   }
   const input = (document.getElementById("find-input") as HTMLInputElement);
   const sel = window.getSelection();
@@ -502,6 +505,8 @@ function firstMatchFrom(range: Range | null) {
 }
 
 export function closeFindBar() {
+  releaseEscapeLock?.();
+  releaseEscapeLock = null;
   const present = findingInPresent();
   const bar = document.getElementById("findbar") as HTMLElement;
   if (present && bar.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
@@ -543,6 +548,8 @@ export function startFind(given: FindPorts): FindControls {
       disposed = true;
       if ((document.getElementById("findbar") as HTMLElement)) closeFindBar();
       else {
+        releaseEscapeLock?.();
+        releaseEscapeLock = null;
         stopViewChange?.();
         stopViewChange = null;
         given.present.setSearching(false);
