@@ -1294,17 +1294,19 @@ async function caseSessionRestore(target, fixturesDir) {
 }
 
 async function startTinyUpdateServer() {
+  let base = "";
   const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
       tag_name: "v99.0.0",
-      html_url: "https://example.com/r",
-      assets: [{ name: "notes.txt", size: 1, browser_download_url: "https://example.com/r/notes.txt" }]
+      html_url: base + "/r",
+      assets: [{ name: "notes.txt", size: 1, browser_download_url: base + "/notes.txt" }]
     }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port;
-  return { server, url: `http://127.0.0.1:${port}/repos/x/releases/latest` };
+  base = `http://127.0.0.1:${port}`;
+  return { server, url: base + "/repos/x/releases/latest", releaseUrl: base + "/r" };
 }
 
 async function startTinyReleaseServer(opts) {
@@ -1316,33 +1318,44 @@ async function startTinyReleaseServer(opts) {
   const digest = crypto.createHash("sha256").update(payload).digest("hex");
 
   let base = "";
+  const downloads = [];
   const server = http.createServer((req, res) => {
     if (req.url.startsWith("/asset")) {
+      downloads.push(req.url);
+      res.writeHead(302, { location: base + "/payload" });
+      res.end();
+      return;
+    }
+    if (req.url.startsWith("/payload")) {
+      downloads.push(req.url);
       res.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(payload.length) });
       res.end(payload);
       return;
     }
     if (req.url.startsWith("/sums")) {
+      downloads.push(req.url);
       res.writeHead(200, { "content-type": "text/plain" });
       res.end(`${digest}  ${assetName}\n`);
       return;
     }
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({
+    const release = {
       tag_name: "v99.0.0",
-      html_url: "https://example.com/r",
+      html_url: base + "/r",
       assets: noSums
         ? [{ name: assetName, size: payload.length, browser_download_url: base + "/asset" }]
         : [
           { name: assetName, size: payload.length, browser_download_url: base + "/asset" },
           { name: "SHA256SUMS", size: 64, browser_download_url: base + "/sums" }
         ]
-    }));
+    };
+    if (opts && opts.mutate) opts.mutate(release);
+    res.end(JSON.stringify(release));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port;
   base = `http://127.0.0.1:${port}`;
-  return { server, url: `${base}/repos/x/releases/latest`, assetName, size: payload.length };
+  return { server, url: `${base}/repos/x/releases/latest`, assetName, size: payload.length, downloads };
 }
 
 async function caseUpdateStatus(target) {
@@ -1355,7 +1368,7 @@ async function caseUpdateStatus(target) {
 
     const status = await poll(app.cdp, "fetch('update-status.json',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){return s.updateAvailable ? s : null;})", 20000);
     record(tag + ": update-status.json reports updateAvailable:true", !!status && status.updateAvailable === true, JSON.stringify(status));
-    record(tag + ": update-status.json reports the release URL", !!status && status.releaseUrl === "https://example.com/r", JSON.stringify(status));
+    record(tag + ": update-status.json reports the release URL", !!status && status.releaseUrl === mini.releaseUrl, JSON.stringify(status));
 
     const barWithoutReload = await poll(app.cdp,
       "(function(){ var b = document.getElementById('update-bar'); return b && b.hidden === false; })()", 15000);
@@ -1401,6 +1414,7 @@ async function caseUpdateDownload(target) {
 
     const result = await evalPage(app.cdp, "window.splitpageDesktop.downloadUpdate()");
     record(tag + ": the download succeeds", !!result && result.ok === true, JSON.stringify(result));
+    record(tag + ": the download follows the release server's asset redirect", mini.downloads.includes("/payload"), JSON.stringify(mini.downloads));
 
     const after = await evalPage(app.cdp, "window.splitpageDesktop.getUpdateStatus()");
     const dl = (after && after.download) || {};
@@ -1426,6 +1440,33 @@ async function caseUpdateDownload(target) {
       rmrf(app.userDataDir);
     }
     await new Promise((resolve) => mini.server.close(resolve));
+  }
+}
+
+async function caseUpdateInvalidFeed(target) {
+  for (const [name, mutate] of [
+    ["unsafe release page", (release) => { release.html_url = "javascript:alert(1)"; }],
+    ["array checksum URL", (release) => { release.assets[1].browser_download_url = [release.assets[1].browser_download_url]; }],
+    ["another repository", (release) => { release.assets[0].browser_download_url = "https://github.com/another/repo/releases/download/tag/setup.exe"; }]
+  ]) {
+    const tag = target.name + " update invalid feed: " + name;
+    const mini = await startTinyReleaseServer({ mutate });
+    let app = null;
+    try {
+      app = await launchApp(target, { label: "update-invalid", allowUpdateCheck: true, updateApi: mini.url });
+      await waitForRows(app.cdp, 20000);
+      const status = await poll(app.cdp,
+        "window.splitpageDesktop.getUpdateStatus().then(function(s){ return s.checking ? null : s; })", 20000);
+      record(tag + ": the check fails closed", !!status && !!status.error && !status.updateAvailable && !status.canInstall, JSON.stringify(status));
+      record(tag + ": no release link is exposed", !!status && status.releaseUrl === null, JSON.stringify(status));
+      const result = await evalPage(app.cdp, "window.splitpageDesktop.downloadUpdate()");
+      record(tag + ": no download can start", !!result && result.ok === false, JSON.stringify(result));
+      record(tag + ": no asset or checksum was requested", mini.downloads.length === 0, JSON.stringify(mini.downloads));
+      record(tag + ": the update notice stays hidden", await evalPage(app.cdp, "document.getElementById('update-bar').hidden"));
+    } finally {
+      if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+      await new Promise((resolve) => mini.server.close(resolve));
+    }
   }
 }
 
@@ -5542,6 +5583,7 @@ async function runTargetSuite(target, groupFilter) {
     ["session restore", () => caseSessionRestore(target, fixturesDir)],
     ["update status", () => caseUpdateStatus(target), hookFree],
     ["update download", () => caseUpdateDownload(target), hookFree],
+    ["update invalid feed", () => caseUpdateInvalidFeed(target), hookFree],
     ["update without a checksum", () => caseUpdateNoChecksum(target), hookFree],
     ["unsaved-changes close", () => caseUnsavedChangesClose(target), hookFree],
     ["close authority (no user gesture)", () => caseCloseAuthorityNoGesture(target)],
