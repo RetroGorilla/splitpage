@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { IDBFactory } from "fake-indexeddb";
 import { createIdbHistoryTestBackend, createMemoryHistoryTestBackend } from "../adapters/storage/history-backend-testing.ts";
-import { createHistoryStore } from "../../shared/history-store.ts";
+import { createHistoryStore, projectHistoryBucket } from "../../shared/history-store.ts";
 
 const require = createRequire(import.meta.url);
 const { createHistoryFsBackend } = require("../../desktop/history-fs-backend.ts");
@@ -34,13 +34,13 @@ for (const kind of ["memory", "idb", "filesystem"]) {
     if (kind === "filesystem") {
       const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "splitpage-history-damage-"));
       t.after(() => fsp.rm(dir, { recursive: true, force: true }));
-      backend = createHistoryFsBackend({ dir, fs, fsp, path, crypto });
+      backend = createHistoryFsBackend({ dir, fs, fsp, path, crypto, projectHistoryBucket });
       await backend.exclusive(async (tx) => {
         for (const [hash, body] of Object.entries(bodies)) await tx.put(hash, body);
         await tx.commit(index([good]), []);
       });
       await fsp.writeFile(path.join(dir, "index.json"), JSON.stringify({ formatVersion: 2, buckets, trash: [] }));
-      backend = createHistoryFsBackend({ dir, fs, fsp, path, crypto });
+      backend = createHistoryFsBackend({ dir, fs, fsp, path, crypto, projectHistoryBucket });
       inspect = async () => {
         const files = {};
         async function walk(dir, prefix = "") {
