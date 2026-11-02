@@ -221,6 +221,31 @@ test("disposing the feature dismisses its partial-export choice and prevents sta
   assert.equal(deliveries, 0);
 });
 
+test("disposing while the opt-in rerun gathers prevents delivery after its reads finish", async () => {
+  const { ports, choices } = setup();
+  const reading = deferred<Awaited<ReturnType<AppDataPorts["history"]["exportAll"]>>>();
+  const started = deferred<void>();
+  let deliveries = 0;
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: (options) => {
+      if (!options?.allowOmissions) return Promise.reject(readFailure());
+      started.resolve();
+      return reading.promise;
+    } },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    assert.ok(choices[0]?.action);
+    const rerun = choices[0].action();
+    await started.promise;
+    mounted.dispose();
+    reading.resolve({ docs: [], older: [{ stateJson: "readable" }], omittedSnapshots: 1 });
+    await rerun;
+    assert.equal(deliveries, 0);
+  } finally { mounted.dispose(); }
+});
+
 test("the partial export is checked for credentials again when the user chooses it", async () => {
   const { ports, choices, shown } = setup();
   const prefs: Record<string, unknown> = {};

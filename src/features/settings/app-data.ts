@@ -134,6 +134,7 @@ async function exportAppData(allowOmissions = false) {
       } else ports.notices.show(message, "error");
       return;
     }
+    if (allowOmissions && (disposed || attempt !== exportAttempt)) return;
     await deliverAppDataBundle(bundle);
   } finally { exporting = false; }
 }
