@@ -52,6 +52,7 @@ export interface CellMark {
   readonly key: string;
   ended: boolean;
   n: number;
+  redo: UndoEntry[];
   value: unknown;
   top: UndoEntry | null;
   after: unknown;
@@ -620,6 +621,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
   function fill(mark: CellMark, value: unknown): CellMark {
     const top = done[done.length - 1] || null;
     mark.n = serial;
+    mark.redo = undone.slice();
     mark.value = value;
     mark.top = top;
     mark.after = top && headAfter(top);
@@ -630,7 +632,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
   }
 
   function markCell(rowId: string, key: string, value: unknown): CellMark {
-    current = fill({ rowId: rowId, cell: rowId + "\u0000" + key, key: key, ended: false, n: 0, value: undefined, top: null, after: null, at: null, endsInSpace: null, lost: null }, value);
+    current = fill({ rowId: rowId, cell: rowId + "\u0000" + key, key: key, ended: false, n: 0, redo: [], value: undefined, top: null, after: null, at: null, endsInSpace: null, lost: null }, value);
     return current;
   }
 
@@ -660,13 +662,22 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
   function dropEmptySince(mark: CellMark, cancelled?: boolean): boolean {
     if (mark !== current) return false;
     mark.ended = true;
+    if (cancelled) {
+      const keep = (entry: UndoEntry): boolean => entry.n <= mark.n || onlyCell(entry.steps) !== mark.cell;
+      undone.splice(0, undone.length, ...undone.filter(keep));
+      if (parked) parked.redo = parked.redo.filter(keep);
+      if (mark.redo.length) parked = {
+        redo: mark.redo.slice(), top: mark.top, after: mark.after,
+        text: mark.top && onlyCell(mark.top.steps) ? projectionOf(runs, mark.after) : null
+      };
+    }
     let k = done.length;
     while (k > 0 && (done[k - 1] as UndoEntry).n > mark.n) k--;
     const top = mark.top;
     const joined = done[k - 1] === top && joinedTop(mark);
     const lost = !!mark.lost && (done[k - 1] || null) === mark.lost.under &&
       (!mark.lost.under || headAfter(mark.lost.under) === mark.lost.after);
-    if (k === done.length && !joined) return false;
+    if (k === done.length && !joined) { if (cancelled) unpark(); return false; }
     if (!joined && !lost && !cosmetic(runs, { op: "rowField", key: mark.key, before: mark.value, after: ((done[k] as UndoEntry).steps[0] as RowFieldStep).before })) return false;
     for (let i = k; i < done.length; i++) if (onlyCell((done[i] as UndoEntry).steps) !== mark.cell) return false;
     const end = (k < done.length ? done[done.length - 1] : top) as UndoEntry;
@@ -766,6 +777,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     const had = done.length + undone.length;
     keep(done);
     keep(undone);
+    if (current) keep(current.redo);
     if (done.length + undone.length !== had) parked = null;
     if (parked) keep(parked.redo);
     done.forEach(function (e) { if (e.evicted && hits(e.evicted)) e.evicted = null; });

@@ -57,20 +57,25 @@ function runCloseCheck(io: CloseCheckIo, tabIdsNow: () => (string | undefined)[]
   const held: DesktopMainTab[] = [];
   const asked: (string | undefined)[] = [];
   const answered = new Set<string | undefined>();
-  const ask = (list: DesktopMainTab[], gone: DesktopMainTab[] = []) => {
+  const ask = async (list: DesktopMainTab[], gone: DesktopMainTab[] = []) => {
     const answer = io.askAboutUnsaved(list, verb, parentOf(list), gone);
     if (answer === "discard") for (const tab of list) answered.add(tab.id);
+    // why: A quit question blocks main while other windows can queue edits; drain those before rechecking.
+    if (verb === "Quit" && list.length && answer === "discard") await new Promise((resolve) => setTimeout(resolve, 0));
     return answer;
   };
   const round = (ids: (string | undefined)[]): Promise<CloseCheckDecision> => {
     asked.push(...ids);
-    return io.goneFileTabsOf(ids).then((gone) => {
+    return io.goneFileTabsOf(ids).then(async (gone) => {
       if (!stillWanted()) return "cancel";
       const unsaved = io.unsavedTabsOf(ids.filter((id) => io.tabs.has(id)), gone);
-      const first = ask(unsaved, gone);
+      const first = await ask(unsaved, gone);
+      if (!stillWanted()) return "cancel";
       if (first !== "discard" || !gone.length) return first;
       held.push(...gone);
-      return io.keepDraftsOfGoneFiles(gone, holder).then((unkept) => {
+      return io.keepDraftsOfGoneFiles(gone, holder).then(async (unkept) => {
+        // why: A successful keep reply can also overtake another window's queued edit.
+        if (verb === "Quit") await new Promise((resolve) => setTimeout(resolve, 0));
         if (!stillWanted()) return "cancel";
         const missing = unkept.filter((tab) => io.tabs.get(tab.id) === tab);
         return ask(missing, gone);
@@ -78,12 +83,13 @@ function runCloseCheck(io: CloseCheckIo, tabIdsNow: () => (string | undefined)[]
     }).then(next);
   };
   const next = (answer: CloseCheckDecision): CloseCheckDecision | Promise<CloseCheckDecision> => {
+    if (!stillWanted()) return "cancel";
     if (answer !== "discard") return answer;
     const now = tabIdsNow();
     const added = now.filter((id) => !asked.includes(id));
     if (added.length) return round(added);
     const changed = io.unsavedTabsOf(asked.filter((id) => now.includes(id) && !answered.has(id)), []);
-    return changed.length ? next(ask(changed)) : answer;
+    return changed.length ? ask(changed).then(next) : answer;
   };
   return Promise.resolve()
     .then(() => round(tabIdsNow()))
