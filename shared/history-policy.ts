@@ -12,7 +12,7 @@ type HistoryPolicyWritableKeys<T> = {
   [P in keyof T]-?: HistoryPolicySame<{ [Q in P]: T[P] }, { -readonly [Q in P]: T[P] }> extends true ? P : never;
 }[keyof T];
 type HistoryPolicyWritableStamp<T extends HistoryPolicyStamp> =
-  "atMs" extends HistoryPolicyWritableKeys<T> ? unknown : never;
+  "atMs" extends HistoryPolicyWritableKeys<T> ? number extends T["atMs"] ? unknown : never : never;
 type HistoryEvictionSnapshot = { id: string; atMs: number; size: number };
 type HistoryEvictionEntry = { docId: string; lastOpenedAt: number; expiresAt: number; snaps: HistoryEvictionSnapshot[] };
 type HistoryEvictionOptions = { perDoc?: unknown; olderKey?: unknown; protect?: unknown };
