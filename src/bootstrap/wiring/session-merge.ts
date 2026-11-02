@@ -1,4 +1,4 @@
-import { createSessionMergeOwner } from "../../application/session/session-merge.js";
+import { createSessionMergeOwner } from "../../application/session/session-merge.ts";
 import type { SessionMergeOwner, SessionMergeOwnerPorts, SessionMergePorts } from "../../application/session/session-merge-ports.ts";
 import type { DocumentDestination, DestinationPort, HistoryPort } from "../../application/transitions/ports.ts";
 import { sessionMergeOwnerPorts } from "./ports/session-merge.ts";

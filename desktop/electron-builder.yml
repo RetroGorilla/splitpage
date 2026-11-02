@@ -23,10 +23,10 @@ files:
   - print-pdf.js
   - prompter-share.js
   - close-quit.js
-  - session-restore.js
+  - session-restore.ts
   - close-keep.js
   - quit-watchdog.ts
-  - blob-store.js
+  - blob-store.ts
   - voice-composition.js
   - voice-helper.js
   - chromium-browsers.js
