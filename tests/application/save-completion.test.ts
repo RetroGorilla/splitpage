@@ -21,7 +21,7 @@ function captured(): ExportDocument {
 function harness(changes = 4, editsDuringNaming = 0, throwDuringNaming = false) {
   const log: string[] = [];
   const amended: Record<string, unknown>[] = [];
-  const ports: SaveCompletionPorts = {
+  const ports: SaveCompletionPorts<{ rev: number }> = {
     edits: { edit: () => {
       if (!editsDuringNaming) throw new Error("unexpected title change");
       changes += editsDuringNaming;

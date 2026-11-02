@@ -5,7 +5,7 @@ import type * as NodePath from "node:path";
 import type * as NodeCrypto from "node:crypto";
 import type { HistoryIndexRecord } from "../src/adapters/storage/history-backend-types.ts";
 import type { DesktopHistoryBlobIpcDependencies } from "./ipc-boundaries.d.ts";
-import type { createBlobStore as CreateBlobStore } from "./blob-store.js";
+import type { createBlobStore as CreateBlobStore, isSha256 as IsSha256 } from "./blob-store.ts";
 
 type HistoryFsSnapshot = Pick<HistoryIndexRecord["snapshots"][number], "id" | "sha"> & {
   [K in Exclude<keyof HistoryIndexRecord["snapshots"][number], "id" | "sha">]?: unknown;
@@ -28,8 +28,8 @@ type HistoryFsIndexRead = { doc: HistoryFsDocument; bad?: undefined; missing?: u
 
 const { createBlobStore, isSha256 }: {
   createBlobStore: (options: Parameters<typeof CreateBlobStore>[0]) => HistoryFsBlobStore;
-  isSha256: (value: unknown) => value is string;
-} = require("./blob-store.js");
+  isSha256: typeof IsSha256;
+} = require("./blob-store.ts");
 
 const FORMAT_VERSION = 2;
 const INDEX_FILE = "index.json";
