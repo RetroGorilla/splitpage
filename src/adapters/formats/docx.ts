@@ -10,7 +10,7 @@ import type { BreakdownRow, CommentBody, SceneFacts } from "./export-projections
 import { internDataUrl, queuePersist } from "../storage/02c-blobs.ts";
 import { rowImage } from "../../core/document/media.ts";
 import { morePictureRefs, rowVideoLinks } from "../../core/document/gallery.ts";
-import { imageDims, sniffImageMime } from "../../../shared/blob-policy.js";
+import { imageDims, sniffImageMime } from "../../../shared/blob-policy.ts";
 import {
   PRINT_COLORS,
   STATUS_PRINT,

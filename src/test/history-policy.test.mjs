@@ -11,7 +11,7 @@ import {
   historyUtf8Length,
   planHistoryEviction,
   sanitizeHistoryMeta
-} from "../../shared/history-policy.js";
+} from "../../shared/history-policy.ts";
 
 const meta = (over) => Object.assign({ id: "s01", atMs: 1000, label: "x" }, over);
 
@@ -127,7 +127,7 @@ test("historyStampAfter: no newest, or an unusable one, changes nothing", () => 
 
 test("require() and import see the same named exports", () => {
   const require = createRequire(import.meta.url);
-  const cjs = require("../../shared/history-policy.js");
+  const cjs = require("../../shared/history-policy.ts");
   assert.equal(cjs.planHistoryEviction, planHistoryEviction);
   assert.equal(cjs.sanitizeHistoryMeta, sanitizeHistoryMeta);
   assert.equal(cjs.historyStampAfter, historyStampAfter);

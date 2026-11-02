@@ -45,7 +45,7 @@ import {
   toggleResolveCommand,
   unwrapCommentAnchorCommand
 } from "../../application/commands/comments.ts";
-import { normalizeImageRef } from "../../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import {
   commentMatchesFilterMode,

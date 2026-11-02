@@ -11,6 +11,7 @@ saving bugs. If you open or share scripts on a Splitpage server, read
 **Removed** before you upgrade.
 
 ### Added
+- Downloads and update checks now use the Splitpage repository releases page.
 - Named section dividers group scenes, fold for the current session and move
   as a group. Section cues appear in the rundown and Present; print, PDF,
   Word and Markdown exports retain headings and section totals.
