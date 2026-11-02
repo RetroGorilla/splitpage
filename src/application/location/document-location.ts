@@ -1,21 +1,24 @@
+import type { Frozen } from "../../core/document/freeze.ts";
+import type { DocumentShape } from "../../core/document/validated.ts";
+
 export type HomeKind = "none" | "file" | "import";
 
-export type Home =
+export type Home<B = Frozen<DocumentShape>> = { readonly diskBase?: B | null } & (
   | { readonly kind: "none"; readonly [field: string]: unknown }
   | { readonly kind: "file"; readonly name?: string | null; readonly format?: string | null; readonly lastModified?: number | null; readonly [field: string]: unknown }
-  | { readonly kind: "import"; readonly name: string; readonly format: string | null; readonly dirty: boolean; readonly lastModified: number | null; readonly [field: string]: unknown };
+  | { readonly kind: "import"; readonly name: string; readonly format: string | null; readonly dirty: boolean; readonly lastModified: number | null; readonly [field: string]: unknown });
 
-export type HomeFields = Readonly<Record<string, unknown>> & { readonly name?: string | null; readonly format?: string | null; readonly dirty?: boolean; readonly lastModified?: number | null };
+export type HomeFields<B = Frozen<DocumentShape>> = Readonly<Record<string, unknown>> & { readonly diskBase?: B | null; readonly name?: string | null; readonly format?: string | null; readonly dirty?: boolean; readonly lastModified?: number | null };
 
 export type LocationChange = "home" | "writtenOut";
 
-export interface DocumentLocation {
-  readonly home: () => Home;
-  readonly setHome: (kind: string, fields?: HomeFields | null) => Home;
-  readonly restoreHome: (record: Home) => Home;
-  readonly amendHome: (record: Home, fields: HomeFields) => Home;
-  readonly fileHome: () => Home | null;
-  readonly importHome: () => Extract<Home, { readonly kind: "import" }> | null;
+export interface DocumentLocation<B = Frozen<DocumentShape>> {
+  readonly home: () => Home<B>;
+  readonly setHome: (kind: string, fields?: HomeFields<B> | null) => Home<B>;
+  readonly restoreHome: (record: Home<B>) => Home<B>;
+  readonly amendHome: (record: Home<B>, fields: HomeFields<B>) => Home<B>;
+  readonly fileHome: () => Home<B> | null;
+  readonly importHome: () => Extract<Home<B>, { readonly kind: "import" }> | null;
   readonly writtenOut: () => boolean;
   readonly markWrittenOut: (writtenOut: boolean) => void;
   readonly onChange: (listener: (change: LocationChange) => void) => () => void;
