@@ -1161,7 +1161,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/ipc-channels.ts` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
-| `desktop/voice-helper.js` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
+| `desktop/voice-helper.ts` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
 | `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/history-store.js` | THE version-history store (#83), pure CommonJS run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
 | `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
@@ -1248,8 +1248,8 @@ desktop, installer, server, export, ui) for where it lives,
 can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
 
 Follow My Voice on desktop (#8) runs Windows' own recogniser (System.Speech, offline) through
-`desktop/voice/listen.ps1`, driven by `desktop/voice-helper.js`, which
-`desktop/voice-composition.js` creates and routes (invariants #45–#47); it has never heard a real voice from an agent
+`desktop/voice/listen.ps1`, driven by `desktop/voice-helper.ts`, which
+`desktop/voice-composition.ts` creates and routes (invariants #45–#47); it has never heard a real voice from an agent
 session — the by-hand check is in `docs/WINDOWS-CHECKS.md` §3.
 
 **The header after Direction B (#169).** The row no longer overlaps
