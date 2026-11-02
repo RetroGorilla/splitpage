@@ -40,6 +40,7 @@ expect document.activeElement.closest('#about-modal') !== null
 key Escape
 wait !shown('about-modal')
 expect shown('broll-page')
+shot ui-about-return-focus
 key Escape
 wait !shown('broll-page')
 eval clearNotes()
