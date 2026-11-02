@@ -18,7 +18,7 @@ export function exportFormatList() { return current().exportFormatList(); }
 export function exportActionName(action: string) { return current().exportActionName(action); }
 export function isExportAction(action: unknown) { return current().isExportAction(action); }
 export function lastExportAction() { return current().lastExportAction(); }
-export function rememberExport(action: string | null) { current().rememberExport(action); }
+export function rememberExport(action: string | null | undefined) { current().rememberExport(action); }
 export function exportActionReason(action: string) { return current().exportActionReason(action); }
 export function exportSummary(action: string) { return current().exportSummary(action); }
 export function exportFileNameFor(action: string) { return current().exportFileNameFor(action); }

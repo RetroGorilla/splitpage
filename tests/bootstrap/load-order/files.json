@@ -6,7 +6,7 @@
     "src/application/transitions/local-files.ts",
     "src/application/save/import-saving.ts",
     "src/features/file-menu/local-files.ts",
-    "src/adapters/files/local-files.js",
+    "src/adapters/files/local-files.ts",
     "src/bootstrap/wiring/local-files.ts"
   ],
   "expectedLoads": 8

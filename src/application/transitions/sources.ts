@@ -1,5 +1,6 @@
+import type { LocalFileData } from "../files/local-file-access.ts";
 export interface DocumentOpening {
-  readonly open: (opening: { readonly kind: "file"; readonly file: unknown; readonly handle: unknown }) => Promise<unknown>;
+  readonly open: (opening: { readonly kind: "file"; readonly file: LocalFileData; readonly handle: unknown }) => Promise<unknown>;
 }
 
 export interface DocumentSource<O, A = unknown> {

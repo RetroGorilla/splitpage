@@ -18,7 +18,7 @@ import type { DesktopIpcArgs, DesktopIpcResult } from "../../../shared/desktop-c
 
 export interface LocalFileOpening {
   readonly kind: string;
-  readonly file?: LocalFileData | null;
+  readonly file?: LocalFileData | null | undefined;
   readonly handle?: LocalFileReference | null;
   readonly parsed?: { readonly state: ValidatedDocument; readonly kind: string };
   readonly options?: { readonly skipSnapshot?: boolean; readonly silent?: boolean; readonly resumed?: boolean; readonly reload?: boolean } | null;

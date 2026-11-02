@@ -1,6 +1,6 @@
 "use strict";
 
-const { createBlobStore, isSha256 } = require("./blob-store.js");
+const { createBlobStore, isSha256 } = require("./blob-store.ts");
 
 const FORMAT_VERSION = 2;
 const INDEX_FILE = "index.json";

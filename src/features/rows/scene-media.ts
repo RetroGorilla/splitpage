@@ -4,7 +4,7 @@ import { addGalleryPicture, removeGalleryLink, removeGallerySlot, replaceGallery
 import type { PastePlace, SceneMedia, SceneMediaPorts } from "./ports.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 
-type VideoFrame = { dataUrl: string; duration: number };
+import type { VideoPosterFrame } from "../../application/media/video-files.ts";
 interface SceneMediaPortUse extends Omit<SceneMediaPorts, "document"> {
  readonly document: { readonly read: SceneMediaPorts["document"]["read"] };
 }
@@ -81,12 +81,12 @@ function removeLink(rowId: string, slot: number, key: string) {
   (ports as SceneMediaPortUse).cells.editGallery(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
 }
 
-export function videoFirstFrame(file: Blob): Promise<VideoFrame | null> {
-  return new Promise<VideoFrame | null>(function (resolve) {
+export function videoFirstFrame(file: Blob): Promise<VideoPosterFrame | null> {
+  return new Promise<VideoPosterFrame | null>(function (resolve) {
     let url: string;
     let v: HTMLVideoElement;
     let settled = false;
-    function done(result: VideoFrame | null) {
+    function done(result: VideoPosterFrame | null) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
