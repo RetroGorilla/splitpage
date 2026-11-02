@@ -50,9 +50,9 @@ PDFs, screenshots, page records and `summary.txt`
 in a unique `splitpage-print-layout-*` TEMP directory. The standalone
 inspector still accepts `<out> --lists --probes` after fixture generation.
 
-On Unraid, Tests uses `/opt/hostedtoolcache/splitpage-playwright/1.63.0`,
-filled only by `checks`; a new or recreated runner needs one `checks` run
-first, or Chromium in its image.
+In CI, each Tests shard installs Playwright's pinned Chromium and passes it as
+`SPLITPAGE_CHROME`. It must not fall back to the `google-chrome` on GitHub's
+runners, which fails the check with `e: missing glyph on page 1`.
 
 While a pull request is being written, run the focused checks for what it
 touches. CI then runs every fast gate on every pull request: lint, types, the
@@ -683,13 +683,11 @@ The persistence suite costs little: on its first hosted run (PR #270,
 checks in 8.0 s, from the runner's start line to its `ALL PASS`; the step
 running `01-core.txt` and `52-csp.txt` on two lanes took 7 s.
 
-CI runs on the maintainer's self-hosted runners (repository variable
-`CI_RUNNER`). When runs are queued there, add the label `ci-github` to the
-pull request and its jobs run on GitHub's runners instead; no other run
-moves. Adding the label does not rerun CI: push to the pull request after
-labelling it, because a run reads the labels from the moment it started. First compare the queue with the median recent run time (about
-3 to 6 minutes in October 2026) and wait if the run in front is nearly done. Remove the
-label once the pull request is green. Never change `CI_RUNNER` for this.
+CI runs on GitHub's runners (repository variable `CI_RUNNER` is
+`ubuntu-latest`, since the repository went public on 1 November 2026). The
+repository has no self-hosted runners. A rerun keeps the workflow files of its
+original commit, so a workflow fix reaches an open pull request only after a
+new push, such as merging the base into it.
 
 `gate` is the one check to mark required in branch protection: a
 prose-only pull request completes it without waiting on the others. Prose
@@ -704,5 +702,6 @@ Windows installers from a tag. [ci.md](ci.md) explains the settings in the workf
 
 The full browser regression, the Windows runs and the packaged x64 check
 are local milestone and release gates; the Linux full run and the packaged
-ARM64 check are local gates at the 4.0 release only (plan section 4). Pull requests from forks must never reach the self-hosted runners
+ARM64 check are local gates at the 4.0 release only (plan section 4). The
+repository is public, so never register a self-hosted runner on it
 ([ci.md](ci.md)).
