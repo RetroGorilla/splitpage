@@ -9,6 +9,10 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import type { createDraftStore as draftStoreFactory } from "../../../desktop/drafts.ts";
+import type {
+  checkFileGone as checkGone, copyKept as keptCopy, holdKeep as keepHold, runCloseCheck as closeCheck, CloseCheckIo
+} from "../../../desktop/close-keep.ts";
+import type { DesktopMainTab } from "../../../desktop/main-types.d.ts";
 import { startDrafts } from "../../../src/application/recovery/drafts.ts";
 import type { DraftsMount, DraftsPorts } from "../../../src/application/recovery/drafts-ports.ts";
 import { createDraftResume } from "../../../src/application/recovery/draft-resume.ts";
@@ -123,7 +127,7 @@ for (const stage of ["capture", "write"] as const) {
     const flush = drafts.flush();
     if (stage !== "capture") await Promise.resolve();
     drafts.dispose();
-    assert.deepEqual(await flush, { ok: true });
+    assert.deepEqual(await flush, { ok: false, code: "CANCELLED" });
     assert.deepEqual(h.written, []);
     assert.deepEqual(h.discarded, []);
     assert.deepEqual(h.log, []);
@@ -147,7 +151,7 @@ for (const outcome of ["persisted", "inline", "rejected"] as const) {
     drafts.dispose();
     if (outcome === "rejected") pending.reject(new Error("persist failed"));
     else pending.resolve(outcome === "inline" ? [sha] : []);
-    assert.deepEqual(await flush, { ok: true });
+    assert.deepEqual(await flush, { ok: false, code: "CANCELLED" });
     assert.deepEqual(calls, ["persist"]);
     assert.deepEqual(h.written, []);
     assert.deepEqual(h.discarded, []);
@@ -176,7 +180,9 @@ for (const outcome of ["landed", "obsolete", "need-base", "refused", "rejected"]
         : { ok: true, seq: 1, bytes: 1, obsolete: outcome === "obsolete" };
       pending.resolve(reply as Awaited<ReturnType<typeof h.desktop.write>>);
     }
-    assert.deepEqual(await Promise.all([flush, queued]), [{ ok: true }, { ok: true }]);
+    assert.deepEqual(await Promise.all([flush, queued]), [
+      { ok: false, code: "CANCELLED" }, { ok: false, code: "CANCELLED" }
+    ]);
     assert.equal(h.written.length, 1);
     assert.deepEqual(h.discarded, []);
     assert.deepEqual(h.log, []);
@@ -185,20 +191,29 @@ for (const outcome of ["landed", "obsolete", "need-base", "refused", "rejected"]
   });
 }
 
-test("dispose during persist keeps the on-disk draft available to the next launch (#814)", async () => {
+test("dispose during a keep flush cancels quit and retains the older on-disk draft (#814)", async () => {
   const { createDraftStore } = createRequire(import.meta.url)("../../../desktop/drafts.ts") as {
     createDraftStore: typeof draftStoreFactory
   };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-dispose-draft-"));
+  const { checkFileGone, copyKept, holdKeep, runCloseCheck } = createRequire(import.meta.url)("../../../desktop/close-keep.ts") as {
+    checkFileGone: typeof checkGone;
+    copyKept: typeof keptCopy;
+    holdKeep: typeof keepHold;
+    runCloseCheck: typeof closeCheck;
+  };
+  const file = path.join(dir, "script.splitpage");
   const tabId = "0123456789abcdef0123456789abcdef";
   const makeStore = () => createDraftStore({ dir, fs, fsp, path, crypto, appVersion: "test" });
   const store = makeStore();
-  const h = harness();
+  const h = harness({ unsaved: false });
   const pending = deferred<string[]>();
+  const entered = deferred<undefined>();
   let drafts: DraftsMount | null = null;
   try {
     store.init();
     const stateJson = JSON.stringify(h.state.current);
+    fs.writeFileSync(file, stateJson);
     assert.equal((await store.write(tabId, {
       title: "Pilot", docId: h.state.current.docId, docIdWrittenOut: false, schema: h.state.current.schema, editSeq: 1,
       origin: { kind: "untitled", filePath: null, fileName: null, fileKind: null, importName: null,
@@ -211,15 +226,47 @@ test("dispose during persist keeps the on-disk draft available to the next launc
       await store.discardClean(tabId, seq);
       return { ok: true } as const;
     };
-    drafts = mount({ ...h.ports, pictures: { ...h.ports.pictures, persist: () => pending.promise } });
+    drafts = mount({ ...h.ports,
+      place: { ...h.ports.place, fileHome: () => ({ kind: "file", handle: { _desktopId: "f1" }, format: "splitpage" }) },
+      pictures: { ...h.ports.pictures, persist: () => { entered.resolve(undefined); return pending.promise; } }
+    });
+    const mounted = drafts;
     assert.equal((drafts.testing["status"] as () => { onDisk: boolean })().onDisk, true);
     h.resume.setRestorePending(false);
+    h.state.current = migrateRows({ ...h.state.current, title: "Newer in-memory copy" }, fakeMigration().ports);
     h.state.base = { rows: [{ id: "r", imageRef: { sha256: "a".repeat(64) } }] };
-    const flush = drafts.flush();
-    await settle();
-    drafts.dispose();
-    pending.resolve([]);
-    assert.deepEqual(await flush, { ok: true });
+    fs.unlinkSync(file);
+    const tab = { id: tabId } as DesktopMainTab;
+    const tabs: CloseCheckIo["tabs"] = new Map();
+    tabs.set(tabId, tab);
+    const questions: string[][] = [];
+    const flushResults: unknown[] = [];
+    const result = await runCloseCheck({
+      tabs,
+      goneFileTabsOf: async () => await checkFileGone(() => fsp.stat(file), file, 1000) ? [tab] : [],
+      unsavedTabsOf: (ids, gone) => ids.includes(tabId) && gone.includes(tab) ? [tab] : [],
+      askAboutUnsaved: (list) => {
+        if (!list.length) return "discard";
+        questions.push(list.map((t) => t.id));
+        return questions.length === 1 ? "discard" : "cancel";
+      },
+      keepDraftsOfGoneFiles: async (gone, holder) => {
+        holdKeep(tab, holder);
+        const flush = mounted.flush({ keep: true });
+        await entered.promise;
+        mounted.dispose();
+        pending.resolve([]);
+        const flushed = await flush;
+        flushResults.push(flushed);
+        return copyKept(flushed, store.hasDraft(tabId)) ? [] : gone;
+      },
+      report: (_verb, error) => { throw error; }
+    }, () => [tabId], "Quit", () => undefined, () => true);
+    assert.equal(result.answer, "cancel", "an older draft must not authorize quitting with uncaptured new content");
+    assert.deepEqual(questions, [[tabId], [tabId]], "the failed-copy question still appears");
+    assert.deepEqual(flushResults, [{ ok: false, code: "CANCELLED" }]);
+    assert.deepEqual(h.written, []);
+    assert.equal(tab.keepDraftOnClose, false);
     const nextStore = makeStore();
     assert.equal(nextStore.init().drafts.length, 1);
     const taken = await nextStore.take(tabId);
