@@ -1,6 +1,7 @@
 import type { ImageRef } from "../../core/document/ports.ts";
 
 export interface PictureStore {
+  readonly has: (sha: string) => boolean;
   readonly intern: (bytes: Uint8Array) => ImageRef | null;
   readonly internDataUrl: (dataUrl: string) => ImageRef | null;
   readonly recordFor: (sha: string) => ImageRef | null;
@@ -10,6 +11,6 @@ export interface PictureStore {
   readonly isDurable: (sha: string) => boolean;
   readonly queuePersist: (shas: readonly string[]) => void;
   readonly persist: (shas: readonly string[]) => Promise<string[]>;
-  readonly ensureBytes: (shas: readonly string[]) => Promise<string[]>;
+  readonly ensureBytes: (shas: readonly string[], options?: { strict?: boolean }) => Promise<string[]>;
   readonly imgHtml: (ref: ImageRef, className?: string) => string;
 }

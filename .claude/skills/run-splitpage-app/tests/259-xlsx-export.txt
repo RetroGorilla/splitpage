@@ -93,7 +93,7 @@ key ctrl KeyE
 sleep 400
 jsclick .export-card[data-format="broll"] input
 sleep 150
-expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'PDF, landscape|Excel (.xlsx)|CSV (.csv)'
+expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'PDF|Excel (.xlsx)|CSV (.csv)'
 expect document.querySelector('input[name="export-choice"]:checked').value == pdf
 jsclick .export-seg input[value="xlsx"]
 sleep 150

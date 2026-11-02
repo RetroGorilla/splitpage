@@ -637,8 +637,8 @@ const clipboardRoutePorts = {
   pasteScenes: pasteScenesAt,
   pasteDraft: pasteIntoDraft,
   hasMedia: hasMediaFiles,
-  readMedia: function (files: FileList | readonly File[]) {
-    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant });
+  readMedia: function (files: FileList | readonly File[], html: string) {
+    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant }, html);
   },
   capture: captureOperation,
   stillOwns: stillOwns,
@@ -648,7 +648,7 @@ const clipboardRoutePorts = {
   findCell: function (rowId: string, field: string) {
     return document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="' + field + '"]');
   },
-  insertNow: function (cellEl: Element, html: string, text: string, extra: ScriptClipboardExtra | null) { insertIntoScriptCellNow(cellEl, html, text, extra); }
+  insertNow: function (cellEl: Element, html: string, text: string, extra: ScriptClipboardExtra | null, fromPaste: boolean) { insertIntoScriptCellNow(cellEl, html, text, extra, fromPaste); }
 };
 
 export function mountClipboardFeature(): ReturnType<typeof mountClipboardRoutes> {
@@ -664,13 +664,13 @@ function insertIntoScriptCell(cellEl: Element, html: string, text: string, files
   if (clipboard) clipboard.insert(cellEl, html, text, files);
 }
 
-function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, extra: ScriptClipboardExtra | null): void {
+function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, extra: ScriptClipboardExtra | null, fromPaste: boolean): void {
   if (screenIsStale()) {
     showToast("Could not paste — press Redraw first.", "error");
     return;
   }
   const before = undoOwner().last();
-  const res: PasteOutcome = pasteIntoCell(cellEl, html, text, extra);
+  const res: PasteOutcome = pasteIntoCell(cellEl, html, text, extra, fromPaste);
   if (!res.done) return;
   const lost = res.lost + (extra ? extra.lost : 0);
   if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");

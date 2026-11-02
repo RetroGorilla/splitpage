@@ -39,7 +39,7 @@ function harness() {
     draftUndo: log("undo"), draftRedo: log("redo"),
     typeMarks: () => state.marks, beforeInput: log("beforeinput"),
     focusDraft: log("focus"), composeDraft: (_box, composing) => { calls.push("composition:" + composing); },
-    pasteDraft: (_box, html, text) => { calls.push("drop:" + html + ":" + text); },
+    pasteDraft: (_box, html, text, fromPaste) => { calls.push("drop:" + html + ":" + text + ":" + fromPaste); },
     toggleResolve: idLog("resolve"), filter: idLog("filter"), toggleReply: idLog("reply"),
     postReply: idLog("reply-post"), deleteComment: (_button, id) => { calls.push("delete:" + id); },
     restoreConflict: idLog("restore"), menu: idLog("menu"), jump: idLog("jump"),
@@ -215,7 +215,7 @@ test("comments: both roots preserve draft history, marks, composition and drag s
     assert.equal(h.fire(box, "drop", { dataTransfer: transfer }).defaultPrevented, false);
     h.fire(box, "dragend");
     assert.equal(h.fire(box, "drop", { dataTransfer: transfer }).defaultPrevented, true);
-    assert.equal(h.calls.at(-1), "drop:<b>Drop</b>:Drop");
+    assert.equal(h.calls.at(-1), "drop:<b>Drop</b>:Drop:false");
   }
   h.fire(h.el("reply"), "dragstart");
   owner.dispose(); owner = h.mount();

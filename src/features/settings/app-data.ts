@@ -50,15 +50,17 @@ async function buildAppDataBundle() {
 
   try {
     const history = await ports.history.exportAll();
+    if (!history || !Array.isArray(history.docs) || !Array.isArray(history.older)) throw new Error("Invalid history export");
+    if (history.omittedSnapshots && !history.older.length && !history.docs.some(function (doc) {
+      return appDataIsPlainObject(doc) && Array.isArray(doc.snapshots) && doc.snapshots.length;
+    })) throw new Error("No readable history could be exported");
     bundle.history = history;
     bundle.blobs = history.blobs || {};
     bundle.missingBlobs = history.missingBlobs || [];
     Reflect.deleteProperty(history, "blobs");
     Reflect.deleteProperty(history, "missingBlobs");
   } catch (e) {
-    bundle.history = null;
-    bundle.blobs = {};
-    bundle.missingBlobs = [];
+    throw appDataError("history", "Export cancelled — history or image data could not be read. Nothing was downloaded.");
   }
 
   try {
@@ -122,7 +124,9 @@ async function exportAppData() {
     return;
   }
 
-  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
+  const omitted = bundle.history?.omittedSnapshots || 0;
+  const truncated = !!bundle.history?.truncated;
+  const saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: omitted || truncated ? "Exported your Splitpage app data with omissions" : "Exported your Splitpage app data" });
   const missing = bundle.missingBlobs || [];
   appDataLastExport = {
     ok: !!saved,
@@ -136,6 +140,17 @@ async function exportAppData() {
       " missing from this device and could not be included. The snapshots that use " +
       (missing.length === 1 ? "it" : "them") + " will show a placeholder.";
     if (window.console) console.warn("Export app data: images not included (bytes not found):", missing);
+    ports.notices.show(appDataLastExport.warning, "warn", true);
+  }
+  if (saved && omitted) {
+    const warning = "Exported, but " + appDataPlural(omitted, "damaged or unreadable history snapshot", "damaged or unreadable history snapshots") +
+      " could not be included. Intact versions and their available images are included.";
+    appDataLastExport.warning = [appDataLastExport.warning, warning].filter(Boolean).join(" ");
+    ports.notices.show(appDataLastExport.warning, "warn", true);
+  }
+  if (saved && truncated) {
+    const warning = "Exported, but some older history snapshots were left out to keep the file within the export size limit.";
+    appDataLastExport.warning = [appDataLastExport.warning, warning].filter(Boolean).join(" ");
     ports.notices.show(appDataLastExport.warning, "warn", true);
   }
 }

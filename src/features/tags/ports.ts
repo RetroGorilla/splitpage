@@ -52,6 +52,7 @@ export interface PlainTagMount extends PlainTagControl {
 export interface TagPanelPorts {
   readonly view: Pick<TagPanelState, "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
   readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly lifetime: Pick<DocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "productionReaders" | "inertBody" | "retagBody" | "sanitizeHtml">;
   readonly production: Pick<ProductionIndexOwner, "entries" | "current">;
