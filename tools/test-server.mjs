@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const SERVER = join(ROOT, "server", "server.js");
+const SERVER = join(ROOT, "server", "server.ts");
 
 let passed = 0;
 const failures = [];

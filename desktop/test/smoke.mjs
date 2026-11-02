@@ -952,10 +952,10 @@ async function caseBootAndSecurity(target) {
     });
 
     await guarded(tag + ": static allowlist", async () => {
-      const nonAllowlisted = await evalPage(cdp, "fetch('splitpage://app/server/server.js').then(function(r){return r.status;})");
-      record(tag + ": server/server.js is not on the static allowlist (404)", nonAllowlisted === 404, "status=" + nonAllowlisted);
+      const nonAllowlisted = await evalPage(cdp, "fetch('splitpage://app/server/server.ts').then(function(r){return r.status;})");
+      record(tag + ": server/server.ts is not on the static allowlist (404)", nonAllowlisted === 404, "status=" + nonAllowlisted);
 
-      const traversalToNonAllowlisted = await evalPage(cdp, "fetch('splitpage://app/../../server/server.js').then(function(r){return r.status;})");
+      const traversalToNonAllowlisted = await evalPage(cdp, "fetch('splitpage://app/../../server/server.ts').then(function(r){return r.status;})");
       record(tag + ": '../..' traversal to a non-allowlisted file is refused (404)", traversalToNonAllowlisted === 404, "status=" + traversalToNonAllowlisted);
 
       const versionViaDots = await evalPage(cdp, "fetch('splitpage://app/../../VERSION').then(function(r){return r.status;})");

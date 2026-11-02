@@ -23,7 +23,7 @@ const FILES = [
   ["icon.svg", 0o644],
   ["icon-maskable.svg", 0o644],
   ["sw.js", 0o644],
-  ["server/server.js", 0o644],
+  ["server/server.ts", 0o644],
   ["server/package.json", 0o644],
   ["start.mjs", 0o644],
   ["start.bat", 0o644],

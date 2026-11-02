@@ -428,7 +428,7 @@ tests: [print-layout.md](../../../docs/architecture/print-layout.md).
 ## The server's own tests
 
 The harness serves static files from its own `HttpListener` and cannot start
-`server/server.js` with an environment, so everything that depends on
+`server/server.ts` with an environment, so everything that depends on
 `JOIN_PIN`, `PERSIST_LINKS`, `TRUST_PROXY`, `ALLOW_ORIGINS` or `LAUNCH_TOKEN` is
 tested by a plain Node script instead. No dependencies, about a minute, real
 servers on free ports (some started twice on one `DATA_DIR`, which is what a
@@ -474,7 +474,7 @@ listing, the leaving beacon's body-carried token, expiry under a dialled-down
 the rev the beat now carries for the pull channel (#69), which is read off the
 head line and never by parsing the script, proved by a document with a good
 head line and a body no parser can read. Run it
-after any change to `server/server.js`.
+after any change to `server/server.ts`.
 
 ## Driving it from the cloud
 

@@ -165,7 +165,7 @@ export default [
   },
 
   {
-    files: ["desktop/*.ts"],
+    files: ["desktop/*.ts", "server/*.ts"],
     rules: { "@typescript-eslint/no-require-imports": "off" }
   },
 

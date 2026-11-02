@@ -172,7 +172,7 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 
 **Serving the app**
 
-- `server/server.js` — a dependency-free Node server that serves the built app
+- `server/server.ts` — a dependency-free Node server that serves the built app
   as static files; `start.mjs` runs it on your own computer.
 
 **Notes**
