@@ -79,14 +79,15 @@ expect __aligned()
 shot find-present-fullscreen
 key Escape
 sleep 300
-eval JSON.stringify({fullscreenAfterEscape:!!document.fullscreenElement,findOpen:!document.getElementById('findbar').hidden,presentOpen:!document.getElementById('prompter').hidden,focus:document.activeElement.id})
+eval JSON.stringify({escape:1,fullscreen:!!document.fullscreenElement,findOpen:!document.getElementById('findbar').hidden,presentOpen:!document.getElementById('prompter').hidden,focus:document.activeElement.id})
 expect !document.getElementById('prompter').hidden
-eval if(document.fullscreenElement)document.exitFullscreen()
-wait document.fullscreenElement === null
-eval if(!document.getElementById('findbar').hidden)document.getElementById('find-close').click()
-expect document.getElementById('prompter').contains(document.activeElement)
+key Escape
+sleep 300
+eval JSON.stringify({escape:2,fullscreen:!!document.fullscreenElement,findOpen:!document.getElementById('findbar').hidden,presentOpen:!document.getElementById('prompter').hidden,focus:document.activeElement.id})
+expect document.getElementById('findbar').hidden
 key Escape
 wait document.getElementById('prompter').hidden
+expect document.fullscreenElement === null
 eval (function(){var rows=Array.from({length:300},function(_,i){return {id:'long'+i,audioText:('Some narration words for the long script. ').repeat(6)+'needle '+i+'.',status:'todo'};});return F.openFile(new File([JSON.stringify({schema:2,title:'Long Present find',rows:rows})],'long-find.splitpage'));})()
 wait F.state().title === 'Long Present find'
 click #btn-present
