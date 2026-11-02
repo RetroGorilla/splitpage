@@ -36,9 +36,7 @@ function click(action: string) {
 }
 
 async function settled() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>(resolve => { setTimeout(resolve, 0); });
 }
 
 test("onboarding mounts with ports, walks its three steps, records completion and starts the tour", async () => {
@@ -177,6 +175,38 @@ test("automatic onboarding waits to decide until startup is ready", async () => 
     await settled();
     assert.equal(modal().hidden, false);
     assert.equal(h.panels.closed(), 1);
+  } finally { mounted.dispose(); }
+});
+
+test("an ineligible onboarding decision settles even while startup remains pending", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  h.state.seed = false;
+  const mounted = startOnboarding({ ...h.ports, startup: { ready: () => new Promise(() => {}) } });
+  const probe = (win as unknown as { __onboarding: { autoShowDecided: () => Promise<void> } }).__onboarding;
+  let decided = false;
+  void probe.autoShowDecided().then(() => { decided = true; });
+  try {
+    await settled();
+    assert.equal(decided, true);
+    assert.equal(modal().hidden, true);
+    assert.equal(h.panels.closed(), 0);
+  } finally { mounted.dispose(); }
+});
+
+test("automatic onboarding rechecks eligibility when startup becomes ready", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  let ready = () => {};
+  const waiting = new Promise<void>(resolve => { ready = resolve; });
+  const mounted = startOnboarding({ ...h.ports, startup: { ready: () => waiting } });
+  try {
+    await settled();
+    h.state.home = { kind: "file", name: "arrived.splitpage" };
+    ready();
+    await settled();
+    assert.equal(modal().hidden, true);
+    assert.equal(h.panels.closed(), 0);
   } finally { mounted.dispose(); }
 });
 
