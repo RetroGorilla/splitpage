@@ -510,7 +510,7 @@ test("packaging: every ./module main.js requires, directly or through another mo
   assert.ok(required.has("drafts.ts"), "main.js requires ./drafts");
   assert.ok(required.has("ipc-setup.ts"), "main.js requires ./ipc-setup");
   assert.ok(required.has("ipc-channels.ts"), "ipc-setup.ts requires ./ipc-channels");
-  for (const f of ["close-keep.js", "quit-watchdog.js", "unsaved-dialog.js"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
+  for (const f of ["close-keep.js", "quit-watchdog.ts", "unsaved-dialog.ts"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
   for (const f of IPC_MODULES) assert.ok(requiredBy(MAIN).includes(f), f + " is an IPC module main.js does not require");
   for (const f of ["close-quit.js", "session-restore.js"]) assert.ok(requiredBy(MAIN).includes(f), f + " is a lifecycle module main.js does not require");
   assert.ok(requiredBy(MAIN).includes("voice-composition.js"), "main.js requires ./voice-composition");
