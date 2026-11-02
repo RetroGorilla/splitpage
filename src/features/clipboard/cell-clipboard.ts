@@ -183,7 +183,7 @@ export function cellFromClipboard(html: unknown, text: unknown, opts?: Clipboard
   return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, lost: lost, attach: attach, fromCut: false, comments: [] };
 }
 
-export function brollIdsTaken(state: BrollScope, rowId: PasteRequest["rowId"], field: PasteRequest["field"], rest: readonly Run[] | null, fromCut: boolean) {
+export function brollIdsTaken(state: BrollScope | null, rowId: PasteRequest["rowId"], field: PasteRequest["field"], rest: readonly Run[] | null, fromCut: boolean) {
   return takenBrollIds(state, rowId, field, rest, fromCut, (ports as CellClipboardPorts).text.cellOf);
 }
 

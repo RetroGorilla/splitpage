@@ -14,7 +14,7 @@ import { detectTwoColumnFormat, parseImportRows } from "../adapters/formats/impo
 import {
   SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isMove, parseScenePayload,
   scenesOnClipboard, setLiveCut
-} from "../features/clipboard/scene-clip.js";
+} from "../features/clipboard/scene-clip.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { removeScenesCommand } from "../application/commands/scenes.ts";
 import { currentDocument, runCommand } from "../bootstrap/wiring/session-owner.ts";
