@@ -1,5 +1,41 @@
 "use strict";
 
+import type * as NodeFs from "node:fs";
+import type * as NodePath from "node:path";
+import type * as NodeCrypto from "node:crypto";
+import type {
+  DesktopDraftReadHeader, DesktopDraftWriteHeader, DesktopWireDraftWrite,
+  DesktopWireDraftDiscard, DesktopWireTakenDraft, DesktopWireDraftSuccess
+} from "../shared/desktop-contract.d.ts";
+
+type DraftWriteInput = Omit<DesktopDraftWriteHeader,
+  "format" | "formatVersion" | "tabId" | "writtenAt" | "state" | "base" | "appVersion" | "seq">;
+type DraftBaseRef = NonNullable<DesktopDraftWriteHeader["base"]>;
+type DraftTabRecord = {
+  floor: number; epoch: number; lastBase: DraftBaseRef | null; lastHeader: DesktopDraftReadHeader | null;
+  held: boolean; holdGen: number; lastSeq: number | null;
+};
+type DraftReadFailure = {
+  bad?: true; unsupported?: true; missing?: true; unreadable?: true;
+  header?: undefined; ok?: undefined; stateJson?: undefined;
+};
+type DraftHeaderRead = DraftReadFailure | {
+  header: DesktopDraftReadHeader; bad?: undefined; unsupported?: undefined; missing?: undefined;
+  unreadable?: undefined; ok?: undefined; stateJson?: undefined;
+};
+type DraftGenerationRead = DraftReadFailure | {
+  ok: true; header: DesktopDraftReadHeader; stateJson: string;
+  bad?: undefined; unsupported?: undefined; missing?: undefined; unreadable?: undefined;
+};
+type DraftStoreOptions = {
+  dir: string; fs: typeof NodeFs; fsp: typeof NodeFs.promises;
+  path: typeof NodePath; crypto: typeof NodeCrypto; appVersion?: string;
+  testHooks?: {
+    failNext?: { code?: string; count?: number };
+    maxBodyBytes?: number; writeDelayMs?: number; killBeforeRenameAt?: number; onKill?: () => void;
+  };
+};
+
 const TAB_ID_RE = /^[0-9a-f]{32}$/;
 const BASE_FILE_RE = /^base-[0-9a-f]{12}\.json$/;
 const CORRUPT_ENTRY_RE = /^([0-9a-f]{32})-(\d+)(?:-\d+)?$/;
@@ -16,41 +52,41 @@ const CORRUPT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const HEADER_READ_LIMIT = 4 * 1024 * 1024;
 
-const WRITE_ERROR_CODES = new Set(["ENOSPC", "EACCES", "EPERM", "EBUSY", "EIO"]);
+const WRITE_ERROR_CODES = new Set<unknown>(["ENOSPC", "EACCES", "EPERM", "EBUSY", "EIO"]);
 const SESSION_STATES = new Set(["running", "clean-exit", "session-end"]);
 
-const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const RENAME_RETRY_CODES = new Set<string | undefined>(["EPERM", "EACCES", "EBUSY"]);
 const RENAME_ATTEMPTS = 5;
 const RENAME_RETRY_MS = 20;
 
-function sleepSync(ms) {
+function sleepSync(ms: number) {
   try {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
   } catch (_) {
   }
 }
 
-function renameSyncRetry(fs, from, to) {
+function renameSyncRetry(fs: typeof NodeFs, from: string, to: string) {
   for (let attempt = 1; ; attempt++) {
     try {
       fs.renameSync(from, to);
       return;
     } catch (err) {
-      if (attempt >= RENAME_ATTEMPTS || !err || !RENAME_RETRY_CODES.has(err.code)) throw err;
+      if (attempt >= RENAME_ATTEMPTS || !err || !RENAME_RETRY_CODES.has((err as NodeJS.ErrnoException).code)) throw err;
       sleepSync(RENAME_RETRY_MS);
     }
   }
 }
 
-function sha256Hex(crypto, data) {
+function sha256Hex(crypto: typeof NodeCrypto, data: NodeCrypto.BinaryLike) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
-function isPlainObject(v) {
+function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
 }
 
-function durableWriteSync(fs, path, crypto, file, text) {
+function durableWriteSync(fs: typeof NodeFs, path: typeof NodePath, crypto: typeof NodeCrypto, file: string, text: unknown) {
   const dir = path.dirname(file);
   const tmp = path.join(dir, `.tmp-${crypto.randomBytes(6).toString("hex")}-${path.basename(file)}`);
   let fd = null;
@@ -72,12 +108,12 @@ function durableWriteSync(fs, path, crypto, file, text) {
   }
 }
 
-function writeFileDurableSync(file, text) {
-  durableWriteSync(require("fs"), require("path"), require("crypto"), file, text);
+function writeFileDurableSync(file: string, text: unknown) {
+  durableWriteSync(require("fs") as typeof NodeFs, require("path") as typeof NodePath, require("crypto") as typeof NodeCrypto, file, text);
 }
 
-function createDraftStore(opts) {
-  const o = opts || {};
+function createDraftStore(opts?: DraftStoreOptions | null) {
+  const o = opts || ({} as DraftStoreOptions);
   const { dir, fs, fsp, path, crypto } = o;
   if (typeof dir !== "string" || !dir) throw new TypeError("createDraftStore: dir is required");
   if (!fs || !fsp || !path || !crypto) throw new TypeError("createDraftStore: fs, fsp, path and crypto are required");
@@ -87,9 +123,9 @@ function createDraftStore(opts) {
   const sessionFile = path.join(dir, "session.json");
   const corruptDir = path.join(dir, "corrupt");
 
-  const tabs = new Map();
-  const queues = new Map();
-  let tombstones = new Set();
+  const tabs = new Map<string, DraftTabRecord>();
+  const queues = new Map<string, Promise<void>>();
+  let tombstones = new Set<string>();
   let previousSession = "none";
   let session = {
     formatVersion: SESSION_FORMAT_VERSION,
@@ -97,18 +133,18 @@ function createDraftStore(opts) {
     pid: process.pid,
     startedAt: Date.now(),
     appVersion,
-    discardedTabIds: [],
+    discardedTabIds: [] as string[],
   };
   const stats = { writes: 0, failures: 0 };
   let writesReachedRename = 0;
-  let failNextCode = null;
+  let failNextCode: string | null = null;
   let failNextRemaining = 0;
   if (hooks && hooks.failNext && typeof hooks.failNext.code === "string") {
     failNextCode = hooks.failNext.code;
-    failNextRemaining = Number.isInteger(hooks.failNext.count) && hooks.failNext.count > 0 ? hooks.failNext.count : 1;
+    failNextRemaining = Number.isInteger(hooks.failNext.count) && (hooks.failNext.count as number) > 0 ? hooks.failNext.count as number : 1;
   }
 
-  function tabRec(tabId) {
+  function tabRec(tabId: string) {
     let rec = tabs.get(tabId);
     if (!rec) {
       rec = { floor: -Infinity, epoch: 0, lastBase: null, lastHeader: null, held: false, holdGen: 0, lastSeq: null };
@@ -117,15 +153,15 @@ function createDraftStore(opts) {
     return rec;
   }
 
-  function validTabId(tabId) {
+  function validTabId(tabId: unknown): tabId is string {
     return typeof tabId === "string" && TAB_ID_RE.test(tabId);
   }
 
-  function tabDir(tabId) {
+  function tabDir(tabId: string) {
     return path.join(dir, tabId);
   }
 
-  function enqueue(tabId, task) {
+  function enqueue<T>(tabId: string, task: () => T | Promise<T>): Promise<T> {
     const prev = queues.get(tabId) || Promise.resolve();
     const run = prev.then(task);
     const tail = run.then(noop, noop);
@@ -138,8 +174,8 @@ function createDraftStore(opts) {
 
   function noop() {}
 
-  function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  function delay(ms: number) {
+    return new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 
   function persistSession() {
@@ -156,7 +192,7 @@ function createDraftStore(opts) {
     }
   }
 
-  function readdirSafe(folder) {
+  function readdirSafe(folder: string) {
     try {
       return fs.readdirSync(folder);
     } catch (_) {
@@ -164,7 +200,7 @@ function createDraftStore(opts) {
     }
   }
 
-  function isDirSafe(p) {
+  function isDirSafe(p: string) {
     try {
       return fs.statSync(p).isDirectory();
     } catch (_) {
@@ -172,11 +208,11 @@ function createDraftStore(opts) {
     }
   }
 
-  function unlinkQuiet(p) {
+  function unlinkQuiet(p: string) {
     try { fs.unlinkSync(p); } catch (_) { }
   }
 
-  function rmQuiet(p) {
+  function rmQuiet(p: string) {
     try {
       fs.rmSync(p, { recursive: true, force: true });
       return true;
@@ -185,7 +221,7 @@ function createDraftStore(opts) {
     }
   }
 
-  function removeTabFolder(tabId) {
+  function removeTabFolder(tabId: string) {
     const folder = tabDir(tabId);
     if (!fs.existsSync(folder)) return true;
     const trash = path.join(dir, `.trash-${tabId}-${crypto.randomBytes(6).toString("hex")}`);
@@ -199,27 +235,27 @@ function createDraftStore(opts) {
     return true;
   }
 
-  function classifyDraftHeader(h, tabId) {
+  function classifyDraftHeader(h: unknown, tabId: string): DraftHeaderRead {
     if (!isPlainObject(h) || h.format !== DRAFT_FORMAT || typeof h.formatVersion !== "number") return { bad: true };
     if (h.formatVersion > FORMAT_VERSION) return { unsupported: true };
     if (h.formatVersion !== FORMAT_VERSION) return { bad: true };
     if (h.tabId !== tabId) return { bad: true };
     const s = h.state;
-    if (!isPlainObject(s) || !Number.isInteger(s.bytes) || s.bytes < 0 || typeof s.sha256 !== "string") return { bad: true };
+    if (!isPlainObject(s) || !Number.isInteger(s.bytes) || (s.bytes as number) < 0 || typeof s.sha256 !== "string") return { bad: true };
     if (h.base !== null && h.base !== undefined) {
       const b = h.base;
       if (!isPlainObject(b) || typeof b.file !== "string" || !BASE_FILE_RE.test(b.file) ||
-          !Number.isInteger(b.bytes) || b.bytes < 0 || typeof b.sha256 !== "string") return { bad: true };
+          !Number.isInteger(b.bytes) || (b.bytes as number) < 0 || typeof b.sha256 !== "string") return { bad: true };
     }
-    return { header: h };
+    return { header: h as DesktopDraftReadHeader };
   }
 
-  function readHeaderSync(file, tabId) {
+  function readHeaderSync(file: string, tabId: string): DraftHeaderRead {
     let fd;
     try {
       fd = fs.openSync(file, "r");
     } catch (err) {
-      return err && err.code === "ENOENT" ? { missing: true } : { bad: true, unreadable: true };
+      return err && (err as NodeJS.ErrnoException).code === "ENOENT" ? { missing: true } : { bad: true, unreadable: true };
     }
     try {
       const chunks = [];
@@ -252,12 +288,12 @@ function createDraftStore(opts) {
     }
   }
 
-  async function readGeneration(tabId, name) {
+  async function readGeneration(tabId: string, name: string): Promise<DraftGenerationRead> {
     let buf;
     try {
       buf = await fsp.readFile(path.join(tabDir(tabId), name));
     } catch (err) {
-      return err && err.code === "ENOENT" ? { missing: true } : { bad: true, unreadable: true };
+      return err && (err as NodeJS.ErrnoException).code === "ENOENT" ? { missing: true } : { bad: true, unreadable: true };
     }
     const nl = buf.indexOf(0x0a);
     if (nl < 0) return { bad: true };
@@ -270,17 +306,17 @@ function createDraftStore(opts) {
     const c = classifyDraftHeader(header, tabId);
     if (!c.header) return c;
     const body = buf.subarray(nl + 1);
-    if (body.length !== header.state.bytes || sha256Hex(crypto, body) !== header.state.sha256) return { bad: true };
-    return { ok: true, header, stateJson: body.toString("utf8") };
+    if (body.length !== (header as DesktopDraftReadHeader).state.bytes || sha256Hex(crypto, body) !== (header as DesktopDraftReadHeader).state.sha256) return { bad: true };
+    return { ok: true, header: header as DesktopDraftReadHeader, stateJson: body.toString("utf8") };
   }
 
-  async function readBase(tabId, ref) {
+  async function readBase(tabId: string, ref: DesktopDraftReadHeader["base"]): Promise<Pick<DesktopWireDraftSuccess, "baseJson" | "baseProblem">> {
     if (!ref) return { baseJson: null, baseProblem: null };
     let buf;
     try {
       buf = await fsp.readFile(path.join(tabDir(tabId), ref.file));
     } catch (err) {
-      return { baseJson: null, baseProblem: err && err.code === "ENOENT" ? "missing" : "corrupt" };
+      return { baseJson: null, baseProblem: err && (err as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "corrupt" };
     }
     const nl = buf.indexOf(0x0a);
     if (nl < 0) return { baseJson: null, baseProblem: "corrupt" };
@@ -299,7 +335,7 @@ function createDraftStore(opts) {
     return { baseJson: body.toString("utf8"), baseProblem: null };
   }
 
-  function quarantine(tabId) {
+  function quarantine(tabId: string) {
     try {
       fs.mkdirSync(corruptDir, { recursive: true });
       const ts = Date.now();
@@ -312,20 +348,20 @@ function createDraftStore(opts) {
     }
   }
 
-  function forgetDiskState(rec) {
+  function forgetDiskState(rec: DraftTabRecord) {
     rec.lastBase = null;
     rec.lastHeader = null;
   }
 
-  function tooLarge(str) {
-    const cap = hooks && Number.isFinite(hooks.maxBodyBytes) ? hooks.maxBodyBytes : MAX_BODY_BYTES;
+  function tooLarge(str: string) {
+    const cap = hooks && Number.isFinite(hooks.maxBodyBytes) ? hooks.maxBodyBytes as number : MAX_BODY_BYTES;
     if (str.length > cap) return true;
     return Buffer.byteLength(str, "utf8") > cap;
   }
 
-  function errorCode(err) {
-    const code = err && err.code;
-    return WRITE_ERROR_CODES.has(code) ? code : "EIO";
+  function errorCode(err: unknown) {
+    const code = err && (err as NodeJS.ErrnoException).code;
+    return WRITE_ERROR_CODES.has(code) ? code as string : "EIO";
   }
 
   function consumeInjectedFailure() {
@@ -334,7 +370,7 @@ function createDraftStore(opts) {
     return failNextCode;
   }
 
-  async function writeFileDurable(file, buffers, injectCode) {
+  async function writeFileDurable(file: string, buffers: Buffer[], injectCode: string | null) {
     const fh = await fsp.open(file, "wx");
     let closed = false;
     try {
@@ -355,7 +391,7 @@ function createDraftStore(opts) {
     }
   }
 
-  function previousBaseRefs(folder, tabId, headerThatBecamePrevious, currentExisted) {
+  function previousBaseRefs(folder: string, tabId: string, headerThatBecamePrevious: DesktopDraftReadHeader | null, currentExisted: boolean) {
     if (currentExisted && headerThatBecamePrevious) {
       return headerThatBecamePrevious.base ? [headerThatBecamePrevious.base.file] : [];
     }
@@ -365,15 +401,15 @@ function createDraftStore(opts) {
     return prev.header.base ? [prev.header.base.file] : [];
   }
 
-  function pruneBases(folder, keepFiles) {
+  function pruneBases(folder: string, keepFiles: string[]) {
     const keep = new Set(keepFiles);
     for (const name of readdirSafe(folder)) {
       if (BASE_FILE_RE.test(name) && !keep.has(name)) unlinkQuiet(path.join(folder, name));
     }
   }
 
-  async function doWrite(tabId, rec, epoch, holdAtCall, header, stateJson, baseJson, seq) {
-    const fail = (code) => {
+  async function doWrite(tabId: string, rec: DraftTabRecord, epoch: number, holdAtCall: number | null, header: DraftWriteInput, stateJson: string, baseJson: string | null, seq: number): Promise<DesktopWireDraftWrite> {
+    const fail = (code: string): Extract<DesktopWireDraftWrite, { ok: false }> => {
       rec.lastBase = null;
       if (code !== "NEED_BASE" && code !== "STALE_SEQ" && code !== "DISCARDED" && code !== "HELD") stats.failures++;
       return { ok: false, code };
@@ -412,12 +448,12 @@ function createDraftStore(opts) {
     }
 
     const stateBuf = Buffer.from(stateJson, "utf8");
-    const finalHeader = Object.assign(
+    const finalHeader: DesktopDraftWriteHeader = Object.assign(
       { format: DRAFT_FORMAT, formatVersion: FORMAT_VERSION, tabId },
       header,
       {
-        format: DRAFT_FORMAT,
-        formatVersion: FORMAT_VERSION,
+        format: DRAFT_FORMAT as typeof DRAFT_FORMAT,
+        formatVersion: FORMAT_VERSION as typeof FORMAT_VERSION,
         tabId,
         writtenAt: Date.now(),
         appVersion,
@@ -436,7 +472,7 @@ function createDraftStore(opts) {
     const rand = crypto.randomBytes(6).toString("hex");
     const stateTmp = path.join(dir, `.tmp-${tabId}-state-${rand}`);
     const baseTmp = baseBuf ? path.join(dir, `.tmp-${tabId}-base-${rand}`) : null;
-    const pendingTmps = [];
+    const pendingTmps: string[] = [];
     const cleanupTmps = () => {
       for (const t of pendingTmps.splice(0)) unlinkQuiet(t);
     };
@@ -448,9 +484,9 @@ function createDraftStore(opts) {
       if (baseTmp) {
         pendingTmps.push(baseTmp);
         const meta = { format: BASE_FORMAT, formatVersion: FORMAT_VERSION, bytes: baseRef.bytes, sha256: baseRef.sha256 };
-        await writeFileDurable(baseTmp, [Buffer.from(JSON.stringify(meta) + "\n", "utf8"), baseBuf], null);
+        await writeFileDurable(baseTmp, [Buffer.from(JSON.stringify(meta) + "\n", "utf8"), baseBuf as Buffer], null);
       }
-      if (hooks && Number.isFinite(hooks.writeDelayMs) && hooks.writeDelayMs > 0) await delay(hooks.writeDelayMs);
+      if (hooks && Number.isFinite(hooks.writeDelayMs) && (hooks.writeDelayMs as number) > 0) await delay(hooks.writeDelayMs as number);
 
       writesReachedRename++;
       if (hooks && Number.isInteger(hooks.killBeforeRenameAt) && hooks.killBeforeRenameAt === writesReachedRename) {
@@ -497,7 +533,7 @@ function createDraftStore(opts) {
     }
   }
 
-  function write(tabId, header, stateJson, baseJson, seq) {
+  function write(tabId: string, header: DraftWriteInput, stateJson: string, baseJson: string | null | undefined, seq: number): Promise<DesktopWireDraftWrite> {
     if (!validTabId(tabId)) return Promise.resolve({ ok: false, code: "NO_TAB" });
     const rec = tabRec(tabId);
     const epoch = rec.epoch;
@@ -506,7 +542,7 @@ function createDraftStore(opts) {
     return enqueue(tabId, () => doWrite(tabId, rec, epoch, holdAtCall, header, stateJson, base, seq));
   }
 
-  function discardClean(tabId, seq) {
+  function discardClean(tabId: string, seq: number): Promise<DesktopWireDraftDiscard> {
     if (!validTabId(tabId)) return Promise.resolve({ ok: false, code: "NO_TAB" });
     const rec = tabRec(tabId);
     const epoch = rec.epoch;
@@ -521,7 +557,7 @@ function createDraftStore(opts) {
     });
   }
 
-  function discardForUserDecision(tabIds, reason) {
+  function discardForUserDecision(tabIds: string | readonly string[], reason: unknown) {
     const ids = (Array.isArray(tabIds) ? tabIds : [tabIds]).filter(validTabId);
     for (const id of ids) {
       tombstones.add(id);
@@ -543,7 +579,7 @@ function createDraftStore(opts) {
     return { ok: failed.length === 0, persisted, failed, reason: typeof reason === "string" ? reason : null };
   }
 
-  function take(tabId) {
+  function take(tabId: string): Promise<DesktopWireTakenDraft | null> {
     if (!validTabId(tabId)) return Promise.resolve(null);
     return enqueue(tabId, async () => {
       if (tombstones.has(tabId)) return null;
@@ -573,20 +609,20 @@ function createDraftStore(opts) {
         stateJson: chosen.stateJson,
         baseJson: base.baseJson,
         baseProblem: base.baseProblem,
-        ageMs: Number.isFinite(writtenAt) ? Math.max(0, Date.now() - writtenAt) : null,
+        ageMs: Number.isFinite(writtenAt) ? Math.max(0, Date.now() - (writtenAt as number)) : null,
         previousSession,
         usedPrevGeneration,
       };
     });
   }
 
-  function hasDraft(tabId) {
+  function hasDraft(tabId: string) {
     if (!validTabId(tabId) || tombstones.has(tabId)) return false;
     const folder = tabDir(tabId);
     return fs.existsSync(path.join(folder, "current.draft")) || fs.existsSync(path.join(folder, "previous.draft"));
   }
 
-  function listingFor(tabId) {
+  function listingFor(tabId: string) {
     const folder = tabDir(tabId);
     const cur = readHeaderSync(path.join(folder, "current.draft"), tabId);
     let chosen = null;
@@ -612,7 +648,7 @@ function createDraftStore(opts) {
         status = "corrupt";
       }
     }
-    const h = chosen || {};
+    const h: Partial<DesktopDraftReadHeader> = chosen || {};
     const origin = isPlainObject(h.origin) ? h.origin : null;
     return {
       tabId,
@@ -620,8 +656,8 @@ function createDraftStore(opts) {
       generation,
       header: chosen,
       title: typeof h.title === "string" ? h.title : "",
-      writtenAt: Number.isFinite(h.writtenAt) ? h.writtenAt : null,
-      seq: Number.isFinite(h.seq) ? h.seq : null,
+      writtenAt: Number.isFinite(h.writtenAt) ? h.writtenAt as number : null,
+      seq: Number.isFinite(h.seq) ? h.seq as number : null,
       docId: typeof h.docId === "string" ? h.docId : null,
       originKind: origin && typeof origin.kind === "string" ? origin.kind : null,
       filePath: origin && typeof origin.filePath === "string" ? origin.filePath : null,
@@ -640,7 +676,7 @@ function createDraftStore(opts) {
     return out;
   }
 
-  function sweepTabFolder(tabId) {
+  function sweepTabFolder(tabId: string) {
     const folder = tabDir(tabId);
     for (const name of readdirSafe(folder)) {
       if (name.startsWith(".tmp-")) rmQuiet(path.join(folder, name));
@@ -664,7 +700,7 @@ function createDraftStore(opts) {
         const m = CORRUPT_ENTRY_RE.exec(name);
         return m ? { name, ts: Number(m[2]) } : null;
       })
-      .filter(Boolean)
+      .filter<{ name: string; ts: number }>(Boolean as unknown as (value: { name: string; ts: number } | null) => value is { name: string; ts: number })
       .sort((a, b) => b.ts - a.ts);
     for (const e of entries.slice(CORRUPT_KEEP_NEWEST)) {
       if (now - e.ts > CORRUPT_MAX_AGE_MS) rmQuiet(path.join(corruptDir, e.name));
@@ -674,7 +710,7 @@ function createDraftStore(opts) {
   function init() {
     fs.mkdirSync(dir, { recursive: true });
     const prior = readSessionSync();
-    previousSession = prior && SESSION_STATES.has(prior.state) ? prior.state : "none";
+    previousSession = prior && SESSION_STATES.has(prior.state as string) ? prior.state as string : "none";
     const priorTombstones = prior && Array.isArray(prior.discardedTabIds) ? prior.discardedTabIds.filter(validTabId) : [];
 
     const entries = readdirSafe(dir);
@@ -711,7 +747,7 @@ function createDraftStore(opts) {
     return { previousSession, drafts: list(), sessionWritten };
   }
 
-  function markSession(state) {
+  function markSession(state: string) {
     session.state = state;
     session.discardedTabIds = Array.from(tombstones);
     try {
@@ -730,7 +766,7 @@ function createDraftStore(opts) {
     take,
     hasDraft,
     list,
-    hold(tabId) {
+    hold(tabId: string) {
       if (!validTabId(tabId)) return;
       const rec = tabRec(tabId);
       if (!rec.held) {
@@ -738,13 +774,13 @@ function createDraftStore(opts) {
         rec.holdGen++;
       }
     },
-    release(tabId) {
+    release(tabId: string) {
       if (validTabId(tabId)) tabRec(tabId).held = false;
     },
-    isHeld(tabId) {
-      return validTabId(tabId) && tabs.has(tabId) && tabs.get(tabId).held;
+    isHeld(tabId: string) {
+      return validTabId(tabId) && tabs.has(tabId) && (tabs.get(tabId) as DraftTabRecord).held;
     },
-    resetSeq(tabId) {
+    resetSeq(tabId: string) {
       if (!validTabId(tabId)) return;
       const rec = tabRec(tabId);
       rec.epoch++;
@@ -757,7 +793,7 @@ function createDraftStore(opts) {
     markSessionEnd() {
       return markSession("session-end");
     },
-    status(tabId) {
+    status(tabId: string) {
       const rec = validTabId(tabId) ? tabs.get(tabId) : null;
       return {
         tabId: validTabId(tabId) ? tabId : null,
@@ -773,10 +809,12 @@ function createDraftStore(opts) {
   };
 }
 
-function restoreDoneAction(outcome) {
+function restoreDoneAction(outcome: unknown) {
   if (outcome === "failed") return "open";
   if (outcome === "kept") return "drop";
   return "release";
 }
+
+export type { createDraftStore, restoreDoneAction, writeFileDurableSync, TAB_ID_RE, MAX_BODY_BYTES };
 
 module.exports = { createDraftStore, restoreDoneAction, writeFileDurableSync, TAB_ID_RE, MAX_BODY_BYTES };
