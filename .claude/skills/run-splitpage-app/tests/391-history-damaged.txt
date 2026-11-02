@@ -20,7 +20,7 @@ wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]')
 wait document.getElementById('history-list').textContent.includes('1 damaged snapshot could not be listed')
 expect !document.getElementById('history-list').textContent.includes('No snapshots')
 expect document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 0
-eval (async function(){ window.rawDamagePayload = { raw: ['  unchanged  ', null, { atMs: 1e100 }] }; await seedDamage(rawDamagePayload); await F.openFile(new File([JSON.stringify(F.clone(F.state()))], 'history-damage.splitpage')); await H.idle(); window.quarantined = (await H.inspect()).index[damageDoc]; return true; })()
+eval (async function(){ window.rawDamagePayload = { raw: ['  unchanged  ', null, { atMs: 1e100 }] }; await seedDamage(rawDamagePayload); await F.openFile(new File([F.buildSplitpage()], 'history-damage.splitpage')); await H.idle(); window.quarantined = (await H.inspect()).index[damageDoc]; return true; })()
 expect JSON.stringify(quarantined.damagedSnapshots) === JSON.stringify(rawDamagePayload)
 expect Array.isArray(quarantined.snapshots)
 jsclick #btn-file
