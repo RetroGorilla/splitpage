@@ -4,7 +4,7 @@
     "src/adapters/print/browser-print.ts",
     "src/bootstrap/wiring/ports/printing.ts",
     "src/features/file-menu/export-dialog.js",
-    "src/features/file-menu/file-menu.js",
+    "src/features/file-menu/file-menu.ts",
     "src/features/file-menu/actions.ts",
     "src/features/file-menu/ports.ts",
     "src/bootstrap/wiring/file-menu-export.ts",

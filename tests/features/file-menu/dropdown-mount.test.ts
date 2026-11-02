@@ -3,7 +3,7 @@ import type { RecentFiles, RecentFileData } from "../../../src/application/files
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startFileMenu } from "../../../src/features/file-menu/file-menu.js";
+import { startFileMenu } from "../../../src/features/file-menu/file-menu.ts";
 import { fileMenuActions } from "../../../src/features/file-menu/actions.ts";
 import type { FileMenuControls, FileMenuDropdownMount, FileMenuDropdownPorts } from "../../../src/features/file-menu/ports.ts";
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
@@ -57,7 +57,7 @@ function harness() {
       routeOpen: async (request) => { calls.push(["routeOpen", request]); return { where: "this-tab" }; },
       read: async (id) => { calls.push(["readFile", id]); return { id, name: "Recent.splitpage" } as MalformedDesktopReply<RecentFileData>; }
     },
-    recentHandle: (entry) => { calls.push(["makeDesktopHandle", entry]); return { getFile: async () => new win.File(["file"], entry.name) }; },
+    recentHandle: (entry) => { calls.push(["makeDesktopHandle", entry]); return { getFile: async () => new win.File(["file"], (entry as NonNullable<typeof entry>).name) }; },
     canOpenPrompter: { browser: () => state.browser, chromium: () => state.chromium },
     opening: { open: async (opening) => { calls.push(["openDocument", opening]); return true; } },
     transitions: { startNew: (arrival) => { calls.push(["startNew", arrival]); assert.ok("document" in arrival.from); return { document: arrival.from.document, forkedFrom: null, kept: false }; } },
@@ -206,7 +206,7 @@ test("a recent file whose read finishes after disposal is not opened", async () 
   h.state.recent = [{ fileId: "f1", name: "Recent.splitpage", title: "Recent" }];
   let release: () => void = () => {};
   const read = new Promise<void>((done) => { release = done; });
-  const mounted = startFileMenu({ ...h.ports, recentHandle: (entry: { readonly name: string }) => ({ getFile: async () => { await read; return new win.File(["file"], entry.name); } }) });
+  const mounted = startFileMenu({ ...h.ports, recentHandle: (entry: { readonly name: string } | undefined) => ({ getFile: async () => { await read; return new win.File(["file"], (entry as NonNullable<typeof entry>).name); } }) });
   mounted.toggleFileMenu(true);
   mounted.toggleSubmenu("recent", true);
   await settled();

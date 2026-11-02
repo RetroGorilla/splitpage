@@ -1,11 +1,17 @@
+import type { LocalFileHandle } from "../files/local-file-access.ts";
 export type HomeKind = "none" | "file" | "import";
 
 export interface Home {
   readonly kind: HomeKind;
+  readonly name?: string | null;
+  readonly format?: string | null;
+  readonly handle?: Partial<LocalFileHandle> | null;
+  readonly lastModified?: number | null;
+  readonly dirty?: boolean;
   readonly [field: string]: unknown;
 }
 
-export type HomeFields = Readonly<Record<string, unknown>>;
+export type HomeFields = Readonly<Record<string, unknown>> & Pick<Home, "name" | "format" | "handle" | "lastModified" | "dirty">;
 
 export type LocationChange = "home" | "writtenOut";
 

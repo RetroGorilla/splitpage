@@ -20,7 +20,7 @@ export interface LocalFileOpening {
   readonly kind: string;
   readonly file?: LocalFileData | null;
   readonly handle?: unknown;
-  readonly parsed?: { readonly state: ValidatedDocument; readonly kind: unknown };
+  readonly parsed?: { readonly state: ValidatedDocument; readonly kind: string };
   readonly options?: { readonly skipSnapshot?: boolean; readonly silent?: boolean; readonly resumed?: boolean; readonly reload?: boolean } | null;
 }
 
