@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createDraftStore, restoreDoneAction, writeFileDurableSync } = require(path.join(here, "..", "drafts.js"));
+const { createDraftStore, restoreDoneAction, writeFileDurableSync } = require(path.join(here, "..", "drafts.ts"));
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-drafts-test-"));
 const TAB = "0123456789abcdef0123456789abcdef";
