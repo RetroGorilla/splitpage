@@ -78,7 +78,7 @@ For the desktop installers — x64 and native ARM64 — it's `cd desktop && npm
 run dist:win`; see [Desktop app](help.md#desktop-app) and docs/RELEASING.md.
 Pushing a `v<version>` tag runs `.github/workflows/release.yml`, which builds
 all of it and opens a draft release on the releases page
-([RELEASING.md §3](RELEASING.md#3-publishing-a-release-to-the-mirror)). On a portable copy
+([RELEASING.md §3](RELEASING.md#3-publishing-a-release)). On a portable copy
 carrying both architectures' runtimes, `start.bat` picks the right one
 automatically.
 

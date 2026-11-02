@@ -14,8 +14,8 @@ type HistoryOwnerApi = Omit<HistoryOwner, "startHistory">;
 
 import { sha256Bytes } from "../../core/document/ids.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
-import { HISTORY_OLDER_KEY, HISTORY_PER_DOC, HISTORY_SNAP_ID_RE, historyClip, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.js";
-import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
+import { HISTORY_OLDER_KEY, HISTORY_PER_DOC, HISTORY_SNAP_ID_RE, historyClip, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
+import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../../shared/blob-policy.ts";
 import { checksumText } from "../../../shared/text.ts";
 
 function startHistory(ports: HistoryOwnerPorts, instrumentation?: HistoryInstrumentation) {

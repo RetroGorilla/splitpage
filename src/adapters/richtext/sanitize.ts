@@ -1,4 +1,4 @@
-import { isSha256Hex, normalizeImageRef } from "../../../shared/blob-policy.js";
+import { isSha256Hex, normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { BROLL_MARKER_RE } from "../../core/document/broll.ts";
 import type { IdSource, ImageSource } from "../../core/document/ports.ts";
 import { tagCategoryId } from "../../core/document/tags.ts";

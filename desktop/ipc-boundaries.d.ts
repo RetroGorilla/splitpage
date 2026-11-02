@@ -8,6 +8,7 @@ import type {
   DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
 import type { createDraftStore } from "./drafts.ts";
+import type * as importHistoryPolicy from "../shared/history-policy.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { createVoiceComposition } from "./voice-composition.ts";
 import type { createPdfPrinter } from "./print-pdf.ts";
@@ -138,12 +139,7 @@ export interface DesktopHistoryBlobIpcDependencies {
   historyProtectList: (value: unknown) => { docId: string; id: string }[];
   historyWireMeta: (meta: DesktopWireHistoryMeta) => DesktopWireHistoryMeta;
   blobStore: () => ReturnType<typeof createBlobStore> | null;
-  historyPolicy: {
-    HISTORY_OLDER_KEY: string;
-    HISTORY_SNAP_ID_RE: RegExp;
-    historyUtf8Length: (text: string) => number;
-    sanitizeHistoryMeta: (value: unknown) => DesktopWireHistoryMeta | null;
-  };
+  historyPolicy: Pick<typeof importHistoryPolicy, "HISTORY_OLDER_KEY" | "HISTORY_SNAP_ID_RE" | "historyUtf8Length" | "sanitizeHistoryMeta">;
   DOC_ID_RE: RegExp;
 }
 

@@ -1296,7 +1296,11 @@ async function caseSessionRestore(target, fixturesDir) {
 async function startTinyUpdateServer() {
   const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ tag_name: "v99.0.0", html_url: "https://example.com/r" }));
+    res.end(JSON.stringify({
+      tag_name: "v99.0.0",
+      html_url: "https://example.com/r",
+      assets: [{ name: "notes.txt", size: 1, browser_download_url: "https://example.com/r/notes.txt" }]
+    }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port;

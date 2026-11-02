@@ -9,7 +9,7 @@ import {
   HISTORY_OLDER_TTL_MS,
   historyOlderExpired,
   historyUtf8Length
-} from "../../shared/history-policy.js";
+} from "../../shared/history-policy.ts";
 
 const DOC_A = "d" + "a".repeat(32);
 const DOC_B = "d" + "b".repeat(32);

@@ -11,11 +11,15 @@ const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
 const INSTALLER_EXT: Record<string, string> = { win32: ".exe", darwin: ".dmg", linux: ".appimage" };
 
 const DEFAULT_UPDATE_API =
-  "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+  "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
 
 const CHECKSUMS_ASSET = /^SHA256SUMS(\.txt)?$/i;
 
 const CHECKSUMS_MAX_CHARS = 200000;
+
+function hasReleaseAssets(assets: unknown) {
+  return Array.isArray(assets) && assets.length > 0;
+}
 
 function splitVersion(v: unknown) {
   const s = String(v).trim().replace(/\+.*$/, "");
@@ -102,10 +106,11 @@ function checksumFor(text: string, assetName: string) {
   return null;
 }
 
-export type { DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor };
+export type { DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor };
 
 module.exports = {
   DEFAULT_UPDATE_API,
+  hasReleaseAssets,
   compareVersions,
   isAllowedDownloadHost,
   pickUpdateAsset,

@@ -9,7 +9,7 @@ import {
   normalizeImageRef,
   refsIn,
   sniffImageMime
-} from "../../shared/blob-policy.js";
+} from "../../shared/blob-policy.ts";
 
 const SHA_A = "a".repeat(64);
 const SHA_B = "0123456789abcdef".repeat(4);
@@ -237,7 +237,7 @@ test("refsIn is empty for anything that is not a state", () => {
 
 test("require() and import see the same named exports", () => {
   const require = createRequire(import.meta.url);
-  const cjs = require("../../shared/blob-policy.js");
+  const cjs = require("../../shared/blob-policy.ts");
   assert.equal(cjs.refsIn, refsIn);
   assert.equal(cjs.normalizeImageRef, normalizeImageRef);
   assert.deepEqual(Object.keys(cjs).sort(), [

@@ -65,7 +65,7 @@ function applyUpdateStatus(status: UpdateStatus | null) {
   renderUpdateNotice();
 }
 
-const RELEASES_URL = "https://github.com/RetroGorilla/splitpage-releases/releases/latest";
+const RELEASES_URL = "https://github.com/RetroGorilla/splitpage/releases/latest";
 
 function releasesUrl() {
   return (updateStatus && (updateStatus.releaseUrl || updateStatus.desktopAppUrl)) || RELEASES_URL;

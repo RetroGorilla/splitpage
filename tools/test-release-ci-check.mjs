@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { parse } from "yaml";
 import { markerName, WORKFLOW } from "./ci-tested-tree.mjs";
 import { checkRelease, describe, gateRun } from "./release-ci-check.mjs";
 
@@ -10,6 +12,16 @@ function eq(name, actual, expected) {
   failures.push(`${name} — ${detail}`);
   console.log(`  FAIL ${name} — ${detail}`);
 }
+
+const workflow = parse(readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8"));
+const draft = workflow.jobs.draft;
+const draftStep = draft.steps.find((step) => step.run && step.run.includes("gh release create"));
+eq("workflow defaults to read-only contents", workflow.permissions, { contents: "read" });
+eq("only the draft job grants contents write", Object.entries(workflow.jobs).filter(([, job]) => job.permissions?.contents === "write").map(([name]) => name), ["draft"]);
+eq("draft uses the repository token", draftStep.env.GH_TOKEN, "${{ github.token }}");
+eq("draft targets this repository", draftStep.run.includes("--repo RetroGorilla/splitpage "), true);
+eq("release remains a draft", draftStep.run.includes("--draft"), true);
+eq("draft does not skip when a token is missing", draftStep.run.includes("exit 0"), false);
 
 const REPOSITORY = "owner/repo";
 const SHA = "c".repeat(40);

@@ -1,6 +1,6 @@
 import { escapeHtml, safeHref } from "../../core/document/text-policy.ts";
 import { base64Encode } from "../../core/document/media.ts";
-import { sniffImageMime } from "../../../shared/blob-policy.js";
+import { sniffImageMime } from "../../../shared/blob-policy.ts";
 import type { ExportPicture } from "../../application/export/assets.ts";
 import { PRINT_COLORS } from "./export-kit.ts";
 

@@ -495,7 +495,7 @@ tabs**.
   IndexedDB is no longer read.
 - **Desktop version history** (#83, `main.js` §8b): one
   `shared/history-store.js` (the store the browser runs too; policy from
-  `shared/history-policy.js`) over `desktop/history-fs-backend.ts`, both
+  `shared/history-policy.ts`) over `desktop/history-fs-backend.ts`, both
   made once in `whenReady` before `registerIpc`. `<userData>/history/`:
   `FORMAT` `"2"` (higher → read-only), `index.json` + `index.prev.json`
   (every bucket in one index, two durable generations; a torn current
@@ -566,7 +566,7 @@ tabs**.
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites.
 - **YouTube and Vimeo in the gallery** (#141, #168, `main.js` §9e,
-  `shared/video-embed.js`). The page's policy is build.mjs's, re-served
+  `shared/video-embed.ts`). The page's policy is build.mjs's, re-served
   as a header (§10), so its `frame-src` — `'self'` plus YouTube's no-cookie
   embed and Vimeo's player — needed no second edit here; `TABSTRIP_CSP`
   keeps `frame-src 'none'`. Three things main does for it: (1)
@@ -967,7 +967,7 @@ image bytes; the bytes live once, content-addressed by SHA-256, in a blob
 store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
 server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
 - A row's picture is `imageRef`, a record gated by `normalizeImageRef()`
-  (`shared/blob-policy.js`): exactly those four fields, the type sniffed
+  (`shared/blob-policy.ts`): exactly those four fields, the type sniffed
   from the bytes, never SVG. The old key `visualImage` (a `data:` URI) is
   read, interned and deleted by `migrateRows()`; a valid one wins over an
   `imageRef` on the same row. The comment `field` value `"visualImage"` keeps
@@ -991,7 +991,7 @@ server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
   user's picture as `imageValue`; its `body` shows the same picture in the
   stored form. `imageValue` is the source of truth: "Use my version" puts
   it back, and the card draws it.
-- `refsIn(state)` (`shared/blob-policy.js`; the server keeps its own copy)
+- `refsIn(state)` (`shared/blob-policy.ts`; the server keeps its own copy)
   lists every sha a state names: `imageRef`, `imageValue`, and `data-blob`
   on an `<img>` in any row, comment or reply HTML. Every writer that must
   not name an unstored blob persists `refsIn` first (#52).
@@ -1165,9 +1165,9 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/voice-helper.ts` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
 | `desktop/drafts.ts` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/history-store.js` | THE version-history store (#83), synchronous ESM run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.ts`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
-| `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
-| `shared/blob-policy.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
-| `shared/video-embed.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
+| `shared/history-policy.ts` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
+| `shared/blob-policy.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
+| `shared/video-embed.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
 | `desktop/blob-store.ts` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
 | `desktop/history-fs-backend.ts` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
 | `desktop/electron-arch.mjs` | pure architecture selection and the `fetch-electron` entry point; passes the selected architecture to Electron's installer (§2) |

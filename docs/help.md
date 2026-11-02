@@ -11,6 +11,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since the 4.0 beta
 
+- Downloads and update checks now use the Splitpage repository releases page.
 - **A title from your first filename.** Save an untouched untitled script as
   `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
   A title you typed stays yours. Download-only browsers leave both unchanged.
@@ -242,7 +243,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   recognition.
 
 Release notes for every version are on the
-[releases page](https://github.com/RetroGorilla/splitpage-releases/releases).
+[releases page](https://github.com/RetroGorilla/splitpage/releases).
 
 ## Getting started
 
@@ -281,7 +282,7 @@ shows it too, on a fresh copy nothing has been opened in.
 ## Running it
 
 **Desktop app**: install it from the
-[releases page](https://github.com/RetroGorilla/splitpage-releases/releases)
+[releases page](https://github.com/RetroGorilla/splitpage/releases)
 (see [Installing and updating](#installing-and-updating)).
 
 **Portable copy, in a browser**: unzip `splitpage-<version>.zip` anywhere and
@@ -921,7 +922,7 @@ included (they're your files).
 
 - **Desktop app**: download `SplitpageDesktopSetup-<version>-x64.exe` (or
   `-arm64.exe` for Windows on ARM) from the
-  [releases page](https://github.com/RetroGorilla/splitpage-releases/releases).
+  [releases page](https://github.com/RetroGorilla/splitpage/releases).
   It installs for you only, with no administrator needed. Windows may warn
   that it isn't signed: click **More info ▸ Run anyway**. If Splitpage is
   open with unsaved changes, it asks whether to save first, and Setup
