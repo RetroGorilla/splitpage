@@ -37,7 +37,6 @@ Groups A, B and C below are done. Every queue task from AQ-1 to AQ-46 is merged 
 | --- | --- | --- | --- |
 | C4 | Files over 1,000 lines, only when a change touches them (rule 11) | As touched | none |
 | AQ-37 check | Real-microphone check of desktop voice (#1016), `WINDOWS-CHECKS.md` §3 | Waiting | Run it on his PC |
-| #1049 | Rows with no id get a different id on every load, so draft recovery can duplicate them | Filed | Whether to fix it for 4.1 |
 | #1039 | `perf-ab`'s images fixture calls a removed test hook, so the default run stops; `--only short,long` works | Filed | none |
 | #1023 | Notes handwriting lines in printed PDFs are too close together | Parked by Adam for the later PDF layout work | none |
 

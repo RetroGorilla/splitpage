@@ -335,7 +335,7 @@ click #btn-present
 wait __fx('prompter').opacity === 1 && __fx('prompter').fading === 0
 eval (function(){window.__rfs=[];window.__rfsOn=function(){var f=__fx('prompter');window.__rfs.push('change:fs='+!!document.fullscreenElement+':opacity='+f.opacity);};document.addEventListener('fullscreenchange',window.__rfsOn);return true;})()
 click #pp-fullscreen
-wait document.fullscreenElement === document.getElementById('prompter')
+wait document.fullscreenElement === document.documentElement
 wait window.__rfs.length === 1
 expect window.__rfs[0].indexOf('change:fs=true:') === 0
 eval (function(){document.getElementById('pp-close').click();var f=__fx('prompter');window.__rfs.push('close:fs='+!!document.fullscreenElement+':holding='+f.holding+':fading='+f.fading);return JSON.stringify(window.__rfs);})()

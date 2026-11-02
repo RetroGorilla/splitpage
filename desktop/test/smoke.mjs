@@ -978,11 +978,17 @@ async function caseFirstSaveTitle(target, fixturesDir) {
     app = await launchApp(target, { label: "first-save-title", dialogs: [null, first, copy] });
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
+    // why: Rows can mount before first-run setup decides; native Save correctly refuses behind that wizard.
+    await evalPage(cdp, "window.__onboarding.autoShowDecided()");
+    await evalPage(cdp, "(function(){var m=document.getElementById('onboarding-modal');if(!m.hidden)m.querySelector('[data-onboard-action=skip]').click();return true;})()");
+    record(tag + ": first-run setup is closed before starting a new script", await evalPage(cdp,
+      "document.getElementById('onboarding-modal').hidden === true"));
     await evalPage(cdp, "document.querySelector('[data-newtab-action=new]').click(); true");
     await poll(cdp, "window.__splitpageFormats.state().title === 'Untitled Script'", 5000);
     const seen = await dialogsSeen(cdp);
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
-    await waitForDialogAnswered(cdp, seen);
+    const cancelled = await waitForDialogAnswered(cdp, seen);
+    record(tag + ": cancelled first save reaches the native dialog", cancelled);
     record(tag + ": cancelled first save leaves title and tag alone", await evalPage(cdp,
       "window.__splitpageFormats.state().title === 'Untitled Script' && !window.__splitpageFormats.state().titleVersion && !window.__splitpageFormats.writtenOut()"));
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
@@ -1294,17 +1300,19 @@ async function caseSessionRestore(target, fixturesDir) {
 }
 
 async function startTinyUpdateServer() {
+  let base = "";
   const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
       tag_name: "v99.0.0",
-      html_url: "https://example.com/r",
-      assets: [{ name: "notes.txt", size: 1, browser_download_url: "https://example.com/r/notes.txt" }]
+      html_url: base + "/r",
+      assets: [{ name: "notes.txt", size: 1, browser_download_url: base + "/notes.txt" }]
     }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port;
-  return { server, url: `http://127.0.0.1:${port}/repos/x/releases/latest` };
+  base = `http://127.0.0.1:${port}`;
+  return { server, url: base + "/repos/x/releases/latest", releaseUrl: base + "/r" };
 }
 
 async function startTinyReleaseServer(opts) {
@@ -1316,33 +1324,44 @@ async function startTinyReleaseServer(opts) {
   const digest = crypto.createHash("sha256").update(payload).digest("hex");
 
   let base = "";
+  const downloads = [];
   const server = http.createServer((req, res) => {
     if (req.url.startsWith("/asset")) {
+      downloads.push(req.url);
+      res.writeHead(302, { location: base + "/payload" });
+      res.end();
+      return;
+    }
+    if (req.url.startsWith("/payload")) {
+      downloads.push(req.url);
       res.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(payload.length) });
       res.end(payload);
       return;
     }
     if (req.url.startsWith("/sums")) {
+      downloads.push(req.url);
       res.writeHead(200, { "content-type": "text/plain" });
       res.end(`${digest}  ${assetName}\n`);
       return;
     }
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({
+    const release = {
       tag_name: "v99.0.0",
-      html_url: "https://example.com/r",
+      html_url: base + "/r",
       assets: noSums
         ? [{ name: assetName, size: payload.length, browser_download_url: base + "/asset" }]
         : [
           { name: assetName, size: payload.length, browser_download_url: base + "/asset" },
           { name: "SHA256SUMS", size: 64, browser_download_url: base + "/sums" }
         ]
-    }));
+    };
+    if (opts && opts.mutate) opts.mutate(release);
+    res.end(JSON.stringify(release));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port;
   base = `http://127.0.0.1:${port}`;
-  return { server, url: `${base}/repos/x/releases/latest`, assetName, size: payload.length };
+  return { server, url: `${base}/repos/x/releases/latest`, assetName, size: payload.length, downloads };
 }
 
 async function caseUpdateStatus(target) {
@@ -1355,7 +1374,7 @@ async function caseUpdateStatus(target) {
 
     const status = await poll(app.cdp, "fetch('update-status.json',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){return s.updateAvailable ? s : null;})", 20000);
     record(tag + ": update-status.json reports updateAvailable:true", !!status && status.updateAvailable === true, JSON.stringify(status));
-    record(tag + ": update-status.json reports the release URL", !!status && status.releaseUrl === "https://example.com/r", JSON.stringify(status));
+    record(tag + ": update-status.json reports the release URL", !!status && status.releaseUrl === mini.releaseUrl, JSON.stringify(status));
 
     const barWithoutReload = await poll(app.cdp,
       "(function(){ var b = document.getElementById('update-bar'); return b && b.hidden === false; })()", 15000);
@@ -1401,6 +1420,7 @@ async function caseUpdateDownload(target) {
 
     const result = await evalPage(app.cdp, "window.splitpageDesktop.downloadUpdate()");
     record(tag + ": the download succeeds", !!result && result.ok === true, JSON.stringify(result));
+    record(tag + ": the download follows the release server's asset redirect", mini.downloads.includes("/payload"), JSON.stringify(mini.downloads));
 
     const after = await evalPage(app.cdp, "window.splitpageDesktop.getUpdateStatus()");
     const dl = (after && after.download) || {};
@@ -1426,6 +1446,33 @@ async function caseUpdateDownload(target) {
       rmrf(app.userDataDir);
     }
     await new Promise((resolve) => mini.server.close(resolve));
+  }
+}
+
+async function caseUpdateInvalidFeed(target) {
+  for (const [name, mutate] of [
+    ["unsafe release page", (release) => { release.html_url = "javascript:alert(1)"; }],
+    ["array checksum URL", (release) => { release.assets[1].browser_download_url = [release.assets[1].browser_download_url]; }],
+    ["another repository", (release) => { release.assets[0].browser_download_url = "https://github.com/another/repo/releases/download/tag/setup.exe"; }]
+  ]) {
+    const tag = target.name + " update invalid feed: " + name;
+    const mini = await startTinyReleaseServer({ mutate });
+    let app = null;
+    try {
+      app = await launchApp(target, { label: "update-invalid", allowUpdateCheck: true, updateApi: mini.url });
+      await waitForRows(app.cdp, 20000);
+      const status = await poll(app.cdp,
+        "window.splitpageDesktop.getUpdateStatus().then(function(s){ return s.checking ? null : s; })", 20000);
+      record(tag + ": the check fails closed", !!status && !!status.error && !status.updateAvailable && !status.canInstall, JSON.stringify(status));
+      record(tag + ": no release link is exposed", !!status && status.releaseUrl === null, JSON.stringify(status));
+      const result = await evalPage(app.cdp, "window.splitpageDesktop.downloadUpdate()");
+      record(tag + ": no download can start", !!result && result.ok === false, JSON.stringify(result));
+      record(tag + ": no asset or checksum was requested", mini.downloads.length === 0, JSON.stringify(mini.downloads));
+      record(tag + ": the update notice stays hidden", await evalPage(app.cdp, "document.getElementById('update-bar').hidden"));
+    } finally {
+      if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+      await new Promise((resolve) => mini.server.close(resolve));
+    }
   }
 }
 
@@ -2971,6 +3018,109 @@ async function caseHistoryKillAfterBody(target) {
       await teardown(app2, tag + " (post-relaunch)");
       rmrf(app2.userDataDir);
     }
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+async function caseHistoryDamagedEntries(target) {
+  const tag = target.name + " history: damaged entries preserve intact versions";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const docId = randDocId(), damagedDocId = randDocId();
+  const meta = historyMeta({ label: "Intact version", atMs: 1000 });
+  const body = JSON.stringify({ rows: [], title: "Intact version" });
+  const index = seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta, body }] });
+  const damaged = { id: "damaged", sha: index.buckets[docId].snapshots[0].sha, atMs: 1e100 };
+  index.buckets[docId].snapshots.push(damaged, { id: "empty", sha: "", atMs: 1 });
+  index.buckets[damagedDocId] = { title: "", lastOpenedAt: 1, snapshots: [damaged] };
+  const indexPath = path.join(historyDirOnDisk(userDataDir), "index.json");
+  const before = JSON.stringify(index);
+  fs.writeFileSync(indexPath, before, "utf8");
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-damaged-entries", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const list = await historyCall(app.cdp, "historyList", [docId]);
+    record(tag + ": intact version remains listed beside a damage count",
+      list.entries.length === 1 && list.entries[0].id === meta.id && list.damaged === 2, JSON.stringify(list));
+    const got = await historyCall(app.cdp, "historyGet", [{ docId }, meta.id]);
+    record(tag + ": intact version remains readable", got && got.stateJson === body, "");
+    const bad = await historyCall(app.cdp, "historyGet", [{ docId }, "damaged"]);
+    const empty = await historyCall(app.cdp, "historyGet", [{ docId }, "empty"]);
+    record(tag + ": damaged entries return null", bad === null && empty === null, JSON.stringify({ bad, empty }));
+    const onlyBad = await historyCall(app.cdp, "historyList", [damagedDocId]);
+    record(tag + ": damaged-only history reports damage", onlyBad.entries.length === 0 && onlyBad.damaged === 1, JSON.stringify(onlyBad));
+    record(tag + ": reads leave the index bytes unchanged", fs.readFileSync(indexPath, "utf8") === before, "");
+    const again = await historyCall(app.cdp, "historyGet", [{ docId }, meta.id]);
+    record(tag + ": reads keep the shared body", again && again.stateJson === body, "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+async function caseHistoryOpaqueWrites(target) {
+  const tag = target.name + " history: opaque entries survive writes and backup retention";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const retentionDoc = randDocId(), oldDoc = randDocId(), capDoc = randDocId(), nullDoc = randDocId(), payloadDoc = randDocId();
+  const body = JSON.stringify({ rows: [], title: "Intact" });
+  const opaqueBody = "opaque body must remain";
+  const versions = () => Array.from({ length: 50 }, (_, i) => ({ meta: historyMeta({ id: "intact" + i, atMs: 1000 + i }), body }));
+  const index = seedHistoryV2OnDisk(userDataDir, {
+    [retentionDoc]: versions(),
+    [oldDoc]: [...versions(), { meta: historyMeta({ id: "oldbad", atMs: 1 }), body: opaqueBody }],
+    [capDoc]: [{ meta: historyMeta({ id: "target", atMs: 1000 }), body }],
+    [nullDoc]: [{ meta: historyMeta({ id: "intact", atMs: 1000 }), body }],
+    [payloadDoc]: [{ meta: historyMeta({ id: "seed", atMs: 1000 }), body }]
+  });
+  const future = { id: "future", atMs: 1e100, sha: historyShaHex(body), sizeBytes: 5 * 1024 * 1024 };
+  index.buckets[retentionDoc].snapshots.push(future);
+  index.buckets[capDoc].snapshots.push(future);
+  index.buckets[nullDoc].snapshots.push(null);
+  const opaque = index.buckets[oldDoc].snapshots.find((entry) => entry.id === "oldbad");
+  opaque.label = { toString: null };
+  const opaqueBytes = JSON.stringify(opaque);
+  const payload = { raw: ["  unchanged  ", null], sha: historyShaHex(body) };
+  index.buckets[payloadDoc].snapshots = payload;
+  fs.writeFileSync(path.join(historyDirOnDisk(userDataDir), "index.json"), JSON.stringify(index));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-opaque-writes", userDataDir, env: { SPLITPAGE_TEST_HISTORY_CAP_BYTES: String(5 * 1024 * 1024) } });
+    await waitForRows(app.cdp, 20000);
+    const call = (name, args) => historyCall(app.cdp, name, args);
+    const put = await call("historyPut", [retentionDoc, historyMeta({ id: "retention-backup", atMs: 2000 }), body]);
+    const listed = await call("historyList", [retentionDoc]);
+    record(tag + ": fifty readable versions retain their allowance beside a damaged future entry",
+      put.ok === true && put.evicted === 1 && listed.entries.length === 50 && listed.damaged === 1, JSON.stringify({ put, count: listed.entries.length }));
+    record(tag + ": the new backup remains readable after trimming",
+      (await call("historyGet", [{ docId: retentionDoc }, "retention-backup"]))?.stateJson === body, "");
+    await call("historyPut", [oldDoc, historyMeta({ id: "prune-backup", atMs: 2000 }), body]);
+    await call("historyTouch", [oldDoc, "Opened again"]);
+    record(tag + ": pruning keeps opaque metadata byte for byte",
+      JSON.stringify(historyBucketOnDisk(userDataDir, oldDoc).snapshots.find((entry) => entry?.id === "oldbad")) === opaqueBytes, "");
+    record(tag + ": pruning keeps the opaque entry's body",
+      fs.readFileSync(historyBodyPathOnDisk(userDataDir, historyShaHex(opaqueBody)), "utf8") === opaqueBody, "");
+    const capPut = await call("historyPut", [capDoc, historyMeta({ id: "cap-backup", atMs: 2000 }), body, { protect: [{ docId: capDoc, id: "target" }] }]);
+    record(tag + ": a cap-sized damaged future entry cannot consume a successful backup",
+      capPut.ok === true && (await call("historyGet", [{ docId: capDoc }, "cap-backup"]))?.stateJson === body, JSON.stringify(capPut));
+    record(tag + ": the protected restore target is retained",
+      (await call("historyGet", [{ docId: capDoc }, "target"]))?.stateJson === body, "");
+    const nullPut = await call("historyPut", [nullDoc, historyMeta({ id: "null-backup", atMs: 2000 }), body]);
+    record(tag + ": null damage cannot block a new backup and remains opaque",
+      nullPut.ok === true && historyBucketOnDisk(userDataDir, nullDoc).snapshots.includes(null) &&
+        (await call("historyGet", [{ docId: nullDoc }, "null-backup"]))?.stateJson === body, JSON.stringify(nullPut));
+    await call("historyTouch", [payloadDoc, "Opened"]);
+    record(tag + ": touch quarantines the exact malformed payload",
+      JSON.stringify(historyBucketOnDisk(userDataDir, payloadDoc).damagedSnapshots) === JSON.stringify(payload), "");
+    const payloadPut = await call("historyPut", [payloadDoc, historyMeta({ id: "payload-backup", atMs: 2000 }), body]);
+    await call("historyCopy", [retentionDoc, payloadDoc]);
+    await call("historyTouch", [payloadDoc, "Opened after pruning"]);
+    const payloadList = await call("historyList", [payloadDoc]);
+    record(tag + ": save and prune keep the quarantined payload and its notice",
+      payloadPut.ok === true && JSON.stringify(historyBucketOnDisk(userDataDir, payloadDoc).damagedSnapshots) === JSON.stringify(payload) && payloadList.damaged === 1, "");
+    record(tag + ": a new backup remains readable alongside quarantine",
+      (await call("historyGet", [{ docId: payloadDoc }, "payload-backup"]))?.stateJson === body, "");
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
@@ -4735,10 +4885,10 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
     const tabCId = await shell(cdpA, "createTab", {});
     cdpC = await connectTab(app, tabCId);
     await waitForRows(cdpC, 20000);
-    await addMarkerRow(cdpC, markerC);
+    const edited = await editLastCell(cdpC, markerC);
     const dirtyC = await pollShellState(cdpA, (l) => l.windows.some((w) => w.tabs.some((t) => t.tabId === tabCId && t.dirty)), 4000).catch(() => null);
     const took = Date.now() - started;
-    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
+    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!edited && !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
 
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": answering 'close' to exactly two questions closes and the app exits", exited === true && app.proc.exitCode === 0,
@@ -5542,6 +5692,7 @@ async function runTargetSuite(target, groupFilter) {
     ["session restore", () => caseSessionRestore(target, fixturesDir)],
     ["update status", () => caseUpdateStatus(target), hookFree],
     ["update download", () => caseUpdateDownload(target), hookFree],
+    ["update invalid feed", () => caseUpdateInvalidFeed(target), hookFree],
     ["update without a checksum", () => caseUpdateNoChecksum(target), hookFree],
     ["unsaved-changes close", () => caseUnsavedChangesClose(target), hookFree],
     ["close authority (no user gesture)", () => caseCloseAuthorityNoGesture(target)],
@@ -5567,6 +5718,8 @@ async function runTargetSuite(target, groupFilter) {
     ["history: id validation", () => caseHistoryIdValidation(target), hookFree],
     ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target), hookFree],
     ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target), hookFree],
+    ["history: damaged entries preserve intact versions", () => caseHistoryDamagedEntries(target), hookFree],
+    ["history: opaque entries survive writes and backup retention", () => caseHistoryOpaqueWrites(target), hookFree],
     ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target), hookFree],
     ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target), hookFree],
     ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target), hookFree],

@@ -53,7 +53,6 @@ function isBucket(v: unknown) {
 function recordOf(row: IdbHistoryRow) {
   const out = {} as HistoryIndexRecord;
   Object.keys(row).forEach(function (k) { if (k !== "bucket") out[k] = row[k]; });
-  if (!Array.isArray(out.snapshots)) out.snapshots = [];
   return out;
 }
 

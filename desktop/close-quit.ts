@@ -68,10 +68,10 @@ function createCloseQuit({
       .then((gone) => fileTabs.filter((tab, i) => gone[i] && tabs.get(tab.id) === tab));
   }
 
-  function askAboutUnsaved(list: DesktopMainTab[], verb: string, parentWin: BrowserWindow | undefined) {
+  function askAboutUnsaved(list: DesktopMainTab[], verb: string, parentWin: BrowserWindow | undefined, gone: DesktopMainTab[] = []) {
     if (!list.length) return "discard";
     const decision = buildUnsavedDialog(list, verb, parentWin);
-    if (decision === "review") reviewFirstUnsaved(list);
+    if (decision === "review") reviewFirstUnsaved(list, gone);
     return decision;
   }
 
@@ -111,11 +111,22 @@ function createCloseQuit({
     return decisionFor(spec, dialog.showMessageBoxSync(parentWin, spec.options));
   }
 
-  function reviewFirstUnsaved(list: DesktopMainTab[]) {
+  function reviewFirstUnsaved(list: DesktopMainTab[], gone: DesktopMainTab[]) {
     const first = list[0];
     if (!first || !tabs.has(first.id)) return;
     activateTab(first.id);
     focusWindow(first.windowId);
+    if (!gone.includes(first)) return;
+    const win = windowsById.get(first.windowId)?.win;
+    dialog.showMessageBoxSync(win && !win.isDestroyed() ? win : undefined, {
+      type: "warning",
+      buttons: ["OK"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Splitpage",
+      message: "This file is unavailable",
+      detail: `${first.title || "Untitled"}\n\nThe file may have been moved, deleted, or become unreadable. Your script is still open. Choose Save a copy to save it to a new file.`
+    });
   }
 
   function settleDraftsForClose(tabIds: (string | undefined)[], discardUnsaved: boolean, reason: string) {
@@ -132,6 +143,9 @@ function createCloseQuit({
   }
 
   function attachWindowClose(win: BrowserWindow, rec: DesktopMainWindow) {
+    // why: The old window record must finish teardown before a fresh macOS window can replace its saved layout.
+    if (process.platform === "darwin" && !quitKeepingDrafts && !quitConfirmed && !sessionEnding
+      && windowsById.size === 1 && windowsById.get(rec.id) === rec) sessionWritesFrozen = false;
     win.on("close", (event) => {
       if (quitConfirmed || sessionEnding) {
         closeConfirmedWindows.add(win);
@@ -260,13 +274,7 @@ function createCloseQuit({
         sessionWritesFrozen = true;
       };
 
-      if (!tabIds.some((id) => tabHasFile(tabs.get(id)))) {
-        const unsaved = unsavedTabsOf(tabIds, []);
-        if (askAboutUnsaved(unsaved, "Quit", parentOf(unsaved)) !== "discard") {
-          stayOpen();
-          event.preventDefault();
-          return;
-        }
+      if (!tabIds.some((id) => tabHasFile(tabs.get(id))) && !unsavedTabsOf(tabIds, []).length) {
         confirmQuit(tabIds);
         return;
       }

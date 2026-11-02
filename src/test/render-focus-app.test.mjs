@@ -64,6 +64,62 @@ function fresh(title, build = fixture) {
   return currentDocument();
 }
 
+test("the length editor keeps its row style through full and row repaints until it closes (#515)", () => {
+  fresh("Length repaint");
+  const input = openLength("r1");
+  const row = document.querySelector('#rows .row[data-id="r1"]');
+  assert.ok(row.classList.contains("is-setting-length"));
+  assert.equal(renderAbsorbed(), true);
+  assert.equal(lengthBox(), input);
+  assert.equal(document.activeElement, input);
+  assert.ok(row.classList.contains("is-setting-length"));
+  assert.equal(renderRow("r1"), true);
+  assert.equal(lengthBox(), input);
+  assert.ok(row.classList.contains("is-setting-length"));
+  input.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(lengthBox(), null);
+  assert.equal(row.classList.contains("is-setting-length"), false);
+  assert.equal(renderAbsorbed(), true);
+  assert.equal(row.classList.contains("is-setting-length"), false);
+});
+
+for (const remaining of [["r1", "r2"], ["r2"], []]) {
+  test("Redraw focuses the Writer directly with remaining scenes " + JSON.stringify(remaining) + " (#468)", () => {
+    fresh("Writer redraw");
+    writer.openWriter();
+    para("r1").focus();
+    const title = document.getElementById("doc-title");
+    const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+    Object.defineProperty(title, "value", { configurable: true, get() { return descriptor.get.call(this); }, set() { throw new Error("redraw fault"); } });
+    const oldError = console.error;
+    console.error = () => {};
+    try {
+      assert.equal(renderAbsorbed(), false);
+      loadTestDocument(migrateRows({ title: "Writer redraw", rows: remaining.map(id => ({ id, audioText: id })) }));
+      writer.renderWriter();
+    } finally {
+      delete title.value;
+      console.error = oldError;
+    }
+    const focused = [];
+    const heard = event => { focused.push(event.target); };
+    const rows = document.getElementById("rows");
+    rows.addEventListener("focusin", heard);
+    try {
+      const toast = Array.from(document.querySelectorAll(".toast.has-action:not(.is-leaving)")).find(el => el.firstChild.nodeValue === REDRAW);
+      assert.ok(toast);
+      toast.querySelector(".toast-action").focus();
+      toast.querySelector(".toast-action").click();
+      assert.equal(document.activeElement, document.querySelector("#writer-doc .wr-para") || document.getElementById("wr-close"));
+      assert.deepEqual(focused, []);
+      assert.equal(document.body.classList.contains("is-stale-screen"), false);
+    } finally {
+      rows.removeEventListener("focusin", heard);
+      writer.closeWriter();
+    }
+  });
+}
+
 const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
 const gridCell = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + (field || "audioText") + '"]');
 const audio = (id) => currentDocument().rows.find((r) => r.id === id).audioText;
