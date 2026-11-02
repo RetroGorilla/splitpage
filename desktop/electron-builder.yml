@@ -22,9 +22,9 @@ files:
   - ipc-print.ts
   - print-pdf.ts
   - prompter-share.ts
-  - close-quit.js
+  - close-quit.ts
   - session-restore.ts
-  - close-keep.js
+  - close-keep.ts
   - quit-watchdog.ts
   - blob-store.ts
   - voice-composition.ts

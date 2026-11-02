@@ -1,12 +1,25 @@
 "use strict";
 
+import type { BrowserWindow } from "electron";
+import type { DesktopMainCommon, DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { decisionFor } from "./unsaved-dialog.ts";
+
+export type CloseCheckDecision = ReturnType<typeof decisionFor>;
+export interface CloseCheckIo extends Pick<DesktopMainCommon, "tabs"> {
+  goneFileTabsOf: (ids: (string | undefined)[]) => Promise<DesktopMainTab[]>;
+  unsavedTabsOf: (ids: (string | undefined)[], gone: DesktopMainTab[]) => DesktopMainTab[];
+  askAboutUnsaved: (list: DesktopMainTab[], verb: string, parent: BrowserWindow | undefined) => CloseCheckDecision;
+  keepDraftsOfGoneFiles: (tabs: DesktopMainTab[], holder: object) => Promise<DesktopMainTab[]>;
+  report: (verb: string, error: unknown) => void;
+}
+
 const FILE_CHECK_TIMEOUT_MS = 1000;
 
-function checkFileGone(stat, absPath, timeoutMs) {
-  return new Promise((resolve) => {
+function checkFileGone(stat: (path: string) => unknown, absPath: string, timeoutMs: number) {
+  return new Promise<boolean>((resolve) => {
     let settled = false;
-    let timer = null;
-    const finish = (gone) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const finish = (gone: boolean) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
@@ -16,39 +29,39 @@ function checkFileGone(stat, absPath, timeoutMs) {
     let pending;
     try { pending = Promise.resolve(stat(absPath)); } catch { finish(true); return; }
     pending.then(
-      (s) => finish(!(s && typeof s.isFile === "function" && s.isFile())),
+      (s) => finish(!(s && typeof (s as { isFile?: unknown }).isFile === "function" && (s as { isFile: () => unknown }).isFile())),
       () => finish(true)
     );
   });
 }
 
-function copyKept(result, hasDraft) {
-  return !!(result && result.ok === true) && hasDraft === true;
+function copyKept(result: unknown, hasDraft: boolean) {
+  return !!(result && (result as { ok?: unknown }).ok === true) && hasDraft === true;
 }
 
-function holdKeep(tab, holder) {
+function holdKeep(tab: Pick<DesktopMainTab, "keepHolders" | "keepDraftOnClose">, holder: object) {
   if (!(tab.keepHolders instanceof Set)) tab.keepHolders = new Set();
   tab.keepHolders.add(holder);
   tab.keepDraftOnClose = true;
 }
 
-function releaseKeep(tab, holder) {
+function releaseKeep(tab: Pick<DesktopMainTab, "keepHolders" | "keepDraftOnClose">, holder: object) {
   if (!(tab.keepHolders instanceof Set)) return;
   tab.keepHolders.delete(holder);
   if (!tab.keepHolders.size) tab.keepDraftOnClose = false;
 }
 
-function runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted) {
+function runCloseCheck(io: CloseCheckIo, tabIdsNow: () => (string | undefined)[], verb: string, parentOf: (tabs: DesktopMainTab[]) => BrowserWindow | undefined, stillWanted: () => boolean) {
   const holder = { verb };
-  const held = [];
-  const asked = [];
-  const answered = new Set();
-  const ask = (list) => {
+  const held: DesktopMainTab[] = [];
+  const asked: (string | undefined)[] = [];
+  const answered = new Set<string | undefined>();
+  const ask = (list: DesktopMainTab[]) => {
     const answer = io.askAboutUnsaved(list, verb, parentOf(list));
     if (answer === "discard") for (const tab of list) answered.add(tab.id);
     return answer;
   };
-  const round = (ids) => {
+  const round = (ids: (string | undefined)[]): Promise<CloseCheckDecision> => {
     asked.push(...ids);
     return io.goneFileTabsOf(ids).then((gone) => {
       if (!stillWanted()) return "cancel";
@@ -63,7 +76,7 @@ function runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted) {
       });
     }).then(next);
   };
-  const next = (answer) => {
+  const next = (answer: CloseCheckDecision): CloseCheckDecision | Promise<CloseCheckDecision> => {
     if (answer !== "discard") return answer;
     const now = tabIdsNow();
     const added = now.filter((id) => !asked.includes(id));
@@ -73,7 +86,7 @@ function runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted) {
   };
   return Promise.resolve()
     .then(() => round(tabIdsNow()))
-    .catch((err) => {
+    .catch((err): CloseCheckDecision => {
       io.report(verb, err);
       return "cancel";
     })
@@ -84,8 +97,10 @@ function runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted) {
     });
 }
 
-function lastWindowClose(othersOpen) {
+function lastWindowClose(othersOpen: boolean) {
   return { freezeSession: !othersOpen };
 }
+
+export type { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS };
 
 module.exports = { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS };
