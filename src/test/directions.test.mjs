@@ -24,7 +24,7 @@ import { fromHtml } from "../bootstrap/richtext.ts";
 import { mergeCells } from "../core/merge/cells.ts";
 import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { toHtml } from "../core/text/html.ts";
-import { clipboardOfCell } from "../features/clipboard/cell-clipboard.js";
+import { clipboardOfCell } from "../features/clipboard/cell-clipboard.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 
 import { startFind as initFind, replaceInHtml } from "../features/find/find.ts";
