@@ -25,14 +25,22 @@ function keepPending(images: ImageIngestion): void {
 export function withDocumentPorts<T>(fields: readonly StateField[], pass: (ports: MigratePorts) => T): T {
   const images = createImageIngestion(blobStore.recordFor);
   let text: RichText | null = null;
+  let textIds = randomIds;
   function richText(): RichText {
-    if (!text) text = createRichText({ DOMParser: DOMParser, images: images, ids: randomIds });
+    if (!text) text = createRichText({ DOMParser: DOMParser, images: images, ids: textIds });
     return text;
   }
   try {
     return pass({
       images: images,
-      sanitize: function (html) { return richText().sanitize(html); },
+      sanitize: function (html, ids) {
+        if (ids && ids !== textIds) { textIds = ids; text = null; }
+        return richText().sanitize(html);
+      },
+      htmlIds: function (html) {
+        return Array.from(richText().inertBody(html).getElementsByTagName("*"))
+          .flatMap(el => [el.getAttribute("data-cmt") || "", el.getAttribute("data-broll-id") || ""]);
+      },
       decode: function (html, opts) { return richText().decode(html, opts); },
       videoCardHtml: function (href) { return richText().videoCardHtml(href); },
       readers: productionReaders,

@@ -3,11 +3,12 @@
 # spreadsheet option"). The Spreadsheet, Breakdown and B-roll shot list
 # cards each offer Excel (.xlsx) beside CSV (.csv) under Format — Excel
 # first, so a first visit picks it; the b-roll list keeps its PDF first.
-# Each choice runs its own hidden File-menu button (export-xlsx,
-# export-breakdown-xlsx, export-broll-xlsx, 18-local-files.js) over the
-# builders in 16b-xlsx.js. The sketch is the CSV's grid dressed as a
-# workbook: the header row ruled off, the sheet tabs under it — only the
-# sheets the file will have. 18c-export-dialog.js, 18d-command-menu.js.
+# Each choice invokes its export action (export-xlsx,
+# export-breakdown-xlsx, export-broll-xlsx) over the
+# builders in src/adapters/formats/xlsx.ts. The sketch is the CSV's grid
+# dressed as a workbook: the header row ruled off, the sheet tabs under it —
+# only the sheets the file will have. The export dialog and command menu live
+# under src/features/.
 #
 # Files are caught at deliverFile's URL.createObjectURL, named from the
 # <a download> (as 98 does); a workbook is unzipped in the page from its

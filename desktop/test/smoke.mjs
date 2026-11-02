@@ -978,11 +978,17 @@ async function caseFirstSaveTitle(target, fixturesDir) {
     app = await launchApp(target, { label: "first-save-title", dialogs: [null, first, copy] });
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
+    // why: Rows can mount before first-run setup decides; native Save correctly refuses behind that wizard.
+    await evalPage(cdp, "window.__onboarding.autoShowDecided()");
+    await evalPage(cdp, "(function(){var m=document.getElementById('onboarding-modal');if(!m.hidden)m.querySelector('[data-onboard-action=skip]').click();return true;})()");
+    record(tag + ": first-run setup is closed before starting a new script", await evalPage(cdp,
+      "document.getElementById('onboarding-modal').hidden === true"));
     await evalPage(cdp, "document.querySelector('[data-newtab-action=new]').click(); true");
     await poll(cdp, "window.__splitpageFormats.state().title === 'Untitled Script'", 5000);
     const seen = await dialogsSeen(cdp);
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
-    await waitForDialogAnswered(cdp, seen);
+    const cancelled = await waitForDialogAnswered(cdp, seen);
+    record(tag + ": cancelled first save reaches the native dialog", cancelled);
     record(tag + ": cancelled first save leaves title and tag alone", await evalPage(cdp,
       "window.__splitpageFormats.state().title === 'Untitled Script' && !window.__splitpageFormats.state().titleVersion && !window.__splitpageFormats.writtenOut()"));
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
@@ -4879,10 +4885,10 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
     const tabCId = await shell(cdpA, "createTab", {});
     cdpC = await connectTab(app, tabCId);
     await waitForRows(cdpC, 20000);
-    await addMarkerRow(cdpC, markerC);
+    const edited = await editLastCell(cdpC, markerC);
     const dirtyC = await pollShellState(cdpA, (l) => l.windows.some((w) => w.tabs.some((t) => t.tabId === tabCId && t.dirty)), 4000).catch(() => null);
     const took = Date.now() - started;
-    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
+    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!edited && !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
 
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": answering 'close' to exactly two questions closes and the app exits", exited === true && app.proc.exitCode === 0,

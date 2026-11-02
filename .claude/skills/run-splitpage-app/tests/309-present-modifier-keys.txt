@@ -79,7 +79,7 @@ expect !document.getElementById('prompter-scroll').classList.contains('flip')
 # --- typing in a field while Present is open: "foo mix" ------------------------
 # The f and m are typed into the field, not taken as the shortcuts, and the
 # space is kept rather than swallowed to play the text.
-eval (function(){ var i = document.createElement('input'); i.id = 'zz-309-field'; document.body.appendChild(i); i.focus(); return document.activeElement === i; })()
+eval (function(){ var i = document.createElement('input'); i.id = 'zz-309-field'; document.getElementById('prompter').appendChild(i); i.focus(); return document.activeElement === i; })()
 press foo mix
 sleep 300
 expect document.getElementById('zz-309-field').value == foo mix
@@ -102,7 +102,7 @@ eval window.__cellText = document.querySelector('#rows .row:nth-child(1) .audio-
 expect window.__cellText.length > 0
 click #btn-present
 wait !document.getElementById('prompter').hidden
-expect document.activeElement.closest('#rows') !== null
+expect document.activeElement.closest('#prompter') !== null
 press mf
 sleep 300
 expect document.getElementById('prompter-scroll').classList.contains('mirror')

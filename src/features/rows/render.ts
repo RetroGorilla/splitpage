@@ -19,6 +19,7 @@ import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
+import { writerFocusTarget } from "../common/writer-focus.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import { slotPoster } from "../common/gallery.ts";
@@ -421,6 +422,7 @@ function newRowEl(row: Row, index: number): SignedRow {
 }
 
 function resetRowShell(rowEl: Element, cls: string): void {
+  if (rowEl.classList.contains("is-setting-length") && rowEl.querySelector(".row-read-input")) cls += " is-setting-length";
   if (rowEl.className !== cls) rowEl.className = cls;
   for (let i = rowEl.attributes.length - 1; i >= 0; i--) {
     const name = (rowEl.attributes[i] as Attr).name;
@@ -762,7 +764,6 @@ function offerRedraw(failed: string): void {
   toast.removeEventListener("click", toast.dismiss);
   toast.removeAttribute("title");
   toast.classList.add("is-held");
-  toast.setAttribute("role", "alert");
 }
 
 function focusPlace(el: Element): StalePlace | null {
@@ -798,7 +799,12 @@ function releaseStaleScreen(): void {
   const place = state.staleFocus;
   state.staleFocus = null;
   const active = document.activeElement;
-  if (!place || (active && active !== document.body && !(state.redrawToast && state.redrawToast.contains(active)))) return;
+  if (active && active !== document.body && !(state.redrawToast && state.redrawToast.contains(active))) return;
+  if (ports.view().writerOpen()) {
+    writerFocusTarget(document)?.focus({ preventScroll: true });
+    return;
+  }
+  if (!place) return;
   const target = place.id ? document.getElementById(place.id) : document.querySelector<HTMLElement>(
     '#rows .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
   if (!target) return;
@@ -814,6 +820,10 @@ function releaseStaleScreen(): void {
 
 function refuseOnStaleScreen(e: Event): void {
   if (!state.screenStale) return;
+  if (!state.redrawToast?.isConnected || state.redrawToast.classList.contains("is-leaving")) {
+    offerRedraw(state.redrawToast?.firstChild?.textContent || REDRAW_FAILED);
+    state.redrawToast?.querySelector<HTMLElement>(".toast-action")?.focus();
+  }
   const t = e.target as Element | null;
   if (!(t && t.closest && t.closest(STALE_PARTS))) return;
   e.preventDefault();

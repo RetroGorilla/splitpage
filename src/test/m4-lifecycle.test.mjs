@@ -93,6 +93,9 @@ function useDocument(doc) {
 async function settle(clock) {
   clock.tick(40000);
   for (let turn = 0; turn < 40; turn++) await new Promise((resolve) => setImmediate(resolve));
+  const host = document.getElementById("toast-host");
+  for (let turn = 0; host.children.length && turn < 100; turn++) await new Promise((resolve) => window.setTimeout(resolve, 50));
+  assert.equal(host.children.length, 0, "transient notices expire before the lifetime ledger");
 }
 
 async function finish(clock) {
