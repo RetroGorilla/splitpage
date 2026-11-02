@@ -112,19 +112,19 @@ function maybeAutoDetectTwoColumn(text: string) {
 }
 
 function updateImportPreview() {
-  const el0 = ((document as Document).getElementById("import-preview") as HTMLElement);
+  const el0 = (document as Document).getElementById("import-preview");
   if (pendingFileRows) {
     const n0 = pendingFileRows.length;
-    el0.textContent = pendingFileName + " — this will create " + n0 + " row" + (n0 === 1 ? "" : "s") +
+    (el0 as HTMLElement).textContent = pendingFileName + " — this will create " + n0 + " row" + (n0 === 1 ? "" : "s") +
       ", columns and formatting kept. Type below to use pasted text instead.";
     return;
   }
   const text = ((document as Document).getElementById("import-textarea") as HTMLTextAreaElement).value;
   const mode = getImportMode();
   const rows = parseImportRows(text, mode);
-  const el = ((document as Document).getElementById("import-preview") as HTMLElement);
+  const el = (document as Document).getElementById("import-preview");
   if (!(rows as NonNullable<typeof rows>).length) {
-    el.textContent = "Paste some text to see a preview.";
+    (el as HTMLElement).textContent = "Paste some text to see a preview.";
     return;
   }
   const n = (rows as NonNullable<typeof rows>).length;
@@ -132,9 +132,9 @@ function updateImportPreview() {
   if (mode === "twocolumn") {
     const v = truncateForPreview(((rows as NonNullable<typeof rows>)[0] as NonNullable<typeof rows>[number]).visualText, 34) || "(empty)";
     const a = truncateForPreview(((rows as NonNullable<typeof rows>)[0] as NonNullable<typeof rows>[number]).audioText, 34) || "(empty)";
-    el.textContent = "This will create " + label + " — first row: Visual “" + v + "” / Audio “" + a + "”";
+    (el as HTMLElement).textContent = "This will create " + label + " — first row: Visual “" + v + "” / Audio “" + a + "”";
   } else {
-    el.textContent = "This will create " + label + " — first: “" + truncateForPreview(((rows as NonNullable<typeof rows>)[0] as NonNullable<typeof rows>[number]).audioText, 70) + "”";
+    (el as HTMLElement).textContent = "This will create " + label + " — first: “" + truncateForPreview(((rows as NonNullable<typeof rows>)[0] as NonNullable<typeof rows>[number]).audioText, 70) + "”";
   }
 }
 
