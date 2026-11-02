@@ -149,7 +149,7 @@ export interface DesktopWireHistoryRead {
 
 export interface DesktopWireHistoryDoc {
   docId: string;
-  title: string;
+  title: unknown;
   lastOpenedAt: number;
 }
 

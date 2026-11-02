@@ -111,7 +111,7 @@ const APP_ROOT = app.isPackaged
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
 const historyPolicy = require(path.join(SHARED_ROOT, "history-policy.js"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
-const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.js"));
+const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.ts"));
 const {
   DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
 } = require(path.join(SHARED_ROOT, "doc-id-policy.js"));

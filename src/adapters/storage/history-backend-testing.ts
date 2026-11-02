@@ -1,6 +1,6 @@
 import { historyMemoryInspection, historyIdbInspection } from "./history-inspection-testing.ts";
 import { createHistoryTestFaults } from "./history-fault-queue.ts";
-import { createMemoryHistoryBackend } from "../../../shared/history-store.js";
+import { createMemoryHistoryBackend } from "../../../shared/history-store.ts";
 import { createIdbHistoryBackend } from "./03c-history-idb.ts";
 import type { HistoryBackendAccess, HistoryBackendProbe } from "./history-backends.ts";
 import type { HistoryFaultBackend } from "./history-backend-types.ts";
