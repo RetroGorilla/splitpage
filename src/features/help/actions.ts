@@ -1,5 +1,5 @@
 import type { ActionDefinition } from "../../application/actions.ts";
-import { availableUnless } from "../../application/screen.ts";
+import { availableUnless, EVERY_OVERLAY } from "../../application/screen.ts";
 import type { HelpActionPorts, HelpControls } from "./ports.ts";
 
 export function helpActions(current: () => HelpControls | null, ports: HelpActionPorts): ActionDefinition[] {
@@ -22,7 +22,7 @@ export function helpActions(current: () => HelpControls | null, ports: HelpActio
       group: "Help",
       icon: "i-compass",
       words: "tutorial walkthrough introduction",
-      availability,
+      availability: () => current() ? availableUnless(["loading", ...EVERY_OVERLAY], ports.screen()) : { enabled: false },
       run: () => { current()?.startTour(); }
     }
   ];

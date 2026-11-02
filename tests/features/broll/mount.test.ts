@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mountBroll } from "../../../src/features/broll/mount.ts";
 import type { BrollPorts } from "../../../src/features/broll/mount.ts";
 import { jsdomWindow } from "../editing/jsdom.mjs";
+import { fakeScreen } from "../fakes.ts";
 
 type Realm = Window & typeof globalThis;
 const targets: Record<string, string[]> = {
@@ -19,9 +20,11 @@ function harness() {
   const el = (id: string): HTMLElement => doc.getElementById(id) as HTMLElement;
   el("broll-page").innerHTML = '<button id="broll-page-close"></button><select id="broll-page-group"><option value="scene">Scene</option></select><textarea class="broll-page-note"></textarea>';
   const calls: string[] = [];
+  const view = fakeScreen();
   const state = { page: false, menus: false, selected: false };
   const log = (name: string) => (): void => { calls.push(name); };
   const ports: BrollPorts = {
+    screen: view.screen,
     click: (_event, root) => { calls.push("click:" + root.id); },
     change: log("change"), focusout: log("focusout"),
     keydown: log("keydown"), input: log("input"), add: log("add"),
@@ -55,8 +58,28 @@ function harness() {
     target.dispatchEvent(event);
     return event;
   }
-  return { win, doc, el, calls, state, ports, records, order, fire, mount: () => mountBroll({ window: win, ports }) };
+  return { win, doc, el, calls, state, ports, view, records, order, fire, mount: () => mountBroll({ window: win, ports }) };
 }
+
+test("shot-list Escape and focus yield to the screen overlay in front", () => {
+  const h = harness();
+  const owner = h.mount();
+  h.state.page = true;
+  h.doc.body.insertAdjacentHTML("beforeend", '<input id="outside">');
+  try {
+    for (const blocker of ["dialog", "launcher", "tour", "prompter", "writer"] as const) {
+      h.view.state[blocker] = true;
+      h.fire(h.win, "keydown", { key: "Escape" });
+      assert.equal(h.state.page, true, blocker);
+      h.el("outside").focus();
+      assert.equal(h.doc.activeElement, h.el("outside"), blocker);
+      h.el("outside").blur();
+      h.view.state[blocker] = false;
+    }
+    h.fire(h.win, "keydown", { key: "Escape" });
+    assert.equal(h.state.page, false);
+  } finally { owner.dispose(); h.win.close(); }
+});
 
 test("b-roll: all 19 S28 registrations preserve order, phase and multiplicity across disposal and remount", () => {
   const h = harness();
@@ -99,10 +122,12 @@ test("b-roll: page delegates run before page-specific changes and Enter blur; Es
   assert.deepEqual(h.calls, ["keydown", "blur"]);
   h.state.page = true;
   h.doc.body.insertAdjacentHTML("beforeend", '<div class="modal-backdrop"></div>');
+  h.view.state.dialog = true;
   h.calls.length = 0;
   h.fire(h.win, "keydown", { key: "Escape" });
   assert.deepEqual(h.calls, []);
   h.doc.querySelector(".modal-backdrop")?.remove();
+  h.view.state.dialog = false;
   const event = new h.win.Event("keydown", { cancelable: true });
   Object.defineProperty(event, "key", { value: "Escape" });
   event.preventDefault();

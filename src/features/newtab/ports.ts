@@ -17,6 +17,7 @@ import type { DocumentDestination } from "../../application/transitions/ports.ts
 import type { Transitions } from "../../application/transitions/transitions.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { IdSource } from "../../core/document/ports.ts";
+import type { ScreenState } from "../../application/screen.ts";
 
 export interface NewTabMount {
   readonly closeNewTabPage: () => void;
@@ -31,6 +32,7 @@ interface StarterChoice {
 }
 
 export interface NewTabPorts {
+  readonly screen: () => ScreenState;
   readonly document: Pick<DocumentReader, "current">;
   readonly place: Pick<DocumentPlace, "home">;
   readonly desktop: () => boolean;
