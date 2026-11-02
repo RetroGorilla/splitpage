@@ -177,7 +177,7 @@ P1's `videoHostLabel` and `videoLinkText` helpers for video references.
 
 ## Browser print workflow (P4)
 
-The browser entry points all meet at `local-files.js`'s `exportAs`: the export
+The browser entry points all meet at `local-files.ts`'s `exportAs`: the export
 dialog button, the hidden File menu actions, the command menu and Export again.
 The Gear panel's packing button runs the gear action; the B-roll full page's
 Print button calls `exportAs("b-roll pdf")` with its current filter/page group.
@@ -349,7 +349,7 @@ absent, desktop otherwise), so the old builders had no caller left.
 
 The four PDF exporters (`pdf`, `packing-gear`, `packing-prop`, `b-roll pdf`)
 register only a `printPage`. `build` is optional in the registry, which
-refuses an exporter that has neither. `buildFileData` (`local-files.js`)
+refuses an exporter that has neither. `buildFileData` (`local-files.ts`)
 refuses a print-only kind; its other callers, import write-back and "save a
 separate copy", only ask for an imported file's own kind (`.docx`, `.md`,
 `.txt`, `.csv`). The export dialog's `printWorkflow` still reads the desktop

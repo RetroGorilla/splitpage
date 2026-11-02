@@ -105,7 +105,7 @@ test("project files: serialize the supplied export or capture before each codec 
 test("project files: opening and importing keep their requests and saving preserves options and promises", () => {
   const f = fixture();
   const { formats } = createProjectFiles(f.ports);
-  const file = { name: "project.splitpage" };
+  const file = new File([], "project.splitpage");
   const handle = { name: file.name };
   const options = { force: true, saveAs: true };
   assert.equal(formats.openFile(file, handle), f.openResult);

@@ -26,8 +26,10 @@ export interface EffectPorts<Item> {
   readonly clipboard: ClipboardPort;
 }
 
+export type BusyBarArguments<T> = [label: string, work: () => T | Promise<T>];
+
 export interface BusyNotices {
   readonly begin: (label: string) => unknown;
   readonly end: (token: unknown) => void;
-  readonly withBar: <T>(label: string, work: () => T | Promise<T>) => Promise<T>;
+  readonly withBar: <T>(...args: BusyBarArguments<T>) => Promise<T>;
 }

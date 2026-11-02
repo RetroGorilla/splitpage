@@ -22,7 +22,7 @@ function fixture() {
   win.document.body.innerHTML = '<button id="btn-broll"></button><div id="broll-panel" hidden>' +
     '<button id="filter" data-action="broll-filter" data-filter="flagged"></button></div>' +
     '<div id="broll-page" hidden><select id="broll-page-group"><option value="location">Location</option></select></div>';
-  const calls: string[] = [];
+  const calls: (string | null)[] = [];
   let open = false;
   const view = createBrollView({ read: () => storage.getItem("splitpage-broll-view"), write: (value) => { storage.setItem("splitpage-broll-view", value); } });
   const ports: BrollPanelPorts = {

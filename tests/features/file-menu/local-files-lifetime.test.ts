@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startLocalFileMenu } from "../../../src/features/file-menu/local-files.js";
+import { startLocalFileMenu } from "../../../src/features/file-menu/local-files.ts";
 import type { LocalFileMenuControls, LocalFileMenuPorts } from "../../../src/features/file-menu/local-files-ports.ts";
 import { createActionRegistry } from "../../../src/application/actions.ts";
 import { createExportRegistry } from "../../../src/application/export/registry.ts";
