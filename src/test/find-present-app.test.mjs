@@ -115,7 +115,12 @@ test("Present Find can jump through a script containing only visible stage direc
   assert.equal(document.querySelectorAll("#prompter-content .w").length, 0);
   openFindBar(); query("hold");
   assert.equal(el("find-count").textContent, "1 of 1");
-  assert.doesNotThrow(() => key(el("find-input"), "Enter"));
+  const errors = [];
+  const onError = event => { errors.push(event.error); };
+  window.addEventListener("error", onError);
+  try { key(el("find-input"), "Enter"); }
+  finally { window.removeEventListener("error", onError); }
+  assert.deepEqual(errors, []);
   assert.equal(present.playing(), false);
   closeFindBar(); present.closePrompter();
   present.setPrompterSceneMode(false);
