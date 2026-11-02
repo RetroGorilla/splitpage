@@ -29,6 +29,11 @@ test("pasting a newsletter link removes only the approved tracking names", () =>
   assert.equal(toHtml(cellFromClipboard(toHtml(cell), "Read this").cell), toHtml(cell));
 });
 
+test("non-paste insertion retains tracking hrefs", () => {
+  const cell = cellFromClipboard(link(tracked), "Read this", { cleanLinks: false }).cell;
+  assert.equal(cell[0].marks.href, tracked);
+});
+
 test("pasting into a comment cleans the incoming link and keeps existing links", () => {
   const box = document.createElement("div");
   box.className = "cell-editable";

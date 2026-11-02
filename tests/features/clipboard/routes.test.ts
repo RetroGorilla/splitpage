@@ -39,6 +39,7 @@ interface Held {
 function harness(p: ReturnType<typeof page>) {
   const state = { scenes: false, copied: true, owner: 0, owns: true, found: null as Element | null };
   const calls: string[] = [];
+  const origins: boolean[] = [];
   const held: Held[] = [];
   const mount = (): ClipboardRoutes => mountClipboardRoutes<Owner, string, Extra>({
     window: p.win,
@@ -57,10 +58,10 @@ function harness(p: ReturnType<typeof page>) {
       placeOf: (cell) => { calls.push("place:" + cell.id); return "place-" + cell.id; },
       restorePlace: (cell, place) => { calls.push("restore:" + cell.id + ":" + place); },
       findCell: (rowId, field) => { calls.push("find:" + rowId + "." + field); return state.found; },
-      insertNow: (cell, html, text, extra) => { calls.push("insert:" + cell.id + ":" + html + ":" + text + ":" + (extra ? extra.media : "none")); }
+      insertNow: (cell, html, text, extra, fromPaste) => { origins.push(fromPaste); calls.push("insert:" + cell.id + ":" + html + ":" + text + ":" + (extra ? extra.media : "none")); }
     }
   });
-  return { state, calls, held, mount };
+  return { state, calls, origins, held, mount };
 }
 
 function clip(p: ReturnType<typeof page>, type: string, target: EventTarget, data: { html?: string; text?: string; files?: File[] } | null): Event {
@@ -80,6 +81,22 @@ function release(held: Held[], at: number, extra: Extra): void {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
+
+test("only clipboard events mark insertions as pastes, including after asynchronous media reads", async () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  clip(p, "paste", p.byId("rows-script"), { html: "<b>x</b>", text: "x" });
+  routes.insert(p.byId("writer-script"), "<b>x</b>", "x", null);
+  const files = [new p.win.File(["x"], "a.png", { type: "image/png" })];
+  clip(p, "paste", p.byId("rows-script"), { html: "<b>x</b>", files });
+  routes.insert(p.byId("writer-script"), "<b>x</b>", "x", files);
+  release(h.held, 0, { media: "paste" });
+  release(h.held, 1, { media: "drop" });
+  await settle();
+  assert.deepEqual(h.origins, [true, false, true, false]);
+  routes.dispose();
+});
 
 test("copy and cut in a script cell call the clipboard once, and a real cut refreshes the cell that holds the caret", () => {
   const p = page();
