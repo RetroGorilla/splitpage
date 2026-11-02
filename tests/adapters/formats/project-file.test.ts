@@ -41,6 +41,16 @@ function file(name: string, text: string | Error): { name: string; text: () => P
 
 const DOC = JSON.stringify({ title: "T", rows: [{ id: "a", visualText: "v", audioText: "a" }] });
 
+test("a project with excessive richtext depth returns a refusal instead of a partial document (#461)", async () => {
+  for (const name of ['deep.splitpage', 'deep.html']) {
+    const { services } = fakes();
+    const raw = JSON.stringify({ schema: 2, title: 'Refused', rows: [{ id: 'r1', audioText: '<svg>' + '<div>'.repeat(5000) + 'KEEP' + '</p>'.repeat(5000) }] });
+    const source = name.endsWith('.html') ? '<script id="state-data" type="application/json">' + raw + '</script>' : raw;
+    const result = await parseProjectFileState(file(name, source), null, services);
+    assert.deepEqual(result, { error: 'richtext-depth', message: 'This content has more than 2,048 nested blocks and cannot be opened or pasted.' });
+  }
+});
+
 test("parseProjectFileState: names that are not project files are not opened, and an unreadable file says so", async () => {
   const { services } = fakes();
   assert.equal(await parseProjectFileState(file("notes.txt", DOC), null, services), null);

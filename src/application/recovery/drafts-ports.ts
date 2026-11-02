@@ -29,6 +29,7 @@ export interface DraftFileHandle {
 export type DraftParsedFile =
   | { readonly state: ValidatedDocument; readonly kind: string; readonly docIdEmbedded: boolean; readonly error?: undefined }
   | { readonly error: "unreadable" }
+  | { readonly error: "richtext-depth"; readonly message: string }
   | { readonly error: "not-splitpage" };
 
 export type DraftOpening = {

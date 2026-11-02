@@ -38,11 +38,9 @@ const PARSED_UNITS_PER_INPUT_UNIT = 8;
 
 const FREE_PARSED_UNITS = 4096;
 
-const PARAGRAPH_END = /<\/p(?=[\t\n\f\r />])/i;
-
 const DIV_START = /<div(?=[\t\n\f\r />])/i;
 
-const SCOPED_DIV_DEPTH = 32;
+const MAX_BLOCK_DEPTH = 2048;
 
 const NAME = 0;
 const BEFORE_NAME = 1;
@@ -229,7 +227,7 @@ function rawTextEnd(html: string, from: number, name: string): number {
   return html.length;
 }
 
-function modelTags(html: string, visit?: (token: Token, foreign: boolean) => void): Token[] {
+function modelTags(html: string, visit?: (token: Token) => void): Token[] {
   const tokens: Token[] = [];
   const found = new Map<string, number>();
   let foreign = 0;
@@ -246,7 +244,7 @@ function modelTags(html: string, visit?: (token: Token, foreign: boolean) => voi
       if (tag.end < html.length) {
         const token = { ...tag, name: name, closing: closing };
         if (FORMATTING_NAME.test(name)) tokens.push(token);
-        if (visit) visit(token, foreign > 0);
+        if (visit) visit(token);
       }
       if (FOREIGN_NAME.test(name)) foreign = closing ? Math.max(0, foreign - 1) : foreign + (tag.selfClosing ? 0 : 1);
       else if (!closing && !foreign) next = rawTextEnd(html, next, name);
@@ -377,66 +375,32 @@ function reopenLimit(inputLength: number): number {
   return REOPENED_PER_INPUT_UNIT * inputLength + FREE_REOPENED;
 }
 
-interface ScopedDiv {
-  readonly token: Token;
-  limited: boolean;
+export class RichTextDepthError extends RangeError {
+  constructor() {
+    super("This content has more than 2,048 nested blocks and cannot be opened or pasted.");
+    this.name = "RichTextDepthError";
+  }
 }
 
-// why: Stray paragraph ends scan deep block stacks before sanitizing can remove their shells.
-function boundedScopes(html: string, limit: number): string {
-  if (!PARAGRAPH_END.test(html) || !DIV_START.test(html)) return html;
-  const divs: ScopedDiv[] = [];
-  const open: ScopedDiv[] = [];
-  const pending = new Set<ScopedDiv>();
-  let paragraph = false;
-  let work = 0;
-  modelTags(html, function (token, foreign) {
-    if (foreign) return;
-    if (token.name === "div") {
-      paragraph = false;
-      const div = { token: token, limited: false };
-      divs.push(div);
-      if (token.closing) {
-        const closed = open.pop();
-        if (closed) pending.delete(closed);
-      } else {
-        work += open.length;
-        open.push(div);
-        pending.add(div);
-      }
-    } else if (token.name === "p") {
-      if (token.closing && !paragraph) {
-        work += open.length;
-        if (work > limit) {
-          pending.forEach(function (div) { div.limited = true; });
-          pending.clear();
-        }
-      }
-      paragraph = !token.closing;
-    }
-  });
+// why: Reject excessive nesting before the browser parses it; inserting closes can detach inline marks and comments.
+export function assertRichTextDepth(html: string): void {
+  if (!DIV_START.test(html)) return;
   let depth = 0;
-  const edits: Edit[] = [];
-  divs.forEach(function (div) {
-    if (div.token.closing) { depth = Math.max(0, depth - 1); return; }
-    if (div.limited && depth >= SCOPED_DIV_DEPTH) {
-      const close = depth - SCOPED_DIV_DEPTH + 1;
-      edits.push([div.token.at, div.token.at, "</div>".repeat(close)]);
-      depth -= close;
-    }
-    depth++;
+  modelTags(html, function (token) {
+    if (token.name !== "div") return;
+    depth = token.closing ? Math.max(0, depth - 1) : depth + 1;
+    if (depth > MAX_BLOCK_DEPTH) throw new RichTextDepthError();
   });
-  return edits.length ? applied(html, edits) : html;
 }
 
 export function boundedMarkup(html: string): string {
   const limit = reopenLimit(html.length);
-  const scoped = boundedScopes(html, limit);
-  if (reopenWork(scoped, limit) <= limit) return scoped;
-  const tokens = modelTags(scoped);
-  const plain = applied(scoped, plainEdits(scoped, tokens));
+  assertRichTextDepth(html);
+  if (reopenWork(html, limit) <= limit) return html;
+  const tokens = modelTags(html);
+  const plain = applied(html, plainEdits(html, tokens));
   if (reopenWork(plain, limit) <= limit) return plain;
-  const renamed = applied(scoped, renameEdits(scoped, tokens));
+  const renamed = applied(html, renameEdits(html, tokens));
   if (reopenWork(renamed, limit) <= limit) return renamed;
   return applied(renamed, strayEdits(renamed));
 }

@@ -1,11 +1,20 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (async function(){ window.F = window.__splitpageFormats; await F.openFile(new File([JSON.stringify({schema: 2, title: 'Block scope', rows: [{id: 'r1', visualText: '', audioText: '', status: 'todo'}], comments: []})], 'blocks.splitpage')); return true; })()
-wait F.state().title === 'Block scope'
-eval (function(){ var el = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]'); el.focus(); var r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); var dt = new DataTransfer(); dt.setData('text/html', '<div>'.repeat(20000) + 'before<strong>bold</strong>after' + '</p>'.repeat(20000)); el.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true})); return true; })()
-wait F.state().rows[0].audioText.indexOf('before<strong>bold</strong>after') !== -1
-expect document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]').textContent.replace(/\s/g, '') === 'beforeboldafter'
-eval (async function(){ window.once = F.state().rows[0].audioText; var state = F.clone(F.state()); state.title = 'Block scope roundtrip'; await F.openFile(new File([F.buildSplitpage(state)], 'roundtrip.splitpage')); return true; })()
-wait F.state().title === 'Block scope roundtrip' && F.state().rows[0].audioText === once
-expect document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"] strong').textContent === 'bold'
+eval (async function(){ window.F = window.__splitpageFormats; window.scopeSeed = F.clone(F.state()); var s = F.clone(scopeSeed); s.title = 'Scope marks'; s.rows[1].audioText = '<div>'.repeat(32) + '<span style="font-style:italic">' + '<div>'.repeat(400) + 'KEEP' + '</p>'.repeat(400); s.rows[1].visualText = '<div>'.repeat(32) + '<span class="cmt-anchor" data-cmt="c1">' + '<div>'.repeat(400) + 'COMMENT' + '</p>'.repeat(400); await F.openFile(new File([JSON.stringify(s)], 'scope-marks.splitpage')); return true; })()
+wait F.state().title === 'Scope marks'
+expect document.querySelector('#rows .row:nth-child(2) .audio-cell em').textContent.trim() === 'KEEP'
+expect document.querySelector('#rows .row:nth-child(2) .visual-cell [data-cmt="c1"]').textContent.trim() === 'COMMENT'
+eval (async function(){ var s = F.clone(F.state()); window.scopeOnce = s.rows[1]; s.title = 'Scope marks reopened'; await F.openFile(new File([F.buildSplitpage(s)], 'scope-roundtrip.splitpage')); return true; })()
+wait F.state().title === 'Scope marks reopened'
+expect F.state().rows[1].audioText === scopeOnce.audioText && F.state().rows[1].visualText === scopeOnce.visualText
+expect document.querySelector('#rows .row:nth-child(2) .visual-cell [data-cmt="c1"]').textContent.trim() === 'COMMENT'
+eval (async function(){ await F.openFile(new File([JSON.stringify({schema: 2, title: 'Block guard', rows: [{id: 'r1', visualText: '', audioText: 'ORIGINAL', status: 'todo'}], comments: []})], 'blocks.splitpage')); return true; })()
+wait F.state().title === 'Block guard'
+eval (function(){ window.scopeBefore = JSON.stringify(F.state()); window.scopeWarnings = []; for (var prefix of ['', '<svg>', '<math>', '<svg><foreignObject>', '<math><annotation-xml encoding="text/html">', '<svg><font color="red">', '<math><span>', '<svg><table>']) { var el = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]'); el.focus(); var r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); var dt = new DataTransfer(); dt.setData('text/html', prefix + '<div>'.repeat(20000) + 'KEEP' + '</p>'.repeat(20000)); dt.setData('text/plain', 'KEEP'); el.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true})); scopeWarnings.push(document.querySelector('#toast-host').textContent.includes('This content has more than 2,048 nested blocks and cannot be opened or pasted.')); if (JSON.stringify(F.state()) !== scopeBefore) throw new Error('Rejected paste changed the document: ' + prefix); } return true; })()
+expect scopeWarnings.length === 8 && scopeWarnings.every(Boolean)
+expect JSON.stringify(F.state()) === scopeBefore
+expect document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]').textContent === 'ORIGINAL'
+eval (async function(){ window.scopeRefusals = []; for (var prefix of ['', '<svg>', '<math>', '<svg><foreignObject>']) { var s = F.clone(F.state()); s.title = 'Rejected block file'; s.rows[0].audioText = prefix + '<div>'.repeat(20000) + 'KEEP' + '</p>'.repeat(20000); var opened = await F.openFile(new File([JSON.stringify(s)], 'deep-blocks.splitpage')); scopeRefusals.push(opened === false && document.querySelector('#toast-host').textContent.includes('This content has more than 2,048 nested blocks and cannot be opened or pasted.')); if (JSON.stringify(F.state()) !== scopeBefore) throw new Error('Rejected reopen changed the document: ' + prefix); } return true; })()
+expect scopeRefusals.length === 4 && scopeRefusals.every(Boolean)
+expect JSON.stringify(F.state()) === scopeBefore
 logs

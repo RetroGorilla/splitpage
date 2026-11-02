@@ -3,32 +3,73 @@ import assert from "node:assert/strict";
 import { boundedMarkup } from "../../../src/adapters/richtext/parse-bound.ts";
 import { storedImageMarkup } from "../../../src/core/document/text-policy.ts";
 import { adapterWith, fakePorts } from "./fakes.ts";
+import { jsdomParser } from "./jsdom.mjs";
+import { splitBudget, walkSanitize } from "../../../src/adapters/richtext/sanitize.ts";
+import { createRichText } from "../../../src/adapters/richtext/richtext.ts";
 
 const rt = adapterWith(fakePorts());
+const Parser: new () => DOMParser = jsdomParser();
 
-function strayParagraphWork(html: string): number {
-  let divs = 0;
-  let paragraph = false;
-  let work = 0;
-  for (const [, closing, name] of html.matchAll(/<(\/?)(div|p)>/g)) {
-    if (name === "div") {
-      if (!closing) work += divs;
-      divs = closing ? Math.max(0, divs - 1) : divs + 1;
-      if (!closing) paragraph = false;
-    } else if (closing) {
-      if (!paragraph) work += divs;
-      paragraph = false;
-    } else paragraph = true;
-  }
-  return work;
+function baseSanitize(html: string): string {
+  const ports = fakePorts();
+  const body = new Parser().parseFromString('<!doctype html><body>' + html, 'text/html').body;
+  const doc = body.ownerDocument;
+  const out = doc.createElement('div');
+  walkSanitize(body, out, { doc, images: ports.images, ids: ports.ids, split: splitBudget(html.length) });
+  return out.innerHTML;
 }
 
-test("deep div opens followed by stray paragraph closes are bounded before DOM parsing (#461)", () => {
-  for (const n of [1000, 5000, 10000, 20000]) {
+test("deep blocks do not close an italic span before its text (#461)", () => {
+  const html = '<div>'.repeat(32) + '<span style="font-style:italic">' + '<div>'.repeat(400) +
+    'KEEP' + '</p>'.repeat(400);
+  const body = rt.inertBody(rt.sanitize(html));
+  assert.equal(body.querySelector('em')?.textContent?.trim(), 'KEEP');
+  assert.equal(rt.sanitize(html), baseSanitize(html));
+});
+
+test("deep blocks keep comment text inside its anchor (#461)", () => {
+  const html = '<div>'.repeat(32) + '<span class="cmt-anchor" data-cmt="c1">' + '<div>'.repeat(400) +
+    'KEEP' + '</p>'.repeat(400);
+  const once = rt.sanitize(html);
+  assert.equal(rt.inertBody(once).querySelector('[data-cmt="c1"]')?.textContent?.trim(), 'KEEP');
+  assert.equal(rt.sanitize(once), once);
+  assert.equal(once, baseSanitize(html));
+});
+
+test("foreign-content breakouts cannot bypass the block-depth guard (#461)", () => {
+  for (const prefix of ['<svg>', '<math>', '<svg><foreignObject>', '<math><annotation-xml encoding="text/html">',
+    '<svg><desc>', '<svg><title>', '<math><mi>', '<math><mo>', '<math><mn>', '<math><ms>', '<math><mtext>',
+    ...['b', 'big', 'blockquote', 'body', 'br', 'center', 'code', 'dd', 'div', 'dl', 'dt', 'em', 'embed',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'hr', 'i', 'img', 'li', 'listing', 'menu', 'meta',
+      'nobr', 'ol', 'p', 'pre', 'ruby', 's', 'small', 'span', 'strong', 'strike', 'sub', 'sup', 'table',
+      'tt', 'u', 'ul', 'var', 'font color="red"', 'font face="serif"', 'font size="3"'].map(tag => '<svg><' + tag + '>')]) {
+    const html = prefix + '<div>'.repeat(5000) + 'KEEP' + '</p>'.repeat(5000);
+    assert.throws(() => boundedMarkup(html), RangeError, prefix);
+  }
+});
+
+test("rejected block depth never reaches DOMParser (#461)", () => {
+  let calls = 0;
+  class CountingParser extends Parser {
+    override parseFromString(html: string, type: DOMParserSupportedType): Document {
+      calls++;
+      return super.parseFromString(html, type);
+    }
+  }
+  const guarded = createRichText({ ...fakePorts(), DOMParser: CountingParser });
+  assert.throws(() => guarded.sanitize('<svg>' + '<div>'.repeat(20000) + 'KEEP' + '</p>'.repeat(20000)), RangeError);
+  assert.equal(calls, 0);
+});
+
+test("excessive block depth is rejected before parsing instead of rewriting inline scopes (#461)", () => {
+  for (const n of [1000, 2048]) {
     const html = "<div>".repeat(n) + "</p>".repeat(n);
-    const work = strayParagraphWork(boundedMarkup(html));
-    const limit = 8 * html.length + 4096;
-    assert.ok(work <= limit, String(work) + " ancestor checks exceeds " + String(limit));
+    assert.equal(boundedMarkup(html), html);
+  }
+  for (const n of [2049, 5000, 10000, 20000]) {
+    const html = "<div>".repeat(n) + "</p>".repeat(n);
+    assert.throws(() => boundedMarkup(html), { name: "RichTextDepthError" });
+    assert.throws(() => rt.inertBody(html), { name: "RichTextDepthError" });
   }
 });
 
@@ -51,14 +92,14 @@ test("ordinary blocks, quoted tag text, raw text and rich-text atoms are unchang
   for (const html of shapes) assert.equal(boundedMarkup(html), html);
 });
 
-test("bounding a hostile block stack keeps its words, image, video, tag and comment, and remains a fixed point (#461)", () => {
+test("accepted deep blocks keep their words, image, video, tag and comment, and remain a fixed point (#461)", () => {
   const image = storedImageMarkup({ sha256: "b".repeat(64), width: 17, height: 13, mime: "image/png" });
   const content = 'before<strong>bold</strong>' + image +
     '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">mug</span>' +
     '<span class="cmt-anchor" data-cmt="c1">comment</span>' +
     '<a class="video-embed-card" href="https://youtu.be/example">video</a>after';
   const html = '<div>'.repeat(1000) + content + '</p>'.repeat(1000);
-  assert.ok(strayParagraphWork(boundedMarkup(html)) <= 8 * html.length + 4096);
+  assert.equal(boundedMarkup(html), html);
   const once = rt.sanitize(html);
   assert.ok(once.includes('<strong>bold</strong>'));
   assert.ok(once.includes(image));
@@ -73,11 +114,11 @@ test("bounding a hostile block stack keeps its words, image, video, tag and comm
   assert.equal(rt.sanitize(once), once);
 });
 
-test("multiple malformed block stacks and implicitly closed paragraphs stay bounded (#461)", () => {
+test("separate accepted block stacks retain their contents and fixed point (#461)", () => {
   const stack = '<p>'.repeat(1000) + '<div>'.repeat(1000) + 'word' + '</p>'.repeat(1000);
   const html = stack + '</div>'.repeat(1000) + stack;
   const bounded = boundedMarkup(html);
-  assert.ok(strayParagraphWork(bounded) <= 8 * html.length + 4096);
+  assert.equal(bounded, html);
   assert.equal(boundedMarkup(bounded), bounded);
   const once = rt.sanitize(html);
   assert.equal(rt.inertBody(once).textContent?.replace(/\s/g, ''), 'wordword');
@@ -108,6 +149,7 @@ test("seeded normal block trees keep their exact markup and sanitizer result (#4
     }
     assert.equal(boundedMarkup(html), html, 'sample ' + String(sample));
     const once = rt.sanitize(html);
+    assert.equal(once, baseSanitize(html), 'sample ' + String(sample));
     assert.equal(rt.sanitize(once), once, 'sample ' + String(sample));
   }
 });

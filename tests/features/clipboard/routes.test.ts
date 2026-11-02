@@ -37,13 +37,14 @@ interface Held {
 }
 
 function harness(p: ReturnType<typeof page>) {
-  const state = { scenes: false, copied: true, owner: 0, owns: true, found: null as Element | null };
+  const state = { scenes: false, copied: true, accepts: true, owner: 0, owns: true, found: null as Element | null };
   const calls: string[] = [];
   const held: Held[] = [];
   const mount = (): ClipboardRoutes => mountClipboardRoutes<Owner, string, Extra>({
     window: p.win,
     roots: p.roots,
     ports: {
+      acceptHtml: () => state.accepts,
       scriptCell: (el) => el.classList.contains("script"),
       copy: (_e, cell, cut) => { calls.push((cut ? "cut:" : "copy:") + cell.id); return state.copied; },
       afterCut: (cell) => { calls.push("afterCut:" + cell.id); },
@@ -80,6 +81,24 @@ function release(held: Held[], at: number, extra: Extra): void {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
+
+test("refused HTML never starts a script, media, drop or draft insertion (#461)", () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  h.state.accepts = false;
+  const html = '<div>'.repeat(5000) + '<img data-blob="hash">KEEP' + '</p>'.repeat(5000);
+  const e = clip(p, "paste", p.byId("rows-script"), { html, text: "KEEP" });
+  assert.equal(e.defaultPrevented, true);
+  assert.deepEqual(h.calls, ["scenes:rows-script"]);
+  h.calls.length = 0;
+  clip(p, "paste", p.byId("rows-note"), { html, text: "KEEP" });
+  routes.insert(p.byId("rows-script"), html, "KEEP", [new p.win.File(["x"], "a.png", { type: "image/png" })]);
+  assert.deepEqual(h.calls, []);
+  assert.equal(h.held.length, 0);
+  assert.equal(p.byId("rows-script").textContent, "Hi");
+  routes.dispose();
+});
 
 test("copy and cut in a script cell call the clipboard once, and a real cut refreshes the cell that holds the caret", () => {
   const p = page();

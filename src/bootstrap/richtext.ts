@@ -1,5 +1,6 @@
 import { randomIds } from "../adapters/identity/ids.ts";
 import { createRichText } from "../adapters/richtext/richtext.ts";
+import { assertRichTextDepth, RichTextDepthError } from "../adapters/richtext/parse-bound.ts";
 import type { CellReader, RichText } from "../adapters/richtext/richtext.ts";
 import type { Frozen } from "../core/document/freeze.ts";
 import type { StoredImageRef } from "../core/document/text-policy.ts";
@@ -19,6 +20,16 @@ function richText(): RichText {
 
 export function inertBody(html: unknown): HTMLElement {
   return richText().inertBody(html);
+}
+
+export function richTextInputProblem(html: string): string | null {
+  try {
+    assertRichTextDepth(html);
+    return null;
+  } catch (error) {
+    if (!(error instanceof RichTextDepthError)) throw error;
+    return error.message;
+  }
 }
 
 export function sanitizeHtml(html: unknown): string {
