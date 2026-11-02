@@ -1,7 +1,7 @@
 import type { CellClipboardPorts } from "./ports.ts";
 import type { Attachment, AttachedCount, BrollScope, ClipboardPorts, PasteRequest, Pasted, TextRange, VideoFileAttachment } from "../../application/commands/clipboard.ts";
 import type { CellInput, NormalizeOptions, Run } from "../../core/text/runs.ts";
-import type { VideoFiles } from "../../application/media/video-files.ts";
+import type { VideoFiles, VideoPosterFrame } from "../../application/media/video-files.ts";
 
 type ClipboardOptions = NormalizeOptions & { keepComments?: boolean | undefined; nonce?: string | null | undefined; skipImages?: boolean | undefined };
 export interface ClipboardMediaInput {
@@ -10,7 +10,7 @@ export interface ClipboardMediaInput {
   lost?: number | undefined;
 }
 export interface ClipboardMediaReader {
-  frame?: ((file: File) => Promise<{ dataUrl: string; duration: number } | null>) | undefined;
+  frame?: ((file: File) => Promise<VideoPosterFrame | null>) | undefined;
   grant?: VideoFiles["grant"] | undefined;
 }
 interface CellPasteResult {
