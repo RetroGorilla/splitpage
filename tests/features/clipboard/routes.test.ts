@@ -49,7 +49,7 @@ function harness(p: ReturnType<typeof page>) {
       afterCut: (cell) => { calls.push("afterCut:" + cell.id); },
       pasteScenes: (_data, cell) => { calls.push("scenes:" + cell.id); return state.scenes; },
       pasteDraft: (cell, html, text) => { calls.push("draft:" + cell.id + ":" + html + ":" + text); },
-      hasMedia: (files) => !!files && Array.prototype.some.call(files, (f: File) => /^image\//.test(f.type)),
+      hasMedia: (files, html) => html.includes("data-blob") || (!!files && Array.prototype.some.call(files, (f: File) => /^image\//.test(f.type))),
       readMedia: () => new Promise<Extra>((resolve) => { held.push({ resolve }); }),
       capture: () => { calls.push("capture"); return { n: ++state.owner }; },
       stillOwns: (owner) => { calls.push("owns:" + owner.n); return state.owns; },
@@ -142,6 +142,20 @@ test("a media paste captures the owner and the place before preparing, then inse
   release(h.held, 0, { media: "pic" });
   await settle();
   assert.deepEqual(h.calls.slice(3), ["owns:1", "restore:rows-script:place-rows-script", "insert:rows-script:<p>t</p>:t:pic"]);
+  routes.dispose();
+});
+
+test("HTML-only gallery pictures wait for byte recovery and retain the paste's owner and place (#1098)", async () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  const html = '<img data-blob="' + "a".repeat(64) + '">';
+  routes.insert(p.byId("rows-script"), html, "", null);
+  assert.deepEqual(h.calls, ["capture", "place:rows-script"]);
+  assert.equal(h.held.length, 1);
+  release(h.held, 0, { media: "picture" });
+  await settle();
+  assert.deepEqual(h.calls.slice(2), ["owns:1", "restore:rows-script:place-rows-script", "insert:rows-script:" + html + "::picture"]);
   routes.dispose();
 });
 

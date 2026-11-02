@@ -121,7 +121,7 @@ function prepareHtml(html: string, opts?: ClipboardOptions) {
     media++;
     if (!opts.skipImages) {
       const ref = (ports as CellClipboardPorts).imageRefOf(el);
-      if (ref) addAttachment(attach, { kind: "image", ref: ref });
+      if (ref && (ports as CellClipboardPorts).pictures.bytesFor(ref.sha256)) addAttachment(attach, { kind: "image", ref: ref });
       else lost++;
     }
     if (el.parentNode) el.parentNode.removeChild(el);
@@ -346,7 +346,7 @@ function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: Clipb
   return result;
 }
 
-export function readClipboardFiles(files: FileList | readonly File[] | null | undefined, compress: (file: File, maxDim: number, quality: number) => Promise<string>, video?: ClipboardMediaReader) {
+export function readClipboardFiles(files: FileList | readonly File[] | null | undefined, compress: (file: File, maxDim: number, quality: number) => Promise<string>, video?: ClipboardMediaReader, html: string = "") {
   video = video || {};
   const list: File[] = Array.prototype.slice.call(files || []) as File[];
   const attach: (Attachment | null)[] = [];
@@ -377,16 +377,30 @@ export function readClipboardFiles(files: FileList | readonly File[] | null | un
       attach[slot] = { kind: "image", ref: rec, name: String(file.name || "") };
     }, function () {});
   });
+  if (!skipImages) {
+    const shas = clipboardImageHashes(html);
+    if (shas.length) jobs.push((ports as CellClipboardPorts).pictures.ensureBytes(shas).then(function () {}));
+  }
   return Promise.all(jobs).then(function () {
     const kept = attach.filter(Boolean) as Attachment[];
     return { attach: kept, skipImages: skipImages, lost: attach.length - kept.length };
   });
 }
 
-export function hasMediaFiles(files: FileList | readonly File[] | null | undefined) {
+function clipboardImageHashes(html: string): string[] {
+  if (!/data-blob/i.test(html)) return [];
+  const shas = new Set<string>();
+  (ports as CellClipboardPorts).text.inertBody(html).querySelectorAll("img[data-blob]").forEach(function (el) {
+    const ref = (ports as CellClipboardPorts).imageRefOf(el);
+    if (ref) shas.add(ref.sha256);
+  });
+  return Array.from(shas);
+}
+
+export function hasMediaFiles(files: FileList | readonly File[] | null | undefined, html: string = "") {
   return Array.prototype.some.call(files || [], function (f: File | null | undefined) {
     return /^(image|video)\//.test(String(f && f.type || ""));
-  });
+  }) || clipboardImageHashes(html).length > 0;
 }
 
 export function startCellClipboard(given: CellClipboardPorts) {

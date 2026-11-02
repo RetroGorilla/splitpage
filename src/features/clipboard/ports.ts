@@ -18,7 +18,7 @@ export interface CellClipboardPorts {
   readonly document: Pick<DocumentReader, "read">;
   readonly edits: Pick<DocumentEdits, "run" | "text">;
   readonly undo: Pick<UndoControl, "breakCoalescing" | "flush">;
-  readonly pictures: Pick<PictureStore, "internDataUrl" | "persist">;
+  readonly pictures: Pick<PictureStore, "internDataUrl" | "persist" | "bytesFor" | "ensureBytes">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "fromHtml" | "inertBody" | "storedHtmlFromDom">;
   readonly imageRefOf: (el: Element) => StoredImageRef | null;
   readonly ids: Pick<IdSource, "id">;

@@ -637,8 +637,8 @@ const clipboardRoutePorts = {
   pasteScenes: pasteScenesAt,
   pasteDraft: pasteIntoDraft,
   hasMedia: hasMediaFiles,
-  readMedia: function (files: FileList | readonly File[]) {
-    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant });
+  readMedia: function (files: FileList | readonly File[], html: string) {
+    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant }, html);
   },
   capture: captureOperation,
   stillOwns: stillOwns,
