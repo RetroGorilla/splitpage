@@ -221,7 +221,7 @@ export interface DesktopIpcContract {
   "splitpage:open-file-dialog": DesktopChannelCall<[], DesktopWireFile | null>;
   "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[] }], { id: string; name: string } | null>;
   "splitpage:read-file": DesktopChannelCall<[string], DesktopWireFile>;
-  "splitpage:write-file": DesktopChannelCall<[string, string | ArrayBuffer | ArrayBufferView], DesktopWireStamp>;
+  "splitpage:write-file": DesktopChannelCall<[string, string | ArrayBuffer | Uint8Array], DesktopWireStamp>;
   "splitpage:stat-file": DesktopChannelCall<[string], { lastModified: number; size: number } | null>;
   "splitpage:recents-list": DesktopChannelCall<[], DesktopWireRecent[]>;
   "splitpage:recents-remove": DesktopChannelCall<[string], DesktopWireRecent[]>;
@@ -258,7 +258,7 @@ export interface DesktopIpcContract {
   "splitpage:history-copy": DesktopChannelCall<[string, string], DesktopWireHistoryCopy>;
   "splitpage:history-touch": DesktopChannelCall<[string, unknown], void>;
   "splitpage:history-list-docs": DesktopChannelCall<[], DesktopWireHistoryDoc[]>;
-  "splitpage:blob-put": DesktopChannelCall<[string, string | ArrayBuffer | ArrayBufferView], { ok: true; stored: boolean } | DesktopWireFailure>;
+  "splitpage:blob-put": DesktopChannelCall<[string, string | ArrayBuffer | Uint8Array], { ok: true; stored: boolean } | DesktopWireFailure>;
   "splitpage:blob-get": DesktopChannelCall<[string], { bytes: Uint8Array; mime: string } | null>;
   "splitpage:blob-missing": DesktopChannelCall<[readonly string[]], string[]>;
   "splitpage:print-to-pdf": DesktopChannelCall<[string], Uint8Array>;

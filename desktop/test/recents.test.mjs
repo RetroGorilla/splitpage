@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createRecents } = require(path.join(here, "..", "recents.js"));
-const { createFileRegistry } = require(path.join(here, "..", "file-service.js"));
+const { createRecents } = require(path.join(here, "..", "recents.ts"));
+const { createFileRegistry } = require(path.join(here, "..", "file-service.ts"));
 const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX } = require(path.join(here, "..", "desktop-state.js"));
 
 const cases = [];

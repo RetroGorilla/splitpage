@@ -4,11 +4,12 @@ import type * as NodeFsPromises from "node:fs/promises";
 
 import type * as NodePath from "node:path";
 
-import type { DesktopFileServiceBoundary, DesktopFileIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopFileIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopFileService } from "./file-service.ts";
 
 const path: typeof NodePath = require("node:path");
 const fsp: typeof NodeFsPromises = require("node:fs/promises");
-const { pathKey, readFileEntry, toBuffer, writeFileEntry }: DesktopFileServiceBoundary = require("./file-service");
+const { pathKey, readFileEntry, toBuffer, writeFileEntry }: DesktopFileService = require("./file-service.ts");
 
 function createFileIpc({
   dialog, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
