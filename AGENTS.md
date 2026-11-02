@@ -4,7 +4,7 @@ Read this first. It is the short version of the rules; the linked documents hold
 
 ## Setup
 
-- Node 24.22.0 (`.nvmrc`). The test runner refuses older versions on purpose: on 22.22.0 two PDF tests break for the runtime, not the code. Install it before anything else.
+- Node 24.22.1 (`.nvmrc`). The test runner refuses older versions on purpose: on 22.22.0 two PDF tests break for the runtime, not the code. Install it before anything else.
 - `npm ci`, then the commands below.
 - Pull requests target `4.1-development`, not `main`.
 

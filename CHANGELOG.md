@@ -4,16 +4,22 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
-## Unreleased
+## 0.4.1 — 2026-11-02
 
 This release removes collaboration and server documents and fixes several
 saving bugs. If you open or share scripts on a Splitpage server, read
 **Removed** before you upgrade.
 
+Version numbers restart here: 0.4.1 follows 3.1 and the 4.0 beta. Those copies
+won't offer it as an update, so download it from the
+[releases page](https://github.com/RetroGorilla/splitpage/releases). Older
+release tags were renamed to match, such as `v3.1.0` to `v0.3.1`; the headings
+below keep the numbers those releases shipped with.
+
 ### Added
 - Downloads and update checks now use the Splitpage repository releases page.
 - Named section dividers group scenes, fold for the current session and move
-  as a group. Section cues appear in the rundown and Present; print, PDF,
+  as a group. Add one with **Add Section Header** in a scene's **⋯** menu. Section cues appear in the rundown and Present; print, PDF,
   Word and Markdown exports retain headings and section totals.
 - First save through a desktop dialog or browser file picker names an untouched
   untitled script from the filename. A trailing version such as `v3` becomes a
