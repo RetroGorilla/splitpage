@@ -21,13 +21,13 @@ const realm = globalThis as unknown as Record<string, unknown>;
 realm.window = win;
 realm.document = win.document;
 
-function fixture() {
+function fixture(cat = "prop") {
   win.document.body.innerHTML = '<button id="btn-production"></button><button id="btn-gear"></button>' +
     '<div id="production-panel" hidden></div><div id="gear-panel" hidden></div>' +
     '<div class="tag-entity"><div><button id="menu-button" class="tag-menu-btn" aria-expanded="false"></button>' +
     '<div class="tag-menu" hidden><button class="tag-menu-item">Pick</button></div></div></div>';
   const migration = fakeMigration();
-  const doc = migrateRows({ schema: 2, rows: [], productionTags: [{ id: "t_hat", cat: "prop", name: "Hat" }] }, migration.ports);
+  const doc = migrateRows({ schema: 2, rows: [], productionTags: [{ id: "t_hat", cat, name: "Hat" }] }, migration.ports);
   const document = fakeDocument(doc);
   const edits = fakeEdits();
   const calls: string[] = [];
@@ -50,6 +50,7 @@ function fixture() {
       tagExpandedKey: () => null
     },
     document: document.document,
+    lifetime: document.lifetime,
     edits: edits.edits,
     production: createProductionIndex(migration.ports.readers, deepFreeze),
     text: {
@@ -69,8 +70,65 @@ function fixture() {
     ids: migration.ids,
     bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 })
   };
-  return { ports, calls, edits, doc, pending, deletion, selection };
+  return { ports, calls, edits, doc, document, pending, deletion, selection };
 }
+
+for (const focused of [true, false]) {
+  test("gear rename keeps its draft and selection across production refresh, focused=" + focused, () => {
+    const h = fixture("gear");
+    win.document.body.innerHTML = '<input id="script"><div id="gear-panel"><div id="gear-list"></div></div>';
+    const mounted = startTagPanels(h.ports);
+    try {
+      const entry = h.ports.production.entries(h.doc)[0];
+      assert.ok(entry);
+      h.ports.view.setTagRenaming(entry.key);
+      mounted.renderProduction();
+      const input = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
+      assert.ok(input);
+      input.value = "Camera draft";
+      input.focus();
+      input.setSelectionRange(2, 8, "backward");
+      const script = win.document.getElementById("script");
+      assert.ok(script);
+      if (!focused) script.focus();
+      mounted.renderProduction();
+      const refreshed = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
+      assert.ok(refreshed);
+      assert.equal(refreshed.value, "Camera draft");
+      assert.equal(refreshed.selectionStart, 2);
+      assert.equal(refreshed.selectionEnd, 8);
+      assert.equal(refreshed.selectionDirection, "backward");
+      assert.equal(win.document.activeElement, focused ? refreshed : script);
+      h.ports.view.setTagRenaming(null);
+      mounted.renderProduction();
+      assert.equal(win.document.querySelector(".tag-rename-input"), null);
+      h.ports.view.setTagRenaming(entry.key);
+      mounted.renderProduction();
+      assert.equal(win.document.querySelector<HTMLInputElement>(".tag-rename-input")?.value, "Hat");
+    } finally { mounted.dispose(); }
+  });
+}
+
+test("gear rename discards its draft when the same document and registry ID enter a new lifetime", () => {
+  const h = fixture("gear");
+  win.document.body.innerHTML = '<div id="gear-panel"><div id="gear-list"></div></div>';
+  const mounted = startTagPanels(h.ports);
+  try {
+    const entry = h.ports.production.entries(h.doc)[0];
+    assert.ok(entry);
+    h.ports.view.setTagRenaming(entry.key);
+    mounted.renderProduction();
+    const input = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
+    assert.ok(input);
+    input.value = "Camera draft";
+    h.document.replace(h.doc);
+    mounted.renderProduction();
+    const refreshed = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
+    assert.ok(refreshed);
+    assert.notEqual(refreshed, input);
+    assert.equal(refreshed.value, "Hat");
+  } finally { mounted.dispose(); }
+});
 
 test("production panels mount with fake ports and remove both menu listeners on disposal and remount", () => {
   const h = fixture();

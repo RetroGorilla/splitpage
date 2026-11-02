@@ -310,6 +310,7 @@ function listenerSet<L>() {
 
 export function fakeDocument<Current extends DocumentView = DocumentView>(initial: Current | null = null) {
   let held = initial;
+  let epoch = 0;
   const changes = listenerSet<SessionListener>();
   const replaced = listenerSet<() => void>();
   const refreshes = listenerSet<(jobs: ReadonlySet<string>) => void>();
@@ -322,8 +323,10 @@ export function fakeDocument<Current extends DocumentView = DocumentView>(initia
   };
   return {
     document,
+    lifetime: { epoch: () => epoch },
     replace: (doc: Current | null): void => {
       held = doc;
+      epoch++;
       for (const listener of [...replaced.listeners]) listener();
     },
     refresh: (jobs: readonly string[]): void => {

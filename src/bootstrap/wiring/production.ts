@@ -4,7 +4,7 @@ import type { TagPanelMount, TagPanelPorts } from "../../features/tags/ports.ts"
 import { tagPanelActions as panelDefinitions } from "../../features/tags/actions.ts";
 import * as tagPanelCommands from "../../application/tag-panel-commands.ts";
 import { installTagPanelCommands } from "../../application/tag-panel-commands.ts";
-import { documentReader as portDocument } from "./ports/document.ts";
+import { documentReader as portDocument, documentLifetime as portLifetime } from "./ports/document.ts";
 import { edits as portEdits, productionSelection as portSelection, undoControl as portUndo } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
 import { production as portProduction, deletion as portDeletion, tagPanelState as portView } from "./ports/production.ts";
@@ -68,7 +68,7 @@ const panelState = owned<TagPanelMount>();
 export function mountTagPanelsFeature(): TagPanelMount {
   return panelState.replace(() => {
     const ports: TagPanelPorts = {
-      view: portView, document: portDocument, edits: portEdits, text: portText,
+      view: portView, document: portDocument, lifetime: portLifetime, edits: portEdits, text: portText,
       production: portProduction, deletion: portDeletion, selection: portSelection,
       panels: portPanels, personColors: portPersonColors, shotHiding: portShotHiding,
       notices: portNotices, undo: portUndo, ids: portIds, bulkTag: bulkTagRows
