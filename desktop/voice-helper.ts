@@ -29,26 +29,26 @@ const MAX_LINE = 64 * 1024;
 const KILL_AFTER_MS = 2000;
 
 function parseHelperLine(line: string) {
-  let raw: Record<string, unknown>;
-  try { raw = JSON.parse(line) as Record<string, unknown>; } catch { return null; }
+  let raw: unknown;
+  try { raw = JSON.parse(line); } catch { return null; }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  if (!EVENT_TYPES.has(raw.type)) return null;
-  const event: Omit<DesktopWireVoiceEvent, "session"> = { type: raw.type as string };
-  if (raw.type === "interim" || raw.type === "final") {
-    if (typeof raw.text !== "string") return null;
-    event.text = raw.text.slice(0, MAX_TEXT);
-  } else if (raw.type === "device") {
-    if (typeof raw.name !== "string") return null;
+  if (!EVENT_TYPES.has((raw as Record<string, unknown>).type)) return null;
+  const event: Omit<DesktopWireVoiceEvent, "session"> = { type: (raw as Record<string, unknown>).type as string };
+  if ((raw as Record<string, unknown>).type === "interim" || (raw as Record<string, unknown>).type === "final") {
+    if (typeof (raw as Record<string, unknown>).text !== "string") return null;
+    event.text = ((raw as Record<string, unknown>).text as string).slice(0, MAX_TEXT);
+  } else if ((raw as Record<string, unknown>).type === "device") {
+    if (typeof (raw as Record<string, unknown>).name !== "string") return null;
     /* eslint-disable-next-line no-control-regex -- stripping control characters
        from a device name the helper reports is the point */
-    const name = raw.name.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME);
+    const name = ((raw as Record<string, unknown>).name as string).replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME);
     if (!name) return null;
     event.name = name;
-  } else if (raw.type === "start") {
-    if (typeof raw.lang === "string" && LANG_RE.test(raw.lang)) event.lang = raw.lang;
+  } else if ((raw as Record<string, unknown>).type === "start") {
+    if (typeof (raw as Record<string, unknown>).lang === "string" && LANG_RE.test((raw as Record<string, unknown>).lang as string)) event.lang = (raw as Record<string, unknown>).lang as string;
   } else {
-    if (typeof raw.code !== "string" || !CODE_RE.test(raw.code)) return null;
-    event.code = raw.code;
+    if (typeof (raw as Record<string, unknown>).code !== "string" || !CODE_RE.test((raw as Record<string, unknown>).code as string)) return null;
+    event.code = (raw as Record<string, unknown>).code as string;
   }
   return event;
 }
