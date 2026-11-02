@@ -53,7 +53,7 @@ function harness(start: { running?: boolean; intent?: string; doc?: boolean } = 
     running: () => state.running,
     shell: () => (state.running ? shell : null),
     canOpenPrompter: { browser: () => state.running, chromium: () => state.running },
-    makeHandle: (entry) => ({ getFile: () => Promise.resolve("file:" + entry.name) }),
+    makeHandle: (entry) => ({ getFile: () => Promise.resolve(new File([], "file:" + entry.name, { lastModified: 0 })) }),
     wireBlobs: () => { log.push("blobs"); },
     document: { current: () => (state.doc ? pilot : null) },
     place: {
@@ -106,7 +106,7 @@ test("an opened file goes through the document sources and settles the handed do
     h.log.length = 0;
     h.handlers.openFile?.({ id: "f1", name: "Pilot.md" });
     await settled();
-    assert.deepEqual(h.opened, [{ kind: "file", file: "file:Pilot.md", handle: h.opened[0] && (h.opened[0] as { handle: unknown }).handle }]);
+    assert.deepEqual(h.opened, [{ kind: "file", file: new File([], "file:Pilot.md", { lastModified: 0 }), handle: h.opened[0] && (h.opened[0] as { handle: unknown }).handle }]);
     assert.deepEqual(h.log, ["settled"]);
   } finally {
     mounted.dispose();
