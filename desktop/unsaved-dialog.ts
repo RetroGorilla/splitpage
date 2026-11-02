@@ -1,7 +1,9 @@
 "use strict";
 
+import type { createDraftStore } from "./drafts.ts";
+
 import type { MessageBoxSyncOptions } from "electron";
-import type { DesktopDraftStoreBoundary, DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab } from "./ipc-boundaries.d.ts";
 
 type UnsavedDecision = "discard" | "cancel" | "review";
 interface UnsavedDialogSpec {
@@ -9,7 +11,7 @@ interface UnsavedDialogSpec {
   decisions: UnsavedDecision[];
 }
 
-function unsavedTitles(list: Pick<DesktopMainTab, "id" | "title">[], draftsList: DesktopDraftStoreBoundary["list"]) {
+function unsavedTitles(list: Pick<DesktopMainTab, "id" | "title">[], draftsList: ReturnType<typeof createDraftStore>["list"]) {
   let listing: ReturnType<typeof draftsList> | null = null;
   return list.map((tab) => {
     if (tab.title) return tab.title;
