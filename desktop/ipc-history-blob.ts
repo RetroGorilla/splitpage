@@ -2,9 +2,10 @@
 
 import type { DesktopWireHistoryPut } from "../shared/desktop-contract.d.ts";
 
-import type { DesktopFileServiceBoundary, DesktopHistoryStoreBoundary, DesktopHistoryBlobIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopHistoryStoreBoundary, DesktopHistoryBlobIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopFileService } from "./file-service.ts";
 
-const { toBuffer }: Pick<DesktopFileServiceBoundary, "toBuffer"> = require("./file-service");
+const { toBuffer }: DesktopFileService = require("./file-service.ts");
 const { imageBlobRefusal, sniffImageMime, isSha256, MAX_MISSING_QUERY }: {
   imageBlobRefusal: (bytes: Buffer) => string | null;
   sniffImageMime: (bytes: Buffer) => string | null;

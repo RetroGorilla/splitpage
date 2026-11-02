@@ -125,7 +125,7 @@ test("historyStampAfter: no newest, or an unusable one, changes nothing", () => 
   assert.equal(historyStampAfter(m, 5), m);
 });
 
-test("a require() sees exactly what an import does — this file is CommonJS on purpose", () => {
+test("require() and import see the same named exports", () => {
   const require = createRequire(import.meta.url);
   const cjs = require("../../shared/history-policy.js");
   assert.equal(cjs.planHistoryEviction, planHistoryEviction);
