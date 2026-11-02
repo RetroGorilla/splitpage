@@ -6,11 +6,13 @@ export type SharedHistoryMeta = {
   title: string; sizeBytes: number; kind: "legacy" | "snapshot"; formatVersion: 1; legacyId?: string;
 };
 type HistoryPolicyStamp = Pick<SharedHistoryMeta, "atMs">;
-type HistoryPolicyMutableStamp<T extends HistoryPolicyStamp> = { atMs: T["atMs"] };
-type HistoryPolicySame<X, Y> = (<K>() => [K extends X ? 1 : 2, K]) extends
-  (<K>() => [K extends Y ? 1 : 2, K]) ? true : false;
+type HistoryPolicySame<X, Y> = (<K>(value: K) => K extends X ? 1 : 2) extends
+  (<K>(value: K) => K extends Y ? 1 : 2) ? true : false;
+type HistoryPolicyWritableKeys<T> = {
+  [P in keyof T]-?: HistoryPolicySame<{ [Q in P]: T[P] }, { -readonly [Q in P]: T[P] }> extends true ? P : never;
+}[keyof T];
 type HistoryPolicyWritableStamp<T extends HistoryPolicyStamp> =
-  HistoryPolicySame<Pick<T, "atMs">, HistoryPolicyMutableStamp<T>> extends true ? unknown : never;
+  "atMs" extends HistoryPolicyWritableKeys<T> ? unknown : never;
 type HistoryEvictionSnapshot = { id: string; atMs: number; size: number };
 type HistoryEvictionEntry = { docId: string; lastOpenedAt: number; expiresAt: number; snaps: HistoryEvictionSnapshot[] };
 type HistoryEvictionOptions = { perDoc?: unknown; olderKey?: unknown; protect?: unknown };
