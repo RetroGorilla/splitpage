@@ -1,0 +1,11 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (async function(){ window.F = window.__splitpageFormats; await F.openFile(new File([JSON.stringify({schema: 2, title: 'Block scope', rows: [{id: 'r1', visualText: '', audioText: '', status: 'todo'}], comments: []})], 'blocks.splitpage')); return true; })()
+wait F.state().title === 'Block scope'
+eval (function(){ var el = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]'); el.focus(); var r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); var dt = new DataTransfer(); dt.setData('text/html', '<div>'.repeat(20000) + 'before<strong>bold</strong>after' + '</p>'.repeat(20000)); el.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true})); return true; })()
+wait F.state().rows[0].audioText.indexOf('before<strong>bold</strong>after') !== -1
+expect document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]').textContent.replace(/\s/g, '') === 'beforeboldafter'
+eval (async function(){ window.once = F.state().rows[0].audioText; var state = F.clone(F.state()); state.title = 'Block scope roundtrip'; await F.openFile(new File([F.buildSplitpage(state)], 'roundtrip.splitpage')); return true; })()
+wait F.state().title === 'Block scope roundtrip' && F.state().rows[0].audioText === once
+expect document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"] strong').textContent === 'bold'
+logs
