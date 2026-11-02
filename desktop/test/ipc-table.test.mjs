@@ -507,7 +507,7 @@ test("packaging: every ./module main.js requires, directly or through another mo
       pending.push(read(f));
     }
   }
-  assert.ok(required.has("drafts.js"), "main.js requires ./drafts");
+  assert.ok(required.has("drafts.ts"), "main.js requires ./drafts");
   assert.ok(required.has("ipc-setup.ts"), "main.js requires ./ipc-setup");
   assert.ok(required.has("ipc-channels.ts"), "ipc-setup.ts requires ./ipc-channels");
   for (const f of ["close-keep.js", "quit-watchdog.ts", "unsaved-dialog.ts"]) assert.ok(required.has(f), "the close and quit code requires ./" + f);
