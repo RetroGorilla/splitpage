@@ -4735,10 +4735,10 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
     const tabCId = await shell(cdpA, "createTab", {});
     cdpC = await connectTab(app, tabCId);
     await waitForRows(cdpC, 20000);
-    await addMarkerRow(cdpC, markerC);
+    const edited = await editLastCell(cdpC, markerC);
     const dirtyC = await pollShellState(cdpA, (l) => l.windows.some((w) => w.tabs.some((t) => t.tabId === tabCId && t.dirty)), 4000).catch(() => null);
     const took = Date.now() - started;
-    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
+    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!edited && !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
 
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": answering 'close' to exactly two questions closes and the app exits", exited === true && app.proc.exitCode === 0,
