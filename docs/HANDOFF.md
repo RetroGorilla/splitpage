@@ -55,7 +55,7 @@ breakdown for props/locations/cast/VFX/sound.
   guide, and a build input — it becomes the in-app Help page), `start.mjs`
   with thin `start.bat`/`start.sh`
   wrappers (local launcher), `update.mjs` (says whether a newer release
-  exists; installs nothing), `server/server.js` (the static file server
+  exists; installs nothing), `server/server.ts` (the static file server
   `start.mjs` runs),
   `tools/package.mjs` (the portable zip), `desktop/` (the Electron app and its NSIS
   installers). #75 deleted the rest of the packaging: `installer/` (the
@@ -216,7 +216,7 @@ emulation; elsewhere it uses Node's architecture. Explicit `npm_config_arch`
 or `ELECTRON_ARCH` overrides detection, in that order; unknown values fail.
 Never run `npm run dist`/`dist:win` outside a deliberate release build.
 `desktop/test/drafts.test.mjs` unit-tests `desktop/drafts.ts` directly, no
-Electron. `tools/test-server.mjs` drives real `server.js` processes.
+Electron. `tools/test-server.mjs` drives real `server.ts` processes.
 
 ### The test harness lies to you — suspect the test before the code
 

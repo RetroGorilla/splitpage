@@ -252,7 +252,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-28 — Native entry points take the least they need
 
-- **Behaviour:** No HTTP endpoint spawns a process or installs files, and `server/server.js` does not load `node:child_process`. Under `/api/launcher/` there is only `info`, behind the launch-token gate; a request without the token gets 404. Desktop channels take no argument or only typed ids and shas. These cover updates, opening the prompter in a browser, Google Drive, blobs, history, voice and video thumbnails. Main builds every URL, path and command itself, and no answer carries a path or a token.
+- **Behaviour:** No HTTP endpoint spawns a process or installs files, and `server/server.ts` does not load `node:child_process`. Under `/api/launcher/` there is only `info`, behind the launch-token gate; a request without the token gets 404. Desktop channels take no argument or only typed ids and shas. These cover updates, opening the prompter in a browser, Google Drive, blobs, history, voice and video thumbnails. Main builds every URL, path and command itself, and no answer carries a path or a token.
 - **Tests:** partial.
   - `tools/test-server.mjs`: "launcher/info without the launch header is 404"; the staging and register routes answer 404.
   - `desktop/test/ipc-table.test.mjs`: "checkArgs refuses the shapes…", plus one argument test per channel.
@@ -260,7 +260,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
   - `desktop/test/blob-store.test.mjs`: "a sha that is not 64 lowercase hex is refused everywhere…".
   - `desktop/test/smoke.mjs`: "no answer names a path (invariant #28)".
 
-  No test checks that `server/server.js` never loads `child_process`.
+  No test checks that `server/server.ts` never loads `child_process`.
 - **Owner:** `server/`, `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** — (plan §8 keeps a single IPC contract source).
 - **Acceptance:** the existing checks pass after server and desktop extraction. A new check in `tools/test-server.mjs` confirms the server's module graph never loads `node:child_process`.
