@@ -25,7 +25,7 @@ files:
   - close-quit.js
   - session-restore.js
   - close-keep.js
-  - quit-watchdog.js
+  - quit-watchdog.ts
   - blob-store.js
   - voice-composition.js
   - voice-helper.js
@@ -36,10 +36,10 @@ files:
   - file-service.ts
   - doc-claims.ts
   - recents.ts
-  - window-appearance.js
-  - tab-registry.js
-  - restore-notice.js
-  - unsaved-dialog.js
+  - window-appearance.ts
+  - tab-registry.ts
+  - restore-notice.ts
+  - unsaved-dialog.ts
   - package.json
 
 extraResources:

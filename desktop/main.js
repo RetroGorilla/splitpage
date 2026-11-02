@@ -15,9 +15,9 @@ const {
 } = require("./file-service.ts");
 const { createDocClaims } = require("./doc-claims.ts");
 const { createRecents } = require("./recents.ts");
-const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance");
-const { createTabRegistry } = require("./tab-registry");
-const { createRestoreNotice } = require("./restore-notice");
+const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance.ts");
+const { createTabRegistry } = require("./tab-registry.ts");
+const { createRestoreNotice } = require("./restore-notice.ts");
 const { isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { createCloseQuit } = require("./close-quit");
 const { createSessionRestore } = require("./session-restore");
