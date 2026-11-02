@@ -1,6 +1,5 @@
 import type { HistoryBackendOptions, HistoryTestingStorage, HistorySnapshotMeta, HistorySnapshotRead, HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
 import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult } from "./history-backend-types.ts";
-import type { SharedHistorySnapshotReader } from "../../../shared/history-store.ts";
 
 type HistoryStore = ReturnType<typeof createHistoryStore<HistoryBrowserBackend>>;
 type HistoryBrowserBackend = Pick<ReturnType<typeof createIdbHistoryBackend>, "name" | "persistent" | "exclusive">;
@@ -14,8 +13,8 @@ type HistoryReplyAlternatives<T, All = T> = T extends object ? T & {
 } : T;
 type HistoryDesktopDoc = Awaited<ReturnType<HistoryDesktopPort["historyListDocs"]>>[number];
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
-import { HISTORY_OLDER_KEY, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
-import { createHistoryStore, createMemoryHistoryBackend } from "../../../shared/history-store.ts";
+import { HISTORY_OLDER_KEY, historyOlderExpired, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
+import { createHistoryStore, createMemoryHistoryBackend, projectHistoryBucket } from "../../../shared/history-store.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "./03c-history-idb.ts";
 
 export interface HistoryBackendProbe {
@@ -107,13 +106,14 @@ function historyMakeStore(backend: HistoryBrowserBackend, capBytes: (lastTotal?:
 function historyRecordOf(index: HistoryIndex, bucket: string) {
   const rec = index && index[bucket];
   if (!rec) return null;
-  const snaps: NonNullable<typeof rec>["snapshots"] = Array.isArray(rec.snapshots) ? rec.snapshots : [];
+  const readable = projectHistoryBucket(rec);
   const out: HistoryBackendDoc = {
     docId: bucket,
     title: rec.title || "",
     lastOpenedAt: Number(rec.lastOpenedAt) || 0,
-    count: snaps.length,
-    bytes: snaps.reduce<number>(function (n, s) { return n + (Number(s && (s as SharedHistorySnapshotReader).sizeBytes) || 0); }, 0)
+    count: readable.entries.length,
+    bytes: readable.entries.reduce(function (n, s) { return n + s.meta.sizeBytes; }, 0),
+    ...(readable.damaged ? { damaged: readable.damaged } : {})
   };
   if (rec.migratedAt != null) out.migratedAt = rec.migratedAt;
   if (rec.expiresAt != null) out.expiresAt = rec.expiresAt;
@@ -122,11 +122,8 @@ function historyRecordOf(index: HistoryIndex, bucket: string) {
 
 function historyMetasOf(index: HistoryIndex, bucket: string) {
   const rec = index && index[bucket];
-  return (rec && Array.isArray(rec.snapshots) ? rec.snapshots : []).map(function (s) {
-    const m: HistorySnapshotMeta | null = sanitizeHistoryMeta(s);
-    if (m) m.docId = bucket;
-    return m;
-  }).filter(Boolean) as HistorySnapshotMeta[];
+  if (bucket === HISTORY_OLDER_KEY && historyOlderExpired(rec, historyNow())) return [];
+  return projectHistoryBucket(rec).entries.map(function (s) { return { ...s.meta, docId: bucket }; });
 }
 
 function historyStoreAdapter(store: HistoryStore): HistoryBackendAdapter & { store: HistoryStore } {
@@ -185,7 +182,8 @@ function historyOpenIdb() {
   const openingError = probe?.opening();
   if (openingError) return Promise.reject(openingError);
   let factory;
-  try { factory = window.indexedDB || null; } catch (e) { factory = null; }
+  try { factory = window.indexedDB || null; } catch (e) { return Promise.reject(e); }
+  if (!factory && !probe) return Promise.resolve(historyUseMemory());
   const backend = (probe ? probe.idb : createIdbHistoryBackend)({ indexedDB: factory });
   probe?.arm(backend);
   const store = historyMakeStore(backend, historyIdbCap);
@@ -282,7 +280,7 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
       return desktopPort().historyList(docId || null);
     }, failed, failed).then(function (r) {
       if (!r || typeof r !== "object") return failed;
-      if (opts && opts.strict && docId && !Array.isArray(r.entries)) return null;
+      if (opts && opts.strict && (!Array.isArray(r.entries) || !Array.isArray(r.older))) return null;
       const entries = (r.entries || []).map(historyStripMeta).filter(Boolean) as HistorySnapshotMeta[];
       if (docId) entries.forEach(function (m) { m.docId = docId; });
       const older = (r.older || []).map(historyStripMeta).filter(Boolean) as HistorySnapshotMeta[];
@@ -298,16 +296,27 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
     });
   },
 
-  get: function (bucket, id) {
+  get: function (bucket, id, options) {
     const query = bucket === HISTORY_OLDER_KEY
       ? { older: true, protect: historyProtectedList() }
       : { docId: bucket, protect: historyProtectedList() };
     return historyDesktopCall(function () {
       return desktopPort().historyGet(query, id);
-    }, null, null).then(function (r) {
-      if (!r || typeof r !== "object" || typeof r.stateJson !== "string") return null;
+    }, { failed: true }, { failed: true }).then(function (r) {
+      if (r && r.failed) {
+        if (options?.strict) throw new Error("Could not read version history for export.");
+        return null;
+      }
+      if (r === null) return null;
+      if (!r || typeof r !== "object" || typeof r.stateJson !== "string") {
+        if (options?.strict) throw new Error("Could not read version history for export.");
+        return null;
+      }
       const meta = historyStripMeta(r.meta);
-      if (!meta) return null;
+      if (!meta) {
+        if (options?.strict) throw new Error("Could not read version history for export.");
+        return null;
+      }
       meta.docId = bucket;
       return { meta: meta, stateJson: r.stateJson };
     });
@@ -370,22 +379,25 @@ const desktopHistoryBackend: HistoryBackendAdapter = {
   },
 
   rawDoc: function (bucket) {
-    return historyDesktopCall(function () {
-      return desktopPort().historyListDocs();
-    }, null, null).then(function (r) {
-      if (!Array.isArray(r)) return null;
+    return Promise.all([
+      historyDesktopCall(function () { return desktopPort().historyListDocs(); }, null, null),
+      desktopHistoryBackend.list(bucket === HISTORY_OLDER_KEY ? null : bucket, { strict: true })
+    ]).then(function ([r, list]) {
+      if (!Array.isArray(r) || !list) throw new Error("Could not read version history for export.");
+      const damaged = bucket === HISTORY_OLDER_KEY ? list.olderDamaged : list.damaged;
+      if (bucket === HISTORY_OLDER_KEY) return { title: "", lastOpenedAt: 0, ...(damaged ? { damaged } : {}) };
       let hit: HistoryDesktopDoc | null = null;
       r.forEach(function (d) {
         if (d && normalizeDocId(d.docId) === bucket) hit = d;
       });
-      return hit ? { title: (hit as HistoryDesktopDoc).title || "", lastOpenedAt: Number((hit as HistoryDesktopDoc).lastOpenedAt) || 0 } : null;
+      return hit ? { title: (hit as HistoryDesktopDoc).title || "", lastOpenedAt: Number((hit as HistoryDesktopDoc).lastOpenedAt) || 0, ...(damaged ? { damaged } : {}) } : null;
     });
   },
 
   rawList: function (bucket) {
     const docId = bucket === HISTORY_OLDER_KEY ? null : bucket;
-    return desktopHistoryBackend.list(docId).then(function (r) {
-      if (!r) return [];
+    return desktopHistoryBackend.list(docId, { strict: true }).then(function (r) {
+      if (!r) throw new Error("Could not read version history for export.");
       return bucket === HISTORY_OLDER_KEY ? r.older : r.entries;
     });
   }
@@ -399,18 +411,19 @@ function historyUseMemory() {
   return historyMemory().adapter;
 }
 
-function resolveHistoryBackend() {
+function resolveHistoryBackend(options?: { strict?: boolean }) {
   if (probe?.choice() === "memory") return Promise.resolve(historyUseMemory());
   if (!probe?.choice() && runningOnDesktop() && typeof desktopPort().historyPut === "function") {
     historyBackendNameNow = "desktop";
     return Promise.resolve(desktopHistoryBackend);
   }
-  if (historyIdbFailed) return Promise.resolve(historyUseMemory());
+  if (historyIdbFailed) return options?.strict ? Promise.reject(new Error("Persistent history is unavailable")) : Promise.resolve(historyUseMemory());
   return historyOpenIdb().then(function (adapter) {
-    historyBackendNameNow = "idb";
+    historyBackendNameNow = adapter.name;
     return adapter;
   }, function (e) {
     historyIdbFailed = true;
+    if (options?.strict) throw e;
     if (window.console) console.warn("Version history: IndexedDB unavailable, keeping history in memory", e);
     return historyUseMemory();
   });

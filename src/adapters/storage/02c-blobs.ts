@@ -47,7 +47,7 @@ export function dataUrlForSync(sha: unknown) { return blobStore.dataUrlFor(sha);
 export function isDurableSync(sha: unknown) { return blobStore.isDurable(sha); }
 export function queuePersist(shas: unknown) { blobStore.queuePersist(shas); }
 export function persist(shas: unknown) { return blobStore.persist(shas); }
-export function ensureBytes(shas: unknown) { return blobStore.ensureBytes(shas); }
+export function ensureBytes(shas: unknown, options?: { strict?: boolean }) { return blobStore.ensureBytes(shas, options); }
 export function setBackend(backend: BlobBackend | null | undefined) { blobStore.setBackend(backend); }
 export function backendInfo() { return blobStore.backendInfo(); }
 export const createMemoryBackend = createMemoryBlobBackend;

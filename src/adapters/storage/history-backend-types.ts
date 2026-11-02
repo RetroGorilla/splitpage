@@ -35,6 +35,7 @@ export interface HistoryOlderImportResult {
 }
 
 export interface HistoryBackendDoc {
+  damaged?: number;
   title: unknown;
   lastOpenedAt: number;
   docId?: string;
@@ -49,7 +50,7 @@ export interface HistoryBackendAdapter {
   persistent: boolean;
   readonly put: (docId: string, meta: unknown, stateJson: string) => Promise<HistoryWriteResult & { evicted?: number; overCap?: boolean }>;
   readonly list: (docId?: string | null, opts?: { strict?: boolean }) => Promise<HistoryBackendList | null>;
-  readonly get: (bucket: string, id: string) => Promise<HistorySnapshotReply | null>;
+  readonly get: (bucket: string, id: string, options?: { strict?: boolean }) => Promise<HistorySnapshotReply | null>;
   readonly copy: (from: string, to: string) => Promise<{ ok: boolean; copied: number; code?: string | undefined }>;
   readonly touch: (docId: string, title: string) => Promise<unknown>;
   readonly importOlder: (entries: HistorySnapshotRead[]) => Promise<HistoryOlderImportResult>;
