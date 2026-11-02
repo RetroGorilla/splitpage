@@ -60,7 +60,7 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
         return { isConnected: true, dismiss: () => { toast.dismissed = true; }, addEventListener: () => {}, removeEventListener: () => {} };
       }
     },
-    entry: { migrate: (raw) => migrateRows(raw, fakeMigration().ports) },
+    entry: { migrate: (raw) => migrateRows(raw, fakeMigration().ports), cell: () => [] },
     identity: { copyHistory: (fromId, toId) => { log.push("copy:" + fromId + ">" + toId); }, sync: () => { log.push("sync"); } },
     transitions: {
       recover: (recovery) => {
