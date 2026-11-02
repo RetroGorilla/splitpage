@@ -1,0 +1,20 @@
+open
+
+eval (async function(){ window.H = window.__historyTest; window.A = window.__appDataTest; window.B = window.__blobsTest; window.D = window.__desktopTest; await H.resetForTest(); await H.forceBackend('idb'); var c = document.createElement('canvas'); c.width = c.height = 2; c.getContext('2d').fillRect(0,0,2,2); window.exportImageUrl = c.toDataURL('image/png'); window.exportImage = B.internDataUrl(exportImageUrl); window.exportDoc = 'd' + 'e'.repeat(32); window.exportBody = JSON.stringify({ docId: exportDoc, title: 'Intact with image', rows: [{ id: 'r1', imageRef: exportImage }] }); var digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(exportBody))); window.exportSha = Array.from(digest, function(b){ return b.toString(16).padStart(2,'0'); }).join(''); window.exportGood = { id: 'intact', atMs: 1000, sha: exportSha, sizeBytes: exportBody.length }; window.exportBad = { id: 'damaged', atMs: 1e100, sha: exportSha }; var db = await new Promise(function(resolve,reject){ var q = indexedDB.open('splitpage-history'); q.onsuccess = function(){resolve(q.result);}; q.onerror = function(){reject(q.error);}; }); await new Promise(function(resolve,reject){ var tx = db.transaction(['index','bodies'],'readwrite'); tx.objectStore('index').put({ bucket: exportDoc, title: 'Intact with image', snapshots: [exportGood, exportBad] }); tx.objectStore('bodies').put({ sha: exportSha, stateJson: exportBody }); tx.oncomplete = resolve; tx.onabort = function(){reject(tx.error);}; }); db.close(); window.exportBefore = JSON.stringify(await H.inspect()); window.exportBundle = await A.build(); return true; })()
+expect exportBundle.history.docs.find(function(d){return d.docId === exportDoc;}).snapshots[0].stateJson === exportBody
+expect exportBundle.history.omittedSnapshots === 1
+expect exportBundle.blobs[exportImage.sha256].b64 === exportImageUrl.split(',')[1]
+expect JSON.stringify(exportBundle.missingBlobs) === '[]'
+
+eval (async function(){ return JSON.stringify(await H.inspect()) === exportBefore; })()
+expect true
+
+eval (async function(){ await A.exportFile(); window.exportResult = A.exportSummary(); return exportResult; })()
+expect exportResult.ok === true
+expect exportResult.images === 1
+expect exportResult.warning === 'Exported, but 1 damaged or unreadable history snapshot could not be included. Intact versions and their available images are included.'
+expect Array.from(document.querySelectorAll('.toast.warn')).some(function(e){return e.textContent.includes('1 damaged or unreadable history snapshot');})
+
+eval (async function(){ await H.forceBackend(null); window.exportBroken = D.makeFakeBackend({ history: true }); exportBroken.historyListDocs = function(){return Promise.reject(new Error('unavailable'));}; D.setBackend(exportBroken); await A.exportFile(); return A.exportSummary(); })()
+expect A.exportSummary() === null
+expect Array.from(document.querySelectorAll('.toast.error')).some(function(e){return e.textContent.includes('Export cancelled — version history could not be read. Nothing was downloaded.');})

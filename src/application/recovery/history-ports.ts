@@ -27,6 +27,7 @@ export type HistorySnapshotReply = Omit<NonNullable<Awaited<ReturnType<ReturnTyp
 };
 
 export interface HistoryBundleData {
+  readonly omittedSnapshots?: number;
   readonly docs: readonly unknown[];
   readonly older: readonly unknown[];
   readonly blobs?: Record<string, unknown>;
@@ -148,7 +149,7 @@ export interface HistoryResolvedBackend {
   readonly touch: (docId: string, title: string) => Promise<unknown>;
   readonly copy: (from: string, to: string) => Promise<{ ok: boolean; copied: number; code?: string | undefined }>;
   readonly rawDocIds: () => Promise<string[] | null>;
-  readonly rawDoc: (bucket: string) => Promise<{ title: unknown; lastOpenedAt: number } | null>;
+  readonly rawDoc: (bucket: string) => Promise<{ title: unknown; lastOpenedAt: number; damaged?: number } | null>;
   readonly rawList: (bucket: string) => Promise<HistorySnapshotMeta[]>;
   readonly importOlder: (entries: HistorySnapshotRead[]) => Promise<{ ok: boolean; added: number; code?: string }>;
   readonly evict: (cap: number) => Promise<unknown>;

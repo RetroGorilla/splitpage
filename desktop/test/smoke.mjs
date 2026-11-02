@@ -3013,6 +3013,37 @@ async function caseHistoryDamagedEntries(target) {
   }
 }
 
+async function caseHistoryDamagedExport(target) {
+  const tag = target.name + " history: export keeps intact versions and images beside damage";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const docId = randDocId();
+  const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==", "base64");
+  const imageSha = blobSha(bytes);
+  const body = JSON.stringify({ docId, title: "Intact with image", rows: [{ id: "r1", imageRef: { sha256: imageSha, mime: "image/png", width: 1, height: 1 } }] });
+  const index = seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: historyMeta({ id: "intact", atMs: 1000 }), body }] });
+  index.buckets[docId].snapshots.push({ id: "damaged", atMs: 1e100, sha: historyShaHex(body) });
+  const indexPath = path.join(historyDirOnDisk(userDataDir), "index.json");
+  fs.writeFileSync(indexPath, JSON.stringify(index));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-damaged-export", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const put = await blobCall(app.cdp, "blobPut", [JSON.stringify(imageSha), blobBytesExpr(bytes)]);
+    record(tag + ": the image is stored through the real bridge", put?.ok === true, JSON.stringify(put));
+    const before = fs.readFileSync(indexPath, "utf8");
+    const bundle = await evalPage(app.cdp, "window.__appDataTest.build()");
+    const doc = bundle.history.docs.find((d) => d.docId === docId);
+    record(tag + ": the intact version exports despite a damaged timestamp",
+      doc?.snapshots.length === 1 && doc.snapshots[0].stateJson === body && bundle.history.omittedSnapshots === 1, JSON.stringify(bundle.history));
+    record(tag + ": its image bytes export from desktop storage",
+      bundle.blobs[imageSha]?.b64 === bytes.toString("base64") && bundle.missingBlobs.length === 0, JSON.stringify(bundle.blobs));
+    record(tag + ": export does not rewrite the damaged index", fs.readFileSync(indexPath, "utf8") === before, "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
 async function caseHistoryOpaqueWrites(target) {
   const tag = target.name + " history: opaque entries survive writes and backup retention";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -5671,6 +5702,7 @@ async function runTargetSuite(target, groupFilter) {
     ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target), hookFree],
     ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target), hookFree],
     ["history: damaged entries preserve intact versions", () => caseHistoryDamagedEntries(target), hookFree],
+    ["history: export keeps intact versions and images beside damage", () => caseHistoryDamagedExport(target)],
     ["history: opaque entries survive writes and backup retention", () => caseHistoryOpaqueWrites(target), hookFree],
     ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target), hookFree],
     ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target), hookFree],
