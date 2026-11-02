@@ -4,10 +4,11 @@ import type { DesktopWireFailure } from "../shared/desktop-contract.d.ts";
 
 import type * as NodeFs from "node:fs";
 
-import type { DesktopDraftStoreBoundary, DesktopFileServiceBoundary, DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopDraftStoreBoundary, DesktopDocumentIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopFileService } from "./file-service.ts";
 
 const fs: typeof NodeFs = require("node:fs");
-const { readFileEntry }: Pick<DesktopFileServiceBoundary, "readFileEntry"> = require("./file-service");
+const { readFileEntry }: DesktopFileService = require("./file-service.ts");
 const { restoreDoneAction }: { restoreDoneAction: (outcome: string) => "open" | "drop" | "release" } = require("./drafts");
 const { LAST_KNOWN_TITLE_MAX }: { LAST_KNOWN_TITLE_MAX: number } = require("./desktop-state");
 

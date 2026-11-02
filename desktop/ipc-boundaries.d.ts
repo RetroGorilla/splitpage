@@ -7,6 +7,9 @@ import type {
   DesktopWireTakenDraft, DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
+import type { createFileRegistry } from "./file-service.ts";
+import type { createRecents } from "./recents.ts";
+import type { createDocClaims } from "./doc-claims.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
 
@@ -34,24 +37,9 @@ export interface DesktopMainWindow {
   tabIds: string[];
 }
 
-export interface DesktopFileRegistryBoundary {
-  register: (path: string) => string;
-  pathOf: (id: string) => string | undefined;
-}
-
-export interface DesktopFileServiceBoundary {
-  pathKey: (path: string) => string;
-  readFileEntry: (id: string, path: string) => Promise<DesktopIpcResult<"splitpage:read-file">>;
-  toBuffer: (bytes: DesktopIpcArgs<"splitpage:write-file">[1]) => Buffer;
-  writeFileEntry: (path: string, bytes: Buffer) => Promise<DesktopIpcResult<"splitpage:write-file">>;
-}
-
-export interface DesktopRecentsBoundary {
-  forRenderer: () => DesktopIpcResult<"splitpage:recents-list">;
-  note: (path: string, title: string) => boolean;
-  removeByFileId: (id: string) => boolean;
-  clear: () => boolean;
-  persist: () => Promise<unknown>;
+export interface DesktopStateStoreBoundary {
+  read: () => { recents: { absPath: string; title: string; at: number }[] };
+  write: (mutator: (state: ReturnType<DesktopStateStoreBoundary["read"]>) => ReturnType<DesktopStateStoreBoundary["read"]>) => Promise<boolean>;
 }
 
 export interface DesktopDraftStoreBoundary {
@@ -67,8 +55,8 @@ export interface DesktopMainCommon {
   tabOf: (event: DesktopIpcEvent) => DesktopMainTab | null;
   tabs: Map<string | undefined, DesktopMainTab>;
   windowsById: Map<string, DesktopMainWindow>;
-  fileIds: DesktopFileRegistryBoundary;
-  recents: DesktopRecentsBoundary;
+  fileIds: ReturnType<typeof createFileRegistry>;
+  recents: ReturnType<typeof createRecents>;
   testMode: boolean;
   draftStore: () => DesktopDraftStoreBoundary | null;
   draftsPreviousSession: () => string;
@@ -100,7 +88,7 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
   applyWindowTitle: (window: DesktopMainWindow) => void;
   pushShellState: (windowId: string) => void;
   persistShellState: () => void;
-  docClaims: { record: (sender: WebContents, tab: DesktopMainTab) => void };
+  docClaims: ReturnType<typeof createDocClaims>;
   flushPendingPayload: (tab: DesktopMainTab, options?: { force: boolean }) => void;
   restoreNotice: { isFor: (id: string) => boolean; deliver: (tab: DesktopMainTab) => void };
   routeOpenPath: (path: string, options: { fromWindowId: string; fromTabId: string }) => DesktopIpcResult<"splitpage:route-open"> | null;

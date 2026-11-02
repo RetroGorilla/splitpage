@@ -1,21 +1,42 @@
 "use strict";
 
-const crypto = require("node:crypto");
+import type * as NodeCrypto from "node:crypto";
+import type { WebContents } from "electron";
+import type * as DocIdPolicy from "../shared/doc-id-policy.js";
+import type { DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
 
-function createDocClaims({ policy, homeKeyOf, contentsFor, askToReassign }) {
+const crypto: typeof NodeCrypto = require("node:crypto");
+
+type DesktopDocumentClaim = {
+  docId: string;
+  homeKey: string;
+  seq: number;
+  title: DesktopMainTab["title"];
+  pendingToId: string | null;
+};
+
+function createDocClaims({ policy, homeKeyOf, contentsFor, askToReassign }: {
+  policy: Pick<typeof DocIdPolicy, "DOC_ID_RE" | "docIdFromSha256Hex" | "duplicateReplacementInput"> & {
+    chooseDuplicateLoser: (a: DesktopDocumentClaim, b: DesktopDocumentClaim) => DesktopDocumentClaim | null;
+  };
+  homeKeyOf: (tab: DesktopMainTab) => string | null;
+  contentsFor: (id: number) => WebContents | null;
+  askToReassign: (contents: WebContents, payload: DesktopIpcArgs<"splitpage:reassign-doc-id">[0]) => void;
+}) {
   const { DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput } = policy;
-  const claims = new Map();
+  const claims = new Map<number, DesktopDocumentClaim>();
   let seq = 0;
-  const cleanupRegistered = new WeakSet();
+  const cleanupRegistered = new WeakSet<WebContents>();
 
-  function replacementDocId(fromId, homeKey) {
+  function replacementDocId(fromId: string, homeKey: string) {
     const digest = crypto.createHash("sha256")
       .update(duplicateReplacementInput(fromId, homeKey), "utf8")
       .digest("hex");
     return docIdFromSha256Hex(digest);
   }
 
-  function checkDuplicate(senderId) {
+  function checkDuplicate(senderId: number) {
     const mine = claims.get(senderId);
     if (!mine) return;
     for (const [otherId, theirs] of claims) {
@@ -35,7 +56,7 @@ function createDocClaims({ policy, homeKeyOf, contentsFor, askToReassign }) {
     }
   }
 
-  function record(sender, tab) {
+  function record(sender: WebContents, tab: DesktopMainTab) {
     const webContentsId = sender.id;
     const docId = typeof tab.docId === "string" && DOC_ID_RE.test(tab.docId) ? tab.docId : null;
     const homeKey = docId ? homeKeyOf(tab) : null;
@@ -64,5 +85,7 @@ function createDocClaims({ policy, homeKeyOf, contentsFor, askToReassign }) {
 
   return { record };
 }
+
+export type { createDocClaims };
 
 module.exports = { createDocClaims };
