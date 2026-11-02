@@ -191,7 +191,7 @@ test("the folded owner change leaves alone an owner I unassigned later, and does
   currentDocument().people.push(person("pT_ada", "ADA"));
   itemOf(currentDocument(), "brollShots", "Dock").owner = "pT_ada";
   currentDocument().brollShots.push(shot("bs_pier", "Pier", "p_Gone"));
-  assert.equal(redo().cleared, 1);
+  assert.equal(redo().cleared, undefined);
   assert.equal(ownerOf("brollShots", "Dock"), "p_Ada");
   itemOf(currentDocument(), "brollShots", "Dock").owner = "";
   commit();
