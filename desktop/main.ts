@@ -169,7 +169,7 @@ const APP_ROOT = app.isPackaged
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
 const historyPolicy: typeof HistoryPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
-const { createHistoryStore }: typeof HistoryStore = require(path.join(SHARED_ROOT, "history-store.ts"));
+const { createHistoryStore, projectHistoryBucket }: typeof HistoryStore = require(path.join(SHARED_ROOT, "history-store.ts"));
 const {
   DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
 }: typeof DocIdPolicy = require(path.join(SHARED_ROOT, "doc-id-policy.ts"));
@@ -548,7 +548,7 @@ function initHistoryStore() {
   const historyDir = path.join(app.getPath("userData"), "history");
   const backend = createHistoryFsBackend({
     dir: historyDir,
-    fs, fsp, path, crypto,
+    fs, fsp, path, crypto, projectHistoryBucket,
     testHooks: historyTestBackendHooks()
   });
   historyStore = createHistoryStore({

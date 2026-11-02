@@ -11,6 +11,7 @@ type HistoryFsDocument = { formatVersion: number; buckets: SharedHistoryIndex; t
 type HistoryFsOptions = {
   dir: string; fs: typeof NodeFs; fsp: typeof NodeFs.promises;
   path: typeof NodePath; crypto: typeof NodeCrypto;
+  projectHistoryBucket: typeof ProjectHistoryBucket;
   now?: () => number; name?: string; maxBodyBytes?: number;
   testHooks?: Record<string, (...args: string[]) => unknown> | undefined;
 };
@@ -21,7 +22,6 @@ const { createBlobStore, isSha256 }: {
   createBlobStore: typeof CreateBlobStore;
   isSha256: typeof IsSha256;
 } = require("./blob-store.ts");
-const { projectHistoryBucket }: { projectHistoryBucket: typeof ProjectHistoryBucket } = require("../shared/history-store.ts");
 
 const FORMAT_VERSION = 2;
 const INDEX_FILE = "index.json";
@@ -52,14 +52,6 @@ function bodyErrorCode(code: unknown) {
   return "io";
 }
 
-function namedShas(buckets: SharedHistoryIndex) {
-  const named = new Set<string>();
-  for (const b of Object.keys(buckets)) {
-    for (const sha of Object.keys(projectHistoryBucket(buckets[b]).references)) named.add(sha);
-  }
-  return named;
-}
-
 function cleanIndexDoc(raw: unknown): HistoryFsDocument | null {
   if (!isPlainObject(raw) || !isPlainObject((raw as HistoryFsFields).buckets)) return null;
   const formatVersion = Number((raw as HistoryFsFields).formatVersion);
@@ -78,11 +70,20 @@ function emptyDoc(): HistoryFsDocument {
 
 function createHistoryFsBackend(opts?: HistoryFsOptions | null) {
   const o = opts || ({} as HistoryFsOptions);
-  const { dir, fs, fsp, path, crypto } = o;
+  const { dir, fs, fsp, path, crypto, projectHistoryBucket } = o;
   if (typeof dir !== "string" || !dir) throw new TypeError("createHistoryFsBackend: dir is required");
   if (!fs || !fsp || !path || !crypto) throw new TypeError("createHistoryFsBackend: fs, fsp, path and crypto are required");
+  if (typeof projectHistoryBucket !== "function") throw new TypeError("createHistoryFsBackend: projectHistoryBucket is required");
   const now = typeof o.now === "function" ? o.now : Date.now;
   const hooks = isPlainObject(o.testHooks) ? o.testHooks as NonNullable<HistoryFsOptions["testHooks"]> : null;
+
+  function namedShas(buckets: SharedHistoryIndex) {
+    const named = new Set<string>();
+    for (const b of Object.keys(buckets)) {
+      for (const sha of Object.keys(projectHistoryBucket(buckets[b]).references)) named.add(sha);
+    }
+    return named;
+  }
 
   const indexPath = path.join(dir, INDEX_FILE);
   const prevPath = path.join(dir, PREV_FILE);
