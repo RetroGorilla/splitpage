@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.join(here, "..");
 const MAIN = stripTypeScriptTypes(fs.readFileSync(path.join(desktop, "main.ts"), "utf8"));
-const EXPOSED = ["createTabWindow", "createTab", "tabs", "windowsById", "pendingDraftFlushes", "initDraftStore", "persistShellState", "requestCloseTab"];
+const EXPOSED = ["createTabWindow", "createTab", "tabs", "windowsById", "pendingDraftFlushes", "initDraftStore", "persistShellState", "requestCloseTab", "registerActivate"];
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -581,6 +581,99 @@ test("session end while the quit question waits cancels the quit", async (w) => 
     "flush T1 keep=false"
   ]);
 });
+
+test("macOS dock activation after the last window closes resumes persisted layout writes", async (w) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    w.main.registerActivate();
+    let rec = w.window();
+    w.tab(rec, "T1");
+    await w.main.persistShellState();
+    const statePath = path.join(w.userData, "desktop-state.json");
+    for (let round = 0; round < 2; round++) {
+      const beforeClose = fs.readFileSync(statePath, "utf8");
+      w.start();
+      rec.win.close();
+      assert.equal(w.main.windowsById.size, 0);
+      assert.equal(w.entries.includes("app.quit"), false);
+      assert.equal(await w.main.persistShellState(), false);
+      assert.equal(fs.readFileSync(statePath, "utf8"), beforeClose);
+      w.app.emit("activate");
+      assert.equal(w.main.windowsById.size, 1);
+      rec = [...w.main.windowsById.values()][0];
+      rec.bounds = { x: 50 + round, y: 60, width: 1100, height: 800 };
+      await w.main.persistShellState();
+      const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      assert.equal(state.windows[0].windowId, rec.id);
+      assert.deepEqual(state.windows[0].bounds, rec.bounds);
+      assert.equal(state.windows[0].tabs[0].tabId, rec.activeTabId);
+    }
+  } finally { Object.defineProperty(process, "platform", platform); }
+});
+
+for (const platformName of ["darwin", "win32", "linux"]) {
+  test(`a window attached during final-close teardown on ${platformName} keeps the saved layout frozen`, async (w) => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: platformName });
+    try {
+      const rec = w.window();
+      w.tab(rec, "T1");
+      await w.main.persistShellState();
+      const statePath = path.join(w.userData, "desktop-state.json");
+      const savedState = fs.readFileSync(statePath, "utf8");
+      let duringClose;
+      rec.win.on("close", () => {
+        w.tab(w.window(), "T2");
+        duringClose = w.main.persistShellState();
+      });
+      rec.win.close();
+      assert.equal(await duringClose, false);
+      assert.equal(await w.main.persistShellState(), false);
+      assert.equal(fs.readFileSync(statePath, "utf8"), savedState);
+    } finally { Object.defineProperty(process, "platform", platform); }
+  });
+}
+
+test("a macOS reopen during an asynchronous quit keeps the completed-close snapshot frozen", async (w) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    const rec = w.window();
+    w.tab(rec, "T1", { file: w.existing });
+    await w.main.persistShellState();
+    const statePath = path.join(w.userData, "desktop-state.json");
+    const savedState = fs.readFileSync(statePath, "utf8");
+    let beforeReopen;
+    let duringQuit;
+    rec.win.on("close", (event) => { if (!event.prevented) w.app.quit(); });
+    rec.win.on("closed", () => {
+      beforeReopen = w.main.persistShellState();
+      w.tab(w.window(), "T2");
+      duringQuit = w.main.persistShellState();
+    });
+    w.start();
+    rec.win.close();
+    await w.until("quit done");
+    assert.equal(await beforeReopen, false);
+    assert.equal(await duringQuit, false);
+    assert.equal(fs.readFileSync(statePath, "utf8"), savedState);
+  } finally { Object.defineProperty(process, "platform", platform); }
+});
+
+for (const ending of ["quit", "session-end"]) {
+  test(`creating a window during ${ending} keeps session writes frozen`, async (w) => {
+    const rec = w.window();
+    w.tab(rec, "T1");
+    await w.main.persistShellState();
+    if (ending === "quit") w.app.quit();
+    else rec.win.emit("session-end");
+    w.start();
+    w.tab(w.window(), "T2");
+    assert.equal(await w.main.persistShellState(), false);
+    assert.equal(w.entries.includes("state-write"), false);
+  });
+}
 
 const saved = { test: process.env.SPLITPAGE_TEST, noUpdate: process.env.SPLITPAGE_NO_UPDATE_CHECK, userData: process.env.SPLITPAGE_USER_DATA };
 const restoreEnv = (name, value) => { if (value === undefined) delete process.env[name]; else process.env[name] = value; };
