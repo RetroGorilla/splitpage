@@ -4,8 +4,8 @@ import type { CellInput } from "../../core/text/runs.ts";
 export type TransactionKind = "edit" | "replay" | "amend" | "disk" | "reload" | "recovery" | "adopt";
 
 export interface CellChange {
-  readonly rowId: string;
-  readonly field: string;
+  readonly rowId: string | null;
+  readonly field: string | null;
 }
 
 export interface ChangeSet {
