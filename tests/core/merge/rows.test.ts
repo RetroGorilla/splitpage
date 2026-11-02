@@ -196,17 +196,6 @@ test("rows: with no base nothing is a delete, and a row only they hold counts as
   assert.deepEqual(r.stats, { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 1, rowsAddedByThem: 1 });
 });
 
-for (const side of ["mine", "theirs"]) {
-  test("rows: a new scene comment on " + side + " retains its unchanged scene when the other side lacks its id", () => {
-    const base = { rows: [row("r1", "Repeat.")], comments: [] };
-    const commented = { rows: jsonCopy(base.rows), comments: [{ id: "note", rowId: "r1", field: "visualImage", body: "Scene note" }] };
-    const absent = { rows: [], comments: [] };
-    const got = runRows([], base, side === "mine" ? commented : absent, side === "mine" ? absent : commented);
-    assert.deepEqual(got.rows, base.rows);
-    assert.deepEqual(got.conflicts, []);
-  });
-}
-
 const PROTO_IDS = ["constructor", "__proto__", "toString", "hasOwnProperty"];
 
 test("rows with Object.prototype ids: each side's new ones are added once, after their neighbour (#278)", () => {

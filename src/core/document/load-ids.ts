@@ -1,11 +1,11 @@
 import { sha256Hex } from "./ids.ts";
 
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return "[" + (value as unknown[]).map(canonicalJson).join(",") + "]";
+export function canonicalSourceJson(value: unknown): string {
+  if (Array.isArray(value)) return "[" + (value as unknown[]).map(canonicalSourceJson).join(",") + "]";
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
     return "{" + Object.keys(record).filter(key => record[key] !== undefined).sort()
-      .map(key => JSON.stringify(key) + ":" + canonicalJson(record[key])).join(",") + "}";
+      .map(key => JSON.stringify(key) + ":" + canonicalSourceJson(record[key])).join(",") + "}";
   }
   return JSON.stringify(value) ?? "null";
 }
@@ -26,7 +26,7 @@ export function createLoadIds(source: () => unknown, reservations: () => Iterabl
   function prepare(): Set<string> {
     if (!reserved) {
       // why: A changed source must never recycle a twin's or a displaced reservation's repaired identity.
-      namespace = sha256Hex(canonicalJson(source())).slice(0, 24);
+      namespace = sha256Hex(canonicalSourceJson(source())).slice(0, 24);
       reserved = new Set(reservations());
     }
     return reserved;
