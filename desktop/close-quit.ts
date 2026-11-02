@@ -49,7 +49,7 @@ function createCloseQuit({
 
   function tabFileGone(tab: DesktopMainTab) {
     if (!tabHasFile(tab)) return Promise.resolve(false);
-    return checkFileGone(closeCheckStat, tab.source.absPath, FILE_CHECK_TIMEOUT_MS);
+    return checkFileGone(closeCheckStat, (tab.source as Extract<DesktopMainTab["source"], { kind: "file" }>).absPath, FILE_CHECK_TIMEOUT_MS);
   }
 
   function keepDraftsOfGoneFiles(goneTabs: DesktopMainTab[], holder: object) {
@@ -61,7 +61,7 @@ function createCloseQuit({
   }
 
   function goneFileTabsOf(tabIds: (string | undefined)[]) {
-    const fileTabs = tabIds.map((id) => tabs.get(id)).filter(tabHasFile);
+    const fileTabs = tabIds.map((id) => tabs.get(id)).filter(tabHasFile) as DesktopMainTab[];
     return Promise.all(fileTabs.map(tabFileGone))
       .then((gone) => fileTabs.filter((tab, i) => gone[i] && tabs.get(tab.id) === tab));
   }
@@ -86,7 +86,7 @@ function createCloseQuit({
     const out: DesktopMainTab[] = [];
     for (const id of tabIds) {
       const tab = tabs.get(id);
-      if (tabIsUnsaved(tab) || (tab && gone.includes(tab))) out.push(tab);
+      if (tabIsUnsaved(tab) || (tab && gone.includes(tab))) out.push(tab as DesktopMainTab);
     }
     return out;
   }
