@@ -181,7 +181,7 @@
     "desktop/main.js": [
       "/* eslint-disable-next-line no-control-regex -- stripping control characters is the function's job; the class is written out above. */"
     ],
-    "desktop/voice-helper.js": [
+    "desktop/voice-helper.ts": [
       "/* eslint-disable-next-line no-control-regex -- stripping control characters from a device name the helper reports is the point */"
     ],
     "desktop/voice/listen.ps1": [

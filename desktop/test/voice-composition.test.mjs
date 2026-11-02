@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.join(here, "..");
-const { createVoiceComposition, VOICE_RELAY_PREFIX } = require(path.join(desktop, "voice-composition.js"));
-const { createCloseQuit } = require(path.join(desktop, "close-quit.js"));
+const { createVoiceComposition, VOICE_RELAY_PREFIX } = require(path.join(desktop, "voice-composition.ts"));
+const { createCloseQuit } = require(path.join(desktop, "close-quit.ts"));
 const FAKE = path.join(here, "fake-voice-helper.mjs");
 const STATIC = { "/index.html": { file: "index.html", type: "text/html; charset=utf-8" } };
 
