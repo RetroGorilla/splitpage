@@ -20,9 +20,21 @@ test("#1049: missing scene ids reload identically without drawing editing ids", 
   const first = migrateRows(jsonCopy(input), f.ports);
   const second = migrateRows(jsonCopy(input), f.ports);
   assert.equal(JSON.stringify(first), JSON.stringify(second));
-  assert.deepEqual(first.rows.map(r => r.id), ["r-c28a57430b578cccb2ea23d7", "r-ccb261ff36e51fff7ccf5edf"]);
+  assert.deepEqual(first.rows.map(r => r.id), ["r-load-f1731b809334dbc038c01b54-1", "r-load-f1731b809334dbc038c01b54-2"]);
   assert.deepEqual(f.ids.minted, []);
 });
+
+for (const text of ["Repeat.", ""]) {
+  test("#1049 review: editing a twin cannot recycle either repaired scene id: " + JSON.stringify(text), () => {
+    const source = { schema: 2, docId: MINTED_DOC_ID, rows: [{ audioText: text }, { audioText: text }] };
+    const before = migrateRows(jsonCopy(source), fakeMigration().ports);
+    source.rows[0] = { audioText: "Disk first." };
+    const after = migrateRows(jsonCopy(source), fakeMigration().ports);
+    assert.deepEqual(after.rows.map(row => row.audioText), ["Disk first.", text]);
+    assert.ok(after.rows.every(row => !before.rows.some(old => old.id === row.id)));
+    assert.equal(new Set(after.rows.map(row => row.id)).size, 2);
+  });
+}
 
 test("#1049: missing ids skip section ids and normalized row ids on either side", () => {
   const id = "r-c28a57430b578cccb2ea23d7";
@@ -31,17 +43,22 @@ test("#1049: missing ids skip section ids and normalized row ids on either side"
     [{ id: id + "!", audioText: "held" }, { audioText: "one" }, { audioText: "one" }]
   ]) {
     const out = migrateRows({ schema: 2, rows, sections: [{ id: id + "-1", name: "Part", firstSceneId: id }] }, fakeMigration().ports);
-    assert.deepEqual(out.rows.filter(r => r.audioText === "one").map(r => r.id), [id + "-2", id + "-3"]);
+    const repaired = out.rows.filter(r => r.audioText === "one").map(r => r.id);
+    assert.equal(new Set(repaired).size, 2);
+    assert.ok(repaired.every(value => value !== id && value !== id + "-1"));
+    assert.equal(new Set(out.rows.map(r => r.id)).size, 3);
     assert.deepEqual(out.sections, [{ id: id + "-1", name: "Part", firstSceneId: id }]);
   }
 });
 
-test("#1049: content-derived row ids survive insertions, reordering and key ordering", () => {
+test("#1049: key ordering keeps source identity; insertion and reordering cannot recycle a repaired id", () => {
   const rows = [{ audioText: "one", visualText: "wide" }, { audioText: "two" }];
   const first = migrateRows({ schema: 2, rows: jsonCopy(rows) }, fakeMigration().ports);
-  const second = migrateRows({ schema: 2, rows: [rows[1], { audioText: "inserted" }, { visualText: "wide", audioText: "one" }] }, fakeMigration().ports);
-  assert.equal(second.rows[0]?.id, first.rows[1]?.id);
-  assert.equal(second.rows[2]?.id, first.rows[0]?.id);
+  const equivalent = migrateRows({ rows: [{ visualText: "wide", audioText: "one" }, { audioText: "two" }], schema: 2 }, fakeMigration().ports);
+  assert.deepEqual(equivalent.rows.map(r => r.id), first.rows.map(r => r.id));
+  const second = migrateRows({ schema: 2, rows: [jsonCopy(rows[1]), { audioText: "inserted" }, { visualText: "wide", audioText: "one" }] }, fakeMigration().ports);
+  assert.ok(second.rows.every(r => !first.rows.some(previous => previous.id === r.id)));
+  assert.deepEqual(second.rows.map(r => r.audioText), ["two", "inserted", "one"]);
 });
 
 test("#1049: seeded mixed ids are unique, stable and a fixed point without consuming editing ids", () => {
@@ -92,7 +109,11 @@ test("#1041: missing ids cannot take a later row's existing id or a previously d
   const id = "r-4f53cda18c2baa0c0354bb5f";
   for (const rows of [[{}, { id }, { id: "!?" }, { id: id + "-1" }], [{ id }, {}, { id: "!?" }, { id: id + "-1" }]]) {
     const out = migrateRows({ schema: 2, rows }, f.ports);
-    assert.deepEqual(out.rows.filter(r => r.id !== id && r.id !== id + "-1").map(r => r.id), [id + "-2", id + "-3"]);
+    const repaired = out.rows.filter(r => r.id !== id && r.id !== id + "-1");
+    assert.equal(repaired.length, 2);
+    assert.ok(repaired.every(r => /^r-load-[0-9a-f]{24}-[0-9]+$/.test(r.id)));
+    assert.ok(out.rows.some(r => r.id === id));
+    assert.ok(out.rows.some(r => r.id === id + "-1"));
     assert.equal(new Set(out.rows.map(r => r.id)).size, 4);
   }
   assert.deepEqual(f.ids.minted, []);
@@ -109,6 +130,19 @@ test("#1041: a document with unique ids retains its exact bytes and consumes no 
   const bytes = JSON.stringify(original);
   const f = fakeMigration();
   assert.equal(JSON.stringify(migrateRows(jsonCopy(original), f.ports)), bytes);
+  assert.deepEqual(f.ids.minted, []);
+});
+
+test("#1049 review: a complete document with markup and matched b-roll never scans or allocates load ids", () => {
+  const f = fakeMigration();
+  f.ports.htmlIds = () => { throw new Error("Complete documents do not need a second HTML parse"); };
+  const doc = migrateRows({ schema: 2, docId: MINTED_DOC_ID,
+    rows: [{ id: "r1", visualText: "B-roll: Steam", audioText: '<span data-cmt="c1">Words</span>' }],
+    comments: [{ id: "c1", rowId: "r1", anchorId: "c1", body: "Comment", replies: [{ id: "rp1", body: "Reply" }] }],
+    brollShots: [{ id: "bs1", name: "Steam" }]
+  }, f.ports);
+  assert.deepEqual(doc.rows.map(r => r.id), ["r1"]);
+  assert.deepEqual(doc.brollShots.map(b => b.id), ["bs1"]);
   assert.deepEqual(f.ids.minted, []);
 });
 
@@ -244,15 +278,15 @@ test("missing record ids are derived while a missing docId comes from the IdSour
     brollShots: [{ name: "Shot" }]
   }, f.ports);
   assert.deepEqual(f.ids.minted, []);
-  assert.deepEqual(out.rows.map(r => r.id), ["r-4f53cda18c2baa0c0354bb5f"]);
-  assert.deepEqual(out.people.map(p => p.id), ["p-b4585e7f24a3bae24509a21d"]);
-  assert.deepEqual(out.brollShots.map(b => b.id), ["bs-86c06edaf0052a7ff6811d53"]);
+  assert.deepEqual(out.rows.map(r => r.id), ["r-load-8630b67bd0701b98d5199a56-1"]);
+  assert.deepEqual(out.people.map(p => p.id), ["p-load-8630b67bd0701b98d5199a56-1"]);
+  assert.deepEqual(out.brollShots.map(b => b.id), ["bs-load-8630b67bd0701b98d5199a56-1"]);
   assert.equal(out.docId, MINTED_DOC_ID);
   const c = list(out, "comments")[0] as Item;
-  assert.equal(c.id, "c-4acf13373d6311b0ba2a84f3");
-  assert.equal(c.rowId, "r-orphan-0");
+  assert.equal(c.id, "c-load-8630b67bd0701b98d5199a56-1");
+  assert.equal(c.rowId, "r-orphan-load-8630b67bd0701b98d5199a56-1");
   assert.equal(c.anchorId, c.id);
-  assert.deepEqual((c.replies as Item[]).map(r => r.id), ["rp-4f53cda18c2baa0c0354bb5f"]);
+  assert.deepEqual((c.replies as Item[]).map(r => r.id), ["rp-load-8630b67bd0701b98d5199a56-1"]);
   assert.equal(migrateRows({ docId: "d" + "1".repeat(32) }, fakeMigration().ports).docId, "d" + "1".repeat(32));
 });
 
@@ -516,11 +550,11 @@ test("a value whose toString or valueOf is not a function is no text: it migrate
   const row = list(out, "rows")[0] as Item;
   const c = list(out, "comments")[0] as Item;
   assert.equal(out.title, "");
-  assert.equal(row.id, "r-15bd0416528bfc5a4640ea09");
+  assert.equal(row.id, "r-load-7ba5b72854bd6cada1854e32-1");
   assert.deepEqual([row.updatedBy, row.audioText, row.visualText], ["Anonymous", "", ""]);
-  assert.deepEqual([c.rowId, c.author, c.quotedText, c.body], ["r-orphan-0", "Anonymous", "", ""]);
-  assert.deepEqual((c.replies as Item[]).map((r) => [r.id, r.author, r.body]), [["rp-85f46f02a8b7da2a91fb56e6", "Anonymous", ""]]);
-  assert.deepEqual(list(out, "people").map((p) => [p.id, p.name]), [["p-b4585e7f24a3bae24509a21d", "Ann"]]);
+  assert.deepEqual([c.rowId, c.author, c.quotedText, c.body], ["r-orphan-load-7ba5b72854bd6cada1854e32-1", "Anonymous", "", ""]);
+  assert.deepEqual((c.replies as Item[]).map((r) => [r.id, r.author, r.body]), [["rp-load-7ba5b72854bd6cada1854e32-1", "Anonymous", ""]]);
+  assert.deepEqual(list(out, "people").map((p) => [p.id, p.name]), [["p-load-7ba5b72854bd6cada1854e32-1", "Ann"]]);
   const tag = list(out, "productionTags")[0] as Item;
   assert.deepEqual([tag.notes, tag.owner], ["", ""]);
   assert.match(tag.id as string, /^t_[0-9a-z]+$/);
@@ -582,7 +616,7 @@ test("6.5: entry gives each named b-roll line a record, renames the one a line m
   }, f.ports);
   assert.deepEqual(list(out, "brollShots").map((b) => [b.id, b.name, b.audioRef]), [
     ["b_pour", "The Pour", ""],
-    ["bs-5d83bb9469d8212ad26318fc", "Steam", "Say now"]
+    ["bs-load-9d53cdf8722df9cd3d08796e-1", "Steam", "Say now"]
   ]);
   assert.deepEqual(f.ids.minted, []);
   const again = migrateRows(jsonCopy(out), fakeMigration().ports);

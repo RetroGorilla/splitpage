@@ -92,7 +92,7 @@ test("applyMarkdownProject: a table with a different number of scenes asks the s
 
 test("#1049: accepting the same hand-added Markdown scenes twice preserves their ids", async () => {
   const project = (): MarkdownProject => ({
-    state: migrateRows({ schema: 2, title: "T", rows: [] }), docIdEmbedded: false, title: null,
+    state: migrateRows({ schema: 2, docId: "d" + "a".repeat(32), title: "T", rows: [] }), docIdEmbedded: false, title: null,
     table: [{ visualText: "v", audioText: "a", statusText: "" }, { visualText: "new", audioText: "added", statusText: "" }]
   });
   const { services, calls } = fakes(null, "table");

@@ -5,7 +5,8 @@ import { SCHEMA_VERSION, STATE_FIELDS } from "./document/fields.ts";
 import type { StateField } from "./document/fields.ts";
 import { migrateGallery } from "./document/gallery.ts";
 import type { GalleryRow } from "./document/gallery.ts";
-import { deriveDocId, docIdEmbeddedIn, sha256Hex } from "./document/ids.ts";
+import { deriveDocId, docIdEmbeddedIn } from "./document/ids.ts";
+import { createLoadIds } from "./document/load-ids.ts";
 import { mediaComments } from "./document/media.ts";
 import type { CellMedia, MediaComment, MediaField, MediaRow } from "./document/media.ts";
 import type { IdSource, ImageSource } from "./document/ports.ts";
@@ -29,7 +30,7 @@ import {
 } from "./document/text-policy.ts";
 import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
 import { sectionsInOrder, writeSections } from "./document/sections.ts";
-import { applyBrollRecords, brollCutRenames, collectBrollFromRows, planBrollRecords } from "./production/broll.ts";
+import { applyBrollRecords, brollCutRenames, planBrollRecords } from "./production/broll.ts";
 import type { BrollShot, LineShotIds } from "./production/broll.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
 import { TAG_FIELDS, collectTagsFromRows, cueCutRenames, missingRegistryTags, retagMarks } from "./production/tags.ts";
@@ -85,19 +86,6 @@ function reservedIds(s: Bag, ports: MigratePorts): Set<string> {
     }
   }
   return reserved;
-}
-
-function derivedId(wanted: string, reserved: Set<string>): string {
-  let id = wanted, suffix = 0;
-  while (reserved.has(id)) id = wanted + "-" + (++suffix);
-  reserved.add(id);
-  return id;
-}
-
-function missingId(record: Bag, prefix: string, reserved: Set<string>): string {
-  const content = Object.keys(record).filter(key => key !== "id").sort().map(key => [key, record[key]]);
-  // why: Positions can name different scenes after a hand edit, allowing a recovery merge to overwrite unrelated words.
-  return derivedId(prefix + "-" + sha256Hex(JSON.stringify(content)).slice(0, 24), reserved);
 }
 
 export function isDocumentObject(raw: unknown): raw is Record<string, unknown> {
@@ -217,30 +205,28 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   if (!Array.isArray(s.rows)) s.rows = [];
   s.rows = (s.rows as unknown[]).filter(isObject);
   const originalRowIds = (s.rows as Bag[]).map(function (r) { return cleanId(r.id); });
-  const reservedRowIds = reservedIds(s, ports);
+  const loadIds = createLoadIds(function () { return s; }, function () { return reservedIds(s, ports); });
+  const loadedIds: IdSource = { docId: ids.docId, id: loadIds.id };
   function sanitize(html: unknown): string {
-    let at = 0;
-    return ports.sanitize(html, {
-      docId: ids.docId,
-      id: prefix => missingId({ html, at: at++ }, prefix, reservedRowIds)
-    });
+    return ports.sanitize(html, loadedIds);
   }
   const usedRowIds = new Set<string>();
   const duplicateRowIds = new Set<string>();
   const rowIdSuffixes = new Map<string, number>();
   let movedMedia: MediaComment[] = [];
   (s.rows as Bag[]).forEach(function (r, at) {
-    let id = originalRowIds[at] || missingId(r, "r", reservedRowIds);
+    let id = originalRowIds[at] || loadIds.id("r");
     if (originalRowIds[at] && usedRowIds.has(id)) {
       duplicateRowIds.add(id);
+      const reservedRowIds = loadIds.reserved();
       // why: Disk reloads must repair the same scene identically, or draft recovery mistakes it for a new scene.
       let suffix = rowIdSuffixes.get(id) || 0;
       do { suffix++; } while (reservedRowIds.has(id + "-" + suffix));
       rowIdSuffixes.set(id, suffix);
       id += "-" + suffix;
+      reservedRowIds.add(id);
     }
     r.id = id;
-    reservedRowIds.add(id);
     usedRowIds.add(id);
     r.status = rowStatusId(r.status) ? r.status : "todo";
     const setLength = normalizeSceneLength(r.lengthSeconds);
@@ -262,7 +248,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   if (!Array.isArray(s.comments)) s.comments = [];
   s.comments = (s.comments as unknown[]).filter(isObject);
   (s.comments as Bag[]).forEach(function (c) {
-    c.id = cleanId(c.id) || missingId(c, "c", reservedRowIds);
+    c.id = cleanId(c.id) || loadIds.id("c");
   });
   if (movedMedia.length) {
     const haveComment: Record<string, boolean> = Object.create(null);
@@ -273,19 +259,19 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
       (s.comments as unknown[]).push(c);
     });
   }
-  (s.comments as Bag[]).forEach(function (c, at) {
+  (s.comments as Bag[]).forEach(function (c) {
     if (c.field === "title") {
       c.rowId = null;
       c.anchorId = null;
     } else {
-      c.rowId = cleanId(c.rowId) || derivedId("r-orphan-" + at, reservedRowIds);
+      c.rowId = cleanId(c.rowId) || loadIds.id("r-orphan");
       c.anchorId = cleanId(c.anchorId) || c.id;
       c.field = (c.field === "visualText" || c.field === "visualImage") ? c.field : "audioText";
     }
     if (!Array.isArray(c.replies)) c.replies = [];
     c.replies = (c.replies as unknown[]).filter(isObject);
     (c.replies as Bag[]).forEach(function (rep) {
-      rep.id = cleanId(rep.id) || missingId(rep, "rp", reservedRowIds);
+      rep.id = cleanId(rep.id) || loadIds.id("rp");
       rep.body = sanitize(textOf(rep.body || ""));
       rep.author = plainName(rep.author);
       if (rep.createdAt !== undefined) rep.createdAt = stampOrNull(rep.createdAt);
@@ -320,7 +306,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   if (!Array.isArray(s.people)) s.people = [];
   s.people = (s.people as unknown[]).filter(isObject);
   (s.people as Bag[]).forEach(function (p) {
-    p.id = cleanId(p.id) || missingId(p, "p", reservedRowIds);
+    p.id = cleanId(p.id) || loadIds.id("p");
   });
   const peopleNames = settledNames((s.people as Bag[]).map(textOfName), 60, nameKey);
   (s.people as Bag[]).forEach(function (p, at) { p.name = peopleNames[at]; });
@@ -356,7 +342,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   if (!Array.isArray(s.brollShots)) s.brollShots = [];
   s.brollShots = (s.brollShots as unknown[]).filter(isObject);
   const shots = s.brollShots as Bag[];
-  shots.forEach(function (b) { b.id = cleanId(b.id) || missingId(b, "bs", reservedRowIds); });
+  shots.forEach(function (b) { b.id = cleanId(b.id) || loadIds.id("bs"); });
   const shotNames = settledNames(shots.map(textOfName), 200, nameKey, shotRenamesFor(shots, s.rows as ProductionRow[], ports.readers));
   shots.forEach(function (b, at) {
     b.name = shotNames[at];
@@ -372,23 +358,10 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   });
   s.brollShots = (s.brollShots as Bag[]).filter(function (b) { return b.name; });
   const readers = ports.readers;
-  const liveShots = collectBrollFromRows(s.rows as ProductionRow[], readers);
-  liveShots.forEach(b => { if (b.id) reservedRowIds.add(b.id); });
-  const lines = ports.brollLines || { held: new Map<string, string>(), drawn: new Map<string, string>() };
-  const occurrences = new Map<string, number>();
-  liveShots.forEach(function (b) {
-    if (b.id || !b.name) return;
-    const base = b.rowId + "\u0000" + normalizeTagName(b.name);
-    const occurrence = (occurrences.get(base) || 0) + 1;
-    occurrences.set(base, occurrence);
-    const key = base + "\u0000" + occurrence;
-    if (!lines.held.has(key) && !lines.drawn.has(key)) lines.drawn.set(key, missingId({ line: key }, "bs", reservedRowIds));
-  });
-  let shotAt = 0;
-  const shotIds: IdSource = { docId: ids.docId, id: prefix => missingId({ rows: s.rows, at: shotAt++ }, prefix, reservedRowIds) };
+  const shotIds: IdSource = { docId: ids.docId, id: loadIds.id };
   applyBrollRecords(s.brollShots as BrollShot[], planBrollRecords(s as ValidatedDocument, readers, shotIds, function (html) {
     return toPlainText(readers.cellOf(html || ""));
-  }, null, lines));
+  }, null, ports.brollLines, ports.brollLines ? function () { return loadIds.id("bs"); } : undefined));
 
   if (duplicateRowIds.size && Array.isArray(s.sections)) {
     s.sections.filter(isObject).forEach(function (section) {
