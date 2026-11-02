@@ -1,3 +1,4 @@
+import type { LocalFileOpening } from "../../application/transitions/local-files-ports.ts";
 import { createOperations } from "../../application/session/operation.ts";
 import type { OperationContext, Operations } from "../../application/session/operation.ts";
 import { createDocumentSources } from "../../application/transitions/sources.ts";
@@ -19,6 +20,7 @@ export interface LegacyTransitionPorts {
 }
 
 export interface LegacyOpening {
+  readonly file?: LocalFileOpening["file"];
   readonly kind: string;
   readonly [field: string]: unknown;
 }

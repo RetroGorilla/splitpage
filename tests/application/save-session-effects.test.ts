@@ -76,7 +76,7 @@ test("save does not schedule the autosave for a recovery", () => {
 });
 
 test("save marks an import home dirty with the home it read, then asks for an autosave now when the change says so", () => {
-  const home: Home = { kind: "import", name: "notes.md" };
+  const home: Home = { kind: "import", name: "notes.md", format: "md", dirty: false, lastModified: null };
   const { log, effects } = fakes({ home });
   effects.save(change("disk", true));
   assert.deepEqual(log, [["scheduleAutoSave"], ["home"], ["home"], ["amendHome", home, { dirty: true }], ["dueNow"]]);
@@ -90,7 +90,7 @@ test("save asks for an autosave now after a recovery that wants one, without sch
 });
 
 test("edit is always allowed and reads nothing", () => {
-  for (const home of [{ kind: "none" }, { kind: "file" }, { kind: "import", name: "notes.md" }] as Home[]) {
+  for (const home of [{ kind: "none" }, { kind: "file" }, { kind: "import", name: "notes.md", format: "md", dirty: false, lastModified: null }] as Home[]) {
     const { log, effects } = fakes({ home });
     assert.deepEqual(effects.edit(), { allowed: true });
     assert.deepEqual(log, []);
