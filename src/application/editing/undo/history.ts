@@ -334,7 +334,6 @@ function resolveDocFields(state: UndoState, plan: PlanStep[]): Resolved {
       if (!e || typeof e.owner !== "string" || !e.owner || crew[e.owner]) return e;
       const moved = rescue[e.owner];
       if (crew[String(moved)]) {
-        if (remap) return e;
         touched = true;
         return Object.assign({}, e, { owner: moved });
       }
@@ -367,8 +366,13 @@ function foldScan(entry: UndoEntry, scanned: DocFieldStep[], replayed: DocFieldS
     entry.steps.push(s);
   });
   replayed.forEach(function (s) {
-    const at = entry.steps.findIndex(function (e) { return e.op === "docField" && e.ownersOnly && e.key === s.key; });
-    entry.steps[at] = { op: "docField", key: s.key, before: clone(invert ? s.after : s.before), after: clone(invert ? s.before : s.after), ownersOnly: true };
+    const at = entry.steps.findIndex(function (e) { return e.op === "docField" && e.key === s.key; });
+    const original = entry.steps[at] as DocFieldStep;
+    const recorded: DocFieldStep = { op: "docField", key: s.key, before: clone(invert ? s.after : s.before), after: clone(invert ? s.before : s.after) };
+    if (original.ownersOnly) recorded.ownersOnly = true;
+    if (original.owners) recorded.owners = original.owners;
+    if (same(recorded.before, recorded.after)) entry.steps.splice(at, 1);
+    else entry.steps[at] = recorded;
   });
   entry.cell = null;
   const watch = entry.unassigned || (entry.unassigned = []);
@@ -401,6 +405,7 @@ export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonl
   const byId = idMap<StepRow>();
   state.rows.forEach(function (r) { byId[idKey(r.id)] = r; });
   const plan: PlanStep[] = [];
+  const people = steps.some(function (s) { return s.op === "docField" && s.key === "people"; });
   for (let n = 0; n < steps.length; n++) {
     const s = steps[n] as Step;
     if (s.op === "rowField") {
@@ -418,7 +423,7 @@ export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonl
       }
     } else if (s.op === "docField") {
       if (!same(state[s.key], s.before) && !listMergeFor(s.key)) return { ok: false, reason: "it has changed since" };
-      plan.push({ op: "doc", key: s.key, step: s, live: s.ownersOnly ? clone(state[s.key]) : undefined });
+      plan.push({ op: "doc", key: s.key, step: s, live: s.ownersOnly || people ? clone(state[s.key]) : undefined });
     } else if (s.op === "insertRow") {
       const id = idKey(s.row.id);
       if (s.index < 0 || s.index > order.length || byId[id] && order.indexOf(s.row.id) !== -1) {
@@ -466,7 +471,8 @@ export function writePlanned(state: UndoState, planned: PlannedSteps, out?: Writ
     out.scanned = plan.filter(function (p): p is DocPlan { return p.op === "doc" && !!p.scan; }).map(function (p) {
       return { op: "docField", key: p.key, before: p.scan, after: clone(state[p.key]) };
     });
-    out.replayed = plan.filter(function (p): p is DocPlan { return p.op === "doc" && !!p.step && !!p.step.ownersOnly; }).map(function (p) {
+    const people = plan.some(function (p) { return p.op === "doc" && p.key === "people"; });
+    out.replayed = plan.filter(function (p): p is DocPlan { return p.op === "doc" && !!p.step && (!!p.step.ownersOnly || people); }).map(function (p) {
       return { op: "docField", key: p.key, before: p.live, after: clone(state[p.key]) };
     });
   }
@@ -731,7 +737,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
         const scanned = out.scanned as DocFieldStep[], replayed = out.replayed as DocFieldStep[];
         if (scanned.length || replayed.length) foldScan(entry, scanned, replayed, invert);
         from.pop();
-        to.push(entry);
+        if (entry.steps.length) to.push(entry);
         marked(true);
         const count = Object.keys(ids).length;
         return count ? { ok: true, steps: steps, cleared: count } : { ok: true, steps: steps };

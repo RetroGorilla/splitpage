@@ -210,8 +210,8 @@ test("a crew-only redo that clears one owner and re-points another records both,
   assert.deepEqual(dangling(), []);
   const back = undo();
   assert.equal(back.ok, true);
-  assert.deepEqual(currentDocument().people.map((p) => p.id), ["p_Cy"]);
-  assert.deepEqual(currentDocument().brollShots.map((b) => b.owner), ["", ""]);
+  assert.deepEqual(currentDocument().people.map((p) => p.id), ["p_Cy", "pT_ada"]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => b.owner), ["pT_ada", ""]);
   assert.deepEqual(dangling(), []);
   assert.equal(redo().ok, true);
   assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Ada");
