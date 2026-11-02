@@ -5,5 +5,5 @@ export interface CellReachPorts {
 }
 
 export interface DraftEditPorts {
-  readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "sanitizeHtml" | "storedHtmlFromDom">;
+  readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "cleanPastedCell" | "sanitizeHtml" | "storedHtmlFromDom">;
 }

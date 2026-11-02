@@ -1,0 +1,36 @@
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function () { window.F = window.__splitpageFormats; window.tracked = 'HTTPS://EXAMPLE.COM:443/%7e?keep=%2f+X&utm_source=news&fbclid=x&gclid=y&mc_eid=e&mc_cid=c&msclkid=m#part'; window.cleaned = 'HTTPS://EXAMPLE.COM:443/%7e?keep=%2f+X#part'; window.markup = function (href) { return '<a href="' + href.replaceAll('&', '&amp;') + '"><strong>Read this</strong></a>'; }; window.pasteLink = function (cell, href) { cell.focus(); var range = document.createRange(); range.selectNodeContents(cell); range.collapse(false); var sel = getSelection(); sel.removeAllRanges(); sel.addRange(range); var data = new DataTransfer(); data.setData('text/html', markup(href)); data.setData('text/plain', 'Read this'); var event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }); cell.dispatchEvent(event); return event.defaultPrevented; }; F.openFile(new File([JSON.stringify({ schema: 2, title: 'Tracking links on load', rows: [{ id: 'track1', visualText: markup(tracked), audioText: '' }] })], 'tracking.splitpage')); return true; })()
+wait F.state().title === 'Tracking links on load'
+expect document.querySelector('#rows .visual-cell a').getAttribute('href') === tracked
+caret #rows .audio-cell .cell-editable
+eval pasteLink(document.activeElement, tracked)
+expect true
+wait document.querySelector('#rows .audio-cell a')?.getAttribute('href') === cleaned
+expect document.querySelector('#rows .audio-cell a strong').textContent === 'Read this'
+expect document.querySelector('#rows .visual-cell a').getAttribute('href') === tracked
+eval window.untouched = 'https://example.com/utm_path/%7e?next=https%3A%2F%2Fshop.test%2F%3Futm_source%3Dx&ref=utm_source%3Dx#utm_source=y'; pasteLink(document.querySelector('#rows .audio-cell .cell-editable'), untouched)
+expect true
+wait document.querySelectorAll('#rows .audio-cell a').length === 2
+expect document.querySelectorAll('#rows .audio-cell a')[1].getAttribute('href') === untouched
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+caret #writer-doc .cell-editable
+eval pasteLink(document.activeElement, tracked)
+expect true
+wait Array.from(document.querySelectorAll('#writer-doc a')).some(function (a) { return a.getAttribute('href') === cleaned; })
+key Escape
+wait document.getElementById('writer').hidden
+expect document.querySelector('#rows .visual-cell a').getAttribute('href') === tracked
+caret #rows .audio-cell .cell-editable
+eval (function () { var r = document.createRange(); r.selectNodeContents(document.activeElement); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+jsclick #rows .audio-cell .mini-toolbar [data-cmd="comment"]
+wait !document.getElementById('comment-modal').hidden
+caret #comment-body-editable
+eval pasteLink(document.activeElement, tracked)
+expect true
+wait document.querySelector('#comment-body-editable a')?.getAttribute('href') === cleaned
+jsclick #comment-post
+wait document.getElementById('comment-modal').hidden
+expect F.state().comments.some(function (c) { return c.text.includes('keep=%2f+X#part') && !c.text.includes('utm_source'); })
+quit
