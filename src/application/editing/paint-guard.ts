@@ -12,21 +12,29 @@ interface Queued {
   readonly ifFailed: (() => void) | undefined;
 }
 
-export function createPaintGuard(): PaintGuard {
+export function createPaintGuard(reportError: (error: unknown) => void = () => {}): PaintGuard {
   let depth = 0;
   let queued: Queued[] = [];
   let showing = 0;
   let afterShowing: (() => void)[] = [];
 
+  function finish(fn: () => void): void {
+    try {
+      fn();
+    } catch (error) {
+      try { reportError(error); } catch {}
+    }
+  }
+
   function settle(drawn: boolean): void {
     const taken = queued;
     if (drawn) {
       queued = [];
-      taken.forEach((entry) => { entry.fn(); });
+      taken.forEach((entry) => { finish(entry.fn); });
       return;
     }
     queued = taken.filter((entry) => !entry.ifFailed);
-    taken.forEach((entry) => { if (entry.ifFailed) entry.ifFailed(); });
+    taken.forEach((entry) => { if (entry.ifFailed) finish(entry.ifFailed); });
   }
 
   return {

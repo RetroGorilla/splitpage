@@ -3,7 +3,7 @@
 import type * as NodeFs from "node:fs";
 import type * as NodePath from "node:path";
 import type * as NodeCrypto from "node:crypto";
-import type { SharedHistoryBucketReader, SharedHistorySnapshotReader, SharedHistoryIndex, SharedHistoryTransaction } from "../shared/history-store.ts";
+import type { SharedHistoryIndex, SharedHistoryTransaction, projectHistoryBucket as ProjectHistoryBucket } from "../shared/history-store.ts";
 import type { createBlobStore as CreateBlobStore, isSha256 as IsSha256 } from "./blob-store.ts";
 
 type HistoryFsFields = Record<string, unknown>;
@@ -21,6 +21,7 @@ const { createBlobStore, isSha256 }: {
   createBlobStore: typeof CreateBlobStore;
   isSha256: typeof IsSha256;
 } = require("./blob-store.ts");
+const { projectHistoryBucket }: { projectHistoryBucket: typeof ProjectHistoryBucket } = require("../shared/history-store.ts");
 
 const FORMAT_VERSION = 2;
 const INDEX_FILE = "index.json";
@@ -51,14 +52,10 @@ function bodyErrorCode(code: unknown) {
   return "io";
 }
 
-function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonly unknown[] {
-  return rec && Array.isArray(rec.snapshots) ? rec.snapshots as readonly unknown[] : [];
-}
-
 function namedShas(buckets: SharedHistoryIndex) {
   const named = new Set<string>();
   for (const b of Object.keys(buckets)) {
-    for (const s of snapshotsOf(buckets[b])) if (s && typeof (s as SharedHistorySnapshotReader).sha === "string") named.add((s as SharedHistorySnapshotReader).sha as string);
+    for (const sha of Object.keys(projectHistoryBucket(buckets[b]).references)) named.add(sha);
   }
   return named;
 }
@@ -67,14 +64,8 @@ function cleanIndexDoc(raw: unknown): HistoryFsDocument | null {
   if (!isPlainObject(raw) || !isPlainObject((raw as HistoryFsFields).buckets)) return null;
   const formatVersion = Number((raw as HistoryFsFields).formatVersion);
   if (!Number.isFinite(formatVersion)) return null;
-  const buckets: SharedHistoryIndex = {};
-  for (const b of Object.keys((raw as HistoryFsFields).buckets as HistoryFsFields)) {
-    const rec = ((raw as HistoryFsFields).buckets as HistoryFsFields)[b];
-    if (!isPlainObject(rec) || !Array.isArray((rec as HistoryFsFields).snapshots)) continue;
-    const snaps = ((rec as HistoryFsFields).snapshots as unknown[]).filter((s: unknown): boolean => isPlainObject(s) && typeof (s as HistoryFsFields).id === "string" && isSha256((s as HistoryFsFields).sha)) as SharedHistorySnapshotReader[];
-    if (!snaps.length) continue;
-    buckets[b] = snaps.length === ((rec as HistoryFsFields).snapshots as unknown[]).length ? rec as SharedHistoryBucketReader : Object.assign({}, rec, { snapshots: snaps });
-  }
+  // why: Shared read validation keeps damage visible without rewriting stored history.
+  const buckets = (raw as HistoryFsFields).buckets as SharedHistoryIndex;
   const trash = Array.isArray((raw as HistoryFsFields).trash) ? ((raw as HistoryFsFields).trash as unknown[]).filter(isSha256) : [];
   const doc: HistoryFsDocument = { formatVersion, buckets, trash };
   if (Number.isFinite(Number((raw as HistoryFsFields).migratedFrom)) && (raw as HistoryFsFields).migratedFrom != null) doc.migratedFrom = Number((raw as HistoryFsFields).migratedFrom);

@@ -375,7 +375,7 @@ function addFakeDesktopHistory(backend: FakeHistoryBackend) {
     if (docId != null && !id) return invalid("invalid document id");
     return store.list(id).then(function (r) {
       return store.usage().then(null, function () { return null; }).then(function (usage) {
-        return { entries: r.entries.map(sanitizeHistoryMeta), older: r.older.map(sanitizeHistoryMeta), olderExpiresAt: r.olderExpiresAt, usage: usage };
+        return { ...r, entries: r.entries.map(sanitizeHistoryMeta), older: r.older.map(sanitizeHistoryMeta), usage: usage };
       });
     });
   };

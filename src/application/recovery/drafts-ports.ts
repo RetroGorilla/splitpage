@@ -10,6 +10,7 @@ import type { CaptureTimers } from "./capture-schedule.ts";
 import type { DraftResume } from "./draft-resume.ts";
 import type { DesktopDraftStore } from "./ports.ts";
 import type { ApplyStashedWork } from "./stashed-work.ts";
+import type { CellDecoder } from "../../core/text/ports.ts";
 
 export interface DraftFlush {
   readonly ok?: boolean;
@@ -57,7 +58,7 @@ export interface DraftsPorts {
   readonly markWrittenOut: (on: boolean) => void;
   readonly saves: { readonly unsaved: () => boolean; readonly editSeq: () => number };
   readonly notices: Pick<NoticePort, "show">;
-  readonly entry: { readonly migrate: (raw: unknown) => ValidatedDocument };
+  readonly entry: { readonly migrate: (raw: unknown) => ValidatedDocument; readonly cell: CellDecoder };
   readonly identity: { readonly copyHistory: (fromId: string, toId: string) => void; readonly sync: () => void };
   readonly transitions: Pick<Transitions<DocumentDestination>, "recover" | "restore">;
   readonly documents: { readonly open: (opening: DraftOpening) => Promise<unknown> };

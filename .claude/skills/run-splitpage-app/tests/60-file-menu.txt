@@ -7,7 +7,7 @@
 # chips; an on/off item is a switch; an item that cannot work says why on a
 # second line. Every data-file-action the old menu had is still here exactly
 # once (tests and the desktop native menu click them), and the keyboard does
-# what a menu's keyboard does. 18b-file-menu.js; the phone sheet is
+# what a menu's keyboard does. src/features/file-menu/; the phone sheet is
 # 05-mobile.txt's.
 #
 # Every `eval` is one physical line (the driver splits on newlines).

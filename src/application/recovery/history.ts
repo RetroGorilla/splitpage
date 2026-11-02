@@ -275,7 +275,7 @@ function listDocHistory(docId?: string | null) {
   docId = normalizeDocId(docId);
   const localBefore = docId ? historyLocalEntries(docId) : [];
   return resolveHistoryBackend().then(function (backend) {
-    return backend.list(docId || null).then(null, function () {
+    return backend.list(docId || null).then(null, function (): Awaited<ReturnType<HistoryResolvedBackend["list"]>> {
       return { entries: [], older: [], olderExpiresAt: null, usage: null };
     }).then(function (listed) {
       listed = listed || { entries: [], older: [], olderExpiresAt: null, usage: null };
@@ -294,6 +294,8 @@ function listDocHistory(docId?: string | null) {
         entries: entries,
         older: ((listed as NonNullable<typeof listed>).older || []).map(function (m) { m.status = "stored"; return m; }),
         olderExpiresAt: listed.olderExpiresAt == null ? null : listed.olderExpiresAt,
+        ...(listed.damaged ? { damaged: listed.damaged } : {}),
+        ...(listed.olderDamaged ? { olderDamaged: listed.olderDamaged } : {}),
         backend: backend.name,
         persistent: !!backend.persistent,
         usage: listed.usage || null,
