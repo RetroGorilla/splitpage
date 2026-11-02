@@ -181,7 +181,7 @@
     "desktop/main.js": [
       "/* eslint-disable-next-line no-control-regex -- stripping control characters is the function's job; the class is written out above. */"
     ],
-    "desktop/voice-helper.js": [
+    "desktop/voice-helper.ts": [
       "/* eslint-disable-next-line no-control-regex -- stripping control characters from a device name the helper reports is the point */"
     ],
     "desktop/voice/listen.ps1": [
@@ -226,13 +226,13 @@
       "# {\"type\":\"start\",\"lang\":\"en-US\"} listening",
       "# {\"type\":\"warning\",\"code\":\"...\"} no-signal / too-quiet / too-noisy /"
     ],
-    "shared/history-policy.js": [
+    "shared/history-policy.ts": [
       "/* condition does the work */",
       "/* condition does the work */",
       "/* condition does the work */",
       "/* condition does the work */"
     ],
-    "shared/video-embed.js": [
+    "shared/video-embed.ts": [
       "/* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */"
     ],
     "start.bat": [

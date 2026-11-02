@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checksumText, driveFormatSize, formatVideoLength, slugify } from "../../shared/text.js";
+import { checksumText, driveFormatSize, formatVideoLength, slugify } from "../../shared/text.ts";
 
 test("driveFormatSize writes bytes, KB or MB and nothing for an empty or unreadable size", () => {
   assert.equal(driveFormatSize(0), "");

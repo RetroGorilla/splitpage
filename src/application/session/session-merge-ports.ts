@@ -6,7 +6,7 @@ import type { Clock, IdSource } from "../../core/document/ports.ts";
 import type { StateField } from "../../core/document/fields.ts";
 import type { MigratePorts } from "../../core/migrate.ts";
 import type { LineShotIds } from "../../core/production/broll.ts";
-import type { TextMergeContext } from "../../core/merge/text-field.ts";
+import type { textMergeContext } from "../../core/merge/text-field.ts";
 import type { HistoryOwner, HistorySnapshotReply } from "../recovery/history-ports.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
 import type { TextServices } from "../text/services.ts";
@@ -51,7 +51,7 @@ export interface SessionMergeOwnerPorts {
   readonly history: Pick<HistoryOwner, "captureSnapshot" | "getHistorySnapshot" | "protectHistorySnapshot">;
   readonly identity: Pick<DocumentIdentityOwner, "noteMergedDocId"> & Pick<IdentityEntry, "adoptRestoredState">;
   readonly recovery: Operations;
-  readonly saving: Pick<SaveCoordinator<unknown, unknown>, "changes" | "confirmBaseline">;
+  readonly saving: Pick<SaveCoordinator<unknown, ValidatedDocument>, "changes" | "confirmBaseline">;
   readonly autoSave: Pick<AutoSavePolicy, "dueNow">;
   readonly location: Pick<DocumentLocation, "setHome">;
   readonly undo: Pick<MergeUndo, "arm">;
@@ -61,11 +61,11 @@ export interface SessionMergeOwnerPorts {
 
 export interface SessionMergeOwner {
   readonly startSessionMerge: (ports: SessionMergeOwnerPorts) => () => void;
-  readonly stampRow: (row: object) => void;
+  readonly stampRow: (row: object & { updatedAt?: string; updatedBy?: string }) => void;
   readonly sessionMergePorts: () => SessionMergePorts;
-  readonly setBaseState: (next: unknown, why: string) => unknown;
+  readonly setBaseState: (next: ValidatedDocument | null, why: string) => ValidatedDocument | null;
   readonly baseStateReason: () => string;
-  readonly textMergeContext: (base: unknown, mine: unknown, theirs: unknown, mergedTags?: unknown) => TextMergeContext;
+  readonly textMergeContext: (...args: Parameters<typeof textMergeContext> extends [unknown, ...infer Rest] ? Rest : never) => ReturnType<typeof textMergeContext>;
   readonly restoreMergeSnapshot: (id: string, request?: SnapshotRestoreRequest) => Promise<SnapshotRestoreResult>;
   readonly documentDestinationPort: DestinationPort<DocumentDestination>;
   readonly documentHistoryPort: HistoryPort;

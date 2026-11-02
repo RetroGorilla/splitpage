@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
-import { checksumText } from "../../shared/text.js";
+import { checksumText } from "../../shared/text.ts";
 import { startupReady } from "../application/startup-signal.ts";
 import { currentDocument, onDocumentReplaced } from "../bootstrap/wiring/session-owner.ts";
 

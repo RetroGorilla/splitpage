@@ -1,4 +1,4 @@
-import { normalizeImageRef } from "../../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import type { IdSource, ImageRef } from "./ports.ts";
 
 export function safeImageSrc(src: unknown): string | null {

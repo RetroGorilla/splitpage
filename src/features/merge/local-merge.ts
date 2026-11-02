@@ -2,7 +2,7 @@ import { normalizeTagName, registryKey } from "../../core/document/tags.ts";
 import { mergeTextField } from "../../core/merge/text-field.ts";
 import { byId, rowFieldKey } from "../../core/merge/rows.ts";
 import { GALLERY_FIELDS, ROW_FIELDS } from "../../core/document/fields.ts";
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { rowStatus, tagCategory, tagStatus } from "../../core/production/looks.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { rowImage, rowImageKey } from "../../core/document/media.ts";
@@ -16,7 +16,7 @@ import type { DocumentShape, DocumentRow, DocumentShot, ValidatedDocument } from
 import type { Frozen } from "../../core/document/freeze.ts";
 
 type MergeReviewDocument = Frozen<Pick<DocumentShape, "docId" | "title" | "rows" | "productionTags" | "brollShots" | "people">>;
-type MergeCandidate = { theirs: ValidatedDocument; base: unknown; home: Home | null; fileName: string; lastModified: number | null };
+type MergeCandidate = { theirs: ValidatedDocument; base: ReturnType<typeof fileMergeBase>; home: Home | null; fileName: string; lastModified: number | null };
 import {
   mergeDiffPairHtml,
   mergeFieldOutcome,
@@ -40,7 +40,7 @@ function fileHome() { return (ports as MergeReviewPorts).place.fileHome(); }
 function amendHome(record: Parameters<MergeReviewPorts["homes"]["amendHome"]>[0], fields: Parameters<MergeReviewPorts["homes"]["amendHome"]>[1]) { return (ports as MergeReviewPorts).homes.amendHome(record, fields); }
 function migrateRows(raw: Parameters<MergeReviewPorts["entry"]["migrate"]>[0]) { return (ports as MergeReviewPorts).entry.migrate(raw); }
 function blobImgHtml(ref: Parameters<MergeReviewPorts["pictures"]["imgHtml"]>[0], cls: Parameters<MergeReviewPorts["pictures"]["imgHtml"]>[1]) { return (ports as MergeReviewPorts).pictures.imgHtml(ref, cls); }
-function textMergeContext(base: unknown, mine: unknown, theirs: unknown) { return (ports as MergeReviewPorts).textMergeContext(base, mine, theirs); }
+function textMergeContext(base: Parameters<MergeReviewPorts["textMergeContext"]>[0], mine: Parameters<MergeReviewPorts["textMergeContext"]>[1], theirs: Parameters<MergeReviewPorts["textMergeContext"]>[2]) { return (ports as MergeReviewPorts).textMergeContext(base, mine, theirs); }
 function parseProjectFileState(file: unknown, opts: Parameters<MergeReviewPorts["files"]["parse"]>[1]) { return (ports as MergeReviewPorts).files.parse(file, opts); }
 function fileConflicts() { return (ports as MergeReviewPorts).conflicts; }
 function applyStashedWork(disk: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[0], work: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[1], options: Parameters<MergeReviewPorts["recovery"]["applyStashedWork"]>[2]) { return (ports as MergeReviewPorts).recovery.applyStashedWork(disk, work, options); }
@@ -110,7 +110,7 @@ function mergeStatusLabel(id: unknown) {
   return s ? s.label : "To do";
 }
 
-function mergeDiffModel(base: unknown, mine: MergeReviewDocument | null, theirs: MergeReviewDocument) {
+function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: MergeReviewDocument | null, theirs: MergeReviewDocument) {
   const groups: MergeReviewGroup[] = [];
   const b = base || null;
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { parseHelperLine } = require(path.join(here, "..", "voice-helper.js"));
+const { parseHelperLine } = require(path.join(here, "..", "voice-helper.ts"));
 
 if (process.platform !== "win32") {
   console.log("SKIP - needs Windows PowerShell and System.Speech");

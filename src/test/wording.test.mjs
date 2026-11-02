@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const files = readdirSync(join(root, "src"), { recursive: true }).map((f) => join("src", String(f)))
   .filter((f) => /\.(js|ts)$/.test(f) && !f.startsWith(join("src", "test")) && !/\.test\.[jt]s$/.test(f))
-  .concat(["src/page.html", "docs/help.md", "desktop/main.js", "desktop/close-quit.js", "desktop/session-restore.js"])
+  .concat(["src/page.html", "docs/help.md", "desktop/main.js", "desktop/close-quit.ts", "desktop/session-restore.ts"])
   .concat(readdirSync(join(root, "desktop")).filter((f) => /^ipc-[a-z-]+\.(?:js|ts)$/.test(f)).map((f) => "desktop/" + f));
 const text = new Map(files.map((f) => [f, readFileSync(join(root, f), "utf8")]));
 

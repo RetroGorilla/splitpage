@@ -12,7 +12,7 @@ await bootApp();
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { cellFromClipboard } = await import("../features/clipboard/cell-clipboard.js");
+const { cellFromClipboard } = await import("../features/clipboard/cell-clipboard.ts");
 const { fromHtml } = await import("../bootstrap/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
 const { projection, commentIds } = await import("../core/text/runs.ts");

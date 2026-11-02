@@ -1,4 +1,4 @@
-import { imageDims, isSha256Hex, normalizeImageRef, sniffImageMime } from "../../../shared/blob-policy.js";
+import { imageDims, isSha256Hex, normalizeImageRef, sniffImageMime } from "../../../shared/blob-policy.ts";
 import { mediaCommentId, sha256Bytes } from "./ids.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
 import { safeHref, safeImageSrc, storedImageHtml, storedImageMarkup } from "./text-policy.ts";

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import { seedCheck as portSeedCheck } from "../../../src/bootstrap/wiring/ports/startup.ts";
 import assert from "node:assert/strict";
 import { seedCheckMatches } from "../../../src/application/preferences/seed-check.ts";
-import { checksumText } from "../../../shared/text.js";
+import { checksumText } from "../../../shared/text.ts";
 import "../../../src/test/_dom.mjs";
 
 test("the seed check passes when the page's content is the length and checksum of its state text", () => {

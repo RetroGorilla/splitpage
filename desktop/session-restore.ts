@@ -1,28 +1,34 @@
 "use strict";
 
-const path = require("node:path");
-const fs = require("node:fs");
-const { pathKey } = require("./file-service.ts");
+import type * as NodePath from "node:path";
+import type * as NodeFs from "node:fs";
+import type { DesktopMainTab, DesktopSessionRestoreDependencies } from "./ipc-boundaries.d.ts";
+import type { createDraftStore } from "./drafts.ts";
+import type { pathKey as FilePathKey } from "./file-service.ts";
+
+const path: typeof NodePath = require("node:path");
+const fs: typeof NodeFs = require("node:fs");
+const { pathKey }: { pathKey: typeof FilePathKey } = require("./file-service.ts");
 
 function createSessionRestore({
   app, BrowserWindow, desktopState, draftStore, draftsList, tabs, windowsById, pathToTabId, claimRoutingKey,
   createTabWindow, createTab, activateTab, liveWindows, firstWindowRecord, payloadForSource, routeLaunchFile,
   argvFilesToOpen, restoreNotice, persistShellState
-}) {
+}: DesktopSessionRestoreDependencies) {
   let hadPriorSession = false;
   let sessionRestoreInProgress = false;
 
-  function draftSourceFromListing(listing) {
+  function draftSourceFromListing(listing: ReturnType<typeof draftsList>[number]): DesktopMainTab["source"] {
     if (listing.filePath) return { kind: "file", absPath: listing.filePath };
     return { kind: "blank" };
   }
 
-  function indexDraftPath(tabId, filePath) {
+  function indexDraftPath(tabId: string, filePath: unknown) {
     if (typeof filePath !== "string" || !filePath || !path.isAbsolute(filePath)) return;
     claimRoutingKey(pathToTabId, pathKey(filePath), tabId);
   }
 
-  function restoreSessionAtLaunch(draftInit) {
+  function restoreSessionAtLaunch(draftInit?: Pick<ReturnType<ReturnType<typeof createDraftStore>["init"]>, "drafts"> | null) {
     const persisted = desktopState.read();
     const drafts = (draftInit && Array.isArray(draftInit.drafts) ? draftInit.drafts : draftsList())
       .filter((d) => d && d.status !== "unsupported");
@@ -30,12 +36,12 @@ function createSessionRestore({
     hadPriorSession = persisted.windows.some((w) => w.tabs.some((t) => t.source.kind !== "blank"))
       || drafts.length > 0;
 
-    const skipped = [];
-    const placed = new Set();
+    const skipped: Parameters<typeof restoreNotice.set>[1] = [];
+    const placed = new Set<string>();
 
     sessionRestoreInProgress = true;
     try {
-      const built = [];
+      const built: { rec: ReturnType<typeof createTabWindow>; pw: typeof persisted.windows[number] }[] = [];
       for (const pw of persisted.windows) {
         const rec = createTabWindow({ windowId: pw.windowId, bounds: pw.bounds, maximized: pw.maximized });
         built.push({ rec, pw });
@@ -54,7 +60,7 @@ function createSessionRestore({
               pendingPayload: payloadForSource(source)
             });
             if (!tab) continue;
-            if (draftStore()) { try { draftStore().hold(tab.id); } catch { } }
+            if (draftStore()) { try { (draftStore() as NonNullable<ReturnType<typeof draftStore>>).hold(tab.id); } catch { } }
             indexDraftPath(tab.id, listing.filePath);
             placed.add(tab.id);
             continue;
@@ -96,13 +102,13 @@ function createSessionRestore({
           index
         });
         if (!tab) continue;
-        if (draftStore()) { try { draftStore().hold(tab.id); } catch { } }
+        if (draftStore()) { try { (draftStore() as NonNullable<ReturnType<typeof draftStore>>).hold(tab.id); } catch { } }
         indexDraftPath(tab.id, listing.filePath);
         placed.add(tab.id);
       }
 
       if (!windowsById.size) createTabWindow({});
-      const blankIdFor = new Map();
+      const blankIdFor = new Map<string, string>();
       for (const { rec, pw } of built) {
         const keep = pw.tabs.find((t) => t.tabId === pw.activeTabId && t.source.kind === "blank")
           || pw.tabs.find((t) => t.source.kind === "blank");
@@ -151,5 +157,7 @@ function createSessionRestore({
     registerActivate
   };
 }
+
+export type { createSessionRestore };
 
 module.exports = { createSessionRestore };

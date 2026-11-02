@@ -1,3 +1,5 @@
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { HOME_KINDS, createDocumentLocation } from "../../../src/application/location/document-location.ts";
@@ -39,7 +41,7 @@ test("readers see the current record", () => {
 test("changing home replaces the record whole — two homes can never be half-set", () => {
   const loc = createDocumentLocation();
   const handle = { name: "script.md" };
-  loc.setHome("file", { handle, format: "md", name: "script.md", lastModified: 5, diskBase: { rows: [] } });
+  loc.setHome("file", { handle, format: "md", name: "script.md", lastModified: 5, diskBase: migrateRows({ rows: [] }, fakeMigration().ports) });
   loc.setHome("none");
   assert.equal(loc.fileHome(), null);
   assert.equal(loc.importHome(), null);
@@ -120,14 +122,14 @@ test("a home record refuses every write that does not go through the owner", () 
 test("amendHome changes only a kind's own changing facts", () => {
   const loc = createDocumentLocation();
   const file = loc.setHome("file", { format: "md", name: "a.md" });
-  loc.amendHome(file, { diskBase: { rows: [] }, lastModified: 9 });
-  assert.deepEqual(file["diskBase"], { rows: [] });
+  loc.amendHome(file, { diskBase: migrateRows({ rows: [] }, fakeMigration().ports), lastModified: 9 });
+  assert.deepEqual(file["diskBase"], migrateRows({ rows: [] }, fakeMigration().ports));
   assert.equal(file["lastModified"], 9);
   assert.throws(() => loc.amendHome(file, { name: "b.md" }), /"name" is set when the home is made/);
   assert.throws(() => loc.amendHome(file, { rev: 3 }), /"rev" is set when the home is made/);
 
   const imported = loc.setHome("import", { name: "a.docx", format: "docx" });
-  loc.amendHome(imported, { dirty: true, inPlace: true, size: 12, lastModified: 4, diskBase: { rows: [] } });
+  loc.amendHome(imported, { dirty: true, inPlace: true, size: 12, lastModified: 4, diskBase: migrateRows({ rows: [] }, fakeMigration().ports) });
   assert.deepEqual([imported["dirty"], imported["inPlace"], imported["size"], imported["lastModified"]], [true, true, 12, 4]);
   assert.throws(() => loc.amendHome(imported, { handle: {} }), /"handle" is set when the home is made/);
 

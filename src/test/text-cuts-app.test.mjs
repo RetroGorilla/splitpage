@@ -17,8 +17,8 @@ const syncDocIdentity = (...args) => documentIdentityOwner().syncDocIdentity(...
 const { videoLinkLabel } = await import("../core/document/gallery.ts");
 const { render } = await import("../features/rows/render.ts");
 const { renderRundown } = await import("../features/rundown/rundown.ts");
-const { buildScenePayload, parseScenePayload } = await import("../features/clipboard/scene-clip.js");
-const { newScriptFromSelection, selectScenes } = await import("../features/clipboard/scene-select.js");
+const { buildScenePayload, parseScenePayload } = await import("../features/clipboard/scene-clip.ts");
+const { newScriptFromSelection, selectScenes } = await import("../features/clipboard/scene-select.ts");
 const { registryKey } = await import("../core/document/tags.ts");
 const { setTagNotes } = await import("../features/tags/panels.ts");
 const { openBrollPanel } = await import("../features/broll/panel.ts");

@@ -24,7 +24,7 @@ export interface CellClipboardPorts {
   readonly ids: Pick<IdSource, "id">;
   readonly nonce: () => string;
   readonly selection: (cell: Element) => CellRange | null;
-  readonly cells: Pick<CellEditing<Element>, "open" | "close">;
+  readonly cells: Pick<CellEditing<Element, unknown>, "open" | "close">;
   readonly paintGuard: Pick<PaintGuard, "whileShown">;
   readonly brollSeed: (row: DeepReadonly<DocumentRow>) => BrollSeedPlace;
 }
@@ -35,13 +35,13 @@ interface SceneTag {
 }
 
 export interface SceneClipPorts {
-  readonly document: Pick<DocumentReader, "current">;
+  readonly document: Pick<DocumentReader<ValidatedDocument>, "current">;
   readonly ids: Pick<IdSource, "id">;
   readonly pictures: Pick<PictureStore, "dataUrlFor" | "internDataUrl" | "queuePersist">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "fromHtml" | "inertBody">;
   readonly migrate: (doc: object) => ValidatedDocument;
   readonly tagsInRows: (rows: readonly unknown[]) => readonly SceneTag[];
-  readonly recordPastedBroll: (doc: ValidatedDocument, rowId: string, cell: readonly Run[], ids: readonly string[]) => void;
+  readonly recordPastedBroll: (doc: ValidatedDocument | null, rowId: string, cell: readonly Run[], ids: readonly string[]) => void;
 }
 
 export interface SceneSelectPorts {

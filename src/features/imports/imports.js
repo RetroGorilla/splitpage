@@ -1,7 +1,7 @@
 import { importRowsCommand } from "../../application/commands/import-rows.ts";
 import { escapeHtml, truncateForPreview } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
-import { fileKindFromName } from "../../../shared/file-names.js";
+import { fileKindFromName } from "../../../shared/file-names.ts";
 
 var ports = null;
 var window = null, document = null;

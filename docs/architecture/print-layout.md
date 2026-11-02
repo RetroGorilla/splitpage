@@ -279,7 +279,7 @@ over 256 Mi characters, and answers bytes; the renderer saves them through the
 existing `saveFileDialog` and `writeFile` (file ids, never paths), so a
 cancelled dialog is reported exactly as before.
 
-Main (`desktop/print-pdf.js`) owns the print view. Each request gets a new
+Main (`desktop/print-pdf.ts`) owns the print view. Each request gets a new
 sandboxed, context-isolated `WebContentsView` with no preload and no window, in
 the in-memory `splitpage-print` partition. That partition serves the page from
 memory at a one-time `splitpage://print/<random>.html` with the print CSP as a
@@ -387,9 +387,9 @@ browser cache, then `google-chrome`/`chrome` on PATH. Missing browsers fail
 the check; no rule or fixture is skipped. Local runtime was 9.2 seconds for
 the check, 10.0 seconds including test startup.
 
-On Unraid, Tests uses `/opt/hostedtoolcache/splitpage-playwright/1.63.0`,
-filled only by `checks`; a new or recreated runner needs one `checks` run
-first, or Chromium in its image. The automatic test deletes its TEMP
+In CI, each Tests shard installs Playwright's pinned Chromium and passes it as
+`SPLITPAGE_CHROME`. Without that step GitHub's runners failed the glyph rule;
+whether the browser or its system libraries caused that wasn't established. The automatic test deletes its TEMP
 directory only after every assertion passes, retaining artifacts on failure.
 
 The inspector inflates PDF streams with `node:zlib`, decodes ToUnicode and

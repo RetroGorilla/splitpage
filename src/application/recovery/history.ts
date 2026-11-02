@@ -2,7 +2,7 @@ import type { HistoryInstrumentation, HistoryPendingSnapshot } from "./history-i
 import type { HistoryOwner, HistoryOwnerPorts, HistorySnapshotMeta, HistorySnapshotRead, HistorySnapshotReply, HistoryWriteResult, HistoryResolvedBackend, HistoryImportResult } from "./history-ports.ts";
 
 
-type HistoryAddress = { id?: string; docId?: string; older?: boolean };
+type HistoryAddress = { id?: string; docId?: string | null; older?: boolean };
 type HistoryMigrationResult = { migrated: number; removedKey: boolean };
 type HistoryExportSnapshot = { meta: HistorySnapshotReply["meta"]; stateJson: HistorySnapshotReply["stateJson"] };
 type HistoryExportDoc = { docId: string; title: unknown; lastOpenedAt: number; metas: HistorySnapshotMeta[]; snapshots?: HistoryExportSnapshot[] };
@@ -14,10 +14,10 @@ type HistoryCallable = (...args: never[]) => unknown;
 type HistoryOwnerApi = Omit<HistoryOwner, "startHistory">;
 
 import { sha256Bytes } from "../../core/document/ids.ts";
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
-import { HISTORY_OLDER_KEY, HISTORY_PER_DOC, HISTORY_SNAP_ID_RE, historyClip, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.js";
-import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
-import { checksumText } from "../../../shared/text.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
+import { HISTORY_OLDER_KEY, HISTORY_PER_DOC, HISTORY_SNAP_ID_RE, historyClip, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.ts";
+import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../../shared/blob-policy.ts";
+import { checksumText } from "../../../shared/text.ts";
 
 function startHistory(ports: HistoryOwnerPorts, instrumentation?: HistoryInstrumentation) {
   let active = true;
@@ -188,7 +188,7 @@ function historyStoreEntry(backend: HistoryResolvedBackend, entry: HistoryPendin
   });
 }
 
-function captureSnapshot(label: string, src: unknown, opts?: { allowSeedSkip?: boolean }) {
+function captureSnapshot(label: string | undefined, src: unknown, opts?: { allowSeedSkip?: boolean }) {
   opts = opts || {};
   if (!src || typeof src !== "object" || !Array.isArray((src as { rows?: unknown }).rows)) return null;
   if (opts.allowSeedSkip && src === currentDocument() && isPristineSeedDocument()) return null;

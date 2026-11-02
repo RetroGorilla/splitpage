@@ -18,20 +18,20 @@ const { createRecents } = require("./recents.ts");
 const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance.ts");
 const { createTabRegistry } = require("./tab-registry.ts");
 const { createRestoreNotice } = require("./restore-notice.ts");
-const { isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
-const { createCloseQuit } = require("./close-quit");
-const { createSessionRestore } = require("./session-restore");
-const { createVoiceComposition } = require("./voice-composition");
-const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
-const { createBlobStore } = require("./blob-store");
-const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
+const { isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share.ts");
+const { createCloseQuit } = require("./close-quit.ts");
+const { createSessionRestore } = require("./session-restore.ts");
+const { createVoiceComposition } = require("./voice-composition.ts");
+const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers.ts");
+const { createBlobStore } = require("./blob-store.ts");
+const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend.ts");
 const {
   DESKTOP_STATE_VERSION,
   normalizeBounds, normalizeTabSource, createDesktopStateStore
 } = require("./desktop-state.ts");
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
-} = require("./update-release");
+} = require("./update-release.ts");
 const { createIpcSetup } = require("./ipc-setup.ts");
 const { createFileIpc } = require("./ipc-files.ts");
 const { createShellIpc } = require("./ipc-shell.ts");
@@ -40,7 +40,7 @@ const { createHistoryBlobIpc } = require("./ipc-history-blob.ts");
 const { createTabStripIpc } = require("./ipc-tabstrip.ts");
 const { createTestModeIpc } = require("./ipc-test-mode.ts");
 const { createPrintIpc } = require("./ipc-print.ts");
-const { createPdfPrinter } = require("./print-pdf");
+const { createPdfPrinter } = require("./print-pdf.ts");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -109,12 +109,12 @@ const APP_ROOT = app.isPackaged
   : path.resolve(__dirname, "..");
 
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
-const historyPolicy = require(path.join(SHARED_ROOT, "history-policy.js"));
+const historyPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
 const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.ts"));
 const {
   DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
-} = require(path.join(SHARED_ROOT, "doc-id-policy.js"));
+} = require(path.join(SHARED_ROOT, "doc-id-policy.ts"));
 
 const STATIC_ALLOWLIST = {
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -786,7 +786,7 @@ async function openPrompterInBrowser(tab, opts) {
   return { ok: true, kind: source.kind, voice: relay ? "relay" : "browser" };
 }
 
-const videoEmbed = require(path.join(SHARED_ROOT, "video-embed.js"));
+const videoEmbed = require(path.join(SHARED_ROOT, "video-embed.ts"));
 
 const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
   ? (() => {
