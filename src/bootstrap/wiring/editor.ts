@@ -64,7 +64,7 @@ import {
   typePendingMarks,
   updateToolbarState
 } from "../../features/rows/render.ts";
-import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.js";
+import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.ts";
 import { pasteScenesAt } from "../../features/clipboard/scene-select.js";
 import { thumbnailsAfterPaste } from "./gallery.ts";
 import {
@@ -145,6 +145,8 @@ interface UndoCellStep {
 function decodeCell(html: unknown): Run[] {
   return fromHtml(html);
 }
+
+type ScriptClipboardExtra = Awaited<ReturnType<typeof readClipboardFiles>>;
 
 interface PasteAttached {
   readonly pictures: number;
@@ -282,7 +284,7 @@ const MEDIA_CELL = Object.freeze({ media: true });
 
 export function mountCellEditingFeature(): { readonly dispose: () => void } {
   return cellEditingMount.replace(function () {
-    const editing = createCellEditing<Element>({
+    const editing = createCellEditing<Element, unknown>({
       page: createCellPage({ storedHtml: function (html) { return storedHtmlFromDom(html); }, caretSpot: ensureTrailingCaretSpot }),
       document: liveDocument.current,
       run: runCommand,
@@ -646,7 +648,7 @@ const clipboardRoutePorts = {
   findCell: function (rowId: string, field: string) {
     return document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="' + field + '"]');
   },
-  insertNow: function (cellEl: Element, html: string, text: string, extra: unknown) { insertIntoScriptCellNow(cellEl, html, text, extra); }
+  insertNow: function (cellEl: Element, html: string, text: string, extra: ScriptClipboardExtra | null) { insertIntoScriptCellNow(cellEl, html, text, extra); }
 };
 
 export function mountClipboardFeature(): ReturnType<typeof mountClipboardRoutes> {
@@ -662,7 +664,7 @@ function insertIntoScriptCell(cellEl: Element, html: string, text: string, files
   if (clipboard) clipboard.insert(cellEl, html, text, files);
 }
 
-function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, extra: unknown): void {
+function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, extra: ScriptClipboardExtra | null): void {
   if (screenIsStale()) {
     showToast("Could not paste — press Redraw first.", "error");
     return;
@@ -670,7 +672,7 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
   const before = undoOwner().last();
   const res: PasteOutcome = pasteIntoCell(cellEl, html, text, extra);
   if (!res.done) return;
-  const lost = res.lost + (extra ? (extra as { lost: number }).lost : 0);
+  const lost = res.lost + (extra ? extra.lost : 0);
   if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
   if (res.attached) {
     const attachedRowId = cellEl.getAttribute("data-id");

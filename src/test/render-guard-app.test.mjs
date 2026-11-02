@@ -18,7 +18,7 @@ const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-pa
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { renderAbsorbed } = await import("../features/rows/render.ts");
 const { cellSelection } = await import("../features/common/cell-selection.ts");
-const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");
+const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.ts");
 const annotate = await import("../features/gallery/annotate.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();

@@ -522,7 +522,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Owner:** `src/core/production` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the named tests pass against `src/core/production` and the migrated clipboard path.
-- **As built (M3 3.14):** the cell-level paste is `pasteCommand` in `src/application/commands/clipboard.ts`, which owns `takenBrollIds`, `freshBrollIds` and `pastedShots` (`src/features/clipboard/cell-clipboard.js` keeps thin wrappers). `tests/application/clipboard.test.ts` pins it: "a copied b-roll key whose id is taken gets a fresh id and a shot record seeded from the scene…", "a cut b-roll key pasted back keeps its id and makes no second record…", and "seeded: a pasted copy never leaves two keys with one id in the script". The scene paste in `src/features/clipboard/scene-clip.js` still uses `freshBrollIds` and `recordPastedBroll` (D10).
+- **As built (M3 3.14):** the cell-level paste is `pasteCommand` in `src/application/commands/clipboard.ts`, which owns `takenBrollIds`, `freshBrollIds` and `pastedShots` (`src/features/clipboard/cell-clipboard.ts` keeps thin wrappers). `tests/application/clipboard.test.ts` pins it: "a copied b-roll key whose id is taken gets a fresh id and a shot record seeded from the scene…", "a cut b-roll key pasted back keeps its id and makes no second record…", and "seeded: a pasted copy never leaves two keys with one id in the script". The scene paste in `src/features/clipboard/scene-clip.js` still uses `freshBrollIds` and `recordPastedBroll` (D10).
 
 ### INV-55 — A comment or reply draft owns its undo
 
