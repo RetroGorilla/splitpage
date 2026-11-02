@@ -18,7 +18,10 @@ directions accepted by the registration wrappers. The contract and
 `desktop/ipc-boundaries.d.ts` contain types only and need no packaged copy.
 Install both tooling packages (`npm ci` and `npm ci --prefix desktop`) before
 running lint, typecheck or the full gate: the desktop check uses Electron's
-own declarations. JavaScript services injected by `main.js` remain unchecked
+own declarations. The file service, recents and document claims also run as
+strictly checked `.ts` modules through the same main-process type stripping.
+The desktop config's `desktop/*.ts` include checks each converted module.
+JavaScript services injected by `main.js` remain unchecked
 boundaries described by narrow interfaces in `ipc-boundaries.d.ts`.
 
 `drafts.ts` also runs through main-process type stripping. Its real store type
@@ -76,9 +79,9 @@ Everything listed here goes inside the asar.
 | `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.js` itself. |
 | `desktop-state.js` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.ts`. |
 | `update-release.js` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
-| `file-service.js` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry, the atomic write and writing a file entry (the atomic write plus its stamp). |
-| `doc-claims.js` | Which tab holds which document id from which file, so that two tabs holding the same document from different files are noticed and the later one is asked to take a new id. The id rules come from `shared/doc-id-policy.js`, which `main.js` passes in, and `main.js` still sends `splitpage:reassign-doc-id` itself, so the IPC table test sees it. |
-| `recents.js` | The recent documents list (`createRecents`): noting an opened file, removing one by its file id, clearing, persisting into `desktop-state.json` and describing the list for the renderer without paths. When a note is written straight away or with the next session write stays in `main.js`. |
+| `file-service.ts` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry, the atomic write and writing a file entry (the atomic write plus its stamp). |
+| `doc-claims.ts` | Which tab holds which document id from which file, so that two tabs holding the same document from different files are noticed and the later one is asked to take a new id. The id rules come from `shared/doc-id-policy.js`, which `main.js` passes in, and `main.js` still sends `splitpage:reassign-doc-id` itself, so the IPC table test sees it. |
+| `recents.ts` | The recent documents list (`createRecents`): noting an opened file, removing one by its file id, clearing, persisting into `desktop-state.json` and describing the list for the renderer without paths. When a note is written straight away or with the next session write stays in `main.js`. |
 | `window-appearance.ts` | The stored theme choice in `<userData>/theme.json` (`createThemeChoice`), the window and title bar colours for dark and light, and whether saved window bounds still overlap a display. `main.js` passes in `nativeTheme` and `screen` values. |
 | `tab-registry.ts` | The maps of open tabs and windows and the two routing indexes (web contents to tab, file path to tab), how a tab or window id is minted unique, and which tab a routed path or file belongs to (`createTabRegistry`). Creating, moving and closing tabs stay in `main.js`. |
 | `restore-notice.ts` | The one notice, after a session restore, that some files could not be reopened (`createRestoreNotice`): which tab it waits for, delivering it once that tab is ready, and moving it to another tab if that one closes first. `main.js` still sends `splitpage:restore-notice` itself. |
