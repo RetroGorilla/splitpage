@@ -44,10 +44,10 @@ test("general sanitizing, decoding and document loading retain tracking links", 
   const html = sanitizeHtml(link(tracked));
   assert.equal(sanitizeHtml(html), html);
   assert.equal(fromHtml(html)[0].marks.href, tracked);
-  const doc = migrateRows({ schema: 2, rows: [{ id: "r1", visualText: html, audioText: html }], comments: [{ id: "c1", text: html, replies: [] }] });
+  const doc = migrateRows({ schema: 2, rows: [{ id: "r1", visualText: html, audioText: html }], comments: [{ id: "c1", body: html, replies: [] }] });
   assert.equal(doc.rows[0].visualText, html);
   assert.equal(doc.rows[0].audioText, html);
-  assert.equal(doc.comments[0].text, html);
+  assert.equal(doc.comments[0].body, html);
 });
 
 test("untracked links, redirect destinations, paths, values and fragments retain their bytes", () => {
