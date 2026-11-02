@@ -30,7 +30,7 @@ const exportFormats = {
   cards: function () { return (ports as FileMenuExportPorts).exports.cards(); },
   card: function (id: string) { return (ports as FileMenuExportPorts).exports.card(id); },
   byAction: function (action: string | null | undefined) { return (ports as FileMenuExportPorts).exports.byAction(action); },
-  isAction: function (action: unknown): action is string { return (ports as FileMenuExportPorts).exports.isAction(action); },
+  isAction: function (action: unknown): boolean { return (ports as FileMenuExportPorts).exports.isAction(action); },
   exporters: function () { return (ports as FileMenuExportPorts).exports.exporters(); }
 };
 
@@ -63,7 +63,7 @@ function exportActionName(action: string | null | undefined) {
   return exporter ? exporter.name : "";
 }
 
-function isExportAction(action: unknown): action is string {
+function isExportAction(action: unknown): boolean {
   return exportFormats.isAction(action);
 }
 
@@ -75,7 +75,7 @@ export function lastExportAction() {
 
 export function rememberExport(action: string | null | undefined) {
   if (!isExportAction(action)) return;
-  try { localStorage.setItem(LAST_EXPORT_KEY, action); } catch (e) { }
+  try { localStorage.setItem(LAST_EXPORT_KEY, action as string); } catch (e) { }
 }
 
 function exportOptionsFor(action: string | null | undefined) {
