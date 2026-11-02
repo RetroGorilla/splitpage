@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { createHistoryFsBackend, FORMAT_VERSION } = require(path.join(here, "..", "history-fs-backend.ts"));
-const { createHistoryStore } = require(path.join(here, "..", "..", "shared", "history-store.ts"));
+const { createHistoryStore, projectHistoryBucket } = require(path.join(here, "..", "..", "shared", "history-store.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_OLDER_TTL_MS, historyUtf8Length } = require(path.join(here, "..", "..", "shared", "history-policy.ts"));
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-history-fs-test-"));
@@ -54,7 +54,7 @@ function faultyFsp() {
 }
 
 function makeBackend(dir, clock, extra = {}) {
-  return createHistoryFsBackend({ dir, fs, fsp, path, crypto, now: () => clock.t, ...extra });
+  return createHistoryFsBackend({ dir, fs, fsp, path, crypto, projectHistoryBucket, now: () => clock.t, ...extra });
 }
 
 function makeStore(backend, clock, extra = {}) {

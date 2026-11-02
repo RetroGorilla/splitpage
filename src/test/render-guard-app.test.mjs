@@ -10,6 +10,7 @@ import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-p
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
+localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
 
 const { currentDocument, liveSession, mergeBase } = await import("../bootstrap/wiring/session-owner.ts");
@@ -28,6 +29,8 @@ const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
+const { screen } = await import("../bootstrap/wiring/ports/screen.ts");
+const { EVERY_OVERLAY, inFront } = await import("../application/screen.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const find = await import("../features/find/find.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
@@ -717,6 +720,7 @@ for (const place of WRITER_OPEN) {
         openTheWriter();
         redrawToasts()[0].querySelector(".toast-action").focus();
       }
+      assert.equal(inFront(EVERY_OVERLAY, screen()), "writer", "the Writer is the top overlay for the redraw focus scenario");
       await pressRedraw();
       const active = document.activeElement;
       assert.notEqual(active, document.body, "the focus is not left on the page");
