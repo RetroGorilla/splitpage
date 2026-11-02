@@ -18,12 +18,13 @@ directions accepted by the registration wrappers. The contract and
 `desktop/ipc-boundaries.d.ts` contain types only and need no packaged copy.
 Install both tooling packages (`npm ci` and `npm ci --prefix desktop`) before
 running lint, typecheck or the full gate: the desktop check uses Electron's
-own declarations. `blob-store.ts` and `desktop-state.ts` also run through main-process type
+own declarations. `update-release.ts`, `chromium-browsers.ts`, `print-pdf.ts`, `blob-store.ts` and `desktop-state.ts` also run through main-process type
 stripping, checked by the existing `desktop/*.ts` include in that config.
-The file service, recents and document claims use the same strict check and
-main-process type stripping, with real types at their IPC dependencies.
 JavaScript services injected by `main.js` remain unchecked
 boundaries described by narrow interfaces in `ipc-boundaries.d.ts`.
+
+The file service, recents and document claims use the same strict check and
+main-process type stripping, with real types at their IPC dependencies.
 
 `drafts.ts` also runs through main-process type stripping. Its real store type
 replaces the handwritten draft boundary, while the shared contract keeps
@@ -50,11 +51,16 @@ syntax error when a sandbox:true preload contains a type annotation.
 must implement `DesktopPort`. `node tools/build-preload.mjs` strips it with
 Node's stripTypeScriptTypes and writes the committed `desktop/preload.js` that the sandbox runs.
 The generated script still requires only Electron. Both `npm run verify`
-and CI regenerate it and require `git diff --exit-code -- desktop/preload.js`
-to pass. Run the generator after editing the source, and commit both files.
+and CI regenerate it and run `node tools/check-preload.mjs`, which requires
+`git status --porcelain` to be empty for both generated scripts, including
+untracked files. Run the generator after editing the source, and commit both files.
 The TypeScript source and its type-only imports are not packaged;
 `preload.js` remains the preload path in `main.js` and the builder file list.
-`tabstrip-preload.js` continues to read the same channel table over IPC.
+`desktop/tabstrip-preload.ts` follows the same checked-source pattern, and
+the generator writes both committed preload scripts. The tab strip still
+runs `tabstrip-preload.js`, which reads the same channel table over IPC;
+its TypeScript source and type-only imports are not packaged. Both the
+verify command and CI check freshness of both generated JavaScript files.
 
 ## `files`
 
@@ -72,7 +78,7 @@ Everything listed here goes inside the asar.
 | `ipc-tabstrip.ts` | The tab strip's channels (`createTabStripIpc`, which returns `registerTabStripIpc`): its window id and state, and new tab, activate, close, reorder, move here and tear off. Creating, activating, closing, reordering and moving tabs stay in `main.js` and are passed in, with the tab map and `tabStripWindowOf`. |
 | `ipc-test-mode.ts` | The `__test` channels (`createTestModeIpc`, which returns `registerTestModeIpc`): close, close tab, quit, draft status, renderer crash, duplicate-loser choice and the test shell. It registers them only when the test-mode flag is on, as before. The tab and window functions, the test logs and getters for the draft store and the previous session's state come from `main.js`; the prompter share getter and the voice helper come from `voice-composition.js`. |
 | `ipc-print.ts` | The PDF channel (`createPrintIpc`, which returns `registerPrintIpc`): `splitpage:print-to-pdf` takes one captured print page as an HTML string and answers the PDF bytes. It hands the asking tab's web contents to the printer, so the print ends if that tab closes. The renderer saves the bytes through the usual save dialog and `splitpage:write-file`; the channel takes no path. |
-| `print-pdf.js` | Desktop PDF export (`createPdfPrinter`, [print-layout.md](print-layout.md#desktop-printtopdf-p3)). For each request it opens a sandboxed `WebContentsView` that no window shows, with no preload, in the in-memory `splitpage-print` partition. The page is served from memory at a one-time `splitpage://print/<random>.html` address with the print CSP as a header, and every other request is refused. Once fonts and pictures are ready it calls `printToPDF` with CSS page sizes, backgrounds, a tagged PDF and headings as bookmarks. The view is closed and the page forgotten on success, failure, a 60-second deadline, the asking tab closing and `will-quit`. |
+| `print-pdf.ts` | Desktop PDF export (`createPdfPrinter`, [print-layout.md](print-layout.md#desktop-printtopdf-p3)). For each request it opens a sandboxed `WebContentsView` that no window shows, with no preload, in the in-memory `splitpage-print` partition. The page is served from memory at a one-time `splitpage://print/<random>.html` address with the print CSP as a header, and every other request is refused. Once fonts and pictures are ready it calls `printToPDF` with CSS page sizes, backgrounds, a tagged PDF and headings as bookmarks. The view is closed and the page forgotten on success, failure, a 60-second deadline, the asking tab closing and `will-quit`. |
 | `prompter-share.js` | The teleprompter's loopback listener (#86). `voice-composition.js` creates it. |
 | `voice-composition.js` | The one owner of Follow My Voice's lifetime in the main process (`createVoiceComposition`): it creates the voice helper and the prompter share lazily, on first use, and holds both. It chooses the listener command (the fake helper named by `SPLITPAGE_TEST_VOICE_HELPER` in test mode; otherwise, on Windows only, PowerShell running `desktop/voice/listen.ps1` in development or `resources/splitpage/voice/listen.ps1` when packaged), sends a tab's events to that tab on `splitpage:voice-event` and a `relay:<tab>` session's events to the browser copy through the share, and forgets a closed tab (`forgetTab`: the share first, then the tab and its relay). It requires `./voice-helper` and `./prompter-share` itself. `main.js` passes in whether the app is packaged, `APP_ROOT`, the test-mode flag, the tab map, the static allowlist and the CSP reader. The IPC channels stay in `ipc-shell.ts` and `ipc-test-mode.ts`, and `close-quit.js` still closes the share and stops the helper at `will-quit`, through the composition's getters. |
 | `close-quit.js` | Closing a tab or a window, quitting and a Windows session end (`createCloseQuit`). It owns the flags they share: quit confirmed, quit waiting on the question, session ending, session writes frozen, the windows already cleared to close, and the update installer waiting for the quit. It asks the unsaved-changes question, waits for kept copies of gone files, settles drafts, registers each window's `close` and `session-end` handlers (`attachWindowClose`) and the app's `before-quit`, `window-all-closed` and `will-quit` handlers (`registerQuitHandlers`), and quits to run a downloaded update (`quitToInstall`). It requires `./close-keep`, `./quit-watchdog` and `./unsaved-dialog` itself. `main.js` passes in the tab and window maps, the draft store helpers and a getter for the store, the draft flush, the test dialog answers, tab activation, focus and destruction, starting the installer, and getters for the prompter share and the voice helper (from `voice-composition.js`); it reads the flags back through `isQuitConfirmed`, `isSessionEnding` and `sessionWritesAreFrozen`. |
@@ -81,10 +87,10 @@ Everything listed here goes inside the asar.
 | `quit-watchdog.ts` | The update restart's 3 s quit timer, which waits while the quit is still asking the user and starts again once they answer. |
 | `blob-store.ts` | The content-addressed folder where images live (#82). |
 | `voice-helper.js` | Follow My Voice's listener process (#8). `voice-composition.js` creates it and gives it its command. The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
-| `chromium-browsers.js` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
+| `chromium-browsers.ts` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
 | `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.ts` itself. |
 | `desktop-state.ts` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.ts`. |
-| `update-release.js` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
+| `update-release.ts` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
 | `file-service.ts` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry, the atomic write and writing a file entry (the atomic write plus its stamp). |
 | `doc-claims.ts` | Which tab holds which document id from which file, so that two tabs holding the same document from different files are noticed and the later one is asked to take a new id. The id rules come from `shared/doc-id-policy.js`, which `main.js` passes in, and `main.js` still sends `splitpage:reassign-doc-id` itself, so the IPC table test sees it. |
 | `recents.ts` | The recent documents list (`createRecents`): noting an opened file, removing one by its file id, clearing, persisting into `desktop-state.json` and describing the list for the renderer without paths. When a note is written straight away or with the next session write stays in `main.js`. |

@@ -1,6 +1,6 @@
 "use strict";
 
-import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContents, WebContentsView } from "electron";
+import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell, WebContentsView } from "electron";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
   DesktopWireHistoryMeta, DesktopWireHistoryOptions, DesktopWireHistoryUsage, DesktopWireLaunch,
@@ -8,6 +8,7 @@ import type {
 } from "../shared/desktop-contract.d.ts";
 import type { createDraftStore } from "./drafts.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
+import type { createPdfPrinter } from "./print-pdf.ts";
 import type { createBlobStore } from "./blob-store.ts";
 import type { createFileRegistry } from "./file-service.ts";
 import type { createRecents } from "./recents.ts";
@@ -165,7 +166,7 @@ export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, 
 }
 
 export interface DesktopPrintIpcDependencies {
-  pdfPrinter: { print: (sender: WebContents, html: string) => Promise<DesktopIpcResult<"splitpage:print-to-pdf">> };
+  pdfPrinter: ReturnType<typeof createPdfPrinter>;
 }
 
 export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;

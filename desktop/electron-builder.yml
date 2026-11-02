@@ -20,7 +20,7 @@ files:
   - ipc-tabstrip.ts
   - ipc-test-mode.ts
   - ipc-print.ts
-  - print-pdf.js
+  - print-pdf.ts
   - prompter-share.js
   - close-quit.js
   - session-restore.ts
@@ -29,10 +29,10 @@ files:
   - blob-store.ts
   - voice-composition.js
   - voice-helper.js
-  - chromium-browsers.js
+  - chromium-browsers.ts
   - history-fs-backend.js
   - desktop-state.ts
-  - update-release.js
+  - update-release.ts
   - file-service.ts
   - doc-claims.ts
   - recents.ts

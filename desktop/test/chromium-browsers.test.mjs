@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require(path.join(here, "..", "chromium-browsers.js"));
+const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require(path.join(here, "..", "chromium-browsers.ts"));
 
 const WIN_ENV = {
   "ProgramFiles": "C:\\Program Files",
