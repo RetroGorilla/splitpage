@@ -116,22 +116,22 @@ function copied(value: unknown): unknown {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
-function owns(owner: Bag, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(owner, key);
+function owns(owner: Bag, key: string | null): boolean {
+  return Object.prototype.hasOwnProperty.call(owner, key as string);
 }
 
-function keepField(owner: Bag, key: string): Restore {
+function keepField(owner: Bag, key: string | null): Restore {
   const had = owns(owner, key);
-  const value = copied(owner[key]);
+  const value = copied(owner[key as string]);
   const keys = Object.keys(owner);
-  const later = had ? keys.slice(keys.indexOf(key) + 1) : [];
+  const later = had ? keys.slice(keys.indexOf(key as string) + 1) : [];
   return function () {
     if (!had) {
-      Reflect.deleteProperty(owner, key);
+      Reflect.deleteProperty(owner, key as string);
       return;
     }
     const gone = !owns(owner, key);
-    owner[key] = value;
+    owner[key as string] = value;
     if (!gone) return;
     later.forEach(function (next) {
       if (!owns(owner, next)) return;
