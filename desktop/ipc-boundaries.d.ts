@@ -182,8 +182,8 @@ export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;
 export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "testMode" | "tabs" | "windowsById" | "draftStore" | "activateTab">, Pick<DesktopTestModeIpcDependencies, "app" | "liveWindows"> {
   app: Pick<App, "on" | "quit">;
   dialog: Pick<DesktopFileIpcDependencies["dialog"], "showMessageBoxSync">;
-  tabHasFile: (tab: DesktopMainTab | null | undefined) => tab is DesktopMainTab & { source: Extract<DesktopMainTab["source"], { kind: "file" }> };
-  tabIsUnsaved: (tab: DesktopMainTab | null | undefined) => tab is DesktopMainTab;
+  tabHasFile: (tab: DesktopMainTab | null | undefined) => boolean;
+  tabIsUnsaved: (tab: DesktopMainTab | null | undefined) => boolean;
   draftsHasDraft: (id: string) => boolean;
   requestDraftFlush: (tab: DesktopMainTab | null | undefined, budgetMs: number, keep?: boolean) => Promise<object>;
   draftFlushBudgetMs: number;
