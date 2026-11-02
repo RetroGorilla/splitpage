@@ -100,7 +100,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
   };
   dialogParentFor: (event: DesktopIpcEvent) => BrowserWindow | undefined;
   pathToTabId: Map<string, string>;
-  consumeTestDialogAnswer: () => unknown;
+  consumeTestDialogAnswer: () => string | null | undefined;
   testDialogsSeen: () => number;
 }
 
@@ -213,7 +213,7 @@ export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "t
   draftsList: DesktopDraftStoreBoundary["list"];
   draftsDiscardForUserDecision: (ids: (string | undefined)[], reason: string) => void;
   draftsDiscardClean: (id: string | undefined) => void;
-  consumeTestDialogAnswer: DesktopFileIpcDependencies["consumeTestDialogAnswer"];
+  consumeTestDialogAnswer: () => unknown;
   focusWindow: (id: string) => void;
   destroyTabView: (id: string | undefined) => void;
   startInstallerNow: () => DesktopIpcResult<"splitpage:update-install">;
