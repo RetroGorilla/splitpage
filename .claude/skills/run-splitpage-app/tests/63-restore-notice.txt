@@ -44,8 +44,11 @@ expect window.__rn().length === 1
 expect F.state().rev === window.__revBefore
 expect F.docId() === window.__idBefore
 
-# ---- a click dismisses it -----------------------------------------------
+# why: Sticky warning text stays selectable; dismissal belongs to its labelled control.
 click #toast-host .toast.is-sticky.warn
+expect window.__rn().length === 1
+expect window.__rn()[0].querySelector('.toast-dismiss').getAttribute('aria-label') === 'Dismiss'
+click #toast-host .toast.is-sticky.warn .toast-dismiss
 wait window.__rn().length === 0
 sleep 400
 expect Array.prototype.filter.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf('Could not restore') === 0; }).length === 0
