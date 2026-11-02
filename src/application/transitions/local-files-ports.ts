@@ -1,6 +1,6 @@
 import type { BusyNotices, NoticePort } from "../effects/ports.ts";
 import type { UndoControl } from "../editing/undo-control.ts";
-import type { LocalFileAccess, LocalFileData } from "../files/local-file-access.ts";
+import type { LocalFileAccess, LocalFileData, LocalFileReference } from "../files/local-file-access.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
 import type { FileConflicts } from "../save/file-conflict.ts";
 import type { SaveConfirmation, SaveState } from "../save/save-state.ts";
@@ -20,7 +20,7 @@ export interface LocalFileOpening {
   readonly kind: string;
   readonly file?: LocalFileData | null;
   readonly handle?: unknown;
-  readonly parsed?: { readonly state: ValidatedDocument; readonly kind: unknown };
+  readonly parsed?: { readonly state: ValidatedDocument; readonly kind: string };
   readonly options?: { readonly skipSnapshot?: boolean; readonly silent?: boolean; readonly resumed?: boolean; readonly reload?: boolean } | null;
 }
 
@@ -45,7 +45,7 @@ export interface LocalFilesOwnerPorts {
   readonly saves: Pick<SaveState, "unsaved">;
   readonly conflicts: Pick<FileConflicts, "close">;
   readonly location: Pick<DocumentLocation, "amendHome" | "setHome" | "fileHome" | "importHome">;
-  readonly lastFile: { readonly load: () => Promise<unknown>; readonly remember: (handle: unknown) => Promise<void> };
+  readonly lastFile: { readonly load: () => Promise<LocalFileReference | null>; readonly remember: (handle: unknown) => Promise<void> };
   readonly syncIdentity: () => void;
   readonly stamps: Pick<SessionMergeOwner, "stampRow">;
   readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "begin" | "end"> };
@@ -54,7 +54,7 @@ export interface LocalFilesOwnerPorts {
   readonly undo: Pick<UndoControl, "flush">;
   readonly imports: LocalFileImports;
   readonly text: Pick<TextServices, "sanitizeHtml">;
-  readonly resumeNeeded: (handle: unknown) => void;
+  readonly resumeNeeded: (handle: LocalFileReference) => void;
   readonly desktop: {
     readonly running: () => boolean;
     readonly openFileDialog: () => Promise<DesktopIpcResult<"splitpage:open-file-dialog">>;

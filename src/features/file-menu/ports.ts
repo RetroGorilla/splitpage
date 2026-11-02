@@ -84,7 +84,7 @@ export interface FileMenuExportMount extends FileMenuExportControls {
   readonly exportActionName: (action: string) => string;
   readonly isExportAction: (action: unknown) => boolean;
   readonly lastExportAction: () => string | null;
-  readonly rememberExport: (action: string) => void;
+  readonly rememberExport: (action: string | null) => void;
   readonly exportActionReason: (action: string) => string;
   readonly exportSummary: (action: string) => string;
   readonly exportFileNameFor: (action: string) => string;

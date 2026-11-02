@@ -5,7 +5,7 @@
     "src/bootstrap/wiring/file-saving.ts",
     "src/application/transitions/local-files.ts",
     "src/application/save/import-saving.ts",
-    "src/features/file-menu/local-files.js",
+    "src/features/file-menu/local-files.ts",
     "src/adapters/files/local-files.js",
     "src/bootstrap/wiring/local-files.ts"
   ],

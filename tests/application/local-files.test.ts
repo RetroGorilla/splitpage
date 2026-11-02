@@ -77,7 +77,7 @@ for (const stage of ["parse", "last handle", "permission", "read", "dialog", "ro
       open = async () => { await h.owner.projectFileSource().open({ kind: "file", file: h.file, handle: {} }); };
     } else if (stage === "last handle" || stage === "permission") {
       ports = stage === "last handle"
-        ? { ...ports, lastFile: { ...ports.lastFile, load: hold } }
+        ? { ...ports, lastFile: { ...ports.lastFile, load: hold as LocalFilesOwnerPorts["lastFile"]["load"] } }
         : { ...ports, files: { ...ports.files, permission: async () => String(await hold()) } };
       finish = stage === "permission" ? "prompt" : {};
       open = () => h.owner.tryResumeLastProject();

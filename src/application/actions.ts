@@ -44,30 +44,30 @@ export interface ActionView {
 
 export interface Refusal {
   readonly kind: "unavailable";
-  readonly id: string;
+  readonly id: string | null;
   readonly reason: string;
 }
 
 export type InvokeOutcome =
-  | { readonly kind: "ran"; readonly id: string }
+  | { readonly kind: "ran"; readonly id: string | null }
   | Refusal
-  | { readonly kind: "unknown"; readonly id: string }
-  | { readonly kind: "failed"; readonly id: string; readonly error: unknown };
+  | { readonly kind: "unknown"; readonly id: string | null }
+  | { readonly kind: "failed"; readonly id: string | null; readonly error: unknown };
 
 export type RefusalPresenter = (refusal: Refusal, source: ActionSource) => void;
 
 export interface ActionRegistry {
   register: (definition: ActionDefinition) => () => void;
-  has: (id: string) => boolean;
+  has: (id: string | null) => boolean;
   shortcuts: () => readonly KeyedAction[];
   view: (id: string, source?: ActionSource) => ActionView | undefined;
   list: (source?: ActionSource) => readonly ActionView[];
-  invoke: (id: string, source: ActionSource, input?: unknown) => InvokeOutcome;
+  invoke: (id: string | null, source: ActionSource, input?: unknown) => InvokeOutcome;
   presentRefusals: (presenter: RefusalPresenter) => () => void;
 }
 
 export interface RegistryOptions {
-  readonly report?: (error: unknown, id: string) => void;
+  readonly report?: (error: unknown, id: string | null) => void;
 }
 
 const ALWAYS: Availability = Object.freeze({ enabled: true });
@@ -105,7 +105,7 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
   return typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
 }
 
-function claimChords(chords: ChordReader, definitions: ReadonlyMap<string, ActionDefinition>, definition: ActionDefinition): void {
+function claimChords(chords: ChordReader, definitions: ReadonlyMap<string | null, ActionDefinition>, definition: ActionDefinition): void {
   const owners = new Map<string, string>();
   for (const other of definitions.values()) {
     for (const k of keysOf(other)) owners.set(chords.chordKey(k), other.id);
@@ -133,9 +133,9 @@ export function registerAll(registry: ActionRegistry, definitions: readonly Acti
 }
 
 export function createActionRegistry(options: RegistryOptions = {}): ActionRegistry {
-  const definitions = new Map<string, ActionDefinition>();
+  const definitions = new Map<string | null, ActionDefinition>();
   const chords = createChordReader();
-  const report = (error: unknown, id: string): void => { options.report?.(error, id); };
+  const report = (error: unknown, id: string | null): void => { options.report?.(error, id); };
   let presenter: RefusalPresenter | null = null;
 
   return {

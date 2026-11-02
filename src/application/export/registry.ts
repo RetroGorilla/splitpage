@@ -73,7 +73,7 @@ export interface ExportRegistry<Request = unknown, Doc = unknown> {
   cards: () => readonly ExportCard<Request, Doc>[];
   exporters: () => readonly Exporter<Request, Doc>[];
   byId: (id: string) => Exporter<Request, Doc> | undefined;
-  byAction: (action: string) => Exporter<Request, Doc> | undefined;
+  byAction: (action: string | null | undefined) => Exporter<Request, Doc> | undefined;
   isAction: (action: unknown) => boolean;
   onChange: (listener: () => void) => () => void;
 }
