@@ -100,7 +100,7 @@ if (problem && process.platform === "win32" && !process.env.CI) {
   mkdirSync(app);
   copyFileSync(join(REPO, "update.mjs"), join(app, "update.mjs"));
   const appProblem = link(app, join(work, "linked-app"));
-  const env = { ...process.env, SPLITPAGE_UPDATE_API: "invalid:" };
+  const env = { ...process.env, SPLITPAGE_TEST: "1", SPLITPAGE_UPDATE_API: "invalid:" };
   const updater = (dir) => {
     const r = spawnSync(process.execPath, [join(dir, "update.mjs"), "--json"], { cwd: work, encoding: "utf8", env, timeout: 60000 });
     return { code: r.status, out: r.stdout ?? "" };

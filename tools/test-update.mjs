@@ -30,7 +30,13 @@ delete process.env.SPLITPAGE_UPDATE_API;
 eq("default URL (no override, no manifest)", updateApiUrl(), DEFAULT_API);
 
 process.env.SPLITPAGE_UPDATE_API = "https://custom.api/releases/latest";
-eq("env override wins", updateApiUrl(), "https://custom.api/releases/latest");
+delete process.env.SPLITPAGE_TEST;
+eq("production ignores the env override", updateApiUrl(), DEFAULT_API);
+process.env.SPLITPAGE_TEST = "0";
+eq("a disabled test switch ignores the override", updateApiUrl(), DEFAULT_API);
+process.env.SPLITPAGE_TEST = "1";
+eq("the explicit test switch permits the env override", updateApiUrl(), "https://custom.api/releases/latest");
+delete process.env.SPLITPAGE_TEST;
 
 delete process.env.SPLITPAGE_UPDATE_API;
 check("updateApiUrl() is exported and callable", typeof updateApiUrl === "function", null);
@@ -54,8 +60,11 @@ check("a manifest naming another update API is ignored", testUpdateApiUrl() !== 
   "got " + testUpdateApiUrl());
 eq("...and the built-in default is used instead", testUpdateApiUrl(), DEFAULT_API);
 process.env.SPLITPAGE_UPDATE_API = OTHER_API;
-eq("...while the env var still overrides it", testUpdateApiUrl(), OTHER_API);
+eq("...and a production env override is also ignored", testUpdateApiUrl(), DEFAULT_API);
+process.env.SPLITPAGE_TEST = "1";
+eq("...while the test switch allows an override", testUpdateApiUrl(), OTHER_API);
 delete process.env.SPLITPAGE_UPDATE_API;
+delete process.env.SPLITPAGE_TEST;
 
 rmSync(testAppRoot, { recursive: true, force: true });
 
@@ -67,10 +76,43 @@ try {
   await mod.latestRelease().then(() => check("404 rejects", false), (err) => check("404 rejects", err.message.includes("404")));
   globalThis.fetch = async () => Response.json({ tag_name: "v9.9.9", assets: [] });
   await mod.latestRelease().then(() => check("empty release rejects", false), (err) => eq("empty release rejects", err.message, "the release has no assets"));
-  globalThis.fetch = async () => Response.json({ tag_name: "v9.9.9", assets: [{ name: "splitpage.zip" }] });
+  const releaseUrl = "https://github.com/RetroGorilla/splitpage/releases/tag/test-release";
+  const downloadUrl = "https://github.com/RetroGorilla/splitpage/releases/download/test-release/splitpage.zip";
+  const release = {
+    url: "https://api.github.com/repos/RetroGorilla/splitpage/releases/123",
+    html_url: releaseUrl, tag_name: "v9.9.9", name: "Test release", body: "Release notes",
+    draft: false, prerelease: false,
+    assets: [{ name: "splitpage.zip", size: 1024, browser_download_url: downloadUrl }]
+  };
+  globalThis.fetch = async () => Response.json(release);
   eq("release with assets returns its version", (await mod.latestRelease()).version, "9.9.9");
+  eq("release with assets returns its validated page", (await mod.latestRelease()).url, releaseUrl);
+  for (const html_url of ["javascript:alert(1)", "https://evil.test/r", [releaseUrl], null,
+    releaseUrl.replace("splitpage/", "splitpage-fork/"), releaseUrl + "?redirect=evil"]) {
+    globalThis.fetch = async () => Response.json({ ...release, html_url });
+    await mod.latestRelease().then(() => check("unsafe release page rejects " + JSON.stringify(html_url), false),
+      () => check("unsafe release page rejects " + JSON.stringify(html_url), true));
+  }
+  for (const browser_download_url of [[downloadUrl], null, 123,
+    downloadUrl.replace("splitpage/", "splitpage-fork/"),
+    "https://api.github.com/repos/RetroGorilla/splitpage/releases/assets/123",
+    "https://release-assets.githubusercontent.com/github-production-release-asset/123/splitpage.zip"]) {
+    globalThis.fetch = async () => Response.json({ ...release, assets: [{ ...release.assets[0], browser_download_url }] });
+    await mod.latestRelease().then(() => check("unsafe release asset rejects " + JSON.stringify(browser_download_url), false),
+      () => check("unsafe release asset rejects " + JSON.stringify(browser_download_url), true));
+  }
+  process.env.SPLITPAGE_UPDATE_API = "http://127.0.0.1:4567/latest";
+  const local = { ...release, html_url: "http://127.0.0.1:4567/r",
+    assets: [{ name: "splitpage.zip", browser_download_url: "http://127.0.0.1:4567/asset" }] };
+  globalThis.fetch = async () => Response.json(local);
+  await mod.latestRelease().then(() => check("local feed is refused without the test switch", false),
+    () => check("local feed is refused without the test switch", true));
+  process.env.SPLITPAGE_TEST = "1";
+  eq("local fake feed works with the test switch", (await mod.latestRelease()).url, local.html_url);
 } finally {
   globalThis.fetch = originalFetch;
+  delete process.env.SPLITPAGE_UPDATE_API;
+  delete process.env.SPLITPAGE_TEST;
 }
 
 console.log("\ncompareVersions():\n");
