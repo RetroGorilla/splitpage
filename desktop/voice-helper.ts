@@ -1,8 +1,26 @@
 "use strict";
 
-const { spawn: nodeSpawn } = require("node:child_process");
+import type * as NodeChildProcess from "node:child_process";
+import type { DesktopWireVoiceEvent, DesktopWireVoiceStart, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
 
-const EVENT_TYPES = new Set(["device", "start", "interim", "final", "warning", "error"]);
+const { spawn: nodeSpawn }: typeof NodeChildProcess = require("node:child_process");
+
+interface DesktopVoiceSession {
+  session: number;
+  tabId: string;
+  child: NodeChildProcess.ChildProcessWithoutNullStreams;
+  ended: boolean;
+  silent: boolean;
+  killTimer: NodeJS.Timeout | null;
+}
+type DesktopVoiceHelperOptions = {
+  command: () => { file: string; args?: string[]; env?: NodeJS.ProcessEnv } | null;
+  onEvent: (tabId: string, event: DesktopWireVoiceEvent) => void;
+  spawn?: typeof nodeSpawn;
+  killAfterMs?: number;
+};
+
+const EVENT_TYPES = new Set<unknown>(["device", "start", "interim", "final", "warning", "error"]);
 const CODE_RE = /^[a-z][a-z-]{0,31}$/;
 const LANG_RE = /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8}){0,3}$/;
 const MAX_TEXT = 2000;
@@ -10,12 +28,12 @@ const MAX_NAME = 120;
 const MAX_LINE = 64 * 1024;
 const KILL_AFTER_MS = 2000;
 
-function parseHelperLine(line) {
-  let raw;
-  try { raw = JSON.parse(line); } catch { return null; }
+function parseHelperLine(line: string) {
+  let raw: Record<string, unknown>;
+  try { raw = JSON.parse(line) as Record<string, unknown>; } catch { return null; }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   if (!EVENT_TYPES.has(raw.type)) return null;
-  const event = { type: raw.type };
+  const event: Omit<DesktopWireVoiceEvent, "session"> = { type: raw.type as string };
   if (raw.type === "interim" || raw.type === "final") {
     if (typeof raw.text !== "string") return null;
     event.text = raw.text.slice(0, MAX_TEXT);
@@ -35,21 +53,21 @@ function parseHelperLine(line) {
   return event;
 }
 
-function createVoiceHelper(opts) {
+function createVoiceHelper(opts: DesktopVoiceHelperOptions) {
   const command = opts.command;
   const onEvent = opts.onEvent;
   const spawn = opts.spawn || nodeSpawn;
   const killAfterMs = typeof opts.killAfterMs === "number" ? opts.killAfterMs : KILL_AFTER_MS;
 
   let nextSession = 1;
-  let current = null;
+  let current: DesktopVoiceSession | null = null;
   let started = 0;
 
-  function emit(entry, event) {
+  function emit(entry: DesktopVoiceSession, event: Omit<DesktopWireVoiceEvent, "session">) {
     try { onEvent(entry.tabId, Object.assign({ session: entry.session }, event)); } catch { }
   }
 
-  function end(entry, reason) {
+  function end(entry: DesktopVoiceSession | null, reason: string) {
     if (!entry || entry.ended) return;
     entry.ended = true;
     if (current === entry) current = null;
@@ -66,14 +84,14 @@ function createVoiceHelper(opts) {
     return !!command();
   }
 
-  function start(tabId) {
+  function start(tabId: string): DesktopWireVoiceStart {
     const cmd = command();
     if (!cmd) return { ok: false, code: "UNAVAILABLE" };
     if (current) {
       const old = current;
       end(old, old.tabId === tabId ? "restarted" : "taken");
     }
-    let child;
+    let child: DesktopVoiceSession["child"];
     try {
       child = spawn(cmd.file, cmd.args || [], {
         env: cmd.env || process.env,
@@ -83,7 +101,7 @@ function createVoiceHelper(opts) {
     } catch {
       return { ok: false, code: "SPAWN_FAILED" };
     }
-    const entry = { session: nextSession++, tabId, child, ended: false, silent: false, killTimer: null };
+    const entry: DesktopVoiceSession = { session: nextSession++, tabId, child, ended: false, silent: false, killTimer: null };
     current = entry;
     started++;
 
@@ -114,12 +132,12 @@ function createVoiceHelper(opts) {
     return { ok: true, session: entry.session };
   }
 
-  function stop(tabId) {
+  function stop(tabId: string): DesktopIpcResult<"splitpage:voice-stop"> {
     if (current && current.tabId === tabId) end(current, "stopped");
     return { ok: true };
   }
 
-  function forget(tabId) {
+  function forget(tabId: string) {
     if (current && current.tabId === tabId) {
       current.silent = true;
       end(current, "closed");
@@ -146,5 +164,7 @@ function createVoiceHelper(opts) {
 
   return { available, start, stop, forget, stopAll, status };
 }
+
+export type { createVoiceHelper, parseHelperLine };
 
 module.exports = { createVoiceHelper, parseHelperLine };

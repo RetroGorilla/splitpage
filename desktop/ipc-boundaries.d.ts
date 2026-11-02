@@ -7,6 +7,7 @@ import type {
   DesktopWireTakenDraft, DesktopWireUpdateStatus
 } from "../shared/desktop-contract.d.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
+import type { createVoiceComposition } from "./voice-composition.ts";
 import type { createRestoreNotice } from "./restore-notice.ts";
 import type { createThemeChoice } from "./window-appearance.ts";
 
@@ -113,13 +114,6 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
   pendingDraftFlushes: Map<number, (result: object) => void>;
 }
 
-export interface DesktopVoiceBoundary {
-  available: () => boolean;
-  start: (id: string) => DesktopIpcResult<"splitpage:voice-start">;
-  stop: (id: string) => DesktopIpcResult<"splitpage:voice-stop">;
-  status: () => { available: boolean; running: boolean; tabId: string | null; session: number | null; pid: number | null | undefined; started: number };
-}
-
 export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "draftStore" | "testMode"> {
   launchIntentFor: (tab: DesktopMainTab) => DesktopWireBoot["launchIntent"];
   draftsIsHeld: (id: string) => boolean;
@@ -138,7 +132,7 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   downloadUpdate: () => Promise<DesktopIpcResult<"splitpage:update-download">>;
   runUpdateInstaller: () => Promise<DesktopIpcResult<"splitpage:update-install">>;
   openPrompterInBrowser: (tab: DesktopMainTab | null, options?: { chromium: boolean }) => Promise<DesktopIpcResult<"splitpage:prompter-open-in-browser">>;
-  voiceHelperInstance: () => DesktopVoiceBoundary;
+  voiceHelperInstance: ReturnType<typeof createVoiceComposition>["voiceHelperInstance"];
 }
 
 export interface DesktopHistoryStoreBoundary {
@@ -184,8 +178,8 @@ export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, 
   testExternalOpens: string[];
   testChromiumLaunches: { browser: string; url: string }[];
   testVideoOpens: string[];
-  prompterShare: () => { status: () => { listening: boolean; port: number | null; shares: string[]; voiceStreams: number } } | null;
-  voiceHelperInstance: () => DesktopVoiceBoundary;
+  prompterShare: ReturnType<typeof createVoiceComposition>["prompterShare"];
+  voiceHelperInstance: ReturnType<typeof createVoiceComposition>["voiceHelperInstance"];
 }
 
 export interface DesktopPrintIpcDependencies {
