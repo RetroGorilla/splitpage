@@ -5,9 +5,17 @@ import { draftResume as currentDraftResume, noteDraftChange } from "../recovery-
 import { seedCheckPasses } from "../../../adapters/page/seed-check.ts";
 import type { StartupSignal } from "../../../application/startup-signal.ts";
 import { startupReady } from "../../../application/startup-signal.ts";
+import { whenDocumentReady } from "../../startup/dom-ready.ts";
 
 export const startup: StartupSignal = {
   ready: () => startupReady()
+};
+
+export const domStartup: StartupSignal = {
+  ready: async () => {
+    await new Promise<void>(resolve => { whenDocumentReady(document, resolve); });
+    return startupReady();
+  }
 };
 
 export const draftResume: Pick<DraftResume, "restorePending"> = {

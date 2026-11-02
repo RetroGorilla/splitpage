@@ -19,6 +19,7 @@ import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
+import { writerFocusTarget } from "../common/writer-focus.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import { slotPoster } from "../common/gallery.ts";
@@ -421,6 +422,7 @@ function newRowEl(row: Row, index: number): SignedRow {
 }
 
 function resetRowShell(rowEl: Element, cls: string): void {
+  if (rowEl.classList.contains("is-setting-length") && rowEl.querySelector(".row-read-input")) cls += " is-setting-length";
   if (rowEl.className !== cls) rowEl.className = cls;
   for (let i = rowEl.attributes.length - 1; i >= 0; i--) {
     const name = (rowEl.attributes[i] as Attr).name;
@@ -798,7 +800,12 @@ function releaseStaleScreen(): void {
   const place = state.staleFocus;
   state.staleFocus = null;
   const active = document.activeElement;
-  if (!place || (active && active !== document.body && !(state.redrawToast && state.redrawToast.contains(active)))) return;
+  if (active && active !== document.body && !(state.redrawToast && state.redrawToast.contains(active))) return;
+  if (ports.view().writerOpen()) {
+    writerFocusTarget(document)?.focus({ preventScroll: true });
+    return;
+  }
+  if (!place) return;
   const target = place.id ? document.getElementById(place.id) : document.querySelector<HTMLElement>(
     '#rows .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
   if (!target) return;
