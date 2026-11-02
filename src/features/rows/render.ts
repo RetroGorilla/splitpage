@@ -41,7 +41,7 @@ import {
 } from "../../core/text/edits.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
 import { cellSelection, placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
-import { formatVideoLength } from "../../../shared/text.js";
+import { formatVideoLength } from "../../../shared/text.ts";
 
 type Ports = RowsRenderPorts;
 type Row = DocumentView["rows"][number];
@@ -468,11 +468,11 @@ function commitRowPatch(rowEl: SignedRow, patch: RowPatch): boolean {
   return patch.parts.length > 0;
 }
 
-export function renderRow(rowId: string): boolean {
+export function renderRow(rowId: string | null): boolean {
   return ports.editing.paint().whilePainting(function () { return paintOneRow(rowId); });
 }
 
-function paintOneRow(rowId: string): boolean {
+function paintOneRow(rowId: string | null): boolean {
   const doc = ports.document.current();
   if (!doc) return false;
   const idx = ports.document.read(function (held) { return rowIndexOf(held, rowId); });
@@ -858,16 +858,16 @@ const TEXT_FIELDS: Readonly<Record<string, true>> = { visualText: true, audioTex
 
 const SHOWN_PREFERENCES: Readonly<Record<string, true>> = { clock: true, commentAuthor: true, personColor: true };
 
-function rowsTouched(cells: ChangeSet["cells"], skip: Readonly<Record<string, true>> | null): string[] {
-  const ids: string[] = [];
+function rowsTouched(cells: ChangeSet["cells"], skip: Readonly<Record<string, true>> | null): (string | null)[] {
+  const ids: (string | null)[] = [];
   cells.forEach(function (cell) {
-    if (skip && skip[cell.field]) return;
+    if (skip && skip[cell.field as string]) return;
     if (ids.indexOf(cell.rowId) === -1) ids.push(cell.rowId);
   });
   return ids;
 }
 
-function paintRows(ids: readonly string[]): void {
+function paintRows(ids: readonly (string | null)[]): void {
   let all = true;
   ids.forEach(function (id) { if (!renderRow(id)) all = false; });
   if (!all) render();
@@ -877,7 +877,7 @@ function paintsWhole(change: ScreenChange): boolean {
   const c = change.changes;
   if (change.kind === "replay" || c.whole || c.rowsInserted.length || c.rowsRemoved.length || c.rowsMoved) return true;
   if (c.docFields.some(function (field) { return SHOWN_DOC_FIELDS[field]; })) return true;
-  return change.kind !== "amend" && c.cells.some(function (cell) { return !ONE_ROW[cell.field]; });
+  return change.kind !== "amend" && c.cells.some(function (cell) { return !ONE_ROW[cell.field as string]; });
 }
 
 function paintSessionChange(change: ScreenChange): void {
@@ -917,7 +917,7 @@ export function screenListeners(): ScreenListeners {
     session: paintSessionChange,
     stamped: function (changes: ChangeSet) {
       if (!state.screen.drawn || state.screenStale || state.paintBroke) return;
-      if (changes.docFields.indexOf("comments") !== -1 || changes.cells.some(function (cell) { return TEXT_FIELDS[cell.field]; })) render();
+      if (changes.docFields.indexOf("comments") !== -1 || changes.cells.some(function (cell) { return TEXT_FIELDS[cell.field as string]; })) render();
     },
     refresh: function (jobs: ReadonlySet<string>) {
       if (state.screen.drawn && jobs.has("production")) paintRowTimes();

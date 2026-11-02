@@ -7,7 +7,7 @@ import { buildExportDocument } from "../../core/document/export-document.ts";
 import { migrateRows } from "../../core/migrate.ts";
 import { fakeMigration } from "../../../tests/core/migrate-ports.ts";
 import { fakeNotices } from "../../../tests/features/fakes.ts";
-import { startExportDialog as mountExportDialog } from "./export-dialog.js";
+import { startExportDialog as mountExportDialog } from "./export-dialog.ts";
 import type { FileMenuExportPorts } from "./ports.ts";
 
 function harness() {

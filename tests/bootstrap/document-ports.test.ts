@@ -14,7 +14,7 @@ import { mergeStates } from "../../src/bootstrap/wiring/document-merge.ts";
 import * as tags from "../../src/features/tags/production-tags.ts";
 import { seedCheckPasses } from "../../src/adapters/page/seed-check.ts";
 import { image } from "../../src/test/golden-helpers.mjs";
-import { checksumText } from "../../shared/text.js";
+import { checksumText } from "../../shared/text.ts";
 import { documentLocation } from "../../src/bootstrap/wiring/location-owner.ts";
 import "../../src/test/_location-started.mjs";
 import "../../src/test/_merge-started.mjs";

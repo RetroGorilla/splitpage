@@ -20,19 +20,19 @@ files:
   - ipc-tabstrip.ts
   - ipc-test-mode.ts
   - ipc-print.ts
-  - print-pdf.js
-  - prompter-share.js
-  - close-quit.js
-  - session-restore.js
-  - close-keep.js
+  - print-pdf.ts
+  - prompter-share.ts
+  - close-quit.ts
+  - session-restore.ts
+  - close-keep.ts
   - quit-watchdog.ts
-  - blob-store.js
-  - voice-composition.js
-  - voice-helper.js
-  - chromium-browsers.js
-  - history-fs-backend.js
+  - blob-store.ts
+  - voice-composition.ts
+  - voice-helper.ts
+  - chromium-browsers.ts
+  - history-fs-backend.ts
   - desktop-state.ts
-  - update-release.js
+  - update-release.ts
   - file-service.ts
   - doc-claims.ts
   - recents.ts

@@ -1,8 +1,8 @@
 {
   "loadOnly": [
-    "src/features/clipboard/cell-clipboard.js",
-    "src/features/clipboard/scene-clip.js",
-    "src/features/clipboard/scene-select.js",
+    "src/features/clipboard/cell-clipboard.ts",
+    "src/features/clipboard/scene-clip.ts",
+    "src/features/clipboard/scene-select.ts",
     "src/bootstrap/wiring/clipboard.ts"
   ],
   "expectedLoads": 4

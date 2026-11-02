@@ -32,7 +32,7 @@ type CommentMenuEvent = KeyboardEvent & { readonly target: HTMLElement };
 
 import { plainText, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
 import { editableCellHtml } from "../common/editable-cell.ts";
-import { formatTimestampAbsolute } from "../../../shared/clock.js";
+import { formatTimestampAbsolute } from "../../../shared/clock.ts";
 
 import { pad2 } from "../../core/production/timing.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
@@ -45,7 +45,7 @@ import {
   toggleResolveCommand,
   unwrapCommentAnchorCommand
 } from "../../application/commands/comments.ts";
-import { normalizeImageRef } from "../../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import {
   commentMatchesFilterMode,

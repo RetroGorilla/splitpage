@@ -3,8 +3,8 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import { slotPoster } from "../common/gallery.ts";
-import { formatVideoLength } from "../../../shared/text.js";
-import { embeddableVideo } from "../../../shared/video-embed.js";
+import { formatVideoLength } from "../../../shared/text.ts";
+import { embeddableVideo } from "../../../shared/video-embed.ts";
 
 import type { GalleryOverlayMount, GalleryOverlayPorts } from "./ports.ts";
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";

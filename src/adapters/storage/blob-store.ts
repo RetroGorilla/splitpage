@@ -1,4 +1,4 @@
-import { isSha256Hex } from "../../../shared/blob-policy.js";
+import { isSha256Hex } from "../../../shared/blob-policy.ts";
 import { base64Encode, claimHandedOver, imageDataUrlBytes, imageRecordOf } from "../../core/document/media.ts";
 import type { DecodedImage } from "../../core/document/media.ts";
 import type { ImageRef } from "../../core/document/ports.ts";

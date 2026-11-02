@@ -20,7 +20,7 @@ export interface CommandMenuPorts {
     readonly askingFromLauncher: <T>(read: () => T) => T;
     readonly launcherShown: () => boolean;
   };
-  readonly exportActionName: (action: string) => string;
+  readonly exportActionName: (action: string) => string | undefined;
   readonly exportActionReason: (action: string) => string;
   readonly runExportAction: (action: string) => void;
   readonly fileMenuOpen: () => boolean;

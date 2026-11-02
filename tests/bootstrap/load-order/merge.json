@@ -2,7 +2,7 @@
   "loadOnly": [
     "src/features/merge/local-merge.ts",
     "src/bootstrap/wiring/merge-review.ts",
-    "src/application/session/session-merge.js",
+    "src/application/session/session-merge.ts",
     "src/bootstrap/wiring/session-merge.ts",
     "src/features/history/panel.ts",
     "src/features/title/document-chrome.ts",

@@ -2,10 +2,10 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../../src/core/migrate.ts";
-import { startCellClipboard as mountCellClipboard, pasteIntoCell } from "../../../src/features/clipboard/cell-clipboard.js";
+import { startCellClipboard as mountCellClipboard, pasteIntoCell } from "../../../src/features/clipboard/cell-clipboard.ts";
 import type { CellClipboardPorts, SceneClipPorts, SceneSelectPorts } from "../../../src/features/clipboard/ports.ts";
-import { startSceneClip as mountSceneClip, parseScenePayload } from "../../../src/features/clipboard/scene-clip.js";
-import { startSceneSelect as mountSceneSelect, selectScenes } from "../../../src/features/clipboard/scene-select.js";
+import { startSceneClip as mountSceneClip, parseScenePayload } from "../../../src/features/clipboard/scene-clip.ts";
+import { startSceneSelect as mountSceneSelect, selectScenes } from "../../../src/features/clipboard/scene-select.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakePictures } from "../fakes.ts";
 

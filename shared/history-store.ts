@@ -1,7 +1,7 @@
 "use strict";
 
-import * as policy from "./history-policy.js";
-import { DOC_ID_RE } from "./doc-id-policy.js";
+import * as policy from "./history-policy.ts";
+import { DOC_ID_RE } from "./doc-id-policy.ts";
 
 type HistoryStoreMeta = Omit<NonNullable<ReturnType<typeof policy.sanitizeHistoryMeta>>, "id"> & { id: string; legacyId?: string };
 type HistoryStoreEntry = HistoryStoreMeta & { sha: string };

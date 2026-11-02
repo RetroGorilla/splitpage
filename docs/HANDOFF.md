@@ -341,7 +341,7 @@ includes the boot stash and the crash-draft file merge, the latter through
 Every other write is "adopt what the other side just confirmed" after a
 successful write or open (or `null`: no ancestor), and goes through
 `setBaseState(next, why)` next to it, each call with its reason — so
-`setBaseState(next, why)` (`src/application/session/session-merge.js`) is the one writer of the base, called through `applyMerge`. `reportMerge(result, {alreadySaved:true})`
+`setBaseState(next, why)` (`src/application/session/session-merge.ts`) is the one writer of the base, called through `applyMerge`. `reportMerge(result, {alreadySaved:true})`
 avoids re-queuing an autosave for a mid-save merge.
 
 ### 3.8 Untagged mentions are painted, never wrapped
@@ -494,7 +494,7 @@ tabs**.
   IndexedDB is no longer read.
 - **Desktop version history** (#83, `main.js` §8b): one
   `shared/history-store.ts` (the store the browser runs too; policy from
-  `shared/history-policy.js`) over `desktop/history-fs-backend.js`, both
+  `shared/history-policy.ts`) over `desktop/history-fs-backend.ts`, both
   made once in `whenReady` before `registerIpc`. `<userData>/history/`:
   `FORMAT` `"2"` (higher → read-only), `index.json` + `index.prev.json`
   (every bucket in one index, two durable generations; a torn current
@@ -530,7 +530,7 @@ tabs**.
   it. Test-mode faults:
   `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `enospc-once`/`-always`;
   `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
-- **Content-addressed blobs** (#82, `desktop/blob-store.js`, `main.js`
+- **Content-addressed blobs** (#82, `desktop/blob-store.ts`, `main.js`
   §8c). Images leave the document state and live in `<userData>/blobs`:
   `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
   own SHA-256 (`<aa>` = its first two hex digits). Plain CommonJS, no
@@ -565,7 +565,7 @@ tabs**.
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites.
 - **YouTube and Vimeo in the gallery** (#141, #168, `main.js` §9e,
-  `shared/video-embed.js`). The page's policy is build.mjs's, re-served
+  `shared/video-embed.ts`). The page's policy is build.mjs's, re-served
   as a header (§10), so its `frame-src` — `'self'` plus YouTube's no-cookie
   embed and Vimeo's player — needed no second edit here; `TABSTRIP_CSP`
   keeps `frame-src 'none'`. Three things main does for it: (1)
@@ -591,7 +591,7 @@ tabs**.
   machine (no Electron binary for x64 here) — first run is CI's
   desktop-smoke job.
 - Duplicate document-id claims reassign in memory only (§4, #36).
-  `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.js`, #76): server
+  `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
   `atomicWrite` measurably moves NTFS birthtime on save — so the loser is
   decided by claim order instead. #76 deleted the `DUP_TRUST_BIRTHTIME =
@@ -966,7 +966,7 @@ image bytes; the bytes live once, content-addressed by SHA-256, in a blob
 store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
 server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
 - A row's picture is `imageRef`, a record gated by `normalizeImageRef()`
-  (`shared/blob-policy.js`): exactly those four fields, the type sniffed
+  (`shared/blob-policy.ts`): exactly those four fields, the type sniffed
   from the bytes, never SVG. The old key `visualImage` (a `data:` URI) is
   read, interned and deleted by `migrateRows()`; a valid one wins over an
   `imageRef` on the same row. The comment `field` value `"visualImage"` keeps
@@ -990,7 +990,7 @@ server `DATA_DIR/blobs`), and `02c-blobs.ts` is the page's registry of them.
   user's picture as `imageValue`; its `body` shows the same picture in the
   stored form. `imageValue` is the source of truth: "Use my version" puts
   it back, and the card draws it.
-- `refsIn(state)` (`shared/blob-policy.js`; the server keeps its own copy)
+- `refsIn(state)` (`shared/blob-policy.ts`; the server keeps its own copy)
   lists every sha a state names: `imageRef`, `imageValue`, and `data-blob`
   on an `<img>` in any row, comment or reply HTML. Every writer that must
   not name an unstored blob persists `refsIn` first (#52).
@@ -1098,7 +1098,7 @@ bytes, #82 — nothing deletes them yet, D4).
 localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
 absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 `nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
-(`12`/`24`, absent = system; `formatClock()` in `shared/clock.js` is the one
+(`12`/`24`, absent = system; `formatClock()` in `shared/clock.ts` is the one
 clock formatter, #180), `splitpage-person-color` (#194),
 `splitpage-default-wpm` (the reading speed a NEW script starts at),
 `splitpage-video-thumbs` (#141: `"0"` = don't fetch a pasted YouTube or
@@ -1137,7 +1137,7 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `src/bootstrap/wiring/` | one module per feature or owner: builds its ports from the real owners and mounts it; the `*-owner(s).ts` modules hold the app's single owners (session, location, preferences, saves, recovery, editor) |
 | `src/bootstrap/wiring/ports/` | shared ports, one module per responsibility (document, editing, effects, files, saving, screen, text, transitions…) |
 | `src/features/<name>/` | one part of the screen each (rows, writer, prompter, tags, broll, file-menu, find, gallery, comments, history, settings, title…); `features/common/` holds stateless DOM helpers |
-| `src/application/session/` | the document session (`document-session.ts`), change sets, merge (`apply-merge.ts`, `merge-incoming.ts`, `session-merge.js`) |
+| `src/application/session/` | the document session (`document-session.ts`), change sets, merge (`apply-merge.ts`, `merge-incoming.ts`, `session-merge.ts`) |
 | `src/application/commands/` | document edits as session commands: cell text, split and join, clipboard, scene length and status, rows, comments, b-roll and production records |
 | `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
 | `src/application/save/` | the save coordinator, autosave, file saving and import write-back (deprecated, switched off 2026-10-30), save completion, export capture, the status selector |
@@ -1153,22 +1153,22 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.ts` over `history-fs-backend.js`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
-| `desktop/desktop-state.ts`, `file-service.ts`, `doc-claims.ts`, `recents.ts`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
-| `desktop/close-quit.js`, `session-restore.js` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
+| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, startup, the history store (`shared/history-store.ts` over `history-fs-backend.ts`), draft headers, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
+| `desktop/desktop-state.ts`, `file-service.ts`, `doc-claims.ts`, `recents.ts`, `tab-registry.ts`, `window-appearance.ts`, `restore-notice.ts`, `unsaved-dialog.ts`, `update-release.ts` | the state file (windows, tabs, recents), opaque file ids, the atomic write and its stamp, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
+| `desktop/close-quit.ts`, `session-restore.ts` | closing a tab or window, quit and Windows session end: the unsaved-changes question, the kept-copy wait, draft settlement, the session-write freeze and the quit-to-install; restoring the last session at launch and reopening a window on macOS activation |
 | `desktop/ipc-setup.ts`, `ipc-files.ts`, `ipc-shell.ts`, `ipc-document.ts`, `ipc-history-blob.ts`, `ipc-tabstrip.ts`, `ipc-test-mode.ts` | how an IPC channel is registered (the wrappers, the sender and argument checks, `registerIpc` and the order of the handler groups); the file, file dialog and recents channels; the tab boot, theme, video file, update, teleprompter browser and Follow My Voice channels; the document state, route-open and crash-draft channels; the version history and image blob channels; the tab strip's channels; the `__test` channels, registered only in test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/ipc-channels.ts` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
-| `desktop/voice-helper.js` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
+| `desktop/voice-helper.ts` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
 | `desktop/drafts.ts` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
-| `shared/history-store.ts` | THE version-history store (#83), synchronous ESM run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
-| `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
-| `shared/blob-policy.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
-| `shared/video-embed.js` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
-| `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
-| `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.ts` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
+| `shared/history-store.ts` | THE version-history store (#83), synchronous ESM run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.ts`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
+| `shared/history-policy.ts` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
+| `shared/blob-policy.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
+| `shared/video-embed.ts` | synchronous ESM shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
+| `desktop/blob-store.ts` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
+| `desktop/history-fs-backend.ts` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.ts` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
 | `desktop/electron-arch.mjs` | pure architecture selection and the `fetch-electron` entry point; passes the selected architecture to Electron's installer (§2) |
 | `desktop/electron-arch.test.mjs` | pure architecture and override tests, including Windows ARM64 under x64 Node emulation |
 | `desktop/electron-builder.yml` | packaging config, x64 + ARM64 Windows |
@@ -1178,8 +1178,8 @@ shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
 | `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.ts` alone |
-| `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
-| `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.js` (two-generation write, torn index → prev, deferred unlink, kills via test hooks, a raw v1 tree left untouched) |
+| `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.ts` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
+| `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.ts` (two-generation write, torn index → prev, deferred unlink, kills via test hooks, a raw v1 tree left untouched) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |
 | `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
 | `.claude/skills/run-splitpage-app/driver.mjs` | the same driver in Node, for the cloud container — same suites, same output (§2) |
@@ -1248,8 +1248,8 @@ desktop, installer, server, export, ui) for where it lives,
 can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
 
 Follow My Voice on desktop (#8) runs Windows' own recogniser (System.Speech, offline) through
-`desktop/voice/listen.ps1`, driven by `desktop/voice-helper.js`, which
-`desktop/voice-composition.js` creates and routes (invariants #45–#47); it has never heard a real voice from an agent
+`desktop/voice/listen.ps1`, driven by `desktop/voice-helper.ts`, which
+`desktop/voice-composition.ts` creates and routes (invariants #45–#47); it has never heard a real voice from an agent
 session — the by-hand check is in `docs/WINDOWS-CHECKS.md` §3.
 
 **The header after Direction B (#169).** The row no longer overlaps

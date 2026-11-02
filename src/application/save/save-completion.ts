@@ -1,4 +1,5 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
 import { fileTitleCommand } from "../commands/title.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
@@ -8,35 +9,35 @@ import type { DocumentLocation, Home } from "../location/document-location.ts";
 import type { SaveConfirmation } from "./save-state.ts";
 import type { FileSavingDeferredPorts, FileSavingPorts } from "./file-saving-ports.ts";
 
-export interface LandedWrite {
-  readonly home: Home;
+export interface LandedWrite<B = ValidatedDocument> {
+  readonly home: Home<B>;
   readonly lastModified: number | null;
 }
 
-export interface CompletedWrite {
+export interface CompletedWrite<B = ValidatedDocument, P extends B = B> {
   readonly naming?: FileTitleChange | null;
   readonly captured: ExportDocument;
-  readonly published: unknown;
+  readonly published: P;
   readonly forkDocId: string | null;
   readonly docIdAtSave: string;
   readonly seqAtSave: number;
-  readonly landed: LandedWrite | null;
+  readonly landed: LandedWrite<B> | null;
 }
 
-export interface SaveCompletionPorts {
+export interface SaveCompletionPorts<B = ValidatedDocument, P extends B = B> {
   readonly edits: FileSavingPorts["edits"];
   readonly document: Pick<FileSavingPorts["document"], "stamp">;
-  readonly location: Pick<FileSavingPorts["location"], "amendHome" | "markWrittenOut">;
-  readonly deferred: FileSavingDeferredPorts;
+  readonly location: Pick<DocumentLocation<B>, "markWrittenOut" | "amendHome">;
+  readonly deferred: FileSavingDeferredPorts<P>;
   readonly saves: Pick<FileSavingPorts["saves"], "changes" | "confirmSavedNow">;
 }
 
-export interface SaveCompletion {
-  readonly confirmWrite: (write: CompletedWrite) => void;
+export interface SaveCompletion<B = ValidatedDocument, P extends B = B> {
+  readonly confirmWrite: (write: CompletedWrite<B, P>) => void;
   readonly adoptSavedCopyDocId: (forkDocId: string | null, docIdAtSave: string, owned: boolean) => void;
 }
 
-export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion {
+export function createSaveCompletion<B, P extends B = B>(ports: SaveCompletionPorts<B, P>): SaveCompletion<B, P> {
   function adoptSavedCopyDocId(forkDocId: string | null, docIdAtSave: string, owned: boolean): void {
     forkDocId = normalizeDocId(forkDocId);
     if (forkDocId) ports.deferred.copyHistory(docIdAtSave, forkDocId);
@@ -46,7 +47,7 @@ export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion
     ports.deferred.syncIdentity();
   }
 
-  function confirmWrite(write: CompletedWrite): void {
+  function confirmWrite(write: CompletedWrite<B, P>): void {
     const stamp = write.captured.document;
     ports.document.stamp(editStamp({ rev: stamp.rev, lastEditedBy: stamp.lastEditedBy, lastEditedAt: stamp.lastEditedAt }));
     ports.deferred.setBaseline(write.published, "saveDoc: the bytes just written");
