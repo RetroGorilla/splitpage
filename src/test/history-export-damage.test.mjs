@@ -68,17 +68,20 @@ async function harness(t, kind, snapshots = [good, bad], fields = {}, options = 
 
 function appHarness(t, owner) {
   document.body.innerHTML = '<input id="import-app-data-input" type="file">';
-  const delivered = [], messages = [];
+  const delivered = [], messages = [], choices = [];
   const app = mountAppData({
-    notices: { show: (...args) => { messages.push(args); return { isConnected: false, dismiss() {}, removeEventListener() {} }; } },
+    notices: {
+      show: (...args) => { messages.push(args); return { isConnected: false, dismiss() {}, removeEventListener() {} }; },
+      showAction: (message, kind, label, action) => { messages.push([message, kind]); choices.push({ label, action }); return { isConnected: true, dismiss() {}, removeEventListener() {} }; }
+    },
     fileDelivery: { deliver: (_name, text) => { delivered.push(JSON.parse(text)); return Promise.resolve(true); } },
     preferences: { appDataExport: () => ({}), appDataImport: () => [], commentsSort: () => "recent" },
     desktop: () => false, launchFacts: { appVersion: () => "" }, commentSorting: { choose: () => "recent" },
-    history: { exportAll: () => owner.exportHistoryAll(), normalizeSnapshots: () => [], importBundle: (bundle) => owner.importHistoryBundle(bundle) },
+    history: { exportAll: (options) => owner.exportHistoryAll(options), normalizeSnapshots: () => [], importBundle: (bundle) => owner.importHistoryBundle(bundle) },
     writer: { size: () => 20, setSize() {} }, embeddedVersion: () => "", useBlobBackend() {}
   });
   t.after(() => app.dispose());
-  return { app, delivered, messages };
+  return { app, delivered, messages, choices };
 }
 
 function productionHarness(t, indexedDB) {
@@ -191,6 +194,7 @@ for (const resolveFirst of [false, true]) test(`persistent reopen failure cancel
   const a = appHarness(t, h.owner);
   await a.app.exportAppData();
   assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 0);
   assert.match(a.messages.at(-1)[0], /Export cancelled/);
   h.storage.controls.injectFault(null);
   await h.storage.controls.forceBackend("idb");
@@ -200,12 +204,17 @@ for (const resolveFirst of [false, true]) test(`persistent reopen failure cancel
 for (const failure of ["reject", "timeout"]) test(`desktop body ${failure} cancels rather than delivering partial history`, async (t) => {
   const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
   const get = h.bridge.historyGet;
-  h.storage.controls.setDesktopTimeout(5);
+  if (failure === "timeout") h.storage.controls.setDesktopTimeout(5);
   h.bridge.historyGet = (query, id) => id === "intact" ? (failure === "reject" ? Promise.reject(new Error("locked")) : new Promise(() => {})) : get(query, id);
   const a = appHarness(t, h.owner);
   await a.app.exportAppData();
   assert.equal(a.delivered.length, 0);
   assert.match(a.messages.at(-1)[0], /Export cancelled/);
+  assert.equal(a.choices.length, failure === "timeout" ? 0 : 1);
+  if (failure === "timeout") {
+    assert.match(a.messages.at(-1)[0], /Please try again/);
+    await assert.rejects(h.owner.exportHistoryAll({ allowOmissions: true }), (error) => error.code === "temporary-read-failed");
+  }
 });
 
 test("desktop image read rejection cancels delivery through the actual image fallback", async (t) => {
@@ -216,6 +225,189 @@ test("desktop image read rejection cancels delivery through the actual image fal
   await a.app.exportAppData();
   assert.equal(a.delivered.length, 0);
   assert.equal(a.messages.at(-1)[0], "Export cancelled — history or image data could not be read. Nothing was downloaded.");
+});
+
+test("a failed body read offers only eligibility until an opt-in export counts omissions", async (t) => {
+  const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
+  const get = h.bridge.historyGet;
+  h.bridge.historyGet = (query, id) => id === "intact" ? Promise.reject(new Error("locked")) : get(query, id);
+  const before = await h.inspect();
+  await assert.rejects(h.owner.exportHistoryAll(), (error) => {
+    assert.equal(error.code, "read-failed");
+    assert.equal(error.canExportRest, true);
+    assert.equal("partial" in error, false);
+    return true;
+  });
+  const out = await h.owner.exportHistoryAll({ allowOmissions: true });
+  assert.deepEqual(out.docs[0].snapshots.map((s) => s.meta.id), ["other"]);
+  assert.equal(out.omittedSnapshots, 2);
+  assert.deepEqual(out.blobs[image], { mime: "image/png", b64: "aW1hZ2U=" });
+  assert.equal(await h.inspect(), before);
+});
+
+test("image read failures retain other images and count shared unreadable images once", async (t) => {
+  const otherImage = "c".repeat(64);
+  const otherBody = JSON.stringify({ docId, rows: [{ imageRef: { sha256: otherImage } }, { imageRef: { sha256: image } }] });
+  const otherSha = crypto.createHash("sha256").update(otherBody).digest("hex");
+  const pictures = { intern: () => null, persist: async () => [],
+    ensureBytes: async (shas) => { if (shas.includes(image)) throw new Error("locked"); return []; },
+    recordFor: () => ({ mime: "image/png" }), dataUrlFor: () => "data:image/png;base64,aW1hZ2U=" };
+  const h = await harness(t, "memory", [good, { ...good, id: "other", sha: otherSha }], {}, { pictures });
+  await h.backend.store.backend.seed(await h.backend.store.rawIndex(), { [sha]: stateJson, [otherSha]: otherBody });
+  await assert.rejects(h.owner.exportHistoryAll(), (error) => {
+    assert.equal(error.code, "read-failed");
+    assert.equal(error.canExportRest, true);
+    assert.equal("partial" in error, false);
+    return true;
+  });
+  const out = await h.owner.exportHistoryAll({ allowOmissions: true });
+  assert.equal(out.docs[0].snapshots.length, 2);
+  assert.equal(out.omittedSnapshots, 1);
+  assert.deepEqual(out.missingBlobs, [image]);
+  assert.deepEqual(out.blobs, { [otherImage]: { mime: "image/png", b64: "aW1hZ2U=" } });
+});
+
+test("no readable history means no partial-export choice", async (t) => {
+  const h = await harness(t, "filesystem", [good]);
+  h.bridge.historyGet = async () => { throw new Error("locked"); };
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 0);
+});
+
+test("an unavailable persistent image store never offers a partial export", async (t) => {
+  const pictures = createBlobStore({ preferred: { available: () => true, open: async () => { throw new Error("locked"); } }, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  const h = await harness(t, "memory", [good], {}, { pictures });
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 0);
+});
+
+test("choosing export rest rereads fresh history and includes recovered versions", async (t) => {
+  const h = await harness(t, "memory", [good, { ...good, id: "other" }]);
+  const get = h.backend.get;
+  h.backend.get = (bucket, id, options) => id === "intact" ? Promise.reject(new Error("locked")) : get(bucket, id, options);
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 1);
+  h.backend.get = get;
+  const fresh = JSON.stringify({ docId, title: "Added after the prompt", rows: [] });
+  assert.equal((await h.backend.store.put(docId, { id: "new", atMs: 3000 }, fresh)).stored, true);
+  const before = await h.inspect();
+  await a.choices[0].action();
+  assert.equal(a.delivered.length, 1);
+  assert.equal(a.delivered[0].history.omittedSnapshots, 1);
+  assert.deepEqual(a.delivered[0].history.docs[0].snapshots.map((s) => s.meta.id).sort(), ["intact", "new", "other"]);
+  assert.equal(a.delivered[0].history.docs[0].snapshots.find((s) => s.meta.id === "new").stateJson, fresh);
+  assert.deepEqual(await h.inspect(), before);
+});
+
+const temporaryFailures = [
+  new Error("History request timed out."),
+  Object.assign(new Error("read failed"), { code: "ETIMEDOUT" }),
+  Object.assign(new Error("read aborted"), { name: "AbortError" }),
+  new Error("Error invoking remote method 'history-get': Error: EAGAIN: resource temporarily unavailable"),
+  new Error("read failed", { cause: Object.assign(new Error("interrupted"), { code: "EINTR" }) })
+];
+
+const permanentPathFailures = [
+  new Error("Error invoking remote method 'blob-get': Error: EACCES: permission denied, open 'C:\\Users\\Temporary\\ETIMEDOUT\\image.png'"),
+  Object.assign(new Error("History request timed out."), { code: "EACCES" }),
+  new Error("ETIMEDOUT: read failed", { cause: Object.assign(new Error("missing"), { code: "ENOENT" }) }),
+  new Error("ENOENT: no such file, open 'C:\\Users\\Temporary\\image.png'"),
+  new Error("Could not read 'C:\\Users\\Temporary\\EBUSY\\image.png'"),
+  new Error("Could not read 'C:\\Users\\timed out\\image.png'")
+];
+
+for (const [index, failure] of permanentPathFailures.entries()) test(`permanent image failure or path marker ${index} preserves the explicit offer`, async (t) => {
+  const pictures = createBlobStore({ preferred: null, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  pictures.setBackend(makeDesktopBlobBackend({ blobGet: async () => { throw failure; }, blobPut: async () => ({ ok: true }), blobMissing: async () => [] }));
+  const h = await harness(t, "filesystem", [good], {}, { pictures });
+  await assert.rejects(h.owner.exportHistoryAll(), (error) => {
+    assert.equal(error.code, "read-failed");
+    assert.equal(error.canExportRest, true);
+    return true;
+  });
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 1);
+  await a.choices[0].action();
+  assert.equal(a.delivered.length, 1);
+  assert.deepEqual(a.delivered[0].missingBlobs, [image]);
+});
+
+for (const [index, failure] of temporaryFailures.entries()) {
+  test(`temporary body rejection ${index} cancels both export modes without a choice`, async (t) => {
+    const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
+    const get = h.bridge.historyGet;
+    h.bridge.historyGet = (query, id) => id === "intact" ? Promise.reject(failure) : get(query, id);
+    for (const allowOmissions of [false, true]) await assert.rejects(h.owner.exportHistoryAll({ allowOmissions }), (error) => {
+      assert.equal(error.code, "temporary-read-failed");
+      assert.equal(error.canExportRest, undefined);
+      assert.equal("partial" in error, false);
+      return true;
+    });
+    const a = appHarness(t, h.owner);
+    await a.app.exportAppData();
+    assert.equal(a.delivered.length, 0);
+    assert.equal(a.choices.length, 0);
+    assert.match(a.messages.at(-1)[0], /Please try again/);
+  });
+
+  test(`temporary image rejection ${index} cancels both export modes without a choice`, async (t) => {
+    const pictures = createBlobStore({ preferred: null, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+    pictures.setBackend(makeDesktopBlobBackend({ blobGet: async () => { throw failure; }, blobPut: async () => ({ ok: true }), blobMissing: async () => [] }));
+    const h = await harness(t, "filesystem", [good], {}, { pictures });
+    for (const allowOmissions of [false, true]) await assert.rejects(h.owner.exportHistoryAll({ allowOmissions }), (error) => error.code === "temporary-read-failed");
+    const a = appHarness(t, h.owner);
+    await a.app.exportAppData();
+    assert.equal(a.delivered.length, 0);
+    assert.equal(a.choices.length, 0);
+    assert.match(a.messages.at(-1)[0], /Please try again/);
+  });
+}
+
+test("recovered image reads are included by the opt-in rerun", async (t) => {
+  let blocked = true, reads = 0;
+  const pictures = { intern: () => null, persist: async () => [], ensureBytes: async () => { reads++; if (blocked) throw new Error("locked"); return []; }, recordFor: () => ({ mime: "image/png" }), dataUrlFor: () => "data:image/png;base64,aW1hZ2U=" };
+  const h = await harness(t, "filesystem", [good], {}, { pictures });
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.choices.length, 1);
+  blocked = false;
+  await a.choices[0].action();
+  assert.equal(reads, 2);
+  assert.equal(a.delivered.length, 1);
+  assert.deepEqual(a.delivered[0].missingBlobs, []);
+  assert.deepEqual(a.delivered[0].blobs[image], { mime: "image/png", b64: "aW1hZ2U=" });
+});
+
+test("an enumeration timeout asks for a retry and never offers partial export", async (t) => {
+  const h = await harness(t, "filesystem");
+  h.storage.controls.setDesktopTimeout(5);
+  h.bridge.historyListDocs = () => new Promise(() => {});
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.delivered.length, 0);
+  assert.equal(a.choices.length, 0);
+  assert.match(a.messages.at(-1)[0], /Please try again/);
+});
+
+test("an unreadable large version cannot consume the readable remainder's export budget", async (t) => {
+  const h = await harness(t, "filesystem", [{ ...good, id: "blocked", atMs: 2000, sizeBytes: 250 * 1024 * 1024 }, { ...good, id: "other" }]);
+  const get = h.bridge.historyGet;
+  h.bridge.historyGet = (query, id) => id === "blocked" ? Promise.reject(new Error("locked")) : get(query, id);
+  const a = appHarness(t, h.owner);
+  await a.app.exportAppData();
+  assert.equal(a.choices.length, 1);
+  await a.choices[0].action();
+  assert.deepEqual(a.delivered[0].history.docs[0].snapshots.map((s) => s.meta.id), ["other"]);
+  assert.equal(a.delivered[0].history.omittedSnapshots, 2);
+  assert.equal(a.delivered[0].history.truncated, false);
 });
 
 test("strict image reads preserve confirmed absence while ordinary reads tolerate errors", async () => {

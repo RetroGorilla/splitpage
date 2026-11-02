@@ -388,6 +388,20 @@ function historyExportError(code: string, message: string) {
   return e;
 }
 
+function historyReadIsTemporary(error: unknown) {
+  const failure = (error && typeof error === "object" ? error : { message: error }) as { code?: unknown; name?: unknown; message?: unknown; cause?: unknown };
+  const cause = (failure.cause && typeof failure.cause === "object" ? failure.cause : { message: failure.cause }) as typeof failure;
+  const permanent = /(?:^|[\s:(])(?:EACCES|EPERM|ENOENT|ENOTDIR|EISDIR|EROFS|ENOSPC|EDQUOT|EINVAL|ENAMETOOLONG|ELOOP)(?=$|[\s:),.;])/i;
+  if ([failure.code, failure.name, failure.message, cause.code, cause.name, cause.message].some(function (value) {
+    return typeof value === "string" && permanent.test(value);
+  })) return false;
+  return [failure.code, failure.name, cause.code, cause.name].some(function (value) {
+    return typeof value === "string" && /^(?:timeout|ETIMEDOUT|ESOCKETTIMEDOUT|EAGAIN|EWOULDBLOCK|EBUSY|EINTR|ECONNRESET|ECONNABORTED|ENETDOWN|ENETUNREACH|EHOSTUNREACH|AbortError|TimeoutError|NetworkError)$/i.test(value);
+  }) || [failure.message, cause.message].some(function (value) {
+    return typeof value === "string" && (/(?:^|[\s:(])(?:ETIMEDOUT|ESOCKETTIMEDOUT|EAGAIN|EWOULDBLOCK|EBUSY|EINTR|ECONNRESET|ECONNABORTED|ENETDOWN|ENETUNREACH|EHOSTUNREACH|AbortError|TimeoutError|NetworkError)(?=$|[\s:),.;])/i.test(value) || /(?:^|:\s*)(?:Error:\s*)?History request timed out\.$/i.test(value));
+  });
+}
+
 function historyFlattenForExport(docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[]) {
   const flat: { docId: string | null; id: string; atMs: number; sizeBytes: number }[] = [];
   docs.forEach(function (d) {
@@ -402,55 +416,52 @@ function historyFlattenForExport(docs: HistoryExportDoc[], olderMetas: HistorySn
   return flat;
 }
 
-function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[], olderDamaged: number) {
+async function historyAssembleExport(backend: HistoryResolvedBackend, docs: HistoryExportDoc[], olderMetas: HistorySnapshotMeta[], olderDamaged: number, readFailed: (error: unknown) => void) {
   const flat = historyFlattenForExport(docs, olderMetas);
-  let total = 0, truncated = false;
+  let total = 0;
   let omittedSnapshots = docs.reduce(function (n, d) { return n + (d.damaged || 0); }, olderDamaged);
-  const keep: Record<string, boolean> = {};
-  flat.forEach(function (f) {
-    const key = (f.docId == null ? "_older" : f.docId) + "\n" + f.id;
-    if (total === 0 || total + f.sizeBytes <= historyExportCap()) {
-      total += f.sizeBytes;
-      keep[key] = true;
-    } else {
-      truncated = true;
-    }
-  });
-  const bodyJobs: Promise<void>[] = [];
+  const byDoc = new Map<string, HistoryExportSnapshot[]>();
   docs.forEach(function (d) {
     d.snapshots = [];
-    (d.metas || []).forEach(function (m) {
-      if (!keep[d.docId + "\n" + m.id]) return;
-      bodyJobs.push(backend.get(d.docId, m.id, { strict: true }).then(function (r) {
-        if (r) (d.snapshots as HistoryExportSnapshot[]).push({ meta: r.meta, stateJson: r.stateJson });
-        else omittedSnapshots++;
-      }));
-    });
+    byDoc.set(d.docId, d.snapshots);
   });
   const olderOut: HistoryExportSnapshot[] = [];
-  (olderMetas || []).forEach(function (m) {
-    if (!keep["_older\n" + m.id]) return;
-    bodyJobs.push(backend.get(HISTORY_OLDER_KEY, m.id, { strict: true }).then(function (r) {
-      if (r) olderOut.push({ meta: r.meta, stateJson: r.stateJson });
-      else omittedSnapshots++;
-    }));
-  });
-  return Promise.all(bodyJobs).then(function () {
-    function newestFirst(a: HistoryExportSnapshot, b: HistoryExportSnapshot) { return (b.meta as HistorySnapshotMeta).atMs - (a.meta as HistorySnapshotMeta).atMs; }
-    docs.forEach(function (d) { (d.snapshots as HistoryExportSnapshot[]).sort(newestFirst); });
-    olderOut.sort(newestFirst);
-    return {
-      docs: docs.map(function (d) {
-        return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots as HistoryExportSnapshot[] };
-      }),
-      older: olderOut,
-      truncated: truncated,
-      ...(omittedSnapshots ? { omittedSnapshots } : {})
-    };
-  });
+  let remaining = flat;
+  while (remaining.length) {
+    let reserved = total;
+    const skipped: typeof flat = [];
+    const reads: Promise<void>[] = [];
+    remaining.forEach(function (f) {
+      if (reserved > 0 && reserved + f.sizeBytes > historyExportCap()) { skipped.push(f); return; }
+      reserved += f.sizeBytes;
+      reads.push(Promise.resolve().then(function () {
+        return backend.get(f.docId ?? HISTORY_OLDER_KEY, f.id, { strict: true });
+      }).then(function (read) {
+        if (!read) { omittedSnapshots++; return; }
+        total += f.sizeBytes;
+        const target = f.docId === null ? olderOut : byDoc.get(f.docId) as HistoryExportSnapshot[];
+        target.push({ meta: read.meta, stateJson: read.stateJson });
+      }, function (e: unknown) { omittedSnapshots++; readFailed(e); }));
+    });
+    if (!reads.length) break;
+    await Promise.all(reads);
+    remaining = skipped;
+    if (total === reserved) break;
+  }
+  function newestFirst(a: HistoryExportSnapshot, b: HistoryExportSnapshot) { return (b.meta as HistorySnapshotMeta).atMs - (a.meta as HistorySnapshotMeta).atMs; }
+  docs.forEach(function (d) { (d.snapshots as HistoryExportSnapshot[]).sort(newestFirst); });
+  olderOut.sort(newestFirst);
+  return {
+    docs: docs.map(function (d) {
+      return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots as HistoryExportSnapshot[] };
+    }),
+    older: olderOut,
+    truncated: remaining.length > 0,
+    ...(omittedSnapshots ? { omittedSnapshots } : {})
+  };
 }
 
-function historyBuildExport(backend: HistoryResolvedBackend, ids: string[]) {
+function historyBuildExport(backend: HistoryResolvedBackend, ids: string[], readFailed: (error: unknown) => void) {
   const docJobs = ids.map(function (docId) {
     return Promise.all([backend.rawDoc(docId), backend.rawList(docId)]).then(function (res) {
       const rec = res[0] || null;
@@ -465,12 +476,19 @@ function historyBuildExport(backend: HistoryResolvedBackend, ids: string[]) {
   });
   return Promise.all(docJobs).then(function (docs) {
     return Promise.all([backend.rawList(HISTORY_OLDER_KEY), backend.rawDoc(HISTORY_OLDER_KEY)]).then(function ([olderMetas, older]) {
-      return historyAssembleExport(backend, docs, olderMetas || [], older?.damaged || 0);
+      return historyAssembleExport(backend, docs, olderMetas || [], older?.damaged || 0, readFailed);
     });
   });
 }
 
-function exportHistoryAll() {
+function exportHistoryAll(options?: { allowOmissions?: boolean }) {
+  const allowOmissions = options?.allowOmissions === true;
+  let failed = false;
+  let temporary = false;
+  const readFailed = function (error: unknown) { failed = true; temporary = temporary || historyReadIsTemporary(error); };
+  function checkTemporary() {
+    if (temporary) throw historyExportError("temporary-read-failed", "History or image reading was interrupted. Please try again.");
+  }
   return enqueueHistory(function () {
     return resolveHistoryBackend({ strict: true }).then(function (backend) {
       return backend.rawDocIds().then(function (ids) {
@@ -478,12 +496,20 @@ function exportHistoryAll() {
           throw historyExportError("no-enumeration",
             "This app's history cannot be listed on this backend (desktop). Export app data from the browser build instead.");
         }
-        return historyBuildExport(backend, ids);
+        return historyBuildExport(backend, ids, readFailed);
       });
     });
   }, function (e) {
+    if (historyReadIsTemporary(e)) return Promise.reject(historyExportError("temporary-read-failed", "History or image reading was interrupted. Please try again."));
     return Promise.reject(e && (e as { code?: unknown }).code ? e : historyExportError("io", "Could not read version history for export."));
-  }).then(historyExportAttachBlobs as (out: HistoryExportBundle | undefined) => Promise<HistoryExportBundle>);
+  }).then(function (out) { checkTemporary(); return historyExportAttachBlobs(out as HistoryExportBundle, readFailed); }).then(function (out) {
+    checkTemporary();
+    if (failed) {
+      const readable = out.older.length || out.docs.some(function (d) { return d.snapshots.length; });
+      if (!allowOmissions || !readable) throw Object.assign(historyExportError("read-failed", "Could not read all history or image data for export."), { canExportRest: !!readable });
+    }
+    return out;
+  });
 }
 
 const HISTORY_BLOB_HINT_RE = /imageRef|imageValue|data-blob/;
@@ -497,7 +523,7 @@ function historyBlobCost(sha: string, entry: HistoryImageData) {
   return sha.length + entry.mime.length + (entry as { b64: string }).b64.length + 40;
 }
 
-async function historyExportAttachBlobs(out: HistoryExportBundle) {
+async function historyExportAttachBlobs(out: HistoryExportBundle, readFailed: (error: unknown) => void) {
   const cap = historyExportCap();
   const all: { snap: HistoryExportSnapshot; owner: HistoryExportSnapshot[] }[] = [];
   out.docs.forEach(function (d) {
@@ -514,7 +540,13 @@ async function historyExportAttachBlobs(out: HistoryExportBundle) {
   for (let i = 0; i < all.length; i++) {
     const snap = (all[i] as typeof all[number]).snap;
     const fresh = historyRefsInJson(snap.stateJson).filter(function (sha) { return !counted[sha]; });
-    const gone = fresh.length ? await ensureBytes(fresh, { strict: true }) : [];
+    const gone = (await Promise.all(fresh.map(function (sha) {
+      return ensureBytes([sha], { strict: true }).catch(function (e: unknown) {
+        if ((e as { code?: unknown } | null)?.code === "storage-unavailable") throw e;
+        readFailed(e);
+        return [sha];
+      });
+    }))).flat();
     const add: Record<string, HistoryImageData> = {}, addMissing: string[] = [];
     let cost = historyUtf8Length(snap.stateJson);
     fresh.forEach(function (sha) {

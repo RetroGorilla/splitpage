@@ -7,7 +7,7 @@ import { createActionRegistry } from "../../../src/application/actions.ts";
 import { appDataActions as wiredAppDataActions, mountAppDataFeature, stopAppDataFeature } from "../../../src/bootstrap/wiring/settings.ts";
 import type { AppDataMount, AppDataPorts } from "../../../src/features/settings/ports.ts";
 import type { ScreenState } from "../../../src/application/screen.ts";
-import { fakeScreen } from "../fakes.ts";
+import { fakeNotices, fakeScreen } from "../fakes.ts";
 
 interface Probe {
   readonly build: () => Promise<{ readonly appVersion: string }>;
@@ -24,9 +24,10 @@ function setup() {
   document.body.innerHTML = '<input id="import-app-data-input" type="file"><div id="connect-modal"></div>';
   const calls: { name: string; args: unknown[] }[] = [];
   const shown: [string, string | undefined][] = [];
+  const actionNotices = fakeNotices();
   const note = (name: string, ...args: unknown[]): void => { calls.push({ name, args }); };
   const ports: AppDataPorts = {
-    notices: { show: (message, kind) => { shown.push([message, kind]); return { isConnected: false, dismiss: () => undefined, removeEventListener: () => undefined }; } },
+    notices: { show: (message, kind) => { shown.push([message, kind]); return { isConnected: false, dismiss: () => undefined, removeEventListener: () => undefined }; }, showAction: actionNotices.notices.showAction },
     fileDelivery: { deliver: () => Promise.resolve(true) },
     preferences: {
       appDataExport: (extra) => { note("preferences.export", extra); return {}; },
@@ -48,8 +49,223 @@ function setup() {
     embeddedVersion: () => "embedded-version",
     useBlobBackend: (backend) => { note("blob.backend", backend); }
   };
-  return { ports, calls, shown };
+  return { ports, calls, shown, choices: actionNotices.shown };
 }
+
+function readFailure() {
+  return Object.assign(new Error("locked"), { code: "read-failed", canExportRest: true });
+}
+
+test("only one export gathers data at a time", async () => {
+  const { ports } = setup();
+  const gate = deferred<undefined>();
+  const started = deferred<undefined>();
+  let reads = 0;
+  const mounted = mountAppData({ ...ports, history: { ...ports.history, exportAll: async () => {
+    reads++;
+    started.resolve(undefined);
+    await gate.promise;
+    throw new Error("unavailable");
+  } } });
+  const first = mounted.exportAppData();
+  await started.promise;
+  const second = mounted.exportAppData();
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(reads, 1);
+  } finally {
+    gate.resolve(undefined);
+    await Promise.all([first, second]);
+    mounted.dispose();
+  }
+});
+
+test("a new export dismisses the older prompt and invalidates its action", async () => {
+  const { ports, choices } = setup();
+  let deliveries = 0;
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: (options) => options?.allowOmissions ? Promise.resolve({ docs: [], older: [{ stateJson: "fresh" }], omittedSnapshots: 1 }) : Promise.reject(readFailure()) },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    const old = choices[0];
+    assert.ok(old?.action);
+    await mounted.exportAppData();
+    const current = choices[1];
+    assert.ok(current?.action);
+    assert.equal(old.notice.isConnected, false);
+    await old.action();
+    assert.equal(deliveries, 0);
+    await Promise.all([current.action(), current.action()]);
+    await old.action();
+    await current.action();
+    assert.equal(deliveries, 1);
+  } finally { mounted.dispose(); }
+});
+
+test("an export stays exclusive until file delivery finishes", async () => {
+  const { ports } = setup();
+  const started = deferred<undefined>();
+  const delivery = deferred<boolean>();
+  let deliveries = 0;
+  const mounted = mountAppData({ ...ports, fileDelivery: { deliver: () => { deliveries++; started.resolve(undefined); return delivery.promise; } } });
+  const first = mounted.exportAppData();
+  await started.promise;
+  try {
+    await mounted.exportAppData();
+    assert.equal(deliveries, 1);
+  } finally { delivery.resolve(true); await first; mounted.dispose(); }
+});
+
+test("temporary failures cancel with a retry message even during an opt-in rerun", async () => {
+  for (const offerFirst of [false, true]) {
+    const { ports, shown, choices } = setup();
+    let deliveries = 0;
+    const mounted = mountAppData({ ...ports,
+      history: { ...ports.history, exportAll: (options) => Promise.reject(offerFirst && !options?.allowOmissions ? readFailure() : Object.assign(new Error("timed out"), { code: "temporary-read-failed" })) },
+      fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+    });
+    try {
+      await mounted.exportAppData();
+      if (offerFirst) { assert.ok(choices[0]?.action); await choices[0].action(); }
+      assert.equal(choices.length, offerFirst ? 1 : 0);
+      assert.equal(deliveries, 0);
+      assert.deepEqual(shown.at(-1), ["Export cancelled — history or image data could not be read right now. Please try again. Nothing was downloaded.", "error"]);
+    } finally { mounted.dispose(); }
+  }
+});
+
+test("read failure offers an explicit choice and downloads the readable data only once after choosing", async () => {
+  const { ports, shown, choices } = setup();
+  const delivered: string[] = [];
+  const partial = { docs: [{ snapshots: [{ stateJson: "readable" }] }], older: [], omittedSnapshots: 2, missingBlobs: ["unreadable-image"] };
+  const modes: boolean[] = [];
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: (options) => { modes.push(options?.allowOmissions === true); return options?.allowOmissions ? Promise.resolve(partial) : Promise.reject(readFailure()); } },
+    fileDelivery: { deliver: (_name, text) => { delivered.push(String(text)); return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    assert.deepEqual(delivered, []);
+    assert.equal(choices.length, 1);
+    const choice = choices[0];
+    assert.equal(choice?.label, "Export the rest anyway");
+    assert.ok(choice?.action);
+    partial.docs[0]?.snapshots.push({ stateJson: "added after the prompt" });
+    partial.omittedSnapshots = 3;
+    partial.missingBlobs.push("another-unreadable-image");
+    await Promise.all([choice.action(), choice.action()]);
+    await choice.action();
+    assert.equal(delivered.length, 1);
+    assert.deepEqual(modes, [false, true]);
+    const bundle = JSON.parse(delivered[0] || "null") as { history: typeof partial; missingBlobs: string[] };
+    assert.equal(bundle.history.docs[0]?.snapshots[0]?.stateJson, "readable");
+    assert.equal(bundle.history.docs[0]?.snapshots[1]?.stateJson, "added after the prompt");
+    assert.equal(bundle.history.omittedSnapshots, 3);
+    assert.deepEqual(bundle.missingBlobs, ["unreadable-image", "another-unreadable-image"]);
+    assert.match(shown.at(-1)?.[0] || "", /3 damaged or unreadable history snapshots/);
+    assert.match(shown.at(-1)?.[0] || "", /2 images were missing or unreadable/);
+  } finally { mounted.dispose(); }
+});
+
+test("dismissing the partial-export choice never downloads a file", async () => {
+  const { ports, choices } = setup();
+  let deliveries = 0;
+  const partial = { docs: [], older: [{ stateJson: "readable" }], omittedSnapshots: 1 };
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: (options) => options?.allowOmissions ? Promise.resolve(partial) : Promise.reject(readFailure()) },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    assert.equal(choices.length, 1);
+    choices[0]?.notice.dismiss();
+    assert.equal(deliveries, 0);
+  } finally { mounted.dispose(); }
+});
+
+test("an empty remainder or unavailable store never offers a partial export", async () => {
+  for (const error of [
+    Object.assign(new Error("locked"), { code: "read-failed", canExportRest: false }),
+    Object.assign(new Error("store unavailable"), { code: "io" })
+  ]) {
+    const { ports, choices } = setup();
+    let deliveries = 0;
+    const mounted = mountAppData({ ...ports,
+      history: { ...ports.history, exportAll: () => Promise.reject(error) },
+      fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+    });
+    try {
+      await mounted.exportAppData();
+      assert.equal(choices.length, 0);
+      assert.equal(deliveries, 0);
+    } finally { mounted.dispose(); }
+  }
+});
+
+test("disposing the feature dismisses its partial-export choice and prevents stale delivery", async () => {
+  const { ports, choices } = setup();
+  let deliveries = 0;
+  const partial = { docs: [], older: [{ stateJson: "readable" }], omittedSnapshots: 1 };
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: (options) => options?.allowOmissions ? Promise.resolve(partial) : Promise.reject(readFailure()) },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  await mounted.exportAppData();
+  const choice = choices[0];
+  assert.ok(choice?.action);
+  mounted.dispose();
+  assert.equal(choice.notice.isConnected, false);
+  await choice.action();
+  assert.equal(deliveries, 0);
+});
+
+test("disposing while the opt-in rerun gathers prevents delivery after its reads finish", async () => {
+  const { ports, choices } = setup();
+  const reading = deferred<Awaited<ReturnType<AppDataPorts["history"]["exportAll"]>>>();
+  const started = deferred<undefined>();
+  let deliveries = 0;
+  const mounted = mountAppData({ ...ports,
+    history: { ...ports.history, exportAll: (options) => {
+      if (!options?.allowOmissions) return Promise.reject(readFailure());
+      started.resolve(undefined);
+      return reading.promise;
+    } },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    assert.ok(choices[0]?.action);
+    const rerun = choices[0].action();
+    await started.promise;
+    mounted.dispose();
+    reading.resolve({ docs: [], older: [{ stateJson: "readable" }], omittedSnapshots: 1 });
+    await rerun;
+    assert.equal(deliveries, 0);
+  } finally { mounted.dispose(); }
+});
+
+test("the partial export is checked for credentials again when the user chooses it", async () => {
+  const { ports, choices, shown } = setup();
+  const prefs: Record<string, unknown> = {};
+  let deliveries = 0;
+  const partial = { docs: [], older: [{ stateJson: "readable" }], omittedSnapshots: 1 };
+  const mounted = mountAppData({ ...ports,
+    preferences: { ...ports.preferences, appDataExport: () => prefs },
+    history: { ...ports.history, exportAll: (options) => options?.allowOmissions ? Promise.resolve(partial) : Promise.reject(readFailure()) },
+    fileDelivery: { deliver: () => { deliveries++; return Promise.resolve(true); } }
+  });
+  try {
+    await mounted.exportAppData();
+    const choice = choices[0];
+    assert.ok(choice?.action);
+    prefs.apiKey = "must not leave the app";
+    await choice.action();
+    assert.equal(deliveries, 0);
+    assert.match(shown.at(-1)?.[0] || "", /credential \(apiKey\)/);
+  } finally { mounted.dispose(); }
+});
 
 test("history read failures cancel app-data delivery", async () => {
   const { ports, shown } = setup();
