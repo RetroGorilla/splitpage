@@ -107,7 +107,7 @@ Since the tabs build, the title-bar tab strip (`desktop/tabstrip/`: `index.html`
 (`splitpage://tabstrip`) served from files on disk rather than from the asar —
 `electron-builder.yml`'s `extraResources` ships them to
 `resources/splitpage/tabstrip` in the packaged app, staged there by
-`stage.mjs`, and `main.js` resolves that same path (vs. `__dirname/tabstrip`
+`stage.mjs`, and `main.ts` resolves that same path (vs. `__dirname/tabstrip`
 in dev) so both layouts serve identical files under the same allowlist. Run
 `npm ci` followed by `npm run fetch-electron` in `desktop/` to fetch the
 machine's dev Electron (see HANDOFF.md §2). The script detects native ARM64
@@ -194,7 +194,7 @@ say when there is something newer; the desktop app offers to install it.
 
 **Where that update URL comes from.** `SPLITPAGE_UPDATE_API` (the desktop app
 honours it only with `SPLITPAGE_TEST=1`), or the default
-compiled into `update.mjs` and `desktop/main.js`, and nothing else. `release.json`
+compiled into `update.mjs` and `desktop/main.ts`, and nothing else. `release.json`
 used to be copied into each release's `.splitpage-release.json` as an
 `updateApi` field that the next update check would follow; #64 made that field
 ignored (a release naming where the next release comes from is a redirect

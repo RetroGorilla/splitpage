@@ -15,7 +15,7 @@ Groups A, B and C below are done. Every queue task from AQ-1 to AQ-46 is merged 
 | A1 | Release builds expose no test hook (AQ-23, PRs 1 to 5), and history's fault-injection code is out of release builds too (AQ-46: two TypeScript conversions, then the move) | #974, #985, #990, #999, #1011, #1014, #1033, #1034, #1036 |
 | A2 | I-20 (Save label after a late save) does not reproduce; its test stays as a regression test (AQ-28). I-6 is moot: import save-back is switched off and the code is marked deprecated (AQ-32, which replaced AQ-29) | #976, #982 |
 | A3 | Flaky suite 266 (AQ-30) and desktop smoke #496 (AQ-31) fixed in the tests' timing; no assertion loosened | #975, #980 |
-| B1 | Desktop split: IPC setup in seven parts (AQ-35), process lifecycle (AQ-36) and voice (AQ-37) moved out of `desktop/main.js`, now 1,810 lines | #1002, #1005 to #1010, #1013, #1016 |
+| B1 | Desktop split: IPC setup in seven parts (AQ-35), process lifecycle (AQ-36) and voice (AQ-37) moved out of `desktop/main.ts`, now 1,810 lines | #1002, #1005 to #1010, #1013, #1016 |
 | B2 | One owner decides when a save is complete (AQ-38) | #1019 |
 | B3 | Storage re-exports gone (AQ-19); the `"server"` merge kind is now `"disk"` (AQ-33); startup slots decided (#954) | #993, #989 |
 | C1 | Prompter and rundown in strict TypeScript, each with its state in one object (AQ-24 to AQ-27) | #959, #973, #988, #997 |

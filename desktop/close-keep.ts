@@ -1,7 +1,8 @@
 "use strict";
 
 import type { BrowserWindow } from "electron";
-import type { DesktopMainCommon, DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopMainCommon } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab } from "./main-types.d.ts";
 import type { decisionFor } from "./unsaved-dialog.ts";
 
 export type CloseCheckDecision = ReturnType<typeof decisionFor>;
@@ -15,7 +16,7 @@ export interface CloseCheckIo extends Pick<DesktopMainCommon, "tabs"> {
 
 const FILE_CHECK_TIMEOUT_MS = 1000;
 
-function checkFileGone(stat: (path: string) => unknown, absPath: string, timeoutMs: number) {
+function checkFileGone(stat: (path: unknown) => unknown, absPath: unknown, timeoutMs: number) {
   return new Promise<boolean>((resolve) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;

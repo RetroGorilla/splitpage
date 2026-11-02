@@ -7,7 +7,7 @@ type VideoEmbedReference = { host: "youtube" | "vimeo"; id: string; hash?: strin
 type VideoEmbedFields = Partial<Record<keyof VideoEmbedReference, unknown>>;
 type VideoEmbedResponse = Pick<Response, "status" | "headers" | "body" | "arrayBuffer">;
 type VideoEmbedFetch = (url: string, init: RequestInit) => VideoEmbedResponse | PromiseLike<VideoEmbedResponse>;
-type VideoEmbedOptions = { fetch?: VideoEmbedFetch | null; bases?: object | null; timeoutMs?: number };
+type VideoEmbedOptions = { fetch?: VideoEmbedFetch | null; bases?: object | null | undefined; timeoutMs?: number };
 type VideoEmbedThumbnail = { ok: false; code: string } | {
   ok: true; bytes: Uint8Array; mime: NonNullable<ReturnType<typeof blobPolicy.sniffImageMime>>;
 };

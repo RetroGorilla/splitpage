@@ -12,7 +12,8 @@ assert.deepEqual(config.errors, []);
 
 const prelude = `import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { DesktopChannelRow, DesktopDraftReadHeader, DesktopIpcArgs } from "../shared/desktop-contract.d.ts";
-import type { DesktopCloseQuitDependencies, DesktopIpcEvent, DesktopFileIpcDependencies, DesktopMainTab } from "./ipc-boundaries.d.ts";
+import type { DesktopCloseQuitDependencies, DesktopIpcEvent, DesktopFileIpcDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab } from "./main-types.d.ts";
 import type { BrowserWindow } from "electron";
 declare const wrappers: DesktopIpcWrappers;
 declare const deps: DesktopFileIpcDependencies;
@@ -53,7 +54,7 @@ const arrayBufferBytes: DesktopIpcArgs<"splitpage:write-file">[1] = new ArrayBuf
 const uint8Bytes: DesktopIpcArgs<"splitpage:write-file">[1] = new Uint8Array(8);
 const blobBytes: DesktopIpcArgs<"splitpage:blob-put">[1] = new Uint8Array(8);
 if (!closeDeps.tabIsUnsaved(maybeTab) && maybeTab && gone.includes(maybeTab)) maybeTab.id.toUpperCase();
-if (!closeDeps.tabHasFile(fileTab)) fileTab.source.absPath.toUpperCase();`;
+if (!closeDeps.tabHasFile(fileTab)) fileTab.source.kind.toUpperCase();`;
 assert.deepEqual(diagnostics(valid), []);
 
 const CASES = [

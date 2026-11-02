@@ -52,7 +52,7 @@ eq("mixed prose and test-only changes skip app checks", needsAppChecks(["README.
 
 console.log("\nneedsDesktopChecks():\n");
 
-for (const files of [null, [], ["desktop/main.js"], ["src/bootstrap/main.ts"], ["desktop/test/smoke.mjs"], ["package.json"], [".github/workflows/ci.yml"], ["unknown/new.file"], ["README.md", "desktop/test/smoke.mjs"]]) {
+for (const files of [null, [], ["desktop/main.ts"], ["src/bootstrap/main.ts"], ["desktop/test/smoke.mjs"], ["package.json"], [".github/workflows/ci.yml"], ["unknown/new.file"], ["README.md", "desktop/test/smoke.mjs"]]) {
   eq(`the desktop smoke runs for ${JSON.stringify(files)}`, needsDesktopChecks(files), true);
 }
 for (const files of [["README.md"], ["tests/application/session.test.ts"], ["src/test/a.test.mjs"], ["tools/test-run-suites.mjs"], ["tools/ci-changes.mjs"], [".github/dependabot.yml"], [".github/workflows/release.yml"], ["desktop/test/notes.md"]]) {

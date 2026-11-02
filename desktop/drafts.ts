@@ -33,7 +33,7 @@ type DraftStoreOptions = {
   testHooks?: {
     failNext?: { code?: string; count?: number };
     maxBodyBytes?: number; writeDelayMs?: number; killBeforeRenameAt?: number; onKill?: () => void;
-  };
+  } | null;
 };
 
 const TAB_ID_RE = /^[0-9a-f]{32}$/;
@@ -542,7 +542,7 @@ function createDraftStore(opts?: DraftStoreOptions | null) {
     return enqueue(tabId, () => doWrite(tabId, rec, epoch, holdAtCall, header, stateJson, base, seq));
   }
 
-  function discardClean(tabId: string, seq: number): Promise<DesktopWireDraftDiscard> {
+  function discardClean(tabId: string | undefined, seq: number): Promise<DesktopWireDraftDiscard> {
     if (!validTabId(tabId)) return Promise.resolve({ ok: false, code: "NO_TAB" });
     const rec = tabRec(tabId);
     const epoch = rec.epoch;
@@ -557,7 +557,7 @@ function createDraftStore(opts?: DraftStoreOptions | null) {
     });
   }
 
-  function discardForUserDecision(tabIds: string | readonly string[], reason: unknown) {
+  function discardForUserDecision(tabIds: string | undefined | readonly (string | undefined)[], reason: unknown) {
     const ids = (Array.isArray(tabIds) ? tabIds : [tabIds]).filter(validTabId);
     for (const id of ids) {
       tombstones.add(id);

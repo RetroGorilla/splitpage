@@ -137,7 +137,7 @@ function createVoiceHelper(opts: DesktopVoiceHelperOptions) {
     return { ok: true };
   }
 
-  function forget(tabId: string) {
+  function forget(tabId: string | undefined) {
     if (current && current.tabId === tabId) {
       current.silent = true;
       end(current, "closed");

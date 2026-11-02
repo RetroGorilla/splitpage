@@ -8,7 +8,7 @@ export interface LaunchFacts {
 
 export interface ExternalLinks {
   readonly available: () => boolean;
-  readonly open: (url: string) => void;
+  readonly open: (url: unknown) => void;
 }
 
 export interface DesktopPresence {

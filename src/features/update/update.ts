@@ -143,7 +143,7 @@ function startDesktopInstall() {
 function openReleasesPage() {
   const url = releasesUrl();
   if (ports.desktop() && ports.externalLinks.available()) { ports.externalLinks.open(url); return; }
-  window.open(url, "_blank", "noopener");
+  window.open(url as string, "_blank", "noopener");
 }
 
 function updateBarPlan() {
@@ -175,7 +175,7 @@ function updateBarPlan() {
     if (!updateStatus.canInstall) {
       return {
         text: available,
-        action: function () { ports.externalLinks.open((updateStatus as UpdateStatus).releaseUrl as string); },
+        action: function () { ports.externalLinks.open((updateStatus as UpdateStatus).releaseUrl); },
         label: "Open release page"
       };
     }
@@ -328,7 +328,7 @@ function closeAboutDialog() {
   if (modal) modal.hidden = true;
 }
 
-function openAboutDialog(version: string | null, lines: string[], link: string | null) {
+function openAboutDialog(version: string | null, lines: string[], link: unknown) {
   const modal = document.getElementById("about-modal");
   if (!modal) return;
   if (!aboutWired) {
@@ -352,7 +352,7 @@ function openAboutDialog(version: string | null, lines: string[], link: string |
   });
   const a = document.getElementById("about-link") as HTMLAnchorElement;
   a.hidden = !link;
-  if (link) a.href = link;
+  if (link) a.href = link as string;
   modal.hidden = false;
   const close = modal.querySelector<HTMLElement>("[data-about-close]");
   if (close) close.focus();

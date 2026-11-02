@@ -1,6 +1,6 @@
 # Menu commands behind a dialog, the writer, Present, the shot-list page or
 # the tour. The desktop app's native menu items and their accelerators reach
-# the page as one call, D.runMenuCommand (desktop/main.js sendMenuCommand,
+# the page as one call, D.runMenuCommand (desktop/main.ts sendMenuCommand,
 # 20f-desktop.js runDesktopMenuCommand), which runs the action through
 # nativeMenuRunner (src/legacy/native-menu.ts), or clicks the File menu item
 # of an export format. Each command is refused under what it would act

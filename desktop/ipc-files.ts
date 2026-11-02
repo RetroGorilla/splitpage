@@ -1,14 +1,14 @@
 "use strict";
 
-import type * as NodeFsPromises from "node:fs/promises";
+import type { DesktopNativePath, DesktopNativeFsPromises } from "./native-inputs.d.ts";
 
-import type * as NodePath from "node:path";
+
 
 import type { DesktopFileIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
 import type { DesktopFileService } from "./file-service.ts";
 
-const path: typeof NodePath = require("node:path");
-const fsp: typeof NodeFsPromises = require("node:fs/promises");
+const path: DesktopNativePath = require("node:path");
+const fsp: DesktopNativeFsPromises = require("node:fs/promises");
 const { pathKey, readFileEntry, toBuffer, writeFileEntry }: DesktopFileService = require("./file-service.ts");
 
 function createFileIpc({

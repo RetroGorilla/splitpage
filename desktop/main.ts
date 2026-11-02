@@ -1,46 +1,104 @@
 "use strict";
 
+import type { DesktopNativePath, DesktopNativeFsPromises, DesktopNativeFs } from "./native-inputs.d.ts";
+
+import type { DesktopMainTab, DesktopMainWindow } from "./main-types.d.ts";
+import type { DesktopIpcEvent, DesktopFileIpcDependencies } from "./ipc-boundaries.d.ts";
+
+import type { DesktopWireHistoryMeta, DesktopWireUpdateStatus, DesktopIpcArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
+
+import type * as Electron from "electron";
+import type * as NodeCrypto from "node:crypto";
+import type * as NodeChildProcess from "node:child_process";
+import type * as Drafts from "./drafts.ts";
+import type * as FileService from "./file-service.ts";
+import type * as DocClaims from "./doc-claims.ts";
+import type * as Recents from "./recents.ts";
+import type * as WindowAppearance from "./window-appearance.ts";
+import type * as TabRegistry from "./tab-registry.ts";
+import type * as RestoreNotice from "./restore-notice.ts";
+import type * as PrompterShare from "./prompter-share.ts";
+import type * as CloseQuit from "./close-quit.ts";
+import type * as SessionRestore from "./session-restore.ts";
+import type * as VoiceComposition from "./voice-composition.ts";
+import type * as ChromiumBrowsers from "./chromium-browsers.ts";
+import type * as BlobStore from "./blob-store.ts";
+import type * as HistoryFsBackend from "./history-fs-backend.ts";
+import type * as DesktopState from "./desktop-state.ts";
+import type * as UpdateRelease from "./update-release.ts";
+import type * as IpcSetup from "./ipc-setup.ts";
+import type * as IpcFiles from "./ipc-files.ts";
+import type * as IpcShell from "./ipc-shell.ts";
+import type * as IpcDocument from "./ipc-document.ts";
+import type * as IpcHistoryBlob from "./ipc-history-blob.ts";
+import type * as IpcTabstrip from "./ipc-tabstrip.ts";
+import type * as IpcTestMode from "./ipc-test-mode.ts";
+import type * as IpcPrint from "./ipc-print.ts";
+import type * as PrintPdf from "./print-pdf.ts";
+import type * as HistoryPolicy from "../shared/history-policy.ts";
+import type * as HistoryStore from "../shared/history-store.ts";
+import type * as DocIdPolicy from "../shared/doc-id-policy.ts";
+import type * as VideoEmbed from "../shared/video-embed.ts";
+
+type NativeMainOptions<T> = { [K in keyof T]: T[K] | undefined };
+type NativeMainDialog = Omit<Electron.Dialog, keyof DesktopFileIpcDependencies["dialog"] | "showSaveDialogSync">
+  & DesktopFileIpcDependencies["dialog"] & {
+    showSaveDialogSync: (...args: Parameters<Electron.Dialog["showSaveDialogSync"]>) => ReturnType<Electron.Dialog["showSaveDialogSync"]> | undefined;
+  };
+type NativeMainMenu = Omit<typeof Electron.Menu, "buildFromTemplate"> & {
+  buildFromTemplate: (...args: Parameters<typeof Electron.Menu.buildFromTemplate>) => Omit<Electron.Menu, "popup"> & {
+    popup: (options?: NativeMainOptions<Electron.PopupOptions>) => ReturnType<Electron.Menu["popup"]>;
+  };
+};
+type NativeMainElectron = Omit<typeof Electron, "dialog" | "BrowserWindow" | "Menu" | "shell" | "net"> & {
+  dialog: NativeMainDialog;
+  shell: Omit<Electron.Shell, "openPath"> & { openPath: (path: string | null) => ReturnType<Electron.Shell["openPath"]> };
+  net: Omit<Electron.Net, "fetch"> & { fetch: (input: unknown, options?: Parameters<Electron.Net["fetch"]>[1]) => ReturnType<Electron.Net["fetch"]> };
+  BrowserWindow: Omit<typeof Electron.BrowserWindow, never> & (new (options?: NativeMainOptions<Electron.BrowserWindowConstructorOptions>) => Electron.BrowserWindow);
+  Menu: NativeMainMenu;
+};
+
 const {
   app, BrowserWindow, WebContentsView, Menu, protocol, net, ipcMain, dialog, shell,
   session, nativeTheme, screen
-} = require("electron");
-const path = require("node:path");
-const fs = require("node:fs");
-const fsp = require("node:fs/promises");
-const crypto = require("node:crypto");
-const { spawn } = require("node:child_process");
-const { createDraftStore, MAX_BODY_BYTES } = require("./drafts.ts");
+}: NativeMainElectron = require("electron");
+const path: DesktopNativePath = require("node:path");
+const fs: DesktopNativeFs = require("node:fs");
+const fsp: DesktopNativeFsPromises = require("node:fs/promises");
+const crypto: typeof NodeCrypto = require("node:crypto");
+const { spawn }: { spawn: (command: string | null, args: readonly string[], options: NodeChildProcess.SpawnOptions) => NodeChildProcess.ChildProcess } = require("node:child_process");
+const { createDraftStore, MAX_BODY_BYTES }: { createDraftStore: typeof Drafts.createDraftStore; MAX_BODY_BYTES: typeof Drafts.MAX_BODY_BYTES } = require("./drafts.ts");
 const {
   filesToOpenFrom, pathKey, createFileRegistry, readFileEntry
-} = require("./file-service.ts");
-const { createDocClaims } = require("./doc-claims.ts");
-const { createRecents } = require("./recents.ts");
-const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance.ts");
-const { createTabRegistry } = require("./tab-registry.ts");
-const { createRestoreNotice } = require("./restore-notice.ts");
-const { isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share.ts");
-const { createCloseQuit } = require("./close-quit.ts");
-const { createSessionRestore } = require("./session-restore.ts");
-const { createVoiceComposition } = require("./voice-composition.ts");
-const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers.ts");
-const { createBlobStore } = require("./blob-store.ts");
-const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend.ts");
+}: { filesToOpenFrom: typeof FileService.filesToOpenFrom; pathKey: typeof FileService.pathKey; createFileRegistry: typeof FileService.createFileRegistry; readFileEntry: typeof FileService.readFileEntry } = require("./file-service.ts");
+const { createDocClaims }: { createDocClaims: typeof DocClaims.createDocClaims } = require("./doc-claims.ts");
+const { createRecents }: { createRecents: typeof Recents.createRecents } = require("./recents.ts");
+const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible }: { createThemeChoice: typeof WindowAppearance.createThemeChoice; backgroundColorFor: typeof WindowAppearance.backgroundColorFor; titleBarOverlayFor: typeof WindowAppearance.titleBarOverlayFor; boundsIfVisible: typeof WindowAppearance.boundsIfVisible } = require("./window-appearance.ts");
+const { createTabRegistry }: { createTabRegistry: typeof TabRegistry.createTabRegistry } = require("./tab-registry.ts");
+const { createRestoreNotice }: { createRestoreNotice: typeof RestoreNotice.createRestoreNotice } = require("./restore-notice.ts");
+const { isShareableName, MAX_SCRIPT_BYTES }: { isShareableName: typeof PrompterShare.isShareableName; MAX_SCRIPT_BYTES: typeof PrompterShare.MAX_SCRIPT_BYTES } = require("./prompter-share.ts");
+const { createCloseQuit }: { createCloseQuit: typeof CloseQuit.createCloseQuit } = require("./close-quit.ts");
+const { createSessionRestore }: { createSessionRestore: typeof SessionRestore.createSessionRestore } = require("./session-restore.ts");
+const { createVoiceComposition }: { createVoiceComposition: typeof VoiceComposition.createVoiceComposition } = require("./voice-composition.ts");
+const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName }: { findChromiumBrowsers: typeof ChromiumBrowsers.findChromiumBrowsers; launchChromiumBrowser: typeof ChromiumBrowsers.launchChromiumBrowser; chromiumBrowserName: typeof ChromiumBrowsers.chromiumBrowserName } = require("./chromium-browsers.ts");
+const { createBlobStore }: { createBlobStore: typeof BlobStore.createBlobStore } = require("./blob-store.ts");
+const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES }: { createHistoryFsBackend: typeof HistoryFsBackend.createHistoryFsBackend; MAX_BODY_BYTES: typeof HistoryFsBackend.MAX_BODY_BYTES } = require("./history-fs-backend.ts");
 const {
   DESKTOP_STATE_VERSION,
   normalizeBounds, normalizeTabSource, createDesktopStateStore
-} = require("./desktop-state.ts");
+}: { DESKTOP_STATE_VERSION: typeof DesktopState.DESKTOP_STATE_VERSION; normalizeBounds: typeof DesktopState.normalizeBounds; normalizeTabSource: typeof DesktopState.normalizeTabSource; createDesktopStateStore: typeof DesktopState.createDesktopStateStore } = require("./desktop-state.ts");
 const {
   DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
-} = require("./update-release.ts");
-const { createIpcSetup } = require("./ipc-setup.ts");
-const { createFileIpc } = require("./ipc-files.ts");
-const { createShellIpc } = require("./ipc-shell.ts");
-const { createDocumentIpc } = require("./ipc-document.ts");
-const { createHistoryBlobIpc } = require("./ipc-history-blob.ts");
-const { createTabStripIpc } = require("./ipc-tabstrip.ts");
-const { createTestModeIpc } = require("./ipc-test-mode.ts");
-const { createPrintIpc } = require("./ipc-print.ts");
-const { createPdfPrinter } = require("./print-pdf.ts");
+}: { DEFAULT_UPDATE_API: typeof UpdateRelease.DEFAULT_UPDATE_API; hasReleaseAssets: typeof UpdateRelease.hasReleaseAssets; compareVersions: typeof UpdateRelease.compareVersions; isAllowedDownloadHost: typeof UpdateRelease.isAllowedDownloadHost; pickUpdateAsset: typeof UpdateRelease.pickUpdateAsset; findChecksumsAsset: typeof UpdateRelease.findChecksumsAsset; checksumFor: typeof UpdateRelease.checksumFor } = require("./update-release.ts");
+const { createIpcSetup }: { createIpcSetup: typeof IpcSetup.createIpcSetup } = require("./ipc-setup.ts");
+const { createFileIpc }: { createFileIpc: typeof IpcFiles.createFileIpc } = require("./ipc-files.ts");
+const { createShellIpc }: { createShellIpc: typeof IpcShell.createShellIpc } = require("./ipc-shell.ts");
+const { createDocumentIpc }: { createDocumentIpc: typeof IpcDocument.createDocumentIpc } = require("./ipc-document.ts");
+const { createHistoryBlobIpc }: { createHistoryBlobIpc: typeof IpcHistoryBlob.createHistoryBlobIpc } = require("./ipc-history-blob.ts");
+const { createTabStripIpc }: { createTabStripIpc: typeof IpcTabstrip.createTabStripIpc } = require("./ipc-tabstrip.ts");
+const { createTestModeIpc }: { createTestModeIpc: typeof IpcTestMode.createTestModeIpc } = require("./ipc-test-mode.ts");
+const { createPrintIpc }: { createPrintIpc: typeof IpcPrint.createPrintIpc } = require("./ipc-print.ts");
+const { createPdfPrinter }: { createPdfPrinter: typeof PrintPdf.createPdfPrinter } = require("./print-pdf.ts");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -62,7 +120,7 @@ if (process.env.SPLITPAGE_USER_DATA) {
 
 const TEST_MODE = process.env.SPLITPAGE_TEST === "1";
 
-let testDialogAnswers = null;
+let testDialogAnswers: unknown = null;
 let testDialogCursor = 0;
 let testDialogsSeen = 0;
 const TEST_DIALOGS_FILE = TEST_MODE ? process.env.SPLITPAGE_TEST_DIALOGS || "" : "";
@@ -76,25 +134,25 @@ if (TEST_DIALOGS_FILE) {
 }
 function consumeTestDialogAnswer() {
   testDialogsSeen++;
-  if (!testDialogAnswers || testDialogCursor >= testDialogAnswers.length) return undefined;
-  return testDialogAnswers[testDialogCursor++];
+  if (!testDialogAnswers || testDialogCursor >= (testDialogAnswers as unknown[]).length) return undefined;
+  return (testDialogAnswers as unknown[])[testDialogCursor++];
 }
 
 const SKIP_UPDATE_CHECK = process.env.SPLITPAGE_NO_UPDATE_CHECK === "1";
 
-const testExternalOpens = [];
-const testChromiumLaunches = [];
-const testVideoOpens = [];
-const videoFileGrants = new Map();
+const testExternalOpens: string[] = [];
+const testChromiumLaunches: { browser: string; url: string }[] = [];
+const testVideoOpens: string[] = [];
+const videoFileGrants = new Map<string, string>();
 const VIDEO_FILE_EXT = /\.(mp4|m4v|mov|webm|mkv|avi|ogv|wmv|mpg|mpeg|3gp)$/i;
 if (TEST_MODE) {
 
-  const cancelIndex = (opts) => (opts && typeof opts.cancelId === "number")
+  const cancelIndex = (opts: Electron.MessageBoxSyncOptions | Electron.MessageBoxOptions | undefined) => (opts && typeof opts.cancelId === "number")
     ? opts.cancelId
     : Math.max(0, ((opts && opts.buttons) || ["OK"]).length - 1);
-  const optsOf = (args) => args[args.length - 1];
-  dialog.showMessageBoxSync = (...args) => cancelIndex(optsOf(args));
-  dialog.showMessageBox = async (...args) => ({ response: cancelIndex(optsOf(args)), checkboxChecked: false });
+  const optsOf = <T>(args: [T] | [Electron.BaseWindow | undefined, T]) => args[args.length - 1] as T;
+  dialog.showMessageBoxSync = (...args: [Electron.MessageBoxSyncOptions] | [Electron.BaseWindow | undefined, Electron.MessageBoxSyncOptions]) => cancelIndex(optsOf(args));
+  dialog.showMessageBox = async (...args: [Electron.MessageBoxOptions] | [Electron.BaseWindow | undefined, Electron.MessageBoxOptions]) => ({ response: cancelIndex(optsOf(args)), checkboxChecked: false });
   dialog.showOpenDialogSync = () => undefined;
   dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
   dialog.showSaveDialogSync = () => undefined;
@@ -109,14 +167,14 @@ const APP_ROOT = app.isPackaged
   : path.resolve(__dirname, "..");
 
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
-const historyPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
+const historyPolicy: typeof HistoryPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
-const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.ts"));
+const { createHistoryStore }: typeof HistoryStore = require(path.join(SHARED_ROOT, "history-store.ts"));
 const {
   DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
-} = require(path.join(SHARED_ROOT, "doc-id-policy.ts"));
+}: typeof DocIdPolicy = require(path.join(SHARED_ROOT, "doc-id-policy.ts"));
 
-const STATIC_ALLOWLIST = {
+const STATIC_ALLOWLIST: NonNullable<Parameters<typeof createVoiceComposition>[0]["staticAllowlist"]> = {
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
   "/manifest.webmanifest": { file: "manifest.webmanifest", type: "application/manifest+json; charset=utf-8" },
   "/icon.svg": { file: "icon.svg", type: "image/svg+xml" },
@@ -137,11 +195,11 @@ if (!gotLock) {
 
 if (TEST_MODE) {
   process.on("uncaughtException", (err) => {
-    console.error("[splitpage-test] uncaught main-process error: " + ((err && err.stack) || err));
+    console.error("[splitpage-test] uncaught main-process error: " + ((err && (err as Error).stack) || err));
     app.exit(70);
   });
   process.on("unhandledRejection", (err) => {
-    console.error("[splitpage-test] unhandled rejection: " + ((err && err.stack) || err));
+    console.error("[splitpage-test] unhandled rejection: " + ((err && (err as Error).stack) || err));
   });
 }
 
@@ -159,7 +217,7 @@ const TABSTRIP_ROOT = app.isPackaged
   ? path.join(APP_ROOT, "tabstrip")
   : path.join(__dirname, "tabstrip");
 
-const TABSTRIP_ALLOWLIST = {
+const TABSTRIP_ALLOWLIST: typeof STATIC_ALLOWLIST = {
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
   "/tabstrip.js": { file: "tabstrip.js", type: "text/javascript; charset=utf-8" },
   "/tabstrip.css": { file: "tabstrip.css", type: "text/css; charset=utf-8" }
@@ -170,10 +228,10 @@ const {
   mintUniqueTabId, mintUniqueWindowId, firstWindowRecord, claimRoutingKey, indexTabSource, unindexTabSource
 } = createTabRegistry({ pathKey });
 
-let lastFocusedWindowId = null;
+let lastFocusedWindowId: string | null = null;
 let firstTabCreated = false;
 let draftFlushReqId = 0;
-const pendingDraftFlushes = new Map();
+const pendingDraftFlushes: Map<number, (result: object) => void> = new Map();
 const DRAFT_FLUSH_BUDGET_MS = 1500;
 const restoreNotice = createRestoreNotice({
   tabs,
@@ -186,7 +244,7 @@ const voice = createVoiceComposition({
   staticAllowlist: STATIC_ALLOWLIST, cspHeader: readAppCsp
 });
 
-const closeConfirmedTabViews = new WeakSet();
+const closeConfirmedTabViews = new WeakSet<Electron.WebContentsView>();
 
 const {
   isQuitConfirmed, isSessionEnding, sessionWritesAreFrozen, closeConfirmedWindows,
@@ -198,13 +256,13 @@ const {
   destroyTabView, startInstallerNow, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper
 });
 
-function homeKeyForClaim(tab) {
+function homeKeyForClaim(tab: DesktopMainTab) {
   const absPath = tab.fileId ? fileIds.pathOf(tab.fileId) : null;
   if (absPath) return "file:" + pathKey(absPath);
   return null;
 }
 
-function tabWebContentsForClaim(webContentsId) {
+function tabWebContentsForClaim(webContentsId: number) {
   const tabId = webContentsIdToTabId.get(webContentsId);
   const tab = tabId ? tabs.get(tabId) : null;
   if (!tab || tab.view.webContents.isDestroyed()) return null;
@@ -218,32 +276,32 @@ const docClaims = createDocClaims({
   askToReassign: (wc, payload) => wc.send("splitpage:reassign-doc-id", payload)
 });
 
-let draftStore = null;
+let draftStore: ReturnType<typeof createDraftStore> | null = null;
 let draftsPreviousSession = "none";
-function draftsHasDraft(tabId) {
+function draftsHasDraft(tabId: string) {
   try { return !!(draftStore && draftStore.hasDraft(tabId)); } catch { return false; }
 }
-function draftsIsHeld(tabId) {
+function draftsIsHeld(tabId: string) {
   try { return !!(draftStore && draftStore.isHeld(tabId)); } catch { return false; }
 }
 function draftsList() {
   try { return draftStore ? draftStore.list() : []; } catch { return []; }
 }
-function draftsDiscardForUserDecision(tabIds, reason) {
+function draftsDiscardForUserDecision(tabIds: (string | undefined)[], reason: string) {
   if (!draftStore || !tabIds.length) return;
   try { draftStore.discardForUserDecision(tabIds, reason); }
   catch (err) {
-    if (TEST_MODE) process.stderr.write(`[splitpage] draft discard failed: ${err && err.stack || err}\n`);
+    if (TEST_MODE) process.stderr.write(`[splitpage] draft discard failed: ${err && (err as Error).stack || err}\n`);
   }
 }
-function draftsDiscardClean(tabId) {
+function draftsDiscardClean(tabId: string | undefined) {
   if (!draftStore) return;
   try { Promise.resolve(draftStore.discardClean(tabId, Infinity)).catch(() => {}); } catch { }
 }
 
 function draftTestHooksFromEnv() {
   if (!TEST_MODE) return null;
-  const hooks = {
+  const hooks: NonNullable<NonNullable<Parameters<typeof createDraftStore>[0]>["testHooks"]> = {
     onKill() {
       process.kill(process.pid, "SIGKILL");
     }
@@ -273,26 +331,26 @@ function initDraftStore() {
     return result;
   } catch (err) {
     draftStore = null;
-    if (TEST_MODE) process.stderr.write(`[splitpage] draft store unavailable: ${err && err.stack || err}\n`);
+    if (TEST_MODE) process.stderr.write(`[splitpage] draft store unavailable: ${err && (err as Error).stack || err}\n`);
     return { previousSession: "none", drafts: [] };
   }
 }
 
-function tabIsUnsaved(tab) {
+function tabIsUnsaved(tab: DesktopMainTab | null | undefined): boolean {
   return !!(tab && !tab.crashedNotReloaded && (tab.dirty || draftsIsHeld(tab.id)));
 }
 
-function tabHasFile(tab) {
+function tabHasFile(tab: DesktopMainTab | null | undefined): boolean {
   if (!tab || tab.crashedNotReloaded || !tab.source || tab.source.kind !== "file") return false;
   const absPath = tab.source.absPath;
   return typeof absPath === "string" && !!absPath;
 }
 
-const DRAFT_ORIGIN_KINDS = new Set(["untitled", "file", "import"]);
-const DRAFT_FILE_KINDS = new Set(["md", "html", "splitpage"]);
+const DRAFT_ORIGIN_KINDS = new Set<unknown>(["untitled", "file", "import"]);
+const DRAFT_FILE_KINDS = new Set<unknown>(["md", "html", "splitpage"]);
 const DRAFT_NAME_MAX = 300;
 
-function draftScalarString(v, max) {
+function draftScalarString(v: unknown, max: number) {
   if (typeof v !== "string" || !v) return null;
   /* eslint-disable-next-line no-control-regex -- stripping control characters
      is the function's job; the class is written out above. */
@@ -300,11 +358,11 @@ function draftScalarString(v, max) {
   return clean || null;
 }
 
-function draftFiniteNumber(v) {
+function draftFiniteNumber(v: unknown) {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-function buildDraftHeader(tab, p) {
+function buildDraftHeader(tab: DesktopMainTab, p: Record<string, unknown>) {
   const fileId = typeof p.fileId === "string" ? p.fileId : null;
   const filePath = fileId ? fileIds.pathOf(fileId) || null : null;
   const w = windowsById.get(tab.windowId);
@@ -316,10 +374,10 @@ function buildDraftHeader(tab, p) {
     schema: draftFiniteNumber(p.schema),
     editSeq: draftFiniteNumber(p.editSeq),
     origin: {
-      kind: DRAFT_ORIGIN_KINDS.has(p.originKind) ? p.originKind : "untitled",
+      kind: DRAFT_ORIGIN_KINDS.has(p.originKind) ? p.originKind as string : "untitled",
       filePath,
       fileName: filePath ? path.basename(filePath) : null,
-      fileKind: DRAFT_FILE_KINDS.has(p.fileKind) ? p.fileKind : null,
+      fileKind: DRAFT_FILE_KINDS.has(p.fileKind) ? p.fileKind as string : null,
       importName: draftScalarString(p.importName, DRAFT_NAME_MAX),
       baseLastModified: draftFiniteNumber(p.baseLastModified),
       baseSize: draftFiniteNumber(p.baseSize)
@@ -328,12 +386,12 @@ function buildDraftHeader(tab, p) {
   };
 }
 
-function draftBodyTooLarge(str) {
+function draftBodyTooLarge(str: string) {
   if (str.length > MAX_BODY_BYTES) return true;
   return Buffer.byteLength(str, "utf8") > MAX_BODY_BYTES;
 }
 
-function requestDraftFlush(tab, budgetMs, keep) {
+function requestDraftFlush(tab: DesktopMainTab | null | undefined, budgetMs: number, keep?: boolean): Promise<object> {
   return new Promise((resolve) => {
     if (!tab || !tab.view || tab.view.webContents.isDestroyed()) { resolve({ ok: false, code: "NO_TAB" }); return; }
     const reqId = ++draftFlushReqId;
@@ -358,7 +416,7 @@ const desktopState = createDesktopStateStore({
   filePath: () => path.join(app.getPath("userData"), "desktop-state.json"),
   pathKey,
   onWriteError: (err) => {
-    if (TEST_MODE) process.stderr.write(`[splitpage] desktop-state write failed: ${err && err.stack || err}\n`);
+    if (TEST_MODE) process.stderr.write(`[splitpage] desktop-state write failed: ${err && (err as Error).stack || err}\n`);
   }
 });
 
@@ -370,13 +428,13 @@ const { hadPriorSession, isRestoringSession, restoreSessionAtLaunch, registerAct
   routeLaunchFile, argvFilesToOpen, restoreNotice, persistShellState
 });
 
-function noteRecentDocumentAndPersist(absPath, title) {
+function noteRecentDocumentAndPersist(absPath: unknown, title: string) {
   if (!recents.note(absPath, title)) return;
   if (sessionWritesAreFrozen() || isRestoringSession() || !windowsById.size) recents.persist();
   else persistShellState();
 }
 
-function primaryDesktopWindow(state) { return state.windows[0]; }
+function primaryDesktopWindow(state: ReturnType<typeof desktopState.read>) { return state.windows[0]; }
 
 function shellStateAsV2() {
   const windows = [];
@@ -431,12 +489,12 @@ function historyTestBackendHooks() {
   return { afterBodyPut: historyTestKill };
 }
 
-function historyWithEnospcFault(backend) {
+function historyWithEnospcFault(backend: ReturnType<typeof createHistoryFsBackend>): NonNullable<NonNullable<Parameters<typeof createHistoryStore>[0]>["backend"]> {
   let armed = HISTORY_TEST_FAULT;
   const enospc = () => {
     if (armed === "enospc-once") armed = "";
     else if (armed !== "enospc-always") return;
-    const err = new Error("Injected ENOSPC");
+    const err: NodeJS.ErrnoException = new Error("Injected ENOSPC");
     err.code = "enospc";
     throw err;
   };
@@ -445,14 +503,14 @@ function historyWithEnospcFault(backend) {
     get persistent() { return backend.persistent; },
     get readOnly() { return backend.readOnly; },
     exclusive: (fn, o) => backend.exclusive((tx) => fn(Object.assign({}, tx, {
-      put: async (sha, text) => { enospc(); return tx.put(sha, text); }
+      put: async (sha: string, text: string) => { enospc(); return tx.put(sha, text); }
     })), o)
   };
 }
 
-let historyStore = null;
+let historyStore: ReturnType<typeof createHistoryStore> | null = null;
 
-const historyHolds = new Map();
+const historyHolds: Map<number, { docId: string; id: string }[]> = new Map();
 
 function historyAllHolds() {
   const out = [];
@@ -460,13 +518,13 @@ function historyAllHolds() {
   return out;
 }
 
-function historyProtectList(protect) {
-  const out = [];
+function historyProtectList(protect: unknown) {
+  const out: { docId: string; id: string }[] = [];
   if (!Array.isArray(protect)) return out;
   for (const p of protect.slice(0, 200)) {
     if (!p || typeof p !== "object") continue;
-    const docId = typeof p.docId === "string" ? p.docId : "";
-    const id = typeof p.id === "string" ? p.id : "";
+    const docId: string = typeof p.docId === "string" ? p.docId : "";
+    const id: string = typeof p.id === "string" ? p.id : "";
     if (!(docId === HISTORY_OLDER_KEY || DOC_ID_RE.test(docId)) || !HISTORY_SNAP_ID_RE.test(id)) continue;
     out.push({ docId, id });
   }
@@ -476,11 +534,11 @@ function historyProtectList(protect) {
 const HISTORY_V1_BACKUP_DIR = "v1-backup";
 const HISTORY_V1_BACKUP_DELAY_MS = 3000;
 
-function removeHistoryV1Backup(historyDir) {
+function removeHistoryV1Backup(historyDir: string) {
   const target = path.join(historyDir, HISTORY_V1_BACKUP_DIR);
   const timer = setTimeout(() => {
     fsp.rm(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch((err) => {
-      if (TEST_MODE) process.stderr.write(`[splitpage] history v1-backup not removed (next launch tries again): ${err && err.stack || err}\n`);
+      if (TEST_MODE) process.stderr.write(`[splitpage] history v1-backup not removed (next launch tries again): ${err && (err as Error).stack || err}\n`);
     });
   }, HISTORY_V1_BACKUP_DELAY_MS);
   if (timer && typeof timer.unref === "function") timer.unref();
@@ -504,18 +562,20 @@ function initHistoryStore() {
   backend.open().then((r) => {
     if (!r.readOnly) removeHistoryV1Backup(historyDir);
   }, (err) => {
-    if (TEST_MODE) process.stderr.write(`[splitpage] history open failed: ${err && err.stack || err}\n`);
+    if (TEST_MODE) process.stderr.write(`[splitpage] history open failed: ${err && (err as Error).stack || err}\n`);
   });
 }
 
-function historyWireMeta(m) {
+type MainHistoryMeta = NonNullable<NonNullable<Awaited<ReturnType<ReturnType<typeof createHistoryStore>["get"]>>>["meta"]>;
+function historyWireMeta<M extends DesktopWireHistoryMeta | null | undefined>(m: M): M extends DesktopWireHistoryMeta ? DesktopWireHistoryMeta : M;
+function historyWireMeta(m: DesktopWireHistoryMeta | null | undefined) {
   if (!m || typeof m !== "object") return m;
-  const out = Object.assign({}, m);
+  const out: DesktopWireHistoryMeta & Partial<Pick<MainHistoryMeta, "docId">> = Object.assign({}, m);
   delete out.docId;
   return out;
 }
 
-let blobStore = null;
+let blobStore: ReturnType<typeof createBlobStore> | null = null;
 
 function initBlobStore() {
   try {
@@ -523,7 +583,7 @@ function initBlobStore() {
     return blobStore.init();
   } catch (err) {
     blobStore = null;
-    if (TEST_MODE) process.stderr.write(`[splitpage] blob store unavailable: ${err && err.stack || err}\n`);
+    if (TEST_MODE) process.stderr.write(`[splitpage] blob store unavailable: ${err && (err as Error).stack || err}\n`);
     return null;
   }
 }
@@ -536,18 +596,18 @@ function updateApiUrl() {
   return (TEST_MODE && process.env.SPLITPAGE_UPDATE_API) || DEFAULT_UPDATE_API;
 }
 
-async function fetchPublishedChecksum(assets, assetName) {
+async function fetchPublishedChecksum(assets: Parameters<typeof findChecksumsAsset>[0], assetName: Parameters<typeof checksumFor>[1]) {
   const entry = findChecksumsAsset(assets, updateApiUrl());
   if (!entry) return null;
   try {
-    const res = await net.fetch(entry.browser_download_url, { headers: { "User-Agent": "splitpage-desktop" } });
+    const res = await net.fetch((entry as Record<string, unknown>).browser_download_url, { headers: { "User-Agent": "splitpage-desktop" } });
     if (!res.ok) return null;
     return checksumFor(await res.text(), assetName);
   } catch { }
   return null;
 }
 
-let updateStatus = {
+let updateStatus: DesktopWireUpdateStatus = {
   version: readAppVersion(),
   checkedAt: null,
   checking: !SKIP_UPDATE_CHECK,
@@ -561,10 +621,10 @@ let updateStatus = {
   download: { state: "idle", received: 0, total: 0, error: null }
 };
 
-let updateAsset = null;
-let updateAssets = [];
-let updateFile = null;
-let updateDownloadPromise = null;
+let updateAsset: ReturnType<typeof pickUpdateAsset> = null;
+let updateAssets: Parameters<typeof pickUpdateAsset>[0] = [];
+let updateFile: string | null = null;
+let updateDownloadPromise: Promise<DesktopIpcResult<"splitpage:update-download">> | null = null;
 
 function updateDir() {
   return path.join(app.getPath("userData"), "updates");
@@ -577,12 +637,12 @@ function broadcastUpdateStatus() {
   }
 }
 
-function setUpdateStatus(patch) {
+function setUpdateStatus(patch: Partial<DesktopWireUpdateStatus>) {
   updateStatus = { ...updateStatus, ...patch };
   broadcastUpdateStatus();
 }
 
-function setDownloadState(patch) {
+function setDownloadState(patch: Partial<DesktopWireUpdateStatus["download"]>) {
   setUpdateStatus({ download: { ...updateStatus.download, ...patch } });
 }
 
@@ -595,7 +655,7 @@ async function checkForUpdate() {
       headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-desktop" }
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const body = await res.json();
+    const body = await res.json() as Record<string, unknown>;
     if (!hasReleaseAssets(body.assets)) throw new Error("the release has no assets");
     const latest = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
     const newer = !!latest && compareVersions(latest, current) > 0;
@@ -622,12 +682,12 @@ async function checkForUpdate() {
       releaseUrl: null,
       checkedAt: new Date().toISOString(),
       checking: false,
-      error: err.message
+      error: (err as Error).message
     });
   }
 }
 
-function downloadUpdate() {
+function downloadUpdate(): Promise<DesktopIpcResult<"splitpage:update-download">> {
   if (updateDownloadPromise) return updateDownloadPromise;
   if (updateStatus.download.state === "ready" && updateFile) {
     return Promise.resolve({ ok: true, state: "ready" });
@@ -636,7 +696,7 @@ function downloadUpdate() {
   if (!asset) return Promise.resolve({ ok: false, error: "no-installer" });
   if (!isAllowedDownloadHost(asset.url, updateApiUrl())) return Promise.resolve({ ok: false, error: "bad-url" });
 
-  updateDownloadPromise = (async () => {
+  updateDownloadPromise = (async (): Promise<DesktopIpcResult<"splitpage:update-download">> => {
     const dir = updateDir();
     const target = path.join(dir, asset.name);
     await fsp.rm(dir, { recursive: true, force: true });
@@ -656,7 +716,7 @@ function downloadUpdate() {
     let received = 0;
     let lastReport = 0;
     try {
-      const reader = res.body.getReader();
+      const reader = (res.body as NonNullable<typeof res.body>).getReader();
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -687,17 +747,17 @@ function downloadUpdate() {
     updateFile = target;
     setDownloadState({ state: "ready", error: null, verified: true });
     return { ok: true, state: "ready" };
-  })().catch(async (err) => {
+  })().catch(async (err): Promise<DesktopIpcResult<"splitpage:update-download">> => {
     updateFile = null;
     await fsp.rm(updateDir(), { recursive: true, force: true }).catch(() => {});
-    setDownloadState({ state: "failed", error: err.message });
-    return { ok: false, error: "download-failed", message: err.message };
+    setDownloadState({ state: "failed", error: (err as Error).message });
+    return { ok: false, error: "download-failed", message: (err as Error).message };
   }).finally(() => { updateDownloadPromise = null; });
 
   return updateDownloadPromise;
 }
 
-function startInstallerNow() {
+function startInstallerNow(): DesktopIpcResult<"splitpage:update-install"> {
   try {
     if (process.platform === "win32") {
       const child = spawn(updateFile, [], { detached: true, stdio: "ignore", windowsHide: false });
@@ -707,11 +767,11 @@ function startInstallerNow() {
     }
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: "could-not-run", message: err.message };
+    return { ok: false, error: "could-not-run", message: (err as Error).message };
   }
 }
 
-function runUpdateInstaller() {
+function runUpdateInstaller(): Promise<DesktopIpcResult<"splitpage:update-install">> {
   if (updateStatus.download.state !== "ready" || !updateFile) {
     return Promise.resolve({ ok: false, error: "not-downloaded" });
   }
@@ -739,7 +799,7 @@ async function pickChromiumBrowser() {
   }
 }
 
-async function openPrompterInBrowser(tab, opts) {
+async function openPrompterInBrowser(tab: DesktopMainTab | null, opts?: { chromium: boolean }): Promise<DesktopIpcResult<"splitpage:prompter-open-in-browser">> {
   if (!tab) return { ok: false, code: "NO_TAB" };
   if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
   const chromium = !!(opts && opts.chromium);
@@ -770,7 +830,7 @@ async function openPrompterInBrowser(tab, opts) {
     try {
       url = await voice.prompterShareInstance().publish(tab.id, path.basename(absPath), text, { voice: relay });
     } catch (err) {
-      if (TEST_MODE) process.stderr.write(`[splitpage] prompter share failed: ${err && err.stack || err}\n`);
+      if (TEST_MODE) process.stderr.write(`[splitpage] prompter share failed: ${err && (err as Error).stack || err}\n`);
       return { ok: false, code: "SERVE_FAILED" };
     }
   } else {
@@ -793,12 +853,12 @@ async function openPrompterInBrowser(tab, opts) {
   return { ok: true, kind: source.kind, voice: relay ? "relay" : "browser" };
 }
 
-const videoEmbed = require(path.join(SHARED_ROOT, "video-embed.ts"));
+const videoEmbed: typeof VideoEmbed = require(path.join(SHARED_ROOT, "video-embed.ts"));
 
 const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
   ? (() => {
       const base = String(process.env.SPLITPAGE_TEST_VIDEO_BASE).replace(/\/+$/, "");
-      const out = {};
+      const out: Record<string, string> = {};
       for (const k of Object.keys(videoEmbed.VIDEO_HOSTS)) out[k] = base + "/" + k;
       return out;
     })()
@@ -806,7 +866,7 @@ const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
 
 const YOUTUBE_EMBED_REFERER = "https://com.retrogorilla.splitpage/";
 
-function videoThumbnail(host, ref) {
+function videoThumbnail(host: DesktopIpcArgs<"splitpage:video-thumbnail">[0], ref: DesktopIpcArgs<"splitpage:video-thumbnail">[1]): Promise<DesktopIpcResult<"splitpage:video-thumbnail">> {
   const v = videoEmbed.parseVideoRef(host, ref);
   if (!v) return Promise.resolve({ ok: false, code: "BAD_REF" });
   return videoEmbed.fetchVideoThumbnail(v, { fetch: globalThis.fetch, bases: VIDEO_TEST_BASES || undefined }).then((res) => {
@@ -815,7 +875,7 @@ function videoThumbnail(host, ref) {
   });
 }
 
-function installPlayerReferer(ses) {
+function installPlayerReferer(ses: Electron.Session) {
   const embedPrefix = (VIDEO_TEST_BASES ? VIDEO_TEST_BASES.youtubePlayer : videoEmbed.VIDEO_HOSTS.youtubePlayer) + "/embed/";
   const filter = { urls: [embedPrefix + "*"] };
   ses.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
@@ -828,7 +888,7 @@ function installPlayerReferer(ses) {
   });
 }
 
-let appCspHeader = null;
+let appCspHeader: string | null = null;
 
 async function readAppCsp() {
   if (appCspHeader !== null) return appCspHeader;
@@ -895,7 +955,7 @@ function registerProtocol() {
     if (!absPath.startsWith(APP_ROOT)) return new Response("not found", { status: 404 });
     try {
       const buf = await fsp.readFile(absPath);
-      const headers = { "content-type": entry.type };
+      const headers: Record<string, string> = { "content-type": entry.type };
       const csp = await readAppCsp();
       if (csp) headers["content-security-policy"] = csp;
       return new Response(buf, { status: 200, headers });
@@ -911,19 +971,19 @@ function backgroundColorForTheme() {
   return backgroundColorFor(nativeTheme.shouldUseDarkColors);
 }
 
-function visibleBounds(b) {
+function visibleBounds(b: Electron.Rectangle | null | undefined) {
   return boundsIfVisible(b, screen.getAllDisplays());
 }
 
 function savedBoundsIfVisible() {
-  return visibleBounds(primaryDesktopWindow(desktopState.read()).bounds);
+  return visibleBounds((primaryDesktopWindow(desktopState.read()) as NonNullable<ReturnType<typeof primaryDesktopWindow>>).bounds);
 }
 
 function titleBarOverlayColors() {
   return titleBarOverlayFor(nativeTheme.shouldUseDarkColors, TITLEBAR_H);
 }
 
-function createTabWindow(restoreSpec) {
+function createTabWindow(restoreSpec?: Partial<Pick<ReturnType<ReturnType<typeof createDesktopStateStore>["read"]>["windows"][number], "windowId" | "bounds" | "maximized">> & Pick<Electron.BrowserWindowConstructorOptions, "x" | "y">): DesktopMainWindow {
   const spec = restoreSpec || {};
   const saved = visibleBounds(normalizeBounds(spec.bounds)) || (windowsById.size ? null : savedBoundsIfVisible());
   const iconPath = app.isPackaged ? undefined : path.join(APP_ROOT, "installer", "icon.ico");
@@ -954,7 +1014,7 @@ function createTabWindow(restoreSpec) {
   });
 
   const windowId = mintUniqueWindowId(spec.windowId);
-  const rec = {
+  const rec: DesktopMainWindow = {
     id: windowId,
     win,
     tabIds: [],
@@ -1005,7 +1065,7 @@ function createTabWindow(restoreSpec) {
   attachWindowClose(win, rec);
 
   win.on("closed", () => {
-    clearTimeout(rec.boundsSaveTimer);
+    clearTimeout(rec.boundsSaveTimer as ReturnType<typeof setTimeout> | undefined);
     for (const tabId of rec.tabIds.slice()) forgetTab(tabId);
     windowsById.delete(windowId);
     if (lastFocusedWindowId === windowId) {
@@ -1018,11 +1078,11 @@ function createTabWindow(restoreSpec) {
   return rec;
 }
 
-function windowRecordFor(windowId) {
+function windowRecordFor(windowId: string | null | undefined) {
   return windowsById.get(windowId) || (lastFocusedWindowId ? windowsById.get(lastFocusedWindowId) : null) || firstWindowRecord();
 }
 
-function forgetTab(tabId) {
+function forgetTab(tabId: string | undefined) {
   const tab = tabs.get(tabId);
   if (!tab) return;
   unindexTabSource(tab);
@@ -1031,17 +1091,17 @@ function forgetTab(tabId) {
   voice.forgetTab(tabId);
   const w = windowsById.get(tab.windowId);
   if (w) {
-    const i = w.tabIds.indexOf(tabId);
+    const i = (w.tabIds as readonly (string | undefined)[]).indexOf(tabId);
     if (i !== -1) w.tabIds.splice(i, 1);
     if (w.activeTabId === tabId) {
-      w.activeTabId = w.tabIds.length ? w.tabIds[Math.max(0, Math.min(i, w.tabIds.length - 1))] : null;
+      w.activeTabId = w.tabIds.length ? w.tabIds[Math.max(0, Math.min(i, w.tabIds.length - 1))] as string : null;
     }
   }
   historyHolds.delete(tab.webContentsId);
   restoreNotice.retarget(tabId, w);
 }
 
-function createTab(windowId, opts) {
+function createTab(windowId: string, opts?: Partial<Pick<DesktopMainTab, "source" | "launchIntent" | "pendingPayload">> & { tabId?: string | undefined; index?: unknown }): DesktopMainTab | null {
   const w = windowsById.get(windowId);
   if (!w || w.win.isDestroyed()) return null;
   const o = opts || {};
@@ -1059,7 +1119,7 @@ function createTab(windowId, opts) {
   });
   view.setBackgroundColor(backgroundColorForTheme());
 
-  const tab = {
+  const tab: DesktopMainTab = {
     id: tabId,
     windowId,
     view,
@@ -1096,7 +1156,7 @@ function createTab(windowId, opts) {
   return tab;
 }
 
-function wireTabView(tab) {
+function wireTabView(tab: DesktopMainTab) {
   const contents = tab.view.webContents;
   const tabId = tab.id;
 
@@ -1112,7 +1172,7 @@ function wireTabView(tab) {
   });
 
   contents.on("context-menu", (event, params) => {
-    const template = [];
+    const template: Electron.MenuItemConstructorOptions[] = [];
     if (params.misspelledWord) {
       const suggestions = params.dictionarySuggestions || [];
       if (suggestions.length) {
@@ -1213,7 +1273,7 @@ function wireTabView(tab) {
   });
 }
 
-function destroyTabView(tabId) {
+function destroyTabView(tabId: string | undefined) {
   const tab = tabs.get(tabId);
   if (!tab) return;
   const w = windowsById.get(tab.windowId);
@@ -1237,7 +1297,7 @@ function destroyTabView(tabId) {
   persistShellState();
 }
 
-function layoutWindow(windowId) {
+function layoutWindow(windowId: string) {
   const w = windowsById.get(windowId);
   if (!w || w.win.isDestroyed()) return;
   const size = w.win.getContentBounds();
@@ -1251,12 +1311,12 @@ function layoutWindow(windowId) {
   }
 }
 
-function activateTab(tabId) {
+function activateTab(tabId: string | null | undefined) {
   const tab = tabs.get(tabId);
   if (!tab) return;
   const w = windowsById.get(tab.windowId);
   if (!w || w.win.isDestroyed()) return;
-  w.activeTabId = tabId;
+  w.activeTabId = tabId as string;
   layoutWindow(w.id);
   applyWindowTitle(w);
   if (!TEST_MODE) {
@@ -1265,7 +1325,7 @@ function activateTab(tabId) {
   pushShellState(w.id);
 }
 
-function applyWindowTitle(w) {
+function applyWindowTitle(w: DesktopMainWindow | null | undefined) {
   if (!w || w.win.isDestroyed()) return;
   const tab = tabs.get(w.activeTabId);
   const title = (tab && tab.title) || "Untitled";
@@ -1274,10 +1334,10 @@ function applyWindowTitle(w) {
   if (process.platform === "darwin") w.win.setDocumentEdited(dirty);
 }
 
-function scheduleBoundsSave(windowId) {
+function scheduleBoundsSave(windowId: string) {
   const w = windowsById.get(windowId);
   if (!w) return;
-  clearTimeout(w.boundsSaveTimer);
+  clearTimeout(w.boundsSaveTimer as ReturnType<typeof setTimeout> | undefined);
   w.boundsSaveTimer = setTimeout(() => {
     if (!w.win || w.win.isDestroyed()) return;
     w.maximized = w.win.isMaximized();
@@ -1286,7 +1346,7 @@ function scheduleBoundsSave(windowId) {
   }, 400);
 }
 
-function shellStateForWindow(windowId) {
+function shellStateForWindow(windowId: string) {
   const w = windowsById.get(windowId);
   if (!w) return null;
   return {
@@ -1303,17 +1363,17 @@ function shellStateForWindow(windowId) {
         pristine: !!t.pristine,
         fullPathForTooltip: t.source.kind === "file" ? t.source.absPath : null
       };
-    }).filter(Boolean)
+    }).filter(Boolean as unknown as (tab: NonNullable<DesktopIpcResult<"splitpage:tabstrip-get-state">>["tabs"][number] | null) => tab is NonNullable<DesktopIpcResult<"splitpage:tabstrip-get-state">>["tabs"][number])
   };
 }
 
-function pushShellState(windowId) {
+function pushShellState(windowId: string) {
   const w = windowsById.get(windowId);
   if (!w || w.win.isDestroyed()) return;
   try { w.win.webContents.send("splitpage:tabstrip-state", shellStateForWindow(windowId)); } catch { }
 }
 
-function deliverOpenFile(tab, absPath) {
+function deliverOpenFile(tab: DesktopMainTab, absPath: unknown) {
   const id = fileIds.register(absPath);
   readFileEntry(id, absPath).then((entry) => {
     if (tab.view.webContents.isDestroyed()) return;
@@ -1323,7 +1383,7 @@ function deliverOpenFile(tab, absPath) {
   }).catch(() => { });
 }
 
-function routeOpenPath(absPath, opts) {
+function routeOpenPath(absPath: unknown, opts?: { fromWindowId?: string | null; fromTabId?: string }): (NonNullable<DesktopIpcResult<"splitpage:route-open">> & { tabId: string }) | null {
   const o = opts || {};
   let resolved;
   try {
@@ -1361,22 +1421,22 @@ function routeOpenPath(absPath, opts) {
   return created ? { where: "new-tab", tabId: created.id } : null;
 }
 
-function reorderTab(tabId, index) {
+function reorderTab(tabId: string | undefined, index: number | undefined) {
   const tab = tabs.get(tabId);
   if (!tab) return false;
   const w = windowsById.get(tab.windowId);
   if (!w) return false;
-  const from = w.tabIds.indexOf(tabId);
+  const from = (w.tabIds as readonly (string | undefined)[]).indexOf(tabId);
   if (from === -1) return false;
   w.tabIds.splice(from, 1);
-  const to = Math.max(0, Math.min(from < index ? index - 1 : index, w.tabIds.length));
-  w.tabIds.splice(to, 0, tabId);
+  const to = Math.max(0, Math.min(from < (index as number) ? (index as number) - 1 : index as number, w.tabIds.length));
+  w.tabIds.splice(to, 0, tabId as string);
   pushShellState(w.id);
   persistShellState();
   return true;
 }
 
-function moveTabToWindow(tabId, targetWindowId, index) {
+function moveTabToWindow(tabId: string, targetWindowId: string, index: number | undefined) {
   const tab = tabs.get(tabId);
   if (!tab) return false;
   const from = windowsById.get(tab.windowId);
@@ -1386,7 +1446,7 @@ function moveTabToWindow(tabId, targetWindowId, index) {
   const i = from.tabIds.indexOf(tabId);
   if (i !== -1) from.tabIds.splice(i, 1);
   if (from.activeTabId === tabId) {
-    from.activeTabId = from.tabIds.length ? from.tabIds[Math.max(0, Math.min(i, from.tabIds.length - 1))] : null;
+    from.activeTabId = from.tabIds.length ? from.tabIds[Math.max(0, Math.min(i, from.tabIds.length - 1))] as string : null;
   }
 
   try { from.win.contentView.removeChildView(tab.view); } catch { }
@@ -1410,17 +1470,17 @@ function moveTabToWindow(tabId, targetWindowId, index) {
   return true;
 }
 
-function tearOffToNewWindow(tabId, screenX, screenY) {
+function tearOffToNewWindow(tabId: string, screenX: number, screenY: number) {
   const tab = tabs.get(tabId);
   if (!tab) return false;
   const from = windowsById.get(tab.windowId);
   if (!from) return false;
   if (from.tabIds.length <= 1) return false;
-  const size = from.win.isDestroyed() ? { width: 1400, height: 900 } : from.win.getBounds();
+  const size: Pick<Electron.Rectangle, "width" | "height"> & Partial<Pick<Electron.Rectangle, "x" | "y">> = from.win.isDestroyed() ? { width: 1400, height: 900 } : from.win.getBounds();
   const created = createTabWindow({
     bounds: {
-      x: Math.round(Number.isFinite(screenX) ? screenX : size.x),
-      y: Math.round(Number.isFinite(screenY) ? screenY : size.y),
+      x: Math.round((Number.isFinite(screenX) ? screenX : size.x) as number),
+      y: Math.round((Number.isFinite(screenY) ? screenY : size.y) as number),
       width: size.width,
       height: size.height
     }
@@ -1432,31 +1492,31 @@ function liveWindows() {
   return [...windowsById.values()].filter((w) => w.win && !w.win.isDestroyed());
 }
 
-function cycleTab(windowId, delta) {
+function cycleTab(windowId: string | null, delta: number) {
   const w = windowsById.get(windowId);
   if (!w || w.tabIds.length < 2) return;
-  const i = w.tabIds.indexOf(w.activeTabId);
+  const i = (w.tabIds as readonly (string | null)[]).indexOf(w.activeTabId);
   const next = w.tabIds[((i === -1 ? 0 : i) + delta + w.tabIds.length) % w.tabIds.length];
   activateTab(next);
 }
 
-function focusWindow(windowId) {
+function focusWindow(windowId: string | null | undefined) {
   const w = windowsById.get(windowId);
   if (!w || w.win.isDestroyed()) return;
-  lastFocusedWindowId = windowId;
+  lastFocusedWindowId = windowId as string;
   if (TEST_MODE) return;
   if (w.win.isMinimized()) w.win.restore();
   w.win.show();
   w.win.focus();
 }
 
-function payloadForSource(source) {
+function payloadForSource(source: DesktopMainTab["source"] | null | undefined): DesktopMainTab["pendingPayload"] {
   if (!source) return null;
   if (source.kind === "file") return { kind: "open-file", absPath: source.absPath };
   return null;
 }
 
-function flushPendingPayload(tab, opts) {
+function flushPendingPayload(tab: DesktopMainTab, opts?: { force: boolean }) {
   const payload = tab.pendingPayload;
   if (!payload) return;
   if (!(opts && opts.force) && draftsHasDraft(tab.id)) return;
@@ -1466,7 +1526,7 @@ function flushPendingPayload(tab, opts) {
   }
 }
 
-function routeLaunchFile(absPath) {
+function routeLaunchFile(absPath: string) {
   let resolved;
   try {
     if (!fs.statSync(absPath).isFile()) return;
@@ -1502,7 +1562,7 @@ function activeTabContents() {
   return tab.view.webContents;
 }
 
-function sendMenuCommand(command) {
+function sendMenuCommand(command: string) {
   const contents = activeTabContents();
   if (contents) contents.send("splitpage:menu-command", command);
 }
@@ -1518,7 +1578,7 @@ function focusedWindowRecord() {
 function buildMenu() {
   const isMac = process.platform === "darwin";
 
-  const exportSubmenu = [
+  const exportSubmenu: Electron.MenuItemConstructorOptions[] = [
     { label: "Word (.docx)", click: () => sendMenuCommand("export-docx") },
     { label: "Markdown (.md)", click: () => sendMenuCommand("export-md") },
     { label: "Markdown, two columns (.md)", click: () => sendMenuCommand("export-md-table") },
@@ -1541,7 +1601,7 @@ function buildMenu() {
     { label: "B-roll shot list (.csv)", click: () => sendMenuCommand("export-broll-csv") }
   ];
 
-  const fileMenu = {
+  const fileMenu: Electron.MenuItemConstructorOptions = {
     label: "File",
     submenu: [
       { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuCommand("save") },
@@ -1571,7 +1631,7 @@ function buildMenu() {
     ]
   };
 
-  const editMenu = {
+  const editMenu: Electron.MenuItemConstructorOptions = {
     label: "Edit",
     submenu: [
       { role: "undo" },
@@ -1598,7 +1658,7 @@ function buildMenu() {
     ]
   };
 
-  const viewMenu = {
+  const viewMenu: Electron.MenuItemConstructorOptions = {
     label: "View",
     submenu: [
       { label: "Production", accelerator: "CmdOrCtrl+Alt+P", click: () => sendMenuCommand("toggle-production") },
@@ -1617,9 +1677,9 @@ function buildMenu() {
       { label: "Minimise the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
       { type: "separator" },
       ...(app.isPackaged ? [] : [
-        { role: "reload" },
-        { role: "toggleDevTools" },
-        { type: "separator" }
+        { role: "reload" as const },
+        { role: "toggleDevTools" as const },
+        { type: "separator" as const }
       ]),
       { label: "Actual Size", accelerator: "CmdOrCtrl+0", registerAccelerator: false, click: () => sendMenuCommand("script-zoom-reset") },
       { label: "Zoom In", accelerator: "CmdOrCtrl+Plus", registerAccelerator: false, click: () => sendMenuCommand("script-zoom-in") },
@@ -1629,7 +1689,7 @@ function buildMenu() {
     ]
   };
 
-  const tabMenu = {
+  const tabMenu: Electron.MenuItemConstructorOptions = {
     label: "Tab",
     submenu: [
       {
@@ -1654,7 +1714,7 @@ function buildMenu() {
     ]
   };
 
-  const helpMenu = {
+  const helpMenu: Electron.MenuItemConstructorOptions = {
     label: "Help",
     submenu: [
       { label: "User guide…", accelerator: "F1", click: () => sendMenuCommand("help") },
@@ -1666,28 +1726,29 @@ function buildMenu() {
     ]
   };
 
-  const template = isMac
+  const template: Electron.MenuItemConstructorOptions[] = isMac
     ? [{ role: "appMenu" }, fileMenu, editMenu, viewMenu, tabMenu, helpMenu]
     : [fileMenu, editMenu, viewMenu, tabMenu, helpMenu];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+
 const { registerIpc } = createIpcSetup({ ipcMain, app, testMode: TEST_MODE, windowsById });
 
-function tabStripWindowOf(event) {
+function tabStripWindowOf(event: DesktopIpcEvent) {
   for (const w of windowsById.values()) {
     if (!w.win.isDestroyed() && w.win.webContents === event.sender) return w;
   }
   return null;
 }
 
-function tabOf(event) {
+function tabOf(event: DesktopIpcEvent) {
   const tabId = webContentsIdToTabId.get(event.sender.id);
   return tabId ? tabs.get(tabId) || null : null;
 }
 
-function dialogParentFor(event) {
+function dialogParentFor(event: DesktopIpcEvent) {
   const tab = tabOf(event);
   if (tab) {
     const w = windowsById.get(tab.windowId);
@@ -1696,7 +1757,7 @@ function dialogParentFor(event) {
   return BrowserWindow.fromWebContents(event.sender) || undefined;
 }
 
-function launchIntentFor(tab) {
+function launchIntentFor(tab: DesktopMainTab) {
   if (draftsHasDraft(tab.id)) return { type: "restore-draft" };
   if (tab.source.kind === "file" && tab.pendingPayload) return { type: "open-file" };
   return { type: "blank" };

@@ -1,13 +1,13 @@
 "use strict";
 
-import type * as NodePath from "node:path";
+import type { DesktopNativePath, DesktopNativeFsPromises } from "./native-inputs.d.ts";
+
 import type * as NodeFs from "node:fs";
-import type * as NodeFsPromises from "node:fs/promises";
 import type * as NodeCrypto from "node:crypto";
 
-const path: typeof NodePath = require("node:path");
+const path: DesktopNativePath = require("node:path");
 const fs: typeof NodeFs = require("node:fs");
-const fsp: typeof NodeFsPromises = require("node:fs/promises");
+const fsp: DesktopNativeFsPromises = require("node:fs/promises");
 const crypto: typeof NodeCrypto = require("node:crypto");
 
 const OPENABLE_EXTENSIONS = [".splitpage", ".md", ".html", ".htm", ".docx", ".txt", ".csv"];
@@ -26,15 +26,15 @@ function filesToOpenFrom(list: string[], baseDir: string) {
   return out;
 }
 
-function pathKey(absPath: string, platform: string = process.platform) {
+function pathKey(absPath: unknown, platform: string = process.platform) {
   const resolved = path.resolve(absPath);
   return platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
 function createFileRegistry() {
-  const paths = new Map<string, string>();
+  const paths = new Map<string, unknown>();
   return {
-    register(absPath: string) {
+    register(absPath: unknown) {
       const id = crypto.randomBytes(16).toString("hex");
       paths.set(id, absPath);
       return id;
@@ -45,7 +45,7 @@ function createFileRegistry() {
   };
 }
 
-async function readFileEntry(id: string, absPath: string) {
+async function readFileEntry(id: string, absPath: unknown) {
   const stat = await fsp.stat(absPath);
   const buf = await fsp.readFile(absPath);
   return {
@@ -64,7 +64,7 @@ function toBuffer(data: unknown) {
   throw new Error("writeFile: unsupported data type");
 }
 
-async function atomicWrite(absPath: string, buffer: Buffer, io: Pick<typeof fsp, "open" | "rename" | "unlink"> = fsp) {
+async function atomicWrite(absPath: unknown, buffer: Buffer, io: Pick<typeof fsp, "open" | "rename" | "unlink"> = fsp) {
   const dir = path.dirname(absPath);
   const tmp = path.join(dir, `.${path.basename(absPath)}.tmp-${crypto.randomBytes(6).toString("hex")}`);
   const fh = await io.open(tmp, "wx");
@@ -82,7 +82,7 @@ async function atomicWrite(absPath: string, buffer: Buffer, io: Pick<typeof fsp,
   }
 }
 
-async function writeFileEntry(absPath: string, buffer: Buffer, io: Pick<typeof fsp, "open" | "rename" | "unlink" | "stat"> = fsp) {
+async function writeFileEntry(absPath: unknown, buffer: Buffer, io: Pick<typeof fsp, "open" | "rename" | "unlink" | "stat"> = fsp) {
   await atomicWrite(absPath, buffer, io);
   try {
     const stat = await io.stat(absPath);

@@ -3,13 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
-import { createRequire } from "node:module";
+import { createRequire, stripTypeScriptTypes } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.join(here, "..");
-const MAIN = fs.readFileSync(path.join(desktop, "main.js"), "utf8");
+const MAIN = stripTypeScriptTypes(fs.readFileSync(path.join(desktop, "main.ts"), "utf8"));
 const EXPOSED = ["createTabWindow", "createTab", "tabs", "windowsById", "pendingDraftFlushes", "initDraftStore", "persistShellState", "requestCloseTab"];
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -175,7 +175,7 @@ function loadMain(world) {
     return require(id.startsWith(".") ? path.join(desktop, id) : id);
   };
 
-  const mainPath = path.join(desktop, "main.js");
+  const mainPath = path.join(desktop, "main.ts");
   const lockElseEnd = MAIN.lastIndexOf("\n}");
   const body = MAIN.slice(0, lockElseEnd) + `\nreturn { ${EXPOSED.join(", ")} };` + MAIN.slice(lockElseEnd);
   const load = vm.runInThisContext(`(function (exports, require, module, __filename, __dirname) {${body}\n})`, { filename: mainPath });
