@@ -1,12 +1,14 @@
 "use strict";
 
+import type { createDraftStore } from "./drafts.ts";
+
 import type * as NodeCrypto from "node:crypto";
 
 import type * as NodeFsPromises from "node:fs/promises";
 
 import type * as NodePath from "node:path";
 
-import type { DesktopDraftStoreBoundary, DesktopShellIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopShellIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
 
 const path: typeof NodePath = require("node:path");
 const fsp: typeof NodeFsPromises = require("node:fs/promises");
@@ -27,9 +29,9 @@ function createShellIpc({
       const hasDraftToRestore = intent.type === "restore-draft";
       if (draftStore()) {
         if (hasDraftToRestore) {
-          try { (draftStore() as DesktopDraftStoreBoundary).hold(tab.id); } catch { }
+          try { (draftStore() as ReturnType<typeof createDraftStore>).hold(tab.id); } catch { }
         } else if (draftsIsHeld(tab.id)) {
-          try { (draftStore() as DesktopDraftStoreBoundary).release(tab.id); } catch { }
+          try { (draftStore() as ReturnType<typeof createDraftStore>).release(tab.id); } catch { }
         }
       }
       return {
