@@ -210,6 +210,37 @@ test("automatic onboarding rechecks eligibility when startup becomes ready", asy
   } finally { mounted.dispose(); }
 });
 
+test("a delayed automatic eligibility read cannot reset a manually opened wizard", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  let reads = 0;
+  let release: (value: unknown) => void = () => {};
+  const mounted = startOnboarding({ ...h.ports, lastFile: { load: () => {
+    reads++;
+    return reads === 2 ? new Promise(resolve => { release = resolve; }) : Promise.resolve(null);
+  } } });
+  try {
+    await settled();
+    assert.equal(reads, 2);
+    assert.equal(modal().hidden, true);
+    mounted.openOnboarding();
+    click("next");
+    click("next");
+    const finish = win.document.querySelector<HTMLButtonElement>('[data-onboard-action="next"]');
+    assert.ok(finish);
+    finish.focus();
+    assert.equal(stepShown(3), true);
+    release(null);
+    const probe = (win as unknown as { __onboarding: { autoShowDecided: () => Promise<void> } }).__onboarding;
+    await probe.autoShowDecided();
+    assert.equal(modal().hidden, false);
+    assert.equal(stepShown(3), true);
+    assert.equal(finish.textContent, "Finish");
+    assert.equal(win.document.activeElement, finish);
+    assert.equal(h.panels.closed(), 1);
+  } finally { mounted.dispose(); }
+});
+
 test("a mount disposed while startup is pending cannot open after it becomes ready", async () => {
   page();
   const h = fakeOnboardingPorts();

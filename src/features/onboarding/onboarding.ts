@@ -131,7 +131,7 @@ async function maybeAutoShowOnboarding() {
     if (activeMount !== mounted) return;
     eligible = await onboardEligibleForAutoShow();
   } catch (e) { eligible = false; }
-  if (eligible && activeMount === mounted) openOnboarding();
+  if (eligible && activeMount === mounted && onboardModal()?.hidden) openOnboarding();
 }
 
 export function startOnboarding(given: OnboardingPorts): OnboardingMount {
