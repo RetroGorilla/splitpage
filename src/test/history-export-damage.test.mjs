@@ -207,6 +207,17 @@ test("strict reads support an intentionally memory-only image store", async () =
   assert.equal(pictures.dataUrlFor(record.sha256), "data:image/png;base64," + bytes.toString("base64"));
 });
 
+test("resetting an opening image backend cannot erase its persistent read failure", async () => {
+  let rejectOpen;
+  const opening = new Promise((_resolve, reject) => { rejectOpen = reject; });
+  const pictures = createBlobStore({ preferred: { available: () => true, open: () => opening }, fallback: createMemoryBlobBackend, objectUrl: () => "", revokeObjectUrl() {}, later() {}, warn() {} });
+  const reading = pictures.ensureBytes([image], { strict: true });
+  const rejected = assert.rejects(reading, /unavailable/);
+  pictures.setBackend(null);
+  rejectOpen(new Error("unavailable"));
+  await rejected;
+});
+
 test("confirmed desktop body absence still permits a partial export", async (t) => {
   const h = await harness(t, "filesystem", [good, { ...good, id: "other" }]);
   const get = h.bridge.historyGet;
