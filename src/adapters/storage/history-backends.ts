@@ -1,5 +1,6 @@
 import type { HistoryBackendOptions, HistoryTestingStorage, HistorySnapshotMeta, HistorySnapshotRead, HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
 import type { HistoryBackendAdapter, HistoryBackendDoc, HistoryBackendList, HistoryIndex, HistoryOlderImportResult } from "./history-backend-types.ts";
+import type { SharedHistorySnapshotReader } from "../../../shared/history-store.ts";
 
 type HistoryStore = ReturnType<typeof createHistoryStore<HistoryBrowserBackend>>;
 type HistoryBrowserBackend = Pick<ReturnType<typeof createIdbHistoryBackend>, "name" | "persistent" | "exclusive">;
@@ -112,7 +113,7 @@ function historyRecordOf(index: HistoryIndex, bucket: string) {
     title: rec.title || "",
     lastOpenedAt: Number(rec.lastOpenedAt) || 0,
     count: snaps.length,
-    bytes: snaps.reduce(function (n, s) { return n + (Number(s && s.sizeBytes) || 0); }, 0)
+    bytes: snaps.reduce<number>(function (n, s) { return n + (Number(s && (s as SharedHistorySnapshotReader).sizeBytes) || 0); }, 0)
   };
   if (rec.migratedAt != null) out.migratedAt = rec.migratedAt;
   if (rec.expiresAt != null) out.expiresAt = rec.expiresAt;

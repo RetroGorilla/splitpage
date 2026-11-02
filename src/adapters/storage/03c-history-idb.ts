@@ -230,9 +230,9 @@ export function createIdbHistoryBackend(o?: { indexedDB?: IDBFactory | null; nam
           return out;
         });
       },
-      get: function (sha: string) {
+      get: function (sha: unknown) {
         if (typeof sha !== "string") return Promise.resolve(null);
-        return idbReq(bodies.get(sha) as IDBRequest<{ stateJson?: unknown } | undefined>).then(function (row) {
+        return idbReq(bodies.get(sha as IDBValidKey) as IDBRequest<{ stateJson?: unknown } | undefined>).then(function (row) {
           return row && typeof row.stateJson === "string" ? row.stateJson : null;
         });
       },

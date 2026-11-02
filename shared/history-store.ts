@@ -9,15 +9,15 @@ type HistoryStorePublicMeta = HistoryStoreMeta & { docId: string };
 type HistoryStoreFields = Record<string, unknown>;
 export interface SharedHistorySnapshotReader {
   readonly [key: string]: unknown;
-  readonly id: string;
-  readonly sha: string;
+  readonly id?: unknown;
+  readonly sha?: unknown;
 }
 export interface SharedHistoryBucketReader {
   readonly [key: string]: unknown;
-  readonly snapshots: readonly SharedHistorySnapshotReader[];
+  readonly snapshots: readonly unknown[];
 }
 export type SharedHistoryIndex = Record<string, SharedHistoryBucketReader | null | undefined>;
-export type SharedHistoryBucket = { [key: string]: unknown; snapshots: SharedHistorySnapshotReader[] };
+export type SharedHistoryBucket = { [key: string]: unknown; snapshots: unknown[] };
 type HistoryStoreMutableBucket = SharedHistoryBucket;
 type HistoryStoreChanges = Record<string, HistoryStoreMutableBucket | null | undefined>;
 type HistoryStoreHold = { docId: string; id: string };
@@ -25,7 +25,7 @@ type HistoryStoreFlags = Record<string, true | undefined>;
 type HistoryStoreError = "quota" | "enospc" | "io" | "read-only";
 export interface SharedHistoryTransaction {
   readonly list: () => Promise<SharedHistoryIndex>;
-  readonly get: (sha: string) => Promise<string | null | undefined>;
+  readonly get: (sha: unknown) => Promise<string | null | undefined>;
   readonly put: (sha: string, text: string) => Promise<void>;
   readonly commit: (changes: SharedHistoryIndex, dropped: string[]) => Promise<void>;
 }
@@ -73,8 +73,8 @@ function noop() {}
 function isDocId(v: unknown): boolean { return typeof v === "string" && DOC_ID_RE.test(v); }
 function isBucket(v: unknown): boolean { return v === HISTORY_OLDER_KEY || isDocId(v); }
 
-function byAtAscending(a: SharedHistorySnapshotReader | HistoryStorePublicMeta, b: SharedHistorySnapshotReader | HistoryStorePublicMeta) {
-  return ((a.atMs as number) - (b.atMs as number)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+function byAtAscending(a: unknown, b: unknown) {
+  return (((a as SharedHistorySnapshotReader).atMs as number) - ((b as SharedHistorySnapshotReader).atMs as number)) || (((a as SharedHistorySnapshotReader).id as string) < ((b as SharedHistorySnapshotReader).id as string) ? -1 : ((a as SharedHistorySnapshotReader).id as string) > ((b as SharedHistorySnapshotReader).id as string) ? 1 : 0);
 }
 function byAtDescending(a: HistoryStorePublicMeta, b: HistoryStorePublicMeta) {
   return (b.atMs - a.atMs) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
@@ -90,12 +90,12 @@ function entryOf(meta: unknown, sha: string) {
 function cloneRecord(rec: SharedHistoryBucketReader | null | undefined) {
   const out = {} as HistoryStoreMutableBucket;
   Object.keys(rec as SharedHistoryBucketReader).forEach(function (k) { if (k !== "snapshots") out[k] = (rec as SharedHistoryBucketReader)[k]; });
-  out.snapshots = Array.isArray((rec as SharedHistoryBucketReader).snapshots) ? ((rec as SharedHistoryBucketReader).snapshots as readonly SharedHistorySnapshotReader[]).slice() : [];
+  out.snapshots = Array.isArray((rec as SharedHistoryBucketReader).snapshots) ? ((rec as SharedHistoryBucketReader).snapshots as readonly unknown[]).slice() : [];
   return out;
 }
 
-function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonly SharedHistorySnapshotReader[] {
-  return rec && Array.isArray(rec.snapshots) ? rec.snapshots as readonly SharedHistorySnapshotReader[] : [];
+function snapshotsOf(rec: SharedHistoryBucketReader | null | undefined): readonly unknown[] {
+  return rec && Array.isArray(rec.snapshots) ? rec.snapshots as readonly unknown[] : [];
 }
 
 function findEntry(rec: SharedHistoryBucketReader | null | undefined, id: string) {
@@ -107,7 +107,7 @@ function findEntry(rec: SharedHistoryBucketReader | null | undefined, id: string
 function newestAtMs(rec: SharedHistoryBucketReader | null | undefined) {
   let n: number | null = null;
   snapshotsOf(rec).forEach(function (s) {
-    const v = Number(s && s.atMs);
+    const v = Number(s && (s as SharedHistorySnapshotReader).atMs);
     if (isFinite(v) && (n == null || v > n)) n = v;
   });
   return n;
@@ -116,7 +116,7 @@ function newestAtMs(rec: SharedHistoryBucketReader | null | undefined) {
 function totalOf(index: SharedHistoryIndex | null | undefined) {
   let total = 0;
   Object.keys(index || {}).forEach(function (b) {
-    snapshotsOf((index as SharedHistoryIndex)[b]).forEach(function (s) { total += Number(s && s.sizeBytes) || 0; });
+    snapshotsOf((index as SharedHistoryIndex)[b]).forEach(function (s) { total += Number(s && (s as SharedHistorySnapshotReader).sizeBytes) || 0; });
   });
   return total;
 }
@@ -154,7 +154,7 @@ function namedShas(index: SharedHistoryIndex, changes: SharedHistoryIndex | null
   Object.keys(changes || {}).forEach(function (b) { if (!(b in (index || {}))) buckets.push(b); });
   buckets.forEach(function (b) {
     const rec = changes && Object.prototype.hasOwnProperty.call(changes, b) ? changes[b] : index[b];
-    snapshotsOf(rec).forEach(function (s) { if (s && typeof s.sha === "string") named[s.sha] = true; });
+    snapshotsOf(rec).forEach(function (s) { if (s && typeof (s as SharedHistorySnapshotReader).sha === "string") named[(s as SharedHistorySnapshotReader).sha as string] = true; });
   });
   return named;
 }
@@ -162,7 +162,7 @@ function namedShas(index: SharedHistoryIndex, changes: SharedHistoryIndex | null
 function planChanges(index: SharedHistoryIndex, changes: HistoryStoreChanges, capBytes: number, nowMs: number, protect: HistoryStoreHold[], putShas: string[]) {
   const out: HistoryStoreChanges = {};
   Object.keys(changes).forEach(function (b) { out[b] = changes[b]; });
-  const docs: { docId: string; lastOpenedAt: unknown; expiresAt: unknown; snapshots: { id: string; atMs: unknown; sizeBytes: unknown }[] }[] = [];
+  const docs: { docId: string; lastOpenedAt: unknown; expiresAt: unknown; snapshots: { id: unknown; atMs: unknown; sizeBytes: unknown }[] }[] = [];
   const buckets = Object.keys(index);
   Object.keys(out).forEach(function (b) { if (!(b in index)) buckets.push(b); });
   buckets.forEach(function (b) {
@@ -172,7 +172,7 @@ function planChanges(index: SharedHistoryIndex, changes: HistoryStoreChanges, ca
       docId: b,
       lastOpenedAt: rec.lastOpenedAt || 0,
       expiresAt: rec.expiresAt || 0,
-      snapshots: snapshotsOf(rec).map(function (s) { return { id: s.id, atMs: s.atMs, sizeBytes: s.sizeBytes }; })
+      snapshots: snapshotsOf(rec).map(function (s) { return { id: (s as SharedHistorySnapshotReader).id, atMs: (s as SharedHistorySnapshotReader).atMs, sizeBytes: (s as SharedHistorySnapshotReader).sizeBytes }; })
     });
   });
   const plan = planHistoryEviction(docs, capBytes, nowMs, {
@@ -184,7 +184,7 @@ function planChanges(index: SharedHistoryIndex, changes: HistoryStoreChanges, ca
   });
   Object.keys(gone).forEach(function (b) {
     const rec = Object.prototype.hasOwnProperty.call(out, b) ? out[b] : cloneRecord(index[b]);
-    (rec as HistoryStoreMutableBucket).snapshots = (rec as SharedHistoryBucketReader).snapshots.filter(function (s) { return !(gone[b] as HistoryStoreFlags)[s.id]; });
+    (rec as HistoryStoreMutableBucket).snapshots = (rec as SharedHistoryBucketReader).snapshots.filter(function (s) { return !(gone[b] as HistoryStoreFlags)[(s as SharedHistorySnapshotReader).id as string]; });
     out[b] = rec;
   });
   Object.keys(out).forEach(function (b) {
@@ -406,19 +406,19 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
     });
   }
 
-  function healMissing(sha: string) {
+  function healMissing(sha: unknown) {
     if (readOnly()) return Promise.resolve();
     return run(true, function (tx) {
       return listIndex(tx).then(function (index) {
-        if (!namedShas(index, null)[sha]) return null;
+        if (!namedShas(index, null)[sha as string]) return null;
         return tx.get(sha).then(function (text) {
           if (typeof text === "string") return null;
           const changes: HistoryStoreChanges = {};
           Object.keys(index).forEach(function (b) {
             const list = snapshotsOf(index[b]);
-            if (!list.some(function (s) { return s && s.sha === sha; })) return;
+            if (!list.some(function (s) { return s && (s as SharedHistorySnapshotReader).sha === sha; })) return;
             const next = cloneRecord(index[b]);
-            next.snapshots = next.snapshots.filter(function (s) { return !s || s.sha !== sha; });
+            next.snapshots = next.snapshots.filter(function (s) { return !s || (s as SharedHistorySnapshotReader).sha !== sha; });
             changes[b] = next.snapshots.length ? next : null;
           });
           return commitAndNote(tx, index, changes, []);
@@ -435,8 +435,8 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
         const e = findEntry(rec, id);
         if (!e) return null;
         if (bucket === HISTORY_OLDER_KEY && historyOlderExpired(rec, now())) return null;
-        return tx.get(e.sha).then(function (text) {
-          if (typeof text !== "string") return { missing: e.sha };
+        return tx.get((e as SharedHistorySnapshotReader).sha).then(function (text) {
+          if (typeof text !== "string") return { missing: (e as SharedHistorySnapshotReader).sha };
           return { meta: publicMeta(e, bucket as string), stateJson: text };
         });
       });
@@ -503,11 +503,11 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
           const t = now();
           const next: HistoryStoreMutableBucket = dst ? cloneRecord(dst) : { title: "", lastOpenedAt: t, snapshots: [] };
           const have: HistoryStoreFlags = Object.create(null);
-          next.snapshots.forEach(function (s) { if (s) have[s.id] = true; });
+          next.snapshots.forEach(function (s) { if (s) have[(s as SharedHistorySnapshotReader).id as string] = true; });
           let copied = 0;
           snapshotsOf(src).forEach(function (s) {
-            if (!s || have[s.id] || typeof s.sha !== "string") return;
-            const m = entryOf(s, s.sha);
+            if (!s || have[(s as SharedHistorySnapshotReader).id as string] || typeof (s as SharedHistorySnapshotReader).sha !== "string") return;
+            const m = entryOf(s, (s as SharedHistorySnapshotReader).sha as string);
             if (!m) return;
             next.snapshots.push(m);
             have[m.id] = true;
@@ -569,10 +569,10 @@ function createHistoryStore<B extends SharedHistoryBackend>(opts?: HistoryStoreO
           if (!clean.length) return { ok: true, count: rec && !expired ? snapshotsOf(rec).length : 0, added: 0 };
           const next: HistoryStoreMutableBucket = (rec && !expired) ? cloneRecord(rec) : {
             title: "", lastOpenedAt: 0, migratedAt: t, expiresAt: t + HISTORY_OLDER_TTL_MS,
-            snapshots: snapshotsOf(rec).filter(function (s) { return s && heldKey[HISTORY_OLDER_KEY + "\n" + s.id]; })
+            snapshots: snapshotsOf(rec).filter(function (s) { return s && heldKey[HISTORY_OLDER_KEY + "\n" + (s as SharedHistorySnapshotReader).id]; })
           };
           const have: HistoryStoreFlags = Object.create(null);
-          next.snapshots.forEach(function (s) { if (s) have[s.id] = true; });
+          next.snapshots.forEach(function (s) { if (s) have[(s as SharedHistorySnapshotReader).id as string] = true; });
           const fresh: { entry: HistoryStoreEntry; stateJson: string }[] = [];
           clean.forEach(function (e, i) {
             if (have[e.meta.id]) return;
@@ -657,7 +657,7 @@ function createMemoryHistoryBackend<E extends object>(o?: HistoryMemoryOptions<E
 
   function isNamed(sha: string, idx: SharedHistoryIndex) {
     return Object.keys(idx).some(function (b) {
-      return snapshotsOf(idx[b]).some(function (s) { return s && s.sha === sha; });
+      return snapshotsOf(idx[b]).some(function (s) { return s && (s as SharedHistorySnapshotReader).sha === sha; });
     });
   }
 
