@@ -145,7 +145,7 @@ function loadMain(world) {
     screen: loose({ getAllDisplays: () => [] })
   });
 
-  const realDrafts = require(path.join(desktop, "drafts.js"));
+  const realDrafts = require(path.join(desktop, "drafts.ts"));
   const draftStore = {
     init: () => ({ previousSession: "none", drafts: [] }),
     hasDraft: (id) => world.kept.has(id),
@@ -161,7 +161,7 @@ function loadMain(world) {
   const realState = require(path.join(desktop, "desktop-state.js"));
   const stubs = {
     electron,
-    "./drafts": { ...realDrafts, createDraftStore: () => draftStore },
+    "./drafts.ts": { ...realDrafts, createDraftStore: () => draftStore },
     "./desktop-state": {
       ...realState,
       createDesktopStateStore: (opts) => {
