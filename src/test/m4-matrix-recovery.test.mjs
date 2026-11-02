@@ -35,7 +35,7 @@ const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const require = createRequire(import.meta.url);
-const { createDraftStore } = require("../../desktop/drafts.js");
+const { createDraftStore } = require("../../desktop/drafts.ts");
 
 after(closeApp);
 
