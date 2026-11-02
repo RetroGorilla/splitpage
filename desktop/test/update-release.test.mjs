@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
-} = require(path.join(here, "..", "update-release.js"));
+} = require(path.join(here, "..", "update-release.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });

@@ -29,10 +29,10 @@ files:
   - blob-store.js
   - voice-composition.js
   - voice-helper.js
-  - chromium-browsers.js
+  - chromium-browsers.ts
   - history-fs-backend.js
   - desktop-state.js
-  - update-release.js
+  - update-release.ts
   - file-service.js
   - doc-claims.js
   - recents.js
