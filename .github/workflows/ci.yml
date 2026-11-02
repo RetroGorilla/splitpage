@@ -68,7 +68,7 @@ jobs:
       - name: Install tooling
         run: npm ci && npm ci --prefix desktop
 
-      - name: Desktop preloads are generated from their checked sources
+      - name: Desktop browser scripts are generated from their checked sources
         run: node tools/build-preload.mjs && node tools/check-preload.mjs
 
       - name: Lint
