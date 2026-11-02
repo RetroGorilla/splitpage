@@ -388,7 +388,8 @@ the check; no rule or fixture is skipped. Local runtime was 9.2 seconds for
 the check, 10.0 seconds including test startup.
 
 In CI, each Tests shard installs Playwright's pinned Chromium and passes it as
-`SPLITPAGE_CHROME`; GitHub's own `google-chrome` fails the glyph rule. The automatic test deletes its TEMP
+`SPLITPAGE_CHROME`. Without that step GitHub's runners failed the glyph rule;
+whether the browser or its system libraries caused that wasn't established. The automatic test deletes its TEMP
 directory only after every assertion passes, retaining artifacts on failure.
 
 The inspector inflates PDF streams with `node:zlib`, decodes ToUnicode and
