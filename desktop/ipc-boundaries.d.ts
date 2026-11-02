@@ -220,4 +220,3 @@ export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "t
   prompterShare: DesktopTestModeIpcDependencies["prompterShare"];
   voiceHelper: () => Pick<DesktopVoiceBoundary, "stopAll"> | null;
 }
-
