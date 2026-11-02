@@ -54,6 +54,7 @@ export interface AppDataMount {
 }
 
 interface AppDataHistoryExport {
+  readonly omittedSnapshots?: number;
   readonly docs: readonly unknown[];
   readonly older: readonly unknown[];
   readonly blobs?: Record<string, unknown>;

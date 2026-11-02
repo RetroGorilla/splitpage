@@ -2,8 +2,9 @@ import type { CellClipboardPorts } from "./ports.ts";
 import type { Attachment, AttachedCount, BrollScope, ClipboardPorts, PasteRequest, Pasted, TextRange, VideoFileAttachment } from "../../application/commands/clipboard.ts";
 import type { CellInput, NormalizeOptions, Run } from "../../core/text/runs.ts";
 import type { VideoFiles, VideoPosterFrame } from "../../application/media/video-files.ts";
+import type { StoredImageRef } from "../../core/document/text-policy.ts";
 
-type ClipboardOptions = NormalizeOptions & { keepComments?: boolean | undefined; nonce?: string | null | undefined; skipImages?: boolean | undefined };
+type ClipboardOptions = NormalizeOptions & { keepComments?: boolean | undefined; nonce?: string | null | undefined; skipImages?: boolean | undefined; cleanLinks?: boolean | undefined };
 export interface ClipboardMediaInput {
   attach?: Attachment[] | undefined;
   skipImages?: boolean | undefined;
@@ -117,10 +118,20 @@ function prepareHtml(html: string, opts?: ClipboardOptions) {
   const body = (ports as CellClipboardPorts).text.inertBody(html);
   let media = 0, lost = 0;
   const attach: Attachment[] = [];
-  Array.prototype.forEach.call(body.querySelectorAll("img"), function (el: HTMLImageElement) {
+  const available = new Map<string, StoredImageRef | null>();
+  const images = Array.from(body.querySelectorAll("img"), function (el) {
+    const ref = opts.skipImages ? null : (ports as CellClipboardPorts).imageRefOf(el);
+    if (ref) available.set(ref.sha256, ref);
+    return { el: el, ref: ref };
+  });
+  available.forEach(function (ref, sha) {
+    available.set(sha, (ports as CellClipboardPorts).pictures.has(sha) ? ref : null);
+  });
+  images.forEach(function (image) {
+    const el = image.el;
     media++;
     if (!opts.skipImages) {
-      const ref = (ports as CellClipboardPorts).imageRefOf(el);
+      const ref = image.ref && available.get(image.ref.sha256);
       if (ref) addAttachment(attach, { kind: "image", ref: ref });
       else lost++;
     }
@@ -171,7 +182,9 @@ export function cellFromClipboard(html: unknown, text: unknown, opts?: Clipboard
     media = prep.media;
     lost = prep.lost;
     attach = prep.attach;
-    let cell = (ports as CellClipboardPorts).text.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
+    const textPort = (ports as CellClipboardPorts).text;
+    let cell = textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
+    if (opts.cleanLinks !== false) cell = textPort.cleanPastedCell(cell);
     if (prep.endsInBlock && projection(cell).slice(-1) === "\n") cell = sliceCell(cell, 0, cellLength(cell) - 1);
     if (cellLength(cell)) {
       return { cell: cell, text: null, media: media, lost: lost, attach: attach, fromCut: fromCut, comments: fromCut ? commentIds(cell) : [] };
@@ -293,11 +306,11 @@ function pasteRequest(rowId: PasteRequest["rowId"], field: PasteRequest["field"]
   return { rowId: rowId, field: field, range: range, pasted: pasted, fromCut: got.fromCut, comments: got.comments, attach: attach };
 }
 
-export function pasteIntoCell(cellEl: Element, html: unknown, text: unknown, extra?: ClipboardMediaInput | null) {
-  return (ports as CellClipboardPorts).paintGuard.whileShown(function () { return pasteShown(cellEl, html, text, extra); });
+export function pasteIntoCell(cellEl: Element, html: unknown, text: unknown, extra?: ClipboardMediaInput | null, cleanLinks = true) {
+  return (ports as CellClipboardPorts).paintGuard.whileShown(function () { return pasteShown(cellEl, html, text, extra, cleanLinks); });
 }
 
-function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: ClipboardMediaInput | null) {
+function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: ClipboardMediaInput | null, cleanLinks = true) {
   extra = extra || {};
   let target: PasteTarget | null = null;
   const hasComment = function (id: string) {
@@ -305,7 +318,7 @@ function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: Clipb
     if (!target) target = { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"), rest: outsideSelection(cellEl) };
     return !anchoredInText(id, target);
   };
-  const got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: hasComment, skipImages: !!extra.skipImages });
+  const got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: hasComment, skipImages: !!extra.skipImages, cleanLinks: cleanLinks });
   const attach = (extra.attach || []).slice();
   got.attach.forEach(function (item) { addAttachment(attach, item); });
   const rowId = cellEl.getAttribute("data-id");
@@ -346,7 +359,7 @@ function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: Clipb
   return result;
 }
 
-export function readClipboardFiles(files: FileList | readonly File[] | null | undefined, compress: (file: File, maxDim: number, quality: number) => Promise<string>, video?: ClipboardMediaReader) {
+export function readClipboardFiles(files: FileList | readonly File[] | null | undefined, compress: (file: File, maxDim: number, quality: number) => Promise<string>, video?: ClipboardMediaReader, html: string = "") {
   video = video || {};
   const list: File[] = Array.prototype.slice.call(files || []) as File[];
   const attach: (Attachment | null)[] = [];
@@ -377,16 +390,30 @@ export function readClipboardFiles(files: FileList | readonly File[] | null | un
       attach[slot] = { kind: "image", ref: rec, name: String(file.name || "") };
     }, function () {});
   });
+  if (!skipImages) {
+    const shas = clipboardImageHashes(html);
+    if (shas.length) jobs.push((ports as CellClipboardPorts).pictures.ensureBytes(shas).then(function () {}));
+  }
   return Promise.all(jobs).then(function () {
     const kept = attach.filter(Boolean) as Attachment[];
     return { attach: kept, skipImages: skipImages, lost: attach.length - kept.length };
   });
 }
 
-export function hasMediaFiles(files: FileList | readonly File[] | null | undefined) {
+function clipboardImageHashes(html: string): string[] {
+  if (!/data-blob/i.test(html)) return [];
+  const shas = new Set<string>();
+  (ports as CellClipboardPorts).text.inertBody(html).querySelectorAll("img[data-blob]").forEach(function (el) {
+    const ref = (ports as CellClipboardPorts).imageRefOf(el);
+    if (ref) shas.add(ref.sha256);
+  });
+  return Array.from(shas);
+}
+
+export function hasMediaFiles(files: FileList | readonly File[] | null | undefined, html: string = "") {
   return Array.prototype.some.call(files || [], function (f: File | null | undefined) {
     return /^(image|video)\//.test(String(f && f.type || ""));
-  });
+  }) || clipboardImageHashes(html).length > 0;
 }
 
 export function startCellClipboard(given: CellClipboardPorts) {

@@ -197,3 +197,75 @@ test("update ports can be wired before mounting and delegate every call and list
     restoreDesktop();
   }
 });
+
+function aboutFixture() {
+  document.body.innerHTML = '<button id="about-origin">Open About</button><div id="rows"><div class="cell-editable" contenteditable="true" tabindex="0"></div></div>' +
+    '<div id="about-modal" hidden><span id="about-version"></span><div id="about-body"></div><a id="about-link"></a><button data-about-close>Close</button></div>';
+  const mounted = mountUpdate({
+    desktop: () => false,
+    preferences: { desktopNoticeDismissed: () => false, dismissDesktopNotice: () => {} },
+    externalLinks: { available: () => true, open: () => {} },
+    updates: {
+      status: () => Promise.resolve(null), onStatus: () => {}, stopStatus: () => {},
+      download: () => Promise.resolve(null), install: () => Promise.resolve(null)
+    }
+  });
+  const origin = document.getElementById("about-origin") as HTMLButtonElement;
+  const modal = document.getElementById("about-modal") as HTMLElement;
+  const close = modal.querySelector<HTMLButtonElement>("[data-about-close]") as HTMLButtonElement;
+  const editor = document.querySelector<HTMLElement>("#rows .cell-editable") as HTMLElement;
+  origin.focus();
+  return { mounted, origin, modal, close, editor };
+}
+
+for (const via of ["button", "backdrop", "Escape"] as const) {
+  test(`closing About by ${via} returns focus to its origin without scrolling`, (t) => {
+    const { mounted, origin, modal, close } = aboutFixture();
+    t.after(mounted.dispose);
+    const focus = t.mock.method(origin, "focus");
+    mounted.showAbout();
+    assert.equal(document.activeElement, close);
+    if (via === "Escape") close.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    else if (via === "backdrop") modal.click();
+    else close.click();
+    assert.equal(modal.hidden, true);
+    assert.equal(document.activeElement, origin);
+    assert.deepEqual(focus.mock.calls[0]?.arguments, [{ preventScroll: true }]);
+  });
+}
+
+test("About lets Escape from its hidden root reach the next keyboard owner", (t) => {
+  const { mounted, origin, close } = aboutFixture();
+  t.after(mounted.dispose);
+  mounted.showAbout();
+  close.click();
+  let heard = 0;
+  const listener = () => { heard++; };
+  window.addEventListener("keydown", listener);
+  t.after(() => window.removeEventListener("keydown", listener));
+  close.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  assert.equal(heard, 1);
+  assert.equal(document.activeElement, origin);
+});
+
+for (const unavailable of ["removed", "hidden", "disabled"] as const) {
+  test(`closing About returns to the editor when its origin is ${unavailable}`, (t) => {
+    const { mounted, origin, close, editor } = aboutFixture();
+    t.after(mounted.dispose);
+    mounted.showAbout();
+    if (unavailable === "removed") origin.remove();
+    else if (unavailable === "hidden") origin.style.display = "none";
+    else origin.disabled = true;
+    close.click();
+    assert.equal(document.activeElement, editor);
+  });
+}
+
+test("refreshing an open About dialog preserves its original focus destination", (t) => {
+  const { mounted, origin, close } = aboutFixture();
+  t.after(mounted.dispose);
+  mounted.showAbout();
+  mounted.showAbout();
+  close.click();
+  assert.equal(document.activeElement, origin);
+});

@@ -1,6 +1,6 @@
 import type { Notice, NoticeKind, NoticePort } from "../../application/effects/ports.ts";
 
-type Toast = HTMLElement & { dismiss: () => void };
+type Toast = HTMLElement & { dismiss: () => void; refresh: () => void };
 
 const QUICK_MS = 2600;
 const ACTION_MS = 6000;
@@ -71,16 +71,29 @@ export function createToasts(window: Window): NoticePort {
     close.addEventListener("click", dismiss);
     el.appendChild(close);
     el.dismiss = dismiss;
+    el.refresh = () => {
+      if (leaving) return;
+      const focused = el.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+      if (host.lastElementChild !== el) {
+        host.appendChild(el);
+        focused?.focus({ preventScroll: true });
+      }
+      window.clearTimeout(timer);
+      if (!sticky) timer = window.setTimeout(dismiss, action ? ACTION_MS : QUICK_MS);
+    };
     host.appendChild(el);
     document.getElementById(kind === "error" ? "toast-alert" : "toast-status")?.appendChild(announcement);
-    if (!sticky) timer = window.setTimeout(dismiss, action ? ACTION_MS : QUICK_MS);
+    el.refresh();
     return el;
   }
 
   function show(message: string, kind?: NoticeKind, sticky?: boolean): Notice {
     const key = JSON.stringify([message, kind || "", !!sticky]);
     const existing = repeated.get(key);
-    if (existing?.isConnected && !existing.classList.contains("is-leaving")) return existing;
+    if (existing?.isConnected && !existing.classList.contains("is-leaving")) {
+      existing.refresh();
+      return existing;
+    }
     const el = add(message, kind, sticky, undefined, () => {
       if (repeated.get(key) === el) repeated.delete(key);
     });

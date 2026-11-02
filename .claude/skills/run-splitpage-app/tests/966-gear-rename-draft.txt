@@ -1,0 +1,24 @@
+open
+jsclick #btn-gear
+eval document.getElementById('gear-quickadd-input').value='Camera'
+jsclick #gear-quickadd-save
+wait document.querySelector('#gear-list [data-action="tag-expand"]') !== null
+jsclick #gear-list [data-action="tag-expand"]
+jsclick #gear-list [data-action="tag-rename"]
+eval (function(){var i=document.querySelector('#gear-list .tag-rename-input');i.value='Camera draft';i.focus();i.setSelectionRange(2,8,'backward');window.oldGearCard=i.closest('.tag-entity');return true;})()
+caret #rows .row .audio-cell .cell-editable
+press x
+wait !window.oldGearCard.isConnected
+expect document.querySelector('#gear-list .tag-rename-input').value == Camera draft
+expect document.activeElement.classList.contains('cell-editable')
+expect document.querySelector('#gear-list .tag-rename-input').selectionStart === 2 && document.querySelector('#gear-list .tag-rename-input').selectionEnd === 8
+press y
+eval (function(){var i=document.querySelector('#gear-list .tag-rename-input');i.focus();i.setSelectionRange(3,7,'backward');window.oldGearCard=i.closest('.tag-entity');return true;})()
+wait !window.oldGearCard.isConnected
+expect document.querySelector('#gear-list .tag-rename-input').value == Camera draft
+expect document.activeElement === document.querySelector('#gear-list .tag-rename-input')
+expect document.activeElement.selectionStart === 3 && document.activeElement.selectionEnd === 7 && document.activeElement.selectionDirection === 'backward'
+jsclick #gear-list [data-action="tag-rename-save"]
+wait document.querySelector('#gear-list .tag-entity-name').textContent === 'Camera draft'
+expect document.querySelector('#gear-list .tag-rename-input') === null
+expect document.querySelector('#rows .audio-cell .cell-editable').textContent.includes('xy')

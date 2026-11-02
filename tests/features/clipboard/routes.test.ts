@@ -39,6 +39,7 @@ interface Held {
 function harness(p: ReturnType<typeof page>) {
   const state = { scenes: false, copied: true, owner: 0, owns: true, found: null as Element | null };
   const calls: string[] = [];
+  const origins: boolean[] = [];
   const held: Held[] = [];
   const mount = (): ClipboardRoutes => mountClipboardRoutes<Owner, string, Extra>({
     window: p.win,
@@ -49,7 +50,7 @@ function harness(p: ReturnType<typeof page>) {
       afterCut: (cell) => { calls.push("afterCut:" + cell.id); },
       pasteScenes: (_data, cell) => { calls.push("scenes:" + cell.id); return state.scenes; },
       pasteDraft: (cell, html, text) => { calls.push("draft:" + cell.id + ":" + html + ":" + text); },
-      hasMedia: (files) => !!files && Array.prototype.some.call(files, (f: File) => /^image\//.test(f.type)),
+      hasMedia: (files, html) => html.includes("data-blob") || (!!files && Array.prototype.some.call(files, (f: File) => /^image\//.test(f.type))),
       readMedia: () => new Promise<Extra>((resolve) => { held.push({ resolve }); }),
       capture: () => { calls.push("capture"); return { n: ++state.owner }; },
       stillOwns: (owner) => { calls.push("owns:" + owner.n); return state.owns; },
@@ -57,10 +58,10 @@ function harness(p: ReturnType<typeof page>) {
       placeOf: (cell) => { calls.push("place:" + cell.id); return "place-" + cell.id; },
       restorePlace: (cell, place) => { calls.push("restore:" + cell.id + ":" + place); },
       findCell: (rowId, field) => { calls.push("find:" + rowId + "." + field); return state.found; },
-      insertNow: (cell, html, text, extra) => { calls.push("insert:" + cell.id + ":" + html + ":" + text + ":" + (extra ? extra.media : "none")); }
+      insertNow: (cell, html, text, extra, fromPaste) => { origins.push(fromPaste); calls.push("insert:" + cell.id + ":" + html + ":" + text + ":" + (extra ? extra.media : "none")); }
     }
   });
-  return { state, calls, held, mount };
+  return { state, calls, origins, held, mount };
 }
 
 function clip(p: ReturnType<typeof page>, type: string, target: EventTarget, data: { html?: string; text?: string; files?: File[] } | null): Event {
@@ -80,6 +81,22 @@ function release(held: Held[], at: number, extra: Extra): void {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
+
+test("only clipboard events mark insertions as pastes, including after asynchronous media reads", async () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  clip(p, "paste", p.byId("rows-script"), { html: "<b>x</b>", text: "x" });
+  routes.insert(p.byId("writer-script"), "<b>x</b>", "x", null);
+  const files = [new p.win.File(["x"], "a.png", { type: "image/png" })];
+  clip(p, "paste", p.byId("rows-script"), { html: "<b>x</b>", files });
+  routes.insert(p.byId("writer-script"), "<b>x</b>", "x", files);
+  release(h.held, 0, { media: "paste" });
+  release(h.held, 1, { media: "drop" });
+  await settle();
+  assert.deepEqual(h.origins, [true, false, true, false]);
+  routes.dispose();
+});
 
 test("copy and cut in a script cell call the clipboard once, and a real cut refreshes the cell that holds the caret", () => {
   const p = page();
@@ -142,6 +159,26 @@ test("a media paste captures the owner and the place before preparing, then inse
   release(h.held, 0, { media: "pic" });
   await settle();
   assert.deepEqual(h.calls.slice(3), ["owns:1", "restore:rows-script:place-rows-script", "insert:rows-script:<p>t</p>:t:pic"]);
+  routes.dispose();
+});
+
+test("HTML-only gallery pictures wait for byte recovery and retain the paste's owner and place (#1098)", async () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  const html = '<img data-blob="' + "a".repeat(64) + '">';
+  routes.insert(p.byId("rows-script"), html, "", null);
+  assert.deepEqual(h.calls, ["capture", "place:rows-script"]);
+  assert.equal(h.held.length, 1);
+  release(h.held, 0, { media: "picture" });
+  await settle();
+  assert.deepEqual(h.calls.slice(2), ["owns:1", "restore:rows-script:place-rows-script", "insert:rows-script:" + html + "::picture"]);
+  assert.deepEqual(h.origins, [false]);
+  clip(p, "paste", p.byId("rows-script"), { html });
+  assert.equal(h.held.length, 2);
+  release(h.held, 1, { media: "picture-paste" });
+  await settle();
+  assert.deepEqual(h.origins, [false, true]);
   routes.dispose();
 });
 

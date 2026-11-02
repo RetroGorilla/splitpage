@@ -22,14 +22,18 @@ export function makeDesktopBlobBackend(bridge: Partial<Pick<DesktopPort, "blobPu
     name: "desktop",
     kind: "desktop",
     persistent: true,
-    get: function (sha: string) {
+    get: function (sha: string, options?: { strict?: boolean }) {
       return Promise.resolve()
         .then(function () { return (b.blobGet as DesktopPort["blobGet"])(sha); })
         .then(function (got) {
-          if (!got || !got.bytes || typeof got.mime !== "string") return null;
+          if (got === null) return null;
+          if (!got || !got.bytes || typeof got.mime !== "string") {
+            if (options?.strict) throw new Error("Could not read image bytes for export.");
+            return null;
+          }
           const bytes = got.bytes instanceof Uint8Array ? got.bytes : new Uint8Array(got.bytes);
           return { bytes: bytes, mime: got.mime };
-        }, function () { return null; });
+        }, function (error: unknown) { if (options?.strict) throw error; return null; });
     },
     put: function (sha: string, bytes: Uint8Array) {
       return Promise.resolve()
