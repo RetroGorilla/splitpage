@@ -65,6 +65,24 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **Crash recovery starts again** with your next change after it paused.
 - Settings keeps keyboard focus after **Show the desktop-app notice
   again**, and the rundown's hover lens eases in and out.
+- **Find in Present.** Press <kbd>Ctrl</kbd>+<kbd>F</kbd> in Present to search
+  the script. Matches are highlighted, and <kbd>Enter</kbd> and
+  <kbd>Shift</kbd>+<kbd>Enter</kbd> jump between them while playback stays
+  paused.
+- **Tagging before existing words.** Type a keyword such as `VFX:` at the front
+  of a line and press <kbd>Tab</kbd> to tag the rest of the line. **Tag** refuses
+  a selection that includes an existing tag and tells you why.
+- **Cleaner pasted links.** Pasted text links lose known tracking parameters.
+  Signed links are left alone.
+- **Damaged history.** History still lists intact snapshots and tells you how
+  many damaged ones it couldn't list. If an app-data export can't read some
+  history or images, it cancels and downloads nothing. When the failure isn't a
+  temporary one and readable history remains, **Export the rest anyway** exports
+  that and says how much was left out.
+- Toasts have a keyboard-accessible **Dismiss** button, and a repeated warning
+  comes back to the front. Closing **About** returns keyboard focus to where you
+  were. Undo after a crew merge and draft recovery of older files are also more
+  reliable.
 
 ## What's new in the 4.0 beta
 
