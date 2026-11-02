@@ -214,6 +214,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     schedule().dropPending();
     const sent = draftRefs.length
       ? persist(draftRefs).then(function (failed: string[]) {
+          if (!ports) return null;
           if (failed.length) {
             inlineFailed = failed;
             payload.stateJson = inlineStateJson(payload.stateJson, failed);
@@ -225,6 +226,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       : sendDraftPayload(payload, baseTextFor, false);
     draftInFlight = sent.then(function (r) {
       draftInFlight = null;
+      if (!ports) return null;
       if (r && r.ok) {
         draftStats.writes++;
         draftStats.lastCode = null;
@@ -250,6 +252,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
       return r;
     }, function (err) {
       draftInFlight = null;
+      if (!ports) return null;
       reportError(err);
       noteDraftWriteRefused("offline");
       return { ok: false, code: "offline" };
@@ -257,10 +260,12 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     return draftInFlight;
   }
 
-  function sendDraftPayload(payload: DraftPayload, baseTextFor: () => string, retriedWithBase: boolean): ReturnType<typeof draftBackendWrite> {
+  function sendDraftPayload(payload: DraftPayload, baseTextFor: () => string, retriedWithBase: boolean): Promise<Awaited<ReturnType<typeof draftBackendWrite>> | null> {
     return Promise.resolve().then(function () {
+      if (!ports) return null;
       return draftBackendWrite(payload);
     }).then(function (r) {
+      if (!ports) return null;
       if (r && r.ok === false && r.code === "NEED_BASE" && !retriedWithBase) {
         const again: DraftPayload = Object.assign({}, payload);
         again.seq = ++draftSeq;
@@ -315,10 +320,12 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     schedule().cancel();
     schedule().cancelRetry();
     return Promise.resolve(draftInFlight).then(function () {
+      if (!ports) return null;
       return captureAndSendDraft(keepClean);
     }).then(function (r) {
       return r || { ok: true };
     }, function (err) {
+      if (!ports) return { ok: true };
       reportError(err);
       return { ok: false, code: "EIO" };
     });
