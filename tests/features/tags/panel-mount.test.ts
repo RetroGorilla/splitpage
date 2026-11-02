@@ -114,7 +114,9 @@ test("gear rename discards its draft when the same document and registry ID ente
   win.document.body.innerHTML = '<div id="gear-panel"><div id="gear-list"></div></div>';
   const mounted = startTagPanels(h.ports);
   try {
-    h.ports.view.setTagRenaming(h.ports.production.entries(h.doc)[0]!.key);
+    const entry = h.ports.production.entries(h.doc)[0];
+    assert.ok(entry);
+    h.ports.view.setTagRenaming(entry.key);
     mounted.renderProduction();
     const input = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
     assert.ok(input);
