@@ -13,6 +13,10 @@ eval window.untouched = 'https://example.com/utm_path/%7e?next=https%3A%2F%2Fsho
 expect true
 wait document.querySelectorAll('#rows .audio-cell a').length === 2
 expect document.querySelectorAll('#rows .audio-cell a')[1].getAttribute('href') === untouched
+caret #rows .audio-cell .cell-editable
+eval (function () { var cell = document.activeElement, box = cell.getBoundingClientRect(), data = new DataTransfer(); data.setData('text/html', markup(tracked)); data.setData('text/plain', 'Read this'); var event = new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true, clientX: box.left + 10, clientY: box.top + 10 }); cell.dispatchEvent(event); return event.defaultPrevented; })()
+expect true
+expect Array.from(document.querySelectorAll('#rows .audio-cell a')).some(function (a) { return a.getAttribute('href') === tracked; })
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
 caret #writer-doc .cell-editable

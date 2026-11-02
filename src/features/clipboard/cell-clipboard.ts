@@ -3,7 +3,7 @@ import type { Attachment, AttachedCount, BrollScope, ClipboardPorts, PasteReques
 import type { CellInput, NormalizeOptions, Run } from "../../core/text/runs.ts";
 import type { VideoFiles, VideoPosterFrame } from "../../application/media/video-files.ts";
 
-type ClipboardOptions = NormalizeOptions & { keepComments?: boolean | undefined; nonce?: string | null | undefined; skipImages?: boolean | undefined };
+type ClipboardOptions = NormalizeOptions & { keepComments?: boolean | undefined; nonce?: string | null | undefined; skipImages?: boolean | undefined; cleanLinks?: boolean | undefined };
 export interface ClipboardMediaInput {
   attach?: Attachment[] | undefined;
   skipImages?: boolean | undefined;
@@ -172,7 +172,8 @@ export function cellFromClipboard(html: unknown, text: unknown, opts?: Clipboard
     lost = prep.lost;
     attach = prep.attach;
     const textPort = (ports as CellClipboardPorts).text;
-    let cell = textPort.cleanPastedCell(textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never }));
+    let cell = textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
+    if (opts.cleanLinks !== false) cell = textPort.cleanPastedCell(cell);
     if (prep.endsInBlock && projection(cell).slice(-1) === "\n") cell = sliceCell(cell, 0, cellLength(cell) - 1);
     if (cellLength(cell)) {
       return { cell: cell, text: null, media: media, lost: lost, attach: attach, fromCut: fromCut, comments: fromCut ? commentIds(cell) : [] };
@@ -294,11 +295,11 @@ function pasteRequest(rowId: PasteRequest["rowId"], field: PasteRequest["field"]
   return { rowId: rowId, field: field, range: range, pasted: pasted, fromCut: got.fromCut, comments: got.comments, attach: attach };
 }
 
-export function pasteIntoCell(cellEl: Element, html: unknown, text: unknown, extra?: ClipboardMediaInput | null) {
-  return (ports as CellClipboardPorts).paintGuard.whileShown(function () { return pasteShown(cellEl, html, text, extra); });
+export function pasteIntoCell(cellEl: Element, html: unknown, text: unknown, extra?: ClipboardMediaInput | null, cleanLinks = true) {
+  return (ports as CellClipboardPorts).paintGuard.whileShown(function () { return pasteShown(cellEl, html, text, extra, cleanLinks); });
 }
 
-function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: ClipboardMediaInput | null) {
+function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: ClipboardMediaInput | null, cleanLinks = true) {
   extra = extra || {};
   let target: PasteTarget | null = null;
   const hasComment = function (id: string) {
@@ -306,7 +307,7 @@ function pasteShown(cellEl: Element, html: unknown, text: unknown, extra?: Clipb
     if (!target) target = { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"), rest: outsideSelection(cellEl) };
     return !anchoredInText(id, target);
   };
-  const got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: hasComment, skipImages: !!extra.skipImages });
+  const got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: hasComment, skipImages: !!extra.skipImages, cleanLinks: cleanLinks });
   const attach = (extra.attach || []).slice();
   got.attach.forEach(function (item) { addAttachment(attach, item); });
   const rowId = cellEl.getAttribute("data-id");
