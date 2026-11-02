@@ -204,7 +204,7 @@ test("a broken shot is not renamed to a line's name when another shot's text alr
       { id: "bs2", name: x(98) + "\uD83D".repeat(99), notes: "broken", status: "shot", origin: "list" }
     ]
   });
-  assert.deepEqual(list(out, "brollShots").map((b) => [b.id, (b.name as string).length, b.notes]), [["bs1", 200, "spaced"], ["bs2", 98, "broken"], ["bs-fake-1", 197, ""]]);
+  assert.deepEqual(list(out, "brollShots").map((b) => [b.id, (b.name as string).length, b.notes]), [["bs1", 200, "spaced"], ["bs2", 98, "broken"], ["bs-7fb6990caeeadfbc78730a29", 197, ""]]);
 });
 
 test("a B-roll line that a shot's heal already matches renames no other broken shot (#344)", () => {

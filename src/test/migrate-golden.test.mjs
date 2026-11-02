@@ -283,10 +283,14 @@ async function runScenario(sc) {
   setBackend(backend);
   const before = sc.images.filter((img) => has(img.sha256)).map((img) => img.sha256);
   const started = Date.now();
-  const masker = createIdMasker(() => started, () => Date.now());
   const raw = sc.input();
   const input = JSON.stringify(raw);
   const out = sc.migrate(raw);
+  const known = idsTheInputCarries(input);
+  const repeated = sc.migrate(sc.input());
+  const stable = new Set(idsInState(repeated).map(a => a.value));
+  const masker = createIdMasker(() => started, () => Date.now(), (value, prefix) =>
+    !known.has(value) && stable.has(value) && new RegExp("^" + prefix + "-(?:[0-9a-f]{24}|orphan-[0-9]+)(?:-[0-9]+)*$").test(value));
   await settle();
   const persisted = backend.log.puts.slice();
   const missing = backend.log.missing.slice();
@@ -305,6 +309,7 @@ async function runScenario(sc) {
     before,
     missing,
     minted: masker.minted,
+    stable,
     once,
     again: JSON.stringify(again),
     putsAfterAgain: backend.log.puts.slice(persisted.length)
@@ -394,15 +399,16 @@ function idsInState(s) {
 
 const MEDIA_COMMENT_ID = /^cm[0-9a-f]{24}$/;
 
-test("every id the migration adds is minted in this run's format and masked; no id the input carried is masked", () => {
+test("every added id is independently stable or minted in this run and masked; no input id is masked", () => {
   let added = 0;
   for (const [name, r] of results) {
     const known = idsTheInputCarries(r.input);
     const ids = idsInState(JSON.parse(r.once)).filter((x) => !known.has(x.value) && !(x.prefix === "c" && MEDIA_COMMENT_ID.test(x.value)));
     const golden = goldenText(r.golden.output);
     for (const a of ids) {
-      assert.ok(mintedId(a.value, a.prefix, r.started, r.ended),
-        `${name}: ${a.value} is not ${a.prefix} plus seven base-36 digits at most and a base-36 time stamp from this run`);
+      assert.ok(mintedId(a.value, a.prefix, r.started, r.ended) ||
+        (r.stable.has(a.value) && new RegExp("^" + a.prefix + "-(?:[0-9a-f]{24}|orphan-[0-9]+)(?:-[0-9]+)*$").test(a.value)),
+      `${name}: ${a.value} is neither independently stable nor minted in this run`);
       assert.ok(!golden.includes(a.value), `${name}: ${a.value} is left unmasked`);
     }
     for (const m of r.minted) assert.ok(ids.some((a) => a.value === m.value), `${name}: ${m.value} was masked, yet the input carried it`);
