@@ -8,7 +8,7 @@ import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createPdfPrinter, PDF_OPTIONS, PRINT_CSP, PRINT_ORIGIN, PRINT_PARTITION } = require(path.join(here, "..", "print-pdf.js"));
+const { createPdfPrinter, PDF_OPTIONS, PRINT_CSP, PRINT_ORIGIN, PRINT_PARTITION } = require(path.join(here, "..", "print-pdf.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
