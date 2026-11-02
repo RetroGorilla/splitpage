@@ -591,7 +591,7 @@ tabs**.
   machine (no Electron binary for x64 here) — first run is CI's
   desktop-smoke job.
 - Duplicate document-id claims reassign in memory only (§4, #36).
-  `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.js`, #76): server
+  `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
   `atomicWrite` measurably moves NTFS birthtime on save — so the loser is
   decided by claim order instead. #76 deleted the `DUP_TRUST_BIRTHTIME =
@@ -1098,7 +1098,7 @@ bytes, #82 — nothing deletes them yet, D4).
 localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
 absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 `nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
-(`12`/`24`, absent = system; `formatClock()` in `shared/clock.js` is the one
+(`12`/`24`, absent = system; `formatClock()` in `shared/clock.ts` is the one
 clock formatter, #180), `splitpage-person-color` (#194),
 `splitpage-default-wpm` (the reading speed a NEW script starts at),
 `splitpage-video-thumbs` (#141: `"0"` = don't fetch a pasted YouTube or

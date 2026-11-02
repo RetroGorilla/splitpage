@@ -1,4 +1,4 @@
-import { formatClock, formatDateClock } from "../../../shared/clock.js";
+import { formatClock, formatDateClock } from "../../../shared/clock.ts";
 
 export function formatTimestamp(iso: unknown, clock?: string) {
   try {

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { createDocClaims } = require(path.join(here, "..", "doc-claims.ts"));
-const policy = require(path.join(here, "..", "..", "shared", "doc-id-policy.js"));
+const policy = require(path.join(here, "..", "..", "shared", "doc-id-policy.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });

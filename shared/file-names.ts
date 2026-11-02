@@ -1,8 +1,8 @@
 "use strict";
 
-function fileKindFromName(name) {
-  var m = /\.([a-z0-9]+)$/i.exec(name || "");
-  var ext = m ? m[1].toLowerCase() : "";
+function fileKindFromName(name?: string | null) {
+  const m = /\.([a-z0-9]+)$/i.exec(name || "");
+  const ext = m ? (m[1] as string).toLowerCase() : "";
   if (ext === "docx") return "docx";
   if (ext === "csv") return "csv";
   if (ext === "md" || ext === "markdown") return "md";
@@ -12,8 +12,8 @@ function fileKindFromName(name) {
   return null;
 }
 
-function mimeForFilename(filename) {
-  var ext = (/\.([a-z0-9]+)$/i.exec(filename || "") || ["", ""])[1].toLowerCase();
+function mimeForFilename(filename?: string | null) {
+  const ext = ((/\.([a-z0-9]+)$/i.exec(filename || "") || ["", ""])[1] as string).toLowerCase();
   if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (ext === "csv") return "text/csv";
   if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

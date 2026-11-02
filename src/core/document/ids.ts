@@ -1,4 +1,4 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { escapeHtml } from "./text-policy.ts";
 
 interface DocIdHolder {
