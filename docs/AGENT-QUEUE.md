@@ -815,7 +815,7 @@ Task: roadmap B1, step 1. desktop/main.js is over 2,500 lines. Its IPC setup is 
 
 FILES TO READ
 - docs/architecture/desktop-build.md: why each module is listed in `files`, and the rule that every `./module` main.js requires must be added to the list (desktop/test/ipc-table.test.mjs fails if one is missing).
-- desktop/main.js: the IPC block above, and what each handler uses from main.js (tabs, windows, drafts, recents, state, dialogs). The earlier extractions are the pattern: desktop/recents.js, tab-registry.js, restore-notice.js and unsaved-dialog.js each take what they need as arguments and return functions; main.js keeps the state.
+- desktop/main.js: the IPC block above, and what each handler uses from main.js (tabs, windows, drafts, recents, state, dialogs). The earlier extractions are the pattern: desktop/recents.js, tab-registry.ts, restore-notice.ts and unsaved-dialog.ts each take what they need as arguments and return functions; main.js keeps the state.
 - desktop/ipc-channels.js (the channel table), desktop/preload.js, desktop/tabstrip-preload.js, desktop/test/ipc-table.test.mjs (it reads main.js as text and checks that nothing registers through ipcMain directly, that every registered channel is in the table with its direction, that every inbound row is registered exactly once).
 - desktop/electron-builder.yml (the `files` list) and desktop/package.json (the `test` script, which lists each desktop test), desktop/verify-dist.mjs.
 - docs/HANDOFF.md and docs/architecture/invariants.md for anything the handlers touch (saving, closing).
@@ -846,7 +846,7 @@ Task: roadmap B1, step 2. Move process lifecycle (start, close, quit) out of des
 FILES TO READ
 - AGENTS.md, docs/HANDOFF.md (desktop shell), docs/architecture/invariants.md (especially drafts and close/quit), docs/architecture/desktop-build.md.
 - desktop/main.js: createTabWindow's close and session-end handlers, requestCloseTab, askBeforeClosing, settleDraftsForClose, restoreSessionAtLaunch, the app startup and quit handlers, and the flags they share. Read the IPC module produced by AQ-35 for the calls it makes into lifecycle code.
-- desktop/close-keep.ts, quit-watchdog.js, unsaved-dialog.js, tab-registry.js, desktop-state.js, drafts.js; desktop/test/close-keep.test.mjs, quit-watchdog.test.mjs, desktop-state.test.mjs, ipc-table.test.mjs and smoke.mjs.
+- desktop/close-keep.ts, quit-watchdog.ts, unsaved-dialog.ts, tab-registry.ts, desktop-state.js, drafts.js; desktop/test/close-keep.test.mjs, quit-watchdog.test.mjs, desktop-state.test.mjs, ipc-table.test.mjs and smoke.mjs.
 - desktop/electron-builder.yml, desktop/package.json, desktop/verify-dist.mjs.
 
 DO

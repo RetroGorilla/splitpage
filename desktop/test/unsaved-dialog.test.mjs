@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { unsavedTitles, unsavedDialogFor, decisionFor } = require(path.join(here, "..", "unsaved-dialog.js"));
+const { unsavedTitles, unsavedDialogFor, decisionFor } = require(path.join(here, "..", "unsaved-dialog.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
