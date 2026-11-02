@@ -1,7 +1,7 @@
 # Follow My Voice on desktop (issue #8): the page's half.
 #
 # On Windows the desktop main process runs Windows' own recogniser and sends
-# this page what it hears (desktop/main.js section 9d). The page wraps that
+# this page what it hears (desktop/main.ts section 9d). The page wraps that
 # in a Web-Speech-shaped recognizer (createDesktopRecognition, 20f-desktop.js)
 # so the teleprompter's following code runs unchanged on top of it. Here that
 # wrapper runs under the in-memory fake desktop backend with its voice calls

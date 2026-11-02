@@ -178,7 +178,7 @@
       "# the suite name so interleaving is never ambiguous.",
       "# up; results are printed in the order lanes FINISH, each line prefixed with"
     ],
-    "desktop/main.js": [
+    "desktop/main.ts": [
       "/* eslint-disable-next-line no-control-regex -- stripping control characters is the function's job; the class is written out above. */"
     ],
     "desktop/voice-helper.ts": [

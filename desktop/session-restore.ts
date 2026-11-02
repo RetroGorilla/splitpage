@@ -2,7 +2,8 @@
 
 import type * as NodePath from "node:path";
 import type * as NodeFs from "node:fs";
-import type { DesktopMainTab, DesktopSessionRestoreDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopSessionRestoreDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab } from "./main-types.d.ts";
 import type { createDraftStore } from "./drafts.ts";
 import type { pathKey as FilePathKey } from "./file-service.ts";
 

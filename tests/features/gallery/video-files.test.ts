@@ -13,7 +13,7 @@ function setup(overrides: Partial<VideoFilePorts> = {}) {
   const doc = migrateRows({ rows: [{ id: "r1", imageLinks: [{ href: "https://example.com/clip" }, { name: "local.mp4", size: 5 }] }] }, fakeMigration().ports);
   const document = fakeDocument(doc);
   const notices = fakeNotices();
-  const external: string[] = [];
+  const external: unknown[] = [];
   const ports: VideoFilePorts = {
     document: document.document,
     notices: notices.notices,
@@ -47,7 +47,7 @@ test("gallery links resolve the current row, slot and key, allow only HTTP(S), a
 });
 
 test("desktop external links use the supplied capability and local files keep the original warning", () => {
-  const external: string[] = [];
+  const external: unknown[] = [];
   const h = setup({ externalLinks: { available: () => true, open: (href) => { external.push(href); } } });
   h.owner.openGallery("r1", 0, videoLinkKey({ href: "https://example.com/clip" }));
   assert.deepEqual(external, ["https://example.com/clip"]);

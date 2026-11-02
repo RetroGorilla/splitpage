@@ -21,7 +21,7 @@ export interface UpdateStatus {
     readonly total?: number;
     readonly error?: string | null;
   } | null;
-  readonly releaseUrl?: string | null;
+  readonly releaseUrl?: unknown;
   readonly desktopAppUrl?: string | null;
   readonly desktop?: boolean;
 }

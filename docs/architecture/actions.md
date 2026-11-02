@@ -326,7 +326,7 @@ passes against 47c0309 too.
 ## The desktop app's native menu
 
 `runDesktopMenuCommand` (`features/desktop/desktop.ts`) receives a command name from
-`desktop/main.js` and hands it to the runner the bootstrap supplied,
+`desktop/main.ts` and hands it to the runner the bootstrap supplied,
 `nativeMenuRunner()` in `src/bootstrap/native-menu.ts`, which runs the action of
 that id with the source `"native-menu"`, reading no rendered state; a command
 the runner does not know (an export format) clicks its File menu item as
