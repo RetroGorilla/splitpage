@@ -1,7 +1,7 @@
 "use strict";
 
-var policy = require("./history-policy.js");
-var DOC_ID_RE = require("./doc-id-policy.js").DOC_ID_RE;
+import * as policy from "./history-policy.js";
+import { DOC_ID_RE } from "./doc-id-policy.js";
 
 var HISTORY_OLDER_KEY = policy.HISTORY_OLDER_KEY;
 var HISTORY_OLDER_TTL_MS = policy.HISTORY_OLDER_TTL_MS;
@@ -715,7 +715,7 @@ function createMemoryHistoryBackend(o) {
   }) : {});
 }
 
-module.exports = {
+export {
   createHistoryStore,
   createMemoryHistoryBackend
 };
