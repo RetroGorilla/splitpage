@@ -28,6 +28,20 @@ eq("applyEdit replaces one occurrence", applyEdit("a1b", "1", "2").text, "a2b");
 eq("applyEdit refuses a missing find", applyEdit("ab", "1", "2").error, "find string not present");
 eq("applyEdit refuses an ambiguous find", applyEdit("a1b1", "1", "2").error, "find string occurs more than once");
 
+const renamedTargets = {
+  "application-pure": ["scene-length-changes-derive-dropped", "scene-status-changes-derive-dropped", "scene-status-grace-default"],
+  "formats-text": ["csv-broll-lists-skip-unassigned", "csv-total-needs-scenes", "csv-total-text", "proj-scene-no-scenes",
+    "proj-breakdown-scene-number", "proj-breakdown-orphan-scenes", "proj-table-first-index", "proj-table-first-fallback",
+    "proj-table-scenes-separator", "proj-print-groups-input", "proj-breakdown-mentions"]
+};
+for (const [manifest, labels] of Object.entries(renamedTargets)) {
+  const mutants = loadMutants(readFileSync(join("tools", "mutants", `${manifest}.json`), "utf8"));
+  for (const label of labels) {
+    const mutant = mutants.find((item) => item.label === label);
+    check(`${label} still applies to its source`, !!mutant && !applyEdit(readFileSync(mutant.file, "utf8"), mutant.find, mutant.replace).error);
+  }
+}
+
 eq("loadMutants takes a bare array", loadMutants(JSON.stringify([good]))[0].tests.length, 0);
 eq("loadMutants takes shared tests", loadMutants(JSON.stringify({ tests: ["t"], mutants: [good] }))[0].tests[0], "t");
 eq("a mutant's own tests win", loadMutants(JSON.stringify({ tests: ["t"], mutants: [{ ...good, tests: ["u"] }] }))[0].tests[0], "u");

@@ -438,7 +438,7 @@ export function report(results, env, when) {
   const exports = results.filter((r) => r.label.endsWith("export"));
   const browsers = results.filter((r) => r.label === "environment");
   const images = results.filter((r) => r.trials !== undefined);
-  const beats = (fixture) => browsers.find((b) => b.fixture === fixture)?.beats;
+  const beats = (fixture) => browsers.find((b) => b.fixture === fixture)?.scenes;
   const fixtureLines = [
     beats("short") !== undefined ? `short is the seed script (${beats("short")} scenes)` : null,
     beats("long") !== undefined ? `long is the long demo (${beats("long")} scenes)` : null,

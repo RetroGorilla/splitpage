@@ -100,8 +100,8 @@ test("Find pauses voice and playback, cues the matched scene, and resumes voice 
     runtime.setSearching(true);
     range.selectNodeContents(rendered[219] as HTMLElement);
     runtime.jumpToFind(range);
-    const hooks = win as unknown as { __prompterTest: { checkBeatBoundaryNow: () => boolean } };
-    assert.equal(hooks.__prompterTest.checkBeatBoundaryNow(), false);
+    const hooks = win as unknown as { __prompterTest: { checkSceneBoundaryNow: () => boolean } };
+    assert.equal(hooks.__prompterTest.checkSceneBoundaryNow(), false);
     runtime.setSearching(false);
     runtime.setPrompterPlaying(true);
     assert.equal(h.state.playing, true);

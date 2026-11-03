@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import { crc32, inflateSync } from "node:zlib";
-import { IMAGES, BEATS, buildArgs, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
+import { IMAGES, BEATS, buildArgs, busyPercent, imageProblems, imageRows, parseArgs, parsePerf, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
 
 const { imageDims, sniffImageMime } = createRequire(import.meta.url)("../shared/blob-policy.ts");
 
@@ -92,6 +92,19 @@ eq("the report has the image table", text.includes("| images merge | 20 | 401, 4
 eq("the report names the load before and after", text.includes("7% of the CPU busy in the second before the run and 9% in the second after it"), true);
 eq("the report has no latency or export table for an images-only run", text.includes("## Input latency") || text.includes("## Export"), false);
 eq("busyPercent is the share not idle", busyPercent({ idle: 100, total: 200 }, { idle: 175, total: 300 }), 25);
+
+const environmentRecords = [["short", 6], ["long", 30]].flatMap(([fixture, count]) => {
+  const probe = suiteText(fixture).split("\n").find((line) => line.includes("label: 'environment'"));
+  const document = {
+    querySelector: () => null,
+    querySelectorAll: () => Array(count),
+    createElement: () => ({ getContext: () => ({ measureText: () => ({ width: 1 }) }) })
+  };
+  const output = vm.runInNewContext(probe.slice(5), { document, navigator: { userAgent: "test" }, innerWidth: 1400, innerHeight: 900, devicePixelRatio: 1 });
+  return parsePerf(output).map((record) => ({ ...record, fixture }));
+});
+const fixtureReport = report(environmentRecords, { platform: "p", cpu: "c", memoryGb: 1, node: "n" }, "2026-01-01");
+eq("the report names both fixture row counts emitted by the environment probe", fixtureReport.includes("- Fixtures: short is the seed script (6 scenes); long is the long demo (30 scenes)"), true);
 
 console.log("\nthe suite:\n");
 

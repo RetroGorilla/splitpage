@@ -35,7 +35,7 @@ type BeatEntry = { id: string; cell: Run[]; view: BeatView | null };
 type BeatLine = BeatEntry & { view: BeatView };
 type PrompterLaunch = { token?: string; hosted?: boolean };
 type PrompterTestHooks = {
-  checkBeatBoundaryNow: () => boolean;
+  checkSceneBoundaryNow: () => boolean;
   simulateVoiceWordCursor: (idx: number) => boolean;
   launchFromScript: (token: string) => Promise<boolean>;
   updateStatus: () => void;
@@ -1129,7 +1129,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
 
   let withdrawHook: (() => void) | null = null;
   exposeTestHook("__prompterTest", (): PrompterTestHooks => ({
-    checkBeatBoundaryNow: function () {
+    checkSceneBoundaryNow: function () {
       const scroller = document.getElementById("prompter-scroll") as HTMLElement;
       if (!state.promptBeatMode || state.promptBeatEndWordOffset == null) return false;
       if (!beatPastReadingLine(scroller.scrollTop, state.promptBeatEndWordOffset, state.promptBeatGuideOffset)) return false;
