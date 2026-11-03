@@ -9,11 +9,11 @@ import { COMPOSITION_ROOT } from "./load-manifests.ts";
 const OUTSIDE_BOOTSTRAP = ["../adapters/storage/02d-gallery.ts"];
 
 const MOUNT_ORDER = [
-  "mountScreenStateOwner", "mountPageEntry", "mountSceneStatusFeature", "mountHideShotFeature", "mountDocumentIdentityOwner", "mountBlobStore", "startGalleryStore",
+  "mountScreenStateOwner", "mountPageEntry", "mountBeatStatusFeature", "mountHideShotFeature", "mountDocumentIdentityOwner", "mountBlobStore", "startGalleryStore",
   "mountSessionMergeOwner", "mountHistoryOwner", "mountScriptPlaceFeature", "mountRowsRenderFeature", "mountDraftEditFeature",
   "mountGalleryOverlayFeature", "mountRundownFeature", "mountCopyPasteFeature", "mountReadTimeFeature", "mountScriptZoomFeature",
-  "mountTargetFeature", "mountGalleryVideoFeature", "mountGalleryFeature", "mountVideoFilesFeature", "mountScenesFeature",
-  "mountSceneMediaFeature", "mountProductionTagsFeature", "mountPlainTagsFeature", "mountTagPanelsFeature", "mountBrollFeature",
+  "mountTargetFeature", "mountGalleryVideoFeature", "mountGalleryFeature", "mountVideoFilesFeature", "mountBeatsFeature",
+  "mountBeatMediaFeature", "mountProductionTagsFeature", "mountPlainTagsFeature", "mountTagPanelsFeature", "mountBrollFeature",
   "mountBrollPanelStateFeature", "mountFindFeature", "mountCommentsLogicFeature", "mountImportDialogFeature", "mountSaveStatusFeature",
   "mountFileSavingFeature", "mountLocalFilesFeature", "mountMergeReviewFeature", "mountFileMenuDropdownFeature",
   "mountFileMenuExportFeature", "mountCommandMenuFeature", "mountWriterRuntimeFeature", "mountPrompterRuntimeFeature",

@@ -7,7 +7,7 @@ import type { NoticePort } from "../../application/effects/ports.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import { addSceneCommand, moveSceneCommand, removeSceneCommand, renameSceneCommand } from "../../application/commands/scenes.ts";
 import { moveBeatCommand } from "../../application/commands/rows.ts";
-import { sceneBeforeBeat, sceneForBeat, sceneGroups } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, sceneFirstBeatId, sceneForBeat, sceneGroups } from "../../core/document/scenes.ts";
 import { cssAttr } from "../common/dom.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import { closeRowMenus } from "./row-menu.ts";
@@ -15,7 +15,7 @@ import { closeRowMenus } from "./row-menu.ts";
 export interface SceneControlsPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly edits: Pick<DocumentEdits, "allowed" | "run">;
-  readonly sections: SceneView;
+  readonly scenes: SceneView;
   readonly focus: Pick<FocusMemory<Element>, "focusedRow">;
   readonly drag: Pick<RowDrag, "dragging" | "end">;
   readonly ids: Pick<IdSource, "id">;
@@ -98,7 +98,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     const id = divider?.getAttribute("data-section-id");
     const action = button.getAttribute("data-section-action");
     if (action === "fold" && id) {
-      ports.sections.toggle(id);
+      ports.scenes.toggle(id);
       header(id)?.querySelector<HTMLButtonElement>(".section-fold")?.focus();
       return;
     }
@@ -128,7 +128,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       header(id)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
     }
   });
-  function dropTarget(event: DragEvent): { id: string; after: boolean; firstSceneId: string; header: Element } | null {
+  function dropTarget(event: DragEvent): { id: string; after: boolean; firstBeatId: string; header: Element } | null {
     const target = event.target as Element | null, state = ports.document.current();
     if (!state || !Array.isArray(state.sections) || !state.sections.length || !target?.closest) return null;
     const divider = target.closest(".section-header"), row = target.closest(".row[data-id]");
@@ -137,7 +137,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     const shown = id && header(id);
     if (!group || !shown) return null;
     const bounds = (divider ?? row ?? shown).getBoundingClientRect();
-    return { id: group.scene.id, firstSceneId: group.scene.firstSceneId, after: event.clientY > bounds.top + bounds.height / 2, header: shown };
+    return { id: group.scene.id, firstBeatId: sceneFirstBeatId(group.scene), after: event.clientY > bounds.top + bounds.height / 2, header: shown };
   }
   life.listen(doc, "dragstart", event => {
     if (!(event.target instanceof Element)) return;
@@ -167,7 +167,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     if ((!dragging && !(beat && event.target.closest(".section-header"))) || !target || !ports.edits.allowed()) return;
     event.preventDefault(); event.stopImmediatePropagation();
     if (dragging) ports.edits.run(moveSceneCommand(dragging, target.id, target.after));
-    else if (beat) ports.edits.run(moveBeatCommand(beat, target.firstSceneId, false, target.id));
+    else if (beat) ports.edits.run(moveBeatCommand(beat, target.firstBeatId, false, target.id));
     ports.drag.end(); finishDrag();
   }, true);
   life.listen(doc, "dragend", finishDrag, true);

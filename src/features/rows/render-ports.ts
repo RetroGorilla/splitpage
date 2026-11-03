@@ -50,7 +50,7 @@ export interface RowsRenderPorts {
   readonly draft: RowDraftEditing;
   readonly undo: Pick<Undo, "track">;
   readonly hiding: () => Pick<ShotHiding, "groups">;
-  readonly sections: () => Pick<SceneView, "folded">;
+  readonly scenes: () => Pick<SceneView, "folded">;
   readonly pictures: Pick<PictureStore, "imgHtml">;
   readonly personColors: PersonColorLookup;
   readonly preferences: () => Pick<Preferences, "clock">;

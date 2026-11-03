@@ -20,7 +20,7 @@ export function mountRowsRenderFeature() {
   return render.replace(() => {
     const ports: RowsRenderPorts = {
       document: documentReader, edits, text, video, editing: renderEditing, draft: renderDraft,
-      undo: renderUndo, hiding: shotHiding, sections: sceneView, pictures, personColors,
+      undo: renderUndo, hiding: shotHiding, scenes: sceneView, pictures, personColors,
       preferences: renderPreferences, view: tagView, notices, actions,
       deletes: renderDeletes, tagPanel: tagPanelState, ids, production: renderProduction
     };

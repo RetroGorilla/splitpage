@@ -562,7 +562,7 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     if (strip) return { node: nodeFromHtml(hiddenShotStripHtml(strip)) };
     return { node: newRowEl(entry.row, entry.index), added: true };
   }
-  const steps = Array.isArray(doc.sections) && doc.sections.length ? sceneRowEntries(doc, ports.hiding(), ports.sections()).map(function (item): RowsStep {
+  const steps = Array.isArray(doc.sections) && doc.sections.length ? sceneRowEntries(doc, ports.hiding(), ports.scenes()).map(function (item): RowsStep {
     if (!("scene" in item)) return planBeat(item);
     const key = "section:" + item.scene.id;
     const html = sceneHeaderHtml(item, !ports.edits.allowed());

@@ -32,7 +32,7 @@ function fixture(withBeat = false) {
     draft: { appendMedia: () => null, model: () => ({ cell: [], media: { markThroughout: () => false, toggleMark: () => [] } }), edit: () => null, isDraft: () => false, isScript: () => false },
     undo: { track: () => { tracks++; } },
     hiding: () => ({ groups: rows => rows.map((row, index) => ({ row, index })) }),
-    sections: () => ({ folded: () => false }),
+    scenes: () => ({ folded: () => false }),
     pictures: fakePictures().pictures,
     personColors: { personColor: () => "#000000" },
     preferences: () => ({ clock: () => "24h" }),
@@ -51,7 +51,7 @@ test("sectionless rendering never requests the fold owner", () => {
   document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
   const first = fixture(true);
   let folds = 0;
-  const mounted = startRowsRender({ ...first.ports, sections: () => { folds++; return { folded: () => false }; } });
+  const mounted = startRowsRender({ ...first.ports, scenes: () => { folds++; return { folded: () => false }; } });
   try {
     assert.equal(mounted.renderFirstDraw(), true);
     assert.equal(folds, 0);

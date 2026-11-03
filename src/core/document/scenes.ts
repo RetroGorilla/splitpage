@@ -17,6 +17,16 @@ export interface SceneGroup {
   readonly end: number;
 }
 
+export function sceneFirstBeatId(scene: DocumentScene): string { return scene.firstSceneId; }
+
+export function withSceneFirstBeat(scene: DocumentScene, firstBeatId: string): DocumentScene {
+  return { ...scene, firstSceneId: firstBeatId };
+}
+
+export function newScene(id: string, name: string, firstBeatId: string): DocumentScene {
+  return { id, name, firstSceneId: firstBeatId };
+}
+
 export function normalizeScenes(value: unknown): DocumentScene[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const ids = new Set<string>();

@@ -1,4 +1,4 @@
-import { normalizeScenes, sceneGroups } from "../document/scenes.ts";
+import { newScene, normalizeScenes, sceneGroups } from "../document/scenes.ts";
 import type { DocumentScene, SceneDocument } from "../document/scenes.ts";
 
 function identities(base: SceneDocument | null | undefined, mine: SceneDocument, theirs: SceneDocument): Map<string, string> {
@@ -116,8 +116,8 @@ export function mergeSceneLayout<T extends { readonly id: string }>(
       const row = byId.get(rowId);
       if (row) ordered.push(row);
     }
-    const firstSceneId = groupOrder[0], name = names.get(id);
-    if (id && name && firstSceneId) scenes.push({ id, name, firstSceneId });
+    const firstBeatId = groupOrder[0], name = names.get(id);
+    if (id && name && firstBeatId) scenes.push(newScene(id, name, firstBeatId));
   }
   return { rows: ordered, sections: scenes.length ? scenes : undefined };
 }

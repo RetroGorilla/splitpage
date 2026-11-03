@@ -114,7 +114,7 @@ eq("the short suite has none of them", shortLines.some((l) => l.includes("__perf
 
 const beatWindow = { __perf: { lat: [] }, __splitpageFormats: {} };
 vm.runInNewContext(BEATS, { window: beatWindow, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
-eq("the scenes install a stamp, a hide and a preference run", Object.keys(beatWindow.__perfBeat), ["stamp", "hide", "preference"]);
+eq("the scenes install a stamp, a hide and a preference run", Object.keys(beatWindow.__perfScene), ["stamp", "hide", "preference"]);
 
 function stampWorld(clicksWork) {
   const next = { todo: "ready", ready: "shot", shot: "todo" };
@@ -128,7 +128,7 @@ function stampWorld(clicksWork) {
   };
   const window = { __perf: { lat: [], reset() {}, take: (label) => label }, __splitpageFormats: { state: () => ({ rows }) } };
   vm.runInNewContext(BEATS, { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
-  return window.__perfBeat.stamp();
+  return window.__perfScene.stamp();
 }
 
 const stampRun = async (clicksWork) => stampWorld(clicksWork).then(() => "passed", (e) => e.message);

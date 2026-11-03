@@ -13,7 +13,7 @@ import { undoOwner } from "./undo.ts";
 
 export function mountSceneHeaders(): { dispose: () => void } {
   const controls = mountSceneControls(window, {
-    document: documentReader, edits, sections: sceneView(), focus: focusMemory(),
+    document: documentReader, edits, scenes: sceneView(), focus: focusMemory(),
     drag: rowDrag(), ids, notices, scroll: updateDragScroll, stopScroll: stopDragScroll
   });
   const boundary = createSceneBoundaryRemoval({

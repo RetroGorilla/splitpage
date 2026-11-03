@@ -1,5 +1,5 @@
 import { cappedText } from "../../core/document/text-policy.ts";
-import { sceneGroups, scenesInOrder, writeScenes } from "../../core/document/scenes.ts";
+import { newScene, sceneFirstBeatId, sceneGroups, scenesInOrder, writeScenes } from "../../core/document/scenes.ts";
 import type { DocumentScene } from "../../core/document/scenes.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
@@ -19,13 +19,13 @@ function sceneEdit(name: string, update: (doc: DocumentView) => readonly Documen
   };
 }
 
-export function addSceneCommand(firstSceneId: string, id: string, name: string): Command {
+export function addSceneCommand(firstBeatId: string, id: string, name: string): Command {
   return sceneEdit("add-section", doc => {
     const scenes = scenesInOrder(doc) ?? [];
     const clean = cappedText(name, 200);
-    if (!clean || !/^[A-Za-z0-9_-]+$/.test(id) || !doc.rows.some(row => row.id === firstSceneId) ||
-      scenes.some(scene => scene.id === id || scene.firstSceneId === firstSceneId)) return null;
-    return scenesInOrder({ rows: doc.rows, sections: [...scenes, { id, name: clean, firstSceneId }] }) ?? [];
+    if (!clean || !/^[A-Za-z0-9_-]+$/.test(id) || !doc.rows.some(row => row.id === firstBeatId) ||
+      scenes.some(scene => scene.id === id || sceneFirstBeatId(scene) === firstBeatId)) return null;
+    return scenesInOrder({ rows: doc.rows, sections: [...scenes, newScene(id, clean, firstBeatId)] }) ?? [];
   });
 }
 

@@ -19,7 +19,7 @@ function fixture(existing = false) {
   const controls = mountSceneControls(window, {
     document: { current: () => h.session.read(doc => doc) },
     edits: { allowed: () => allowed, run: command => runConfined(h.session, command) },
-    sections: createSceneView(),
+    scenes: createSceneView(),
     focus: { focusedRow: () => {} },
     drag: { dragging: () => null, end: () => {} },
     ids: { id: () => "created" },

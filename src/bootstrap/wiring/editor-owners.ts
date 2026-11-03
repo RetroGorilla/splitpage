@@ -22,7 +22,7 @@ export type CellSelection = EditorSelection<Element, Range, Element>;
 
 interface Started {
   readonly drag: RowDrag;
-  readonly sections: SceneView;
+  readonly scenes: SceneView;
   readonly undo: UndoGuard;
   readonly paint: PaintGuard;
   readonly focus: FocusMemory<Element>;
@@ -58,7 +58,7 @@ export function startEditor(live: LiveDocumentPort): () => void {
   if (started) throw new Error("The editor's owners are already started; stop them first");
   const mine: Started = {
     drag: createRowDrag(),
-    sections: createSceneView(),
+    scenes: createSceneView(),
     undo: createUndoGuard(),
     paint: createPaintGuard(error => { console.error(error); }),
     focus: createFocusMemory<Element>(),
@@ -82,7 +82,7 @@ export function rowDrag(): RowDrag {
 }
 
 export function sceneView(): SceneView {
-  return running().sections;
+  return running().scenes;
 }
 
 export function undoGuard(): UndoGuard {

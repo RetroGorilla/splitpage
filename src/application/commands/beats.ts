@@ -1,5 +1,5 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { scenesAfterRemoval, scenesInOrder, writeScenes } from "../../core/document/scenes.ts";
+import { sceneFirstBeatId, scenesAfterRemoval, scenesInOrder, withSceneFirstBeat, writeScenes } from "../../core/document/scenes.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
@@ -31,8 +31,8 @@ export function pasteBeatsCommand(paste: BeatPaste): Command {
       if (!planned || !planned.inserted.length) return null;
       const replaced = planned.replaced !== null && present(doc, planned.replaced) ? [planned.replaced] : [];
       const scenes = scenesInOrder(doc);
-      const nextScenes = replaced.length ? scenes?.map(scene => scene.firstSceneId === planned.replaced
-        ? { ...scene, firstSceneId: planned.inserted[0] as string } : scene) : scenes;
+      const nextScenes = replaced.length ? scenes?.map(scene => sceneFirstBeatId(scene) === planned.replaced
+        ? withSceneFirstBeat(scene, planned.inserted[0] as string) : scene) : scenes;
       return {
         changes: changeSet({
           rowsInserted: planned.inserted,

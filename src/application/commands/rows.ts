@@ -6,7 +6,7 @@ import type { StampPorts } from "../session/ports.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import type { TextServices } from "../text/services.ts";
-import { scenesAfterRemoval, scenesInOrder, writeScenes } from "../../core/document/scenes.ts";
+import { scenesAfterRemoval, scenesInOrder, withSceneFirstBeat, writeScenes } from "../../core/document/scenes.ts";
 
 function indexOf(rows: DocumentView["rows"], rowId: string): number {
   return rows.findIndex(function (r) { return r.id === rowId; });
@@ -99,7 +99,7 @@ export function moveBeatCommand(rowId: string, targetId: string, after: boolean,
       const order = orderAfterMove(ids, rowId, targetId, after);
       const original = scenesInOrder(doc);
       const scenes = scenesAfterRemoval(doc, new Set([rowId]))?.map(scene =>
-        scene.id === intoScene ? { ...scene, firstSceneId: rowId } : scene);
+        scene.id === intoScene ? withSceneFirstBeat(scene, rowId) : scene);
       if (sameOrder(ids, order) && (!intoScene || JSON.stringify(scenes) === JSON.stringify(original))) return null;
       return {
         changes: reorderedChange(!!original),
