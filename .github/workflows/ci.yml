@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, 4.1-development]
+    branches: [main]
   push:
-    branches: [main, 4.1-development]
+    branches: [main, 'hotfix/**']
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -47,7 +47,7 @@ jobs:
 
       - name: Find a passed run of this exact tree
         id: tested
-        run: node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/4.1-development' && '--lookup' || '' }}
+        run: node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '--lookup' || '' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 

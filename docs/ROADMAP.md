@@ -1,6 +1,6 @@
 # Roadmap
 
-What is left for Splitpage 4.1 and the order it runs in. Checked on 2026-11-02 at `fd29b083`. "4.1" is the internal name for this work (the `4.1-development` branch), not the version it ships as; the number is set when the release is cut. Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
+What is left for Splitpage 4.1 and the order it runs in. Checked on 2026-11-02 at `fd29b083`. "4.1" is the internal name for this work, not the version it ships as; the number is set when the release is cut. Agents: this file says where the work is going; [AGENT-QUEUE.md](AGENT-QUEUE.md) still decides what a queue agent picks, and its rules and protected paths still apply.
 
 ## Where it stands
 

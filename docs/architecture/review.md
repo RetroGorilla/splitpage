@@ -1,12 +1,16 @@
 # Splitpage review policy
 
-This applies to every PR into `4.1-development`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on `4.1-development` under §2.
+This applies to every PR into `main`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on `main` under §2.
 
-**Fast path.** Two kinds of PR get the automated checks and a quick read instead of the full process:
-- docs-only PRs (CI's change classifier marks them as prose)
-- dependency-baseline prunes whose diff only removes entries from `tools/dep-baseline.json`, with no source changes, no new exceptions and no gate configuration changes
+**Tiers.** The area a PR touches sets how much review it gets, not its size. Anything not listed is Normal. A PR that fits more than one tier takes the highest, and when in doubt go up a tier.
 
-Every other PR goes through the full process below.
+| Tier | What it covers | Review |
+| --- | --- | --- |
+| Quick | Docs-only PRs (CI's change classifier marks them as prose); dependency-baseline prunes whose diff only removes entries from `tools/dep-baseline.json`, with no source changes, no new exceptions and no gate configuration changes; test-only changes; dependency patch updates; copy and styling; small UI fixes | The automated checks and a quick read. No independent reviewer, and the author may merge |
+| Normal | New features; IPC and the desktop main process; the updater; the release pipeline; major dependency updates, which also need a run of the real app | One independent review (§4) and a re-check of its fixes. Only blockers hold the merge; other concerns are filed as issues (§6) |
+| Full | Save, drafts, history, recovery, merge | The whole process below, with every concern closed before merge |
+
+The Autonomous run rules in [AGENT-QUEUE.md](../AGENT-QUEUE.md) still apply to queue tasks.
 
 ## 1. The PR
 
@@ -23,14 +27,14 @@ Every other PR goes through the full process below.
 | The bug… | Fix it |
 |---|---|
 | was introduced by the current PR | inside that PR, before merge |
-| already existed, in code a pending PR or milestone step is moving | after the move lands, in its own PR on 4.1-development, in the module that now owns the code, with a regression test written to fail first |
-| already existed, in code nothing is moving | in its own PR on 4.1-development, with a regression test written to fail first |
+| already existed, in code a pending PR or milestone step is moving | after the move lands, in its own PR on main, in the module that now owns the code, with a regression test written to fail first |
+| already existed, in code nothing is moving | in its own PR on main, with a regression test written to fail first |
 
 A PR that moves code keeps the bugs it moves. Each one is filed as an issue and fixed by a later PR, never folded into the move.
 
 ## 3. Automated checks
 
-- **CI on PRs into 4.1-development and main** (the `gate` job): lint, type check, dependency gate, comment gate, the build with its `sw.js` stamp check, `test:all`, the core and content-security-policy browser suites.
+- **CI on PRs into main** (the `gate` job): lint, type check, dependency gate, comment gate, the build with its `sw.js` stamp check, `test:all`, the core and content-security-policy browser suites.
 - **Locally before review:** the browser suites for the affected areas, chosen with the change table in [testing.md](testing.md#what-to-run-for-which-change).
 - **Full browser run before merge** for:
   - changes to `02-state.js` or its shim, `build.mjs`, or the test harness or driver
@@ -48,9 +52,9 @@ A PR that moves code keeps the bugs it moves. Each one is filed as an issue and 
 
 ## 4. Review
 
-One independent reviewer: a session or agent that did not write the change. They read the diff, the surrounding code, its callers and its tests.
+Normal and Full PRs get one independent reviewer: a session or agent that did not write the change. They read the diff, the surrounding code, its callers and its tests.
 
-Adam confirmed on 2026-10-23 that an independent agent review is sufficient. GPT-6.1 Sol is preferred; Opus is not required. This supersedes the stricter review-model rule in the October 24 handoff. The author still does not merge their own PR.
+Adam confirmed on 2026-10-23 that an independent agent review is sufficient. GPT-6.1 Sol is preferred; Opus is not required. This supersedes the stricter review-model rule in the October 24 handoff. In those tiers the author still does not merge their own PR.
 
 | Area | Questions |
 |---|---|
@@ -65,7 +69,7 @@ Adam confirmed on 2026-10-23 that an independent agent review is sufficient. GPT
 | Core purity | Nothing the dependency gate bans: no clock reads, no ambient randomness, no platform globals. Time and randomness come in through the ports. Pure date operations are fine. |
 | No comments | No authored comments anywhere, including workflow and config files |
 | Behavior preservation | Does the refactor change behavior? Is every intended change called out and routed per §2? |
-| Goldens | Are golden files changed only in a dedicated commit on `4.1-development` via `src/test/golden-helpers.mjs`, with the diff explained? |
+| Goldens | Are golden files changed only in a dedicated commit on `main` via `src/test/golden-helpers.mjs`, with the diff explained? |
 | User-facing text | Do toasts and refusal messages, and the PR's suggested CHANGELOG line, match what the code actually does? The PR does not edit CHANGELOG or help.md (§7). |
 
 ## 5. Extra verification by risk
@@ -90,13 +94,13 @@ Every extra check names the failure it is meant to catch. If it can't name one, 
 Each finding gives its location, the failure scenario, the consequence, and a suggested fix or verification.
 
 - **Blocker:** a concrete defect, a broken requirement, or a violated architectural rule. Fix before merge.
-- **Concern:** a plausible, significant risk. Close it with evidence, a fix, or a recorded decision.
+- **Concern:** a plausible, significant risk. Close it with evidence, a fix, or a recorded decision. In the Normal tier, filing an issue also closes it.
 - **Suggestion:** optional. Does not block the merge. May become a follow-up issue.
 
 Severity follows impact, not the size of the mistake.
 
 **Who decides:**
-- Technical concerns: the coordinating session, with its reasoning written in the PR comment.
+- Technical concerns: the coordinating session, with its reasoning written in the PR description.
 - Product behavior, user-facing wording and input syntax: Adam.
 
 **Problems that existed before the PR** become an issue, not extra scope for the PR. The exception: if the PR depends on the problem, exposes it, or makes it worse, the problem is a finding of this PR and is handled here.
@@ -109,23 +113,19 @@ The lane that wrote the code fixes the findings. The reviewer then re-checks the
 - blockers are fixed and concerns are closed
 - the final changes have been reviewed
 - the evidence matches the PR's own latest head: the CI `gate` is green on it, and the base has been merged in only when the base merges rule below calls for it
-- a short PR comment records:
-  - the findings and how each was closed
-  - the verification, with counts
-  - the head and base SHAs the evidence covers
-  - any accepted limitations
+- the PR description has one line with the review's result, such as `Review: 2 blockers, 1 concern`, and gives the verification, with counts, and any accepted limitations
 
 **Base merges.** Adam approved this rule on 2026-10-02, to cut the testing bottleneck. Merge the base into a PR branch only when:
 - GitHub reports a conflict, or
 - the base has changed files the PR touches.
 
-Otherwise merge with CI green on the PR's own head, even though the base has moved. The safety net is CI on `4.1-development` after every merge, plus the milestone gate's full run on the merged tree (§8). When the base is merged in, push, so CI runs on the new combined tree. A re-run alone isn't enough, because it reuses the old merge commit. Local run evidence counts only for the tree it ran on.
+Otherwise merge with CI green on the PR's own head, even though the base has moved. The safety net is CI on `main` after every merge, plus the milestone gate's full run on the merged tree (§8). When the base is merged in, push, so CI runs on the new combined tree. A re-run alone isn't enough, because it reuses the old merge commit. Local run evidence counts only for the tree it ran on.
 
 **CHANGELOG and help are not edited in fix PRs.** Adam approved this rule on 2026-10-02. `CHANGELOG.md` and `docs/help.md` stay as the base has them. A user-visible fix puts a "Suggested CHANGELOG line" section in its PR body, in the existing entry style, or says "No CHANGELOG entry" and why. The coordinator writes every entry in one docs PR, and Adam signs off the wording there once, under "Wording for Adam's sign-off".
 
 **CI unavailable vs. failing.** Failing checks never merge. If CI is *unavailable*, merging on local evidence needs:
 - the exact tested revision and its logs
-- Adam's okay, noted in the PR comment
+- Adam's okay, noted in the PR description
 
 Merge with `gh pr merge N --merge --match-head-commit <sha>`.
 

@@ -39,7 +39,7 @@ assert.equal(changes.outputs.tested, "${{ steps.tested.outputs.tested }}");
 assert.equal(changes.outputs.tree, "${{ steps.tested.outputs.tree }}");
 assert.equal(changes.permissions.actions, "read");
 const lookup = changes.steps.find((s) => s.id === "tested");
-assert.equal(lookup.run, "node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/4.1-development' && '--lookup' || '' }}");
+assert.equal(lookup.run, "node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '--lookup' || '' }}");
 const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''";
 const upload = gate.steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
 assert.equal(upload.with.name, "ci-passed-tree-${{ needs.changes.outputs.tree }}");
