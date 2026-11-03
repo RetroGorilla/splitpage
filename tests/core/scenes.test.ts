@@ -40,8 +40,8 @@ test("sections r1: rename survives removal with an unrelated scene insertion", (
 });
 
 test("sections r1: absent metadata defers without a base in both orientations", () => {
-  const sceneed = { rows, sections: scenes }, plain = { rows };
-  for (const [mine, theirs] of [[sceneed, plain], [plain, sceneed]] as const) {
+  const withScenes = { rows, sections: scenes }, plain = { rows };
+  for (const [mine, theirs] of [[withScenes, plain], [plain, withScenes]] as const) {
     const migration = fakeMigration();
     const result = mergeStateFields(null, migrateRows(structuredClone(mine), migration.ports),
       migrateRows(structuredClone(theirs), migration.ports), fakePorts(() => []));

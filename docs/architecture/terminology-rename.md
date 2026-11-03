@@ -20,6 +20,7 @@ This inventory is for PR 2 of #1186. Old "scene" means beat and old "section" me
 | CSV/DOCX legacy headings and recognizers | **Keep reading old names.** CSV recognizes `scene` and `shot` on import at `src/adapters/formats/csv.ts:193`, `:209`; DOCX recognizes visual `shot` and generated headings including `B-roll shot list` at `src/adapters/formats/docx.ts:1028`, `:1032`, `:1042`. Visible exported wording can change in PR 4 only with compatible import. |
 | XLSX `Scene` and `Scenes` column headings | **Stay.** These exported headers are also keys when workbook rows are read by the round-trip tests. |
 | `__sceneSelectTest` | **Stay.** Browser suites use this test hook to exercise scene selection. |
+| Test fixture keys `sceneLength` and `scene` | **Stay.** The normalizer golden records use `sceneLength`; print-layout fixture data uses `scene`. |
 | URLs | **No scene/section/shot URL parameter found.** The present-mode URL reader uses `teleprompter`, `script`, `voice`: `src/features/prompter/prompter.ts:1028`. Keep existing links readable; no terminology-bearing URL was identified. |
 
 Project files write and parse the same document state through `src/adapters/formats/project-file.ts:71`, `:114`, `:307`; the embedded JSON keys above therefore stay.
