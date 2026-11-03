@@ -22,22 +22,22 @@ interface ExportPreviewPort {
     target: { seconds: number } | null;
     status: { todo: number; ready: number; shot: number };
   };
-  readonly scenes: (doc: ExportDocument) => {
+  readonly beats: (doc: ExportDocument) => {
     number: string; start: string; seconds: number; read: string; readSet: boolean;
     status: { id: string; label: string };
   }[];
   readonly breakdown: (doc: ExportDocument) => {
     catId: string; categoryLabel: string; name: string; status: string; statusLabel: string;
-    owner: string; notes: string; inScript: string; scenes: string[];
+    owner: string; notes: string; inScript: string; beats: string[];
   }[];
   readonly shots: (doc: ExportDocument) => {
-    scene: string; start: string;
+    beat: string; start: string;
     items: { shot: boolean; name: string; location: string; props: string[]; flagged: boolean }[];
   }[];
   readonly runs: (html: unknown, numbers: Readonly<Record<string, number>>) => (Omit<DocxRun, "tag"> & {
     tag?: { color?: string | null }; markers?: number[];
   })[];
-  readonly narration: (doc: ExportDocument, options: { directions?: boolean }) => ExportDocument["scenes"];
+  readonly narration: (doc: ExportDocument, options: { directions?: boolean }) => ExportDocument["beats"];
   readonly meta: (doc: ExportDocument) => string;
   readonly shotSummary: (doc: ExportDocument) => string;
   readonly commentCount: (doc: ExportDocument) => number;

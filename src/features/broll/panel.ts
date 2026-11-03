@@ -5,7 +5,7 @@ import { tagCategory, tagStatus } from "../../core/production/looks.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
 import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { cssAttr } from "../common/dom.ts";
-import { BROLL_PANEL_GROUPS as GROUPS, brollGroups as brollGroupsFrom, filterCounts, FILTERS, matchesFilter, pageSummaryText, sceneLabel, startOf } from "../../core/production/broll-view.ts";
+import { BROLL_PANEL_GROUPS as GROUPS, brollGroups as brollGroupsFrom, filterCounts, FILTERS, matchesFilter, pageSummaryText, beatLabel, startOf } from "../../core/production/broll-view.ts";
 import { cappedLongText, cappedText, escapeHtml, plainText } from "../../core/document/text-policy.ts";
 import { mountBroll } from "./mount.ts";
 import { deleteShotCommand, setShotsCommand } from "../../application/commands/broll-records.ts";
@@ -115,7 +115,7 @@ function plural(n: number, one: string, many: string) {
   return n + " " + (n === 1 ? one : many);
 }
 
-function sceneStarts() {
+function beatStarts() {
   let t = 0;
   const out: Record<string, number> = Object.create(null);
   const doc = (ports as PanelPortUse).document.current();
@@ -365,7 +365,7 @@ function rowHtml(e: PanelShot, starts: Record<string, number>) {
       '<span class="broll-row-icons">' + rowStateIconsHtml(e) + '</span>' +
       (e.rowId
         ? '<button type="button" class="broll-row-go" data-action="broll-jump" data-id="' + id + '" title="Go to scene ' +
-            sceneLabel(e) + '">Go to scene' + icon("arrow-right") + '</button>'
+            beatLabel(e) + '">Go to scene' + icon("arrow-right") + '</button>'
         : '') +
     '</div>' +
     (open ? cardHtml(e, starts) : '');
@@ -403,9 +403,9 @@ function cardHtml(e: PanelShot, starts: Record<string, number>) {
   const renaming = renamingId === e.id;
 
   const when = startOf(e, starts);
-  const scene = e.rowId
+  const beat = e.rowId
     ? '<button type="button" class="jump-link broll-scene-link" data-action="broll-jump" data-id="' + id + '" title="Go to scene ' +
-        sceneLabel(e) + '"><span class="broll-scene-n">' + sceneLabel(e) + '</span>' + (when ? ' · ' + when : '') + '</button>'
+        beatLabel(e) + '"><span class="broll-scene-n">' + beatLabel(e) + '</span>' + (when ? ' · ' + when : '') + '</button>'
     : e.orphaned
       ? '<span class="broll-muted">No longer in the script — its line was deleted.</span>'
       : '<span class="broll-muted">Added here</span>';
@@ -483,7 +483,7 @@ function cardHtml(e: PanelShot, starts: Record<string, number>) {
         : e.desc ? '<div class="broll-card-desc">' + escapeHtml(e.desc) + '</div>' : '') +
       '<dl class="broll-fields">' +
         field("Status", statusFieldHtml(e)) +
-        field("Scene", scene) +
+        field("Scene", beat) +
         field("Location", location) +
         field("Assigned", assigned) +
         field("Props", propsEditHtml(e)) +
@@ -644,7 +644,7 @@ export function renderBroll() {
     if (summary) summary.innerHTML = entries.length ? summaryHtml(entries) : '';
     controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
     const shown = entries.filter(function (e) { return matchesFilter(e, (ports as PanelPortUse).view.current().filter); });
-    const starts = sceneStarts();
+    const starts = beatStarts();
     listEl.innerHTML = datalistsHtml() + (shown.length
       ? brollGroups(shown, (ports as PanelPortUse).view.current().group).map(function (g) {
           return '<div class="broll-group" role="group" aria-label="' + escapeHtml(g.label || "Shots") + '">' +
@@ -1209,7 +1209,7 @@ function pageRowHtml(e: PanelShot) {
       escapeHtml(e.name || "Untitled shot") + '</span>' + rowStateIconsHtml(Object.assign({}, e, { notes: "", reshoot: false })) + '</td>' +
     '<td class="broll-page-c-scene" data-label="Scene">' + (e.rowId
       ? '<button type="button" class="broll-page-scene" data-action="broll-page-jump" data-id="' + id + '" title="Go to scene ' +
-          sceneLabel(e) + '">' + sceneLabel(e) + '</button>'
+          beatLabel(e) + '">' + beatLabel(e) + '</button>'
       : '<span class="broll-muted" title="' + (e.orphaned ? 'No longer in the script' : 'Added here') + '">—</span>') + '</td>' +
     '<td class="broll-page-c-props" data-label="Props" style="--prop:' + catColor("prop") + '">' +
       (props ? '<span class="broll-page-ellipsis" title="' + escapeHtml(propListTitle(e)) + '">' + propListHtml(e) + '</span>' : '<span class="broll-muted">—</span>') + '</td>' +

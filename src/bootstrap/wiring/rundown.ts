@@ -7,7 +7,7 @@ import { edits as portEdits } from "./ports/editing.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { rundownMinimizeActions as minimizeDefinitions, rundownSceneActions as sceneDefinitions } from "../../features/rundown/actions.ts";
+import { rundownMinimizeActions as minimizeDefinitions, rundownBeatActions as beatDefinitions } from "../../features/rundown/actions.ts";
 import type { RundownPorts, TargetMount, TargetPorts } from "../../features/rundown/ports.ts";
 import { startRundown as mountRundown } from "../../features/rundown/rundown.ts";
 import { startTarget as mountTarget } from "../../features/rundown/target.ts";
@@ -58,6 +58,6 @@ export function rundownMinimizeActions(): ActionDefinition[] {
   return minimizeDefinitions(mounted, portScreen);
 }
 
-export function rundownSceneActions(): ActionDefinition[] {
-  return sceneDefinitions(mounted);
+export function rundownBeatActions(): ActionDefinition[] {
+  return beatDefinitions(mounted);
 }

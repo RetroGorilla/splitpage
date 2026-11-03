@@ -1,14 +1,14 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { addGalleryPicture, removeGalleryLink, removeGallerySlot, replaceGalleryPicture } from "../../core/document/gallery.ts";
 
-import type { PastePlace, SceneMedia, SceneMediaPorts } from "./ports.ts";
+import type { PastePlace, BeatMedia, BeatMediaPorts } from "./ports.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 
 import type { VideoPosterFrame } from "../../application/media/video-files.ts";
-interface SceneMediaPortUse extends Omit<SceneMediaPorts, "document"> {
- readonly document: { readonly read: SceneMediaPorts["document"]["read"] };
+interface BeatMediaPortUse extends Omit<BeatMediaPorts, "document"> {
+ readonly document: { readonly read: BeatMediaPorts["document"]["read"] };
 }
-let ports: SceneMediaPorts | null = null;
+let ports: BeatMediaPorts | null = null;
 
 const ALPHA_CAPABLE_TYPE = /^image\/(png|gif|webp)$/;
 
@@ -41,44 +41,44 @@ export function compressImageFile(file: Blob | null | undefined, maxDim: number,
 }
 
 function capturePastePlace(cellEl: Element) {
-  return { html: (ports as SceneMediaPortUse).text.storedHtmlFromDom(cellEl.innerHTML), sel: (ports as SceneMediaPortUse).selection.of(cellEl) };
+  return { html: (ports as BeatMediaPortUse).text.storedHtmlFromDom(cellEl.innerHTML), sel: (ports as BeatMediaPortUse).selection.of(cellEl) };
 }
 
 function restorePastePlace(cellEl: Element, place: PastePlace) {
-  const unchanged = place.sel && (ports as SceneMediaPortUse).text.storedHtmlFromDom(cellEl.innerHTML) === place.html;
-  (ports as SceneMediaPortUse).selection.set(cellEl, unchanged ? (place.sel as CellRange).from : Infinity, unchanged ? (place.sel as CellRange).to : Infinity);
+  const unchanged = place.sel && (ports as BeatMediaPortUse).text.storedHtmlFromDom(cellEl.innerHTML) === place.html;
+  (ports as BeatMediaPortUse).selection.set(cellEl, unchanged ? (place.sel as CellRange).from : Infinity, unchanged ? (place.sel as CellRange).to : Infinity);
 }
 
 function showPictureNotAdded() {
-  (ports as SceneMediaPortUse).notices.show("The picture finished loading after the script changed, so it was not added.", "warn");
+  (ports as BeatMediaPortUse).notices.show("The picture finished loading after the script changed, so it was not added.", "warn");
 }
 
 function addPicture(rowId: string, file: File, slot?: number) {
-  const ctx = (ports as SceneMediaPortUse).ownership.capture();
+  const ctx = (ports as BeatMediaPortUse).ownership.capture();
   compressImageFile(file, 1000, 0.78).then(function (dataUrl) {
-    if (!(ports as SceneMediaPortUse).ownership.stillOwns(ctx)) { showPictureNotAdded(); return; }
-    const idx = (ports as SceneMediaPortUse).document.read(function (doc) { return rowIndexOf(doc, rowId); });
+    if (!(ports as BeatMediaPortUse).ownership.stillOwns(ctx)) { showPictureNotAdded(); return; }
+    const idx = (ports as BeatMediaPortUse).document.read(function (doc) { return rowIndexOf(doc, rowId); });
     if (idx === -1) return;
-    const rec = (ports as SceneMediaPortUse).pictures.internDataUrl(dataUrl);
+    const rec = (ports as BeatMediaPortUse).pictures.internDataUrl(dataUrl);
     if (!rec) throw new Error("not a picture the registry takes");
-    (ports as SceneMediaPortUse).pictures.persist([rec.sha256]);
+    (ports as BeatMediaPortUse).pictures.persist([rec.sha256]);
     const replacing = typeof slot === "number";
-    (ports as SceneMediaPortUse).cells.editGallery(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + (idx + 1), function (row) {
+    (ports as BeatMediaPortUse).cells.editGallery(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + (idx + 1), function (row) {
       if (replacing && !replaceGalleryPicture(row, slot, rec, file.name)) return false;
       if (!replacing) addGalleryPicture(row, rec, file.name);
       return true;
     });
-  }).catch(function () { (ports as SceneMediaPortUse).notices.show("Could not use that image.", "error"); });
+  }).catch(function () { (ports as BeatMediaPortUse).notices.show("Could not use that image.", "error"); });
 }
 
 function removePicture(rowId: string, slot?: number) {
-  (ports as SceneMediaPortUse).cells.editGallery(rowId, "Picture removed", function (row) {
+  (ports as BeatMediaPortUse).cells.editGallery(rowId, "Picture removed", function (row) {
     return removeGallerySlot(row, slot || 0);
   });
 }
 
 function removeLink(rowId: string, slot: number, key: string) {
-  (ports as SceneMediaPortUse).cells.editGallery(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
+  (ports as BeatMediaPortUse).cells.editGallery(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
 }
 
 export function videoFirstFrame(file: Blob): Promise<VideoPosterFrame | null> {
@@ -124,7 +124,7 @@ export function videoFirstFrame(file: Blob): Promise<VideoPosterFrame | null> {
   });
 }
 
-export function startSceneMedia(next: SceneMediaPorts): SceneMedia {
+export function startBeatMedia(next: BeatMediaPorts): BeatMedia {
   ports = next;
   return {
     capturePastePlace: capturePastePlace,

@@ -72,7 +72,7 @@ test("capture keeps preference, session, clock and model reads in order and free
   f.doc.title = "Later";
   assert.equal(got.title, "Capture");
   assert.ok(Object.isFrozen(got.document));
-  assert.ok(Object.isFrozen(got.scenes));
+  assert.ok(Object.isFrozen(got.beats));
   assert.deepEqual({ ...got.commentNumbers }, {});
 });
 

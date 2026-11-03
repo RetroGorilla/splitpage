@@ -1,6 +1,6 @@
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { SectionBoundaryRemoval } from "../../application/editing/section-boundary.ts";
-import { sectionBeforeScene, sectionGroups } from "../../core/document/sections.ts";
+import { sectionBeforeBeat, sectionGroups } from "../../core/document/sections.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export interface SectionBoundaryPorts {
@@ -58,7 +58,7 @@ export function mountSectionBoundary(window: Window, ports: SectionBoundaryPorts
     if (!state) { cancel(); return; }
     const at = state.rows.findIndex(row => row.id === cell.getAttribute("data-id"));
     const next = state.rows[key === "Backspace" ? at : at + 1];
-    const section = at === -1 || !next ? undefined : sectionBeforeScene(state, next.id);
+    const section = at === -1 || !next ? undefined : sectionBeforeBeat(state, next.id);
     if (!section) { cancel(); return; }
     event.preventDefault();
     event.stopImmediatePropagation();

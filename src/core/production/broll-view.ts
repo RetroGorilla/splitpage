@@ -11,7 +11,7 @@ type Person = Frozen<ExportPerson>;
 type Row = Frozen<DocumentRow>;
 
 export interface ShotRecord {
-  scene: string;
+  beat: string;
   name: string;
   status: string;
   shot: boolean;
@@ -79,7 +79,7 @@ export function personIn(people: readonly Person[], id: string): Person | null {
   return null;
 }
 
-export function sceneLabel(e: Shot): string {
+export function beatLabel(e: Shot): string {
   return e.rowIndex === -1 ? "" : pad2(e.rowIndex + 1);
 }
 
@@ -90,7 +90,7 @@ export function startOf(e: Shot, starts: Readonly<Record<string, number>>): stri
 export function shotRecordForFile(e: Shot, people: readonly Person[]): ShotRecord {
   const who = personIn(people, e.owner);
   return {
-    scene: e.rowId ? sceneLabel(e) : "",
+    beat: e.rowId ? beatLabel(e) : "",
     name: e.name || "Untitled shot",
     status: e.status === "shot" ? "Shot" : "To shoot",
     shot: e.status === "shot",

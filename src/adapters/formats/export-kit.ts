@@ -7,7 +7,7 @@ import { TAG_CATEGORIES, rowStatus } from "../../core/production/looks.ts";
 import { formatDuration, pad2, rowSeconds as rowSecondsIn, targetClock } from "../../core/production/timing.ts";
 import { tagPrintColor } from "./print-colors.ts";
 import { shotRecordForFile } from "../../core/production/broll-view.ts";
-import { breakdownRows, commentEntries, sceneFacts } from "./export-projections.ts";
+import { breakdownRows, commentEntries, beatFacts } from "./export-projections.ts";
 import type { ShotRecord } from "../../core/production/broll-view.ts";
 import type { CommentEntry, CommentOptions } from "./export-projections.ts";
 import { toDocxRuns } from "../../core/text/projections.ts";
@@ -44,7 +44,7 @@ export function exportRuns(html: unknown, nums: Readonly<Record<string, number>>
 
 export interface ExportFacts {
   title: string;
-  scenes: number;
+  beats: number;
   seconds: number;
   runtime: string;
   target: { seconds: number; text: string; delta: string; over: boolean } | null;
@@ -56,12 +56,12 @@ export interface ExportFacts {
 }
 interface ExportComment extends CommentEntry {
   number: number | null;
-  scene: string;
+  beat: string;
   where: string;
 }
-interface BrollScene {
+interface BrollBeat {
   label: string;
-  scene: string;
+  beat: string;
   start: string;
   done: number;
   total: number;
@@ -133,7 +133,7 @@ export function exportFacts(doc: ExportDocument, services: ExportServices = expo
   const when = new Date(doc.capturedAt);
   return {
     title: s.title || "Untitled Script",
-    scenes: rows.length,
+    beats: rows.length,
     seconds: seconds,
     runtime: formatDuration(seconds),
     target: clock ? { seconds: target ?? 0, text: clock.target, delta: clock.delta, over: clock.over } : null,
@@ -146,24 +146,24 @@ export function exportFacts(doc: ExportDocument, services: ExportServices = expo
 }
 
 export function exportSummaryParts(facts: ExportFacts): string[] {
-  const out = [plural(facts.scenes, "scene"), facts.runtime + " running time"];
+  const out = [plural(facts.beats, "scene"), facts.runtime + " running time"];
   if (facts.target) {
     out.push("Target " + facts.target.text + " · " +
       (facts.target.delta === "0:00" ? "on target" : facts.target.delta + (facts.target.over ? " over" : " under")));
   }
-  if (facts.scenes) out.push(facts.status.shot + " of " + facts.scenes + " shot");
+  if (facts.beats) out.push(facts.status.shot + " of " + facts.beats + " shot");
   return out;
 }
 
 export function exportComments(doc: ExportDocument, opts?: CommentOptions | null, services: ExportServices = exportServices()): ExportComment[] {
   const nums = doc.commentNumbers;
   const list: ExportComment[] = commentEntries(doc, Object.assign({ clockMode: doc.clockMode }, opts || { pieces: true }), services).map(function (c) {
-    const scene = c.rowIndex >= 0 ? pad2(c.rowIndex + 1) : "";
+    const beat = c.rowIndex >= 0 ? pad2(c.rowIndex + 1) : "";
     const field = c.field === "audioText" ? "Audio" : "Visual";
     return Object.assign(c, {
       number: nums[c.id] || null,
-      scene: scene,
-      where: c.field === "title" ? "Document title" : scene ? "Scene " + scene + " · " + field : "Deleted scene"
+      beat: beat,
+      where: c.field === "title" ? "Document title" : beat ? "Scene " + beat + " · " + field : "Deleted scene"
     });
   });
   let i = 0;
@@ -202,10 +202,10 @@ export function breakdownGroups(doc: ExportDocument) {
   }).filter(function (g) { return g.items.length; });
 }
 
-export function exportBrollScenes(doc: ExportDocument, services: ExportServices = exportServices()): BrollScene[] {
-  const facts = sceneFacts(doc, services);
-  const groups: BrollScene[] = [];
-  const byRow: Record<string, BrollScene> = {};
+export function exportBrollBeats(doc: ExportDocument, services: ExportServices = exportServices()): BrollBeat[] {
+  const facts = beatFacts(doc, services);
+  const groups: BrollBeat[] = [];
+  const byRow: Record<string, BrollBeat> = {};
   brollSortedForList(doc.broll).forEach(function (e) {
     const key = e.rowIndex === -1 ? "none" : String(e.rowIndex);
     let g = byRow[key];
@@ -213,7 +213,7 @@ export function exportBrollScenes(doc: ExportDocument, services: ExportServices 
       const f = e.rowIndex === -1 ? null : facts[e.rowIndex];
       g = byRow[key] = {
         label: f ? "Scene " + f.number : "Not in the script",
-        scene: f ? f.number : "",
+        beat: f ? f.number : "",
         start: f ? f.start : "",
         done: 0,
         total: 0,
@@ -229,7 +229,7 @@ export function exportBrollScenes(doc: ExportDocument, services: ExportServices 
   return groups;
 }
 
-export function brollSummaryText(groups: readonly BrollScene[]): string {
+export function brollSummaryText(groups: readonly BrollBeat[]): string {
   let all = 0, shot = 0, flagged = 0;
   groups.forEach(function (g) {
     g.items.forEach(function (r) { all++; if (r.shot) shot++; if (r.flagged) flagged++; });

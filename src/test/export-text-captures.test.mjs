@@ -34,7 +34,7 @@ test("a Markdown export of a scene that holds only a picture writes the picture,
   withPicture(51);
   const doc = exportDocumentOf(currentDocument());
   const assets = exportAssetsNow(doc);
-  assert.ok(assets.picture(doc.scenes[0].imageRef.sha256), "setup: the bytes are held");
+  assert.ok(assets.picture(doc.beats[0].imageRef.sha256), "setup: the bytes are held");
   const withBytes = toMarkdownDoc(doc, { assets });
   assert.ok(withBytes.includes("![visual for scene 01](images/scene-01.jpg)"), withBytes);
   assert.ok(!withBytes.includes("_(blank scene)_"));

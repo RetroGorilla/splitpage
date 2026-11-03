@@ -1,4 +1,4 @@
-# A scene cut and Ctrl+Z (src/features/clipboard/scene-clip.ts isMove, features/clipboard/scene-select.ts
+# A scene cut and Ctrl+Z (src/features/clipboard/beat-clip.ts isMove, features/clipboard/beat-select.ts
 # pasteClip). Whether a paste of cut scenes is the MOVE (the same rows, their
 # comments following their words, the b-roll keys finding their records) or a
 # COPY (everything its own) must follow the undo stack:
@@ -12,7 +12,7 @@
 #     which deleting the comment then left behind;
 #   * a paste of the same cut once its scenes are in the script again is a
 #     copy.
-# Real mouse drags and real keys. The model is src/test/scene-clip.test.mjs.
+# Real mouse drags and real keys. The model is src/test/beat-clip.test.mjs.
 # Every `eval` is one physical line.
 
 open

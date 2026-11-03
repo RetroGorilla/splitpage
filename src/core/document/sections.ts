@@ -53,12 +53,12 @@ export function sectionsInOrder(doc: SectionDocument): DocumentSection[] | undef
   return sections.length ? sections : undefined;
 }
 
-export function sectionForScene(doc: SectionDocument, rowId: string): DocumentSection | undefined {
+export function sectionForBeat(doc: SectionDocument, rowId: string): DocumentSection | undefined {
   const at = doc.rows.findIndex(row => row.id === rowId);
   return sectionGroups(doc).find(group => at >= group.start && at < group.end)?.section;
 }
 
-export function sectionBeforeScene(doc: SectionDocument, rowId: string): DocumentSection | undefined {
+export function sectionBeforeBeat(doc: SectionDocument, rowId: string): DocumentSection | undefined {
   return normalizeSections(doc.sections)?.find(section => section.firstSceneId === rowId);
 }
 

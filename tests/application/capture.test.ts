@@ -40,8 +40,8 @@ test("a capture is its own frozen copy: later edits to the session's document do
   (live.rows[0] as { audioText: string }).audioText = "Changed";
   assert.equal(doc.title, "Before");
   assert.equal(doc.document.title, "Before");
-  assert.notEqual(doc.scenes[0]?.audioText, "Changed");
-  assert.ok(Object.isFrozen(doc) && Object.isFrozen(doc.document) && Object.isFrozen(doc.scenes[0]));
+  assert.notEqual(doc.beats[0]?.audioText, "Changed");
+  assert.ok(Object.isFrozen(doc) && Object.isFrozen(doc.document) && Object.isFrozen(doc.beats[0]));
   assert.throws(() => { (doc.document as { title: string }).title = "x"; }, TypeError);
 });
 

@@ -46,7 +46,7 @@ import {
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import type { SessionReplayRunner, SessionUndoPorts } from "../../src/bootstrap/wiring/session-owner.ts";
 import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
-import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
+import { beatLengthCommand } from "../../src/application/commands/beat-length.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../../src/application/formats/project-file-services.ts";
@@ -666,7 +666,7 @@ test("a session built by wireApp runs exactly the effects it was handed: a probe
     liveSession().noteEdit();
     assert.deepEqual(counted(), { dirty: 1, draft: 1, records: 1, save: 1 }, "a legacy edit to the held document reconciles its records and runs each change effect once");
     calls.clear();
-    const outcome = runCommand(sceneLengthCommand("r1", 30, sessionStamps));
+    const outcome = runCommand(beatLengthCommand("r1", 30, sessionStamps));
     assert.equal(outcome.kind, "applied");
     assert.equal(doc.rows[0]?.updatedBy, "Probe", "the stamp comes from the editor name handed in");
     assert.deepEqual(counted(), { attribute: 1, dirty: 1, draft: 1, edit: 1, "editor name": 1, records: 1, save: 1 }, "a command runs each effect once");

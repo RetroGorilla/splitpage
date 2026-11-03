@@ -1,8 +1,8 @@
 import type { LengthHolder } from "../../core/document/timing.ts";
-import { hasSetLength, parseSceneLength } from "../../core/document/timing.ts";
+import { hasSetLength, parseBeatLength } from "../../core/document/timing.ts";
 import { estimatedSeconds, formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { cssAttr } from "../common/dom.ts";
-import { sceneAt, sceneLengthCommand } from "../../application/commands/scene-length.ts";
+import { beatAt, beatLengthCommand } from "../../application/commands/beat-length.ts";
 
 import type { ReadTimePorts } from "./ports.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
@@ -16,8 +16,8 @@ interface ReadTimeEditor {
 }
 type ReadTimeDocument = Pick<DocumentView, "rows">;
 type ReadTimeNullableIdArgs<T extends readonly unknown[]> = T extends [infer Id, ...infer Rest] ? [Id | null, ...Rest] : never;
-type ReadTimeSceneAt = (...args: ReadTimeNullableIdArgs<Parameters<typeof sceneAt>>) => ReturnType<typeof sceneAt>;
-type ReadTimeLengthCommand = (...args: ReadTimeNullableIdArgs<Parameters<typeof sceneLengthCommand>>) => ReturnType<typeof sceneLengthCommand>;
+type ReadTimeBeatAt = (...args: ReadTimeNullableIdArgs<Parameters<typeof beatAt>>) => ReturnType<typeof beatAt>;
+type ReadTimeLengthCommand = (...args: ReadTimeNullableIdArgs<Parameters<typeof beatLengthCommand>>) => ReturnType<typeof beatLengthCommand>;
 interface ReadTimePortUse extends Omit<ReadTimePorts, "document"> {
  readonly document: {
   readonly read: ReadTimePorts["document"]["read"];
@@ -29,25 +29,25 @@ let editing: ReadTimeEditor | null = null;
 
 export function readTimeEditing() { return editing ? editing.rowId : null; }
 
-function applySceneLength(rowId: string | null, seconds: number | null | undefined) {
-  const outcome = (ports as ReadTimePortUse).edits.run((sceneLengthCommand as ReadTimeLengthCommand)(rowId, seconds, (ports as ReadTimePortUse).edits.stamps));
+function applyBeatLength(rowId: string | null, seconds: number | null | undefined) {
+  const outcome = (ports as ReadTimePortUse).edits.run((beatLengthCommand as ReadTimeLengthCommand)(rowId, seconds, (ports as ReadTimePortUse).edits.stamps));
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
-export function setSceneLength(rowId: string | null, seconds: number | null | undefined) {
+export function setBeatLength(rowId: string | null, seconds: number | null | undefined) {
   if (!ports) return false;
-  return applySceneLength(rowId, seconds);
+  return applyBeatLength(rowId, seconds);
 }
 
 function openReadTimeEditor(btn: HTMLElement | null) {
   if (!btn || !ports) return;
   const rowId = btn.getAttribute("data-id");
-  const scene = (ports as ReadTimePortUse).document.read((sceneAt as ReadTimeSceneAt)(rowId));
-  if (!scene) return;
+  const beat = (ports as ReadTimePortUse).document.read((beatAt as ReadTimeBeatAt)(rowId));
+  if (!beat) return;
   closeReadTimeEditor(false);
-  const row = scene.row;
-  const idx = scene.index;
+  const row = beat.row;
+  const idx = beat.index;
   const wasSet = hasSetLength(row as LengthHolder);
   const doc = (ports as ReadTimePortUse).document.current();
   const secs = rowSeconds(row, doc, (ports as ReadTimePortUse).text.productionReaders);
@@ -81,7 +81,7 @@ function closeReadTimeEditor(commit: boolean, fromBlur?: boolean) {
     const text = ed.input.value.trim();
     const unchanged = text === ed.prefill;
     if (!unchanged) {
-      const secs = parseSceneLength(text);
+      const secs = parseBeatLength(text);
       if (typeof secs === "number" && isNaN(secs)) {
         if (!fromBlur) {
           ed.input.setAttribute("aria-invalid", "true");
@@ -94,8 +94,8 @@ function closeReadTimeEditor(commit: boolean, fromBlur?: boolean) {
         editing = null;
         teardown(ed);
         (ports as ReadTimePortUse).paint.afterThisPaint(
-          function () { setSceneLength(ed.rowId, secs); },
-          function () { applySceneLength(ed.rowId, secs); }
+          function () { setBeatLength(ed.rowId, secs); },
+          function () { applyBeatLength(ed.rowId, secs); }
         );
         refocus(ed, !fromBlur);
         return true;

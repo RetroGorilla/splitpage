@@ -66,7 +66,7 @@ import { saveAuthorName as saveAuthorNameWith } from "../application/comment-aut
 import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 const flushEdits = () => undoOwner().flush();
 function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
-const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
+const { beatStatusCommand } = await import("../application/commands/beat-status.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const homeModule = await import("../bootstrap/wiring/location-owner.ts");
@@ -214,7 +214,7 @@ function assertReportedAfterCommit(inject, message) {
     let outcome = null;
     let thrown = null;
     try {
-      outcome = runCommand(sceneStatusCommand(row.id, sessionStamps));
+      outcome = runCommand(beatStatusCommand(row.id, sessionStamps));
     } catch (error) {
       thrown = error;
     } finally {
@@ -233,7 +233,7 @@ function assertReportedAfterCommit(inject, message) {
 rightToday("E1", "a command's effect pass writes no document content that its change set does not declare", () => {
   const { row } = committedPrecondition();
   const before = JSON.parse(JSON.stringify(currentDocument()));
-  const outcome = runCommand(sceneStatusCommand(row.id, sessionStamps));
+  const outcome = runCommand(beatStatusCommand(row.id, sessionStamps));
   assert.equal(outcome.kind, "applied", "the command applied");
   const undeclared = undeclaredChanges(before, JSON.parse(JSON.stringify(currentDocument())), outcome.changes);
   assert.deepEqual(undeclared, [], "undeclared document changes after the effect pass: " + JSON.stringify(undeclared));

@@ -5,7 +5,7 @@ import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { ChangeSet } from "../../../src/application/session/change-set.ts";
 import type { CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
-import { createSceneStatus } from "../../../src/features/rows/scene-status.ts";
+import { createBeatStatus } from "../../../src/features/rows/beat-status.ts";
 import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits } from "../fakes.ts";
@@ -26,7 +26,7 @@ function setup(opts: { targetSeconds?: number; hideShot?: boolean; status?: stri
   const held = fakeDocument(doc);
   const edits = fakeEdits();
   const grace: string[] = [];
-  const owner = createSceneStatus({
+  const owner = createBeatStatus({
     document: held.document,
     edits: opts.applies ? {
       run: (command) => {

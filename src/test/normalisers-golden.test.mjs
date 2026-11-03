@@ -9,7 +9,7 @@ import { safeId } from "../adapters/identity/safe-id.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { directionShortcut, importDirections } from "../core/text/directions.ts";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
-import { normalizeSceneLength, normalizeTargetLength } from "../core/document/timing.ts";
+import { normalizeBeatLength, normalizeTargetLength } from "../core/document/timing.ts";
 import { migrateGallery } from "../adapters/storage/02d-gallery.ts";
 import { normalizeMarks, normalizePictureName, normalizeVideoLink, normalizeVideoLinks } from "../core/document/gallery.ts";
 import { assertGolden, goldenNames, mintedId, updatingGoldens } from "./golden-helpers.mjs";
@@ -380,7 +380,7 @@ TABLES["with-page-head"] = () => table([
 TABLES["lengths"] = () => [
   ...table([["-0.1", -0.1], ["-0", -0], ["0", 0], ["0.4", 0.4], ["0.5", 0.5], ["86399.5", 86399.5], ["86400", 86400],
     ["86400.4: checked before rounding", 86400.4], ["86401", 86401], ["NaN", NaN], ["Infinity", Infinity], ["a numeric string", "5"],
-    ["null", null], ["true", true]], (v) => ({ sceneLength: normalizeSceneLength(v) })),
+    ["null", null], ["true", true]], (v) => ({ sceneLength: normalizeBeatLength(v) })),
   ...table([["0.4", 0.4], ["0.5: rounded up to one", 0.5], ["1", 1], ["86400", 86400], ["86400.4: checked after rounding", 86400.4],
     ["86400.5", 86400.5], ["86401", 86401], ["-1", -1], ["a numeric string", "5"], ["NaN", NaN], ["Infinity", Infinity]],
   (v) => ({ targetLength: normalizeTargetLength(v) }))

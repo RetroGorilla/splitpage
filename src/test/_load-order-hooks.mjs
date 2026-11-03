@@ -34,7 +34,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/script-zoom.ts": { functions: ["mountScriptZoomFeature"] },
   "src/bootstrap/wiring/read-time.ts": { functions: ["mountReadTimeFeature"] },
   "src/bootstrap/wiring/broll.ts": { functions: ["mountBrollFeature", "mountBrollPanelStateFeature"] },
-  "src/bootstrap/wiring/scene-status.ts": { functions: ["mountSceneStatusFeature", "onScriptStats"] },
+  "src/bootstrap/wiring/beat-status.ts": { functions: ["mountSceneStatusFeature", "onScriptStats"] },
   "src/bootstrap/wiring/rundown.ts": { functions: ["mountRundownFeature", "mountTargetFeature"] },
   "src/bootstrap/wiring/find.ts": { functions: ["mountFindFeature", "mountFindEventsFeature"] },
   "src/bootstrap/wiring/onboarding.ts": { functions: ["mountOnboardingFeature"] },

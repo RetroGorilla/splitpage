@@ -5,9 +5,9 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 const stubs = await import("./_fanout-stubs.mjs");
-const { createSceneStatus } = await import("../features/rows/scene-status.ts");
-const { cycleRowStatus, onScriptStats, statsFollowChange, updateScriptStats } = createSceneStatus(stubs.sceneStatusPorts());
-const { startReadTime: mountReadTime, setSceneLength } = await import("../features/rows/read-time.ts");
+const { createBeatStatus } = await import("../features/rows/beat-status.ts");
+const { cycleRowStatus, onScriptStats, statsFollowChange, updateScriptStats } = createBeatStatus(stubs.beatStatusPorts());
+const { startReadTime: mountReadTime, setBeatLength } = await import("../features/rows/read-time.ts");
 mountReadTime(stubs.readTimePorts());
 const bridge = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
@@ -146,7 +146,7 @@ test("a scene length whose commit is followed by a throw still runs the stats an
   stubs.resetFanout();
   lengthDoc([{ id: "r1", status: "todo" }]);
   let answer = null;
-  const reported = withThrowingListener(() => { answer = setSceneLength("r1", 45); });
+  const reported = withThrowingListener(() => { answer = setBeatLength("r1", 45); });
   assert.deepEqual(reported, ["listener broke"]);
   assert.equal(answer, true);
   assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS]);
@@ -155,7 +155,7 @@ test("a scene length whose commit is followed by a throw still runs the stats an
 test("a scene length: the command sets and stamps the row, one effect pass with an immediate save, then the stats; the script screen repaints the row itself by hearing the change", () => {
   stubs.resetFanout();
   lengthDoc([{ id: "r1", status: "todo" }, { id: "r2", status: "todo" }]);
-  assert.equal(setSceneLength("r2", 90), true);
+  assert.equal(setBeatLength("r2", 90), true);
   assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS]);
   assert.equal(stubs.dirtied[0][1].lengthSeconds, 90, "the length is set before the effects run");
   assert.notEqual(stubs.dirtied[0][1].updatedAt, "", "and the row is already stamped");
@@ -168,14 +168,14 @@ test("a scene length: the command sets and stamps the row, one effect pass with 
 test("a scene length that changes nothing or a missing scene has no effect; no document does nothing", () => {
   stubs.resetFanout();
   const before = JSON.stringify(lengthDoc([{ id: "r1", status: "todo", lengthSeconds: 90 }]));
-  assert.equal(setSceneLength("r1", 90), false);
-  assert.equal(setSceneLength("gone", 30), false);
+  assert.equal(setBeatLength("r1", 90), false);
+  assert.equal(setBeatLength("gone", 30), false);
   assert.deepEqual(stubs.calls, []);
   assert.equal(JSON.stringify(currentDocument()), before);
   assert.deepEqual(published, []);
 
   stubs.resetFanout();
   loadTestDocument(null);
-  assert.equal(setSceneLength("r1", 30), false);
+  assert.equal(setBeatLength("r1", 30), false);
   assert.deepEqual(stubs.calls, []);
 });

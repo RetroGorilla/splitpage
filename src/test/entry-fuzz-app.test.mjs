@@ -376,7 +376,7 @@ test("seed 21's entries, whose merge found #412, now all land in a valid fixed p
   assert.ok(tally.kinds.merge, JSON.stringify(tally));
 });
 
-function twoScenes(title) {
+function twoBeats(title) {
   const doc = startingDocument(title);
   settle(doc);
   const mine = cloneState(doc);
@@ -403,7 +403,7 @@ test("applyMerge refuses a theirs or a mine that is no document, and nothing cha
   };
   for (const raw of NOT_DOCUMENTS) {
     for (const [name, call] of Object.entries(calls)) {
-      const start = twoScenes("Refused " + name);
+      const start = twoBeats("Refused " + name);
       const opts = call(raw, start);
       const where = name + " " + JSON.stringify(raw);
       const epoch = session.epoch(), gen = session.generation();
@@ -423,7 +423,7 @@ test("applyMerge refuses a theirs or a mine that is no document, and nothing cha
 
 test("applyMerge takes a base that is no document as no base, the way it takes a missing one (#407)", () => {
   const merged = (base) => {
-    const start = twoScenes("Base");
+    const start = twoBeats("Base");
     const theirs = table304Document("Untitled Script");
     theirs.rows[1].audioText = "Theirs, edited.";
     const out = applyMerge({ base: base === "start" ? start.base : base, mine: start.mine, theirs: theirs, source: "stash", mergeOnly: true });
@@ -446,7 +446,7 @@ test("the reload seed that found #411 now ends in a migrateRows fixed point", as
 const toastHost = () => document.getElementById("toast-host");
 const toasts = () => Array.from(toastHost().querySelectorAll(".toast")).map((t) => t.textContent);
 function holding(title) {
-  twoScenes(title);
+  twoBeats(title);
   heard.length = 0;
   toastHost().textContent = "";
   return { doc: currentDocument(), text: JSON.stringify(currentDocument()), epoch: session.epoch(), gen: session.generation() };

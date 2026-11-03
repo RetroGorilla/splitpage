@@ -4,17 +4,17 @@ import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 
-export const SCENE_PASTE_FIELDS: readonly string[] = Object.freeze(["comments", "people", "productionTags", "brollShots"]);
+export const BEAT_PASTE_FIELDS: readonly string[] = Object.freeze(["comments", "people", "productionTags", "brollShots"]);
 
-export interface ScenePastePlan {
+export interface BeatPastePlan {
   readonly inserted: readonly string[];
   readonly replaced: string | null;
   readonly title: boolean;
   readonly saveNow: boolean;
 }
 
-export interface ScenePaste {
-  readonly plan: (doc: DocumentView) => ScenePastePlan | null;
+export interface BeatPaste {
+  readonly plan: (doc: DocumentView) => BeatPastePlan | null;
   readonly apply: (live: ValidatedDocument) => void;
 }
 
@@ -22,7 +22,7 @@ function present(doc: DocumentView, rowId: string): boolean {
   return doc.rows.some(function (r) { return r.id === rowId; });
 }
 
-export function pasteScenesCommand(paste: ScenePaste): Command {
+export function pasteBeatsCommand(paste: BeatPaste): Command {
   return {
     name: "paste-scenes",
     needs: "edit",
@@ -37,7 +37,7 @@ export function pasteScenesCommand(paste: ScenePaste): Command {
         changes: changeSet({
           rowsInserted: planned.inserted,
           rowsRemoved: replaced,
-          docFields: SCENE_PASTE_FIELDS.concat(planned.title ? ["title"] : [], sections ? ["sections"] : []),
+          docFields: BEAT_PASTE_FIELDS.concat(planned.title ? ["title"] : [], sections ? ["sections"] : []),
           derive: CELL_TEXT_DERIVES,
           saveNow: planned.saveNow
         }),
@@ -53,7 +53,7 @@ export function pasteScenesCommand(paste: ScenePaste): Command {
   };
 }
 
-export function removeScenesCommand(rowIds: readonly string[]): Command {
+export function removeBeatsCommand(rowIds: readonly string[]): Command {
   return {
     name: "remove-scenes",
     needs: "edit",

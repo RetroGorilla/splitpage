@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
-import { SCENE_STATUS_DERIVES, sceneStatus, sceneStatusCommand, shotGrace } from "../../src/application/commands/scene-status.ts";
+import { BEAT_STATUS_DERIVES, beatStatus, beatStatusCommand, shotGrace } from "../../src/application/commands/beat-status.ts";
 import type { StampPorts } from "../../src/application/session/ports.ts";
 import { harness, rawScript, runConfined } from "./session-fakes.ts";
 
@@ -55,7 +55,7 @@ const STATUS_CHANGES = function (rowId: string) {
 
 test("E2: a status click is one generation, one undo record and one effect pass, stamped through the clock and editor ports", () => {
   const h = opened();
-  const out = runConfined(h.session, sceneStatusCommand("r1", stamps()));
+  const out = runConfined(h.session, beatStatusCommand("r1", stamps()));
   assert.deepEqual(out, { kind: "applied", generation: 1, changes: STATUS_CHANGES("r1") });
   assert.equal(h.session.generation(), 1);
   assert.deepEqual(h.log, ["undo.record", "dirty:1", "draft:1", "save:1", "publish:edit"]);
@@ -67,7 +67,7 @@ test("E2: a status click is one generation, one undo record and one effect pass,
   assert.equal(rowOf(h, "r2")?.status, "todo", "no other scene changes status");
   assert.equal(h.published.length, 1);
   assert.equal(h.published[0]?.changes.saveNow, true, "the change asks for an immediate save, as the button always did");
-  assert.deepEqual(SCENE_STATUS_DERIVES, ["production"], "the production refresh only, no b-roll");
+  assert.deepEqual(BEAT_STATUS_DERIVES, ["production"], "the production refresh only, no b-roll");
   assert.deepEqual(h.refreshes, []);
   h.clock.advance(180);
   assert.deepEqual(h.refreshes, [["production"]], "production refreshes once, on the idle refresh");
@@ -77,7 +77,7 @@ test("E2: each click moves to the next status, todo to ready to shot and back to
   const h = opened();
   const seen: unknown[] = [];
   for (let i = 0; i < 3; i++) {
-    assert.equal(runConfined(h.session, sceneStatusCommand("r2", stamps("Mara"))).kind, "applied");
+    assert.equal(runConfined(h.session, beatStatusCommand("r2", stamps("Mara"))).kind, "applied");
     seen.push(rowOf(h, "r2")?.status);
   }
   assert.deepEqual(seen, ["ready", "shot", "todo"]);
@@ -90,7 +90,7 @@ test("E2: each click moves to the next status, todo to ready to shot and back to
 
 test("E2: the same command run again plans against the document as it is then", () => {
   const h = opened();
-  const command = sceneStatusCommand("r1", stamps());
+  const command = beatStatusCommand("r1", stamps());
   assert.equal(runConfined(h.session, command).kind, "applied");
   assert.equal(runConfined(h.session, command).kind, "applied");
   assert.equal(rowOf(h, "r1")?.status, "todo", "ready, then shot, then todo");
@@ -99,7 +99,7 @@ test("E2: the same command run again plans against the document as it is then", 
 test("E3: a scene that is gone is a no-op with no effects and no write", () => {
   const h = opened();
   const before = snapshot(h);
-  assert.deepEqual(runConfined(h.session, sceneStatusCommand("gone", stamps())), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, beatStatusCommand("gone", stamps())), { kind: "noop" });
   assert.equal(h.session.generation(), 0);
   assert.deepEqual(h.log, []);
   assert.deepEqual(h.published, []);
@@ -116,8 +116,8 @@ test("E3: in review mode the command is refused before it plans, with no effects
     clock: { nowIso: function () { asked++; return STAMP; } },
     editor: { name: function () { asked++; return "Adam"; } }
   };
-  assert.deepEqual(runConfined(h.session, sceneStatusCommand("r1", counting)), { kind: "rejected", reason: "review" });
-  assert.deepEqual(runConfined(h.session, sceneStatusCommand("gone", counting)), { kind: "rejected", reason: "review" });
+  assert.deepEqual(runConfined(h.session, beatStatusCommand("r1", counting)), { kind: "rejected", reason: "review" });
+  assert.deepEqual(runConfined(h.session, beatStatusCommand("gone", counting)), { kind: "rejected", reason: "review" });
   assert.equal(asked, 0, "the stamp ports are never asked");
   assert.equal(h.session.generation(), 0);
   assert.deepEqual(h.log, []);
@@ -128,7 +128,7 @@ test("E3: in review mode the command is refused before it plans, with no effects
 
 test("E3: with no document open the command is refused", () => {
   const h = harness();
-  assert.deepEqual(runConfined(h.session, sceneStatusCommand("r1", stamps())), { kind: "rejected", reason: NO_DOCUMENT });
+  assert.deepEqual(runConfined(h.session, beatStatusCommand("r1", stamps())), { kind: "rejected", reason: NO_DOCUMENT });
   assert.deepEqual(h.log, []);
 });
 
@@ -139,14 +139,14 @@ test("E3: a stamp port that throws fails the command and rolls the status back, 
     clock: { nowIso: function () { return STAMP; } },
     editor: { name: function () { throw new Error("no editor"); } }
   };
-  const out = runConfined(h.session, sceneStatusCommand("r1", broken));
+  const out = runConfined(h.session, beatStatusCommand("r1", broken));
   assert.equal(out.kind, "failed");
   assert.equal(out.kind === "failed" && out.error instanceof Error ? out.error.message : "", "no editor");
   const late: StampPorts = {
     clock: { nowIso: function () { throw new Error("no clock"); } },
     editor: { name: function () { return "Adam"; } }
   };
-  assert.equal(runConfined(h.session, sceneStatusCommand("r2", late)).kind, "failed");
+  assert.equal(runConfined(h.session, beatStatusCommand("r2", late)).kind, "failed");
   assert.equal(snapshot(h), before, "the status and the stamp are as they were");
   assert.equal(h.session.generation(), 0);
   assert.deepEqual(h.log, []);
@@ -169,8 +169,8 @@ test("shotGrace arms on reaching shot, clears on leaving it, and does nothing ot
 
 test("sceneStatus reads a scene's status, and nothing for a scene that is gone or no document", () => {
   const h = opened();
-  assert.equal(h.session.read(sceneStatus("r1")), "ready");
-  assert.equal(h.session.read(sceneStatus("r2")), "todo");
-  assert.equal(h.session.read(sceneStatus("gone")), undefined);
-  assert.equal(harness().session.read(sceneStatus("r1")), undefined, "no document, no status");
+  assert.equal(h.session.read(beatStatus("r1")), "ready");
+  assert.equal(h.session.read(beatStatus("r2")), "todo");
+  assert.equal(h.session.read(beatStatus("gone")), undefined);
+  assert.equal(harness().session.read(beatStatus("r1")), undefined, "no document, no status");
 });

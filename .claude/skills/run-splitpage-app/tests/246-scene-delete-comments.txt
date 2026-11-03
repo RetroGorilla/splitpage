@@ -1,5 +1,5 @@
 # Taking a scene out re-points the comments whose words are still in the
-# script (features/clipboard/scene-clip.ts removeScenes, features/rows/scenes.ts deleteRow). Alt+Enter
+# script (features/clipboard/beat-clip.ts removeScenes, features/rows/beats.ts deleteRow). Alt+Enter
 # through a commented phrase leaves it marked in both halves, its card on
 # the first; deleting (or cutting) that first scene used to leave the
 # comment pointing at the deleted scene ("Deleted scene · Audio") although

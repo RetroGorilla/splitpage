@@ -4,8 +4,8 @@ import { text as portText } from "./ports/text.ts";
 import { notices as portNotices, menuItems as portMenuItems } from "./ports/effects.ts";
 import { exports as portExports } from "./ports/files.ts";
 import { screen as portScreen } from "./ports/screen.ts";
-import { brollSummaryText, exportBrollScenes, exportComments, exportFacts, exportRuns } from "../../adapters/formats/export-kit.ts";
-import { breakdownRows, sceneFacts } from "../../adapters/formats/export-projections.ts";
+import { brollSummaryText, exportBrollBeats, exportComments, exportFacts, exportRuns } from "../../adapters/formats/export-kit.ts";
+import { breakdownRows, beatFacts } from "../../adapters/formats/export-projections.ts";
 import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../../adapters/formats/export-text.ts";
 import { narrationRows } from "../../adapters/formats/docx.ts";
 import { tagPrintColor } from "../../adapters/formats/print-colors.ts";
@@ -28,16 +28,16 @@ export function mountFileMenuExportFeature(capture: FileMenuExportPorts["capture
       capture,
       preview: {
         facts: exportFacts,
-        scenes: sceneFacts,
+        beats: beatFacts,
         breakdown: breakdownRows,
-        shots: exportBrollScenes,
+        shots: exportBrollBeats,
         runs: exportRuns,
         narration: narrationRows,
         meta: (doc) => exportMetaLine(exportFacts(doc)),
-        shotSummary: (doc) => brollSummaryText(exportBrollScenes(doc)),
+        shotSummary: (doc) => brollSummaryText(exportBrollBeats(doc)),
         commentCount: (doc) => exportComments(doc).length,
-        markdown: (doc) => toMarkdownDoc(doc, { scenes: 3 }),
-        markdownTable: (doc) => toMarkdownTableDoc(doc, { export: true, scenes: 7 }),
+        markdown: (doc) => toMarkdownDoc(doc, { beats: 3 }),
+        markdownTable: (doc) => toMarkdownTableDoc(doc, { export: true, beats: 7 }),
         tagColor: tagPrintColor
       },
       fileName: (format, options) => localFileMenuControls().exportFileName(format, localFileMenuControls().exportBaseName(), options),

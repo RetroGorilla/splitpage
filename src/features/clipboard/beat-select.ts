@@ -1,12 +1,12 @@
-import type { SceneSelectPorts } from "./ports.ts";
+import type { BeatSelectPorts } from "./ports.ts";
 import type { DocumentView, Command } from "../../application/session/document-session.ts";
 import { refsIn } from "../../../shared/blob-policy.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { cssAttr } from "../common/dom.ts";
 import {
-  SCENES_MIME, buildScenePayload, parseScenePayload, scenePaste, scenesOnClipboard, setLiveCut
-} from "./scene-clip.ts";
-import { pasteScenesCommand, removeScenesCommand } from "../../application/commands/scenes.ts";
+  BEATS_MIME, buildBeatPayload, parseBeatPayload, beatPaste, beatsOnClipboard, setLiveCut
+} from "./beat-clip.ts";
+import { pasteBeatsCommand, removeBeatsCommand } from "../../application/commands/beats.ts";
 import { cappedLongText } from "../../core/document/text-policy.ts";
 
 const TOLERANCE = 4;
@@ -14,23 +14,23 @@ const SCROLL_ZONE = 120;
 const SCROLL_MIN = 6;
 const SCROLL_MAX = 28;
 
-let ports: SceneSelectPorts | null = null;
-let track: { cell: HTMLElement; rowId: string | null; x: number; y: number; scene: boolean } | null = null;
+let ports: BeatSelectPorts | null = null;
+let track: { cell: HTMLElement; rowId: string | null; x: number; y: number; beat: boolean } | null = null;
 let sel: { anchor: string | null | undefined; focus: string | null | undefined; doc: DocumentView | null } | null = null;
 let scroll: { dir: number; speed: number; raf: number } | null = null;
 let styleEl: HTMLStyleElement | null = null;
 let menuEl: HTMLDivElement | null = null;
 let pendingCut = false;
-let clipWritten: ReturnType<typeof writeScenes> | null = null;
+let clipWritten: ReturnType<typeof writeBeats> | null = null;
 
-function hasSceneSelection() {
-  if (sel && sel.doc !== (ports as SceneSelectPorts).document.current()) clearSceneSelection();
+function hasBeatSelection() {
+  if (sel && sel.doc !== (ports as BeatSelectPorts).document.current()) clearBeatSelection();
   return !!sel;
 }
 
-function selectedSceneIds() {
-  if (!hasSceneSelection()) return [];
-  const rows = ((ports as SceneSelectPorts).document.current() as DocumentView).rows;
+function selectedBeatIds() {
+  if (!hasBeatSelection()) return [];
+  const rows = ((ports as BeatSelectPorts).document.current() as DocumentView).rows;
   let a = -1, b = -1;
   rows.forEach(function (r, i) {
     if (r.id === (sel as NonNullable<typeof sel>).anchor) a = i;
@@ -46,17 +46,17 @@ function selectedSceneIds() {
   return ids;
 }
 
-export function selectScenes(anchorId: string | null | undefined, focusId?: string | null | undefined) {
-  sel = { anchor: anchorId, focus: focusId || anchorId, doc: (ports as SceneSelectPorts).document.current() };
+export function selectBeats(anchorId: string | null | undefined, focusId?: string | null | undefined) {
+  sel = { anchor: anchorId, focus: focusId || anchorId, doc: (ports as BeatSelectPorts).document.current() };
   paint();
 }
 
-function clearSceneSelection() {
+function clearBeatSelection() {
   if (!sel && !track) return;
   sel = null;
-  if (track && track.scene) endTrack();
+  if (track && track.beat) endTrack();
   paint();
-  closeSceneMenu();
+  closeBeatMenu();
 }
 
 function paint() {
@@ -65,7 +65,7 @@ function paint() {
     styleEl.id = "scene-selection-style";
     document.head.appendChild(styleEl);
   }
-  const ids = sel ? selectedSceneIds() : [];
+  const ids = sel ? selectedBeatIds() : [];
   document.body.classList.toggle("has-scene-selection", ids.length > 0);
   if (!ids.length) { styleEl.textContent = ""; return; }
   const of = function (id: string) { return '#rows .row[data-id="' + cssAttr(id) + '"]'; };
@@ -91,10 +91,10 @@ function rowIdAtY(y: number) {
 }
 
 function onRowsMouseDown(e: MouseEvent) {
-  if (e.button !== 0 || (ports as SceneSelectPorts).rowDrag.dragging()) return;
+  if (e.button !== 0 || (ports as BeatSelectPorts).rowDrag.dragging()) return;
   const cell = (e.target as Element).closest && (e.target as Element).closest<HTMLElement>(".cell-editable");
-  if (!cell || !(ports as SceneSelectPorts).scriptCell(cell) || !cell.closest("#rows")) return;
-  track = { cell: cell, rowId: cell.getAttribute("data-id"), x: e.clientX, y: e.clientY, scene: false };
+  if (!cell || !(ports as BeatSelectPorts).scriptCell(cell) || !cell.closest("#rows")) return;
+  track = { cell: cell, rowId: cell.getAttribute("data-id"), x: e.clientX, y: e.clientY, beat: false };
 }
 
 function onMouseMove(e: MouseEvent) {
@@ -102,24 +102,24 @@ function onMouseMove(e: MouseEvent) {
   if (!(e.buttons & 1)) { endTrack(); return; }
   track.x = e.clientX;
   track.y = e.clientY;
-  if (!track.scene) {
+  if (!track.beat) {
     const r = track.cell.getBoundingClientRect();
     if (e.clientY >= r.top - TOLERANCE && e.clientY <= r.bottom + TOLERANCE) return;
-    startScenes();
+    startBeats();
   }
   e.preventDefault();
   followPointer();
   updateScroll();
 }
 
-function startScenes() {
-  (track as NonNullable<typeof track>).scene = true;
-  sel = { anchor: (track as NonNullable<typeof track>).rowId, focus: (track as NonNullable<typeof track>).rowId, doc: (ports as SceneSelectPorts).document.current() };
+function startBeats() {
+  (track as NonNullable<typeof track>).beat = true;
+  sel = { anchor: (track as NonNullable<typeof track>).rowId, focus: (track as NonNullable<typeof track>).rowId, doc: (ports as BeatSelectPorts).document.current() };
   document.body.classList.add("is-scene-selecting");
   const s = window.getSelection();
   if (s) s.removeAllRanges();
   if (document.activeElement === (track as NonNullable<typeof track>).cell) (track as NonNullable<typeof track>).cell.blur();
-  (ports as SceneSelectPorts).rows.closeMenus();
+  (ports as BeatSelectPorts).rows.closeMenus();
   paint();
 }
 
@@ -137,7 +137,7 @@ function endTrack() {
   track = null;
   stopScroll();
   document.body.classList.remove("is-scene-selecting");
-  if (was && was.scene && sel) prefetchPictures();
+  if (was && was.beat && sel) prefetchPictures();
 }
 
 function onMouseUp() {
@@ -145,11 +145,11 @@ function onMouseUp() {
 }
 
 function onDragStart() {
-  if (track && !track.scene) track = null;
+  if (track && !track.beat) track = null;
 }
 
 function onSelectionChange() {
-  if (!track || !track.scene) return;
+  if (!track || !track.beat) return;
   const s = window.getSelection();
   if (s && s.rangeCount && !s.isCollapsed) s.removeAllRanges();
 }
@@ -179,31 +179,31 @@ function stopScroll() {
 }
 
 function prefetchPictures() {
-  const ids = selectedSceneIds();
+  const ids = selectedBeatIds();
   if (!ids.length) return;
   const want = Object.create(null);
   ids.forEach(function (id) { want[id] = true; });
-  const doc = (ports as SceneSelectPorts).document.current();
+  const doc = (ports as BeatSelectPorts).document.current();
   const rows = (doc as DocumentView).rows.filter(function (r) { return want[r.id]; });
   const comments = ((doc as DocumentView).comments || []).filter(function (c) { return c && want[c.rowId as string]; });
   const shas = refsIn({ rows: rows, comments: comments });
-  if (shas.length) (ports as SceneSelectPorts).pictures.ensureBytes(shas);
+  if (shas.length) (ports as BeatSelectPorts).pictures.ensureBytes(shas);
 }
 
 function count(n: number) { return n === 1 ? "1 scene" : n + " scenes"; }
 
-function writeScenes(cd: DataTransfer, cut: boolean) {
-  const ids = selectedSceneIds();
-  const nonce = cut ? (ports as SceneSelectPorts).nonce() : null;
-  const out = buildScenePayload((ports as SceneSelectPorts).document.current(), ids, { cut: nonce });
-  try { cd.setData(SCENES_MIME, out.json); } catch (e) { }
+function writeBeats(cd: DataTransfer, cut: boolean) {
+  const ids = selectedBeatIds();
+  const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
+  const out = buildBeatPayload((ports as BeatSelectPorts).document.current(), ids, { cut: nonce });
+  try { cd.setData(BEATS_MIME, out.json); } catch (e) { }
   cd.setData("text/html", out.html);
   cd.setData("text/plain", out.text);
   return { ids: ids, nonce: nonce, out: out };
 }
 
 function onBeforeCopy(e: Event) {
-  if (hasSceneSelection() && !inEditable()) e.preventDefault();
+  if (hasBeatSelection() && !inEditable()) e.preventDefault();
 }
 
 function inEditable() {
@@ -212,12 +212,12 @@ function inEditable() {
 }
 
 function onCopyEvent(e: ClipboardEvent) {
-  if (!hasSceneSelection() || inEditable() || !e.clipboardData) return;
+  if (!hasBeatSelection() || inEditable() || !e.clipboardData) return;
   const cut = e.type === "cut" || pendingCut;
   pendingCut = false;
   e.preventDefault();
   e.stopImmediatePropagation();
-  const w = writeScenes(e.clipboardData, cut);
+  const w = writeBeats(e.clipboardData, cut);
   clipWritten = w;
   if (cut) {
     afterCut(w);
@@ -228,11 +228,11 @@ function onCopyEvent(e: ClipboardEvent) {
 
 function announceLeftOut(msg: string, leftOut: string[], kind?: "ok" | "warn") {
   if (leftOut.length) {
-    (ports as SceneSelectPorts).notices.show(msg + ". " + (leftOut.length === 1 ? "One picture" : leftOut.length + " pictures") +
+    (ports as BeatSelectPorts).notices.show(msg + ". " + (leftOut.length === 1 ? "One picture" : leftOut.length + " pictures") +
       " didn't fit on the clipboard: " + (leftOut.length === 1 ? "it pastes" : "they paste") +
       " only where Splitpage already has " + (leftOut.length === 1 ? "it" : "them") + ".", "warn");
   } else {
-    (ports as SceneSelectPorts).notices.show(msg + ".", kind || "ok");
+    (ports as BeatSelectPorts).notices.show(msg + ".", kind || "ok");
   }
 }
 
@@ -246,10 +246,10 @@ function runClipboardCommand(cut: boolean) {
   const ok = execCopy();
   pendingCut = false;
   if (ok && clipWritten) return;
-  const ids = selectedSceneIds();
-  if (!ids.length || !navigator.clipboard) { (ports as SceneSelectPorts).notices.show("Could not reach the clipboard.", "warn"); return; }
-  const nonce = cut ? (ports as SceneSelectPorts).nonce() : null;
-  const out = buildScenePayload((ports as SceneSelectPorts).document.current(), ids, { cut: nonce });
+  const ids = selectedBeatIds();
+  if (!ids.length || !navigator.clipboard) { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); return; }
+  const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
+  const out = buildBeatPayload((ports as BeatSelectPorts).document.current(), ids, { cut: nonce });
   const write = typeof ClipboardItem === "function" && navigator.clipboard.write
     ? navigator.clipboard.write([new ClipboardItem({
         "text/html": new Blob([out.html], { type: "text/html" }),
@@ -259,108 +259,108 @@ function runClipboardCommand(cut: boolean) {
   write.then(function () {
     if (cut) afterCut({ ids: ids, nonce: nonce, out: out });
     else announceLeftOut(count(ids.length) + " copied", out.leftOut);
-  }, function () { (ports as SceneSelectPorts).notices.show("Could not reach the clipboard.", "warn"); });
+  }, function () { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); });
 }
 
-function afterCut(w: ReturnType<typeof writeScenes>) {
-  setLiveCut(w.nonce, ((ports as SceneSelectPorts).document.current() as DocumentView).docId);
+function afterCut(w: ReturnType<typeof writeBeats>) {
+  setLiveCut(w.nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
   const entry = takeOut(w.ids);
   const msg = count(w.ids.length) + " cut — paste them with Ctrl+V";
   if (w.out.leftOut.length) announceLeftOut(msg, w.out.leftOut);
   else offerUndo(msg, entry);
 }
 
-function runSceneCommand(command: Command) {
-  const outcome = (ports as SceneSelectPorts).edits.run(command);
+function runBeatCommand(command: Command) {
+  const outcome = (ports as BeatSelectPorts).edits.run(command);
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
 function takeOut(ids: string[]) {
-  (ports as SceneSelectPorts).undo.breakCoalescing();
-  const before = (ports as SceneSelectPorts).undo.last();
-  const done = runSceneCommand(removeScenesCommand(ids));
+  (ports as BeatSelectPorts).undo.breakCoalescing();
+  const before = (ports as BeatSelectPorts).undo.last();
+  const done = runBeatCommand(removeBeatsCommand(ids));
   sel = null;
   paint();
-  (ports as SceneSelectPorts).undo.flush();
-  (ports as SceneSelectPorts).undo.breakCoalescing();
-  if (done) (ports as SceneSelectPorts).production.scheduleRefresh();
-  const entry = (ports as SceneSelectPorts).undo.last();
+  (ports as BeatSelectPorts).undo.flush();
+  (ports as BeatSelectPorts).undo.breakCoalescing();
+  if (done) (ports as BeatSelectPorts).production.scheduleRefresh();
+  const entry = (ports as BeatSelectPorts).undo.last();
   return entry === before ? null : entry;
 }
 
-export function deleteSelectedScenes() {
-  const ids = selectedSceneIds();
+export function deleteSelectedBeats() {
+  const ids = selectedBeatIds();
   if (!ids.length) return;
-  closeSceneMenu();
+  closeBeatMenu();
   offerUndo(count(ids.length) + " deleted", takeOut(ids));
 }
 
-function offerUndo(msg: string, entry: ReturnType<SceneSelectPorts["undo"]["last"]>) {
-  if (!entry) { (ports as SceneSelectPorts).notices.show(msg + ".", "ok"); return; }
-  (ports as SceneSelectPorts).notices.showAction(msg + ".", "ok", "Undo", function () {
-    if ((ports as SceneSelectPorts).undo.last() === entry) (ports as SceneSelectPorts).undo.undo();
-    else (ports as SceneSelectPorts).notices.show("Something else has changed since — Ctrl+Z undoes one step at a time.", "warn");
+function offerUndo(msg: string, entry: ReturnType<BeatSelectPorts["undo"]["last"]>) {
+  if (!entry) { (ports as BeatSelectPorts).notices.show(msg + ".", "ok"); return; }
+  (ports as BeatSelectPorts).notices.showAction(msg + ".", "ok", "Undo", function () {
+    if ((ports as BeatSelectPorts).undo.last() === entry) (ports as BeatSelectPorts).undo.undo();
+    else (ports as BeatSelectPorts).notices.show("Something else has changed since — Ctrl+Z undoes one step at a time.", "warn");
   });
 }
 
-function pasteClip(clip: NonNullable<ReturnType<typeof parseScenePayload>>, afterRowId: string | null | undefined, opts?: Pick<NonNullable<Parameters<typeof scenePaste>[1]>, "title"> & { message?: string }) {
+function pasteClip(clip: NonNullable<ReturnType<typeof parseBeatPayload>>, afterRowId: string | null | undefined, opts?: Pick<NonNullable<Parameters<typeof beatPaste>[1]>, "title"> & { message?: string }) {
   opts = opts || {};
-  (ports as SceneSelectPorts).undo.breakCoalescing();
-  const before = (ports as SceneSelectPorts).undo.last();
-  const paste = scenePaste(clip, { afterRowId: afterRowId, title: opts.title, stamp: (ports as SceneSelectPorts).stampRow });
-  if (!runSceneCommand(pasteScenesCommand(paste))) return null;
+  (ports as BeatSelectPorts).undo.breakCoalescing();
+  const before = (ports as BeatSelectPorts).undo.last();
+  const paste = beatPaste(clip, { afterRowId: afterRowId, title: opts.title, stamp: (ports as BeatSelectPorts).stampRow });
+  if (!runBeatCommand(pasteBeatsCommand(paste))) return null;
   const res = paste.result();
-  (ports as SceneSelectPorts).undo.flush();
-  (ports as SceneSelectPorts).undo.breakCoalescing();
-  (ports as SceneSelectPorts).production.scheduleRefresh();
-  if (!(ports as SceneSelectPorts).writerOpen() && (res as NonNullable<typeof res>).rowIds.length) {
-    selectScenes((res as NonNullable<typeof res>).rowIds[0], (res as NonNullable<typeof res>).rowIds[(res as NonNullable<typeof res>).rowIds.length - 1]);
+  (ports as BeatSelectPorts).undo.flush();
+  (ports as BeatSelectPorts).undo.breakCoalescing();
+  (ports as BeatSelectPorts).production.scheduleRefresh();
+  if (!(ports as BeatSelectPorts).writerOpen() && (res as NonNullable<typeof res>).rowIds.length) {
+    selectBeats((res as NonNullable<typeof res>).rowIds[0], (res as NonNullable<typeof res>).rowIds[(res as NonNullable<typeof res>).rowIds.length - 1]);
     const first = document.querySelector('#rows .row[data-id="' + cssAttr((res as NonNullable<typeof res>).rowIds[0]) + '"]');
     if (first) first.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
-  const entry = (ports as SceneSelectPorts).undo.last();
+  const entry = (ports as BeatSelectPorts).undo.last();
   const msg = opts.message || count((res as NonNullable<typeof res>).rowIds.length) + " pasted";
   offerUndo(msg, entry === before ? null : entry);
   const want = clip.refs.filter(function (sha: string) { return clip.carried.indexOf(sha) === -1; });
   if (want.length) {
-    (ports as SceneSelectPorts).pictures.ensureBytes(want).then(function (missing) {
+    (ports as BeatSelectPorts).pictures.ensureBytes(want).then(function (missing) {
       if (!missing.length) return;
-      (ports as SceneSelectPorts).notices.show((missing.length === 1 ? "A picture" : missing.length + " pictures") +
+      (ports as BeatSelectPorts).notices.show((missing.length === 1 ? "A picture" : missing.length + " pictures") +
         " in the pasted scenes could not be found here — the scenes show where each one was.", "warn");
     });
   }
   return res;
 }
 
-export function pasteScenesAt(cd: DataTransfer | null, cellEl: Element) {
-  if (!cd || !(ports as SceneSelectPorts).document.current()) return false;
-  const clip = scenesOnClipboard(function (t: string) { return cd.getData(t); });
+export function pasteBeatsAt(cd: DataTransfer | null, cellEl: Element) {
+  if (!cd || !(ports as BeatSelectPorts).document.current()) return false;
+  const clip = beatsOnClipboard(function (t: string) { return cd.getData(t); });
   if (!clip) return false;
-  (ports as SceneSelectPorts).cells.sync(cellEl);
+  (ports as BeatSelectPorts).cells.sync(cellEl);
   pasteClip(clip, cellEl.getAttribute("data-id"));
   return true;
 }
 
 function onPasteEvent(e: ClipboardEvent) {
-  if (!hasSceneSelection() || inEditable() || !e.clipboardData) return;
-  const clip = scenesOnClipboard(function (t: string) { return (e.clipboardData as DataTransfer).getData(t); });
+  if (!hasBeatSelection() || inEditable() || !e.clipboardData) return;
+  const clip = beatsOnClipboard(function (t: string) { return (e.clipboardData as DataTransfer).getData(t); });
   if (!clip) return;
   e.preventDefault();
   e.stopImmediatePropagation();
-  const ids = selectedSceneIds();
+  const ids = selectedBeatIds();
   pasteClip(clip, ids[ids.length - 1]);
 }
 
 export function newScriptFromSelection() {
-  const ids = selectedSceneIds();
+  const ids = selectedBeatIds();
   if (!ids.length) return;
-  closeSceneMenu();
-  const source = (ports as SceneSelectPorts).document.current();
+  closeBeatMenu();
+  const source = (ports as BeatSelectPorts).document.current();
   const title = (source as DocumentView).title || "Untitled Script";
-  const clip = parseScenePayload(buildScenePayload(source, ids).json);
-  if (!clip || !(ports as SceneSelectPorts).startNewScript()) return;
-  const first = ((ports as SceneSelectPorts).document.current() as DocumentView).rows[0];
+  const clip = parseBeatPayload(buildBeatPayload(source, ids).json);
+  if (!clip || !(ports as BeatSelectPorts).startNewScript()) return;
+  const first = ((ports as BeatSelectPorts).document.current() as DocumentView).rows[0];
   pasteClip(clip, first ? first.id : null, {
     title: cappedLongText(title + " — " + count(ids.length), 300),
     message: "New script with " + count(ids.length) + " — the one before is in Version history"
@@ -368,16 +368,16 @@ export function newScriptFromSelection() {
 }
 
 function onKeyDown(e: KeyboardEvent) {
-  if (!hasSceneSelection() || e.isComposing) return;
+  if (!hasBeatSelection() || e.isComposing) return;
   if (menuEl && !menuEl.hidden) {
-    if (e.key === "Escape") { e.preventDefault(); closeSceneMenu(); return; }
+    if (e.key === "Escape") { e.preventDefault(); closeBeatMenu(); return; }
     if (menuEl.contains(e.target as Node | null)) return;
   }
-  if (inEditable()) { clearSceneSelection(); return; }
+  if (inEditable()) { clearBeatSelection(); return; }
   const mod = (e.ctrlKey || e.metaKey) && !e.altKey;
   const k = String(e.key || "").toLowerCase();
-  if (e.key === "Escape") { e.preventDefault(); clearSceneSelection(); return; }
-  if ((e.key === "Delete" || e.key === "Backspace") && !mod) { e.preventDefault(); deleteSelectedScenes(); return; }
+  if (e.key === "Escape") { e.preventDefault(); clearBeatSelection(); return; }
+  if ((e.key === "Delete" || e.key === "Backspace") && !mod) { e.preventDefault(); deleteSelectedBeats(); return; }
   if (mod && !e.shiftKey && (k === "c" || k === "x")) {
     e.preventDefault();
     runClipboardCommand(k === "x");
@@ -385,7 +385,7 @@ function onKeyDown(e: KeyboardEvent) {
   }
   if (mod && k === "v") return;
   if (/^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key)) return;
-  clearSceneSelection();
+  clearBeatSelection();
 }
 
 function menuItem(action: string, icon: string, label: string, keys: string, danger?: boolean) {
@@ -411,18 +411,18 @@ function ensureMenu() {
     const btn = (e.target as Element).closest<HTMLButtonElement>("[data-scene-action]");
     if (!btn || btn.disabled) return;
     const action = btn.getAttribute("data-scene-action");
-    closeSceneMenu();
+    closeBeatMenu();
     if (action === "copy") runClipboardCommand(false);
     else if (action === "cut") runClipboardCommand(true);
-    else if (action === "delete") deleteSelectedScenes();
+    else if (action === "delete") deleteSelectedBeats();
     else if (action === "new") newScriptFromSelection();
   });
   document.body.appendChild(menuEl);
   return menuEl;
 }
 
-function openSceneMenu(x: number, y: number) {
-  const ids = selectedSceneIds();
+function openBeatMenu(x: number, y: number) {
+  const ids = selectedBeatIds();
   if (!ids.length) return;
   const menu = ensureMenu();
   menu.setAttribute("aria-label", count(ids.length) + " selected");
@@ -432,32 +432,32 @@ function openSceneMenu(x: number, y: number) {
   menu.style.top = Math.max(8, Math.min(y, window.innerHeight - h - 8)) + "px";
 }
 
-function closeSceneMenu() {
+function closeBeatMenu() {
   if (menuEl) menuEl.hidden = true;
 }
 
 function onContextMenu(e: MouseEvent) {
-  if (!hasSceneSelection()) return;
+  if (!hasBeatSelection()) return;
   const row = (e.target as Element).closest && (e.target as Element).closest("#rows .row[data-id]");
-  if (row && (selectedSceneIds().indexOf as (id: string | null) => number)(row.getAttribute("data-id")) !== -1) {
+  if (row && (selectedBeatIds().indexOf as (id: string | null) => number)(row.getAttribute("data-id")) !== -1) {
     e.preventDefault();
-    openSceneMenu(e.clientX, e.clientY);
+    openBeatMenu(e.clientX, e.clientY);
     return;
   }
-  clearSceneSelection();
+  clearBeatSelection();
 }
 
 function onDocMouseDown(e: MouseEvent) {
   if (menuEl && menuEl.contains(e.target as Node | null)) return;
-  if (e.button === 2 && hasSceneSelection()) {
+  if (e.button === 2 && hasBeatSelection()) {
     const row = (e.target as Element).closest && (e.target as Element).closest("#rows .row[data-id]");
-    if (row && (selectedSceneIds().indexOf as (id: string | null) => number)(row.getAttribute("data-id")) !== -1) { e.preventDefault(); return; }
+    if (row && (selectedBeatIds().indexOf as (id: string | null) => number)(row.getAttribute("data-id")) !== -1) { e.preventDefault(); return; }
   }
-  closeSceneMenu();
-  if (sel) clearSceneSelection();
+  closeBeatMenu();
+  if (sel) clearBeatSelection();
 }
 
-export function startSceneSelect(given: SceneSelectPorts) {
+export function startBeatSelect(given: BeatSelectPorts) {
   ports = given;
   track = null;
   sel = null;
@@ -482,14 +482,14 @@ export function startSceneSelect(given: SceneSelectPorts) {
   listen(document, "paste", onPasteEvent as EventListener, true);
   listen(window, "keydown", onKeyDown as EventListener, true);
   listen(document, "contextmenu", onContextMenu as EventListener);
-  listen(window, "resize", closeSceneMenu);
-  listen(window, "scroll", closeSceneMenu, true);
+  listen(window, "resize", closeBeatMenu);
+  listen(window, "scroll", closeBeatMenu, true);
   exposeTestHook("__sceneSelectTest", function () { return {
-    select: selectScenes,
-    clear: clearSceneSelection,
-    ids: selectedSceneIds,
-    openMenu: openSceneMenu,
-    tracking: function () { return track ? { rowId: track.rowId, scene: track.scene } : null; }
+    select: selectBeats,
+    clear: clearBeatSelection,
+    ids: selectedBeatIds,
+    openMenu: openBeatMenu,
+    tracking: function () { return track ? { rowId: track.rowId, beat: track.beat } : null; }
   }; }, function (withdraw) { offs.push(withdraw); });
   let disposed = false;
   return { dispose: function () {

@@ -8,7 +8,7 @@ import { mountDocumentIdentityOwner } from "./wiring/document-identity.ts";
 import { mountSessionMergeOwner } from "./wiring/session-merge.ts";
 import { mountHistoryOwner } from "./wiring/history.ts";
 import { mountScreenStateOwner } from "./wiring/screen-state.ts";
-import { mountSceneStatusFeature } from "./wiring/scene-status.ts";
+import { mountBeatStatusFeature } from "./wiring/beat-status.ts";
 import { mountHideShotFeature } from "./wiring/hide-shot.ts";
 import { mountScriptPlaceFeature } from "./wiring/side-panels.ts";
 import { mountRowsRenderFeature } from "./wiring/render.ts";
@@ -19,7 +19,7 @@ import { mountCopyPasteFeature } from "./wiring/clipboard.ts";
 import { mountReadTimeFeature } from "./wiring/read-time.ts";
 import { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 import { mountVideoFilesFeature } from "./wiring/video-files.ts";
-import { mountScenesFeature, mountSceneMediaFeature } from "./wiring/rows.ts";
+import { mountBeatsFeature, mountBeatMediaFeature } from "./wiring/rows.ts";
 import { mountProductionTagsFeature } from "./wiring/production-tags.ts";
 import { mountPlainTagsFeature } from "./wiring/plain-tags.ts";
 import { mountTagPanelsFeature } from "./wiring/production.ts";
@@ -73,7 +73,7 @@ if (wiring) {
 function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountScreenStateOwner();
   mountPageEntry();
-  mountSceneStatusFeature();
+  mountBeatStatusFeature();
   mountHideShotFeature();
   mountDocumentIdentityOwner();
   mountBlobStore();
@@ -92,8 +92,8 @@ function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountGalleryVideoFeature();
   mountGalleryFeature();
   mountVideoFilesFeature();
-  mountScenesFeature();
-  mountSceneMediaFeature();
+  mountBeatsFeature();
+  mountBeatMediaFeature();
   mountProductionTagsFeature();
   mountPlainTagsFeature();
   mountTagPanelsFeature();

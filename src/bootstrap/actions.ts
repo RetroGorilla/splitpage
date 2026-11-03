@@ -21,7 +21,7 @@ import { historyActions } from "./wiring/history-panel.ts";
 import { targetActions } from "./wiring/title-chrome.ts";
 import { writerActions } from "../bootstrap/wiring/writer.ts";
 import { rowsActions } from "./wiring/editor.ts";
-import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
+import { rundownMinimizeActions, rundownBeatActions } from "./wiring/rundown.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
 import { helpActions } from "./wiring/help.ts";
 import { updateActions } from "./wiring/update.ts";
@@ -60,7 +60,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerAll(registry, scriptZoomActions()),
     () => {
       const openers = editorOpenActions(videoFiles.openGallery);
-      return registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...openers.slice(0, 1), ...commentsOpenActions(), ...tagComposerActions()]);
+      return registerAll(registry, [...rundownBeatActions(), ...galleryActions(), ...openers.slice(0, 1), ...commentsOpenActions(), ...tagComposerActions()]);
     },
     () => registerAll(registry, rowsActions()),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal, () => { toggleFileMenu(false); })),

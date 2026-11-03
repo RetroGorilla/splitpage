@@ -228,7 +228,7 @@ function applyChange(target: HTMLInputElement) {
   if (id === "settings-autosave") { (ports as SettingsPorts).editor.autoSave(target.checked); return; }
   if (id === "settings-prompter-mirror") { (ports as SettingsPorts).prompter.mirror(target.checked); return; }
   if (id === "settings-prompter-flip") { (ports as SettingsPorts).prompter.flip(target.checked); return; }
-  if (id === "settings-prompter-scene") { (ports as SettingsPorts).prompter.sceneMode(target.checked); return; }
+  if (id === "settings-prompter-scene") { (ports as SettingsPorts).prompter.beatMode(target.checked); return; }
   if (id === "settings-default-wpm") {
     const n = Math.round(Number(target.value));
     if (isFinite(n) && n >= 60 && n <= 400) (ports as SettingsPorts).preferences.setDefaultWpm(n);

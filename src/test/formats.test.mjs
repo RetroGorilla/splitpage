@@ -12,7 +12,7 @@ import { htmlToMarkdown } from "../bootstrap/richtext.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { breakdownRows } from "../adapters/formats/export-projections.ts";
 import { commentBodyText, commentEntries } from "../adapters/formats/export-projections.ts";
-import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
+import { mdBeatCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { LONG_DEMO } from "../starters/index.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, fileImagesMissing, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { STORED } from "./_stored-cells.mjs";
@@ -378,9 +378,9 @@ test(".md: the table is htmlToMarkdown of the stored HTML, which is not the mode
   let differs = 0;
   for (let i = 0; i < STORED.length; i++) {
     const row = { id: "r", visualText: "", audioText: STORED[i], imageRef: null };
-    const table = mdSceneCellSource(row, 0).audio;
+    const table = mdBeatCellSource(row, 0).audio;
     assert.equal(table, htmlToMarkdown(STORED[i]).replace(/\n/g, "<br>").trim());
-    if (mdSceneCellSource(row, 0, true).audio !== table) differs++;
+    if (mdBeatCellSource(row, 0, true).audio !== table) differs++;
   }
   assert.ok(differs > 100, "cells whose two renderings differ: " + differs);
 });
@@ -394,7 +394,7 @@ test(".md: a table cell in the model's Markdown reads as unchanged", async () =>
     productionTags: [{ cat: "prop", name: "gaffer tape" }]
   });
   const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
-  const was = mdSceneCellSource(s.rows[0], 0).audio, model = mdSceneCellSource(s.rows[0], 0, true).audio;
+  const was = mdBeatCellSource(s.rows[0], 0).audio, model = mdBeatCellSource(s.rows[0], 0, true).audio;
   assert.equal(was, "**bo****ld** *x *gaffer tape");
   assert.equal(model, "**bold** *x* gaffer tape");
   const proj = parseMarkdownProject(md.replace("| " + was + " |", "| " + model + " |"));
@@ -460,7 +460,7 @@ function oldAppendMarkdownTail(lines) {
     lines.push("| --- | --- | --- | --- | --- | --- | --- |");
     breakdown.forEach(function (r) {
       lines.push("| " + [r.categoryLabel, r.name, r.statusLabel, r.owner, r.mentions,
-                         r.scenes.join(", "), r.notes].map(oldMdCell).join(" | ") + " |");
+                         r.beats.join(", "), r.notes].map(oldMdCell).join(" | ") + " |");
     });
     lines.push("");
   }
@@ -504,7 +504,7 @@ function oldToMarkdownTableDoc(s) {
     lines.push("| # | Visual | Audio | Status |");
     lines.push("| --- | --- | --- | --- |");
     s.rows.forEach(function (row, i) {
-      var cell = mdSceneCellSource(row, i);
+      var cell = mdBeatCellSource(row, i);
       lines.push("| " + pad2(i + 1) + " | " + oldMdRichTableCell(cell.visual) + " | " +
                  oldMdRichTableCell(cell.audio) + " | " + (row.status || "todo") + " |");
     });

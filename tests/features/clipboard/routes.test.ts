@@ -37,7 +37,7 @@ interface Held {
 }
 
 function harness(p: ReturnType<typeof page>) {
-  const state = { scenes: false, copied: true, owner: 0, owns: true, found: null as Element | null };
+  const state = { beats: false, copied: true, owner: 0, owns: true, found: null as Element | null };
   const calls: string[] = [];
   const origins: boolean[] = [];
   const held: Held[] = [];
@@ -48,7 +48,7 @@ function harness(p: ReturnType<typeof page>) {
       scriptCell: (el) => el.classList.contains("script"),
       copy: (_e, cell, cut) => { calls.push((cut ? "cut:" : "copy:") + cell.id); return state.copied; },
       afterCut: (cell) => { calls.push("afterCut:" + cell.id); },
-      pasteScenes: (_data, cell) => { calls.push("scenes:" + cell.id); return state.scenes; },
+      pasteBeats: (_data, cell) => { calls.push("scenes:" + cell.id); return state.beats; },
       pasteDraft: (cell, html, text) => { calls.push("draft:" + cell.id + ":" + html + ":" + text); },
       hasMedia: (files, html) => html.includes("data-blob") || (!!files && Array.prototype.some.call(files, (f: File) => /^image\//.test(f.type))),
       readMedia: () => new Promise<Extra>((resolve) => { held.push({ resolve }); }),
@@ -135,7 +135,7 @@ test("a paste into a script cell tries scenes first, then inserts the text; a dr
   assert.equal(e.defaultPrevented, true);
   assert.deepEqual(h.calls, ["scenes:rows-script", "insert:rows-script:<b>x</b>:x:none"]);
   h.calls.length = 0;
-  h.state.scenes = true;
+  h.state.beats = true;
   clip(p, "paste", p.byId("writer-script"), { text: "scenes" });
   assert.deepEqual(h.calls, ["scenes:writer-script"]);
   h.calls.length = 0;

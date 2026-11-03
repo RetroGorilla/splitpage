@@ -6,8 +6,8 @@ import type { RowDrag } from "../../application/editing/row-drag.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import { addSectionCommand, moveSectionCommand, removeSectionCommand, renameSectionCommand } from "../../application/commands/sections.ts";
-import { moveSceneCommand } from "../../application/commands/rows.ts";
-import { sectionBeforeScene, sectionForScene, sectionGroups } from "../../core/document/sections.ts";
+import { moveBeatCommand } from "../../application/commands/rows.ts";
+import { sectionBeforeBeat, sectionForBeat, sectionGroups } from "../../core/document/sections.ts";
 import { cssAttr } from "../common/dom.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import { closeRowMenus } from "./row-menu.ts";
@@ -84,8 +84,8 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
   }
   life.listen(doc, "click", event => {
     const target = event.target;
-    const scene = target.closest(".row[data-id]");
-    if (scene) ports.focus.focusedRow(scene.getAttribute("data-id") ?? "");
+    const beat = target.closest(".row[data-id]");
+    if (beat) ports.focus.focusedRow(beat.getAttribute("data-id") ?? "");
     const add = target.closest('[data-action="add-section"]');
     const button = add ?? target.closest("[data-section-action]");
     if (!button) {
@@ -107,10 +107,10 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
       const row = state.rows.find(item => item.id === add.getAttribute("data-id"));
       if (!row) { ports.notices.show("Add a scene before creating a section.", "warn"); return; }
       closeRowMenus();
-      scene?.querySelector<HTMLElement>(".row-more")?.focus();
-      const existing = sectionBeforeScene(state, row.id);
+      beat?.querySelector<HTMLElement>(".row-more")?.focus();
+      const existing = sectionBeforeBeat(state, row.id);
       if (existing) { const parent = header(existing.id); if (parent) rename(existing.id, parent); return; }
-      nameAt(scene ?? add.parentElement ?? add, "", name => {
+      nameAt(beat ?? add.parentElement ?? add, "", name => {
         const created = ports.ids.id("section");
         ports.edits.run(addSectionCommand(row.id, created, name));
         header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
@@ -132,7 +132,7 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     const target = event.target as Element | null, state = ports.document.current();
     if (!state || !Array.isArray(state.sections) || !state.sections.length || !target?.closest) return null;
     const divider = target.closest(".section-header"), row = target.closest(".row[data-id]");
-    const id = divider?.getAttribute("data-section-id") ?? (row && sectionForScene(state, row.getAttribute("data-id") ?? "")?.id);
+    const id = divider?.getAttribute("data-section-id") ?? (row && sectionForBeat(state, row.getAttribute("data-id") ?? "")?.id);
     const group = id && sectionGroups(state).find(item => item.section.id === id);
     const shown = id && header(id);
     if (!group || !shown) return null;
@@ -155,19 +155,19 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
   life.listen(doc, "dragover", event => {
     const drag = event as unknown as DragEvent;
     const target = dropTarget(drag);
-    const sceneOverHeader = !!ports.drag.dragging() && !!event.target.closest(".section-header");
-    if ((!dragging && !sceneOverHeader) || !target || !ports.edits.allowed()) return;
+    const beatOverHeader = !!ports.drag.dragging() && !!event.target.closest(".section-header");
+    if ((!dragging && !beatOverHeader) || !target || !ports.edits.allowed()) return;
     event.preventDefault(); event.stopImmediatePropagation();
     clearDrop();
     target.header.classList.add(dragging && target.after ? "section-drop-after" : "section-drop-before");
     ports.scroll(drag.clientX, drag.clientY);
   }, true);
   life.listen(doc, "drop", event => {
-    const target = dropTarget(event as unknown as DragEvent), scene = ports.drag.dragging();
-    if ((!dragging && !(scene && event.target.closest(".section-header"))) || !target || !ports.edits.allowed()) return;
+    const target = dropTarget(event as unknown as DragEvent), beat = ports.drag.dragging();
+    if ((!dragging && !(beat && event.target.closest(".section-header"))) || !target || !ports.edits.allowed()) return;
     event.preventDefault(); event.stopImmediatePropagation();
     if (dragging) ports.edits.run(moveSectionCommand(dragging, target.id, target.after));
-    else if (scene) ports.edits.run(moveSceneCommand(scene, target.firstSceneId, false, target.id));
+    else if (beat) ports.edits.run(moveBeatCommand(beat, target.firstSceneId, false, target.id));
     ports.drag.end(); finishDrag();
   }, true);
   life.listen(doc, "dragend", finishDrag, true);

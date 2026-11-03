@@ -1,8 +1,8 @@
-import type { ScenePaste, ScenePastePlan } from "../../application/commands/scenes.ts";
+import type { BeatPaste, BeatPastePlan } from "../../application/commands/beats.ts";
 
-type SceneCloned<T> = T extends readonly (infer V)[] ? SceneCloned<V>[] : T extends object ? { -readonly [K in keyof T]: SceneCloned<T[K]> } : T;
-type SceneWireData = Pick<DocumentShape, "rows" | "comments" | "people" | "productionTags" | "brollShots">;
-interface SceneWirePayload extends SceneWireData {
+type BeatCloned<T> = T extends readonly (infer V)[] ? BeatCloned<V>[] : T extends object ? { -readonly [K in keyof T]: BeatCloned<T[K]> } : T;
+type BeatWireData = Pick<DocumentShape, "rows" | "comments" | "people" | "productionTags" | "brollShots">;
+interface BeatWirePayload extends BeatWireData {
   format: string;
   version: number;
   source: { docId: string | null; title: string };
@@ -10,24 +10,24 @@ interface SceneWirePayload extends SceneWireData {
   blobsLeftOut: string[];
   cut?: string | undefined;
 }
-interface ParsedSceneClipboard extends SceneWireData {
+interface ParsedBeatClipboard extends BeatWireData {
   cut: string | null;
-  source: SceneWirePayload["source"];
+  source: BeatWirePayload["source"];
   carried: string[];
   refs: string[];
 }
-type ScenePayloadInput = { [K in keyof SceneWirePayload]?: unknown };
-interface SceneInsertOptions {
+type BeatPayloadInput = { [K in keyof BeatWirePayload]?: unknown };
+interface BeatInsertOptions {
   state?: ValidatedDocument | null | undefined;
   rowMap?: Record<string, string> | undefined;
   afterRowId?: string | null | undefined;
   replaceRowId?: string | null | undefined;
   move?: boolean | undefined;
-  mint?: SceneClipPorts["ids"]["id"] | undefined;
+  mint?: BeatClipPorts["ids"]["id"] | undefined;
   stamp?: ((row: DocumentRow) => void) | undefined;
 }
-type ScenePasteOptions = Pick<SceneInsertOptions, "afterRowId" | "mint" | "stamp"> & { title?: string | undefined };
-import type { SceneClipPorts } from "./ports.ts";
+type BeatPasteOptions = Pick<BeatInsertOptions, "afterRowId" | "mint" | "stamp"> & { title?: string | undefined };
+import type { BeatClipPorts } from "./ports.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { DocumentShape, DocumentComment, DocumentTag, DocumentShot, ValidatedDocument, DocumentRow } from "../../core/document/validated.ts";
 import type { Run } from "../../core/text/runs.ts";
@@ -41,42 +41,42 @@ import { syncCommentAnchors } from "../../core/text/anchors.ts";
 import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./cell-clipboard.ts";
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { cappedLongText } from "../../core/document/text-policy.ts";
-import { isBlankScene } from "../../application/commands/rows.ts";
+import { isBlankBeat } from "../../application/commands/rows.ts";
 
-export const SCENES_MIME = "application/x-splitpage-scenes";
-export const SCENES_ATTR = "data-splitpage-scenes";
+export const BEATS_MIME = "application/x-splitpage-scenes";
+export const BEATS_ATTR = "data-splitpage-scenes";
 const FORMAT = "splitpage-scenes";
 const VERSION = 1;
 
-const SCENE_BLOB_CAP = 16 * 1024 * 1024;
+const BEAT_BLOB_CAP = 16 * 1024 * 1024;
 
-let ports: SceneClipPorts | null = null;
+let ports: BeatClipPorts | null = null;
 let liveCut: { nonce: string; docId: string | null } | null = null;
 
 export function setLiveCut(nonce: string | null, docId: string | null) { liveCut = nonce ? { nonce: String(nonce), docId: docId || null } : null; }
 
-export function isMove(clip: SceneClip | null, state: DocumentView | null) {
+export function isMove(clip: BeatClip | null, state: DocumentView | null) {
   return !!(liveCut && clip && clip.cut && clip.cut === liveCut.nonce && state && state.docId === liveCut.docId) &&
-    scenesAway(clip, state);
+    beatsAway(clip, state);
 }
 
-function scenesAway(clip: SceneClip, state: DocumentView | null) {
+function beatsAway(clip: BeatClip, state: DocumentView | null) {
   const here = Object.create(null) as Record<string, boolean>;
   ((state as DocumentView).rows || []).forEach(function (r) { if (r) here[r.id] = true; });
   return !clip.rows.some(function (r) { return here[r.id]; });
 }
 
-function clone<T>(v: T): SceneCloned<T> { return (v === undefined ? undefined : JSON.parse(JSON.stringify(v))) as SceneCloned<T>; }
+function clone<T>(v: T): BeatCloned<T> { return (v === undefined ? undefined : JSON.parse(JSON.stringify(v))) as BeatCloned<T>; }
 
 function cellIdsOf(rows: readonly DocumentRow[], pick: (cell: readonly Run[], out: Record<string, boolean>) => void) {
   const out = Object.create(null) as Record<string, boolean>;
   rows.forEach(function (row) {
-    ["visualText", "audioText"].forEach(function (f) { pick((ports as SceneClipPorts).text.cellOf(row[f] || ""), out); });
+    ["visualText", "audioText"].forEach(function (f) { pick((ports as BeatClipPorts).text.cellOf(row[f] || ""), out); });
   });
   return out;
 }
 
-export function buildScenePayload(state: DocumentView | null, rowIds: readonly string[], opts?: { cut?: string | null; dataUrl?: SceneClipPorts["pictures"]["dataUrlFor"]; cap?: number }) {
+export function buildBeatPayload(state: DocumentView | null, rowIds: readonly string[], opts?: { cut?: string | null; dataUrl?: BeatClipPorts["pictures"]["dataUrlFor"]; cap?: number }) {
   opts = opts || {};
   const want = Object.create(null) as Record<string, boolean>;
   (rowIds || []).forEach(function (id) { want[id] = true; });
@@ -93,7 +93,7 @@ export function buildScenePayload(state: DocumentView | null, rowIds: readonly s
   }).map(clone);
 
   const tagKeys = Object.create(null) as Record<string, boolean>;
-  (ports as SceneClipPorts).tagsInRows(rows).forEach(function (t) { tagKeys[registryKey((t.cat as NonNullable<typeof t.cat>).id, t.name)] = true; });
+  (ports as BeatClipPorts).tagsInRows(rows).forEach(function (t) { tagKeys[registryKey((t.cat as NonNullable<typeof t.cat>).id, t.name)] = true; });
   const keyIds = cellIdsOf(rows, function (cell, out) {
     cell.forEach(function (r) { if (r.atom && r.id) out[r.id] = true; });
   });
@@ -108,8 +108,8 @@ export function buildScenePayload(state: DocumentView | null, rowIds: readonly s
   (productionTags as (DocumentTag | DocumentShot)[]).concat(brollShots).forEach(function (x) { if (x.owner) owners[x.owner] = true; });
   const people = ((state as DocumentView).people || []).filter(function (p) { return p && owners[p.id]; }).map(clone);
 
-  const dataUrl = opts.dataUrl || (ports as SceneClipPorts).pictures.dataUrlFor;
-  const cap = typeof opts.cap === "number" ? opts.cap : SCENE_BLOB_CAP;
+  const dataUrl = opts.dataUrl || (ports as BeatClipPorts).pictures.dataUrlFor;
+  const cap = typeof opts.cap === "number" ? opts.cap : BEAT_BLOB_CAP;
   const blobs: Record<string, string> = {}; const leftOut: string[] = []; let used = 0;
   refsIn({ rows: rows, comments: comments }).forEach(function (sha: string) {
     const uri = dataUrl(sha);
@@ -119,7 +119,7 @@ export function buildScenePayload(state: DocumentView | null, rowIds: readonly s
     blobs[sha] = uri;
   });
 
-  const payload: SceneWirePayload = {
+  const payload: BeatWirePayload = {
     format: FORMAT, version: VERSION,
     source: { docId: (state as DocumentView).docId || null, title: (state as DocumentView).title || "" },
     rows: rows, comments: comments, people: people,
@@ -130,8 +130,8 @@ export function buildScenePayload(state: DocumentView | null, rowIds: readonly s
   return {
     payload: payload,
     json: JSON.stringify(payload),
-    html: scenesTableHtml(rows, payload),
-    text: scenesPlainText(rows),
+    html: beatsTableHtml(rows, payload),
+    text: beatsPlainText(rows),
     rows: rows.length,
     leftOut: leftOut
   };
@@ -140,10 +140,10 @@ export function buildScenePayload(state: DocumentView | null, rowIds: readonly s
 const NBSP_RE = new RegExp(String.fromCharCode(160), "g");
 
 function plainOf(html: string | null | undefined) {
-  return toPlainText((ports as SceneClipPorts).text.cellOf(html || "")).replace(NBSP_RE, " ");
+  return toPlainText((ports as BeatClipPorts).text.cellOf(html || "")).replace(NBSP_RE, " ");
 }
 
-function scenesPlainText(rows: readonly DocumentRow[]) {
+function beatsPlainText(rows: readonly DocumentRow[]) {
   return rows.map(function (r) {
     return "Visual: " + plainOf(r.visualText) + "\nAudio: " + plainOf(r.audioText);
   }).join("\n\n");
@@ -153,16 +153,16 @@ function escAttr(s: unknown) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function scenesTableHtml(rows: readonly DocumentRow[], payload: SceneWirePayload) {
+function beatsTableHtml(rows: readonly DocumentRow[], payload: BeatWirePayload) {
   let marker = "";
   if (payload) {
     const lean = Object.assign({}, payload, {
       blobs: {},
       blobsLeftOut: Object.keys(payload.blobs || {}).concat(payload.blobsLeftOut || [])
     });
-    marker = " " + SCENES_ATTR + '="' + escAttr(JSON.stringify(lean)) + '"';
+    marker = " " + BEATS_ATTR + '="' + escAttr(JSON.stringify(lean)) + '"';
   }
-  const cell = function (html: string | null | undefined) { return clipboardOfCell((ports as SceneClipPorts).text.cellOf(html || "")).html; };
+  const cell = function (html: string | null | undefined) { return clipboardOfCell((ports as BeatClipPorts).text.cellOf(html || "")).html; };
   return '<table border="1" cellpadding="6" style="border-collapse:collapse"' + marker + ">" +
     "<thead><tr><th>Visual</th><th>Audio</th></tr></thead><tbody>" +
     rows.map(function (r) {
@@ -175,33 +175,33 @@ function readType(getData: (type: string) => string, type: string) {
   try { return String(getData(type) || ""); } catch (e) { return ""; }
 }
 
-export function scenesOnClipboard(getData: (type: string) => string) {
-  const json = readType(getData, SCENES_MIME);
+export function beatsOnClipboard(getData: (type: string) => string) {
+  const json = readType(getData, BEATS_MIME);
   if (json) {
-    const clip = parseScenePayload(json);
+    const clip = parseBeatPayload(json);
     if (clip) return clip;
   }
   const html = readType(getData, "text/html");
-  if (html.indexOf(SCENES_ATTR) === -1) return null;
-  const el = (ports as SceneClipPorts).text.inertBody(html).querySelector("[" + SCENES_ATTR + "]");
-  return el ? parseScenePayload(el.getAttribute(SCENES_ATTR)) : null;
+  if (html.indexOf(BEATS_ATTR) === -1) return null;
+  const el = (ports as BeatClipPorts).text.inertBody(html).querySelector("[" + BEATS_ATTR + "]");
+  return el ? parseBeatPayload(el.getAttribute(BEATS_ATTR)) : null;
 }
 
-export function parseScenePayload(json: unknown): ParsedSceneClipboard | null {
-  let p: ScenePayloadInput | null;
-  try { p = (typeof json === "string" ? JSON.parse(json) : json) as ScenePayloadInput | null; } catch (e) { return null; }
+export function parseBeatPayload(json: unknown): ParsedBeatClipboard | null {
+  let p: BeatPayloadInput | null;
+  try { p = (typeof json === "string" ? JSON.parse(json) : json) as BeatPayloadInput | null; } catch (e) { return null; }
   if (!p || typeof p !== "object" || p.format !== FORMAT || typeof p.version !== "number" || p.version < 1) return null;
   if (!Array.isArray(p.rows) || !p.rows.length) return null;
   const carried: string[] = [];
   const blobs = p.blobs && typeof p.blobs === "object" ? p.blobs as Record<string, unknown> : {};
   Object.keys(blobs).forEach(function (sha) {
     if (!isSha256Hex(sha) || typeof blobs[sha] !== "string") return;
-    const rec = (ports as SceneClipPorts).pictures.internDataUrl(blobs[sha]);
+    const rec = (ports as BeatClipPorts).pictures.internDataUrl(blobs[sha]);
     if (rec && rec.sha256 === sha) carried.push(sha);
   });
-  if (carried.length) (ports as SceneClipPorts).pictures.queuePersist(carried);
+  if (carried.length) (ports as BeatClipPorts).pictures.queuePersist(carried);
   const list = function (v: unknown) { return Array.isArray(v) ? clone(v as unknown[]) : []; };
-  const doc = (ports as SceneClipPorts).migrate({
+  const doc = (ports as BeatClipPorts).migrate({
     schema: SCHEMA_VERSION,
     title: "",
     rows: list(p.rows),
@@ -235,7 +235,7 @@ function mintFree(prefix: string, taken: Record<string, boolean>, mint: (prefix:
   return id;
 }
 
-function sceneRowIds(clip: SceneClip, state: DocumentView | null, move: boolean, mint: (prefix: string) => string) {
+function beatRowIds(clip: BeatClip, state: DocumentView | null, move: boolean, mint: (prefix: string) => string) {
   const rowTaken = Object.create(null) as Record<string, boolean>;
   (state as DocumentView).rows.forEach(function (r) { rowTaken[r.id] = true; });
   const rowMap = Object.create(null) as Record<string, string>;
@@ -246,20 +246,20 @@ function sceneRowIds(clip: SceneClip, state: DocumentView | null, move: boolean,
   return rowMap;
 }
 
-type SceneClip = NonNullable<ReturnType<typeof parseScenePayload>>;
+type BeatClip = NonNullable<ReturnType<typeof parseBeatPayload>>;
 
-export function scenePaste(clip: SceneClip, opts?: ScenePasteOptions) {
+export function beatPaste(clip: BeatClip, opts?: BeatPasteOptions) {
   opts = opts || {};
-  const mint = opts.mint || (ports as SceneClipPorts).ids.id;
+  const mint = opts.mint || (ports as BeatClipPorts).ids.id;
   let planned: { move: boolean; rowMap: Record<string, string>; replaceRowId: string | null } | null = null;
-  let result: ReturnType<typeof insertScenes> | null = null;
+  let result: ReturnType<typeof insertBeats> | null = null;
   return {
-    plan: function (doc: Parameters<ScenePaste["plan"]>[0]): ScenePastePlan | null {
+    plan: function (doc: Parameters<BeatPaste["plan"]>[0]): BeatPastePlan | null {
       if (!clip || !clip.rows || !clip.rows.length) return null;
       const row = doc.rows.filter(function (r) { return r.id === opts.afterRowId; })[0];
       const move = isMove(clip, doc);
-      const rowMap = sceneRowIds(clip, doc, move, mint);
-      planned = { move: move, rowMap: rowMap, replaceRowId: row && isBlankScene(doc, row, (ports as SceneClipPorts).text) ? row.id : null };
+      const rowMap = beatRowIds(clip, doc, move, mint);
+      planned = { move: move, rowMap: rowMap, replaceRowId: row && isBlankBeat(doc, row, (ports as BeatClipPorts).text) ? row.id : null };
       return {
         inserted: clip.rows.map(function (r) { return rowMap[r.id] as string; }),
         replaced: (planned as NonNullable<typeof planned>).replaceRowId,
@@ -267,8 +267,8 @@ export function scenePaste(clip: SceneClip, opts?: ScenePasteOptions) {
         saveNow: true
       };
     },
-    apply: function (live: Parameters<ScenePaste["apply"]>[0]) {
-      result = insertScenes(clip, {
+    apply: function (live: Parameters<BeatPaste["apply"]>[0]) {
+      result = insertBeats(clip, {
         state: live,
         rowMap: (planned as NonNullable<typeof planned>).rowMap,
         afterRowId: opts.afterRowId,
@@ -283,14 +283,14 @@ export function scenePaste(clip: SceneClip, opts?: ScenePasteOptions) {
   };
 }
 
-export function insertScenes(clip: SceneClip, opts?: SceneInsertOptions) {
+export function insertBeats(clip: BeatClip, opts?: BeatInsertOptions) {
   opts = opts || {};
-  const state = opts.state || (ports as SceneClipPorts).document.current();
-  const mint = opts.mint || (ports as SceneClipPorts).ids.id;
-  const move = !!opts.move && scenesAway(clip, state);
-  const list = function <K extends keyof SceneWireData>(k: K): ValidatedDocument[K] { if (!Array.isArray((state as ValidatedDocument)[k])) (state as ValidatedDocument)[k] = []; return (state as ValidatedDocument)[k]; };
+  const state = opts.state || (ports as BeatClipPorts).document.current();
+  const mint = opts.mint || (ports as BeatClipPorts).ids.id;
+  const move = !!opts.move && beatsAway(clip, state);
+  const list = function <K extends keyof BeatWireData>(k: K): ValidatedDocument[K] { if (!Array.isArray((state as ValidatedDocument)[k])) (state as ValidatedDocument)[k] = []; return (state as ValidatedDocument)[k]; };
 
-  const rowMap = opts.rowMap || sceneRowIds(clip, state, move, mint);
+  const rowMap = opts.rowMap || beatRowIds(clip, state, move, mint);
   const firstRowId = rowMap[(clip.rows[0] as DocumentRow).id];
 
   const comments = list("comments");
@@ -336,7 +336,7 @@ export function insertScenes(clip: SceneClip, opts?: SceneInsertOptions) {
     const row = clone(r);
     row.id = rowMap[r.id] as string;
     ["visualText", "audioText"].forEach(function (f) {
-      const cell = (ports as SceneClipPorts).text.fromHtml(row[f] || "").map(function (run) {
+      const cell = (ports as BeatClipPorts).text.fromHtml(row[f] || "").map(function (run) {
         if (!run.marks || !run.marks.cmt) return run;
         const marks = Object.assign({}, run.marks);
         marks.cmt = (marks.cmt as NonNullable<typeof marks.cmt>).map(function (id) { return anchorMap[id]; }).filter(Boolean) as string[];
@@ -411,11 +411,11 @@ export function insertScenes(clip: SceneClip, opts?: SceneInsertOptions) {
     shots.push(rec);
   });
   Object.keys(mintedByRow).forEach(function (rowId) {
-    (ports as SceneClipPorts).recordPastedBroll(state, rowId, (mintedByRow[rowId] as NonNullable<typeof mintedByRow[string]>).cell, (mintedByRow[rowId] as NonNullable<typeof mintedByRow[string]>).ids);
+    (ports as BeatClipPorts).recordPastedBroll(state, rowId, (mintedByRow[rowId] as NonNullable<typeof mintedByRow[string]>).cell, (mintedByRow[rowId] as NonNullable<typeof mintedByRow[string]>).ids);
   });
 
   added.forEach(function (c) { comments.push(c); });
-  syncCommentAnchors(state, (ports as SceneClipPorts).text.cellOf);
+  syncCommentAnchors(state, (ports as BeatClipPorts).text.cellOf);
 
   return {
     rowIds: rows.map(function (r) { return r.id; }),
@@ -424,7 +424,7 @@ export function insertScenes(clip: SceneClip, opts?: SceneInsertOptions) {
   };
 }
 
-export function startSceneClip(given: SceneClipPorts) {
+export function startBeatClip(given: BeatClipPorts) {
   ports = given;
   liveCut = null;
   return { dispose: function () { liveCut = null; } };

@@ -15,7 +15,7 @@ const { paintingScreen, renderAbsorbed, renderRow } = await import("../features/
 const { paintGuard } = await import("../bootstrap/wiring/editor-owners.ts");
 const whilePainting = (paint) => paintGuard().whilePainting(paint);
 const afterThisPaint = (work) => paintGuard().afterThisPaint(work);
-const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
+const { setHideShotBeats } = await import("../bootstrap/wiring/hide-shot.ts");
 const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../features/broll/panel.ts");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
@@ -684,18 +684,18 @@ function openLength(id) {
   return box;
 }
 
-function hidingShotScenes(run) {
-  setHideShotScenes(true);
+function hidingShotBeats(run) {
+  setHideShotBeats(true);
   try {
     return run();
   } finally {
-    setHideShotScenes(false);
+    setHideShotBeats(false);
   }
 }
 
 const editsWhilePainting = () => published.map((k, i) => [k, publishedWhilePainting[i]]).filter((p) => p[0] === "edit").map((p) => p[1]);
 
-test("a length typed into the scene-length editor is set after a redraw that removes the editor, not from inside it, and the incoming change is kept too (#485)", () => hidingShotScenes(() => {
+test("a length typed into the scene-length editor is set after a redraw that removes the editor, not from inside it, and the incoming change is kept too (#485)", () => hidingShotBeats(() => {
   const doc = fresh("Length typed");
   openLength("r1").value = "2:00";
   const theirs = cloneState(doc);
@@ -709,7 +709,7 @@ test("a length typed into the scene-length editor is set after a redraw that rem
   assert.deepEqual(editsWhilePainting(), [false], "the length is set with no paint running");
 }));
 
-test("an untouched scene-length editor that a redraw removes sets nothing and keeps the incoming length (#485)", () => hidingShotScenes(() => {
+test("an untouched scene-length editor that a redraw removes sets nothing and keeps the incoming length (#485)", () => hidingShotBeats(() => {
   const doc = fresh("Length untouched");
   openLength("r1");
   const theirs = cloneState(doc);
@@ -721,7 +721,7 @@ test("an untouched scene-length editor that a redraw removes sets nothing and ke
   assert.equal(lengthOf("r1"), 45);
 }));
 
-test("a length typed into an editor that a failing redraw removed is set in the document once that redraw has failed, so a save keeps it, and Redraw then sets nothing more (#485, #514)", () => hidingShotScenes(() => {
+test("a length typed into an editor that a failing redraw removed is set in the document once that redraw has failed, so a save keeps it, and Redraw then sets nothing more (#485, #514)", () => hidingShotBeats(() => {
   const doc = fresh("Length failed");
   openLength("r1").value = "2:00";
   const theirs = cloneState(doc);

@@ -18,7 +18,7 @@ import { presence } from "./ports/desktop-presence.ts";
 import { startSettings as mountSettings } from "../../features/settings/settings.ts";
 import type { SettingsMount, SettingsPorts } from "../../features/settings/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { setHideShotScenes } from "./hide-shot.ts";
+import { setHideShotBeats } from "./hide-shot.ts";
 import { personSwatchesHtml } from "./title-chrome.ts";
 import { getSavedAuthorName } from "../../application/comment-author.ts";
 import { connectWriter } from "./writer.ts";
@@ -34,7 +34,7 @@ const settings = owned<SettingsMount>();
 export function mountSettingsFeature(): SettingsMount {
   return settings.replace(() => {
     const editor: { -readonly [K in keyof SettingsPorts["editor"]]: SettingsPorts["editor"][K] } = {
-      writerSize: writerSizePreference, setWriterSize: inactiveWriterSize, hideShot: setHideShotScenes, autoSave: setAutoSaveEnabled
+      writerSize: writerSizePreference, setWriterSize: inactiveWriterSize, hideShot: setHideShotBeats, autoSave: setAutoSaveEnabled
     };
     const ports: SettingsPorts = {
       actions: portActions,
@@ -74,7 +74,7 @@ export function mountSettingsFeature(): SettingsMount {
       },
       editor,
       identity: { name: () => getSavedAuthorName(preferences()), swatchesHtml: personSwatchesHtml },
-      prompter: { mirror: (value) => { prompterControls()?.setPrompterMirror(value); }, flip: (value) => { prompterControls()?.setPrompterFlip(value); }, sceneMode: (value) => { prompterControls()?.setPrompterSceneMode(value); } },
+      prompter: { mirror: (value) => { prompterControls()?.setPrompterMirror(value); }, flip: (value) => { prompterControls()?.setPrompterFlip(value); }, beatMode: (value) => { prompterControls()?.setPrompterBeatMode(value); } },
       desktop: { running: presence.running, renderNotice: () => { updateControls()?.renderDesktopAppNotice(); } }
     };
     const mounted: SettingsMount = mountSettings(ports);

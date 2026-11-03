@@ -7,9 +7,9 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { normalizeCell } from "../../../src/core/text/runs.ts";
 import type { TextSpan } from "../../../src/core/text/edits.ts";
-import type { SceneMediaPorts, ScenePorts } from "../../../src/features/rows/ports.ts";
-import { startSceneMedia as mountSceneMedia } from "../../../src/features/rows/scene-media.ts";
-import { startSceneRows as mountScenes } from "../../../src/features/rows/scenes.ts";
+import type { BeatMediaPorts, BeatPorts } from "../../../src/features/rows/ports.ts";
+import { startBeatMedia as mountBeatMedia } from "../../../src/features/rows/beat-media.ts";
+import { startBeatRows as mountBeats } from "../../../src/features/rows/beats.ts";
 import { cellOf, storedHtmlFromDom } from "../../../src/bootstrap/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeOwnership, fakePictures } from "../fakes.ts";
@@ -34,7 +34,7 @@ function setup() {
   const calls: string[] = [];
   const armed = new Map<DeleteArea, string>();
   let minted = 0;
-  const ports: ScenePorts = {
+  const ports: BeatPorts = {
     document: fakeDocument(doc).document,
     edits: {
       ...edits.edits,
@@ -54,7 +54,7 @@ function setup() {
       disarm: (area) => { armed.delete(area); }
     }
   };
-  return { edits, notices, calls, owner: mountScenes(ports) };
+  return { edits, notices, calls, owner: mountBeats(ports) };
 }
 
 test("scenes: adding a scene runs the add command with a fresh id, and a refused add adds nothing", () => {
@@ -125,7 +125,7 @@ test("scene media: a gallery change goes through the gallery edit, and a paste p
   const notices = fakeNotices();
   const edited: string[] = [];
   const placed: [number, number | undefined][] = [];
-  const ports: SceneMediaPorts = {
+  const ports: BeatMediaPorts = {
     document: fakeDocument(null).document,
     notices: notices.notices,
     ownership: fakeOwnership().ownership,
@@ -134,7 +134,7 @@ test("scene media: a gallery change goes through the gallery edit, and a paste p
     text: { storedHtmlFromDom },
     selection: { of: () => ({ from: 1, to: 3 }), set: (_cell, from, to) => { placed.push([from, to]); } }
   };
-  const owner = mountSceneMedia(ports);
+  const owner = mountBeatMedia(ports);
   owner.removePicture("r1", 0);
   owner.removeLink("r1", 0, "k");
   assert.deepEqual(edited, ["r1: Picture removed", "r1: Video link removed"]);

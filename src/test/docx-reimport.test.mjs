@@ -311,13 +311,13 @@ test("the narration: its meta line and each scene's number in the margin, none o
   const paras = kids(body, "p");
   assert.equal(paraStyle(paras[1]), "SplitpageMeta");
   assert.match(paras[1].textContent, /^Narration · 3 scenes · \d+ words · about 0:\d\d at 150 wpm$/);
-  const scenes = paras.slice(2);
-  assert.ok(scenes.every((p) => paraStyle(p) === "SplitpageNarration"));
-  assert.deepEqual(scenes.map((p) => {
+  const beats = paras.slice(2);
+  assert.ok(beats.every((p) => paraStyle(p) === "SplitpageNarration"));
+  assert.deepEqual(beats.map((p) => {
     const r = p.getElementsByTagNameNS(W, "r")[0];
     return runStyle(r) + ":" + r.textContent;
   }), ["SplitpageSceneNo:01", "SplitpageSceneNo:02", "SplitpageSceneNo:04"]);
-  assert.ok(scenes.every((p) => prop(p, "ind", "hanging") && p.getElementsByTagNameNS(W, "tab").length));
+  assert.ok(beats.every((p) => prop(p, "ind", "hanging") && p.getElementsByTagNameNS(W, "tab").length));
   assert.equal(body.getElementsByTagNameNS(W, "tbl").length, 0, "prose, not a table");
 });
 

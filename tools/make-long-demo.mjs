@@ -15,7 +15,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const TITLE = "I Fixed a $40 Film Camera (and Shot a Roll With It)";
 
-const SCENES = [
+const BEATS = [
   { s: "shot",
     v: "Cold open, macro: a dusty [p:Pentax K1000] on the [l:workbench]. A finger wipes a line through the dust.\n[s:shutter click] as the lever is wound.",
     a: "Forty dollars. That's what this cost me at a flea market. The meter's dead, the seals are gone, and the shutter sticks. Let's fix it." },
@@ -139,18 +139,18 @@ const TAG_STATE = {
 };
 
 const COMMENTS = [
-  { id: "c1", scene: 3, field: "audioText", author: "Jo (editor)",
+  { id: "c1", beat: 3, field: "audioText", author: "Jo (editor)",
     body: "Love this. Could we hold on your face for a beat after it?",
     at: "2026-09-20T10:12:00.000Z",
     replies: [{ id: "c1r1", author: "Sam", body: "Yes — I'll leave a second of room in the take.", at: "2026-09-20T11:40:00.000Z" }] },
-  { id: "c2", scene: 9, field: "audioText", author: "Jo (editor)",
+  { id: "c2", beat: 9, field: "audioText", author: "Jo (editor)",
     body: "Is “escapement” right for a focal-plane shutter? Worth checking.",
     at: "2026-09-20T10:20:00.000Z",
     resolved: { by: "Sam", at: "2026-09-21T09:05:00.000Z" } },
-  { id: "c3", scene: 18, field: "audioText", author: "Sam",
+  { id: "c3", beat: 18, field: "audioText", author: "Sam",
     body: "Rita's line — keep it exactly as she said it.",
     at: "2026-09-21T14:30:00.000Z", assignee: "Jo (editor)" },
-  { id: "c4", scene: 24, field: "audioText", author: "Jo (editor)",
+  { id: "c4", beat: 24, field: "audioText", author: "Jo (editor)",
     body: "Tension here could use a sting. Something short and low?",
     at: "2026-09-22T08:15:00.000Z" }
 ];
@@ -201,7 +201,7 @@ function visual(text) {
   }).join("<br>");
 }
 
-const rows = SCENES.map((sc, i) => {
+const rows = BEATS.map((sc, i) => {
   const row = {
     id: "r" + (i + 1),
     status: sc.s,
@@ -221,9 +221,9 @@ const productionTags = Object.keys(TAG_STATE).map((key, i) => {
 });
 
 const comments = COMMENTS.map((c) => {
-  const row = rows[c.scene - 1];
+  const row = rows[c.beat - 1];
   const quoted = new RegExp('data-cmt="' + c.id + '">([^<]*)<').exec(row[c.field]);
-  if (!quoted) throw new Error("comment " + c.id + " has no anchor in scene " + c.scene);
+  if (!quoted) throw new Error("comment " + c.id + " has no anchor in scene " + c.beat);
   return {
     id: c.id, rowId: row.id, field: c.field, anchorId: c.id, quotedText: quoted[1],
     author: c.author, body: esc(c.body),

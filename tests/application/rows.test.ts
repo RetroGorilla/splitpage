@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import { CELL_TEXT_DERIVES } from "../../src/application/commands/cell-text.ts";
-import { addSceneCommand, deleteSceneCommand, moveSceneCommand, swapScenesCommand } from "../../src/application/commands/rows.ts";
+import { addBeatCommand, deleteBeatCommand, moveBeatCommand, swapBeatsCommand } from "../../src/application/commands/rows.ts";
 import type { StampPorts } from "../../src/application/session/ports.ts";
 import { harness, runConfined } from "./session-fakes.ts";
 
@@ -52,7 +52,7 @@ const ONE_EDIT = ["undo.record", "dirty:1", "draft:1", "save:1", "publish:edit"]
 
 test("rows: adding a scene below another is one generation, one undo record, a stamped blank scene in place", () => {
   const h = opened();
-  const out = runConfined(h.session, addSceneCommand("r2", "new1", stamps()));
+  const out = runConfined(h.session, addBeatCommand("r2", "new1", stamps()));
   assert.deepEqual(out, { kind: "applied", generation: 1, changes: changeSet({ rowsInserted: ["new1"] }) });
   assert.deepEqual(h.log, ["reconcile"].concat(ONE_EDIT));
   assert.deepEqual(order(h), ["r1", "r2", "new1", "r3", "r4"]);
@@ -64,21 +64,21 @@ test("rows: adding a scene below another is one generation, one undo record, a s
 
 test("rows: adding with no anchor appends at the end", () => {
   const h = opened();
-  assert.equal(runConfined(h.session, addSceneCommand(null, "new1", stamps())).kind, "applied");
+  assert.equal(runConfined(h.session, addBeatCommand(null, "new1", stamps())).kind, "applied");
   assert.deepEqual(order(h), ["r1", "r2", "r3", "r4", "new1"]);
 });
 
 test("rows: adding below a scene that has gone is a no-op, not a scene at the top", () => {
   const h = opened();
   const before = snapshot(h);
-  assert.deepEqual(runConfined(h.session, addSceneCommand("gone", "new1", stamps())), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, addBeatCommand("gone", "new1", stamps())), { kind: "noop" });
   assert.deepEqual(h.log, []);
   assert.equal(snapshot(h), before);
 });
 
 test("rows: deleting a scene is one transaction that also re-points the comments it held", () => {
   const h = opened();
-  const out = runConfined(h.session, deleteSceneCommand("r2"));
+  const out = runConfined(h.session, deleteBeatCommand("r2"));
   assert.deepEqual(out, { kind: "applied", generation: 1, changes: changeSet({ rowsRemoved: ["r2"], derive: CELL_TEXT_DERIVES }) });
   assert.deepEqual(h.log, ["reconcile"].concat(ONE_EDIT), "anchors reconcile inside the transaction, before commit");
   assert.deepEqual(order(h), ["r1", "r3", "r4"]);
@@ -87,43 +87,43 @@ test("rows: deleting a scene is one transaction that also re-points the comments
 
 test("rows: deleting a scene that has gone is a no-op", () => {
   const h = opened();
-  assert.deepEqual(runConfined(h.session, deleteSceneCommand("gone")), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, deleteBeatCommand("gone")), { kind: "noop" });
   assert.deepEqual(h.log, []);
 });
 
 test("rows: a drag move is one transaction marked as moved rows, saved at once, with no stamps", () => {
   const h = opened();
-  const out = runConfined(h.session, moveSceneCommand("r1", "r3", true));
+  const out = runConfined(h.session, moveBeatCommand("r1", "r3", true));
   assert.deepEqual(out, { kind: "applied", generation: 1, changes: changeSet({ rowsMoved: true, derive: CELL_TEXT_DERIVES, saveNow: true }) });
   assert.deepEqual(order(h), ["r2", "r3", "r1", "r4"]);
   assert.equal(h.log.filter(function (l) { return l === "undo.record"; }).length, 1);
   assert.deepEqual(stampsOf(h), [OLD, OLD, OLD, OLD]);
-  assert.equal(runConfined(h.session, moveSceneCommand("r4", "r2", false)).kind, "applied");
+  assert.equal(runConfined(h.session, moveBeatCommand("r4", "r2", false)).kind, "applied");
   assert.deepEqual(order(h), ["r4", "r2", "r3", "r1"]);
 });
 
 test("rows: a move that leaves the order as it was is a no-op with no undo entry and no dirty mark", () => {
   const h = opened();
-  assert.deepEqual(runConfined(h.session, moveSceneCommand("r2", "r1", true)), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, moveSceneCommand("r2", "r3", false)), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, moveSceneCommand("r2", "r2", true)), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, moveSceneCommand("gone", "r2", true)), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, moveSceneCommand("r2", "gone", true)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, moveBeatCommand("r2", "r1", true)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, moveBeatCommand("r2", "r3", false)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, moveBeatCommand("r2", "r2", true)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, moveBeatCommand("gone", "r2", true)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, moveBeatCommand("r2", "gone", true)), { kind: "noop" });
   assert.deepEqual(h.log, []);
   assert.deepEqual(order(h), ["r1", "r2", "r3", "r4"]);
 });
 
 test("rows: swapping with a neighbour is one transaction; past either end is a no-op", () => {
   const h = opened();
-  assert.equal(runConfined(h.session, swapScenesCommand("r2", -1)).kind, "applied");
+  assert.equal(runConfined(h.session, swapBeatsCommand("r2", -1)).kind, "applied");
   assert.deepEqual(order(h), ["r2", "r1", "r3", "r4"]);
-  assert.equal(runConfined(h.session, swapScenesCommand("r3", 1)).kind, "applied");
+  assert.equal(runConfined(h.session, swapBeatsCommand("r3", 1)).kind, "applied");
   assert.deepEqual(order(h), ["r2", "r1", "r4", "r3"]);
   assert.equal(h.session.generation(), 2);
   h.log.length = 0;
-  assert.deepEqual(runConfined(h.session, swapScenesCommand("r2", -1)), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, swapScenesCommand("r3", 1)), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, swapScenesCommand("gone", 1)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, swapBeatsCommand("r2", -1)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, swapBeatsCommand("r3", 1)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, swapBeatsCommand("gone", 1)), { kind: "noop" });
   assert.deepEqual(h.log, []);
 });
 
@@ -131,7 +131,7 @@ test("rows: a review copy refuses every row command before it plans, with nothin
   const h = opened();
   const before = snapshot(h);
   h.deny("review");
-  for (const command of [addSceneCommand("r1", "new1", stamps()), deleteSceneCommand("r1"), moveSceneCommand("r1", "r3", true), swapScenesCommand("r1", 1)]) {
+  for (const command of [addBeatCommand("r1", "new1", stamps()), deleteBeatCommand("r1"), moveBeatCommand("r1", "r3", true), swapBeatsCommand("r1", 1)]) {
     assert.deepEqual(runConfined(h.session, command), { kind: "rejected", reason: "review" }, command.name);
   }
   assert.deepEqual(h.log, []);
@@ -140,8 +140,8 @@ test("rows: a review copy refuses every row command before it plans, with nothin
 
 test("rows: with no document open the row commands are refused", () => {
   const h = harness();
-  assert.deepEqual(runConfined(h.session, addSceneCommand(null, "new1", stamps())), { kind: "rejected", reason: NO_DOCUMENT });
-  assert.deepEqual(runConfined(h.session, moveSceneCommand("r1", "r2", true)), { kind: "rejected", reason: NO_DOCUMENT });
+  assert.deepEqual(runConfined(h.session, addBeatCommand(null, "new1", stamps())), { kind: "rejected", reason: NO_DOCUMENT });
+  assert.deepEqual(runConfined(h.session, moveBeatCommand("r1", "r2", true)), { kind: "rejected", reason: NO_DOCUMENT });
 });
 
 test("rows: a stamp port that throws fails the add and leaves the scenes as they were", () => {
@@ -151,7 +151,7 @@ test("rows: a stamp port that throws fails the add and leaves the scenes as they
     clock: { nowIso: function () { return STAMP; } },
     editor: { name: function () { throw new Error("no editor"); } }
   };
-  const out = runConfined(h.session, addSceneCommand("r1", "new1", broken));
+  const out = runConfined(h.session, addBeatCommand("r1", "new1", broken));
   assert.equal(out.kind, "failed");
   assert.equal(snapshot(h), before);
   assert.deepEqual(h.log, []);

@@ -127,9 +127,9 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
 
   const baseRows = byId(b && (b as MergeReviewDocument).rows), mineRows = byId((mine as MergeReviewDocument).rows), theirRows = byId(theirs.rows);
   const textCtx = textMergeContext(b, mine, theirs);
-  const order: string[] = [], seen = idMap<boolean>(), sceneNo = idMap<number>();
-  theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; });
-  (mine as MergeReviewDocument).rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; } });
+  const order: string[] = [], seen = idMap<boolean>(), beatNo = idMap<number>();
+  theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; beatNo[r.id] = order.length; });
+  (mine as MergeReviewDocument).rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; beatNo[r.id] = order.length; } });
 
   order.forEach(function (id) {
     const m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
@@ -179,7 +179,7 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
       entries.push({ label: "Status", outcome: "status", mineHtml: statusPair.mine, theirsHtml: statusPair.theirs });
     }
     if (!entries.length) return;
-    groups.push({ label: "Scene " + pad2(sceneNo[id] as number), note: mergeRowFate(bb, m, t), entries: entries });
+    groups.push({ label: "Scene " + pad2(beatNo[id] as number), note: mergeRowFate(bb, m, t), entries: entries });
   });
 
   const tagEntries = mergeListEntries("Breakdown", (mine as MergeReviewDocument).productionTags, theirs.productionTags,

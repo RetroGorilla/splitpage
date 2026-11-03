@@ -6,9 +6,9 @@ import { text as portText } from "./ports/text.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { brollSeedOf, recordPastedBroll } from "../../application/production/broll-records.ts";
 import { startCellClipboard as mountCellClipboard } from "../../features/clipboard/cell-clipboard.ts";
-import type { CellClipboardPorts, CopyPasteMount, SceneClipPorts, SceneSelectPorts } from "../../features/clipboard/ports.ts";
-import { startSceneClip as mountSceneClip } from "../../features/clipboard/scene-clip.ts";
-import { startSceneSelect as mountSceneSelect } from "../../features/clipboard/scene-select.ts";
+import type { CellClipboardPorts, CopyPasteMount, BeatClipPorts, BeatSelectPorts } from "../../features/clipboard/ports.ts";
+import { startBeatClip as mountBeatClip } from "../../features/clipboard/beat-clip.ts";
+import { startBeatSelect as mountBeatSelect } from "../../features/clipboard/beat-select.ts";
 import { isScriptCell } from "../../features/editing/cell-page.ts";
 import { cellSelection } from "../../features/common/cell-selection.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -43,16 +43,16 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       paintGuard: { whileShown: (edit) => paintGuard().whileShown(edit) },
       brollSeed: (row) => brollSeedOf(row, portText)
     };
-    const clipPorts: SceneClipPorts = {
+    const clipPorts: BeatClipPorts = {
       document: portDocument,
       ids: randomIds,
       pictures: portPictures,
       text: portText,
       migrate: migrateRows,
-      tagsInRows: collectTagsFromRows as SceneClipPorts["tagsInRows"],
+      tagsInRows: collectTagsFromRows as BeatClipPorts["tagsInRows"],
       recordPastedBroll: (doc, rowId, cell, ids) => { recordPastedBroll(doc, rowId, cell, ids, portText, randomIds); }
     };
-    const selectPorts: SceneSelectPorts = {
+    const selectPorts: BeatSelectPorts = {
       document: portDocument,
       edits: portEdits,
       undo: portUndo,
@@ -69,12 +69,12 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       nonce
     };
     const cells = mountCellClipboard(cellPorts);
-    const scenes = mountSceneClip(clipPorts);
-    const selection = mountSceneSelect(selectPorts);
+    const beats = mountBeatClip(clipPorts);
+    const selection = mountBeatSelect(selectPorts);
     return {
       dispose: () => {
         selection.dispose();
-        scenes.dispose();
+        beats.dispose();
         cells.dispose();
       }
     };

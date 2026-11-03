@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../src/core/migrate.ts";
-import { sectionForScene } from "../../src/core/document/sections.ts";
+import { sectionForBeat } from "../../src/core/document/sections.ts";
 import { mergeSectionLayout } from "../../src/core/merge/sections.ts";
 import { fakeMigration } from "./migrate-ports.ts";
 import { fakePorts } from "./merge/fakes.ts";
@@ -14,8 +14,8 @@ test("sections r2: removing a header retains the predecessor after its original 
   const base = { rows: ["a", "b", "c"].map(id => ({ id })), sections: [
     { id: "P", name: "P", firstSceneId: "b" }, { id: "S", name: "S", firstSceneId: "c" }
   ] };
-  for (const [sceneIds, name] of [[["a", "c"], "P"], [["b", "a", "c"], "P"], [["a", "c"], "P2"]] as const) {
-    const edited = { rows: sceneIds.map(id => ({ id })), sections: [{ id: "P", name, firstSceneId: "c" }] };
+  for (const [beatIds, name] of [[["a", "c"], "P"], [["b", "a", "c"], "P"], [["a", "c"], "P2"]] as const) {
+    const edited = { rows: beatIds.map(id => ({ id })), sections: [{ id: "P", name, firstSceneId: "c" }] };
     for (const other of [base, { ...base, sections: [base.sections[0]] }]) {
       for (const [mine, theirs] of [[other, edited], [edited, other]] as const) {
         const result = mergeSectionLayout(base, mine, theirs, edited.rows);
@@ -54,8 +54,8 @@ test("sections r1: absent metadata defers without a base in both orientations", 
 test("sections r1: incidental deletion or movement of an anchor does not defeat header removal", () => {
   const base = { rows, sections };
   const removed = { rows, sections: [sections[0]] };
-  for (const sceneIds of [["a", "b", "d"], ["a", "c", "b", "d"]]) {
-    const edited = { rows: sceneIds.map(id => ({ id })), sections: [sections[0], { ...sections[1], firstSceneId: "d" }] };
+  for (const beatIds of [["a", "b", "d"], ["a", "c", "b", "d"]]) {
+    const edited = { rows: beatIds.map(id => ({ id })), sections: [sections[0], { ...sections[1], firstSceneId: "d" }] };
     for (const [mine, theirs] of [[removed, edited], [edited, removed]] as const) {
       const result = mergeSectionLayout(base, mine, theirs, edited.rows);
       assert.deepEqual(result.rows, edited.rows);
@@ -74,9 +74,9 @@ test("sections r1: snapshot ambiguity restores renamed original scenes but keeps
     const result = mergeSectionLayout(base, mine, theirs, removed.rows);
     assert.deepEqual(result.rows, removed.rows);
     assert.deepEqual(result.sections, renamed.sections);
-    assert.equal(sectionForScene(result, "x"), undefined);
-    assert.equal(sectionForScene(result, "b")?.id, "A");
-    assert.equal(sectionForScene(result, "c")?.id, "B");
+    assert.equal(sectionForBeat(result, "x"), undefined);
+    assert.equal(sectionForBeat(result, "b")?.id, "A");
+    assert.equal(sectionForBeat(result, "c")?.id, "B");
   }
   const anchorOnly = { ...base, sections: [{ ...base.sections[0], firstSceneId: "c" }, base.sections[1]] };
   assert.deepEqual(mergeSectionLayout(base, { ...base, sections: [base.sections[1]] }, anchorOnly, rows).sections, [base.sections[1]]);
@@ -102,8 +102,8 @@ test("sections: migration omits absent and empty metadata, normalizes names, rej
   const doc = migrateRows({ rows, sections: [sections[1], { ...sections[0], name: "  Opening  " },
     { id: "duplicate", name: "Duplicate", firstSceneId: "a" }, { id: "orphan", name: "Gone", firstSceneId: "gone" }] }, migration.ports);
   assert.deepEqual(doc.sections, sections);
-  assert.equal(sectionForScene(doc, "b")?.id, "s1");
-  assert.equal(sectionForScene(doc, "d")?.id, "s2");
+  assert.equal(sectionForBeat(doc, "b")?.id, "s1");
+  assert.equal(sectionForBeat(doc, "d")?.id, "s2");
 });
 
 test("sections: concurrent rename and anchor change combine; same-property conflicts keep theirs", () => {
@@ -144,15 +144,15 @@ test("sections: a group move and concurrent paste over its first scene keep the 
   const merged = mergeSectionLayout(base, mine, theirs, theirs.rows);
   const mergedRows = merged.rows;
   assert.deepEqual(mergedRows.map(row => row.id), ["x", "y", "d", "a", "b"]);
-  assert.equal(sectionForScene(merged, "d")?.id, "s2");
-  assert.equal(sectionForScene(merged, "a")?.id, "s1");
+  assert.equal(sectionForBeat(merged, "d")?.id, "s2");
+  assert.equal(sectionForBeat(merged, "a")?.id, "s1");
   for (const [mineSide, theirSide] of [[mine, theirs], [theirs, mine]]) {
     const migration = fakeMigration();
     const result = mergeStateFields(migrateRows(structuredClone(base), migration.ports),
       migrateRows(structuredClone(mineSide), migration.ports), migrateRows(structuredClone(theirSide), migration.ports), fakePorts(() => []));
     const state = migrateRows(result.merged, migration.ports);
     assert.deepEqual(state.rows.map(row => row.id), ["x", "y", "d", "a", "b"]);
-    assert.equal(sectionForScene(state, "d")?.id, "s2");
+    assert.equal(sectionForBeat(state, "d")?.id, "s2");
   }
 });
 
@@ -166,8 +166,8 @@ test("sections: replacing a singleton retains its section's concurrent move in b
       migrateRows(structuredClone(mine), migration.ports), migrateRows(structuredClone(theirs), migration.ports), fakePorts(() => []));
     const state = migrateRows(result.merged, migration.ports);
     assert.deepEqual(state.rows.map(row => row.id), ["x", "y", "a"]);
-    assert.equal(sectionForScene(state, "x")?.id, "s2");
-    assert.equal(sectionForScene(state, "y")?.id, "s2");
+    assert.equal(sectionForBeat(state, "x")?.id, "s2");
+    assert.equal(sectionForBeat(state, "y")?.id, "s2");
   }
 });
 
@@ -182,7 +182,7 @@ test("sections: scene positions inside their destination do not compete with a s
   for (const [mine, theirs] of [[moved, edited], [edited, moved]] as const) {
     const result = mergeSectionLayout(base, mine, theirs, edited.rows);
     assert.deepEqual(result.rows.map(row => row.id), ["d", "e", "a", "c", "b"]);
-    assert.equal(sectionForScene(result, "c")?.id, "A");
+    assert.equal(sectionForBeat(result, "c")?.id, "A");
   }
 });
 

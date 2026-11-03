@@ -1,4 +1,4 @@
-import { sectionForScene } from "../../core/document/sections.ts";
+import { sectionForBeat } from "../../core/document/sections.ts";
 import type { SectionDocument } from "../../core/document/sections.ts";
 
 export interface SectionView {
@@ -18,7 +18,7 @@ export function createSectionView(): SectionView {
     toggle(id) { if (folded.has(id)) folded.delete(id); else folded.add(id); changed(); },
     reveal(doc, rowId) {
       if (!folded.size) return;
-      const section = sectionForScene(doc, rowId);
+      const section = sectionForBeat(doc, rowId);
       if (section && folded.delete(section.id)) changed();
     },
     reset() { if (!folded.size) return; folded.clear(); changed(); },

@@ -6,12 +6,12 @@ import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DeepReadonly, DocumentView } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 
-export interface SceneAt {
+export interface BeatAt {
   readonly index: number;
   readonly row: DeepReadonly<DocumentRow>;
 }
 
-export const SCENE_LENGTH_DERIVES: readonly string[] = Object.freeze(["production", "broll"]);
+export const BEAT_LENGTH_DERIVES: readonly string[] = Object.freeze(["production", "broll"]);
 
 function rowCopy(row: DeepReadonly<DocumentRow>): DeepReadonly<DocumentRow> {
   return Object.freeze(JSON.parse(JSON.stringify(row)) as DocumentRow);
@@ -24,12 +24,12 @@ function lengthChanges(rowId: string): ChangeSet {
       { rowId: rowId, field: "updatedAt" },
       { rowId: rowId, field: "updatedBy" }
     ],
-    derive: SCENE_LENGTH_DERIVES,
+    derive: BEAT_LENGTH_DERIVES,
     saveNow: true
   });
 }
 
-export function sceneAt(rowId: string): (doc: DocumentView | null) => SceneAt | null {
+export function beatAt(rowId: string): (doc: DocumentView | null) => BeatAt | null {
   return function (doc) {
     if (!doc) return null;
     const index = doc.rows.findIndex(function (r) { return r.id === rowId; });
@@ -38,7 +38,7 @@ export function sceneAt(rowId: string): (doc: DocumentView | null) => SceneAt | 
   };
 }
 
-export function sceneLengthCommand(rowId: string, seconds: number | null | undefined, stamps: StampPorts): Command {
+export function beatLengthCommand(rowId: string, seconds: number | null | undefined, stamps: StampPorts): Command {
   const after = seconds == null ? null : seconds;
   return {
     name: "set-scene-length",

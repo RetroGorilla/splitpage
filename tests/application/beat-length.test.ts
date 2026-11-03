@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
-import { SCENE_LENGTH_DERIVES, sceneAt, sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
+import { BEAT_LENGTH_DERIVES, beatAt, beatLengthCommand } from "../../src/application/commands/beat-length.ts";
 import type { StampPorts } from "../../src/application/session/ports.ts";
 import { harness, rawScript, runConfined } from "./session-fakes.ts";
 
@@ -57,7 +57,7 @@ const LENGTH_CHANGES = function (rowId: string) {
 
 test("E2: setting a scene's length is one generation, one undo record and one effect pass, stamped through the clock and editor ports", () => {
   const h = opened();
-  const out = runConfined(h.session, sceneLengthCommand("r1", 90, stamps()));
+  const out = runConfined(h.session, beatLengthCommand("r1", 90, stamps()));
   assert.deepEqual(out, { kind: "applied", generation: 1, changes: LENGTH_CHANGES("r1") });
   assert.equal(h.session.generation(), 1);
   assert.deepEqual(h.log, ["undo.record", "dirty:1", "draft:1", "save:1", "publish:edit"]);
@@ -68,7 +68,7 @@ test("E2: setting a scene's length is one generation, one undo record and one ef
   assert.equal(rowOf(h, "r2")?.updatedAt, "2026-01-01T00:00:00.000Z", "no other scene is stamped");
   assert.equal(h.published.length, 1);
   assert.equal(h.published[0]?.changes.saveNow, true, "the change asks for an immediate save, as the button always did");
-  assert.deepEqual(SCENE_LENGTH_DERIVES, ["production", "broll"]);
+  assert.deepEqual(BEAT_LENGTH_DERIVES, ["production", "broll"]);
   assert.deepEqual(h.refreshes, []);
   h.clock.advance(180);
   assert.deepEqual(h.refreshes, [["broll", "production"]], "production and b-roll refresh once, on the idle refresh");
@@ -76,7 +76,7 @@ test("E2: setting a scene's length is one generation, one undo record and one ef
 
 test("E2: clearing a set length deletes the key and is one more generation", () => {
   const h = opened();
-  const out = runConfined(h.session, sceneLengthCommand("r2", null, stamps("Mara")));
+  const out = runConfined(h.session, beatLengthCommand("r2", null, stamps("Mara")));
   assert.equal(out.kind, "applied");
   const row = rowOf(h, "r2");
   assert.ok(row && !("lengthSeconds" in row), "the key is gone, not set to null");
@@ -88,10 +88,10 @@ test("E2: clearing a set length deletes the key and is one more generation", () 
 test("E3: the same length again, clearing a length that was never set and a scene that is gone are no-ops with no effects", () => {
   const h = opened();
   const before = snapshot(h);
-  assert.deepEqual(runConfined(h.session, sceneLengthCommand("r2", 45, stamps())), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, sceneLengthCommand("r1", null, stamps())), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, sceneLengthCommand("r1", undefined, stamps())), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, sceneLengthCommand("gone", 30, stamps())), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, beatLengthCommand("r2", 45, stamps())), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, beatLengthCommand("r1", null, stamps())), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, beatLengthCommand("r1", undefined, stamps())), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, beatLengthCommand("gone", 30, stamps())), { kind: "noop" });
   assert.equal(h.session.generation(), 0);
   assert.deepEqual(h.log, []);
   assert.deepEqual(h.published, []);
@@ -108,7 +108,7 @@ test("E3: in review mode the command is refused before it plans, with no effects
     clock: { nowIso: function () { asked++; return STAMP; } },
     editor: { name: function () { asked++; return "Adam"; } }
   };
-  assert.deepEqual(runConfined(h.session, sceneLengthCommand("r1", 30, counting)), { kind: "rejected", reason: "review" });
+  assert.deepEqual(runConfined(h.session, beatLengthCommand("r1", 30, counting)), { kind: "rejected", reason: "review" });
   assert.equal(asked, 0, "the stamp ports are never asked");
   assert.equal(h.session.generation(), 0);
   assert.deepEqual(h.log, []);
@@ -117,7 +117,7 @@ test("E3: in review mode the command is refused before it plans, with no effects
 
 test("E3: with no document open the command is refused", () => {
   const h = harness();
-  assert.deepEqual(runConfined(h.session, sceneLengthCommand("r1", 30, stamps())), { kind: "rejected", reason: NO_DOCUMENT });
+  assert.deepEqual(runConfined(h.session, beatLengthCommand("r1", 30, stamps())), { kind: "rejected", reason: NO_DOCUMENT });
   assert.deepEqual(h.log, []);
 });
 
@@ -128,10 +128,10 @@ test("E3: a stamp port that throws fails the command and rolls the length back, 
     clock: { nowIso: function () { return STAMP; } },
     editor: { name: function () { throw new Error("no editor"); } }
   };
-  const out = runConfined(h.session, sceneLengthCommand("r1", 90, broken));
+  const out = runConfined(h.session, beatLengthCommand("r1", 90, broken));
   assert.equal(out.kind, "failed");
   assert.equal(out.kind === "failed" && out.error instanceof Error ? out.error.message : "", "no editor");
-  const cleared = runConfined(h.session, sceneLengthCommand("r2", null, broken));
+  const cleared = runConfined(h.session, beatLengthCommand("r2", null, broken));
   assert.equal(cleared.kind, "failed");
   assert.equal(snapshot(h), before, "the length and the stamp are as they were");
   assert.equal(h.session.generation(), 0);
@@ -141,7 +141,7 @@ test("E3: a stamp port that throws fails the command and rolls the length back, 
 
 test("the same command run twice applies once: each run plans against the document as it is then", () => {
   const h = opened();
-  const command = sceneLengthCommand("r2", 60, stamps());
+  const command = beatLengthCommand("r2", 60, stamps());
   assert.equal(runConfined(h.session, command).kind, "applied");
   assert.equal(rowOf(h, "r2")?.lengthSeconds, 60);
   assert.deepEqual(runConfined(h.session, command), { kind: "noop" }, "the same command again changes nothing");
@@ -149,7 +149,7 @@ test("the same command run twice applies once: each run plans against the docume
 
 test("sceneAt reads a scene's place and a copy of its fields; writing the copy changes nothing", () => {
   const h = opened();
-  const at = h.session.read(sceneAt("r2"));
+  const at = h.session.read(beatAt("r2"));
   assert.ok(at);
   assert.equal(at.index, 1);
   assert.equal(at.row.id, "r2");
@@ -158,6 +158,6 @@ test("sceneAt reads a scene's place and a copy of its fields; writing the copy c
   Reflect.set(at.row, "lengthSeconds", 1);
   Reflect.set(at.row, "audioText", "Changed");
   assert.equal(snapshot(h), before);
-  assert.equal(h.session.read(sceneAt("gone")), null);
-  assert.equal(harness().session.read(sceneAt("r1")), null, "no document, no scene");
+  assert.equal(h.session.read(beatAt("gone")), null);
+  assert.equal(harness().session.read(beatAt("r1")), null, "no document, no scene");
 });

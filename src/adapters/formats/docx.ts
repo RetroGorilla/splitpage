@@ -6,7 +6,7 @@ import type { Frozen } from "../../core/document/freeze.ts";
 import type { DocumentRow } from "../../core/document/validated.ts";
 import type { PlainTextOptions } from "../../core/text/projections.ts";
 import type { ExportRun } from "./export-kit.ts";
-import type { BreakdownRow, CommentBody, SceneFacts } from "./export-projections.ts";
+import type { BreakdownRow, CommentBody, BeatFacts } from "./export-projections.ts";
 import { internDataUrl, queuePersist } from "../storage/02c-blobs.ts";
 import { rowImage } from "../../core/document/media.ts";
 import { morePictureRefs, rowVideoLinks } from "../../core/document/gallery.ts";
@@ -17,7 +17,7 @@ import {
   TAG_STATUS_PRINT,
   breakdownGroups,
   brollSummaryText,
-  exportBrollScenes,
+  exportBrollBeats,
   exportDay,
   exportComments,
   exportFacts,
@@ -25,7 +25,7 @@ import {
   exportSummaryParts
 } from "./export-kit.ts";
 import { capturedPicture, capturedRowPicture } from "./export-assets.ts";
-import { sceneFacts, scriptSectionFacts } from "./export-projections.ts";
+import { beatFacts, scriptSectionFacts } from "./export-projections.ts";
 import { strBytes } from "./bytes.ts";
 import { xmlEscape } from "./xml.ts";
 import { zipRead, zipWrite } from "./zip.ts";
@@ -348,7 +348,7 @@ function docxLineBreakParagraph(text: string | undefined, indentDxa: number, rPr
 }
 
 const PAGE_W = 10080;
-const COL_SCENE = 1080, COL_VISUAL = 3880, COL_AUDIO = 4400, COL_READ = 720;
+const COL_BEAT = 1080, COL_VISUAL = 3880, COL_AUDIO = 4400, COL_READ = 720;
 const VISUAL_SZ = 20;
 const HEAD_SZ = 17;
 const GUTTER_SZ = 16;
@@ -360,16 +360,16 @@ function lampRunsXml(status: { lamp: string; color: string }, label: string, sz:
     textRunXml(" " + label, { color: status.lamp === "outline" ? PRINT_COLORS.faint : PRINT_COLORS.dim, sz: sz });
 }
 
-function sceneCellXml(f: SceneFacts): string {
+function beatCellXml(f: BeatFacts): string {
   const st = STATUS_PRINT[f.status.id] || STATUS_PRINT.todo;
   return docxCellXml(
     cellParaXml(textRunXml(f.number, { b: true, sz: 26 })) +
     cellParaXml(textRunXml(f.start, { color: PRINT_COLORS.faint, sz: GUTTER_SZ }), { after: 80 }) +
     cellParaXml(lampRunsXml(st, f.status.label, GUTTER_SZ)),
-    COL_SCENE, { mar: { left: 0 } });
+    COL_BEAT, { mar: { left: 0 } });
 }
 
-function readCellXml(f: SceneFacts): string {
+function readCellXml(f: BeatFacts): string {
   const p: RunProperties = { color: PRINT_COLORS.dim, sz: 18 };
   if (f.readSet) p.bdr = PRINT_COLORS.borderStrong;
   return docxCellXml(cellParaXml(textRunXml(f.readSet ? CHIP_PAD + f.read + CHIP_PAD : f.read, p), { jc: "right" }),
@@ -386,7 +386,7 @@ function headCellXml(text: string, width: number, color?: string | null, opts?: 
 
 const KEEP_WHOLE_LINES = 10;
 
-function sceneLineEstimate(row: Row): number {
+function beatLineEstimate(row: Row): number {
   function lines(html: unknown): number {
     return toPlainText(exportServices().cellOf(html)).split("\n").reduce(function (n, l) { return n + Math.max(1, Math.ceil(l.length / 40)); }, 0);
   }
@@ -460,17 +460,17 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
 
   let rowsXml = "";
   rowsXml += "<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>" +
-    headCellXml("Scene", COL_SCENE, null, { mar: { left: 0 } }) +
+    headCellXml("Scene", COL_BEAT, null, { mar: { left: 0 } }) +
     headCellXml("Visual", COL_VISUAL, PRINT_COLORS.visual) +
     headCellXml("Audio", COL_AUDIO, PRINT_COLORS.audio) +
     headCellXml("Read", COL_READ, null, { jc: "right", mar: { right: 0 } }) +
     "</w:tr>";
 
-  const scenes = sceneFacts(doc);
-  const headings = new Map(scriptSectionFacts(doc, scenes).map(group => [group.start, group]));
+  const beats = beatFacts(doc);
+  const headings = new Map(scriptSectionFacts(doc, beats).map(group => [group.start, group]));
   const ann = { nums: doc.commentNumbers, open: commentOpenness(doc) };
   const maxW = (COL_VISUAL - 200) * 635;
-  doc.scenes.forEach(function (row, idx) {
+  doc.beats.forEach(function (row, idx) {
     const heading = headings.get(idx);
     if (heading) rowsXml += '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + docxCellXml(
       cellParaXml(textRunXml(heading.name + " · " + heading.total, { b: true, sz: 24 }), { keepNext: true, before: 80, after: 80 }),
@@ -503,12 +503,12 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
     visual += docxVideoLinksXml(rowVideoLinks(row), rels);
     visual += docxRunsXml(row.visualText, rels, { annotate: ann, sz: VISUAL_SZ, pPr: '<w:spacing w:after="0"/>' });
     const audio = docxRunsXml(row.audioText, rels, { annotate: ann, pPr: '<w:spacing w:after="0"/>' });
-    rowsXml += "<w:tr>" + (sceneLineEstimate(row) <= KEEP_WHOLE_LINES ? "<w:trPr><w:cantSplit/></w:trPr>" : "") +
-      sceneCellXml(required(scenes[idx])) + docxCellXml(visual, COL_VISUAL) + docxCellXml(audio, COL_AUDIO) +
-      readCellXml(required(scenes[idx])) + "</w:tr>";
+    rowsXml += "<w:tr>" + (beatLineEstimate(row) <= KEEP_WHOLE_LINES ? "<w:trPr><w:cantSplit/></w:trPr>" : "") +
+      beatCellXml(required(beats[idx])) + docxCellXml(visual, COL_VISUAL) + docxCellXml(audio, COL_AUDIO) +
+      readCellXml(required(beats[idx])) + "</w:tr>";
   });
 
-  body += tableXml([COL_SCENE, COL_VISUAL, COL_AUDIO, COL_READ], rowsXml);
+  body += tableXml([COL_BEAT, COL_VISUAL, COL_AUDIO, COL_READ], rowsXml);
   let appendix = 0;
   const groups = breakdownGroups(doc);
   if (groups.length) {
@@ -522,7 +522,7 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
     const bMins = [12, 13, 10, 13, 14];
     const bMaxes = [28, 13, 16, 18, 40];
     const bCellRows = items.map(function (r) {
-      return [r.name, "● " + r.statusLabel, r.scenes.join(", "), r.owner,
+      return [r.name, "● " + r.statusLabel, r.beats.join(", "), r.owner,
         r.notes + (r.broll.length ? " B-roll: " + r.broll.join("; ") : "")];
     });
     const bCols = fitColumnWidths(PAGE_W, bMins, bHeaders, bCellRows, bMaxes);
@@ -552,7 +552,7 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
         const cells = [
           cellParaXml(textRunXml(r.name, { sz: BD_SZ })),
           cellParaXml(lampRunsXml(st, r.statusLabel, BD_SZ)),
-          cellParaXml(textRunXml(r.scenes.join(", "), { color: PRINT_COLORS.dim, sz: BD_SZ })),
+          cellParaXml(textRunXml(r.beats.join(", "), { color: PRINT_COLORS.dim, sz: BD_SZ })),
           cellParaXml(textRunXml(r.owner, { color: PRINT_COLORS.dim, sz: BD_SZ })),
           notes
         ];
@@ -565,7 +565,7 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
     body += tableXml(bCols, bRows);
   }
 
-  const shots = exportBrollScenes(doc);
+  const shots = exportBrollBeats(doc);
   if (shots.length) {
     body += headingParaXml("B-roll shot list", !appendix++) + metaParaXml(brollSummaryText(shots));
     shots.forEach(function (g) {
@@ -844,7 +844,7 @@ function narrationTextOpts(opts?: NarrationOptions | null): PlainTextOptions {
 
 export function narrationRows(doc: ExportDocument, opts?: NarrationOptions | null): Row[] {
   const t = narrationTextOpts(opts);
-  return doc.scenes.filter(function (row) { return toPlainText(exportServices().cellOf(row.audioText), t); });
+  return doc.beats.filter(function (row) { return toPlainText(exportServices().cellOf(row.audioText), t); });
 }
 
 export function buildNarrationText(doc: ExportDocument, opts?: NarrationOptions | null): string {
@@ -858,8 +858,8 @@ export function buildNarrationText(doc: ExportDocument, opts?: NarrationOptions 
 }
 
 const NARRATION_STYLE = "SplitpageNarration";
-const SCENE_NO_STYLE = "SplitpageSceneNo";
-const SCENE_NO_HANG = 560;
+const BEAT_NO_STYLE = "SplitpageSceneNo";
+const BEAT_NO_HANG = 560;
 
 function groupDigits(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -870,7 +870,7 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
   const links: string[] = [];
   const rels = { addLink: function (href: string) { links.push(href); return "rIdL" + links.length; } };
   const rows = narrationRows(doc, opts);
-  const sections = scriptSectionFacts(doc, sceneFacts(doc));
+  const sections = scriptSectionFacts(doc, beatFacts(doc));
   let lastSection = "";
   const words = rows.reduce(function (n, row) { return n + exportServices().productionReaders.wordCount(row.audioText); }, 0);
   const wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
@@ -880,7 +880,7 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
       "about " + formatDuration(words / Number(wpm) * 60) + " at " + String(wpm) + " wpm"].join(" · "));
 
   rows.forEach(function (row) {
-    const index = doc.scenes.indexOf(row);
+    const index = doc.beats.indexOf(row);
     const heading = sections.find(group => index >= group.start && index < group.end);
     if (heading && heading.id !== lastSection) {
       lastSection = heading.id;
@@ -889,8 +889,8 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
     }
     const number = pad2(index + 1);
     body += docxRunsXml(row.audioText, rels, Object.assign({
-      pPr: '<w:pStyle w:val="' + NARRATION_STYLE + '"/><w:ind w:left="0" w:hanging="' + SCENE_NO_HANG + '"/>',
-      lead: '<w:r><w:rPr><w:rStyle w:val="' + SCENE_NO_STYLE + '"/><w:color w:val="' + PRINT_COLORS.faint + '"/><w:sz w:val="16"/></w:rPr>' +
+      pPr: '<w:pStyle w:val="' + NARRATION_STYLE + '"/><w:ind w:left="0" w:hanging="' + BEAT_NO_HANG + '"/>',
+      lead: '<w:r><w:rPr><w:rStyle w:val="' + BEAT_NO_STYLE + '"/><w:color w:val="' + PRINT_COLORS.faint + '"/><w:sz w:val="16"/></w:rPr>' +
         '<w:t xml:space="preserve">' + number + "</w:t><w:tab/></w:r>"
     }, t));
   });
@@ -925,7 +925,7 @@ function runStyleName(rEl: Element): string {
 
 function isDroppedRun(rEl: Element): boolean {
   const st = runStyleName(rEl);
-  return st === MARKER_STYLE.toLowerCase() || st === SCENE_NO_STYLE.toLowerCase();
+  return st === MARKER_STYLE.toLowerCase() || st === BEAT_NO_STYLE.toLowerCase();
 }
 
 function colouredUnderline(props: Element): boolean {
@@ -1355,7 +1355,7 @@ function stylesXml(): string {
       '<w:sz w:val="' + MARKER_SIZE + '"/><w:bdr w:val="single" w:sz="4" w:space="0" w:color="' + C.audio + '"/>') +
     charStyle(BROLL_STYLE, "B-roll key", '<w:b/><w:color w:val="' + C.broll + '"/><w:sz w:val="' + BROLL_SIZE + '"/>' +
       '<w:bdr w:val="single" w:sz="4" w:space="0" w:color="' + C.broll + '"/>') +
-    charStyle(SCENE_NO_STYLE, "Scene number", '<w:color w:val="' + C.faint + '"/><w:sz w:val="16"/>') +
+    charStyle(BEAT_NO_STYLE, "Scene number", '<w:color w:val="' + C.faint + '"/><w:sz w:val="16"/>') +
     '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/>' +
       '<w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/>' +
       '<w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>' +

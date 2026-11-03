@@ -12,9 +12,9 @@ const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 
 const stubs = await import("./_fanout-stubs.mjs");
-const { createSceneStatus } = await import("../features/rows/scene-status.ts");
-const { cycleRowStatus } = createSceneStatus(stubs.sceneStatusPorts());
-const { startReadTime: mountReadTime, setSceneLength } = await import("../features/rows/read-time.ts");
+const { createBeatStatus } = await import("../features/rows/beat-status.ts");
+const { cycleRowStatus } = createBeatStatus(stubs.beatStatusPorts());
+const { startReadTime: mountReadTime, setBeatLength } = await import("../features/rows/read-time.ts");
 mountReadTime(stubs.readTimePorts());
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -74,7 +74,7 @@ test("a status click and a length on the same scene are two entries", async () =
   fresh();
   cycleRowStatus("r2");
   await settle();
-  assert.equal(setSceneLength("r2", 90), true);
+  assert.equal(setBeatLength("r2", 90), true);
   await settle();
   assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
   assert.deepEqual(lastUndoEntry().steps, [{ op: "rowField", rowId: "r2", key: "lengthSeconds", before: undefined, after: 90 }]);
@@ -87,9 +87,9 @@ test("a status click and a length on the same scene are two entries", async () =
 
 test("a scene length is one entry; clearing it is another", async () => {
   fresh();
-  setSceneLength("r1", 90);
+  setBeatLength("r1", 90);
   await settle();
-  setSceneLength("r1", null);
+  setBeatLength("r1", null);
   await settle();
   assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
   assert.deepEqual(lastUndoEntry().steps, [{ op: "rowField", rowId: "r1", key: "lengthSeconds", before: 90, after: undefined }]);
@@ -97,9 +97,9 @@ test("a scene length is one entry; clearing it is another", async () => {
 
 test("a length that changes nothing records nothing", async () => {
   fresh();
-  setSceneLength("r1", 90);
+  setBeatLength("r1", 90);
   await settle();
-  assert.equal(setSceneLength("r1", 90), false);
+  assert.equal(setBeatLength("r1", 90), false);
   await settle();
   assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
 });

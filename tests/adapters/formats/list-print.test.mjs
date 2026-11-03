@@ -31,7 +31,7 @@ test("gear and prop packing lists preserve alphabetic rows, captured facts, stat
       assert.equal(cells[3].querySelector(".scene-meta").textContent, item.statusLabel);
       assert.equal(cells[3].querySelectorAll(".filled").length, TAG_STATUSES.findIndex((s) => s.id === item.status) + 1);
       assert.equal(cells[4].textContent, item.owner);
-      assert.equal(cells[5].textContent, item.inScript === "no" ? "Not in script" : item.scenes.join(", "));
+      assert.equal(cells[5].textContent, item.inScript === "no" ? "Not in script" : item.beats.join(", "));
       if (item.notes) assert.ok(cells[2].textContent.includes(item.notes));
       for (const shot of item.broll) assert.ok(cells[2].textContent.includes(shot));
     });
@@ -64,7 +64,7 @@ test("shot lists use every existing filter and grouping with projected counts an
       assert.equal(!!cells[0].querySelector(".checked"), item.shot);
       assert.equal(row.classList.contains("shot-done"), item.shot);
       assert.equal(cells[0].querySelector("span").getAttribute("aria-label"), item.status);
-      assert.equal(cells[1].textContent, item.scene + item.start);
+      assert.equal(cells[1].textContent, item.beat + item.start);
       assert.equal(cells[2].querySelector("strong").textContent, item.name);
       for (const detail of [item.desc, item.cuts]) if (detail) assert.ok(cells[2].textContent.includes(detail));
       assert.equal(cells[3].textContent, kind === "location" ? "" : item.location);
@@ -125,7 +125,7 @@ test("script composition keeps every breakdown category, all scene-grouped shots
   assert.deepEqual(texts(dom, ".breakdown-table .list-group th"), breakdownGroups(input.doc).map((g) => g.label + " " + g.items.length));
   for (const group of breakdownGroups(input.doc)) for (const item of group.items) {
     const row = [...dom.querySelectorAll(".breakdown-table td:first-child")].find((cell) => cell.textContent.startsWith(item.name)).parentElement;
-    for (const fact of [item.statusLabel, item.scenes.join(", "), item.owner || "—", item.notes, ...item.broll]) assert.ok(row.textContent.includes(fact));
+    for (const fact of [item.statusLabel, item.beats.join(", "), item.owner || "—", item.notes, ...item.broll]) assert.ok(row.textContent.includes(fact));
   }
   assert.match(dom.querySelector("#broll-shot-list").textContent, /by scene/);
   assert.equal(dom.querySelectorAll(".shot-table .list-checkbox").length, input.doc.broll.length);

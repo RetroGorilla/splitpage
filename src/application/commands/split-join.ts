@@ -1,5 +1,5 @@
 import { gallerySize, rowSlots, setRowSlots } from "../../core/document/gallery.ts";
-import { sectionBeforeScene } from "../../core/document/sections.ts";
+import { sectionBeforeBeat } from "../../core/document/sections.ts";
 import type { DocumentRow } from "../../core/document/validated.ts";
 import { clampRange, deleteRange, joinCells, splitCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -69,7 +69,7 @@ function splitChanges(rowId: string, field: string, createdId: string): ChangeSe
   });
 }
 
-export function splitSceneCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts): Command {
+export function splitBeatCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts): Command {
   return {
     name: "split-scene",
     needs: "edit",
@@ -102,7 +102,7 @@ function hasVisual(row: DeepReadonly<DocumentRow>, plainText: JoinPorts["plainTe
   return !!(plainText(row.visualText) || gallerySize(row));
 }
 
-export function bothScenesHaveVisual(intoId: string, plainText: JoinPorts["plainText"]): (doc: DocumentView | null) => boolean {
+export function bothBeatsHaveVisual(intoId: string, plainText: JoinPorts["plainText"]): (doc: DocumentView | null) => boolean {
   return function (doc) {
     if (!doc) return false;
     const at = doc.rows.findIndex(function (r) { return r.id === intoId; });
@@ -128,7 +128,7 @@ function joinChanges(prevId: string, curId: string, takesVisual: boolean, raises
   });
 }
 
-export function joinScenesCommand(intoId: string, ports: JoinPorts): Command {
+export function joinBeatsCommand(intoId: string, ports: JoinPorts): Command {
   return {
     name: "join-scenes",
     needs: "edit",
@@ -136,7 +136,7 @@ export function joinScenesCommand(intoId: string, ports: JoinPorts): Command {
       const at = doc.rows.findIndex(function (r) { return r.id === intoId; });
       const prev = doc.rows[at], cur = doc.rows[at + 1];
       if (!prev || !cur) return null;
-      if (sectionBeforeScene(doc, cur.id)) return { refused: "remove the section header before joining these scenes" };
+      if (sectionBeforeBeat(doc, cur.id)) return { refused: "remove the section header before joining these scenes" };
       const curHasVisual = hasVisual(cur, ports.plainText);
       if (hasVisual(prev, ports.plainText) && curHasVisual) return { refused: BOTH_VISUALS };
       const audio = joinedAudio(textOf(prev.audioText), textOf(cur.audioText), ports);

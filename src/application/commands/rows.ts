@@ -22,7 +22,7 @@ function reorderedChange(sections = false): ChangeSet {
   return changeSet({ rowsMoved: true, docFields: sections ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true });
 }
 
-export function addSceneCommand(afterId: string | null, createdId: string, ports: StampPorts): Command {
+export function addBeatCommand(afterId: string | null, createdId: string, ports: StampPorts): Command {
   return {
     name: "add-scene",
     needs: "edit",
@@ -43,7 +43,7 @@ export function addSceneCommand(afterId: string | null, createdId: string, ports
   };
 }
 
-export function deleteSceneCommand(rowId: string): Command {
+export function deleteBeatCommand(rowId: string): Command {
   return {
     name: "delete-scene",
     needs: "edit",
@@ -88,7 +88,7 @@ function idsOf(doc: DocumentView): string[] {
   return doc.rows.map(function (r) { return r.id; });
 }
 
-export function moveSceneCommand(rowId: string, targetId: string, after: boolean, intoSection?: string): Command {
+export function moveBeatCommand(rowId: string, targetId: string, after: boolean, intoSection?: string): Command {
   return {
     name: "move-scene",
     needs: "edit",
@@ -115,7 +115,7 @@ export function moveSceneCommand(rowId: string, targetId: string, after: boolean
   };
 }
 
-export function swapScenesCommand(rowId: string, dir: -1 | 1): Command {
+export function swapBeatsCommand(rowId: string, dir: -1 | 1): Command {
   return {
     name: "swap-scenes",
     needs: "edit",
@@ -123,7 +123,7 @@ export function swapScenesCommand(rowId: string, dir: -1 | 1): Command {
       const at = indexOf(doc.rows, rowId);
       const other = at + dir;
       if (at === -1 || other < 0 || other >= doc.rows.length) return null;
-      return moveSceneCommand(rowId, (doc.rows[other] as DocumentView["rows"][number]).id, dir > 0).plan(doc, capability);
+      return moveBeatCommand(rowId, (doc.rows[other] as DocumentView["rows"][number]).id, dir > 0).plan(doc, capability);
     }
   };
 }
@@ -134,7 +134,7 @@ function hasItems(value: unknown): boolean {
   return !!value && !!(value as { readonly length?: unknown }).length;
 }
 
-export function isBlankScene(
+export function isBlankBeat(
   doc: Pick<DocumentView, "comments">,
   row: DocumentView["rows"][number] | null | undefined,
   text: Pick<TextServices, "cellOf">

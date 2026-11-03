@@ -7,22 +7,22 @@ import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentIds } from "../core/text/runs.ts";
 import { cellOf, fromHtml } from "../bootstrap/richtext.ts";
-import { isBlankScene } from "../application/commands/rows.ts";
+import { isBlankBeat } from "../application/commands/rows.ts";
 import { createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
 import { detectTwoColumnFormat, parseImportRows } from "../adapters/formats/import-text.ts";
 import {
-  SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isMove, parseScenePayload,
-  scenesOnClipboard, setLiveCut
-} from "../features/clipboard/scene-clip.ts";
+  BEATS_ATTR, BEATS_MIME, buildBeatPayload, insertBeats, isMove, parseBeatPayload,
+  beatsOnClipboard, setLiveCut
+} from "../features/clipboard/beat-clip.ts";
 import { loadTestDocument } from "./_document.mjs";
-import { removeScenesCommand } from "../application/commands/scenes.ts";
+import { removeBeatsCommand } from "../application/commands/beats.ts";
 import { currentDocument, runCommand } from "../bootstrap/wiring/session-owner.ts";
 
 initTags();
 
-function removeScenes(rowIds) {
-  const outcome = runCommand(removeScenesCommand(rowIds));
+function removeBeats(rowIds) {
+  const outcome = runCommand(removeBeatsCommand(rowIds));
   assert.notEqual(outcome.kind, "failed", outcome.error && outcome.error.stack);
   assert.notEqual(outcome.kind, "rejected", outcome.reason);
   return outcome.kind === "noop" ? 0 : outcome.changes.rowsRemoved.length;
@@ -84,11 +84,11 @@ function target(extra) {
 
 let n = 0;
 const mint = (prefix) => (prefix || "r") + "new" + (++n);
-const clip = (built) => parseScenePayload(built.json);
+const clip = (built) => parseBeatPayload(built.json);
 
 test("a copy carries the scenes in document order and everything that belongs to them", () => {
   const src = source();
-  const out = buildScenePayload(src, ["r3", "r2"]);
+  const out = buildBeatPayload(src, ["r3", "r2"]);
   const p = out.payload;
   assert.equal(p.format, "splitpage-scenes");
   assert.equal(p.version, 1);
@@ -114,20 +114,20 @@ test("a copy carries the scenes in document order and everything that belongs to
 test("pictures past the cap, or not held, travel by reference", () => {
   const src = source();
   const oneSize = Math.floor((dataUrlForSync(P1.sha256).split(",")[1].length) * 3 / 4);
-  const capped = buildScenePayload(src, ["r2"], { cap: oneSize });
+  const capped = buildBeatPayload(src, ["r2"], { cap: oneSize });
   assert.deepEqual(Object.keys(capped.payload.blobs), [P1.sha256]);
   assert.deepEqual(capped.leftOut.sort(), [P2.sha256, P3.sha256].sort());
-  const none = buildScenePayload(src, ["r2"], { dataUrl: () => null });
+  const none = buildBeatPayload(src, ["r2"], { dataUrl: () => null });
   assert.deepEqual(none.payload.blobs, {});
   assert.equal(none.leftOut.length, 3);
 });
 
 test("the plain text is labelled two-column text File > Paste a script reads back", () => {
-  const out = buildScenePayload(source(), ["r2", "r3"]);
+  const out = buildBeatPayload(source(), ["r2", "r3"]);
   assert.equal(out.text, "Visual: Wide of the Harbour\nB-roll: gulls at dawn\nAudio: Every morning the town wakes.\n\n" +
     "Visual: Mara with the Kettle\nAudio: She has mended nets.");
   assert.equal(detectTwoColumnFormat(out.text), "labels");
-  const plain = buildScenePayload(source(), ["r1", "r3"]).text;
+  const plain = buildBeatPayload(source(), ["r1", "r3"]).text;
   const back = parseImportRows(plain, "twocolumn");
   assert.equal(back.length, 2);
   assert.equal(back[1].visualText, "Mara with the Kettle");
@@ -135,7 +135,7 @@ test("the plain text is labelled two-column text File > Paste a script reads bac
 });
 
 test("the HTML is a two-column table without comment marks, carrying the payload without its bytes", () => {
-  const out = buildScenePayload(source(), ["r2", "r3"]);
+  const out = buildBeatPayload(source(), ["r2", "r3"]);
   assert.match(out.html, /^<table [^>]*data-splitpage-scenes="/);
   assert.match(out.html, /<th>Visual<\/th><th>Audio<\/th>/);
   assert.equal((out.html.match(/<tr>/g) || []).length, 3);
@@ -143,32 +143,32 @@ test("the HTML is a two-column table without comment marks, carrying the payload
   const tbody = body.querySelector("tbody").innerHTML;
   assert.ok(tbody.indexOf("cmt-anchor") === -1, "no comment marks for another program");
   assert.ok(tbody.indexOf("Every morning the town wakes.") !== -1);
-  const lean = JSON.parse(body.querySelector("[" + SCENES_ATTR + "]").getAttribute(SCENES_ATTR));
+  const lean = JSON.parse(body.querySelector("[" + BEATS_ATTR + "]").getAttribute(BEATS_ATTR));
   assert.deepEqual(lean.blobs, {});
   assert.equal(lean.blobsLeftOut.length, 3);
   assert.equal(lean.rows.length, 2);
 });
 
 test("a paste reads the custom type first, and the table's marker when that is gone", () => {
-  const out = buildScenePayload(source(), ["r2"]);
-  const full = scenesOnClipboard((t) => ({ [SCENES_MIME]: out.json, "text/html": out.html, "text/plain": out.text })[t] || "");
+  const out = buildBeatPayload(source(), ["r2"]);
+  const full = beatsOnClipboard((t) => ({ [BEATS_MIME]: out.json, "text/html": out.html, "text/plain": out.text })[t] || "");
   assert.equal(full.rows.length, 1);
   assert.equal(full.carried.length, 3);
   const wrapped = '<meta charset="utf-8"><html><body><!--StartFragment-->' + out.html + "<!--EndFragment--></body></html>";
-  const lean = scenesOnClipboard((t) => ({ "text/html": wrapped })[t] || "");
+  const lean = beatsOnClipboard((t) => ({ "text/html": wrapped })[t] || "");
   assert.equal(lean.rows.length, 1);
   assert.equal(lean.carried.length, 0, "no bytes in the table");
   assert.deepEqual(lean.refs.sort(), [P1.sha256, P2.sha256, P3.sha256].sort(), "but every picture by reference");
-  assert.equal(scenesOnClipboard((t) => ({ "text/html": "<b>just words</b>", "text/plain": "just words" })[t] || ""), null);
-  assert.equal(scenesOnClipboard(() => ""), null);
+  assert.equal(beatsOnClipboard((t) => ({ "text/html": "<b>just words</b>", "text/plain": "just words" })[t] || ""), null);
+  assert.equal(beatsOnClipboard(() => ""), null);
 });
 
 test("a payload is untrusted: only ours is read, every cell sanitised, every picture checked against its sha", () => {
-  assert.equal(parseScenePayload("not json"), null);
-  assert.equal(parseScenePayload(JSON.stringify({ format: "something-else", version: 1, rows: [{}] })), null);
-  assert.equal(parseScenePayload(JSON.stringify({ format: "splitpage-scenes", version: 1, rows: [] })), null);
+  assert.equal(parseBeatPayload("not json"), null);
+  assert.equal(parseBeatPayload(JSON.stringify({ format: "something-else", version: 1, rows: [{}] })), null);
+  assert.equal(parseBeatPayload(JSON.stringify({ format: "splitpage-scenes", version: 1, rows: [] })), null);
   const other = intern(jpegBytes(64, 64, 99));
-  const evil = parseScenePayload(JSON.stringify({
+  const evil = parseBeatPayload(JSON.stringify({
     format: "splitpage-scenes", version: 1, cut: "../bad nonce",
     rows: [{ id: "x", visualText: '<img src=x onerror="alert(1)">hi<script>alert(2)</script>', audioText: '<a href="javascript:alert(3)">link</a>', status: "weird" }],
     comments: [{ id: "k", rowId: "x", body: "<iframe src=//evil></iframe>ok" }],
@@ -185,9 +185,9 @@ test("a payload is untrusted: only ours is read, every cell sanitised, every pic
 
 test("a copy pasted into another document: every id its own, the details that belong to it along", () => {
   loadTestDocument(target());
-  const c = clip(buildScenePayload(source(), ["r2", "r3"]));
+  const c = clip(buildBeatPayload(source(), ["r2", "r3"]));
   n = 0;
-  const res = insertScenes(c, { afterRowId: "t1", mint });
+  const res = insertBeats(c, { afterRowId: "t1", mint });
   const rows = currentDocument().rows;
   assert.deepEqual(rows.map((r) => r.id), ["t1", "rnew1", "rnew2", "t2"], "after the caret's scene");
   assert.deepEqual(res.rowIds, ["rnew1", "rnew2"]);
@@ -230,9 +230,9 @@ test("a copy pasted into another document: every id its own, the details that be
 test("a copy pasted into its own document: a new b-roll shot, new comments, the originals untouched", () => {
   loadTestDocument(source());
   const before = JSON.stringify(currentDocument().rows.find((r) => r.id === "r2"));
-  const c = clip(buildScenePayload(currentDocument(), ["r2"]));
+  const c = clip(buildBeatPayload(currentDocument(), ["r2"]));
   n = 0;
-  const res = insertScenes(c, { afterRowId: "r4", mint });
+  const res = insertBeats(c, { afterRowId: "r4", mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4", "rnew1"]);
   assert.equal(JSON.stringify(currentDocument().rows.find((r) => r.id === "r2")), before);
   assert.equal(res.broll.kept.length, 0);
@@ -251,17 +251,17 @@ test("a copy pasted into its own document: a new b-roll shot, new comments, the 
 test("a cut then its paste in the same document is a move: ids kept, comments not copied, records found", () => {
   loadTestDocument(source());
   const nonce = "ab12";
-  const built = buildScenePayload(currentDocument(), ["r2", "r3"], { cut: nonce });
+  const built = buildBeatPayload(currentDocument(), ["r2", "r3"], { cut: nonce });
   assert.equal(built.payload.cut, nonce);
   setLiveCut(nonce, currentDocument().docId);
-  assert.equal(removeScenes(["r2", "r3"]), 2);
+  assert.equal(removeBeats(["r2", "r3"]), 2);
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r4"]);
   assert.equal(currentDocument().comments.length, 4, "a cut leaves the comments, as a delete does");
   const c = clip(built);
   assert.equal(isMove(c, currentDocument()), true);
   assert.equal(isMove(c, target()), false, "another document: a copy");
   n = 0;
-  const res = insertScenes(c, { afterRowId: "r4", move: true, mint });
+  const res = insertBeats(c, { afterRowId: "r4", move: true, mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r4", "r2", "r3"]);
   assert.equal(res.comments, 0);
   assert.equal(currentDocument().comments.length, 4);
@@ -275,10 +275,10 @@ test("a cut then its paste in the same document is a move: ids kept, comments no
 
 test("a move whose rows came back meanwhile (the cut undone) is a copy where it has to be", () => {
   loadTestDocument(source());
-  const built = buildScenePayload(currentDocument(), ["r2"], { cut: "cd34" });
+  const built = buildBeatPayload(currentDocument(), ["r2"], { cut: "cd34" });
   setLiveCut("cd34", currentDocument().docId);
   n = 0;
-  insertScenes(clip(built), { afterRowId: "r4", move: true, mint });
+  insertBeats(clip(built), { afterRowId: "r4", move: true, mint });
   const ids = currentDocument().rows.map((r) => r.id);
   assert.deepEqual(ids, ["r1", "r2", "r3", "r4", "rnew1"], "r2 is still here, so the paste is a new row");
   assert.equal(new Set(ids).size, ids.length);
@@ -302,23 +302,23 @@ const markedIn = (state) => {
 test("the live cut follows undo: the move's paste undone, the next paste is the move again", () => {
   loadTestDocument(source());
   const history = createUndoHistory(cellRuns);
-  const built = buildScenePayload(currentDocument(), ["r2", "r3"], { cut: "ef56" });
+  const built = buildBeatPayload(currentDocument(), ["r2", "r3"], { cut: "ef56" });
   setLiveCut("ef56", currentDocument().docId);
   let base = JSON.parse(JSON.stringify(currentDocument()));
-  removeScenes(["r2", "r3"]);
+  removeBeats(["r2", "r3"]);
   history.record(diffStates(base, currentDocument()), Date.now());
   const c = clip(built);
   assert.equal(isMove(c, currentDocument()), true);
   base = JSON.parse(JSON.stringify(currentDocument()));
   n = 0;
-  insertScenes(c, { afterRowId: "r4", move: isMove(c, currentDocument()), mint });
+  insertBeats(c, { afterRowId: "r4", move: isMove(c, currentDocument()), mint });
   history.record(diffStates(base, currentDocument()), Date.now());
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r4", "r2", "r3"]);
   assert.equal(isMove(c, currentDocument()), false, "its scenes are back: another paste is a copy");
   assert.equal(history.undo(currentDocument()).ok, true);
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r4"]);
   assert.equal(isMove(c, currentDocument()), true, "the undo put the cut back");
-  const res = insertScenes(c, { afterRowId: "r1", move: isMove(c, currentDocument()), mint });
+  const res = insertBeats(c, { afterRowId: "r1", move: isMove(c, currentDocument()), mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
   assert.equal(res.comments, 0);
   assert.deepEqual(currentDocument().comments.map((x) => x.id + "@" + x.rowId).sort(), ["c1@r2", "c2@r3", "c4@r4", "c9@r3"]);
@@ -330,17 +330,17 @@ test("the live cut follows undo: the move's paste undone, the next paste is the 
 test("the cut undone, its paste is a copy: comments and b-roll records of its own, never the originals' marks", () => {
   loadTestDocument(source());
   const history = createUndoHistory(cellRuns);
-  const built = buildScenePayload(currentDocument(), ["r2", "r3"], { cut: "ab78" });
+  const built = buildBeatPayload(currentDocument(), ["r2", "r3"], { cut: "ab78" });
   setLiveCut("ab78", currentDocument().docId);
   const base = JSON.parse(JSON.stringify(currentDocument()));
-  removeScenes(["r2", "r3"]);
+  removeBeats(["r2", "r3"]);
   history.record(diffStates(base, currentDocument()), Date.now());
   assert.equal(history.undo(currentDocument()).ok, true);
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
   const c = clip(built);
   assert.equal(isMove(c, currentDocument()), false, "the scenes came back with the undo");
   n = 0;
-  const res = insertScenes(c, { afterRowId: "r4", move: isMove(c, currentDocument()), mint });
+  const res = insertBeats(c, { afterRowId: "r4", move: isMove(c, currentDocument()), mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4", "rnew1", "rnew2"]);
   assert.equal(res.comments, 3);
   assert.equal(currentDocument().comments.length, 7);
@@ -365,20 +365,20 @@ test("deleting or cutting a scene points a comment split across it at the words 
     ],
     comments: [{ id: "c1", rowId: "r1", field: "audioText", anchorId: "c1", quotedText: "morning", author: "Ann", body: "Warmer?" }]
   }));
-  assert.equal(removeScenes(["r1"]), 1);
+  assert.equal(removeBeats(["r1"]), 1);
   assert.equal(currentDocument().comments[0].rowId, "r2", "its surviving words");
   assert.equal(currentDocument().comments[0].field, "audioText");
-  removeScenes(["r2"]);
+  removeBeats(["r2"]);
   assert.equal(currentDocument().comments[0].rowId, "r2", "no words left anywhere: detached, as it was");
 });
 
 test("a paste onto a blank scene takes its place, and its comments land with it", () => {
   const t = target();
-  assert.equal(isBlankScene(t, t.rows[1], { cellOf }), true);
-  assert.equal(isBlankScene(t, t.rows[0], { cellOf }), false);
+  assert.equal(isBlankBeat(t, t.rows[1], { cellOf }), true);
+  assert.equal(isBlankBeat(t, t.rows[0], { cellOf }), false);
   loadTestDocument(t);
   n = 0;
-  const res = insertScenes(clip(buildScenePayload(source(), ["r2"])), { replaceRowId: "t2", mint });
+  const res = insertBeats(clip(buildBeatPayload(source(), ["r2"])), { replaceRowId: "t2", mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["t1", "rnew1"]);
   assert.equal(currentDocument().comments.length, 1);
   assert.equal(currentDocument().comments[0].rowId, "rnew1");
@@ -389,8 +389,8 @@ test("a paste, a cut and a delete are each one undo entry that puts the document
   loadTestDocument(target());
   const history = createUndoHistory(cellRuns);
   let base = JSON.parse(JSON.stringify(currentDocument()));
-  const c = clip(buildScenePayload(source(), ["r2", "r3"]));
-  insertScenes(c, { afterRowId: "t1" });
+  const c = clip(buildBeatPayload(source(), ["r2", "r3"]));
+  insertBeats(c, { afterRowId: "t1" });
   history.record(diffStates(base, currentDocument()), Date.now());
   assert.equal(history.sizes().undo, 1);
   const r = history.undo(currentDocument());
@@ -403,7 +403,7 @@ test("a paste, a cut and a delete are each one undo entry that puts the document
 
   const h2 = createUndoHistory(cellRuns);
   base = JSON.parse(JSON.stringify(currentDocument()));
-  removeScenes([currentDocument().rows[1].id, currentDocument().rows[2].id]);
+  removeBeats([currentDocument().rows[1].id, currentDocument().rows[2].id]);
   h2.record(diffStates(base, currentDocument()), Date.now());
   assert.equal(currentDocument().rows.length, 2);
   assert.equal(h2.undo(currentDocument()).ok, true);

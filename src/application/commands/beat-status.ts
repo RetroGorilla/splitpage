@@ -6,7 +6,7 @@ import type { StampPorts } from "../session/ports.ts";
 
 export type ShotGrace = "arm" | "clear" | null;
 
-export const SCENE_STATUS_DERIVES: readonly string[] = Object.freeze(["production"]);
+export const BEAT_STATUS_DERIVES: readonly string[] = Object.freeze(["production"]);
 
 function statusChanges(rowId: string): ChangeSet {
   return changeSet({
@@ -15,12 +15,12 @@ function statusChanges(rowId: string): ChangeSet {
       { rowId: rowId, field: "updatedAt" },
       { rowId: rowId, field: "updatedBy" }
     ],
-    derive: SCENE_STATUS_DERIVES,
+    derive: BEAT_STATUS_DERIVES,
     saveNow: true
   });
 }
 
-export function sceneStatus(rowId: string): (doc: DocumentView | null) => unknown {
+export function beatStatus(rowId: string): (doc: DocumentView | null) => unknown {
   return function (doc) {
     if (!doc) return undefined;
     const row = doc.rows.find(function (r) { return r.id === rowId; });
@@ -34,7 +34,7 @@ export function shotGrace(before: unknown, after: unknown): ShotGrace {
   return null;
 }
 
-export function sceneStatusCommand(rowId: string, stamps: StampPorts): Command {
+export function beatStatusCommand(rowId: string, stamps: StampPorts): Command {
   return {
     name: "cycle-scene-status",
     needs: "edit",

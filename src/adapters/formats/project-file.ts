@@ -10,7 +10,7 @@ import { isDocumentObject } from "../../core/migrate.ts";
 import { fileKindFromName } from "../../../shared/file-names.ts";
 import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "../storage/02c-blobs.ts";
 import { audioDirectionsHtml } from "./docx.ts";
-import { mdSceneCellSource, toMarkdownTableDoc } from "./export-text.ts";
+import { mdBeatCellSource, toMarkdownTableDoc } from "./export-text.ts";
 import { MD_IMAGE_PREFIX_RE } from "./markdown-image.ts";
 import { parseMarkdownTable } from "./markdown-table.ts";
 import type { MarkdownTableRow } from "./markdown-table.ts";
@@ -117,13 +117,13 @@ export function parseMarkdownProject(text: unknown, services: ProjectFileService
   let parsed: unknown;
   try { parsed = parseSplitpageFile(block.json); } catch { return null; }
 
-  const sceneSection = block.before.split(/^##\s/m)[0] ?? "";
+  const beatSection = block.before.split(/^##\s/m)[0] ?? "";
   const heading = /^#\s+(.+)$/m.exec(block.before);
   const docIdEmbedded = docIdEmbeddedIn(parsed);
   return {
     state: services.migrateDocument(docIdEmbedded ? parsed : JSON.parse(canonicalSourceJson(parsed)), { kind: "file" }),
     docIdEmbedded: docIdEmbedded,
-    table: parseMarkdownTable(sceneSection, { keepEmpty: true }),
+    table: parseMarkdownTable(beatSection, { keepEmpty: true }),
     title: heading ? (heading[1] ?? "").trim() : null
   };
 }
@@ -178,10 +178,10 @@ function markdownVisualCellChanged(cellText: unknown, was: CellSource): boolean 
   return text.slice(m[0].length).trim() !== was.visualText;
 }
 
-function sceneCellEdits(row: DocumentRow, i: number, cells: MarkdownTableRow): CellEdits {
-  const was: CellSource = mdSceneCellSource(row, i);
+function beatCellEdits(row: DocumentRow, i: number, cells: MarkdownTableRow): CellEdits {
+  const was: CellSource = mdBeatCellSource(row, i);
   let model: CellSource | null = null;
-  function modelWas(): CellSource { return model || (model = mdSceneCellSource(row, i, true)); }
+  function modelWas(): CellSource { return model || (model = mdBeatCellSource(row, i, true)); }
   return {
     visual: markdownVisualCellChanged(cells.visualText, was) && markdownVisualCellChanged(cells.visualText, modelWas()),
     audio: markdownCellChanged(cells.audioText, was.audio) && markdownCellChanged(cells.audioText, modelWas().audio)
@@ -193,7 +193,7 @@ function reconcileMarkdownRows(s: ValidatedDocument, table: readonly MarkdownTab
   s.rows.forEach(function (row, i) {
     const cells = table[i];
     if (!cells) return;
-    const edits = sceneCellEdits(row, i, cells);
+    const edits = beatCellEdits(row, i, cells);
     if (edits.visual) {
       applyMarkdownVisualCell(s, row, cells.visualText, services);
       changed++;
@@ -210,7 +210,7 @@ function rowsFromMarkdownTable(s: ValidatedDocument, table: readonly MarkdownTab
   return table.map(function (cells, i) {
     const old = s.rows[i] || null;
     const row: DocumentRow = old || { id: "", status: "todo", imageRef: null, updatedAt: "", updatedBy: null };
-    const edits: CellEdits = old ? sceneCellEdits(old, i, cells) : { visual: true, audio: true };
+    const edits: CellEdits = old ? beatCellEdits(old, i, cells) : { visual: true, audio: true };
     if (edits.visual) {
       applyMarkdownVisualCell(s, row, cells.visualText, services);
     }

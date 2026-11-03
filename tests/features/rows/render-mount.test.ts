@@ -11,8 +11,8 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { rowMenuKeydown, toggleRowMenu } from "../../../src/features/rows/row-menu.ts";
 
-function fixture(withScene = false) {
-  const doc = fakeDocument(migrateRows({ schema: 2, title: "Render mount", rows: withScene ? [{ id: "r1", audioText: "One" }] : [] }, fakeMigration().ports));
+function fixture(withBeat = false) {
+  const doc = fakeDocument(migrateRows({ schema: 2, title: "Render mount", rows: withBeat ? [{ id: "r1", audioText: "One" }] : [] }, fakeMigration().ports));
   const notices = fakeNotices();
   const paint = createPaintGuard();
   const selection = createEditorSelection<Element, Range, Element>({ epoch: () => 0, order: () => [], keys: () => [] });

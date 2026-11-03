@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import { crc32, inflateSync } from "node:zlib";
-import { IMAGES, SCENES, buildArgs, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
+import { IMAGES, BEATS, buildArgs, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
 
 const { imageDims, sniffImageMime } = createRequire(import.meta.url)("../shared/blob-policy.ts");
 
@@ -112,9 +112,9 @@ eq("they run after the export timing, so the existing cases run first", longLine
 eq("the preference is changed with the settings dialog open", longLines.indexOf("wait window.__settingsTest.isOpen()") > at("eval window.__perfScene.hide()") && longLines.indexOf("wait window.__settingsTest.isOpen()") < at("eval window.__perfScene.preference()"), true);
 eq("the short suite has none of them", shortLines.some((l) => l.includes("__perfScene")), false);
 
-const sceneWindow = { __perf: { lat: [] }, __splitpageFormats: {} };
-vm.runInNewContext(SCENES, { window: sceneWindow, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
-eq("the scenes install a stamp, a hide and a preference run", Object.keys(sceneWindow.__perfScene), ["stamp", "hide", "preference"]);
+const beatWindow = { __perf: { lat: [] }, __splitpageFormats: {} };
+vm.runInNewContext(BEATS, { window: beatWindow, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
+eq("the scenes install a stamp, a hide and a preference run", Object.keys(beatWindow.__perfBeat), ["stamp", "hide", "preference"]);
 
 function stampWorld(clicksWork) {
   const next = { todo: "ready", ready: "shot", shot: "todo" };
@@ -127,8 +127,8 @@ function stampWorld(clicksWork) {
     }
   };
   const window = { __perf: { lat: [], reset() {}, take: (label) => label }, __splitpageFormats: { state: () => ({ rows }) } };
-  vm.runInNewContext(SCENES, { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
-  return window.__perfScene.stamp();
+  vm.runInNewContext(BEATS, { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
+  return window.__perfBeat.stamp();
 }
 
 const stampRun = async (clicksWork) => stampWorld(clicksWork).then(() => "passed", (e) => e.message);

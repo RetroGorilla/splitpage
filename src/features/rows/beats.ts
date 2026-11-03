@@ -1,46 +1,46 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeId } from "../../core/document/text-policy.ts";
-import { addSceneCommand, deleteSceneCommand, isBlankScene, swapScenesCommand } from "../../application/commands/rows.ts";
-import { splitSceneCommand, textCut } from "../../application/commands/split-join.ts";
+import { addBeatCommand, deleteBeatCommand, isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
+import { splitBeatCommand, textCut } from "../../application/commands/split-join.ts";
 import { armDeleteButton, disarmDeleteButton } from "./delete-button.ts";
 
-import type { ScenePorts, Scenes } from "./ports.ts";
+import type { BeatPorts, Beats } from "./ports.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { Command, DocumentView } from "../../application/session/document-session.ts";
 
-interface SceneDragScroll {
+interface BeatDragScroll {
  dir: number;
  speed: number;
  x: number;
  y: number;
  raf: number | null;
 }
-type SceneDocument = Pick<DocumentView, "rows" | "comments">;
-type SceneNullableIdArgs<T extends readonly unknown[]> = T extends [infer Id, ...infer Rest] ? [Id | null, ...Rest] : never;
-type SceneSplitCommand = (...args: SceneNullableIdArgs<Parameters<typeof splitSceneCommand>>) => ReturnType<typeof splitSceneCommand>;
-type SceneSwapCommand = (...args: SceneNullableIdArgs<Parameters<typeof swapScenesCommand>>) => ReturnType<typeof swapScenesCommand>;
-interface ScenePortUse extends Omit<ScenePorts, "document"> {
+type BeatDocument = Pick<DocumentView, "rows" | "comments">;
+type BeatNullableIdArgs<T extends readonly unknown[]> = T extends [infer Id, ...infer Rest] ? [Id | null, ...Rest] : never;
+type BeatSplitCommand = (...args: BeatNullableIdArgs<Parameters<typeof splitBeatCommand>>) => ReturnType<typeof splitBeatCommand>;
+type BeatSwapCommand = (...args: BeatNullableIdArgs<Parameters<typeof swapBeatsCommand>>) => ReturnType<typeof swapBeatsCommand>;
+interface BeatPortUse extends Omit<BeatPorts, "document"> {
  readonly document: {
-  readonly read: ScenePorts["document"]["read"];
-  readonly current: (...args: Parameters<ScenePorts["document"]["current"]>) => SceneDocument | null;
+  readonly read: BeatPorts["document"]["read"];
+  readonly current: (...args: Parameters<BeatPorts["document"]["current"]>) => BeatDocument | null;
  };
 }
-let ports: ScenePorts | null = null;
+let ports: BeatPorts | null = null;
 
 function rowCellSelector(rowId: string | null, field: string | null) {
-  return '#rows .row[data-id="' + safeId(rowId, "r", (ports as ScenePortUse).ids as IdSource) +
+  return '#rows .row[data-id="' + safeId(rowId, "r", (ports as BeatPortUse).ids as IdSource) +
     '"] .cell-editable[data-field="' + (field === "visualText" ? "visualText" : "audioText") + '"]';
 }
 
 function runRowCommand(command: Command) {
-  const outcome = (ports as ScenePortUse).edits.run(command);
+  const outcome = (ports as BeatPortUse).edits.run(command);
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
 function addRow(afterId: string | null | undefined) {
-  const createdId = (ports as ScenePortUse).ids.id("r");
-  if (!runRowCommand(addSceneCommand(afterId || null, createdId, (ports as ScenePortUse).edits.stamps))) return null;
+  const createdId = (ports as BeatPortUse).ids.id("r");
+  if (!runRowCommand(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps))) return null;
   return createdId;
 }
 
@@ -62,13 +62,13 @@ function addRowAndFocus(afterId: string | null | undefined, field: string | null
 function splitField(cellEl: Element) {
   const id = cellEl.getAttribute("data-id");
   const field = cellEl.getAttribute("data-field");
-  if ((ports as ScenePortUse).document.read(function (doc) { return rowIndexOf(doc, id); }) === -1 || (field !== "visualText" && field !== "audioText")) return null;
-  (ports as ScenePortUse).cells.sync(cellEl);
-  const sel = (ports as ScenePortUse).selection.of(cellEl);
+  if ((ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); }) === -1 || (field !== "visualText" && field !== "audioText")) return null;
+  (ports as BeatPortUse).cells.sync(cellEl);
+  const sel = (ports as BeatPortUse).selection.of(cellEl);
   if (!sel) return null;
-  (ports as ScenePortUse).undo.breakCoalescing();
-  const createdId = (ports as ScenePortUse).ids.id("r");
-  const outcome = (ports as ScenePortUse).edits.run((splitSceneCommand as SceneSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as ScenePortUse).edits.text));
+  (ports as BeatPortUse).undo.breakCoalescing();
+  const createdId = (ports as BeatPortUse).ids.id("r");
+  const outcome = (ports as BeatPortUse).edits.run((splitBeatCommand as BeatSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as BeatPortUse).edits.text));
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed" ? { id: createdId, field: field } : null;
 }
@@ -83,7 +83,7 @@ function focusField(rowId: string | null, field: string | null, offset?: number)
   const cell = document.querySelector<HTMLElement>(rowCellSelector(rowId, field));
   if (!cell) return;
   cell.focus();
-  (ports as ScenePortUse).placeCaret(cell, offset || 0);
+  (ports as BeatPortUse).placeCaret(cell, offset || 0);
   cell.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
@@ -111,7 +111,7 @@ function setDropMarkerForRow(row: Element, clientY: number) {
 const DRAG_SCROLL_ZONE = 120;
 const DRAG_SCROLL_MIN_SPEED = 6;
 const DRAG_SCROLL_MAX_SPEED = 28;
-let dragScroll: SceneDragScroll | null = null;
+let dragScroll: BeatDragScroll | null = null;
 
 function dragScrollSpeedFor(depthIntoZone: number) {
   const t = Math.max(0, Math.min(1, depthIntoZone / DRAG_SCROLL_ZONE));
@@ -121,7 +121,7 @@ function dragScrollSpeedFor(depthIntoZone: number) {
 function updateDropMarkersAtPoint(clientX: number, clientY: number) {
   const el = document.elementFromPoint(clientX, clientY);
   const row = el && el.closest && el.closest(".row");
-  if (!row || row.getAttribute("data-id") === (ports as ScenePortUse).rowDrag.dragging()) return;
+  if (!row || row.getAttribute("data-id") === (ports as BeatPortUse).rowDrag.dragging()) return;
   setDropMarkerForRow(row, clientY);
 }
 
@@ -161,11 +161,11 @@ function updateDragScroll(clientX: number, clientY: number) {
 }
 
 function deleteRow(id: string) {
-  runRowCommand(deleteSceneCommand(id));
+  runRowCommand(deleteBeatCommand(id));
 }
 
 function swapAdjacent(id: string | null, dir: number) {
-  return runRowCommand((swapScenesCommand as SceneSwapCommand)(id, dir < 0 ? -1 : 1));
+  return runRowCommand((swapBeatsCommand as BeatSwapCommand)(id, dir < 0 ? -1 : 1));
 }
 
 function moveRow(id: string, dir: number) {
@@ -173,27 +173,27 @@ function moveRow(id: string, dir: number) {
 }
 
 function armDelete(btn: Element, id: string) {
-  const idx = (ports as ScenePortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
-  const rowEl = document.querySelector<HTMLElement>('#rows .row[data-id="' + safeId(id, "r", (ports as ScenePortUse).ids as IdSource) + '"]');
-  if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { (ports as ScenePortUse).cells.sync(cellEl); });
-  const doc = (ports as ScenePortUse).document.current() as SceneDocument;
-  if (idx !== -1 && isBlankScene(doc, doc.rows[idx], (ports as ScenePortUse).text)) {
-    (ports as ScenePortUse).deletes.disarm("row");
+  const idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
+  const rowEl = document.querySelector<HTMLElement>('#rows .row[data-id="' + safeId(id, "r", (ports as BeatPortUse).ids as IdSource) + '"]');
+  if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });
+  const doc = (ports as BeatPortUse).document.current() as BeatDocument;
+  if (idx !== -1 && isBlankBeat(doc, doc.rows[idx], (ports as BeatPortUse).text)) {
+    (ports as BeatPortUse).deletes.disarm("row");
     deleteRow(id);
     return;
   }
-  if ((ports as ScenePortUse).deletes.armedId("row") === id) {
-    (ports as ScenePortUse).deletes.disarm("row");
+  if ((ports as BeatPortUse).deletes.armedId("row") === id) {
+    (ports as BeatPortUse).deletes.disarm("row");
     deleteRow(id);
     return;
   }
   document.querySelectorAll(".gutter-btn.danger.armed").forEach(disarmDeleteButton);
-  (ports as ScenePortUse).deletes.arm("row", id, function () {
+  (ports as BeatPortUse).deletes.arm("row", id, function () {
     disarmDeleteButton(btn);
   }, function () { armDeleteButton(btn); });
 }
 
-export function startSceneRows(next: ScenePorts): Scenes {
+export function startBeatRows(next: BeatPorts): Beats {
   ports = next;
   return {
     addRow: addRow,

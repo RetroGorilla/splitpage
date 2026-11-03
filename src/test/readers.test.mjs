@@ -9,7 +9,7 @@ import { tagsInField } from "../features/tags/production-tags.ts";
 
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
 import { htmlToPlainText } from "../bootstrap/plain-text.ts";
-import { prompterSceneHtml, trimPrompterCell } from "../features/prompter/prompter.ts";
+import { prompterBeatHtml, trimPrompterCell } from "../features/prompter/prompter.ts";
 import { STORED, tagSpan } from "./_stored-cells.mjs";
 
 test("plain text: the model reads every stored cell as htmlToPlainText does", () => {
@@ -48,7 +48,7 @@ test("docx/pdf runs: the same text in the same formats as htmlToRuns, for every 
   assert.ok(merged > 0, "the random cells do exercise neighbouring same-format elements");
 });
 
-function oldPrompterScene(html) {
+function oldPrompterBeat(html) {
   const trimmed = (html || "").replace(/^(\s|<br\s*\/?>)+|(\s|<br\s*\/?>)+$/g, "");
   if (!trimmed.trim()) return null;
   const body = inertBody(sanitizeHtml(trimmed));
@@ -73,9 +73,9 @@ function oldPrompterScene(html) {
   return body.innerHTML;
 }
 
-function newPrompterScene(html) {
+function newPrompterBeat(html) {
   const cell = trimPrompterCell(cellOf(html));
-  return cell.length ? prompterSceneHtml(cell).html : null;
+  return cell.length ? prompterBeatHtml(cell).html : null;
 }
 
 function looks(html) {
@@ -123,23 +123,23 @@ const wordCount = (html) => (html === null ? 0 : inertBody(html).querySelectorAl
 test("teleprompter: every stored scene looks as it did, word for word and style for style", () => {
   let joined = 0;
   for (const html of STORED) {
-    const before = oldPrompterScene(html), after = newPrompterScene(html);
+    const before = oldPrompterBeat(html), after = newPrompterBeat(html);
     assert.deepEqual(looks(after), looks(before), html);
     assert.ok(wordCount(after) <= wordCount(before), html);
     if (wordCount(after) < wordCount(before)) joined++;
-    if (after !== null) assert.equal(prompterSceneHtml(trimPrompterCell(cellOf(html))).words, wordCount(after));
+    if (after !== null) assert.equal(prompterBeatHtml(trimPrompterCell(cellOf(html))).words, wordCount(after));
   }
   assert.ok(joined > 0, "the random cells do exercise a word split between two same-format elements");
 });
 
 test("teleprompter: where the model draws differently", () => {
-  assert.equal(newPrompterScene("<strong>bo</strong><strong>ld</strong>"),
+  assert.equal(newPrompterBeat("<strong>bo</strong><strong>ld</strong>"),
     '<strong><span class="w">bold</span></strong>');
-  assert.equal(wordCount(newPrompterScene("<strong>bo</strong>ld")), 2);
-  assert.equal(newPrompterScene("<strong><br>x</strong>"), '<strong><span class="w">x</span></strong>');
-  assert.equal(oldPrompterScene("<strong><br>x</strong>"), '<strong><br><span class="w">x</span></strong>');
-  assert.equal(newPrompterScene("<strong></strong>"), null);
-  assert.equal(newPrompterScene("&nbsp;x"), '&nbsp;<span class="w">x</span>');
+  assert.equal(wordCount(newPrompterBeat("<strong>bo</strong>ld")), 2);
+  assert.equal(newPrompterBeat("<strong><br>x</strong>"), '<strong><span class="w">x</span></strong>');
+  assert.equal(oldPrompterBeat("<strong><br>x</strong>"), '<strong><br><span class="w">x</span></strong>');
+  assert.equal(newPrompterBeat("<strong></strong>"), null);
+  assert.equal(newPrompterBeat("&nbsp;x"), '&nbsp;<span class="w">x</span>');
 });
 
 const MD_MARKUP = /<\/?(?:strong|em|s|u|mark)>|\]\((?:https?|mailto):[^)\s]*\)|\*|~~|\[/g;

@@ -10,8 +10,8 @@ await bootApp();
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { SCENES_MIME, buildScenePayload } = await import("../features/clipboard/scene-clip.ts");
-const { deleteSelectedScenes, newScriptFromSelection, pasteScenesAt } = await import("../features/clipboard/scene-select.ts");
+const { BEATS_MIME, buildBeatPayload } = await import("../features/clipboard/beat-clip.ts");
+const { deleteSelectedBeats, newScriptFromSelection, pasteBeatsAt } = await import("../features/clipboard/beat-select.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
@@ -65,9 +65,9 @@ function clipboardWith(data) {
   };
 }
 
-function copiedScenes(rowIds) {
-  const out = buildScenePayload(currentDocument(), rowIds);
-  return clipboardWith({ [SCENES_MIME]: out.json, "text/html": out.html, "text/plain": out.text });
+function copiedBeats(rowIds) {
+  const out = buildBeatPayload(currentDocument(), rowIds);
+  return clipboardWith({ [BEATS_MIME]: out.json, "text/html": out.html, "text/plain": out.text });
 }
 
 function watch() {
@@ -92,11 +92,11 @@ beforeEach(() => { clock += 10_000; });
 
 test("pasting copied scenes is one paste-scenes transaction: one generation, one edit, one undo entry, and the scenes and their comments in its change set", async () => {
   await open();
-  const cd = copiedScenes(["r1"]);
+  const cd = copiedBeats(["r1"]);
   const was = counters();
   const w = watch();
   try {
-    assert.equal(pasteScenesAt(cd, cellOf("r3", "audioText")), true);
+    assert.equal(pasteBeatsAt(cd, cellOf("r3", "audioText")), true);
   } finally {
     w.stop();
   }
@@ -123,10 +123,10 @@ test("pasting copied scenes is one paste-scenes transaction: one generation, one
 
 test("pasting onto a blank scene replaces it inside the same transaction", async () => {
   await open(true);
-  const cd = copiedScenes(["r2"]);
+  const cd = copiedBeats(["r2"]);
   const w = watch();
   try {
-    pasteScenesAt(cd, cellOf("r3", "audioText"));
+    pasteBeatsAt(cd, cellOf("r3", "audioText"));
   } finally {
     w.stop();
   }
@@ -156,9 +156,9 @@ test("cutting selected scenes is one remove-scenes transaction with one undo ent
   assert.equal(w.seen[0].changes.saveNow, true);
   assert.equal(liveSession().generation(), was.generation + 1);
   assert.deepEqual(undoSizes(), { undo: was.sizes.undo + 1, redo: 0 });
-  assert.ok(cd.store[SCENES_MIME], "the scenes are on the clipboard");
+  assert.ok(cd.store[BEATS_MIME], "the scenes are on the clipboard");
 
-  pasteScenesAt(cd, cellOf("r1", "audioText"));
+  pasteBeatsAt(cd, cellOf("r1", "audioText"));
   assert.deepEqual(ids(), ["r1", "r2", "r3"], "a cut then its paste keeps the scene ids");
   undo();
   assert.deepEqual(ids(), ["r1"]);
@@ -171,7 +171,7 @@ test("deleting selected scenes is one transaction, and its undo brings the scene
   window.__sceneSelectTest.select("r1", "r2");
   const w = watch();
   try {
-    deleteSelectedScenes();
+    deleteSelectedBeats();
   } finally {
     w.stop();
   }
@@ -200,7 +200,7 @@ test("a new script from selected scenes takes its title in the same transaction 
 
 test("a scene paste that fails part way is thrown and leaves the document, the edit count and undo as they were", async () => {
   await open();
-  const cd = copiedScenes(["r1", "r2"]);
+  const cd = copiedBeats(["r1", "r2"]);
   await settle();
   const before = JSON.stringify(currentDocument());
   const was = counters();
@@ -208,7 +208,7 @@ test("a scene paste that fails part way is thrown and leaves the document, the e
   const real = Date.prototype.toISOString;
   Date.prototype.toISOString = function () { throw new Error("no clock"); };
   try {
-    assert.throws(() => pasteScenesAt(cd, cellOf("r3", "audioText")), /no clock/);
+    assert.throws(() => pasteBeatsAt(cd, cellOf("r3", "audioText")), /no clock/);
   } finally {
     Date.prototype.toISOString = real;
     w.stop();

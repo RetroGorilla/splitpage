@@ -7,7 +7,7 @@ import { zipWrite } from "../../adapters/formats/zip.ts";
 import { tagCategory } from "../../core/production/looks.ts";
 import { preferences } from "./preferences-owner.ts";
 import { exportServices } from "../../application/export/services.ts";
-import { exportBrollScenes, exportDay, exportFacts } from "../../adapters/formats/export-kit.ts";
+import { exportBrollBeats, exportDay, exportFacts } from "../../adapters/formats/export-kit.ts";
 import {
   exportMetaLine,
   htmlToPlainScript,
@@ -65,7 +65,7 @@ function narrationReason(doc: ExportDocument): string {
 }
 
 function brollReason(doc: ExportDocument): string {
-  return exportBrollScenes(doc, exportServices()).length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
+  return exportBrollBeats(doc, exportServices()).length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
 }
 
 const CARDS: readonly ExportCardDecl[] = [

@@ -3,9 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { startCellClipboard as mountCellClipboard, pasteIntoCell } from "../../../src/features/clipboard/cell-clipboard.ts";
-import type { CellClipboardPorts, SceneClipPorts, SceneSelectPorts } from "../../../src/features/clipboard/ports.ts";
-import { startSceneClip as mountSceneClip, parseScenePayload } from "../../../src/features/clipboard/scene-clip.ts";
-import { startSceneSelect as mountSceneSelect, selectScenes } from "../../../src/features/clipboard/scene-select.ts";
+import type { CellClipboardPorts, BeatClipPorts, BeatSelectPorts } from "../../../src/features/clipboard/ports.ts";
+import { startBeatClip as mountBeatClip, parseBeatPayload } from "../../../src/features/clipboard/beat-clip.ts";
+import { startBeatSelect as mountBeatSelect, selectBeats } from "../../../src/features/clipboard/beat-select.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakePictures } from "../fakes.ts";
 
@@ -17,12 +17,12 @@ function scriptDoc() {
   ] }, fakeMigration().ports);
 }
 
-function sceneSelect() {
+function beatSelect() {
   document.body.innerHTML = '<div id="rows"></div>';
   const edits = fakeEdits();
   const notices = fakeNotices();
   const calls: string[] = [];
-  const ports: SceneSelectPorts = {
+  const ports: BeatSelectPorts = {
     document: fakeDocument(scriptDoc()).document,
     edits: edits.edits,
     undo: {
@@ -43,7 +43,7 @@ function sceneSelect() {
     startNewScript: () => false,
     nonce: () => "n1"
   };
-  return { owner: mountSceneSelect(ports), edits, notices, calls };
+  return { owner: mountBeatSelect(ports), edits, notices, calls };
 }
 
 function press(key: string): void {
@@ -51,8 +51,8 @@ function press(key: string): void {
 }
 
 test("scene selection: Delete removes the selected scenes through the edits port, between undo breaks, and says so", () => {
-  const { owner, edits, notices, calls } = sceneSelect();
-  selectScenes("r1", "r2");
+  const { owner, edits, notices, calls } = beatSelect();
+  selectBeats("r1", "r2");
   press("Delete");
   assert.equal(edits.ran.length, 1);
   assert.deepEqual(calls, ["break", "flush", "break"]);
@@ -61,8 +61,8 @@ test("scene selection: Delete removes the selected scenes through the edits port
 });
 
 test("scene selection: dispose removes its listeners and its highlight", () => {
-  const { owner, edits } = sceneSelect();
-  selectScenes("r1");
+  const { owner, edits } = beatSelect();
+  selectBeats("r1");
   assert.ok(document.getElementById("scene-selection-style"));
   owner.dispose();
   assert.equal(document.getElementById("scene-selection-style"), null);
@@ -74,7 +74,7 @@ test("scene selection: dispose removes its listeners and its highlight", () => {
 test("scene clipboard: a pasted payload's pictures go through the picture port and its scenes through the migrate port", () => {
   const pictures = fakePictures();
   const migrated: object[] = [];
-  const ports: SceneClipPorts = {
+  const ports: BeatClipPorts = {
     document: fakeDocument(scriptDoc()).document,
     ids: { id: (prefix) => prefix + "1" },
     pictures: pictures.pictures,
@@ -83,9 +83,9 @@ test("scene clipboard: a pasted payload's pictures go through the picture port a
     tagsInRows: () => [],
     recordPastedBroll: () => {}
   };
-  const owner = mountSceneClip(ports);
+  const owner = mountBeatClip(ports);
   const sha = "0".repeat(63) + "1";
-  const clip = parseScenePayload(JSON.stringify({
+  const clip = parseBeatPayload(JSON.stringify({
     format: "splitpage-scenes", version: 1,
     rows: [{ id: "r9", visualText: "Hello", audioText: "" }],
     blobs: { [sha]: "data:image/png;base64,AQ==" }

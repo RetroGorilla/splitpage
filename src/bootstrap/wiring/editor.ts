@@ -35,7 +35,7 @@ import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "./editor-owners.ts";
 import { currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "./session-owner.ts";
 import { fromHtml } from "../richtext.ts";
-import { cycleRowStatus } from "./scene-status.ts";
+import { cycleRowStatus } from "./beat-status.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { restoreMergeSnapshot } from "./session-merge.ts";
@@ -65,7 +65,7 @@ import {
   updateToolbarState
 } from "../../features/rows/render.ts";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.ts";
-import { pasteScenesAt } from "../../features/clipboard/scene-select.ts";
+import { pasteBeatsAt } from "../../features/clipboard/beat-select.ts";
 import { thumbnailsAfterPaste } from "./gallery.ts";
 import {
   draftRedo,
@@ -93,7 +93,7 @@ import {
   updateDragScroll
 } from "./rows.ts";
 import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.ts";
-import { compressImageFile, videoFirstFrame } from "../../features/rows/scene-media.ts";
+import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-media.ts";
 import { videoFiles } from "./video-files.ts";
 import {
   acceptTagGhost,
@@ -425,7 +425,7 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
   }, function (owner) {
     return [
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
-      function () { return routeRootClick("rows-scene", function (e) { return owner.sceneClick(e); }); },
+      function () { return routeRootClick("rows-scene", function (e) { return owner.beatClick(e); }); },
       function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); },
       function () { return rowDrag().onEnd(clearDropMarkers); }
     ];
@@ -634,7 +634,7 @@ const clipboardRoutePorts = {
   scriptCell: isScriptCell,
   copy: copyFromCell,
   afterCut: afterScriptCellChange,
-  pasteScenes: pasteScenesAt,
+  pasteBeats: pasteBeatsAt,
   pasteDraft: pasteIntoDraft,
   hasMedia: hasMediaFiles,
   readMedia: function (files: FileList | readonly File[], html: string) {

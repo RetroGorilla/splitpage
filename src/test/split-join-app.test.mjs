@@ -395,13 +395,13 @@ function panelDoc() {
 }
 
 const texts = (selector) => Array.from(document.querySelectorAll(selector)).map((el) => el.textContent);
-const brollScenes = () => texts("#broll-panel .broll-group-scene");
-const productionScenes = () => texts("#production-panel .tag-scene");
+const brollBeats = () => texts("#broll-panel .broll-group-scene");
+const productionBeats = () => texts("#production-panel .tag-scene");
 const waitRefresh = () => new Promise((r) => setTimeout(r, 400));
 
 const PANELS = [
-  { name: "production", open: openProductionPanel, scenes: productionScenes, labels: (n) => ["0" + n] },
-  { name: "b-roll", open: openBrollPanel, scenes: brollScenes, labels: (n) => ["Scene 0" + n] }
+  { name: "production", open: openProductionPanel, beats: productionBeats, labels: (n) => ["0" + n] },
+  { name: "b-roll", open: openBrollPanel, beats: brollBeats, labels: (n) => ["Scene 0" + n] }
 ];
 
 async function openPanelUnderWriter(panel) {
@@ -409,7 +409,7 @@ async function openPanelUnderWriter(panel) {
   writer.openWriter();
   panel.open();
   await waitRefresh();
-  assert.deepEqual(panel.scenes(), panel.labels(2), panel.name);
+  assert.deepEqual(panel.beats(), panel.labels(2), panel.name);
 }
 
 test("a Writer split refreshes the production and b-roll panels with the scene numbers after the split", async () => {
@@ -421,7 +421,7 @@ test("a Writer split refreshes the production and b-roll panels with the scene n
     key(p, "Enter");
     assert.equal(currentDocument().rows.length, 3, panel.name);
     await waitRefresh();
-    assert.deepEqual(panel.scenes(), panel.labels(3), panel.name);
+    assert.deepEqual(panel.beats(), panel.labels(3), panel.name);
     writer.closeWriter();
   }
 });
@@ -435,7 +435,7 @@ test("a Writer join refreshes the production and b-roll panels with the scene nu
     key(p, "Backspace");
     assert.equal(currentDocument().rows.length, 1, panel.name);
     await waitRefresh();
-    assert.deepEqual(panel.scenes(), panel.labels(1), panel.name);
+    assert.deepEqual(panel.beats(), panel.labels(1), panel.name);
     writer.closeWriter();
   }
 });

@@ -2,7 +2,7 @@ interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly scriptCell: (el: Element) => boolean;
   readonly copy: (e: ClipboardEvent, cell: Element, cut: boolean) => boolean;
   readonly afterCut: (cell: Element) => void;
-  readonly pasteScenes: (data: DataTransfer | null, cell: Element) => boolean;
+  readonly pasteBeats: (data: DataTransfer | null, cell: Element) => boolean;
   readonly pasteDraft: (cell: Element, html: string, text: string) => void;
   readonly hasMedia: (files: FileList | readonly File[] | null | undefined, html: string) => boolean;
   readonly readMedia: (files: FileList | readonly File[], html: string) => Promise<Extra>;
@@ -82,7 +82,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
       if (data) ports.pasteDraft(cell, data.getData("text/html"), data.getData("text/plain"));
       return;
     }
-    if (ports.pasteScenes(data, cell)) return;
+    if (ports.pasteBeats(data, cell)) return;
     if (!data) return;
     insert(cell, data.getData("text/html"), data.getData("text/plain"), data.files, true);
   }

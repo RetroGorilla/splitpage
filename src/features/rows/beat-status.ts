@@ -4,11 +4,11 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
-import { sceneStatus, sceneStatusCommand, shotGrace } from "../../application/commands/scene-status.ts";
+import { beatStatus, beatStatusCommand, shotGrace } from "../../application/commands/beat-status.ts";
 import { targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration, rowSeconds, targetClock, totalSeconds } from "../../core/production/timing.ts";
 
-interface SceneStatusPorts {
+interface BeatStatusPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "run" | "stamps">;
   readonly text: Pick<TextServices, "productionReaders">;
@@ -17,7 +17,7 @@ interface SceneStatusPorts {
   readonly element: (id: string) => HTMLElement | null;
 }
 
-export interface SceneStatus {
+export interface BeatStatus {
   readonly updateScriptStats: () => void;
   readonly statsFollowChange: (change: SessionChange) => void;
   readonly onScriptStats: (listener: (targetSeconds: number) => void) => () => void;
@@ -35,7 +35,7 @@ function paintLength(el: HTMLElement | null, totalHtml: string, slotHtml: string
   if (el.title !== title) el.title = title;
 }
 
-export function createSceneStatus(ports: SceneStatusPorts): SceneStatus {
+export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
   const statsListeners: ((targetSeconds: number) => void)[] = [];
 
   function updateScriptStats(): void {
@@ -93,12 +93,12 @@ export function createSceneStatus(ports: SceneStatusPorts): SceneStatus {
       };
     },
     cycleRowStatus: function (rowId) {
-      const before = ports.document.read(sceneStatus(rowId));
-      const outcome: CommandOutcome = ports.edits.run(sceneStatusCommand(rowId, ports.edits.stamps));
+      const before = ports.document.read(beatStatus(rowId));
+      const outcome: CommandOutcome = ports.edits.run(beatStatusCommand(rowId, ports.edits.stamps));
       if (outcome.kind === "failed") throw outcome.error;
       if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
       if (ports.hideShot()) {
-        const grace = shotGrace(before, ports.document.read(sceneStatus(rowId)));
+        const grace = shotGrace(before, ports.document.read(beatStatus(rowId)));
         if (grace === "arm") ports.shots.armGrace(rowId);
         else if (grace === "clear") ports.shots.clearGrace(rowId);
       }

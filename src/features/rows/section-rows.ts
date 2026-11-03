@@ -16,16 +16,16 @@ export function sectionRowEntries<R extends ShotRow>(doc: Pick<SectionDocument, 
   const groups = sectionGroups(doc);
   if (!groups.length) return hiding.groups(doc.rows);
   const entries: SectionRowEntry<R>[] = [];
-  const scenes = (from: number, to: number): void => {
+  const beats = (from: number, to: number): void => {
     for (const item of hiding.groups(doc.rows.slice(from, to))) {
       entries.push("strip" in item ? item : { ...item, index: item.index + from });
     }
   };
-  scenes(0, groups[0]?.start ?? 0);
+  beats(0, groups[0]?.start ?? 0);
   for (const group of groups) {
     const folded = view.folded(group.section.id);
     entries.push({ section: group.section, count: group.end - group.start, folded });
-    if (!folded) scenes(group.start, group.end);
+    if (!folded) beats(group.start, group.end);
   }
   return entries;
 }

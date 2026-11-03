@@ -29,22 +29,22 @@ export interface CellClipboardPorts {
   readonly brollSeed: (row: DeepReadonly<DocumentRow>) => BrollSeedPlace;
 }
 
-interface SceneTag {
+interface BeatTag {
   readonly cat: { readonly id: string } | null;
   readonly name: string;
 }
 
-export interface SceneClipPorts {
+export interface BeatClipPorts {
   readonly document: Pick<DocumentReader<ValidatedDocument>, "current">;
   readonly ids: Pick<IdSource, "id">;
   readonly pictures: Pick<PictureStore, "dataUrlFor" | "internDataUrl" | "queuePersist">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "fromHtml" | "inertBody">;
   readonly migrate: (doc: object) => ValidatedDocument;
-  readonly tagsInRows: (rows: readonly unknown[]) => readonly SceneTag[];
+  readonly tagsInRows: (rows: readonly unknown[]) => readonly BeatTag[];
   readonly recordPastedBroll: (doc: ValidatedDocument | null, rowId: string, cell: readonly Run[], ids: readonly string[]) => void;
 }
 
-export interface SceneSelectPorts {
+export interface BeatSelectPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly edits: Pick<DocumentEdits, "run">;
   readonly undo: Pick<UndoControl, "breakCoalescing" | "flush" | "last" | "undo">;

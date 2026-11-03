@@ -6,10 +6,10 @@ import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts"
 
 await bootApp();
 
-const { cycleRowStatus } = await import("../bootstrap/wiring/scene-status.ts");
+const { cycleRowStatus } = await import("../bootstrap/wiring/beat-status.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { setSceneLength } = await import("../features/rows/read-time.ts");
+const { setBeatLength } = await import("../features/rows/read-time.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
@@ -41,12 +41,12 @@ test("a status click advances saveChanges() by exactly one and marks the documen
 
 test("a scene length advances saveChanges() by exactly one; setting it again or clearing nothing adds none", () => {
   const seq = saveChanges();
-  assert.equal(setSceneLength("r2", 90), true);
+  assert.equal(setBeatLength("r2", 90), true);
   assert.equal(saveChanges(), seq + 1);
-  assert.equal(setSceneLength("r2", 90), false);
-  assert.equal(setSceneLength("r1", null), false);
+  assert.equal(setBeatLength("r2", 90), false);
+  assert.equal(setBeatLength("r1", null), false);
   assert.equal(saveChanges(), seq + 1);
-  assert.equal(setSceneLength("r2", null), true);
+  assert.equal(setBeatLength("r2", null), true);
   assert.equal(saveChanges(), seq + 2);
 });
 

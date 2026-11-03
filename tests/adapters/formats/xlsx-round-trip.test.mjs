@@ -17,34 +17,34 @@ const openScript = async () => readWorkbook(buildScriptXlsx(liveDoc()));
 test("every row is a sheet row, in order, blank rows included, with its text, line breaks and status", async () => {
   loadFixture();
   const records = recordsOf(sheetNamed(await openScript(), "Script"));
-  const scenes = records.filter((r) => /^\d+$/.test(r.Scene));
-  assert.equal(scenes.length, scriptRows().length);
-  assert.deepEqual(scenes.map((r) => r.Scene), scriptRows().map((_, i) => String(i + 1).padStart(2, "0")));
+  const beats = records.filter((r) => /^\d+$/.test(r.Scene));
+  assert.equal(beats.length, scriptRows().length);
+  assert.deepEqual(beats.map((r) => r.Scene), scriptRows().map((_, i) => String(i + 1).padStart(2, "0")));
   scriptRows().forEach((row, i) => {
     const want = plainOf(row);
-    assert.ok(scenes[i].Visual === want.visual, "visual text of scene " + (i + 1));
-    assert.ok(scenes[i].Audio === want.audio, "audio text of scene " + (i + 1));
+    assert.ok(beats[i].Visual === want.visual, "visual text of scene " + (i + 1));
+    assert.ok(beats[i].Audio === want.audio, "audio text of scene " + (i + 1));
   });
-  assert.deepEqual(scenes.map((r) => r.Status), ["Shot", "To do", "To do", "Ready", "To do", "To do", "To do", "To do", "To do", "To do"]);
-  assert.deepEqual(records.slice(scenes.length).map((r) => r.Scene), ["Total"]);
+  assert.deepEqual(beats.map((r) => r.Status), ["Shot", "To do", "To do", "Ready", "To do", "To do", "To do", "To do", "To do", "To do"]);
+  assert.deepEqual(records.slice(beats.length).map((r) => r.Scene), ["Total"]);
 });
 
 test("a row with nothing in it stays as a row with empty cells, so the numbering holds", async () => {
   loadFixture();
-  const scenes = recordsOf(sheetNamed(await openScript(), "Script")).filter((r) => /^\d+$/.test(r.Scene));
+  const beats = recordsOf(sheetNamed(await openScript(), "Script")).filter((r) => /^\d+$/.test(r.Scene));
   for (const i of [1, 6, 9]) {
-    assert.deepEqual([scenes[i].Visual, scenes[i].Audio, scenes[i].Tags, scenes[i]["Open comments"]], ["", "", "", ""], "scene " + (i + 1));
+    assert.deepEqual([beats[i].Visual, beats[i].Audio, beats[i].Tags, beats[i]["Open comments"]], ["", "", "", ""], "scene " + (i + 1));
   }
 });
 
 test("accents, curly quotes, emoji, right-to-left and CJK text, and the title, come through every sheet", async () => {
   loadFixture();
   const book = await openScript();
-  const scenes = recordsOf(sheetNamed(book, "Script"));
-  assert.equal(scenes[0].Audio.split("\n")[0], UNICODE_LINE);
-  assert.equal(scenes[2].Audio, "Narration only: “curly” ‘quotes’ and naïve café 😀.");
-  assert.equal(scenes[7].Visual, "שלום עולם 你好 🎬");
-  assert.equal(scenes[7].Audio, "Ünïcödé — ‘ﬁ’ ligature");
+  const beats = recordsOf(sheetNamed(book, "Script"));
+  assert.equal(beats[0].Audio.split("\n")[0], UNICODE_LINE);
+  assert.equal(beats[2].Audio, "Narration only: “curly” ‘quotes’ and naïve café 😀.");
+  assert.equal(beats[7].Visual, "שלום עולם 你好 🎬");
+  assert.equal(beats[7].Audio, "Ünïcödé — ‘ﬁ’ ligature");
   assert.equal(book.xml("docProps/core.xml").getElementsByTagName("dc:title")[0].textContent, TITLE);
   const breakdown = recordsOf(sheetNamed(book, "Breakdown"));
   assert.ok(breakdown.some((r) => r.Item === "Rita 😀"));

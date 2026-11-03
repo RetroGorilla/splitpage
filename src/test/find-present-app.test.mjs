@@ -128,7 +128,7 @@ test("Present Find can jump through a script containing only visible stage direc
   loadTestDocument(migrateRows({ schema: 2, rows: [{ id: "r1", audioText: '<span class="stage-dir">hold still</span>' }] }));
   const present = prompterControls();
   present.openPrompter();
-  present.setPrompterSceneMode(true);
+  present.setPrompterBeatMode(true);
   assert.equal(document.querySelectorAll("#prompter-content .w").length, 0);
   openFindBar(); query("hold");
   assert.equal(el("find-count").textContent, "1 of 1");
@@ -140,7 +140,7 @@ test("Present Find can jump through a script containing only visible stage direc
   assert.deepEqual(errors, []);
   assert.equal(present.playing(), false);
   closeFindBar(); present.closePrompter();
-  present.setPrompterSceneMode(false);
+  present.setPrompterBeatMode(false);
 });
 
 for (const method of ["disposeRuntime", "dispose"]) {

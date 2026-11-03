@@ -47,7 +47,7 @@ function wrote(target) {
   return target.calls.filter((op) => op === "createWritable" || op === "write" || op === "close");
 }
 
-function scene(run) {
+function beat(run) {
   return async () => {
     const asked = [];
     const picked = createHeldFileHandle({ name: "notes.md", text: "" });
@@ -71,7 +71,7 @@ async function importText(target) {
   await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle });
 }
 
-test("an imported file opens as a script with no file, and nothing in the app offers to write back to it", scene(async () => {
+test("an imported file opens as a script with no file, and nothing in the app offers to write back to it", beat(async () => {
   const target = createHeldFileHandle({ name: "notes.txt", text: SOURCE, lastModified: 1000 });
   await importText(target);
   assert.equal(currentHome().kind, "none", "the script has no file, like a new untitled script");
@@ -89,7 +89,7 @@ test("an imported file opens as a script with no file, and nothing in the app of
   assert.deepEqual(wrote(target), [], "the imported file was only read");
 }));
 
-test("Save after an import asks for a new project file with the usual choices and default, and the imported file is never written", scene(async ({ asked, picked }) => {
+test("Save after an import asks for a new project file with the usual choices and default, and the imported file is never written", beat(async ({ asked, picked }) => {
   const target = createHeldFileHandle({ name: "notes.txt", text: SOURCE, lastModified: 1000 });
   await importText(target);
   edit("Typed after the import.");
@@ -117,7 +117,7 @@ test("Save after an import asks for a new project file with the usual choices an
   assert.equal(target.text(), SOURCE, "and still holds what it held");
 }));
 
-test("Save after a desktop import asks for a new project file and never writes the imported file's path", scene(async () => {
+test("Save after a desktop import asks for a new project file and never writes the imported file's path", beat(async () => {
   const fake = window.__desktopTest.makeFakeBackend();
   const asked = [];
   const written = [];
@@ -139,7 +139,7 @@ test("Save after a desktop import asks for a new project file and never writes t
   assert.equal(new TextDecoder().decode((await fake.readFile(source.id)).bytes), SOURCE, "the imported file is unchanged");
 }));
 
-test("a home an older build recorded as an import loads, and Save treats it as a script with no file", scene(async ({ asked, picked }) => {
+test("a home an older build recorded as an import loads, and Save treats it as a script with no file", beat(async ({ asked, picked }) => {
   const target = createHeldFileHandle({ name: "old.txt", text: SOURCE, lastModified: 1000 });
   placeholder();
   setHome("import", { name: "old.txt", handle: target.handle, format: "txt", inPlace: true, dirty: false, lastModified: 1000 });
@@ -155,7 +155,7 @@ test("a home an older build recorded as an import loads, and Save treats it as a
   assert.deepEqual(wrote(target), [], "the old imported file was never written");
 }));
 
-test("a recovery draft that records an import loads as a script with no file, and Save asks where", scene(async ({ asked, picked }) => {
+test("a recovery draft that records an import loads as a script with no file, and Save asks where", beat(async ({ asked, picked }) => {
   placeholder();
   const restored = await applyTakenDraft({
     header: { origin: { kind: "import", importName: "notes.txt" } },

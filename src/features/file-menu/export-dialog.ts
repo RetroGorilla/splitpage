@@ -20,9 +20,9 @@ function captureExportDocument(options?: Parameters<FileMenuExportPorts["capture
 function showToast(message: Parameters<FileMenuExportPorts["notices"]["show"]>[0], kind: Parameters<FileMenuExportPorts["notices"]["show"]>[1]) { return (ports as FileMenuExportPorts).notices.show(message, kind); }
 function cellOf(html: Parameters<FileMenuExportPorts["text"]["cellOf"]>[0]) { return (ports as FileMenuExportPorts).text.cellOf(html); }
 function exportFacts(doc: ExportDocument) { return (ports as FileMenuExportPorts).preview.facts(doc); }
-function exportBrollScenes(doc: ExportDocument) { return (ports as FileMenuExportPorts).preview.shots(doc); }
+function exportBrollBeats(doc: ExportDocument) { return (ports as FileMenuExportPorts).preview.shots(doc); }
 function breakdownRows(doc: ExportDocument) { return (ports as FileMenuExportPorts).preview.breakdown(doc); }
-function sceneFacts(doc: ExportDocument) { return (ports as FileMenuExportPorts).preview.scenes(doc); }
+function beatFacts(doc: ExportDocument) { return (ports as FileMenuExportPorts).preview.beats(doc); }
 function narrationRows(doc: ExportDocument, opts: Parameters<FileMenuExportPorts["preview"]["narration"]>[1]) { return (ports as FileMenuExportPorts).preview.narration(doc, opts); }
 function runExportAction(action: string) { return (ports as FileMenuExportPorts).exportAction(action); }
 
@@ -198,13 +198,13 @@ function pvPill(id: string | null) {
     ids.map(function (x, i) { return '<i' + (i <= level ? ' class="is-on"' : '') + '></i>'; }).join("") + '</span>';
 }
 
-function pvRundown(scenes: ReturnType<FileMenuExportPorts["preview"]["scenes"]>, legend: boolean, doc: ExportDocument) {
-  if (!scenes.length) return "";
+function pvRundown(beats: ReturnType<FileMenuExportPorts["preview"]["beats"]>, legend: boolean, doc: ExportDocument) {
+  if (!beats.length) return "";
   const facts = exportFacts(doc);
   const mark = facts.target && facts.seconds
     ? '<b class="pv-rd-target" style="left:' + Math.min(100, facts.target.seconds / Math.max(facts.seconds, facts.target.seconds) * 100).toFixed(2) + '%"></b>'
     : "";
-  return '<div class="pv-rundown">' + scenes.map(function (f) {
+  return '<div class="pv-rundown">' + beats.map(function (f) {
     return '<i class="pv-rd pv-rd-' + escapeHtml(f.status.id) + '" style="flex-grow:' + Math.max(1, f.seconds) + '"></i>';
   }).join("") + mark + '</div>' +
     (legend ? '<div class="pv-legend">' + [["shot", "Shot"], ["ready", "Ready"], ["todo", "To do"]].map(function (s) {
@@ -213,15 +213,15 @@ function pvRundown(scenes: ReturnType<FileMenuExportPorts["preview"]["scenes"]>,
 }
 
 function pvScript(title: string, opts: { app?: boolean; rundown?: boolean; word?: boolean }, doc: ExportDocument) {
-  const scenes = sceneFacts(doc);
+  const beats = beatFacts(doc);
   const nums = doc.commentNumbers;
-  let html = (opts.app ? "" : pvTitleBlock(title, doc)) + (opts.rundown ? pvRundown(scenes, !opts.app, doc) : "");
+  let html = (opts.app ? "" : pvTitleBlock(title, doc)) + (opts.rundown ? pvRundown(beats, !opts.app, doc) : "");
   if (!(currentDocument() as DocumentView).rows.length) return html + '<p class="pv-para pv-faint">(no scenes yet)</p>';
   html += '<div class="pv-script' + (opts.word ? ' pv-script-word' : '') + '">' +
     '<div class="pv-sh"><span>Scene</span><span><i class="pv-dot pv-dot-v"></i>Visual</span>' +
     '<span><i class="pv-dot pv-dot-a"></i>Audio</span><span class="pv-read">Read</span></div>' +
     (currentDocument() as DocumentView).rows.slice(0, 6).map(function (r, i) {
-      const f = scenes[i] as typeof scenes[number];
+      const f = beats[i] as typeof beats[number];
       return '<div class="pv-sc">' +
         '<div class="pv-gut"><b>' + f.number + '</b> <span class="pv-tc">' + f.start + '</span>' +
           '<span class="pv-st">' + pvLamp(f.status.id) + escapeHtml(f.status.label) + '</span></div>' +
@@ -255,13 +255,13 @@ function pvGrid(head: string[], rows: PreviewGridRow[], widths: number[]) {
 }
 
 function pvShotList(title: string, doc: ExportDocument) {
-  const groups = exportBrollScenes(doc);
+  const groups = exportBrollBeats(doc);
   const rows: PreviewGridRow[] = [];
   groups.forEach(function (g) {
     g.items.forEach(function (r, i) {
       rows.push({ cells: [
         '<i class="pv-box' + (r.shot ? ' is-ticked' : '') + '"></i>',
-        i ? "" : '<b>' + escapeHtml(g.scene) + '</b>',
+        i ? "" : '<b>' + escapeHtml(g.beat) + '</b>',
         '<b' + (r.shot ? ' class="pv-faint"' : '') + '>' + escapeHtml(trunc(r.name, 34)) + '</b>',
         escapeHtml(trunc(r.location, 14)),
         escapeHtml(trunc((r.props || []).join(", "), 18)),
@@ -280,7 +280,7 @@ function xlsxSheetNames(doc: ExportDocument) {
   const names = ["Script"];
   if ((ports as FileMenuExportPorts).preview.commentCount(doc)) names.push("Comments");
   if (breakdownRows(doc).length) names.push("Breakdown");
-  if (exportBrollScenes(doc).length) names.push("B-roll");
+  if (exportBrollBeats(doc).length) names.push("B-roll");
   return names;
 }
 
@@ -298,9 +298,9 @@ function previewHtml(action: string | null | undefined) {
   if (action === "export-broll-pdf") return pvShotList(title, doc);
   if (action === "export-broll-csv" || action === "export-broll-xlsx") {
     const shots: PreviewGridRow[] = [];
-    exportBrollScenes(doc).forEach(function (g) {
+    exportBrollBeats(doc).forEach(function (g) {
       g.items.forEach(function (r) {
-        shots.push({ cells: [escapeHtml(g.scene), escapeHtml(trunc(r.name, 24)), r.shot ? "Shot" : "To shoot",
+        shots.push({ cells: [escapeHtml(g.beat), escapeHtml(trunc(r.name, 24)), r.shot ? "Shot" : "To shoot",
                              r.flagged ? "yes" : "", escapeHtml(trunc(r.location, 12)), escapeHtml(g.start)] });
       });
     });
@@ -312,10 +312,10 @@ function previewHtml(action: string | null | undefined) {
   if (action === "export-md") return pvTextLines((ports as FileMenuExportPorts).preview.markdown(doc), 40);
   if (action === "export-md-table") return pvTextLines((ports as FileMenuExportPorts).preview.markdownTable(doc), 20);
   if (action === "export-csv" || action === "export-xlsx") {
-    const scenes = sceneFacts(doc);
+    const beats = beatFacts(doc);
     const sheetHead = ["Scene", "Start", "Status", "Read", "Visual", "Audio"];
     const sheetRows = rows.slice(0, 5).map<PreviewGridRow>(function (r, i) {
-      const f = scenes[i] as typeof scenes[number];
+      const f = beats[i] as typeof beats[number];
       return { cells: [f.number, f.start, escapeHtml(f.status.label), f.read,
                        cellText(r.visualText, 34), cellText(r.audioText, 44)] };
     }).concat(rows.length ? [
@@ -338,24 +338,24 @@ function previewHtml(action: string | null | undefined) {
     const paras = spoken.slice(0, 8);
     const txt = action === "export-narration-txt";
     const said = exportOptionsFor(action).directions ? { cues: "omit" } : { directions: "omit", cues: "omit" };
-    const numbers = sceneFacts(doc);
+    const numbers = beatFacts(doc);
     const words = String(exportFacts(doc).words).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     return (txt ? '<div class="pv-mono pv-md-h">' + title + '</div><br>'
       : '<div class="pv-title">' + title + '</div><div class="pv-meta">Narration · ' +
         escapeHtml(plural(spoken.length, "scene") + " · " + words + " words") + '</div>') +
       '<div class="' + (txt ? 'pv-mono' : 'pv-narr') + '">' +
       (paras.length ? paras.map(function (r) {
-        const n = txt ? "" : '<span class="pv-margin">' + (numbers[doc.scenes.indexOf(r)] as typeof numbers[number]).number + '</span>';
+        const n = txt ? "" : '<span class="pv-margin">' + (numbers[doc.beats.indexOf(r)] as typeof numbers[number]).number + '</span>';
         return '<p class="pv-para">' + n + cellText(r.audioText, 180, said) + '</p>';
       }).join("") : '<p class="pv-para">(no narration yet)</p>') + '</div>';
   }
   if (action === "export-breakdown" || action === "export-breakdown-xlsx") {
-    const starts = sceneFacts(doc).map(function (f) { return f.start; });
+    const starts = beatFacts(doc).map(function (f) { return f.start; });
     const items = breakdownRows(doc).slice(0, 14);
     const itemGrid = pvGrid(["Category", "Item", "Status", "Scenes", "First at"], items.map(function (b) {
-      const first = b.inScript === "no" ? "" : (starts[Number(b.scenes[0]) - 1] || "");
+      const first = b.inScript === "no" ? "" : (starts[Number(b.beats[0]) - 1] || "");
       return { cells: [escapeHtml(b.categoryLabel), escapeHtml(trunc(b.name, 24)), escapeHtml(b.statusLabel),
-                       escapeHtml(trunc(b.scenes.join(" "), 14)), first] };
+                       escapeHtml(trunc(b.beats.join(" "), 14)), first] };
     }), [17, 29, 17, 21, 16]) + (items.length ? "" : '<p class="pv-para pv-faint">(nothing tagged yet)</p>');
     return action === "export-breakdown-xlsx" ? pvWorkbook(itemGrid, ["Breakdown"]) : itemGrid;
   }
@@ -382,7 +382,7 @@ function previewHtml(action: string | null | undefined) {
                 (b.notes ? '<span class="pv-faint">' + escapeHtml(trunc(b.notes, 44)) + '</span>' : '') + '</span>' +
               '<span>' + pvPill(b.status) + '</span>' +
               '<span>' + escapeHtml(trunc(b.owner, 12)) + '</span>' +
-              '<span>' + escapeHtml(b.scenes.join(", ")) + '</span></div>';
+              '<span>' + escapeHtml(b.beats.join(", ")) + '</span></div>';
           }).join("") + '</div>' +
           '<div class="pv-sign"><span>Packed by</span><i></i><span>Date</span><i></i>' +
             '<span>Returned by</span><i></i><span>Date</span><i></i></div>'
@@ -415,7 +415,7 @@ function listed(parts: string[]) {
 function tailSummary(doc: ExportDocument) {
   const parts = [];
   if (breakdownRows(doc).length) parts.push("breakdown");
-  if (exportBrollScenes(doc).length) parts.push("b-roll shot list");
+  if (exportBrollBeats(doc).length) parts.push("b-roll shot list");
   const comments = (currentDocument() as DocumentView).comments || [];
   if (comments.length) parts.push(comments.some(function (c) { return !c.resolved; }) ? "numbered comments" : "comments");
   return parts.length ? listed(parts) + " at the end" : "";
@@ -466,7 +466,7 @@ function exportSummary(action: string | null | undefined) {
     const missing = items.filter(function (b) { return b.status === "needed" || b.status === "sourcing"; }).length;
     if (missing) bits.push(missing + " not in hand yet");
   } else if (f.format.id === "broll") {
-    const shotGroups = exportBrollScenes(doc);
+    const shotGroups = exportBrollBeats(doc);
     const shotCount = shotGroups.reduce(function (n, g) { return n + g.items.length; }, 0);
     bits.push(plural(shotCount, "shot") + ", by scene");
     if (shotCount) bits.push((ports as FileMenuExportPorts).preview.shotSummary(doc));

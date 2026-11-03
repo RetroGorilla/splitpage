@@ -10,15 +10,15 @@ const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamp
 const { changeSet } = await import("../application/session/change-set.ts");
 const { editStamp } = await import("../application/commands/save-stamps.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
-const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
+const { beatStatusCommand } = await import("../application/commands/beat-status.ts");
+const { beatLengthCommand } = await import("../application/commands/beat-length.ts");
 const { registerTagCommand } = await import("../application/commands/production-records.ts");
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
-const { addSceneCommand } = await import("../application/commands/rows.ts");
+const { addBeatCommand } = await import("../application/commands/rows.ts");
 const { cellEditing, paintGuard } = await import("../bootstrap/wiring/editor-owners.ts");
 const { preferences, viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { documentLocation } = await import("../bootstrap/wiring/location-owner.ts");
-const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
+const { setHideShotBeats } = await import("../bootstrap/wiring/hide-shot.ts");
 const { expandHiddenShotStrip } = await import("../bootstrap/wiring/hide-shot.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
@@ -49,7 +49,7 @@ function script() {
 
 function open() {
   if (viewFlags().writerOpen()) writer.closeWriter();
-  if (viewFlags().hideShot()) setHideShotScenes(false);
+  if (viewFlags().hideShot()) setHideShotBeats(false);
   adoptReplacement(script());
   flushEdits();
   reset();
@@ -88,7 +88,7 @@ test("a command that adds a scene repaints the whole screen once, inside the com
   open();
   let during = null;
   const stop = onSessionChange(() => { during = !!rowEl("n1"); });
-  const outcome = runCommand(addSceneCommand("r1", "n1", sessionStamps));
+  const outcome = runCommand(addBeatCommand("r1", "n1", sessionStamps));
   stop();
   assert.equal(outcome.kind, "applied");
   assert.equal(during, true, "the screen had painted by the time later listeners heard the change");
@@ -99,7 +99,7 @@ test("a command that adds a scene repaints the whole screen once, inside the com
 test("a scene status change repaints only that row, and its read times, with no whole-screen paint", () => {
   open();
   const others = [rowEl("r1"), rowEl("r3")].map((el) => el.querySelector(".gutter").outerHTML);
-  runCommand(sceneStatusCommand("r3", sessionStamps));
+  runCommand(beatStatusCommand("r3", sessionStamps));
   assert.equal(counts().render, 0);
   assert.equal(counts().rowsPainted, 1);
   assert.notEqual(statusWord("r3"), "To do");
@@ -108,12 +108,12 @@ test("a scene status change repaints only that row, and its read times, with no 
 
 test("a row change the screen cannot paint as one row, because the row is not on screen, repaints the whole screen once", () => {
   open();
-  setHideShotScenes(true);
+  setHideShotBeats(true);
   reset();
   assert.equal(rowEl("r2"), null);
-  runCommand(sceneLengthCommand("r2", 40, sessionStamps));
+  runCommand(beatLengthCommand("r2", 40, sessionStamps));
   assert.equal(counts().render, 1);
-  setHideShotScenes(false);
+  setHideShotBeats(false);
 });
 
 test("a change to the tag list alone repaints the production views in the same call, with no whole-screen paint", () => {
@@ -136,7 +136,7 @@ test("a words-per-minute change repaints the screen and its read times once", ()
 
 test("an undo and a redo each repaint the screen once, and the repaint is not read back as an edit", () => {
   open();
-  runCommand(addSceneCommand("r1", "n2", sessionStamps));
+  runCommand(addBeatCommand("r1", "n2", sessionStamps));
   flushEdits();
   reset();
   undo();
@@ -181,7 +181,7 @@ test("row work left by a shown edit runs when the edit ends, not inside it", () 
   open();
   let inside = null;
   paintGuard().whileShown(() => {
-    runCommand(sceneStatusCommand("r1", sessionStamps));
+    runCommand(beatStatusCommand("r1", sessionStamps));
     inside = counts().rowsPainted;
   });
   assert.equal(inside, 0, "nothing paints while the page leads");
@@ -190,7 +190,7 @@ test("row work left by a shown edit runs when the edit ends, not inside it", () 
 
 test("hiding shot scenes, and opening a hidden strip, repaint the screen through the hide-shot state", () => {
   open();
-  setHideShotScenes(true);
+  setHideShotBeats(true);
   assert.equal(counts().render, 1);
   assert.equal(rowEl("r2"), null);
   const strip = document.querySelector("#rows .hidden-shot-strip");
@@ -198,7 +198,7 @@ test("hiding shot scenes, and opening a hidden strip, repaint the screen through
   expandHiddenShotStrip(strip.getAttribute("data-ids"));
   assert.equal(counts().render, 2);
   assert.ok(rowEl("r2"));
-  setHideShotScenes(false);
+  setHideShotBeats(false);
 });
 
 test("the clock and the author name repaint the screen through the preferences", () => {

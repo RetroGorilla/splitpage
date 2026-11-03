@@ -28,7 +28,7 @@ import {
   textOf,
   withoutLoneSurrogates
 } from "./document/text-policy.ts";
-import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
+import { normalizeBeatLength, rowStatusId } from "./document/timing.ts";
 import { sectionsInOrder, writeSections } from "./document/sections.ts";
 import { applyBrollRecords, brollCutRenames, planBrollRecords } from "./production/broll.ts";
 import type { BrollShot, LineShotIds } from "./production/broll.ts";
@@ -229,7 +229,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     r.id = id;
     usedRowIds.add(id);
     r.status = rowStatusId(r.status) ? r.status : "todo";
-    const setLength = normalizeSceneLength(r.lengthSeconds);
+    const setLength = normalizeBeatLength(r.lengthSeconds);
     if (setLength === undefined) delete r.lengthSeconds; else r.lengthSeconds = setLength;
     r.visualText = sanitize(legacy ? legacyMdToHtml(r.visualText || "") : textOf(r.visualText || ""));
     r.audioText = sanitize(legacy ? legacyMdToHtml(r.audioText || "") : textOf(r.audioText || ""));

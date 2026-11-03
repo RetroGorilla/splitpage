@@ -19,7 +19,7 @@ import {
 import { formatDuration, formatTimecode, pad2, rowSeconds as rowSecondsIn } from "../../core/production/timing.ts";
 
 export type TableCell = string | number;
-export interface SceneFacts {
+export interface BeatFacts {
   index: number;
   number: string;
   start: string;
@@ -47,7 +47,7 @@ export interface BreakdownRow {
   statusLabel: string;
   notes: string;
   inScript: string;
-  scenes: string[];
+  beats: string[];
   broll: string[];
 }
 interface BreakdownTable {
@@ -91,9 +91,9 @@ interface CommentInput {
 function text(value: unknown): string { return typeof value === "string" ? value : ""; }
 
 
-export function sceneFacts(doc: ExportDocument, services: ExportServices = exportServices()): SceneFacts[] {
+export function beatFacts(doc: ExportDocument, services: ExportServices = exportServices()): BeatFacts[] {
   let at = 0;
-  return (doc.scenes || []).map(function (r, i) {
+  return (doc.beats || []).map(function (r, i) {
     const sec = rowSecondsIn(r, doc.document, services.productionReaders);
     const st = rowStatus(r.status) || rowStatus("todo");
     if (!st) throw new Error("Missing row status");
@@ -112,10 +112,10 @@ export function sceneFacts(doc: ExportDocument, services: ExportServices = expor
   });
 }
 
-export function scriptSectionFacts(doc: ExportDocument, scenes: readonly SceneFacts[]): ScriptSectionFacts[] {
-  return sectionGroups({ rows: doc.scenes, sections: doc.document.sections }).map(group => ({
+export function scriptSectionFacts(doc: ExportDocument, beats: readonly BeatFacts[]): ScriptSectionFacts[] {
+  return sectionGroups({ rows: doc.beats, sections: doc.document.sections }).map(group => ({
     id: group.section.id, name: group.section.name, start: group.start, end: group.end,
-    total: formatDuration(scenes.slice(group.start, group.end).reduce((sum, scene) => sum + scene.seconds, 0))
+    total: formatDuration(beats.slice(group.start, group.end).reduce((sum, beat) => sum + beat.seconds, 0))
   }));
 }
 
@@ -152,12 +152,12 @@ export function breakdownRows(doc: ExportDocument): BreakdownRow[] {
   const shotsFor = capturedShotsByProp(doc);
   groupTagsByCategory(capturedEntries(doc)).forEach(function (g) {
     g.items.forEach(function (item) {
-      const scenes: string[] = [];
+      const beats: string[] = [];
       const seen: Record<number, boolean> = {};
       item.mentions.forEach(function (m) {
         if (seen[m.rowIndex]) return;
         seen[m.rowIndex] = true;
-        scenes.push(pad2(m.rowIndex + 1));
+        beats.push(pad2(m.rowIndex + 1));
       });
       const owner = capturedPerson(doc, item.owner);
       const st = tagStatus(item.status) || tagStatus("needed");
@@ -173,7 +173,7 @@ export function breakdownRows(doc: ExportDocument): BreakdownRow[] {
         statusLabel: st.label,
         notes: item.notes || "",
         inScript: item.orphaned ? "no" : "yes",
-        scenes: item.orphaned ? ["not in script"] : scenes,
+        beats: item.orphaned ? ["not in script"] : beats,
         broll: shotsFor[item.key] || []
       });
     });
@@ -182,21 +182,21 @@ export function breakdownRows(doc: ExportDocument): BreakdownRow[] {
 }
 
 export function breakdownTable(doc: ExportDocument, services: ExportServices = exportServices()): BreakdownTable {
-  const starts = sceneFacts(doc, services).map(function (f) { return f.start; });
+  const starts = beatFacts(doc, services).map(function (f) { return f.start; });
   const out: BreakdownTable = {
     head: ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
            "First scene at", "Group"],
     rows: []
   };
   breakdownRows(doc).forEach(function (r) {
-    const first = r.inScript === "no" ? "" : (starts[Number(r.scenes[0]) - 1] || "");
+    const first = r.inScript === "no" ? "" : (starts[Number(r.beats[0]) - 1] || "");
     out.rows.push({ catId: r.catId, status: r.status, cells: [
       r.categoryLabel,
       r.name,
       r.statusLabel,
       r.owner,
       r.mentions,
-      r.scenes.join(" "),
+      r.beats.join(" "),
       r.inScript,
       r.notes,
       r.broll.join("; "),
@@ -211,7 +211,7 @@ function capturedStarts(doc: ExportDocument, services: ExportServices = exportSe
   let t = 0;
   const out: Record<string, number> = {};
   Object.setPrototypeOf(out, null);
-  doc.scenes.forEach(function (row) { out[row.id] = t; t += rowSecondsIn(row, doc.document, services.productionReaders); });
+  doc.beats.forEach(function (row) { out[row.id] = t; t += rowSecondsIn(row, doc.document, services.productionReaders); });
   return out;
 }
 
@@ -224,7 +224,7 @@ export function brollTable(doc: ExportDocument, services: ExportServices = expor
   const starts = capturedStarts(doc, services);
   brollSortedForList(doc.broll).forEach(function (e) {
     const r = shotRecordForFile(e, doc.people);
-    out.rows.push({ shot: r.shot, flagged: r.flagged, cells: [r.scene, r.name, r.status, r.flagged ? "yes" : "", r.location,
+    out.rows.push({ shot: r.shot, flagged: r.flagged, cells: [r.beat, r.name, r.status, r.flagged ? "yes" : "", r.location,
       r.props.join("; "), r.cuts, r.owner, r.note, r.desc, startOf(e, starts)] });
   });
   return out;
@@ -245,7 +245,7 @@ export function brollShotListForPrint(doc: ExportDocument, as?: unknown, service
     title: doc.title || "Untitled Script",
     summary: pageSummaryText(entries),
     scope: (filter && filter.id !== "all" ? filter.label + ", " : "") + "by " + group.label.toLowerCase(),
-    groups: brollGroups(shown, groupId, { rows: doc.scenes, people: doc.people }).map(function (g) {
+    groups: brollGroups(shown, groupId, { rows: doc.beats, people: doc.people }).map(function (g) {
       return {
         label: g.label,
         kind: g.kind,
@@ -263,7 +263,7 @@ export function brollShotListForPrint(doc: ExportDocument, as?: unknown, service
 
 function capturedRowIndex(doc: ExportDocument) {
   const at = new Map<string, number>();
-  doc.scenes.forEach(function (row, i) { if (!at.has(row.id)) at.set(row.id, i); });
+  doc.beats.forEach(function (row, i) { if (!at.has(row.id)) at.set(row.id, i); });
   return function (id: unknown): number { return typeof id === "string" ? (at.get(id) ?? -1) : -1; };
 }
 

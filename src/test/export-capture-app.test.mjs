@@ -45,7 +45,7 @@ test("E15: a capture taken with a file home holds no file name or handle", () =>
       assert.equal(text.includes(FILE_NAME), false, "output " + i + " holds the file name");
     });
     assert.deepEqual(Object.keys(doc).sort(),
-      ["broll", "capturedAt", "clockMode", "commentNumbers", "comments", "document", "people", "production", "scenes", "shots", "tags", "title"]);
+      ["beats", "broll", "capturedAt", "clockMode", "commentNumbers", "comments", "document", "people", "production", "shots", "tags", "title"]);
   } finally {
     setHome("none");
   }

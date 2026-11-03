@@ -163,13 +163,13 @@ function newTabOpenDropped(file: File | undefined) {
   return ports.opening.open({ kind: "file", file: file, handle: null });
 }
 
-function starterSceneSeconds(state: StarterState) {
+function starterBeatSeconds(state: StarterState) {
   const wpm = state.wordsPerMinute || DEFAULT_WPM;
   return state.rows.map(function (row) { return ports.text.productionReaders.wordCount(row.audioText) / wpm * 60; });
 }
 
 function starterPreviewHtml(state: StarterState) {
-  const secs = starterSceneSeconds(state);
+  const secs = starterBeatSeconds(state);
   const total = secs.reduce(function (n, s) { return n + s; }, 0);
   return '<span class="newtab-preview" aria-hidden="true">' +
     '<span class="newtab-preview-bar">' + secs.map(function (s) {
@@ -183,14 +183,14 @@ function renderStarterCards() {
   const cards = document.getElementById("newtab-cards");
   if (!cards || cards.querySelector('[data-newtab-action="starter"]')) return;
   cards.insertAdjacentHTML("beforeend", ports.starters.map(function (s) {
-    const scenes = s.state.rows.length;
+    const beats = s.state.rows.length;
     return '<button type="button" class="newtab-card" data-newtab-action="starter" data-starter="' + escapeHtml(s.id) + '">' +
       '<strong class="newtab-card-name">' + escapeHtml(s.name) + '</strong>' +
       '<span class="newtab-card-desc">' + escapeHtml(s.desc) + '</span>' +
       '<span class="newtab-card-meta">' +
         '<span class="newtab-card-doc">' + escapeHtml(s.state.title) + '</span>' +
         '<span aria-hidden="true">·</span>' +
-        '<span class="newtab-card-count">' + scenes + (scenes === 1 ? ' scene' : ' scenes') + '</span>' +
+        '<span class="newtab-card-count">' + beats + (beats === 1 ? ' scene' : ' scenes') + '</span>' +
       '</span>' +
       starterPreviewHtml(s.state as unknown as StarterState) +
     '</button>';

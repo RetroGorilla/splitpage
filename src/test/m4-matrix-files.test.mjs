@@ -98,7 +98,7 @@ async function openFromDesktop(fake, doc) {
   return picked;
 }
 
-function scene(run) {
+function beat(run) {
   return async (t) => {
     mockClock(t);
     setAutoSaveEnabled(false);
@@ -144,7 +144,7 @@ function writers(...targets) {
   return targets.reduce((n, t) => n + t.calls.filter((c) => c === "createWritable").length, 0);
 }
 
-rightToday("F1", "a file save that fails after its document was replaced leaves the replacement alone", scene(async () => {
+rightToday("F1", "a file save that fails after its document was replaced leaves the replacement alone", beat(async () => {
   const target = heldFile(script("Saving", { docId: ID("1") }));
   await openFrom(target);
   edit("Typed before the save.");
@@ -162,7 +162,7 @@ rightToday("F1", "a file save that fails after its document was replaced leaves 
   assertSame(before, "replacement");
 }));
 
-rightToday("F1-abort", "a Save As picker that is cancelled after its document was replaced leaves the replacement alone", scene(async () => {
+rightToday("F1-abort", "a Save As picker that is cancelled after its document was replaced leaves the replacement alone", beat(async () => {
   const picks = createGates();
   window.showSaveFilePicker = async () => {
     await picks.pass("picker");
@@ -182,7 +182,7 @@ rightToday("F1-abort", "a Save As picker that is cancelled after its document wa
   assertSame(before, "replacement");
 }));
 
-rightToday("F1-dialog", "a desktop save dialog that is cancelled after its document was replaced leaves the replacement alone", scene(async () => {
+rightToday("F1-dialog", "a desktop save dialog that is cancelled after its document was replaced leaves the replacement alone", beat(async () => {
   const { fake, held } = withHeldDesktop();
   useDocument(script("Saving as", { docId: ID("1") }));
   edit("Typed before the dialog.");
@@ -199,7 +199,7 @@ rightToday("F1-dialog", "a desktop save dialog that is cancelled after its docum
   assertSame(before, "replacement");
 }));
 
-rightToday("F1-done", "a file save that completes after its document was replaced writes its own file and touches nothing in the replacement", scene(async () => {
+rightToday("F1-done", "a file save that completes after its document was replaced writes its own file and touches nothing in the replacement", beat(async () => {
   const target = heldFile(script("Saving", { docId: ID("1") }));
   await openFrom(target);
   edit("Typed before the save.");
@@ -215,7 +215,7 @@ rightToday("F1-done", "a file save that completes after its document was replace
   assertSame(before, "replacement");
 }));
 
-rightToday("F2", "a file save that completes after a same-id reopen leaves the reopened session's baseline and dirty state alone", scene(async () => {
+rightToday("F2", "a file save that completes after a same-id reopen leaves the reopened session's baseline and dirty state alone", beat(async () => {
   const target = heldFile(script("Same id", { docId: ID("3") }));
   await openFrom(target);
   edit("Typed before the save.");
@@ -233,7 +233,7 @@ rightToday("F2", "a file save that completes after a same-id reopen leaves the r
   assert.equal(JSON.stringify(mergeBase()), baselineBefore, "the reopened session's baseline is the one it opened with");
 }));
 
-rightToday("F3", "a Save As that is cancelled or fails leaves Save's target and the document id as they were", scene(async () => {
+rightToday("F3", "a Save As that is cancelled or fails leaves Save's target and the document id as they were", beat(async () => {
   const target = heldFile(script("Saved as", { docId: ID("1") }));
   await openFrom(target);
   edit("Typed before Save As.");
@@ -263,7 +263,7 @@ rightToday("F3", "a Save As that is cancelled or fails leaves Save's target and 
   assertSame(desktopBefore, "document after a cancelled desktop dialog");
 }));
 
-rightToday("F4", "an edit during the write leaves the document dirty, and the file holds the bytes without it", scene(async () => {
+rightToday("F4", "an edit during the write leaves the document dirty, and the file holds the bytes without it", beat(async () => {
   const target = heldFile(script("Edited during", { docId: ID("1") }));
   await openFrom(target);
   edit("Typed before the save.");
@@ -280,7 +280,7 @@ rightToday("F4", "an edit during the write leaves the document dirty, and the fi
   assert.equal(currentDocument().rows[0].audioText, "Typed during the write.", "the edit is still on screen");
 }));
 
-rightToday("F5-one", "a save with nothing else running writes once", scene(async () => {
+rightToday("F5-one", "a save with nothing else running writes once", beat(async () => {
   const target = heldFile(script("Alone", { docId: ID("1") }));
   await openFrom(target);
   edit("Typed once.");
@@ -314,7 +314,7 @@ function assertEndsWithLaterSave(target, copy) {
 }
 
 function directCaller(id, title, trigger) {
-  rightToday(id, title, scene(async () => {
+  rightToday(id, title, beat(async () => {
     const target = await firstSaveInFlight();
     const copy = createHeldFileHandle({ name: "copy.splitpage" });
     window.showSaveFilePicker = async () => copy.handle;
@@ -340,7 +340,7 @@ directCaller("F5-copy", "the conflict copy waits for the save that is running", 
   document.getElementById("file-conflict-copy").click();
 });
 
-rightToday("F5-stale", "overlapping saves never leave the file older than the document says it is saved", scene(async () => {
+rightToday("F5-stale", "overlapping saves never leave the file older than the document says it is saved", beat(async () => {
   const target = await firstSaveInFlight();
   document.getElementById("save-error-retry").click();
   await turns(60);
@@ -348,7 +348,7 @@ rightToday("F5-stale", "overlapping saves never leave the file older than the do
   assert.ok(unsavedChanges() || target.text().includes(currentDocument().rows[0].audioText), "the document is not marked saved while its file holds older text");
 }));
 
-rightToday("F5-prompter", "the prompter's save waits for the save that is running", scene(async () => {
+rightToday("F5-prompter", "the prompter's save waits for the save that is running", beat(async () => {
   const { fake, held } = withHeldDesktop();
   await openFromDesktop(fake, script("Prompter", { docId: ID("6") }));
   edit("First save's text.");
@@ -365,7 +365,7 @@ rightToday("F5-prompter", "the prompter's save waits for the save that is runnin
   assert.ok(new TextDecoder().decode((await fake.readFile(homeModule.currentHome().handle._desktopId)).bytes).includes("Second save's text."), "the file ends with the later save's text");
 }));
 
-rightToday("F5-saveas", "a save asked for while a Save As is writing its new file waits for it", scene(async () => {
+rightToday("F5-saveas", "a save asked for while a Save As is writing its new file waits for it", beat(async () => {
   const copy = createHeldFileHandle({ name: "copy.splitpage" });
   window.showSaveFilePicker = async () => copy.handle;
   useDocument(script("Saving as", { docId: ID("5") }));
@@ -387,7 +387,7 @@ rightToday("F5-saveas", "a save asked for while a Save As is writing its new fil
   assert.equal(unsavedChanges(), false, "and the document is saved");
 }));
 
-rightToday("F5-replaced", "a save waiting behind a running save is dropped when the document is replaced, not run against the replacement", scene(async () => {
+rightToday("F5-replaced", "a save waiting behind a running save is dropped when the document is replaced, not run against the replacement", beat(async () => {
   const target = await firstSaveInFlight();
   document.getElementById("save-error-retry").click();
   await turns(20);
@@ -400,7 +400,7 @@ rightToday("F5-replaced", "a save waiting behind a running save is dropped when 
   assertSame(before, "replacement");
 }));
 
-rightToday("F6", "a write that fails at write or close keeps the document dirty and the home and rev as they were", scene(async () => {
+rightToday("F6", "a write that fails at write or close keeps the document dirty and the home and rev as they were", beat(async () => {
   for (const op of ["write", "close"]) {
     const target = heldFile(script("Fails at " + op, { docId: ID("1") }));
     await openFrom(target);
@@ -414,7 +414,7 @@ rightToday("F6", "a write that fails at write or close keeps the document dirty 
   }
 }));
 
-rightToday("F7", "a handle whose permission is refused fails without retargeting and without a write", scene(async () => {
+rightToday("F7", "a handle whose permission is refused fails without retargeting and without a write", beat(async () => {
   const target = heldFile(script("Refused", { docId: ID("1") }));
   await openFrom(target);
   edit("Typed before the save.");
@@ -433,7 +433,7 @@ rightToday("F7", "a handle whose permission is refused fails without retargeting
   assertSame(before, "document after a refused Save As");
 }));
 
-rightToday("F8", "after a desktop write the baseline timestamp is the one that write produced, not a later read's", scene(async () => {
+rightToday("F8", "after a desktop write the baseline timestamp is the one that write produced, not a later read's", beat(async () => {
   const { fake, held } = withHeldDesktop();
   const picked = await openFromDesktop(fake, script("Stamped", { docId: ID("7") }));
   edit("Typed before the save.");
@@ -456,7 +456,7 @@ rightToday("F8", "after a desktop write the baseline timestamp is the one that w
   assert.equal(held.calls.filter((c) => c.op === "readFile").length, readsBefore, "and no second full read followed the write");
 }));
 
-rightToday("F9", "no history copy happens before the write is confirmed, and a save never waits on a history copy that does not resolve", scene(async () => {
+rightToday("F9", "no history copy happens before the write is confirmed, and a save never waits on a history copy that does not resolve", beat(async () => {
   const { fake, held } = withHeldDesktop({ history: true });
   await openFromDesktop(fake, script("Forked", { docId: ID("8") }));
   documentLocation().markWrittenOut(true);
@@ -476,7 +476,7 @@ rightToday("F9", "no history copy happens before the write is confirmed, and a s
   held.gates.releaseAll("desktop.historyCopy");
 }));
 
-rightToday("F9-warn", "a Save As that gives the copy a new document id is not reported as finishing after a reopen", scene(async () => {
+rightToday("F9-warn", "a Save As that gives the copy a new document id is not reported as finishing after a reopen", beat(async () => {
   const copy = createHeldFileHandle({ name: "copy.splitpage" });
   window.showSaveFilePicker = async () => copy.handle;
   useDocument(script("Forked", { docId: ID("8") }));
@@ -510,7 +510,7 @@ async function importFrom(target) {
   assert.equal(homeModule.currentHome().dirty, false, "and nothing unsaved");
 }
 
-rightToday("I1", "an edit while import writeback awaits its bytes leaves the import home unsaved", scene(async () => {
+rightToday("I1", "an edit while import writeback awaits its bytes leaves the import home unsaved", beat(async () => {
   const target = importDocument();
   await importFrom(target);
   const imported = homeModule.currentHome();
@@ -529,7 +529,7 @@ rightToday("I1", "an edit while import writeback awaits its bytes leaves the imp
   assert.equal(imported.dirty, true, "the import home is still unsaved after an edit made while its bytes were prepared");
 }));
 
-rightToday("I2", "import writeback acknowledges only the import home", scene(async () => {
+rightToday("I2", "import writeback acknowledges only the import home", beat(async () => {
   const target = importDocument();
   await importFrom(target);
   const imported = homeModule.currentHome();
@@ -561,7 +561,7 @@ async function writtenText(kind, bytes) {
   return new TextDecoder().decode(await zip.get("word/document.xml"));
 }
 
-rightToday("I3", "import writeback stores the document as it stood when the write back began, while its bytes are held, for every import format", scene(async () => {
+rightToday("I3", "import writeback stores the document as it stood when the write back began, while its bytes are held, for every import format", beat(async () => {
   for (const [kind, name, source] of WRITEBACK_SOURCES) {
     const target = createHeldFileHandle({ name: name, text: source(), lastModified: 1000 });
     await importFrom(target);
@@ -599,7 +599,7 @@ function importModalShows(pattern) {
   return pattern.test(document.getElementById("import-preview").textContent);
 }
 
-rightToday("I4", "a file decoded for an import that was closed and opened again does not fill the reopened import", scene(async () => {
+rightToday("I4", "a file decoded for an import that was closed and opened again does not fill the reopened import", beat(async () => {
   useDocument(script("Importing"));
   const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
   openImportModal();
@@ -616,7 +616,7 @@ rightToday("I4", "a file decoded for an import that was closed and opened again 
   assert.doesNotMatch(JSON.stringify(currentDocument().rows), /Late words/, "the earlier file's scenes are not in the document");
 }));
 
-rightToday("I5", "a file decoded for an import into a document that was replaced meanwhile fills nothing", scene(async () => {
+rightToday("I5", "a file decoded for an import into a document that was replaced meanwhile fills nothing", beat(async () => {
   useDocument(script("Importing"));
   const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
   openImportModal();
@@ -630,7 +630,7 @@ rightToday("I5", "a file decoded for an import into a document that was replaced
   closeImportModal();
 }));
 
-rightToday("I6", "confirming an import after its document was replaced adds nothing to the replacement", scene(async () => {
+rightToday("I6", "confirming an import after its document was replaced adds nothing to the replacement", beat(async () => {
   useDocument(script("Importing"));
   openImportModal();
   document.getElementById("import-textarea").value = "Meant for the first document.";
@@ -648,7 +648,7 @@ rightToday("I6", "confirming an import after its document was replaced adds noth
   assert.ok(told && !/Imported/.test(told), "the user is told nothing was imported");
 }));
 
-test("import writeback is the import destination's save: it waits behind a writeback in flight and runs after it", scene(async () => {
+test("import writeback is the import destination's save: it waits behind a writeback in flight and runs after it", beat(async () => {
   const gates = createGates();
   const target = createHeldFileHandle({ name: "notes.txt", text: "Alpha line.\n\nBeta line.\n", lastModified: 1000, gates: gates });
   await importFrom(target);
@@ -667,7 +667,7 @@ test("import writeback is the import destination's save: it waits behind a write
   assert.equal(homeModule.currentHome().dirty, false, "the import home is saved once the second has landed");
 }));
 
-test("an import writeback that lands after another file was imported leaves the new import home's unsaved state alone", scene(async () => {
+test("an import writeback that lands after another file was imported leaves the new import home's unsaved state alone", beat(async () => {
   const gates = createGates();
   const target = createHeldFileHandle({ name: "notes.txt", text: "Alpha line.\n\nBeta line.\n", lastModified: 1000, gates: gates });
   await importFrom(target);
@@ -687,7 +687,7 @@ test("an import writeback that lands after another file was imported leaves the 
   assert.equal(replaced.dirty, true, "and still unsaved");
 }));
 
-test("a writeback queued behind another writes nothing once a different file was imported while it waited", scene(async () => {
+test("a writeback queued behind another writes nothing once a different file was imported while it waited", beat(async () => {
   const gates = createGates();
   const target = createHeldFileHandle({ name: "notes.txt", text: "Alpha line.\n\nBeta line.\n", lastModified: 1000, gates: gates });
   await importFrom(target);
@@ -727,7 +727,7 @@ function noDownloads() {
   };
 }
 
-rightToday("D1", "an export acknowledges nothing", scene(async () => {
+rightToday("D1", "an export acknowledges nothing", beat(async () => {
   const target = heldFile(script("Exported", { docId: ID("9") }));
   await openFrom(target);
   edit("Typed before the exports.");

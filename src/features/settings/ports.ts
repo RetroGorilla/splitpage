@@ -39,7 +39,7 @@ export interface SettingsPorts {
   readonly prompter: {
     readonly mirror: (on: boolean) => void;
     readonly flip: (on: boolean) => void;
-    readonly sceneMode: (on: boolean) => void;
+    readonly beatMode: (on: boolean) => void;
   };
   readonly desktop: {
     readonly running: () => boolean;

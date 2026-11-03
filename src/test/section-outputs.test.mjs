@@ -9,7 +9,7 @@ import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
 import { buildScriptPrintPage } from "../adapters/formats/script-print.ts";
 import { buildDocx, buildNarrationDocx, docxToRows, buildNarrationText } from "../adapters/formats/docx.ts";
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { sceneFacts, scriptSectionFacts } from "../adapters/formats/export-projections.ts";
+import { beatFacts, scriptSectionFacts } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { parseImportRows } from "../adapters/formats/import-text.ts";
 
@@ -22,7 +22,7 @@ function fixture() {
 
 test("captured section facts count every scene, keep the prefix unsectioned, and ignore view folds", () => {
   const doc = fixture();
-  assert.deepEqual(scriptSectionFacts(doc, sceneFacts(doc)), [
+  assert.deepEqual(scriptSectionFacts(doc, beatFacts(doc)), [
     { id: "s1", name: "Opening & *part*", start: 1, end: 3, total: "0:50" },
     { id: "s2", name: "Ending", start: 3, end: 4, total: "0:40" }
   ]);
@@ -94,10 +94,10 @@ function markdownFixture(anchors, count = 4) {
   "2026-10-31T12:00:00Z", { production: [], commentNumbers: {}, broll: [] }, { clockMode: "24" });
 }
 
-function assertMarkdownScenes(doc, markdown, message) {
+function assertMarkdownBeats(doc, markdown, message) {
   const rows = parseImportRows(markdown, "twocolumn");
   assert.deepEqual(rows.map(({ visualText, audioText }) => ({ visualText, audioText })),
-    doc.scenes.map(({ visualText, audioText }) => ({ visualText, audioText })), message);
+    doc.beats.map(({ visualText, audioText }) => ({ visualText, audioText })), message);
   assert.ok(rows.every(row => !Object.hasOwn(row, "sections") && !Object.hasOwn(row, "firstSceneId")));
 }
 
@@ -108,7 +108,7 @@ for (const [form, write] of [
   test(form + " Markdown reimports scenes with first, middle, last and adjacent section boundaries", () => {
     for (const anchors of [[], [0], [1], [3], [1, 2], [0, 1, 2, 3]]) {
       const doc = markdownFixture(anchors);
-      assertMarkdownScenes(doc, write(doc), "boundaries " + JSON.stringify(anchors));
+      assertMarkdownBeats(doc, write(doc), "boundaries " + JSON.stringify(anchors));
     }
     const doc = markdownFixture([1, 3]);
     const ownText = form === "stacked" ? "Audio 0\n\n## Personal notes · 0:50\n\nMore audio\n\n## Last note · 0:50" : "Audio 0 ## Personal notes · 0:50";
@@ -126,7 +126,7 @@ for (const [form, write] of [
       const count = 1 + next() % 12;
       const anchors = Array.from({ length: count }, (_, i) => i).filter(() => (next() >>> 16) % 3 === 0);
       const doc = markdownFixture(anchors, count);
-      assertMarkdownScenes(doc, write(doc), "seed 3101031 trial " + trial + " boundaries " + JSON.stringify(anchors));
+      assertMarkdownBeats(doc, write(doc), "seed 3101031 trial " + trial + " boundaries " + JSON.stringify(anchors));
     }
   });
 }

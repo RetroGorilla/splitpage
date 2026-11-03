@@ -44,7 +44,7 @@ function setup() {
     prompter: {
       mirror: (value) => { calls.push(["mirror", value]); },
       flip: (value) => { calls.push(["flip", value]); },
-      sceneMode: (value) => { calls.push(["scene", value]); }
+      beatMode: (value) => { calls.push(["scene", value]); }
     },
     desktop: { running: () => false, renderNotice: () => { calls.push(["desktop"]); } }
   };

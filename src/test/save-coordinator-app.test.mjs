@@ -57,7 +57,7 @@ function buttons() {
   });
 }
 
-function scene(run) {
+function beat(run) {
   return async (t) => {
     mockClock(t);
     setAutoSaveEnabled(false);
@@ -70,7 +70,7 @@ function scene(run) {
   };
 }
 
-test("D10: a file save that lands after the same file was reopened is reported once with the agreed wording", scene(async () => {
+test("D10: a file save that lands after the same file was reopened is reported once with the agreed wording", beat(async () => {
   const target = heldFile(script("Reopened", ID("a")), "reopened.splitpage");
   await openFrom(target);
   edit("Typed before the save.");
@@ -84,7 +84,7 @@ test("D10: a file save that lands after the same file was reopened is reported o
   assert.deepEqual(warnings().slice(before), [obsoleteSaveText("Reopened")]);
 }));
 
-test("D10: a file save that lands after another file's document was opened says nothing", scene(async () => {
+test("D10: a file save that lands after another file's document was opened says nothing", beat(async () => {
   const target = heldFile(script("Left", ID("b")), "left.splitpage");
   await openFrom(target);
   edit("Typed before the save.");
@@ -99,7 +99,7 @@ test("D10: a file save that lands after another file's document was opened says 
   assert.deepEqual(warnings().slice(before), []);
 }));
 
-test("INV-20: while a save waits behind another, both Save buttons stay busy until the last one finishes, then read saved", scene(async () => {
+test("INV-20: while a save waits behind another, both Save buttons stay busy until the last one finishes, then read saved", beat(async () => {
   const target = heldFile(script("Busy", ID("d")), "busy.splitpage");
   await openFrom(target);
   edit("First.");
@@ -119,7 +119,7 @@ test("INV-20: while a save waits behind another, both Save buttons stay busy unt
   assert.ok(target.text().includes("Second."), "the file ends with the later save");
 }));
 
-test("confirmSavedNow confirms the open destination at the current generation, and an edit puts it behind again", scene(async () => {
+test("confirmSavedNow confirms the open destination at the current generation, and an edit puts it behind again", beat(async () => {
   const target = heldFile(script("Generations", ID("e")), "generations.splitpage");
   await openFrom(target);
   assert.equal(saves.unsavedFor(), false);

@@ -1,5 +1,5 @@
 import { rowContentEqual } from "../core/merge/rows.ts";
-import { hasSetLength, normalizeSceneLength, parseSceneLength } from "../core/document/timing.ts";
+import { hasSetLength, normalizeBeatLength, parseBeatLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
 import "./_project-file-services-started.mjs";
@@ -38,38 +38,38 @@ function doc(rows) {
 }
 
 test("the forms Adam signed off: 1:30, 90, 90s, 1m30, 1m 30s", () => {
-  assert.equal(parseSceneLength("1:30"), 90);
-  assert.equal(parseSceneLength("90"), 90);
-  assert.equal(parseSceneLength("90s"), 90);
-  assert.equal(parseSceneLength("1m30"), 90);
-  assert.equal(parseSceneLength("1m 30s"), 90);
-  assert.equal(parseSceneLength("1m30s"), 90);
+  assert.equal(parseBeatLength("1:30"), 90);
+  assert.equal(parseBeatLength("90"), 90);
+  assert.equal(parseBeatLength("90s"), 90);
+  assert.equal(parseBeatLength("1m30"), 90);
+  assert.equal(parseBeatLength("1m 30s"), 90);
+  assert.equal(parseBeatLength("1m30s"), 90);
 });
 
 test("and the forms around them", () => {
-  assert.equal(parseSceneLength("0:05"), 5);
-  assert.equal(parseSceneLength("12:00"), 720);
-  assert.equal(parseSceneLength("1:02:03"), 3723);
-  assert.equal(parseSceneLength("  45  "), 45);
-  assert.equal(parseSceneLength("0"), 0);
-  assert.equal(parseSceneLength("2m"), 120);
-  assert.equal(parseSceneLength("2 min"), 120);
-  assert.equal(parseSceneLength("1 min 30 sec"), 90);
-  assert.equal(parseSceneLength("2 minutes 5 seconds"), 125);
-  assert.equal(parseSceneLength("1.5m"), 90);
-  assert.equal(parseSceneLength("7.4s"), 7);
-  assert.equal(parseSceneLength("90 S"), 90);
-  assert.equal(parseSceneLength("1h"), 3600);
-  assert.equal(parseSceneLength("1h 5m"), 3900);
-  assert.equal(parseSceneLength("1h30"), 5400, "a bare number after hours is minutes");
+  assert.equal(parseBeatLength("0:05"), 5);
+  assert.equal(parseBeatLength("12:00"), 720);
+  assert.equal(parseBeatLength("1:02:03"), 3723);
+  assert.equal(parseBeatLength("  45  "), 45);
+  assert.equal(parseBeatLength("0"), 0);
+  assert.equal(parseBeatLength("2m"), 120);
+  assert.equal(parseBeatLength("2 min"), 120);
+  assert.equal(parseBeatLength("1 min 30 sec"), 90);
+  assert.equal(parseBeatLength("2 minutes 5 seconds"), 125);
+  assert.equal(parseBeatLength("1.5m"), 90);
+  assert.equal(parseBeatLength("7.4s"), 7);
+  assert.equal(parseBeatLength("90 S"), 90);
+  assert.equal(parseBeatLength("1h"), 3600);
+  assert.equal(parseBeatLength("1h 5m"), 3900);
+  assert.equal(parseBeatLength("1h30"), 5400, "a bare number after hours is minutes");
 });
 
 test("blank is the estimate, and anything else unreadable is NaN", () => {
-  assert.equal(parseSceneLength(""), null);
-  assert.equal(parseSceneLength("   "), null);
-  assert.equal(parseSceneLength(null), null);
+  assert.equal(parseBeatLength(""), null);
+  assert.equal(parseBeatLength("   "), null);
+  assert.equal(parseBeatLength(null), null);
   for (const bad of ["abc", "1:3", "1:60", "1:30:", ":30", "-5", "5x", "30s 1m", "1m 2m", "1m30s5", "1,5", "90 90", "s", "1:30s", "25h"]) {
-    assert.ok(Number.isNaN(parseSceneLength(bad)), "accepted " + JSON.stringify(bad));
+    assert.ok(Number.isNaN(parseBeatLength(bad)), "accepted " + JSON.stringify(bad));
   }
 });
 
@@ -111,12 +111,12 @@ test("the reading speed moves an estimate and never a set length", () => {
 });
 
 test("migrateRows keeps whole seconds from 0 to a day, rounds, and drops the rest", () => {
-  assert.equal(normalizeSceneLength(12), 12);
-  assert.equal(normalizeSceneLength(12.6), 13);
-  assert.equal(normalizeSceneLength(0), 0);
-  assert.equal(normalizeSceneLength(86400), 86400);
+  assert.equal(normalizeBeatLength(12), 12);
+  assert.equal(normalizeBeatLength(12.6), 13);
+  assert.equal(normalizeBeatLength(0), 0);
+  assert.equal(normalizeBeatLength(86400), 86400);
   for (const bad of [-1, 86401, NaN, Infinity, "12", null, undefined, {}, [], true]) {
-    assert.equal(normalizeSceneLength(bad), undefined, "kept " + String(bad));
+    assert.equal(normalizeBeatLength(bad), undefined, "kept " + String(bad));
   }
   const s = doc([
     { id: "a", lengthSeconds: 12.4 },

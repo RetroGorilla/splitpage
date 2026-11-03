@@ -272,21 +272,21 @@ export function mountPrompterFeature(): ReturnType<typeof mountPrompter> {
       updatePrompterStatus: () => { prompterControls()?.updatePrompterStatus(); },
       buildPrompterContent: () => { prompterControls()?.buildPrompterContent(); },
       updateVoiceAvailability: () => { prompterControls()?.updateVoiceAvailability(); },
-      cueSceneForCurrentPosition: () => { prompterControls()?.cueSceneForCurrentPosition(); },
-      updateSceneReadout: () => { prompterControls()?.updateSceneReadout(); },
+      cueBeatForCurrentPosition: () => { prompterControls()?.cueBeatForCurrentPosition(); },
+      updateBeatReadout: () => { prompterControls()?.updateBeatReadout(); },
       setPrompterPlaying: (value) => { prompterControls()?.setPrompterPlaying(value); },
       setPrompterSpeed: (value) => { prompterControls()?.setPrompterSpeed(value); },
       stepPrompterSpeed: (value) => { prompterControls()?.stepPrompterSpeed(value); },
       stepPrompterSize: (value) => { prompterControls()?.stepPrompterSize(value); },
       setPrompterMirror: (value) => { prompterControls()?.setPrompterMirror(value); },
       setPrompterFlip: (value) => { prompterControls()?.setPrompterFlip(value); },
-      setPrompterSceneMode: (value) => { prompterControls()?.setPrompterSceneMode(value); },
-      stepScene: (value) => { prompterControls()?.stepScene(value); },
+      setPrompterBeatMode: (value) => { prompterControls()?.setPrompterBeatMode(value); },
+      stepBeat: (value) => { prompterControls()?.stepBeat(value); },
       voiceActive: prompterState.voiceFollowing, playing: prompterState.isPlaying, isOpen: prompterState.isOpen,
       skipShot: prompterState.skipsShot, setSkipShot: prompterState.setSkipShot,
       mirror: () => prompterControls()?.mirror() ?? false,
       flip: () => prompterControls()?.flip() ?? false,
-      sceneMode: () => prompterControls()?.sceneMode() ?? false
+      beatMode: () => prompterControls()?.beatMode() ?? false
     };
     return mountPrompter({ window: window, ports: ports });
   });

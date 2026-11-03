@@ -40,33 +40,33 @@ export function detectTwoColumnFormat(text: string) {
   return null;
 }
 
-const MD_SCENE_HEADING_RE = /^###\s+Scene\s+\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
-const MD_SCENE_META_RE = /^_\d+ scenes? · (est\. )?\S+ running time( · .*)?_$/;
-const MD_SCENE_FACTS_RE = /^\*\*[^*]+\*\* · Read \d+(:\d\d)+(, set by hand)?$/;
+const MD_BEAT_HEADING_RE = /^###\s+Scene\s+\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
+const MD_BEAT_META_RE = /^_\d+ scenes? · (est\. )?\S+ running time( · .*)?_$/;
+const MD_BEAT_FACTS_RE = /^\*\*[^*]+\*\* · Read \d+(:\d\d)+(, set by hand)?$/;
 const MD_MARKER_RE = /<sup>\d+<\/sup>/g;
 const MD_VISUAL_LEAD_RE = /^\*Visual —\*\s?/;
-const MD_SCENE_MEDIA_RE = /^(!\[visual [^\]]*\]\(images\/[^)]*\)|▶ .*)$/;
+const MD_BEAT_MEDIA_RE = /^(!\[visual [^\]]*\]\(images\/[^)]*\)|▶ .*)$/;
 
 function parseStackedMarkdownExport(text: string) {
   const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
   let i = 0;
   while (i < lines.length && !(lines[i] as string).trim()) i++;
   if (i === lines.length || !/^#\s+\S/.test((lines[i] as string))) return null;
-  for (i++; i < lines.length && !MD_SCENE_HEADING_RE.test((lines[i] as string).trim()); i++) {
+  for (i++; i < lines.length && !MD_BEAT_HEADING_RE.test((lines[i] as string).trim()); i++) {
     if (isStackedSectionHeading(lines, i)) { i++; continue; }
-    if ((lines[i] as string).trim() && !MD_SCENE_META_RE.test((lines[i] as string).trim())) return null;
+    if ((lines[i] as string).trim() && !MD_BEAT_META_RE.test((lines[i] as string).trim())) return null;
   }
   if (i === lines.length) return null;
 
-  const scenes: string[][] = [], timed: boolean[] = [];
+  const beats: string[][] = [], timed: boolean[] = [];
   for (; i < lines.length; i++) {
     if (MD_EXPORT_TAIL_RE.test((lines[i] as string))) break;
-    if (MD_SCENE_HEADING_RE.test((lines[i] as string).trim())) {
-      scenes.push([]);
+    if (MD_BEAT_HEADING_RE.test((lines[i] as string).trim())) {
+      beats.push([]);
       timed.push((lines[i] as string).indexOf("·") !== -1);
-    } else if (!(lines[i - 2] === "---" && isStackedSectionHeading(lines, i))) (scenes[scenes.length - 1] as string[]).push((lines[i] as string));
+    } else if (!(lines[i - 2] === "---" && isStackedSectionHeading(lines, i))) (beats[beats.length - 1] as string[]).push((lines[i] as string));
   }
-  return scenes.map(function (sc, n) {
+  return beats.map(function (sc, n) {
     function cellText(s: string) {
       s = s.replace(MD_MARKER_RE, "");
       return timed[n] ? s.replace(/ {2}\n/g, "\n") : s;
@@ -77,8 +77,8 @@ function parseStackedMarkdownExport(text: string) {
     sc = sc.slice(0, end);
     let k = 0;
     while (k < sc.length && !(sc[k] as string).trim()) k++;
-    if (k < sc.length && MD_SCENE_FACTS_RE.test((sc[k] as string).trim())) k++;
-    while (k < sc.length && (!(sc[k] as string).trim() || MD_SCENE_MEDIA_RE.test((sc[k] as string).trim()))) k++;
+    if (k < sc.length && MD_BEAT_FACTS_RE.test((sc[k] as string).trim())) k++;
+    while (k < sc.length && (!(sc[k] as string).trim() || MD_BEAT_MEDIA_RE.test((sc[k] as string).trim()))) k++;
     const visual = [];
     if (k < sc.length && MD_VISUAL_LEAD_RE.test((sc[k] as string))) {
       visual.push((sc[k] as string).replace(MD_VISUAL_LEAD_RE, ""));

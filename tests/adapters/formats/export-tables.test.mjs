@@ -19,7 +19,7 @@ import {
   brollTable,
   commentBodyText,
   commentEntries,
-  sceneFacts
+  beatFacts
 } from "../../../src/adapters/formats/export-projections.ts";
 
 initTags();
@@ -97,14 +97,14 @@ const TIMED = [row("r0", { lengthSeconds: 60, status: "shot", visualText: "Wide 
 test("a scene's row has its number, start, status, read time and whether the read was set by hand", () => {
   const doc = small({ rows: [TIMED[0], row("r1", { audioText: "One two three four five six seven eight nine ten." })] });
   const table = scriptTable(doc);
-  assert.equal(table.scenes.length, 2);
-  assert.deepEqual(table.scenes[0].cells.slice(0, 7), ["01", "00:00", "Shot", "1:00", "yes", "Wide shot", "Hello"]);
-  assert.equal(table.scenes[0].status, "shot");
-  assert.equal(table.scenes[1].cells[0], "02");
-  assert.equal(table.scenes[1].cells[1], "01:00");
-  assert.equal(table.scenes[1].cells[4], "");
-  assert.equal(table.scenes[1].status, "todo");
-  assert.deepEqual(table.scenes[1].cells.slice(5, 7), ["V r1", "One two three four five six seven eight nine ten."]);
+  assert.equal(table.beats.length, 2);
+  assert.deepEqual(table.beats[0].cells.slice(0, 7), ["01", "00:00", "Shot", "1:00", "yes", "Wide shot", "Hello"]);
+  assert.equal(table.beats[0].status, "shot");
+  assert.equal(table.beats[1].cells[0], "02");
+  assert.equal(table.beats[1].cells[1], "01:00");
+  assert.equal(table.beats[1].cells[4], "");
+  assert.equal(table.beats[1].status, "todo");
+  assert.deepEqual(table.beats[1].cells.slice(5, 7), ["V r1", "One two three four five six seven eight nine ten."]);
 });
 
 test("the total row counts shot scenes and the running time", () => {
@@ -116,7 +116,7 @@ test("the total row counts shot scenes and the running time", () => {
 
 test("a script with no scenes has an empty status in its total row", () => {
   const table = scriptTable(small({ rows: [] }));
-  assert.deepEqual(table.scenes, []);
+  assert.deepEqual(table.beats, []);
   assert.deepEqual(table.summary[0].slice(0, 4), ["Total", "", "", "0:00"]);
   assert.equal(table.summary.length, 1);
 });
@@ -152,9 +152,9 @@ function commented() {
 
 test("a scene lists its open comment numbers in number order, not text order", () => {
   const table = scriptTable(commented());
-  assert.equal(table.scenes[0].cells[9], "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11");
-  assert.equal(table.scenes[1].cells[9], "12");
-  assert.equal(table.scenes[2].cells[9], "");
+  assert.equal(table.beats[0].cells[9], "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11");
+  assert.equal(table.beats[1].cells[9], "12");
+  assert.equal(table.beats[2].cells[9], "");
 });
 
 test("each comment is a row with its number, place, status, author and text, and each reply follows it", () => {
@@ -203,35 +203,35 @@ test("a scene's b-roll cell lists every shot with its state, joined by a semicol
   const b = doc.broll.find((e) => e.id === "bs_ld_01");
   const extra = { ...b, id: "x1", name: "second shot", ordinal: 1, status: "needed", reshoot: true };
   const table = scriptTable({ ...doc, broll: [...doc.broll, extra] });
-  assert.equal(table.scenes[3].cells[8], "fingertip pushing on the sticky old foam (shot); second shot (to shoot, flagged)");
-  assert.equal(table.scenes[5].cells[8], "the toothpick lifting a long strand of goo (shot, flagged)");
-  assert.equal(table.scenes[0].cells[8], "");
+  assert.equal(table.beats[3].cells[8], "fingertip pushing on the sticky old foam (shot); second shot (to shoot, flagged)");
+  assert.equal(table.beats[5].cells[8], "the toothpick lifting a long strand of goo (shot, flagged)");
+  assert.equal(table.beats[0].cells[8], "");
 });
 
 test("a scene's tag cell groups names by category, in the order they appear", () => {
   const doc = demo();
   const table = scriptTable(doc);
-  assert.equal(table.scenes[0].cells[7], "Prop: Pentax K1000; Location: workbench; Music/SFX: shutter click");
-  assert.equal(table.scenes[4].cells[7], "Prop: toothpick, light seal kit, naphtha; Gear: overhead rig");
+  assert.equal(table.beats[0].cells[7], "Prop: Pentax K1000; Location: workbench; Music/SFX: shutter click");
+  assert.equal(table.beats[4].cells[7], "Prop: toothpick, light seal kit, naphtha; Gear: overhead rig");
 });
 
 test("scene facts: start times add up, read times are the formatted seconds, an unknown status is to do", () => {
   const doc = demo();
-  const scenes = sceneFacts(doc);
+  const beats = beatFacts(doc);
   let at = 0;
-  for (const s of scenes) {
+  for (const s of beats) {
     assert.equal(s.startSeconds, at);
     assert.ok(s.seconds > 0);
     at += s.seconds;
   }
-  assert.equal(scenes[1].startSeconds, scenes[0].seconds);
-  assert.equal(scenes[0].read, Math.floor(scenes[0].seconds / 60) + ":" + String(Math.round(scenes[0].seconds % 60)).padStart(2, "0"));
-  const todo = sceneFacts({ ...doc, scenes: [{ ...doc.scenes[0], status: "todo" }] })[0];
-  const odd = sceneFacts({ ...doc, scenes: [{ ...doc.scenes[0], status: "no such status" }] })[0];
+  assert.equal(beats[1].startSeconds, beats[0].seconds);
+  assert.equal(beats[0].read, Math.floor(beats[0].seconds / 60) + ":" + String(Math.round(beats[0].seconds % 60)).padStart(2, "0"));
+  const todo = beatFacts({ ...doc, beats: [{ ...doc.beats[0], status: "todo" }] })[0];
+  const odd = beatFacts({ ...doc, beats: [{ ...doc.beats[0], status: "no such status" }] })[0];
   assert.deepEqual(odd.status, todo.status);
   assert.equal(todo.status.id, "todo");
   assert.notEqual(todo.status.label, todo.status.id);
-  assert.deepEqual(sceneFacts({ ...doc, scenes: undefined }), []);
+  assert.deepEqual(beatFacts({ ...doc, beats: undefined }), []);
 });
 
 test("breakdown rows: a scene is counted once however often an item is mentioned in it", () => {
@@ -239,7 +239,7 @@ test("breakdown rows: a scene is counted once however often an item is mentioned
   const first = doc.production[0];
   const twice = { ...first, mentions: [first.mentions[0], { ...first.mentions[0], text: "again" }, first.mentions[1]] };
   const [r] = breakdownRows({ ...doc, production: [twice] });
-  assert.deepEqual(r.scenes, ["01", "28"]);
+  assert.deepEqual(r.beats, ["01", "28"]);
   assert.equal(r.mentions, 3);
   const [t] = breakdownTable({ ...doc, production: [twice] }).rows;
   assert.equal(t.cells[4], 3);
@@ -265,9 +265,9 @@ test("breakdown rows: status, owner, notes and where the item is", () => {
   assert.equal(one({ orphaned: false }).inScript, "yes");
   const gone = one({ orphaned: true });
   assert.equal(gone.inScript, "no");
-  assert.deepEqual(gone.scenes, ["not in script"]);
-  assert.deepEqual(one({ orphaned: true, mentions: [] }).scenes, ["not in script"]);
-  assert.deepEqual(one({ orphaned: false, mentions: [] }).scenes, []);
+  assert.deepEqual(gone.beats, ["not in script"]);
+  assert.deepEqual(one({ orphaned: true, mentions: [] }).beats, ["not in script"]);
+  assert.deepEqual(one({ orphaned: false, mentions: [] }).beats, []);
   const plain = one({});
   assert.equal(plain.catId, "prop");
   assert.equal(plain.category, "Props & set dressing");
@@ -385,20 +385,20 @@ test("each print group counts its shots, marks the unplaced group and carries it
   const a = shotWith(doc, { id: "a", name: "A", rowIndex: 3, rowId: "r4", ordinal: 0, status: "shot", location: "Garage" });
   const b = shotWith(doc, { id: "b", name: "B", rowIndex: 3, rowId: "r4", ordinal: 1, status: "needed", location: "" });
   const added = shotWith(doc, { id: "c", name: "C", rowIndex: -1, rowId: null, ordinal: 0, status: "needed", location: "" });
-  const scenes = sceneFacts(doc);
-  const byScene = brollShotListForPrint({ ...doc, broll: [b, a, added] }, { group: "scene" });
-  assert.deepEqual(byScene.groups.map((g) => [g.label, g.kind, g.none, g.start, g.done, g.total]), [
-    ["Scene 04", "scene", false, scenes[3].start, 1, 2],
+  const beats = beatFacts(doc);
+  const byBeat = brollShotListForPrint({ ...doc, broll: [b, a, added] }, { group: "scene" });
+  assert.deepEqual(byBeat.groups.map((g) => [g.label, g.kind, g.none, g.start, g.done, g.total]), [
+    ["Scene 04", "scene", false, beats[3].start, 1, 2],
     ["Added here", "added", false, "", 0, 1]
   ]);
-  assert.deepEqual(byScene.groups[0].items.map((i) => [i.name, i.start]), [["A", scenes[3].start], ["B", scenes[3].start]]);
-  assert.deepEqual(byScene.groups[1].items.map((i) => [i.name, i.start]), [["C", ""]]);
+  assert.deepEqual(byBeat.groups[0].items.map((i) => [i.name, i.start]), [["A", beats[3].start], ["B", beats[3].start]]);
+  assert.deepEqual(byBeat.groups[1].items.map((i) => [i.name, i.start]), [["C", ""]]);
   const byPlace = brollShotListForPrint({ ...doc, broll: [b, a, added] }, { group: "location" });
   assert.deepEqual(byPlace.groups.map((g) => [g.kind, g.none, g.start, g.done, g.total]), [
     ["location", false, "", 1, 1],
     ["location", true, "", 0, 2]
   ]);
-  assert.deepEqual(byPlace.groups[1].items.map((i) => i.start), [scenes[3].start, ""]);
+  assert.deepEqual(byPlace.groups[1].items.map((i) => i.start), [beats[3].start, ""]);
 });
 
 const ROWS = [row("r0"), row("r1"), row("r2")];
@@ -426,8 +426,8 @@ test("a comment's place: the row and field, a missing row, or the title", () => 
 
 test("when two rows share an id, a comment belongs to the first", () => {
   const doc = small({ rows: ROWS });
-  const twins = [doc.scenes[0], { ...doc.scenes[1], id: doc.scenes[0].id }];
-  const [entry] = commentEntries({ ...doc, scenes: twins, comments: [comment("c1", "r0")] });
+  const twins = [doc.beats[0], { ...doc.beats[1], id: doc.beats[0].id }];
+  const [entry] = commentEntries({ ...doc, beats: twins, comments: [comment("c1", "r0")] });
   assert.equal(entry.rowIndex, 0);
   assert.equal(entry.location, "Row 01 · Audio");
 });

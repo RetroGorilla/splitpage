@@ -251,7 +251,7 @@ is special. **It is the only atom.**
   (`src/application/commands/clipboard.ts`; `src/features/clipboard/cell-clipboard.ts`
   keeps thin wrappers), and `recordPastedBroll`
   (`src/application/production/broll-records.ts`) for a scene paste
-  (`src/features/clipboard/scene-clip.ts`). A document that already has two keys
+  (`src/features/clipboard/beat-clip.ts`). A document that already has two keys
   with one id (pasted by an older version) is healed by the anchoring
   pass: the list reads the second as unanchored, a name match never takes
   a record a key further down still holds, and the pass gives the second
@@ -785,7 +785,7 @@ until step 4.
      in `src/features/clipboard/share-text.ts`, the fallback of the share clipboard's
      `copyText` (`createShareClipboard`, wired in `src/bootstrap/effects.ts`) when
      `clipboard.writeText` is missing or rejects; and `execCopy()` in
-     `src/features/clipboard/scene-select.ts`, which `runClipboardCommand` tries first for
+     `src/features/clipboard/beat-select.ts`, which `runClipboardCommand` tries first for
      a selected-scene copy or cut, with the Clipboard API as its fallback.
    IME and spellcheck in a draft stay the browser's, as in a script cell
    (§5), and the by-hand check list's Japanese-IME and spellcheck lines

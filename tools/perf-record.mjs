@@ -66,7 +66,7 @@ const ENVIRONMENT = `(function () {
     scenes: document.querySelectorAll('#rows .row').length });
 })()`;
 
-export const SCENES = `(function () {
+export const BEATS = `(function () {
   if (window.__perfScene) return 'ready';
   var perf = window.__perf, F = window.__splitpageFormats;
   var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
@@ -322,7 +322,7 @@ function bulk(fixture) {
 
 function redraws() {
   return [
-    `eval ${oneLine(SCENES)}`,
+    `eval ${oneLine(BEATS)}`,
     "eval window.__perfScene.stamp()",
     "eval window.__perfScene.hide()",
     "eval window.__settingsTest.open()",
@@ -438,10 +438,10 @@ export function report(results, env, when) {
   const exports = results.filter((r) => r.label.endsWith("export"));
   const browsers = results.filter((r) => r.label === "environment");
   const images = results.filter((r) => r.trials !== undefined);
-  const scenes = (fixture) => browsers.find((b) => b.fixture === fixture)?.scenes;
+  const beats = (fixture) => browsers.find((b) => b.fixture === fixture)?.beats;
   const fixtureLines = [
-    scenes("short") !== undefined ? `short is the seed script (${scenes("short")} scenes)` : null,
-    scenes("long") !== undefined ? `long is the long demo (${scenes("long")} scenes)` : null,
+    beats("short") !== undefined ? `short is the seed script (${beats("short")} scenes)` : null,
+    beats("long") !== undefined ? `long is the long demo (${beats("long")} scenes)` : null,
     images.length ? `images is the seed script with ${PICTURES} comments, each holding a fresh ${PICTURE_BYTES / 1024 / 1024} MiB PNG (a 1x1 image with a private chunk of random bytes)` : null
   ].filter(Boolean);
   const lines = [

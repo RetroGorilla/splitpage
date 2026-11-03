@@ -36,7 +36,7 @@ import {
   audioDirectionsHtml, buildDocx, buildNarrationDocx, buildNarrationText, docxToRows, narrationRows
 } from "../adapters/formats/docx.ts";
 import { buildCsv } from "../adapters/formats/csv.ts";
-import { prompterSceneHtml } from "../features/prompter/prompter.ts";
+import { prompterBeatHtml } from "../features/prompter/prompter.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
@@ -180,10 +180,10 @@ test("Word runs carry dir and a bracket each side", () => {
 });
 
 test("the teleprompter shows it in place but never as a word to hear", () => {
-  const view = prompterSceneHtml(fromHtml("Hello " + DIR("look to camera two") + " world"));
+  const view = prompterBeatHtml(fromHtml("Hello " + DIR("look to camera two") + " world"));
   assert.equal(view.words, 2);
   assert.equal(view.html, '<span class="w">Hello</span> ' + DIR("look to camera two") + ' <span class="w">world</span>');
-  assert.equal(prompterSceneHtml(fromHtml(DIR("beat"))).words, 0);
+  assert.equal(prompterBeatHtml(fromHtml(DIR("beat"))).words, 0);
 });
 
 test("read time: a direction takes none", () => {

@@ -42,7 +42,7 @@ test("the export kit reads the decoders, the production readers and the cache se
     assert.equal(facts.words, 3);
     assert.ok(calls.wordCount > 0, "the word count reads the port's production readers");
     const before = calls.cellOf;
-    const runs = exportRuns(doc.scenes[0].audioText, doc.commentNumbers);
+    const runs = exportRuns(doc.beats[0].audioText, doc.commentNumbers);
     assert.equal(calls.cellOf, before + 1);
     assert.deepEqual(runs.filter((r) => r.markers).map((r) => [r.text, r.markers]), [["there", [1]]]);
   } finally {

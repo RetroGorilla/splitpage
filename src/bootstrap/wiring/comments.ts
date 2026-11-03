@@ -34,7 +34,7 @@ import {
   pasteIntoDraft
 } from "../../features/editing/draft-edit.ts";
 import { isDraftBox } from "../../features/editing/cell-page.ts";
-import { compressImageFile } from "../../features/rows/scene-media.ts";
+import { compressImageFile } from "../../features/rows/beat-media.ts";
 import {
   AUTHOR_NAME_FIELDS,
   armDeleteComment,

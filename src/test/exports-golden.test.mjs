@@ -114,16 +114,17 @@ function htmlParts(html) {
 
 function outputs() {
   const doc = captureExportDocument();
+  const { title, beats, ...facts } = exportFacts(doc);
   const head = { title: (doc.title || "Untitled Script") + " " + EM_DASH + " SplitShare", description: exportMetaLine(exportFacts(doc)) };
   return {
     splitpage: digest(buildSplitpageFile(doc)),
     markdownProject: digest(buildMarkdownProject(doc)),
     standaloneHtml: htmlParts(standaloneHtmlFor(doc, head)),
     markdownExport: digest(toMarkdownDoc(doc)),
-    markdownExportPreview: digest(toMarkdownDoc(doc, { scenes: 3 })),
+    markdownExportPreview: digest(toMarkdownDoc(doc, { beats: 3 })),
     markdownTableExport: digest(toMarkdownTableDoc(doc, { export: true })),
     markdownImages: markdownExportImages(doc, exportAssetsNow(doc)).map((img) => ({ path: img.path, bytes: img.bytes.length })),
-    facts: exportFacts(doc)
+    facts: { title, scenes: beats, ...facts }
   };
 }
 

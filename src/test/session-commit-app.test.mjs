@@ -7,10 +7,10 @@ import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts"
 await bootApp();
 
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const { cycleRowStatus } = await import("../bootstrap/wiring/scene-status.ts");
+const { cycleRowStatus } = await import("../bootstrap/wiring/beat-status.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { render } = await import("../features/rows/render.ts");
-const { setSceneLength } = await import("../features/rows/read-time.ts");
+const { setBeatLength } = await import("../features/rows/read-time.ts");
 const { noteAbsorbedDirty, noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
@@ -197,7 +197,7 @@ test("a scene length whose effect throws after the commit still closes as applie
   let result;
   let reported;
   try {
-    reported = reportedDuring(() => { result = setSceneLength("r1", 45); });
+    reported = reportedDuring(() => { result = setBeatLength("r1", 45); });
   } finally {
     globalThis.setTimeout = start;
   }

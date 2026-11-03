@@ -2,19 +2,19 @@ import type { SessionChange } from "../../application/session/change-set.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
-import { createSceneStatus } from "../../features/rows/scene-status.ts";
-import type { SceneStatus } from "../../features/rows/scene-status.ts";
+import { createBeatStatus } from "../../features/rows/beat-status.ts";
+import type { BeatStatus } from "../../features/rows/beat-status.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { shotHiding } from "./shot-hiding.ts";
 
-type SceneStatusMount = SceneStatus & { readonly dispose: () => void };
+type BeatStatusMount = BeatStatus & { readonly dispose: () => void };
 
-const sceneStatus = owned<SceneStatusMount>();
+const beatStatus = owned<BeatStatusMount>();
 
-export function mountSceneStatusFeature(): SceneStatusMount {
-  return sceneStatus.replace(() => {
-    const status = createSceneStatus({
+export function mountBeatStatusFeature(): BeatStatusMount {
+  return beatStatus.replace(() => {
+    const status = createBeatStatus({
       document: portDocument,
       edits: portEdits,
       text: portText,
@@ -29,21 +29,21 @@ export function mountSceneStatusFeature(): SceneStatusMount {
   });
 }
 
-export const stopSceneStatusFeature = sceneStatus.stop;
+export const stopBeatStatusFeature = beatStatus.stop;
 
 export function updateScriptStats(): void {
-  sceneStatus.owner()?.updateScriptStats();
+  beatStatus.owner()?.updateScriptStats();
 }
 
 export function statsFollowChange(change: SessionChange): void {
-  sceneStatus.owner()?.statsFollowChange(change);
+  beatStatus.owner()?.statsFollowChange(change);
 }
 
 export function onScriptStats(listener: (targetSeconds: number) => void): () => void {
-  const owner = sceneStatus.owner();
+  const owner = beatStatus.owner();
   return owner ? owner.onScriptStats(listener) : () => {};
 }
 
 export function cycleRowStatus(rowId: string): void {
-  sceneStatus.owner()?.cycleRowStatus(rowId);
+  beatStatus.owner()?.cycleRowStatus(rowId);
 }

@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_WPM,
   ROW_STATUS_IDS,
-  SCENE_LENGTH_MAX,
+  BEAT_LENGTH_MAX,
   hasSetLength,
   nextRowStatus,
-  normalizeSceneLength,
+  normalizeBeatLength,
   normalizeTargetLength,
   normalizeWordsPerMinute,
-  parseSceneLength,
+  parseBeatLength,
   rowStatusId,
   targetLengthOf
 } from "../../../src/core/document/timing.ts";
@@ -27,7 +27,7 @@ test("a scene's status is to do, ready or shot, and cycles in that order", () =>
 
 test("the reading speed and the longest length", () => {
   assert.equal(DEFAULT_WPM, 150);
-  assert.equal(SCENE_LENGTH_MAX, 86400);
+  assert.equal(BEAT_LENGTH_MAX, 86400);
 });
 
 test("a stored reading speed is a whole number from 60 to 400, else the default", () => {
@@ -43,8 +43,8 @@ test("a stored reading speed is a whole number from 60 to 400, else the default"
 test("a scene has a set length only when it holds a whole day or less", () => {
   assert.equal(hasSetLength({ lengthSeconds: 0 }), true);
   assert.equal(hasSetLength({ lengthSeconds: 12.5 }), true);
-  assert.equal(hasSetLength({ lengthSeconds: SCENE_LENGTH_MAX }), true);
-  assert.equal(hasSetLength({ lengthSeconds: SCENE_LENGTH_MAX + 0.1 }), false);
+  assert.equal(hasSetLength({ lengthSeconds: BEAT_LENGTH_MAX }), true);
+  assert.equal(hasSetLength({ lengthSeconds: BEAT_LENGTH_MAX + 0.1 }), false);
   assert.equal(hasSetLength({ lengthSeconds: -1 }), false);
   assert.equal(hasSetLength({ lengthSeconds: NaN }), false);
   assert.equal(hasSetLength({ lengthSeconds: Infinity }), false);
@@ -57,11 +57,11 @@ test("a scene has a set length only when it holds a whole day or less", () => {
 test("a stored scene length rounds to whole seconds and is dropped out of range", () => {
   const cases: [unknown, number | undefined][] = [
     [-0.1, undefined], [0, 0], [0.4, 0], [0.5, 1], [61.49, 61],
-    [SCENE_LENGTH_MAX, SCENE_LENGTH_MAX], [SCENE_LENGTH_MAX + 0.1, undefined],
+    [BEAT_LENGTH_MAX, BEAT_LENGTH_MAX], [BEAT_LENGTH_MAX + 0.1, undefined],
     [NaN, undefined], [Infinity, undefined], ["30", undefined], [null, undefined], [undefined, undefined]
   ];
-  for (const [input, want] of cases) assert.equal(normalizeSceneLength(input), want, String(input));
-  assert.ok(Object.is(normalizeSceneLength(-0), -0));
+  for (const [input, want] of cases) assert.equal(normalizeBeatLength(input), want, String(input));
+  assert.ok(Object.is(normalizeBeatLength(-0), -0));
 });
 
 test("a typed length reads clock times and units, largest unit first", () => {
@@ -71,15 +71,15 @@ test("a typed length reads clock times and units, largest unit first", () => {
     ["1m", 60], ["1m 30", 90], ["2m30s", 150], ["1 hour 2 minutes", 3720], ["1h 5", 3900], ["1h 2m 3", 3723],
     ["1.5m", 90], [".5h", 1800], ["1 HR", 3600], ["10 secs", 10], ["0.4", 0], ["0.5", 1]
   ];
-  for (const [input, want] of cases) assert.equal(parseSceneLength(input), want, String(input));
+  for (const [input, want] of cases) assert.equal(parseBeatLength(input), want, String(input));
   const refused = ["1:60", "1:5", "25:00:00", "86401", "30s 2m", "1m 1m", "1s 2", "1m 2 3", "5 parsecs", "abc", "1:30x", "-5", "m"];
-  for (const input of refused) assert.ok(Number.isNaN(parseSceneLength(input)), input);
+  for (const input of refused) assert.ok(Number.isNaN(parseBeatLength(input)), input);
 });
 
 test("a target length is a whole number of seconds from one to a day", () => {
   const cases: [unknown, number | undefined][] = [
-    [0.4, undefined], [0.5, 1], [1, 1], [300.4, 300], [SCENE_LENGTH_MAX, SCENE_LENGTH_MAX],
-    [SCENE_LENGTH_MAX + 0.4, SCENE_LENGTH_MAX], [SCENE_LENGTH_MAX + 0.5, undefined],
+    [0.4, undefined], [0.5, 1], [1, 1], [300.4, 300], [BEAT_LENGTH_MAX, BEAT_LENGTH_MAX],
+    [BEAT_LENGTH_MAX + 0.4, BEAT_LENGTH_MAX], [BEAT_LENGTH_MAX + 0.5, undefined],
     [-1, undefined], [NaN, undefined], [Infinity, undefined], ["60", undefined], [null, undefined]
   ];
   for (const [input, want] of cases) assert.equal(normalizeTargetLength(input), want, String(input));

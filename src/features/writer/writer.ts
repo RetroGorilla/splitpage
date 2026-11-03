@@ -2,7 +2,7 @@ import { editableCellHtml } from "../common/editable-cell.ts";
 import { formatDuration, pad2, totalSeconds } from "../../core/production/timing.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot, cssAttr } from "../common/dom.ts";
-import { bothScenesHaveVisual, joinScenesCommand } from "../../application/commands/split-join.ts";
+import { bothBeatsHaveVisual, joinBeatsCommand } from "../../application/commands/split-join.ts";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { placeCaretAtTextOffset } from "../common/caret.ts";
@@ -181,7 +181,7 @@ function mergeWriterRows(intoIdx: number) {
   const prev = rows[intoIdx];
   const cur = rows[intoIdx + 1];
   if (!prev || !cur) return;
-  if ((readSession as WriterFeaturePorts["document"]["read"])(bothScenesHaveVisual(prev.id, (htmlToPlainText as WriterFeaturePorts["text"]["htmlToPlainText"])))) {
+  if ((readSession as WriterFeaturePorts["document"]["read"])(bothBeatsHaveVisual(prev.id, (htmlToPlainText as WriterFeaturePorts["text"]["htmlToPlainText"])))) {
     (showToast as WriterFeaturePorts["notices"]["show"])("Both scenes have a visual — join them in the split view, so you can pick which one to keep.", "warn");
     return;
   }
@@ -191,7 +191,7 @@ function mergeWriterRows(intoIdx: number) {
 
   (breakUndoCoalescing as WriterFeaturePorts["undo"]["breakCoalescing"])();
   const ports = Object.assign({}, (sessionTextPorts as WriterFeaturePorts["edits"]["text"]), { plainText: (htmlToPlainText as WriterFeaturePorts["text"]["htmlToPlainText"]) });
-  const outcome = (paintGuard as WriterFeaturePorts["editing"]["paint"])().whileShown(function () { return (runCommand as WriterFeaturePorts["edits"]["run"])(joinScenesCommand(prev.id, ports)); });
+  const outcome = (paintGuard as WriterFeaturePorts["editing"]["paint"])().whileShown(function () { return (runCommand as WriterFeaturePorts["edits"]["run"])(joinBeatsCommand(prev.id, ports)); });
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
   renderWriter();

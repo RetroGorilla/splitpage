@@ -547,7 +547,7 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     else drop.push(el);
   });
 
-  function planScene(item: ShotRowEntry<Row> | ShotStrip): RowsStep {
+  function planBeat(item: ShotRowEntry<Row> | ShotStrip): RowsStep {
     const strip = (item as Partial<ShotStrip>).strip;
     const entry = item as ShotRowEntry<Row>;
     const key = strip ? "strip:" + strip.join(",") : "row:" + entry.row.id;
@@ -563,7 +563,7 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     return { node: newRowEl(entry.row, entry.index), added: true };
   }
   const steps = Array.isArray(doc.sections) && doc.sections.length ? sectionRowEntries(doc, ports.hiding(), ports.sections()).map(function (item): RowsStep {
-    if (!("section" in item)) return planScene(item);
+    if (!("section" in item)) return planBeat(item);
     const key = "section:" + item.section.id;
     const html = sectionHeaderHtml(item, !ports.edits.allowed());
     const old = existing.get(key);
@@ -573,7 +573,7 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     const node = nodeFromHtml(html) as SignedRow;
     node.__splitpageSectionSig = html;
     return { node };
-  }) : ports.hiding().groups(doc.rows).map(planScene);
+  }) : ports.hiding().groups(doc.rows).map(planBeat);
   existing.forEach(function (el) { drop.push(el); });
   return { steps: steps, drop: drop };
 }

@@ -16,7 +16,7 @@ const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { editorSelection } = await import("../bootstrap/wiring/editor-owners.ts");
-const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
+const { setHideShotBeats } = await import("../bootstrap/wiring/hide-shot.ts");
 const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
@@ -204,7 +204,7 @@ test("B44: a scene's status button cycles its status through the session", async
 
 test("B46: a hidden-shot strip opens its scenes without an edit", async () => {
   await open();
-  setHideShotScenes(true);
+  setHideShotBeats(true);
   try {
     const strip = document.querySelector('#rows [data-action="expand-hidden-shot"]');
     assert.ok(strip, "the shot scene is folded into a strip");
@@ -213,13 +213,13 @@ test("B46: a hidden-shot strip opens its scenes without an edit", async () => {
     assert.ok(rowEl("r2"), "the scene is shown again");
     assert.equal(document.querySelector('#rows [data-action="expand-hidden-shot"]'), null);
   } finally {
-    setHideShotScenes(false);
+    setHideShotBeats(false);
   }
 });
 
 test("B47: jump to scene centres and flashes the scene, opening a hidden one first; a scene that is gone says so", async () => {
   await open();
-  setHideShotScenes(true);
+  setHideShotBeats(true);
   const host = document.getElementById("history-panel");
   const jump = (rowId) => {
     const b = document.createElement("button");
@@ -237,7 +237,7 @@ test("B47: jump to scene centres and flashes the scene, opening a hidden one fir
     assert.deepEqual(toasts(), ["That scene is no longer here."]);
   } finally {
     host.querySelectorAll('[data-action="jump-row"]').forEach((b) => b.remove());
-    setHideShotScenes(false);
+    setHideShotBeats(false);
   }
 });
 

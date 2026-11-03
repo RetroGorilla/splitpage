@@ -89,7 +89,7 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
   const t = scriptTable(liveDoc());
   const script = book.sheets[0];
   assert.deepEqual(script.rows[0], t.head.concat(["Notes"]));
-  const want = t.scenes.map((s) => s.cells).concat(t.summary).map((r) => pad(r, 11));
+  const want = t.beats.map((s) => s.cells).concat(t.summary).map((r) => pad(r, 11));
   assert.deepEqual(asText(script.rows.slice(1)), asText(want));
   assert.equal(script.rows.length, 1 + 30 + t.summary.length);
   const notes = script.cells.filter((c) => /^K\d+$/.test(c.getAttribute("r")) && c.getAttribute("r") !== "K1");

@@ -2,8 +2,8 @@ import type { ExportServices } from "../../application/export/services.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { ImportedRow } from "../../application/formats/import-formats.ts";
 import type { TableCell } from "./export-projections.ts";
-import { sceneFacts, breakdownRows, breakdownTable, brollTable, commentBodyText } from "./export-projections.ts";
-import { exportBrollScenes, exportComments, exportFacts } from "./export-kit.ts";
+import { beatFacts, breakdownRows, breakdownTable, brollTable, commentBodyText } from "./export-projections.ts";
+import { exportBrollBeats, exportComments, exportFacts } from "./export-kit.ts";
 import { makeId } from "../identity/ids.ts";
 import { exportServices } from "../../application/export/services.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
@@ -11,7 +11,7 @@ import { toPlainText } from "../../core/text/projections.ts";
 
 export interface ScriptTable {
   head: string[];
-  scenes: { status: string; cells: TableCell[] }[];
+  beats: { status: string; cells: TableCell[] }[];
   summary: TableCell[][];
   commentHead: string[];
   comments: { reply: boolean; resolved: boolean; cells: TableCell[] }[];
@@ -40,43 +40,43 @@ export function buildBrollCsv(doc: ExportDocument, services: ExportServices = ex
 
 const CSV_HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
 
-function sceneTagLists(doc: ExportDocument): Record<string, string[]> {
-  const byScene: Record<string, { label: string; names: string[] }[]> = {};
+function beatTagLists(doc: ExportDocument): Record<string, string[]> {
+  const byBeat: Record<string, { label: string; names: string[] }[]> = {};
   breakdownRows(doc).forEach(function (r) {
     if (r.inScript === "no") return;
-    r.scenes.forEach(function (n) {
+    r.beats.forEach(function (n) {
       const i = Number(n) - 1;
-      const list = byScene[i] = byScene[i] || [];
+      const list = byBeat[i] = byBeat[i] || [];
       const last = list[list.length - 1];
       if (last && last.label === r.categoryLabel) last.names.push(r.name);
       else list.push({ label: r.categoryLabel, names: [r.name] });
     });
   });
   const out: Record<string, string[]> = {};
-  Object.entries(byScene).forEach(function ([i, groups]) {
+  Object.entries(byBeat).forEach(function ([i, groups]) {
     out[i] = groups.map(function (g) { return g.label + ": " + g.names.join(", "); });
   });
   return out;
 }
 
-function sceneBrollLists(doc: ExportDocument, services: ExportServices): Record<number, string[]> {
-  const byScene: Record<number, string[]> = {};
-  exportBrollScenes(doc, services).forEach(function (g) {
-    if (!g.scene) return;
-    byScene[Number(g.scene) - 1] = g.items.map(function (r) {
+function beatBrollLists(doc: ExportDocument, services: ExportServices): Record<number, string[]> {
+  const byBeat: Record<number, string[]> = {};
+  exportBrollBeats(doc, services).forEach(function (g) {
+    if (!g.beat) return;
+    byBeat[Number(g.beat) - 1] = g.items.map(function (r) {
       return r.name + " (" + (r.shot ? "shot" : "to shoot") + (r.flagged ? ", flagged" : "") + ")";
     });
   });
-  return byScene;
+  return byBeat;
 }
 
 const COMMENT_HEAD = ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"];
 
 export function scriptTable(doc: ExportDocument, services: ExportServices = exportServices()): ScriptTable {
   const facts = exportFacts(doc, services);
-  const scenes = sceneFacts(doc, services);
-  const tags = sceneTagLists(doc);
-  const broll = sceneBrollLists(doc, services);
+  const beats = beatFacts(doc, services);
+  const tags = beatTagLists(doc);
+  const broll = beatBrollLists(doc, services);
   const comments = exportComments(doc, { pieces: true }, services);
   const open: Record<number, number[]> = {};
   comments.forEach(function (c) {
@@ -91,11 +91,11 @@ export function scriptTable(doc: ExportDocument, services: ExportServices = expo
     return cells;
   }
 
-  const out: ScriptTable = { head: CSV_HEAD.slice(), scenes: [], summary: [], commentHead: COMMENT_HEAD.slice(), comments: [] };
-  doc.scenes.forEach(function (row, i) {
-    const f = scenes[i];
+  const out: ScriptTable = { head: CSV_HEAD.slice(), beats: [], summary: [], commentHead: COMMENT_HEAD.slice(), comments: [] };
+  doc.beats.forEach(function (row, i) {
+    const f = beats[i];
     if (!f) throw new Error("Missing scene facts");
-    out.scenes.push({ status: f.status.id, cells: [
+    out.beats.push({ status: f.status.id, cells: [
       f.number,
       f.start,
       f.status.label,
@@ -108,7 +108,7 @@ export function scriptTable(doc: ExportDocument, services: ExportServices = expo
       (open[i] || []).sort(function (a, b) { return a - b; }).join(", ")
     ] });
   });
-  out.summary.push(summary("Total", facts.scenes ? facts.status.shot + " of " + facts.scenes + " shot" : "", facts.runtime));
+  out.summary.push(summary("Total", facts.beats ? facts.status.shot + " of " + facts.beats + " shot" : "", facts.runtime));
   if (facts.target) {
     out.summary.push(summary("Target", facts.target.delta === "0:00" ? "on target"
       : facts.target.delta + (facts.target.over ? " over" : " under"), facts.target.text));
@@ -135,7 +135,7 @@ export function buildCsv(doc: ExportDocument, services: ExportServices = exportS
   const t = scriptTable(doc, services);
   const line = function (cells: readonly TableCell[]) { return cells.map(csvEscape).join(","); };
   const lines = [t.head.join(",")];
-  t.scenes.forEach(function (s) { lines.push(line(s.cells)); });
+  t.beats.forEach(function (s) { lines.push(line(s.cells)); });
   t.summary.forEach(function (cells) { lines.push(line(cells)); });
   if (t.comments.length) {
     lines.push("");
