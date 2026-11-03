@@ -1,5 +1,15 @@
 # Structured document model — design (issue #85)
 
+## Saved terminology names
+
+The user-facing terms are defined in [the glossary](GLOSSARY.md). Existing saved names remain unchanged for compatibility:
+
+- `sections` holds scenes; each `firstSceneId` identifies the first beat of that scene.
+- A row represents a beat. Its status `"shot"` means **Filmed**. A B-roll record in `brollShots` can also have status `"shot"`, meaning that shot is filmed. `"unshot"` means it is yet to be filmed.
+
+These names describe the existing format, not a migration or a change to saved files.
+
+
 Status: **built** (2026-09-23), with the few leftovers §10 names — the
 model (`src/core/text/`), registry ids, the readers, every edit of a
 script cell (the cell-editing owner `src/application/editing/cell-editing.ts`,
