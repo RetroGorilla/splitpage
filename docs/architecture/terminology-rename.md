@@ -22,6 +22,22 @@ This inventory is for PR 2 of #1186. Old "scene" means beat and old "section" me
 
 Project files write and parse the same document state through `src/adapters/formats/project-file.ts:71`, `:114`, `:307`; the embedded JSON keys above therefore stay.
 
+## Import and paste compatibility
+
+New exports can use the new wording, but import and paste readers must continue recognizing the old wording and styles. Add new recognizers alongside these when needed; changing export text alone must not make old files ambiguous or import their scaffolding as content.
+
+| Existing reader input | Decision, writer and reader |
+| --- | --- |
+| DOCX run style `SplitpageSceneNo` | **Stay.** Narration export writes it at `src/adapters/formats/docx.ts:861`, `:893`, `:1358`. Import drops the styled scene-number run via `isDroppedRun` at `src/adapters/formats/docx.ts:926`, used at `:940`, `:1004`. Without the reader, old exported numbers become narration text. |
+| DOCX `SplitpageBroll`, `SplitpageMarker` | **Stay.** The writer emits B-roll and comment marker styles at `src/adapters/formats/docx.ts:174`, `:206`, `:230`, `:1354`; the reader drops marker runs and recognizes the B-roll style at `:926`, `:951`. Preserve the B-roll atom when importing old files. |
+| DOCX visual columns `shot`, `shots`, `b-roll`; breakdown headers with `scenes`; `B-roll shot list` | **Keep recognizing.** Table detection recognizes visual labels and rejects breakdown tables at `src/adapters/formats/docx.ts:1028`, `:1031`, `:1066`. The appendix cutoff recognizes old heading text at `:1042`, `:1059`; its writer is `:570`. Otherwise appendices can be imported as script. |
+| Markdown stacked `### Scene N`, `_N scenes ..._`, `_(blank scene)_` | **Keep recognizing.** Stacked text import reads heading, metadata and blank placeholder at `src/adapters/formats/import-text.ts:43`, `:44`, `:55`, `:90`; export writes scene headings and blank placeholder at `src/adapters/formats/export-text.ts:275`, `:305`, with summary at `:260`. |
+| Markdown stacked facts, visual lead and media | **Keep recognizing.** Import strips old `Read` facts, `*Visual ...*`, `![visual ...](images/...)` and video metadata at `src/adapters/formats/import-text.ts:45`, `:47`, `:48`, `:80`; corresponding export at `src/adapters/formats/export-text.ts:275`, `:280`, `:291`. The old image paths `images/scene-N...` are written at `:223`, `:238`; accept old image references when importing. |
+| Markdown table and tab column `scene` / `shot`; old stacked section + `### Scene ...`; `## B-roll shot list` | **Keep recognizing.** `src/adapters/formats/markdown-table.ts:12`, `:15`, `:17`, `:19`, `:24`, `:48`, `:60` control column selection, section recognition and appendix truncation. Tab and stacked imports reuse them at `src/adapters/formats/import-text.ts:2`, `:102`, `:158`. Markdown writer emits the appendix at `src/adapters/formats/export-text.ts:174`. |
+| Labeled text `Scene:`, `Shot:`, `B-roll:` | **Keep recognizing.** Detection and parsing use `VISUAL_LABEL_RE` at `src/adapters/formats/import-text.ts:19`, `:35`, `:125`; this accepts user-authored text, not just exports. |
+| CSV `Scene` / `Shot` header and exported `Comments` boundary | **Keep recognizing.** `src/adapters/formats/csv.ts:193`, `:196`, `:209`, `:215` identify columns and stop before the comments appendix for old exports. The current writer emits `Scene` at `:41`. |
+| Rich-text B-roll marker text and HTML | **Keep recognizing.** `B-roll:` and accepted variants are parsed by `src/core/document/broll.ts:27`; serialized `broll-key` / `data-broll-id` are written at `src/core/text/html.ts:42` and decoded and sanitized at `src/adapters/richtext/decode.ts:60`, `src/adapters/richtext/sanitize.ts:374`. The B-roll anchor reader/writer also uses the marker at `src/adapters/production/broll-anchors.ts:68`, `:93`, `:126`. Paste and stored HTML both depend on this. |
+
 ## DOM and test selectors
 
 The following CSS selectors and data attributes contain the old words. They **can change together** with producers, consumers, styles and tests, except serialized cell HTML and clipboard attributes listed above, which **stay**. The test column lists literal occurrences, including fixture and browser checks; inspect each before renaming. "No direct literal" does not prove there is no indirect use. The list includes identifiers containing "snapshot", which should not be mistaken for the old status.
@@ -83,7 +99,7 @@ The following CSS selectors and data attributes contain the old words. They **ca
 | `.scene-gallery-preview-pic` | src/features/gallery/styles-tiles-and-modal.css:123 | No direct literal found |
 | `.scene-gallery-remove` | src/features/gallery/styles-tiles-and-modal.css:232 | No direct literal found |
 | `.scene-gallery-show-all` | src/features/gallery/styles-tiles-and-modal.css:91 | No direct literal found |
-| `.scene-gallery-step` | src/features/gallery/styles-tiles-and-modal.css:101 | No direct literal found |
+| `.scene-gallery-step` | src/features/gallery/overlay.ts:175, :178, :236; src/features/gallery/styles-tiles-and-modal.css:101 | No direct literal found |
 | `.scene-gallery-summary` | src/features/gallery/styles-tiles-and-modal.css:86 | No direct literal found |
 | `.scene-gallery-tile` | src/features/gallery/styles-tiles-and-modal.css:6 | No direct literal found |
 | `.scene-gallery-zoom` | src/features/gallery/styles-tiles-and-modal.css:175 | No direct literal found |
@@ -122,3 +138,39 @@ The following CSS selectors and data attributes contain the old words. They **ca
 | `data-section-id` | src/features/rows/row-motion.ts:6 | src/test/sections-app.test.mjs:50, tests/features/rows/section-controls.test.ts:15 |
 | `data-section-total` | src/features/rows/render.ts:249 | src/test/sections-app.test.mjs:190 |
 | `data-splitpage-scenes` | src/features/clipboard/scene-clip.ts:47 | src/test/scene-clip.test.mjs:139 |
+
+### Generated markup, class operations and IDs
+
+These additional literal names occur in generated markup, DOM class operations, element IDs or action attributes. They can change together with all producers, consumers and tests, except the action ID `toggle-hide-shot`, which stays as specified above. `restore-snapshot` is unrelated to the terminology change and stays. A test listed here contains the literal; inspect it to distinguish assertions from fixtures.
+
+| Name | First source occurrence | Tests with a literal occurrence |
+| --- | --- | --- |
+| `add-section` | src/features/rows/section-controls.ts:89 | tests/features/rows/section-controls.test.ts:17 |
+| `broll-bulk-shot` | src/features/broll/panel.ts:509 | No direct literal found |
+| `broll-page-c-scene` | src/features/broll/panel.ts:1210 | No direct literal found |
+| `broll-scene-n` | src/features/broll/panel.ts:408 | No direct literal found |
+| `broll-shot-list` | src/adapters/formats/list-print.ts:92 | tests/adapters/formats/fixtures/inspect-script-print.mjs:589, tests/adapters/formats/list-print.test.mjs:123 |
+| `expand-hidden-shot` | src/features/rows/hide-shot.ts:22 | src/test/remaining-rows-app.test.mjs:209, tests/features/rows/routes.test.ts:19, tests/features/writer/mount.test.ts:59 |
+| `.has-scene-selection` | src/features/clipboard/scene-select.ts:69 | tests/features/clipboard/copy-paste.test.ts:69 |
+| `hidden-shot-label` | src/features/rows/hide-shot.ts:24 | No direct literal found |
+| `i-scene-mode` | src/page.html:509 | No direct literal found |
+| `menu-hide-shot` | src/bootstrap/wiring/hide-shot.ts:25 | tests/features/rows/hide-shot.test.ts:9 |
+| `pp-scene-mode` | src/features/prompter/prompter.ts:416 | tests/features/prompter/mount.test.ts:76 |
+| `pp-scene-next` | src/page.html:513 | tests/features/prompter/mount.test.ts:84 |
+| `pp-scene-pos-sr` | src/features/prompter/prompter.ts:314 | No direct literal found |
+| `pp-scene-prev` | src/page.html:511 | tests/features/prompter/mount.test.ts:80 |
+| `pp-scene-step` | src/page.html:510 | No direct literal found |
+| `pp-skip-shot` | src/features/prompter/prompter.ts:235 | src/test/find-present-app.test.mjs:99, tests/features/prompter/mount.test.ts:64 |
+| `restore-snapshot` | src/features/gallery/mount.ts:11 | src/test/views-mount-app.test.mjs:42, tests/features/gallery/mount.test.ts:25, tests/features/history/panel.test.ts:50, desktop/test/smoke.mjs:2683 |
+| `scene-gallery-overlay` | src/page.html:656 | No direct literal found |
+| `scene-meta` | src/adapters/formats/list-print.ts:37 | tests/adapters/formats/list-print.test.mjs:31, tests/adapters/formats/script-print.test.mjs:23 |
+| `scene-number` | src/adapters/formats/script-print.ts:65 | src/test/section-outputs.test.mjs:42, tests/adapters/formats/fixtures/inspect-script-print.mjs:548, tests/adapters/formats/script-print.test.mjs:22 |
+| `scene-selection-style` | src/features/clipboard/scene-select.ts:65 | tests/features/clipboard/copy-paste.test.ts:66 |
+| `script-section` | src/adapters/formats/script-print.ts:77 | src/test/section-outputs.test.mjs:37 |
+| `script-section-total` | src/adapters/formats/script-print.ts:77 | No direct literal found |
+| `shot-done` | src/adapters/formats/list-print.ts:87 | src/test/section-outputs.test.mjs:43, tests/adapters/formats/list-print.test.mjs:65, tests/adapters/formats/script-print.test.mjs:45 |
+| `shot-flag` | src/adapters/formats/list-print.ts:90 | tests/adapters/formats/list-print.test.mjs:115 |
+| `shot-list` | src/adapters/formats/list-print.ts:92 | src/test/browser-pdf-app.test.mjs:34, tests/adapters/formats/fixtures/inspect-script-print.mjs:547, tests/adapters/formats/list-print.test.mjs:123, tests/features/broll/mount.test.ts:64, tests/legacy/overlay-availability.test.ts:147, desktop/test/smoke.mjs:1204 |
+| `shot-table` | src/adapters/formats/list-print.ts:84 | tests/adapters/formats/list-print.test.mjs:101 |
+| `toggle-hide-shot` | src/page.html:147 | tests/bootstrap/action-order.test.ts:17, tests/bootstrap/start-actions.test.ts:47, tests/legacy/chords.test.ts:88, tests/legacy/overlay-availability.test.ts:141 |
+| `wr-scenes` | src/features/writer/writer.ts:135 | src/test/panels-listen-app.test.mjs:89 |
