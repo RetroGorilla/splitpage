@@ -25,7 +25,7 @@ import {
   exportSummaryParts
 } from "./export-kit.ts";
 import { capturedPicture, capturedRowPicture } from "./export-assets.ts";
-import { beatFacts, scriptSectionFacts } from "./export-projections.ts";
+import { beatFacts, scriptSceneFacts } from "./export-projections.ts";
 import { strBytes } from "./bytes.ts";
 import { xmlEscape } from "./xml.ts";
 import { zipRead, zipWrite } from "./zip.ts";
@@ -467,7 +467,7 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
     "</w:tr>";
 
   const beats = beatFacts(doc);
-  const headings = new Map(scriptSectionFacts(doc, beats).map(group => [group.start, group]));
+  const headings = new Map(scriptSceneFacts(doc, beats).map(group => [group.start, group]));
   const ann = { nums: doc.commentNumbers, open: commentOpenness(doc) };
   const maxW = (COL_VISUAL - 200) * 635;
   doc.beats.forEach(function (row, idx) {
@@ -870,7 +870,7 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
   const links: string[] = [];
   const rels = { addLink: function (href: string) { links.push(href); return "rIdL" + links.length; } };
   const rows = narrationRows(doc, opts);
-  const sections = scriptSectionFacts(doc, beatFacts(doc));
+  const scenes = scriptSceneFacts(doc, beatFacts(doc));
   let lastSection = "";
   const words = rows.reduce(function (n, row) { return n + exportServices().productionReaders.wordCount(row.audioText); }, 0);
   const wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
@@ -881,7 +881,7 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
 
   rows.forEach(function (row) {
     const index = doc.beats.indexOf(row);
-    const heading = sections.find(group => index >= group.start && index < group.end);
+    const heading = scenes.find(group => index >= group.start && index < group.end);
     if (heading && heading.id !== lastSection) {
       lastSection = heading.id;
       body += '<w:p><w:pPr><w:pStyle w:val="' + META_STYLE + '"/><w:keepNext/><w:spacing w:before="240" w:after="120"/></w:pPr>' +

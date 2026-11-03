@@ -1,10 +1,10 @@
-import { normalizeSections, sectionGroups } from "../document/sections.ts";
-import type { DocumentSection, SectionDocument } from "../document/sections.ts";
+import { normalizeScenes, sceneGroups } from "../document/scenes.ts";
+import type { DocumentScene, SceneDocument } from "../document/scenes.ts";
 
-function identities(base: SectionDocument | null | undefined, mine: SectionDocument, theirs: SectionDocument): Map<string, string> {
-  const b = new Map((normalizeSections(base?.sections) ?? []).map(section => [section.id, section]));
-  const m = new Map((normalizeSections(mine.sections) ?? []).map(section => [section.id, section]));
-  const t = new Map((normalizeSections(theirs.sections) ?? []).map(section => [section.id, section]));
+function identities(base: SceneDocument | null | undefined, mine: SceneDocument, theirs: SceneDocument): Map<string, string> {
+  const b = new Map((normalizeScenes(base?.sections) ?? []).map(scene => [scene.id, scene]));
+  const m = new Map((normalizeScenes(mine.sections) ?? []).map(scene => [scene.id, scene]));
+  const t = new Map((normalizeScenes(theirs.sections) ?? []).map(scene => [scene.id, scene]));
   const merged = new Map<string, string>();
   for (const id of new Set([...t.keys(), ...m.keys()])) {
     const bs = b.get(id), ms = m.get(id), ts = t.get(id);
@@ -16,12 +16,12 @@ function identities(base: SectionDocument | null | undefined, mine: SectionDocum
   return merged;
 }
 
-function membership(doc: SectionDocument): Map<string, string> {
+function membership(doc: SceneDocument): Map<string, string> {
   const out = new Map(doc.rows.map(row => [row.id, ""]));
-  for (const group of sectionGroups(doc)) {
+  for (const group of sceneGroups(doc)) {
     for (let i = group.start; i < group.end; i++) {
       const row = doc.rows[i];
-      if (row) out.set(row.id, group.section.id);
+      if (row) out.set(row.id, group.scene.id);
     }
   }
   return out;
@@ -47,23 +47,23 @@ function mergeOrder(base: readonly string[], mine: readonly string[], theirs: re
   return ordered;
 }
 
-export function mergeSectionLayout<T extends { readonly id: string }>(
-  base: SectionDocument | null | undefined, mine: SectionDocument, theirs: SectionDocument, rows: T[]
-): { rows: T[]; sections: DocumentSection[] | undefined } {
+export function mergeSceneLayout<T extends { readonly id: string }>(
+  base: SceneDocument | null | undefined, mine: SceneDocument, theirs: SceneDocument, rows: T[]
+): { rows: T[]; sections: DocumentScene[] | undefined } {
   if (!(base?.sections || mine.sections || theirs.sections)) return { rows, sections: undefined };
-  const empty: SectionDocument = { rows: [] };
+  const empty: SceneDocument = { rows: [] };
   const original = base ?? empty;
   const names = identities(base, mine, theirs);
-  const sectionIds = (doc: SectionDocument): string[] => sectionGroups(doc).map(group => group.section.id);
-  const baseOrder = sectionIds(original), mineOrder = sectionIds(mine), theirOrder = sectionIds(theirs);
+  const sceneIds = (doc: SceneDocument): string[] => sceneGroups(doc).map(group => group.scene.id);
+  const baseOrder = sceneIds(original), mineOrder = sceneIds(mine), theirOrder = sceneIds(theirs);
   const order = mergeOrder(baseOrder, mineOrder, theirOrder, [...names.keys()]);
   const b = membership(original), m = membership(mine), t = membership(theirs);
   const mineGroups = new Map(m), theirGroups = new Map(t);
   for (const [members, ids] of [[m, mineOrder], [t, theirOrder]] as const) {
-    for (const [rowId, sectionId] of b) {
-      if (!sectionId || ids.includes(sectionId) || !members.has(rowId)) continue;
-      const preceding = baseOrder.slice(0, baseOrder.indexOf(sectionId)).reverse().find(id => ids.includes(id)) ?? "";
-      if (members.get(rowId) === preceding) members.set(rowId, sectionId);
+    for (const [rowId, sceneId] of b) {
+      if (!sceneId || ids.includes(sceneId) || !members.has(rowId)) continue;
+      const preceding = baseOrder.slice(0, baseOrder.indexOf(sceneId)).reverse().find(id => ids.includes(id)) ?? "";
+      if (members.get(rowId) === preceding) members.set(rowId, sceneId);
     }
   }
   if (!base && !mineOrder.length && theirOrder.length) m.clear();
@@ -93,21 +93,21 @@ export function mergeSectionLayout<T extends { readonly id: string }>(
     group.push(row);
     bucket.set(id, group);
   }
-  const ordered: T[] = [], sections: DocumentSection[] = [];
+  const ordered: T[] = [], scenes: DocumentScene[] = [];
   const canonicalGroups = ["", ...baseOrder];
   const rank = new Map(canonicalGroups.map((id, i) => [id, i]));
   for (const side of [mine, theirs]) {
-    for (const group of sectionGroups(side)) {
-      if (rank.has(group.section.id)) continue;
+    for (const group of sceneGroups(side)) {
+      if (rank.has(group.scene.id)) continue;
       const neighbour = side.rows.slice(0, group.start + 1).reverse().find(row => b.has(row.id));
-      rank.set(group.section.id, rank.get(neighbour ? b.get(neighbour.id) ?? "" : "") ?? 0);
+      rank.set(group.scene.id, rank.get(neighbour ? b.get(neighbour.id) ?? "" : "") ?? 0);
     }
   }
   for (const id of ["", ...order]) {
     const group = bucket.get(id);
     if (!group?.length) continue;
     const byId = new Map(group.map(row => [row.id, row]));
-    const ids = (doc: SectionDocument, members: ReadonlyMap<string, string>): string[] =>
+    const ids = (doc: SceneDocument, members: ReadonlyMap<string, string>): string[] =>
       doc.rows.filter(row => byId.has(row.id))
         .sort((a, z) => (rank.get(members.get(a.id) ?? "") ?? 0) - (rank.get(members.get(z.id) ?? "") ?? 0))
         .map(row => row.id);
@@ -117,7 +117,7 @@ export function mergeSectionLayout<T extends { readonly id: string }>(
       if (row) ordered.push(row);
     }
     const firstSceneId = groupOrder[0], name = names.get(id);
-    if (id && name && firstSceneId) sections.push({ id, name, firstSceneId });
+    if (id && name && firstSceneId) scenes.push({ id, name, firstSceneId });
   }
-  return { rows: ordered, sections: sections.length ? sections : undefined };
+  return { rows: ordered, sections: scenes.length ? scenes : undefined };
 }

@@ -113,8 +113,8 @@ test("empty and long scripts preserve all content, with sections composable thro
   assert.match(empty.body.textContent, /No scenes yet/);
   assert.equal(empty.querySelectorAll("table,#comments,.rundown").length, 0);
   const { input } = scriptFixture("long");
-  const sections = scriptPrintSections(input);
-  const html = buildPrintPage(input.doc.title, [sections[0], { id: "packing", title: "Packing list", html: "<h2>Packing list fixture</h2>" }, ...sections.slice(1)]);
+  const scenes = scriptPrintSections(input);
+  const html = buildPrintPage(input.doc.title, [scenes[0], { id: "packing", title: "Packing list", html: "<h2>Packing list fixture</h2>" }, ...scenes.slice(1)]);
   const dom = new JSDOM(html).window.document;
   assert.equal(dom.querySelectorAll("tbody tr").length, 18);
   assert.match(dom.body.textContent, /Visual line 179/);

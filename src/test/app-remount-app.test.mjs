@@ -106,7 +106,7 @@ const RESOURCE_ROWS = {
   ],
   cellReach: ["#rows mousedown/B"],
   prompterFocus: ["document focusin/B"],
-  sectionControls: ["document click/B", "document dragstart/C", "document dragover/C", "document drop/C", "document dragend/C", "document keydown/B"],
+  sceneControls: ["document click/B", "document dragstart/C", "document dragover/C", "document drop/C", "document dragend/C", "document keydown/B"],
   phoneBar: ["#phone-bar click/B"],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
   S26: ["#production-panel change/B", "#production-panel click/B", "#production-panel focusout/B", "#production-panel input/B", "#production-panel keydown/B"],

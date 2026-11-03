@@ -1,15 +1,15 @@
-import { sectionForBeat } from "../../core/document/sections.ts";
-import type { SectionDocument } from "../../core/document/sections.ts";
+import { sceneForBeat } from "../../core/document/scenes.ts";
+import type { SceneDocument } from "../../core/document/scenes.ts";
 
-export interface SectionView {
+export interface SceneView {
   readonly folded: (id: string) => boolean;
   readonly toggle: (id: string) => void;
-  readonly reveal: (doc: SectionDocument, rowId: string) => void;
+  readonly reveal: (doc: SceneDocument, rowId: string) => void;
   readonly reset: () => void;
   readonly subscribe: (changed: () => void) => () => void;
 }
 
-export function createSectionView(): SectionView {
+export function createSceneView(): SceneView {
   const folded = new Set<string>();
   const listeners = new Set<() => void>();
   function changed(): void { for (const listener of listeners) listener(); }
@@ -18,8 +18,8 @@ export function createSectionView(): SectionView {
     toggle(id) { if (folded.has(id)) folded.delete(id); else folded.add(id); changed(); },
     reveal(doc, rowId) {
       if (!folded.size) return;
-      const section = sectionForBeat(doc, rowId);
-      if (section && folded.delete(section.id)) changed();
+      const scene = sceneForBeat(doc, rowId);
+      if (scene && folded.delete(scene.id)) changed();
     },
     reset() { if (!folded.size) return; folded.clear(); changed(); },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; }

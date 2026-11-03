@@ -122,8 +122,8 @@ import { viewFlags } from "./preferences-owner.ts";
 import { configureUndo, undoOwner } from "./undo.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";
-import { mountSectionHeaders } from "./section-headers.ts";
-import { sectionView } from "./editor-owners.ts";
+import { mountSceneHeaders } from "./scene-headers.ts";
+import { sceneView } from "./editor-owners.ts";
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
@@ -413,15 +413,15 @@ const rowRoutePorts: RowRoutePorts = {
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
   expandHidden: expandHiddenShotStrip,
-  reveal: function (rowId) { const doc = currentDocument(); if (doc) sectionView().reveal(doc, rowId); shotHiding().reveal(rowId); },
+  reveal: function (rowId) { const doc = currentDocument(); if (doc) sceneView().reveal(doc, rowId); shotHiding().reveal(rowId); },
   gone: function () { showToast("That scene is no longer here.", "warn"); }
 };
 
 export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
   return rowRoutes.replace(function () {
     const routes = mountRowRoutes({ window: window, rows: document.getElementById("rows") as Element, ports: rowRoutePorts });
-    const sections = mountSectionHeaders();
-    return { ...routes, dispose() { sections.dispose(); routes.dispose(); } };
+    const scenes = mountSceneHeaders();
+    return { ...routes, dispose() { scenes.dispose(); routes.dispose(); } };
   }, function (owner) {
     return [
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
@@ -435,7 +435,7 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
 export const stopRowsFeature = rowRoutes.stop;
 
 export function rowsActions(): ActionDefinition[] {
-  return rowActions({ reveal: (rowId) => { const doc = currentDocument(); if (doc) sectionView().reveal(doc, rowId); shotHiding().reveal(rowId); } });
+  return rowActions({ reveal: (rowId) => { const doc = currentDocument(); if (doc) sceneView().reveal(doc, rowId); shotHiding().reveal(rowId); } });
 }
 
 const rowsEditor = owned<ReturnType<typeof mountRowsEditor>>();
@@ -771,7 +771,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
     const mvOffset = caretTextOffset(cellEl);
     if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1)) {
       const moved = currentDocument();
-      if (moved && mvId) sectionView().reveal(moved, mvId);
+      if (moved && mvId) sceneView().reveal(moved, mvId);
       if (!viewFlags().writerOpen()) focusRowField(mvId, mvField, mvOffset);
       renderProduction();
     }

@@ -68,16 +68,16 @@ test("scene menus place Add Section Header between Insert scene and Delete and i
     toggleRowMenu(more, true);
     const items = Array.from(document.querySelectorAll<HTMLButtonElement>(".row-menu-item"));
     assert.deepEqual(items.map(item => item.textContent), ["Move up", "Move down", "Insert scene", "Add Section Header", "Delete"]);
-    const insert = items[2], section = items[3], remove = items[4];
-    assert.ok(insert && section && remove);
-    assert.equal(section.getAttribute("role"), "menuitem");
-    assert.equal(section.getAttribute("data-id"), "r1");
-    assert.equal(section.querySelector(".mi-icon use")?.getAttribute("href"), "#i-plus");
+    const insert = items[2], scene = items[3], remove = items[4];
+    assert.ok(insert && scene && remove);
+    assert.equal(scene.getAttribute("role"), "menuitem");
+    assert.equal(scene.getAttribute("data-id"), "r1");
+    assert.equal(scene.querySelector(".mi-icon use")?.getAttribute("href"), "#i-plus");
     const down = (target: Element) => rowMenuKeydown({ target, key: "ArrowDown", preventDefault() {} } as unknown as KeyboardEvent);
     insert.focus();
     assert.equal(down(insert), true);
-    assert.equal(document.activeElement, section);
-    assert.equal(down(section), true);
+    assert.equal(document.activeElement, scene);
+    assert.equal(down(scene), true);
     assert.equal(document.activeElement, remove);
   } finally { mounted.dispose(); }
 });

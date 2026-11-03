@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSectionBoundaryRemoval } from "../../src/application/editing/section-boundary.ts";
+import { createSceneBoundaryRemoval } from "../../src/application/editing/scene-boundary.ts";
 import { fakeClock } from "./session-fakes.ts";
 
 function setup() {
   const timers = fakeClock();
   const removed: string[] = [];
   let hint = "";
-  const owner = createSectionBoundaryRemoval({ timers, remove: id => { removed.push(id); },
+  const owner = createSceneBoundaryRemoval({ timers, remove: id => { removed.push(id); },
     hint: (_id, text) => { hint = text; } });
   return { timers, removed, owner, hint: () => hint };
 }

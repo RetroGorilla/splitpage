@@ -1,12 +1,12 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mountSectionControls } from "../../../src/features/rows/section-controls.ts";
-import { createSectionView } from "../../../src/application/editing/section-view.ts";
+import { mountSceneControls } from "../../../src/features/rows/scene-controls.ts";
+import { createSceneView } from "../../../src/application/editing/scene-view.ts";
 import { harness, runConfined } from "../../application/session-fakes.ts";
 import { toggleRowMenu } from "../../../src/features/rows/row-menu.ts";
 import { fakeNotices } from "../fakes.ts";
-import { sectionsInOrder } from "../../../src/core/document/sections.ts";
+import { scenesInOrder } from "../../../src/core/document/scenes.ts";
 
 function fixture(existing = false) {
   const h = harness();
@@ -16,10 +16,10 @@ function fixture(existing = false) {
     '<div class="row" data-id="r2"><button class="row-more"></button><div class="row-menu" hidden>' +
     '<button class="row-menu-item" data-action="add-section" data-id="r2"><span>Add Section Header</span></button></div></div></div>';
   let allowed = true;
-  const controls = mountSectionControls(window, {
+  const controls = mountSceneControls(window, {
     document: { current: () => h.session.read(doc => doc) },
     edits: { allowed: () => allowed, run: command => runConfined(h.session, command) },
-    sections: createSectionView(),
+    sections: createSceneView(),
     focus: { focusedRow: () => {} },
     drag: { dragging: () => null, end: () => {} },
     ids: { id: () => "created" },
@@ -81,7 +81,7 @@ test("section controls respect edit permission both before naming and before sub
     input.value = "Blocked";
     f.allow(false);
     form.requestSubmit();
-    assert.equal(f.h.session.read(doc => doc ? sectionsInOrder(doc)?.length ?? 0 : 0), 0);
+    assert.equal(f.h.session.read(doc => doc ? scenesInOrder(doc)?.length ?? 0 : 0), 0);
     assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 0);
     assert.equal(form.isConnected, true);
   } finally { f.controls.dispose(); }

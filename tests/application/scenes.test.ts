@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addSectionCommand, moveSectionCommand, removeSectionCommand, renameSectionCommand } from "../../src/application/commands/sections.ts";
+import { addSceneCommand, moveSceneCommand, removeSceneCommand, renameSceneCommand } from "../../src/application/commands/scenes.ts";
 import { deleteBeatCommand, moveBeatCommand, swapBeatsCommand } from "../../src/application/commands/rows.ts";
 import { removeBeatsCommand } from "../../src/application/commands/beats.ts";
 import { joinBeatsCommand } from "../../src/application/commands/split-join.ts";
 import { createUndoHistory, diffStates } from "../../src/application/editing/undo/history.ts";
-import { sectionForBeat, sectionsInOrder } from "../../src/core/document/sections.ts";
+import { sceneForBeat, scenesInOrder } from "../../src/core/document/scenes.ts";
 import { harness, runConfined } from "./session-fakes.ts";
 import type { Harness } from "./session-fakes.ts";
 import type { DocumentShape } from "../../src/core/document/validated.ts";
@@ -25,23 +25,23 @@ function snapshot(h: Harness): DocumentShape {
 test("sections: add, rename and remove are confined single transactions and keep all scenes", () => {
   const h = opened();
   const rows = snapshot(h).rows;
-  assert.equal(runConfined(h.session, addSectionCommand("c", "middle", " Middle ")).kind, "applied");
-  assert.equal(runConfined(h.session, renameSectionCommand("middle", "The middle")).kind, "applied");
-  assert.equal(sectionForBeat(snapshot(h), "c")?.name, "The middle");
-  assert.equal(runConfined(h.session, removeSectionCommand("middle")).kind, "applied");
-  assert.equal(sectionForBeat(snapshot(h), "c")?.id, "s1");
+  assert.equal(runConfined(h.session, addSceneCommand("c", "middle", " Middle ")).kind, "applied");
+  assert.equal(runConfined(h.session, renameSceneCommand("middle", "The middle")).kind, "applied");
+  assert.equal(sceneForBeat(snapshot(h), "c")?.name, "The middle");
+  assert.equal(runConfined(h.session, removeSceneCommand("middle")).kind, "applied");
+  assert.equal(sceneForBeat(snapshot(h), "c")?.id, "s1");
   assert.deepEqual(snapshot(h).rows, rows);
   assert.equal(h.log.filter(item => item === "undo.record").length, 3);
-  assert.equal(runConfined(h.session, removeSectionCommand("s1")).kind, "applied");
-  assert.equal(sectionForBeat(snapshot(h), "b"), undefined);
-  assert.equal(sectionForBeat(snapshot(h), "c"), undefined);
+  assert.equal(runConfined(h.session, removeSceneCommand("s1")).kind, "applied");
+  assert.equal(sceneForBeat(snapshot(h), "b"), undefined);
+  assert.equal(sceneForBeat(snapshot(h), "c"), undefined);
 });
 
 test("sections: invalid, duplicate and unchanged operations are no-ops", () => {
   const h = opened();
   const before = snapshot(h);
-  for (const command of [addSectionCommand("b", "s3", "Duplicate"), addSectionCommand("gone", "s3", "Missing"),
-    renameSectionCommand("s1", "Opening"), renameSectionCommand("s1", "  "), removeSectionCommand("gone")]) {
+  for (const command of [addSceneCommand("b", "s3", "Duplicate"), addSceneCommand("gone", "s3", "Missing"),
+    renameSceneCommand("s1", "Opening"), renameSceneCommand("s1", "  "), removeSceneCommand("gone")]) {
     assert.equal(runConfined(h.session, command).kind, "noop");
   }
   assert.deepEqual(snapshot(h), before);
@@ -51,32 +51,32 @@ test("sections: invalid, duplicate and unchanged operations are no-ops", () => {
 test("sections: deleting or moving the first scene advances the boundary; the last removal drops it", () => {
   const h = opened();
   assert.equal(runConfined(h.session, moveBeatCommand("b", "e", true)).kind, "applied");
-  assert.equal(sectionForBeat(snapshot(h), "b")?.id, "s2");
-  assert.equal(sectionsInOrder(snapshot(h))?.[0]?.firstSceneId, "c");
+  assert.equal(sceneForBeat(snapshot(h), "b")?.id, "s2");
+  assert.equal(scenesInOrder(snapshot(h))?.[0]?.firstSceneId, "c");
   assert.equal(runConfined(h.session, deleteBeatCommand("c")).kind, "applied");
-  assert.deepEqual(sectionsInOrder(snapshot(h))?.map(section => section.id), ["s2"]);
+  assert.deepEqual(scenesInOrder(snapshot(h))?.map(scene => scene.id), ["s2"]);
 });
 
 test("sections: an explicit drop after a header can become its first scene, and swaps reassign scenes", () => {
   const h = opened();
   assert.equal(runConfined(h.session, moveBeatCommand("a", "b", false, "s1")).kind, "applied");
-  assert.equal(sectionsInOrder(snapshot(h))?.[0]?.firstSceneId, "a");
+  assert.equal(scenesInOrder(snapshot(h))?.[0]?.firstSceneId, "a");
   assert.equal(runConfined(h.session, swapBeatsCommand("c", 1)).kind, "applied");
-  assert.equal(sectionForBeat(snapshot(h), "c")?.id, "s2");
+  assert.equal(sceneForBeat(snapshot(h), "c")?.id, "s2");
 });
 
 test("sections: a group move carries every scene and leaves the unsectioned prefix in place", () => {
   const h = opened();
-  assert.equal(runConfined(h.session, moveSectionCommand("s2", "s1", false)).kind, "applied");
+  assert.equal(runConfined(h.session, moveSceneCommand("s2", "s1", false)).kind, "applied");
   assert.deepEqual(snapshot(h).rows.map(row => row.id), ["a", "d", "e", "b", "c"]);
-  assert.deepEqual(sectionsInOrder(snapshot(h))?.map(section => section.id), ["s2", "s1"]);
+  assert.deepEqual(scenesInOrder(snapshot(h))?.map(scene => scene.id), ["s2", "s1"]);
   assert.equal(h.log.filter(item => item === "undo.record").length, 1);
 });
 
 test("sections: undo restores a removed header and its name in one step; redo removes only the header", () => {
   const h = opened();
   const before = snapshot(h);
-  runConfined(h.session, removeSectionCommand("s1"));
+  runConfined(h.session, removeSceneCommand("s1"));
   const after = snapshot(h);
   const steps = diffStates(before, after);
   assert.equal(steps.length, 1);
@@ -99,7 +99,7 @@ test("sections: bulk deletion advances boundaries and a join cannot silently rem
   assert.equal(outcome.kind, "rejected");
   assert.deepEqual(snapshot(h), before);
   assert.equal(runConfined(h.session, removeBeatsCommand(["a", "b", "d"])).kind, "applied");
-  assert.deepEqual(sectionsInOrder(snapshot(h))?.map(section => section.firstSceneId), ["c", "e"]);
+  assert.deepEqual(scenesInOrder(snapshot(h))?.map(scene => scene.firstSceneId), ["c", "e"]);
   assert.equal(runConfined(h.session, removeBeatsCommand(["c", "e"])).kind, "applied");
   assert.equal("sections" in snapshot(h), false);
 });
@@ -107,7 +107,7 @@ test("sections: bulk deletion advances boundaries and a join cannot silently rem
 test("sections: undo after an unrelated merged edit retains that edit; a changed header is not overwritten", () => {
   const h = opened();
   const before = snapshot(h);
-  runConfined(h.session, removeSectionCommand("s1"));
+  runConfined(h.session, removeSceneCommand("s1"));
   const live = snapshot(h);
   const history = createUndoHistory(() => []);
   history.record(diffStates(before, live), 0);

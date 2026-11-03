@@ -5,8 +5,8 @@ import { createPaintGuard, createUndoGuard } from "../../application/editing/pai
 import type { PaintGuard, UndoGuard } from "../../application/editing/paint-guard.ts";
 import { createRowDrag } from "../../application/editing/row-drag.ts";
 import type { RowDrag } from "../../application/editing/row-drag.ts";
-import { createSectionView } from "../../application/editing/section-view.ts";
-import type { SectionView } from "../../application/editing/section-view.ts";
+import { createSceneView } from "../../application/editing/scene-view.ts";
+import type { SceneView } from "../../application/editing/scene-view.ts";
 import { createEditorSelection } from "../../application/editing/selection.ts";
 import type { EditorSelection, SelectionPorts } from "../../application/editing/selection.ts";
 import { createMergeUndo } from "../../application/session/merge-undo.ts";
@@ -22,7 +22,7 @@ export type CellSelection = EditorSelection<Element, Range, Element>;
 
 interface Started {
   readonly drag: RowDrag;
-  readonly sections: SectionView;
+  readonly sections: SceneView;
   readonly undo: UndoGuard;
   readonly paint: PaintGuard;
   readonly focus: FocusMemory<Element>;
@@ -58,7 +58,7 @@ export function startEditor(live: LiveDocumentPort): () => void {
   if (started) throw new Error("The editor's owners are already started; stop them first");
   const mine: Started = {
     drag: createRowDrag(),
-    sections: createSectionView(),
+    sections: createSceneView(),
     undo: createUndoGuard(),
     paint: createPaintGuard(error => { console.error(error); }),
     focus: createFocusMemory<Element>(),
@@ -81,7 +81,7 @@ export function rowDrag(): RowDrag {
   return running().drag;
 }
 
-export function sectionView(): SectionView {
+export function sceneView(): SceneView {
   return running().sections;
 }
 

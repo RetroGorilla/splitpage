@@ -1,21 +1,21 @@
-import type { SectionView } from "../../application/editing/section-view.ts";
+import type { SceneView } from "../../application/editing/scene-view.ts";
 import type { ShotHiding, ShotRow, ShotRowEntry, ShotStrip } from "../../application/shot-hiding.ts";
-import { sectionGroups } from "../../core/document/sections.ts";
-import type { DocumentSection, SectionDocument } from "../../core/document/sections.ts";
+import { sceneGroups } from "../../core/document/scenes.ts";
+import type { DocumentScene, SceneDocument } from "../../core/document/scenes.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 
-export interface SectionDivider {
-  readonly section: DocumentSection;
+export interface SceneDivider {
+  readonly scene: DocumentScene;
   readonly count: number;
   readonly folded: boolean;
 }
 
-export type SectionRowEntry<R extends ShotRow> = ShotRowEntry<R> | ShotStrip | SectionDivider;
+export type SceneRowEntry<R extends ShotRow> = ShotRowEntry<R> | ShotStrip | SceneDivider;
 
-export function sectionRowEntries<R extends ShotRow>(doc: Pick<SectionDocument, "sections"> & { readonly rows: readonly R[] }, hiding: Pick<ShotHiding, "groups">, view: Pick<SectionView, "folded">): SectionRowEntry<R>[] {
-  const groups = sectionGroups(doc);
+export function sceneRowEntries<R extends ShotRow>(doc: Pick<SceneDocument, "sections"> & { readonly rows: readonly R[] }, hiding: Pick<ShotHiding, "groups">, view: Pick<SceneView, "folded">): SceneRowEntry<R>[] {
+  const groups = sceneGroups(doc);
   if (!groups.length) return hiding.groups(doc.rows);
-  const entries: SectionRowEntry<R>[] = [];
+  const entries: SceneRowEntry<R>[] = [];
   const beats = (from: number, to: number): void => {
     for (const item of hiding.groups(doc.rows.slice(from, to))) {
       entries.push("strip" in item ? item : { ...item, index: item.index + from });
@@ -23,16 +23,16 @@ export function sectionRowEntries<R extends ShotRow>(doc: Pick<SectionDocument, 
   };
   beats(0, groups[0]?.start ?? 0);
   for (const group of groups) {
-    const folded = view.folded(group.section.id);
-    entries.push({ section: group.section, count: group.end - group.start, folded });
+    const folded = view.folded(group.scene.id);
+    entries.push({ scene: group.scene, count: group.end - group.start, folded });
     if (!folded) beats(group.start, group.end);
   }
   return entries;
 }
 
-export function sectionHeaderHtml(entry: SectionDivider, readOnly = false, total = ""): string {
-  const id = escapeHtml(entry.section.id);
-  const name = escapeHtml(entry.section.name);
+export function sceneHeaderHtml(entry: SceneDivider, readOnly = false, total = ""): string {
+  const id = escapeHtml(entry.scene.id);
+  const name = escapeHtml(entry.scene.name);
   const disabled = readOnly ? " disabled" : "";
   return '<div class="section-header" data-section-id="' + id + '">' +
     '<button type="button" class="section-grip" draggable="true" aria-label="Drag section ' + name + '"' + disabled + '>⠿</button>' +

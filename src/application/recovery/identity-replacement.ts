@@ -1,6 +1,6 @@
 import { cloneState } from "../../core/document/clone.ts";
 import { sha256Hex } from "../../core/document/ids.ts";
-import { normalizeSections } from "../../core/document/sections.ts";
+import { normalizeScenes } from "../../core/document/scenes.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { rowContentEqual } from "../../core/merge/rows.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -35,7 +35,7 @@ export function prepareIdentityReplacement(
   const reserved = new Set<string>();
   for (const doc of [base, mine, disk]) {
     if (!doc) continue;
-    for (const record of [...doc.people, ...doc.productionTags, ...doc.brollShots, ...(normalizeSections(doc.sections) || [])]) {
+    for (const record of [...doc.people, ...doc.productionTags, ...doc.brollShots, ...(normalizeScenes(doc.sections) || [])]) {
       if (record?.id) reserved.add(record.id);
     }
     for (const row of doc.rows) {

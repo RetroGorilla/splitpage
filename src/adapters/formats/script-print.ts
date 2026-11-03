@@ -6,7 +6,7 @@ import { decodeImageDataUrl, rowImage } from "../../core/document/media.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { videoLinkText } from "../storage/02d-gallery.ts";
 import type { CommentBody } from "./export-projections.ts";
-import { beatFacts, scriptSectionFacts } from "./export-projections.ts";
+import { beatFacts, scriptSceneFacts } from "./export-projections.ts";
 import { exportComments, exportFacts, exportRuns, exportSummaryParts } from "./export-kit.ts";
 import type { PrintSection } from "./print-page.ts";
 import { buildPrintPage, printLink, printPicture } from "./print-page.ts";
@@ -68,7 +68,7 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
 <td><div class="print-text">${cellHtml(row.audioText, input)}</div></td>
 <td><span${beat.readSet ? ' class="read-set"' : ""}>${escapeHtml(beat.read)}</span></td></tr>`;
   });
-  const groups = scriptSectionFacts(doc, beats);
+  const groups = scriptSceneFacts(doc, beats);
   function table(from: number, to: number, heading = ""): string {
     return `<table class="script-table"><colgroup><col style="width:10%"><col style="width:40%"><col style="width:40%"><col style="width:10%"></colgroup>
 <thead><tr><th>Scene</th><th class="visual-head">Visual</th><th class="audio-head">Audio</th><th>Read</th></tr>${heading}</thead><tbody>${rows.slice(from, to).join("")}</tbody></table>`;
@@ -77,7 +77,7 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
     table(group.start, group.end, `<tr class="script-section"><th colspan="4"><span>${escapeHtml(group.name)}</span><span class="script-section-total">${escapeHtml(group.total)}</span></th></tr>`)).join("") : table(0, rows.length);
   const script = `<h1>${escapeHtml(facts.title)}</h1><p class="print-meta">${escapeHtml(summary)}</p>${statusSummary}` +
     (rows.length ? tables : "<p>No scenes yet.</p>");
-  const sections: PrintSection[] = [{ id: "script", title: "Script", html: script }];
+  const scenes: PrintSection[] = [{ id: "script", title: "Script", html: script }];
   const comments = exportComments(doc, { pieces: true }, services);
   if (comments.length) {
     const open = comments.filter((comment) => !comment.resolved).length;
@@ -90,9 +90,9 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
 ${comment.quoted ? `<blockquote class="print-text">${escapeHtml(comment.quoted)}</blockquote>` : ""}${commentBody(comment, input)}
 ${comment.replies.map((reply) => `<div class="reply"><p class="print-meta">${escapeHtml([reply.author, reply.when].filter(Boolean).join(" · "))}</p>${commentBody(reply, input)}</div>`).join("")}</article>`;
     }).join("");
-    sections.push({ id: "comments", title: "Comments", html });
+    scenes.push({ id: "comments", title: "Comments", html });
   }
-  return sections;
+  return scenes;
 }
 
 export function buildScriptPrintPage(input: ScriptPrintInput): string {

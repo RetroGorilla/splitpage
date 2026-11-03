@@ -20,7 +20,7 @@ import {
   exportFacts,
   exportSummaryParts
 } from "./export-kit.ts";
-import { beatFacts, scriptSectionFacts, breakdownRows, commentBodyText, commentEntries } from "./export-projections.ts";
+import { beatFacts, scriptSceneFacts, breakdownRows, commentBodyText, commentEntries } from "./export-projections.ts";
 import { exportServices } from "../../application/export/services.ts";
 import { base64Encode } from "../../core/document/media.ts";
 import { pad2 } from "../../core/production/timing.ts";
@@ -255,7 +255,7 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
   const assets = (opts && opts.assets) || exportAssetsNow(doc);
   const facts = exportFacts(doc, services);
   const beats = beatFacts(doc, services);
-  const headings = new Map(scriptSectionFacts(doc, beats).map(group => [group.start, group]));
+  const headings = new Map(scriptSceneFacts(doc, beats).map(group => [group.start, group]));
   const nums = doc.commentNumbers;
   const lines: string[] = [];
   lines.push("# " + facts.title);
@@ -360,7 +360,7 @@ export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions |
     lines.push(exporting ? "_No scenes yet._" : "_No rows yet._");
   } else if (exporting) {
     const beats = beatFacts(doc, services);
-    const headings = new Map(scriptSectionFacts(doc, beats).map(group => [group.start, group]));
+    const headings = new Map(scriptSceneFacts(doc, beats).map(group => [group.start, group]));
     (limit ? s.rows.slice(0, limit) : s.rows).forEach(function (row, i) {
       const heading = headings.get(i);
       if (heading) lines.push("", "## " + markdownSectionName(heading.name) + " · " + heading.total, "");

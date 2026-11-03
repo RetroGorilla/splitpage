@@ -67,7 +67,7 @@ async function readDocx(bytes) {
   const paras = Array.from(doc.getElementsByTagNameNS(W, "body")[0].childNodes).filter((n) => n.localName === "p");
   const start = paras.findIndex((p) => p.textContent === "Comments");
   assert.ok(start >= 0, "no Comments heading");
-  const section = paras.slice(start + 1).map((p) => {
+  const scene = paras.slice(start + 1).map((p) => {
     const blip = p.getElementsByTagName("a:blip")[0];
     const ind = p.getElementsByTagNameNS(W, "ind")[0];
     const indent = ind ? +ind.getAttributeNS(W, "left") : 0;
@@ -79,7 +79,7 @@ async function readDocx(bytes) {
     return { text: p.textContent, italic: p.getElementsByTagNameNS(W, "i").length > 0, indent };
   });
   const docPrIds = Array.from(doc.getElementsByTagName("wp:docPr")).map((d) => d.getAttribute("id"));
-  return { zip, rels, types, section, docPrIds };
+  return { zip, rels, types, scene, docPrIds };
 }
 
 test("the .docx embeds a comment's and a reply's pictures in order, each part once, as its own type", async () => {
@@ -91,7 +91,7 @@ test("the .docx embeds a comment's and a reply's pictures in order, each part on
     { kind: "conflict", rowId: "r1", field: "visualImage", conflictField: "Visual image", imageValue: conflictPic.rec, body: "" },
     { rowId: "r1", body: "Look: <img class=\"comment-img\" data-blob=\"" + MISSING + "\"> there." }
   ]);
-  const { zip, rels, types, section, docPrIds } = await readDocx(buildDocx(...liveWithAssets()));
+  const { zip, rels, types, scene, docPrIds } = await readDocx(buildDocx(...liveWithAssets()));
 
   assert.deepEqual(Object.values(rels).filter((t) => t.startsWith("media/")),
     ["media/image1.jpeg", "media/image2.png", "media/image3.jpeg", "media/image4.png"]);
@@ -102,22 +102,22 @@ test("the .docx embeds a comment's and a reply's pictures in order, each part on
   assert.ok(types.includes('<Default Extension="jpeg" ContentType="image/jpeg"/>'));
   assert.equal(new Set(docPrIds).size, docPrIds.length, "duplicate drawing ids: " + docPrIds);
 
-  const seq = section.map((p) => p.img ? "IMG:" + p.img : p.text);
+  const seq = scene.map((p) => p.img ? "IMG:" + p.img : p.text);
   const at = (k, from) => seq.indexOf(k, from || 0);
   const order = [at("Before"), at("IMG:media/image2.png"), at("Between"), at("IMG:media/image3.jpeg"), at("After")];
   assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), "comment out of order: " + seq.join(" | "));
   const reply = at("Reply text");
   const rorder = [reply, at("IMG:media/image2.png", reply), at("reply after", reply), at("IMG:media/image1.jpeg", reply)];
   assert.ok(rorder.every((v, i) => v >= 0 && (i === 0 || v > rorder[i - 1])), "reply out of order: " + seq.join(" | "));
-  assert.equal(section[order[1]].indent, 360);
-  assert.equal(section[rorder[1]].indent, 720);
+  assert.equal(scene[order[1]].indent, 360);
+  assert.equal(scene[rorder[1]].indent, 720);
 
   assert.ok(at("IMG:media/image4.png") > rorder[3]);
   assert.equal(at("(empty)"), -1);
 
   const look = at("Look:");
   assert.ok(look > 0 && seq[look + 1] === "[image unavailable]" && seq[look + 2] === "there.", seq.join(" | "));
-  assert.ok(section[look + 1].italic);
+  assert.ok(scene[look + 1].italic);
 });
 
 function pngOrJpeg(p) {
@@ -128,8 +128,8 @@ function pngOrJpeg(p) {
 test("a .docx comment picture is at most 60% of the column, keeps its aspect and is never enlarged past 96 dpi", async () => {
   const big = pic(pngBytes(3000, 2000)), small = pic(jpegBytes(40, 30)), tall = pic(pngBytes(500, 4000));
   setDoc(null, [{ body: big.html, replies: [{ id: "rp", author: "Bob", body: big.html }] }, { body: small.html }, { body: tall.html }]);
-  const { section } = await readDocx(buildDocx(...liveWithAssets()));
-  const imgs = section.filter((p) => p.img);
+  const { scene } = await readDocx(buildDocx(...liveWithAssets()));
+  const imgs = scene.filter((p) => p.img);
   assert.equal(imgs.length, 4);
   const [b, br, s, t] = imgs;
   assert.equal(b.cx, Math.round((10080 - 360) * 635 * 0.6));
@@ -140,7 +140,7 @@ test("a .docx comment picture is at most 60% of the column, keeps its aspect and
   assert.equal(s.cy, 30 * 9525);
   assert.equal(t.cy, 260 * 12700);
   assert.ok(Math.abs(t.cy / t.cx - 8) < 0.001);
-  assert.equal(section.filter((p) => p.text === "(empty)").length, 0);
+  assert.equal(scene.filter((p) => p.text === "(empty)").length, 0);
 });
 
 test("Markdown and CSV write \"[image]\" where a picture was, in reading order", () => {

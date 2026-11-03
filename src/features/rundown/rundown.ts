@@ -1,6 +1,6 @@
 import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { sectionGroups } from "../../core/document/sections.ts";
+import { sceneGroups } from "../../core/document/scenes.ts";
 import { contentMemo } from "../../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../../core/document/text-policy.ts";
 import { pad2, formatDuration, rowSeconds } from "../../core/production/timing.ts";
@@ -426,8 +426,8 @@ interface RundownState {
   currentRowId: string | null;
   lastBlocksHtml: string;
   lastRulerHtml: string;
-  lastSectionsHtml: string;
-  sectionLabels: { el: HTMLElement; start: number; end: number }[];
+  lastScenesHtml: string;
+  sceneLabels: { el: HTMLElement; start: number; end: number }[];
   lastLayout: LayoutView;
   lastKnotsKey: string;
   minimized: boolean;
@@ -445,8 +445,8 @@ function freshState(): RundownState {
     currentRowId: null,
     lastBlocksHtml: "",
     lastRulerHtml: "",
-    lastSectionsHtml: "",
-    sectionLabels: [],
+    lastScenesHtml: "",
+    sceneLabels: [],
     lastLayout: { pxPerSecond: 0, spanSeconds: 0, totalSeconds: 0, width: 0, x: function () { return 0; } },
     lastKnotsKey: "",
     minimized: false,
@@ -615,21 +615,21 @@ export function renderRundown(): void {
   const right = Math.max(0, tenth(trackWidth - width)) + "px";
   if (blocksEl.style.right !== right) blocksEl.style.right = right;
 
-  const hasSections = doc && Array.isArray(doc.sections) && doc.sections.length;
-  const sectionsEl = hasSections || state.lastSectionsHtml ? strip.querySelector<HTMLElement>(".rundown-sections") : null;
-  if (sectionsEl) {
-    const groups = hasSections ? sectionGroups(doc) : [];
-    sectionsEl.hidden = !groups.length || state.minimized;
-    if (groups.length || state.lastSectionsHtml) {
+  const hasScenes = doc && Array.isArray(doc.sections) && doc.sections.length;
+  const scenesEl = hasScenes || state.lastScenesHtml ? strip.querySelector<HTMLElement>(".rundown-sections") : null;
+  if (scenesEl) {
+    const groups = hasScenes ? sceneGroups(doc) : [];
+    scenesEl.hidden = !groups.length || state.minimized;
+    if (groups.length || state.lastScenesHtml) {
       const labels = groups.map(group => {
         const first = blocks[group.start], last = blocks[group.end - 1];
         if (!first || !last) return "";
-        return '<span class="rd-section" data-start="' + group.start + '" data-end="' + group.end + '" title="' + escapeHtml(group.section.name) + '" style="left:' + first.left +
-          'px;width:' + (last.left + last.width - first.left) + 'px">' + escapeHtml(group.section.name) + '</span>';
+        return '<span class="rd-section" data-start="' + group.start + '" data-end="' + group.end + '" title="' + escapeHtml(group.scene.name) + '" style="left:' + first.left +
+          'px;width:' + (last.left + last.width - first.left) + 'px">' + escapeHtml(group.scene.name) + '</span>';
       }).join("");
-      if (labels !== state.lastSectionsHtml) {
-        sectionsEl.innerHTML = labels; state.lastSectionsHtml = labels;
-        state.sectionLabels = Array.from(sectionsEl.querySelectorAll<HTMLElement>(".rd-section"), el => ({
+      if (labels !== state.lastScenesHtml) {
+        scenesEl.innerHTML = labels; state.lastScenesHtml = labels;
+        state.sceneLabels = Array.from(scenesEl.querySelectorAll<HTMLElement>(".rd-section"), el => ({
           el, start: Number(el.dataset.start), end: Number(el.dataset.end)
         }));
       }
@@ -776,7 +776,7 @@ function applyKnots(Z: readonly number[]): void {
       }
     }
   }
-  if (state.sectionLabels.length) paintSectionLabels();
+  if (state.sceneLabels.length) paintSceneLabels();
   const strip = stripEl();
   const playhead = strip && strip.querySelector<HTMLElement>(".rundown-playhead");
   if (playhead && state.base.current !== -1) {
@@ -793,8 +793,8 @@ function applyKnots(Z: readonly number[]): void {
   lengthCovered(Z);
 }
 
-function paintSectionLabels(): void {
-  for (const label of state.sectionLabels) {
+function paintSceneLabels(): void {
+  for (const label of state.sceneLabels) {
     const left = state.base.lefts[label.start] ?? 0;
     const right = (state.base.lefts[label.end - 1] ?? left) + (state.base.widths[label.end - 1] ?? 0);
     label.el.style.left = left + "px";
@@ -867,7 +867,7 @@ function lensSettle(): void {
       state.base.lefts[i] = b.left;
       state.base.widths[i] = b.width;
     }
-    if (state.sectionLabels.length) paintSectionLabels();
+    if (state.sceneLabels.length) paintSceneLabels();
     const playhead = strip.querySelector<HTMLElement>(".rundown-playhead");
     if (playhead && state.base.current !== -1 && state.base.blocks[state.base.current]) {
       playhead.style.left = tenth((state.base.blocks[state.base.current] as RundownBlock).left - 1) + "px";

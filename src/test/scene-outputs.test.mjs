@@ -9,7 +9,7 @@ import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
 import { buildScriptPrintPage } from "../adapters/formats/script-print.ts";
 import { buildDocx, buildNarrationDocx, docxToRows, buildNarrationText } from "../adapters/formats/docx.ts";
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { beatFacts, scriptSectionFacts } from "../adapters/formats/export-projections.ts";
+import { beatFacts, scriptSceneFacts } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { parseImportRows } from "../adapters/formats/import-text.ts";
 
@@ -22,7 +22,7 @@ function fixture() {
 
 test("captured section facts count every scene, keep the prefix unsectioned, and ignore view folds", () => {
   const doc = fixture();
-  assert.deepEqual(scriptSectionFacts(doc, beatFacts(doc)), [
+  assert.deepEqual(scriptSceneFacts(doc, beatFacts(doc)), [
     { id: "s1", name: "Opening & *part*", start: 1, end: 3, total: "0:50" },
     { id: "s2", name: "Ending", start: 3, end: 4, total: "0:40" }
   ]);

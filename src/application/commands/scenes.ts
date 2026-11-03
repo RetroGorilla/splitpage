@@ -1,53 +1,53 @@
 import { cappedText } from "../../core/document/text-policy.ts";
-import { sectionGroups, sectionsInOrder, writeSections } from "../../core/document/sections.ts";
-import type { DocumentSection } from "../../core/document/sections.ts";
+import { sceneGroups, scenesInOrder, writeScenes } from "../../core/document/scenes.ts";
+import type { DocumentScene } from "../../core/document/scenes.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 
-function sectionEdit(name: string, update: (doc: DocumentView) => readonly DocumentSection[] | null): Command {
+function sceneEdit(name: string, update: (doc: DocumentView) => readonly DocumentScene[] | null): Command {
   return {
     name, needs: "edit",
     plan(doc): Plan | null {
       const next = update(doc);
-      if (next === null || JSON.stringify(next) === JSON.stringify(sectionsInOrder(doc) ?? [])) return null;
+      if (next === null || JSON.stringify(next) === JSON.stringify(scenesInOrder(doc) ?? [])) return null;
       return {
         changes: changeSet({ docFields: ["sections"], derive: CELL_TEXT_DERIVES, saveNow: true }),
-        apply(live) { writeSections(live, next); }
+        apply(live) { writeScenes(live, next); }
       };
     }
   };
 }
 
-export function addSectionCommand(firstSceneId: string, id: string, name: string): Command {
-  return sectionEdit("add-section", doc => {
-    const sections = sectionsInOrder(doc) ?? [];
+export function addSceneCommand(firstSceneId: string, id: string, name: string): Command {
+  return sceneEdit("add-section", doc => {
+    const scenes = scenesInOrder(doc) ?? [];
     const clean = cappedText(name, 200);
     if (!clean || !/^[A-Za-z0-9_-]+$/.test(id) || !doc.rows.some(row => row.id === firstSceneId) ||
-      sections.some(section => section.id === id || section.firstSceneId === firstSceneId)) return null;
-    return sectionsInOrder({ rows: doc.rows, sections: [...sections, { id, name: clean, firstSceneId }] }) ?? [];
+      scenes.some(scene => scene.id === id || scene.firstSceneId === firstSceneId)) return null;
+    return scenesInOrder({ rows: doc.rows, sections: [...scenes, { id, name: clean, firstSceneId }] }) ?? [];
   });
 }
 
-export function renameSectionCommand(id: string, name: string): Command {
-  return sectionEdit("rename-section", doc => {
+export function renameSceneCommand(id: string, name: string): Command {
+  return sceneEdit("rename-section", doc => {
     const clean = cappedText(name, 200);
     if (!clean) return null;
-    return (sectionsInOrder(doc) ?? []).map(section => section.id === id ? { ...section, name: clean } : section);
+    return (scenesInOrder(doc) ?? []).map(scene => scene.id === id ? { ...scene, name: clean } : scene);
   });
 }
 
-export function removeSectionCommand(id: string): Command {
-  return sectionEdit("remove-section", doc => (sectionsInOrder(doc) ?? []).filter(section => section.id !== id));
+export function removeSceneCommand(id: string): Command {
+  return sceneEdit("remove-section", doc => (scenesInOrder(doc) ?? []).filter(scene => scene.id !== id));
 }
 
-export function moveSectionCommand(id: string, targetId: string, after: boolean): Command {
+export function moveSceneCommand(id: string, targetId: string, after: boolean): Command {
   return {
     name: "move-section", needs: "edit",
     plan(doc): Plan | null {
-      const groups = sectionGroups(doc);
-      const moving = groups.find(group => group.section.id === id);
-      const target = groups.find(group => group.section.id === targetId);
+      const groups = sceneGroups(doc);
+      const moving = groups.find(group => group.scene.id === id);
+      const target = groups.find(group => group.scene.id === targetId);
       if (!moving || !target || moving === target) return null;
       const movedIds = doc.rows.slice(moving.start, moving.end).map(row => row.id);
       const movingSet = new Set(movedIds);
@@ -66,7 +66,7 @@ export function moveSectionCommand(id: string, targetId: string, after: boolean)
             if (!row) throw new Error("scene left the section before it was moved");
             return row;
           }));
-          writeSections(live, sectionsInOrder(live));
+          writeScenes(live, scenesInOrder(live));
         }
       };
     }

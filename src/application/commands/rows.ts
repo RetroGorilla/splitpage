@@ -6,7 +6,7 @@ import type { StampPorts } from "../session/ports.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import type { TextServices } from "../text/services.ts";
-import { sectionsAfterRemoval, sectionsInOrder, writeSections } from "../../core/document/sections.ts";
+import { scenesAfterRemoval, scenesInOrder, writeScenes } from "../../core/document/scenes.ts";
 
 function indexOf(rows: DocumentView["rows"], rowId: string): number {
   return rows.findIndex(function (r) { return r.id === rowId; });
@@ -18,8 +18,8 @@ function liveIndex(rows: DocumentRow[], rowId: string, doing: string): number {
   return at;
 }
 
-function reorderedChange(sections = false): ChangeSet {
-  return changeSet({ rowsMoved: true, docFields: sections ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true });
+function reorderedChange(scenes = false): ChangeSet {
+  return changeSet({ rowsMoved: true, docFields: scenes ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true });
 }
 
 export function addBeatCommand(afterId: string | null, createdId: string, ports: StampPorts): Command {
@@ -49,13 +49,13 @@ export function deleteBeatCommand(rowId: string): Command {
     needs: "edit",
     plan: function (doc): Plan | null {
       if (indexOf(doc.rows, rowId) === -1) return null;
-      const hadSections = !!sectionsInOrder(doc);
-      const sections = sectionsAfterRemoval(doc, new Set([rowId]));
+      const hadScenes = !!scenesInOrder(doc);
+      const scenes = scenesAfterRemoval(doc, new Set([rowId]));
       return {
-        changes: changeSet({ rowsRemoved: [rowId], docFields: hadSections ? ["sections"] : [], derive: CELL_TEXT_DERIVES }),
+        changes: changeSet({ rowsRemoved: [rowId], docFields: hadScenes ? ["sections"] : [], derive: CELL_TEXT_DERIVES }),
         apply: function (live) {
           live.rows.splice(liveIndex(live.rows, rowId, "deleted"), 1);
-          if (hadSections) writeSections(live, sections);
+          if (hadScenes) writeScenes(live, scenes);
         }
       };
     }
@@ -88,7 +88,7 @@ function idsOf(doc: DocumentView): string[] {
   return doc.rows.map(function (r) { return r.id; });
 }
 
-export function moveBeatCommand(rowId: string, targetId: string, after: boolean, intoSection?: string): Command {
+export function moveBeatCommand(rowId: string, targetId: string, after: boolean, intoScene?: string): Command {
   return {
     name: "move-scene",
     needs: "edit",
@@ -97,17 +97,17 @@ export function moveBeatCommand(rowId: string, targetId: string, after: boolean,
       if (from === -1 || to === -1 || from === to) return null;
       const ids = idsOf(doc);
       const order = orderAfterMove(ids, rowId, targetId, after);
-      const original = sectionsInOrder(doc);
-      const sections = sectionsAfterRemoval(doc, new Set([rowId]))?.map(section =>
-        section.id === intoSection ? { ...section, firstSceneId: rowId } : section);
-      if (sameOrder(ids, order) && (!intoSection || JSON.stringify(sections) === JSON.stringify(original))) return null;
+      const original = scenesInOrder(doc);
+      const scenes = scenesAfterRemoval(doc, new Set([rowId]))?.map(scene =>
+        scene.id === intoScene ? { ...scene, firstSceneId: rowId } : scene);
+      if (sameOrder(ids, order) && (!intoScene || JSON.stringify(scenes) === JSON.stringify(original))) return null;
       return {
         changes: reorderedChange(!!original),
         apply: function (live) {
           reorderTo(live.rows, order);
           if (original) {
-            writeSections(live, sections);
-            writeSections(live, sectionsInOrder(live));
+            writeScenes(live, scenes);
+            writeScenes(live, scenesInOrder(live));
           }
         }
       };

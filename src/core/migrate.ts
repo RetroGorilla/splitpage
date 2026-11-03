@@ -29,7 +29,7 @@ import {
   withoutLoneSurrogates
 } from "./document/text-policy.ts";
 import { normalizeBeatLength, rowStatusId } from "./document/timing.ts";
-import { sectionsInOrder, writeSections } from "./document/sections.ts";
+import { scenesInOrder, writeScenes } from "./document/scenes.ts";
 import { applyBrollRecords, brollCutRenames, planBrollRecords } from "./production/broll.ts";
 import type { BrollShot, LineShotIds } from "./production/broll.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
@@ -364,9 +364,9 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   }, null, ports.brollLines, ports.brollLines ? function () { return loadIds.id("bs"); } : undefined));
 
   if (duplicateRowIds.size && Array.isArray(s.sections)) {
-    s.sections.filter(isObject).forEach(function (section) {
-      const firstSceneId = cleanId(section.firstSceneId);
-      if (duplicateRowIds.has(firstSceneId)) section.firstSceneId = firstSceneId;
+    s.sections.filter(isObject).forEach(function (scene) {
+      const firstSceneId = cleanId(scene.firstSceneId);
+      if (duplicateRowIds.has(firstSceneId)) scene.firstSceneId = firstSceneId;
     });
   }
   fields.forEach(function (f) {
@@ -378,7 +378,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
 
   s.title = cappedLongText(plainText(s.title), 300);
   if (!Number.isFinite(s.rev)) s.rev = 0;
-  if ("sections" in s) writeSections(s, sectionsInOrder({ rows: s.rows as { id: string }[], sections: s.sections }));
+  if ("sections" in s) writeScenes(s, scenesInOrder({ rows: s.rows as { id: string }[], sections: s.sections }));
   s.docId = normalizeDocId(s.docId) || ids.docId();
   s.schema = SCHEMA_VERSION;
   return s as ValidatedDocument;

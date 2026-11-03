@@ -8,7 +8,7 @@ import { exportServices } from "../../application/export/services.ts";
 import { compareCommentPositions } from "../../core/document/comments.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
 import { hasSetLength } from "../../core/document/timing.ts";
-import { sectionGroups } from "../../core/document/sections.ts";
+import { sceneGroups } from "../../core/document/scenes.ts";
 import { brollSortedForList } from "../../core/production/broll.ts";
 import {
   groupTagsByCategory,
@@ -29,7 +29,7 @@ export interface BeatFacts {
   readSet: boolean;
   status: { id: RowStatusId; label: string };
 }
-export interface ScriptSectionFacts {
+export interface ScriptSceneFacts {
   readonly id: string;
   readonly name: string;
   readonly start: number;
@@ -112,9 +112,9 @@ export function beatFacts(doc: ExportDocument, services: ExportServices = export
   });
 }
 
-export function scriptSectionFacts(doc: ExportDocument, beats: readonly BeatFacts[]): ScriptSectionFacts[] {
-  return sectionGroups({ rows: doc.beats, sections: doc.document.sections }).map(group => ({
-    id: group.section.id, name: group.section.name, start: group.start, end: group.end,
+export function scriptSceneFacts(doc: ExportDocument, beats: readonly BeatFacts[]): ScriptSceneFacts[] {
+  return sceneGroups({ rows: doc.beats, sections: doc.document.sections }).map(group => ({
+    id: group.scene.id, name: group.scene.name, start: group.start, end: group.end,
     total: formatDuration(beats.slice(group.start, group.end).reduce((sum, beat) => sum + beat.seconds, 0))
   }));
 }

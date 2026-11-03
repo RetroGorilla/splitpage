@@ -14,15 +14,15 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
-const { sectionView } = await import("../bootstrap/wiring/editor-owners.ts");
+const { sceneView } = await import("../bootstrap/wiring/editor-owners.ts");
 const writer = await import("../features/writer/writer.ts");
 let opened = 0;
 
-async function open(sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r3" }], fields = {}) {
+async function open(scenes = [{ id: "s1", name: "Opening", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r3" }], fields = {}) {
   if (viewFlags().writerOpen()) writer.closeWriter();
   const doc = migrateRows({ title: "Sections", rows: ["One.", "Two.", "Three.", "Four."].map((audioText, i) => ({
     id: "r" + (i + 1), audioText, visualText: "", status: i === 1 ? "shot" : "todo", lengthSeconds: (i + 1) * 10
-  })), sections, ...fields });
+  })), sections: scenes, ...fields });
   const file = new File([buildSplitpageFile(exportDocumentOf(doc))], "sections-" + (++opened) + ".splitpage");
   await openDocument({ kind: "file", file, handle: null, options: { skipSnapshot: true } });
   undoOwner().flush();
@@ -112,12 +112,12 @@ test("singleton move confirmation survives modifier-only keydowns, including rep
 
 test("moving a scene into a folded section reveals the destination and restores its caret", async () => {
   await open();
-  sectionView().toggle("s1");
+  sceneView().toggle("s1");
   const cell = document.querySelector('#rows .row[data-id="r3"] .audio-cell .cell-editable');
   cell.focus();
   key("ArrowUp", cell, { altKey: true });
   assert.deepEqual(ids(), ["r1", "r3", "r2", "r4"]);
-  assert.equal(sectionView().folded("s1"), false);
+  assert.equal(sceneView().folded("s1"), false);
   assert.equal(document.activeElement.getAttribute("data-id"), "r3");
   assert.equal(document.activeElement.getAttribute("data-field"), "audioText");
 });
@@ -125,16 +125,16 @@ test("moving a scene into a folded section reveals the destination and restores 
 test("Find and Replace reveal a folded match through their real wiring", async () => {
   const find = await import("../features/find/find.ts");
   await open();
-  sectionView().toggle("s2");
+  sceneView().toggle("s2");
   find.openFindBar();
   document.getElementById("find-input").value = "Three";
   find.findQueryChanged();
-  assert.equal(sectionView().folded("s2"), false);
+  assert.equal(sceneView().folded("s2"), false);
   assert.match(document.querySelector('#rows .row[data-id="r3"]').textContent, /Three/);
-  sectionView().toggle("s2");
+  sceneView().toggle("s2");
   document.getElementById("replace-input").value = "Replaced";
   document.getElementById("find-replace").click();
-  assert.equal(sectionView().folded("s2"), false);
+  assert.equal(sceneView().folded("s2"), false);
   assert.match(document.querySelector('#rows .row[data-id="r3"]').textContent, /Replaced/);
   find.closeFindBar();
 });
@@ -142,10 +142,10 @@ test("Find and Replace reveal a folded match through their real wiring", async (
 test("comment jump reveals its folded anchor", async () => {
   await open(undefined, { schema: 2, rows: [{ id: "r1", audioText: '<span class="cmt-anchor" data-cmt="c_one">One</span>', visualText: "" }],
     comments: [{ id: "c_one", kind: "anchor", rowId: "r1", field: "audioText", anchorId: "c_one", quotedText: "One", author: "Ada", body: "Comment", replies: [] }] });
-  sectionView().toggle("s1");
+  sceneView().toggle("s1");
   const { jumpToAnchor } = await import("../features/comments/comments.ts");
   jumpToAnchor("c_one");
-  assert.equal(sectionView().folded("s1"), false);
+  assert.equal(sceneView().folded("s1"), false);
   assert.ok(document.querySelector('#rows .cmt-anchor[data-cmt="c_one"].flash'));
 });
 
@@ -193,11 +193,11 @@ test("section dividers count all scenes, fold without an edit and reset when ano
   assert.equal(document.querySelectorAll("#rows .row").length, 2);
   assert.equal(state(), before);
   assert.equal(undoOwner().sizes().undo, undo);
-  sectionView().reveal(currentDocument(), "r2");
+  sceneView().reveal(currentDocument(), "r2");
   assert.equal(document.querySelectorAll("#rows .row").length, 4);
-  sectionView().toggle("s1");
+  sceneView().toggle("s1");
   await open();
-  assert.equal(sectionView().folded("s1"), false);
+  assert.equal(sceneView().folded("s1"), false);
   assert.equal(document.querySelectorAll("#rows .row").length, 4);
 });
 
@@ -236,9 +236,9 @@ test("mounted Writer cancels confirmation on another key, click or caret movemen
 });
 
 test("boundary removal reveals a folded predecessor and preserves the current caret", async () => {
-  await open(); sectionView().toggle("s1"); writer.openWriter(); caret("r3");
+  await open(); sceneView().toggle("s1"); writer.openWriter(); caret("r3");
   key("Backspace"); key("Backspace");
-  assert.equal(sectionView().folded("s1"), false);
+  assert.equal(sceneView().folded("s1"), false);
   assert.equal(document.activeElement.getAttribute("data-id"), "r3");
   assert.equal(currentDocument().sections.length, 1);
   key("Backspace");

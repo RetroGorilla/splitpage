@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../src/core/migrate.ts";
-import { sectionGroups } from "../../src/core/document/sections.ts";
+import { sceneGroups } from "../../src/core/document/scenes.ts";
 import { mergeStateFields } from "../../src/core/merge/states.ts";
 import { fakeMigration } from "./migrate-ports.ts";
 import { fakePorts } from "./merge/fakes.ts";
@@ -32,17 +32,17 @@ function mergeLaws(base: GroupFixture[] | null, mine: GroupFixture[], theirs: Gr
   for (const [local, incoming] of [[left, right], [right, left]] as const) {
     const result = merge(local, incoming);
     const survivors = new Set(result.rows.map(row => row.id));
-    for (const group of sectionGroups(original ?? { rows: [] })) {
-      const record = JSON.stringify(group.section);
-      if (![local, incoming].every(side => sectionGroups(side).some(item => JSON.stringify(item.section) === record))) continue;
+    for (const group of sceneGroups(original ?? { rows: [] })) {
+      const record = JSON.stringify(group.scene);
+      if (![local, incoming].every(side => sceneGroups(side).some(item => JSON.stringify(item.scene) === record))) continue;
       if (!original?.rows.slice(group.start, group.end).some(row => survivors.has(row.id))) continue;
-      assert.ok(sectionGroups(result).some(item => item.section.id === group.section.id), label + " unchanged populated identity survives " + group.section.id + " " + JSON.stringify({ base, mine, theirs, actual: layout(result) }));
+      assert.ok(sceneGroups(result).some(item => item.scene.id === group.scene.id), label + " unchanged populated identity survives " + group.scene.id + " " + JSON.stringify({ base, mine, theirs, actual: layout(result) }));
     }
   }
 }
 
 test("sections: seeded section operations against scene edits preserve identities and every surviving scene", () => {
-  const initialSeed = Number(process.env.SPLITPAGE_SECTION_SEED ?? 3101031);
+  const initialSeed = Number(process.env.SPLITPAGE_SCENE_SEED ?? 3101031);
   let seed = initialSeed;
   const random = (n: number): number => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return Math.floor(seed / 0x100000000 * n); };
   let serial = 0;
@@ -51,29 +51,29 @@ test("sections: seeded section operations against scene edits preserve identitie
     const base: GroupFixture[] = Array.from({ length: 2 + random(6) }, (_, i) => ({
       id: i ? "s" + i : "", name: "Section " + i, beats: Array.from({ length: 1 + random(5) }, beat)
     }));
-    const sectionSide = structuredClone(base), beatSide = structuredClone(base);
-    const sectionIndex = 1 + random(base.length - 1);
-    const chosen = base[sectionIndex];
+    const sceneSide = structuredClone(base), beatSide = structuredClone(base);
+    const sceneIndex = 1 + random(base.length - 1);
+    const chosen = base[sceneIndex];
     assert.ok(chosen);
     const operation = trial % 4;
     if (operation === 0) {
-      const [moving] = sectionSide.splice(sectionIndex, 1);
+      const [moving] = sceneSide.splice(sceneIndex, 1);
       assert.ok(moving);
-      sectionSide.splice(1 + random(sectionSide.length), 0, moving);
+      sceneSide.splice(1 + random(sceneSide.length), 0, moving);
     } else if (operation === 1) {
-      const group = sectionSide[sectionIndex];
+      const group = sceneSide[sceneIndex];
       assert.ok(group);
       group.name = "Renamed " + trial;
     } else if (operation === 2) {
-      const [removed] = sectionSide.splice(sectionIndex, 1), previous = sectionSide[sectionIndex - 1];
+      const [removed] = sceneSide.splice(sceneIndex, 1), previous = sceneSide[sceneIndex - 1];
       assert.ok(removed && previous);
       previous.beats.push(...removed.beats);
     } else {
-      const candidates = sectionSide.filter((group, i) => !i || group.beats.length > 1);
+      const candidates = sceneSide.filter((group, i) => !i || group.beats.length > 1);
       const group = candidates[random(candidates.length)];
       assert.ok(group);
       const at = group.id ? 1 + random(group.beats.length - 1) : random(group.beats.length);
-      sectionSide.splice(sectionSide.indexOf(group) + 1, 0, { id: "added", name: "Added", beats: group.beats.splice(at) });
+      sceneSide.splice(sceneSide.indexOf(group) + 1, 0, { id: "added", name: "Added", beats: group.beats.splice(at) });
     }
     for (let edit = 0, count = 1 + random(8); edit < count; edit++) {
       const populated = beatSide.filter(group => group.beats.length);
@@ -93,31 +93,31 @@ test("sections: seeded section operations against scene edits preserve identitie
         target.beats.splice(random(target.beats.length + 1), 0, moved);
       }
     }
-    const original = documentOf(base), edited = documentOf(sectionSide), other = documentOf(beatSide);
-    mergeLaws(base, sectionSide, beatSide, "seed " + initialSeed + " trial " + trial);
+    const original = documentOf(base), edited = documentOf(sceneSide), other = documentOf(beatSide);
+    mergeLaws(base, sceneSide, beatSide, "seed " + initialSeed + " trial " + trial);
     for (const [mine, theirs] of [[edited, other], [other, edited]]) {
       const migration = fakeMigration();
       const state = migrateRows(mergeStateFields(migrateRows(structuredClone(original), migration.ports),
         migrateRows(structuredClone(mine), migration.ports), migrateRows(structuredClone(theirs), migration.ports), fakePorts(() => [])).merged, migration.ports);
       const label = "seed " + initialSeed + " trial " + trial + " operation " + operation + " reversed " + (mine === other);
       assert.deepEqual(state.rows.map(row => row.id).sort(), other.rows.map(row => row.id).sort(), label + " scene conservation");
-      const groups = sectionGroups(state);
-      assert.equal(new Set(groups.map(group => group.section.id)).size, groups.length, label + " unique identity");
-      assert.ok(groups.every(group => state.rows[group.start]?.id === group.section.firstSceneId && group.end > group.start), label + " first surviving anchor");
-      const first = mine === edited ? sectionSide : beatSide, second = mine === edited ? beatSide : sectionSide;
-      const expected = snapshotProjection(base, first, second, sectionSide, beatSide);
+      const groups = sceneGroups(state);
+      assert.equal(new Set(groups.map(group => group.scene.id)).size, groups.length, label + " unique identity");
+      assert.ok(groups.every(group => state.rows[group.start]?.id === group.scene.firstSceneId && group.end > group.start), label + " first surviving anchor");
+      const first = mine === edited ? sceneSide : beatSide, second = mine === edited ? beatSide : sceneSide;
+      const expected = snapshotProjection(base, first, second, sceneSide, beatSide);
       const wanted = documentOf(expected);
-      const detail = label + " " + JSON.stringify({ base, sectionSide, beatSide });
+      const detail = label + " " + JSON.stringify({ base, sceneSide, beatSide });
       assert.deepEqual(state.rows.map(row => row.id), wanted.rows.map(row => row.id), detail + " complete order");
       assert.deepEqual(state.sections ?? [], wanted.sections, detail + " identities, names and anchors");
     }
   }
 });
 
-function snapshotProjection(base: GroupFixture[], mine: GroupFixture[], theirs: GroupFixture[], sectionOrder: GroupFixture[], beatOrder: GroupFixture[]): GroupFixture[] {
+function snapshotProjection(base: GroupFixture[], mine: GroupFixture[], theirs: GroupFixture[], sceneOrder: GroupFixture[], beatOrder: GroupFixture[]): GroupFixture[] {
   const present = (groups: GroupFixture[], id: string): GroupFixture | undefined => groups.find(group => group.id === id && group.beats.length);
   const names = new Map<string, string>();
-  for (const group of sectionOrder) {
+  for (const group of sceneOrder) {
     const before = present(base, group.id), local = present(mine, group.id), incoming = present(theirs, group.id);
     if (before && ((!local && incoming?.name === before.name) || (!incoming && local?.name === before.name))) continue;
     const name = incoming && incoming.name !== before?.name ? incoming.name : local?.name ?? incoming?.name;
@@ -142,7 +142,7 @@ function snapshotProjection(base: GroupFixture[], mine: GroupFixture[], theirs: 
     assignments.set(beat, assigned);
   }
   const active = new Set([...assignments.values()].filter(id => names.has(id)));
-  const wanted = [{ id: "", name: "", beats: [] as string[] }, ...sectionOrder.filter(group => group.id && active.has(group.id)).map(group => ({ id: group.id, name: names.get(group.id) ?? "", beats: [] as string[] }))];
+  const wanted = [{ id: "", name: "", beats: [] as string[] }, ...sceneOrder.filter(group => group.id && active.has(group.id)).map(group => ({ id: group.id, name: names.get(group.id) ?? "", beats: [] as string[] }))];
   for (const beat of beatOrder.flatMap(group => group.beats)) {
     let id = assignments.get(beat) ?? "";
     if (id && !active.has(id)) id = base.slice(0, base.findIndex(group => group.id === id)).reverse().find(group => active.has(group.id))?.id ?? "";
@@ -154,7 +154,7 @@ function snapshotProjection(base: GroupFixture[], mine: GroupFixture[], theirs: 
 }
 
 test("sections: seeded edits on both sides reconcile names, removal, additions and complete order", () => {
-  const initialSeed = Number(process.env.SPLITPAGE_SECTION_SEED ?? 3101031);
+  const initialSeed = Number(process.env.SPLITPAGE_SCENE_SEED ?? 3101031);
   let seed = initialSeed;
   const random = (n: number): number => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return Math.floor(seed / 0x100000000 * n); };
   const clone = (groups: GroupFixture[]): GroupFixture[] => structuredClone(groups);

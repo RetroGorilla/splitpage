@@ -1,21 +1,21 @@
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
-import type { SectionView } from "../../application/editing/section-view.ts";
+import type { SceneView } from "../../application/editing/scene-view.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { RowDrag } from "../../application/editing/row-drag.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { IdSource } from "../../core/document/ports.ts";
-import { addSectionCommand, moveSectionCommand, removeSectionCommand, renameSectionCommand } from "../../application/commands/sections.ts";
+import { addSceneCommand, moveSceneCommand, removeSceneCommand, renameSceneCommand } from "../../application/commands/scenes.ts";
 import { moveBeatCommand } from "../../application/commands/rows.ts";
-import { sectionBeforeBeat, sectionForBeat, sectionGroups } from "../../core/document/sections.ts";
+import { sceneBeforeBeat, sceneForBeat, sceneGroups } from "../../core/document/scenes.ts";
 import { cssAttr } from "../common/dom.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import { closeRowMenus } from "./row-menu.ts";
 
-export interface SectionControlsPorts {
+export interface SceneControlsPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly edits: Pick<DocumentEdits, "allowed" | "run">;
-  readonly sections: SectionView;
+  readonly sections: SceneView;
   readonly focus: Pick<FocusMemory<Element>, "focusedRow">;
   readonly drag: Pick<RowDrag, "dragging" | "end">;
   readonly ids: Pick<IdSource, "id">;
@@ -24,7 +24,7 @@ export interface SectionControlsPorts {
   readonly stopScroll: () => void;
 }
 
-export function mountSectionControls(window: Window, ports: SectionControlsPorts): {
+export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
   readonly hint: (id: string | null, text: string) => void;
   readonly reset: () => void;
   readonly dispose: () => void;
@@ -75,10 +75,10 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
   }
   function rename(id: string, parent: Element): void {
     const state = ports.document.current();
-    const section = state && sectionGroups(state).find(group => group.section.id === id)?.section;
-    if (!section) return;
-    nameAt(parent, section.name, name => {
-      ports.edits.run(renameSectionCommand(id, name));
+    const scene = state && sceneGroups(state).find(group => group.scene.id === id)?.scene;
+    if (!scene) return;
+    nameAt(parent, scene.name, name => {
+      ports.edits.run(renameSceneCommand(id, name));
       header(id)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
     });
   }
@@ -108,11 +108,11 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
       if (!row) { ports.notices.show("Add a scene before creating a section.", "warn"); return; }
       closeRowMenus();
       beat?.querySelector<HTMLElement>(".row-more")?.focus();
-      const existing = sectionBeforeBeat(state, row.id);
+      const existing = sceneBeforeBeat(state, row.id);
       if (existing) { const parent = header(existing.id); if (parent) rename(existing.id, parent); return; }
       nameAt(beat ?? add.parentElement ?? add, "", name => {
         const created = ports.ids.id("section");
-        ports.edits.run(addSectionCommand(row.id, created, name));
+        ports.edits.run(addSceneCommand(row.id, created, name));
         header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
       });
       return;
@@ -120,11 +120,11 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     if (!id || !divider) return;
     divider.querySelector<HTMLDetailsElement>("details")?.removeAttribute("open");
     if (action === "rename") rename(id, divider);
-    else if (action === "remove") ports.edits.run(removeSectionCommand(id));
+    else if (action === "remove") ports.edits.run(removeSceneCommand(id));
     else if (action === "up" || action === "down") {
-      const groups = sectionGroups(state), index = groups.findIndex(group => group.section.id === id);
+      const groups = sceneGroups(state), index = groups.findIndex(group => group.scene.id === id);
       const targetGroup = groups[index + (action === "up" ? -1 : 1)];
-      if (targetGroup) ports.edits.run(moveSectionCommand(id, targetGroup.section.id, action === "down"));
+      if (targetGroup) ports.edits.run(moveSceneCommand(id, targetGroup.scene.id, action === "down"));
       header(id)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
     }
   });
@@ -132,12 +132,12 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     const target = event.target as Element | null, state = ports.document.current();
     if (!state || !Array.isArray(state.sections) || !state.sections.length || !target?.closest) return null;
     const divider = target.closest(".section-header"), row = target.closest(".row[data-id]");
-    const id = divider?.getAttribute("data-section-id") ?? (row && sectionForBeat(state, row.getAttribute("data-id") ?? "")?.id);
-    const group = id && sectionGroups(state).find(item => item.section.id === id);
+    const id = divider?.getAttribute("data-section-id") ?? (row && sceneForBeat(state, row.getAttribute("data-id") ?? "")?.id);
+    const group = id && sceneGroups(state).find(item => item.scene.id === id);
     const shown = id && header(id);
     if (!group || !shown) return null;
     const bounds = (divider ?? row ?? shown).getBoundingClientRect();
-    return { id: group.section.id, firstSceneId: group.section.firstSceneId, after: event.clientY > bounds.top + bounds.height / 2, header: shown };
+    return { id: group.scene.id, firstSceneId: group.scene.firstSceneId, after: event.clientY > bounds.top + bounds.height / 2, header: shown };
   }
   life.listen(doc, "dragstart", event => {
     if (!(event.target instanceof Element)) return;
@@ -166,7 +166,7 @@ export function mountSectionControls(window: Window, ports: SectionControlsPorts
     const target = dropTarget(event as unknown as DragEvent), beat = ports.drag.dragging();
     if ((!dragging && !(beat && event.target.closest(".section-header"))) || !target || !ports.edits.allowed()) return;
     event.preventDefault(); event.stopImmediatePropagation();
-    if (dragging) ports.edits.run(moveSectionCommand(dragging, target.id, target.after));
+    if (dragging) ports.edits.run(moveSceneCommand(dragging, target.id, target.after));
     else if (beat) ports.edits.run(moveBeatCommand(beat, target.firstSceneId, false, target.id));
     ports.drag.end(); finishDrag();
   }, true);

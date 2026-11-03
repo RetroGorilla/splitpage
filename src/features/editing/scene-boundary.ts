@@ -1,15 +1,15 @@
 import type { DocumentReader } from "../../application/session/document-reader.ts";
-import type { SectionBoundaryRemoval } from "../../application/editing/section-boundary.ts";
-import { sectionBeforeBeat, sectionGroups } from "../../core/document/sections.ts";
+import type { SceneBoundaryRemoval } from "../../application/editing/scene-boundary.ts";
+import { sceneBeforeBeat, sceneGroups } from "../../core/document/scenes.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
-export interface SectionBoundaryPorts {
+export interface SceneBoundaryPorts {
   readonly document: Pick<DocumentReader, "current">;
-  readonly boundary: SectionBoundaryRemoval;
+  readonly boundary: SceneBoundaryRemoval;
   readonly allowed: () => boolean;
 }
 
-export function mountSectionBoundary(window: Window, ports: SectionBoundaryPorts): { dispose: () => void } {
+export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts): { dispose: () => void } {
   const doc = window.document;
   const life = createViewLifetime(window);
   let caret: { node: Node | null; offset: number; end: Node | null; endOffset: number } | null = null;
@@ -36,13 +36,13 @@ export function mountSectionBoundary(window: Window, ports: SectionBoundaryPorts
       (key === "ArrowUp" || key === "ArrowDown")) {
       const state = ports.document.current();
       const at = state?.rows.findIndex(row => row.id === scriptCell.getAttribute("data-id")) ?? -1;
-      const group = state && sectionGroups(state).find(item => item.start === at && item.end === at + 1);
+      const group = state && sceneGroups(state).find(item => item.start === at && item.end === at + 1);
       const next = state?.rows[at + (key === "ArrowUp" ? -1 : 1)];
       if (group && next && selection) {
         caret = { node: selection.anchorNode, offset: selection.anchorOffset, end: selection.focusNode, endOffset: selection.focusOffset };
         const chord = event.shiftKey ? (key === "ArrowUp" ? "Alt+Shift+ArrowUp" : "Alt+Shift+ArrowDown") :
           (key === "ArrowUp" ? "Alt+ArrowUp" : "Alt+ArrowDown");
-        if (!event.repeat && ports.boundary.press(group.section.id, chord)) return;
+        if (!event.repeat && ports.boundary.press(group.scene.id, chord)) return;
         event.preventDefault(); event.stopImmediatePropagation();
         return;
       }
@@ -58,13 +58,13 @@ export function mountSectionBoundary(window: Window, ports: SectionBoundaryPorts
     if (!state) { cancel(); return; }
     const at = state.rows.findIndex(row => row.id === cell.getAttribute("data-id"));
     const next = state.rows[key === "Backspace" ? at : at + 1];
-    const section = at === -1 || !next ? undefined : sectionBeforeBeat(state, next.id);
-    if (!section) { cancel(); return; }
+    const scene = at === -1 || !next ? undefined : sceneBeforeBeat(state, next.id);
+    if (!scene) { cancel(); return; }
     event.preventDefault();
     event.stopImmediatePropagation();
     if (event.repeat) return;
     caret = { node: selection.anchorNode, offset: selection.anchorOffset, end: selection.focusNode, endOffset: selection.focusOffset };
-    ports.boundary.press(section.id, key);
+    ports.boundary.press(scene.id, key);
   }, true);
   for (const type of ["pointerdown", "mousedown", "click", "beforeinput", "input", "paste", "cut", "compositionstart", "blur"]) {
     life.listen(doc, type, cancel, true);

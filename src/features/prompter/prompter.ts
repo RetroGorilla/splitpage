@@ -1,5 +1,5 @@
 import { pad2, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
-import { sectionGroups } from "../../core/document/sections.ts";
+import { sceneGroups } from "../../core/document/scenes.ts";
 import { withoutCues } from "../../core/text/cues.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -65,7 +65,7 @@ interface PrompterState {
   promptLinePx: number;
   prompterWakeLock: WakeLockSentinel | null;
   beatRowIds: string[];
-  beatSections: string[];
+  beatScenes: string[];
   beatWordStart: number[];
   beatWordEnd: number[];
   promptBeatIndex: number;
@@ -101,7 +101,7 @@ function freshState(): PrompterState {
     promptLinePx: 60 * 1.42,
     prompterWakeLock: null,
     beatRowIds: [],
-    beatSections: [],
+    beatScenes: [],
     beatWordStart: [],
     beatWordEnd: [],
     promptBeatIndex: -1,
@@ -200,11 +200,11 @@ export function buildPrompterContent(): void {
   state.speakCursor = -1;
 
   state.beatRowIds = [];
-  state.beatSections = [];
-  const sectionNames = new Map<string, string>();
+  state.beatScenes = [];
+  const sceneNames = new Map<string, string>();
   if (Array.isArray(doc.sections) && doc.sections.length) {
-    for (const group of sectionGroups(doc)) {
-      for (let i = group.start; i < group.end; i++) sectionNames.set((doc.rows[i] as { id: string }).id, group.section.name);
+    for (const group of sceneGroups(doc)) {
+      for (let i = group.start; i < group.end; i++) sceneNames.set((doc.rows[i] as { id: string }).id, group.scene.name);
     }
   }
   state.beatWordStart = [];
@@ -213,7 +213,7 @@ export function buildPrompterContent(): void {
   beatEntries.forEach(function (e) {
     const n = e.view ? e.view.words : 0;
     state.beatRowIds.push(e.id);
-    state.beatSections.push(sectionNames.get(e.id) ?? "");
+    state.beatScenes.push(sceneNames.get(e.id) ?? "");
     state.beatWordStart.push(cursor);
     cursor += n;
     state.beatWordEnd.push(cursor);
@@ -313,9 +313,9 @@ export function updatePrompterStatus(): void {
   setText(posEl, beat === -1 ? "" : pad2(beat + 1) + " / " + pad2(state.beatRowIds.length));
   setText(document.getElementById("pp-scene-pos-sr"), beat === -1 ? "" : "Scene " + (beat + 1) + " of " + state.beatRowIds.length);
   setText(document.getElementById("pp-scene-start"), beat === -1 ? "" : formatTimecode(state.beatStartSec[beat] as number));
-  const sectionEl = document.getElementById("pp-section");
-  const sectionName = beat === -1 ? "" : state.beatSections[beat] ?? "";
-  if (sectionEl) { setText(sectionEl, sectionName); sectionEl.hidden = !sectionName; sectionEl.title = sectionName; }
+  const sceneEl = document.getElementById("pp-section");
+  const sceneName = beat === -1 ? "" : state.beatScenes[beat] ?? "";
+  if (sceneEl) { setText(sceneEl, sceneName); sceneEl.hidden = !sceneName; sceneEl.title = sceneName; }
   const read = Math.round(elapsed);
   const total = Math.round(state.promptTotalSec);
   const readText = formatTimecode(read);

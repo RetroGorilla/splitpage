@@ -117,13 +117,13 @@ export function parseMarkdownProject(text: unknown, services: ProjectFileService
   let parsed: unknown;
   try { parsed = parseSplitpageFile(block.json); } catch { return null; }
 
-  const beatSection = block.before.split(/^##\s/m)[0] ?? "";
+  const beatScene = block.before.split(/^##\s/m)[0] ?? "";
   const heading = /^#\s+(.+)$/m.exec(block.before);
   const docIdEmbedded = docIdEmbeddedIn(parsed);
   return {
     state: services.migrateDocument(docIdEmbedded ? parsed : JSON.parse(canonicalSourceJson(parsed)), { kind: "file" }),
     docIdEmbedded: docIdEmbedded,
-    table: parseMarkdownTable(beatSection, { keepEmpty: true }),
+    table: parseMarkdownTable(beatScene, { keepEmpty: true }),
     title: heading ? (heading[1] ?? "").trim() : null
   };
 }

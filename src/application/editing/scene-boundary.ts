@@ -1,9 +1,9 @@
 import type { TimerPort } from "../session/ports.ts";
 
-export type SectionBoundaryKey = "Backspace" | "Delete" | "Alt+ArrowUp" | "Alt+ArrowDown" | "Alt+Shift+ArrowUp" | "Alt+Shift+ArrowDown";
+export type SceneBoundaryKey = "Backspace" | "Delete" | "Alt+ArrowUp" | "Alt+ArrowDown" | "Alt+Shift+ArrowUp" | "Alt+Shift+ArrowDown";
 
-export interface SectionBoundaryRemoval {
-  readonly press: (id: string, key: SectionBoundaryKey) => boolean;
+export interface SceneBoundaryRemoval {
+  readonly press: (id: string, key: SceneBoundaryKey) => boolean;
   readonly cancel: () => void;
   readonly dispose: () => void;
 }
@@ -11,11 +11,11 @@ export interface SectionBoundaryRemoval {
 interface BoundaryRemovalPorts {
   readonly timers: TimerPort;
   readonly hint: (id: string | null, text: string) => void;
-  readonly remove: (id: string, key: SectionBoundaryKey) => void;
+  readonly remove: (id: string, key: SceneBoundaryKey) => void;
 }
 
-export function createSectionBoundaryRemoval(ports: BoundaryRemovalPorts): SectionBoundaryRemoval {
-  let pending: { id: string; key: SectionBoundaryKey; until: number; timer: unknown } | null = null;
+export function createSceneBoundaryRemoval(ports: BoundaryRemovalPorts): SceneBoundaryRemoval {
+  let pending: { id: string; key: SceneBoundaryKey; until: number; timer: unknown } | null = null;
   let disposed = false;
   function cancel(): void {
     if (!pending) return;
