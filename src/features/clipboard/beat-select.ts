@@ -489,7 +489,7 @@ export function startBeatSelect(given: BeatSelectPorts) {
     clear: clearBeatSelection,
     ids: selectedBeatIds,
     openMenu: openBeatMenu,
-    tracking: function () { return track ? { rowId: track.rowId, beat: track.beat } : null; }
+    tracking: function () { return track ? { rowId: track.rowId, scene: track.beat } : null; }
   }; }, function (withdraw) { offs.push(withdraw); });
   let disposed = false;
   return { dispose: function () {
