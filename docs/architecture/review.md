@@ -52,9 +52,9 @@ A PR that moves code keeps the bugs it moves. Each one is filed as an issue and 
 
 ## 4. Review
 
-One independent reviewer: a session or agent that did not write the change. They read the diff, the surrounding code, its callers and its tests.
+Normal and Full PRs get one independent reviewer: a session or agent that did not write the change. They read the diff, the surrounding code, its callers and its tests.
 
-Adam confirmed on 2026-10-23 that an independent agent review is sufficient. GPT-6.1 Sol is preferred; Opus is not required. This supersedes the stricter review-model rule in the October 24 handoff. The author still does not merge their own PR.
+Adam confirmed on 2026-10-23 that an independent agent review is sufficient. GPT-6.1 Sol is preferred; Opus is not required. This supersedes the stricter review-model rule in the October 24 handoff. In those tiers the author still does not merge their own PR.
 
 | Area | Questions |
 |---|---|

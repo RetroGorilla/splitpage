@@ -138,8 +138,10 @@ Electron-built installers, which ship instead:
 **Branches.** `main` is the only long-lived branch, and it can hold work that
 has not been released. A release is a tag on `main`, cut when things are
 stable and not in the middle of a multi-PR feature. To fix a released version
-while `main` isn't ready to ship, branch from its tag, bump `VERSION`, tag the
-fix there, and merge the branch back into `main`.
+while `main` isn't ready to ship, branch from its tag as `hotfix/<name>`, make
+the fix and bump `VERSION`, and push. CI runs on pushes to `hotfix/` branches,
+and the [release gate](architecture/ci.md#release-gate) needs it to pass on
+the commit you tag. Then merge the branch back into `main`.
 
 **From CI.** Pushing a `v<version>` tag on the commit that bumped `VERSION`
 runs `.github/workflows/release.yml`. It first refuses a commit with no passed

@@ -669,7 +669,7 @@ measures is shown to Windows browsers only.
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request to `main` and every push
-to it. Its jobs call the scripts above and nothing else.
+to `main` or a `hotfix/` branch. Its jobs call the scripts above and nothing else.
 
 | Job | Runs |
 | --- | --- |
