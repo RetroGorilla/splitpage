@@ -63,13 +63,13 @@ test("tags in every category, repeated across scenes", () => {
   const tags = collectTagsFromRows(doc.rows);
   const cats = new Set(tags.map((t) => t.cat.id));
   TAG_CATEGORIES.forEach((c) => assert.ok(cats.has(c.id), "a " + c.id + " tag"));
-  const scenesAt = {};
+  const beatsAt = {};
   doc.rows.forEach((r) => {
     collectTagsFromRows([r]).filter((t) => t.cat.id === "location")
-      .forEach((t) => { (scenesAt[t.name.toLowerCase()] = scenesAt[t.name.toLowerCase()] || new Set()).add(r.id); });
+      .forEach((t) => { (beatsAt[t.name.toLowerCase()] = beatsAt[t.name.toLowerCase()] || new Set()).add(r.id); });
   });
-  assert.ok(Object.keys(scenesAt).length >= 3);
-  Object.keys(scenesAt).forEach((l) => assert.ok(scenesAt[l].size >= 2, l + " in one scene only"));
+  assert.ok(Object.keys(beatsAt).length >= 3);
+  Object.keys(beatsAt).forEach((l) => assert.ok(beatsAt[l].size >= 2, l + " in one scene only"));
   assert.ok(new Set(doc.productionTags.map((t) => t.status)).size >= 3);
   assert.ok(doc.productionTags.some((t) => t.owner) && doc.people.length >= 2);
 });

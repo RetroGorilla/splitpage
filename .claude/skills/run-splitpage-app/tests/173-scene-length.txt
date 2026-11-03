@@ -6,7 +6,7 @@
 # feeds every scene start, the program clock and the rundown strip, is one
 # undo step, turns amber when the Audio now reads longer, and a scene with
 # no Audio can have one. The parser, the
-# merge, migrateRows and the formats are src/test/scene-length.test.mjs.
+# merge, migrateRows and the formats are src/test/beat-length.test.mjs.
 #
 # Every `eval` is one physical line (the driver splits on newlines).
 

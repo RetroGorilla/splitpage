@@ -43,16 +43,16 @@ const shot = { id: "b1", name: "Gulls", desc: "", status: "unshot", reshoot: fal
 const kettle = { id: "t_kettle", cat: "prop", name: "Kettle", owner: "", notes: "", status: "needed" };
 
 function everyField() {
-  const sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }];
-  const base = doc({ sections });
+  const scenes = [{ id: "s1", name: "Opening", firstSceneId: "r1" }];
+  const base = doc({ sections: scenes });
   const mine = doc({
-    sections,
+    sections: scenes,
     title: "Mine title", docId: DOC_MINE, rows: [row("r1", ONE_M, { updatedBy: "Mine" })], comments: [cm("cM")],
     people: [{ id: "p1", name: "Sam" }], productionTags: [kettle], wordsPerMinute: 180, rev: 9, lastEditedBy: "Mine", lastEditedAt: NEW,
     personColors: { Sam: "#CBA1FA" }, targetSeconds: 420
   });
   const theirs = doc({
-    sections,
+    sections: scenes,
     rows: [row("r1", ONE_T, { updatedBy: "Theirs" })], people: [{ id: "p2", name: "Ada" }], brollShots: [shot],
     rev: 6, lastEditedBy: "Theirs", lastEditedAt: NEW, schema: SCHEMA_VERSION + 1
   });

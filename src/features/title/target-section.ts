@@ -1,4 +1,4 @@
-import { parseSceneLength, targetLengthOf } from "../../core/document/timing.ts";
+import { parseBeatLength, targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { targetLengthCommand } from "../../application/commands/document-settings.ts";
 import type { DocumentChromePorts } from "./ports.ts";
@@ -37,7 +37,7 @@ export function wireTargetSection(ports: TargetSectionPorts, wrap: HTMLElement, 
   if (!input) return;
   function commit() {
     const text = (input as HTMLInputElement).value.trim();
-    const secs = parseSceneLength(text);
+    const secs = parseBeatLength(text);
     if (typeof secs === "number" && isNaN(secs)) {
       (input as HTMLInputElement).setAttribute("aria-invalid", "true");
       ports.notices.show("That isn’t a length — try 2:00, 90 or 1m30s. Leave it empty for no target.", "error");

@@ -7,7 +7,7 @@ import { buildScriptPrintPage, scriptPrintSections } from "../../../src/adapters
 import { buildPrintPage, printPicture } from "../../../src/adapters/formats/print-page.ts";
 import { buildExportDocument } from "../../../src/core/document/export-document.ts";
 import { exportFacts, exportSummaryParts } from "../../../src/adapters/formats/export-kit.ts";
-import { sceneFacts } from "../../../src/adapters/formats/export-projections.ts";
+import { beatFacts } from "../../../src/adapters/formats/export-projections.ts";
 import { scriptFixture, PNG } from "./fixtures/script-print-fixture.mjs";
 
 function page(input) { return new JSDOM(buildScriptPrintPage(input)).window.document; }
@@ -18,10 +18,10 @@ test("script print preserves captured facts, scene metadata, rich text and annot
   const facts = exportFacts(input.doc, input.services);
   assert.equal(dom.querySelector("h1").textContent, facts.title);
   assert.equal(dom.querySelector(".print-meta").textContent, exportSummaryParts(facts).concat(facts.date).join(" · "));
-  const scene = sceneFacts(input.doc, input.services)[0];
-  assert.equal(dom.querySelector(".scene-number").textContent, scene.number);
-  assert.deepEqual([...dom.querySelectorAll(".scene-meta")].map((el) => el.textContent), [scene.start, scene.status.label]);
-  assert.equal(dom.querySelector(".read-set").textContent, scene.read);
+  const beat = beatFacts(input.doc, input.services)[0];
+  assert.equal(dom.querySelector(".scene-number").textContent, beat.number);
+  assert.deepEqual([...dom.querySelectorAll(".scene-meta")].map((el) => el.textContent), [beat.start, beat.status.label]);
+  assert.equal(dom.querySelector(".read-set").textContent, beat.read);
   for (const [selector, text] of [["strong", "Bold"], ["em", "italic"], ["u", "underline"], ["s", "strike"], ["mark", "highlight"],
     [".tag", "Camera"], [".broll", "B-roll"], [".direction", "whisper"], [".cue", "MUSIC"]]) {
     assert.ok([...dom.querySelectorAll(selector)].some((el) => el.textContent.includes(text)), selector);
@@ -113,8 +113,8 @@ test("empty and long scripts preserve all content, with sections composable thro
   assert.match(empty.body.textContent, /No scenes yet/);
   assert.equal(empty.querySelectorAll("table,#comments,.rundown").length, 0);
   const { input } = scriptFixture("long");
-  const sections = scriptPrintSections(input);
-  const html = buildPrintPage(input.doc.title, [sections[0], { id: "packing", title: "Packing list", html: "<h2>Packing list fixture</h2>" }, ...sections.slice(1)]);
+  const scenes = scriptPrintSections(input);
+  const html = buildPrintPage(input.doc.title, [scenes[0], { id: "packing", title: "Packing list", html: "<h2>Packing list fixture</h2>" }, ...scenes.slice(1)]);
   const dom = new JSDOM(html).window.document;
   assert.equal(dom.querySelectorAll("tbody tr").length, 18);
   assert.match(dom.body.textContent, /Visual line 179/);

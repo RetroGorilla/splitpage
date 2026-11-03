@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import { crc32, inflateSync } from "node:zlib";
-import { IMAGES, SCENES, buildArgs, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
+import { IMAGES, BEATS, buildArgs, busyPercent, imageProblems, imageRows, parseArgs, parsePerf, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
 
 const { imageDims, sniffImageMime } = createRequire(import.meta.url)("../shared/blob-policy.ts");
 
@@ -93,6 +93,19 @@ eq("the report names the load before and after", text.includes("7% of the CPU bu
 eq("the report has no latency or export table for an images-only run", text.includes("## Input latency") || text.includes("## Export"), false);
 eq("busyPercent is the share not idle", busyPercent({ idle: 100, total: 200 }, { idle: 175, total: 300 }), 25);
 
+const environmentRecords = [["short", 6], ["long", 30]].flatMap(([fixture, count]) => {
+  const probe = suiteText(fixture).split("\n").find((line) => line.includes("label: 'environment'"));
+  const document = {
+    querySelector: () => null,
+    querySelectorAll: () => Array(count),
+    createElement: () => ({ getContext: () => ({ measureText: () => ({ width: 1 }) }) })
+  };
+  const output = vm.runInNewContext(probe.slice(5), { document, navigator: { userAgent: "test" }, innerWidth: 1400, innerHeight: 900, devicePixelRatio: 1 });
+  return parsePerf(output).map((record) => ({ ...record, fixture }));
+});
+const fixtureReport = report(environmentRecords, { platform: "p", cpu: "c", memoryGb: 1, node: "n" }, "2026-01-01");
+eq("the report names both fixture row counts emitted by the environment probe", fixtureReport.includes("- Fixtures: short is the seed script (6 scenes); long is the long demo (30 scenes)"), true);
+
 console.log("\nthe suite:\n");
 
 const lines = suiteText("images").split("\n").filter(Boolean);
@@ -112,9 +125,9 @@ eq("they run after the export timing, so the existing cases run first", longLine
 eq("the preference is changed with the settings dialog open", longLines.indexOf("wait window.__settingsTest.isOpen()") > at("eval window.__perfScene.hide()") && longLines.indexOf("wait window.__settingsTest.isOpen()") < at("eval window.__perfScene.preference()"), true);
 eq("the short suite has none of them", shortLines.some((l) => l.includes("__perfScene")), false);
 
-const sceneWindow = { __perf: { lat: [] }, __splitpageFormats: {} };
-vm.runInNewContext(SCENES, { window: sceneWindow, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
-eq("the scenes install a stamp, a hide and a preference run", Object.keys(sceneWindow.__perfScene), ["stamp", "hide", "preference"]);
+const beatWindow = { __perf: { lat: [] }, __splitpageFormats: {} };
+vm.runInNewContext(BEATS, { window: beatWindow, performance, setTimeout, requestAnimationFrame: (f) => setTimeout(f, 0) });
+eq("the scenes install a stamp, a hide and a preference run", Object.keys(beatWindow.__perfScene), ["stamp", "hide", "preference"]);
 
 function stampWorld(clicksWork) {
   const next = { todo: "ready", ready: "shot", shot: "todo" };
@@ -127,7 +140,7 @@ function stampWorld(clicksWork) {
     }
   };
   const window = { __perf: { lat: [], reset() {}, take: (label) => label }, __splitpageFormats: { state: () => ({ rows }) } };
-  vm.runInNewContext(SCENES, { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
+  vm.runInNewContext(BEATS, { window, document, performance, setTimeout: (f) => setTimeout(f, 0), requestAnimationFrame: (f) => setTimeout(f, 0) });
   return window.__perfScene.stamp();
 }
 

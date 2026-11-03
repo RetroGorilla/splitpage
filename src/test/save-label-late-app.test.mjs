@@ -81,7 +81,7 @@ function settledAs(expected) {
   assert.deepEqual(painted(), expected);
 }
 
-function scene(run) {
+function beat(run) {
   return async (t) => {
     mockClock(t);
     setAutoSaveEnabled(false);
@@ -95,7 +95,7 @@ function scene(run) {
   };
 }
 
-test("I-20: an edit made while a save runs leaves the label dirty once the save lands", scene(async () => {
+test("I-20: an edit made while a save runs leaves the label dirty once the save lands", beat(async () => {
   const target = heldFile(script("One", ID("a")), "one.splitpage");
   await openFrom(target);
   edit("Before.");
@@ -108,7 +108,7 @@ test("I-20: an edit made while a save runs leaves the label dirty once the save 
   settledAs(UNSAVED);
 }));
 
-test("I-20: a save that lands after another document was opened and edited shows that document's state", scene(async () => {
+test("I-20: a save that lands after another document was opened and edited shows that document's state", beat(async () => {
   const target = heldFile(script("Two", ID("b")), "two.splitpage");
   await openFrom(target);
   edit("Before.");
@@ -123,7 +123,7 @@ test("I-20: a save that lands after another document was opened and edited shows
   settledAs(UNSAVED);
 }));
 
-test("I-20: a save that lands after the same file was reopened reads saved", scene(async () => {
+test("I-20: a save that lands after the same file was reopened reads saved", beat(async () => {
   const target = heldFile(script("Three", ID("d")), "three.splitpage");
   await openFrom(target);
   edit("Before.");
@@ -136,7 +136,7 @@ test("I-20: a save that lands after the same file was reopened reads saved", sce
   settledAs(SAVED);
 }));
 
-test("I-20: a second save waiting behind the first, with an edit during the second, ends dirty", scene(async () => {
+test("I-20: a second save waiting behind the first, with an edit during the second, ends dirty", beat(async () => {
   const target = heldFile(script("Four", ID("e")), "four.splitpage");
   await openFrom(target);
   edit("First.");
@@ -154,7 +154,7 @@ test("I-20: a second save waiting behind the first, with an edit during the seco
   settledAs(UNSAVED);
 }));
 
-test("I-20: a save that fails after an edit leaves the label dirty", scene(async () => {
+test("I-20: a save that fails after an edit leaves the label dirty", beat(async () => {
   const target = heldFile(script("Five", ID("f")), "five.splitpage");
   await openFrom(target);
   edit("Before.");
@@ -168,7 +168,7 @@ test("I-20: a save that fails after an edit leaves the label dirty", scene(async
   settledAs(UNSAVED);
 }));
 
-test("I-20: a Save As waiting behind a running save stays busy, then ends dirty after an edit during it", scene(async () => {
+test("I-20: a Save As waiting behind a running save stays busy, then ends dirty after an edit during it", beat(async () => {
   const target = heldFile(script("Six", ID("g")), "six.splitpage");
   await openFrom(target);
   edit("First.");
@@ -191,7 +191,7 @@ test("I-20: a Save As waiting behind a running save stays busy, then ends dirty 
   settledAs(UNSAVED);
 }));
 
-test("I-20: an untitled save that picks a file while the user types, with a second Save queued, ends saved", scene(async () => {
+test("I-20: an untitled save that picks a file while the user types, with a second Save queued, ends saved", beat(async () => {
   loadTestDocument(script("Seven", ID("h")));
   flushEdits();
   confirmSavedNow();
@@ -210,7 +210,7 @@ test("I-20: an untitled save that picks a file while the user types, with a seco
   assert.ok(copy.text().includes("Second."), "the queued save wrote the later edit");
 }));
 
-test("I-20: an autosave that runs while the user types and presses Save ends saved", scene(async () => {
+test("I-20: an autosave that runs while the user types and presses Save ends saved", beat(async () => {
   const target = heldFile(script("Eight", ID("i")), "eight.splitpage");
   await openFrom(target);
   setAutoSaveEnabled(true);
@@ -230,7 +230,7 @@ test("I-20: an autosave that runs while the user types and presses Save ends sav
   }
 }));
 
-test("I-20: an import writeback that lands late repaints from the save state", scene(async () => {
+test("I-20: an import writeback that lands late repaints from the save state", beat(async () => {
   const target = createHeldFileHandle({ name: "nine.txt", text: "Hello", lastModified: 1000 });
   loadTestDocument(script("Nine", ID("j")));
   flushEdits();
@@ -247,7 +247,7 @@ test("I-20: an import writeback that lands late repaints from the save state", s
   settledAs(UNSAVED);
 }));
 
-test("I-20: a save from a stopped app that lands after the restart leaves the new app's label alone", scene(async () => {
+test("I-20: a save from a stopped app that lands after the restart leaves the new app's label alone", beat(async () => {
   const target = heldFile(script("Ten", ID("k")), "ten.splitpage");
   await openFrom(target);
   edit("Before.");

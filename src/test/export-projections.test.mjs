@@ -18,7 +18,7 @@ import {
   brollTable,
   commentBodyText,
   commentEntries,
-  sceneFacts
+  beatFacts
 } from "../adapters/formats/export-projections.ts";
 import { LONG_DEMO } from "../starters/index.ts";
 import { loadTestDocument } from "./_document.mjs";
@@ -30,7 +30,7 @@ const demo = () => { loadTestDocument(migrateRows(copy(LONG_DEMO.state))); };
 
 function projections(doc) {
   return {
-    scenes: sceneFacts(doc),
+    beats: beatFacts(doc),
     breakdown: breakdownRows(doc),
     breakdownTable: breakdownTable(doc),
     brollTable: brollTable(doc),
@@ -82,7 +82,7 @@ test("a comment's time is formatted with the clock the caller names, not the sto
 test("b-roll groups come from the rows and people they are given, not from the open document", () => {
   demo();
   const doc = exportDocumentOf(currentDocument());
-  const from = { rows: doc.scenes, people: doc.people };
+  const from = { rows: doc.beats, people: doc.people };
   const grouped = brollGroups(doc.broll, "scene", from);
   loadTestDocument(null);
   assert.deepEqual(brollGroups(doc.broll, "scene", from), grouped);

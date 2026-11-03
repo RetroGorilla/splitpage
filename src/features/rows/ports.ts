@@ -25,7 +25,7 @@ interface CellSelectionPort {
   readonly set: (cell: Element, from: number, to?: number) => void;
 }
 
-export interface ScenePorts {
+export interface BeatPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "run" | "stamps" | "text">;
   readonly notices: Pick<NoticePort, "show">;
@@ -39,15 +39,15 @@ export interface ScenePorts {
   readonly deletes: Pick<DeleteConfirm, "armedId" | "arm" | "disarm">;
 }
 
-interface SplitScene {
+interface SplitBeat {
   readonly id: string;
   readonly field: string;
 }
 
-export interface Scenes {
+export interface Beats {
   readonly addRow: (afterId: string | null | undefined) => string | null;
   readonly addRowAndFocus: (afterId: string | null | undefined, field: string | null) => void;
-  readonly splitField: (cell: Element) => SplitScene | null;
+  readonly splitField: (cell: Element) => SplitBeat | null;
   readonly splitCellField: (cell: Element) => void;
   readonly focusField: (rowId: string | null, field: string | null, offset?: number) => void;
   readonly swapAdjacent: (rowId: string | null, dir: number) => boolean;
@@ -60,7 +60,7 @@ export interface Scenes {
   readonly dispose: () => void;
 }
 
-export interface SceneMediaPorts {
+export interface BeatMediaPorts {
   readonly document: Pick<DocumentReader, "read">;
   readonly notices: Pick<NoticePort, "show">;
   readonly ownership: Operations;
@@ -75,7 +75,7 @@ export interface PastePlace {
   readonly sel: CellRange | null;
 }
 
-export interface SceneMedia {
+export interface BeatMedia {
   readonly capturePastePlace: (cell: Element) => PastePlace;
   readonly restorePastePlace: (cell: Element, place: PastePlace) => void;
   readonly showPictureNotAdded: () => void;

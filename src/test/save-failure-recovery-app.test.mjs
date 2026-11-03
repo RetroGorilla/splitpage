@@ -50,7 +50,7 @@ function edit(text) {
   noteSessionEdit();
 }
 
-function scene(run) {
+function beat(run) {
   return async (t) => {
     const clock = mockClock(t);
     setAutoSaveEnabled(false);
@@ -128,7 +128,7 @@ const FAULTS = [
 ];
 
 for (const fault of FAULTS) {
-  test("a file handle that fails at " + fault.op + " (" + fault.why + ") keeps the work, warns on close, and the next save completes", scene(async () => {
+  test("a file handle that fails at " + fault.op + " (" + fault.why + ") keeps the work, warns on close, and the next save completes", beat(async () => {
     const target = createHeldFileHandle({
       name: "fails.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Failing", { docId: ID("1") }))), lastModified: 1000
     });
@@ -163,7 +163,7 @@ for (const fault of FAULTS) {
   }));
 }
 
-test("a handle whose permission is withdrawn fails the save with an error, not a conflict, keeps the work, and saving again once it is granted completes", scene(async () => {
+test("a handle whose permission is withdrawn fails the save with an error, not a conflict, keeps the work, and saving again once it is granted completes", beat(async () => {
   const target = createHeldFileHandle({
     name: "revoked.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Revoked", { docId: ID("2") }))), lastModified: 1000
   });
@@ -191,7 +191,7 @@ test("a handle whose permission is withdrawn fails the save with an error, not a
   assert.equal(homeModule.currentHome().lastModified, target.lastModified(), "the home holds the stamp of that write");
   assertSavedCleanly("after the retry");
 }));
-test("a failed automatic save pauses autosave and keeps the work, and a manual save writes, clears the pause and the dirty state", scene(async (t, clock) => {
+test("a failed automatic save pauses autosave and keeps the work, and a manual save writes, clears the pause and the dirty state", beat(async (t, clock) => {
   const target = createHeldFileHandle({
     name: "auto.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Automatic", { docId: ID("3") }))), lastModified: 1000
   });
@@ -252,7 +252,7 @@ async function openFromDesktop(fake, doc) {
 }
 
 for (const code of ["EACCES", "ENOSPC"]) {
-  test("a desktop write that fails with " + code + " keeps the work, tells the desktop the document is dirty, and the next save completes", scene(async () => {
+  test("a desktop write that fails with " + code + " keeps the work, tells the desktop the document is dirty, and the next save completes", beat(async () => {
     const { fake, fault, written, state } = failingDesktop();
     const picked = await openFromDesktop(fake, script("Desktop", { docId: ID("4") }));
     const onDisk = fake._text(picked.id);

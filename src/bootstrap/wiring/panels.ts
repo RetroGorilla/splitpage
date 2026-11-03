@@ -1,7 +1,7 @@
 import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
 import { currentDocument, onRefresh, onSessionChange } from "./session-owner.ts";
 import { onPreferenceChange, preferences, viewFlags } from "./preferences-owner.ts";
-import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-status.ts";
+import { onScriptStats, statsFollowChange, updateScriptStats } from "./beat-status.ts";
 import { historyOwner } from "./history.ts";
 import { renderHistory } from "./history-panel.ts";
 import { currentProductionTags } from "./production-tags.ts";

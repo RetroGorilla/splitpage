@@ -7,7 +7,7 @@ import {
   oneOf,
   pageSummaryText,
   personIn,
-  sceneLabel,
+  beatLabel,
   shotRecordForFile,
   startOf
 } from "../../../src/core/production/broll-view.ts";
@@ -51,9 +51,9 @@ test("the counts and the page summary say how many are shot and how many flagged
 });
 
 test("a scene is numbered from one with two digits, a start is a timecode, and a shot with no scene has neither", () => {
-  assert.equal(sceneLabel(entry("a", { rowIndex: 0 })), "01");
-  assert.equal(sceneLabel(entry("a", { rowIndex: 11 })), "12");
-  assert.equal(sceneLabel(entry("a", { rowIndex: -1 })), "");
+  assert.equal(beatLabel(entry("a", { rowIndex: 0 })), "01");
+  assert.equal(beatLabel(entry("a", { rowIndex: 11 })), "12");
+  assert.equal(beatLabel(entry("a", { rowIndex: -1 })), "");
   const starts = { r1: 0, r2: 65 };
   assert.equal(startOf(entry("a", { rowId: "r1" }), starts), "00:00", "a scene that starts at zero still has a start");
   assert.equal(startOf(entry("a", { rowId: "r2" }), starts), "01:05");
@@ -67,12 +67,12 @@ test("a shot's file record names its scene, owner, status and props, with defaul
     props: [{ key: "t:k", id: "t_k", name: "Kettle", status: "have" }, { key: "n:x", id: "", name: "Boat hook", status: "" }]
   });
   assert.deepEqual(shotRecordForFile(full, PEOPLE), {
-    scene: "03", name: "Gulls", status: "Shot", shot: true, flagged: true, location: "Pier",
+    beat: "03", name: "Gulls", status: "Shot", shot: true, flagged: true, location: "Pier",
     props: ["Kettle", "Boat hook"], propsWithStatus: ["Kettle (have it)", "Boat hook"],
     cuts: "cut 3", owner: "Sam", note: "wide", desc: "over the pier"
   });
   assert.deepEqual(shotRecordForFile(entry("b", { name: undefined, rowId: null, rowIndex: -1 }), PEOPLE), {
-    scene: "", name: "Untitled shot", status: "To shoot", shot: false, flagged: false, location: "",
+    beat: "", name: "Untitled shot", status: "To shoot", shot: false, flagged: false, location: "",
     props: [], propsWithStatus: [], cuts: "", owner: "", note: "", desc: ""
   });
 });

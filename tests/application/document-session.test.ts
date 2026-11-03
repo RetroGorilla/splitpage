@@ -223,7 +223,7 @@ test("E4: a recovery migrates the raw input, opens a new epoch, keeps the undo s
   assert.equal(first.session.epoch(), 1, "the first document can enter as a recovery, with an epoch of its own");
 });
 
-function reloadedScenes(): Record<string, unknown>[] {
+function reloadedBeats(): Record<string, unknown>[] {
   return [
     { id: "f1", visualText: "Wide", audioText: "Put the kettle on.", updatedAt: "2026-10-07T09:00:00.000Z" },
     { id: "f2", visualText: "Close", audioText: "Two." }
@@ -236,7 +236,7 @@ test("E4: a reload migrates the reloaded title and scenes over the held document
   assert.ok(held);
   const comments = JSON.stringify(held.comments);
   const docId = held.docId;
-  const rows = reloadedScenes();
+  const rows = reloadedBeats();
   const rowsText = JSON.stringify(rows);
   const doc = h.session.absorbReload({ title: "Reloaded", rows: rows });
   assert.equal(doc, held, "reloaded in place");
@@ -259,7 +259,7 @@ test("E4: a reload keeps the held document's unchanged fields as the same object
   assert.ok(held);
   const comments = held.comments;
   const keys = Object.keys(held);
-  h.session.absorbReload({ title: "Reloaded", rows: reloadedScenes() });
+  h.session.absorbReload({ title: "Reloaded", rows: reloadedBeats() });
   assert.equal(held.comments, comments);
   assert.deepEqual(Object.keys(held), keys);
 });
@@ -286,7 +286,7 @@ test("E4: a reload whose migration throws leaves the held document, the epoch an
 
 test("E4: a reload with no document held changes nothing and publishes nothing", () => {
   const h = harness();
-  assert.equal(h.session.absorbReload({ title: "Reloaded", rows: reloadedScenes() }), null);
+  assert.equal(h.session.absorbReload({ title: "Reloaded", rows: reloadedBeats() }), null);
   assert.equal(h.session.read(function (d) { return d; }), null);
   assert.deepEqual([h.session.epoch(), h.session.generation()], [0, 0]);
   assert.deepEqual(h.log, []);

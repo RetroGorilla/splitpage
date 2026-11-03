@@ -1,144 +1,123 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { changeSet } from "../../src/application/session/change-set.ts";
-import { CELL_TEXT_DERIVES } from "../../src/application/commands/cell-text.ts";
-import {
-  SCENE_PASTE_FIELDS, pasteScenesCommand, removeScenesCommand
-} from "../../src/application/commands/scenes.ts";
-import type { ScenePaste, ScenePastePlan } from "../../src/application/commands/scenes.ts";
-import type { DocumentRow, ValidatedDocument } from "../../src/core/document/validated.ts";
+import { addSceneCommand, moveSceneCommand, removeSceneCommand, renameSceneCommand } from "../../src/application/commands/scenes.ts";
+import { deleteBeatCommand, moveBeatCommand, swapBeatsCommand } from "../../src/application/commands/rows.ts";
+import { removeBeatsCommand } from "../../src/application/commands/beats.ts";
+import { joinBeatsCommand } from "../../src/application/commands/split-join.ts";
+import { createUndoHistory, diffStates } from "../../src/application/editing/undo/history.ts";
+import { sceneForBeat, scenesInOrder } from "../../src/core/document/scenes.ts";
 import { harness, runConfined } from "./session-fakes.ts";
+import type { Harness } from "./session-fakes.ts";
+import type { DocumentShape } from "../../src/core/document/validated.ts";
 
-function script(): Record<string, unknown> {
-  return {
-    title: "Scenes",
-    docId: "d" + "3".repeat(32),
-    rows: ["r1", "r2", "r3"].map(function (id, i) {
-      return { id: id, visualText: "V" + (i + 1), audioText: "A" + (i + 1), status: "todo" };
-    }),
-    comments: [{ id: "c1", rowId: "r2", field: "audioText", body: "Tighter", replies: [] }]
-  };
-}
-
-function opened(): ReturnType<typeof harness> {
+function opened(): Harness {
   const h = harness();
-  h.session.adopt(script());
+  h.session.adopt({ title: "Sections", rows: ["a", "b", "c", "d", "e"].map(id => ({ id })),
+    sections: [{ id: "s1", name: "Opening", firstSceneId: "b" }, { id: "s2", name: "Ending", firstSceneId: "d" }] });
   h.log.length = 0;
-  h.published.length = 0;
   return h;
 }
 
-function order(h: ReturnType<typeof harness>): string[] {
-  return h.session.read(function (doc) { return doc ? doc.rows.map(function (r) { return r.id; }) : []; });
+function snapshot(h: Harness): DocumentShape {
+  return h.session.read(doc => JSON.parse(JSON.stringify(doc)) as DocumentShape);
 }
 
-function snapshot(h: ReturnType<typeof harness>): string {
-  return h.session.read(function (doc) { return JSON.stringify(doc); });
-}
-
-function scene(id: string): DocumentRow {
-  return { id: id, visualText: "Pasted " + id, audioText: "", status: "todo" };
-}
-
-function fakePaste(planned: ScenePastePlan | null, write?: (live: ValidatedDocument) => void): ScenePaste & { planned: number } {
-  const out = {
-    planned: 0,
-    plan: function () { out.planned++; return planned; },
-    apply: function (live: ValidatedDocument) {
-      if (write) { write(live); return; }
-      if (!planned) return;
-      const at = planned.replaced ? live.rows.findIndex(function (r) { return r.id === planned.replaced; }) : live.rows.length;
-      live.rows.splice(at, planned.replaced ? 1 : 0, ...planned.inserted.map(scene));
-      live.people = [{ id: "p1", name: "Jordan" }];
-    }
-  };
-  return out;
-}
-
-const ONE_EDIT = ["undo.record", "dirty:1", "draft:1", "save:1", "publish:edit"];
-
-test("scenes: a paste is one transaction that declares the inserted scenes and the records that come with them", () => {
+test("sections: add, rename and remove are confined single transactions and keep all scenes", () => {
   const h = opened();
-  const paste = fakePaste({ inserted: ["n1", "n2"], replaced: null, title: false, saveNow: true });
-  const out = runConfined(h.session, pasteScenesCommand(paste));
-  assert.deepEqual(out, {
-    kind: "applied", generation: 1,
-    changes: changeSet({ rowsInserted: ["n1", "n2"], docFields: SCENE_PASTE_FIELDS, derive: CELL_TEXT_DERIVES, saveNow: true })
-  });
-  assert.deepEqual(h.log, ["reconcile"].concat(ONE_EDIT));
-  assert.deepEqual(order(h), ["r1", "r2", "r3", "n1", "n2"]);
-  assert.equal(paste.planned, 1);
+  const rows = snapshot(h).rows;
+  assert.equal(runConfined(h.session, addSceneCommand("c", "middle", " Middle ")).kind, "applied");
+  assert.equal(runConfined(h.session, renameSceneCommand("middle", "The middle")).kind, "applied");
+  assert.equal(sceneForBeat(snapshot(h), "c")?.name, "The middle");
+  assert.equal(runConfined(h.session, removeSceneCommand("middle")).kind, "applied");
+  assert.equal(sceneForBeat(snapshot(h), "c")?.id, "s1");
+  assert.deepEqual(snapshot(h).rows, rows);
+  assert.equal(h.log.filter(item => item === "undo.record").length, 3);
+  assert.equal(runConfined(h.session, removeSceneCommand("s1")).kind, "applied");
+  assert.equal(sceneForBeat(snapshot(h), "b"), undefined);
+  assert.equal(sceneForBeat(snapshot(h), "c"), undefined);
 });
 
-test("scenes: a paste onto a blank scene declares that scene removed, and a new script's title is declared", () => {
+test("sections: invalid, duplicate and unchanged operations are no-ops", () => {
   const h = opened();
-  const out = runConfined(h.session, pasteScenesCommand(fakePaste({ inserted: ["n1"], replaced: "r3", title: true, saveNow: false })));
-  assert.equal(out.kind, "applied");
-  assert.deepEqual(out.kind === "applied" ? out.changes : null, changeSet({
-    rowsInserted: ["n1"], rowsRemoved: ["r3"], docFields: SCENE_PASTE_FIELDS.concat(["title"]), derive: CELL_TEXT_DERIVES
+  const before = snapshot(h);
+  for (const command of [addSceneCommand("b", "s3", "Duplicate"), addSceneCommand("gone", "s3", "Missing"),
+    renameSceneCommand("s1", "Opening"), renameSceneCommand("s1", "  "), removeSceneCommand("gone")]) {
+    assert.equal(runConfined(h.session, command).kind, "noop");
+  }
+  assert.deepEqual(snapshot(h), before);
+  assert.deepEqual(h.log, []);
+});
+
+test("sections: deleting or moving the first scene advances the boundary; the last removal drops it", () => {
+  const h = opened();
+  assert.equal(runConfined(h.session, moveBeatCommand("b", "e", true)).kind, "applied");
+  assert.equal(sceneForBeat(snapshot(h), "b")?.id, "s2");
+  assert.equal(scenesInOrder(snapshot(h))?.[0]?.firstSceneId, "c");
+  assert.equal(runConfined(h.session, deleteBeatCommand("c")).kind, "applied");
+  assert.deepEqual(scenesInOrder(snapshot(h))?.map(scene => scene.id), ["s2"]);
+});
+
+test("sections: an explicit drop after a header can become its first scene, and swaps reassign scenes", () => {
+  const h = opened();
+  assert.equal(runConfined(h.session, moveBeatCommand("a", "b", false, "s1")).kind, "applied");
+  assert.equal(scenesInOrder(snapshot(h))?.[0]?.firstSceneId, "a");
+  assert.equal(runConfined(h.session, swapBeatsCommand("c", 1)).kind, "applied");
+  assert.equal(sceneForBeat(snapshot(h), "c")?.id, "s2");
+});
+
+test("sections: a group move carries every scene and leaves the unsectioned prefix in place", () => {
+  const h = opened();
+  assert.equal(runConfined(h.session, moveSceneCommand("s2", "s1", false)).kind, "applied");
+  assert.deepEqual(snapshot(h).rows.map(row => row.id), ["a", "d", "e", "b", "c"]);
+  assert.deepEqual(scenesInOrder(snapshot(h))?.map(scene => scene.id), ["s2", "s1"]);
+  assert.equal(h.log.filter(item => item === "undo.record").length, 1);
+});
+
+test("sections: undo restores a removed header and its name in one step; redo removes only the header", () => {
+  const h = opened();
+  const before = snapshot(h);
+  runConfined(h.session, removeSceneCommand("s1"));
+  const after = snapshot(h);
+  const steps = diffStates(before, after);
+  assert.equal(steps.length, 1);
+  const history = createUndoHistory(() => []);
+  history.record(steps, 0);
+  assert.equal(history.undo(after).ok, true);
+  assert.deepEqual(after.sections, before.sections);
+  assert.deepEqual(after.rows, before.rows);
+  assert.equal(history.redo(after).ok, true);
+  assert.deepEqual(after.sections, snapshot(h).sections);
+  assert.deepEqual(after.rows, before.rows);
+});
+
+test("sections: bulk deletion advances boundaries and a join cannot silently remove a header", () => {
+  const h = opened();
+  const before = snapshot(h);
+  const outcome = runConfined(h.session, joinBeatsCommand("c", {
+    clock: { nowIso: () => "2030-01-01T00:00:00.000Z" }, editor: { name: () => "Adam" }, cells: () => [], plainText: () => ""
   }));
-  assert.deepEqual(order(h), ["r1", "r2", "n1"]);
-  assert.equal(h.published[0]?.changes.saveNow, false, "a paste whose comments follow in a second step leaves the save to that step");
+  assert.equal(outcome.kind, "rejected");
+  assert.deepEqual(snapshot(h), before);
+  assert.equal(runConfined(h.session, removeBeatsCommand(["a", "b", "d"])).kind, "applied");
+  assert.deepEqual(scenesInOrder(snapshot(h))?.map(scene => scene.firstSceneId), ["c", "e"]);
+  assert.equal(runConfined(h.session, removeBeatsCommand(["c", "e"])).kind, "applied");
+  assert.equal("sections" in snapshot(h), false);
 });
 
-test("scenes: a paste with nothing to insert is a no-op that writes nothing", () => {
+test("sections: undo after an unrelated merged edit retains that edit; a changed header is not overwritten", () => {
   const h = opened();
   const before = snapshot(h);
-  assert.deepEqual(runConfined(h.session, pasteScenesCommand(fakePaste(null))), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, pasteScenesCommand(fakePaste({ inserted: [], replaced: null, title: false, saveNow: true }))), { kind: "noop" });
-  assert.deepEqual(h.log, []);
-  assert.equal(snapshot(h), before);
+  runConfined(h.session, removeSceneCommand("s1"));
+  const live = snapshot(h);
+  const history = createUndoHistory(() => []);
+  history.record(diffStates(before, live), 0);
+  const first = live.rows[0];
+  assert.ok(first);
+  first.audioText = "Incoming text";
+  assert.equal(history.undo(live).ok, true);
+  assert.equal(live.rows[0]?.audioText, "Incoming text");
+  assert.deepEqual(live.sections, before.sections);
+  live.sections = [{ id: "s1", name: "Incoming name", firstSceneId: "b" }];
+  assert.equal(history.redo(live).ok, false);
+  assert.deepEqual(live.sections, [{ id: "s1", name: "Incoming name", firstSceneId: "b" }]);
 });
-
-test("scenes: a paste whose scenes did not land, or that throws part way, is rolled back with nothing published", () => {
-  const h = opened();
-  const before = snapshot(h);
-  const short = fakePaste({ inserted: ["n1", "n2"], replaced: null, title: false, saveNow: true }, function (live) {
-    live.rows.push(scene("n1"));
-    live.people = [{ id: "p9", name: "Half" }];
-  });
-  const out = runConfined(h.session, pasteScenesCommand(short));
-  assert.equal(out.kind, "failed");
-  assert.match(String(out.kind === "failed" ? out.error : ""), /n2 is not in the document/);
-  assert.equal(snapshot(h), before);
-  const broken = fakePaste({ inserted: ["n1"], replaced: "r1", title: true, saveNow: true }, function (live) {
-    live.rows.splice(0, 1, scene("n1"));
-    live.title = "Half";
-    live.comments.push({ id: "c2", rowId: "n1", field: "audioText", body: "" });
-    throw new Error("no clock");
-  });
-  assert.equal(runConfined(h.session, pasteScenesCommand(broken)).kind, "failed");
-  assert.equal(snapshot(h), before);
-  assert.deepEqual(h.log, []);
-  assert.deepEqual(h.published, []);
-});
-
-test("scenes: a refused session pastes nothing and plans nothing", () => {
-  const h = opened();
-  h.deny("review");
-  const paste = fakePaste({ inserted: ["n1"], replaced: null, title: false, saveNow: true });
-  assert.deepEqual(runConfined(h.session, pasteScenesCommand(paste)), { kind: "rejected", reason: "review" });
-  assert.equal(paste.planned, 0);
-  assert.deepEqual(runConfined(h.session, removeScenesCommand(["r1"])), { kind: "rejected", reason: "review" });
-  assert.deepEqual(order(h), ["r1", "r2", "r3"]);
-  assert.deepEqual(h.log, []);
-});
-
-test("scenes: a cut or delete removes the scenes still there in one transaction, saves at once and re-points comments", () => {
-  const h = opened();
-  const out = runConfined(h.session, removeScenesCommand(["r3", "gone", "r1", "r3"]));
-  assert.deepEqual(out, {
-    kind: "applied", generation: 1,
-    changes: changeSet({ rowsRemoved: ["r3", "r1"], derive: CELL_TEXT_DERIVES, saveNow: true })
-  });
-  assert.deepEqual(h.log, ["reconcile"].concat(ONE_EDIT));
-  assert.deepEqual(order(h), ["r2"]);
-});
-
-test("scenes: removing scenes that have all gone is a no-op", () => {
-  const h = opened();
-  assert.deepEqual(runConfined(h.session, removeScenesCommand(["gone"])), { kind: "noop" });
-  assert.deepEqual(runConfined(h.session, removeScenesCommand([])), { kind: "noop" });
-  assert.deepEqual(h.log, []);
-});
-

@@ -394,8 +394,8 @@ test("an array, or any value that is not an object, is no document: adoption, a 
 
 test("an array scene is dropped (#407)", () => {
   const h = fuzzHarness();
-  const scene = h.session.absorbDisk({ rows: [[], { id: "r2" }] });
-  assert.ok(scene);
-  assert.equal(JSON.stringify(scene.rows), '[{"id":"r2","status":"todo","visualText":"","audioText":"","imageRef":null,"updatedAt":"","updatedBy":null}]');
-  assert.deepEqual(judge(scene, migrate), { problems: [], known: [] });
+  const beat = h.session.absorbDisk({ rows: [[], { id: "r2" }] });
+  assert.ok(beat);
+  assert.equal(JSON.stringify(beat.rows), '[{"id":"r2","status":"todo","visualText":"","audioText":"","imageRef":null,"updatedAt":"","updatedBy":null}]');
+  assert.deepEqual(judge(beat, migrate), { problems: [], known: [] });
 });

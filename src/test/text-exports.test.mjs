@@ -45,22 +45,22 @@ test("the script's sheet: a row per scene with its start, status, read time, tag
   const s = demo();
   const rows = sheet(buildCsv(liveDoc()));
   assert.deepEqual(rows[0], HEAD);
-  const scene = (n) => rows[n];
-  assert.deepEqual(scene(1).slice(0, 5), ["01", "00:00", "Shot", "0:10", ""]);
-  assert.equal(scene(1)[5], toPlainText(cellOf(s.rows[0].visualText)));
-  assert.equal(scene(1)[6], toPlainText(cellOf(s.rows[0].audioText)));
-  assert.equal(scene(1)[7], "Prop: Pentax K1000; Location: workbench; Music/SFX: shutter click");
-  assert.deepEqual(scene(2).slice(0, 5), ["02", "00:10", "Shot", "0:06", "yes"]);
-  assert.deepEqual(scene(25).slice(0, 5), ["25", "08:14", "To do", "0:12", "yes"]);
+  const beat = (n) => rows[n];
+  assert.deepEqual(beat(1).slice(0, 5), ["01", "00:00", "Shot", "0:10", ""]);
+  assert.equal(beat(1)[5], toPlainText(cellOf(s.rows[0].visualText)));
+  assert.equal(beat(1)[6], toPlainText(cellOf(s.rows[0].audioText)));
+  assert.equal(beat(1)[7], "Prop: Pentax K1000; Location: workbench; Music/SFX: shutter click");
+  assert.deepEqual(beat(2).slice(0, 5), ["02", "00:10", "Shot", "0:06", "yes"]);
+  assert.deepEqual(beat(25).slice(0, 5), ["25", "08:14", "To do", "0:12", "yes"]);
   assert.equal(rows.slice(1, 31).filter((r) => r[4] === "yes").length, 2);
-  assert.equal(scene(5)[7], "Prop: toothpick, light seal kit, naphtha; Gear: overhead rig");
-  assert.equal(scene(21)[7], "", "nothing tagged in scene 21");
-  assert.equal(scene(4)[8], "fingertip pushing on the sticky old foam (shot)");
-  assert.equal(scene(6)[8], "the toothpick lifting a long strand of goo (shot, flagged)");
-  assert.equal(scene(22)[8], "feet on the gravel path, low angle (to shoot)");
-  assert.deepEqual([3, 9, 18, 24].map((n) => scene(n)[9]), ["1", "", "2", "3"]);
-  assert.deepEqual(scene(10).slice(0, 4), ["10", "02:48", "Ready", "0:38"]);
-  assert.deepEqual(scene(13).slice(0, 4), ["13", "03:43", "To do", "0:45"]);
+  assert.equal(beat(5)[7], "Prop: toothpick, light seal kit, naphtha; Gear: overhead rig");
+  assert.equal(beat(21)[7], "", "nothing tagged in scene 21");
+  assert.equal(beat(4)[8], "fingertip pushing on the sticky old foam (shot)");
+  assert.equal(beat(6)[8], "the toothpick lifting a long strand of goo (shot, flagged)");
+  assert.equal(beat(22)[8], "feet on the gravel path, low angle (to shoot)");
+  assert.deepEqual([3, 9, 18, 24].map((n) => beat(n)[9]), ["1", "", "2", "3"]);
+  assert.deepEqual(beat(10).slice(0, 4), ["10", "02:48", "Ready", "0:38"]);
+  assert.deepEqual(beat(13).slice(0, 4), ["13", "03:43", "To do", "0:45"]);
 });
 
 test("the sheet's totals are labelled, the target beside them, and the comments carry their numbers", () => {

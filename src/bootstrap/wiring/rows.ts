@@ -7,19 +7,19 @@ import { ownership as portOwnership } from "./ports/saving.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
-import type { PastePlace, SceneMedia, SceneMediaPorts, ScenePorts, Scenes } from "../../features/rows/ports.ts";
-import { startSceneMedia as mountSceneMedia } from "../../features/rows/scene-media.ts";
-import { startSceneRows as mountScenes } from "../../features/rows/scenes.ts";
+import type { PastePlace, BeatMedia, BeatMediaPorts, BeatPorts, Beats } from "../../features/rows/ports.ts";
+import { startBeatMedia as mountBeatMedia } from "../../features/rows/beat-media.ts";
+import { startBeatRows as mountBeats } from "../../features/rows/beats.ts";
 import { randomIds } from "../../adapters/identity/ids.ts";
 import { cellEditing, rowDrag } from "./editor-owners.ts";
 import { deleteConfirmation } from "./production-editing-owners.ts";
 
-const scenes = owned<Scenes>();
-const media = owned<SceneMedia>();
+const beats = owned<Beats>();
+const media = owned<BeatMedia>();
 
-export function mountScenesFeature(): Scenes {
-  return scenes.replace(function () {
-    const ports: ScenePorts = {
+export function mountBeatsFeature(): Beats {
+  return beats.replace(function () {
+    const ports: BeatPorts = {
       document: portDocument,
       edits: portEdits,
       notices: portNotices,
@@ -36,15 +36,15 @@ export function mountScenesFeature(): Scenes {
         disarm: (area) => { deleteConfirmation().disarm(area); }
       }
     };
-    return mountScenes(ports);
+    return mountBeats(ports);
   });
 }
 
-export const stopScenesFeature = scenes.stop;
+export const stopBeatsFeature = beats.stop;
 
-export function mountSceneMediaFeature(): SceneMedia {
+export function mountBeatMediaFeature(): BeatMedia {
   return media.replace(function () {
-    const ports: SceneMediaPorts = {
+    const ports: BeatMediaPorts = {
       document: portDocument,
       notices: portNotices,
       ownership: portOwnership,
@@ -53,54 +53,54 @@ export function mountSceneMediaFeature(): SceneMedia {
       text: portText,
       selection: { of: cellSelection, set: setCellSelection }
     };
-    return mountSceneMedia(ports);
+    return mountBeatMedia(ports);
   });
 }
 
-export const stopSceneMediaFeature = media.stop;
+export const stopBeatMediaFeature = media.stop;
 
 export function addRow(afterId: string | null | undefined): string | null {
-  return scenes.owner()?.addRow(afterId) ?? null;
+  return beats.owner()?.addRow(afterId) ?? null;
 }
 
 export function addRowAndFocus(afterId: string | null | undefined, field: string | null): void {
-  scenes.owner()?.addRowAndFocus(afterId, field);
+  beats.owner()?.addRowAndFocus(afterId, field);
 }
 
 export function splitCellField(cell: Element): void {
-  scenes.owner()?.splitCellField(cell);
+  beats.owner()?.splitCellField(cell);
 }
 
 export function focusRowField(rowId: string | null, field: string | null, offset?: number): void {
-  scenes.owner()?.focusField(rowId, field, offset);
+  beats.owner()?.focusField(rowId, field, offset);
 }
 
 export function swapAdjacentRows(rowId: string | null, dir: number): boolean {
-  return scenes.owner()?.swapAdjacent(rowId, dir) ?? false;
+  return beats.owner()?.swapAdjacent(rowId, dir) ?? false;
 }
 
 export function moveRow(rowId: string, dir: number): void {
-  scenes.owner()?.moveRow(rowId, dir);
+  beats.owner()?.moveRow(rowId, dir);
 }
 
 export function armDelete(btn: Element, rowId: string): void {
-  scenes.owner()?.armDelete(btn, rowId);
+  beats.owner()?.armDelete(btn, rowId);
 }
 
 export function clearDropMarkers(): void {
-  scenes.owner()?.clearDropMarkers();
+  beats.owner()?.clearDropMarkers();
 }
 
 export function setDropMarkerForRow(row: Element, clientY: number): void {
-  scenes.owner()?.setDropMarkerForRow(row, clientY);
+  beats.owner()?.setDropMarkerForRow(row, clientY);
 }
 
 export function updateDragScroll(clientX: number, clientY: number): void {
-  scenes.owner()?.updateDragScroll(clientX, clientY);
+  beats.owner()?.updateDragScroll(clientX, clientY);
 }
 
 export function stopDragScroll(): void {
-  scenes.owner()?.stopDragScroll();
+  beats.owner()?.stopDragScroll();
 }
 
 export function capturePastePlace(cell: Element): PastePlace {
@@ -128,5 +128,5 @@ export function removeImageLink(rowId: string, slot: number, key: string): void 
 }
 
 export function splitRowFieldCore(cell: Element) {
-  return scenes.owner()?.splitField(cell) ?? null;
+  return beats.owner()?.splitField(cell) ?? null;
 }

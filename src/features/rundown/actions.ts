@@ -5,7 +5,7 @@ import type { ScreenState } from "../../application/screen.ts";
 export interface RundownControls {
   readonly minimized: () => boolean;
   readonly toggleMinimized: () => void;
-  readonly goToScene: (rowId: string | null) => void;
+  readonly goToBeat: (rowId: string | null) => void;
 }
 
 const OFF: Availability = { enabled: false };
@@ -28,7 +28,7 @@ export function rundownMinimizeActions(current: () => RundownControls | null, sc
   ];
 }
 
-export function rundownSceneActions(current: () => RundownControls | null): ActionDefinition[] {
+export function rundownBeatActions(current: () => RundownControls | null): ActionDefinition[] {
   return [
     {
       id: "go-to-scene",
@@ -37,7 +37,7 @@ export function rundownSceneActions(current: () => RundownControls | null): Acti
       availability: () => current() ? OPENED_FROM_ITS_VIEW : { enabled: false, visible: false },
       run: (_source, input) => {
         if (input !== null && typeof input !== "string") throw new TypeError("go-to-scene needs a scene id");
-        current()?.goToScene(input);
+        current()?.goToBeat(input);
       }
     }
   ];

@@ -279,7 +279,7 @@ function fill<T>(n: number, v: T): T[] { const a: T[] = []; for (let i = 0; i < 
 function scriptSheet(L: Looks, t: ScriptTable): WorkbookSheet {
   const head = t.head.concat(["Notes"]);
   const headStyles = head.map(function (h) { return h === "Visual" ? L.headVisual : h === "Audio" ? L.headAudio : L.head; });
-  const rows: WorkbookSheet["rows"] = t.scenes.map(function (s) {
+  const rows: WorkbookSheet["rows"] = t.beats.map(function (s) {
     const st = Object.entries(STATUS_PRINT).find(([id]) => id === s.status)?.[1] || STATUS_PRINT.todo;
     const styles = fill(head.length, L.body);
     styles[0] = L.with({ bold: true, align: "center" });
@@ -299,7 +299,7 @@ function scriptSheet(L: Looks, t: ScriptTable): WorkbookSheet {
     headStyles: headStyles,
     cols: [7, 9, 10, 8, 9, 46, 60, 32, 30, 11, 40],
     rows: rows,
-    filterRows: t.scenes.length
+    filterRows: t.beats.length
   };
 }
 

@@ -165,11 +165,11 @@ test("row routes: add-row and the scene menu commands route by action", () => {
   routes.dispose();
 });
 
-function sceneClick(routes: RowRoutes, win: Realm, target: Element): boolean {
+function beatClick(routes: RowRoutes, win: Realm, target: Element): boolean {
   let handled = false;
   target.addEventListener("click", function once(ev) {
     target.removeEventListener("click", once);
-    handled = routes.sceneClick(ev as MouseEvent);
+    handled = routes.beatClick(ev as MouseEvent);
   });
   target.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
   return handled;
@@ -179,9 +179,9 @@ test("row routes: a scene's status button cycles that scene's status, from inner
   const p = page();
   const h = harness(p);
   const routes = h.mount();
-  assert.equal(sceneClick(routes, p.win, p.byId("status-r1")), true);
-  assert.equal(sceneClick(routes, p.win, p.byId("status-dot-r3")), true);
-  assert.equal(sceneClick(routes, p.win, p.byId("other")), false);
+  assert.equal(beatClick(routes, p.win, p.byId("status-r1")), true);
+  assert.equal(beatClick(routes, p.win, p.byId("status-dot-r3")), true);
+  assert.equal(beatClick(routes, p.win, p.byId("other")), false);
   assert.deepEqual(h.calls, ["status:r1", "status:r3"]);
   routes.dispose();
 });
@@ -190,7 +190,7 @@ test("row routes: a hidden-shot strip expands its scenes", () => {
   const p = page();
   const h = harness(p);
   const routes = h.mount();
-  assert.equal(sceneClick(routes, p.win, p.byId("strip-label")), true);
+  assert.equal(beatClick(routes, p.win, p.byId("strip-label")), true);
   assert.deepEqual(h.calls, ["expand:r4,r5"]);
   routes.dispose();
 });
@@ -204,10 +204,10 @@ test("row routes: jump to scene reveals it, scrolls it to the centre and flashes
   };
   const routes = h.mount();
   p.row("r2").classList.add("just-merged");
-  assert.equal(sceneClick(routes, p.win, p.byId("jump-label")), true);
+  assert.equal(beatClick(routes, p.win, p.byId("jump-label")), true);
   assert.deepEqual(scrolled, [["r2", { behavior: "smooth", block: "center" }]]);
   assert.ok(p.row("r2").classList.contains("just-merged"), "the flash runs again");
-  assert.equal(sceneClick(routes, p.win, p.byId("jump-gone")), true);
+  assert.equal(beatClick(routes, p.win, p.byId("jump-gone")), true);
   assert.deepEqual(h.calls, ["reveal:r2", "reveal:gone", "gone"], "revealed first, then found or reported gone");
   assert.equal(scrolled.length, 1);
   routes.dispose();
@@ -230,7 +230,7 @@ test("row routes: dispose removes every registration it made and stops the route
   fire(p.win, p.byId("other"), "mouseup");
   assert.deepEqual(h.calls, [], "nothing reacts after dispose");
   assert.deepEqual(routedClick(first, p.win, p.byId("add")), { add: false, menu: false }, "a disposed owner routes nothing");
-  assert.equal(sceneClick(first, p.win, p.byId("status-r1")), false, "nor the scene clicks");
+  assert.equal(beatClick(first, p.win, p.byId("status-r1")), false, "nor the scene clicks");
   const second = h.mount();
   fire(p.win, p.byId("grip-r1"), "dragstart");
   assert.deepEqual(h.calls, ["drag:r1"], "the remount handles one drag start once");

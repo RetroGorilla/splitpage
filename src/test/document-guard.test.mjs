@@ -11,7 +11,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { DocumentWriteError, documentGuardOn, isDocumentView, quietly, rawOf } = await import("../application/identity/document-guard.ts");
 const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../bootstrap/wiring/session-owner.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
-const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
+const { beatLengthCommand } = await import("../application/commands/beat-length.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undo = () => undoOwner().undo();
@@ -123,7 +123,7 @@ test("a command changes the session's own object, and values read through views 
   assert.deepEqual(viewsIn(heldDocument()), [], "no view reaches the session");
   assert.equal(raw.people[1], raw.people[0], "the view was replaced by the object it shows");
   assert.equal(raw.people[2].crew[0], raw.people[0]);
-  assert.equal(runDocumentEdit(sceneLengthCommand("r1", 30, sessionStamps)), true);
+  assert.equal(runDocumentEdit(beatLengthCommand("r1", 30, sessionStamps)), true);
   assert.equal(shown().rows[0].lengthSeconds, 30);
   assert.deepEqual(viewsIn(heldDocument()), []);
 });
@@ -145,7 +145,7 @@ test("a view handed to the session is unwrapped: a replacement and a disk update
 test("undo and redo of a command run through the session under the guard", () => {
   loadTestDocument(script("Undone"));
   flushEdits();
-  assert.equal(runDocumentEdit(sceneLengthCommand("r2", 45, sessionStamps)), true);
+  assert.equal(runDocumentEdit(beatLengthCommand("r2", 45, sessionStamps)), true);
   flushEdits();
   assert.equal(undoSizes().undo, 1);
   assert.equal(undo().ok, true);

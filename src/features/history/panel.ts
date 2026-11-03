@@ -143,7 +143,7 @@ function historySavedHtml(d: Date | null) {
   return (day.word ? escapeHtml(day.word) : historyFig(day.date)) + " at " + historyFig(historyClock(d));
 }
 
-function historyScenesHtml(n: number) {
+function historyBeatsHtml(n: number) {
   return historyFig(String(n)) + " scene" + (n === 1 ? "" : "s");
 }
 
@@ -213,13 +213,13 @@ function historyCardHtml(m: HistoryCardMeta, bucket: string) {
         '<span class="history-card-label">' + escapeHtml(m.label || "Snapshot") +
           (status === "pending" ? '<span class="history-card-badge" title="Kept in this window only, and tried again after the next successful write">Not stored</span>' : "") +
         '</span>' +
-        '<span class="history-scenes">' + historyScenesHtml(rows) + '</span>' +
+        '<span class="history-scenes">' + historyBeatsHtml(rows) + '</span>' +
       '</summary>' +
       '<div class="history-detail">' +
         '<dl class="history-facts">' +
           '<dt>Saved</dt><dd><span>' + historySavedHtml(when) + '</span></dd>' +
           '<dt>Saved by</dt><dd>' + historyPersonHtml(m.by) + '</dd>' +
-          '<dt>Script at the time</dt><dd><span>' + historyScenesHtml(rows) + '</span></dd>' +
+          '<dt>Script at the time</dt><dd><span>' + historyBeatsHtml(rows) + '</span></dd>' +
           (size ? '<dt>Snapshot size</dt><dd><span>' + size + '</span></dd>' : "") +
         '</dl>' +
         '<div class="history-restore">' +

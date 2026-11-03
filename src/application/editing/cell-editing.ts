@@ -5,7 +5,7 @@ import { cellRuns, cellTextCommand } from "../commands/cell-text.ts";
 import type { CellRecords } from "../commands/cell-text.ts";
 import { galleryCommand } from "../commands/gallery.ts";
 import type { GalleryEdit } from "../commands/gallery.ts";
-import { moveSceneCommand } from "../commands/rows.ts";
+import { moveBeatCommand } from "../commands/rows.ts";
 import type { Command, CommandOutcome, DocumentView } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 
@@ -163,7 +163,7 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
   }
 
   function moveRow(rowId: string, targetId: string, after: boolean): void {
-    took(ports.run(moveSceneCommand(rowId, targetId, !!after)));
+    took(ports.run(moveBeatCommand(rowId, targetId, !!after)));
   }
 
   return { open, close, edit, sync, editGallery, moveRow };

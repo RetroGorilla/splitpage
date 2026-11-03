@@ -27,7 +27,7 @@ const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toNam
 
 import { buildBreakdownCsv, buildBrollCsv } from "../adapters/formats/csv.ts";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
-import { sceneFacts } from "../adapters/formats/export-projections.ts";
+import { beatFacts } from "../adapters/formats/export-projections.ts";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -616,7 +616,7 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
   assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start");
   assert.equal(lines.length, 4);
-  const at = (i) => sceneFacts(exportDocumentOf(currentDocument()))[i].start;
+  const at = (i) => beatFacts(exportDocumentOf(currentDocument()))[i].start;
   assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,,00:00");
   assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
   assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,," + at(2));

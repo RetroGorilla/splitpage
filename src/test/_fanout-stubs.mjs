@@ -80,7 +80,7 @@ export function cssAttr(v) { return String(v); }
 export const productionReaders = { wordCount: () => 0 };
 export function hasSetLength(row) { return coreHasSetLength(row); }
 export function formatDuration(s) { return String(s); }
-export function parseSceneLength() { return null; }
+export function parseBeatLength() { return null; }
 
 export function readTimePorts() {
   return {
@@ -93,7 +93,7 @@ export function readTimePorts() {
   };
 }
 
-export function sceneStatusPorts() {
+export function beatStatusPorts() {
   return {
     document: { current: currentDocument, read: readSession },
     edits: { run: runCommand, stamps: sessionStamps },

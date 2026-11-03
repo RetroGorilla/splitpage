@@ -11,8 +11,8 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { rowMenuKeydown, toggleRowMenu } from "../../../src/features/rows/row-menu.ts";
 
-function fixture(withScene = false) {
-  const doc = fakeDocument(migrateRows({ schema: 2, title: "Render mount", rows: withScene ? [{ id: "r1", audioText: "One" }] : [] }, fakeMigration().ports));
+function fixture(withBeat = false) {
+  const doc = fakeDocument(migrateRows({ schema: 2, title: "Render mount", rows: withBeat ? [{ id: "r1", audioText: "One" }] : [] }, fakeMigration().ports));
   const notices = fakeNotices();
   const paint = createPaintGuard();
   const selection = createEditorSelection<Element, Range, Element>({ epoch: () => 0, order: () => [], keys: () => [] });
@@ -32,7 +32,7 @@ function fixture(withScene = false) {
     draft: { appendMedia: () => null, model: () => ({ cell: [], media: { markThroughout: () => false, toggleMark: () => [] } }), edit: () => null, isDraft: () => false, isScript: () => false },
     undo: { track: () => { tracks++; } },
     hiding: () => ({ groups: rows => rows.map((row, index) => ({ row, index })) }),
-    sections: () => ({ folded: () => false }),
+    scenes: () => ({ folded: () => false }),
     pictures: fakePictures().pictures,
     personColors: { personColor: () => "#000000" },
     preferences: () => ({ clock: () => "24h" }),
@@ -51,7 +51,7 @@ test("sectionless rendering never requests the fold owner", () => {
   document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
   const first = fixture(true);
   let folds = 0;
-  const mounted = startRowsRender({ ...first.ports, sections: () => { folds++; return { folded: () => false }; } });
+  const mounted = startRowsRender({ ...first.ports, scenes: () => { folds++; return { folded: () => false }; } });
   try {
     assert.equal(mounted.renderFirstDraw(), true);
     assert.equal(folds, 0);
@@ -68,16 +68,16 @@ test("scene menus place Add Section Header between Insert scene and Delete and i
     toggleRowMenu(more, true);
     const items = Array.from(document.querySelectorAll<HTMLButtonElement>(".row-menu-item"));
     assert.deepEqual(items.map(item => item.textContent), ["Move up", "Move down", "Insert scene", "Add Section Header", "Delete"]);
-    const insert = items[2], section = items[3], remove = items[4];
-    assert.ok(insert && section && remove);
-    assert.equal(section.getAttribute("role"), "menuitem");
-    assert.equal(section.getAttribute("data-id"), "r1");
-    assert.equal(section.querySelector(".mi-icon use")?.getAttribute("href"), "#i-plus");
+    const insert = items[2], scene = items[3], remove = items[4];
+    assert.ok(insert && scene && remove);
+    assert.equal(scene.getAttribute("role"), "menuitem");
+    assert.equal(scene.getAttribute("data-id"), "r1");
+    assert.equal(scene.querySelector(".mi-icon use")?.getAttribute("href"), "#i-plus");
     const down = (target: Element) => rowMenuKeydown({ target, key: "ArrowDown", preventDefault() {} } as unknown as KeyboardEvent);
     insert.focus();
     assert.equal(down(insert), true);
-    assert.equal(document.activeElement, section);
-    assert.equal(down(section), true);
+    assert.equal(document.activeElement, scene);
+    assert.equal(down(scene), true);
     assert.equal(document.activeElement, remove);
   } finally { mounted.dispose(); }
 });

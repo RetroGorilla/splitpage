@@ -1,5 +1,5 @@
 import { pad2, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
-import { sectionGroups } from "../../core/document/sections.ts";
+import { sceneGroups } from "../../core/document/scenes.ts";
 import { withoutCues } from "../../core/text/cues.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -30,9 +30,9 @@ type PrompterDoc = {
   readonly sections?: unknown;
 };
 type PromptWord = { el: HTMLElement; norm: string };
-type SceneView = { html: string; words: number };
-type SceneEntry = { id: string; cell: Run[]; view: SceneView | null };
-type SceneLine = SceneEntry & { view: SceneView };
+type BeatView = { html: string; words: number };
+type BeatEntry = { id: string; cell: Run[]; view: BeatView | null };
+type BeatLine = BeatEntry & { view: BeatView };
 type PrompterLaunch = { token?: string; hosted?: boolean };
 type PrompterTestHooks = {
   checkSceneBoundaryNow: () => boolean;
@@ -56,24 +56,24 @@ interface PrompterState {
   voiceStream: MediaStream | null;
   finalTranscript: string;
   interimTranscript: string;
-  sceneSeconds: number[];
-  sceneStartSec: number[];
+  beatSeconds: number[];
+  beatStartSec: number[];
   promptTotalSec: number;
   rundownBlockEls: (HTMLElement | null)[];
   rundownBlockIndex: number[];
-  paintedScene: number;
+  paintedBeat: number;
   promptLinePx: number;
   prompterWakeLock: WakeLockSentinel | null;
-  sceneRowIds: string[];
-  sceneSections: string[];
-  sceneWordStart: number[];
-  sceneWordEnd: number[];
-  promptSceneIndex: number;
-  promptSceneEndWordOffset: number | null;
-  promptSceneGuideOffset: number;
+  beatRowIds: string[];
+  beatScenes: string[];
+  beatWordStart: number[];
+  beatWordEnd: number[];
+  promptBeatIndex: number;
+  promptBeatEndWordOffset: number | null;
+  promptBeatGuideOffset: number;
   promptSizeDefaultSet: number | null;
   voiceMicName: string;
-  promptSceneMode: boolean | undefined;
+  promptBeatMode: boolean | undefined;
 }
 
 function freshState(): PrompterState {
@@ -92,24 +92,24 @@ function freshState(): PrompterState {
     voiceStream: null,
     finalTranscript: "",
     interimTranscript: "",
-    sceneSeconds: [],
-    sceneStartSec: [],
+    beatSeconds: [],
+    beatStartSec: [],
     promptTotalSec: 0,
     rundownBlockEls: [],
     rundownBlockIndex: [],
-    paintedScene: -2,
+    paintedBeat: -2,
     promptLinePx: 60 * 1.42,
     prompterWakeLock: null,
-    sceneRowIds: [],
-    sceneSections: [],
-    sceneWordStart: [],
-    sceneWordEnd: [],
-    promptSceneIndex: -1,
-    promptSceneEndWordOffset: null,
-    promptSceneGuideOffset: 0,
+    beatRowIds: [],
+    beatScenes: [],
+    beatWordStart: [],
+    beatWordEnd: [],
+    promptBeatIndex: -1,
+    promptBeatEndWordOffset: null,
+    promptBeatGuideOffset: 0,
     promptSizeDefaultSet: null,
     voiceMicName: "",
-    promptSceneMode: undefined
+    promptBeatMode: undefined
   };
 }
 
@@ -131,7 +131,7 @@ function normalizeWord(w: unknown): string {
   return String(w || "").toLowerCase().replace(/[^a-z0-9']/g, "");
 }
 
-export function prompterSceneHtml(cell: CellInput): SceneView {
+export function prompterBeatHtml(cell: CellInput): BeatView {
   let words = 0;
   const html = toHtml(cell, {
     textHtml: function (text, esc, where) {
@@ -162,15 +162,15 @@ export function buildPrompterContent(): void {
   const source = skippingShot
     ? doc.rows.filter(function (row) { return row.status !== "shot"; })
     : doc.rows;
-  const sceneEntries = source.map(function (row): SceneEntry {
+  const beatEntries = source.map(function (row): BeatEntry {
     const cell = trimPrompterCell(withoutCues(ports.text.cellOf(row.audioText)));
-    return { id: row.id, cell: cell, view: cell.length ? prompterSceneHtml(cell) : null };
+    return { id: row.id, cell: cell, view: cell.length ? prompterBeatHtml(cell) : null };
   });
-  const lines = sceneEntries.filter(function (e) { return e.view; }) as SceneLine[];
+  const lines = beatEntries.filter(function (e) { return e.view; }) as BeatLine[];
 
   const paragraphs: string[] = [];
   lines.forEach(function (e, i) {
-    const prevEndsSentence = i === 0 || SENTENCE_END_RE.test(toPlainText((lines[i - 1] as SceneLine).cell));
+    const prevEndsSentence = i === 0 || SENTENCE_END_RE.test(toPlainText((lines[i - 1] as BeatLine).cell));
     if (prevEndsSentence) paragraphs.push(e.view.html);
     else paragraphs[paragraphs.length - 1] += " " + e.view.html;
   });
@@ -199,35 +199,35 @@ export function buildPrompterContent(): void {
   state.wordCursor = -1;
   state.speakCursor = -1;
 
-  state.sceneRowIds = [];
-  state.sceneSections = [];
-  const sectionNames = new Map<string, string>();
+  state.beatRowIds = [];
+  state.beatScenes = [];
+  const sceneNames = new Map<string, string>();
   if (Array.isArray(doc.sections) && doc.sections.length) {
-    for (const group of sectionGroups(doc)) {
-      for (let i = group.start; i < group.end; i++) sectionNames.set((doc.rows[i] as { id: string }).id, group.section.name);
+    for (const group of sceneGroups(doc)) {
+      for (let i = group.start; i < group.end; i++) sceneNames.set((doc.rows[i] as { id: string }).id, group.scene.name);
     }
   }
-  state.sceneWordStart = [];
-  state.sceneWordEnd = [];
+  state.beatWordStart = [];
+  state.beatWordEnd = [];
   let cursor = 0;
-  sceneEntries.forEach(function (e) {
+  beatEntries.forEach(function (e) {
     const n = e.view ? e.view.words : 0;
-    state.sceneRowIds.push(e.id);
-    state.sceneSections.push(sectionNames.get(e.id) ?? "");
-    state.sceneWordStart.push(cursor);
+    state.beatRowIds.push(e.id);
+    state.beatScenes.push(sceneNames.get(e.id) ?? "");
+    state.beatWordStart.push(cursor);
     cursor += n;
-    state.sceneWordEnd.push(cursor);
+    state.beatWordEnd.push(cursor);
   });
-  state.promptSceneIndex = -1;
-  state.promptSceneEndWordOffset = null;
+  state.promptBeatIndex = -1;
+  state.promptBeatEndWordOffset = null;
 
-  state.sceneSeconds = [];
-  state.sceneStartSec = [];
+  state.beatSeconds = [];
+  state.beatStartSec = [];
   let t = 0;
   source.forEach(function (row) {
     const secs = rowSeconds(row, doc, ports.text.productionReaders);
-    state.sceneStartSec.push(t);
-    state.sceneSeconds.push(secs);
+    state.beatStartSec.push(t);
+    state.beatSeconds.push(secs);
     t += secs;
   });
   state.promptTotalSec = t;
@@ -243,7 +243,7 @@ function renderPrompterRundown(): void {
   if (!track) return;
   let html = "";
   let count = 0;
-  state.rundownBlockIndex = state.sceneSeconds.map(function (secs) {
+  state.rundownBlockIndex = state.beatSeconds.map(function (secs) {
     const before = count;
     if (secs > 0) {
       html += '<span class="pp-rd-block" style="flex-grow:' + Math.round(secs * 1000) / 1000 + '"></span>';
@@ -254,10 +254,10 @@ function renderPrompterRundown(): void {
   track.innerHTML = count ? html + '<span class="pp-rd-head" aria-hidden="true"></span>' : "";
   track.style.setProperty("--pp-blocks", String(count));
   const els = track.querySelectorAll<HTMLElement>(".pp-rd-block");
-  state.rundownBlockEls = state.sceneSeconds.map(function (secs, i) {
+  state.rundownBlockEls = state.beatSeconds.map(function (secs, i) {
     return secs > 0 ? els[state.rundownBlockIndex[i] as number] as HTMLElement : null;
   });
-  state.paintedScene = -2;
+  state.paintedBeat = -2;
 }
 
 function readingPosition(scroller: HTMLElement): number {
@@ -283,12 +283,12 @@ function readingPosition(scroller: HTMLElement): number {
   return lo + frac * (next - lo);
 }
 
-function sceneAtWord(pos: number): number {
+function beatAtWord(pos: number): number {
   const w = Math.min(Math.floor(pos), state.promptWords.length - 1);
-  let lo = 0, hi = state.sceneWordEnd.length - 1;
+  let lo = 0, hi = state.beatWordEnd.length - 1;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if ((state.sceneWordEnd[mid] as number) > w) hi = mid; else lo = mid + 1;
+    if ((state.beatWordEnd[mid] as number) > w) hi = mid; else lo = mid + 1;
   }
   return lo;
 }
@@ -300,22 +300,22 @@ function setText(el: HTMLElement | null, text: string): void {
 export function updatePrompterStatus(): void {
   if (!ports.state.isOpen()) return;
   const scroller = document.getElementById("prompter-scroll") as HTMLElement;
-  let scene = -1, elapsed = 0;
-  if (state.promptWords.length && state.sceneRowIds.length) {
+  let beat = -1, elapsed = 0;
+  if (state.promptWords.length && state.beatRowIds.length) {
     const pos = readingPosition(scroller);
-    scene = sceneAtWord(pos);
-    const span = (state.sceneWordEnd[scene] as number) - (state.sceneWordStart[scene] as number);
-    const into = span > 0 ? Math.min(1, Math.max(0, (pos - (state.sceneWordStart[scene] as number)) / span)) : 0;
-    elapsed = (state.sceneStartSec[scene] as number) + (state.sceneSeconds[scene] as number) * into;
+    beat = beatAtWord(pos);
+    const span = (state.beatWordEnd[beat] as number) - (state.beatWordStart[beat] as number);
+    const into = span > 0 ? Math.min(1, Math.max(0, (pos - (state.beatWordStart[beat] as number)) / span)) : 0;
+    elapsed = (state.beatStartSec[beat] as number) + (state.beatSeconds[beat] as number) * into;
   }
 
   const posEl = document.getElementById("pp-scene-pos");
-  setText(posEl, scene === -1 ? "" : pad2(scene + 1) + " / " + pad2(state.sceneRowIds.length));
-  setText(document.getElementById("pp-scene-pos-sr"), scene === -1 ? "" : "Scene " + (scene + 1) + " of " + state.sceneRowIds.length);
-  setText(document.getElementById("pp-scene-start"), scene === -1 ? "" : formatTimecode(state.sceneStartSec[scene] as number));
-  const sectionEl = document.getElementById("pp-section");
-  const sectionName = scene === -1 ? "" : state.sceneSections[scene] ?? "";
-  if (sectionEl) { setText(sectionEl, sectionName); sectionEl.hidden = !sectionName; sectionEl.title = sectionName; }
+  setText(posEl, beat === -1 ? "" : pad2(beat + 1) + " / " + pad2(state.beatRowIds.length));
+  setText(document.getElementById("pp-scene-pos-sr"), beat === -1 ? "" : "Scene " + (beat + 1) + " of " + state.beatRowIds.length);
+  setText(document.getElementById("pp-scene-start"), beat === -1 ? "" : formatTimecode(state.beatStartSec[beat] as number));
+  const sceneEl = document.getElementById("pp-section");
+  const sceneName = beat === -1 ? "" : state.beatScenes[beat] ?? "";
+  if (sceneEl) { setText(sceneEl, sceneName); sceneEl.hidden = !sceneName; sceneEl.title = sceneName; }
   const read = Math.round(elapsed);
   const total = Math.round(state.promptTotalSec);
   const readText = formatTimecode(read);
@@ -333,18 +333,18 @@ export function updatePrompterStatus(): void {
 
   const track = document.getElementById("pp-rd-track");
   if (!track || !state.promptTotalSec) return;
-  if (scene !== state.paintedScene) {
+  if (beat !== state.paintedBeat) {
     state.rundownBlockEls.forEach(function (el, i) {
       if (!el) return;
-      el.classList.toggle("is-played", i < scene);
-      el.classList.toggle("is-current", i === scene);
+      el.classList.toggle("is-played", i < beat);
+      el.classList.toggle("is-current", i === beat);
     });
-    state.paintedScene = scene;
+    state.paintedBeat = beat;
   }
-  const cur = scene === -1 ? null : state.rundownBlockEls[scene];
-  if (cur) cur.style.setProperty("--p", ((state.sceneSeconds[scene] as number) ? (elapsed - (state.sceneStartSec[scene] as number)) / (state.sceneSeconds[scene] as number) * 100 : 0) + "%");
+  const cur = beat === -1 ? null : state.rundownBlockEls[beat];
+  if (cur) cur.style.setProperty("--p", ((state.beatSeconds[beat] as number) ? (elapsed - (state.beatStartSec[beat] as number)) / (state.beatSeconds[beat] as number) * 100 : 0) + "%");
   track.style.setProperty("--pp-at", String(Math.min(1, elapsed / state.promptTotalSec)));
-  track.style.setProperty("--pp-i", String(scene === -1 ? 0 : state.rundownBlockIndex[scene]));
+  track.style.setProperty("--pp-i", String(beat === -1 ? 0 : state.rundownBlockIndex[beat]));
 }
 
 export function acquireWakeLock(owns?: () => boolean): void {
@@ -401,83 +401,83 @@ export function setPrompterFlip(on: boolean): void {
   applyPrompterOrientation();
 }
 
-function scenePastReadingLine(scrollTop: number, wordTop: number, guideTop: number): boolean {
+function beatPastReadingLine(scrollTop: number, wordTop: number, guideTop: number): boolean {
   return (wordTop - scrollTop) <= guideTop;
 }
 
-export function updateSceneReadout(): void {
+export function updateBeatReadout(): void {
   const el = document.getElementById("pp-scene-readout");
   if (!el) return;
-  if (!state.promptSceneMode || state.promptSceneIndex === -1 || !state.sceneRowIds.length) { el.textContent = ""; return; }
-  el.textContent = "Scene " + (state.promptSceneIndex + 1) + " of " + state.sceneRowIds.length;
+  if (!state.promptBeatMode || state.promptBeatIndex === -1 || !state.beatRowIds.length) { el.textContent = ""; return; }
+  el.textContent = "Scene " + (state.promptBeatIndex + 1) + " of " + state.beatRowIds.length;
 }
 
-function updatePrompterSceneModeUI(): void {
-  setToggle(document.getElementById("pp-scene-mode"), !!state.promptSceneMode);
+function updatePrompterBeatModeUI(): void {
+  setToggle(document.getElementById("pp-scene-mode"), !!state.promptBeatMode);
   ["pp-scene-step", "pp-scene-prev", "pp-scene-next", "pp-scene-readout"].forEach(function (id) {
     const el = document.getElementById(id);
-    if (el) el.hidden = !state.promptSceneMode;
+    if (el) el.hidden = !state.promptBeatMode;
   });
-  updateSceneReadout();
+  updateBeatReadout();
 }
 
-function findNonEmptySceneIndex(from: number, dir: number): number {
-  for (let i = from; i >= 0 && i < state.sceneRowIds.length; i += dir) {
-    if ((state.sceneWordEnd[i] as number) > (state.sceneWordStart[i] as number)) return i;
+function findNonEmptyBeatIndex(from: number, dir: number): number {
+  for (let i = from; i >= 0 && i < state.beatRowIds.length; i += dir) {
+    if ((state.beatWordEnd[i] as number) > (state.beatWordStart[i] as number)) return i;
   }
   return -1;
 }
 
-function cueScene(idx: number): boolean {
-  if (idx < 0 || idx >= state.sceneRowIds.length) return false;
-  if ((state.sceneWordEnd[idx] as number) <= (state.sceneWordStart[idx] as number)) return false;
+function cueBeat(idx: number): boolean {
+  if (idx < 0 || idx >= state.beatRowIds.length) return false;
+  if ((state.beatWordEnd[idx] as number) <= (state.beatWordStart[idx] as number)) return false;
   const scroller = document.getElementById("prompter-scroll") as HTMLElement;
-  const firstWord = (state.promptWords[state.sceneWordStart[idx] as number] as PromptWord).el;
-  const lastWord = (state.promptWords[(state.sceneWordEnd[idx] as number) - 1] as PromptWord).el;
-  state.promptSceneIndex = idx;
-  state.promptSceneGuideOffset = scroller.clientHeight / 2;
-  scroller.scrollTop = Math.max(0, firstWord.offsetTop - state.promptSceneGuideOffset);
-  state.promptSceneEndWordOffset = lastWord.offsetTop;
-  updateSceneReadout();
+  const firstWord = (state.promptWords[state.beatWordStart[idx] as number] as PromptWord).el;
+  const lastWord = (state.promptWords[(state.beatWordEnd[idx] as number) - 1] as PromptWord).el;
+  state.promptBeatIndex = idx;
+  state.promptBeatGuideOffset = scroller.clientHeight / 2;
+  scroller.scrollTop = Math.max(0, firstWord.offsetTop - state.promptBeatGuideOffset);
+  state.promptBeatEndWordOffset = lastWord.offsetTop;
+  updateBeatReadout();
   updatePrompterStatus();
   return true;
 }
 
-export function stepScene(dir: number): void {
-  if (!state.promptSceneMode || !state.sceneRowIds.length) return;
-  const next = findNonEmptySceneIndex(state.promptSceneIndex + dir, dir);
+export function stepBeat(dir: number): void {
+  if (!state.promptBeatMode || !state.beatRowIds.length) return;
+  const next = findNonEmptyBeatIndex(state.promptBeatIndex + dir, dir);
   if (next === -1) return;
   setPrompterPlaying(false);
-  cueScene(next);
+  cueBeat(next);
 }
 
-export function cueSceneForCurrentPosition(): void {
-  if (!state.sceneRowIds.length) { state.promptSceneIndex = -1; state.promptSceneEndWordOffset = null; updateSceneReadout(); return; }
+export function cueBeatForCurrentPosition(): void {
+  if (!state.beatRowIds.length) { state.promptBeatIndex = -1; state.promptBeatEndWordOffset = null; updateBeatReadout(); return; }
   const lastRow = ports.focus.lastRow();
-  let idx = lastRow ? state.sceneRowIds.indexOf(lastRow) : -1;
+  let idx = lastRow ? state.beatRowIds.indexOf(lastRow) : -1;
   if (idx === -1) idx = 0;
-  let resolved = findNonEmptySceneIndex(idx, 1);
-  if (resolved === -1) resolved = findNonEmptySceneIndex(idx, -1);
-  if (resolved === -1) { state.promptSceneIndex = -1; state.promptSceneEndWordOffset = null; updateSceneReadout(); return; }
-  cueScene(resolved);
+  let resolved = findNonEmptyBeatIndex(idx, 1);
+  if (resolved === -1) resolved = findNonEmptyBeatIndex(idx, -1);
+  if (resolved === -1) { state.promptBeatIndex = -1; state.promptBeatEndWordOffset = null; updateBeatReadout(); return; }
+  cueBeat(resolved);
 }
 
-function advanceSceneAfterAutoPause(): void {
-  const next = findNonEmptySceneIndex(state.promptSceneIndex + 1, 1);
-  if (next === -1) { state.promptSceneEndWordOffset = null; return; }
-  state.promptSceneIndex = next;
-  state.promptSceneEndWordOffset = (state.promptWords[(state.sceneWordEnd[next] as number) - 1] as PromptWord).el.offsetTop;
-  updateSceneReadout();
+function advanceBeatAfterAutoPause(): void {
+  const next = findNonEmptyBeatIndex(state.promptBeatIndex + 1, 1);
+  if (next === -1) { state.promptBeatEndWordOffset = null; return; }
+  state.promptBeatIndex = next;
+  state.promptBeatEndWordOffset = (state.promptWords[(state.beatWordEnd[next] as number) - 1] as PromptWord).el.offsetTop;
+  updateBeatReadout();
 }
 
-export function setPrompterSceneMode(on: boolean): void {
+export function setPrompterBeatMode(on: boolean): void {
   on = !!on;
-  if (on === state.promptSceneMode) return;
-  state.promptSceneMode = on;
+  if (on === state.promptBeatMode) return;
+  state.promptBeatMode = on;
   ports.preferences.setPrompterFlag("prompterSceneMode", on);
-  updatePrompterSceneModeUI();
-  if (on) cueSceneForCurrentPosition();
-  else { state.promptSceneIndex = -1; state.promptSceneEndWordOffset = null; }
+  updatePrompterBeatModeUI();
+  if (on) cueBeatForCurrentPosition();
+  else { state.promptBeatIndex = -1; state.promptBeatEndWordOffset = null; }
 }
 
 function lockPageScrollWhenArrived(el: HTMLElement): void {
@@ -506,8 +506,8 @@ export function openPrompter(): void {
   applyPrompterDefaultSize();
   applyPrompterSize();
   applyPrompterOrientation();
-  updatePrompterSceneModeUI();
-  if (state.promptSceneMode) cueSceneForCurrentPosition();
+  updatePrompterBeatModeUI();
+  if (state.promptBeatMode) cueBeatForCurrentPosition();
   updateVoiceAvailability();
   syncSpeedReadout();
   updatePrompterStatus();
@@ -566,10 +566,10 @@ function prompterTick(ts: number): void {
   const dt = (ts - state.prompterLastTs) / 1000;
   state.prompterLastTs = ts;
   scroller.scrollTop += state.prompterSpeed * dt;
-  if (state.promptSceneMode && state.promptSceneEndWordOffset != null &&
-      scenePastReadingLine(scroller.scrollTop, state.promptSceneEndWordOffset, state.promptSceneGuideOffset)) {
+  if (state.promptBeatMode && state.promptBeatEndWordOffset != null &&
+      beatPastReadingLine(scroller.scrollTop, state.promptBeatEndWordOffset, state.promptBeatGuideOffset)) {
     setPrompterPlaying(false);
-    advanceSceneAfterAutoPause();
+    advanceBeatAfterAutoPause();
     return;
   }
   if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) {
@@ -762,9 +762,9 @@ function onSpeechTranscript(): void {
     state.wordCursor = state.speakable[state.speakCursor] as number;
     applySpokenUpTo(state.wordCursor);
     scrollWordIntoView(state.wordCursor);
-    if (state.promptSceneMode && state.promptSceneIndex !== -1 && state.wordCursor >= (state.sceneWordEnd[state.promptSceneIndex] as number)) {
+    if (state.promptBeatMode && state.promptBeatIndex !== -1 && state.wordCursor >= (state.beatWordEnd[state.promptBeatIndex] as number)) {
       stopVoiceFollow();
-      advanceSceneAfterAutoPause();
+      advanceBeatAfterAutoPause();
       setVoiceStatus("Scene finished — say it again to keep following, or press Next.", "listening");
     }
   }
@@ -1125,23 +1125,23 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
 
   prompterFlip = ports.preferences.prompterFlag("prompterFlip");
 
-  state.promptSceneMode = ports.preferences.prompterFlag("prompterSceneMode");
+  state.promptBeatMode = ports.preferences.prompterFlag("prompterSceneMode");
 
   let withdrawHook: (() => void) | null = null;
   exposeTestHook("__prompterTest", (): PrompterTestHooks => ({
     checkSceneBoundaryNow: function () {
       const scroller = document.getElementById("prompter-scroll") as HTMLElement;
-      if (!state.promptSceneMode || state.promptSceneEndWordOffset == null) return false;
-      if (!scenePastReadingLine(scroller.scrollTop, state.promptSceneEndWordOffset, state.promptSceneGuideOffset)) return false;
+      if (!state.promptBeatMode || state.promptBeatEndWordOffset == null) return false;
+      if (!beatPastReadingLine(scroller.scrollTop, state.promptBeatEndWordOffset, state.promptBeatGuideOffset)) return false;
       setPrompterPlaying(false);
-      advanceSceneAfterAutoPause();
+      advanceBeatAfterAutoPause();
       return true;
     },
     simulateVoiceWordCursor: function (idx) {
       state.wordCursor = idx;
-      if (!state.promptSceneMode || state.promptSceneIndex === -1 || state.wordCursor < (state.sceneWordEnd[state.promptSceneIndex] as number)) return false;
+      if (!state.promptBeatMode || state.promptBeatIndex === -1 || state.wordCursor < (state.beatWordEnd[state.promptBeatIndex] as number)) return false;
       stopVoiceFollow();
-      advanceSceneAfterAutoPause();
+      advanceBeatAfterAutoPause();
       return true;
     },
     launchFromScript: launchPrompterFromScript,
@@ -1178,12 +1178,12 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
       if (index < 0) index = state.promptWords.length - 1;
       voiceFromReadingLine = true;
       clearSpokenHighlights();
-      if (state.promptSceneMode) {
-        const scene = index < 0 ? -1 : state.sceneWordEnd.findIndex((end) => end > index);
-        state.promptSceneIndex = scene;
-        state.promptSceneGuideOffset = scroller.clientHeight / 2;
-        state.promptSceneEndWordOffset = scene < 0 ? null : Math.max(top + state.promptLinePx, (state.promptWords[(state.sceneWordEnd[scene] as number) - 1] as PromptWord).el.offsetTop);
-        updateSceneReadout();
+      if (state.promptBeatMode) {
+        const beat = index < 0 ? -1 : state.beatWordEnd.findIndex((end) => end > index);
+        state.promptBeatIndex = beat;
+        state.promptBeatGuideOffset = scroller.clientHeight / 2;
+        state.promptBeatEndWordOffset = beat < 0 ? null : Math.max(top + state.promptLinePx, (state.promptWords[(state.beatWordEnd[beat] as number) - 1] as PromptWord).el.offsetTop);
+        updateBeatReadout();
       }
       updatePrompterStatus();
     },
@@ -1194,8 +1194,8 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     openPrompter, closePrompter, stopVoiceFollow, startVoiceFollow,
     setPrompterPlaying, setPrompterSpeed, applyPrompterSize, stepPrompterSpeed, stepPrompterSize,
     updatePrompterStatus, buildPrompterContent, updateVoiceAvailability,
-    cueSceneForCurrentPosition, updateSceneReadout, setPrompterMirror, setPrompterFlip,
-    setPrompterSceneMode, stepScene, acquireWakeLock, wireTagEntityContainer,
+    cueBeatForCurrentPosition, updateBeatReadout, setPrompterMirror, setPrompterFlip,
+    setPrompterBeatMode, stepBeat, acquireWakeLock, wireTagEntityContainer,
     disposeRuntime,
     voiceActive: function () { return ports.state.voiceFollowing(); },
     playing: function () { return ports.state.isPlaying(); },
@@ -1204,7 +1204,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     setSkipShot: function (value) { ports.state.setSkipShot(value); },
     mirror: function () { return prompterMirror; },
     flip: function () { return prompterFlip; },
-    sceneMode: function () { return !!state.promptSceneMode; },
+    beatMode: function () { return !!state.promptBeatMode; },
     dispose: function () {
       if (ports !== nextPorts) return;
       disposeRuntime();

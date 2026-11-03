@@ -1,6 +1,6 @@
 # Selecting whole scenes by dragging out of a text box, and copying,
-# cutting, deleting and pasting them (#204; src/features/clipboard/scene-select.ts,
-# src/features/clipboard/scene-clip.ts):
+# cutting, deleting and pasting them (#204; src/features/clipboard/beat-select.ts,
+# src/features/clipboard/beat-clip.ts):
 #
 #   * a drag that stays in its text box selects words, as ever; one that
 #     leaves the box (up or down) selects whole scenes — the text
@@ -14,7 +14,7 @@
 #     caret's scene, one undo entry, with fresh comment ids;
 #   * cut and delete are one undo entry each; Esc and a click clear;
 #   * the grip still drags one scene to a new place (#185).
-# The payload itself is src/test/scene-clip.test.mjs. Every `eval` is one
+# The payload itself is src/test/beat-clip.test.mjs. Every `eval` is one
 # physical line. The mouse lines are real CDP mouse events (driver `mouse`).
 
 open

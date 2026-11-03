@@ -31,15 +31,15 @@ export function normalizeWordsPerMinute(v: unknown): number {
   return (isFinite(wpm) && wpm >= 60 && wpm <= 400) ? Math.round(wpm) : DEFAULT_WPM;
 }
 
-export const SCENE_LENGTH_MAX = 24 * 3600;
+export const BEAT_LENGTH_MAX = 24 * 3600;
 
 export function hasSetLength(row: LengthHolder | null | undefined): row is LengthHolder & { lengthSeconds: number } {
   return !!row && typeof row.lengthSeconds === "number" && isFinite(row.lengthSeconds) &&
-    row.lengthSeconds >= 0 && row.lengthSeconds <= SCENE_LENGTH_MAX;
+    row.lengthSeconds >= 0 && row.lengthSeconds <= BEAT_LENGTH_MAX;
 }
 
-export function normalizeSceneLength(v: unknown): number | undefined {
-  if (typeof v !== "number" || !isFinite(v) || v < 0 || v > SCENE_LENGTH_MAX) return undefined;
+export function normalizeBeatLength(v: unknown): number | undefined {
+  if (typeof v !== "number" || !isFinite(v) || v < 0 || v > BEAT_LENGTH_MAX) return undefined;
   return Math.round(v);
 }
 
@@ -55,7 +55,7 @@ function lengthUnit(word: string | undefined): LengthUnit | "" | null {
   return null;
 }
 
-export function parseSceneLength(text: unknown): number | null {
+export function parseBeatLength(text: unknown): number | null {
   const s = String(text == null ? "" : text).trim().toLowerCase();
   if (!s) return null;
   let total;
@@ -91,14 +91,14 @@ export function parseSceneLength(text: unknown): number | null {
     if (!parts) return NaN;
   }
   total = Math.round(total);
-  if (!isFinite(total) || total < 0 || total > SCENE_LENGTH_MAX) return NaN;
+  if (!isFinite(total) || total < 0 || total > BEAT_LENGTH_MAX) return NaN;
   return total;
 }
 
 export function normalizeTargetLength(v: unknown): number | undefined {
   if (typeof v !== "number" || !isFinite(v)) return undefined;
   const whole = Math.round(v);
-  return whole >= 1 && whole <= SCENE_LENGTH_MAX ? whole : undefined;
+  return whole >= 1 && whole <= BEAT_LENGTH_MAX ? whole : undefined;
 }
 
 export function targetLengthOf(s: TargetHolder | null | undefined): number | null {

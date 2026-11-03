@@ -12,7 +12,7 @@ import { personColors } from "./ports/person-colors.ts";
 import { renderDeletes, renderProduction, tagPanelState } from "./ports/production.ts";
 import { ids } from "./ports/identity.ts";
 import { shotHiding } from "./shot-hiding.ts";
-import { sectionView } from "./editor-owners.ts";
+import { sceneView } from "./editor-owners.ts";
 
 const render = owned<ReturnType<typeof startRowsRender>>();
 
@@ -20,14 +20,14 @@ export function mountRowsRenderFeature() {
   return render.replace(() => {
     const ports: RowsRenderPorts = {
       document: documentReader, edits, text, video, editing: renderEditing, draft: renderDraft,
-      undo: renderUndo, hiding: shotHiding, sections: sectionView, pictures, personColors,
+      undo: renderUndo, hiding: shotHiding, scenes: sceneView, pictures, personColors,
       preferences: renderPreferences, view: tagView, notices, actions,
       deletes: renderDeletes, tagPanel: tagPanelState, ids, production: renderProduction
     };
     return startRowsRender(ports);
   }, control => [
-    () => sectionView().subscribe(control.render),
-    () => documentReader.onReplaced(() => sectionView().reset())
+    () => sceneView().subscribe(control.render),
+    () => documentReader.onReplaced(() => sceneView().reset())
   ]);
 }
 

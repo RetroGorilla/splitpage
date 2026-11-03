@@ -27,14 +27,14 @@ test("the export document copies the validated document, names its parts, and fr
   assert.notEqual(doc.document, source);
   assert.deepEqual(doc.document, JSON.parse(JSON.stringify(source)));
   assert.equal(doc.title, "Export");
-  assert.equal(doc.scenes, doc.document.rows);
+  assert.equal(doc.beats, doc.document.rows);
   assert.equal(doc.people, doc.document.people);
   assert.equal(doc.tags, doc.document.productionTags);
   assert.equal(doc.shots, doc.document.brollShots);
   assert.equal(doc.comments, doc.document.comments);
   assert.equal(doc.capturedAt, "2026-10-13T17:30:00.000Z");
-  assert.equal(doc.scenes[0]?.imageRef && (doc.scenes[0].imageRef as { sha256: string }).sha256, "a".repeat(64));
-  [doc, doc.document, doc.scenes, doc.scenes[0], doc.comments[0], doc.broll, doc.broll[0], doc.commentNumbers]
+  assert.equal(doc.beats[0]?.imageRef && (doc.beats[0].imageRef as { sha256: string }).sha256, "a".repeat(64));
+  [doc, doc.document, doc.beats, doc.beats[0], doc.comments[0], doc.broll, doc.broll[0], doc.commentNumbers]
     .forEach((part) => assert.ok(Object.isFrozen(part)));
 });
 

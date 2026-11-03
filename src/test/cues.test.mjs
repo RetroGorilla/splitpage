@@ -32,7 +32,7 @@ const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 import { productionIndex } from "../application/production/index-owner.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
-import { prompterSceneHtml, trimPrompterCell } from "../features/prompter/prompter.ts";
+import { prompterBeatHtml, trimPrompterCell } from "../features/prompter/prompter.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
@@ -146,7 +146,7 @@ test("mergeStates carries a cue through the document merge", () => {
 
 test("the teleprompter never shows one, and voice follow has no word of it", () => {
   const cell = trimPrompterCell(withoutCues(fromHtml("Hello.<br>" + CUE("SFX: door slam") + "<br>World.")));
-  const view = prompterSceneHtml(cell);
+  const view = prompterBeatHtml(cell);
   assert.equal(view.words, 2);
   assert.ok(!view.html.includes("door") && !view.html.includes("audio-cue"));
 });

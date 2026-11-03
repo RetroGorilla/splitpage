@@ -13,10 +13,10 @@ import { screen } from "./ports/screen.ts";
 import { splitRowFieldCore } from "./rows.ts";
 import { hiddenShotStripHtml } from "../../features/rows/hide-shot.ts";
 import { currentHideShot } from "./hide-shot.ts";
-import { sectionHeaderHtml, sectionRowEntries } from "../../features/rows/section-rows.ts";
-import { sectionGroups } from "../../core/document/sections.ts";
+import { sceneHeaderHtml, sceneRowEntries } from "../../features/rows/scene-rows.ts";
+import { sceneGroups } from "../../core/document/scenes.ts";
 import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
-import { sectionView } from "./editor-owners.ts";
+import { sceneView } from "./editor-owners.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { currentRowsRender } from "./render.ts";
 import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.ts";
@@ -44,10 +44,10 @@ export function mountWriterRuntimeFeature() {
         const doc = documentReader.current();
         if (!doc) return "";
         if (!Array.isArray(doc.sections) || !doc.sections.length) return currentHideShot()?.renderGroups(rows, renderRow) ?? "";
-        const totals = new Map(sectionGroups(doc).map(group => [group.section.id,
+        const totals = new Map(sceneGroups(doc).map(group => [group.scene.id,
           formatDuration(doc.rows.slice(group.start, group.end).reduce((sum, row) => sum + rowSeconds(row, doc, text.productionReaders), 0))]));
-        return sectionRowEntries({ rows, sections: doc.sections }, shotHiding(), sectionView()).map(item =>
-          "section" in item ? sectionHeaderHtml(item, !edits.allowed(), totals.get(item.section.id) ?? "") :
+        return sceneRowEntries({ rows, sections: doc.sections }, shotHiding(), sceneView()).map(item =>
+          "scene" in item ? sceneHeaderHtml(item, !edits.allowed(), totals.get(item.scene.id) ?? "") :
             "strip" in item ? hiddenShotStripHtml(item.strip) : renderRow(item.row, item.index)).join("");
       } },
       panels: writerPanels, preferences: writerPreferences, view: writerView, notices, actions,

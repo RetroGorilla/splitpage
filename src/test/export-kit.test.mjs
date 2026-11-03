@@ -9,7 +9,7 @@ import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/prod
 import {
   breakdownGroups,
   brollSummaryText,
-  exportBrollScenes,
+  exportBrollBeats,
   exportComments,
   exportFacts,
   exportSummaryParts
@@ -18,7 +18,7 @@ import {
   exportDocumentOf
 } from "../bootstrap/wiring/export-capture.ts";
 import { exportRuns } from "../adapters/formats/export-kit.ts";
-import { sceneFacts } from "../adapters/formats/export-projections.ts";
+import { beatFacts } from "../adapters/formats/export-projections.ts";
 import { LONG_DEMO } from "../starters/index.ts";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -32,7 +32,7 @@ test("the document's facts: scenes, running time, target, shot count", (t) => {
   demo();
   const f = exportFacts(exportDocumentOf(currentDocument()));
   assert.equal(f.title, LONG_DEMO.state.title);
-  assert.equal(f.scenes, 30);
+  assert.equal(f.beats, 30);
   assert.equal(f.runtime, "9:44");
   assert.deepEqual(f.target, { seconds: 540, text: "9:00", delta: "0:44", over: true });
   assert.equal(f.status.shot + f.status.ready + f.status.todo, 30);
@@ -57,18 +57,18 @@ test("a script with no target and one scene says so in the singular", () => {
 
 test("each scene's gutter: number, start timecode, read time, set by hand or not, status", () => {
   demo();
-  const scenes = sceneFacts(exportDocumentOf(currentDocument()));
-  assert.equal(scenes.length, 30);
-  assert.equal(scenes[0].number, "01");
-  assert.equal(scenes[0].start, "00:00");
-  assert.equal(scenes[1].start, "00:10");
-  assert.equal(scenes[2].start, "00:16");
-  assert.equal(scenes[0].read, "0:10");
-  for (let i = 1; i < scenes.length; i++) assert.ok(scenes[i].startSeconds >= scenes[i - 1].startSeconds);
-  assert.equal(scenes.filter((s) => s.readSet).length, 2);
-  assert.equal(scenes[1].readSet, true);
-  assert.deepEqual(scenes[0].status, { id: "shot", label: "Shot" });
-  assert.ok(scenes.some((s) => s.status.id === "ready") && scenes.some((s) => s.status.id === "todo"));
+  const beats = beatFacts(exportDocumentOf(currentDocument()));
+  assert.equal(beats.length, 30);
+  assert.equal(beats[0].number, "01");
+  assert.equal(beats[0].start, "00:00");
+  assert.equal(beats[1].start, "00:10");
+  assert.equal(beats[2].start, "00:16");
+  assert.equal(beats[0].read, "0:10");
+  for (let i = 1; i < beats.length; i++) assert.ok(beats[i].startSeconds >= beats[i - 1].startSeconds);
+  assert.equal(beats.filter((s) => s.readSet).length, 2);
+  assert.equal(beats[1].readSet, true);
+  assert.deepEqual(beats[0].status, { id: "shot", label: "Shot" });
+  assert.ok(beats.some((s) => s.status.id === "ready") && beats.some((s) => s.status.id === "todo"));
 });
 
 test("the open threads are numbered down the script, a resolved one not at all", () => {
@@ -140,7 +140,7 @@ test("the breakdown by category, in the panel's order and words", () => {
 
 test("the b-roll by scene, with each scene's start and count", () => {
   demo();
-  const groups = exportBrollScenes(exportDocumentOf(currentDocument()));
+  const groups = exportBrollBeats(exportDocumentOf(currentDocument()));
   const all = groups.reduce((n, g) => n + g.items.length, 0);
   assert.equal(all, 9);
   assert.equal(groups[0].label, "Scene 04");
@@ -148,6 +148,6 @@ test("the b-roll by scene, with each scene's start and count", () => {
   assert.equal(groups[0].done, 1);
   assert.equal(brollSummaryText(groups), "3 of 9 shot · 1 flagged");
   const s = currentDocument().brollShots.length;
-  exportBrollScenes(exportDocumentOf(currentDocument()));
+  exportBrollBeats(exportDocumentOf(currentDocument()));
   assert.equal(currentDocument().brollShots.length, s, "reading the list adds nothing to it");
 });

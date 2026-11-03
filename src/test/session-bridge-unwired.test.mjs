@@ -5,8 +5,8 @@ import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 const bridge = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
-const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
+const { beatStatusCommand } = await import("../application/commands/beat-status.ts");
+const { beatLengthCommand } = await import("../application/commands/beat-length.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -31,7 +31,7 @@ test("with the bridge started on ports that were not provided, each port throws 
 test("with nothing wired, a command that needs edit capability throws before it plans or writes", () => {
   const doc = script();
   const before = JSON.stringify(doc);
-  assert.throws(() => bridge.runCommand(sceneStatusCommand("r1", bridge.sessionStamps)), /edit capability port was not provided/);
+  assert.throws(() => bridge.runCommand(beatStatusCommand("r1", bridge.sessionStamps)), /edit capability port was not provided/);
   assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(bridge.liveSession().generation(), 0);
 });
@@ -40,7 +40,7 @@ test("with only the capability wired, a command fails on the missing attribution
   const doc = script();
   const before = JSON.stringify(doc);
   unwired.given.edit = () => ({ allowed: true });
-  const outcome = bridge.runCommand(sceneLengthCommand("r1", 30, bridge.sessionStamps));
+  const outcome = bridge.runCommand(beatLengthCommand("r1", 30, bridge.sessionStamps));
   assert.equal(outcome.kind, "failed");
   assert.match(outcome.error.message, /attribution port was not provided/);
   assert.equal(JSON.stringify(currentDocument()), before);
@@ -50,7 +50,7 @@ test("with the attribution wired but no editor name, the command fails on its st
   const doc = script();
   const before = JSON.stringify(doc);
   unwired.given.attribute = () => null;
-  const outcome = bridge.runCommand(sceneLengthCommand("r1", 30, bridge.sessionStamps));
+  const outcome = bridge.runCommand(beatLengthCommand("r1", 30, bridge.sessionStamps));
   assert.equal(outcome.kind, "failed");
   assert.match(outcome.error.message, /editor name port was not provided/);
   assert.equal(JSON.stringify(currentDocument()), before);
@@ -89,7 +89,7 @@ test("once every port is provided, a command applies", () => {
     editorName: () => "Ann",
     refresh: () => {}
   });
-  const outcome = bridge.runCommand(sceneLengthCommand("r1", 30, bridge.sessionStamps));
+  const outcome = bridge.runCommand(beatLengthCommand("r1", 30, bridge.sessionStamps));
   assert.equal(outcome.kind, "applied");
   assert.deepEqual(ran, ["dirty", "draft", "save"]);
   bridge.liveSession().dispose();

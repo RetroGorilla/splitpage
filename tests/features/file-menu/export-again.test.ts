@@ -51,7 +51,7 @@ function mount(t: TestContext, options: { loaded?: boolean; reasons?: Reasons } 
     menuItems: { setLabel: () => undefined, setReason: () => undefined },
     text: { cellOf: unused },
     preview: {
-      facts: unused, shots: unused, breakdown: unused, scenes: unused, narration: unused, runs: unused,
+      facts: unused, shots: unused, breakdown: unused, beats: unused, narration: unused, runs: unused,
       meta: unused, shotSummary: unused, commentCount: unused, markdown: unused, markdownTable: unused, tagColor: unused
     }
   };

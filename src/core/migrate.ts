@@ -28,8 +28,8 @@ import {
   textOf,
   withoutLoneSurrogates
 } from "./document/text-policy.ts";
-import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
-import { sectionsInOrder, writeSections } from "./document/sections.ts";
+import { normalizeBeatLength, rowStatusId } from "./document/timing.ts";
+import { scenesInOrder, writeScenes } from "./document/scenes.ts";
 import { applyBrollRecords, brollCutRenames, planBrollRecords } from "./production/broll.ts";
 import type { BrollShot, LineShotIds } from "./production/broll.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
@@ -229,7 +229,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     r.id = id;
     usedRowIds.add(id);
     r.status = rowStatusId(r.status) ? r.status : "todo";
-    const setLength = normalizeSceneLength(r.lengthSeconds);
+    const setLength = normalizeBeatLength(r.lengthSeconds);
     if (setLength === undefined) delete r.lengthSeconds; else r.lengthSeconds = setLength;
     r.visualText = sanitize(legacy ? legacyMdToHtml(r.visualText || "") : textOf(r.visualText || ""));
     r.audioText = sanitize(legacy ? legacyMdToHtml(r.audioText || "") : textOf(r.audioText || ""));
@@ -364,9 +364,9 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   }, null, ports.brollLines, ports.brollLines ? function () { return loadIds.id("bs"); } : undefined));
 
   if (duplicateRowIds.size && Array.isArray(s.sections)) {
-    s.sections.filter(isObject).forEach(function (section) {
-      const firstSceneId = cleanId(section.firstSceneId);
-      if (duplicateRowIds.has(firstSceneId)) section.firstSceneId = firstSceneId;
+    s.sections.filter(isObject).forEach(function (scene) {
+      const firstSceneId = cleanId(scene.firstSceneId);
+      if (duplicateRowIds.has(firstSceneId)) scene.firstSceneId = firstSceneId;
     });
   }
   fields.forEach(function (f) {
@@ -378,7 +378,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
 
   s.title = cappedLongText(plainText(s.title), 300);
   if (!Number.isFinite(s.rev)) s.rev = 0;
-  if ("sections" in s) writeSections(s, sectionsInOrder({ rows: s.rows as { id: string }[], sections: s.sections }));
+  if ("sections" in s) writeScenes(s, scenesInOrder({ rows: s.rows as { id: string }[], sections: s.sections }));
   s.docId = normalizeDocId(s.docId) || ids.docId();
   s.schema = SCHEMA_VERSION;
   return s as ValidatedDocument;

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 const bridge = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
-const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
+const { beatLengthCommand } = await import("../application/commands/beat-length.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
@@ -31,7 +31,7 @@ startTestSession(unwired.deps);
 
 test("a change listener registered before the session starts hears the first session's adoption and edits", () => {
   bridge.liveSession().adopt(script("First"));
-  bridge.runCommand(sceneLengthCommand("r1", 30, bridge.sessionStamps));
+  bridge.runCommand(beatLengthCommand("r1", 30, bridge.sessionStamps));
   assert.deepEqual(heard, [["early", "adopt", 0], ["early", "edit", 1]]);
 });
 
@@ -40,7 +40,7 @@ test("a change listener hears a replacement document's adoption and the edits ma
   const late = (change) => { heard.push(["late", change.kind, change.generation]); };
   const stop = bridge.onSessionChange(late);
   bridge.adoptReplacement(script("Second"));
-  bridge.runCommand(sceneLengthCommand("r1", 45, bridge.sessionStamps));
+  bridge.runCommand(beatLengthCommand("r1", 45, bridge.sessionStamps));
   assert.deepEqual(heard, [
     ["early", "adopt", 1], ["late", "adopt", 1],
     ["early", "edit", 2], ["late", "edit", 2]
@@ -53,7 +53,7 @@ test("a stopped change listener hears nothing more, on this session or a replace
   const gone = (change) => { heard.push(["gone", change.kind]); };
   const stop = bridge.onSessionChange(gone);
   stop();
-  bridge.runCommand(sceneLengthCommand("r1", 50, bridge.sessionStamps));
+  bridge.runCommand(beatLengthCommand("r1", 50, bridge.sessionStamps));
   bridge.adoptReplacement(script("Third"));
   assert.deepEqual(heard.filter((h) => h[0] === "gone"), []);
   assert.deepEqual(heard.map((h) => h[1]), ["edit", "adopt"], "the listener still registered hears both");
@@ -80,7 +80,7 @@ test("a listener stopped and registered again on the same session hears each cha
   const again = (change) => { heard.push(["again", change.kind]); };
   bridge.onSessionChange(again)();
   const stop = bridge.onSessionChange(again);
-  bridge.runCommand(sceneLengthCommand("r1", 55, bridge.sessionStamps));
+  bridge.runCommand(beatLengthCommand("r1", 55, bridge.sessionStamps));
   stop();
   assert.deepEqual(heard.filter((h) => h[0] === "again"), [["again", "edit"]]);
 });

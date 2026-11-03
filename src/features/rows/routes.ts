@@ -24,7 +24,7 @@ export interface RowRoutesMount {
 
 export interface RowRoutes {
   readonly addClick: (e: MouseEvent) => boolean;
-  readonly sceneClick: (e: MouseEvent) => boolean;
+  readonly beatClick: (e: MouseEvent) => boolean;
   readonly menuClick: (e: MouseEvent) => boolean;
   readonly dragOver: (e: DragEvent) => boolean;
   readonly drop: (e: DragEvent) => boolean;
@@ -120,7 +120,7 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
       ports.add(null);
       return true;
     },
-    sceneClick(e: MouseEvent): boolean {
+    beatClick(e: MouseEvent): boolean {
       if (!open) return false;
       const status = closest(e, '[data-action="cycle-status"]');
       if (status) { ports.cycleStatus(idOf(status)); return true; }

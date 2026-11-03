@@ -330,14 +330,14 @@ test("#1049 review: seeded twin records retain edits on either side in every rep
   assert.equal(covered.size, 6);
 });
 
-for (const identified of [false, true]) for (const editScene of [false, true]) {
-  test("#1049 re-review: retained marked scene copies keep their own comments " + JSON.stringify({ identified, editScene }), async () => {
+for (const identified of [false, true]) for (const editBeat of [false, true]) {
+  test("#1049 re-review: retained marked scene copies keep their own comments " + JSON.stringify({ identified, editBeat }), async () => {
     const mark = text => '<span class="cmt-anchor" data-cmt="quote">' + text + '</span>';
     const disk = { ...raw(), rows: [{ audioText: mark("Original first.") }],
       comments: [{ ...(identified ? { id: "comment" } : {}), anchorId: "quote", field: "audioText", body: "Original note" }] };
     const base = migrateRows(structuredClone(disk)), mine = structuredClone(base);
     mine.comments[0].body = "DRAFT NOTE";
-    if (editScene) mine.rows[0].audioText = mark("Draft first.");
+    if (editBeat) mine.rows[0].audioText = mark("Draft first.");
     disk.rows[0].audioText = mark("Disk first.");
     disk.comments[0].body = "DISK NOTE";
     const { doc } = await recover(disk, base, mine);
@@ -347,7 +347,7 @@ for (const identified of [false, true]) for (const editScene of [false, true]) {
     assert.notEqual(draftNote.anchorId, diskNote.anchorId);
     assert.notEqual(draftNote.id, diskNote.id);
     assert.equal(doc.rows.find(r => r.id === draftNote.rowId).audioText,
-      '<span class="cmt-anchor" data-cmt="' + draftNote.anchorId + '">' + (editScene ? "Draft first." : "Original first.") + '</span>');
+      '<span class="cmt-anchor" data-cmt="' + draftNote.anchorId + '">' + (editBeat ? "Draft first." : "Original first.") + '</span>');
     assert.equal(doc.rows.find(r => r.id === diskNote.rowId).audioText, mark("Disk first."));
   });
 }

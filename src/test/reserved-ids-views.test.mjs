@@ -6,7 +6,7 @@ import "./_rows-render-mounted.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { setHideShotScenes } from "../bootstrap/wiring/hide-shot.ts";
+import { setHideShotBeats } from "../bootstrap/wiring/hide-shot.ts";
 import { shotHiding } from "../bootstrap/wiring/shot-hiding.ts";
 import { paintRowTimes } from "../features/rows/render.ts";
 import { syncAnchorResolvedClasses } from "../features/common/comment-anchors.ts";
@@ -18,13 +18,13 @@ const row = (id, status) => ({ id: id, status: status || "todo", visualText: "",
 test("hide shot scenes: a shot scene with an Object.prototype id is hidden like any other (#311)", () => {
   const saved = currentDocument();
   loadTestDocument(null);
-  setHideShotScenes(true);
+  setHideShotBeats(true);
   try {
     const rows = [row("r1")].concat(PROTOTYPE_IDS.map((id) => row(id, "shot")), [row("r9")]);
     const items = shotHiding().groups(rows);
     assert.deepEqual(items.map((it) => it.strip || it.row.id), ["r1", PROTOTYPE_IDS, "r9"]);
   } finally {
-    setHideShotScenes(false);
+    setHideShotBeats(false);
     loadTestDocument(saved);
   }
 });

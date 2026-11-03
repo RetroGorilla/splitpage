@@ -13,8 +13,8 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import type { LengthHolder } from "../../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
 import { hiddenShotStripHtml } from "./hide-shot.ts";
-import { sectionHeaderHtml, sectionRowEntries } from "./section-rows.ts";
-import { sectionGroups } from "../../core/document/sections.ts";
+import { sceneHeaderHtml, sceneRowEntries } from "./scene-rows.ts";
+import { sceneGroups } from "../../core/document/scenes.ts";
 import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
@@ -62,7 +62,7 @@ interface RowParts {
 
 interface SignedRow extends Element {
   __splitpageRowSig?: RowParts;
-  __splitpageSectionSig?: string;
+  __splitpageSceneSig?: string;
 }
 
 interface RowPatch {
@@ -243,10 +243,10 @@ export function paintRowTimes() {
     t += secs;
   });
   if (Array.isArray(doc.sections) && doc.sections.length) {
-    for (const group of sectionGroups(doc)) {
+    for (const group of sceneGroups(doc)) {
       let total = 0;
       for (let i = group.start; i < group.end; i++) total += rowSeconds(doc.rows[i] as Row, doc, ports.text.productionReaders);
-      document.querySelectorAll('[data-section-total="' + cssAttr(group.section.id) + '"]').forEach(el => setTextIfChanged(el, formatDuration(total)));
+      document.querySelectorAll('[data-section-total="' + cssAttr(group.scene.id) + '"]').forEach(el => setTextIfChanged(el, formatDuration(total)));
     }
   }
 }
@@ -547,7 +547,7 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     else drop.push(el);
   });
 
-  function planScene(item: ShotRowEntry<Row> | ShotStrip): RowsStep {
+  function planBeat(item: ShotRowEntry<Row> | ShotStrip): RowsStep {
     const strip = (item as Partial<ShotStrip>).strip;
     const entry = item as ShotRowEntry<Row>;
     const key = strip ? "strip:" + strip.join(",") : "row:" + entry.row.id;
@@ -562,18 +562,18 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     if (strip) return { node: nodeFromHtml(hiddenShotStripHtml(strip)) };
     return { node: newRowEl(entry.row, entry.index), added: true };
   }
-  const steps = Array.isArray(doc.sections) && doc.sections.length ? sectionRowEntries(doc, ports.hiding(), ports.sections()).map(function (item): RowsStep {
-    if (!("section" in item)) return planScene(item);
-    const key = "section:" + item.section.id;
-    const html = sectionHeaderHtml(item, !ports.edits.allowed());
+  const steps = Array.isArray(doc.sections) && doc.sections.length ? sceneRowEntries(doc, ports.hiding(), ports.scenes()).map(function (item): RowsStep {
+    if (!("scene" in item)) return planBeat(item);
+    const key = "section:" + item.scene.id;
+    const html = sceneHeaderHtml(item, !ports.edits.allowed());
     const old = existing.get(key);
     existing.delete(key);
-    if (old?.__splitpageSectionSig === html) return { node: old };
+    if (old?.__splitpageSceneSig === html) return { node: old };
     if (old) drop.push(old);
     const node = nodeFromHtml(html) as SignedRow;
-    node.__splitpageSectionSig = html;
+    node.__splitpageSceneSig = html;
     return { node };
-  }) : ports.hiding().groups(doc.rows).map(planScene);
+  }) : ports.hiding().groups(doc.rows).map(planBeat);
   existing.forEach(function (el) { drop.push(el); });
   return { steps: steps, drop: drop };
 }

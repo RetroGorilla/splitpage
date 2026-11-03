@@ -25,7 +25,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/person-colors.ts": await import("../../src/core/document/person-colors.ts"),
   "document/ports.ts": await import("../../src/core/document/ports.ts"),
   "document/rows.ts": await import("../../src/core/document/rows.ts"),
-  "document/sections.ts": await import("../../src/core/document/sections.ts"),
+  "document/scenes.ts": await import("../../src/core/document/scenes.ts"),
   "document/tags.ts": await import("../../src/core/document/tags.ts"),
   "document/text-policy.ts": await import("../../src/core/document/text-policy.ts"),
   "document/timing.ts": await import("../../src/core/document/timing.ts"),
@@ -36,7 +36,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "merge/review.ts": await import("../../src/core/merge/review.ts"),
   "merge/rows.ts": await import("../../src/core/merge/rows.ts"),
   "merge/scalars.ts": await import("../../src/core/merge/scalars.ts"),
-  "merge/sections.ts": await import("../../src/core/merge/sections.ts"),
+  "merge/scenes.ts": await import("../../src/core/merge/scenes.ts"),
   "merge/shape.ts": await import("../../src/core/merge/shape.ts"),
   "merge/state-fields.ts": await import("../../src/core/merge/state-fields.ts"),
   "merge/states.ts": await import("../../src/core/merge/states.ts"),
@@ -87,12 +87,12 @@ test("core's policies run in this process", async () => {
   const { normalizeBrollProps } = await import("../../src/core/document/broll.ts");
   const { decodeImageDataUrl } = await import("../../src/core/document/media.ts");
   const { normalizeVideoLinks } = await import("../../src/core/document/gallery.ts");
-  const { parseSceneLength } = await import("../../src/core/document/timing.ts");
+  const { parseBeatLength } = await import("../../src/core/document/timing.ts");
   assert.equal(sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   assert.equal(plainText("<b>x</b>"), "x");
   assert.equal(safeHref("javascript:x"), null);
   assert.deepEqual(normalizeBrollProps(["Mug"], []), [{ id: "", name: "Mug" }]);
   assert.equal(decodeImageDataUrl("data:image/gif;base64,R0lGODlhAQABAAAAACw=")?.ref.mime, "image/gif");
   assert.deepEqual(normalizeVideoLinks([{ href: "https://example.com/v" }]), [{ href: "https://example.com/v" }]);
-  assert.equal(parseSceneLength("1:30"), 90);
+  assert.equal(parseBeatLength("1:30"), 90);
 });

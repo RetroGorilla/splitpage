@@ -1,6 +1,6 @@
 import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { sectionGroups } from "../../core/document/sections.ts";
+import { sceneGroups } from "../../core/document/scenes.ts";
 import { contentMemo } from "../../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../../core/document/text-policy.ts";
 import { pad2, formatDuration, rowSeconds } from "../../core/production/timing.ts";
@@ -13,9 +13,9 @@ import type { RundownControls } from "./actions.ts";
 import type { RundownPorts } from "./ports.ts";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
-type SceneRow = DocumentView["rows"][number];
+type BeatRow = DocumentView["rows"][number];
 type StatusLook = NonNullable<ReturnType<typeof rowStatus>>;
-type RundownScene = { readonly seconds?: number | null | undefined; readonly status?: unknown };
+type RundownBeat = { readonly seconds?: number | null | undefined; readonly status?: unknown };
 type RundownBlock = {
   index: number;
   start: number;
@@ -121,9 +121,9 @@ export function rundownScale(totalSeconds: number | null | undefined, extraSecon
 
 function tenth(v: number): number { return Math.round(v * 10) / 10; }
 
-export function rundownBlocks(scenes: readonly RundownScene[], pxPerSecond: number): RundownBlock[] {
+export function rundownBlocks(beats: readonly RundownBeat[], pxPerSecond: number): RundownBlock[] {
   let t = 0;
-  return scenes.map(function (sc, i) {
+  return beats.map(function (sc, i) {
     const secs = Math.max(0, sc.seconds || 0);
     const width = Math.max(BLOCK_MIN_PX, tenth(secs * pxPerSecond - BLOCK_GAP_PX));
     const shot = sc.status === "shot";
@@ -145,22 +145,22 @@ export const REST_MIN_PX = 5;
 const REST_FLOOR_SHARE = 0.8;
 
 export function rundownRestLayout(
-  scenes: readonly (RundownScene | null | undefined)[] | null | undefined,
+  beats: readonly (RundownBeat | null | undefined)[] | null | undefined,
   totalSeconds: number | null | undefined,
   extraSeconds: number | null | undefined,
   widthPx: number,
   floorPx?: number | null
 ): RestLayout {
-  scenes = scenes || [];
-  const n = scenes.length;
-  const secs = scenes.map(function (sc) { return Math.max(0, (sc && sc.seconds) || 0); });
+  beats = beats || [];
+  const n = beats.length;
+  const secs = beats.map(function (sc) { return Math.max(0, (sc && sc.seconds) || 0); });
   let total = Number(totalSeconds);
   if (!(total >= 0)) total = secs.reduce(function (a, b) { return a + b; }, 0);
   const W = widthPx > 0 ? widthPx : 0;
   const pps = rundownScale(total, extraSeconds, W);
-  const sceneW = total * pps;
+  const beatW = total * pps;
   const floor = floorPx == null ? REST_MIN_PX : Number(floorPx) || 0;
-  const slotFloor = floor > BLOCK_MIN_PX && n && sceneW > 0 ? Math.min(floor + BLOCK_GAP_PX, sceneW / n * REST_FLOOR_SHARE) : 0;
+  const slotFloor = floor > BLOCK_MIN_PX && n && beatW > 0 ? Math.min(floor + BLOCK_GAP_PX, beatW / n * REST_FLOOR_SHARE) : 0;
   const raw = secs.map(function (s) { return s * pps; });
   const w = raw.slice();
   if (slotFloor > 0) {
@@ -168,7 +168,7 @@ export function rundownRestLayout(
     for (let it = 0; it <= n; it++) {
       let heldW = 0, freeRaw = 0, i;
       for (i = 0; i < n; i++) { if (held[i]) heldW += slotFloor; else freeRaw += raw[i] as number; }
-      const f = freeRaw > 0 ? (sceneW - heldW) / freeRaw : 0;
+      const f = freeRaw > 0 ? (beatW - heldW) / freeRaw : 0;
       let changed = false;
       for (i = 0; i < n; i++) {
         if (held[i]) { w[i] = slotFloor; continue; }
@@ -183,7 +183,7 @@ export function rundownRestLayout(
   let t = 0;
   for (let j = 0; j < n; j++) {
     const width = Math.max(BLOCK_MIN_PX, tenth((w[j] as number) - BLOCK_GAP_PX));
-    const shot = scenes[j] && (scenes[j] as RundownScene).status === "shot";
+    const shot = beats[j] && (beats[j] as RundownBeat).status === "shot";
     blocks.push({
       index: j,
       start: t,
@@ -196,7 +196,7 @@ export function rundownRestLayout(
     t += secs[j] as number;
     X.push((X[j] as number) + (w[j] as number));
   }
-  X[n] = Math.min(sceneW, W);
+  X[n] = Math.min(beatW, W);
   X.push(W);
   return {
     pxPerSecond: pps,
@@ -268,7 +268,7 @@ export function rundownLengthPlace(
 }
 
 export const LENS_MIN_PX = 96;
-export const LENS_REACH_SCENES = 3;
+export const LENS_REACH_BEATS = 3;
 const LENS_RECENTER_MS = 400;
 export const LENS_SLOW_PX_MS = 0.12;
 const LENS_FAST_PX_MS = 0.6;
@@ -281,7 +281,7 @@ function clamp(v: number, lo: number, hi: number): number { return v < lo ? lo :
 export function rundownLens(slots: readonly number[], focus: number, anchor: number | null | undefined, opts?: LensOpts | null): number[] {
   opts = opts || {};
   const minW = (opts.minWidth as number) > 0 ? opts.minWidth as number : LENS_MIN_PX;
-  const R = (opts.reach as number) >= 0 ? opts.reach as number : LENS_REACH_SCENES;
+  const R = (opts.reach as number) >= 0 ? opts.reach as number : LENS_REACH_BEATS;
   const m = slots.length - 1;
   const W = slots[m] as number;
   if (!(W > 0) || m < 2) return slots.slice();
@@ -426,8 +426,8 @@ interface RundownState {
   currentRowId: string | null;
   lastBlocksHtml: string;
   lastRulerHtml: string;
-  lastSectionsHtml: string;
-  sectionLabels: { el: HTMLElement; start: number; end: number }[];
+  lastScenesHtml: string;
+  sceneLabels: { el: HTMLElement; start: number; end: number }[];
   lastLayout: LayoutView;
   lastKnotsKey: string;
   minimized: boolean;
@@ -445,8 +445,8 @@ function freshState(): RundownState {
     currentRowId: null,
     lastBlocksHtml: "",
     lastRulerHtml: "",
-    lastSectionsHtml: "",
-    sectionLabels: [],
+    lastScenesHtml: "",
+    sceneLabels: [],
     lastLayout: { pxPerSecond: 0, spanSeconds: 0, totalSeconds: 0, width: 0, x: function () { return 0; } },
     lastKnotsKey: "",
     minimized: false,
@@ -512,7 +512,7 @@ export function rundownLayout(): LayoutView {
 
 const CHECK_SVG = '<svg class="rd-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
-function sceneSnippet(row: SceneRow): string {
+function beatSnippet(row: BeatRow): string {
   if (!state.snippetOf) {
     state.snippetOf = contentMemo(function (html) {
       const text = toPlainText(ports.text.cellOf(html)).replace(/\s+/g, " ").trim();
@@ -522,7 +522,7 @@ function sceneSnippet(row: SceneRow): string {
   return state.snippetOf(row.audioText || "") || state.snippetOf(row.visualText || "");
 }
 
-function brollTicksHtml(row: SceneRow): string {
+function brollTicksHtml(row: BeatRow): string {
   const n = brollCountIn(row, ports.text.productionReaders);
   let out = "";
   for (let i = 0; i < n; i++) {
@@ -531,12 +531,12 @@ function brollTicksHtml(row: SceneRow): string {
   return out;
 }
 
-function blockHtml(row: SceneRow, b: RundownBlock, isCurrent: boolean, focusable: boolean): string {
+function blockHtml(row: BeatRow, b: RundownBlock, isCurrent: boolean, focusable: boolean): string {
   const st = rowStatus(row.status) || ROW_STATUSES[0] as StatusLook;
   const num = pad2(b.index + 1);
   const len = formatDuration(b.seconds);
   const label = "Scene " + num + ", " + len + ", " + st.label.toLowerCase() + (isCurrent ? " — current scene" : "");
-  const snip = sceneSnippet(row);
+  const snip = beatSnippet(row);
   return '<button type="button" class="rd-block is-' + escapeHtml(st.id) + (isCurrent ? ' is-current' : '') +
     '" data-row="' + escapeHtml(row.id) + '" data-i="' + b.index + '" tabindex="' + (focusable ? '0' : '-1') + '"' +
     (isCurrent ? ' aria-current="true"' : '') +
@@ -584,7 +584,7 @@ function overLength(x: number): boolean {
   return state.lengthAt.left !== null && x >= state.lengthAt.left - 2 && x <= state.lengthAt.left + state.lengthAt.width + 2;
 }
 
-function segmentHtml(row: SceneRow, b: RundownBlock, isCurrent: boolean): string {
+function segmentHtml(row: BeatRow, b: RundownBlock, isCurrent: boolean): string {
   const st = rowStatus(row.status) || ROW_STATUSES[0] as StatusLook;
   return '<span class="rd-seg is-' + escapeHtml(st.id) + (isCurrent ? ' is-current' : '') +
     '" style="left:' + b.left + 'px;width:' + b.width + 'px"></span>';
@@ -605,31 +605,31 @@ export function renderRundown(): void {
   if (!trackWidth) return;
 
   const doc = ports.document.current();
-  const scenes = rows.map(function (r) { return { seconds: rowSeconds(r, doc, ports.text.productionReaders), status: r.status }; });
-  const total = scenes.reduce(function (n, sc) { return n + sc.seconds; }, 0);
+  const beats = rows.map(function (r) { return { seconds: rowSeconds(r, doc, ports.text.productionReaders), status: r.status }; });
+  const total = beats.reduce(function (n, sc) { return n + sc.seconds; }, 0);
   const width = placeLength(strip, total, trackWidth);
-  const lay = rundownRestLayout(scenes, total, state.extraSeconds, width, REST_MIN_PX);
+  const lay = rundownRestLayout(beats, total, state.extraSeconds, width, REST_MIN_PX);
   const span = lay.spanSeconds;
   const s = lay.pxPerSecond;
   const blocks = lay.blocks;
   const right = Math.max(0, tenth(trackWidth - width)) + "px";
   if (blocksEl.style.right !== right) blocksEl.style.right = right;
 
-  const hasSections = doc && Array.isArray(doc.sections) && doc.sections.length;
-  const sectionsEl = hasSections || state.lastSectionsHtml ? strip.querySelector<HTMLElement>(".rundown-sections") : null;
-  if (sectionsEl) {
-    const groups = hasSections ? sectionGroups(doc) : [];
-    sectionsEl.hidden = !groups.length || state.minimized;
-    if (groups.length || state.lastSectionsHtml) {
+  const hasScenes = doc && Array.isArray(doc.sections) && doc.sections.length;
+  const scenesEl = hasScenes || state.lastScenesHtml ? strip.querySelector<HTMLElement>(".rundown-sections") : null;
+  if (scenesEl) {
+    const groups = hasScenes ? sceneGroups(doc) : [];
+    scenesEl.hidden = !groups.length || state.minimized;
+    if (groups.length || state.lastScenesHtml) {
       const labels = groups.map(group => {
         const first = blocks[group.start], last = blocks[group.end - 1];
         if (!first || !last) return "";
-        return '<span class="rd-section" data-start="' + group.start + '" data-end="' + group.end + '" title="' + escapeHtml(group.section.name) + '" style="left:' + first.left +
-          'px;width:' + (last.left + last.width - first.left) + 'px">' + escapeHtml(group.section.name) + '</span>';
+        return '<span class="rd-section" data-start="' + group.start + '" data-end="' + group.end + '" title="' + escapeHtml(group.scene.name) + '" style="left:' + first.left +
+          'px;width:' + (last.left + last.width - first.left) + 'px">' + escapeHtml(group.scene.name) + '</span>';
       }).join("");
-      if (labels !== state.lastSectionsHtml) {
-        sectionsEl.innerHTML = labels; state.lastSectionsHtml = labels;
-        state.sectionLabels = Array.from(sectionsEl.querySelectorAll<HTMLElement>(".rd-section"), el => ({
+      if (labels !== state.lastScenesHtml) {
+        scenesEl.innerHTML = labels; state.lastScenesHtml = labels;
+        state.sceneLabels = Array.from(scenesEl.querySelectorAll<HTMLElement>(".rd-section"), el => ({
           el, start: Number(el.dataset.start), end: Number(el.dataset.end)
         }));
       }
@@ -637,12 +637,12 @@ export function renderRundown(): void {
   }
 
   const current = state.currentRowId && rows.some(function (r) { return r.id === state.currentRowId; }) ? state.currentRowId : null;
-  const tabRow = current || (rows[0] as SceneRow).id;
+  const tabRow = current || (rows[0] as BeatRow).id;
   let html = "";
   blocks.forEach(function (b, i) {
     html += state.minimized
-      ? segmentHtml(rows[i] as SceneRow, b, (rows[i] as SceneRow).id === current)
-      : blockHtml(rows[i] as SceneRow, b, (rows[i] as SceneRow).id === current, (rows[i] as SceneRow).id === tabRow);
+      ? segmentHtml(rows[i] as BeatRow, b, (rows[i] as BeatRow).id === current)
+      : blockHtml(rows[i] as BeatRow, b, (rows[i] as BeatRow).id === current, (rows[i] as BeatRow).id === tabRow);
   });
   let rewritten = false;
   if (html !== state.lastBlocksHtml) {
@@ -668,7 +668,7 @@ export function renderRundown(): void {
   }
 
   let at = -1;
-  for (let j = 0; j < rows.length; j++) if ((rows[j] as SceneRow).id === current) at = j;
+  for (let j = 0; j < rows.length; j++) if ((rows[j] as BeatRow).id === current) at = j;
 
   const countChanged = rows.length !== state.base.n;
   state.base.blocks = blocks;
@@ -734,7 +734,7 @@ function holdTrack(i: number): void {
   }, LENS_HOLD_MS);
 }
 
-function sceneAt(Z: readonly number[], x: number): number {
+function beatAt(Z: readonly number[], x: number): number {
   for (let i = 0; i < state.base.n; i++) if (x >= (Z[i] as number) && x < (Z[i + 1] as number)) return i;
   return -1;
 }
@@ -776,7 +776,7 @@ function applyKnots(Z: readonly number[]): void {
       }
     }
   }
-  if (state.sectionLabels.length) paintSectionLabels();
+  if (state.sceneLabels.length) paintSceneLabels();
   const strip = stripEl();
   const playhead = strip && strip.querySelector<HTMLElement>(".rundown-playhead");
   if (playhead && state.base.current !== -1) {
@@ -793,8 +793,8 @@ function applyKnots(Z: readonly number[]): void {
   lengthCovered(Z);
 }
 
-function paintSectionLabels(): void {
-  for (const label of state.sectionLabels) {
+function paintSceneLabels(): void {
+  for (const label of state.sceneLabels) {
     const left = state.base.lefts[label.start] ?? 0;
     const right = (state.base.lefts[label.end - 1] ?? left) + (state.base.widths[label.end - 1] ?? 0);
     label.el.style.left = left + "px";
@@ -867,7 +867,7 @@ function lensSettle(): void {
       state.base.lefts[i] = b.left;
       state.base.widths[i] = b.width;
     }
-    if (state.sectionLabels.length) paintSectionLabels();
+    if (state.sceneLabels.length) paintSceneLabels();
     const playhead = strip.querySelector<HTMLElement>(".rundown-playhead");
     if (playhead && state.base.current !== -1 && state.base.blocks[state.base.current]) {
       playhead.style.left = tenth((state.base.blocks[state.base.current] as RundownBlock).left - 1) + "px";
@@ -927,7 +927,7 @@ function lensAt(x: number, src: LensSource, t: number): void {
   state.lens.src = src;
   state.lens.x = x;
   state.lens.t = t;
-  if (src === "pointer") holdTrack(sceneAt(state.lens.Z as number[], x)); else holdClear();
+  if (src === "pointer") holdTrack(beatAt(state.lens.Z as number[], x)); else holdClear();
   lensKick();
 }
 
@@ -1055,7 +1055,7 @@ function endDragOver(): void {
   lensOff("drag");
 }
 
-function followMovedScene(rowId: string): void {
+function followMovedBeat(rowId: string): void {
   ports.actions.invoke("reveal-row", "button", rowId);
   const rowEl = document.querySelector<HTMLElement>('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;
@@ -1107,12 +1107,12 @@ function onStripDrop(e: DragEvent): void {
   const doc = ports.document.current();
   if (g < 0 || !doc) return;
   const rows = doc.rows;
-  if (g === 0) ports.cells.moveRow(id, (rows[0] as SceneRow).id, false);
-  else ports.cells.moveRow(id, (rows[g - 1] as SceneRow).id, true);
-  followMovedScene(id);
+  if (g === 0) ports.cells.moveRow(id, (rows[0] as BeatRow).id, false);
+  else ports.cells.moveRow(id, (rows[g - 1] as BeatRow).id, true);
+  followMovedBeat(id);
 }
 
-export function goToScene(rowId: string | null): void {
+export function goToBeat(rowId: string | null): void {
   ports.actions.invoke("reveal-row", "button", rowId);
   const rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;
@@ -1157,7 +1157,7 @@ export function startRundown(given: RundownPorts): RundownOwner {
   ports = given;
   const offs: (() => void)[] = [];
   let disposed = false;
-  const owner: RundownOwner = { mounted: function () { return !disposed; }, minimized: isRundownMinimized, toggleMinimized: toggleRundownMinimized, goToScene: goToScene, dispose: function () {
+  const owner: RundownOwner = { mounted: function () { return !disposed; }, minimized: isRundownMinimized, toggleMinimized: toggleRundownMinimized, goToBeat: goToBeat, dispose: function () {
     if (disposed) return;
     disposed = true;
     while (offs.length) (offs.pop() as () => void)();
@@ -1186,7 +1186,7 @@ export function startRundown(given: RundownPorts): RundownOwner {
   listen(document, "selectionchange", function () { noteCurrentRow(document.activeElement); });
   listen(strip, "click", function (e) {
     const b = (e.target as Element).closest ? (e.target as Element).closest(".rd-block") : null;
-    if (b) goToScene(b.getAttribute("data-row"));
+    if (b) goToBeat(b.getAttribute("data-row"));
   });
   listen(strip, "keydown", function (e) {
     const b = (e.target as Element).closest ? (e.target as Element).closest<HTMLElement>(".rd-block") : null;

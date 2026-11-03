@@ -241,7 +241,7 @@ Structure section: "no structural change"; the tested/untested table before and 
 ## AQ-9 [x] Mutation configs for pure src/application modules (after AQ-8 merges)
 
 ```text
-Task: tools/mutants/ has configs for src/core areas. Add one for the pure, logic-only modules in src/application/ (for example src/application/commands/scenes.ts, rows.ts, cell-text.ts, split-join.ts, scene-length.ts, scene-status.ts, and src/application/save/autosave.ts and status.ts, plus shortcuts.ts if it is pure: choose modules with no I/O and no timers; src/application/save/ is read-only here, add tests and config only). Tests and config only.
+Task: tools/mutants/ has configs for src/core areas. Add one for the pure, logic-only modules in src/application/ (for example src/application/commands/beats.ts, rows.ts, cell-text.ts, split-join.ts, beat-length.ts, beat-status.ts, and src/application/save/autosave.ts and status.ts, plus shortcuts.ts if it is pure: choose modules with no I/O and no timers; src/application/save/ is read-only here, add tests and config only). Tests and config only.
 
 1. Read two existing configs and the runner; copy their shape. Use the runner as it is after #932.
 2. Add tools/mutants/application-pure.json. List the chosen modules and the tests that cover them in the PR.

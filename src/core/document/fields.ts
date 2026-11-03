@@ -1,5 +1,5 @@
 import { normalizePersonColors } from "./person-colors.ts";
-import { normalizeSections } from "./sections.ts";
+import { normalizeScenes } from "./scenes.ts";
 import { cappedName } from "./text-policy.ts";
 import { DEFAULT_WPM, normalizeTargetLength, normalizeWordsPerMinute } from "./timing.ts";
 import { normalizeTitleOrigin, normalizeTitleVersion } from "./file-title.ts";
@@ -54,7 +54,7 @@ const FIELDS: StateField[] = [
   { key: "lastEditedAt",   merge: "theirs-wins", undo: false },
   { key: "personColors",   normalize: function (v) { return normalizePersonColors(v) || undefined; }, merge: "person-colors", undo: false },
   { key: "targetSeconds",  normalize: normalizeTargetLength, merge: "target-length", undo: true },
-  { key: "sections",       normalize: normalizeSections, merge: "sections", undo: true },
+  { key: "sections",       normalize: normalizeScenes, merge: "sections", undo: true },
   { key: "schema",         merge: "constant", undo: false }
 ];
 

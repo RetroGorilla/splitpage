@@ -9,7 +9,7 @@ import type { TagCategoryLook } from "../../core/production/looks.ts";
 type PanelTagStatus = (typeof TAG_STATUSES)[number];
 type PanelRowStatus = (typeof ROW_STATUSES)[number];
 type PanelTagMention = PresentedProductionEntry["mentions"][number];
-type SceneMentionGroup = { m: PanelTagMention; n: number; visual: boolean; audio: boolean };
+type BeatMentionGroup = { m: PanelTagMention; n: number; visual: boolean; audio: boolean };
 type PersonTagGroup = { id: string; label: string; items: PresentedProductionEntry[] };
 type ShootTagGroup = { name: string; rows: number[]; needs: Record<string, PresentedProductionEntry>; needOrder: string[] };
 type PanelProductionOwner = TagPanelPorts["production"];
@@ -144,7 +144,7 @@ export function renderGearList() {
 
   if ((ports as TagPanelPorts).view.gearGroupBy() === "scene") {
     const untracked = entries.filter(function (e) { return e.orphaned; }).length;
-    listEl.innerHTML = renderProductionByScene(entries.filter(function (e) { return !e.orphaned; })) +
+    listEl.innerHTML = renderProductionByBeat(entries.filter(function (e) { return !e.orphaned; })) +
       (untracked ? '<div class="tag-orphan-note">' + untracked +
         (untracked === 1 ? " item isn't" : " items aren't") +
         ' mentioned in any scene — switch to List to see ' +
@@ -192,7 +192,7 @@ export function applyGearQuickAdd() {
   (ports as TagPanelPorts).notices.show("Gear list updated — " + parts.join(", ") + ".", "ok");
 }
 
-function joinSceneLinks(links: readonly string[]) {
+function joinBeatLinks(links: readonly string[]) {
   return links.map(function (html, i) {
     return i < links.length - 1
       ? '<span class="tag-scene-unit">' + html + '<span class="tag-scene-sep">,</span></span>'
@@ -200,8 +200,8 @@ function joinSceneLinks(links: readonly string[]) {
   }).join('<span class="tag-scene-sep"> </span>');
 }
 
-function sceneLinksHtml(item: PresentedProductionEntry) {
-  const byRow = idMap<SceneMentionGroup>(), order: SceneMentionGroup[] = [];
+function beatLinksHtml(item: PresentedProductionEntry) {
+  const byRow = idMap<BeatMentionGroup>(), order: BeatMentionGroup[] = [];
   item.mentions.forEach(function (m) {
     let s = byRow[m.rowId];
     if (!s) { s = byRow[m.rowId] = { m: m, n: 0, visual: false, audio: false }; order.push(s); }
@@ -209,7 +209,7 @@ function sceneLinksHtml(item: PresentedProductionEntry) {
     if (m.field === "visualText") s.visual = true; else s.audio = true;
   });
   order.sort(function (a, b) { return a.m.rowIndex - b.m.rowIndex; });
-  return joinSceneLinks(order.map(function (s) {
+  return joinBeatLinks(order.map(function (s) {
     const num = pad2(s.m.rowIndex + 1);
     const label = "Scene " + num + " · " +
       (s.visual && s.audio ? "Visual and Audio" : s.visual ? "Visual" : "Audio") +
@@ -429,7 +429,7 @@ function tagEntityHtml(item: PresentedProductionEntry, opts?: { gear?: boolean; 
       '</button>' +
       statusCellHtml(item) +
       '<span class="tag-scenes">' +
-        (item.orphaned ? '<span class="tag-orphan-badge">Not in script</span>' : sceneLinksHtml(item)) +
+        (item.orphaned ? '<span class="tag-orphan-badge">Not in script</span>' : beatLinksHtml(item)) +
       '</span>' +
       (gear ? '' : ownerCellHtml(personById(item.owner))) +
     '</div>' +
@@ -437,7 +437,7 @@ function tagEntityHtml(item: PresentedProductionEntry, opts?: { gear?: boolean; 
   '</li>';
 }
 
-function renderProductionByScene(all: readonly PresentedProductionEntry[]) {
+function renderProductionByBeat(all: readonly PresentedProductionEntry[]) {
   const byRow: Record<number, Record<string, PresentedProductionEntry>> = {};
   all.forEach(function (item) {
     item.mentions.forEach(function (m) {
@@ -549,7 +549,7 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
       '<dl class="shoot-detail">' +
         '<dt>Scenes</dt>' +
         '<dd class="tag-scenes">' +
-          joinSceneLinks(g.rows.map(function (i) {
+          joinBeatLinks(g.rows.map(function (i) {
             const row = doc.rows[i] as DocumentView["rows"][number];
             const st = rowStatus(row.status) || (ROW_STATUSES[0] as PanelRowStatus);
             const label = "Scene " + pad2(i + 1) + " · " + st.label + " — go to it";
@@ -633,7 +633,7 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
     const orphanCount = groups.reduce(function (n, g) {
       return n + g.items.filter(function (i) { return i.orphaned; }).length;
     }, 0);
-    listEl.innerHTML = renderProductionByScene(entries.filter(function (e) { return !e.orphaned; })) +
+    listEl.innerHTML = renderProductionByBeat(entries.filter(function (e) { return !e.orphaned; })) +
       (orphanCount ? '<div class="tag-orphan-note">' + orphanCount +
         (orphanCount === 1 ? " item doesn't" : " items don't") +
         ' appear in any scene — group by category or person to see ' +

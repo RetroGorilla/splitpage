@@ -1,76 +1,72 @@
-import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { sectionsAfterRemoval, sectionsInOrder, writeSections } from "../../core/document/sections.ts";
+import { cappedText } from "../../core/document/text-policy.ts";
+import { newScene, sceneFirstBeatId, sceneGroups, scenesInOrder, writeScenes } from "../../core/document/scenes.ts";
+import type { DocumentScene } from "../../core/document/scenes.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 
-export const SCENE_PASTE_FIELDS: readonly string[] = Object.freeze(["comments", "people", "productionTags", "brollShots"]);
-
-export interface ScenePastePlan {
-  readonly inserted: readonly string[];
-  readonly replaced: string | null;
-  readonly title: boolean;
-  readonly saveNow: boolean;
-}
-
-export interface ScenePaste {
-  readonly plan: (doc: DocumentView) => ScenePastePlan | null;
-  readonly apply: (live: ValidatedDocument) => void;
-}
-
-function present(doc: DocumentView, rowId: string): boolean {
-  return doc.rows.some(function (r) { return r.id === rowId; });
-}
-
-export function pasteScenesCommand(paste: ScenePaste): Command {
+function sceneEdit(name: string, update: (doc: DocumentView) => readonly DocumentScene[] | null): Command {
   return {
-    name: "paste-scenes",
-    needs: "edit",
-    plan: function (doc): Plan | null {
-      const planned = paste.plan(doc);
-      if (!planned || !planned.inserted.length) return null;
-      const replaced = planned.replaced !== null && present(doc, planned.replaced) ? [planned.replaced] : [];
-      const sections = sectionsInOrder(doc);
-      const nextSections = replaced.length ? sections?.map(section => section.firstSceneId === planned.replaced
-        ? { ...section, firstSceneId: planned.inserted[0] as string } : section) : sections;
+    name, needs: "edit",
+    plan(doc): Plan | null {
+      const next = update(doc);
+      if (next === null || JSON.stringify(next) === JSON.stringify(scenesInOrder(doc) ?? [])) return null;
       return {
-        changes: changeSet({
-          rowsInserted: planned.inserted,
-          rowsRemoved: replaced,
-          docFields: SCENE_PASTE_FIELDS.concat(planned.title ? ["title"] : [], sections ? ["sections"] : []),
-          derive: CELL_TEXT_DERIVES,
-          saveNow: planned.saveNow
-        }),
-        apply: function (live) {
-          paste.apply(live);
-          if (sections) writeSections(live, nextSections);
-          planned.inserted.forEach(function (id) {
-            if (!live.rows.some(function (r) { return r.id === id; })) throw new Error("pasted scene " + id + " is not in the document");
-          });
-        }
+        changes: changeSet({ docFields: ["sections"], derive: CELL_TEXT_DERIVES, saveNow: true }),
+        apply(live) { writeScenes(live, next); }
       };
     }
   };
 }
 
-export function removeScenesCommand(rowIds: readonly string[]): Command {
+export function addSceneCommand(firstBeatId: string, id: string, name: string): Command {
+  return sceneEdit("add-section", doc => {
+    const scenes = scenesInOrder(doc) ?? [];
+    const clean = cappedText(name, 200);
+    if (!clean || !/^[A-Za-z0-9_-]+$/.test(id) || !doc.rows.some(row => row.id === firstBeatId) ||
+      scenes.some(scene => scene.id === id || sceneFirstBeatId(scene) === firstBeatId)) return null;
+    return scenesInOrder({ rows: doc.rows, sections: [...scenes, newScene(id, clean, firstBeatId)] }) ?? [];
+  });
+}
+
+export function renameSceneCommand(id: string, name: string): Command {
+  return sceneEdit("rename-section", doc => {
+    const clean = cappedText(name, 200);
+    if (!clean) return null;
+    return (scenesInOrder(doc) ?? []).map(scene => scene.id === id ? { ...scene, name: clean } : scene);
+  });
+}
+
+export function removeSceneCommand(id: string): Command {
+  return sceneEdit("remove-section", doc => (scenesInOrder(doc) ?? []).filter(scene => scene.id !== id));
+}
+
+export function moveSceneCommand(id: string, targetId: string, after: boolean): Command {
   return {
-    name: "remove-scenes",
-    needs: "edit",
-    plan: function (doc): Plan | null {
-      const gone = rowIds.filter(function (id, at) { return present(doc, id) && rowIds.indexOf(id) === at; });
-      if (!gone.length) return null;
-      const hadSections = !!sectionsInOrder(doc);
-      const sections = sectionsAfterRemoval(doc, new Set(gone));
+    name: "move-section", needs: "edit",
+    plan(doc): Plan | null {
+      const groups = sceneGroups(doc);
+      const moving = groups.find(group => group.scene.id === id);
+      const target = groups.find(group => group.scene.id === targetId);
+      if (!moving || !target || moving === target) return null;
+      const movedIds = doc.rows.slice(moving.start, moving.end).map(row => row.id);
+      const movingSet = new Set(movedIds);
+      const remaining = doc.rows.filter(row => !movingSet.has(row.id)).map(row => row.id);
+      const anchor = doc.rows[after ? target.end - 1 : target.start]?.id;
+      if (!anchor) return null;
+      const at = remaining.indexOf(anchor) + (after ? 1 : 0);
+      remaining.splice(at, 0, ...movedIds);
+      if (remaining.every((rowId, i) => rowId === doc.rows[i]?.id)) return null;
       return {
-        changes: changeSet({ rowsRemoved: gone, docFields: hadSections ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true }),
-        apply: function (live) {
-          const out = new Set(gone);
-          for (let i = live.rows.length - 1; i >= 0; i--) {
-            const row = live.rows[i];
-            if (row && out.has(row.id)) live.rows.splice(i, 1);
-          }
-          if (hadSections) writeSections(live, sections);
+        changes: changeSet({ rowsMoved: true, docFields: ["sections"], derive: CELL_TEXT_DERIVES, saveNow: true }),
+        apply(live) {
+          const byId = new Map(live.rows.map(row => [row.id, row]));
+          live.rows.splice(0, live.rows.length, ...remaining.map(rowId => {
+            const row = byId.get(rowId);
+            if (!row) throw new Error("scene left the section before it was moved");
+            return row;
+          }));
+          writeScenes(live, scenesInOrder(live));
         }
       };
     }

@@ -46,7 +46,7 @@ export function hideShotActions(): ActionDefinition[] {
   });
 }
 
-export function setHideShotScenes(on: boolean): void {
+export function setHideShotBeats(on: boolean): void {
   hideShot.owner()?.set(on);
 }
 

@@ -17,8 +17,8 @@ const syncDocIdentity = (...args) => documentIdentityOwner().syncDocIdentity(...
 const { videoLinkLabel } = await import("../core/document/gallery.ts");
 const { render } = await import("../features/rows/render.ts");
 const { renderRundown } = await import("../features/rundown/rundown.ts");
-const { buildScenePayload, parseScenePayload } = await import("../features/clipboard/scene-clip.ts");
-const { newScriptFromSelection, selectScenes } = await import("../features/clipboard/scene-select.ts");
+const { buildBeatPayload, parseBeatPayload } = await import("../features/clipboard/beat-clip.ts");
+const { newScriptFromSelection, selectBeats } = await import("../features/clipboard/beat-select.ts");
 const { registryKey } = await import("../core/document/tags.ts");
 const { setTagNotes } = await import("../features/tags/panels.ts");
 const { openBrollPanel } = await import("../features/broll/panel.ts");
@@ -86,17 +86,17 @@ test("02b the identity claim and the copy toast cut the title by code point (#43
 
 test("05g a pasted scene's source title is cut by code point (#434)", () => {
   load();
-  const payload = JSON.parse(buildScenePayload(currentDocument(), ["r2"]).json);
+  const payload = JSON.parse(buildBeatPayload(currentDocument(), ["r2"]).json);
   payload.source = { docId: null, title: x(299) + GRIN + "y" };
-  assert.equal(parseScenePayload(JSON.stringify(payload)).source.title, x(299) + GRIN);
+  assert.equal(parseBeatPayload(JSON.stringify(payload)).source.title, x(299) + GRIN);
   payload.source = { docId: null, title: "a\uD83D b" };
-  assert.equal(parseScenePayload(JSON.stringify(payload)).source.title, "a b");
+  assert.equal(parseBeatPayload(JSON.stringify(payload)).source.title, "a b");
 });
 
 test("05h a new script from selected scenes cuts its title by code point (#434)", () => {
   load();
   currentDocument().title = x(299) + GRIN;
-  selectScenes("r2", "r2");
+  selectBeats("r2", "r2");
   newScriptFromSelection();
   assert.equal(currentDocument().title, x(299) + GRIN);
   assert.equal(currentDocument().rows.length, 1);

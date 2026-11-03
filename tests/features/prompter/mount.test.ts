@@ -121,12 +121,12 @@ export function setup() {
     updatePrompterStatus: h.log("updatePrompterStatus"),
     buildPrompterContent: h.log("buildPrompterContent"),
     updateVoiceAvailability: h.log("updateVoiceAvailability"),
-    cueSceneForCurrentPosition: h.log("cueSceneForCurrentPosition"),
-    updateSceneReadout: h.log("updateSceneReadout"),
+    cueBeatForCurrentPosition: h.log("cueSceneForCurrentPosition"),
+    updateBeatReadout: h.log("updateSceneReadout"),
     setPrompterMirror: h.log("setPrompterMirror"),
     setPrompterFlip: h.log("setPrompterFlip"),
-    setPrompterSceneMode: h.log("setPrompterSceneMode"),
-    stepScene: h.log("stepScene"),
+    setPrompterBeatMode: h.log("setPrompterSceneMode"),
+    stepBeat: h.log("stepScene"),
     voiceActive: () => false,
     playing: () => false,
     isOpen: () => false,
@@ -134,7 +134,7 @@ export function setup() {
     setSkipShot: h.log("setSkipShot"),
     mirror: () => false,
     flip: () => false,
-    sceneMode: () => false
+    beatMode: () => false
   };
   const mount = () => [mountPrompterVisibility({ window: h.window, ports: p0 }), mountPrompterOpen({ window: h.window, ports: p1 }), mountPrompter({ window: h.window, ports: p2 })];
   return { ...h, mount, p0, p1, p2 };
@@ -283,7 +283,7 @@ test("prompter: shot skip rebuild order, scene readout and playback stay unchang
   const h = setup();
   let skip = false;
   const owner = mountPrompter({ window: h.window, ports: {
-    ...h.p2, skipShot: () => skip, setSkipShot: (value) => { skip = value; }, sceneMode: () => true
+    ...h.p2, skipShot: () => skip, setSkipShot: (value) => { skip = value; }, beatMode: () => true
   } });
   h.el("prompter-scroll").scrollTop = 100;
   h.fire(h.el("pp-skip-shot"), "click");

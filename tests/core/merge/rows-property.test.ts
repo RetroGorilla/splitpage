@@ -15,16 +15,16 @@ for (const movesOnly of [true, false]) {
     const read = (ids: string[]) => migrateRows({ rows: ids.map(id => ({ id })) }, migration.ports);
     for (let trial = 0; trial < 1000; trial++) {
       let serial = 0;
-      const scene = (): string => "r" + serial++;
-      const baseIds = Array.from({ length: 2 + random(20) }, scene);
+      const beat = (): string => "r" + serial++;
+      const baseIds = Array.from({ length: 2 + random(20) }, beat);
       const change = (): string[] => {
         const ids = [...baseIds];
         for (let edit = 0, count = 1 + random(8); edit < count; edit++) {
           const at = random(ids.length), action = movesOnly ? 3 : random(4);
-          if (action === 0) ids.splice(at, 0, scene());
+          if (action === 0) ids.splice(at, 0, beat());
           else if (action === 1) {
             if (ids.length > 1) ids.splice(at, 1);
-          } else if (action === 2) ids.splice(at, 1, scene(), scene());
+          } else if (action === 2) ids.splice(at, 1, beat(), beat());
           else {
             const [moved] = ids.splice(at, 1);
             assert.ok(moved);

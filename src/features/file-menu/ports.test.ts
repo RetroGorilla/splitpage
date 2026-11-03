@@ -49,7 +49,7 @@ function harness() {
     capture: () => captured,
     preview: {
       facts: () => ({ seconds: 0, runtime: "0:00", words: 0, date: "23 October", target: null, status: { todo: 0, ready: 0, shot: 0 } }),
-      scenes: () => [], breakdown: () => [], shots: () => [], runs: () => [], narration: () => [],
+      beats: () => [], breakdown: () => [], shots: () => [], runs: () => [], narration: () => [],
       meta: () => "", shotSummary: () => "", commentCount: () => 0,
       markdown: () => "", markdownTable: () => "", tagColor: () => null
     },

@@ -48,7 +48,7 @@ export type ClockMode = "system" | "12" | "24";
 export type ExportDocument = Frozen<{
   document: ValidatedDocument;
   title: string;
-  scenes: DocumentRow[];
+  beats: DocumentRow[];
   people: ExportPerson[];
   tags: (DocumentTag | null | undefined)[];
   shots: DocumentShot[];
@@ -104,7 +104,7 @@ export function buildExportDocument(
   return deepFreeze({
     document: document,
     title: document.title,
-    scenes: document.rows,
+    beats: document.rows,
     people: people,
     tags: document.productionTags,
     shots: document.brollShots,

@@ -9,8 +9,8 @@ import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats, RowSide } from "./rows.ts";
 import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWins, mergeTitle } from "./scalars.ts";
 import { listShapedSide } from "./shape.ts";
-import { mergeSectionLayout } from "./sections.ts";
-import type { DocumentSection } from "../document/sections.ts";
+import { mergeSceneLayout } from "./scenes.ts";
+import type { DocumentScene } from "../document/scenes.ts";
 import { textMergeContext } from "./text-field.ts";
 import type { MergeDecoder } from "./text-field.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
@@ -48,7 +48,7 @@ interface FieldRun {
   people: unknown[] | undefined;
   survives: PersonSurvives | undefined;
   rows: MergeRow[];
-  sections: DocumentSection[] | undefined;
+  sections: DocumentScene[] | undefined;
   comments: MergeComment[];
   title: unknown;
 }
@@ -113,7 +113,7 @@ export function mergeStateFields(baseSide: ValidatedDocument | null | undefined,
   const mergedTags = listMerger(tagField)(base && base.productionTags, mine.productionTags, theirs.productionTags, survives);
   const textCtx = textMergeContext(ports.decode, base, mine, theirs, mergedTags as TagEntry[]);
 
-  const layout = mergeSectionLayout(base, mine, theirs,
+  const layout = mergeSceneLayout(base, mine, theirs,
     mergeRows(base, mine, theirs, { text: textCtx, conflicts: conflicts, stats: stats, clock: ports.clock, editor: ports.editor }));
   const comments = mergeComments(base, mine, theirs);
   const title = mergeTitle(base, mine, theirs, conflicts);

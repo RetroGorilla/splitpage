@@ -6,7 +6,7 @@ import type { ExportAssets } from "../../application/export/assets.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import type { ExportFacts } from "./export-kit.ts";
 import type { ShotRecord } from "../../core/production/broll-view.ts";
-import type { SceneFacts } from "./export-projections.ts";
+import type { BeatFacts } from "./export-projections.ts";
 import { capturedPicture, capturedRowPicture, exportAssetsNow } from "./export-assets.ts";
 import { rowImageDataUrl } from "../storage/02c-blobs.ts";
 import { rowImage, rowImageKey } from "../../core/document/media.ts";
@@ -15,12 +15,12 @@ import { morePictureRefs, rowVideoLinks, videoLinkLabel } from "../../core/docum
 import {
   breakdownGroups,
   brollSummaryText,
-  exportBrollScenes,
+  exportBrollBeats,
   exportComments,
   exportFacts,
   exportSummaryParts
 } from "./export-kit.ts";
-import { sceneFacts, scriptSectionFacts, breakdownRows, commentBodyText, commentEntries } from "./export-projections.ts";
+import { beatFacts, scriptSceneFacts, breakdownRows, commentBodyText, commentEntries } from "./export-projections.ts";
 import { exportServices } from "../../application/export/services.ts";
 import { base64Encode } from "../../core/document/media.ts";
 import { pad2 } from "../../core/production/timing.ts";
@@ -28,7 +28,7 @@ import { toMarkdown, toPlainText } from "../../core/text/projections.ts";
 
 type Row = Frozen<DocumentRow>;
 interface MarkdownOptions {
-  scenes?: number | undefined;
+  beats?: number | undefined;
   assets?: ExportAssets | null | undefined;
   export?: boolean | undefined;
 }
@@ -49,7 +49,7 @@ function appendMarkdownTail(lines: string[], doc: ExportDocument, opts: Markdown
     lines.push("| --- | --- | --- | --- | --- | --- | --- |");
     breakdown.forEach(function (r) {
       lines.push("| " + [r.categoryLabel, r.name, r.statusLabel, r.owner, r.mentions,
-                         r.scenes.join(", "), r.notes].map(mdCell).join(" | ") + " |");
+                         r.beats.join(", "), r.notes].map(mdCell).join(" | ") + " |");
     });
     lines.push("");
   }
@@ -85,11 +85,11 @@ export function exportMetaLine(facts: ExportFacts): string {
   return exportSummaryParts(facts).concat(facts.date).join(" · ");
 }
 
-function mdSceneFactsLine(f: SceneFacts): string {
+function mdBeatFactsLine(f: BeatFacts): string {
   return "**" + f.status.label + "** · Read " + f.read + (f.readSet ? ", set by hand" : "");
 }
 
-function mdReadCell(f: SceneFacts): string {
+function mdReadCell(f: BeatFacts): string {
   return f.read + (f.readSet ? ", set by hand" : "");
 }
 
@@ -163,13 +163,13 @@ function appendExportTail(lines: string[], doc: ExportDocument, services: Export
       lines.push("| Item | Status | Scenes | Assigned to | Notes |");
       lines.push("| --- | --- | --- | --- | --- |");
       g.items.forEach(function (r) {
-        lines.push("| " + [r.name, r.statusLabel, r.scenes.join(", "), r.owner || "—", r.notes].map(mdCell).join(" | ") + " |");
+        lines.push("| " + [r.name, r.statusLabel, r.beats.join(", "), r.owner || "—", r.notes].map(mdCell).join(" | ") + " |");
       });
       lines.push("");
     });
   }
 
-  const broll = exportBrollScenes(doc, services);
+  const broll = exportBrollBeats(doc, services);
   if (broll.length) {
     lines.push("## B-roll shot list");
     lines.push("");
@@ -242,7 +242,7 @@ function markdownMorePictures(row: Row, i: number, assets: ExportAssets): Markdo
 
 export function markdownExportImages(doc: ExportDocument, assets: ExportAssets): MarkdownImage[] {
   let out: MarkdownImage[] = [];
-  doc.scenes.forEach(function (row, i) {
+  doc.beats.forEach(function (row, i) {
     const pic = rowImage(row) && capturedRowPicture(assets, row);
     if (pic) out.push({ path: markdownImagePath(row, i), bytes: pic.bytes });
     out = out.concat(markdownMorePictures(row, i, assets));
@@ -251,30 +251,30 @@ export function markdownExportImages(doc: ExportDocument, assets: ExportAssets):
 }
 
 export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null, services: ExportServices = exportServices()): string {
-  const limit = opts && opts.scenes;
+  const limit = opts && opts.beats;
   const assets = (opts && opts.assets) || exportAssetsNow(doc);
   const facts = exportFacts(doc, services);
-  const scenes = sceneFacts(doc, services);
-  const headings = new Map(scriptSectionFacts(doc, scenes).map(group => [group.start, group]));
+  const beats = beatFacts(doc, services);
+  const headings = new Map(scriptSceneFacts(doc, beats).map(group => [group.start, group]));
   const nums = doc.commentNumbers;
   const lines: string[] = [];
   lines.push("# " + facts.title);
   lines.push("");
-  if (!doc.scenes.length) {
+  if (!doc.beats.length) {
     lines.push("_No scenes yet._");
     lines.push("");
   } else {
     lines.push("_" + exportMetaLine(facts) + "_");
     lines.push("");
   }
-  (limit ? doc.scenes.slice(0, limit) : doc.scenes).forEach(function (row, i) {
+  (limit ? doc.beats.slice(0, limit) : doc.beats).forEach(function (row, i) {
     const heading = headings.get(i);
     if (heading) lines.push("## " + markdownSectionName(heading.name) + " · " + heading.total, "");
-    const f = scenes[i];
+    const f = beats[i];
     if (!f) throw new Error("Missing scene facts");
     lines.push("### Scene " + f.number + " · " + f.start);
     lines.push("");
-    lines.push(mdSceneFactsLine(f));
+    lines.push(mdBeatFactsLine(f));
     lines.push("");
     if (markdownHasPicture(row, assets)) {
       lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
@@ -328,7 +328,7 @@ function capturedRowDataUrl(assets: ExportAssets, row: Row): string | null {
   return pic ? "data:" + pic.mime + ";base64," + base64Encode(pic.bytes) : null;
 }
 
-export function mdSceneCellSource(row: Row, i: number, model?: boolean, assets?: ExportAssets | null, services: ExportServices = exportServices()) {
+export function mdBeatCellSource(row: Row, i: number, model?: boolean, assets?: ExportAssets | null, services: ExportServices = exportServices()) {
   const toMd = model ? function (html: unknown) { return toMarkdown(services.cellOf(html)); } : services.htmlToMarkdown;
   const text = toMd(row.visualText);
   let visual = text;
@@ -347,7 +347,7 @@ export function mdSceneCellSource(row: Row, i: number, model?: boolean, assets?:
 export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions | null, services: ExportServices = exportServices()): string {
   const s = doc.document;
   const exporting = !!(opts && opts.export);
-  const limit = exporting ? opts?.scenes : undefined;
+  const limit = exporting ? opts?.beats : undefined;
   const assets = (opts && opts.assets) || null;
   const lines: string[] = [];
   lines.push("# " + (s.title || "Untitled Script"));
@@ -359,14 +359,14 @@ export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions |
   if (!s.rows.length) {
     lines.push(exporting ? "_No scenes yet._" : "_No rows yet._");
   } else if (exporting) {
-    const scenes = sceneFacts(doc, services);
-    const headings = new Map(scriptSectionFacts(doc, scenes).map(group => [group.start, group]));
+    const beats = beatFacts(doc, services);
+    const headings = new Map(scriptSceneFacts(doc, beats).map(group => [group.start, group]));
     (limit ? s.rows.slice(0, limit) : s.rows).forEach(function (row, i) {
       const heading = headings.get(i);
       if (heading) lines.push("", "## " + markdownSectionName(heading.name) + " · " + heading.total, "");
       if (i === 0 || heading) lines.push("| # | Start | Status | Visual | Audio | Read |", "| --- | --- | --- | --- | --- | --- |");
-      const cell = mdSceneCellSource(row, i, false, assets, services);
-      const f = scenes[i];
+      const cell = mdBeatCellSource(row, i, false, assets, services);
+      const f = beats[i];
       if (!f) throw new Error("Missing scene facts");
       lines.push("| " + [f.number, f.start, f.status.label].join(" | ") + " | " +
                  mdRichTableCell(cell.visual) + " | " + mdRichTableCell(cell.audio) + " | " +
@@ -376,7 +376,7 @@ export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions |
     lines.push("| # | Visual | Audio | Status |");
     lines.push("| --- | --- | --- | --- |");
     s.rows.forEach(function (row, i) {
-      const cell = mdSceneCellSource(row, i, false, assets, services);
+      const cell = mdBeatCellSource(row, i, false, assets, services);
       lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(cell.visual) + " | " +
                  mdRichTableCell(cell.audio) + " | " + (row.status || "todo") + " |");
     });
@@ -388,7 +388,7 @@ export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions |
 
 export function htmlToPlainScript(doc: ExportDocument, services: ExportServices = exportServices()): string {
   const lines = [doc.title || "Untitled Script", ""];
-  doc.scenes.forEach(function (row, i) {
+  doc.beats.forEach(function (row, i) {
     lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(services.cellOf(row.visualText)));
     rowVideoLinks(row).forEach(function (l) { lines.push("      VIDEO: " + videoLinkText(l)); });
     lines.push("      AUDIO: " + toPlainText(services.cellOf(row.audioText)));
@@ -404,7 +404,7 @@ export function htmlToPlainScript(doc: ExportDocument, services: ExportServices 
       const where = r.inScript === "no"
         ? "not in script"
         : r.mentions + " mention" + (r.mentions === 1 ? "" : "s") +
-          (r.scenes.length ? ", scene" + (r.scenes.length === 1 ? " " : "s ") + r.scenes.join(", ") : "");
+          (r.beats.length ? ", scene" + (r.beats.length === 1 ? " " : "s ") + r.beats.join(", ") : "");
       lines.push(r.categoryLabel + ": " + r.name +
         "  [" + r.statusLabel + "]" +
         (r.owner ? "  —  " + r.owner : "") +

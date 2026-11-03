@@ -6,7 +6,7 @@ import { decodeImageDataUrl, rowImage } from "../../core/document/media.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { videoLinkText } from "../storage/02d-gallery.ts";
 import type { CommentBody } from "./export-projections.ts";
-import { sceneFacts, scriptSectionFacts } from "./export-projections.ts";
+import { beatFacts, scriptSceneFacts } from "./export-projections.ts";
 import { exportComments, exportFacts, exportRuns, exportSummaryParts } from "./export-kit.ts";
 import type { PrintSection } from "./print-page.ts";
 import { buildPrintPage, printLink, printPicture } from "./print-page.ts";
@@ -50,25 +50,25 @@ function commentBody(entry: CommentBody, input: ScriptPrintInput): string {
 export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
   const { doc, assets, services } = input;
   const facts = exportFacts(doc, services);
-  const scenes = sceneFacts(doc, services);
+  const beats = beatFacts(doc, services);
   const summary = exportSummaryParts(facts).concat(facts.date).join(" · ");
-  const statusSummary = scenes.length ? `<p class="print-meta">Shot ${facts.status.shot} · Ready ${facts.status.ready} · To do ${facts.status.todo} · Grey rows: shot scenes</p>` : "";
-  const rows = doc.scenes.map((row, index) => {
-    const scene = scenes[index];
-    if (!scene) throw new Error("Missing captured scene facts");
+  const statusSummary = beats.length ? `<p class="print-meta">Shot ${facts.status.shot} · Ready ${facts.status.ready} · To do ${facts.status.todo} · Grey rows: shot scenes</p>` : "";
+  const rows = doc.beats.map((row, index) => {
+    const beat = beats[index];
+    if (!beat) throw new Error("Missing captured scene facts");
     const image = rowImage(row);
     const legacy = image?.dataUrl ? decodeImageDataUrl(image.dataUrl) : null;
     const picture = image?.ref ? assets.picture(image.ref.sha256) : legacy ? { bytes: legacy.bytes, mime: legacy.ref.mime } : null;
-    const main = image ? printPicture(picture, "Scene " + scene.number + " picture") : "";
-    const more = morePictureRefs(row).map((ref) => printPicture(assets.picture(ref.sha256), "Scene " + scene.number + " gallery picture")).join("");
+    const main = image ? printPicture(picture, "Scene " + beat.number + " picture") : "";
+    const more = morePictureRefs(row).map((ref) => printPicture(assets.picture(ref.sha256), "Scene " + beat.number + " gallery picture")).join("");
     const links = rowVideoLinks(row).map((link) => `<p>${link.href ? escapeHtml(videoHostLabel(link)) + " " : ""}${printLink(String(videoLinkText(link)), link.href)}</p>`).join("");
-    return `<tr${scene.status.id === "shot" ? ' class="shot-done"' : ""}><td><strong class="scene-number">${scene.number}</strong><span class="scene-meta">${escapeHtml(scene.start)}</span>
-<span class="scene-meta">${escapeHtml(scene.status.label)}</span></td>
+    return `<tr${beat.status.id === "shot" ? ' class="shot-done"' : ""}><td><strong class="scene-number">${beat.number}</strong><span class="scene-meta">${escapeHtml(beat.start)}</span>
+<span class="scene-meta">${escapeHtml(beat.status.label)}</span></td>
 <td>${main}${more}${links}<div class="print-text">${cellHtml(row.visualText, input)}</div></td>
 <td><div class="print-text">${cellHtml(row.audioText, input)}</div></td>
-<td><span${scene.readSet ? ' class="read-set"' : ""}>${escapeHtml(scene.read)}</span></td></tr>`;
+<td><span${beat.readSet ? ' class="read-set"' : ""}>${escapeHtml(beat.read)}</span></td></tr>`;
   });
-  const groups = scriptSectionFacts(doc, scenes);
+  const groups = scriptSceneFacts(doc, beats);
   function table(from: number, to: number, heading = ""): string {
     return `<table class="script-table"><colgroup><col style="width:10%"><col style="width:40%"><col style="width:40%"><col style="width:10%"></colgroup>
 <thead><tr><th>Scene</th><th class="visual-head">Visual</th><th class="audio-head">Audio</th><th>Read</th></tr>${heading}</thead><tbody>${rows.slice(from, to).join("")}</tbody></table>`;
@@ -77,7 +77,7 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
     table(group.start, group.end, `<tr class="script-section"><th colspan="4"><span>${escapeHtml(group.name)}</span><span class="script-section-total">${escapeHtml(group.total)}</span></th></tr>`)).join("") : table(0, rows.length);
   const script = `<h1>${escapeHtml(facts.title)}</h1><p class="print-meta">${escapeHtml(summary)}</p>${statusSummary}` +
     (rows.length ? tables : "<p>No scenes yet.</p>");
-  const sections: PrintSection[] = [{ id: "script", title: "Script", html: script }];
+  const scenes: PrintSection[] = [{ id: "script", title: "Script", html: script }];
   const comments = exportComments(doc, { pieces: true }, services);
   if (comments.length) {
     const open = comments.filter((comment) => !comment.resolved).length;
@@ -90,9 +90,9 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
 ${comment.quoted ? `<blockquote class="print-text">${escapeHtml(comment.quoted)}</blockquote>` : ""}${commentBody(comment, input)}
 ${comment.replies.map((reply) => `<div class="reply"><p class="print-meta">${escapeHtml([reply.author, reply.when].filter(Boolean).join(" · "))}</p>${commentBody(reply, input)}</div>`).join("")}</article>`;
     }).join("");
-    sections.push({ id: "comments", title: "Comments", html });
+    scenes.push({ id: "comments", title: "Comments", html });
   }
-  return sections;
+  return scenes;
 }
 
 export function buildScriptPrintPage(input: ScriptPrintInput): string {
