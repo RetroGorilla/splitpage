@@ -4,7 +4,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    target-branch: 4.1-development
     groups:
       dev-tooling:
         patterns: ['*']
@@ -13,7 +12,6 @@ updates:
     directory: /desktop
     schedule:
       interval: weekly
-    target-branch: 4.1-development
     groups:
       desktop:
         patterns: ['*']
@@ -22,7 +20,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    target-branch: 4.1-development
     groups:
       actions:
         patterns: ['*']

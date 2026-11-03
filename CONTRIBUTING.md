@@ -15,7 +15,8 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
 
 ## Sending a change
 
-1. One issue per pull request, and link it (`Closes #123`).
+1. Branch from `main` and open the pull request against `main`. One issue per
+   pull request, and link it (`Closes #123`).
 2. Build and check locally. [DEVELOPING.md](docs/DEVELOPING.md#working-on-the-code) has the
    setup; the short version is:
    ```

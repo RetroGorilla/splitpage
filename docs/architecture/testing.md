@@ -333,7 +333,7 @@ names, and a golden test writes its fixture only when that variable names it
 left in a shell cannot rewrite every fixture and pass; the helper starts
 `node --test` itself and is not affected.
 
-Goldens are regenerated only on `4.1-development`, in a commit of their own
+Goldens are regenerated only on `main`, in a commit of their own
 that changes nothing else, and never inside a lane that moves code: such a
 lane keeps every golden passing unchanged.
 
@@ -668,17 +668,16 @@ measures is shown to Windows browsers only.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every pull request to `main` or
-`4.1-development` and every push to either branch. Its jobs call the scripts
-above and nothing else.
+`.github/workflows/ci.yml` runs on every pull request to `main` and every push
+to it. Its jobs call the scripts above and nothing else.
 
 | Job | Runs |
 | --- | --- |
-| `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `4.1-development`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
+| `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `main`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
 | `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for non-prose changes requiring a fresh run; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01 and 52, then 19 suites covering save, typing, undo and export (the list and the reason for each are in [ci.md](ci.md); about 75 s), and upload the built app |
 | `tests` | Two independent matrix jobs run `test:all -- --shard 1/2` and `2/2`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots |
 | `gate` | Requires successful classification, `checks`, both test shards and, when the change touches app or desktop code, `desktop-smoke` for code changes; for prose only, or a tree another run already passed, requires `checks`, `tests` and `desktop-smoke` to be skipped. After they pass it uploads the `ci-passed-tree-<tree>` marker |
-| `desktop-smoke` | Electron dev-target smoke on `ubuntu-latest` under Xvfb, on pull requests and pushes to `main` and `4.1-development` when `tools/ci-changes.mjs` reports `desktop=true`; about 5.5 min, in parallel with the other jobs |
+| `desktop-smoke` | Electron dev-target smoke on `ubuntu-latest` under Xvfb, on pull requests and pushes to `main` when `tools/ci-changes.mjs` reports `desktop=true`; about 5.5 min, in parallel with the other jobs |
 
 The persistence suite costs little: on its first hosted run (PR #270,
 `ubuntu-latest`, 30 September 2026) `265-browser-drafts.txt` passed 80 of 80

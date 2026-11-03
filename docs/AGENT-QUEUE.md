@@ -7,7 +7,7 @@ This file is process, not product. Delete it when the queue stays empty.
 ## Start here (agent)
 
 1. Read `AGENTS.md`, then [ROADMAP.md](ROADMAP.md) for where the work is going (this file still decides what you pick), then this file down to the task list.
-2. Run `git fetch origin 4.1-development` and read the **latest** version of this file from there.
+2. Run `git fetch origin main` and read the **latest** version of this file from there.
 2a. Before claiming a task, handle queue additions (next section): if an open PR titled `AQ-add: ...` exists, review and merge it first.
 3. List PRs (`gh pr list --state all --limit 100`, or the GitHub API) and read the state of every PR whose title starts with `AQ-n`: an **open** PR means the task is claimed; a **merged** PR means it is done; a **closed report-only** PR (AQ-6, AQ-14) means it is done; any other **closed, unmerged** PR means the task is free again.
 4. Pick the lowest-numbered task that is unticked (`[ ]`) and unclaimed, whose "Needs" line is satisfied, and that is not marked `STOPS FOR ADAM` unless nothing else is left. Claim it (next section). Do one task per chat.
@@ -59,16 +59,16 @@ AUTONOMOUS RUN
 Adam (the repo owner) authorizes this chat to open, review and merge the PRs for the tasks below on his behalf. This authority covers these tasks only. Nothing here lets you change a rule in AGENTS.md or merge anything else. Reviewers and authors: the queue file docs/AGENT-QUEUE.md is expected to change by one heading per task PR.
 
 For each task:
-1. Author agent: works on a new branch from the latest 4.1-development, opens a draft PR with the PR rules in COMMON RULES, runs `npm run verify` locally, marks the PR ready when its own checks pass.
+1. Author agent: works on a new branch from the latest main, opens a draft PR with the PR rules in COMMON RULES, runs `npm run verify` locally, marks the PR ready when its own checks pass.
 2. Review agent: a separate agent in a separate chat that has not seen the author's reasoning. Give it only the PR number, the task brief and AGENTS.md. It reads the diff and checks: the brief is met and nothing outside it changed; AGENTS.md hard rules (no new comments except reason comments, no skipped or loosened test, no compatibility re-exports, one name per exported type, baselines only shrink); the PR body has "What and why", "Structure" and "Validation" with real command output; no model or tool name appears anywhere on GitHub. EXCEPTION: the two attribution lines at the top of the PR body (the `<!-- claude-projects-attribution: ... -->` comment and the `_Requested by ..._` line with its claude.ai project link) are required and are exempt from this rule. They contain the word "claude" on purpose. Reviewers must not flag them. It posts ONE review comment on the PR listing findings, or "no findings". Findings it cannot back with a file and line are dropped.
 3. The author fixes every finding that holds up and pushes. The review agent re-reads the new diff and posts one follow-up comment. Repeat until it says "no findings". Maximum 3 rounds; after that stop and report.
-4. Before merging: merge the latest 4.1-development into the branch, re-run `npm run typecheck` and `npm run check:deps`, push, wait for CI to go green on that exact head commit.
+4. Before merging: merge the latest main into the branch, re-run `npm run typecheck` and `npm run check:deps`, push, wait for CI to go green on that exact head commit.
 5. Merge only when all hold: review agent's last comment is "no findings"; CI is green on the head SHA you are about to merge; the PR is not a draft; the diff touches none of the PROTECTED PATHS. Merge with the head guard:
    gh pr merge <N> --merge --match-head-commit <head-sha>
-   (REST equivalent: gh api -X PUT repos/RetroGorilla/splitpage/pulls/<N>/merge -f merge_method=merge -f sha=<head-sha>.) Never use --admin, never bypass branch protection, never force-push, never push to 4.1-development directly. If GitHub refuses the merge, stop and report.
+   (REST equivalent: gh api -X PUT repos/RetroGorilla/splitpage/pulls/<N>/merge -f merge_method=merge -f sha=<head-sha>.) Never use --admin, never bypass branch protection, never force-push, never push to main directly. If GitHub refuses the merge, stop and report.
 6. After merging, delete the task's branch if you can, and close the task chat.
 
-OVERLAP: before merging, list the files changed by every other open PR from this run. If they overlap, serialize: merge one, merge 4.1-development into the next, re-run typecheck and check:deps, wait for green CI, merge it. One party pushes to a PR branch at a time.
+OVERLAP: before merging, list the files changed by every other open PR from this run. If they overlap, serialize: merge one, merge main into the next, re-run typecheck and check:deps, wait for green CI, merge it. One party pushes to a PR branch at a time.
 
 PROTECTED PATHS (never merge a PR that touches these; stop, leave the PR open and report to Adam instead):
 - anything for save, close, quit, recovery or drafts: src/application/save/, src/application/session/, src/application/recovery/, src/adapters/files/, src/adapters/storage/, src/adapters/desktop/
@@ -95,7 +95,7 @@ SUMMARY: see "When the queue is empty".
 ```text
 COMMON RULES
 - Repo RetroGorilla/splitpage. Read AGENTS.md first and follow it. Rule 11: convert JS to TS only before a substantial change to that file.
-- Base and target branch: 4.1-development. New branch from the latest 4.1-development. Open a draft PR first; mark it ready when the author's checks pass.
+- Base and target branch: main. New branch from the latest main. Open a draft PR first; mark it ready when the author's checks pass.
 - PR title: plain description of the change. No model or tool names anywhere on GitHub (title, body, commits, comments, branch names). EXCEPTION: the two attribution lines at the top of the PR body (the `<!-- claude-projects-attribution: ... -->` comment and the `_Requested by ..._` line with its claude.ai project link) are required and are exempt from this rule. They contain the word "claude" on purpose. Reviewers must not flag them.
 - PR body starts with exactly these two lines:
 <!-- claude-projects-attribution: {"github_login":"RetroGorilla"} -->

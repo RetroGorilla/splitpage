@@ -72,7 +72,7 @@ eq("a gate of another workflow does not pass", (await check({ checks: [gateCheck
 eq("a gate check for another commit does not pass even when its run is for this one", (await check({ checks: [gateCheck({ head_sha: "d".repeat(40) })] })).ok, false);
 eq("a gate of a run for another commit does not pass",(await check({ checks: [gateCheck()], runs: [{ ...ciRun, head_sha: "d".repeat(40) }] })).ok, false);
 eq("a gate of a fork's run does not pass", (await check({ checks: [gateCheck()], runs: [{ ...ciRun, head_repository: { full_name: "fork/repo" } }] })).ok, false);
-eq("a workflow path with a ref suffix still counts", (await check({ checks: [gateCheck()], runs: [{ ...ciRun, path: WORKFLOW + "@refs/heads/4.1-development" }] })).ok, true);
+eq("a workflow path with a ref suffix still counts", (await check({ checks: [gateCheck()], runs: [{ ...ciRun, path: WORKFLOW + "@refs/heads/main" }] })).ok, true);
 eq("a later success after a failed gate passes", (await check({ checks: [gateCheck({ conclusion: "failure" }), gateCheck()] })).ok, true);
 eq("the count of gate checks seen is reported", (await gateRun({ sha: SHA, repository: REPOSITORY, get: api({ checks: [gateCheck({ conclusion: "failure" })] }).get })).seen, 1);
 
