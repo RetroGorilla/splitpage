@@ -4,6 +4,47 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
+## Unreleased
+
+### Added
+- Select beats like in other apps: Shift+click selects a run of beats,
+  Ctrl+click (Cmd+click on a Mac) adds or removes one, and Ctrl+A outside a
+  text field selects all beats.
+- Ctrl+click (Cmd+click on a Mac) on a link in a beat's text opens it: in a new
+  window in the browser, and in your default browser in the desktop app.
+- In the writer, Ctrl+scroll changes the text size, the same setting as the
+  Size slider.
+
+### Changed
+- New words throughout the app. A section is now a **scene**, and a scene is now
+  a **beat**. As a status, Shot is now **Filmed** and To shoot is **To film**.
+  Scene mode in Present is now **Beat mode**.
+- Numbering follows the new words. Scenes are lettered A to Z, then AA, AB and
+  so on. Beats restart in each scene, as in `B.8`, and B-roll shots follow tag
+  order, as in `B.8.2`. Beats before the first header are in an automatic,
+  unnamed Scene A. Numbers shift when you move beats or scenes. Saved scripts
+  keep their contents; old files open as they are.
+- Excel columns are now `Beat` and `Beats`. Images in exported Markdown are
+  named like `images/beat-A-3.jpg`; old `images/scene-N` names still import.
+- Status markers are colour coded: Needed is hollow, Sourcing is yellow and
+  Have it is green, in light and dark.
+- Scene headers scale with the script zoom in the editor and with the Size
+  slider in the writer.
+- **Tag** with the cursor in the Visual column now opens the category menu right
+  after or inside a word, and no space is added. In the Audio column, a link or
+  another tag, it says why it can't start one.
+- A video link whose thumbnail didn't download gets another try when you click
+  its beat.
+- Resizing the window with a script open does less work: the rundown strip moves
+  its blocks and ruler instead of rebuilding them on every resize step.
+
+### Fixed
+- The comments panel's filter and sort dropdowns follow dark mode.
+- Move up and Move down in a beat's menu ask before removing a one-beat scene's
+  header, as Alt+Up and Alt+Down already did.
+- Selecting across a folded scene no longer includes its hidden beats, so Delete
+  can't remove beats you can't see.
+
 ## 0.4.1 — 2026-11-02
 
 This release removes collaboration and server documents and fixes several
