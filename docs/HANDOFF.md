@@ -292,7 +292,7 @@ the caret can't enter one and typing/backspace can't corrupt its
 
 ### 3.4 Tags are derived; the *registry* is not
 
-Which scenes a tag appears in is read live (`collectTags()`). Which items
+Which beats a tag appears in is read live (`collectTags()`). Which items
 are tracked at all is real storage, `state.productionTags`. A mention is
 one stretch of one tag in the cell's document model (`tagsInField()`, via
 `cellOf()`, #85), not one tag span: two spans of one tag side by side,
@@ -372,7 +372,7 @@ milestone 3: they decide what the user asked, run `splitSceneCommand` or
 `joinScenesCommand` (`src/application/commands/split-join.ts`) through the
 session, and repaint. `caretAtEdge()` must not count empty inline wrappers —
 `Range.cloneContents()`'s empty `<strong></strong>` clone looked like
-content, blocking join on any scene starting with formatting.
+content, blocking join on any beat starting with formatting.
 
 `onWriterKeydown` runs capture-phase ahead of the shared `onRootKeydown`, so
 Enter means different things in each view; `onRootClick` isn't attached to
@@ -661,7 +661,7 @@ them:
   `pointer-events: none`, so a click during the fade reaches the view
   underneath.
 - **No transform on either container.** Mirror/Flip are transforms on
-  `.prompter-scroll`, the caret's `scrollIntoView` and the scene cue measure
+  `.prompter-scroll`, the caret's `scrollIntoView` and the beat cue measure
   the page, and a transform would make the container a containing block for
   anything fixed inside it.
 
@@ -674,7 +674,7 @@ leaving does not shift the editor under a still-clear layer.
 `.claude/skills/run-splitpage-app/tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
 on the two elements and checks all of it.
 
-**`render()` must stay synchronous.** `src/features/rows/row-motion.ts` animates scene
+**`render()` must stay synchronous.** `src/features/rows/row-motion.ts` animates beat
 reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
 `#rows` (§3.16), measure again, put things back with a transform and animate
 it away. It is FLIP and *not* the View Transitions API for one reason:
@@ -687,11 +687,11 @@ Two traps it already works around:
 
 - **Measure in document space**, not viewport space (`rect.top + scrollY`).
   `render()` can refocus the cell that had the caret, and focusing can scroll
-  the page — measured in viewport space that scroll reads as every scene in
+  the page — measured in viewport space that scroll reads as every beat in
   the document having moved, and the whole script slides on a render that
   changed nothing.
 - **Nothing is animated out, and do not add it back as a clone.** The
-  obvious fade-out for a departing scene is to clone it into a layer and
+  obvious fade-out for a departing beat is to clone it into a layer and
   fade the clone. That was written, and removed: for the length of its fade
   a clone is a second copy of real interface sitting in the document, where
   every selector in the app and every assertion in `tests/` can reach it.
@@ -700,7 +700,7 @@ Two traps it already works around:
   unscoped here (`48-hide-shot.txt` asks
   `document.querySelectorAll('.hidden-shot-strip').length == 0` to mean "the
   run is expanded"), so a fading clone would have answered those queries
-  with a scene that no longer exists. A departure is announced by the FLIP
+  with a beat that no longer exists. A departure is announced by the FLIP
   instead: everything below closes the gap, which is what actually reads as
   "it went away".
 
@@ -768,7 +768,7 @@ What a rebuild used to give for free and a reconcile has to do on purpose:
 `render()` still re-applies `ensureTrailingCaretSpot()` to every field,
 disarms an armed row delete, and drops a saved link-popover Range only
 if its cell is gone. `.claude/skills/run-splitpage-app/tests/67-render-perf.txt` holds the numbers: typing in a
-300-scene document renders nothing and derives the breakdown once per idle
+300-beat document renders nothing and derives the breakdown once per idle
 refresh; an insert elsewhere keeps the focused cell's node and caret and
 builds two fields.
 
@@ -778,11 +778,11 @@ builds two fields.
 
 Section headers (I-31) are an optional `sections` list of
 `{ id, name, firstSceneId }` records. They are boundaries anchored to real
-scene IDs, never scene rows. Scenes before the first boundary are unsectioned.
+beat IDs, never beat rows. Beats before the first boundary belong to automatic Scene A.
 The list is absent when empty, so sectionless files retain their old bytes.
 Both `.splitpage` and the authoritative Markdown data block carry the list;
 the legacy Markdown project table remains unchanged. Migration orders valid
-boundaries by scene order and removes invalid, duplicate or orphaned entries.
+boundaries by beat order and removes invalid, duplicate or orphaned entries.
 Names are plain text, limited to 200 code points. See
 [sections.md](architecture/sections.md) for editing, undo and merge rules.
 
@@ -864,7 +864,7 @@ lists as sets, both sides' additions kept, never a conflict, #135); `rows[].stat
 `productionTags[].status` merge by rank (further-along wins);
 `owner`/`notes` merge "filled beats empty".
 
-**A scene's length** (#179) is `rowSeconds(row)` (`src/core/production/timing.ts`):
+**A beat's length** (#179) is `rowSeconds(row)` (`src/core/production/timing.ts`):
 `rows[].lengthSeconds` when it is set, which replaces the estimate outright,
 otherwise the Audio words at `wordsPerMinute`. Every consumer — the gutter's
 start times, the program clock, the rundown strip, the Production and B-roll
@@ -879,8 +879,8 @@ base, theirs when both did (no conflict card), and with no base a set length
 beats none; `rowContentEqual()` counts it, so setting it outranks the other
 side's delete. Undo needs nothing — `diffStates` makes it a `rowField` step.
 A `.splitpage` and the `.md` data block carry it as any row key; the `.md`
-table does not show it. Present counts it too, for a scene with no Audio
-words as well (its clock steps over that scene's length as the reading
+table does not show it. Present counts it too, for a beat with no Audio
+words as well (its clock steps over that beat's length as the reading
 passes it, and the running order gives it a block); only Present's scroll
 speed is words at the reading speed.
 
@@ -893,7 +893,7 @@ the `target-length` strategy, `mergeTargetLength()` (`src/core/merge/scalars.ts`
 like the title — the side that changed it since the base wins, and taking
 it away is a change too (which `changed-side-wins`' `m || fallback` would
 lose) — but both sides changing it keeps theirs with no conflict card, as a
-scene's length does; with no base a set target beats none. Both project
+beat's length does; with no base a set target beats none. Both project
 formats carry it as a plain key; the `.md` table does not show it and no
 export prints it. It is set only through `setTargetLength()`
 (`src/features/rundown/target.ts`), one `markDirty()`, so undo sees a `docField` step. What reads it:
@@ -902,14 +902,14 @@ the script's length (`updateScriptStats()`: `1:35 / 2:00` and `0:25 left` /
 label at the end of the rundown, `#runtime-chip`, placed by
 `rundownLengthPlace()`, and at phone widths `#length-status` in the
 header's status line — it was the header's program clock before; the
-target is measured against the whole script — with shot scenes hidden the
+target is measured against the whole script — with filmed beats hidden the
 remaining-to-shoot figure moves to the tooltip), and the rundown
 strip (`setRundownExtraSeconds(target)`, so the span is
 max(target, total) + 10s; `src/features/rundown/target.ts` draws the line, "Target 2:00" and
 the hatching on `#rundown-overlay` from `rundownLayout().x` — the layout at
 rest, never `rundownX()`, because the overlay is faded while the lens is on
 and must be right when it settles; and never seconds × `pxPerSecond`, since
-the rest floor (`REST_MIN_PX`, `rundownRestLayout()`) keeps short scenes'
+the rest floor (`REST_MIN_PX`, `rundownRestLayout()`) keeps short beats'
 blocks wider than to scale; minimized, CSS leaves only the line as a tick).
 Present does not show it.
 
@@ -1074,7 +1074,7 @@ card's picture into its body — what an older client wrote and reads. A
 picture whose bytes nobody has stays a ref and the save says "N images
 could not be included". Standalone HTML gets the same inline form; the page
 keeps the refs.
-**`.md`** is `toMarkdownTableDoc()` (title, scene table, breakdown,
+**`.md`** is `toMarkdownTableDoc()` (title, beat table, breakdown,
 comments) followed by a fenced `~~~~splitpage` block holding the exact
 `.splitpage` bytes (so its images are inline there too, and a row's picture
 also inline in its Visual cell, #82 D2; HTML images are only in the block —

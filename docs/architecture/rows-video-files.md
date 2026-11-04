@@ -1,10 +1,10 @@
 # Session video files after the rows extraction
 
-The former `06-rows.js` module is retired. Its remaining video-file responsibilities live in `src/features/gallery/video-files.ts`, with the shared `VideoFiles` contract in `src/application/media/video-files.ts`. The existing scene operations, scene media, row routing and row editing already have their own owners.
+The former `06-rows.js` module is retired. Its remaining video-file responsibilities live in `src/features/gallery/video-files.ts`, with the shared `VideoFiles` contract in `src/application/media/video-files.ts`. The existing beat operations, beat media, row routing and row editing already have their own owners.
 
 ## Ownership and wiring
 
-Bootstrap creates the video-file owner explicitly through `mountVideoFilesFeature()` at the old `init_06_rows()` position, after gallery mounting and before scene mounting. Importing the feature, contract or wiring starts no owner and registers no listener. The forwarding `videoFiles` port follows the current owner and throws before mounting or after stopping. There is no compatibility export from the retired numbered file and no new legacy bridge.
+Bootstrap creates the video-file owner explicitly through `mountVideoFilesFeature()` at the old `init_06_rows()` position, after gallery mounting and before beat mounting. Importing the feature, contract or wiring starts no owner and registers no listener. The forwarding `videoFiles` port follows the current owner and throws before mounting or after stopping. There is no compatibility export from the retired numbered file and no new legacy bridge.
 
 The owner receives the existing document reader, notices, desktop-video and external-link ports. It imports only core helpers for row lookup, link normalization, keys and URL safety. Editor/media wiring grants dropped or pasted files through `videoFiles.grant`; the gallery overlay reads `has` and `url`; picture-link actions receive `openGallery` explicitly instead of importing a numbered module.
 

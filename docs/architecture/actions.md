@@ -206,8 +206,8 @@ started over one of them.
 | `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before; the wizard's tour button closes the wizard and then asks this action (#400) |
 | The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
 
-Save, Save a copy and Hide shot scenes still act in the writer, Present, the
-shot list and the tour, and Find, Hide shot scenes and Search commands behind
+Save, Save a copy and Hide filmed beats still act in the writer, Present, the
+shot list and the tour, and Find, Hide filmed beats and Search commands behind
 the command menu (no toast: the command menu closes as they run).
 
 A command that opens a dialog (#307) is refused over another dialog, so two
@@ -223,7 +223,7 @@ it runs a command or loses the focus.
 A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
 (`launcher`) are separate blockers, because the shortcuts never treated them
 alike: Save, Save a copy, Open and Export are refused behind the command menu,
-while Find and Hide shot scenes act behind it (Find then takes the focus, and
+while Find and Hide filmed beats act behind it (Find then takes the focus, and
 the command menu closes). While the command menu reads what to list, it asks
 through `askingFromLauncher()`, so each action is judged as it will be once
 the menu has closed to run it.

@@ -20,31 +20,30 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **A title from your first filename.** Save an untouched untitled script as
   `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
   A title you typed stays yours. Download-only browsers leave both unchanged.
-- **Section headers** group scenes without changing their running order.
-  Open a scene's **⋯** menu and choose **Add Section Header** to name a
-  section. Its header shows the scene count and total time, including shot
-  scenes. Click the name to rename it; the ⋯ menu moves or removes the header.
-  Drag the grip to move the whole section, or drag a scene across a header
-  to change its section. The fold chevron hides scenes for this session only;
+- **Scene headers** group beats without changing their running order.
+  Open a beat's **⋯** menu and choose **Add Scene Header** to name a
+  scene. Its header shows the beat count and total time, including filmed beats. Click the name to rename it; the ⋯ menu moves or removes the header.
+  Drag the grip to move the whole scene, or drag a beat across a header
+  to change its scene. The fold chevron hides beats for this session only;
   folding changes neither the saved file nor the running order.
-  Section names appear above rundown blocks and in Present's top bar as
+  Scene names appear above rundown blocks and in Present's top bar as
   visual cues. They are never spoken or used by Follow My Voice. Print/PDF,
   full-script Word and Markdown exports retain headings and totals and include
-  every scene, including folded ones. Narration Word keeps heading cues;
-  plain narration text omits section headings. CSV/XLSX keep their existing columns.
-  At the start of a scene after a header, press Backspace once to show
-  “Press Backspace again to remove the section header”. Press it again
+  every beat, including folded ones. Narration Word keeps heading cues;
+  plain narration text omits scene headings. CSV uses beat labels; XLSX keeps its existing column keys.
+  At the start of a beat after a header, press Backspace once to show
+  “Press Backspace again to remove the scene header”. Press it again
   within two seconds, without another key, click or caret move, to remove
-  only the header. The scenes join the section above, or become unsectioned
-  at the top. A further Backspace joins scenes normally. Delete at the end
-  of the preceding scene works the same way. Other input, a caret move or
+  only the header. The beats join the scene above, or join automatic Scene A
+  at the top. A further Backspace joins beats normally. Delete at the end
+  of the preceding beat works the same way. Other input, a caret move or
   waiting two seconds cancels the hint. Undo restores the header and its
   name in one step.
   - If <kbd>Alt</kbd>+<kbd>↑</kbd> or <kbd>Alt</kbd>+<kbd>↓</kbd> would move a
-    section's only scene across its header, the first press changes nothing
-    and shows “Press again to remove the section header”. Repeat the same
+    scene's only beat across its header, the first press changes nothing
+    and shows “Press again to remove the scene header”. Repeat the same
     shortcut within two seconds, without another non-modifier key, click or caret move,
-    to move the scene and remove the emptied header. Undo restores both.
+    to move the beat and remove the emptied header. Undo restores both.
     Releasing and pressing Alt again does not cancel the hint; the same
     confirmation also applies when Shift is held with the shortcut.
 
@@ -777,7 +776,7 @@ format, with a preview and the file name.
   reasons, and lines for notes (or the same as a spreadsheet).
 
 **PDF** and **Word** lay the script out the way the app does: the running
-time and target at the top (the PDF shades shot rows grey), each beat's
+time and target at the top (the PDF shades filmed rows grey), each beat's
 number, start time, status and read time, tags in their colours, b-roll
 keys, and each open comment's number beside its words. At the end come the
 breakdown by category, the b-roll shot list and the numbered comments. The

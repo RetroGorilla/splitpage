@@ -243,14 +243,14 @@ is special. **It is the only atom.**
   it keeps it, and its shot — status, notes and all — is found by it again.
   Only another key holding the id then (the cut undone first, say) makes it
   a new one. A copy is a **new shot**: its record is made fresh in the
-  paste's own undo entry, seeded from the scene it landed in the way a
+  paste's own undo entry, seeded from the beat it landed in the way a
   typed key's is, and nothing of the copied shot's status, notes, owner or
   location comes with it. Split and join move a key rather than copy it,
   and import brings only plain-text markers, which the anchoring pass keys.
   **Built:** `freshBrollIds` / `takenBrollIds` and `pastedShots`
   (`src/application/commands/clipboard.ts`; `src/features/clipboard/cell-clipboard.ts`
   keeps thin wrappers), and `recordPastedBroll`
-  (`src/application/production/broll-records.ts`) for a scene paste
+  (`src/application/production/broll-records.ts`) for a beat paste
   (`src/features/clipboard/beat-clip.ts`). A document that already has two keys
   with one id (pasted by an older version) is healed by the anchoring
   pass: the list reads the second as unanchored, a name match never takes
@@ -261,7 +261,7 @@ is special. **It is the only atom.**
 **Script cells hold no pictures or video cards (D7).**
 
 - **Pasting.** A paste or a drop into a cell never puts them in it. Since
-  #135 each one goes into the scene's **gallery** — its Image section — in
+  #135 each one goes into the beat's **gallery** — its Image section — in
   the same undo entry as the pasted words (the paste command's gallery
   effect): a picture
   (by its blob ref) is added after the ones there, and so is each video,
@@ -274,7 +274,7 @@ is special. **It is the only atom.**
   (`[{imageRef, links}]`), `src/core/document/gallery.ts`; the merge takes both sides'
   additions (a set merge, never a conflict).
 - **Existing documents.** A picture or video card already inside a cell is
-  **moved into a comment on the same scene** when the document is read:
+  **moved into a comment on the same beat** when the document is read:
   - The comment holds the picture (by its blob ref, #82) or the link.
   - It gets an id derived from the row id and the picture's sha or the
     link, so reading the document twice, or merging two copies that both
@@ -284,8 +284,8 @@ is special. **It is the only atom.**
     real save.
   - Nothing is lost: version history still has the original.
   - **Built:** paste and drop go through `fromHtml` with pictures and video
-    cards taken out first and put in the scene's gallery (`pasteIntoCell`
-    in `src/features/clipboard/cell-clipboard.ts`, `attachToGallery` in `clipboard.ts`, #135), with a "Picture added to scene N" toast
+    cards taken out first and put in the beat's gallery (`pasteIntoCell`
+    in `src/features/clipboard/cell-clipboard.ts`, `attachToGallery` in `clipboard.ts`, #135), with a "Picture added to beat N" toast
     whose Undo takes back that paste's entry while it is still the last.
     `migrateRows` (`src/core/migrate.ts`, `moveMediaOutOfCell`) does the move: the
     comment is by "Splitpage", dated the row's `updatedAt`, with an empty
@@ -508,8 +508,8 @@ One stack per tab, of step lists (§4). What counts as one entry:
   - adding or deleting a b-roll marker
   - creating or deleting a comment (see below)
   - splitting, joining, adding, deleting or moving rows
-  - a scene's status (todo/ready/shot)
-  - setting or removing a scene's picture
+  - a beat's status (todo/ready/shot)
+  - setting or removing a beat's picture
   - the document title
   - Replace All
   - an import into the current document
@@ -722,7 +722,7 @@ until step 4.
      gets an id of its own unless a cut is moving it (§3.3). Pictures and video
      cards are dropped from pasted script text and moved out of existing
      cells into comments on load (D7).
-   - splitting a scene (Enter in the writer, Alt+Enter) is `splitCell` at
+   - splitting a beat (Enter in the writer, Alt+Enter) is `splitCell` at
      the caret and joining two (Backspace/Delete at a paragraph's edge) is
      `joinCells`; comments follow their marks (`syncCommentAnchors`, §3.2).
      Tests: `comment-anchors.test.mjs`, browser suite 78.
@@ -786,7 +786,7 @@ until step 4.
      `copyText` (`createShareClipboard`, wired in `src/bootstrap/effects.ts`) when
      `clipboard.writeText` is missing or rejects; and `execCopy()` in
      `src/features/clipboard/beat-select.ts`, which `runClipboardCommand` tries first for
-     a selected-scene copy or cut, with the Clipboard API as its fallback.
+     a selected-beat copy or cut, with the Clipboard API as its fallback.
    IME and spellcheck in a draft stay the browser's, as in a script cell
    (§5), and the by-hand check list's Japanese-IME and spellcheck lines
    (§11) cover the comment composer and a reply box too.
@@ -822,5 +822,5 @@ words.
 | D4 | Undo after a merge | **Forget only the cells the merge touched.** |
 | D5 | Comments and undo | **Undoable until sent**: always in a local file; on a server document, until the server has it. |
 | D6 | Cut and paste of commented text | **The comment moves with the text** within the same tab. Copy never duplicates it. |
-| D7 | Pictures and video in script cells | **Kept out of the cell on paste** — since #135 put in the scene's gallery (its Image section; #124 attached them as comments). Ones already in a cell are **moved into a comment** on that scene when the document is read (§3.3). |
-| — | Undo also covers | Scene status, scene picture, production-panel edits (owner, notes, status, rename), the document title. |
+| D7 | Pictures and video in script cells | **Kept out of the cell on paste** — since #135 put in the beat's gallery (its Image section; #124 attached them as comments). Ones already in a cell are **moved into a comment** on that beat when the document is read (§3.3). |
+| — | Undo also covers | Beat status, beat picture, production-panel edits (owner, notes, status, rename), the document title. |

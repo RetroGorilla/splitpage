@@ -559,10 +559,10 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 - **Behaviour:** Every document export takes everything it states besides the words from `application/save/export-kit.ts`:
   - the facts line;
-  - each scene's number, start timecode, status and read time;
+  - each beat's number, start timecode, status and read time;
   - open-thread numbers;
   - each cell's tags, b-roll keys and markers;
-  - the breakdown by category and the b-roll by scene.
+  - the breakdown by category and the b-roll by beat.
 
   No format works these out for itself. The print colours are a second copy of `:root`, held to it by `palette.test.mjs`.
 - **Tests:** `src/test/export-kit.test.mjs`; `src/test/m4-matrix-exports.test.mjs` (X6–X12, X14, X15 and X18: non-PDF writers and file-building kinds retain captured bytes after live edits); `src/test/palette.test.mjs`; `src/test/export-colours.test.mjs`; `src/test/xlsx-export.test.mjs`; `tests/adapters/formats/markdown-table.test.mjs`; browser `41-export-polish.txt`. PDF capture: `tests/adapters/formats/script-print.test.mjs` ("rendering a capture after edits keeps captured words, facts, comments and assets"), `tests/adapters/formats/list-print.test.mjs` ("held captures survive later source, production, shot and person edits; the captured day is deterministic"), `src/test/browser-pdf-app.test.mjs`, `src/test/print-capture-app.test.mjs`, and `tests/features/file-menu/browser-pdf.test.mjs` and `desktop-pdf.test.mjs` (capture before asset loading, including document switches). Adam approved deletion of the replaced old-generator cases in AQ-44 on 2026-10-31.
@@ -570,7 +570,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Replacement:** one frozen `ExportDocument` projection, captured from the session and the options, plus a format registry whose writers read only that projection (M5).
 - **Acceptance:**
   - M5 gate: a small test exporter needs only one provider and one registration.
-  - Unit test: for a fixture, every registered writer's scene facts equal the `ExportDocument`'s.
+  - Unit test: for a fixture, every registered writer's beat facts equal the `ExportDocument`'s.
   - Dependency gate: format modules import no timing, tag or thread-numbering helpers directly.
 
 ### INV-58 — Export decoration is skipped on re-import
