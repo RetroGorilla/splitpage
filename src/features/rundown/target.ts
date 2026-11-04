@@ -44,7 +44,10 @@ function overlayHtml(p: NonNullable<ReturnType<typeof targetOverlayParts>>) {
 }
 
 let lastOverlayHtml = "";
+let lastOverlayShape = "";
+let labelWidth = 0;
 const LABEL_GAP_PX = 4;
+const STYLE_ATTR = / style="[^"]*"/g;
 
 export function paintTargetOverlay() {
   const layer = document.getElementById("rundown-overlay");
@@ -54,11 +57,29 @@ export function paintTargetOverlay() {
   const parts = target && L.pxPerSecond > 0 ? targetOverlayParts(L.totalSeconds, target, L.x) : null;
   const html = parts ? overlayHtml(parts) : "";
   if (html === lastOverlayHtml) return;
-  layer.innerHTML = html;
   lastOverlayHtml = html;
-  if (!parts) return;
+  const shape = html.replace(STYLE_ATTR, "");
+  const line = layer.querySelector<HTMLElement>(".rd-target-line");
   const label = layer.querySelector<HTMLElement>(".rd-target-label");
-  if (label) label.classList.toggle("is-right", parts.lineX < (label.offsetWidth || 0) + LABEL_GAP_PX);
+  if (parts && line && label && shape === lastOverlayShape) {
+    const hatch = layer.querySelector<HTMLElement>(".rd-target-hatch");
+    if (hatch && parts.hatch) {
+      hatch.style.left = parts.hatch.left + "px";
+      hatch.style.width = parts.hatch.width + "px";
+    }
+    line.style.left = parts.lineX + "px";
+    label.style.left = parts.lineX + "px";
+    label.classList.toggle("is-right", parts.lineX < labelWidth + LABEL_GAP_PX);
+    return;
+  }
+  layer.innerHTML = html;
+  lastOverlayShape = shape;
+  if (!parts) return;
+  const built = layer.querySelector<HTMLElement>(".rd-target-label");
+  if (built) {
+    labelWidth = built.offsetWidth || 0;
+    built.classList.toggle("is-right", parts.lineX < labelWidth + LABEL_GAP_PX);
+  }
 }
 
 export function setTargetLength(seconds: number | null | undefined) {
@@ -69,6 +90,7 @@ export function setTargetLength(seconds: number | null | undefined) {
 export function startTarget(given: TargetPorts) {
   ports = given;
   lastOverlayHtml = "";
+  lastOverlayShape = "";
   let disposed = false;
   const off = onRundownPaint(function () { paintTargetOverlay(); });
   let withdrawHook: (() => void) | null = null;
