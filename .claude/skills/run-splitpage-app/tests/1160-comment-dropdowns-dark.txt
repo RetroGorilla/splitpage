@@ -1,0 +1,17 @@
+open
+click #btn-comments
+sleep 500
+eval document.documentElement.setAttribute('data-theme', 'dark')
+sleep 300
+
+expect getComputedStyle(document.documentElement).colorScheme == dark
+expect getComputedStyle(document.querySelector('#comments-sort option')).backgroundColor == rgb(23, 22, 20)
+expect getComputedStyle(document.querySelector('#comments-sort option')).color == rgb(236, 235, 231)
+expect getComputedStyle(document.querySelector('#comments-assignee-filter option')).backgroundColor == rgb(23, 22, 20)
+expect getComputedStyle(document.querySelector('#comments-assignee-filter option')).color == rgb(236, 235, 231)
+
+eval (function(){var s=document.getElementById('comments-sort');s.size=s.options.length;s.style.height='auto';s.style.position='relative';s.style.zIndex=50;return s.size;})()
+sleep 300
+shot 1160-comment-sort-options-dark
+
+quit
