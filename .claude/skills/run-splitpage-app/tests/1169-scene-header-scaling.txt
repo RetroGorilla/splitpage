@@ -1,0 +1,149 @@
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.removeItem('splitpage-script-scale'); localStorage.removeItem('splitpage-writer-size'); true
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.old=F.state(); var text='A line of narration that is long enough to sit on the page. '; F.openFile(new File([JSON.stringify({title:'Header scaling',rows:['r1','r2','r3','r4','r5','r6'].map(function(id,i){return {id:id,visualText:'Shot '+(i+1),audioText:text+(i+1),status:'todo',lengthSeconds:10};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r4'}]})],'scaling.splitpage'));return true;})()
+wait F.state() !== old && F.state().title === 'Header scaling'
+expect document.querySelectorAll('#rows .section-header').length === 2
+eval (function(){ window.num=function(sel,prop){return parseFloat(getComputedStyle(document.querySelector(sel))[prop||'fontSize']);}; window.scale=function(){return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale'));}; window.hh=function(sel){return document.querySelector(sel).getBoundingClientRect().height;}; window.ctrlKey=function(key,code){var ev=new KeyboardEvent('keydown',{key:key,code:code,ctrlKey:true,bubbles:true,cancelable:true});(document.activeElement||document.body).dispatchEvent(ev);return ev.defaultPrevented;}; window.wheelAt=function(el,dy,ctrl){var r=el.getBoundingClientRect();var ev=new WheelEvent('wheel',{ctrlKey:ctrl!==false,deltaY:dy,deltaMode:0,clientX:r.left+20,clientY:r.top+Math.min(20,r.height/2),bubbles:true,cancelable:true});el.dispatchEvent(ev);return ev.defaultPrevented;}; window.H='#rows [data-section-id="s1"]'; window.before=JSON.stringify(F.state()); window.undoBefore=U.sizes().undo; return true;})()
+
+expect scale() === 1
+expect num(H) === 13
+expect num(H + ' .section-stats') === 11
+expect num(H + ' .section-grip') === 17
+expect num('#rows .audio-cell .cell-editable') === 18
+eval window.h100 = hh(H); true
+shot 1169-editor-100
+
+expect ctrlKey('=', 'Equal') === true
+sleep 700
+expect ctrlKey('+', 'Equal') === true
+sleep 700
+expect ctrlKey('+', 'Equal') === true
+sleep 900
+expect scale() === 1.5
+expect Math.abs(num('#rows .audio-cell .cell-editable') - 27) < 0.05
+expect Math.abs(num(H) - 19.5) < 0.05
+expect Math.abs(num(H + ' .section-stats') - 16.5) < 0.05
+expect Math.abs(num(H + ' .section-grip') - 25.5) < 0.05
+expect Math.abs(num(H + ' .section-name') - 19.5) < 0.05
+expect Math.abs(hh(H) / h100 - 1.5) < 0.04
+expect Math.abs(num('#rows [data-section-id="s2"]') - 19.5) < 0.05
+shot 1169-editor-150
+
+expect ctrlKey('0', 'Digit0') === true
+sleep 300
+expect scale() === 1
+expect num(H) === 13
+expect ctrlKey('-', 'Minus') === true
+sleep 700
+expect ctrlKey('-', 'Minus') === true
+sleep 700
+expect ctrlKey('-', 'Minus') === true
+sleep 900
+expect scale() === 0.7
+expect Math.abs(num('#rows .audio-cell .cell-editable') - 12.6) < 0.05
+expect Math.abs(num(H) - 9.1) < 0.05
+expect Math.abs(num(H + ' .section-stats') - 7.7) < 0.05
+expect Math.abs(hh(H) / h100 - 0.7) < 0.04
+shot 1169-editor-70
+
+expect wheelAt(document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable'), -300) === true
+sleep 900
+expect scale() > 0.9
+expect Math.abs(num(H) / num('#rows .audio-cell .cell-editable') - 13 / 18) < 0.01
+expect ctrlKey('0', 'Digit0') === true
+sleep 300
+
+click #btn-write
+sleep 700
+expect !document.getElementById('writer').hidden
+expect document.querySelectorAll('#writer-doc .section-header').length === 2
+eval window.W = '#writer-doc .section-header'; window.P = '#writer-doc .wr-para'; window.setSize = function(n){ var s = document.getElementById('wr-size'); s.value = n; s.dispatchEvent(new Event('input', { bubbles: true })); return document.getElementById('writer').style.getPropertyValue('--wr-font'); }; window.slider = function(){ return Number(document.getElementById('wr-size').value); }; window.wfont = function(){ return parseFloat(getComputedStyle(document.getElementById('writer')).getPropertyValue('--wr-font')); }; window.wh100 = hh(W); true
+expect wfont() === 19
+expect num(P) === 19
+expect num(W) === 13
+expect num(W + ' .section-stats') === 11
+expect num(W + ' .section-grip') === 17
+shot 1169-writer-19
+
+expect setSize(28) === '28px'
+expect num(P) === 28
+expect Math.abs(num(W) - 28 * 13 / 19) < 0.05
+expect Math.abs(num(W + ' .section-stats') - 28 * 11 / 19) < 0.05
+expect Math.abs(num(W + ' .section-name') - 28 * 13 / 19) < 0.05
+expect Math.abs(hh(W) / wh100 - 28 / 19) < 0.04
+shot 1169-writer-28
+
+expect setSize(16) === '16px'
+expect Math.abs(num(W) - 16 * 13 / 19) < 0.05
+expect Math.abs(hh(W) / wh100 - 16 / 19) < 0.04
+shot 1169-writer-16
+
+expect setSize(34) === '34px'
+expect Math.abs(num(W) - 34 * 13 / 19) < 0.05
+expect Math.abs(hh(W) / wh100 - 34 / 19) < 0.04
+shot 1169-writer-34
+
+expect setSize(20) === '20px'
+expect wheelAt(document.querySelector(P), -300) === true
+sleep 100
+expect wfont() > 20
+expect slider() === wfont()
+expect localStorage.getItem('splitpage-writer-size') === String(wfont())
+expect Math.abs(num(W) - wfont() * 13 / 19) < 0.05
+expect num(P) === wfont()
+eval window.afterUp = wfont(); true
+expect wheelAt(document.querySelector(P), 300) === true
+sleep 100
+expect wfont() < afterUp
+expect slider() === wfont()
+expect localStorage.getItem('splitpage-writer-size') === String(wfont())
+expect wheelAt(document.querySelector(P), 100, false) === false
+expect wfont() === afterUp - 0 || wfont() < afterUp
+eval window.beforePlain = wfont(); wheelAt(document.querySelector(P), 100, false); true
+expect wfont() === beforePlain
+
+expect setSize(20) === '20px'
+eval for (var i = 0; i < 6; i++) wheelAt(document.querySelector(P), -10); true
+sleep 100
+expect wfont() === 21
+expect slider() === 21
+expect wheelAt(document.querySelector('.writer-bar'), -5000) === true
+expect wfont() <= 34
+expect wheelAt(document.querySelector('.writer-bar'), -5000) === true
+expect wfont() === 34
+expect slider() === 34
+expect wheelAt(document.querySelector(P), 5000) === true
+expect wheelAt(document.querySelector(P), 5000) === true
+expect wheelAt(document.querySelector(P), 5000) === true
+expect wfont() === 16
+expect slider() === 16
+expect num(W) === 16 * 13 / 19 || Math.abs(num(W) - 16 * 13 / 19) < 0.05
+
+expect setSize(24) === '24px'
+expect wheelAt(document.querySelector(P), -300) === true
+sleep 100
+expect Math.abs(num(W) - wfont() * 13 / 19) < 0.05
+expect Math.abs(hh(W) / wh100 - wfont() / 19) < 0.04
+shot 1169-writer-ctrl-wheel
+
+expect JSON.stringify(F.state()) === before
+expect U.sizes().undo === undoBefore
+
+click #wr-close
+sleep 300
+expect document.getElementById('writer').hidden
+expect JSON.stringify(F.state()) === before
+expect scale() === 1
+expect num('#rows .section-header') === 13
+click #btn-write
+sleep 700
+expect wfont() === Number(localStorage.getItem('splitpage-writer-size'))
+expect slider() === wfont()
+expect Math.abs(num(W) - wfont() * 13 / 19) < 0.05
+
+quit
