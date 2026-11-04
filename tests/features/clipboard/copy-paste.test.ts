@@ -258,6 +258,14 @@ test("beat selection: Ctrl+A leaves out beats in a folded scene", () => {
   owner.dispose();
 });
 
+test("beat selection: a dragged range across a folded scene leaves out the folded beats", () => {
+  const { owner } = beatSelect(
+    rowHtml("r1") + '<header class="section-header"><button class="section-fold" aria-expanded="false"></button></header>' + rowHtml("r3"));
+  selectBeats("r1", "r3");
+  assert.deepEqual(selectedIds(), ["r1", "r3"]);
+  owner.dispose();
+});
+
 test("scene selection: Delete removes the selected scenes through the edits port, between undo breaks, and says so", () => {
   const { owner, edits, notices, calls } = beatSelect();
   selectBeats("r1", "r2");

@@ -163,6 +163,16 @@ wait row('r5')
 eval out()
 sleep 300
 
+# ---- Ctrl+A then Delete empties the script, and one undo brings it all back ----
+key ctrl KeyA
+key Delete
+wait F.state().rows.length === 0
+wait document.querySelector('#rows .empty-state')
+key ctrl KeyZ
+wait ids() === 'r1,r2,r3,r4,r5,r6,r7'
+eval out()
+sleep 300
+
 # ---- copy, delete, cut and paste with a gap, one undo entry each ---------------
 mouse ctrl click audio('r3')
 mouse ctrl click audio('r1')
