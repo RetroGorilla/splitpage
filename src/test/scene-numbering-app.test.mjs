@@ -65,7 +65,8 @@ test("#1186: an old document reorders, saves and reopens with identity, statuses
   assert.equal(reopened.comments[0].body, "Plain B.8 stays.");
   const expected = ["A.1", "B.1", "B.2", "C.1"];
   assert.deepEqual(ids.map(id => documentReader.numbering().beats[id].full), expected);
-  assert.deepEqual(Array.from(document.querySelectorAll("#rows .row-num"), el => el.textContent), expected);
+  assert.deepEqual(Array.from(document.querySelectorAll("#rows .row-num"), el => el.textContent), ["A1", "B1", "B2", "C1"]);
+  assert.equal(document.querySelector("#rows .row-more").getAttribute("aria-label"), "Beat A.1 actions");
   const track = document.querySelector(".rundown-track");
   Object.defineProperty(track, "clientWidth", { configurable: true, value: 1200 });
   renderRundown();
@@ -107,7 +108,7 @@ test("Remove scene header acts immediately, retains beats, and undoes the first 
   assert.equal(currentDocument().sections, undefined);
   assert.equal(JSON.stringify(currentDocument().rows), rows);
   assert.equal(documentReader.numbering().scenes[0].id, null);
-  assert.deepEqual(Array.from(document.querySelectorAll("#rows .row-num"), el => el.textContent), ["A.1", "A.2"]);
+  assert.deepEqual(Array.from(document.querySelectorAll("#rows .row-num"), el => el.textContent), ["A1", "A2"]);
   undoOwner().flush();
   assert.equal(undoOwner().sizes().undo, count + 1);
   undoOwner().undo();

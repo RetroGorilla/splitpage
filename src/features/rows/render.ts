@@ -185,11 +185,12 @@ function rowMenuItemHtml(row: Row, action: string, icon: string, label: string, 
 
 function rowGutterHtml(row: Row): string {
   const st = (rowStatus(row.status) || ROW_STATUSES[0]) as NonNullable<ReturnType<typeof rowStatus>>;
-  const num = ports.document.numbering().beats[row.id]?.full ?? "";
-  const lamp = '<span class="status-dot ' + st.cls + '" aria-hidden="true">' +
+  const beat = ports.document.numbering().beats[row.id];
+  const num = beat?.full ?? "";
+  const lamp ='<span class="status-dot ' + st.cls + '" aria-hidden="true">' +
     (st.id === "shot" ? STATUS_CHECK_SVG : '') + '</span><span class="status-word">' + escapeHtml(st.label) + '</span>';
   const head = '<div class="row-head" data-action="drag-grip" data-id="' + row.id + '" title="Drag to reorder">' +
-        '<span class="row-num">' + num + '</span><span class="row-start"></span>' +
+        '<span class="row-num">' + (beat ? beat.scene.letter + beat.number : "") + '</span><span class="row-start"></span>' +
       '</div>';
   const controls = '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
         '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Beat ' + num + ' status: ' +
