@@ -1,7 +1,4 @@
-﻿# The comments panel's filter and sort dropdowns in dark mode (#1160): the options
-# take the surface and text colours, not the light popup default.
-
-open
+﻿open
 click #btn-comments
 sleep 500
 eval document.documentElement.setAttribute('data-theme', 'dark')
