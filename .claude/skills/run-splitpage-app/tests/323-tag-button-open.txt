@@ -126,3 +126,27 @@ press prop:Camera
 key Tab
 wait kw() === 0 && cell(11).querySelector('.tag-anchor strong') !== null
 expect st(10) === st(11)
+
+eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
+caret #rows .row:nth-of-type(13) .visual-cell .cell-editable
+press word
+eval (function(){ U.flush(); window.html13=cell(12).innerHTML; window.st13=st(12); window.steps13=U.sizes().undo; return true; })()
+click #rows .row:nth-of-type(13) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect cell(12).textContent.replace(/\u200b/g, '') == wordprop:
+expect st(12) === window.st13 && U.sizes().undo === window.steps13
+key Escape
+wait kw() === 0
+expect cell(12).innerHTML === window.html13 && st(12) === window.st13
+expect U.sizes().undo === window.steps13
+expect document.activeElement === cell(12)
+click #rows .row:nth-of-type(13) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+press Lamp
+key Escape
+wait kw() === 0
+expect st(12) == wordLamp

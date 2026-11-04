@@ -33,7 +33,8 @@ function fixture(html: string, model: string | Run[]) {
         if (!res) return null;
         changes.push(res);
         return target;
-      }
+      },
+      sync: () => {}
     },
     text: text.text
   };

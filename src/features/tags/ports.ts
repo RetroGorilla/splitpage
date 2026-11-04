@@ -28,7 +28,7 @@ export interface TagPanelMount extends TagPanelCommands {
 export interface PlainTagPorts {
   readonly renderCategories: (selected: string | null) => void;
   readonly document: Pick<DocumentReader, "current">;
-  readonly cells: Pick<CellEditing<Element>, "edit">;
+  readonly cells: Pick<CellEditing<Element>, "edit" | "sync">;
   readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
 }
 
