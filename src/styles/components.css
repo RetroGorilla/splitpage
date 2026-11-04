@@ -809,17 +809,22 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 .section-drop-before { box-shadow: inset 0 3px var(--visual); }
 .section-drop-after { box-shadow: inset 0 -3px var(--visual); }
 .section-rename {
-  position: absolute;
-  inset: 0;
-  z-index: 22;
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: calc(6 * var(--u));
-  padding: calc(3 * var(--u)) calc(12 * var(--u));
-  background: var(--surface-2);
+  min-width: 0;
 }
-.section-rename input { flex: 1; min-width: 0; padding: calc(4 * var(--u)) calc(6 * var(--u)); font: calc(13 * var(--u)) var(--font-body); }
-.section-rename button { padding: calc(4 * var(--u)) calc(8 * var(--u)); font: calc(12 * var(--u)) var(--font-body); cursor: pointer; }
+#rows > .section-rename {
+  min-height: calc(32 * var(--u));
+  padding: calc(2 * var(--u)) calc(12 * var(--u));
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong);
+}
+.section-header:has(> .section-rename) .section-name { display: none; }
+.section-rename input { flex: 0 1 calc(240 * var(--u)); width: calc(240 * var(--u)); min-width: 0; padding: calc(4 * var(--u)) calc(6 * var(--u)); font: calc(13 * var(--u)) var(--font-body); }
+.section-rename button { padding: calc(4 * var(--u)) calc(8 * var(--u)); font: calc(12 * var(--u)) var(--font-body); color: inherit; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
+.section-rename button:hover { background: var(--hover); }
 .section-header, .section-rename { --u: calc(var(--script-scale, 1) * 1px); }
 #writer-doc .section-header, #writer-doc .section-rename { --u: calc(var(--wr-font) / 19); }
 #writer-doc .section-header { margin: calc(12 * var(--u)) 0; }

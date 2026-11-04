@@ -69,7 +69,8 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     made.addEventListener("keydown", event => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelName(); }
     });
-    parent.appendChild(made);
+    const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
+    if (heading) heading.after(made); else parent.before(made);
     form = made;
     input.focus(); input.select();
   }
