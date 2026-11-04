@@ -170,6 +170,14 @@ function Start-Edge {
   # browsers, and the trailing guid still keeps two suites of the SAME run
   # (each its own driver.ps1) from ever matching each other's directory.
   $script:UserDataDir = Join-Path $env:TEMP ("splitpage-edge-" + $RunId + "-" + [guid]::NewGuid().ToString('N').Substring(0,8))
+  # why: a download the app starts lands in the profile's folder, never the PC's real Downloads
+  $downloadDir = Join-Path $script:UserDataDir 'downloads'
+  New-Item -ItemType Directory -Force -Path $downloadDir, (Join-Path $script:UserDataDir 'Default') | Out-Null
+  $prefs = @{
+    download = @{ default_directory = $downloadDir; prompt_for_download = $false; directory_upgrade = $true }
+    savefile = @{ default_directory = $downloadDir }
+  } | ConvertTo-Json -Depth 4 -Compress
+  [IO.File]::WriteAllText((Join-Path $script:UserDataDir 'Default\Preferences'), $prefs, (New-Object Text.UTF8Encoding($false)))
   $a = @(
     "--remote-debugging-port=$CdpPort",
     # Quoted: Start-Process joins -ArgumentList with spaces unescaped, so a
