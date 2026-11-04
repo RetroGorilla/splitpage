@@ -69,6 +69,7 @@ export function paintTargetOverlay() {
     }
     line.style.left = parts.lineX + "px";
     label.style.left = parts.lineX + "px";
+    if (!labelWidth) labelWidth = label.offsetWidth || 0;
     label.classList.toggle("is-right", parts.lineX < labelWidth + LABEL_GAP_PX);
     return;
   }
@@ -91,6 +92,7 @@ export function startTarget(given: TargetPorts) {
   ports = given;
   lastOverlayHtml = "";
   lastOverlayShape = "";
+  labelWidth = 0;
   let disposed = false;
   const off = onRundownPaint(function () { paintTargetOverlay(); });
   let withdrawHook: (() => void) | null = null;
