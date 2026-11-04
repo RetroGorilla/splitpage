@@ -78,9 +78,12 @@ export interface GalleryVideoPorts {
   readonly undo: UndoFold;
   readonly thumbnailsAllowed: () => boolean;
   readonly desktop: Pick<DesktopVideo, "present" | "thumbnail">;
+  readonly cells: Pick<CellEditing<Element>, "editGallery">;
+  readonly viewer: { readonly refresh: () => void };
 }
 
 export interface GalleryVideoMount extends Omit<GalleryVideo, "hostLabel"> {
   readonly thumbnailsAfterPaste: (rowId: string | null, hrefs: readonly unknown[] | null | undefined, entry: unknown) => void;
+  readonly thumbnailsOnBeatClick: (rowId: string | null) => void;
   readonly dispose: () => void;
 }

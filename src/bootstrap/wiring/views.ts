@@ -30,6 +30,7 @@ import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { promptForName, promptForWpm } from "./title-chrome.ts";
 import { restoreSnapshotFromCard } from "./history-panel.ts";
 import { openGalleryOverlay } from "../../features/gallery/overlay.ts";
+import { thumbnailsOnBeatClick } from "./gallery.ts";
 import { importControls } from "./imports.ts";
 import { updateSaveStatus } from "./save-status.ts";
 import { showToast } from "./effects-owner.ts";
@@ -331,7 +332,7 @@ export function mountWriterCloseFeature(): ReturnType<typeof mountWriterClose> {
 
 export function mountHistoryGalleryFeature(): ReturnType<typeof mountHistoryGallery> {
   return replaceViewMount("mountHistoryGallery", function () {
-    const ports: HistoryGalleryPorts = { restore: restoreSnapshotFromCard, open: openGalleryOverlay };
+    const ports: HistoryGalleryPorts = { restore: restoreSnapshotFromCard, open: openGalleryOverlay, beatClicked: thumbnailsOnBeatClick };
     return mountHistoryGallery(ports);
   }, function (owner) {
     return [
