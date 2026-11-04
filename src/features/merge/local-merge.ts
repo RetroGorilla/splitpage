@@ -204,7 +204,7 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
 
   const brollEntries = mergeListEntries("B-roll", (mine as MergeReviewDocument).brollShots, theirs.brollShots,
     function (s) { return s.id; },
-    function (s) { return s.name || "Shot"; },
+    function (s) { return s.name || "Filmed"; },
     function (s) {
       return mergeItemSummary([s.name, s.desc, s.location, s.owner, s.audioRef, s.notes,
         s.status === "shot" ? "Filmed" : "To film", s.reshoot ? "Flagged" : "",

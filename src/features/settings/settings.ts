@@ -76,11 +76,11 @@ function bodyHtml() {
       segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], (ports as SettingsPorts).preferences.theme()) +
       segHtml("clock", "Clock", [["system", "System"], ["12", "12-hour"], ["24", "24-hour"]], clock) +
       '<p class="settings-hint settings-clock-example" id="settings-clock-example">' + escapeHtml(clockExample(clock)) + '</p>' +
-      switchHtml("settings-rundown-min", "Minimise the rundown strip", "Keep the strip of scenes under the header small.", (ports as SettingsPorts).preferences.rundownMin()) +
+      switchHtml("settings-rundown-min", "Minimise the rundown strip", "Keep the strip of beats under the header small.", (ports as SettingsPorts).preferences.rundownMin()) +
       switchHtml("settings-tag-icons", "Show icons on tags",
         "Put a small icon for its category before each tag, as well as its colour.", (ports as SettingsPorts).preferences.tagIcons())) +
     section("Editor",
-      switchHtml("settings-hide-shot", "Hide shot scenes", "Collapse scenes marked Shot into a thin strip.", (ports as SettingsPorts).preferences.hideShot()) +
+      switchHtml("settings-hide-shot", "Hide filmed beats", "Collapse beats marked Filmed into a thin strip.", (ports as SettingsPorts).preferences.hideShot()) +
       switchHtml("settings-autosave", "Autosave", "Write each change to the file you saved to, a moment after you stop typing.", (ports as SettingsPorts).preferences.autosave()) +
       switchHtml("settings-video-thumbs", "Fetch video thumbnails",
         "When you paste a YouTube or Vimeo link, ask the site for its picture once and keep it with the script.", (ports as SettingsPorts).preferences.videoThumbs()) +
@@ -106,7 +106,7 @@ function bodyHtml() {
     section("Present",
       switchHtml("settings-prompter-mirror", "Mirror", "Flip the teleprompter left to right, for a beam-splitter glass.", (ports as SettingsPorts).preferences.prompterFlag("prompterMirror")) +
       switchHtml("settings-prompter-flip", "Flip", "Turn it upside down, for a monitor mounted that way.", (ports as SettingsPorts).preferences.prompterFlag("prompterFlip")) +
-      switchHtml("settings-prompter-scene", "One scene at a time", "Pause at the end of each scene.", (ports as SettingsPorts).preferences.prompterFlag("prompterSceneMode"))) +
+      switchHtml("settings-prompter-scene", "One beat at a time", "Pause at the end of each beat.", (ports as SettingsPorts).preferences.prompterFlag("prompterSceneMode"))) +
     section("You",
       '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-name">Your name</label>' +

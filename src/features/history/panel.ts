@@ -144,7 +144,7 @@ function historySavedHtml(d: Date | null) {
 }
 
 function historyBeatsHtml(n: number) {
-  return historyFig(String(n)) + " scene" + (n === 1 ? "" : "s");
+  return historyFig(String(n)) + " beat" + (n === 1 ? "" : "s");
 }
 
 function historyDamageHtml(count: number | undefined) {

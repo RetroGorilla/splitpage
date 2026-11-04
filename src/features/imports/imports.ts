@@ -227,7 +227,7 @@ async function handleImportFile(file: LocalFileOpening["file"]) {
       return;
     }
     if (!stillAsked(asked)) return;
-    if (!rows || !(rows as NonNullable<typeof rows>).length) { showToast("No scenes found in that file.", "warn"); return; }
+    if (!rows || !(rows as NonNullable<typeof rows>).length) { showToast("No beats found in that file.", "warn"); return; }
     pendingFileRows = rows;
     pendingFileName = file.name;
     ((document as Document).getElementById("import-textarea") as HTMLTextAreaElement).value = "";

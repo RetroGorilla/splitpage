@@ -107,6 +107,6 @@ test("a disposed owner ignores pending grants and native open failures without c
   replacement.openFile(link);
   const notice = h.notices.shown[0];
   assert.ok(notice);
-  assert.match(notice.message, /drop “pending.mp4” onto this scene again/);
+  assert.match(notice.message, /drop “pending.mp4” onto this beat again/);
   replacement.dispose();
 });

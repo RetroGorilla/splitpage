@@ -293,7 +293,7 @@ function openLongDemo() {
   if (!(ports as FileMenuDropdownPorts).document.current()) { (ports as FileMenuDropdownPorts).notices.show("Still loading…", "warn"); return false; }
   const kept = replaceWithNewDocument((ports as FileMenuDropdownPorts).prepareDocument(JSON.parse(JSON.stringify((ports as FileMenuDropdownPorts).longDemo.state))),
     "openLongDemo: a new copy of the long demo", "Before opening the long demo");
-  (ports as FileMenuDropdownPorts).notices.show("The long demo — " + (ports as FileMenuDropdownPorts).longDemo.state.rows.length + " scenes, not saved anywhere yet." +
+  (ports as FileMenuDropdownPorts).notices.show("The long demo — " + (ports as FileMenuDropdownPorts).longDemo.state.rows.length + " beats, not saved anywhere yet." +
     (kept ? " The script before is in Version history." : ""), "ok");
   return true;
 }

@@ -190,7 +190,7 @@ function renderStarterCards() {
       '<span class="newtab-card-meta">' +
         '<span class="newtab-card-doc">' + escapeHtml(s.state.title) + '</span>' +
         '<span aria-hidden="true">·</span>' +
-        '<span class="newtab-card-count">' + beats + (beats === 1 ? ' scene' : ' scenes') + '</span>' +
+        '<span class="newtab-card-count">' + beats + (beats === 1 ? ' beat' : ' beats') + '</span>' +
       '</span>' +
       starterPreviewHtml(s.state as unknown as StarterState) +
     '</button>';

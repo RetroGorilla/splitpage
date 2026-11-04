@@ -76,7 +76,7 @@ const CARDS: readonly ExportCardDecl[] = [
   { id: "md", group: "whole", name: "Markdown", ext: ".md", icon: "i-file",
     purpose: "Plain text that reads anywhere", pictures: true, extras: true, option: "Shape" },
   { id: "csv", group: "whole", name: "Spreadsheet", ext: ".xlsx / .csv", icon: "i-file",
-    purpose: "A row per scene, for Excel, Sheets or Numbers", option: "Format" },
+    purpose: "A row per beat, for Excel, Sheets or Numbers", option: "Format" },
   { id: "html", group: "whole", name: "SplitShare", ext: ".html", icon: "i-globe",
     purpose: "The script and the whole app in one file. Any device, nothing to install", pictures: true },
   { id: "narration", group: "part", name: "Narration only", ext: ".docx / .txt", icon: "i-mic",

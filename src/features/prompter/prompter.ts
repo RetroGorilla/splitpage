@@ -177,7 +177,7 @@ export function buildPrompterContent(): void {
   const content = document.getElementById("prompter-content") as HTMLElement;
   if (!paragraphs.length) {
     content.innerHTML = '<div class="prompter-empty">' + (skippingShot
-      ? "Every scene is marked Shot — switch off Skip shot (or Hide shot scenes) to read them again."
+      ? "Every scene is marked Shot — switch off Skip shot (or Hide shot beats) to read them again."
       : "Nothing to read yet — add some audio text first.") + '</div>';
     state.promptWords = [];
   } else {
@@ -309,7 +309,7 @@ export function updatePrompterStatus(): void {
   const posEl = document.getElementById("pp-scene-pos");
   const number = ports.document.numbering().beats[state.beatRowIds[beat] ?? ""]?.full ?? "";
   setText(posEl, number);
-  setText(document.getElementById("pp-scene-pos-sr"), beat === -1 ? "" : "Scene " + number + ", " + state.beatRowIds.length + " scenes");
+  setText(document.getElementById("pp-scene-pos-sr"), beat === -1 ? "" : "Beat " + number + ", " + state.beatRowIds.length + " beats");
   setText(document.getElementById("pp-scene-start"), beat === -1 ? "" : formatTimecode(state.beatStartSec[beat] as number));
   const sceneEl = document.getElementById("pp-section");
   const sceneName = beat === -1 ? "" : state.beatScenes[beat] ?? "";
@@ -407,7 +407,7 @@ export function updateBeatReadout(): void {
   const el = document.getElementById("pp-scene-readout");
   if (!el) return;
   if (!state.promptBeatMode || state.promptBeatIndex === -1 || !state.beatRowIds.length) { el.textContent = ""; return; }
-  el.textContent = "Scene " + (ports.document.numbering().beats[state.beatRowIds[state.promptBeatIndex] ?? ""]?.full ?? "") + " of " + state.beatRowIds.length;
+  el.textContent = "Beat " + (ports.document.numbering().beats[state.beatRowIds[state.promptBeatIndex] ?? ""]?.full ?? "") + " of " + state.beatRowIds.length;
 }
 
 function updatePrompterBeatModeUI(): void {
@@ -763,7 +763,7 @@ function onSpeechTranscript(): void {
     if (state.promptBeatMode && state.promptBeatIndex !== -1 && state.wordCursor >= (state.beatWordEnd[state.promptBeatIndex] as number)) {
       stopVoiceFollow();
       advanceBeatAfterAutoPause();
-      setVoiceStatus("Scene finished — say it again to keep following, or press Next.", "listening");
+      setVoiceStatus("Beat finished — say it again to keep following, or press Next.", "listening");
     }
   }
 
