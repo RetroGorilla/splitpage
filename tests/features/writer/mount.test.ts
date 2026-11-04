@@ -93,7 +93,8 @@ function wheelHarness(size: number) {
     h.calls.length = 0;
     const event = h.fire(h.el("writer-doc"), "wheel", { ctrlKey: true, deltaY, deltaMode: 0, clientY: 0, ...props });
     const sizes = h.calls.filter((call) => call.name === "applyWriterSize").map((call) => call.args);
-    if (sizes.length) h.el("wr-size").value = String(sizes[sizes.length - 1]![0]);
+    const last = sizes.at(-1);
+    if (last) h.el("wr-size").value = String(last[0]);
     return { event, sizes };
   };
   return { h, owners, wheel };
