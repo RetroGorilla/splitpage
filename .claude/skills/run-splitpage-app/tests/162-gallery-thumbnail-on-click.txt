@@ -1,0 +1,121 @@
+# A beat's missing video thumbnail fetched once when the beat is clicked (#1175; src/features/gallery/video.ts
+# `thumbnailsOnBeatClick`, the click route in src/features/gallery/mount.ts), against a FAKE host
+# (window.__videoTest.setFetch; the drivers' __splitpageNoRemote keeps everything else off the network):
+#   * nothing is fetched when the document opens or while typing; a click in a beat fetches for that beat's
+#     own link only, and the thumbnail lands as a "Thumbnail added" edit with its own undo step and a toast
+#     with Undo, the same as the Retry thumbnail button;
+#   * the caret is left where the click put it, and typing on goes into the same cell;
+#   * a link that failed is not asked for again on later clicks, and a failure says nothing; the manual
+#     Retry thumbnail button still works for it;
+#   * a click on the beat's tile opens the viewer, which shows the thumbnail once it arrives;
+#   * nothing is fetched with video thumbnails off or while the browser is offline, and neither is
+#     remembered as a failure; a link that is not YouTube or Vimeo is never fetched.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.V = window.__videoTest; function r(id, n, href){ return { id: id, visualText: 'v' + n, audioText: 'Beat ' + n, status: 'todo', imageRef: null, imageLinks: [{ href: href, poster: true }] }; } var doc = { schema: 2, title: 'Thumbnail on click', rows: [ r('r1', 1, 'https://youtu.be/aaaaaaaaaaa?si=abcdefghijklmnop'), r('r2', 2, 'https://www.youtube.com/watch?v=bbbbbbbbbbb'), r('r3', 3, 'https://www.youtube.com/shorts/ccccccccccc'), r('r4', 4, 'https://youtu.be/ddddddddddd'), r('r5', 5, 'https://www.loom.com/share/abc') ], comments: [] }; F.openFile(new File([JSON.stringify(doc)], 'thumbnail-on-click.splitpage')); return true; })()
+wait F.state().title === 'Thumbnail on click' && document.querySelector('#rows .row[data-id="r5"]')
+eval (function(){ window.cell = function(id, field){ return document.querySelector('#rows .row[data-id="' + id + '"] .' + (field === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.row = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast:not(.is-leaving)'), function(t){ return t.textContent; }); }; window.clearToasts = function(){ document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return true; }; window.mark = function(){ U.flush(); window.__u = U.sizes().undo; return true; }; window.media = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"] .visual-media'); }; window.M = function(){ return document.getElementById('gallery-modal'); }; window.closeM = function(){ if (!M().hidden) document.getElementById('gallery-close').click(); return M().hidden; }; window.url = function(id){ return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'; }; window.hits = function(id){ return calls.filter(function(c){ return c === url(id); }).length; }; return true; })()
+
+eval (async function(){ var c = document.createElement('canvas'); c.width = 480; c.height = 360; var g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 480, 360); g.fillStyle = '#2a7'; g.fillRect(0, 45, 480, 270); g.fillStyle = '#fc3'; g.fillRect(60, 100, 140, 120); var b = await new Promise(function(r){ c.toBlob(r, 'image/jpeg', 0.92); }); window.YT_JPEG = new Uint8Array(await b.arrayBuffer()); return YT_JPEG.length; })()
+eval (function(){ window.calls = []; window.routes = {}; V.setFetch(function(u, init){ calls.push(u); var r = routes[u]; if (!r) return Promise.resolve(new Response('no such video', { status: 404 })); return Promise.resolve(new Response(r.body, { status: r.status || 200 })); }); routes[url('aaaaaaaaaaa')] = { body: YT_JPEG }; routes[url('ccccccccccc')] = { body: YT_JPEG }; return true; })()
+expect YT_JPEG.length > 0
+
+# ---- 1. nothing is fetched on open or while typing ----
+sleep 400
+expect calls.length === 0
+eval document.activeElement && document.activeElement.blur()
+caret #rows .row[data-id="r4"] .audio-cell .cell-editable
+press x
+sleep 400
+expect calls.length === 0
+expect row('r4').imageRef === null
+
+# ---- 2. a click in a beat fetches that beat's link only ----
+eval clearToasts()
+eval mark()
+click #rows .row[data-id="r1"] .audio-cell .cell-editable
+wait !!row('r1').imageRef
+expect calls.length === 1 && hits('aaaaaaaaaaa') === 1
+expect row('r1').imageRef.width === 480 && row('r1').imageRef.height === 270
+expect row('r2').imageRef === null && row('r3').imageRef === null && row('r4').imageRef === null
+expect JSON.stringify(row('r1').imageLinks) === JSON.stringify([{ href: 'https://youtu.be/aaaaaaaaaaa?si=abcdefghijklmnop', poster: true }])
+wait !!media('r1').querySelector('.scene-gallery-tile.is-video img')
+wait toasts().indexOf('Thumbnail addedUndo') !== -1
+eval U.flush()
+expect U.sizes().undo === __u + 1
+# the caret stays in the cell that was clicked, and typing goes there
+expect document.activeElement === cell('r1', 'audioText')
+press Z
+expect row('r1').audioText.indexOf('Z') !== -1 && !!row('r1').imageRef
+# a click on a beat whose thumbnail is there asks for nothing more
+click #rows .row[data-id="r1"] .audio-cell .cell-editable
+sleep 300
+expect calls.length === 1
+
+# ---- 3. the thumbnail is an undo step of its own, below the typing: undo takes the typing, then the thumbnail ----
+eval document.activeElement && document.activeElement.blur()
+key ctrl KeyZ
+wait row('r1').audioText.indexOf('Z') === -1 && !!row('r1').imageRef
+key ctrl KeyZ
+wait row('r1').imageRef === null
+expect JSON.stringify(row('r1').imageLinks) === JSON.stringify([{ href: 'https://youtu.be/aaaaaaaaaaa?si=abcdefghijklmnop', poster: true }])
+key ctrl+shift KeyZ
+wait !!row('r1').imageRef
+sleep 300
+expect calls.length === 1
+# ---- 4. a failure: silent, remembered, and the manual button still works ----
+eval clearToasts()
+click #rows .row[data-id="r2"] .audio-cell .cell-editable
+wait hits('bbbbbbbbbbb') === 1
+sleep 400
+expect row('r2').imageRef === null && !!media('r2').querySelector('.scene-gallery-placeholder')
+expect toasts().length === 0
+click #rows .row[data-id="r2"] .visual-cell .cell-editable
+click #rows .row[data-id="r2"] .audio-cell .cell-editable
+sleep 400
+expect hits('bbbbbbbbbbb') === 1
+expect toasts().length === 0
+eval media('r2').querySelector('.scene-gallery-tile').click()
+wait !M().hidden
+expect hits('bbbbbbbbbbb') === 1
+eval (function(){ routes[url('bbbbbbbbbbb')] = { body: YT_JPEG }; clearToasts(); mark(); M().querySelector('[data-gact="retry-thumb"]').click(); return true; })()
+wait !!row('r2').imageRef
+expect hits('bbbbbbbbbbb') === 2
+wait toasts().indexOf('Thumbnail addedUndo') !== -1
+expect closeM()
+
+# ---- 5. a click on the tile opens the viewer, which shows the thumbnail when it arrives ----
+eval clearToasts()
+eval media('r3').querySelector('.scene-gallery-tile').click()
+wait !M().hidden
+wait !!row('r3').imageRef
+wait M().querySelector('.scene-gallery-kind').textContent.indexOf('thumbnail') !== -1
+expect !M().querySelector('[data-gact="retry-thumb"]')
+expect hits('ccccccccccc') === 1
+expect closeM()
+
+# ---- 6. off, offline, and a link that is not a video ----
+eval document.activeElement && document.activeElement.blur()
+eval clearToasts()
+eval localStorage.setItem('splitpage-video-thumbs', '0')
+click #rows .row[data-id="r4"] .audio-cell .cell-editable
+sleep 400
+expect hits('ddddddddddd') === 0 && row('r4').imageRef === null
+eval localStorage.removeItem('splitpage-video-thumbs')
+eval Object.defineProperty(navigator, 'onLine', { configurable: true, get: function(){ return false; } })
+click #rows .row[data-id="r4"] .visual-cell .cell-editable
+sleep 400
+expect hits('ddddddddddd') === 0 && row('r4').imageRef === null
+eval delete navigator.onLine
+expect navigator.onLine === true
+eval (function(){ routes[url('ddddddddddd')] = { body: YT_JPEG }; return true; })()
+click #rows .row[data-id="r4"] .audio-cell .cell-editable
+wait !!row('r4').imageRef
+expect hits('ddddddddddd') === 1
+click #rows .row[data-id="r5"] .audio-cell .cell-editable
+sleep 400
+expect calls.every(function(c){ return c.indexOf('loom') === -1; })
+expect (function(){ var j = JSON.stringify(F.state()); return j.indexOf('data:image') === -1 && j.indexOf('ytimg') === -1 && j.indexOf('blob:') === -1; })()
