@@ -46,7 +46,7 @@ expect st('r4', 'audioText') === 'Delta'
 wait !!media('r4').querySelector('.scene-gallery-tile.is-video .scene-gallery-placeholder')
 expect !!media('r4').querySelector('.scene-gallery-tile.is-video .scene-gallery-play.is-big')
 expect caption('r4').join('|') === 'youtube.com/watch?v=dQw4w9WgXcQ'
-wait toasts().indexOf('Video added to scene A.4Undo') !== -1
+wait toasts().indexOf('Video added to beat A.4Undo') !== -1
 expect F.state().comments.length === 0
 eval U.flush()
 expect U.sizes().undo === __u + 1
@@ -73,7 +73,7 @@ expect !!B.recordFor(P1SHA)
 expect items('r2') === 'P|V:https://vimeo.com/76979871'
 wait count('r2') === '2'
 expect !!media('r2').querySelectorAll('.scene-gallery-tile')[1].querySelector('.scene-gallery-play')
-wait toasts().indexOf('Picture and video added to scene A.2Undo') !== -1
+wait toasts().indexOf('Picture and video added to beat A.2Undo') !== -1
 eval U.flush()
 expect U.sizes().undo === __u + 1
 eval document.activeElement && document.activeElement.blur()
@@ -94,7 +94,7 @@ expect st('r2', 'imageRef').sha256 === P1SHA
 expect items('r2') === 'P|V:https://vimeo.com/76979871|P'
 expect st('r2', 'audioText') === 'Bravo'
 wait count('r2') === '3'
-wait toasts().indexOf('Picture added to scene A.2Undo') !== -1
+wait toasts().indexOf('Picture added to beat A.2Undo') !== -1
 eval U.flush()
 expect U.sizes().undo === __u + 1
 # a video into a scene with pictures: a tile of its own, after them — and
@@ -106,7 +106,7 @@ expect paste(cell('r2', 'audioText'), { 'text/plain': 'https://youtu.be/second' 
 wait items('r2') === 'P|V:https://vimeo.com/76979871|P|V:https://youtu.be/second'
 wait count('r2') === '4'
 expect caption('r2').join('|') === 'vimeo.com/76979871|youtu.be/second'
-wait toasts().indexOf('Video added to scene A.2Undo') !== -1
+wait toasts().indexOf('Video added to beat A.2Undo') !== -1
 eval U.flush()
 expect U.sizes().undo === __u + 1
 # the same video again is not a second tile
@@ -143,7 +143,7 @@ expect st('r3', 'imageLinks')[0].name === "take & one's 3.webm"
 expect st('r3', 'imageLinks')[0].poster === true && st('r3', 'imageLinks')[0].size === WEBM.size
 # its first frame is the thumbnail
 expect !!st('r3', 'imageRef') && st('r3', 'imageRef').width === 64 && st('r3', 'imageRef').height === 48
-wait toasts().indexOf('Video added to scene A.3Undo') !== -1
+wait toasts().indexOf('Video added to beat A.3Undo') !== -1
 eval U.flush()
 expect U.sizes().undo === __u + 1
 # the name is text, never markup
@@ -173,7 +173,7 @@ eval mark()
 eval caretEnd(cell('r1', 'audioText'))
 expect paste(cell('r1', 'audioText'), { 'text/html': '<img src="https://example.com/copied.png">' }, [ new File([P3.bytes], 'image.png', { type: 'image/png' }) ]) === true
 wait items('r1') === 'V:https://youtu.be/abc123|V:broken.mp4|P'
-wait toasts().indexOf('Picture added to scene A.1Undo') !== -1
+wait toasts().indexOf('Picture added to beat A.1Undo') !== -1
 expect toasts().every(function(t){ return t.indexOf("couldn't be added") === -1; })
 # the picture goes after the videos, never over their placeholders
 expect st('r1', 'imageRef') === null && st('r1', 'moreImages').length === 2
@@ -199,7 +199,7 @@ eval clearToasts()
 eval mark()
 expect drop(media('r4'), null, [ new File([P4.bytes], 'drop.png', { type: 'image/png' }) ]) === true
 wait items('r4') === 'V:https://www.youtube.com/watch?v=dQw4w9WgXcQ|V:https://www.loom.com/share/abc|P'
-wait toasts().indexOf('Picture added to scene A.4Undo') !== -1
+wait toasts().indexOf('Picture added to beat A.4Undo') !== -1
 eval U.flush()
 expect U.sizes().undo === __u + 1
 # and a second one beside it

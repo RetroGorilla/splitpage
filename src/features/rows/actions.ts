@@ -35,7 +35,7 @@ export function hideShotActions(ports: HideShotActionPorts): ActionDefinition[] 
       group: "This document",
       icon: "i-eye-off",
       keys: ["mod+alt+h", "mod+alt+shift+h"],
-      words: "collapse done finished filter filmed beats",
+      words: "collapse done finished filter filmed beats shot scenes",
       availability: () => availableUnless(["loading", "dialog"], ports.screen(), ports.hidden()),
       run: () => { ports.toggle(); }
     }

@@ -14,7 +14,7 @@ expect window.__onboarding.seedCheckPasses() == true
 expect window.__splitpageFormats.state().rows.length < 5
 
 # --- the footer link, beside "Look at the example script" -------------------
-expect document.querySelector('#newtab-page [data-newtab-action="long-demo"]').textContent == Open the long demo (30 scenes)
+expect document.querySelector('#newtab-page [data-newtab-action="long-demo"]').textContent == Open the long demo (30 beats)
 expect document.querySelector('#newtab-page [data-newtab-action="long-demo"]').offsetParent !== null
 # still one row of cards: Blank script and the three starters, no fourth
 expect document.querySelectorAll('#newtab-cards [data-starter]').length == 3
@@ -72,7 +72,7 @@ wait !document.getElementById('cmdk').hidden
 press long demo
 sleep 200
 expect document.querySelector('#cmdk-list .cmdk-item').getAttribute('data-cmd') == long-demo
-expect document.querySelector('#cmdk-list .cmdk-item').textContent.indexOf('Open the long demo (30 scenes)') !== -1
+expect document.querySelector('#cmdk-list .cmdk-item').textContent.indexOf('Open the long demo (30 beats)') !== -1
 key Enter
 wait document.getElementById('cmdk').hidden == true
 wait F.state().rows[0].audioText.indexOf('Edited.') === -1
@@ -91,3 +91,6 @@ type More.
 wait document.getElementById('btn-save').classList.contains('is-dirty') == true
 expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 expect F.docFile().name === null
+
+expect window.__commandTest.results('30 scenes').some(g => g.items.some(i => i.id === 'long-demo'))
+expect window.__commandTest.results('30 beats').some(g => g.items.some(i => i.id === 'long-demo'))

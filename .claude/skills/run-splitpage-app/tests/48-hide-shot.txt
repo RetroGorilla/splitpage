@@ -68,7 +68,7 @@ jsclick #file-menu-close
 # r2 is the only Shot scene so far: one strip, everything else still shown
 expect document.querySelectorAll('#rows .row').length == 3
 expect document.querySelectorAll('#rows .hidden-shot-strip').length == 1
-expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 shot scene hidden") !== -1
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 filmed beat hidden") !== -1
 expect document.querySelector('#rows .row[data-id="r2"]') === null
 
 # --- the runtime chip shows remaining / total while the toggle is on -------
@@ -94,7 +94,7 @@ expect document.querySelectorAll('#rows .row').length == 4
 key ctrl+alt KeyH
 sleep 200
 expect document.querySelectorAll('#rows .row').length == 3
-expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 shot scene hidden") !== -1
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 filmed beat hidden") !== -1
 
 # --- delayed hide: a scene turning Shot while visible stays put for a beat -
 # (the tagged 3rd row is still a plain .row at this position — only r2, right
@@ -105,11 +105,11 @@ sleep 100
 expect document.querySelector('#rows .row:nth-of-type(2)').classList.contains('is-shot')
 # still visible right away — the click that set it must not yank it off screen
 expect document.querySelectorAll('#rows .row').length == 3
-expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 shot scene hidden") !== -1
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 filmed beat hidden") !== -1
 
 # it settles into the (now two-long, contiguous with r2) strip on its own
 wait document.querySelectorAll('#rows .row').length == 2
-expect document.querySelector('.hidden-shot-strip').textContent.indexOf("2 shot scenes hidden") !== -1
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("2 filmed beats hidden") !== -1
 
 # --- find & replace expands the whole hidden run to reach its match --------
 key ctrl KeyF
@@ -131,7 +131,7 @@ sleep 150
 key ctrl+alt KeyH
 sleep 200
 expect document.querySelectorAll('.hidden-shot-strip').length == 1
-expect document.querySelector('.hidden-shot-strip').textContent.indexOf("2 shot scenes hidden") !== -1
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("2 filmed beats hidden") !== -1
 
 click #btn-comments
 wait document.querySelectorAll('.comment-card').length == 1

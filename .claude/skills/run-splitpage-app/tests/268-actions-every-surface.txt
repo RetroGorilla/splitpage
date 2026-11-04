@@ -9,8 +9,9 @@ viewport 1400 900
 eval (function(){ localStorage.removeItem('splitpage-hide-shot'); localStorage.removeItem('splitpage-rundown-min'); window.C = window.__commandTest; window.__cmd = function (q, id) { var hit = null; C.results(q).forEach(function (g) { g.items.forEach(function (it) { if (it.id === id) hit = it; }); }); return hit; }; window.__toasts = function () { return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (t) { return t.textContent; }).join('|'); }; window.__clearToasts = function () { document.getElementById('toast-host').innerHTML = ''; return true; }; return true; })()
 
 # --- what the command menu says about each ---------------------------------
-expect __cmd('hide shot', 'toggle-hide-shot').label == Hide shot scenes
+expect __cmd('hide shot', 'toggle-hide-shot').label == Hide filmed beats
 expect __cmd('hide shot', 'toggle-hide-shot').disabled == false
+expect __cmd('hide filmed', 'toggle-hide-shot').label == Hide filmed beats
 expect __cmd('minimise rundown', 'toggle-rundown-min').label == Minimise the rundown
 expect __cmd('version history', 'history').label == Version history…
 expect __cmd('version history', 'history').disabled == false
@@ -30,7 +31,7 @@ key ctrl+alt KeyH
 sleep 200
 expect localStorage.getItem('splitpage-hide-shot') == 1
 expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == true
-expect __toasts().indexOf('Hiding shot scenes') !== -1
+expect __toasts().indexOf('Hiding filmed beats') !== -1
 
 eval __clearToasts()
 click #btn-file
@@ -40,7 +41,7 @@ sleep 200
 expect localStorage.getItem('splitpage-hide-shot') == 0
 expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == false
 expect !document.getElementById('file-menu').hidden
-expect __toasts().indexOf('Showing every scene again.') !== -1
+expect __toasts().indexOf('Showing every beat again.') !== -1
 jsclick #file-menu-close
 sleep 200
 
@@ -53,7 +54,7 @@ key Enter
 sleep 300
 expect document.getElementById('cmdk').hidden
 expect localStorage.getItem('splitpage-hide-shot') == 1
-expect __toasts().indexOf('Hiding shot scenes') !== -1
+expect __toasts().indexOf('Hiding filmed beats') !== -1
 expect __cmd('hide shot', 'toggle-hide-shot').disabled == false
 
 # refused with a dialog open: the shortcut does nothing

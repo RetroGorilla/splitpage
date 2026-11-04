@@ -18,7 +18,7 @@ eval (function(){ window.toasts = function(){ return Array.prototype.map.call(do
 # ---- 1. New script from these scenes ---------------------------------------
 eval (function(){ window.__old = F.state().docId; untoast(); T.select('r2', 'r3'); T.openMenu(200, 200); return __old; })()
 jsclick #scene-menu [data-scene-action="new"]
-wait F.state().title.indexOf('2 scenes') !== -1
+wait F.state().title.indexOf('2 beats') !== -1
 wait toasts().indexOf('the one before is in Version history') !== -1
 eval (function(){ window.__new = F.state().docId; return __new; })()
 expect __new !== __old

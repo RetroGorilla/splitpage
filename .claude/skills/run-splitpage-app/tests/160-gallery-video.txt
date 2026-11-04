@@ -53,7 +53,7 @@ expect (function(){ var j = JSON.stringify(F.state()); return j.indexOf('data:im
 # ONE undo entry: the paste's, now holding the picture too
 eval U.flush()
 expect U.sizes().undo === __u + 1
-wait toasts().indexOf('Video added to scene A.1Undo') !== -1
+wait toasts().indexOf('Video added to beat A.1Undo') !== -1
 jsclick #toast-host .toast-action
 wait !st('r1', 'imageLinks') && st('r1', 'imageRef') === null
 expect media('r1').classList.contains('is-empty')
@@ -87,7 +87,7 @@ expect paste(cell('r3', 'audioText'), { 'text/plain': 'https://youtu.be/aaaaaaaa
 wait calls.indexOf('https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg') !== -1
 sleep 300
 expect st('r3', 'imageRef') === null && !!media('r3').querySelector('.scene-gallery-placeholder')
-expect toasts().join('|') === 'Video added to scene A.3Undo'
+expect toasts().join('|') === 'Video added to beat A.3Undo'
 eval media('r3').querySelector('.scene-gallery-tile').click()
 wait !M().hidden
 expect M().querySelector('.scene-gallery-kind').textContent === 'Video'

@@ -57,7 +57,7 @@ expect __pb.fits() == ok
 expect __pb.guide() == ok
 jsclick #pp-scene-next
 sleep 300
-expect document.getElementById('pp-scene-readout').textContent == Scene A.2 of 2
+expect document.getElementById('pp-scene-readout').textContent == Beat A.2 of 2
 expect __pb.wordOnGuide() == ok
 jsclick #pp-scene-mode
 sleep 300
