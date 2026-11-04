@@ -121,7 +121,7 @@ test("merge review numbers a locally inserted beat from its actual scene", async
   try {
     await merge.offer(file(), null);
     merge.open();
-    assert.deepEqual(heads(), ["Scene B.1"]);
+    assert.deepEqual(heads(), ["Beat B.1"]);
     assert.match(el("merge-review-list").textContent ?? "", /Inserted/);
     assert.equal(calls.applied.length, 0);
     assert.deepEqual(mine.rows.map(r => r.id), ["a", "b", "c"]);
@@ -140,7 +140,7 @@ test("merge review identifies both actual references when only the local header 
   try {
     await merge.offer(file(), null);
     merge.open();
-    assert.deepEqual(heads(), ["Scene B.1 (Open here) / A.2 (On disk)"]);
+    assert.deepEqual(heads(), ["Beat B.1 (Open here) / A.2 (On disk)"]);
     assert.deepEqual(Array.from(win.document.querySelectorAll(".merge-side-body"), side => side.textContent),
       ["Local words", "Disk words"]);
   } finally {
@@ -157,7 +157,7 @@ test("merge review numbers a disk-only beat from the complete disk layout", asyn
   try {
     await merge.offer(file(), null);
     merge.open();
-    assert.deepEqual(heads(), ["Scene B.1"]);
+    assert.deepEqual(heads(), ["Beat B.1"]);
   } finally {
     merge.dispose();
   }
@@ -172,7 +172,7 @@ test("merge review keeps side references when a common beat has moved", async ()
   try {
     await merge.offer(file(), null);
     merge.open();
-    assert.deepEqual(heads(), ["Scene A.1 (Open here) / A.2 (On disk)"]);
+    assert.deepEqual(heads(), ["Beat A.1 (Open here) / A.2 (On disk)"]);
   } finally {
     merge.dispose();
   }
@@ -193,7 +193,7 @@ test("merge review: offers a file that parses, lists each side's changes and con
     merge.open();
     assert.equal(calls.contexts.length, 1);
     assert.deepEqual(calls.contexts[0], { base: base, mine: mine, theirs: theirs }, "the text context is asked for base, mine and theirs");
-    assert.deepEqual(heads(), ["Scene A.1", "Scene A.2"]);
+    assert.deepEqual(heads(), ["Beat A.1", "Beat A.2"]);
     assert.match(el("merge-review-list").innerHTML, /<span class="diff-del">two<\/span>/);
     assert.match(el("merge-review-list").innerHTML, /<span class="diff-add">three<\/span>/);
     assert.match(el("merge-review-list").textContent ?? "", /The file's version is taken/);
