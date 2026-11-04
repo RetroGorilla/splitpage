@@ -100,6 +100,7 @@ expect rec('bs5').props[0].id === prop('Ice scoop').id
 # ---- 4. a rename in the breakdown carries through -----------------------
 eval (function(){ window.__droneId = prop('Drone').id; return window.__droneId; })()
 jsclick #btn-production
+jsclick #production-modes [data-group="cat"]
 wait !!document.querySelector('#production-list .tag-entity')
 eval (function(){ function q(){ return Array.from(document.querySelectorAll('#production-list .tag-entity')).find(function(c){ return c.querySelector('.tag-entity-name').textContent === 'Drone'; }); } var c = q(); if (!c.classList.contains('is-expanded')) c.querySelector('[data-action="tag-expand"]').click(); q().querySelector('[data-action="tag-rename"]').click(); return true; })()
 eval (function(){ var input = document.querySelector('#production-list .tag-rename-input'); input.value = 'Drone kit'; return true; })()

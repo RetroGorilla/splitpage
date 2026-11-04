@@ -43,6 +43,7 @@ function harness() {
   const tick = (): void => { const jobs = [...pending.values()]; pending.clear(); jobs.forEach(({ fn }) => fn()); };
   let routes: TagsRoutes;
   const ports: TagsPorts = {
+    clickProductionOutline: () => false, changeProductionOutline: () => {}, revealProductionItem: () => {},
     rootClick: (e) => { calls.push("root"); routes.jumpClick(e); routes.click(e); },
     renderProduction: log("render"),
     saveTagRename: log("rename-save"), addPersonForTag: log("person-save"),
@@ -192,6 +193,20 @@ for (const work of ["card", "touch"] as const) {
     });
   }
 }
+
+test("holding a finger inside inline prep notes does not start bulk selection", () => {
+  const h = harness();
+  const owner = h.mount();
+  h.card().insertAdjacentHTML("beforeend", '<div class="prep-resource-detail"><textarea class="tag-notes-input"></textarea></div>');
+  const notes = h.card().querySelector("textarea");
+  assert.ok(notes);
+  h.fire(notes, "pointerdown", { pointerType: "touch", clientX: 1, clientY: 2 });
+  assert.equal(h.pending.size, 0);
+  h.tick();
+  assert.equal(h.calls.some(call => call.startsWith("select:")), false);
+  owner.dispose();
+  h.win.close();
+});
 
 test("tags: delegation precedes backdrop, input Escape excludes selection clearing, captured scroll refreshes", () => {
   const h = harness();

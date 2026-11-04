@@ -1,4 +1,8 @@
+import { createProductionPrepState } from "./production/prep-state.ts";
+import type { ProductionPrepState } from "./production/prep-state.ts";
+
 export interface TagPanelState {
+  readonly prep: () => ProductionPrepState;
   readonly tagRenamingKey: () => string | null;
   readonly setTagRenaming: (key: string | null) => void;
   readonly tagExpandedKey: () => string | null;
@@ -16,9 +20,11 @@ export function createTagPanelState(): TagPanelState {
   let renaming: string | null = null;
   let expanded: string | null = null;
   let addingPersonFor: string | null = null;
-  let productionGroup: string = "cat";
+  const prep = createProductionPrepState();
+  let productionGroup: string = "prep";
   let gearGroup: string = "flat";
   return Object.freeze({
+    prep: () => prep,
     tagRenamingKey: (): string | null => renaming,
     setTagRenaming: (key: string | null): void => { renaming = key; },
     tagExpandedKey: (): string | null => expanded,
@@ -33,7 +39,8 @@ export function createTagPanelState(): TagPanelState {
       renaming = null;
       expanded = null;
       addingPersonFor = null;
-      productionGroup = "cat";
+      productionGroup = "prep";
+      prep.reset();
     }
   });
 }

@@ -85,6 +85,7 @@ expect snap() === window.__before
 # cell reads its old contents back on focusout (the skill's jsclick note).
 eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
 jsclick #btn-production
+jsclick #production-modes [data-group="cat"]
 wait !document.getElementById('production-panel').hidden
 eval (function(){ U.flush(); window.__n = U.sizes().undo; var c = Array.from(document.querySelectorAll('#production-list .tag-entity')).find(function (e) { return e.querySelector('.tag-entity-name').textContent === 'Kettle'; }); if (!c.classList.contains('is-expanded')) c.querySelector('[data-action="tag-expand"]').click(); return true; })()
 sleep 300

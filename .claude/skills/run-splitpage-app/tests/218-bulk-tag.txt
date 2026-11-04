@@ -62,6 +62,7 @@ expect F.state().rows[0].audioText == The drone hums.
 expect U.sizes().undo === window.__n + 1
 # the Production panel's count follows
 jsclick #btn-production
+jsclick #production-modes [data-group="cat"]
 wait document.querySelector('#production-list') && document.querySelector('#production-list').textContent.indexOf('drone') !== -1
 eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
 key ctrl KeyZ

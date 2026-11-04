@@ -4,7 +4,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
-import { beatStatus, beatStatusCommand, shotGrace } from "../../application/commands/beat-status.ts";
+import { beatStatus, beatStatusCommand, setBeatFilmedCommand, shotGrace } from "../../application/commands/beat-status.ts";
 import { targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration, rowSeconds, targetClock, totalSeconds } from "../../core/production/timing.ts";
 
@@ -22,6 +22,7 @@ export interface BeatStatus {
   readonly statsFollowChange: (change: SessionChange) => void;
   readonly onScriptStats: (listener: (targetSeconds: number) => void) => () => void;
   readonly cycleRowStatus: (rowId: string) => void;
+  readonly setFilmed: (rowId: string, filmed: boolean) => void;
 }
 
 const LENGTH_TITLE = "The script's read time, from the Audio column — click to set your reading speed or a target length";
@@ -80,6 +81,17 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
   }
 
   return {
+    setFilmed: function (rowId, filmed) {
+      const before = ports.document.read(beatStatus(rowId));
+      const outcome = ports.edits.run(setBeatFilmedCommand(rowId, filmed, ports.edits.stamps));
+      if (outcome.kind === "failed") throw outcome.error;
+      if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
+      if (ports.hideShot()) {
+        const grace = shotGrace(before, ports.document.read(beatStatus(rowId)));
+        if (grace === "arm") ports.shots.armGrace(rowId);
+        else if (grace === "clear") ports.shots.clearGrace(rowId);
+      }
+    },
     updateScriptStats,
     statsFollowChange: function (change) {
       const changes = change.changes;

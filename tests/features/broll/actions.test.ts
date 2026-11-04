@@ -19,10 +19,10 @@ test("B-roll actions refuse while unmounted, retain loading availability, and fo
   try {
     assert.equal(registry.invoke("panel-broll", "button").kind, "unavailable");
     assert.equal(calls.length, 0);
-    current = { openBrollPanel: () => { calls.push("first"); }, dispose: () => {} };
+    current = { openShot: () => {}, openBrollPanel: () => { calls.push("first"); }, dispose: () => {} };
     screen.state.loading = true;
     assert.equal(registry.invoke("panel-broll", "button").kind, "ran");
-    current = { openBrollPanel: () => { calls.push("second"); }, dispose: () => {} };
+    current = { openShot: () => {}, openBrollPanel: () => { calls.push("second"); }, dispose: () => {} };
     assert.equal(registry.invoke("panel-broll", "button").kind, "ran");
     screen.state.dialog = true;
     assert.equal(registry.invoke("panel-broll", "button").kind, "unavailable");

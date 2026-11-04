@@ -55,3 +55,25 @@ export function beatStatusCommand(rowId: string, stamps: StampPorts): Command {
     }
   };
 }
+
+export function setBeatFilmedCommand(rowId: string, filmed: boolean, stamps: StampPorts): Command {
+  return {
+    name: "set-beat-filmed",
+    needs: "edit",
+    plan: function (doc) {
+      const row = doc.rows.find(r => r.id === rowId);
+      const status = filmed ? "shot" : "todo";
+      if (!row || row.status === status) return null;
+      return {
+        changes: statusChanges(rowId),
+        apply: function (live) {
+          const target = live.rows.find(r => r.id === rowId);
+          if (!target) throw new Error("Beat left the document before its status was set");
+          target.status = status;
+          target.updatedAt = stamps.clock.nowIso();
+          target.updatedBy = stamps.editor.name();
+        }
+      };
+    }
+  };
+}

@@ -117,7 +117,7 @@ test("panel reset clears tag UI, tag confirmation and production selection in or
     assert.equal(panel.tagRenamingKey(), null);
     assert.equal(panel.tagAddingPersonKey(), null);
     assert.equal(panel.tagExpandedKey(), null);
-    assert.equal(panel.productionGroupBy(), "cat");
+    assert.equal(panel.productionGroupBy(), "prep");
     assert.deepEqual(selectedKeys(), []);
     assert.equal(productionSelection().anchorKey(), null);
     assert.equal(bulkDeleteArmed(), false);

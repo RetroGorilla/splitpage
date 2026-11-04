@@ -32,6 +32,7 @@ expect document.getElementById('production-badge').textContent == 1
 
 # --- "Have it", then a one-letter fix: the same item, still "Have it" --------
 click #btn-production
+jsclick #production-modes [data-group="cat"]
 wait !document.getElementById('production-panel').hidden
 sleep 400
 eval pill('slow piano intro')

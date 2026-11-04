@@ -7,12 +7,12 @@ import { createImportMode } from "../../src/application/import-mode.ts";
 import { createPrompterState } from "../../src/application/prompter-state.ts";
 import { createTagPanelState } from "../../src/application/tag-panel-state.ts";
 
-test("the tag panel starts on the category view with nothing open", () => {
+test("the tag panel starts on Scene prep with nothing open", () => {
   const panel = createTagPanelState();
   assert.equal(panel.tagRenamingKey(), null);
   assert.equal(panel.tagExpandedKey(), null);
   assert.equal(panel.tagAddingPersonKey(), null);
-  assert.equal(panel.productionGroupBy(), "cat");
+  assert.equal(panel.productionGroupBy(), "prep");
   assert.equal(panel.gearGroupBy(), "flat");
 });
 
@@ -30,7 +30,7 @@ test("resetting the tag panel closes its rows and the production grouping but ke
   assert.equal(panel.tagRenamingKey(), null);
   assert.equal(panel.tagExpandedKey(), null);
   assert.equal(panel.tagAddingPersonKey(), null);
-  assert.equal(panel.productionGroupBy(), "cat");
+  assert.equal(panel.productionGroupBy(), "prep");
   assert.equal(panel.gearGroupBy(), "scene");
 });
 

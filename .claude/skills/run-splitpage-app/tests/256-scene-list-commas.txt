@@ -17,6 +17,7 @@ eval window.probe = function (dd) { if (!dd) return 'no list'; dd.style.flex = '
 
 # --- the Category view's Scenes column -------------------------------------
 click #btn-production
+jsclick #production-modes [data-group="cat"]
 wait !document.getElementById('production-panel').hidden
 wait document.querySelectorAll('#production-list .tag-entity .tag-scene').length === 14
 eval window.__cat = probe(document.querySelector('#production-list .tag-entity .tag-scenes'))

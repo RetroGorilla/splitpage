@@ -1,3 +1,5 @@
+import { createProductionPrepState } from "../../../src/application/production/prep-state.ts";
+import { clickProductionOutline, changeProductionOutline, revealProductionItem } from "../../../src/features/tags/panels.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
@@ -21,12 +23,11 @@ const realm = globalThis as unknown as Record<string, unknown>;
 realm.window = win;
 realm.document = win.document;
 
-function fixture(cat = "prop") {
+function fixture(cat = "prop", migration = fakeMigration()) {
   win.document.body.innerHTML = '<button id="btn-production"></button><button id="btn-gear"></button>' +
     '<div id="production-panel" hidden></div><div id="gear-panel" hidden></div>' +
     '<div class="tag-entity"><div><button id="menu-button" class="tag-menu-btn" aria-expanded="false"></button>' +
     '<div class="tag-menu" hidden><button class="tag-menu-item">Pick</button></div></div></div>';
-  const migration = fakeMigration();
   const doc = migrateRows({ schema: 2, rows: [], productionTags: [{ id: "t_hat", cat, name: "Hat" }] }, migration.ports);
   const document = fakeDocument(doc);
   const edits = fakeEdits();
@@ -41,8 +42,13 @@ function fixture(cat = "prop") {
   };
   const deletion = createDeleteConfirm(timers);
   const selection = createProductionSelection(timers);
+  const prep = createProductionPrepState();
   const ports: TagPanelPorts = {
+    focus: { lastRow: () => null },
+    beats: { setFilmed: () => {}, reveal: () => {} },
+    footage: { entries: () => [], open: () => {} },
     view: {
+      prep: () => prep,
       gearGroupBy: () => "flat", productionGroupBy: () => "cat",
       setTagAddingPerson: (key) => { addingPerson = key; },
       setTagRenaming: (key) => { renaming = key; },
@@ -65,13 +71,189 @@ function fixture(cat = "prop") {
     shotHiding: { reveal: (id) => { calls.push(id); } },
     panels: { open: (id) => { calls.push(id); } },
     personColors: { personColor: () => "blue" },
-    undo: { breakCoalescing: () => { calls.push("undo"); } },
+    undo: { undo: () => {}, last: () => null, breakCoalescing: () => { calls.push("undo"); } },
     notices: fakeNotices().notices,
     ids: migration.ids,
     bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 })
   };
   return { ports, calls, edits, doc, document, pending, deletion, selection };
 }
+
+function prepFixture(focus: string | null = null) {
+  const migration = fakeMigration();
+  const tagged = migration.cell([{ text: "Hat", marks: { tag: "t:prop:Hat" } }]);
+  const h = fixture("prop", migration);
+  const doc = migrateRows({
+    schema: 2,
+    rows: Array.from({ length: 200 }, (_, i) => ({ id: "r" + i, visualText: tagged, audioText: "Beat " + i, status: i < 2 ? "shot" : "todo" })),
+    sections: Array.from({ length: 6 }, (_, i) => ({ id: "sec" + i, name: "Scene " + i, firstSceneId: "r" + i * 34 })),
+    people: [{ id: "p1", name: "Adam" }],
+    productionTags: [{ id: "hat", cat: "prop", name: "Hat", notes: "https://example.com/hat" }]
+  }, migration.ports);
+  h.document.replace(doc);
+  win.document.body.innerHTML = '<div id="production-panel"><div id="production-bulk"></div><div id="production-list"></div></div>';
+  const calls: unknown[][] = [];
+  const ports: TagPanelPorts = { ...h.ports,
+    focus: { lastRow: () => focus },
+    view: { ...h.ports.view, productionGroupBy: () => "prep" },
+    beats: { reveal: id => { calls.push(["jump", id]); }, setFilmed: (id, filmed) => { calls.push(["filmed", id, filmed]); } }
+  };
+  const mounted = startTagPanels(ports);
+  mounted.renderProduction();
+  function click(selector: string): void {
+    const target = win.document.querySelector(selector);
+    assert.ok(target, selector);
+    assert.equal(clickProductionOutline({ target } as unknown as MouseEvent), true);
+  }
+  return { ...h, doc, ports, calls, mounted, click };
+}
+
+test("Scene prep handles 200 beats as six scene groups, reveals the focused beat, and keeps browsing stable across refresh", () => {
+  const h = prepFixture("r119");
+  try {
+    assert.equal(win.document.querySelectorAll(".prep-scene").length, 6);
+    assert.equal(win.document.querySelectorAll(".prep-scene.is-open").length, 1);
+    assert.equal(win.document.querySelector(".prep-beat.is-open .prep-beat-ref")?.textContent, "D.18");
+    assert.equal(win.document.querySelectorAll(".prep-beat").length, 8);
+    h.click('[data-prep="more"]');
+    assert.equal(win.document.querySelectorAll(".prep-beat").length, 16);
+    h.mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll(".prep-beat").length, 16);
+    h.click('[data-prep="jump"][data-id="r119"]');
+    assert.deepEqual(h.calls, [["jump", "r119"]]);
+    assert.equal(h.edits.ran.length, 0);
+  } finally { h.mounted.dispose(); }
+});
+
+test("Scene prep renders shared items once per beat and once in the scene summary, with one notes editor and literal Assign", () => {
+  const h = prepFixture("r2");
+  try {
+    const owner = win.document.querySelector<HTMLSelectElement>(".prep-owner select");
+    assert.equal(owner?.selectedOptions[0]?.textContent, "Assign");
+    assert.equal(owner?.parentElement?.dataset["initial"], "+");
+    assert.equal(win.document.querySelectorAll(".prep-reference").length, 1);
+    h.click('[data-prep="requirements"]');
+    assert.equal(win.document.querySelectorAll(".prep-resource").length, 2);
+    h.click('.prep-resource-name [data-prep="notes"]');
+    assert.equal(win.document.querySelectorAll(".tag-notes-input").length, 1);
+    assert.equal(win.document.querySelectorAll(".prep-status-select option").length, 8);
+    const ids = [...win.document.querySelectorAll("[id]")].map(el => el.id);
+    assert.equal(ids.length, new Set(ids).size);
+    const film = win.document.querySelector<HTMLInputElement>('[data-row="r2"]');
+    assert.ok(film);
+    film.checked = true;
+    changeProductionOutline(film);
+    assert.deepEqual(h.calls, [["filmed", "r2", true]]);
+  } finally { h.mounted.dispose(); }
+});
+
+test("an explicit script tag reveal reaches a beat beyond the current batch", () => {
+  const h = prepFixture("r2");
+  try {
+    const item = h.ports.production.entries(h.doc)[0];
+    assert.ok(item);
+    revealProductionItem("r119", item.key);
+    assert.equal(win.document.querySelector(".prep-beat.is-open .prep-beat-ref")?.textContent, "D.18");
+    assert.equal(win.document.querySelectorAll(".tag-notes-input").length, 1);
+    assert.equal(h.edits.ran.length, 0);
+    h.document.replace(h.doc);
+    h.mounted.renderProduction();
+    assert.equal(win.document.querySelector(".prep-beat.is-open")?.getAttribute("data-beat"), "r2");
+    assert.equal(win.document.querySelectorAll(".tag-notes-input").length, 0);
+  } finally { h.mounted.dispose(); }
+});
+
+for (const focused of [true, false]) {
+  test("Scene prep preserves an unfinished rename across refresh, focused=" + focused, () => {
+    const h = prepFixture("r2");
+    try {
+      h.click('.prep-resource-name [data-prep="notes"]');
+      const item = h.ports.production.entries(h.doc)[0];
+      assert.ok(item);
+      h.ports.view.setTagRenaming(item.key);
+      h.mounted.renderProduction();
+      const input = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
+      assert.ok(input);
+      input.value = "A new hat";
+      input.focus();
+      input.setSelectionRange(2, 5, "backward");
+      if (!focused) input.blur();
+      h.mounted.renderProduction();
+      const next = win.document.querySelector<HTMLInputElement>(".tag-rename-input");
+      assert.equal(next, input);
+      assert.equal(next.value, "A new hat");
+      assert.equal(next.selectionStart, 2);
+      assert.equal(next.selectionEnd, 5);
+      assert.equal(next.selectionDirection, "backward");
+      assert.equal(win.document.activeElement === next, focused);
+    } finally { h.mounted.dispose(); }
+  });
+}
+
+test("a requirement that becomes ready stays in place; initially ready items use an explicit fold", () => {
+  const h = prepFixture("r2");
+  try {
+    const tag = h.doc.productionTags?.[0];
+    assert.ok(tag);
+    tag.status = "have";
+    h.mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll(".prep-resource").length, 1);
+    assert.equal(win.document.querySelectorAll('[data-prep="ready-fold"]').length, 0);
+    h.document.replace(h.doc);
+    h.mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll(".prep-resource").length, 0);
+    h.click('[data-prep="ready-fold"]');
+    assert.equal(win.document.querySelectorAll(".prep-resource").length, 1);
+  } finally { h.mounted.dispose(); }
+});
+
+test("a requirement that stops being ready leaves the ready fold, and a script tag can reveal an initially ready item", () => {
+  const h = prepFixture("r2");
+  try {
+    const tag = h.doc.productionTags?.[0];
+    assert.ok(tag);
+    tag.status = "have";
+    h.document.replace(h.doc);
+    h.mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll(".prep-resource").length, 0);
+    const item = h.ports.production.entries(h.doc)[0];
+    assert.ok(item);
+    revealProductionItem("r2", item.key);
+    assert.equal(win.document.querySelectorAll(".tag-notes-input").length, 1);
+    h.ports.view.prep().toggleReady("beat:r2");
+    tag.status = "needed";
+    h.mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll(".prep-resource").length, 1);
+    assert.equal(win.document.querySelectorAll('[data-prep="ready-fold"]').length, 0);
+  } finally { h.mounted.dispose(); }
+});
+
+test("an unnamed scene cannot collide with an imported scene whose ID is auto", () => {
+  const h = prepFixture("r0");
+  try {
+    const imported = migrateRows({ ...h.doc, sections: [{ id: "auto", name: "Intro", firstSceneId: "r2" }] }, fakeMigration().ports);
+    h.document.replace(imported);
+    h.mounted.renderProduction();
+    assert.equal(win.document.querySelectorAll(".prep-scene").length, 2);
+    assert.equal(win.document.querySelectorAll(".prep-scene.is-open").length, 1);
+    h.click('[data-prep="scene"][data-id="scene:auto"]');
+    assert.equal(win.document.querySelectorAll(".prep-scene.is-open").length, 2);
+  } finally { h.mounted.dispose(); }
+});
+
+test("marking a focused requirement ready keeps keyboard focus in the same resource", () => {
+  const h = prepFixture("r2");
+  try {
+    const button = win.document.querySelector<HTMLButtonElement>('[data-prep="ready"]');
+    assert.ok(button);
+    button.focus();
+    const tag = h.doc.productionTags?.[0];
+    assert.ok(tag);
+    tag.status = "have";
+    h.mounted.renderProduction();
+    assert.equal(win.document.activeElement, win.document.querySelector(".prep-status-select"));
+  } finally { h.mounted.dispose(); }
+});
 
 for (const focused of [true, false]) {
   test("gear rename keeps its draft and selection across production refresh, focused=" + focused, () => {
