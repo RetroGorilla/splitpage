@@ -25,6 +25,9 @@ appear in the app under **Help**. The format follows
   as in `B8`. Beats before the first header are in an automatic, unnamed Scene
   A. Numbers shift when you move beats or scenes. Saved scripts keep their
   contents; old files open as they are.
+- Beat lists in Production and the Shoot view are grouped by scene: the letter
+  appears once, followed by that scene's beat numbers. Dotted numbers elsewhere
+  sit tighter around the dot.
 - Excel columns are now `Beat` and `Beats`. Images in exported Markdown are
   named like `images/beat-A-3.jpg`; old `images/scene-N` names still import.
 - Status markers are colour coded: Needed is hollow, Sourcing is yellow and
