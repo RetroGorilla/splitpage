@@ -39,7 +39,7 @@ function tileIn(id: string): Element {
 }
 
 function paintedRows(): string {
-  return ["r1", "r2", "r3"].map(rowHtml).join("");
+  return ["r1", "r2", "r3"].map((id) => rowHtml(id)).join("");
 }
 
 function beatSelect(rowsHtml = "", screen: ScreenState = CLEAR_SCREEN) {
