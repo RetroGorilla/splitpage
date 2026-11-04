@@ -1,0 +1,11 @@
+open
+caret #rows .row .audio-cell .cell-editable
+press  Grab the [gaffer tape] in the {kitchen}.
+sleep 400
+click #btn-production
+wait !document.getElementById('production-panel').hidden
+wait !!document.querySelector('#production-list .tag-beat-links .tag-scene')
+eval (function(){var links=document.querySelector('#production-list .tag-beat-links');var one=links.querySelector('.tag-scene');for(var i=0;i<60;i++)links.appendChild(one.cloneNode(true));return true;})()
+expect document.querySelector('#production-list .tag-beat-links').getBoundingClientRect().height > document.querySelector('#production-list .tag-beat-links .tag-scene').getBoundingClientRect().height * 2
+expect document.querySelector('#production-list .tag-beat-links').lastElementChild.getBoundingClientRect().right <= document.querySelector('#production-list .tag-scenes, #production-list .tag-beat-group').parentElement.getBoundingClientRect().right + 1
+expect document.getElementById('production-list').scrollWidth <= document.getElementById('production-list').clientWidth

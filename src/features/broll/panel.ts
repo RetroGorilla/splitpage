@@ -1,3 +1,4 @@
+import { numberHtml } from "../common/number-html.ts";
 import { brollSortedForList } from "../../core/production/broll.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../../core/document/broll.ts";
@@ -359,7 +360,7 @@ function rowHtml(e: PanelShot, starts: Record<string, number>) {
       checkHtml(e) +
       '<button type="button" class="broll-row-main" data-action="broll-expand" data-id="' + id +
         '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
-        '<span class="broll-row-name">' + (e.shotNumber ? escapeHtml(e.shotNumber) + " " : "") + escapeHtml(e.name || "Untitled shot") + '</span>' +
+        '<span class="broll-row-name">' + (e.shotNumber ? numberHtml(e.shotNumber) + " " : "") + escapeHtml(e.name || "Untitled shot") + '</span>' +
         '<span class="broll-row-meta">' + rowMetaHtml(e) + '</span>' +
       '</button>' +
       '<span class="broll-row-icons">' + rowStateIconsHtml(e) + '</span>' +
@@ -1206,7 +1207,7 @@ function pageRowHtml(e: PanelShot) {
       '" data-id="' + id + '">' +
     '<td class="broll-page-c-check">' + checkHtml(e) + '</td>' +
     '<td class="broll-page-c-shot" data-label="Shot"><span class="broll-row-name" title="' + escapeHtml(e.name || "Untitled shot") + '">' +
-      (e.shotNumber ? escapeHtml(e.shotNumber) + " " : "") + escapeHtml(e.name || "Untitled shot") + '</span>' + rowStateIconsHtml(Object.assign({}, e, { notes: "", reshoot: false })) + '</td>' +
+      (e.shotNumber ? numberHtml(e.shotNumber) + " " : "") + escapeHtml(e.name || "Untitled shot") + '</span>' + rowStateIconsHtml(Object.assign({}, e, { notes: "", reshoot: false })) + '</td>' +
     '<td class="broll-page-c-scene" data-label="Beat">' + (e.rowId
       ? '<button type="button" class="broll-page-scene" data-action="broll-page-jump" data-id="' + id + '" title="Go to beat ' +
           beatLabel(e) + '">' + beatLabel(e) + '</button>'

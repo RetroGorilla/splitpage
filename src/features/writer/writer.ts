@@ -1,3 +1,4 @@
+import { numberHtml } from "../common/number-html.ts";
 import { editableCellHtml } from "../common/editable-cell.ts";
 import { formatDuration, totalSeconds } from "../../core/production/timing.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
@@ -75,7 +76,7 @@ function writerBlockHtml(row: WriterRow) {
   return '<div class="wr-block" data-row="' + id + '">' +
       '<div class="wr-gutter" data-action="writer-jump" data-row="' + id +
         '" title="Open this beat in the split view">' +
-        '<span class="wr-num">' + ((numbering as WriterFeaturePorts["document"]["numbering"])().beats[row.id]?.full ?? "") + '</span>' +
+        '<span class="wr-num">' + numberHtml(((numbering as WriterFeaturePorts["document"]["numbering"])().beats[row.id]?.full ?? "")) + '</span>' +
         '<span class="wr-visual">' + visual + '</span>' +
       '</div>' +
       editableCellHtml({

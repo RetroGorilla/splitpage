@@ -1,3 +1,4 @@
+import { numberHtml } from "../common/number-html.ts";
 import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { withoutCues } from "../../core/text/cues.ts";
 import { sliceCell } from "../../core/text/edits.ts";
@@ -308,7 +309,7 @@ export function updatePrompterStatus(): void {
 
   const posEl = document.getElementById("pp-scene-pos");
   const number = ports.document.numbering().beats[state.beatRowIds[beat] ?? ""]?.full ?? "";
-  setText(posEl, number);
+  if (posEl && posEl.textContent !== number) posEl.innerHTML = numberHtml(number);
   setText(document.getElementById("pp-scene-pos-sr"), beat === -1 ? "" : "Beat " + number + ", " + state.beatRowIds.length + " beats");
   setText(document.getElementById("pp-scene-start"), beat === -1 ? "" : formatTimecode(state.beatStartSec[beat] as number));
   const sceneEl = document.getElementById("pp-section");

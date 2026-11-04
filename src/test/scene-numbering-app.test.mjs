@@ -76,7 +76,7 @@ test("#1186: an old document reorders, saves and reopens with identity, statuses
   assert.match(document.querySelector('#broll-list [data-id="bs_two"] .broll-row-name').textContent, /^C\.1\.2 /);
   assert.equal(document.querySelector('#broll-list [data-id="bs_added"] .broll-row-name').textContent, "Added");
   openProductionPanel();
-  assert.equal(document.querySelector('.tag-scene[data-row="r3"]').textContent, "C.1");
+  assert.equal(document.querySelector('.tag-scene[data-row="r3"]').textContent, "1");
   writer.openWriter();
   assert.deepEqual(Array.from(document.querySelectorAll("#writer-doc .wr-num"), el => el.textContent), expected);
   writer.closeWriter();
@@ -113,4 +113,26 @@ test("Remove scene header acts immediately, retains beats, and undoes the first 
   undoOwner().undo();
   assert.deepEqual(currentDocument(), before);
   assert.equal(document.querySelector('#rows [data-section-id="first"] .section-letter').textContent, "A");
+});
+
+test("grouped production beats keep full accessible numbers and filmed links", async () => {
+  const tag = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug">Mug</span>';
+  await open(JSON.stringify({ schema: 2, title: "Grouped beats", productionTags: [{ id: "mug", cat: "prop", name: "Mug", status: "have" }], rows: Array.from({ length: 94 }, (_, i) => ({
+    id: "g" + i, audioText: tag, status: i === 13 ? "shot" : "todo"
+  })), sections: [{ id: "second", name: "Second", firstSceneId: "g60" }] }), "grouped.splitpage");
+  openProductionPanel();
+  document.querySelector('#production-modes [data-group="cat"]').click();
+  const groups = () => Array.from(document.querySelectorAll('#production-list .tag-beat-group'));
+  assert.deepEqual(groups().map(g => g.querySelector('.tag-beat-letter').textContent), ["A", "B"]);
+  assert.deepEqual(groups().map(g => g.querySelectorAll('button').length), [60, 34]);
+  assert.equal(groups()[0].querySelectorAll('button')[13].textContent, "14");
+  assert.match(groups()[0].querySelectorAll('button')[13].getAttribute('aria-label'), /^Beat A\.14 /);
+  document.querySelector('#production-modes [data-group="shoot"]').click();
+  assert.deepEqual(groups().map(g => g.querySelectorAll('button').length), [60, 34]);
+  const filmed = document.querySelector('#production-list .tag-scene[data-row="g13"]');
+  assert.equal(filmed.textContent, "14");
+  assert.ok(filmed.querySelector('.tag-scene-tick'));
+  assert.equal(filmed.title, filmed.getAttribute('aria-label'));
+  assert.match(filmed.title, /^Beat A\.14 /);
+  assert.equal(filmed.dataset.action, "jump-row");
 });
