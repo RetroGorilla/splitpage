@@ -76,7 +76,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
     if (!v) return "";
     const protocol = testHooks.protocol || location.protocol;
     if ((v as { host?: unknown }).host === "youtube" && (protocol === "file:" || protocol === "data:")) {
-      return "YouTube wonâ€™t play in a copy of Splitpage opened from a file.";
+      return "YouTube won’t play in a copy of Splitpage opened from a file.";
     }
     return "";
   }

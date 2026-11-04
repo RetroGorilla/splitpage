@@ -313,6 +313,13 @@ function startPlaying() {
   if (player) { try { player.focus({ preventScroll: true }); } catch (e) { } }
 }
 
+function hasThumbnail(rowId: string, key: string) {
+  const got = rowOf(rowId);
+  return !!got && rowSlots(got.row).some(function (s) {
+    return !!s.ref && s.links.some(function (l) { return !!l.poster && videoLinkKey(l) === key; });
+  });
+}
+
 function retryThumbnail() {
   const rowId = (view as GalleryView).rowId;
   const slot = rowSlots((rowOf(rowId) as { row: unknown; index: number; }).row)[(view as GalleryView).sel];
@@ -329,7 +336,7 @@ function retryThumbnail() {
       return;
     }
     const done = rec && rowOf(rowId) && (ports as OverlayPortUse).cells.editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
-    if (!done) (ports as OverlayPortUse).notices.show("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
+    if (!done && !hasThumbnail(rowId, key)) (ports as OverlayPortUse).notices.show("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
     if (view && (view as GalleryView).rowId === rowId) refreshGalleryOverlay();
   });
 }

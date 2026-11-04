@@ -2,6 +2,8 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../../src/core/migrate.ts";
+import { setVideoThumbnail, videoLinkKey } from "../../../src/core/document/gallery.ts";
+import type { ImageRef } from "../../../src/core/document/ports.ts";
 import type { GalleryOverlayPorts } from "../../../src/features/gallery/ports.ts";
 import { startGalleryOverlay as mountOverlay, closeGalleryOverlay, openGalleryOverlay } from "../../../src/features/gallery/overlay.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -82,4 +84,57 @@ test("gallery overlay: dispose removes its listeners and its preference subscrip
   assert.equal(changes.listenerCount(), 0);
   document.querySelector<HTMLElement>('#gallery-modal [data-gact="add"]')?.click();
   assert.deepEqual(picked, []);
+});
+
+const YOUTUBE = "https://www.youtube.com/watch?v=aaaaaaaaaaa";
+const PICTURE: ImageRef = { sha256: "a".repeat(64), mime: "image/jpeg", width: 480, height: 270 };
+
+function retrySetup(fetchThumbnail: (href: string) => Promise<ImageRef | null>) {
+  document.body.innerHTML = MODAL;
+  const doc = migrateRows({ title: "Gallery", rows: [{ id: "r1", visualText: "", audioText: "", imageLinks: [{ href: YOUTUBE, poster: true }] }] }, fakeMigration().ports);
+  const notes = fakeNotices();
+  const ports: GalleryOverlayPorts = {
+    document: fakeDocument(doc).document,
+    notices: notes.notices,
+    ownership: fakeOwnership().ownership,
+    cells: { editGallery: (rowId, _label, edit) => { const row = doc.rows.find((r) => r.id === rowId); return !!row && !!edit(row); } },
+    undo: { breakCoalescing: () => {}, last: () => null, undo: () => {} },
+    actions: fakeActions().actions,
+    changes: fakePreferenceChanges().changes,
+    pickPicture: () => {},
+    render: { slotPictureHtml: () => "", badgeHtml: () => "" },
+    video: { embedRefusal: () => "", playerSrc: () => null, thumbnailsAllowed: () => true, fetchThumbnail, hostLabel: () => "YouTube" },
+    sessionVideos: { has: () => false, url: () => null },
+    desktop: () => false
+  };
+  return { owner: mountOverlay(ports), doc, shown: notes.shown };
+}
+
+function settle(): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, 0); });
+}
+
+test("gallery overlay: Retry thumbnail says nothing wrong when an automatic fetch added the thumbnail while it ran", async () => {
+  let release: ((rec: ImageRef | null) => void) | null = null;
+  const { owner, doc, shown } = retrySetup(() => new Promise((resolve) => { release = resolve; }));
+  openGalleryOverlay("r1", 0, false);
+  press("retry-thumb");
+  const key = videoLinkKey({ href: YOUTUBE, poster: true });
+  assert.equal(doc.rows[0] && setVideoThumbnail(doc.rows[0], key, PICTURE), true);
+  (release as ((rec: ImageRef | null) => void) | null)?.(PICTURE);
+  await settle();
+  assert.deepEqual(shown, []);
+  closeGalleryOverlay();
+  owner.dispose();
+});
+
+test("gallery overlay: Retry thumbnail still says it could not get one when none arrived", async () => {
+  const { owner, shown } = retrySetup(() => Promise.resolve(null));
+  openGalleryOverlay("r1", 0, false);
+  press("retry-thumb");
+  await settle();
+  assert.equal(shown.length, 1);
+  assert.match(shown[0]?.message ?? "", /Could not get this video/);
+  closeGalleryOverlay();
+  owner.dispose();
 });
