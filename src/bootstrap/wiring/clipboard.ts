@@ -4,6 +4,7 @@ import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts"
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { text as portText } from "./ports/text.ts";
 import { notices as portNotices } from "./ports/effects.ts";
+import { screen as portScreen } from "./ports/screen.ts";
 import { brollSeedOf, recordPastedBroll } from "../../application/production/broll-records.ts";
 import { startCellClipboard as mountCellClipboard } from "../../features/clipboard/cell-clipboard.ts";
 import type { CellClipboardPorts, CopyPasteMount, BeatClipPorts, BeatSelectPorts } from "../../features/clipboard/ports.ts";
@@ -66,7 +67,8 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       stampRow,
       writerOpen: () => viewFlags().writerOpen(),
       startNewScript,
-      nonce
+      nonce,
+      screen: portScreen
     };
     const cells = mountCellClipboard(cellPorts);
     const beats = mountBeatClip(clipPorts);

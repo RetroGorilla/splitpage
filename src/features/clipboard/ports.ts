@@ -5,6 +5,7 @@ import type { RowDrag } from "../../application/editing/row-drag.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
+import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DeepReadonly } from "../../application/session/document-session.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
@@ -59,6 +60,7 @@ export interface BeatSelectPorts {
   readonly writerOpen: () => boolean;
   readonly startNewScript: () => boolean;
   readonly nonce: () => string;
+  readonly screen: () => ScreenState;
 }
 
 export interface CopyPasteMount {
