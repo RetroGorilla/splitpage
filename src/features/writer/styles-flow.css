@@ -1,0 +1,14 @@
+  #writer-doc.is-flow { --wr-faint: var(--text-faint); outline: none; font-size: var(--wr-font); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #writer-doc.is-flow .wr-heading { font-size: 1.25em; font-weight: 600; line-height: 1.3; margin: 1.5em 0 .55em; }
+  #writer-doc.is-flow .wr-heading:first-child { margin-top: 0; }
+  #writer-doc.is-flow .wr-par { margin: 0 0 .95em; }
+  #writer-doc.is-flow .wr-beat { border-radius: 2px; padding: .05em 0; }
+  #writer-doc.is-flow .wr-beat + .wr-beat:not(.no-gap) { margin-left: .28em; }
+  #writer-doc.is-flow .wr-beat.is-current { background: var(--surface-2); }
+  #writer-doc.is-flow .is-pending-heading { font-size: 1.25em; font-weight: 600; line-height: 1.3; }
+  #writer-doc.is-flow .wr-beat.is-blank::before { content: "Write what gets said…"; color: var(--wr-faint); font-style: italic; opacity: .75; }
+  #writer-doc.is-flow .wr-par .wr-beat.is-blank:not(:first-child)::before { content: "empty beat"; font-size: .75em; padding: 0 .3em; border: 1px dashed var(--border); border-radius: 4px; }
+  #writer-doc.is-flow .wr-beat:not(.is-visual-only):not(.is-blank)::before { content: attr(data-num); font-size: .55em; line-height: 1; color: var(--wr-faint); vertical-align: .6em; margin-right: .3em; }
+  #writer-doc.is-flow .wr-beat.is-visual-only::before { content: attr(data-num) "  ▣ " attr(data-visual); white-space: pre; color: var(--text-dim); font-size: .78em; line-height: 1.5; }
+  #writer-doc.is-flow .wr-beat.is-visual-only { padding: .08em .5em; margin: 0 .25em; background: var(--surface-2); border-radius: 5px; }
+  #writer-doc.is-flow .wr-beat.is-filmed:not(.is-visual-only):not(.is-blank)::before { color: var(--accent); }

@@ -2,15 +2,16 @@ import {
   backspaceAt, beatPos, caretAt, comparePos, deleteForwardAt, enterAt, enterInHeading, finalizeHeading, flowOf, headingPos, inlineMarkdown,
   isCollapsed, isPendingHeading, joinWithPrevious, lineBreakAt, logicalText, orderedRange, pasteText, renameHeading, replaceRange,
   setMarkAcross, selectionToOwnBeat, startBeat, startParagraph, stepFrom, typeWithMarks, withinOneBeat
-} from "../../src/core/flow/flow.ts";
-import type { FlowDoc, FlowEdit, FlowOutcome, FlowPorts, FlowPos, FlowRange, FlowRow } from "../../src/core/flow/flow.ts";
-import { typingMarks } from "../../src/core/text/edits.ts";
-import { toHtml } from "../../src/core/text/html.ts";
-import { cellLength, projection } from "../../src/core/text/runs.ts";
-import type { MarkName, Marks, Run } from "../../src/core/text/runs.ts";
-import { domToPos, posToDom } from "../../src/features/common/cell-dom.ts";
+} from "../../core/flow/flow.ts";
+import type { FlowDoc, FlowEdit, FlowOutcome, FlowPorts, FlowPos, FlowRange, FlowRow } from "../../core/flow/flow.ts";
+import { typingMarks } from "../../core/text/edits.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { cellLength, projection } from "../../core/text/runs.ts";
+import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
+import { domToPos, posToDom } from "../common/cell-dom.ts";
 
-const ZWSP = "​";
+const ZWSP = String.fromCharCode(0x200B);
+const ZWSP_ALL = new RegExp(ZWSP, "g");
 
 export interface SurfacePorts {
   readonly root: HTMLElement;
@@ -39,6 +40,8 @@ export interface SurfaceSettings {
 
 export interface Surface {
   readonly paint: () => void;
+  readonly repaint: () => void;
+  readonly focusBack: () => void;
   readonly selection: () => FlowRange | null;
   readonly place: (range: FlowRange, scroll?: boolean) => void;
   readonly format: (mark: MarkName) => void;
@@ -63,6 +66,12 @@ function elementOf(node: Node | null): HTMLElement | null {
   return isElement(node) ? node : node.parentElement;
 }
 
+function withMark(marks: Marks, mark: MarkName, on: boolean): Marks {
+  const kept = Object.entries(marks).filter(([name]) => name !== mark);
+  if (on) kept.push([mark, true]);
+  return Object.fromEntries(kept) as Marks;
+}
+
 function beatHtml(runs: readonly Run[]): string {
   const html = toHtml(runs);
   if (!html) return ZWSP;
@@ -79,6 +88,8 @@ export function createSurface(ports: SurfacePorts): Surface {
   let pendingHeading: string | null = null;
   let lastBeat: string | null = null;
   let painting = false;
+  let held: FlowRange | null = null;
+  let repaintOwed = false;
 
   function cellOf(row: FlowRow): readonly Run[] { return ports.flow.cells(row.audioText); }
 
@@ -93,7 +104,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   function textBefore(el: HTMLElement): string | null {
     let found: string | null = null;
     for (let prev = el.previousElementSibling; prev; prev = prev.previousElementSibling) {
-      found = (prev.textContent || "").replace(/​/g, "");
+      found = (prev.textContent || "").replace(ZWSP_ALL, "");
       if (found) return found;
     }
     return found;
@@ -309,6 +320,25 @@ export function createSurface(ports: SurfacePorts): Surface {
     }
   }
 
+  // why: the app paints from outside on undo, reloads and merges; a beat whose text changed gets a new DOM, so the
+  // selection is carried across by model position. Composing text must never be repainted, so that waits.
+  function repaint(): void {
+    if (composing) { repaintOwed = true; return; }
+    const before = selection();
+    paint();
+    if (!before || document.activeElement !== root) return;
+    const now = selection();
+    const doc = ports.doc();
+    if (!now || comparePos(doc, now.anchor, before.anchor) !== 0 || comparePos(doc, now.head, before.head) !== 0) place(before);
+  }
+
+  function focusBack(): void {
+    const first = ports.doc().rows[0];
+    const target = held ?? (first ? caretAt(beatPos(first.id, 0)) : null);
+    if (target) place(target, true);
+    else root.focus({ preventScroll: true });
+  }
+
   function apply(name: string, outcome: FlowOutcome, before: FlowRange | null): void {
     if (!outcome) return;
     if ("refused" in outcome) { ports.notice(outcome.refused); return; }
@@ -326,7 +356,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     root.querySelectorAll<HTMLElement>(":scope > .wr-par").forEach(function (par) {
       Array.from(par.childNodes).forEach(function (child) {
         if (isElement(child) && child.classList.contains("wr-beat")) return;
-        const text = (child.textContent || "").replace(/​/g, "");
+        const text = (child.textContent || "").replace(ZWSP_ALL, "");
         found = true;
         if (text) {
           const previous = child.previousSibling;
@@ -342,7 +372,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     });
     Array.from(root.childNodes).forEach(function (child) {
       if (isElement(child) && (child.classList.contains("wr-par") || child.classList.contains("wr-heading"))) return;
-      const text = (child.textContent || "").replace(/​/g, "");
+      const text = (child.textContent || "").replace(ZWSP_ALL, "");
       found = true;
       if (text) {
         const previous = child.previousSibling;
@@ -364,7 +394,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   function syncBeatEl(el: HTMLElement): void {
     const rowId = el.getAttribute("data-id");
     if (!rowId) return;
-    const stored = ports.storedHtml(el.innerHTML.replace(/​/g, ""));
+    const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
     const runs = ports.decode(stored);
     ports.syncBeat(rowId, runs);
     rendered.set(el, beatHtml(runs));
@@ -405,9 +435,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     const rows = doc.rows.map(item => item.id === row.id ? { ...item, audioText: toHtml(made.cell) } : item);
     ports.breakCoalescing();
     apply("inline-markdown", { rows, sections: doc.sections as FlowEdit["sections"], removedComments: [], selection: caretAt(beatPos(row.id, made.caret)) }, range);
-    const marks: Record<string, unknown> = { ...typingMarks(made.cell, made.caret) };
-    delete marks[made.mark];
-    pending = { pos: beatPos(row.id, made.caret), marks: marks as Marks };
+    pending = { pos: beatPos(row.id, made.caret), marks: withMark(typingMarks(made.cell, made.caret), made.mark, false) };
   }
 
   function onInput(event: Event): void {
@@ -423,7 +451,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       if (input.inputType === "insertText" && input.data && /[*~]$/.test(input.data)) maybeInlineMarkdown();
     } else if (heading) {
       const id = heading.getAttribute("data-scene") as string;
-      const name = (heading.textContent || "").replace(/​/g, "");
+      const name = (heading.textContent || "").replace(ZWSP_ALL, "");
       const pos = selection()?.head ?? headingPos(id, name.length);
       if (name) {
         apply("rename-scene", renameHeading(ports.doc(), id, name, pos.offset), null);
@@ -631,10 +659,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       const row = currentBeatRow(range);
       if (!row) return;
       const base = pending && comparePos(ports.doc(), pending.pos, range.head) === 0 ? pending.marks : typingMarks(cellOf(row), range.head.offset);
-      const marks: Record<string, unknown> = { ...base };
-      if (marks[mark]) delete marks[mark];
-      else marks[mark] = true;
-      pending = { pos: range.head, marks: marks as Marks };
+      pending = { pos: range.head, marks: withMark(base, mark, !base[mark]) };
       ports.selectionMoved(range);
       return;
     }
@@ -724,6 +749,7 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function noteSelection(): void {
     const range = selection();
+    if (range) held = range;
     const head = range?.head;
     const currentBeat = head && head.kind === "beat" ? head.rowId : null;
     if (lastBeat !== currentBeat) {
@@ -762,10 +788,11 @@ export function createSurface(ports: SurfacePorts): Surface {
       root.querySelectorAll<HTMLElement>(".wr-beat").forEach(function (el) {
         const row = ports.doc().rows.find(item => item.id === el.getAttribute("data-id"));
         if (!row) return;
-        const stored = ports.storedHtml(el.innerHTML.replace(/​/g, ""));
+        const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
         if (toHtml(ports.decode(stored)) !== toHtml(cellOf(row))) syncBeatEl(el);
       });
       ports.changed();
+      if (repaintOwed) { repaintOwed = false; repaint(); }
     }, 0);
   }
 
@@ -819,14 +846,14 @@ export function createSurface(ports: SurfacePorts): Surface {
     ports.doc().rows.forEach(function (row) {
       const el = beatEl(row.id);
       if (!el) { problems.push("beat " + row.id + " has no element"); return; }
-      const stored = ports.storedHtml(el.innerHTML.replace(/​/g, ""));
+      const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
       const shown = projection(ports.decode(stored));
       const held = projection(cellOf(row));
       if (shown !== held) problems.push("beat " + row.id + " shows " + JSON.stringify(shown) + " but holds " + JSON.stringify(held));
     });
     root.querySelectorAll(":scope > .wr-par > :not(.wr-beat)").forEach(() => problems.push("stray element in a paragraph"));
     root.querySelectorAll(":scope > .wr-par").forEach(par => {
-      par.childNodes.forEach(node => { if (isText(node) && node.data.replace(/​/g, "")) problems.push("stray text in a paragraph: " + node.data); });
+      par.childNodes.forEach(node => { if (isText(node) && node.data.replace(ZWSP_ALL, "")) problems.push("stray text in a paragraph: " + node.data); });
     });
     return problems;
   }
@@ -848,6 +875,8 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   return {
     paint,
+    repaint,
+    focusBack,
     selection,
     place,
     format,

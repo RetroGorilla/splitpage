@@ -18,6 +18,48 @@ import { sceneView } from "./editor-owners.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { currentRowsRender } from "./render.ts";
 import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.ts";
+import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
+import { createFlowWriter } from "../../features/writer/flow-writer.ts";
+import { caretAfterStep } from "../../features/undo/caret.ts";
+import { exposeTestHook } from "../../features/common/test-hooks.ts";
+import { randomIds } from "../../adapters/identity/ids.ts";
+import { gallerySize } from "../../core/document/gallery.ts";
+import type { FlowDoc, FlowPorts, FlowRow } from "../../core/flow/flow.ts";
+import { projection } from "../../core/text/runs.ts";
+import type { Run } from "../../core/text/runs.ts";
+import { paintGuard } from "./editor-owners.ts";
+import { undoOwner } from "./undo.ts";
+
+const MEDIA_CELL = Object.freeze({ media: true });
+const flowCells = new Map<string, Run[]>();
+
+// why: screen positions count pictures and video cards, so this reader keeps them; a paint asks once per beat
+function flowCell(html: string | null | undefined): Run[] {
+  const source = html ?? "";
+  const hit = flowCells.get(source);
+  if (hit) return hit;
+  const made = text.fromHtml(source, MEDIA_CELL);
+  if (flowCells.size > 20000) flowCells.clear();
+  flowCells.set(source, made);
+  return made;
+}
+
+function plainVisual(row: FlowRow): string {
+  const words = projection(flowCell(row.visualText)).replace(/\s+/g, " ").trim();
+  if (words) return words.length > 70 ? words.slice(0, 69) + "…" : words;
+  return gallerySize(row) ? "Picture" : "";
+}
+
+const flowPorts: FlowPorts = {
+  cells: flowCell,
+  newId: () => randomIds.id("r"),
+  hasVisual: row => !!projection(flowCell(row.visualText)) || !!gallerySize(row)
+};
+
+// why: a switch for this branch only, so the old writer's suites keep running until the new writer replaces it
+function writerFlowOn(): boolean {
+  try { return window.localStorage.getItem("splitpage-writer-flow") === "1"; } catch { return false; }
+}
 
 const writer = owned<ReturnType<typeof startWriter>>();
 const connections = new Set<(control: ReturnType<typeof startWriter> | null) => void>();
@@ -36,6 +78,33 @@ export function mountWriterRuntimeFeature() {
     const render = currentRowsRender();
     if (!render) throw new Error("Writer needs the row renderer to be mounted");
     const ports: WriterFeaturePorts = {
+      flow: {
+        enabled: writerFlowOn,
+        create: (root, selectionMoved, undoStep) => createFlowWriter({
+          root,
+          doc: () => documentReader.current() as unknown as FlowDoc,
+          flow: flowPorts,
+          decode: flowCell,
+          storedHtml: text.storedHtmlFromDom,
+          run: edits.run,
+          shown: edit => paintGuard().whileShown(edit),
+          text: edits.text,
+          undo: {
+            step: undoStep,
+            flush: () => { undoOwner().flush(); },
+            breakCoalescing: () => { undoOwner().breakCoalescing(); },
+            last: () => undoOwner().last(),
+            nextRedo: () => undoOwner().nextRedo()
+          },
+          caretAfterStep: step => caretAfterStep(html => flowCell(html as string | null | undefined), step),
+          notice: (message, tone) => { notices.show(message, tone); },
+          changed: () => { ["production", "broll", "writerStats"].forEach(job => { scheduleIdleRefresh(job); }); },
+          selectionMoved,
+          plainVisual,
+          newCommentId: () => randomIds.id("c"),
+          openComment: at => { actions.invoke("comment-on-selection", "button", at); }
+        })
+      },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,
       rows: { splitField: splitRowFieldCore },
       hiding: { renderGroups: (rows, renderRow) => {
@@ -58,7 +127,17 @@ export function mountWriterRuntimeFeature() {
       cancelStats: () => { refresh.cancel(["writerStats"]); }
     };
     const mounted = startWriter(ports);
+    let withdrawHook: (() => void) | null = null;
+    exposeTestHook("__writerFlowTest", () => ({
+      on: () => !!mounted.writerFlowControl(),
+      selection: () => mounted.writerFlowControl()?.selection() ?? null,
+      place: (range: never) => { mounted.writerFlowControl()?.place(range); },
+      check: () => mounted.writerFlowControl()?.check() ?? ["the flow writer isn't open"],
+      fullRender: () => { currentRowsRender()?.render(); },
+      outsideEdit: (rowId: string, words: string) => edits.run(cellTextCommand(rowId, "audioText", cellRuns(flowCell(words)), edits.text))
+    }), (withdraw) => { withdrawHook = withdraw; });
     const control = { ...mounted, dispose: () => {
+      withdrawHook?.();
       if (writer.owner() === control) writer.stop();
       else mounted.dispose();
     } };

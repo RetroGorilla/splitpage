@@ -156,24 +156,41 @@ function typeChar(cell, ch) {
   cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: ch }));
 }
 
-test("typing paints the save buttons once per key and the status line once per paint", () => {
+function countWrites(el, name, noted) {
+  let proto = Object.getPrototypeOf(el);
+  let real = null;
+  while (proto && !real) {
+    real = Object.getOwnPropertyDescriptor(proto, name);
+    proto = Object.getPrototypeOf(proto);
+  }
+  Object.defineProperty(el, name, { configurable: true, get() { return real.get.call(this); }, set(v) { noted(); real.set.call(this, v); } });
+  return () => { delete el[name]; };
+}
+
+test("typing paints the save buttons once per key and the status line once per paint, and rewrites their text only when it changes", () => {
   const target = createHeldFileHandle({ name: "listening.splitpage" });
   open(onFile(target.handle));
   const cell = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
   let labels = 0;
   let lines = 0;
-  const label = Object.getOwnPropertyDescriptor(window.Node.prototype, "textContent");
-  Object.defineProperty(button(), "textContent", { configurable: true, get() { return label.get.call(this); }, set(v) { labels++; label.set.call(this, v); } });
-  Object.defineProperty(status(), "textContent", { configurable: true, get() { return label.get.call(this); }, set(v) { lines++; label.set.call(this, v); } });
+  let labelTexts = 0;
+  let lineTexts = 0;
+  const stops = [
+    countWrites(button(), "disabled", () => { labels++; }),
+    countWrites(status(), "title", () => { lines++; }),
+    countWrites(button(), "textContent", () => { labelTexts++; }),
+    countWrites(status(), "textContent", () => { lineTexts++; })
+  ];
   try {
     for (const ch of "abcde") typeChar(cell, ch);
     flushEdits();
   } finally {
-    delete button().textContent;
-    delete status().textContent;
+    stops.forEach((stop) => { stop(); });
   }
   assert.equal(labels, 5);
   assert.equal(lines, 5);
+  assert.equal(labelTexts, 1);
+  assert.equal(lineTexts, 1);
 });
 
 test("location changes repaint the status line", () => {

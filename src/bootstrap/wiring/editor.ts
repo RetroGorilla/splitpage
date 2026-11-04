@@ -261,6 +261,9 @@ function refreshFormatState(cellEl: Element): void {
   else updateToolbarState(cellEl);
 }
 
+const noWriterReplay = (): boolean => false;
+let writerReplayed: (steps: readonly unknown[]) => boolean = noWriterReplay;
+
 const editorToolbar = owned<ReturnType<typeof mountEditorToolbar>>();
 
 const editorToolbarPorts: EditorToolbarPorts = {
@@ -314,6 +317,8 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
     updateWriterFormatState = control?.updateWriterFormatState ?? inactiveWriter;
     undoRoutePorts.writerStep = control?.writerUndoStep ?? skipWriterUndo;
+    writerReplayed = control?.writerReplayed ?? noWriterReplay;
+    control?.connectFlowUndo((dir) => { undoRoutes.owner()?.step(dir); });
     writerRoutePorts.editKeydown = control?.onWriterKeydown ?? inactiveWriter;
     writerRoutePorts.format = control?.onWriterFormat ?? inactiveWriter;
     writerRoutePorts.gutter = control?.cycleWriterGutter ?? inactiveWriter;
@@ -498,6 +503,7 @@ function afterUndoApplied(steps: readonly unknown[]): void {
   }
   undoGuard().whileApplying(renderProduction);
   undoOwner().settleAfterApply();
+  if (writerReplayed(steps)) return;
   if (cellStep) {
     const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
     const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);

@@ -65,6 +65,8 @@ wait !document.getElementById('comments-panel').hidden
 expect opens.length === 6
 jsclick #comments-panel-close
 wait panelsShut()
+# why: the rows widen for about 100 ms as the panel closes, so a link measured during that isn't under the mouse at mouseup.
+sleep 300
 eval out()
 
 mouse ctrl click audio('r1', 0.9)

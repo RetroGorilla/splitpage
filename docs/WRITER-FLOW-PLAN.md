@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phase 0a's test page is built in `tools/writer-lab/` (section 9) and waiting on Adam's picks. Nothing is in the app yet. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phases 0a and 0b are done and the engine holds up (sections 9 and 10). Adam has picked every setting. The in-app slice sits behind a switch on `feat/writer-flow`, and nothing is on `main` yet. Phase 1 is next. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -282,3 +282,54 @@ The page is `tools/writer-lab/`. `node tools/writer-lab/build.mjs` builds it and
 - Electron's menu routing, app focus and saving, which phase 0b covers. The Electron run used a hidden off-screen window on 44.4.5, not the repo's 44.10.
 
 `src/core/flow/` has no unit tests yet. Phase 1 adds them.
+
+## 10. Phase 0b results
+
+**The engine holds up.** The same surface now runs inside the real app behind a branch-only switch (`localStorage "splitpage-writer-flow" = "1"`), with the old writer untouched when it's off. `node tools/writer-lab/slice.mjs --target electron|edge` drives it with real key events, and it isn't meant to merge.
+
+| Run, on the final code | Result |
+| --- | --- |
+| In-app slice, real Electron 44.10 (Chrome 152) | 25 of 25 |
+| In-app slice, Edge 156 | 19 of 19 |
+| Test page, Edge, Chromium and Electron 44.10 | 88 of 88 each |
+| Unit tests | 5,726 of 5,726, the two PDF checks run alone (their 4 GB free RAM guard trips while the whole set runs) |
+| Browser regression, switch off | 9,948 of 9,952 in the one full run; see below |
+
+The four regression failures:
+
+- `1197-ctrl-click-link` (3): the suite measured a link about 20 ms after closing the comments panel, while the rows were still widening for about 100 ms, so the link had moved by mouseup. It passed on clean `main` and failed on this branch, and why this code tips the timing isn't established: each half of the flow code passes alone, and only both together fail. The suite now waits for the rows to settle, keeps every assertion, and passed 40 of 40 three times in a row. The full browser run wasn't repeated, and no app code changed after it.
+- `219-sound-cues` (1): it fails the same way on a clean build of `main` on this PC, while `main`'s CI is green. The Production panel collapses beat A.2, so "upbeat intro" isn't in the panel's text, though the tag is in the document. It isn't from this work and is still open.
+
+**What 0b checked:** undo replay and selection, real full renders and outside edits, toolbar clicks, focus to the title and back, comment Post and Cancel, close and Esc, Edit menu Undo and Redo through the real application menu, and Save As and plain Save to disk. The words, the flags and the paragraphs round-trip, and no zero-width space reaches the file.
+
+**Found and fixed along the way, none of it specific to the new writer:**
+
+- **Typing restyled the whole page on every key.** The save indicators replaced their text nodes on each key, even with no change. With `body:has(...)` rules on the page, each replacement made Chromium re-check `:has()` from `<body>`, and `.ev-field:has(> .ev-chevron) > button` then put every button in the page in the restyle: 4,753 elements on a 900-beat script. The indicators now write only changed text, and that rule names its one real button. Measured with `--profile` on the flow writer: main-thread time per key fell from 89 ms to 9.7 ms, and style from 76 ms to 3 ms.
+- **Edit > Undo and Redo were often dead.** Those menu roles run Chromium's own command, which does nothing while its stack is empty, and script edits never go on that stack. Redo was already dead in today's split view. The items now send the same keys as the keyboard, so they reach every existing route, text boxes included.
+- **Enter redrew the rows and panels behind the writer.** Flow commands now run under the paint guard, as typing does. The rows redraw when the writer closes.
+
+Timing on the 900-beat, sectionless script, one run each:
+
+| | Edge typing p50 / p95 / max | Edge Enter | Edge Undo | Electron Enter | Electron Undo |
+| --- | --- | --- | --- | --- | --- |
+| Flow, before | 58.5 / 76.7 / 85.3 ms | 489 ms | 384 ms | 537 ms | 331 ms |
+| Flow, now | 10.8 / 24.8 / 46.4 ms | 77 ms | 269 ms | 109 ms | 208 ms |
+| Old writer, before | 42.4 / 66.1 / 70.7 ms | 16 ms | 351 ms | 25 ms | 321 ms |
+| Old writer, now | 3.8 / 20.9 / 46.2 ms | 12 ms | 233 ms | 54 ms | 247 ms |
+
+Electron's typing figure isn't in the table because it isn't useful. It sits near 62 ms on the 6-beat and the 900-beat script alike, in both writers, with the page idle for most of it, so it looks like a measuring floor in the off-screen window, though its cause isn't known. Electron's cost per key is the 9.7 ms task time above. Enter in flow mode is still slower than in the old writer: 77 ms against 12 in Edge, and 109 against 54 in Electron, where flow Enter ranged from 70 to 141 ms across runs. In Edge, script length still shows a little: typing p50 goes from 6.3 ms on 6 beats to 10.8 on 900 in the flow writer, and from 1.1 to 3.8 in the old one.
+
+**Not yet shown:**
+
+- A gap of about one second appeared on a single key in some Electron runs, always about 1,000 to 1,090 ms, in both writers. The page had no long task and the main process was nearly idle (44 ms of fsync) during it. Timers weren't throttled and the window was visible, which ruled out my first guess. Its cause is unknown, and it needs watching with real keys on a real screen.
+- Spellcheck on the real page, right-click suggestions, real Ctrl+C and Ctrl+V, and a real IME, as in section 9.
+- Real keyboard Ctrl+Z against the menu in Electron. CDP keys may not pass through accelerators, though the new items have `registerAccelerator: false`, as Find does.
+- The full Electron smoke (`desktop/test/smoke.mjs`) on the menu change. It opens windows on screen, so it's left to CI on the PR. The desktop unit set ran locally.
+- `tools/perf-ab.mjs`, which AGENTS.md requires for typing changes. It runs on the PR that carries the typing fixes.
+- A real script in Adam's hands.
+
+**Deliberately outside the slice:** the sentence rule on first open, Find, tags and direction shortcuts, the tag ghost, the comments panel beside the writer and its jumps, whole-beat clipboard, and the viewing-only guard. A script with no flags opens as one paragraph per scene until the sentence rule lands.
+
+**Noted for later:** each idle refresh re-adds all 900 rundown buttons, even with the writer covering them, and the `body:has(...)` rules still cost a style pass of about 40 ms each time. Neither runs per key.
+
+The first `tests/core/flow/` file covers the rules Adam picked. Fuzz, merge and differential tests are phase 1.

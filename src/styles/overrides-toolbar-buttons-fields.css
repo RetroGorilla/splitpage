@@ -71,7 +71,7 @@ input.ev-field:focus-visible, textarea.ev-field:focus-visible { outline: 2px sol
   outline: none;
 }
 .ev-field > select option { background: var(--surface); color: var(--text); }
-.ev-field:has(> .ev-chevron) > select, .ev-field:has(> .ev-chevron) > button { padding-right: 26px; }
+.ev-field:has(> .ev-chevron) > select, .broll-loc-field > .broll-picker { padding-right: 26px; }
 .jump-link {
   display: inline-flex; align-items: center; gap: var(--space-6);
   padding: 0; border: 0; background: none;

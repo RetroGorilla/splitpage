@@ -3,7 +3,8 @@ import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
-import type { Undo } from "../../application/editing/undo/undo.ts";
+import type { Undo, UndoDirection } from "../../application/editing/undo/undo.ts";
+import type { FlowWriter } from "./flow-writer.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
@@ -14,7 +15,13 @@ import type { TextServices } from "../../application/text/services.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { ShotRow } from "../../application/shot-hiding.ts";
 
+export interface FlowWriterMaker {
+  readonly enabled: () => boolean;
+  readonly create: (root: HTMLElement, selectionMoved: () => void, undoStep: (dir: UndoDirection) => void) => FlowWriter;
+}
+
 export interface WriterFeaturePorts {
+  readonly flow?: FlowWriterMaker;
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "allowed" | "run" | "text">;
   readonly text: Pick<TextServices, "sanitizeHtml" | "storedHtmlFromDom" | "productionReaders" | "htmlToPlainText">;

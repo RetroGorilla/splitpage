@@ -589,7 +589,7 @@ for (const edit of EDITS) {
 test("a stale screen makes the script, the titles and the editing controls inert and moves the focus from the script to Redraw, which keeps it until a Redraw draws and then gives it back (#443)", async () => {
   await staleScreen(() => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3, 7); });
   const parts = inertParts();
-  assert.equal(parts.length, STALE_PARTS.length + 4, "every part is on the page: " + JSON.stringify(parts));
+  assert.equal(parts.length, STALE_PARTS.length + 5, "every part is on the page: " + JSON.stringify(parts));
   assert.deepEqual(parts.filter((p) => !p[1]), [], "every part is inert");
   assert.deepEqual(dimmedParts().filter((p) => !p[1]), [], "every part is dimmed");
   const toast = redrawToasts()[0];

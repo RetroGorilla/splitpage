@@ -10,7 +10,9 @@ import { placeCaretAtTextOffset } from "../common/caret.ts";
 import { gallerySize } from "../../core/document/gallery.ts";
 import { escapeHtml, truncateForPreview } from "../../core/document/text-policy.ts";
 
-import type { WriterFeaturePorts } from "./ports.ts";
+import type { FlowWriterMaker, WriterFeaturePorts } from "./ports.ts";
+import type { FlowWriter } from "./flow-writer.ts";
+import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 
 type WriterDocument = Pick<DocumentView, "title" | "rows">;
@@ -59,6 +61,9 @@ let toggleCellFormat: WriterFeaturePorts["formatting"]["toggle"] | null;
 let hideTagGhost: WriterFeaturePorts["dismissTagGhost"] | null;
 let scheduleIdleRefresh: WriterFeaturePorts["scheduleStats"] | null;
 let activeWriter: object | null = null;
+let flowMaker: FlowWriterMaker | null = null;
+let flowWriter: FlowWriter | null = null;
+let flowUndoStep: ((dir: UndoDirection) => void) | null = null;
 
 let writerGutterMode = "visuals";
 let writerUndoMark = 0;
@@ -99,12 +104,21 @@ export function drawWriter() {
   return {
     title: doc.title || "",
     readOnly: !(editAllowed as WriterFeaturePorts["edits"]["allowed"])(),
-    html: doc.rows.length ? (renderRowGroups as WriterFeaturePorts["hiding"]["renderGroups"])(doc.rows, writerBlockHtml) : null
+    html: flowWriter ? "" : doc.rows.length ? (renderRowGroups as WriterFeaturePorts["hiding"]["renderGroups"])(doc.rows, writerBlockHtml) : null
   };
 }
 
 export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
   const doc = (document.getElementById("writer-doc") as HTMLElement);
+  if (flowWriter) {
+    const title = (document.getElementById("writer-title") as HTMLInputElement);
+    if (document.activeElement !== title) title.value = draw.title;
+    title.readOnly = draw.readOnly;
+    doc.setAttribute("contenteditable", draw.readOnly ? "false" : "true");
+    flowWriter.repaint();
+    updateWriterStats();
+    return;
+  }
   const active = document.activeElement;
   const caret = (viewFlags as WriterFeaturePorts["view"])().writerOpen() && active && active.classList && active.classList.contains("wr-para") && doc.contains(active)
     ? rememberCellSelection((editorSelection as WriterFeaturePorts["editing"]["selection"])(), active) : null;
@@ -145,6 +159,7 @@ export function scheduleWriterStats() {
 }
 
 function focusWriterBlock(rowId: string, offset?: number | "end") {
+  if (flowWriter) { flowWriter.caret(rowId, offset ?? 0); return; }
   const el = document.querySelector<HTMLElement>('#writer-doc .wr-para[data-id="' + cssAttr(rowId) + '"]');
   if (!el) return;
   el.focus();
@@ -235,6 +250,13 @@ export function onWriterKeydown(e: KeyboardEvent) {
 }
 
 export function onWriterFormat(btn: Element) {
+  if (flowWriter) {
+    const command = btn.getAttribute("data-cmd") ?? "";
+    if (command === "comment") flowWriter.comment();
+    else flowWriter.format(command);
+    updateWriterFormatState();
+    return;
+  }
   const cellEl = (focusMemory as WriterFeaturePorts["editing"]["focus"])().writerParagraph();
   if (!cellEl || !cellEl.isConnected) return;
   const cmd = btn.getAttribute("data-cmd");
@@ -247,7 +269,7 @@ export function onWriterFormat(btn: Element) {
 export function updateWriterFormatState() {
   const paragraph = (viewFlags as WriterFeaturePorts["view"])().writerOpen() ? (focusMemory as WriterFeaturePorts["editing"]["focus"])().writerParagraph() : null;
   const live = paragraph && paragraph.isConnected;
-  const model = live ? (cellFormatState as WriterFeaturePorts["formatting"]["state"])(paragraph) : null;
+  const model = flowWriter ? flowWriter.marks() : live ? (cellFormatState as WriterFeaturePorts["formatting"]["state"])(paragraph) : null;
   ["bold", "italic", "underline", "direction"].forEach(function (cmd) {
     const btn = document.querySelector<HTMLElement>('.writer-bar .wr-fmt[data-cmd="' + cmd + '"]');
     if (btn) btn.classList.toggle("is-active", !!(model && (model as Record<string, unknown>)[cmd]));
@@ -303,6 +325,7 @@ export function openWriter(keepMark?: number | null) {
   el.inert = false;
   el.hidden = false;
   (viewFlags as WriterFeaturePorts["view"])().setWriterOpen(true);
+  attachFlowWriter();
   renderWriter();
   (document.getElementById("writer-scroll") as HTMLElement).scrollTop = 0;
 
@@ -316,9 +339,47 @@ export function openWriter(keepMark?: number | null) {
   updateWriterFormatState();
 }
 
+function attachFlowWriter() {
+  if (!flowMaker || flowWriter || !flowMaker.enabled()) return;
+  const root = (document.getElementById("writer-doc") as HTMLElement);
+  root.textContent = "";
+  root.classList.add("is-flow");
+  root.setAttribute("spellcheck", "true");
+  root.setAttribute("tabindex", "0");
+  (document.querySelector('.writer-bar .wr-fmt[data-cmd="comment"]') as HTMLElement).hidden = false;
+  flowWriter = flowMaker.create(root, updateWriterFormatState, (dir) => { flowUndoStep?.(dir); });
+}
+
+function detachFlowWriter() {
+  if (!flowWriter) return;
+  flowWriter.dispose();
+  flowWriter = null;
+  const root = (document.getElementById("writer-doc") as HTMLElement);
+  root.classList.remove("is-flow");
+  root.removeAttribute("contenteditable");
+  root.removeAttribute("spellcheck");
+  root.removeAttribute("tabindex");
+  root.textContent = "";
+}
+
+export function connectFlowUndo(step: ((dir: UndoDirection) => void) | null) {
+  flowUndoStep = step;
+}
+
+export function writerReplayed(steps: readonly unknown[]) {
+  if (!flowWriter || !(viewFlags as WriterFeaturePorts["view"])().writerOpen()) return false;
+  flowWriter.afterReplay(steps);
+  return true;
+}
+
+export function writerFlowControl() {
+  return flowWriter;
+}
+
 export function closeWriter() {
   const el = (document.getElementById("writer") as HTMLElement);
   if (el.hidden) return;
+  detachFlowWriter();
   const active = document.activeElement;
   if (active && active.classList && active.classList.contains("wr-para")) {
     const clean = (sanitizeHtml as WriterFeaturePorts["text"]["sanitizeHtml"])(active.innerHTML);
@@ -335,6 +396,7 @@ export function closeWriter() {
 
 export function writerUndoStep(dir: string) {
   if ((viewFlags as WriterFeaturePorts["view"])().writerOpen()) {
+    flowWriter?.beforeReplay(dir as UndoDirection);
     if (dir === "redo") {
       const next = (nextRedoEntry as WriterFeaturePorts["undo"]["nextRedo"])();
       return !next || next.n <= writerUndoMark;
@@ -405,6 +467,7 @@ function guardWriterEdit(e: Event) {
 }
 
 export function startWriter(given: WriterFeaturePorts) {
+  flowMaker = given.flow ?? null;
   numbering = given.document.numbering;
   currentDocument = given.document.current;
   readSession = given.document.read;
@@ -446,6 +509,7 @@ export function startWriter(given: WriterFeaturePorts) {
     renderWriter, drawWriter, paintWriterDraw, updateWriterStats, scheduleWriterStats,
     onWriterKeydown, onWriterFormat, updateWriterFormatState, readWriterSize, applyWriterSize,
     cycleWriterGutter, openWriter, closeWriter, writerUndoStep, jumpFromWriterToRow,
+    connectFlowUndo, writerReplayed, writerFlowControl,
     dispose: function () {
       if (disposed) return;
       disposed = true;
@@ -453,6 +517,9 @@ export function startWriter(given: WriterFeaturePorts) {
       activeWriter = null;
       GUARDED_EVENTS.forEach(function (type) { root.removeEventListener(type, guardWriterEdit, true); });
       closeWriter();
+      detachFlowWriter();
+      flowMaker = null;
+      flowUndoStep = null;
       given.cancelStats();
       writerGutterMode = "visuals";
       writerUndoMark = 0;
