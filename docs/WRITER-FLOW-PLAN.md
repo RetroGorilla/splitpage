@@ -47,7 +47,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 ### What you see
 
 - A clean centred column of narration. Filmed beats and folded scenes always show in full, whatever their split-view setting.
-- A small number marks each boundary, Adam's pick on the test page, and a filmed beat's number is coloured. The beat holding the caret gets a very light tint. Its visual shows as a quiet note beside the line, and clicking the note opens the floating box. The Visuals, Numbers and Compact margin button goes away.
+- A small number marks every beat, including a paragraph's first and a visual chip, Adam's pick on the test page, and a filmed beat's number is coloured. The beat holding the caret gets a very light tint. Its visual shows as a quiet note beside the line, and clicking the note opens the floating box. The Visuals, Numbers and Compact margin button goes away.
 - A beat with a visual and no narration shows as a chip in the text, Adam's pick on the test page, like `▣ Drone over the harbour · 0:04`, with the time only if one is set. It shows the writer there's a small break for a visual without being a paragraph break. Typing on it adds narration and makes it a normal beat.
 - A beat with neither narration nor a visual shows a small placeholder. Once such a beat starts a paragraph, Enter on it does nothing, so repeated Enter cannot fill the script with blank beats.
 - `((direction))` stays inline. `SFX:` and `Music:` cues stay on their own line and do not start a paragraph or beat.
@@ -94,7 +94,7 @@ Narration export following the writer's paragraphs, bullets and the Outline view
 
 ### To judge on the test page
 
-The Backspace rules, and whether a paragraph's first beat gets a number. Already picked: the sentence rule for existing scripts, the chip for a visual with no narration, numbers for ticks, typing going where the caret is, and Enter for a new beat with a second Enter for a paragraph.
+All picked: the sentence rule for existing scripts, the chip for a visual with no narration, a number on every beat, typing going where the caret is, Enter for a new beat with a second Enter for a paragraph, and Backspace at a tick deleting a character while Alt+Backspace joins.
 
 ## 3. How it fits the code today
 
@@ -278,7 +278,7 @@ The page is `tools/writer-lab/`. `node tools/writer-lab/build.mjs` builds it and
 - Choosing a spellcheck suggestion from the right-click menu. The check selects a word and inserts text instead.
 - Real Ctrl+C and Ctrl+V. The checks fire clipboard events directly, so they don't touch the PC's clipboard.
 - A real IME. The checks use simulated composition events.
-- Typing time with spellcheck actually running. Since the planted typo was never underlined, no run shows that case. Typing in a 900-beat paragraph took about one frame in the last Chromium and Electron runs (median 15 to 19 ms by run position, worst 51 ms). The last two Edge runs measured 62 to 69 ms of page work per key and 1,016 ms per frame, on the long script only. Those one-second frames also appeared in earlier Edge runs, so they look like headless pacing, but that isn't proven.
+- Typing time with spellcheck actually running. Since the planted typo was never underlined, no run shows that case. Typing in a 900-beat paragraph took about one frame in the final Chromium and Electron runs (median 15 to 18 ms by position in the script, worst 34 ms). The final Edge run measured 64 to 70 ms of page work per key and about 1,016 ms per frame, on the long script only. Those one-second frames also appeared in earlier Edge runs, so they look like headless pacing, but that isn't proven.
 - Electron's menu routing, app focus and saving, which phase 0b covers. The Electron run used a hidden off-screen window on 44.4.5, not the repo's 44.10.
 
 `src/core/flow/` has no unit tests yet. Phase 1 adds them.

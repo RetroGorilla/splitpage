@@ -657,7 +657,7 @@ async function run() {
       await key("ArrowRight");
       same((await sel()).head, beat("rb", 0), tick + " caret");
     }
-    await ev(`document.querySelector('[data-setting="tickStyle"]').value = "line"; document.querySelector('[data-setting="tickStyle"]').dispatchEvent(new Event("change"))`);
+    await ev(`document.querySelector('[data-setting="tickStyle"]').value = "number"; document.querySelector('[data-setting="tickStyle"]').dispatchEvent(new Event("change"))`);
     same(await ev(`document.body.getAttribute("data-visual-only")`), "chip", "the chip is the default");
     await caret("rc", 17);
     await key("ArrowRight");
@@ -670,6 +670,22 @@ async function run() {
     await key("ArrowRight");
     same((await sel()).head.rowId, "rd", "into the line");
     await ev(`document.querySelector('[data-setting="visualOnly"]').value = "chip"; document.querySelector('[data-setting="visualOnly"]').dispatchEvent(new Event("change"))`);
+  });
+
+  await t("numbers: every beat with words or a visual shows its number, including a paragraph's first", async () => {
+    await fresh();
+    same(await ev(`document.body.getAttribute("data-tick")`), "number", "numbers are the default");
+    const shown = await ev(`Array.from(document.querySelectorAll(".wr-beat")).map(el => [el.getAttribute("data-id"), el.getAttribute("data-num"), getComputedStyle(el, "::before").content])`);
+    same(shown.map(item => item[1]), ["A1", "A2", "A3", "A4", "A5", "B1", "B2", "B3", "B4", "B5"], "a running count per scene");
+    same(shown.find(item => item[0] === "ra")[2], '"A1"', "the script's first beat shows a number");
+    same(shown.find(item => item[0] === "rc")[2], '"A3"', "a paragraph's first beat shows a number");
+    same(shown.find(item => item[0] === "rd")[2], '"A4  ▣ Street b-roll"', "the chip shows its number");
+    await caret("rc", 0);
+    await key("Backspace");
+    same((await sel()).head, beat("rc", 0), "the number doesn't move the caret");
+    await caret("rc", 0);
+    await type("Q");
+    same(await textOf("rc"), "QCharlie bold end.", "typing lands after the number");
   });
 
   const SHA_A = "a".repeat(64), SHA_B = "b".repeat(64);
