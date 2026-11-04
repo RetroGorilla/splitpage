@@ -137,7 +137,7 @@ const fixture = () => ({
 });
 async function fresh(raw) {
   await closeBars();
-  await ev(`__lab.setting("enter","single"); __lab.setting("tick","delete"); __lab.setting("gapTyping","before"); __lab.setting("markdown",true); __lab.load(${JSON.stringify(raw ?? fixture())})`);
+  await ev(`__lab.setting("enter","single"); __lab.setting("tick","delete"); __lab.setting("gapTyping","here"); __lab.setting("markdown",true); __lab.load(${JSON.stringify(raw ?? fixture())})`);
   await settle();
 }
 const ids = list => list.map(r => r.id).join(",");
@@ -249,12 +249,13 @@ async function run() {
     same(await textOf("rb"), "Bravo two.", "next");
   });
 
-  await t("typing: start of a run-on beat goes into the beat before", async () => {
+  await t("typing: start of a run-on beat stays where the caret is", async () => {
     await fresh();
     await caret("rb", 0);
     await type("Q");
-    same(await textOf("ra"), "Alpha one.Q", "before");
-    same(await textOf("rb"), "Bravo two.", "after");
+    same(await textOf("ra"), "Alpha one.", "before");
+    same(await textOf("rb"), "QBravo two.", "after");
+    same((await sel()).head, beat("rb", 1), "caret");
   });
 
   await t("typing: start of a paragraph stays in that beat", async () => {
@@ -378,18 +379,38 @@ async function run() {
     same(await textOf("wa"), "We went to the storex", "left of the gap");
     same(await textOf("wb"), "and bought some milk", "next");
     await fresh(midSentence());
+    await ev(`__lab.setting("gapTyping","before")`);
     await caret("wb", 0);
     await type("y");
-    same(await textOf("wa"), "We went to the storey", "right of the gap, decided rule");
+    same(await textOf("wa"), "We went to the storey", "right of the gap, other setting");
     await fresh(midSentence());
-    await ev(`__lab.setting("gapTyping","here")`);
     await caret("wb", 0);
     await type("yz");
-    same(await textOf("wa"), "We went to the store", "right of the gap, other rule: before");
-    same(await textOf("wb"), "yzand bought some milk", "right of the gap, other rule: after");
+    same(await textOf("wa"), "We went to the store", "right of the gap: before");
+    same(await textOf("wb"), "yzand bought some milk", "right of the gap: after");
     same((await sel()).head, beat("wb", 2), "caret");
     const zw = await ev(`document.querySelector('.wr-beat[data-id="wb"]').firstChild.data.split("\\u200B").length - 1`);
     same(zw, 1, "exactly one zero-width space left in the DOM");
+  });
+
+  await t("mid-sentence: typing just after a gap, before a bold word", async () => {
+    await fresh(midSentence());
+    await caret("wc", 0);
+    await type("yz");
+    same(await textOf("wb"), "and bought some milk", "before");
+    same(await textOf("wc"), "yzthen walked home", "after");
+    same((await sel()).head, beat("wc", 2), "caret");
+    ok((await rows()).find(r => r.id === "wc").html.includes("then</strong>"), "bold word kept");
+  });
+
+  await t("mid-sentence: a space typed just after the gap is the next beat's, and the gap steps aside", async () => {
+    await fresh(midSentence());
+    await caret("wb", 0);
+    await type(" ");
+    same(await textOf("wa"), "We went to the store", "before");
+    same(await textOf("wb"), " and bought some milk", "after");
+    ok(await ev(`document.querySelector('.wr-beat[data-id="wb"]').classList.contains("no-gap")`), "no gap");
+    same((await sel()).head, beat("wb", 1), "caret");
   });
 
   await t("mid-sentence: the zero-width space never reaches the script", async () => {

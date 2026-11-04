@@ -25,13 +25,13 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 - Selecting, typing over, deleting, Ctrl+A and arrow keys all work across beats. Each edit is one Ctrl+Z.
 - Deleting a selection removes beats fully inside it, with their visuals, comments and status. Partly selected beats keep their remaining text and their visuals. A notice says what went, such as "Removed 3 beats: 2 with visuals, 1 filmed".
 - Bold, italic, underline, strikethrough and highlight work across beats. Comments, tags and links stay within one beat. With a selection across beats, those three buttons are disabled and say why.
-- Backspace at a paragraph's start removes only the paragraph break. Backspace just after a tick deletes the previous character and leaves the boundary. Text typed at a tick goes into the beat before it. The caret now has a stop on each side of the gap, so Adam is choosing on the test page whether text typed at the right-hand stop follows this rule or stays where the caret is.
+- Backspace at a paragraph's start removes only the paragraph break. Backspace just after a tick deletes the previous character and leaves the boundary. The caret has a stop on each side of the gap, and text goes where the caret is, Adam's pick on the test page: just before the gap it goes in the beat before, and just after the gap it goes in the next beat.
 - Beats join only through Alt+Backspace or Join on the tick. If both have visuals, the joined beat keeps both: the words with a line break between them, and the pictures in order, with a notice saying so. It takes the higher status, as a join does today. Only a scene header or the picture limit refuses a join. This replaces the refusal in `joinBeatsCommand`, so the two tests that assert the refusal change with it (`split-join-app`, `text-editing-app`).
 - A selection inside one beat, even of all its text, is ordinary text editing: the beat stays, empty or with just its visual.
 - A beat fully inside a deleted selection takes its comments with it, unless part of a comment's marked text survives in another beat, which can happen after a split. Deleting words inside a surviving beat treats comments as the split view does today: the comment stays at its last position.
 - The writer always has somewhere to type: Ctrl+A then Delete leaves one empty beat.
 - Beats display with a gap the width of a space between them, unless the text already has whitespace there. The gap's width is painted, and a run-on beat's span starts with a zero-width space so the browser sees a word break there. Neither can be typed into or deleted, and the caret stops once on each side, as it would at a real space. A selection crossing the gap copies it as one space. It isn't stored, so it costs no read time and doesn't reach exports.
-- Typing a space at a tick is an ordinary character in the beat before it, and the painted gap then steps aside.
+- Typing a space on either side of the gap is an ordinary character in that beat, and the painted gap then steps aside.
 
 ### Cut and paste
 
@@ -94,7 +94,7 @@ Narration export following the writer's paragraphs, bullets and the Outline view
 
 ### To judge on the test page
 
-Enter versus double Enter, the Backspace rules, and typing just after a gap. Already picked: the sentence rule for existing scripts, the chip for a visual with no narration, and numbers for ticks.
+Enter versus double Enter, the Backspace rules, and whether a paragraph's first beat gets a number. Already picked: the sentence rule for existing scripts, the chip for a visual with no narration, numbers for ticks, and typing going where the caret is.
 
 ## 3. How it fits the code today
 
