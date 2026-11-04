@@ -34,13 +34,16 @@ function counted(target: EventTarget) {
   return tally;
 }
 
-function harness(p: ReturnType<typeof page>) {
+function harness(p: ReturnType<typeof page>, mac = false) {
   const state = { dragging: null as string | null };
   const calls: string[] = [];
   const mount = (): RowRoutes => mountRowRoutes({
     window: p.win,
     rows: p.byId("rows"),
     ports: {
+      mac,
+      scriptCell: (cell) => cell.classList.contains("script"),
+      openLink: (href) => { calls.push("open:" + href); },
       dragging: () => state.dragging,
       setDragging: (id) => { state.dragging = id; calls.push("drag:" + id); },
       clearMarkers: () => { calls.push("clear"); },
@@ -253,4 +256,87 @@ test("row routes: dispose during a drag ends it: the dragged scene, its markers 
   fire(p.win, p.byId("other"), "dragover", { clientX: 5, clientY: 2 });
   assert.equal(h.calls.length, 5, "the remount inherits no drag, so an edge dragover does not scroll");
   second.dispose();
+});
+
+function linkPage() {
+  const p = page();
+  p.byId("rows").insertAdjacentHTML("beforeend",
+    '<div class="row" data-id="r9"><div class="cell-editable script" id="script">' +
+    '<a href="https://example.com/a" id="web">a <b id="inner">link</b></a><a href="mailto:crew@example.com" id="mail">mail</a>' +
+    '<a href="javascript:alert(1)" id="js">js</a><a href="file:///C:/win.ini" id="file">file</a><a href="data:text/html,hi" id="data">data</a>' +
+    '<a id="bare">no address</a><span id="plain">words</span></div>' +
+    '<div class="cell-editable" id="draft"><a href="https://example.com/draft" id="draft-link">draft</a></div></div>');
+  return p;
+}
+
+function press(routes: RowRoutes, win: Realm, target: Element, init: Record<string, unknown>): { down: boolean; click: boolean; downPrevented: boolean; clickPrevented: boolean } {
+  const out = { down: false, click: false, downPrevented: false, clickPrevented: false };
+  const down = new win.MouseEvent("mousedown", Object.assign({ bubbles: true, cancelable: true, button: 0 }, init));
+  const click = new win.MouseEvent("click", Object.assign({ bubbles: true, cancelable: true, button: 0 }, init));
+  target.addEventListener("mousedown", function once(ev) { target.removeEventListener("mousedown", once); out.down = routes.linkMouseDown(ev as MouseEvent); }, { once: true });
+  target.addEventListener("click", function once(ev) { target.removeEventListener("click", once); out.click = routes.linkClick(ev as MouseEvent); }, { once: true });
+  target.dispatchEvent(down);
+  target.dispatchEvent(click);
+  out.downPrevented = down.defaultPrevented;
+  out.clickPrevented = click.defaultPrevented;
+  return out;
+}
+
+test("row routes: Ctrl+click on a link in a script cell opens it once and moves nothing", () => {
+  const p = linkPage();
+  const h = harness(p);
+  const routes = h.mount();
+  assert.deepEqual(press(routes, p.win, p.byId("web"), { ctrlKey: true }), { down: true, click: true, downPrevented: true, clickPrevented: true });
+  assert.deepEqual(press(routes, p.win, p.byId("inner"), { ctrlKey: true }), { down: true, click: true, downPrevented: true, clickPrevented: true }, "from inside the link's formatting");
+  assert.deepEqual(press(routes, p.win, p.byId("mail"), { ctrlKey: true }), { down: true, click: true, downPrevented: true, clickPrevented: true });
+  assert.deepEqual(h.calls, ["open:https://example.com/a", "open:https://example.com/a", "open:mailto:crew@example.com"]);
+  routes.dispose();
+});
+
+test("row routes: a link press that is not Ctrl+click, or not in a script cell, is left alone", () => {
+  const p = linkPage();
+  const h = harness(p);
+  const routes = h.mount();
+  const none = { down: false, click: false, downPrevented: false, clickPrevented: false };
+  assert.deepEqual(press(routes, p.win, p.byId("web"), {}), none, "a plain click places the caret");
+  assert.deepEqual(press(routes, p.win, p.byId("web"), { metaKey: true }), none, "Cmd is not the key off a Mac");
+  assert.deepEqual(press(routes, p.win, p.byId("web"), { ctrlKey: true, shiftKey: true }), none);
+  assert.deepEqual(press(routes, p.win, p.byId("web"), { ctrlKey: true, altKey: true }), none);
+  assert.deepEqual(press(routes, p.win, p.byId("web"), { ctrlKey: true, button: 2 }), none, "the right button");
+  assert.deepEqual(press(routes, p.win, p.byId("plain"), { ctrlKey: true }), none, "words that are not a link are the selection's");
+  assert.deepEqual(press(routes, p.win, p.byId("bare"), { ctrlKey: true }), none, "an anchor with no address is not a link");
+  assert.deepEqual(press(routes, p.win, p.byId("draft-link"), { ctrlKey: true }), none, "a box that is not a script cell");
+  assert.deepEqual(h.calls, []);
+  routes.dispose();
+});
+
+test("row routes: Cmd+click is the key on a Mac, Ctrl+click is not", () => {
+  const p = linkPage();
+  const h = harness(p, true);
+  const routes = h.mount();
+  const none = { down: false, click: false, downPrevented: false, clickPrevented: false };
+  assert.deepEqual(press(routes, p.win, p.byId("web"), { ctrlKey: true }), none);
+  assert.equal(press(routes, p.win, p.byId("web"), { metaKey: true }).click, true);
+  assert.deepEqual(h.calls, ["open:https://example.com/a"]);
+  routes.dispose();
+});
+
+test("row routes: an address the link policy refuses is claimed, never opened", () => {
+  const p = linkPage();
+  const h = harness(p);
+  const routes = h.mount();
+  for (const id of ["js", "file", "data"]) {
+    assert.deepEqual(press(routes, p.win, p.byId(id), { ctrlKey: true }), { down: true, click: true, downPrevented: true, clickPrevented: true }, id);
+  }
+  assert.deepEqual(h.calls, []);
+  routes.dispose();
+});
+
+test("row routes: after dispose a link press routes nothing", () => {
+  const p = linkPage();
+  const h = harness(p);
+  const routes = h.mount();
+  routes.dispose();
+  assert.deepEqual(press(routes, p.win, p.byId("web"), { ctrlKey: true }), { down: false, click: false, downPrevented: false, clickPrevented: false });
+  assert.deepEqual(h.calls, []);
 });
