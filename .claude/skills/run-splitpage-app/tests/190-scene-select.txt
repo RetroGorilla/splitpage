@@ -139,7 +139,7 @@ expect T.ids().join() === 'r2,r3'
 # the keyboard's Ctrl+C runs the same copy
 eval untoast()
 key ctrl KeyC
-wait toasts().indexOf('2 scenes copied') !== -1
+wait toasts().indexOf('2 beats copied') !== -1
 
 # ---- 7. the right-click menu -----------------------------------------------
 mouse right pt(cell('r3', 'audioText'), 0.5, 0.5)
@@ -225,7 +225,7 @@ wait row(P1.id) && row(P1.id).querySelector('.visual-media img')
 wait row(P1.id).querySelector('.visual-media img').naturalWidth === 16
 expect document.querySelector('#rows .cmt-anchor[data-cmt="' + C.id + '"]') !== null
 expect T.ids().join() === P1.id + ',' + P2.id
-wait toasts().indexOf('2 scenes pasted') !== -1
+wait toasts().indexOf('2 beats pasted') !== -1
 # one undo entry takes the whole paste back, and redo brings it again
 eval U.flush()
 expect U.sizes().undo === __u0 + 1
@@ -261,7 +261,7 @@ wait F.state().rows.length === 2
 expect T.ids().length === 0
 eval U.flush()
 expect U.sizes().undo === __u1 + 1
-wait toasts().indexOf('2 scenes cut') !== -1
+wait toasts().indexOf('2 beats cut') !== -1
 # the cut leaves the comments, as a delete does
 expect F.state().comments.length === 2
 key ctrl KeyZ
@@ -288,7 +288,7 @@ wait F.state().rows.length === 2
 expect T.ids().length === 0
 eval U.flush()
 expect U.sizes().undo === __u2 + 1
-wait toasts().indexOf('2 scenes deleted') !== -1
+wait toasts().indexOf('2 beats deleted') !== -1
 key ctrl KeyZ
 wait ids() === __before
 eval T.select(F.state().rows[0].id)
@@ -300,7 +300,7 @@ wait ids() === __before
 # ---- 13. the menu's New script from these scenes ----------------------------
 eval (function(){ untoast(); T.select(F.state().rows[0].id, F.state().rows[1].id); T.openMenu(200, 200); return true; })()
 jsclick #scene-menu [data-scene-action="new"]
-wait F.state().title === 'Blank film — 2 scenes'
+wait F.state().title === 'Blank film — 2 beats'
 expect F.state().rows.length === 2
 expect F.state().rows[0].status === 'shot'
 expect F.state().comments.length === 1

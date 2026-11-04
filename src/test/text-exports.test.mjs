@@ -39,25 +39,25 @@ function sheet(text) {
   return rows;
 }
 
-const HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
+const HEAD = ["Beat", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
 
 test("the script's sheet: a row per scene with its start, status, read time, tags, b-roll and open threads", () => {
   const s = demo();
   const rows = sheet(buildCsv(liveDoc()));
   assert.deepEqual(rows[0], HEAD);
   const beat = (n) => rows[n];
-  assert.deepEqual(beat(1).slice(0, 5), ["A.1", "00:00", "Shot", "0:10", ""]);
+  assert.deepEqual(beat(1).slice(0, 5), ["A.1", "00:00", "Filmed", "0:10", ""]);
   assert.equal(beat(1)[5], toPlainText(cellOf(s.rows[0].visualText)));
   assert.equal(beat(1)[6], toPlainText(cellOf(s.rows[0].audioText)));
   assert.equal(beat(1)[7], "Prop: Pentax K1000; Location: workbench; Music/SFX: shutter click");
-  assert.deepEqual(beat(2).slice(0, 5), ["A.2", "00:10", "Shot", "0:06", "yes"]);
+  assert.deepEqual(beat(2).slice(0, 5), ["A.2", "00:10", "Filmed", "0:06", "yes"]);
   assert.deepEqual(beat(25).slice(0, 5), ["A.25", "08:14", "To do", "0:12", "yes"]);
   assert.equal(rows.slice(1, 31).filter((r) => r[4] === "yes").length, 2);
   assert.equal(beat(5)[7], "Prop: toothpick, light seal kit, naphtha; Gear: overhead rig");
-  assert.equal(beat(21)[7], "", "nothing tagged in scene 21");
-  assert.equal(beat(4)[8], "A.4.1 fingertip pushing on the sticky old foam (shot)");
+  assert.equal(beat(21)[7], "", "nothing tagged in beat 21");
+  assert.equal(beat(4)[8], "A.4.1 fingertip pushing on the sticky old foam (filmed)");
   assert.equal(beat(6)[8], "A.6.1 the toothpick lifting a long strand of goo (shot, flagged)");
-  assert.equal(beat(22)[8], "A.22.1 feet on the gravel path, low angle (to shoot)");
+  assert.equal(beat(22)[8], "A.22.1 feet on the gravel path, low angle (to film)");
   assert.deepEqual([3, 9, 18, 24].map((n) => beat(n)[9]), ["1", "", "2", "3"]);
   assert.deepEqual(beat(10).slice(0, 4), ["A.10", "02:48", "Ready", "0:38"]);
   assert.deepEqual(beat(13).slice(0, 4), ["A.13", "03:43", "To do", "0:45"]);
@@ -66,18 +66,18 @@ test("the script's sheet: a row per scene with its start, status, read time, tag
 test("the sheet's totals are labelled, the target beside them, and the comments carry their numbers", () => {
   demo();
   const rows = sheet(buildCsv(liveDoc()));
-  assert.deepEqual(rows[31], ["Total", "", "13 of 30 shot", "9:44", "", "", "", "", "", ""]);
+  assert.deepEqual(rows[31], ["Total", "", "13 of 30 filmed", "9:44", "", "", "", "", "", ""]);
   assert.deepEqual(rows[32], ["Target", "", "0:44 over", "9:00", "", "", "", "", "", ""]);
   assert.deepEqual(rows[33], [""]);
   assert.deepEqual(rows[34], ["Comments"]);
   assert.deepEqual(rows[35], ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"]);
   const c = rows.slice(36);
-  assert.deepEqual(c[0].slice(0, 5), ["1", "Scene A.3 · Audio", "Open", "", "Jo (editor)"]);
+  assert.deepEqual(c[0].slice(0, 5), ["1", "Beat A.3 · Audio", "Open", "", "Jo (editor)"]);
   assert.equal(c[0][6], "Some of them really, really don't.");
   assert.deepEqual(c[1].slice(0, 5), ["", "", "", "", "↳ Sam"], "the reply under its thread");
-  assert.deepEqual(c[2].slice(0, 3), ["", "Scene A.9 · Audio", "Resolved by Sam"], "resolved: no number");
-  assert.deepEqual(c[3].slice(0, 5), ["2", "Scene A.18 · Audio", "Open", "Jo (editor)", "Sam"]);
-  assert.deepEqual(c[4].slice(0, 2), ["3", "Scene A.24 · Audio"]);
+  assert.deepEqual(c[2].slice(0, 3), ["", "Beat A.9 · Audio", "Resolved by Sam"], "resolved: no number");
+  assert.deepEqual(c[3].slice(0, 5), ["2", "Beat A.18 · Audio", "Open", "Jo (editor)", "Sam"]);
+  assert.deepEqual(c[4].slice(0, 2), ["3", "Beat A.24 · Audio"]);
   assert.ok(!buildCsv(liveDoc()).includes("Row "), "the app says Scene");
 });
 
@@ -123,15 +123,15 @@ test("a script with no target and no comments: no Target row, no Comments block"
   assert.equal(rows.length, 3);
   assert.deepEqual(rows[1].slice(0, 3), ["A.1", "00:00", "Ready"]);
   assert.equal(rows[2][0], "Total");
-  assert.equal(rows[2][2], "0 of 1 shot");
+  assert.equal(rows[2][2], "0 of 1 filmed");
   assert.equal(csvToRows(buildCsv(liveDoc())).length, 1);
 });
 
 test("the breakdown sheet: the old columns where they were, when each item is first needed and its group after them", () => {
   demo();
   const rows = sheet(buildBreakdownCsv(liveDoc()));
-  assert.deepEqual(rows[0], ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
-                             "First scene at", "Group"]);
+  assert.deepEqual(rows[0], ["Category", "Item", "Status", "Assigned to", "Mentions", "Beats", "In script", "Notes", "B-roll shots",
+                             "First beat at", "Group"]);
   const item = (name) => rows.find((r) => r[1] === name);
   assert.deepEqual(item("Pentax K1000").slice(9), ["00:00", "Props & set dressing"]);
   assert.deepEqual(item("button cell battery").slice(0, 3), ["Prop", "button cell battery", "Sourcing"]);
@@ -145,8 +145,8 @@ test("the breakdown sheet: the old columns where they were, when each item is fi
 test("the b-roll sheet: the scene's start after the columns it had", () => {
   demo();
   const rows = sheet(buildBrollCsv(liveDoc()));
-  assert.deepEqual(rows[0], ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
-                             "Scene start"]);
+  assert.deepEqual(rows[0], ["Beat", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
+                             "Beat start"]);
   assert.equal(rows.length, 10);
   assert.deepEqual([rows[1][0], rows[1][1], rows[1][10]], ["A.4", "A.4.1 fingertip pushing on the sticky old foam", "01:03"]);
   assert.deepEqual([rows[2][0], rows[2][3], rows[2][10]], ["A.6", "yes", "01:50"]);
@@ -162,7 +162,7 @@ test("the standalone page is named for the script: its title and the export's me
   demo();
   const html = withPageHead(SHELL, { title: LONG_DEMO.state.title + " — SplitShare", description: exportMetaLine(exportFacts(exportDocumentOf(currentDocument()))) });
   assert.ok(html.includes("<title>I Fixed a $40 Film Camera (and Shot a Roll With It) — SplitShare</title>"));
-  assert.ok(html.includes('<meta name="description" content="30 scenes · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 shot · '));
+  assert.ok(html.includes('<meta name="description" content="30 beats · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 filmed · '));
   assert.equal((html.match(/<title>/g) || []).length, 2, "the document's own text in the body is left alone");
   assert.ok(html.endsWith('{"title":"<title>x</title>"}\n</script></body></html>'));
   assert.ok(!html.includes("A two-column visual/audio"));

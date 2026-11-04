@@ -54,7 +54,7 @@ test("shot lists use every existing filter and grouping with projected counts an
     assert.ok(dom.body.textContent.includes(data.summary + " · " + data.scope));
     assert.ok(dom.body.textContent.includes(exportDateText(exportDay(input.doc))));
     assert.deepEqual(texts(dom, "thead th"), ["Done", "Beat", "B-roll shot", "Location", "Props", "Assigned", "Flagged", "Notes"]);
-    assert.deepEqual(texts(dom, ".list-group th"), data.groups.map((g) => g.label + " " + g.done + "/" + g.total + " shot"));
+    assert.deepEqual(texts(dom, ".list-group th"), data.groups.map((g) => g.label + " " + g.done + "/" + g.total + " filmed"));
     const items = data.groups.flatMap((g) => g.items.map((item) => ({ item, kind: g.kind })));
     const rows = [...dom.querySelectorAll("tbody tr:not(.list-group)")];
     assert.equal(rows.length, items.length);

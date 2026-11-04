@@ -207,10 +207,10 @@ test("B46: a hidden-shot strip opens its scenes without an edit", async () => {
   setHideShotBeats(true);
   try {
     const strip = document.querySelector('#rows [data-action="expand-hidden-shot"]');
-    assert.ok(strip, "the shot scene is folded into a strip");
+    assert.ok(strip, "the shot beat is folded into a strip");
     assert.equal(rowEl("r2"), null);
     await nothingWritten(() => click(strip));
-    assert.ok(rowEl("r2"), "the scene is shown again");
+    assert.ok(rowEl("r2"), "the beat is shown again");
     assert.equal(document.querySelector('#rows [data-action="expand-hidden-shot"]'), null);
   } finally {
     setHideShotBeats(false);
@@ -230,11 +230,11 @@ test("B47: jump to scene centres and flashes the scene, opening a hidden one fir
   };
   try {
     await nothingWritten(() => click(jump("r2")));
-    assert.ok(rowEl("r2"), "the hidden scene is revealed");
+    assert.ok(rowEl("r2"), "the hidden beat is revealed");
     assert.ok(rowEl("r2").classList.contains("just-merged"), "and flashed");
     assert.ok(scrolled.includes(rowEl("r2")), "and scrolled into view");
     await nothingWritten(() => click(jump("no-such-scene")));
-    assert.deepEqual(toasts(), ["That scene is no longer here."]);
+    assert.deepEqual(toasts(), ["That beat is no longer here."]);
   } finally {
     host.querySelectorAll('[data-action="jump-row"]').forEach((b) => b.remove());
     setHideShotBeats(false);
@@ -260,7 +260,7 @@ test("a file that is not a picture or video dropped on a scene's Image section i
     e = drop(media, { types: ["Files"], files: [new File(["x"], "notes.txt", { type: "text/plain" })] });
   });
   assert.ok(e.defaultPrevented);
-  assert.deepEqual(toasts(), ["Only pictures and video files go in a scene's Image section."]);
+  assert.deepEqual(toasts(), ["Only pictures and video files go in a beat's Image section."]);
 });
 
 test("the add-scene bar adds a scene through the session", async () => {

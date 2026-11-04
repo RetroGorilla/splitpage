@@ -202,7 +202,7 @@ test("a scene's b-roll cell lists every shot with its state, joined by a semicol
   const doc = demo();
   const extra = shotWith(doc, { id: "x1", name: "second shot", ordinal: 1, status: "needed", reshoot: true });
   const table = scriptTable({ ...doc, broll: [...doc.broll, extra] });
-  assert.equal(table.beats[3].cells[8], "A.4.1 fingertip pushing on the sticky old foam (shot); A.4.2 second shot (to shoot, flagged)");
+  assert.equal(table.beats[3].cells[8], "A.4.1 fingertip pushing on the sticky old foam (filmed); A.4.2 second shot (to film, flagged)");
   assert.equal(table.beats[5].cells[8], "A.6.1 the toothpick lifting a long strand of goo (shot, flagged)");
   assert.equal(table.beats[0].cells[8], "");
 });

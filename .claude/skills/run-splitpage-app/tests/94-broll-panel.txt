@@ -36,7 +36,7 @@ sleep 400
 expect document.getElementById('btn-save').classList.contains('is-dirty') === false
 eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; })()
 
-expect Array.prototype.map.call(document.querySelectorAll('#broll-controls .broll-chip'), function(c){ return c.textContent.replace(/\s+/g, ' ').trim(); }).join('|') === 'All 8|To shoot 5|Flagged 1|Shot 3'
+expect Array.prototype.map.call(document.querySelectorAll('#broll-controls .broll-chip'), function(c){ return c.textContent.replace(/\s+/g, ' ').trim(); }).join('|') === 'All 8|To film 5|Flagged 1|Filmed 3'
 click #broll-controls .broll-chip[data-filter="unshot"]
 wait document.querySelectorAll('#broll-list .broll-row').length === 5
 expect document.querySelector('#broll-controls .broll-chip[data-filter="unshot"]').getAttribute('aria-checked') === 'true'
@@ -79,7 +79,7 @@ wait document.querySelectorAll('#broll-list .broll-row').length === 8
 # ---- 2. the head's count, and one segment per shot ---------------------
 # (#169: in the head beside the title, "3 of 8 shot", where it was a
 # sentence over the chips)
-expect document.querySelector('#broll-summary .broll-summary-line').textContent === '3 of 8 shot'
+expect document.querySelector('#broll-summary .broll-summary-line').textContent === '3 of 8 filmed'
 expect document.querySelectorAll('#broll-summary .broll-bar-seg').length === 8
 expect document.querySelectorAll('#broll-summary .broll-bar-seg.is-shot').length === 3
 expect document.querySelectorAll('#broll-summary .broll-bar-seg.is-flagged').length === 1
@@ -92,7 +92,7 @@ expect Array.prototype.every.call(document.querySelectorAll('#broll-list .broll-
 expect row('bs6').getBoundingClientRect().height === 44
 expect document.querySelectorAll('#broll-panel .tag-scene, #broll-panel .tag-entity').length === 0
 expect document.getElementById('broll-panel').textContent.indexOf('No audio reference') === -1
-expect heads() === 'Scene A.1|Scene A.2|Scene A.3|Scene A.4|Added here'
+expect heads() === 'Beat A.1|Beat A.2|Beat A.3|Beat A.4|Added here'
 # where each scene starts, in the mono (#169: the board's group head; the
 # scene's audio used to follow, cut short)
 expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-group-head .broll-group-time'), function(t){ return t.textContent; }).join(' ') === '00:00 00:07 00:13 00:17'
@@ -119,7 +119,7 @@ click #broll-list .broll-row[data-id="bs4"] .broll-check
 wait rec('bs4').status === 'shot'
 expect row('bs4').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
 expect row('bs4').classList.contains('is-shot')
-expect document.querySelector('#broll-summary .broll-summary-line').textContent === '4 of 8 shot'
+expect document.querySelector('#broll-summary .broll-summary-line').textContent === '4 of 8 filmed'
 expect document.getElementById('btn-save').classList.contains('is-dirty') === true
 eval U.flush()
 expect U.sizes().undo === window.__u0 + 1
@@ -130,10 +130,10 @@ wait row('bs4').querySelector('.broll-check').getAttribute('aria-checked') === '
 # ---- 5. opening a shot: the label–value list ---------------------------
 click #broll-list .broll-row-main[data-id="bs2"]
 wait !!document.querySelector('#broll-list .broll-card[data-id="bs2"]')
-expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-card .broll-label'), function(l){ return l.textContent; }).join('|') === 'Status|Scene|Location|Assigned|Props|Cuts against|Note'
+expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-card .broll-label'), function(l){ return l.textContent; }).join('|') === 'Status|Beat|Location|Assigned|Props|Cuts against|Note'
 # Status is one field that flips on click (#169, B-BrollCalm; Adam: like the
 # breakdown's status), where it was two segmented buttons: no chevron
-expect document.querySelector('#broll-list .broll-card .broll-status-btn').textContent === 'To shoot'
+expect document.querySelector('#broll-list .broll-card .broll-status-btn').textContent === 'To film'
 expect document.querySelector('#broll-list .broll-card .broll-status-btn').getAttribute('data-status') === 'unshot'
 expect !document.querySelector('#broll-list .broll-card .broll-status-field .ev-chevron')
 expect document.querySelector('#broll-list .broll-card .broll-flag-btn').classList.contains('is-active')
@@ -163,9 +163,9 @@ wait rec('bs2').notes === 'Go back before six.'
 eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; })()
 click #broll-list .broll-card .broll-status-btn
 wait rec('bs2').status === 'shot'
-expect document.querySelector('#broll-list .broll-card .broll-status-btn').textContent === 'Shot'
+expect document.querySelector('#broll-list .broll-card .broll-status-btn').textContent === 'Filmed'
 expect document.activeElement.classList.contains('broll-status-btn') && document.activeElement.getAttribute('data-status') === 'shot'
-expect document.querySelector('#broll-list .broll-card .broll-status-btn').getAttribute('aria-label') === 'Status: Shot. Click to mark to shoot'
+expect document.querySelector('#broll-list .broll-card .broll-status-btn').getAttribute('aria-label') === 'Status: Filmed. Click to mark to film'
 expect row('bs2').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
 eval U.flush()
 expect U.sizes().undo === window.__u0 + 1

@@ -174,13 +174,13 @@ test("project files: Markdown mismatch resolves once, normalizes the answer, and
   const other = createProjectFiles(f.ports);
   const keep = owner.services.askMarkdownRows(1, 2);
   assert.equal(f.modal.hidden, false);
-  assert.equal(f.detail.textContent, "This file's own record has 1 scene, but the table in it now has 2. Scenes were added or removed somewhere other than Splitpage, so the two can no longer be lined up scene by scene.");
+  assert.equal(f.detail.textContent, "This file's own record has 1 beat, but the table in it now has 2. Beats were added or removed somewhere other than Splitpage, so the two can no longer be lined up beat by beat.");
   other.finishMarkdownRowChoice("table");
   owner.finishMarkdownRowChoice("unexpected");
   assert.equal(await keep, "keep");
   assert.equal(f.modal.hidden, true);
   const table = owner.services.askMarkdownRows(2, 1);
-  assert.match(f.detail.textContent, /has 2 scenes, but the table in it now has 1\./);
+  assert.match(f.detail.textContent, /has 2 beats, but the table in it now has 1\./);
   owner.finishMarkdownRowChoice("table");
   owner.finishMarkdownRowChoice("keep");
   assert.equal(await table, "table");

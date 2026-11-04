@@ -57,7 +57,7 @@ test("the .docx breakdown heads each category with its dot and name in its colou
   const val = (el) => el.getAttributeNS(W, "val") || el.getAttribute("w:val");
 
   const head = Array.from(trs[0].getElementsByTagNameNS(W, "tc")).map((tc) => tc.textContent);
-  assert.deepEqual(head, ["Item", "Status", "Scenes", "Assigned to", "Notes"]);
+  assert.deepEqual(head, ["Item", "Status", "Beats", "Assigned to", "Notes"]);
 
   const seen = new Set();
   let current = null;

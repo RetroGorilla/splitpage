@@ -111,7 +111,7 @@ test("only the export's own headings, in its own style, after its own table end 
   ]);
   assert.deepEqual(await read(para("Production breakdown", "Heading1") + para("dropped") +
     para("Comments", "Heading1") + para("dropped too")), [{ v: "Shot", a: "Line." }]);
-  assert.deepEqual(await read(para("B-roll shot list", "Heading1") + para("Scene 01") + para("a shot")),
+  assert.deepEqual(await read(para("B-roll shot list", "Heading1") + para("Beat 01") + para("a shot")),
     [{ v: "Shot", a: "Line." }]);
   const before = await docxToRows(asFile(foreignDocx(para("T", "Title") + para("Comments", "Heading1") + script)));
   assert.deepEqual(plainRows(before.rows), [{ v: "Comments", a: "" }, { v: "Shot", a: "Line." }]);
@@ -223,7 +223,7 @@ test("the title's meta line, tags, markers, the b-roll chip and the comments' un
   const paras = kids(body, "p");
   assert.equal(paraStyle(paras[0]), "Title");
   assert.equal(paraStyle(paras[1]), "SplitpageMeta");
-  assert.match(paras[1].textContent, /^4 scenes · 0:\d\d running time · Target 1:00 · 0:\d\d under · 1 of 4 shot · .+$/);
+  assert.match(paras[1].textContent, /^4 beats · 0:\d\d running time · Target 1:00 · 0:\d\d under · 1 of 4 filmed · .+$/);
 
   const script = kids(body, "tbl")[0];
   const runs = Array.from(script.getElementsByTagNameNS(W, "r"));
@@ -255,7 +255,7 @@ test("the scene gutter and the read time sit either side of the script and are r
   const { body } = await parts(buildDocx(...liveWithAssets()));
   const trs = kids(kids(body, "tbl")[0], "tr");
   const cells = (tr) => kids(tr, "tc");
-  assert.deepEqual(cells(trs[0]).map((tc) => tc.textContent), ["Scene", "Visual", "Audio", "Read"]);
+  assert.deepEqual(cells(trs[0]).map((tc) => tc.textContent), ["Beat", "Visual", "Audio", "Read"]);
   assert.ok(trs[0].getElementsByTagNameNS(W, "tblHeader").length, "the header repeats on every page");
   assert.equal(prop(cells(trs[0])[1].getElementsByTagNameNS(W, "r")[0], "color"), "2863AB");
   assert.equal(prop(cells(trs[0])[2].getElementsByTagNameNS(W, "r")[0], "color"), "9E5800");
@@ -263,7 +263,7 @@ test("the scene gutter and the read time sit either side of the script and are r
   const data = [trs[0], ...trs.slice(2)];
   const gutter = kids(cells(data[2])[0], "p").map((p) => p.textContent);
   assert.deepEqual(gutter, ["A.2", "00:07", "● Ready"]);
-  assert.deepEqual(kids(cells(data[1])[0], "p").map((p) => p.textContent)[2], "✓ Shot");
+  assert.deepEqual(kids(cells(data[1])[0], "p").map((p) => p.textContent)[2], "✓ Filmed");
   assert.deepEqual(kids(cells(data[3])[0], "p").map((p) => p.textContent)[2], "○ To do");
   const read = (tr) => cells(tr)[3].getElementsByTagNameNS(W, "r")[0];
   assert.equal(read(data[2]).textContent.split(THIN).join(""), "0:12");
@@ -280,7 +280,7 @@ test("the breakdown is grouped by category and no item's row splits across a pag
   assert.equal(paraStyle(heading), "Heading1");
   assert.ok(heading.getElementsByTagNameNS(W, "pageBreakBefore").length, "the appendix starts a page of its own");
   const trs = kids(kids(body, "tbl")[1], "tr");
-  assert.deepEqual(kids(trs[0], "tc").map((tc) => tc.textContent), ["Item", "Status", "Scenes", "Assigned to", "Notes"]);
+  assert.deepEqual(kids(trs[0], "tc").map((tc) => tc.textContent), ["Item", "Status", "Beats", "Assigned to", "Notes"]);
   assert.ok(trs.every((tr) => tr.getElementsByTagNameNS(W, "cantSplit").length), "a row that can split");
   const groups = trs.filter((tr) => tr.getElementsByTagNameNS(W, "gridSpan").length);
   assert.deepEqual(groups.map((tr) => tr.textContent), [
@@ -301,7 +301,7 @@ test("the b-roll shot list, by scene, with a box for each shot", async () => {
   const at = paras.indexOf("B-roll shot list");
   assert.ok(at > 0);
   assert.deepEqual(paras.slice(at + 1, at + 6), [
-    "1 of 1 shot · 1 flagged", "Scene A.1  00:001/1 shot", "☑A.1.1 dust in the light", "Workbench  ·  Flagged", "Needs a haze."
+    "1 of 1 filmed · 1 flagged", "Beat A.1  00:001/1 filmed", "☑A.1.1 dust in the light", "Workbench  ·  Flagged", "Needs a haze."
   ]);
   assert.deepEqual(plainRows((await docxToRows(asFile(buildDocx(...liveWithAssets())))).rows).map((r) => r.v),
     ["Wide on the workbench, the Pentax K1000 in frame.\nB-roll: dust in the light", "Title card over the montage.", "Close on the needle.", ""]);
@@ -312,7 +312,7 @@ test("the narration: its meta line and each scene's number in the margin, none o
   const { body } = await parts(buildNarrationDocx(liveDoc(), { directions: true }));
   const paras = kids(body, "p");
   assert.equal(paraStyle(paras[1]), "SplitpageMeta");
-  assert.match(paras[1].textContent, /^Narration · 3 scenes · \d+ words · about 0:\d\d at 150 wpm$/);
+  assert.match(paras[1].textContent, /^Narration · 3 beats · \d+ words · about 0:\d\d at 150 wpm$/);
   assert.equal(paras[2].textContent, "A · 0:21");
   const beats = paras.slice(3);
   assert.ok(beats.every((p) => paraStyle(p) === "SplitpageNarration"));
@@ -360,7 +360,7 @@ test("a long title wraps on the page and is cut short in the footer; an empty sc
 
   loadTestDocument(migrateRows({ schema: 2, title: "Empty", rows: [], comments: [] }));
   const empty = await parts(buildDocx(...liveWithAssets()));
-  assert.match(kids(empty.body, "p")[1].textContent, /^0 scenes · 0:00 running time · /);
+  assert.match(kids(empty.body, "p")[1].textContent, /^0 beats · 0:00 running time · /);
   const back = await docxToRows(asFile(buildDocx(...liveWithAssets())));
   assert.equal(back.title, "Empty");
   assert.deepEqual(back.rows, []);
@@ -377,7 +377,7 @@ test("a coloured underline is the export's drawing only in the export's own file
 });
 
 test("the breakdown's heads, old and new, are never read as a scene", async () => {
-  for (const head of [["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"], ["Item", "Status", "Scenes", "Assigned to", "Notes"]]) {
+  for (const head of [["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"], ["Item", "Status", "Scenes", "Assigned to", "Notes"]].flatMap(head => [head, head.map(word => word === "Scenes" ? "Beats" : word)])) {
     const body = table(null, [["Visual", "Audio"], ["Shot", "Line."]]) + table(null, [head, head.map((h) => h + " value")]);
     assert.deepEqual(plainRows((await docxToRows(asFile(foreignDocx(body)))).rows), [{ v: "Shot", a: "Line." }], head.join("|"));
   }

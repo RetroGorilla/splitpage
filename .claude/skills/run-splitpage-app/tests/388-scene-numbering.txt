@@ -28,7 +28,7 @@ expect JSON.stringify(canonical(F.state().rows)) === content
 expect !saved.includes('"numbering"') && !saved.includes('"shotNumber"')
 expect F.state().rows.find(r=>r.id==='b').status === 'shot'
 expect Array.from(document.querySelectorAll('#rows .row-num'),e=>e.textContent).join('|') === 'A.1|B.1|B.2'
-expect Array.from(document.querySelectorAll('.rd-block'),e=>e.title.split(' · ')[0]).join('|') === 'Scene A.1|Scene B.1|Scene B.2'
+expect Array.from(document.querySelectorAll('.rd-block'),e=>e.title.split(' · ')[0]).join('|') === 'Beat A.1|Beat B.1|Beat B.2'
 
 eval (function(){var row=document.querySelector('#rows .row[data-id="c"]');var grip=row.querySelector('[data-action="drag-grip"]');var dt=new DataTransfer();grip.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));row.dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:dt}));var target=document.querySelector('#rows .section-header[data-section-id=""]');target.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt}));target.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt}));row.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}));return true;})()
 wait F.state().rows.map(r=>r.id).join('|') === 'c|a|b'

@@ -411,7 +411,7 @@ test("a Writer join (Backspace at a scene's start): one entry; words glued with 
   assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["deleteRow:r4", "rowField:r3.audioText", "rowField:r3.status", "docField:comments"] });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3"]);
   assert.equal(row("r3").audioText, "Three. Four " + cmt("c2", "words") + ".");
-  assert.equal(row("r3").status, "shot", "the joined scene takes the further status");
+  assert.equal(row("r3").status, "shot", "the joined beat takes the further status");
   assert.equal(row("r3").visualText, KEY("bsA") + " gulls");
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r3", "audioText"]]);
   assert.equal(document.activeElement, para("r3"));
@@ -433,7 +433,7 @@ test("a Writer join of two scenes that both have a visual is refused with a toas
   const got = record(() => key(p2, "Backspace"));
   assert.deepEqual(got, { seq: 0, render: 0, undo: 0, steps: [] });
   assert.equal(JSON.stringify(currentDocument()), before);
-  assert.equal(toasts().at(-1), "Both scenes have a visual \u2014 join them in the split view, so you can pick which one to keep.");
+  assert.equal(toasts().at(-1), "Both beats have a visual \u2014 join them in the split view, so you can pick which one to keep.");
   writer.closeWriter();
 });
 

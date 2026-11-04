@@ -177,7 +177,7 @@ export function buildPrompterContent(): void {
   const content = document.getElementById("prompter-content") as HTMLElement;
   if (!paragraphs.length) {
     content.innerHTML = '<div class="prompter-empty">' + (skippingShot
-      ? "Every scene is marked Shot — switch off Skip shot (or Hide shot beats) to read them again."
+      ? "Every beat is marked Filmed — switch off Skip filmed (or Hide filmed beats) to read them again."
       : "Nothing to read yet — add some audio text first.") + '</div>';
     state.promptWords = [];
   } else {

@@ -246,7 +246,7 @@ test("a cell edited outside Splitpage: the table wins for that cell only", () =>
 test("a Visual cell's inline image travels in the table and comes back", () => {
   const s = fixture();
   const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
-  assert.ok(md.includes("![visual for scene 01](" + PNG + ")"), "the image is in the human half too");
+  assert.ok(md.includes("![visual for beat 01](" + PNG + ")"), "the image is in the human half too");
   const proj = parseMarkdownProject(md);
   return withState(proj.state, async () => {
     const back = await applyMarkdownProject(proj, { noAsk: true });

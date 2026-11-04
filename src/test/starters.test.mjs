@@ -20,7 +20,7 @@ const copy = (o) => JSON.parse(JSON.stringify(o));
 
 test("there are three starters, with the ids, names and lines the page shows", () => {
   assert.deepEqual(STARTERS.map((s) => [s.id, s.name, s.desc]), [
-    ["to-camera", "To-camera video", "Hook, intro, sections, call to action."],
+    ["to-camera", "To-camera video", "Hook, intro, scenes, call to action."],
     ["interview", "Interview", "Questions on the right, cutaways on the left."],
     ["spot-30", "30-second spot", "Six timed beats with a packshot."]
   ]);
@@ -63,11 +63,11 @@ for (const starter of STARTERS) {
   });
 
   test(`${starter.id}: shows the features off — scenes, tags, a status`, () => {
-    assert.ok(doc.rows.length >= 4, "a few scenes");
+    assert.ok(doc.rows.length >= 4, "a few beats");
     assert.ok(doc.title && doc.title !== "Untitled Script", "a title of its own");
     const cats = new Set(collectTagsFromRows(doc.rows).map((t) => t.cat.id));
     for (const cat of ["prop", "location", "vfx"]) assert.ok(cats.has(cat), "a " + cat + " tag");
-    assert.ok(doc.rows.some((r) => r.status !== "todo"), "a scene status");
+    assert.ok(doc.rows.some((r) => r.status !== "todo"), "a beat status");
     assert.ok(doc.rows.every((r) => r.visualText && r.audioText), "no empty column");
     assert.deepEqual(doc.comments, []);
     assert.ok(doc.rows.every((r) => r.imageRef === null && !r.updatedAt && r.updatedBy === null));

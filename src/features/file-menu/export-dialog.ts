@@ -216,7 +216,7 @@ function pvScript(title: string, opts: { app?: boolean; rundown?: boolean; word?
   const beats = beatFacts(doc);
   const nums = doc.commentNumbers;
   let html = (opts.app ? "" : pvTitleBlock(title, doc)) + (opts.rundown ? pvRundown(beats, !opts.app, doc) : "");
-  if (!(currentDocument() as DocumentView).rows.length) return html + '<p class="pv-para pv-faint">(no scenes yet)</p>';
+  if (!(currentDocument() as DocumentView).rows.length) return html + '<p class="pv-para pv-faint">(no beats yet)</p>';
   html += '<div class="pv-script' + (opts.word ? ' pv-script-word' : '') + '">' +
     '<div class="pv-sh"><span>Scene</span><span><i class="pv-dot pv-dot-v"></i>Visual</span>' +
     '<span><i class="pv-dot pv-dot-a"></i>Audio</span><span class="pv-read">Read</span></div>' +

@@ -17,7 +17,7 @@ for (const key of ["Backspace", "Delete", "Alt+ArrowUp", "Alt+ArrowDown"] as con
     const h = setup();
     assert.equal(h.owner.press("s1", key), false);
     assert.deepEqual(h.removed, []);
-    assert.equal(h.hint(), key.startsWith("Alt+") ? "Press again to remove the section header" : "Press " + key + " again to remove the section header");
+    assert.equal(h.hint(), key.startsWith("Alt+") ? "Press again to remove the scene header" : "Press " + key + " again to remove the scene header");
     h.timers.advance(1999);
     assert.equal(h.owner.press("s1", key), true);
     assert.deepEqual(h.removed, ["s1"]);

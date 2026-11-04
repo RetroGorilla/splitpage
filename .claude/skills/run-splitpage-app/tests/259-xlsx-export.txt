@@ -32,7 +32,7 @@ jsclick .export-card[data-format="csv"] input
 sleep 150
 expect document.querySelector('.export-card[data-format="csv"] .export-card-name').textContent == Spreadsheet
 expect document.querySelector('.export-card[data-format="csv"] .export-card-ext').textContent == .xlsx / .csv
-expect document.querySelector('.export-card[data-format="csv"] .export-card-purpose').textContent == A row per scene, for Excel, Sheets or Numbers
+expect document.querySelector('.export-card[data-format="csv"] .export-card-purpose').textContent == A row per beat, for Excel, Sheets or Numbers
 expect document.querySelector('#export-options .export-option-label').textContent == Format
 expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'Excel (.xlsx)|CSV (.csv)'
 expect document.querySelector('input[name="export-choice"]:checked').value == xlsx
@@ -48,9 +48,9 @@ expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-s
 expect document.querySelectorAll('#export-preview .pv-sheet.is-on').length === 1 && document.querySelector('#export-preview .pv-sheet.is-on').textContent === 'Script'
 # the tabs sit at the page's foot, inside it
 expect (function(){var p=document.getElementById('export-preview').getBoundingClientRect(),t=document.querySelector('#export-preview .pv-sheets').getBoundingClientRect();return t.bottom<=p.bottom+0.5&&t.bottom>=p.bottom-2&&t.left>=p.left&&t.right<=p.right;})()
-expect document.getElementById('export-summary').textContent == 2 scenes, with start and read times, tags and b-roll · a sheet for comments · a Notes column to write in · columns sized, header frozen, filters on · pictures not included
+expect document.getElementById('export-summary').textContent == 2 beats, with start and read times, tags and b-roll · a sheet for comments · a Notes column to write in · columns sized, header frozen, filters on · pictures not included
 # the script sheet's blank Notes column, the room to write in
-expect document.querySelector('#export-preview .pv-gh').textContent == SceneStartStatusReadVisualAudioNotes
+expect document.querySelector('#export-preview .pv-gh').textContent == BeatStartStatusReadVisualAudioNotes
 shot 259-xlsx-export
 # CSV is the second click: no tabs, its own name and summary
 jsclick .export-seg input[value="csv"]

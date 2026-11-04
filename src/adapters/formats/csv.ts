@@ -64,7 +64,7 @@ function beatBrollLists(doc: ExportDocument, services: ExportServices): Record<s
   exportBrollBeats(doc, services).forEach(function (g) {
     if (!g.beat) return;
     byBeat[g.beat] = g.items.map(function (r) {
-      return r.name + " (" + (r.shot ? "shot" : "to shoot") + (r.flagged ? ", flagged" : "") + ")";
+      return r.name + " (" + (r.shot ? "filmed" : "to film") + (r.flagged ? ", flagged" : "") + ")";
     });
   });
   return byBeat;

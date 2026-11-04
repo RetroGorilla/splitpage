@@ -266,7 +266,7 @@ wait !document.getElementById('file-conflict-merge').hidden
 click #file-conflict-merge
 wait !document.getElementById('merge-review-modal').hidden
 expect document.getElementById('merge-review-list').textContent.indexOf('IDSMINE') !== -1
-expect document.getElementById('merge-review-list').textContent.indexOf('Scene A.2') !== -1
+expect document.getElementById('merge-review-list').textContent.indexOf('Beat A.2') !== -1
 expect document.getElementById('merge-review-list').textContent.indexOf('Crew: constructor') !== -1
 expect document.getElementById('merge-review-list').textContent.indexOf('Crew: Object') === -1
 click #merge-review-cancel

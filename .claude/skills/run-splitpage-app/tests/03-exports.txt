@@ -25,10 +25,10 @@ expect window.__md.indexOf('## Production breakdown') !== -1
 expect window.__md.indexOf('gaffer tape') !== -1
 # #169's look: the meta line, the gutter under each heading, the breakdown by
 # category with a table of its own
-expect /^_\d+ scenes? · \d+:\d\d running time · \d+ of \d+ shot · [^_\n]+_$/m.test(window.__md)
-expect /^### Scene A\.1 · 00:00\n\n\*\*(To do|Ready|Shot)\*\* · Read \d+:\d\d/m.test(window.__md)
+expect /^_\d+ beats? · \d+:\d\d running time · \d+ of \d+ filmed · [^_\n]+_$/m.test(window.__md)
+expect /^### Beat A\.1 · 00:00\n\n\*\*(To do|Ready|Filmed)\*\* · Read \d+:\d\d/m.test(window.__md)
 expect window.__md.indexOf('### Props & set dressing (1)') !== -1
-expect window.__md.indexOf('| Item | Status | Scenes | Assigned to | Notes |') !== -1
+expect window.__md.indexOf('| Item | Status | Beats | Assigned to | Notes |') !== -1
 expect window.__md.indexOf('| gaffer tape | Needed | A.1 | — |  |') !== -1
 expect window.__md.indexOf('| Category | Item |') === -1
 
@@ -38,7 +38,7 @@ jsclick #file-menu [data-file-action="export-md-table"]
 sleep 1200
 eval (async function(){window.__mdt = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 expect window.__mdt.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
-expect /^\| A.1 \| 00:00 \| (To do|Ready|Shot) \| /m.test(window.__mdt)
+expect /^\| A.1 \| 00:00 \| (To do|Ready|Filmed) \| /m.test(window.__mdt)
 expect window.__mdt.indexOf('### Props & set dressing (1)') !== -1
 
 # --- breakdown CSV ----------------------------------------------------------
@@ -49,7 +49,7 @@ eval (async function(){window.__csv = await window.__blobs[window.__blobs.length
 expect window.__csv.indexOf('Category,Item,Status,Assigned to') !== -1
 expect window.__csv.indexOf('Needed') !== -1
 # #169's columns only at the end, where a sheet built on the old ones never looks
-expect /^﻿?Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group\r\n/.test(window.__csv)
+expect /^﻿?Category,Item,Status,Assigned to,Mentions,Beats,In script,Notes,B-roll shots,First beat at,Group\r\n/.test(window.__csv)
 expect window.__csv.indexOf('Prop,gaffer tape,Needed,,1,A.1,yes,,,00:00,Props & set dressing') !== -1
 
 # --- Word -------------------------------------------------------------------
@@ -83,11 +83,11 @@ sleep 1200
 eval (async function(){window.__scsv = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 # #169: where each scene starts, its status and read time, the tags in it,
 # its b-roll and open threads — "Scene" first, Visual and Audio by name
-expect /^\uFEFF?Scene,Start,Status,Read,Read set by hand,Visual,Audio,Tags,B-roll,Open comments\r\n/.test(window.__scsv)
+expect /^\uFEFF?Beat,Start,Status,Read,Read set by hand,Visual,Audio,Tags,B-roll,Open comments\r\n/.test(window.__scsv)
 expect /\r\nA\.2,\d\d:\d\d,To do,\d+:\d\d,,[^\r]*word for word[^\r]*,,,1\r\n/.test(window.__scsv)
-expect /\r\nA\.1,00:00,(To do|Ready|Shot),\d+:\d\d,,/.test(window.__scsv)
+expect /\r\nA\.1,00:00,(To do|Ready|Filmed),\d+:\d\d,,/.test(window.__scsv)
 expect window.__scsv.indexOf(',Prop: gaffer tape; Location: kitchen,,') !== -1
-expect /\r\nTotal,,\d+ of \d+ shot,\d+:\d\d,,,,,,/.test(window.__scsv)
+expect /\r\nTotal,,\d+ of \d+ filmed,\d+:\d\d,,,,,,/.test(window.__scsv)
 
 # --- the SplitShare page: named for the script, and saying what it is --------
 jsclick #btn-file
@@ -97,7 +97,7 @@ eval (async function(){window.__html = await window.__blobs[window.__blobs.lengt
 eval (function(){ var d = new DOMParser().parseFromString(window.__html, 'text/html'); window.__htmlHead = { title: d.title, desc: d.querySelector('meta[name="description"]').getAttribute('content') }; return window.__htmlHead; })()
 expect window.__htmlHead.title === (window.__splitpageFormats.state().title || 'Untitled Script') + ' — SplitShare'
 expect /- SplitShare\.html$/.test(window.__exportTest.fileName('export-html'))
-expect /^\d+ scenes? · \d+:\d\d running time · \d+ of \d+ shot · /.test(window.__htmlHead.desc)
+expect /^\d+ beats? · \d+:\d\d running time · \d+ of \d+ filmed · /.test(window.__htmlHead.desc)
 # the app's own page is left as it is
 expect document.title == Splitpage
 

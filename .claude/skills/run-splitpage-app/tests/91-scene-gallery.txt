@@ -71,7 +71,7 @@ eval (function(){ D.setBackend(null); window.open = window.__realOpen; return tr
 # ---- 3. the dialog --------------------------------------------------------------
 eval tiles('r10')[3].click()
 wait !M().hidden
-expect document.getElementById('gallery-title').textContent === 'Scene A.5 · Visual'
+expect document.getElementById('gallery-title').textContent === 'Beat A.5 · Visual'
 expect document.getElementById('gallery-summary').textContent === '8 pictures · 5 videos'
 expect grid().length === 10 && grid()[3].classList.contains('is-selected')
 expect M().querySelector('.scene-gallery-position').textContent === '4 / 10'
@@ -152,7 +152,7 @@ eval (function(){ var inp = document.getElementById('file-input'); var dt = new 
 wait shas('r10').length === 11
 wait grid().length === 11
 expect row('r10').moreImages[9].name === 'extra.png'
-wait toasts().indexOf('Picture added to scene A.5Undo') !== -1
+wait toasts().indexOf('Picture added to beat A.5Undo') !== -1
 expect tiles('r10')[3].textContent === '+8'
 jsclick #toast-host .toast-action
 wait shas('r10').length === 10

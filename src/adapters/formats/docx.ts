@@ -876,7 +876,7 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
   const wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
 
   let body = titleParaXml(doc.title || "Untitled Script") +
-    metaParaXml(["Narration", plural(rows.length, "scene"), groupDigits(words) + (words === 1 ? " word" : " words"),
+    metaParaXml(["Narration", plural(rows.length, "beat"), groupDigits(words) + (words === 1 ? " word" : " words"),
       "about " + formatDuration(words / Number(wpm) * 60) + " at " + String(wpm) + " wpm"].join(" · "));
 
   rows.forEach(function (row) {

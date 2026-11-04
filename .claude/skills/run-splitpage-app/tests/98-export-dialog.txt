@@ -56,7 +56,7 @@ expect __cardLines()
 expect (function () { var r = document.createRange(); r.selectNodeContents(document.querySelector('.export-card[data-format="broll"] .export-card-name')); return r.getClientRects().length === 1; })()
 # the right-hand side for PDF: a sketch with the real title, a summary, the name
 expect document.getElementById('export-preview').textContent.indexOf('Untitled Script') !== -1
-expect document.getElementById('export-summary').textContent.indexOf('2 scenes') === 0
+expect document.getElementById('export-summary').textContent.indexOf('2 beats') === 0
 expect document.getElementById('export-filename').textContent == Print dialog · choose Save as PDF
 expect document.getElementById('export-filename').previousElementSibling.textContent == Next step
 expect document.getElementById('export-options').hidden
@@ -112,8 +112,8 @@ click #menu-export
 wait !document.getElementById('export-modal').hidden
 wait __settled()
 jsclick .export-card[data-format="pdf"] input
-wait /^2 scenes · \d+:\d\d running time · 0 of 2 shot · /.test(document.querySelector('#export-preview .pv-meta').textContent)
-expect /^2 scenes · \d+:\d\d running time · 0 of 2 shot · /.test(document.querySelector('#export-preview .pv-meta').textContent)
+wait /^2 beats · \d+:\d\d running time · 0 of 2 filmed · /.test(document.querySelector('#export-preview .pv-meta').textContent)
+expect /^2 beats · \d+:\d\d running time · 0 of 2 filmed · /.test(document.querySelector('#export-preview .pv-meta').textContent)
 expect document.querySelectorAll('#export-preview .pv-rundown .pv-rd').length === 2
 expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-sc .pv-gut b'), function(b){return b.textContent;}).join(',') === 'A.1,A.2'
 expect document.querySelector('#export-preview .pv-sc .pv-tc').textContent === '00:00' && !!document.querySelector('#export-preview .pv-sc .pv-lamp-todo')
@@ -127,10 +127,10 @@ eval (function(){ window.__splitpageFormats.state().rows[1].visualText = window.
 jsclick .export-card[data-format="pdf"] input
 wait !!document.querySelector('#export-preview .pv-foot') && document.querySelector('#export-preview .pv-sh').textContent.indexOf('Read') !== -1
 expect !!document.querySelector('#export-preview .pv-foot') && document.querySelector('#export-preview .pv-sh').textContent.indexOf('Read') !== -1
-expect document.getElementById('export-summary').textContent == 2 scenes with timecodes, status and read times · breakdown and numbered comments at the end
+expect document.getElementById('export-summary').textContent == 2 beats with timecodes, status and read times · breakdown and numbered comments at the end
 jsclick .export-card[data-format="md"] input
 jsclick .export-seg input[value="stacked"]
-wait document.getElementById('export-preview').textContent.indexOf('### Scene A.1 · 00:00') !== -1 && /\*\*To do\*\* · Read \d+:\d\d/.test(document.getElementById('export-preview').textContent)
+wait document.getElementById('export-preview').textContent.indexOf('### Beat A.1 · 00:00') !== -1 && /\*\*To do\*\* · Read \d+:\d\d/.test(document.getElementById('export-preview').textContent)
 jsclick .export-seg input[value="table"]
 wait document.getElementById('export-preview').textContent.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
 expect document.getElementById('export-preview').textContent.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
@@ -144,9 +144,9 @@ expect !!document.querySelector('#export-preview .pv-sheets')
 jsclick .export-seg input[value="csv"]
 wait !document.querySelector('#export-preview .pv-sheets') && !!document.querySelector('#export-preview .pv-gh')
 expect !document.querySelector('#export-preview .pv-sheets')
-expect document.querySelector('#export-preview .pv-gh').textContent == SceneStartStatusReadVisualAudio
+expect document.querySelector('#export-preview .pv-gh').textContent == BeatStartStatusReadVisualAudio
 expect document.querySelector('#export-preview .pv-total').textContent.indexOf('Total') === 0
-expect document.getElementById('export-summary').textContent == 2 scenes, with start and read times, tags and b-roll · comments below · pictures not included
+expect document.getElementById('export-summary').textContent == 2 beats, with start and read times, tags and b-roll · comments below · pictures not included
 jsclick .export-card[data-format="html"] input
 wait !!document.querySelector('#export-preview .pv-tab') && document.querySelector('#export-preview .pv-tab').textContent === 'Untitled Script — SplitShare'
 expect document.querySelector('#export-preview .pv-tab').textContent == Untitled Script — SplitShare
@@ -154,9 +154,9 @@ expect document.querySelector('.export-card[data-format="html"] .export-card-nam
 expect document.getElementById('export-summary').textContent.indexOf('the whole app built in') !== -1
 jsclick .export-card[data-format="narration"] input
 jsclick .export-seg input[value="docx"]
-wait !!document.querySelector('#export-preview .pv-margin') && document.querySelector('#export-preview .pv-margin').textContent === 'A.1' && document.getElementById('export-summary').textContent.indexOf('2 scenes of narration · scene numbers in the margin · ') === 0
+wait !!document.querySelector('#export-preview .pv-margin') && document.querySelector('#export-preview .pv-margin').textContent === 'A.1' && document.getElementById('export-summary').textContent.indexOf('2 beats of narration · beat numbers in the margin · ') === 0
 expect document.querySelector('#export-preview .pv-margin').textContent === 'A.1'
-expect document.getElementById('export-summary').textContent.indexOf('2 scenes of narration · scene numbers in the margin · ') === 0
+expect document.getElementById('export-summary').textContent.indexOf('2 beats of narration · beat numbers in the margin · ') === 0
 jsclick .export-seg input[value="txt"]
 wait document.getElementById('export-summary').textContent.indexOf('margin') === -1 && !document.querySelector('#export-preview .pv-margin')
 expect document.getElementById('export-summary').textContent.indexOf('margin') === -1 && !document.querySelector('#export-preview .pv-margin')
@@ -165,7 +165,7 @@ jsclick .export-card[data-format="breakdown"] input
 jsclick .export-seg input[value="csv"]
 wait !!document.querySelector('#export-preview .pv-gh') && document.querySelector('#export-preview .pv-gh').textContent.indexOf('First at') !== -1
 expect document.querySelector('#export-preview .pv-gh').textContent.indexOf('First at') !== -1
-expect document.getElementById('export-summary').textContent == 3 tagged items · category, status, owner, scenes and where each first appears
+expect document.getElementById('export-summary').textContent == 3 tagged items · category, status, owner, beats and where each first appears
 jsclick .export-card[data-format="packing"] input
 jsclick .export-seg input[value="gear"]
 wait !!document.querySelector('#export-preview .pv-pack-head') && document.querySelector('#export-preview .pv-pack-head').textContent === 'Gear'

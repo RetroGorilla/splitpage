@@ -137,7 +137,7 @@ test("forget (design D4): a merge that changed a cell drops the entries for it, 
   assert.equal(h.sizes().undo, 2);
   const withNewRow = doc([row("r2", "B"), row("r1", "A merged"), row("r3")]);
   h.forget(changedBetween(next, withNewRow));
-  assert.equal(h.sizes().undo, 1, "the move goes with a change to the scene list");
+  assert.equal(h.sizes().undo, 1, "the move goes with a change to the beat list");
 });
 
 const typed = (b, a, key) => [{ op: "rowField", rowId: "r1", key: key || "audioText", before: b, after: a }];
@@ -1347,7 +1347,7 @@ for (const x of PROTOTYPE_IDS) {
   test(`applyStepsLive refuses a step for a missing scene "${x}" and inserts a new one (#311)`, () => {
     const live = doc([row("r1", "one")]);
     const edit = { op: "rowField", rowId: x, key: "audioText", before: "two", after: "TWO" };
-    assert.deepEqual(applyStepsLive(cellRuns, live, [edit]), { ok: false, reason: "a scene it changed has gone" });
+    assert.deepEqual(applyStepsLive(cellRuns, live, [edit]), { ok: false, reason: "a beat it changed has gone" });
     assert.deepEqual(applyStepsLive(cellRuns, live, [{ op: "insertRow", index: 1, row: row(x, "two") }]), { ok: true });
     assert.deepEqual(live.rows.map((r) => r.id), ["r1", x]);
     assert.deepEqual(applyStepsLive(cellRuns, live, [edit]), { ok: true });

@@ -237,7 +237,7 @@ test("a video link pasted on its own attaches to the scene's gallery, leaves the
   assert.notEqual(row("r1").updatedAt, OLD);
   assert.deepEqual({ seq: got.seq, generation: got.generation, heard: got.heard, undo: got.undo, steps: got.steps },
     { seq: 1, generation: 1, heard: ["edit"], undo: 1, steps: ["rowField:r1.imageLinks"] });
-  assert.ok(toasts().some((t) => t.indexOf("Video added to scene A.1") === 0));
+  assert.ok(toasts().some((t) => t.indexOf("Video added to beat A.1") === 0));
 });
 
 test("the same video link pasted again is dirtied and stamped but makes no second tile and no undo entry", async () => {

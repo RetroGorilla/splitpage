@@ -5,6 +5,12 @@ import { csvToRows } from "../../../src/adapters/formats/csv.ts";
 
 const rows = (text) => csvToRows(text).map((r) => [r.visualText, r.audioText]);
 
+test("legacy Scene and current Beat exports both stop before their comments appendix", () => {
+  for (const heading of ["Scene", "Beat"]) {
+    assert.deepEqual(rows(`${heading},Visual,Audio,Status\r\nB.1,Wide,Hello,shot\r\nComments,,,\r\n1,Comment,Words,`), [["Wide", "Hello"]]);
+  }
+});
+
 test("an empty file gives no rows", () => {
   assert.deepEqual(rows(""), []);
   assert.deepEqual(rows(undefined), []);

@@ -17,7 +17,7 @@ eval var changed=F.clone(base); changed.title='Disk title'; disk._body=JSON.stri
 wait !document.getElementById('file-conflict-modal').hidden && !document.getElementById('file-conflict-merge').hidden
 jsclick #file-conflict-merge
 wait !document.getElementById('merge-review-modal').hidden
-expect Array.from(document.querySelectorAll('.merge-group-head'),h=>h.firstChild.textContent).filter(h=>h.startsWith('Scene ')).join('|') === 'Scene B.1'
+expect Array.from(document.querySelectorAll('.merge-group-head'),h=>h.firstChild.textContent).filter(h=>h.startsWith('Beat ')).join('|') === 'Beat B.1'
 expect disk.writes === 0
 jsclick #merge-review-confirm
 wait document.getElementById('merge-review-modal').hidden
@@ -39,7 +39,7 @@ eval var changed=F.clone(base); changed.rows[1].audioText='Disk words'; disk._bo
 wait !document.getElementById('file-conflict-modal').hidden && !document.getElementById('file-conflict-merge').hidden
 jsclick #file-conflict-merge
 wait !document.getElementById('merge-review-modal').hidden
-expect document.querySelector('.merge-group-head').firstChild.textContent === 'Scene B.1 (Open here) / A.2 (On disk)'
+expect document.querySelector('.merge-group-head').firstChild.textContent === 'Beat B.1 (Open here) / A.2 (On disk)'
 viewport 375 812 mobile
 eval document.querySelectorAll('#toast-host .toast-dismiss').forEach(b=>b.click()); true
 wait document.querySelectorAll('#toast-host .toast').length === 0 && getComputedStyle(document.getElementById('merge-review-modal')).opacity === '1' && getComputedStyle(document.querySelector('#merge-review-modal .modal-panel')).opacity === '1'

@@ -35,7 +35,7 @@ eval if(document.getElementById('pp-scene-mode').getAttribute('aria-pressed')!==
 jsclick #pp-scene-next
 wait document.getElementById('pp-section').textContent === 'B Opening cue' && !document.getElementById('pp-section').hidden
 jsclick #pp-scene-next
-wait document.getElementById('pp-scene-readout').textContent === 'Scene B.2 of 4'
+wait document.getElementById('pp-scene-readout').textContent === 'Beat B.2 of 4'
 expect document.getElementById('pp-section').textContent === 'B Opening cue'
 jsclick #pp-scene-next
 wait document.getElementById('pp-section').textContent === 'C Ending cue'

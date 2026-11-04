@@ -345,7 +345,7 @@ function checkHtml(e: PanelShot) {
   const shot = e.status === "shot";
   return '<button type="button" class="broll-check" role="checkbox" aria-checked="' + (shot ? 'true' : 'false') +
     '" data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
-    escapeHtml("Shot: " + (e.name || "Untitled shot")) + '" title="' +
+    escapeHtml("Filmed: " + (e.name || "Untitled shot")) + '" title="' +
     (shot ? 'Filmed — click to mark To film' : 'To film — click to mark Filmed') +
     '"><span class="broll-check-box">' + icon("check") + '</span></button>';
 }
@@ -1243,7 +1243,7 @@ function renderBrollPage() {
       ? '<table class="broll-page-table">' +
           '<colgroup><col class="broll-page-w-check"><col class="broll-page-w-shot"><col class="broll-page-w-scene">' +
           '<col class="broll-page-w-props"><col class="broll-page-w-cuts"><col class="broll-page-w-owner"><col class="broll-page-w-note"></colgroup>' +
-          '<thead><tr><th scope="col"><span class="broll-sr">Shot or to film</span></th><th scope="col">Shot</th><th scope="col">Scene</th>' +
+          '<thead><tr><th scope="col"><span class="broll-sr">Filmed or to film</span></th><th scope="col">Shot</th><th scope="col">Beat</th>' +
             '<th scope="col">Props</th><th scope="col">Cuts against</th><th scope="col">Assigned</th><th scope="col">Note</th></tr></thead>' +
           brollGroups(shown, (ports as PanelPortUse).view.current().pageGroup).map(function (g) {
             return '<tbody>' + pageGroupHeadHtml(g) + g.items.map(pageRowHtml).join("") + '</tbody>';

@@ -20,6 +20,14 @@ initTags();
 
 const cells = (rows) => rows.map((r) => [r.visualText, r.audioText]);
 
+test("stacked imports distinguish scene headers from legacy Scene and current Beat rows", () => {
+  for (const word of ["Scene", "Beat"]) {
+    const text = `# Video\n\n_2 ${word.toLowerCase()}s · 0:02 running time_\n\n## Scene B · 0:02\n\n### ${word} B.1 · 00:00\n\n**Filmed** · Read 0:01\n\n*Visual —* Wide\n\nHello\n\n---\n\n### ${word} B.2 · 00:01\n\n_(blank ${word.toLowerCase()})_\n`;
+    assert.equal(detectTwoColumnFormat(text), "stacked");
+    assert.deepEqual(cells(parseImportRows(text, "twocolumn")), [["Wide", "Hello"], ["", ""]]);
+  }
+});
+
 test("a plain two-column table, header and separator both consumed", () => {
   const out = parseMarkdownTable([
     "| Visual | Audio |",
