@@ -18,11 +18,11 @@ const { sceneView } = await import("../bootstrap/wiring/editor-owners.ts");
 const writer = await import("../features/writer/writer.ts");
 let opened = 0;
 
-async function open(scenes = [{ id: "s1", name: "Opening", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r3" }], fields = {}) {
+async function open(sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r3" }], fields = {}) {
   if (viewFlags().writerOpen()) writer.closeWriter();
   const doc = migrateRows({ title: "Sections", rows: ["One.", "Two.", "Three.", "Four."].map((audioText, i) => ({
     id: "r" + (i + 1), audioText, visualText: "", status: i === 1 ? "shot" : "todo", lengthSeconds: (i + 1) * 10
-  })), sections: scenes, ...fields });
+  })), sections, ...fields });
   const file = new File([buildSplitpageFile(exportDocumentOf(doc))], "sections-" + (++opened) + ".splitpage");
   await openDocument({ kind: "file", file, handle: null, options: { skipSnapshot: true } });
   undoOwner().flush();
@@ -152,7 +152,7 @@ test("comment jump reveals its folded anchor", async () => {
 test("headers expose headings, Escape closes the menu, and non-element drag targets are ignored", async context => {
   await open();
   const header = document.querySelector('#rows [data-section-id="s1"]');
-  assert.equal(header.querySelector('[role="heading"][aria-level="2"]').textContent, "Opening");
+  assert.equal(header.querySelector('[role="heading"][aria-level="2"]').textContent, "A Opening");
   const menu = header.querySelector("details"), summary = menu.querySelector("summary");
   menu.open = true; summary.focus();
   key("Escape", summary);

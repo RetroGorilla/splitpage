@@ -8,14 +8,14 @@ import { escapeHtml } from "../../core/document/text-policy.ts";
 import { rowImage, rowImageKey } from "../../core/document/media.ts";
 import { idMap } from "../../core/document/id-map.ts";
 import { safeImageSrc } from "../../core/document/text-policy.ts";
-import { pad2 } from "../../core/production/timing.ts";
+import { deriveDocumentNumbering } from "../../core/document/numbering.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import type { MergeReviewControl, MergeReviewPorts } from "./ports.ts";
 import type { Home } from "../../application/location/document-location.ts";
 import type { DocumentShape, DocumentRow, DocumentShot, ValidatedDocument } from "../../core/document/validated.ts";
 import type { Frozen } from "../../core/document/freeze.ts";
 
-type MergeReviewDocument = Frozen<Pick<DocumentShape, "docId" | "title" | "rows" | "productionTags" | "brollShots" | "people">>;
+type MergeReviewDocument = Frozen<Pick<DocumentShape, "docId" | "title" | "rows" | "productionTags" | "brollShots" | "people">> & { readonly sections?: unknown };
 type MergeCandidate = { theirs: ValidatedDocument; base: ReturnType<typeof fileMergeBase>; home: Home | null; fileName: string; lastModified: number | null };
 import {
   mergeDiffPairHtml,
@@ -127,10 +127,12 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
 
   const baseRows = byId(b && (b as MergeReviewDocument).rows), mineRows = byId((mine as MergeReviewDocument).rows), theirRows = byId(theirs.rows);
   const textCtx = textMergeContext(b, mine, theirs);
-  const order: string[] = [], seen = idMap<boolean>(), beatNo = idMap<number>();
-  theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; beatNo[r.id] = order.length; });
-  (mine as MergeReviewDocument).rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; beatNo[r.id] = order.length; } });
+  const order: string[] = [], seen = idMap<boolean>();
+  theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; });
+  (mine as MergeReviewDocument).rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; } });
 
+  const mineNumbers = deriveDocumentNumbering(mine ?? { rows: [] });
+  const theirNumbers = deriveDocumentNumbering(theirs);
   order.forEach(function (id) {
     const m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
     const entries: MergeReviewEntry[] = [];
@@ -179,7 +181,10 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
       entries.push({ label: "Status", outcome: "status", mineHtml: statusPair.mine, theirsHtml: statusPair.theirs });
     }
     if (!entries.length) return;
-    groups.push({ label: "Scene " + pad2(beatNo[id] as number), note: mergeRowFate(bb, m, t), entries: entries });
+    const here = mineNumbers.beats[id]?.full, disk = theirNumbers.beats[id]?.full;
+    const label = here && disk && here !== disk
+      ? "Scene " + here + " (Open here) / " + disk + " (On disk)" : "Scene " + (here ?? disk ?? "");
+    groups.push({ label, note: mergeRowFate(bb, m, t), entries: entries });
   });
 
   const tagEntries = mergeListEntries("Breakdown", (mine as MergeReviewDocument).productionTags, theirs.productionTags,

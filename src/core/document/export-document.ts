@@ -1,4 +1,6 @@
 import { deepFreeze } from "./freeze.ts";
+import { deriveDocumentNumbering } from "./numbering.ts";
+import type { DocumentNumbering } from "./numbering.ts";
 import type { Frozen } from "./freeze.ts";
 import type { DocumentComment, DocumentRow, DocumentShot, DocumentTag, ValidatedDocument } from "./validated.ts";
 
@@ -21,6 +23,9 @@ type ExportTagEntry = {
 type ExportShotProp = { key: string; id: string; name: string; status: string; [key: string]: unknown };
 
 export type ExportShotEntry = {
+  beatNumber?: string;
+  shotNumber?: string;
+  shortShotNumber?: string;
   id: string;
   name: string | undefined;
   desc: string;
@@ -46,6 +51,7 @@ export type ExportReadModels = {
 export type ClockMode = "system" | "12" | "24";
 
 export type ExportDocument = Frozen<{
+  numbering: DocumentNumbering;
   document: ValidatedDocument;
   title: string;
   beats: DocumentRow[];
@@ -101,7 +107,9 @@ export function buildExportDocument(
   const forked = opts && opts.docId ? Object.assign({}, copied, { docId: opts.docId }) : copied;
   const document = opts && opts.stamp ? Object.assign({}, forked, opts.stamp) : forked;
   const people = Array.isArray(document.people) ? document.people as ExportPerson[] : [];
+  const labels = deriveDocumentNumbering(document);
   return deepFreeze({
+    numbering: labels,
     document: document,
     title: document.title,
     beats: document.rows,
@@ -113,6 +121,10 @@ export function buildExportDocument(
     clockMode: opts && opts.clockMode ? opts.clockMode : "system",
     production: jsonCopy(models.production.slice()),
     commentNumbers: numbering(models.commentNumbers),
-    broll: jsonCopy(models.broll.map(shotEntry))
+    broll: jsonCopy(models.broll.map(entry => {
+      const number = labels.shot(entry.rowId, entry.ordinal);
+      return { ...shotEntry(entry), beatNumber: labels.beats[entry.rowId ?? ""]?.full ?? "",
+        shotNumber: number?.full ?? "", shortShotNumber: number?.short ?? "" };
+    }))
   });
 }

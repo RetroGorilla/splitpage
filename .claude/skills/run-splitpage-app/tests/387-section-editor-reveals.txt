@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){window.F=window.__splitpageFormats;window.old=F.state();F.openFile(new File([JSON.stringify({schema:2,title:'Folded navigation',rows:[{id:'a',audioText:'Prefix',visualText:''},{id:'b',audioText:'<span class="cmt-anchor" data-cmt="c_one">Needle</span>',visualText:''},{id:'c',audioText:'Only scene',visualText:''},{id:'d',audioText:'Ending',visualText:''}],sections:[{id:'p',name:'Predecessor',firstSceneId:'a'},{id:'s',name:'Singleton',firstSceneId:'c'},{id:'t',name:'Tail',firstSceneId:'d'}],comments:[{id:'c_one',kind:'anchor',rowId:'b',field:'audioText',anchorId:'c_one',quotedText:'Needle',author:'Ada',body:'Jump here',replies:[]}]})],'folded.splitpage'));return true;})()
 wait F.state() !== old && F.state().title === 'Folded navigation'
-expect document.querySelector('#rows [data-section-id="p"] [role="heading"][aria-level="2"]').textContent === 'Predecessor'
+expect document.querySelector('#rows [data-section-id="p"] [role="heading"][aria-level="2"]').textContent === 'A Predecessor'
 eval var m=document.querySelector('#rows [data-section-id="p"] details');m.open=true;m.querySelector('summary').focus();true
 key none Escape
 expect !document.querySelector('#rows [data-section-id="p"] details').open

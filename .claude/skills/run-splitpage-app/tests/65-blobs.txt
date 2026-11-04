@@ -74,7 +74,7 @@ expect (async function(){ var before = await B.idbRecord(P); var f = await B.per
 # pictures) and re-rendered through __renderTest.render. Four rows: the
 # PNG whose bytes are in memory, the WebP whose bytes are only in
 # IndexedDB, a sha nobody has, and a legacy inline PNG.
-eval (function(){ window.F = window.__splitpageFormats; window.R = window.__renderTest; window.RP = B.recordFor(P); window.RW = { sha256: W, width: 37, height: 23, mime: 'image/webp' }; var c = document.createElement('canvas'); c.width = 29; c.height = 17; var g = c.getContext('2d'); g.fillStyle = '#3a3'; g.fillRect(0, 0, 29, 17); window.LEGACY = c.toDataURL('image/png'); var st = F.state(); while (st.rows.length < 4) st.rows.push({ id: 'img-row-' + st.rows.length, visualText: '', visualImage: null, audioText: 'filler', status: 'todo' }); window.IDS = st.rows.slice(0, 4).map(function(r){ return r.id; }); return !!(RP && RW && typeof R.render === 'function'); })()
+eval (async function(){ window.F = window.__splitpageFormats; window.R = window.__renderTest; window.RP = B.recordFor(P); window.RW = { sha256: W, width: 37, height: 23, mime: 'image/webp' }; var c = document.createElement('canvas'); c.width = 29; c.height = 17; var g = c.getContext('2d'); g.fillStyle = '#3a3'; g.fillRect(0, 0, 29, 17); window.LEGACY = c.toDataURL('image/png'); var st = JSON.parse(JSON.stringify(F.state())); while (st.rows.length < 4) st.rows.push({ id: 'img-row-' + st.rows.length, visualText: '', visualImage: null, audioText: 'filler', status: 'todo' }); await F.openFile(new File([JSON.stringify(st)], 'blob-readers.splitpage')); window.IDS = F.state().rows.slice(0, 4).map(function(r){ return r.id; }); return !!(RP && RW && typeof R.render === 'function'); })()
 eval (function(){ window.imgOf = function(i){ return document.querySelector('#rows .row[data-id="' + IDS[i] + '"] .visual-media img'); }; B.forgetMemory(); window.__heldAfterForget = B.has(W) || B.has(P); return true; })()
 expect __heldAfterForget === false
 # P back in memory (ensureBytes), W left only in IndexedDB
@@ -119,7 +119,7 @@ expect (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Arra
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-md"]
 wait !!lastOf('zip')
-expect (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await lastOf('zip').arrayBuffer())); return t.indexOf('images/scene-01.png') !== -1 && t.indexOf('images/scene-02.webp') !== -1 && t.indexOf('images/scene-04.png') !== -1 && t.indexOf('images/scene-03.') === -1; })()
+expect (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await lastOf('zip').arrayBuffer())); return t.indexOf('images/beat-A-1.png') !== -1 && t.indexOf('images/beat-A-2.webp') !== -1 && t.indexOf('images/beat-A-4.png') !== -1 && t.indexOf('images/beat-A-3.') === -1; })()
 # the two-column table inlines them as data: URIs, the ref'd ones canonical
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-md-table"]

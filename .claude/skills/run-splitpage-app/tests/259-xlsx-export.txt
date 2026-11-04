@@ -113,8 +113,8 @@ press  Bring the [gaffer tape] and the <tripod> to the {kitchen}.
 sleep 500
 eval document.activeElement.blur()
 expect document.querySelectorAll('#rows .tag-anchor').length >= 3
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return true;})()
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return true;})()
 press B-roll: steam off the kettle
 sleep 600
 eval document.activeElement.blur()

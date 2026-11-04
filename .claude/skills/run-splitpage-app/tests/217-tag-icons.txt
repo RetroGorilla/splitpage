@@ -19,7 +19,7 @@ caret #rows .row .audio-cell .cell-editable
 press  Hold up the [coffee cup].
 eval document.activeElement.blur()
 sleep 300
-expect document.querySelectorAll('#rows .row:first-child .tag-anchor').length === 5
+expect document.querySelectorAll('#rows .row:first-of-type .tag-anchor').length === 5
 eval window.__txt = function(){return JSON.stringify(F.state().rows.map(function(r){return [r.visualText,r.audioText];}));}
 eval window.__rows0 = __txt()
 eval window.__text0 = document.querySelector('#rows .row .visual-cell .cell-editable').innerText

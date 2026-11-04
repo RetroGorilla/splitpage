@@ -8,7 +8,6 @@ import { exportServices } from "../../application/export/services.ts";
 import { compareCommentPositions } from "../../core/document/comments.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
 import { hasSetLength } from "../../core/document/timing.ts";
-import { sceneGroups } from "../../core/document/scenes.ts";
 import { brollSortedForList } from "../../core/production/broll.ts";
 import {
   groupTagsByCategory,
@@ -79,6 +78,7 @@ export interface CommentEntry extends CommentReply {
   replies: CommentReply[];
 }
 export interface CommentOptions {
+  project?: boolean;
   pieces?: boolean;
   clockMode?: ClockMode | undefined;
 }
@@ -99,7 +99,7 @@ export function beatFacts(doc: ExportDocument, services: ExportServices = export
     if (!st) throw new Error("Missing row status");
     const out = {
       index: i,
-      number: pad2(i + 1),
+      number: doc.numbering.beats[r.id]?.full ?? "",
       start: formatTimecode(at),
       startSeconds: at,
       seconds: sec,
@@ -113,8 +113,8 @@ export function beatFacts(doc: ExportDocument, services: ExportServices = export
 }
 
 export function scriptSceneFacts(doc: ExportDocument, beats: readonly BeatFacts[]): ScriptSceneFacts[] {
-  return sceneGroups({ rows: doc.beats, sections: doc.document.sections }).map(group => ({
-    id: group.scene.id, name: group.scene.name, start: group.start, end: group.end,
+  return doc.numbering.scenes.map(group => ({
+    id: group.id ?? "", name: group.letter + (group.name ? " " + group.name : ""), start: group.start, end: group.end,
     total: formatDuration(beats.slice(group.start, group.end).reduce((sum, beat) => sum + beat.seconds, 0))
   }));
 }
@@ -133,7 +133,7 @@ function capturedShotsByProp(doc: ExportDocument): Record<string, string[]> {
     e.props.forEach(function (p) {
       const k = "prop " + normalizeTagName(p.name);
       const list = out[k] || (out[k] = []);
-      list.push(e.name || "Untitled shot");
+      list.push((e.shotNumber ? e.shotNumber + " " : "") + (e.name || "Untitled shot"));
     });
   });
   return out;
@@ -147,7 +147,7 @@ function capturedPerson(doc: ExportDocument, id: string) {
   return null;
 }
 
-export function breakdownRows(doc: ExportDocument): BreakdownRow[] {
+export function breakdownRows(doc: ExportDocument, project = false): BreakdownRow[] {
   const out: BreakdownRow[] = [];
   const shotsFor = capturedShotsByProp(doc);
   groupTagsByCategory(capturedEntries(doc)).forEach(function (g) {
@@ -157,7 +157,7 @@ export function breakdownRows(doc: ExportDocument): BreakdownRow[] {
       item.mentions.forEach(function (m) {
         if (seen[m.rowIndex]) return;
         seen[m.rowIndex] = true;
-        beats.push(pad2(m.rowIndex + 1));
+        beats.push(project ? pad2(m.rowIndex + 1) : doc.numbering.beats[m.rowId]?.full ?? "");
       });
       const owner = capturedPerson(doc, item.owner);
       const st = tagStatus(item.status) || tagStatus("needed");
@@ -182,14 +182,14 @@ export function breakdownRows(doc: ExportDocument): BreakdownRow[] {
 }
 
 export function breakdownTable(doc: ExportDocument, services: ExportServices = exportServices()): BreakdownTable {
-  const starts = beatFacts(doc, services).map(function (f) { return f.start; });
+  const starts = new Map(beatFacts(doc, services).map(f => [f.number, f.start]));
   const out: BreakdownTable = {
     head: ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
            "First scene at", "Group"],
     rows: []
   };
   breakdownRows(doc).forEach(function (r) {
-    const first = r.inScript === "no" ? "" : (starts[Number(r.beats[0]) - 1] || "");
+    const first = r.inScript === "no" ? "" : (starts.get(r.beats[0] ?? "") ?? "");
     out.rows.push({ catId: r.catId, status: r.status, cells: [
       r.categoryLabel,
       r.name,
@@ -267,9 +267,10 @@ function capturedRowIndex(doc: ExportDocument) {
   return function (id: unknown): number { return typeof id === "string" ? (at.get(id) ?? -1) : -1; };
 }
 
-function capturedLocationLabel(rowIndex: number, field: string): string {
+function capturedLocationLabel(doc: ExportDocument, rowIndex: number, field: string, project: boolean): string {
   if (field === "title") return "Document title";
-  const rowLabel = rowIndex === -1 ? "Deleted row" : ("Row " + pad2(rowIndex + 1));
+  const number = project ? pad2(rowIndex + 1) : doc.numbering.beats[doc.beats[rowIndex]?.id ?? ""]?.full ?? "";
+  const rowLabel = rowIndex === -1 ? "Deleted row" : "Row " + number;
   return rowLabel + " · " + (field === "audioText" ? "Audio" : "Visual");
 }
 
@@ -288,7 +289,7 @@ export function commentEntries(doc: ExportDocument, opts?: CommentOptions | null
       id: c.id,
       rowIndex: c.field === "title" ? -1 : rowIndex,
       field: text(c.field),
-      location: capturedLocationLabel(rowIndex, text(c.field)),
+      location: capturedLocationLabel(doc, rowIndex, text(c.field), !!opts?.project),
       author: text(c.author) || "Anonymous",
       body: services.htmlToPlainText(c.body),
       quoted: text(c.quotedText),

@@ -21,6 +21,7 @@ type ReadTimeLengthCommand = (...args: ReadTimeNullableIdArgs<Parameters<typeof 
 interface ReadTimePortUse extends Omit<ReadTimePorts, "document"> {
  readonly document: {
   readonly read: ReadTimePorts["document"]["read"];
+  readonly numbering: ReadTimePorts["document"]["numbering"];
   readonly current: (...args: Parameters<ReadTimePorts["document"]["current"]>) => ReadTimeDocument | null;
  };
 }
@@ -47,7 +48,6 @@ function openReadTimeEditor(btn: HTMLElement | null) {
   if (!beat) return;
   closeReadTimeEditor(false);
   const row = beat.row;
-  const idx = beat.index;
   const wasSet = hasSetLength(row as LengthHolder);
   const doc = (ports as ReadTimePortUse).document.current();
   const secs = rowSeconds(row, doc, (ports as ReadTimePortUse).text.productionReaders);
@@ -60,7 +60,7 @@ function openReadTimeEditor(btn: HTMLElement | null) {
   input.setAttribute("inputmode", "text");
   input.setAttribute("autocomplete", "off");
   input.setAttribute("spellcheck", "false");
-  input.setAttribute("aria-label", "Scene " + (idx + 1) + " length");
+  input.setAttribute("aria-label", "Scene " + ((ports as ReadTimePortUse).document.numbering().beats[row.id]?.full ?? "") + " length");
   input.placeholder = estimate;
   input.title = "A length like 1:30, 90 or 1m30s. Leave it empty to use the estimate (" + estimate + ").";
   btn.hidden = true;

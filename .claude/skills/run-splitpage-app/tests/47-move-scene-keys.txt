@@ -72,7 +72,7 @@ jsclick #btn-production
 sleep 500
 jsclick #production-modes [data-group="scene"]
 sleep 300
-expect document.querySelector('#production-list .tag-scene-group-head').textContent == Scene 01
+expect document.querySelector('#production-list .tag-scene-group-head').textContent == Scene A.1
 jsclick #production-close
 sleep 300
 

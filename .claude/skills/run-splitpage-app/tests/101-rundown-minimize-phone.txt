@@ -11,7 +11,7 @@ wait document.querySelectorAll('#rows .row').length > 0
 wait document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
 
 expect matchMedia('(hover: none)').matches
-expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 52
+expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 72
 # the chevron sits inside the strip's right margin, on the screen
 expect (function(){ var t = document.querySelector('#rundown .rundown-toggle').getBoundingClientRect(); return t.width > 0 && t.right <= innerWidth && t.left >= innerWidth - 20; })()
 # and never over a block
@@ -26,7 +26,7 @@ expect localStorage.getItem('splitpage-rundown-min') == 1
 
 click #rundown .rundown-toggle
 wait !document.getElementById('rundown').classList.contains('is-min')
-expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 52
+expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 72
 expect document.documentElement.scrollWidth <= innerWidth
 # numbers only, as before
 expect document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length

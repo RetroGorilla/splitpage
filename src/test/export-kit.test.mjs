@@ -59,7 +59,7 @@ test("each scene's gutter: number, start timecode, read time, set by hand or not
   demo();
   const beats = beatFacts(exportDocumentOf(currentDocument()));
   assert.equal(beats.length, 30);
-  assert.equal(beats[0].number, "01");
+  assert.equal(beats[0].number, "A.1");
   assert.equal(beats[0].start, "00:00");
   assert.equal(beats[1].start, "00:10");
   assert.equal(beats[2].start, "00:16");
@@ -83,7 +83,7 @@ test("the open threads are numbered down the script, a resolved one not at all",
   assert.equal(list.length, currentDocument().comments.length);
   const numbered = list.filter((c) => c.number);
   assert.deepEqual(numbered.map((c) => c.number), [1, 2, 3]);
-  assert.equal(list[0].where, "Scene 03 · Audio");
+  assert.equal(list[0].where, "Scene A.3 · Audio");
   assert.equal(list.find((c) => c.resolved).number, null);
 });
 
@@ -143,7 +143,7 @@ test("the b-roll by scene, with each scene's start and count", () => {
   const groups = exportBrollBeats(exportDocumentOf(currentDocument()));
   const all = groups.reduce((n, g) => n + g.items.length, 0);
   assert.equal(all, 9);
-  assert.equal(groups[0].label, "Scene 04");
+  assert.equal(groups[0].label, "Scene A.4");
   assert.equal(groups[0].start, "01:03");
   assert.equal(groups[0].done, 1);
   assert.equal(brollSummaryText(groups), "3 of 9 shot · 1 flagged");

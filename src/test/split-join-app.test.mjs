@@ -400,8 +400,8 @@ const productionBeats = () => texts("#production-panel .tag-scene");
 const waitRefresh = () => new Promise((r) => setTimeout(r, 400));
 
 const PANELS = [
-  { name: "production", open: openProductionPanel, beats: productionBeats, labels: (n) => ["0" + n] },
-  { name: "b-roll", open: openBrollPanel, beats: brollBeats, labels: (n) => ["Scene 0" + n] }
+  { name: "production", open: openProductionPanel, beats: productionBeats, labels: (n) => ["A." + n] },
+  { name: "b-roll", open: openBrollPanel, beats: brollBeats, labels: (n) => ["Scene A." + n] }
 ];
 
 async function openPanelUnderWriter(panel) {

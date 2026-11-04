@@ -53,14 +53,14 @@ expect document.querySelectorAll('#merge-review-list .diff-del').length > 0
 expect document.querySelectorAll('#merge-review-list .merge-entry[data-outcome="conflict"]').length === 0
 # nothing written, and nothing applied to the open document yet
 expect window.__written === 0
-expect document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') === -1
+expect document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') === -1
 
 # --- Cancel changes nothing, and hands the four original choices back -----
 click #merge-review-cancel
 wait document.getElementById('merge-review-modal').hidden
 expect document.getElementById('file-conflict-modal').hidden == false
 expect window.__written === 0
-expect document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') === -1
+expect document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') === -1
 expect F.docFile().lastModified === window.__t0
 
 # --- confirming merges both sides in, and still writes nothing ------------
@@ -69,7 +69,7 @@ wait !document.getElementById('merge-review-modal').hidden
 click #merge-review-confirm
 wait document.getElementById('merge-review-modal').hidden
 expect document.getElementById('file-conflict-modal').hidden
-wait document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') !== -1
+wait document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') !== -1
 expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('MINESCENEONE') !== -1
 expect window.__written === 0
 # reported through the existing merge banner, and nothing overlapped
@@ -239,7 +239,7 @@ wait !document.getElementById('merge-review-modal').hidden
 expect document.getElementById('merge-review-list').textContent.indexOf('DESKTOPDISK') !== -1
 expect document.querySelectorAll('#merge-review-list .merge-entry[data-outcome="conflict"]').length === 0
 click #merge-review-confirm
-wait document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').textContent.indexOf('DESKTOPDISK') !== -1
+wait document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable').textContent.indexOf('DESKTOPDISK') !== -1
 expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('DESKTOPLOCAL') !== -1
 # still nothing on disk until the user saves
 expect window.fake._text(window.__deskId).indexOf('DESKTOPLOCAL') === -1
@@ -266,7 +266,7 @@ wait !document.getElementById('file-conflict-merge').hidden
 click #file-conflict-merge
 wait !document.getElementById('merge-review-modal').hidden
 expect document.getElementById('merge-review-list').textContent.indexOf('IDSMINE') !== -1
-expect document.getElementById('merge-review-list').textContent.indexOf('Scene 02') !== -1
+expect document.getElementById('merge-review-list').textContent.indexOf('Scene A.2') !== -1
 expect document.getElementById('merge-review-list').textContent.indexOf('Crew: constructor') !== -1
 expect document.getElementById('merge-review-list').textContent.indexOf('Crew: Object') === -1
 click #merge-review-cancel

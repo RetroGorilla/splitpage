@@ -15,7 +15,7 @@ wait document.querySelectorAll('#rows .row').length > 1
 eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.cell = function (i, col) { return document.querySelectorAll('#rows .row')[i].querySelector('.' + col + '-cell .cell-editable'); }; window.st = function (i, col) { return F.state().rows[i][col + 'Text']; }; window.reg = function (name) { return F.state().productionTags.some(function (t) { return t.name === name; }); }; return true; })()
 
 # --- a typed [shortcut]: one entry, and Ctrl+Z gives back the typed text -----
-caret #rows .row:nth-child(1) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(1) .audio-cell .cell-editable
 press  a [zebra lamp
 sleep 200
 eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
@@ -50,7 +50,7 @@ expect cell(0, 'audio').querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"
 expect reg('zebra lamp')
 
 # --- Tab completion: one entry, Ctrl+Z gives back the half-typed name -------
-caret #rows .row:nth-child(2) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(2) .audio-cell .cell-editable
 press  then [zeb
 wait document.getElementById('tag-ghost').classList.contains('is-visible')
 eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
@@ -71,7 +71,7 @@ expect cell(1, 'audio').querySelectorAll('.tag-anchor').length == 0
 expect /\[zeb$/.test(st(1, 'audio'))
 
 # --- an untagged mention taken with Tab: one entry, Ctrl+Z gives back the words
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
 press  Beside the Zebra Lamp there.
 sleep 900
 expect document.getElementById('tag-suggest').classList.contains('is-visible')
@@ -87,7 +87,7 @@ expect cell(1, 'visual').querySelectorAll('.tag-anchor[data-tag-name="zebra lamp
 expect st(1, 'visual').indexOf('Beside the Zebra Lamp there.') !== -1
 
 # --- a b-roll key: typed, then undone ---------------------------------------
-caret #rows .row:nth-child(1) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
 eval (function(){ var c = cell(0, 'visual'); var r = document.createRange(); r.selectNodeContents(c); var s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('delete'); return c.innerHTML; })()
 press B-roll
 sleep 200
@@ -112,7 +112,7 @@ sleep 300
 expect cell(0, 'visual').querySelectorAll('.broll-key').length == 1
 
 # typing after a key goes after it, not into it
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
 key Enter
 press B-roll: gulls over the pier
 sleep 600

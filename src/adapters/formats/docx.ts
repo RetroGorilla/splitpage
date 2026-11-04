@@ -871,7 +871,7 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
   const rels = { addLink: function (href: string) { links.push(href); return "rIdL" + links.length; } };
   const rows = narrationRows(doc, opts);
   const scenes = scriptSceneFacts(doc, beatFacts(doc));
-  let lastSection = "";
+  let lastScene: string | null = null;
   const words = rows.reduce(function (n, row) { return n + exportServices().productionReaders.wordCount(row.audioText); }, 0);
   const wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
 
@@ -882,12 +882,12 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
   rows.forEach(function (row) {
     const index = doc.beats.indexOf(row);
     const heading = scenes.find(group => index >= group.start && index < group.end);
-    if (heading && heading.id !== lastSection) {
-      lastSection = heading.id;
+    if (heading && heading.id !== lastScene) {
+      lastScene = heading.id;
       body += '<w:p><w:pPr><w:pStyle w:val="' + META_STYLE + '"/><w:keepNext/><w:spacing w:before="240" w:after="120"/></w:pPr>' +
         textRunXml(heading.name + " · " + heading.total, { b: true, sz: 24, color: PRINT_COLORS.text }) + '</w:p>';
     }
-    const number = pad2(index + 1);
+    const number = doc.numbering.beats[row.id]?.full ?? "";
     body += docxRunsXml(row.audioText, rels, Object.assign({
       pPr: '<w:pStyle w:val="' + NARRATION_STYLE + '"/><w:ind w:left="0" w:hanging="' + BEAT_NO_HANG + '"/>',
       lead: '<w:r><w:rPr><w:rStyle w:val="' + BEAT_NO_STYLE + '"/><w:color w:val="' + PRINT_COLORS.faint + '"/><w:sz w:val="16"/></w:rPr>' +

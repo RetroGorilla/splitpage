@@ -56,8 +56,8 @@ eval (function(){ for (var i = 0; i < 8; i++) document.querySelector('[data-acti
 sleep 400
 eval document.activeElement.blur()
 eval window.scrollTo(0, 0)
-eval (function(){ var c = document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'); var r = c.getBoundingClientRect(); window.__y = r.top + Math.min(20, r.height / 2); window.__frac = (window.__y - r.top) / r.height; return window.__y; })()
-expect wheelAt(document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'), -300) === true
+eval (function(){ var c = document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable'); var r = c.getBoundingClientRect(); window.__y = r.top + Math.min(20, r.height / 2); window.__frac = (window.__y - r.top) / r.height; return window.__y; })()
+expect wheelAt(document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable'), -300) === true
 sleep 900
 expect scale() > 1.3
 expect afs() > 18 * 1.3
@@ -66,7 +66,7 @@ expect getComputedStyle(document.querySelector('.doc-title')).fontSize + '|' + g
 # the gutter and rail grow with it, and the row's padding
 expect parseFloat(getComputedStyle(document.querySelector('#rows .row-num')).fontSize) > 18
 # the line under the pointer is still under the pointer
-expect (function(){ var r = document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').getBoundingClientRect(); return Math.abs(r.top + window.__frac * r.height - window.__y) <= 3; })()
+expect (function(){ var r = document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable').getBoundingClientRect(); return Math.abs(r.top + window.__frac * r.height - window.__y) <= 3; })()
 expect window.scrollY > 0
 # the readout says so, and is remembered
 expect document.getElementById('script-zoom-readout').hidden === false
@@ -76,7 +76,7 @@ expect Math.abs(parseFloat(localStorage.getItem('splitpage-script-scale')) - sca
 
 # --- a plain wheel is a scroll, not a zoom -------------------------------------------
 eval window.__s = scale()
-expect wheelAt(document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'), 100, false) === false
+expect wheelAt(document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable'), 100, false) === false
 sleep 300
 expect scale() === window.__s
 
@@ -87,11 +87,11 @@ expect scale() === 1
 expect afs() === 18
 
 # --- 70 % to 200 %, and no further ---------------------------------------------------
-eval (function(){ for (var i = 0; i < 20; i++) wheelAt(document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'), 300); return true; })()
+eval (function(){ for (var i = 0; i < 20; i++) wheelAt(document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable'), 300); return true; })()
 sleep 1500
 expect scale() === 0.7
 expect matchMedia('(hover: none), (pointer: coarse)').matches || Math.abs(afs() - 12.6) < 0.01
-eval (function(){ for (var i = 0; i < 30; i++) wheelAt(document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'), -300); return true; })()
+eval (function(){ for (var i = 0; i < 30; i++) wheelAt(document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable'), -300); return true; })()
 sleep 1500
 expect scale() === 2
 expect afs() === 36

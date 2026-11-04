@@ -4,7 +4,7 @@ import type { Frozen } from "../document/freeze.ts";
 import { normalizeTagName } from "../document/tags.ts";
 import { brollSortedForList } from "./broll.ts";
 import { tagStatus } from "./looks.ts";
-import { formatTimecode, pad2 } from "./timing.ts";
+import { formatTimecode } from "./timing.ts";
 
 type Shot = Frozen<ExportShotEntry>;
 type Person = Frozen<ExportPerson>;
@@ -80,7 +80,7 @@ export function personIn(people: readonly Person[], id: string): Person | null {
 }
 
 export function beatLabel(e: Shot): string {
-  return e.rowIndex === -1 ? "" : pad2(e.rowIndex + 1);
+  return e.beatNumber ?? "";
 }
 
 export function startOf(e: Shot, starts: Readonly<Record<string, number>>): string {
@@ -91,7 +91,7 @@ export function shotRecordForFile(e: Shot, people: readonly Person[]): ShotRecor
   const who = personIn(people, e.owner);
   return {
     beat: e.rowId ? beatLabel(e) : "",
-    name: e.name || "Untitled shot",
+    name: (e.shotNumber ? e.shotNumber + " " : "") + (e.name || "Untitled shot"),
     status: e.status === "shot" ? "Shot" : "To shoot",
     shot: e.status === "shot",
     flagged: !!e.reshoot,
@@ -121,7 +121,7 @@ export function brollGroups(entries: readonly Shot[], by: string, from: { rows: 
     let row: Row | null = null;
     if (by === "scene") {
       if (e.rowIndex === -1) { key = "added"; label = "Added here"; kind = "added"; }
-      else { key = "r:" + e.rowId; label = "Scene " + pad2(e.rowIndex + 1); row = rows[e.rowIndex] || null; }
+      else { key = "r:" + e.rowId; label = "Scene " + beatLabel(e); row = rows[e.rowIndex] || null; }
     } else if (by === "location") {
       key = e.location ? "l:" + normalizeTagName(e.location) : "none";
       label = e.location || "No location";

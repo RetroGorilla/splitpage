@@ -17,7 +17,7 @@ import type { Clock, IdSource } from "../../core/document/ports.ts";
 
 export interface CommentStatePorts {
   readonly sort: CommentSorting;
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly notices: Pick<NoticePort, "show">;
   readonly preferences: Pick<Preferences, "clock" | "commentAuthor" | "rememberCommentAuthor" | "commentsSort" | "setCommentsSort" | "commentFilter" | "setCommentFilter" | "taggingHelpShown" | "taggingHelpDismissed">;

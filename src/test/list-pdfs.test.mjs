@@ -24,7 +24,7 @@ test("the print data says what each group is and where each scene starts", () =>
   groupBy("scene");
   const data = printData();
   const g = data.groups[0];
-  assert.deepEqual([g.label, g.kind, g.start, g.none], ["Scene 04", "scene", "01:03", false]);
+  assert.deepEqual([g.label, g.kind, g.start, g.none], ["Scene A.4", "scene", "01:03", false]);
   assert.equal(g.items[0].start, "01:03");
   groupBy("location");
   const byPlace = printData().groups;

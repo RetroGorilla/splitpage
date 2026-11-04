@@ -45,7 +45,7 @@ function beatTagLists(doc: ExportDocument): Record<string, string[]> {
   breakdownRows(doc).forEach(function (r) {
     if (r.inScript === "no") return;
     r.beats.forEach(function (n) {
-      const i = Number(n) - 1;
+      const i = n;
       const list = byBeat[i] = byBeat[i] || [];
       const last = list[list.length - 1];
       if (last && last.label === r.categoryLabel) last.names.push(r.name);
@@ -59,11 +59,11 @@ function beatTagLists(doc: ExportDocument): Record<string, string[]> {
   return out;
 }
 
-function beatBrollLists(doc: ExportDocument, services: ExportServices): Record<number, string[]> {
-  const byBeat: Record<number, string[]> = {};
+function beatBrollLists(doc: ExportDocument, services: ExportServices): Record<string, string[]> {
+  const byBeat: Record<string, string[]> = {};
   exportBrollBeats(doc, services).forEach(function (g) {
     if (!g.beat) return;
-    byBeat[Number(g.beat) - 1] = g.items.map(function (r) {
+    byBeat[g.beat] = g.items.map(function (r) {
       return r.name + " (" + (r.shot ? "shot" : "to shoot") + (r.flagged ? ", flagged" : "") + ")";
     });
   });
@@ -103,8 +103,8 @@ export function scriptTable(doc: ExportDocument, services: ExportServices = expo
       f.readSet ? "yes" : "",
       toPlainText(services.cellOf(row.visualText)),
       toPlainText(services.cellOf(row.audioText)),
-      (tags[i] || []).join("; "),
-      (broll[i] || []).join("; "),
+      (tags[f.number] || []).join("; "),
+      (broll[f.number] || []).join("; "),
       (open[i] || []).sort(function (a, b) { return a - b; }).join(", ")
     ] });
   });

@@ -15,7 +15,9 @@ import {
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
-import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
+import { markdownExportImages, toMarkdownDoc } from "../adapters/formats/export-text.ts";
+import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
+import { parseImportRows } from "../adapters/formats/import-text.ts";
 import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { refsIn } from "../../shared/blob-policy.ts";
@@ -146,8 +148,33 @@ test("Markdown names every picture and every link", () => {
   loadTestDocument(doc([{ visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc" }],
     moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]));
   const md = toMarkdownDoc(exportDocumentOf(currentDocument()));
-  assert.ok(md.indexOf("](images/scene-01.jpg)") !== -1);
-  assert.ok(md.indexOf("](images/scene-01-2.jpg)") !== -1);
+  assert.ok(md.indexOf("](images/beat-A-1.jpg)") !== -1);
+  assert.ok(md.indexOf("](images/beat-A-1-2.jpg)") !== -1);
   assert.ok(md.indexOf("▶ [youtu.be/abc](https://youtu.be/abc)") !== -1);
   assert.ok(md.indexOf("▶ b.mov _(video file)_") !== -1);
+});
+
+test("Markdown image links and bundle names use full beat numbers across scenes", () => {
+  loadTestDocument(migrateRows({ title: "Pictures by scene", rows: [
+    { id: "a1", visualText: "First", audioText: "One", imageRef: P1 },
+    { id: "a2", visualText: "Second", audioText: "Two", imageRef: P1 },
+    { id: "a3", visualText: "Third", audioText: "Three", imageRef: P1, moreImages: [{ imageRef: P2 }] },
+    { id: "b1", visualText: "Fourth", audioText: "Four", imageRef: P1, moreImages: [{ imageRef: P3 }] }
+  ], sections: [{ id: "named", name: "Second scene", firstSceneId: "b1" }] }));
+  const captured = exportDocumentOf(currentDocument());
+  const assets = exportAssetsNow(captured);
+  const names = markdownExportImages(captured, assets).map(picture => picture.path);
+  assert.deepEqual(names, ["images/beat-A-1.jpg", "images/beat-A-2.jpg", "images/beat-A-3.jpg",
+    "images/beat-A-3-2.jpg", "images/beat-B-1.jpg", "images/beat-B-1-2.jpg"]);
+  assert.equal(new Set(names).size, names.length);
+  const markdown = toMarkdownDoc(captured, { assets });
+  for (const name of names) assert.ok(markdown.includes("](" + name + ")"), name);
+  assert.deepEqual(parseImportRows(markdown, "twocolumn").map(({ visualText, audioText }) => [visualText, audioText]),
+    [["First", "One"], ["Second", "Two"], ["Third", "Three"], ["Fourth", "Four"]]);
+});
+
+test("Markdown still recognizes old scene-numbered primary and additional image references", () => {
+  const markdown = "# Legacy\n\n### Scene 03 · 00:00\n\n![visual for scene 03](images/scene-03.jpg)\n\n" +
+    "![visual 2 for scene 03](images/scene-03-2.jpg)\n\n*Visual —* Third\n\nThree\n\n---\n";
+  assert.deepEqual(parseImportRows(markdown, "twocolumn"), [{ visualText: "Third", audioText: "Three" }]);
 });

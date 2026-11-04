@@ -6,7 +6,7 @@ import type { CellRange } from "../../application/editing/cell-editing.ts";
 
 import type { VideoPosterFrame } from "../../application/media/video-files.ts";
 interface BeatMediaPortUse extends Omit<BeatMediaPorts, "document"> {
- readonly document: { readonly read: BeatMediaPorts["document"]["read"] };
+ readonly document: Pick<BeatMediaPorts["document"], "read" | "numbering">;
 }
 let ports: BeatMediaPorts | null = null;
 
@@ -63,7 +63,8 @@ function addPicture(rowId: string, file: File, slot?: number) {
     if (!rec) throw new Error("not a picture the registry takes");
     (ports as BeatMediaPortUse).pictures.persist([rec.sha256]);
     const replacing = typeof slot === "number";
-    (ports as BeatMediaPortUse).cells.editGallery(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + (idx + 1), function (row) {
+    const number = (ports as BeatMediaPortUse).document.numbering().beats[rowId]?.full ?? "";
+    (ports as BeatMediaPortUse).cells.editGallery(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + number, function (row) {
       if (replacing && !replaceGalleryPicture(row, slot, rec, file.name)) return false;
       if (!replacing) addGalleryPicture(row, rec, file.name);
       return true;

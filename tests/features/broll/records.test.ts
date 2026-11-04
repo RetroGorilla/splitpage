@@ -1,3 +1,4 @@
+import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -19,7 +20,7 @@ function setup(doc: ValidatedDocument | null) {
   const anchored: string[] = [];
   let next = 0;
   const ports: BrollRecordsPorts = {
-    document: { current: () => doc, read: (select) => select(doc) },
+    document: { numbering: () => deriveDocumentNumbering(doc ?? { rows: [] }), current: () => doc, read: (select) => select(doc) },
     edits: { ...edits.edits, text: { ...edits.edits.stamps, cells: (html: string) => cellOf(html) } },
     cells: { edit: (cell, change) => { cellEdits.push(change); return cell; } },
     paint: { whileShown: (edit) => edit() },

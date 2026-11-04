@@ -10,7 +10,7 @@ goto /index.html
 wait document.querySelectorAll('#rows .row').length > 1
 eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.cell = function (i) { return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable'); }; window.st = function (i) { return F.state().rows[i].visualText.replace(/&nbsp;/g, ' '); }; window.kw = function () { return document.querySelectorAll('#rows .plain-tag-keyword').length; }; return true; })()
 
-caret #rows .row:nth-child(1) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
 press  VFX: lens flare
 sleep 250
 expect kw() == 1

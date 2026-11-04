@@ -27,7 +27,8 @@ export function detectTwoColumnFormat(text: string) {
   if (nonBlank.length < 2) return null;
 
   const pipeLines = nonBlank.filter(function (l) { return l.indexOf("|") !== -1; });
-  if (pipeLines.length >= 2 && pipeLines.length / nonBlank.length > 0.6) return "table";
+  const ownTable = nonBlank.some(line => /^\|\s*#\s*\|\s*(?:Start\s*\|\s*Status\s*\|\s*)?Visual\s*\|\s*Audio\s*\|/i.test(line));
+  if (ownTable || pipeLines.length >= 2 && pipeLines.length / nonBlank.length > 0.6) return "table";
 
   const tabLines = nonBlank.filter(function (l) { return l.indexOf("\t") !== -1; });
   if (tabLines.length / nonBlank.length > 0.6) return "tab";
@@ -40,7 +41,7 @@ export function detectTwoColumnFormat(text: string) {
   return null;
 }
 
-const MD_BEAT_HEADING_RE = /^###\s+Scene\s+\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
+const MD_BEAT_HEADING_RE = /^###\s+Scene\s+(?:[A-Z]+\.)?\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
 const MD_BEAT_META_RE = /^_\d+ scenes? · (est\. )?\S+ running time( · .*)?_$/;
 const MD_BEAT_FACTS_RE = /^\*\*[^*]+\*\* · Read \d+(:\d\d)+(, set by hand)?$/;
 const MD_MARKER_RE = /<sup>\d+<\/sup>/g;

@@ -32,7 +32,7 @@ interface BrollAnchors {
 }
 
 export interface BrollRecordsPorts {
-  readonly document: Pick<DocumentReader, "read"> & { readonly current: () => ValidatedDocument | null };
+  readonly document: Pick<DocumentReader, "read" | "numbering"> & { readonly current: () => ValidatedDocument | null };
   readonly edits: Pick<DocumentEdits, "run" | "edit" | "stamps" | "text">;
   readonly cells: Pick<CellEditing<Element>, "edit">;
   readonly paint: Pick<PaintGuard, "whileShown">;
@@ -64,7 +64,7 @@ export interface BrollRecordsMount extends BrollRecords {
 export interface BrollPanelPorts {
   readonly screen: () => ScreenState;
   readonly view: Pick<BrollView, "load" | "current" | "setFilter" | "setGroup" | "setPageGroup">;
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit">;
   readonly text: Pick<TextServices<HTMLElement>, "productionReaders">;
   readonly ids: IdSource;

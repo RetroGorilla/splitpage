@@ -90,7 +90,7 @@ test("Find pauses voice and playback, cues the matched scene, and resumes voice 
     range.getClientRects = () => [] as unknown as DOMRectList;
     runtime.jumpToFind(range);
     assert.equal(scroller.scrollTop, 3300);
-    assert.equal(document.getElementById("pp-scene-readout")?.textContent, "Scene 2 of 2");
+    assert.equal(document.getElementById("pp-scene-readout")?.textContent, "Scene A.2 of 2");
     runtime.setSearching(false);
     assert.equal(h.state.playing, false);
     await runtime.startVoiceFollow();

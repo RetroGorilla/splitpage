@@ -85,8 +85,8 @@ expect new TextDecoder().decode(window.__parts['docProps/core.xml']).indexOf('<d
 # the scene gutter visible in the document (#169): a "Scene" header, "01"/"02"
 # cells, a start timecode each; a "Read" header on the right
 expect window.__docXml.indexOf('>Scene<') !== -1 && window.__docXml.indexOf('>Read<') !== -1
-expect window.__docXml.indexOf('>01<') !== -1
-expect window.__docXml.indexOf('>02<') !== -1
+expect window.__docXml.indexOf('>A.1<') !== -1
+expect window.__docXml.indexOf('>A.2<') !== -1
 expect window.__docXml.indexOf('>00:00<') !== -1
 # the line under the title, in the export's own paragraph style
 expect window.__docXml.indexOf('<w:pStyle w:val="SplitpageMeta"/>') !== -1 && window.__docXml.indexOf('running time') !== -1
@@ -150,7 +150,7 @@ jsclick #file-menu [data-file-action="export-md"]
 sleep 1200
 eval (async function(){window.__md = await window.__blobs[window.__blobs.length-1].text(); return window.__md.length;})()
 
-expect window.__md.indexOf('### Scene 01') !== -1
+expect window.__md.indexOf('### Scene A.1') !== -1
 # no bold-label-per-field pattern
 expect window.__md.indexOf('**Visual**') === -1
 expect window.__md.indexOf('**Audio**') === -1
@@ -181,8 +181,8 @@ sleep 1200
 eval (async function(){var blob=window.__blobs[window.__blobs.length-1];window.__mdZipType=blob.type;var bytes=new Uint8Array(await blob.arrayBuffer());window.__isZip=(bytes[0]===0x50&&bytes[1]===0x4B);var files=window.__unzip(bytes);window.__mdZipNames=Object.keys(files);var mdName=window.__mdZipNames.filter(function(n){return /\.md$/.test(n);})[0];window.__mdFromZip=new TextDecoder().decode(files[mdName]);return true;})()
 expect window.__isZip
 expect window.__mdZipType == application/zip
-expect window.__mdZipNames.indexOf('images/scene-01.png') !== -1
-expect window.__mdFromZip.indexOf('images/scene-01.png') !== -1
+expect window.__mdZipNames.indexOf('images/beat-A-1.png') !== -1
+expect window.__mdFromZip.indexOf('images/beat-A-1.png') !== -1
 expect window.__mdFromZip.indexOf('data:image') === -1
 
 # the two-column export's cells are untouched: still one file, still base64

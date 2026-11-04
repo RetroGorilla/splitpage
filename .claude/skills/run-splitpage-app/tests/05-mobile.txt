@@ -34,7 +34,8 @@ expect parseFloat(getComputedStyle(document.getElementById('doc-title')).fontSiz
 # 44px icons; the panels and Write are in the bottom bar instead, which is
 # 72px along the foot of the screen, with Script lit.
 expect Math.round(document.querySelector('.topbar-row').getBoundingClientRect().height) == 56
-expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 52
+expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 72
+expect document.querySelector('#rundown .rd-section').textContent === 'A'
 expect getComputedStyle(document.querySelector('#rundown .rundown-ruler')).display == none
 expect document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
 expect Math.round(document.getElementById('btn-file').getBoundingClientRect().width) == 44

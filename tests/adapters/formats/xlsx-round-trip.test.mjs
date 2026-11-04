@@ -17,9 +17,9 @@ const openScript = async () => readWorkbook(buildScriptXlsx(liveDoc()));
 test("every row is a sheet row, in order, blank rows included, with its text, line breaks and status", async () => {
   loadFixture();
   const records = recordsOf(sheetNamed(await openScript(), "Script"));
-  const beats = records.filter((r) => /^\d+$/.test(r.Scene));
+  const beats = records.filter((r) => /^[A-Z]+\.\d+$/.test(r.Scene));
   assert.equal(beats.length, scriptRows().length);
-  assert.deepEqual(beats.map((r) => r.Scene), scriptRows().map((_, i) => String(i + 1).padStart(2, "0")));
+  assert.deepEqual(beats.map((r) => r.Scene), scriptRows().map((_, i) => "A." + (i + 1)));
   scriptRows().forEach((row, i) => {
     const want = plainOf(row);
     assert.ok(beats[i].Visual === want.visual, "visual text of scene " + (i + 1));
@@ -31,7 +31,7 @@ test("every row is a sheet row, in order, blank rows included, with its text, li
 
 test("a row with nothing in it stays as a row with empty cells, so the numbering holds", async () => {
   loadFixture();
-  const beats = recordsOf(sheetNamed(await openScript(), "Script")).filter((r) => /^\d+$/.test(r.Scene));
+  const beats = recordsOf(sheetNamed(await openScript(), "Script")).filter((r) => /^[A-Z]+\.\d+$/.test(r.Scene));
   for (const i of [1, 6, 9]) {
     assert.deepEqual([beats[i].Visual, beats[i].Audio, beats[i].Tags, beats[i]["Open comments"]], ["", "", "", ""], "scene " + (i + 1));
   }
@@ -75,7 +75,7 @@ test("all six tag kinds come back as the scene's Tags and as Breakdown items wit
   const tags = recordsOf(sheetNamed(book, "Script"))[0].Tags.split("; ");
   assert.deepEqual([...tags].sort(), Object.keys(TAGS).map((cat) => TAG_LABELS[cat] + ": " + TAGS[cat]).sort());
   const items = recordsOf(sheetNamed(book, "Breakdown")).map((r) => [r.Category, r.Item, r.Scenes, r["In script"]]);
-  for (const cat of Object.keys(TAGS)) assert.deepEqual(items.find((i) => i[1] === TAGS[cat]), [TAG_LABELS[cat], TAGS[cat], "01", "yes"], cat);
+  for (const cat of Object.keys(TAGS)) assert.deepEqual(items.find((i) => i[1] === TAGS[cat]), [TAG_LABELS[cat], TAGS[cat], "A.1", "yes"], cat);
   assert.equal(items.length, 6);
   const standalone = recordsOf(sheetNamed(await readWorkbook(buildBreakdownXlsx(liveDoc())), "Breakdown"));
   assert.deepEqual(standalone.map((r) => [r.Category, r.Item]), items.map((i) => i.slice(0, 2)));
@@ -87,9 +87,9 @@ test("comments: a row per comment and per reply, each with its author, quote, wo
   const comments = recordsOf(sheetNamed(book, "Comments"));
   assert.equal(comments.length, 3);
   const [open, reply, resolved] = comments;
-  assert.deepEqual([open["No."], open.Location, open.Status, open["Quoted text"]], [1, "Scene 01 · Audio", "Open", "anchored words"]);
+  assert.deepEqual([open["No."], open.Location, open.Status, open["Quoted text"]], [1, "Scene A.1 · Audio", "Open", "anchored words"]);
   assert.deepEqual([reply.Author, reply.Comment, reply["No."]], ["↳ Sam", "Done — ‘ok’.", ""]);
-  assert.deepEqual([resolved.Location, resolved.Status, resolved.Author, resolved.Comment], ["Scene 09 · Visual", "Resolved by Ann", "Ann", "Resolved note"]);
+  assert.deepEqual([resolved.Location, resolved.Status, resolved.Author, resolved.Comment], ["Scene A.9 · Visual", "Resolved by Ann", "Ann", "Resolved note"]);
   assert.equal(recordsOf(sheetNamed(book, "Script"))[0]["Open comments"], "1");
 });
 
@@ -105,7 +105,7 @@ test("pictures are dropped: no picture part in the file, and the text cells are 
 
 test("the script's text in the workbook is the text a Word export of the same script reads back as", async () => {
   loadFixture();
-  const sheet = recordsOf(sheetNamed(await openScript(), "Script")).filter((r) => /^\d+$/.test(r.Scene));
+  const sheet = recordsOf(sheetNamed(await openScript(), "Script")).filter((r) => /^[A-Z]+\.\d+$/.test(r.Scene));
   const word = await docxToRows(new File([buildDocx(...liveWithAssets())], "script.docx"));
   const fromSheet = sheet.filter((r) => r.Visual || r.Audio).map((r) => ({ visual: r.Visual, audio: r.Audio }));
   assert.deepEqual(word.rows.map(plainOf).filter((r) => r.visual || r.audio), fromSheet);
@@ -124,5 +124,5 @@ test("the b-roll sheet keeps each shot's scene, name, status, flag, location and
   const [shot] = recordsOf(sheet);
   assert.equal(sheet.rows.length, 2);
   assert.deepEqual([shot.Scene, shot.Shot, shot.Status, shot.Flagged, shot.Location, shot.Note],
-    ["01", "Café façade 😀", "Shot", "yes", "Rue Saint-Honoré", "Needs a “warm” haze."]);
+    ["A.1", "A.1.1 Café façade 😀", "Shot", "yes", "Rue Saint-Honoré", "Needs a “warm” haze."]);
 });

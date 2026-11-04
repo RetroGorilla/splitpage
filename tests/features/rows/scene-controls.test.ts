@@ -7,8 +7,9 @@ import { harness, runConfined } from "../../application/session-fakes.ts";
 import { toggleRowMenu } from "../../../src/features/rows/row-menu.ts";
 import { fakeNotices } from "../fakes.ts";
 import { scenesInOrder } from "../../../src/core/document/scenes.ts";
+import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 
-function fixture(existing = false) {
+function fixture(existing = false, moving: string | null = null) {
   const h = harness();
   h.session.adopt({ rows: [{ id: "r1" }, { id: "r2" }], sections: existing ? [{ id: "s1", name: "Opening", firstSceneId: "r2" }] : [] });
   document.body.innerHTML = '<div id="rows">' +
@@ -17,11 +18,11 @@ function fixture(existing = false) {
     '<button class="row-menu-item" data-action="add-section" data-id="r2"><span>Add Section Header</span></button></div></div></div>';
   let allowed = true;
   const controls = mountSceneControls(window, {
-    document: { current: () => h.session.read(doc => doc) },
+    document: { current: () => h.session.read(doc => doc), numbering: () => h.session.read(doc => deriveDocumentNumbering(doc ?? { rows: [] })) },
     edits: { allowed: () => allowed, run: command => runConfined(h.session, command) },
     scenes: createSceneView(),
     focus: { focusedRow: () => {} },
-    drag: { dragging: () => null, end: () => {} },
+    drag: { dragging: () => moving, end: () => { moving = null; } },
     ids: { id: () => "created" },
     notices: fakeNotices().notices,
     scroll: () => {}, stopScroll: () => {}
@@ -54,6 +55,28 @@ test("section controls add before the menu's scene without consulting scene sele
     assert.deepEqual(f.h.session.read(doc => doc?.sections), [{ id: "created", name: "Middle", firstSceneId: "r2" }]);
     assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 1);
   } finally { f.controls.dispose(); }
+});
+
+test("a beat dropped on automatic A joins it without saving a default header", () => {
+  for (const existing of [false, true]) {
+    const f = fixture(existing, "r2");
+    try {
+      const automatic = document.createElement("header");
+      automatic.className = "section-header";
+      automatic.setAttribute("data-section-id", "");
+      document.getElementById("rows")?.prepend(automatic);
+      const drop = new window.Event("drop", { bubbles: true, cancelable: true });
+      automatic.dispatchEvent(drop);
+      assert.equal(drop.defaultPrevented, true);
+      f.h.session.read(doc => {
+        assert.ok(doc);
+        assert.deepEqual(doc.rows.map(row => row.id), ["r2", "r1"]);
+        assert.equal(doc.sections, undefined);
+        assert.equal(deriveDocumentNumbering(doc).beats["r2"]?.full, "A.1");
+      });
+      assert.equal(f.h.log.filter(entry => entry === "undo.record").length, 1);
+    } finally { f.controls.dispose(); }
+  }
 });
 
 test("section controls rename an existing header directly above the menu's scene", () => {

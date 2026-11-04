@@ -4,7 +4,7 @@ import { exportServices } from "../../application/export/services.ts";
 import { DEFAULT_WPM, targetLengthOf } from "../../core/document/timing.ts";
 import { brollSortedForList } from "../../core/production/broll.ts";
 import { TAG_CATEGORIES, rowStatus } from "../../core/production/looks.ts";
-import { formatDuration, pad2, rowSeconds as rowSecondsIn, targetClock } from "../../core/production/timing.ts";
+import { formatDuration, rowSeconds as rowSecondsIn, targetClock } from "../../core/production/timing.ts";
 import { tagPrintColor } from "./print-colors.ts";
 import { shotRecordForFile } from "../../core/production/broll-view.ts";
 import { breakdownRows, commentEntries, beatFacts } from "./export-projections.ts";
@@ -158,7 +158,7 @@ export function exportSummaryParts(facts: ExportFacts): string[] {
 export function exportComments(doc: ExportDocument, opts?: CommentOptions | null, services: ExportServices = exportServices()): ExportComment[] {
   const nums = doc.commentNumbers;
   const list: ExportComment[] = commentEntries(doc, Object.assign({ clockMode: doc.clockMode }, opts || { pieces: true }), services).map(function (c) {
-    const beat = c.rowIndex >= 0 ? pad2(c.rowIndex + 1) : "";
+    const beat = doc.numbering.beats[doc.beats[c.rowIndex]?.id ?? ""]?.full ?? "";
     const field = c.field === "audioText" ? "Audio" : "Visual";
     return Object.assign(c, {
       number: nums[c.id] || null,

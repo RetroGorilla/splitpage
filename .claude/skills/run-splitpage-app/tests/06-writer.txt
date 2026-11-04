@@ -64,7 +64,7 @@ sleep 400
 expect document.querySelectorAll('#writer-doc .wr-para')[1].textContent.indexOf('OK.Today') === 0
 
 # --- Backspace at the start joins two scenes back together ------------------
-caret #writer-doc .wr-block:nth-child(2) .wr-para start
+caret #writer-doc .wr-block:nth-of-type(2) .wr-para start
 key Backspace
 sleep 500
 expect document.querySelectorAll('#writer-doc .wr-para').length == 2
@@ -73,7 +73,7 @@ expect document.querySelectorAll('#writer-doc .wr-para')[0].textContent.indexOf(
 
 # --- but never when it would silently throw a shot description away ---------
 # Both demo scenes have a visual, and only one of them can survive a merge.
-caret #writer-doc .wr-block:nth-child(2) .wr-para start
+caret #writer-doc .wr-block:nth-of-type(2) .wr-para start
 key Backspace
 sleep 500
 expect document.querySelectorAll('#writer-doc .wr-para').length == 2
@@ -250,7 +250,7 @@ expect window.__anchorRow >= 2
 # ...and what the comments panel says about it. These must agree.
 jsclick #btn-comments
 sleep 600
-expect document.querySelector('.comment-loc').textContent.indexOf(String(window.__anchorRow).padStart(2, '0')) !== -1
+expect document.querySelector('.comment-loc').textContent.indexOf('A.' + window.__anchorRow) !== -1
 jsclick #comments-panel-close
 sleep 300
 

@@ -27,7 +27,7 @@ import { rowMotionKey, withRowMotion } from "./row-motion.ts";
 import { formatTimestamp } from "../common/comment-time.ts";
 import { idMap } from "../../core/document/id-map.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
-import { estimatedSeconds, pad2, formatDuration, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
+import { estimatedSeconds, formatDuration, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { cueShortcut } from "../../core/text/cues.ts";
 import { directionRangeAt, directionShortcut, directionToggleRange, toggleDirection } from "../../core/text/directions.ts";
 import {
@@ -183,9 +183,9 @@ function rowMenuItemHtml(row: Row, action: string, icon: string, label: string, 
     '<span class="row-menu-label">' + label + '</span></button>';
 }
 
-function rowGutterHtml(row: Row, index: number): string {
+function rowGutterHtml(row: Row): string {
   const st = (rowStatus(row.status) || ROW_STATUSES[0]) as NonNullable<ReturnType<typeof rowStatus>>;
-  const num = pad2(index + 1);
+  const num = ports.document.numbering().beats[row.id]?.full ?? "";
   const lamp = '<span class="status-dot ' + st.cls + '" aria-hidden="true">' +
     (st.id === "shot" ? STATUS_CHECK_SVG : '') + '</span><span class="status-word">' + escapeHtml(st.label) + '</span>';
   const head = '<div class="row-head" data-action="drag-grip" data-id="' + row.id + '" title="Drag to reorder">' +
@@ -369,10 +369,10 @@ function rowMediaHtml(row: Row): string {
     row.id + '">' + imageBlock + '</div>';
 }
 
-function rowParts(row: Row, index: number): RowParts {
+function rowParts(row: Row): RowParts {
   return {
     cls: "row" + (row.status === "shot" ? " is-shot" : ""),
-    gutter: rowGutterHtml(row, index),
+    gutter: rowGutterHtml(row),
     media: rowMediaHtml(row),
     visualText: rowFieldHtml(row, "visualText"),
     audioText: rowFieldHtml(row, "audioText")
@@ -414,8 +414,8 @@ function nodeFromHtml(html: string): Element {
   return state.partTemplate.content.firstElementChild as Element;
 }
 
-function newRowEl(row: Row, index: number): SignedRow {
-  const p = rowParts(row, index);
+function newRowEl(row: Row): SignedRow {
+  const p = rowParts(row);
   const el: SignedRow = nodeFromHtml(rowHtmlFromParts(row, p));
   el[ROW_SIG] = p;
   el.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
@@ -435,10 +435,10 @@ function resetRowShell(rowEl: Element, cls: string): void {
   if (ac && ac.className !== "cell audio-cell") ac.className = "cell audio-cell";
 }
 
-function planRowPatch(rowEl: SignedRow, row: Row, index: number): RowPatch | null {
+function planRowPatch(rowEl: SignedRow, row: Row): RowPatch | null {
   const sig = rowEl[ROW_SIG];
   if (!sig) return null;
-  const p = rowParts(row, index);
+  const p = rowParts(row);
   const parts: RowPatch["parts"][number][] = [];
   for (let i = 0; i < PATCHED_PARTS.length; i++) {
     const k = PATCHED_PARTS[i] as PatchedPart;
@@ -484,8 +484,8 @@ function paintOneRow(rowId: string | null): boolean {
   const rowEl = rowsEl.querySelector(':scope > .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return false;
   const shown = doc.rows[idx] as Row;
-  const patch = planRowPatch(rowEl, shown, idx);
-  const whole = patch ? null : newRowEl(shown, idx);
+  const patch = planRowPatch(rowEl, shown);
+  const whole = patch ? null : newRowEl(shown);
   const active = document.activeElement;
   const heldCell = active && active.classList && active.classList.contains("cell-editable") && rowEl.contains(active) &&
     rememberCellSelection(ports.editing.selection(), active) ? active : null;
@@ -555,14 +555,14 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     if (el) {
       existing.delete(key);
       if (strip) return { node: el };
-      const patch = planRowPatch(el, entry.row, entry.index);
+      const patch = planRowPatch(el, entry.row);
       if (patch) return { node: el, patch: patch };
       drop.push(el);
     }
     if (strip) return { node: nodeFromHtml(hiddenShotStripHtml(strip)) };
-    return { node: newRowEl(entry.row, entry.index), added: true };
+    return { node: newRowEl(entry.row), added: true };
   }
-  const steps = Array.isArray(doc.sections) && doc.sections.length ? sceneRowEntries(doc, ports.hiding(), ports.scenes()).map(function (item): RowsStep {
+  const steps = sceneRowEntries(doc, ports.hiding(), { folded: id => ports.scenes().folded(id) }, ports.document.numbering()).map(function (item): RowsStep {
     if (!("scene" in item)) return planBeat(item);
     const key = "section:" + item.scene.id;
     const html = sceneHeaderHtml(item, !ports.edits.allowed());
@@ -573,7 +573,7 @@ function planRows(rowsEl: Element, doc: DocumentView): RowsPlan {
     const node = nodeFromHtml(html) as SignedRow;
     node.__splitpageSceneSig = html;
     return { node };
-  }) : ports.hiding().groups(doc.rows).map(planBeat);
+  });
   existing.forEach(function (el) { drop.push(el); });
   return { steps: steps, drop: drop };
 }

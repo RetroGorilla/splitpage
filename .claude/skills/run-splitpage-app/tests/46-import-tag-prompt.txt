@@ -50,19 +50,19 @@ wait document.querySelector('input[name="import-split"][value="twocolumn"]').che
 jsclick #import-confirm
 sleep 400
 expect document.querySelectorAll('#rows .row').length == 5
-expect document.querySelectorAll('#rows .row:nth-child(5) .visual-cell .broll-key').length == 0
-expect document.querySelector('#rows .row:nth-child(5) .visual-cell .cell-editable').textContent == B-roll: declined gulls
+expect document.querySelectorAll('#rows .row:nth-of-type(5) .visual-cell .broll-key').length == 0
+expect document.querySelector('#rows .row:nth-of-type(5) .visual-cell .cell-editable').textContent == B-roll: declined gulls
 # nothing about the decline is reported as a find
 expect Array.prototype.slice.call(document.querySelectorAll('.toast')).pop().textContent.indexOf('B-roll line') === -1
 
 # and it STAYS that way: the #21 pass runs on every render and on leaving a
 # field, and it has to keep its hands off an import that said no. A real
 # click blurs, which is exactly what anchors an unanchored line otherwise.
-caret #rows .row:nth-child(5) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
 click #doc-title
 sleep 1200
-expect document.querySelectorAll('#rows .row:nth-child(5) .visual-cell .broll-key').length == 0
-expect document.querySelector('#rows .row:nth-child(5) .visual-cell .cell-editable').textContent == B-roll: declined gulls
+expect document.querySelectorAll('#rows .row:nth-of-type(5) .visual-cell .broll-key').length == 0
+expect document.querySelector('#rows .row:nth-of-type(5) .visual-cell .cell-editable').textContent == B-roll: declined gulls
 
 # the panel still counts it, exactly as it does today — declining changes the
 # script, not the list: 2 anchored plus this one
@@ -81,11 +81,11 @@ eval (function(){document.querySelector('#import-scan-options [data-import-scan=
 wait document.querySelector('input[name="import-split"][value="twocolumn"]').checked
 jsclick #import-confirm
 sleep 400
-expect document.querySelectorAll('#rows .row:nth-child(6) .visual-cell .broll-key').length == 1
+expect document.querySelectorAll('#rows .row:nth-of-type(6) .visual-cell .broll-key').length == 1
 expect JSON.parse(localStorage.getItem('splitpage-import-scans')).broll === true
 # the line declined earlier is still left alone — the answer was about that
 # import, not a standing rule over the whole document
-expect document.querySelectorAll('#rows .row:nth-child(5) .visual-cell .broll-key').length == 0
+expect document.querySelectorAll('#rows .row:nth-of-type(5) .visual-cell .broll-key').length == 0
 
 shot 46-import-tag-prompt
 

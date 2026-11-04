@@ -70,7 +70,7 @@ export function createBrollRecords(ports: BrollRecordsPorts): BrollRecordsMount 
 
   function brollEntries(): BrollEntry[] {
     const doc = ports.document.current();
-    return doc ? readBrollEntries(doc, ports.text.productionReaders, ports.ids, ports.text.htmlToPlainText) : [];
+    return doc ? readBrollEntries(doc, ports.text.productionReaders, ports.ids, ports.text.htmlToPlainText, ports.document.numbering()) : [];
   }
 
   function brollUnshotCount(): number {
@@ -123,7 +123,7 @@ export function createBrollRecords(ports: BrollRecordsPorts): BrollRecordsMount 
         e.props.forEach(function (p) {
           const k = "prop " + normalizeTagName(p.name);
           if (!out[k]) out[k] = [];
-          out[k].push(e.name || "Untitled shot");
+          out[k].push((e.shotNumber ? e.shotNumber + " " : "") + (e.name || "Untitled shot"));
         });
       });
       return out;

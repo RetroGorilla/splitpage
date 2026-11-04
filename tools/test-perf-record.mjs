@@ -135,7 +135,7 @@ function stampWorld(clicksWork) {
   let tick = 0;
   const document = {
     querySelector(selector) {
-      const row = rows[Number(/nth-child\((\d+)\)/.exec(selector)[1]) - 1];
+      const row = rows[Number(/nth-of-type\((\d+)\)/.exec(selector)[1]) - 1];
       return { getAttribute: () => row.id, click() { if (clicksWork) { row.status = next[row.status]; row.updatedAt = `t${tick++}`; } } };
     }
   };

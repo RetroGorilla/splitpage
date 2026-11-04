@@ -350,10 +350,10 @@ function previewHtml(action: string | null | undefined) {
       }).join("") : '<p class="pv-para">(no narration yet)</p>') + '</div>';
   }
   if (action === "export-breakdown" || action === "export-breakdown-xlsx") {
-    const starts = beatFacts(doc).map(function (f) { return f.start; });
+    const starts = new Map(beatFacts(doc).map(f => [f.number, f.start]));
     const items = breakdownRows(doc).slice(0, 14);
     const itemGrid = pvGrid(["Category", "Item", "Status", "Scenes", "First at"], items.map(function (b) {
-      const first = b.inScript === "no" ? "" : (starts[Number(b.beats[0]) - 1] || "");
+      const first = b.inScript === "no" ? "" : (starts.get(b.beats[0] ?? "") ?? "");
       return { cells: [escapeHtml(b.categoryLabel), escapeHtml(trunc(b.name, 24)), escapeHtml(b.statusLabel),
                        escapeHtml(trunc(b.beats.join(" "), 14)), first] };
     }), [17, 29, 17, 21, 16]) + (items.length ? "" : '<p class="pv-para pv-faint">(nothing tagged yet)</p>');

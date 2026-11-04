@@ -27,16 +27,16 @@ expect document.querySelectorAll('#rows .row').length == 4
 # runs off scheduleBrollRefresh's debounce, so give it the poll rather than
 # a fixed sleep.
 wait document.querySelectorAll('#rows .broll-key').length === 2
-expect document.querySelectorAll('#rows .row:nth-child(3) .visual-cell .broll-key').length == 1
-expect document.querySelector('#rows .row:nth-child(3) .visual-cell .broll-key').textContent == B-roll:
-expect document.querySelector('#rows .row:nth-child(3) .visual-cell .broll-key').getAttribute('contenteditable') == false
+expect document.querySelectorAll('#rows .row:nth-of-type(3) .visual-cell .broll-key').length == 1
+expect document.querySelector('#rows .row:nth-of-type(3) .visual-cell .broll-key').textContent == B-roll:
+expect document.querySelector('#rows .row:nth-of-type(3) .visual-cell .broll-key').getAttribute('contenteditable') == false
 # one id per LINE, and two lines never share one
 eval (function(){var k=document.querySelectorAll('#rows .broll-key');window.__ids=[k[0].getAttribute('data-broll-id'),k[1].getAttribute('data-broll-id')];return window.__ids.join(' / ');})()
 expect window.__ids[0] && window.__ids[1] && window.__ids[0] !== window.__ids[1]
 expect /^bs/.test(window.__ids[0])
 # the words either side of the marker are untouched
-expect document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editable').textContent.indexOf('gulls over the harbour') !== -1
-expect document.querySelector('#rows .row:nth-child(4) .visual-cell .cell-editable').textContent.indexOf('nets coming in') !== -1
+expect document.querySelector('#rows .row:nth-of-type(3) .visual-cell .cell-editable').textContent.indexOf('gulls over the harbour') !== -1
+expect document.querySelector('#rows .row:nth-of-type(4) .visual-cell .cell-editable').textContent.indexOf('nets coming in') !== -1
 
 # --- 2) paste: the same line arriving through the clipboard ---------------
 # A real paste event through the app's own onRootPaste, not a programmatic
@@ -48,16 +48,16 @@ expect document.querySelector('#rows .row:nth-child(4) .visual-cell .cell-editab
 # headless window moves activeElement without firing focus/blur at all, so
 # blur() leaves the app's focusout handler (and every sanitiser hanging off
 # it) unrun. Same reason the skill's gotchas list `jsclick` as not blurring.
-caret #rows .row:nth-child(1) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);document.execCommand('delete');var dt=new DataTransfer();dt.setData('text/plain','B-roll: pasted puffins');c.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));return c.textContent;})()
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(1) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);document.execCommand('delete');var dt=new DataTransfer();dt.setData('text/plain','B-roll: pasted puffins');c.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));return c.textContent;})()
 sleep 700
-expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').textContent.indexOf('pasted puffins') !== -1
-expect document.querySelectorAll('#rows .row:nth-child(1) .visual-cell .broll-key').length == 0
+expect document.querySelector('#rows .row:nth-of-type(1) .visual-cell .cell-editable').textContent.indexOf('pasted puffins') !== -1
+expect document.querySelectorAll('#rows .row:nth-of-type(1) .visual-cell .broll-key').length == 0
 
 click #doc-title
-wait document.querySelectorAll('#rows .row:nth-child(1) .visual-cell .broll-key').length === 1
-expect !!document.querySelector('#rows .row:nth-child(1) .visual-cell .broll-key').getAttribute('data-broll-id')
-expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').textContent.indexOf('pasted puffins') !== -1
+wait document.querySelectorAll('#rows .row:nth-of-type(1) .visual-cell .broll-key').length === 1
+expect !!document.querySelector('#rows .row:nth-of-type(1) .visual-cell .broll-key').getAttribute('data-broll-id')
+expect document.querySelector('#rows .row:nth-of-type(1) .visual-cell .cell-editable').textContent.indexOf('pasted puffins') !== -1
 
 # three lines, three items, and none of them still flagged as unanchored
 jsclick #btn-broll
@@ -75,8 +75,8 @@ sleep 300
 eval (function(){var e=document.querySelector('#broll-list .broll-row[data-id="'+window.__gullsId+'"]');return e.querySelector('[data-action="broll-status-toggle"]').getAttribute('aria-checked');})()
 expect document.querySelector('#broll-list .broll-row[data-id="'+window.__gullsId+'"] [data-action="broll-status-toggle"]').getAttribute('aria-checked') == true
 
-caret #rows .row:nth-child(3) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);r.collapse(false);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return c.textContent;})()
+caret #rows .row:nth-of-type(3) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(3) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);r.collapse(false);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return c.textContent;})()
 press  at dawn
 click #doc-title
 sleep 900
@@ -92,41 +92,41 @@ expect document.querySelector('#broll-list .broll-row[data-id="'+window.__gullsI
 # and nothing ever read it. The window is real but short: the pass only
 # touches a field nobody is editing, so keeping the caret in the cell keeps
 # the line unanchored — jsclick deliberately, since it never moves focus.
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);document.execCommand('delete');var dt=new DataTransfer();dt.setData('text/plain','B-roll: unanchored for now');c.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));return c.textContent;})()
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);document.execCommand('delete');var dt=new DataTransfer();dt.setData('text/plain','B-roll: unanchored for now');c.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));return c.textContent;})()
 wait document.querySelectorAll('#broll-list .broll-row').length === 4
-expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .broll-key').length == 0
+expect document.querySelectorAll('#rows .row:nth-of-type(2) .visual-cell .broll-key').length == 0
 expect document.querySelectorAll('#broll-list .broll-loose-badge').length == 1
 
 # and the flag clears itself the moment the field is left
 click #doc-title
-wait document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .broll-key').length === 1
+wait document.querySelectorAll('#rows .row:nth-of-type(2) .visual-cell .broll-key').length === 1
 wait document.querySelectorAll('#broll-list .broll-loose-badge').length === 0
 
 # --- 5) a comment on a key and its line survives anchoring, and so does the id
 # Row 2 now holds an anchored key. A comment over the whole line used to make
 # the key read as a typed marker with no id, so leaving the field swapped in a
 # fresh key and the comment lost its anchor on the key.
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);window.__keyId=c.querySelector('.broll-key').getAttribute('data-broll-id');return window.__keyId;})()
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);window.__keyId=c.querySelector('.broll-key').getAttribute('data-broll-id');return window.__keyId;})()
 wait !getSelection().isCollapsed
-jsclick #rows .row:nth-child(2) .visual-cell .mini-toolbar [data-cmd="comment"]
+jsclick #rows .row:nth-of-type(2) .visual-cell .mini-toolbar [data-cmd="comment"]
 wait !!document.getElementById('comment-body-editable') && document.getElementById('comment-body-editable').offsetParent !== null
 eval (function(){var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'Check this shot.');return b.textContent;})()
 jsclick #comment-post
-wait document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .cmt-anchor .broll-key').length === 1
-expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .cmt-anchor .broll-key').length == 1
-eval (function(){window.__cmtId=document.querySelector('#rows .row:nth-child(2) .visual-cell .cmt-anchor').getAttribute('data-cmt');return window.__cmtId;})()
+wait document.querySelectorAll('#rows .row:nth-of-type(2) .visual-cell .cmt-anchor .broll-key').length === 1
+expect document.querySelectorAll('#rows .row:nth-of-type(2) .visual-cell .cmt-anchor .broll-key').length == 1
+eval (function(){window.__cmtId=document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cmt-anchor').getAttribute('data-cmt');return window.__cmtId;})()
 expect !!window.__cmtId
 
 click #doc-title
 wait !document.activeElement || !document.activeElement.isContentEditable
 wait document.getElementById('comment-post') === null || document.getElementById('comment-post').offsetParent === null
 sleep 900
-expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .cmt-anchor .broll-key').length == 1
-expect document.querySelector('#rows .row:nth-child(2) .visual-cell .broll-key').getAttribute('data-broll-id') === window.__keyId
-expect document.querySelector('#rows .row:nth-child(2) .visual-cell .cmt-anchor').getAttribute('data-cmt') === window.__cmtId
-expect document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable').textContent.indexOf('unanchored for now') !== -1
+expect document.querySelectorAll('#rows .row:nth-of-type(2) .visual-cell .cmt-anchor .broll-key').length == 1
+expect document.querySelector('#rows .row:nth-of-type(2) .visual-cell .broll-key').getAttribute('data-broll-id') === window.__keyId
+expect document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cmt-anchor').getAttribute('data-cmt') === window.__cmtId
+expect document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cell-editable').textContent.indexOf('unanchored for now') !== -1
 expect document.querySelectorAll('#broll-list .broll-row').length == 4
 expect document.querySelectorAll('#broll-list .broll-orphan-ico').length == 0
 

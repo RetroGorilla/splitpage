@@ -32,7 +32,8 @@ const renamedTargets = {
   "application-pure": ["scene-length-changes-derive-dropped", "scene-status-changes-derive-dropped", "scene-status-grace-default"],
   "formats-text": ["csv-broll-lists-skip-unassigned", "csv-total-needs-scenes", "csv-total-text", "proj-scene-no-scenes",
     "proj-breakdown-scene-number", "proj-breakdown-orphan-scenes", "proj-table-first-index", "proj-table-first-fallback",
-    "proj-table-scenes-separator", "proj-print-groups-input", "proj-breakdown-mentions"]
+    "proj-table-scenes-separator", "proj-print-groups-input", "proj-breakdown-mentions", "csv-tag-cell-separator",
+    "csv-broll-cell-separator", "proj-scene-number", "proj-shots-untitled", "proj-location-row-number"]
 };
 for (const [manifest, labels] of Object.entries(renamedTargets)) {
   const mutants = loadMutants(readFileSync(join("tools", "mutants", `${manifest}.json`), "utf8"));

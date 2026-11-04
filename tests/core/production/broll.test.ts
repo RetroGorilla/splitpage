@@ -39,6 +39,29 @@ function shot(id: string, name: string, extra?: Partial<BrollShot>): BrollShot {
 
 const read = (cell: Run[]) => brollInCell(normalizeCell(cell));
 
+test("shot numbering follows tag order and a keyed tag moving between beats preserves its record", () => {
+  const first = cells.html([B("bs_one"), T(" One\n"), B("bs_two"), T(" Two")]);
+  const state = doc({ rows: [{ id: "r1", visualText: EMPTY, audioText: EMPTY },
+    { id: "r2", visualText: first, audioText: EMPTY }, { id: "r3", visualText: EMPTY, audioText: EMPTY }],
+    sections: [{ id: "second", name: "Second", firstSceneId: "r2" }],
+    productionTags: [], brollShots: [shot("bs_one", "One", { status: "shot", notes: "Keep this" }),
+      shot("bs_two", "Two"), shot("bs_added", "Added", { origin: "manual" })] });
+  const before = JSON.stringify(state);
+  const entries = () => brollEntries(state, readers, countingIds(), plainTextOf);
+  assert.deepEqual(entries().map(e => [e.id, e.shotNumber, e.shortShotNumber]),
+    [["bs_one", "B.1.1", "1.1"], ["bs_two", "B.1.2", "1.2"], ["bs_added", "", ""]]);
+  assert.equal(JSON.stringify(state), before);
+  const source = state.rows[1], target = state.rows[2];
+  assert.ok(source && target);
+  source.visualText = cells.html([B("bs_two"), T(" Two")]);
+  target.visualText = cells.html([B("bs_one"), T(" One")]);
+  assert.deepEqual(entries().map(e => [e.id, e.shotNumber]), [["bs_two", "B.1.1"], ["bs_one", "B.2.1"], ["bs_added", ""]]);
+  const moved = entries().find(e => e.id === "bs_one");
+  assert.equal(moved?.status, "shot");
+  assert.equal(moved?.notes, "Keep this");
+  assert.equal(moved?.rec, state.brollShots[0]);
+});
+
 test("brollCellLines splits a cell into lines of positioned items, a key counting one position", () => {
   const cell = normalizeCell([B("bs1"), T(" gulls\n\nover"), T(" the pier", { b: true })]);
   const key = cell[0] as Run;

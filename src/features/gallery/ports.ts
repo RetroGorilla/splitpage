@@ -14,7 +14,7 @@ import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
 
 export interface GalleryPorts {
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly notices: Pick<NoticePort, "show">;
   readonly pictures: Pick<PictureStore, "ensureBytes" | "urlFor" | "intern" | "persist">;
   readonly ownership: Operations;
@@ -49,7 +49,7 @@ interface SessionVideos {
 }
 
 export interface GalleryOverlayPorts {
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly notices: Pick<NoticePort, "show" | "showAction">;
   readonly ownership: Operations;
   readonly cells: Pick<CellEditing<Element>, "editGallery">;
@@ -72,7 +72,7 @@ interface UndoFold {
 }
 
 export interface GalleryVideoPorts {
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly pictures: Pick<PictureStore, "intern" | "persist">;
   readonly ownership: Operations;
   readonly undo: UndoFold;

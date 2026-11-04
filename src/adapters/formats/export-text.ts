@@ -41,7 +41,8 @@ function mdCell(value: unknown): string {
 
 function appendMarkdownTail(lines: string[], doc: ExportDocument, opts: MarkdownOptions | null | undefined, services: ExportServices): void {
   if (opts && opts.export) { appendExportTail(lines, doc, services); return; }
-  const breakdown = breakdownRows(doc);
+  // why: Saved Markdown's human half is frozen, including its historical row labels.
+  const breakdown = breakdownRows(doc, true);
   if (breakdown.length) {
     lines.push("## Production breakdown");
     lines.push("");
@@ -54,7 +55,7 @@ function appendMarkdownTail(lines: string[], doc: ExportDocument, opts: Markdown
     lines.push("");
   }
 
-  const comments = commentEntries(doc, { pieces: true, clockMode: doc.clockMode }, services);
+  const comments = commentEntries(doc, { pieces: true, clockMode: doc.clockMode, project: true }, services);
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");
@@ -218,9 +219,15 @@ function dataUrlImageExt(dataUrl: string | null | undefined): string {
   return t;
 }
 
-function markdownImagePath(row: Row, i: number): string {
+function markdownImageBase(doc: ExportDocument, row: Row): string {
+  const number = doc.numbering.beats[row.id];
+  if (!number) throw new Error("Missing beat number");
+  return "images/beat-" + number.full.replace(".", "-");
+}
+
+function markdownImagePath(doc: ExportDocument, row: Row): string {
   const img = rowImage(row);
-  return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(img && img.ref ? "data:" + img.ref.mime : img && img.dataUrl);
+  return markdownImageBase(doc, row) + "." + dataUrlImageExt(img && img.ref ? "data:" + img.ref.mime : img && img.dataUrl);
 }
 
 function markdownHasPicture(row: Row, assets: ExportAssets): boolean {
@@ -230,22 +237,22 @@ function markdownHasPicture(row: Row, assets: ExportAssets): boolean {
 
 interface MarkdownImage { path: string; bytes: Uint8Array }
 
-function markdownMorePictures(row: Row, i: number, assets: ExportAssets): MarkdownImage[] {
+function markdownMorePictures(doc: ExportDocument, row: Row, assets: ExportAssets): MarkdownImage[] {
   const out: MarkdownImage[] = [];
   morePictureRefs(row).forEach(function (ref, k) {
     const pic = capturedPicture(assets, ref);
     if (!pic) return;
-    out.push({ path: "images/scene-" + pad2(i + 1) + "-" + (k + 2) + "." + dataUrlImageExt("data:" + ref.mime), bytes: pic.bytes });
+    out.push({ path: markdownImageBase(doc, row) + "-" + (k + 2) + "." + dataUrlImageExt("data:" + ref.mime), bytes: pic.bytes });
   });
   return out;
 }
 
 export function markdownExportImages(doc: ExportDocument, assets: ExportAssets): MarkdownImage[] {
   let out: MarkdownImage[] = [];
-  doc.beats.forEach(function (row, i) {
+  doc.beats.forEach(function (row) {
     const pic = rowImage(row) && capturedRowPicture(assets, row);
-    if (pic) out.push({ path: markdownImagePath(row, i), bytes: pic.bytes });
-    out = out.concat(markdownMorePictures(row, i, assets));
+    if (pic) out.push({ path: markdownImagePath(doc, row), bytes: pic.bytes });
+    out = out.concat(markdownMorePictures(doc, row, assets));
   });
   return out;
 }
@@ -277,12 +284,12 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
     lines.push(mdBeatFactsLine(f));
     lines.push("");
     if (markdownHasPicture(row, assets)) {
-      lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
+      lines.push("![visual for scene " + f.number + "](" + markdownImagePath(doc, row) + ")");
       lines.push("");
     }
-    const more = markdownMorePictures(row, i, assets);
+    const more = markdownMorePictures(doc, row, assets);
     more.forEach(function (m, k) {
-      lines.push("![visual " + (k + 2) + " for scene " + pad2(i + 1) + "](" + m.path + ")");
+      lines.push("![visual " + (k + 2) + " for scene " + f.number + "](" + m.path + ")");
       lines.push("");
     });
     const vlinks = rowVideoLinks(row);
@@ -328,13 +335,13 @@ function capturedRowDataUrl(assets: ExportAssets, row: Row): string | null {
   return pic ? "data:" + pic.mime + ";base64," + base64Encode(pic.bytes) : null;
 }
 
-export function mdBeatCellSource(row: Row, i: number, model?: boolean, assets?: ExportAssets | null, services: ExportServices = exportServices()) {
+export function mdBeatCellSource(row: Row, i: number, model?: boolean, assets?: ExportAssets | null, services: ExportServices = exportServices(), number?: string) {
   const toMd = model ? function (html: unknown) { return toMarkdown(services.cellOf(html)); } : services.htmlToMarkdown;
   const text = toMd(row.visualText);
   let visual = text;
   const image = assets ? capturedRowDataUrl(assets, row) : rowImageDataUrl(row);
   if (image) {
-    visual = "![visual for scene " + pad2(i + 1) + "](" + image + ")" + (visual ? "<br>" + visual : "");
+    visual = "![visual for scene " + (number ?? pad2(i + 1)) + "](" + image + ")" + (visual ? "<br>" + visual : "");
   }
   return {
     visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),
@@ -365,9 +372,9 @@ export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions |
       const heading = headings.get(i);
       if (heading) lines.push("", "## " + markdownSectionName(heading.name) + " · " + heading.total, "");
       if (i === 0 || heading) lines.push("| # | Start | Status | Visual | Audio | Read |", "| --- | --- | --- | --- | --- | --- |");
-      const cell = mdBeatCellSource(row, i, false, assets, services);
       const f = beats[i];
       if (!f) throw new Error("Missing scene facts");
+      const cell = mdBeatCellSource(row, i, false, assets, services, f.number);
       lines.push("| " + [f.number, f.start, f.status.label].join(" | ") + " | " +
                  mdRichTableCell(cell.visual) + " | " + mdRichTableCell(cell.audio) + " | " +
                  mdReadCell(f) + " |");
@@ -388,8 +395,8 @@ export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions |
 
 export function htmlToPlainScript(doc: ExportDocument, services: ExportServices = exportServices()): string {
   const lines = [doc.title || "Untitled Script", ""];
-  doc.beats.forEach(function (row, i) {
-    lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(services.cellOf(row.visualText)));
+  doc.beats.forEach(function (row) {
+    lines.push("[" + (doc.numbering.beats[row.id]?.full ?? "") + "] VISUAL: " + toPlainText(services.cellOf(row.visualText)));
     rowVideoLinks(row).forEach(function (l) { lines.push("      VIDEO: " + videoLinkText(l)); });
     lines.push("      AUDIO: " + toPlainText(services.cellOf(row.audioText)));
     lines.push("");

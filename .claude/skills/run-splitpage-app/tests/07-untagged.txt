@@ -87,13 +87,13 @@ press  Also a [gaffer] on the crew.
 sleep 800
 expect document.getElementById('production-badge').textContent == 2
 
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
 press  Watch the gaffer tapes the cable down.
 sleep 900
 expect document.getElementById('tag-suggest').classList.contains('is-visible')
 key Tab
 sleep 700
-expect document.querySelector('#rows .row:nth-child(2) .visual-cell .tag-anchor').getAttribute('data-tag-name') == gaffer
+expect document.querySelector('#rows .row:nth-of-type(2) .visual-cell .tag-anchor').getAttribute('data-tag-name') == gaffer
 
 # --- an accented letter is a letter -----------------------------------------
 # The boundary test used to be [A-Za-z0-9], so anything outside ASCII read as
@@ -102,11 +102,11 @@ expect document.querySelector('#rows .row:nth-child(2) .visual-cell .tag-anchor'
 caret #rows .row .audio-cell .cell-editable
 press  And [Ana] is on set.
 sleep 800
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
 press  Anaïs opens the door.
 sleep 900
 expect document.getElementById('tag-suggest').classList.contains('is-visible') === false
-expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .tag-anchor').length == 1
+expect document.querySelectorAll('#rows .row:nth-of-type(2) .visual-cell .tag-anchor').length == 1
 
 # --- the breakdown now counts the mention it was missing --------------------
 click #btn-production

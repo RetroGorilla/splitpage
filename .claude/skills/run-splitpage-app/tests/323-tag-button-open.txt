@@ -1,8 +1,8 @@
 open
 wait document.querySelectorAll('#rows .row').length > 1
 eval (function(){ for(var i=0;i<8;i++) document.querySelector('[data-action="add-row"]').click(); document.activeElement.blur(); window.F=window.__splitpageFormats; window.U=window.__undoTest; window.cell=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.st=function(i){return F.state().rows[i].visualText;}; window.modal=document.getElementById('tag-modal'); window.kw=function(){return document.querySelectorAll('#rows .plain-tag-keyword').length;}; return true; })()
-caret #rows .row:nth-child(3) .visual-cell .cell-editable
-click #rows .row:nth-child(3) .visual-cell button.tb-tag
+caret #rows .row:nth-of-type(3) .visual-cell .cell-editable
+click #rows .row:nth-of-type(3) .visual-cell button.tb-tag
 wait !modal.hidden
 expect modal.classList.contains('is-category-only')
 expect document.activeElement === modal.querySelector('.tag-cat-btn')
@@ -23,44 +23,44 @@ key Enter
 wait kw() === 0
 expect st(2).indexOf('prop:Lamp<br>') === 0
 expect cell(2).querySelectorAll('.tag-anchor').length == 0
-caret #rows .row:nth-child(4) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(4) .visual-cell .cell-editable
 press prop:Lamp
 key Enter
 wait kw() === 0
 expect st(2) === st(3)
 
-caret #rows .row:nth-child(5) .visual-cell .cell-editable
-click #rows .row:nth-child(5) .visual-cell button.tb-tag
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
+click #rows .row:nth-of-type(5) .visual-cell button.tb-tag
 wait !modal.hidden
 key Enter
 wait modal.hidden && kw() === 1
 press Lantern
 key Tab
 wait kw() === 0 && cell(4).querySelector('.tag-anchor') !== null
-caret #rows .row:nth-child(6) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(6) .visual-cell .cell-editable
 press prop:Lantern
 key Tab
 wait kw() === 0 && cell(5).querySelector('.tag-anchor') !== null
 expect st(4) === st(5)
 expect cell(4).querySelector('.tag-anchor').getAttribute('data-tag-name') == Lantern
 
-caret #rows .row:nth-child(7) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(7) .visual-cell .cell-editable
 press Before.
 eval (function(){ U.flush(); window.before=st(6); window.steps=U.sizes().undo; window.at=getSelection().anchorOffset; return true; })()
-click #rows .row:nth-child(7) .visual-cell button.tb-tag
+click #rows .row:nth-of-type(7) .visual-cell button.tb-tag
 wait !modal.hidden
 key Escape
 wait modal.hidden
 expect document.activeElement === cell(6) && getSelection().anchorOffset === window.at
 expect st(6) === window.before && U.sizes().undo === window.steps
-click #rows .row:nth-child(7) .visual-cell button.tb-tag
+click #rows .row:nth-of-type(7) .visual-cell button.tb-tag
 wait !modal.hidden
 mouse down ({x:5,y:5})
 mouse up ({x:5,y:5})
 wait modal.hidden
 expect document.activeElement === cell(6) && getSelection().anchorOffset === window.at
 expect st(6) === window.before && U.sizes().undo === window.steps
-click #rows .row:nth-child(7) .visual-cell button.tb-tag
+click #rows .row:nth-of-type(7) .visual-cell button.tb-tag
 wait !modal.hidden
 click #tag-cats [data-tag-cat="prop"]
 wait kw() === 1
@@ -69,8 +69,8 @@ key ctrl KeyZ
 wait st(6) === window.before
 expect kw() === 0
 
-caret #rows .row:nth-child(8) .visual-cell .cell-editable
-click #rows .row:nth-child(8) .visual-cell button.tb-tag
+caret #rows .row:nth-of-type(8) .visual-cell .cell-editable
+click #rows .row:nth-of-type(8) .visual-cell button.tb-tag
 wait !modal.hidden
 click #tag-cats [data-tag-cat="sound"]
 wait kw() === 1
@@ -81,31 +81,31 @@ wait kw() === 0
 expect st(7) == sfx:Wind
 expect cell(7).querySelectorAll('.tag-anchor').length == 0
 
-caret #rows .row:nth-child(9) .visual-cell .cell-editable
-click #rows .row:nth-child(9) .visual-cell button.tb-tag
+caret #rows .row:nth-of-type(9) .visual-cell .cell-editable
+click #rows .row:nth-of-type(9) .visual-cell button.tb-tag
 wait !modal.hidden
 click #tag-cats [data-tag-cat="gear"]
 wait kw() === 1
 press Tripod
-caret #rows .row:nth-child(10) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(10) .visual-cell .cell-editable
 wait kw() === 0
 expect st(8) == gear:Tripod
 expect cell(8).querySelectorAll('.tag-anchor').length == 0
 
-caret #rows .row:nth-child(10) .audio-cell .cell-editable
-click #rows .row:nth-child(10) .audio-cell button.tb-tag
+caret #rows .row:nth-of-type(10) .audio-cell .cell-editable
+click #rows .row:nth-of-type(10) .audio-cell button.tb-tag
 expect modal.hidden && kw() === 0
-caret #rows .row:nth-child(10) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(10) .visual-cell .cell-editable
 press word
-click #rows .row:nth-child(10) .visual-cell button.tb-tag
+click #rows .row:nth-of-type(10) .visual-cell button.tb-tag
 expect modal.hidden && kw() === 0
 expect st(9) == word
 
 eval (function(){ document.querySelector('[data-action="add-row"]').click(); document.querySelector('[data-action="add-row"]').click(); return true; })()
-caret #rows .row:nth-child(11) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(11) .visual-cell .cell-editable
 press Prefix.
-click #rows .row:nth-child(11) .visual-cell [data-cmd="bold"]
-click #rows .row:nth-child(11) .visual-cell button.tb-tag
+click #rows .row:nth-of-type(11) .visual-cell [data-cmd="bold"]
+click #rows .row:nth-of-type(11) .visual-cell button.tb-tag
 wait !modal.hidden
 click #tag-cats [data-tag-cat="prop"]
 wait kw() === 1
@@ -113,9 +113,9 @@ expect st(10) == Prefix.<strong>prop:</strong>
 press Camera
 key Tab
 wait kw() === 0 && cell(10).querySelector('.tag-anchor strong') !== null
-caret #rows .row:nth-child(12) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(12) .visual-cell .cell-editable
 press Prefix.
-click #rows .row:nth-child(12) .visual-cell [data-cmd="bold"]
+click #rows .row:nth-of-type(12) .visual-cell [data-cmd="bold"]
 press prop:Camera
 key Tab
 wait kw() === 0 && cell(11).querySelector('.tag-anchor strong') !== null

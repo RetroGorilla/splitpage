@@ -20,11 +20,12 @@ function fixture() {
   "2026-10-31T12:00:00Z", { production: [], commentNumbers: {}, broll: [] }, { clockMode: "24" });
 }
 
-test("captured section facts count every scene, keep the prefix unsectioned, and ignore view folds", () => {
+test("captured section facts count every beat, put the prefix in automatic A, and ignore view folds", () => {
   const doc = fixture();
   assert.deepEqual(scriptSceneFacts(doc, beatFacts(doc)), [
-    { id: "s1", name: "Opening & *part*", start: 1, end: 3, total: "0:50" },
-    { id: "s2", name: "Ending", start: 3, end: 4, total: "0:40" }
+    { id: "", name: "A", start: 0, end: 1, total: "0:10" },
+    { id: "s1", name: "B Opening & *part*", start: 1, end: 3, total: "0:50" },
+    { id: "s2", name: "C Ending", start: 3, end: 4, total: "0:40" }
   ]);
 });
 
@@ -34,12 +35,12 @@ test("print headings span all columns, repeat in the table head, and retain shot
   const page = new DOMParser().parseFromString(html, "text/html");
   const tables = [...page.querySelectorAll(".script-table")];
   assert.equal(tables.length, 3);
-  assert.equal(tables[0].querySelector(".script-section"), null);
+  assert.equal(tables[0].querySelector(".script-section th").textContent, "A0:10");
   assert.deepEqual([...page.querySelectorAll(".script-section th")].map(el => [el.colSpan, el.textContent]), [
-    [4, "Opening & *part*0:50"], [4, "Ending0:40"]
+    [4, "A0:10"], [4, "B Opening & *part*0:50"], [4, "C Ending0:40"]
   ]);
-  assert.equal(page.querySelectorAll("thead .script-section").length, 2);
-  assert.deepEqual([...page.querySelectorAll(".scene-number")].map(el => el.textContent), ["01", "02", "03", "04"]);
+  assert.equal(page.querySelectorAll("thead .script-section").length, 3);
+  assert.deepEqual([...page.querySelectorAll(".scene-number")].map(el => el.textContent), ["A.1", "B.1", "B.2", "C.1"]);
   assert.match(page.querySelector(".shot-done").textContent, /Spoken c/);
   assert.equal(page.querySelector("part"), null);
 });
@@ -49,7 +50,7 @@ test("Word headings span four columns and reimport never creates heading scenes"
   const parts = await zipRead(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
   const xml = new DOMParser().parseFromString(new TextDecoder().decode(await parts.get("word/document.xml")), "application/xml");
   const spans = [...xml.getElementsByTagName("w:gridSpan")];
-  assert.equal(spans.length, 2);
+  assert.equal(spans.length, 3);
   for (const span of spans) {
     assert.equal(span.getAttribute("w:val"), "4");
     assert.equal(span.parentElement.parentElement.getElementsByTagName("w:keepNext").length, 1);
@@ -62,10 +63,10 @@ test("Word headings span four columns and reimport never creates heading scenes"
 test("both readable Markdown forms keep escaped section headings; project view and narration stay separate", () => {
   const doc = fixture();
   for (const markdown of [toMarkdownDoc(doc), toMarkdownTableDoc(doc, { export: true })]) {
-    assert.ok(markdown.indexOf("Spoken a") < markdown.indexOf("## Opening"));
-    assert.ok(markdown.includes("## Opening & \\*part\\* · 0:50"));
-    assert.ok(markdown.indexOf("Spoken c") < markdown.indexOf("## Ending · 0:40"));
-    assert.ok(markdown.indexOf("## Ending · 0:40") < markdown.indexOf("Spoken d"));
+    assert.ok(markdown.indexOf("Spoken a") < markdown.indexOf("## B Opening"));
+    assert.ok(markdown.includes("## B Opening & \\*part\\* · 0:50"));
+    assert.ok(markdown.indexOf("Spoken c") < markdown.indexOf("## C Ending · 0:40"));
+    assert.ok(markdown.indexOf("## C Ending · 0:40") < markdown.indexOf("Spoken d"));
   }
   assert.doesNotMatch(toMarkdownTableDoc(doc), /## Opening|## Ending/);
   assert.doesNotMatch(buildNarrationText(doc), /Opening|Ending/);

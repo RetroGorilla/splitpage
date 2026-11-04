@@ -16,6 +16,7 @@ interface OverlayPortUse extends Omit<GalleryOverlayPorts, "document"> {
   readonly document: {
     readonly current: (...args: Parameters<GalleryOverlayPorts["document"]["current"]>) => OverlayDocument | Extract<ReturnType<GalleryOverlayPorts["document"]["current"]>, null | undefined>;
     readonly read: GalleryOverlayPorts["document"]["read"];
+    readonly numbering: GalleryOverlayPorts["document"]["numbering"];
   };
 }
 interface GalleryView {
@@ -120,7 +121,7 @@ function paint() {
   let videos = 0;
   slots.forEach(function (s) { videos += s.links.length; });
 
-  (document.getElementById("gallery-title") as HTMLElement).textContent = "Scene " + ((got as { row: unknown; index: number; }).index + 1) + " · Visual";
+  (document.getElementById("gallery-title") as HTMLElement).textContent = "Scene " + ((ports as OverlayPortUse).document.numbering().beats[(view as GalleryView).rowId]?.full ?? "") + " · Visual";
   const summary = [];
   if (pictures) summary.push(plural(pictures, "picture"));
   if (videos) summary.push(plural(videos, "video"));

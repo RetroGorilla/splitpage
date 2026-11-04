@@ -1,5 +1,5 @@
 import { editableCellHtml } from "../common/editable-cell.ts";
-import { formatDuration, pad2, totalSeconds } from "../../core/production/timing.ts";
+import { formatDuration, totalSeconds } from "../../core/production/timing.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot, cssAttr } from "../common/dom.ts";
 import { bothBeatsHaveVisual, joinBeatsCommand } from "../../application/commands/split-join.ts";
@@ -25,6 +25,7 @@ interface WriterRedoBoundary {
   lifetime: ReturnType<WriterFeaturePorts["undo"]["lifetime"]>;
   serial: number;
 }
+let numbering: WriterFeaturePorts["document"]["numbering"] | null;
 let currentDocument: WriterFeaturePorts["document"]["current"] | null;
 let readSession: WriterFeaturePorts["document"]["read"] | null;
 let editAllowed: WriterFeaturePorts["edits"]["allowed"] | null;
@@ -62,7 +63,7 @@ let writerGutterMode = "visuals";
 let writerUndoMark = 0;
 let reopenOnRedo: WriterRedoBoundary | null = null;
 
-function writerBlockHtml(row: WriterRow, i: number) {
+function writerBlockHtml(row: WriterRow) {
   let visual;
   if (gallerySize(row)) {
     const caption = truncateForPreview((htmlToPlainText as WriterFeaturePorts["text"]["htmlToPlainText"])(row.visualText), 42);
@@ -74,7 +75,7 @@ function writerBlockHtml(row: WriterRow, i: number) {
   return '<div class="wr-block" data-row="' + id + '">' +
       '<div class="wr-gutter" data-action="writer-jump" data-row="' + id +
         '" title="Open this scene in the split view">' +
-        '<span class="wr-num">' + pad2(i + 1) + '</span>' +
+        '<span class="wr-num">' + ((numbering as WriterFeaturePorts["document"]["numbering"])().beats[row.id]?.full ?? "") + '</span>' +
         '<span class="wr-visual">' + visual + '</span>' +
       '</div>' +
       editableCellHtml({
@@ -403,6 +404,7 @@ function guardWriterEdit(e: Event) {
 }
 
 export function startWriter(given: WriterFeaturePorts) {
+  numbering = given.document.numbering;
   currentDocument = given.document.current;
   readSession = given.document.read;
   editAllowed = given.edits.allowed;

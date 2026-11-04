@@ -17,7 +17,7 @@ wait document.querySelectorAll('#rows .row').length >= 9
 eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.cell = function (i, col) { return document.querySelectorAll('#rows .row')[i].querySelector('.' + (col || 'visual') + '-cell .cell-editable'); }; window.st = function (i, col) { return F.state().rows[i][(col || 'visual') + 'Text'].replace(/&nbsp;/g, ' '); }; window.reg = function (cat, name) { return F.state().productionTags.some(function (t) { return t.cat === cat && t.name === name; }); }; window.kw = function () { return document.querySelectorAll('#rows .plain-tag-keyword').length; }; window.hint = function () { var h = document.getElementById('tag-open-hint'); return h.classList.contains('is-visible') ? h.textContent : ''; }; window.hl = function (cat) { var h = CSS.highlights.get('splitpage-open-tag-' + cat); if (!h || !h.size) return null; var r = Array.from(h)[0]; return String(r).split(String.fromCharCode(0x200B)).join(''); }; window.seen = function (el) { return el.innerText.split(String.fromCharCode(0xA0)).join(' ').split(String.fromCharCode(0x200B)).join(''); }; window.tags = function (el) { return Array.from(el.querySelectorAll('.tag-anchor')).map(function (t) { return t.getAttribute('data-tag-cat') + ':' + t.getAttribute('data-tag-name'); }); }; return true; })()
 
 # --- VFX: opens a tag; the keyword disappears, the document keeps it --------
-caret #rows .row:nth-child(1) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
 press  Shot VFX:
 wait kw() == 1
 expect getComputedStyle(document.querySelector('#rows .plain-tag-keyword')).display == none
@@ -79,7 +79,7 @@ wait cell(0).querySelectorAll('.tag-anchor').length == 1
 expect JSON.stringify(tags(cell(0))) == ["vfx:lens flare sweeps"]
 
 # --- Esc cancels and puts the plain keyword back; no edit, no entry ---------
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
 press  Prop: red mug
 wait kw() == 1
 expect hint().indexOf('Prop') !== -1
@@ -98,7 +98,7 @@ wait /Prop: red mug too$/.test(st(1))
 expect cell(1).querySelectorAll('.tag-anchor').length == 0
 
 # --- every name, any case, each its own category ----------------------------
-caret #rows .row:nth-child(3) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(3) .visual-cell .cell-editable
 press  prop: mug
 key Tab
 press  LOCATION: park
@@ -127,13 +127,13 @@ expect cell(2).querySelector('.tag-anchor[data-tag-cat="cast"]').getAttribute('c
 expect getComputedStyle(cell(2).querySelector('.tag-anchor[data-tag-cat="gear"]')).boxShadow.indexOf('68, 105, 60') !== -1
 
 # --- not a keyword: mid-word, other names, the Audio column -----------------
-caret #rows .row:nth-child(4) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(4) .visual-cell .cell-editable
 press  myVFX: a Sound: b Props: c FX: d
 wait /FX: d$/.test(st(3))
 sleep 200
 expect kw() == 0
 expect hint() === ''
-caret #rows .row:nth-child(4) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(4) .audio-cell .cell-editable
 press  VFX: boom
 wait /VFX: boom$/.test(st(3, 'audio'))
 sleep 200
@@ -143,7 +143,7 @@ expect /VFX: boom$/.test(st(3, 'audio'))
 expect cell(3, 'audio').querySelectorAll('.tag-anchor').length == 0
 
 # --- Tab with nothing typed puts the keyword back, and stays in the cell ----
-caret #rows .row:nth-child(4) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(4) .visual-cell .cell-editable
 press  Gear:
 wait kw() == 1
 key Tab
@@ -178,12 +178,12 @@ wait kw() == 0 && /Cast$/.test(st(3))
 # --- the caret leaving ends it: the plain text again ------------------------
 press : smoke machine
 wait kw() == 1
-caret #rows .row:nth-child(5) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
 wait kw() == 0 && hint() === ''
 expect /Cast: smoke machine$/.test(seen(cell(3)))
 expect cell(3).querySelectorAll('.tag-anchor').length == 0
 # a click (a caret move) inside the same cell, before where the keyword was
-caret #rows .row:nth-child(5) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
 press  VFX: sparks
 wait kw() == 1
 eval (function(){ var c = cell(4); var w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT, null); var t = w.nextNode(); var r = document.createRange(); r.setStart(t, 0); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
@@ -191,14 +191,14 @@ wait kw() == 0
 expect /VFX: sparks$/.test(seen(cell(4)))
 
 # --- a line break ends it, as plain text -----------------------------------
-caret #rows .row:nth-child(5) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
 press  Loc: roof
 key Enter
 wait kw() == 0 && hint() === '' && /Loc: roof<br>/.test(st(4))
 expect cell(4).querySelectorAll('.tag-anchor').length == 0
 
 # --- a repaint of the cell from state (an undo, a remote edit) ends it ------
-caret #rows .row:nth-child(5) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
 press  VFX: rain
 wait kw() == 1
 # the row changed behind the cell and render() run, as a pulled remote edit
@@ -210,7 +210,7 @@ wait kw() == 0 && hint() === '' && hl('vfx') === null
 expect st(4).indexOf('plain-tag') === -1
 expect cell(4).querySelectorAll('.tag-anchor').length == 0
 # an undo while one is open: the typing taken back, the tag forgotten
-caret #rows .row:nth-child(5) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
 press  Prop: hat
 wait kw() == 1
 key ctrl KeyZ
@@ -220,7 +220,7 @@ expect st(4).indexOf('plain-tag') === -1
 expect !/Prop: hat$/.test(st(4))
 
 # --- Tab: the open tag before the ghost ------------------------------------
-caret #rows .row:nth-child(1) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(1) .audio-cell .cell-editable
 press  a [zebra lamp]
 wait F.state().productionTags.some(function (t) { return t.name === 'zebra lamp'; })
 # mid-screen first: a scroll puts the ghost away, and typing low on the
@@ -232,7 +232,7 @@ wait F.state().productionTags.some(function (t) { return t.name === 'zebra lamp'
 # scrolled for 400 ms before typing.
 eval (function(){ window.__lastScroll = performance.now(); window.addEventListener('scroll', function(){ window.__lastScroll = performance.now(); }, true); return true; })()
 eval (function(){ cell(5).scrollIntoView({ block: 'center' }); window.__lastScroll = performance.now(); return true; })()
-caret #rows .row:nth-child(6) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(6) .visual-cell .cell-editable
 wait performance.now() - window.__lastScroll > 400
 press  VFX: glow [zeb
 wait document.getElementById('tag-ghost').classList.contains('is-visible')
@@ -250,11 +250,11 @@ key Tab
 wait cell(5).querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 1
 
 # --- Tab: the open tag before the untagged-mention prompt -------------------
-caret #rows .row:nth-child(1) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(1) .audio-cell .cell-editable
 press  and [gaffer tape]
 wait F.state().productionTags.some(function (t) { return t.name === 'gaffer tape'; })
 eval (function(){ cell(6).scrollIntoView({ block: 'center' }); return true; })()
-caret #rows .row:nth-child(7) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(7) .visual-cell .cell-editable
 press  VFX: gaffer tape smoke
 wait kw() == 1 && /gaffer tape smoke$/.test(st(6))
 sleep 900
@@ -272,7 +272,7 @@ wait cell(6).querySelectorAll('.tag-anchor').length == 2
 expect JSON.stringify(tags(cell(6))) == ["vfx:gaffer tape smoke","prop:gaffer tape"]
 
 # --- brackets are unchanged -----------------------------------------------
-caret #rows .row:nth-child(8) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(8) .visual-cell .cell-editable
 press  [cup] {hall} ~haze~ <boom pole>
 wait cell(7).querySelectorAll('.tag-anchor').length == 4
 expect JSON.stringify(tags(cell(7))) == ["prop:cup","location:hall","vfx:haze","gear:boom pole"]
@@ -299,7 +299,7 @@ wait /fog<\/span> after$/.test(st(7))
 # pointerdown with its default prevented, as the ghost's: the cell keeps the
 # focus and the caret. The phone's own run is 196-plain-tags-phone.txt.
 eval (function(){ cell(8).scrollIntoView({ block: 'center' }); return true; })()
-caret #rows .row:nth-child(9) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(9) .visual-cell .cell-editable
 press  Music: rain loop
 wait kw() == 1
 eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()

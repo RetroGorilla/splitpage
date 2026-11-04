@@ -103,7 +103,7 @@ interface HelpTourStep {
 
 const TOUR_STEPS: HelpTourStep[] = [
   {
-    selector: "#rows .row:first-child",
+    selector: "#rows .row:first-of-type",
     title: "Two columns",
     body: "The left column is what the viewer sees. The right is what gets said out loud.",
     slug: "help-tagging-and-the-production-breakdown"
