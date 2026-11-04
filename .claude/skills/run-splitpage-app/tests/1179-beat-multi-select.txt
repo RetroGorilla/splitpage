@@ -2,18 +2,16 @@
 
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.T = window.__sceneSelectTest; window.D = window.__desktopTest; var rows = ['One','Two','Three','Four','Five','Six','Seven'].map(function(w, i){ return { id: 'r' + (i + 1), visualText: w + ' visual', audioText: w + ' words go here for a good long way.', status: i === 2 ? 'shot' : 'todo' }; }); rows[1].audioText = 'Start <a href="https://example.com/beat" target="_blank" rel="noopener">the link</a> and more words go here for a good long way.'; rows[3].audioText = 'Four <span class="cmt-anchor" data-cmt="c1">words</span> go here for a good long way.'; var doc = { schema: 2, title: 'Gaps', rows: rows, sections: [ { id: 's2', name: 'Middle', firstSceneId: 'r5' }, { id: 's3', name: 'End', firstSceneId: 'r7' } ], comments: [ { id: 'c1', rowId: 'r4', field: 'audioText', anchorId: 'c1', quotedText: 'words', author: 'Ann', body: 'Warmer?', createdAt: '2026-09-01T10:00:00Z', kind: 'anchor', replies: [] } ] }; F.openFile(new File([JSON.stringify(doc)], 'gaps.splitpage')); return true; })()
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.T = window.__sceneSelectTest; window.D = window.__desktopTest; var c = document.createElement('canvas'); c.width = 16; c.height = 12; c.getContext('2d').fillRect(0, 0, 16, 12); var rows = ['One','Two','Three','Four','Five','Six','Seven'].map(function(w, i){ return { id: 'r' + (i + 1), visualText: w + ' visual', audioText: w + ' words go here for a good long way.', status: i === 2 ? 'shot' : 'todo' }; }); rows[1].audioText = 'Start <a href="https://example.com/beat" target="_blank" rel="noopener">the link</a> and more words go here for a good long way.'; rows[6].visualImage = c.toDataURL('image/png'); rows[6].imageName = 'seven.png'; rows[3].audioText = 'Four <span class="cmt-anchor" data-cmt="c1">words</span> go here for a good long way.'; var doc = { schema: 2, title: 'Gaps', rows: rows, sections: [ { id: 's2', name: 'Middle', firstSceneId: 'r5' }, { id: 's3', name: 'End', firstSceneId: 'r7' } ], comments: [ { id: 'c1', rowId: 'r4', field: 'audioText', anchorId: 'c1', quotedText: 'words', author: 'Ann', body: 'Warmer?', createdAt: '2026-09-01T10:00:00Z', kind: 'anchor', replies: [] } ] }; F.openFile(new File([JSON.stringify(doc)], 'gaps.splitpage')); return true; })()
 wait F.state().title === 'Gaps' && document.querySelector('#rows .row[data-id="r7"]')
 eval (function(){ window.row = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"]'); }; window.cell = function(id, f){ return row(id).querySelector('.' + (f === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.pt = function(el, fx, fy){ var r = el.getBoundingClientRect(); return { x: r.left + r.width * (fx === undefined ? 0.5 : fx), y: r.top + r.height * (fy === undefined ? 0.5 : fy) }; }; window.audio = function(id, fx){ return pt(cell(id, 'audioText'), fx === undefined ? 0.9 : fx, 0.5); }; window.ids = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; window.toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent; }).join(' | '); }; window.untoast = function(){ document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return true; }; window.out = function(){ if (document.activeElement) document.activeElement.blur(); getSelection().removeAllRanges(); return true; }; window.noText = function(){ return getSelection().isCollapsed || getSelection().rangeCount === 0; }; window.inText = function(){ return !!(document.activeElement && document.activeElement.isContentEditable); }; window.lit = function(id){ return getComputedStyle(row(id)).backgroundColor === 'rgb(200, 218, 242)'; }; window.scrollTo(0, 0); untoast(); return true; })()
 wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
 sleep 300
 
-# ---- a plain click places the cursor and starts no selection ---------------
 mouse click audio('r1')
 expect T.ids().length === 0
 expect document.activeElement === cell('r1', 'audioText')
 
-# ---- Shift+click: a range from the beat holding the cursor -------------------
 mouse shift click audio('r3')
 expect T.ids().join() === 'r1,r2,r3'
 expect !inText() && noText()
@@ -21,7 +19,6 @@ expect lit('r1') && lit('r2') && lit('r3') && !lit('r4')
 key Escape
 expect T.ids().length === 0
 
-# ---- Shift+click: a range from the last clicked beat, in either direction ----
 eval out()
 mouse click audio('r3')
 eval out()
@@ -31,7 +28,6 @@ mouse shift click audio('r5')
 expect T.ids().join() === 'r3,r4,r5'
 key Escape
 
-# ---- Shift+click inside one beat stays a text selection, in either column ----
 eval out()
 mouse click audio('r6', 0.05)
 mouse shift click audio('r6', 0.6)
@@ -42,7 +38,6 @@ mouse click audio('r6', 0.05)
 mouse shift click pt(cell('r6', 'visualText'))
 expect T.ids().length === 0
 
-# ---- Ctrl+click adds and removes, with a gap ------------------------------
 eval out()
 mouse ctrl click audio('r1')
 mouse ctrl click audio('r3')
@@ -56,11 +51,9 @@ expect T.ids().join() === 'r1,r6'
 expect !lit('r3')
 mouse ctrl click pt(row('r2').querySelector('.row-num'))
 expect T.ids().join() === 'r1,r2,r6'
-# Shift+click runs from the last Ctrl+clicked beat and replaces the selection
 mouse shift click audio('r4')
 expect T.ids().join() === 'r2,r3,r4'
 
-# ---- a Ctrl+click from a cell holding the cursor leaves the text --------------
 key Escape
 mouse click audio('r5')
 expect inText()
@@ -69,7 +62,38 @@ expect T.ids().join() === 'r2'
 expect !inText()
 key Escape
 
-# ---- Esc and a plain click clear a selection with a gap --------------------
+eval out()
+eval row('r7').scrollIntoView({ block: 'center' })
+sleep 300
+eval (function(){ window.tile = function(id){ return row(id).querySelector('.scene-gallery-tile'); }; window.galleryOpen = function(){ return !document.getElementById('gallery-modal').hidden; }; return !!tile('r7'); })()
+expect tile('r7') !== null
+mouse ctrl click audio('r6')
+mouse ctrl click pt(tile('r7'))
+expect T.ids().join() === 'r6,r7'
+expect !galleryOpen()
+sleep 200
+expect !galleryOpen()
+mouse ctrl click pt(tile('r7'))
+expect T.ids().join() === 'r6'
+expect !galleryOpen()
+key Escape
+mouse click audio('r6')
+mouse shift click pt(tile('r7'))
+expect T.ids().join() === 'r6,r7'
+sleep 200
+expect !galleryOpen()
+key Escape
+eval out()
+mouse ctrl click audio('r6')
+mouse click pt(tile('r7'))
+expect T.ids().length === 0
+wait galleryOpen()
+jsclick #gallery-close
+wait !galleryOpen()
+eval out()
+eval window.scrollTo(0, 0)
+sleep 400
+
 mouse ctrl click audio('r1')
 mouse ctrl click audio('r3')
 key Escape
@@ -82,7 +106,6 @@ expect T.ids().length === 0
 expect document.activeElement === cell('r5', 'audioText')
 eval out()
 
-# ---- the right-click menu keeps a selection with a gap ---------------------
 mouse ctrl click audio('r1')
 mouse ctrl click audio('r3')
 mouse right audio('r3')
@@ -94,7 +117,6 @@ mouse right audio('r2')
 expect T.ids().length === 0
 eval out()
 
-# ---- Ctrl+click on a link stays the link's, a control stays the control's -----
 eval (function(){ window.__link = null; document.addEventListener('click', function(e){ if (e.target.closest && e.target.closest('a')) window.__link = { ctrl: e.ctrlKey, prevented: e.defaultPrevented }; }); return true; })()
 mouse ctrl click pt(cell('r2', 'audioText').querySelector('a'))
 expect __link && __link.ctrl && !__link.prevented
@@ -108,13 +130,11 @@ key ctrl KeyZ
 wait F.state().rows[0].status === 'todo'
 eval out()
 
-# ---- Ctrl+click on a comment's words selects the beat and opens no comment ----
 mouse ctrl click pt(cell('r4', 'audioText').querySelector('.cmt-anchor'))
 expect T.ids().join() === 'r4'
 expect document.getElementById('comments-panel').hidden
 key Escape
 
-# ---- Ctrl+A: a field's text inside it, every beat outside --------------------
 mouse click audio('r2')
 key ctrl KeyA
 expect T.ids().length === 0
@@ -127,7 +147,6 @@ expect lit('r1') && lit('r7')
 key Escape
 expect T.ids().length === 0
 
-# ---- Ctrl+A leaves the beats behind a dialog alone ----------------------------
 eval D.runMenuCommand('export')
 wait !document.getElementById('export-modal').hidden
 eval out()
@@ -137,7 +156,6 @@ jsclick #export-close
 wait document.getElementById('export-modal').hidden
 eval out()
 
-# ---- hidden beats: left out of Ctrl+A, Shift+click and what acts on them -------
 jsclick #menu-hide-shot
 wait !row('r3') && document.querySelector('#rows .hidden-shot-strip')
 key ctrl KeyA
@@ -163,7 +181,6 @@ wait row('r5')
 eval out()
 sleep 300
 
-# ---- Ctrl+A then Delete empties the script, and one undo brings it all back ----
 key ctrl KeyA
 key Delete
 wait F.state().rows.length === 0
@@ -173,7 +190,6 @@ wait ids() === 'r1,r2,r3,r4,r5,r6,r7'
 eval out()
 sleep 300
 
-# ---- copy, delete, cut and paste with a gap, one undo entry each ---------------
 mouse ctrl click audio('r3')
 mouse ctrl click audio('r1')
 eval untoast()
@@ -209,7 +225,6 @@ wait ids() === 'r1,r2,r3,r4,r5,r6,r7'
 eval out()
 sleep 300
 
-# ---- a paste over a selection with a gap lands after its last beat ------------
 mouse ctrl click audio('r1')
 key ctrl KeyC
 key Escape
@@ -224,7 +239,6 @@ wait ids() === 'r1,r2,r3,r4,r5,r6,r7'
 eval out()
 sleep 300
 
-# ---- the selection never reaches the saved document or undo -------------------
 eval (function(){ U.flush(); window.__u = U.sizes().undo; window.__doc = JSON.stringify(F.state()); return true; })()
 mouse ctrl click audio('r1')
 mouse ctrl click audio('r3')
@@ -235,7 +249,6 @@ eval U.flush()
 expect U.sizes().undo === __u
 expect JSON.stringify(F.state()) === __doc
 
-# ---- New script from beats with a gap ------------------------------------------
 mouse ctrl click audio('r3')
 mouse ctrl click audio('r1')
 eval T.openMenu(200, 200)

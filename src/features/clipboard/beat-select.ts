@@ -16,6 +16,7 @@ const SCROLL_ZONE = 120;
 const SCROLL_MIN = 6;
 const SCROLL_MAX = 28;
 const NOT_A_BEAT_CLICK = "a[href], button, input, textarea, select, summary, label, .row-menu, .link-popover, .video-popover, .mini-toolbar";
+const BEAT_PICTURE = ".scene-gallery-tile";
 const HIDES_BEATS = '#rows .hidden-shot-strip, #rows .section-fold[aria-expanded="false"]';
 
 let ports: BeatSelectPorts | null = null;
@@ -89,7 +90,7 @@ function selectAllBeats() {
 }
 
 function beatUnder(target: Element) {
-  if (!target.closest || target.closest(NOT_A_BEAT_CLICK)) return null;
+  if (!target.closest || (!target.closest(BEAT_PICTURE) && target.closest(NOT_A_BEAT_CLICK))) return null;
   const cell = target.closest(".cell-editable");
   if (cell && !(ports as BeatSelectPorts).scriptCell(cell)) return null;
   const row = target.closest("#rows .row[data-id]");

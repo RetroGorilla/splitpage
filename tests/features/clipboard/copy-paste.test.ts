@@ -26,10 +26,16 @@ Object.defineProperty(window.HTMLElement.prototype, "isContentEditable", {
 
 const CLEAR_SCREEN: ScreenState = { loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false };
 
-function rowHtml(id: string): string {
+function rowHtml(id: string, tile = "is-cover"): string {
   return '<div class="row" data-id="' + id + '"><button class="status-btn" type="button">Todo</button>' +
     '<div class="cell-editable" contenteditable="true" tabindex="0" data-id="' + id + '" data-field="audioText">Words ' +
-    '<a href="https://example.com/' + id + '">link</a></div></div>';
+    '<a href="https://example.com/' + id + '">link</a></div>' +
+    '<div class="visual-media"><button type="button" class="scene-gallery-tile ' + tile + '" data-action="gallery-open"><img alt=""></button>' +
+    '<div class="image-thumb-actions"><button type="button" class="tile-replace" data-action="image-replace">Replace</button></div></div></div>';
+}
+
+function tileIn(id: string): Element {
+  return document.querySelector('#rows .row[data-id="' + id + '"] .scene-gallery-tile img') as Element;
 }
 
 function paintedRows(): string {
@@ -122,6 +128,50 @@ test("beat selection: Ctrl+click on a control leaves the control alone", () => {
   const { owner } = beatSelect(paintedRows());
   const status = document.querySelector('#rows .row[data-id="r2"] .status-btn') as Element;
   assert.equal(pressOn(status, { ctrlKey: true }), false);
+  assert.deepEqual(selectedIds(), []);
+  owner.dispose();
+});
+
+for (const tile of ["is-cover", "is-video", "is-more"]) {
+  test("beat selection: Ctrl+click on a gallery picture (" + tile + ") adds its beat, removes it, and opens nothing", () => {
+    const { owner } = beatSelect(["r1", "r2", "r3"].map((id) => rowHtml(id, tile)).join(""));
+    let reached = 0;
+    document.getElementById("rows")?.addEventListener("click", () => { reached++; });
+    pressOn(cellOf("r1"), { ctrlKey: true });
+    assert.equal(pressOn(tileIn("r3"), { ctrlKey: true }), true);
+    assert.deepEqual(selectedIds(), ["r1", "r3"]);
+    tileIn("r3").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    assert.equal(reached, 0);
+    pressOn(tileIn("r3"), { ctrlKey: true });
+    assert.deepEqual(selectedIds(), ["r1"]);
+    owner.dispose();
+  });
+}
+
+test("beat selection: Shift+click on a gallery picture selects up to its beat", () => {
+  const { owner } = beatSelect(paintedRows());
+  cellOf("r1").focus();
+  assert.equal(pressOn(tileIn("r3"), { shiftKey: true }), true);
+  assert.deepEqual(selectedIds(), ["r1", "r2", "r3"]);
+  owner.dispose();
+});
+
+test("beat selection: a plain click on a gallery picture stays the gallery's", () => {
+  const { owner } = beatSelect(paintedRows());
+  let reached = 0;
+  document.getElementById("rows")?.addEventListener("click", () => { reached++; });
+  pressOn(cellOf("r1"), { ctrlKey: true });
+  assert.equal(pressOn(tileIn("r3")), false);
+  assert.deepEqual(selectedIds(), []);
+  tileIn("r3").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.equal(reached, 1);
+  owner.dispose();
+});
+
+test("beat selection: Ctrl+click on the buttons over a gallery picture leaves them alone", () => {
+  const { owner } = beatSelect(paintedRows());
+  const replace = document.querySelector('#rows .row[data-id="r2"] .tile-replace') as Element;
+  assert.equal(pressOn(replace, { ctrlKey: true }), false);
   assert.deepEqual(selectedIds(), []);
   owner.dispose();
 });
