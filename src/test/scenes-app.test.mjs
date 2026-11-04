@@ -92,28 +92,67 @@ test("singleton Alt moves require consecutive confirmation and undo restores the
   }
 });
 
-test("row menu Move up and Move down confirm before removing a one-beat scene header, like Alt+Arrow", async () => {
-  for (const [action, expected] of [["move-up", ["r2", "r1", "r3", "r4"]], ["move-down", ["r1", "r3", "r2", "r4"]]]) {
-    await open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);
-    const button = () => document.querySelector('#rows .row[data-id="r2"] [data-action="' + action + '"]');
-    const before = state(), undo = undoOwner().sizes().undo;
-    button().click();
-    assert.equal(state(), before);
-    assert.equal(document.querySelector('#rows [data-section-id="s1"] .section-hint').textContent, "Press again to remove the scene header");
-    button().click();
-    assert.deepEqual(ids(), expected);
-    assert.equal(currentDocument().sections.length, 1);
-    undoOwner().flush();
-    assert.equal(undoOwner().sizes().undo, undo + 1);
-    undoOwner().undo();
-    assert.equal(state(), before);
-  }
-});
+function mouse(target, type) {
+  target.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, detail: type === "click" ? 1 : 0 }));
+}
 
+function press(target, how) {
+  target.focus();
+  if (how === "mouse") { mouse(target, "pointerdown"); mouse(target, "mousedown"); mouse(target, "mouseup"); mouse(target, "click"); return; }
+  key("Enter", target);
+  mouse(target, "click");
+}
+
+function openMenu(id) {
+  const more = document.querySelector('#rows .row[data-id="' + id + '"] .row-more');
+  press(more, "mouse");
+  const menu = more.parentNode.querySelector(".row-menu");
+  assert.equal(menu.hidden, false);
+  return menu;
+}
+
+const singleton = () => open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);
+const hintOf = () => document.querySelector('#rows [data-section-id="s1"] .section-hint').textContent;
+
+for (const how of ["mouse", "keyboard"]) {
+  test("row menu Move up and Move down confirm by " + how + " before removing a one-beat scene header", async () => {
+    for (const [action, expected] of [["move-up", ["r2", "r1", "r3", "r4"]], ["move-down", ["r1", "r3", "r2", "r4"]]]) {
+      await singleton();
+      const menu = openMenu("r2");
+      const button = menu.querySelector('[data-action="' + action + '"]');
+      const before = state(), undo = undoOwner().sizes().undo;
+      press(button, how);
+      assert.equal(state(), before);
+      assert.equal(hintOf(), "Press again to remove the scene header");
+      assert.equal(menu.hidden, false);
+      assert.equal(document.activeElement, button);
+      press(button, how);
+      assert.deepEqual(ids(), expected);
+      assert.equal(currentDocument().sections.length, 1);
+      undoOwner().flush();
+      assert.equal(undoOwner().sizes().undo, undo + 1);
+      undoOwner().undo();
+      assert.equal(state(), before);
+    }
+  });
+}
+
+test("row menu Move that changes nothing drops a pending header confirmation", async () => {
+  await open([{ id: "s1", name: "Only scene", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r2" }]);
+  const menu = openMenu("r1");
+  press(menu.querySelector('[data-action="move-down"]'), "mouse");
+  assert.equal(hintOf(), "Press again to remove the scene header");
+  const before = state();
+  press(menu.querySelector('[data-action="move-up"]'), "mouse");
+  assert.equal(state(), before);
+  assert.equal(hintOf(), "");
+  press(menu.querySelector('[data-action="move-down"]'), "mouse");
+  assert.equal(state(), before);
+});
 test("row menu Move without a header to remove moves at once", async () => {
   await open();
   const before = undoOwner().sizes().undo;
-  document.querySelector('#rows .row[data-id="r1"] [data-action="move-down"]').click();
+  press(openMenu("r1").querySelector('[data-action="move-down"]'), "mouse");
   assert.deepEqual(ids(), ["r2", "r1", "r3", "r4"]);
   undoOwner().flush();
   assert.equal(undoOwner().sizes().undo, before + 1);

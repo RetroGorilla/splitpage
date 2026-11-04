@@ -47,7 +47,8 @@ export function mountSceneHeaders(): { confirmMove: (rowId: string, dir: -1 | 1)
   function confirmMove(rowId: string, dir: -1 | 1): boolean {
     const doc = documentReader.current();
     const scene = doc && edits.allowed() ? soleBeatSceneMovedBy(doc, rowId, dir) : undefined;
-    return !!scene && !boundary.press(scene.id, dir < 0 ? "Alt+ArrowUp" : "Alt+ArrowDown");
+    if (!scene) { boundary.cancel(); return false; }
+    return !boundary.press(scene.id, dir < 0 ? "Alt+ArrowUp" : "Alt+ArrowDown");
   }
   return { confirmMove, dispose() { offChange(); offReplaced(); input?.dispose(); boundary.dispose(); controls.dispose(); } };
 }

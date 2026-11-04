@@ -47,7 +47,8 @@ export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts): {
     }
     if (!cell || !ports.allowed() || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
       (key !== "Backspace" && key !== "Delete") || !selection?.rangeCount) {
-      if (!["Alt", "Shift", "Control", "Meta"].includes(key)) cancel();
+      const onMove = !!event.target.closest?.('[data-action="move-up"],[data-action="move-down"]');
+      if (!["Alt", "Shift", "Control", "Meta"].includes(key) && !(onMove && (key === "Enter" || key === " "))) cancel();
       return;
     }
     const range = selection.getRangeAt(0);
@@ -66,7 +67,9 @@ export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts): {
   }, true);
   for (const type of ["pointerdown", "mousedown", "click", "beforeinput", "input", "paste", "cut", "compositionstart", "blur"]) {
     life.listen(doc, type, event => {
-      if (!event.target.closest?.('[data-action="move-up"],[data-action="move-down"]')) cancel();
+      const keep = type === "blur" ? '[data-action="move-up"],[data-action="move-down"],.row-more' :
+        '[data-action="move-up"],[data-action="move-down"]';
+      if (!event.target.closest?.(keep)) cancel();
     }, true);
   }
   life.listen(doc, "selectionchange", () => { if (caret && !sameCaret(window.getSelection())) cancel(); });

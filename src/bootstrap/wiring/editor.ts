@@ -411,7 +411,11 @@ const rowRoutePorts: RowRoutePorts = {
   stopScroll: stopDragScroll,
   move: function (rowId, targetId, after) { cellEditing().moveRow(rowId, targetId, after); },
   add: addRow,
-  moveBy: function (rowId, dir) { if (!sceneHeaders?.confirmMove(rowId, dir)) moveRow(rowId, dir); refocusRowMenu(rowId); },
+  moveBy: function (rowId, dir) {
+    if (sceneHeaders?.confirmMove(rowId, dir)) return;
+    moveRow(rowId, dir);
+    refocusRowMenu(rowId);
+  },
   toggleMenu: toggleRowMenu,
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
