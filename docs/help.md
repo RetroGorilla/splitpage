@@ -325,7 +325,7 @@ The launcher needs Node. Without it, open `index.html` directly.
 
 ## Writing and planning
 
-Scenes contain beats. Scene letters continue after Z as AA, AB and so on. Beats restart at 1 within each scene: **B.8** is beat 8 in Scene B. B-roll shots follow tag order within a beat: **B.8.2** is its second shot. Beats before the first header belong to an automatic, unnamed Scene A. Moving scenes, beats or tags updates their numbers; plain-text references in notes and comments must be updated by hand. **Remove scene header** keeps its beats in the previous scene (or automatic Scene A at the top), and supports Undo.
+Scenes contain beats. Scene letters continue after Z as AA, AB and so on. Beats restart at 1 within each scene: **B.8** is beat 8 in Scene B, shown as **B8** beside the beat in the editor. B-roll shots follow tag order within a beat: **B.8.2** is its second shot. Beats before the first header belong to an automatic, unnamed Scene A. Moving scenes, beats or tags updates their numbers; plain-text references in notes and comments must be updated by hand. **Remove scene header** keeps its beats in the previous scene (or automatic Scene A at the top), and supports Undo.
 
 
 Each beat is a row: **Visual** on the left, **Audio** on the right.

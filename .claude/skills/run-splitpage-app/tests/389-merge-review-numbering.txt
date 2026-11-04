@@ -12,7 +12,7 @@ wait !!document.querySelector('.section-rename input')
 press Local scene
 key none Enter
 wait F.state().sections && F.state().sections[0].firstSceneId === inserted
-expect document.querySelector('#rows .row:nth-of-type(2) .row-num').textContent === 'B.1'
+expect document.querySelector('#rows .row:nth-of-type(2) .row-num').textContent === 'B1'
 eval var changed=F.clone(base); changed.title='Disk title'; disk._body=JSON.stringify(changed); disk._mtime=t0+200000; F.save(); true
 wait !document.getElementById('file-conflict-modal').hidden && !document.getElementById('file-conflict-merge').hidden
 jsclick #file-conflict-merge
@@ -23,7 +23,7 @@ jsclick #merge-review-confirm
 wait document.getElementById('merge-review-modal').hidden
 expect F.state().rows.map(r=>r.id).join('|') === 'a|'+inserted+'|c'
 expect F.state().sections[0].firstSceneId === inserted
-expect Array.from(document.querySelectorAll('#rows .row-num'),n=>n.textContent).join('|') === 'A.1|B.1|B.2'
+expect Array.from(document.querySelectorAll('#rows .row-num'),n=>n.textContent).join('|') === 'A1|B1|B2'
 expect disk.writes === 0
 eval openNumberingBase('Same order numbering')
 wait F.state().title === 'Same order numbering' && F.state().rows.length === 2
@@ -34,7 +34,7 @@ wait !!document.querySelector('.section-rename input')
 press Local scene
 key none Enter
 wait F.state().sections && F.state().sections[0].firstSceneId === 'c'
-expect document.querySelector('#rows .row[data-id="c"] .row-num').textContent === 'B.1'
+expect document.querySelector('#rows .row[data-id="c"] .row-num').textContent === 'B1'
 eval var changed=F.clone(base); changed.rows[1].audioText='Disk words'; disk._body=JSON.stringify(changed); disk._mtime=t0+200000; F.save(); true
 wait !document.getElementById('file-conflict-modal').hidden && !document.getElementById('file-conflict-merge').hidden
 jsclick #file-conflict-merge
@@ -50,6 +50,6 @@ jsclick #merge-review-confirm
 wait document.getElementById('merge-review-modal').hidden
 expect F.state().rows.map(r=>r.id).join('|') === 'a|c'
 expect F.state().sections[0].firstSceneId === 'c'
-expect document.querySelector('#rows .row[data-id="c"] .row-num').textContent === 'B.1'
+expect document.querySelector('#rows .row[data-id="c"] .row-num').textContent === 'B1'
 expect disk.writes === 0
 quit

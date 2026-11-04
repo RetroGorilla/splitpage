@@ -21,9 +21,10 @@ appear in the app under **Help**. The format follows
   Scene mode in Present is now **Beat mode**.
 - Numbering follows the new words. Scenes are lettered A to Z, then AA, AB and
   so on. Beats restart in each scene, as in `B.8`, and B-roll shots follow tag
-  order, as in `B.8.2`. Beats before the first header are in an automatic,
-  unnamed Scene A. Numbers shift when you move beats or scenes. Saved scripts
-  keep their contents; old files open as they are.
+  order, as in `B.8.2`. The number beside each beat in the editor drops the dot,
+  as in `B8`. Beats before the first header are in an automatic, unnamed Scene
+  A. Numbers shift when you move beats or scenes. Saved scripts keep their
+  contents; old files open as they are.
 - Excel columns are now `Beat` and `Beats`. Images in exported Markdown are
   named like `images/beat-A-3.jpg`; old `images/scene-N` names still import.
 - Status markers are colour coded: Needed is hollow, Sourcing is yellow and
