@@ -1,4 +1,9 @@
+import { safeHref } from "../../core/document/text-policy.ts";
+
 export interface RowRoutePorts {
+  readonly mac: boolean;
+  readonly scriptCell: (cell: Element) => boolean;
+  readonly openLink: (href: string) => void;
   readonly dragging: () => string | null;
   readonly setDragging: (rowId: string | null) => void;
   readonly clearMarkers: () => void;
@@ -26,6 +31,8 @@ export interface RowRoutes {
   readonly addClick: (e: MouseEvent) => boolean;
   readonly beatClick: (e: MouseEvent) => boolean;
   readonly menuClick: (e: MouseEvent) => boolean;
+  readonly linkMouseDown: (e: MouseEvent) => boolean;
+  readonly linkClick: (e: MouseEvent) => boolean;
   readonly dragOver: (e: DragEvent) => boolean;
   readonly drop: (e: DragEvent) => boolean;
   readonly dispose: () => void;
@@ -65,6 +72,14 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
     row.classList.remove("just-merged");
     void row.offsetWidth;
     row.classList.add("just-merged");
+  }
+
+  function linkUnder(e: MouseEvent): Element | null {
+    const held = ports.mac ? e.metaKey : e.ctrlKey;
+    if (e.button !== 0 || !held || e.shiftKey || e.altKey) return null;
+    const link = closest(e, "a[href]");
+    const cell = link && link.closest(".cell-editable");
+    return link && cell && ports.scriptCell(cell) ? link : null;
   }
 
   function onDragStart(e: Event): void {
@@ -143,6 +158,19 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
       const del = closest(e, '[data-action="delete-row"]');
       if (del) { ports.armDelete(del, idOf(del)); return true; }
       return false;
+    },
+    linkMouseDown(e: MouseEvent): boolean {
+      if (!open || !linkUnder(e)) return false;
+      e.preventDefault();
+      return true;
+    },
+    linkClick(e: MouseEvent): boolean {
+      const link = open ? linkUnder(e) : null;
+      if (!link) return false;
+      e.preventDefault();
+      const href = safeHref(link.getAttribute("href"));
+      if (href) ports.openLink(href);
+      return true;
     },
     dragOver(e: DragEvent): boolean {
       if (!open) return false;

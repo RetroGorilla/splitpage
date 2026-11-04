@@ -96,6 +96,8 @@ import {
 import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.ts";
 import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-media.ts";
 import { videoFiles } from "./video-files.ts";
+import { externalLinks } from "./ports/desktop.ts";
+import { IS_MAC } from "../../features/common/key-chips.ts";
 import {
   acceptTagGhost,
   acceptUntaggedMention,
@@ -400,7 +402,15 @@ export const stopMediaFeature = mediaRoutes.stop;
 
 const rowRoutes = owned<ReturnType<typeof mountRowRoutes>>();
 
+function openLinkInNewWindow(href: string): void {
+  if (externalLinks.available()) { externalLinks.open(href); return; }
+  window.open(href, "_blank", "noopener");
+}
+
 const rowRoutePorts: RowRoutePorts = {
+  mac: IS_MAC,
+  scriptCell: isScriptCell,
+  openLink: openLinkInNewWindow,
   dragging: function () { return rowDrag().dragging(); },
   setDragging: function (rowId) { if (rowId) rowDrag().start(rowId); else rowDrag().end(); },
   clearMarkers: clearDropMarkers,
@@ -425,6 +435,8 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
     return { ...routes, dispose() { scenes.dispose(); routes.dispose(); } };
   }, function (owner) {
     return [
+      function () { return routeRootClick("cell-link", function (e) { return owner.linkClick(e); }); },
+      function () { return routeRootMouseDown("cell-link", function (e) { return owner.linkMouseDown(e); }); },
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
       function () { return routeRootClick("rows-scene", function (e) { return owner.beatClick(e); }); },
       function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); },

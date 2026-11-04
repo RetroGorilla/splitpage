@@ -1,0 +1,75 @@
+# why: caret, focus and native link clicks only behave for real input, so every click here is a real one.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.T = window.__sceneSelectTest; var rows = ['One','Two','Three','Four'].map(function(w, i){ return { id: 'r' + (i + 1), visualText: w + ' visual', audioText: w + ' words go here for a good long way.', status: 'todo' }; }); rows[1].audioText = 'Start <a href="https://example.com/beat" target="_blank" rel="noopener">the link</a> and more words go here for a good long way.'; rows[2].audioText = 'Mail <a href="mailto:crew@example.com" target="_blank" rel="noopener">the crew</a> and more words go here for a good long way.'; rows[3].audioText = 'Four <a href="https://example.com/four" target="_blank" rel="noopener"><strong>bold</strong> words</a> go here for a good long way.'; var doc = { schema: 2, title: 'Links', rows: rows }; F.openFile(new File([JSON.stringify(doc)], 'links.splitpage')); return true; })()
+wait F.state().title === 'Links' && document.querySelector('#rows .row[data-id="r4"]')
+eval (function(){ window.row = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"]'); }; window.cell = function(id, f){ return row(id).querySelector('.' + (f === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.pt = function(el, fx, fy){ var r = el.getBoundingClientRect(); return { x: r.left + r.width * (fx === undefined ? 0.5 : fx), y: r.top + r.height * (fy === undefined ? 0.5 : fy) }; }; window.audio = function(id, fx){ return pt(cell(id, 'audioText'), fx === undefined ? 0.9 : fx, 0.5); }; window.link = function(id, sel){ return cell(id, 'audioText').querySelector(sel || 'a'); }; window.out = function(){ if (document.activeElement) document.activeElement.blur(); getSelection().removeAllRanges(); return true; }; window.opens = []; window.open = function(url, target, features){ opens.push([String(url), target, features]); return null; }; window.__click = null; document.addEventListener('click', function(e){ if (e.target.closest && e.target.closest('a')) window.__click = { ctrl: e.ctrlKey, prevented: e.defaultPrevented }; }); window.scrollTo(0, 0); return true; })()
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
+sleep 300
+
+# ---- 1. a plain click on a link places the caret and opens nothing ---------
+mouse click pt(link('r2'), 0.5, 0.5)
+expect document.activeElement === cell('r2', 'audioText')
+expect opens.length === 0
+expect T.ids().length === 0
+eval out()
+
+# ---- 2. Ctrl+click opens it once, in a new window, and nothing else moves ---
+mouse click audio('r1', 0.3)
+eval (function(){ U.flush(); window.__u = U.sizes().undo; window.__doc = JSON.stringify(F.state()); var s = getSelection(); window.__caret = { node: s.anchorNode, offset: s.anchorOffset, collapsed: s.isCollapsed }; return __caret.collapsed; })()
+expect document.activeElement === cell('r1', 'audioText')
+mouse ctrl click pt(link('r2'), 0.5, 0.5)
+expect opens.length === 1
+expect opens[0][0] === 'https://example.com/beat' && opens[0][1] === '_blank' && /noopener/.test(opens[0][2])
+expect __click && __click.ctrl && __click.prevented
+sleep 300
+expect opens.length === 1
+expect T.ids().length === 0
+expect document.activeElement === cell('r1', 'audioText')
+expect getSelection().anchorNode === __caret.node && getSelection().anchorOffset === __caret.offset && getSelection().isCollapsed
+eval U.flush()
+expect U.sizes().undo === __u
+expect JSON.stringify(F.state()) === __doc
+
+# ---- 3. a selection that is already there stays ----------------------------
+mouse click audio('r1', 0.05)
+mouse shift click audio('r1', 0.6)
+eval (function(){ window.__words = getSelection().toString(); return __words.length > 0; })()
+mouse ctrl click pt(link('r2'), 0.5, 0.5)
+expect opens.length === 2
+expect getSelection().toString() === __words
+expect document.activeElement === cell('r1', 'audioText')
+
+# ---- 4. a press on a link inside formatting, and a mail address -------------
+eval out()
+mouse ctrl click pt(link('r4', 'a strong'), 0.5, 0.5)
+expect opens.length === 3 && opens[2][0] === 'https://example.com/four'
+mouse ctrl click pt(link('r3'), 0.5, 0.5)
+expect opens.length === 4 && opens[3][0] === 'mailto:crew@example.com'
+expect T.ids().length === 0
+expect !(document.activeElement && document.activeElement.isContentEditable)
+
+# ---- 5. Ctrl+click elsewhere in a beat still selects it ---------------------
+mouse ctrl click audio('r1', 0.9)
+mouse ctrl click audio('r3', 0.9)
+expect T.ids().join() === 'r1,r3'
+expect opens.length === 4
+mouse ctrl click pt(link('r2'), 0.5, 0.5)
+expect opens.length === 5
+expect T.ids().indexOf('r2') === -1
+key Escape
+eval out()
+
+# ---- 6. an address that is not a safe link opens nothing --------------------
+eval (function(){ window.__ran = 0; var c = cell('r1', 'audioText'); ['javascript:window.__ran=1', 'file:///C:/Windows/win.ini', 'data:text/html,hi', 'ftp://example.com/x'].forEach(function(h, i){ var a = document.createElement('a'); a.setAttribute('href', h); a.setAttribute('target', '_blank'); a.id = 'bad' + i; a.textContent = ' bad' + i + ' '; c.appendChild(a); }); return c.querySelectorAll('a').length; })()
+mouse ctrl click pt(document.getElementById('bad0'), 0.5, 0.5)
+mouse ctrl click pt(document.getElementById('bad1'), 0.5, 0.5)
+mouse ctrl click pt(document.getElementById('bad2'), 0.5, 0.5)
+mouse ctrl click pt(document.getElementById('bad3'), 0.5, 0.5)
+sleep 200
+expect opens.length === 5
+expect __ran === 0
+expect __click.prevented
+
+logs

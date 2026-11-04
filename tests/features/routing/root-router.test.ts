@@ -33,9 +33,9 @@ test("unknown and repeated slots are refused", () => {
   assert.throws(() => createRootRouter(["a", "a"]), /listed twice/);
 });
 
-test("the click order lists the thirteen delegated routes once", () => {
-  assert.equal(ROOT_CLICK_ORDER.length, 13);
-  assert.equal(new Set(ROOT_CLICK_ORDER).size, 13);
+test("the click order lists the fourteen delegated routes once", () => {
+  assert.equal(ROOT_CLICK_ORDER.length, 14);
+  assert.equal(new Set(ROOT_CLICK_ORDER).size, 14);
 });
 
 test("the click and mousedown orders keep the ledger's B02 to B57 order", () => {
@@ -52,9 +52,10 @@ test("the click and mousedown orders keep the ledger's B02 to B57 order", () => 
     "rows-menu",
     "media-picker",
     "gallery",
-    "media-link"
+    "media-link",
+    "cell-link"
   ]);
-  assert.deepEqual([...ROOT_MOUSEDOWN_ORDER], ["tags-anchor"]);
+  assert.deepEqual([...ROOT_MOUSEDOWN_ORDER], ["tags-anchor", "cell-link"]);
 });
 
 test("owned replaces its owner, unrouting and disposing the previous one first, and stop is idempotent", () => {
