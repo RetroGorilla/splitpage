@@ -309,7 +309,7 @@ test("opening the long demo whose render throws still opens it as a new, saved-n
   const seen = await bothWays("long demo", () => { fresh("Before the demo"); return null; }, () => openLongDemo());
   assert.equal(seen.value, true);
   assert.equal(seen.book.toasts.length, 1);
-  assert.match(seen.book.toasts[0], /^The long demo — # scenes/);
+  assert.match(seen.book.toasts[0], /^The long demo — # beats/);
 });
 
 test("the redraw toast is a sticky error with a Redraw button: Redraw while render still throws logs it and offers it once more, and Redraw after the fault draws the update (#418)", async () => {
@@ -621,7 +621,7 @@ test("a stale screen makes the script, the titles and the editing controls inert
 });
 
 function caretAtEnd(cell, end, label) {
-  assert.equal(document.activeElement, cell, label + ": the focus is in the scene's cell");
+  assert.equal(document.activeElement, cell, label + ": the focus is in the beat's cell");
   assert.equal(window.getSelection().toString(), "", label + ": nothing is selected");
   assert.deepEqual(cellSelection(cell), { from: end, to: end }, label + ": a collapsed caret at the end");
 }

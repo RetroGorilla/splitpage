@@ -38,7 +38,7 @@ test("read time: a click opens the length editor, and Enter runs the scene lengt
   assert.equal(readTimeEditing(), "r1");
   const input = document.querySelector<HTMLInputElement>(".row-read-input");
   assert.ok(input);
-  assert.equal(input.getAttribute("aria-label"), "Scene A.1 length");
+  assert.equal(input.getAttribute("aria-label"), "Beat A.1 length");
   input.value = "1:30";
   key(input, { key: "Enter" });
   assert.equal(readTimeEditing(), null);

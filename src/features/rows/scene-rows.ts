@@ -37,19 +37,19 @@ export function sceneHeaderHtml(entry: SceneDivider, readOnly = false, total = "
   const name = escapeHtml(entry.scene.name);
   const label = escapeHtml(entry.letter ?? "");
   if (entry.automatic) return '<header class="section-header" data-section-id=""><span role="heading" aria-level="2">' + label + '</span>' +
-    '<span class="section-stats">' + entry.count + ' scene' + (entry.count === 1 ? '' : 's') + '</span></header>';
+    '<span class="section-stats">' + entry.count + ' beat' + (entry.count === 1 ? '' : 's') + '</span></header>';
   const disabled = readOnly ? " disabled" : "";
   return '<header class="section-header" data-section-id="' + id + '">' +
-    '<button type="button" class="section-grip" draggable="true" aria-label="Drag section ' + name + '"' + disabled + '>⠿</button>' +
+    '<button type="button" class="section-grip" draggable="true" aria-label="Drag scene ' + name + '"' + disabled + '>⠿</button>' +
     '<button type="button" class="section-fold" data-section-action="fold" aria-expanded="' + !entry.folded + '" aria-label="' +
       (entry.folded ? 'Expand ' : 'Fold ') + name + '">' + (entry.folded ? '▸' : '▾') + '</button>' +
     '<span role="heading" aria-level="2"><span class="section-letter">' + label + '</span> <button type="button" class="section-name" data-section-action="rename"' + disabled + '>' + name + '</button></span>' +
-    '<span class="section-stats">' + entry.count + ' scene' + (entry.count === 1 ? '' : 's') + ' · <span data-section-total="' + id + '">' + escapeHtml(total) + '</span></span>' +
+    '<span class="section-stats">' + entry.count + ' beat' + (entry.count === 1 ? '' : 's') + ' · <span data-section-total="' + id + '">' + escapeHtml(total) + '</span></span>' +
     '<span class="section-hint" aria-hidden="true" hidden></span>' +
-    '<details class="section-more"><summary aria-label="Section menu for ' + name + '">⋯</summary><div class="section-menu">' +
+    '<details class="section-more"><summary aria-label="Scene menu for ' + name + '">⋯</summary><div class="section-menu">' +
     '<button type="button" data-section-action="rename"' + disabled + '>Rename</button>' +
-    '<button type="button" data-section-action="up"' + disabled + '>Move section ↑</button>' +
-    '<button type="button" data-section-action="down"' + disabled + '>Move section ↓</button>' +
+    '<button type="button" data-section-action="up"' + disabled + '>Move scene ↑</button>' +
+    '<button type="button" data-section-action="down"' + disabled + '>Move scene ↓</button>' +
     '<button type="button" data-section-action="remove"' + disabled + '>Remove scene header</button>' +
     '</div></details></header>';
 }

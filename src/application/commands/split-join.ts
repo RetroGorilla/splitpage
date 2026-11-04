@@ -22,7 +22,7 @@ export interface TextCut {
 
 export type SplitAt = TextCut;
 
-const BOTH_VISUALS = "both scenes have a visual";
+const BOTH_VISUALS = "both beats have a visual";
 
 const SPLIT_FIELDS: readonly string[] = Object.freeze(["visualText", "audioText"]);
 const VISUAL_CELLS: readonly string[] = Object.freeze([
@@ -136,7 +136,7 @@ export function joinBeatsCommand(intoId: string, ports: JoinPorts): Command {
       const at = doc.rows.findIndex(function (r) { return r.id === intoId; });
       const prev = doc.rows[at], cur = doc.rows[at + 1];
       if (!prev || !cur) return null;
-      if (sceneBeforeBeat(doc, cur.id)) return { refused: "remove the section header before joining these scenes" };
+      if (sceneBeforeBeat(doc, cur.id)) return { refused: "remove the scene header before joining these beats" };
       const curHasVisual = hasVisual(cur, ports.plainText);
       if (hasVisual(prev, ports.plainText) && curHasVisual) return { refused: BOTH_VISUALS };
       const audio = joinedAudio(textOf(prev.audioText), textOf(cur.audioText), ports);

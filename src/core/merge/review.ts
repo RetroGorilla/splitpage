@@ -41,11 +41,11 @@ export function mergeRowFate(b: ReviewRow, m: ReviewRow, t: ReviewRow): string |
   if (m && !t) {
     if (b && rowContentEqual(b, m)) return "Deleted in the file on disk — it goes.";
     return b ? "Deleted in the file on disk, but you changed it — your version stays."
-             : "A scene you added — it stays.";
+             : "A beat you added — it stays.";
   }
-  if (b && rowContentEqual(b, t)) return "You deleted this scene — it stays deleted.";
-  return b ? "You deleted this scene, but it changed on disk — it comes back."
-           : "A new scene from the file on disk.";
+  if (b && rowContentEqual(b, t)) return "You deleted this beat — it stays deleted.";
+  return b ? "You deleted this beat, but it changed on disk — it comes back."
+           : "A new beat from the file on disk.";
 }
 
 export function mergeItemSummary(bits: readonly unknown[]): string {

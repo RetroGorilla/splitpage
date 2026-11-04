@@ -36,14 +36,14 @@ expect !document.body.classList.contains('panel-open')
 expect document.activeElement.id === 'broll-page-close'
 expect getComputedStyle(document.getElementById('broll-page')).position === 'fixed'
 expect document.getElementById('broll-page-title').textContent === 'B-roll shot list'
-expect document.getElementById('broll-page-summary').textContent === '3 of 8 shot · 1 flagged'
+expect document.getElementById('broll-page-summary').textContent === '3 of 8 filmed · 1 flagged'
 expect document.getElementById('broll-page-group').value === 'location'
 
 # ---- 2. the table: groups by location, rows 46px, flagged tinted --------
 expect pheads() === 'Café|Fish market|Harbour|Headland|No location'
-expect Array.prototype.map.call(document.querySelectorAll('#broll-page .broll-page-group-count'), function(c){ return c.textContent; }).join(',') === '1/1 shot,0/2 shot,1/3 shot,1/1 shot,0/1 shot'
+expect Array.prototype.map.call(document.querySelectorAll('#broll-page .broll-page-group-count'), function(c){ return c.textContent; }).join(',') === '1/1 filmed,0/2 filmed,1/3 filmed,1/1 filmed,0/1 filmed'
 expect document.querySelector('#broll-page .broll-page-group .broll-loc-pin').getAttribute('style').indexOf('--loc:') === 0
-expect Array.prototype.map.call(document.querySelectorAll('#broll-page thead th'), function(t){ return t.textContent; }).join('|') === 'Shot or to shoot|Shot|Scene|Props|Cuts against|Assigned|Note'
+expect Array.prototype.map.call(document.querySelectorAll('#broll-page thead th'), function(t){ return t.textContent; }).join('|') === 'Filmed or to film|Shot|Beat|Props|Cuts against|Assigned|Note'
 expect document.querySelectorAll('#broll-page .broll-page-row').length === 8
 expect Array.prototype.every.call(document.querySelectorAll('#broll-page .broll-page-row'), function(r){ var h = r.getBoundingClientRect().height; return h >= 45 && h <= 48; })
 # --radius-md, a detail card's radius since #169 (it was 12px)
@@ -66,7 +66,7 @@ expect window.__brollTest.view().filter === 'flagged'
 click #broll-page .broll-chip[data-filter="all"]
 wait document.querySelectorAll('#broll-page .broll-page-row').length === 8
 eval (function(){ var s = document.getElementById('broll-page-group'); s.value = 'scene'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
-wait pheads() === 'Scene A.1|Scene A.2|Scene A.3|Scene A.4|Added here'
+wait pheads() === 'Beat A.1|Beat A.2|Beat A.3|Beat A.4|Added here'
 eval (function(){ var s = document.getElementById('broll-page-group'); s.value = 'person'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
 wait pheads() === 'Ada Brenner|Jordan Sato|Unassigned'
 expect JSON.parse(localStorage.getItem('splitpage-broll-view')).pageGroup === 'person'
@@ -78,7 +78,7 @@ eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; }
 click #broll-page .broll-page-row[data-id="bs4"] .broll-check
 wait rec('bs4').status === 'shot'
 wait prow('bs4').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
-expect document.getElementById('broll-page-summary').textContent === '4 of 8 shot · 1 flagged'
+expect document.getElementById('broll-page-summary').textContent === '4 of 8 filmed · 1 flagged'
 eval U.flush()
 expect U.sizes().undo === window.__u0 + 1
 eval (function(){ var s = prow('bs4').querySelector('.broll-owner-select'); s.value = 'p2'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
@@ -103,15 +103,15 @@ expect rec('bs4').status === 'shot'
 click #broll-page [data-action="broll-page-csv"]
 wait window.__blobs.length === 1
 eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
-expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start'
+expect window.__csv[0] === 'Beat,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Beat start'
 expect window.__csv.length === 9
-expect window.__csv[1].indexOf('A.1,A.1.1 gulls wheeling over the nets,Shot,,Harbour,Fishing nets; Drone,') === 0
+expect window.__csv[1].indexOf('A.1,A.1.1 gulls wheeling over the nets,Filmed,,Harbour,Fishing nets; Drone,') === 0
 # the scene's start last (#169), after the columns a sheet may be built on;
 # a shot added by hand has no scene and no start
 expect /,00:00$/.test(window.__csv[1])
 expect window.__csv.slice(1).every(function(l){ return /,(\d\d:\d\d)?$/.test(l); })
-expect window.__csv.filter(function(l){ return l.indexOf('boats coming in at dawn,To shoot,yes,') !== -1; }).length === 1
-expect window.__csv.filter(function(l){ return l.indexOf(',A.3.1 hands mending a net,Shot,,Harbour,Fishing nets,,Ada Brenner,') !== -1; }).length === 1
+expect window.__csv.filter(function(l){ return l.indexOf('boats coming in at dawn,To film,yes,') !== -1; }).length === 1
+expect window.__csv.filter(function(l){ return l.indexOf(',A.3.1 hands mending a net,Filmed,,Harbour,Fishing nets,,Ada Brenner,') !== -1; }).length === 1
 expect window.__csv[8].indexOf(',Establisher of the street, blue hour') === -1 && window.__csv[8].indexOf('"Establisher of the street, blue hour"') !== -1
 
 # ---- 6. Print: a PDF of the list as shown -------------------------------

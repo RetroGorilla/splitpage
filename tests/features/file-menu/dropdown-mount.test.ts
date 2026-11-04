@@ -137,7 +137,7 @@ test("the long demo copies its starter state and creates the document through th
     assert.equal(arrival.reason, "openLongDemo: a new copy of the long demo");
     assert.equal(arrival.destination, NO_DESTINATION);
     assert.deepEqual(LONG_DEMO.state.rows, [{ id: "d1", audioText: "One" }, { id: "d2", audioText: "Two" }]);
-    assert.deepEqual(shown(h.notices), [{ message: "The long demo — 2 scenes, not saved anywhere yet. The script before is in Version history.", kind: "ok" }]);
+    assert.deepEqual(shown(h.notices), [{ message: "The long demo — 2 beats, not saved anywhere yet. The script before is in Version history.", kind: "ok" }]);
   } finally { mounted.dispose(); }
 });
 

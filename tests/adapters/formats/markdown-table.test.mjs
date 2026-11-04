@@ -20,6 +20,14 @@ initTags();
 
 const cells = (rows) => rows.map((r) => [r.visualText, r.audioText]);
 
+test("stacked imports distinguish scene headers from legacy Scene and current Beat rows", () => {
+  for (const word of ["Scene", "Beat"]) {
+    const text = `# Video\n\n_2 ${word.toLowerCase()}s · 0:02 running time_\n\n## Scene B · 0:02\n\n### ${word} B.1 · 00:00\n\n**Filmed** · Read 0:01\n\n*Visual —* Wide\n\nHello\n\n---\n\n### ${word} B.2 · 00:01\n\n_(blank ${word.toLowerCase()})_\n`;
+    assert.equal(detectTwoColumnFormat(text), "stacked");
+    assert.deepEqual(cells(parseImportRows(text, "twocolumn")), [["Wide", "Hello"], ["", ""]]);
+  }
+});
+
 test("a plain two-column table, header and separator both consumed", () => {
   const out = parseMarkdownTable([
     "| Visual | Audio |",
@@ -190,8 +198,8 @@ test("a stacked export's blank scene, video link and multi-line cells", () => {
 });
 
 test("Markdown that only looks like the stacked export reads as it always did", () => {
-  assert.equal(detectTwoColumnFormat("# Notes\n\nSome intro.\n\n### Scene 01\n\nWords."), null);
-  assert.equal(detectTwoColumnFormat("### Scene 01\n\nWords.\n\n### Scene 02\n\nMore."), null);
+  assert.equal(detectTwoColumnFormat("# Notes\n\nSome intro.\n\n### Beat 01\n\nWords."), null);
+  assert.equal(detectTwoColumnFormat("### Beat 01\n\nWords.\n\n### Beat 02\n\nMore."), null);
 });
 
 const demo = () => { loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)))); return currentDocument(); };
@@ -202,12 +210,12 @@ test("the stacked export of the long demo: meta line, scene headings, status and
   const lines = md.split("\n");
   assert.equal(lines[0], "# " + LONG_DEMO.state.title);
   assert.equal(lines[2], "_" + exportMetaLine(exportFacts(exportDocumentOf(currentDocument()))) + "_");
-  assert.match(lines[2], /^_30 scenes · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 shot · .*2026_$/);
-  assert.ok(md.includes("### Scene A.1 · 00:00\n\n**Shot** · Read 0:10\n\n*Visual —* Cold open"));
-  assert.ok(md.includes("### Scene A.4 · 01:03\n\n**Shot** · Read 0:37\n"));
-  assert.ok(md.includes("### Scene A.10 · 02:48\n\n**Ready** · Read 0:38\n"));
-  assert.ok(md.includes("### Scene A.13 · 03:43\n\n**To do** · Read 0:45\n"));
-  assert.ok(md.includes("### Scene A.2 · 00:10\n\n**Shot** · Read 0:06, set by hand\n"));
+  assert.match(lines[2], /^_30 beats · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 filmed · .*2026_$/);
+  assert.ok(md.includes("### Beat A.1 · 00:00\n\n**Filmed** · Read 0:10\n\n*Visual —* Cold open"));
+  assert.ok(md.includes("### Beat A.4 · 01:03\n\n**Filmed** · Read 0:37\n"));
+  assert.ok(md.includes("### Beat A.10 · 02:48\n\n**Ready** · Read 0:38\n"));
+  assert.ok(md.includes("### Beat A.13 · 03:43\n\n**To do** · Read 0:45\n"));
+  assert.ok(md.includes("### Beat A.2 · 00:10\n\n**Filmed** · Read 0:06, set by hand\n"));
   assert.equal((md.match(/, set by hand$/gm) || []).length, 2);
   assert.ok(!/\bRow\b/.test(md), "the app says Scene");
   assert.ok(md.includes("*Visual —* Close-up: the back door open, crumbling foam in the channels.  \n" +
@@ -223,11 +231,11 @@ test("the stacked export numbers each open thread after its words, and a resolve
   assert.equal((md.match(/<sup>\d+<\/sup>/g) || []).length, 3, "scene 09's resolved thread has none");
   assert.ok(md.includes("gummy in the escapement.\n"));
   const tail = md.slice(md.indexOf("## Comments"));
-  assert.ok(tail.includes("**1 · Scene A.3 · Audio** — Jo (editor)"));
-  assert.ok(tail.includes("**2 · Scene A.18 · Audio** _(assigned to Jo (editor))_ — Sam"));
-  assert.ok(tail.includes("**3 · Scene A.24 · Audio** — Jo (editor)"));
-  assert.ok(tail.includes("**Scene A.9 · Audio** _(resolved by Sam)_ — Jo (editor)"));
-  assert.ok(tail.indexOf("**1 · ") < tail.indexOf("**Scene A.9") && tail.indexOf("**Scene A.9") < tail.indexOf("**2 · "), "script order");
+  assert.ok(tail.includes("**1 · Beat A.3 · Audio** — Jo (editor)"));
+  assert.ok(tail.includes("**2 · Beat A.18 · Audio** _(assigned to Jo (editor))_ — Sam"));
+  assert.ok(tail.includes("**3 · Beat A.24 · Audio** — Jo (editor)"));
+  assert.ok(tail.includes("**Beat A.9 · Audio** _(resolved by Sam)_ — Jo (editor)"));
+  assert.ok(tail.indexOf("**1 · ") < tail.indexOf("**Beat A.9") && tail.indexOf("**Beat A.9") < tail.indexOf("**2 · "), "script order");
   assert.ok(tail.includes("> ↳ **Sam** · "));
 });
 
@@ -241,16 +249,16 @@ test("the export tail: the breakdown by category, the b-roll shot list as task l
       "### Props & set dressing (6)", "### Locations & shots (4)", "### Cast & wardrobe (2)",
       "### VFX & graphics (10)", "### Music & SFX (6)", "### Gear (3)"
     ]);
-    assert.equal((bd.match(/^\| Item \| Status \| Scenes \| Assigned to \| Notes \|$/gm) || []).length, 6);
+    assert.equal((bd.match(/^\| Item \| Status \| Beats \| Assigned to \| Notes \|$/gm) || []).length, 6);
     assert.ok(bd.includes("| Pentax K1000 | Have it | A.1, A.28 | Sam | The $40 flea-market body. Keep the lens cap on between setups. |"));
     assert.ok(bd.includes("| toothpick | Have it | A.5, A.7 | — |  |"), "nobody assigned: a dash, as the panel shows it");
     assert.ok(bd.includes("| gimbal | Returned | A.16 | — | Borrowed for the shop day. |"));
     assert.ok(!/\| Prop \|/.test(bd), "the category is the heading, not a column");
     const br = md.slice(at("## B-roll shot list"), at("## Comments"));
-    assert.ok(br.includes("_3 of 9 shot · 1 flagged_"));
-    assert.ok(br.includes("**Scene A.4** · 01:03 · 1/1 shot\n\n- [x] A.4.1 fingertip pushing on the sticky old foam\n"));
+    assert.ok(br.includes("_3 of 9 filmed · 1 flagged_"));
+    assert.ok(br.includes("**Beat A.4** · 01:03 · 1/1 filmed\n\n- [x] A.4.1 fingertip pushing on the sticky old foam\n"));
     assert.ok(br.includes("- [x] A.6.1 the toothpick lifting a long strand of goo — **Flagged** · Note: "));
-    assert.ok(br.includes("**Scene A.22** · 06:43 · 0/1 shot\n\n- [ ] A.22.1 feet on the gravel path, low angle — Riverside park\n"));
+    assert.ok(br.includes("**Beat A.22** · 06:43 · 0/1 filmed\n\n- [ ] A.22.1 feet on the gravel path, low angle — Riverside park\n"));
     assert.equal((br.match(/^- \[[ x]\] /gm) || []).length, 9);
     assert.equal((br.match(/^- \[x\] /gm) || []).length, 3);
     assert.ok(!/FLAGGED/.test(br));
@@ -298,13 +306,13 @@ test("a thread's marker sits outside a mark that ends with it, inside one that g
 test("a stacked export written before #169's look still reads back as its scenes", () => {
   const old = [
     "# Old one", "",
-    "_3 scenes · est. 0:12 running time_", "",
-    "### Scene 01", "",
+    "_3 beats · est. 0:12 running time_", "",
+    "### Beat 01", "",
     "▶ [youtube.com/watch?v=aqz-KE-bpKQ](https://www.youtube.com/watch?v=aqz-KE-bpKQ)", "",
     "*Visual —* Wide on the **kettle**.", "B-roll: steam rising", "",
     "Hello there. *(beat)* Welcome back.", "", "---", "",
-    "### Scene 02", "", "_(blank scene)_", "", "---", "",
-    "### Scene 03", "", "Just audio.", "", "---", "",
+    "### Beat 02", "", "_(blank scene)_", "", "---", "",
+    "### Beat 03", "", "Just audio.", "", "---", "",
     "## Production breakdown", "",
     "| Category | Item | Status | Assigned to | Mentions | Scenes | Notes |",
     "| --- | --- | --- | --- | --- | --- | --- |",
@@ -326,9 +334,9 @@ test("the two-column export: the meta line and the gutter's columns, reopened as
   const lines = md.split("\n");
   assert.equal(lines[2], "_" + exportMetaLine(exportFacts(exportDocumentOf(currentDocument()))) + "_");
   assert.equal(lines[7], "| # | Start | Status | Visual | Audio | Read |");
-  assert.ok(lines[9].startsWith("| A.1 | 00:00 | Shot | Cold open, macro:"));
+  assert.ok(lines[9].startsWith("| A.1 | 00:00 | Filmed | Cold open, macro:"));
   assert.ok(lines[9].endsWith(" | 0:10 |"));
-  assert.ok(lines[10].startsWith("| A.2 | 00:10 | Shot | ") && lines[10].endsWith(" | ((music up)) | 0:06, set by hand |"));
+  assert.ok(lines[10].startsWith("| A.2 | 00:10 | Filmed | ") && lines[10].endsWith(" | ((music up)) | 0:06, set by hand |"));
   assert.equal(detectTwoColumnFormat(md), "table");
   const out = parseImportRows(md, "twocolumn");
   assert.equal(out.length, 30);
@@ -350,7 +358,7 @@ test("a tail that opens on the b-roll list ends the script too, in either shape"
   const stacked = toMarkdownDoc(exportDocumentOf(currentDocument())), table = toMarkdownTableDoc(exportDocumentOf(currentDocument()), { export: true });
   for (const md of [stacked, table]) {
     assert.ok(!md.includes("## Production breakdown") && !md.includes("## Comments"));
-    assert.ok(md.includes("## B-roll shot list\n\n_1 of 1 shot_\n\n**Scene A.1** · 00:00 · 1/1 shot\n\n- [x] A.1.1 gulls over the nets\n"), md);
+    assert.ok(md.includes("## B-roll shot list\n\n_1 of 1 filmed_\n\n**Beat A.1** · 00:00 · 1/1 filmed\n\n- [x] A.1.1 gulls over the nets\n"), md);
     assert.deepEqual(cells(parseImportRows(md, "twocolumn")), [["B-roll: gulls over the nets", "Morning."], ["Close", "Evening."]]);
   }
 });
@@ -358,13 +366,13 @@ test("a tail that opens on the b-roll list ends the script too, in either shape"
 test("a script with no target, tags, b-roll or comments: the meta line says less, the tail is absent", () => {
   loadTestDocument(migrateRows({ schema: 2, title: "Plain", rows: [{ id: "r0", visualText: "Wide", audioText: "Hello there.", status: "ready" }] }));
   const md = toMarkdownDoc(exportDocumentOf(currentDocument()));
-  assert.match(md, /^# Plain\n\n_1 scene · 0:0\d running time · 0 of 1 shot · [^_\n]+_\n\n## A · 0:0\d\n\n### Scene A\.1 · 00:00\n\n\*\*Ready\*\* · Read 0:0\d\n\n\*Visual —\* Wide\n\nHello there\.\n\n---\n$/);
+  assert.match(md, /^# Plain\n\n_1 beat · 0:0\d running time · 0 of 1 filmed · [^_\n]+_\n\n## A · 0:0\d\n\n### Beat A\.1 · 00:00\n\n\*\*Ready\*\* · Read 0:0\d\n\n\*Visual —\* Wide\n\nHello there\.\n\n---\n$/);
   assert.equal((md.match(/^## .*$/gm) || []).join(""), "## A · 0:01");
   const table = toMarkdownTableDoc(exportDocumentOf(currentDocument()), { export: true });
   assert.equal((table.match(/^## .*$/gm) || []).join(""), "## A · 0:01");
   assert.ok(!/Target/.test(table));
   loadTestDocument(migrateRows({ schema: 2, title: "Empty", rows: [] }));
-  assert.equal(toMarkdownDoc(exportDocumentOf(currentDocument())), "# Empty\n\n_No scenes yet._\n");
-  assert.equal(toMarkdownTableDoc(exportDocumentOf(currentDocument()), { export: true }), "# Empty\n\n_No scenes yet._\n");
+  assert.equal(toMarkdownDoc(exportDocumentOf(currentDocument())), "# Empty\n\n_No beats yet._\n");
+  assert.equal(toMarkdownTableDoc(exportDocumentOf(currentDocument()), { export: true }), "# Empty\n\n_No beats yet._\n");
   assert.equal(toMarkdownTableDoc(exportDocumentOf(currentDocument())), "# Empty\n\n_No rows yet._\n", "the project's table, as it always was");
 });

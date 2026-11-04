@@ -162,7 +162,7 @@ async function loadFileIntoEditor(file: LocalFileData | null | undefined, handle
   }
 
   if (!active) return;
-  if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
+  if (!newRows || !newRows.length) { showToast("No beats found in that file.", "warn"); return; }
 
 
   newRows.forEach(stampRow);

@@ -95,10 +95,10 @@ export function fileMenuActions(current: () => FileMenuControls | null, ports: F
     },
     {
       id: "long-demo",
-      label: "Open the long demo (30 scenes)",
+      label: "Open the long demo (30 beats)",
       group: "Help",
       icon: "i-file-plus",
-      words: "demo example sample long thirty 30 scenes test try every feature",
+      words: "demo example sample long thirty 30 beats scenes test try every feature",
       availability: () => current() ? { enabled: true } : UNMOUNTED,
       run: () => { current()?.openLongDemo(); }
     }

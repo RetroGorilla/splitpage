@@ -27,10 +27,10 @@ test("row fate: a scene on one side only says what happens to it, by whether it 
   assert.equal(mergeRowFate(base, base, base), null);
   assert.equal(mergeRowFate(base, base, null), "Deleted in the file on disk — it goes.");
   assert.equal(mergeRowFate(base, changed, null), "Deleted in the file on disk, but you changed it — your version stays.");
-  assert.equal(mergeRowFate(null, changed, null), "A scene you added — it stays.");
-  assert.equal(mergeRowFate(base, null, base), "You deleted this scene — it stays deleted.");
-  assert.equal(mergeRowFate(base, null, changed), "You deleted this scene, but it changed on disk — it comes back.");
-  assert.equal(mergeRowFate(null, null, changed), "A new scene from the file on disk.");
+  assert.equal(mergeRowFate(null, changed, null), "A beat you added — it stays.");
+  assert.equal(mergeRowFate(base, null, base), "You deleted this beat — it stays deleted.");
+  assert.equal(mergeRowFate(base, null, changed), "You deleted this beat, but it changed on disk — it comes back.");
+  assert.equal(mergeRowFate(null, null, changed), "A new beat from the file on disk.");
 });
 
 test("item summary: empty bits are left out and the rest joined with a middle dot", () => {

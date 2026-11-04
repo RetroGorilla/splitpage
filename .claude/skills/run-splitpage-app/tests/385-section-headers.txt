@@ -4,7 +4,7 @@ eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest
 wait F.state() !== old && F.state().title === 'Section headers'
 expect document.querySelectorAll('#rows .section-header').length === 2
 expect document.querySelectorAll('#rows .row').length === 4
-expect document.querySelector('#rows [data-section-id="s1"] .section-stats').textContent.includes('2 scenes')
+expect document.querySelector('#rows [data-section-id="s1"] .section-stats').textContent.includes('2 beats')
 expect document.querySelector('#rows [data-section-id="s1"] [data-section-total]').textContent === '0:30'
 eval window.beforeFold=JSON.stringify(F.state()); document.querySelector('#rows [data-section-id="s1"] .section-fold').click(); true
 wait document.querySelectorAll('#rows .row').length === 2
@@ -12,16 +12,16 @@ expect document.activeElement === document.querySelector('#rows [data-section-id
 expect JSON.stringify(F.state()) === beforeFold
 eval document.querySelector('#rows [data-section-id="s1"] .section-fold').click(); true
 wait document.querySelectorAll('#rows .row').length === 4
-expect !document.querySelector('.add-row-bar [data-section-action="add"]') && !document.querySelector('.add-row-bar').textContent.includes('Section before selected scene')
+expect !document.querySelector('.add-row-bar [data-section-action="add"]') && !document.querySelector('.add-row-bar').textContent.includes('Section before selected beat')
 eval document.querySelector('#rows .row[data-id="r1"] .audio-cell .cell-editable').focus(); U.flush(); window.beforeAdd=JSON.stringify(F.state()); window.undoBeforeAdd=U.sizes().undo; true
 eval document.querySelector('#rows .row[data-id="r2"] .row-more').focus(); true
 key none ArrowDown
-expect Array.from(document.querySelectorAll('#rows .row[data-id="r2"] .row-menu-item')).map(function(el){return el.textContent;}).join('|') === 'Move up|Move down|Insert scene|Add Section Header|Delete'
+expect Array.from(document.querySelectorAll('#rows .row[data-id="r2"] .row-menu-item')).map(function(el){return el.textContent;}).join('|') === 'Move up|Move down|Insert beat|Add Scene Header|Delete'
 key none ArrowDown
 key none ArrowDown
 expect document.activeElement.getAttribute('data-action') === 'insert-below'
 key none ArrowDown
-expect document.activeElement.textContent === 'Add Section Header'
+expect document.activeElement.textContent === 'Add Scene Header'
 shot section-scene-menu
 key none ArrowDown
 expect document.activeElement.getAttribute('data-action') === 'delete-row'
@@ -55,7 +55,7 @@ expect F.state().sections.length === 3 && F.state().sections[1].id === middle
 eval document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable').focus(); window.beforeMove=JSON.stringify(F.state()); true
 key alt ArrowDown
 expect JSON.stringify(F.state()) === beforeMove
-expect document.querySelector('#rows [data-section-id="'+middle+'"] .section-hint').textContent === 'Press again to remove the section header'
+expect document.querySelector('#rows [data-section-id="'+middle+'"] .section-hint').textContent === 'Press again to remove the scene header'
 key none ArrowRight
 key alt ArrowDown
 expect JSON.stringify(F.state()) === beforeMove
@@ -96,7 +96,7 @@ eval window.caret=function(id,end){var el=document.querySelector('#writer-doc .w
 eval window.beforeBoundary=JSON.stringify(F.state()); U.flush();window.undoBefore=U.sizes().undo;true
 key none Backspace
 expect JSON.stringify(F.state()) === beforeBoundary
-expect !hint().hidden && hint().textContent === 'Press Backspace again to remove the section header'
+expect !hint().hidden && hint().textContent === 'Press Backspace again to remove the scene header'
 expect document.querySelectorAll('.section-hint:not([hidden])').length === 1 && document.getElementById('section-hint-live').textContent === hint().textContent
 expect U.sizes().undo === undoBefore
 key none Backspace
@@ -123,7 +123,7 @@ expect hint().hidden
 key none Escape
 eval caret('r2',true)
 key none Delete
-expect F.state().sections.length === 2 && hint().textContent === 'Press Delete again to remove the section header'
+expect F.state().sections.length === 2 && hint().textContent === 'Press Delete again to remove the scene header'
 key none Delete
 wait F.state().sections.length === 1
 expect F.state().rows.length === 4

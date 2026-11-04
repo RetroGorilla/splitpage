@@ -416,15 +416,15 @@ export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonl
     const s = steps[n] as Step;
     if (s.op === "rowField") {
       const row = byId[s.rowId];
-      if (!row || order.indexOf(s.rowId) === -1) return { ok: false, reason: "a scene it changed has gone" };
+      if (!row || order.indexOf(s.rowId) === -1) return { ok: false, reason: "a beat it changed has gone" };
       if (TEXT_KEYS[s.key]) {
         const cell = resolveCell(runs, row[s.key] == null ? "" : row[s.key], {
           before: s.before == null ? "" : s.before, after: s.after == null ? "" : s.after
         });
-        if (!cell) return { ok: false, reason: "that scene's text has changed since" };
+        if (!cell) return { ok: false, reason: "that beat's text has changed since" };
         plan.push({ op: "set", row: row, key: s.key, value: cell.value });
       } else {
-        if (!same(row[s.key], s.before)) return { ok: false, reason: "that scene has changed since" };
+        if (!same(row[s.key], s.before)) return { ok: false, reason: "that beat has changed since" };
         plan.push({ op: "set", row: row, key: s.key, value: clone(s.after) });
       }
     } else if (s.op === "docField") {
@@ -433,7 +433,7 @@ export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonl
     } else if (s.op === "insertRow") {
       const id = idKey(s.row.id);
       if (s.index < 0 || s.index > order.length || byId[id] && order.indexOf(s.row.id) !== -1) {
-        return { ok: false, reason: "the scene list has changed since" };
+        return { ok: false, reason: "the beat list has changed since" };
       }
       order.splice(s.index, 0, s.row.id);
       const copy = clone(s.row);
@@ -441,12 +441,12 @@ export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonl
       plan.push({ op: "insert", index: s.index, row: copy });
     } else if (s.op === "deleteRow") {
       if (order[s.index] !== s.row.id || !rowsEqualIgnoringStamps(byId[idKey(s.row.id)], s.row)) {
-        return { ok: false, reason: "that scene has changed since" };
+        return { ok: false, reason: "that beat has changed since" };
       }
       order.splice(s.index, 1);
       plan.push({ op: "delete", index: s.index });
     } else if (s.op === "moveRow") {
-      if (!order[s.from] || s.to < 0 || s.to >= order.length) return { ok: false, reason: "the scene list has changed since" };
+      if (!order[s.from] || s.to < 0 || s.to >= order.length) return { ok: false, reason: "the beat list has changed since" };
       order.splice(s.to, 0, order.splice(s.from, 1)[0]);
       plan.push({ op: "move", from: s.from, to: s.to });
     } else {

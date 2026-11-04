@@ -85,7 +85,7 @@ eval (async function(){window.__md = await window.__blobs[window.__blobs.length-
 # strings would also match the scenes' own headings (the export names a
 # thread's place as the panel does since #169, "Scene 01 · Audio")
 eval (function(){window.__mdComments = window.__md.slice(window.__md.indexOf('## Comments')); return window.__mdComments.length;})()
-expect window.__mdComments.indexOf('Scene A.1 · ') !== -1
-expect window.__mdComments.indexOf('Scene A.1 · ') < window.__mdComments.indexOf('Scene A.2 · ')
+expect window.__mdComments.indexOf('Beat A.1 · ') !== -1
+expect window.__mdComments.indexOf('Beat A.1 · ') < window.__mdComments.indexOf('Beat A.2 · ')
 
 quit

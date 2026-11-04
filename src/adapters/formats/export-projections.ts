@@ -184,8 +184,8 @@ export function breakdownRows(doc: ExportDocument, project = false): BreakdownRo
 export function breakdownTable(doc: ExportDocument, services: ExportServices = exportServices()): BreakdownTable {
   const starts = new Map(beatFacts(doc, services).map(f => [f.number, f.start]));
   const out: BreakdownTable = {
-    head: ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
-           "First scene at", "Group"],
+    head: ["Category", "Item", "Status", "Assigned to", "Mentions", "Beats", "In script", "Notes", "B-roll shots",
+           "First beat at", "Group"],
     rows: []
   };
   breakdownRows(doc).forEach(function (r) {
@@ -217,8 +217,8 @@ function capturedStarts(doc: ExportDocument, services: ExportServices = exportSe
 
 export function brollTable(doc: ExportDocument, services: ExportServices = exportServices()): BrollTable {
   const out: BrollTable = {
-    head: ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
-           "Scene start"],
+    head: ["Beat", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
+           "Beat start"],
     rows: []
   };
   const starts = capturedStarts(doc, services);

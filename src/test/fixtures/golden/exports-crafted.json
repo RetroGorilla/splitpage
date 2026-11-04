@@ -4,8 +4,8 @@
     "sha256": "2c691503c0aa317f87dea2e1d888be56cdfb34cee70dac9e8b66d2110d7f77a8"
   },
   "markdownProject": {
-    "bytes": 6787,
-    "sha256": "56c90b45f644d110c11f1a9f768062d303b3eaad9b723510b1b8b5e0592e905e"
+    "bytes": 6786,
+    "sha256": "fa3073c63ae4adf3230b4ee05fa4a3a244f6a39e9b4f11236aa5047f7b4a777d"
   },
   "standaloneHtml": {
     "stateData": {
@@ -13,19 +13,19 @@
       "sha256": "07921c1479c560a536031e4d263132e174565a0780f0efa95218ea58a78c99c6"
     },
     "title": "Every export path — SplitShare",
-    "description": "3 scenes · 0:15 running time · Target 0:30 · 0:15 under · 1 of 3 shot · October 13, 2026"
+    "description": "3 beats · 0:15 running time · Target 0:30 · 0:15 under · 1 of 3 filmed · October 13, 2026"
   },
   "markdownExport": {
-    "bytes": 1990,
-    "sha256": "1062ae1fda89066a563589ed308c83edbf31e0f16d29cec6195a3b32ccf94dd2"
+    "bytes": 1986,
+    "sha256": "d945ed9051ff74edb25bd4454b6ad0418bec85fbd62f547c511e0368ba8ba253"
   },
   "markdownExportPreview": {
-    "bytes": 771,
-    "sha256": "96417a8c97f7be96d1807a0b6d01974c829336b086713d7e687cfaf30580ab9d"
+    "bytes": 768,
+    "sha256": "5218e6a0a9a4b4404b3cb7619b2b2440cbd68021e3b7dd6458767c38a8eec8d8"
   },
   "markdownTableExport": {
-    "bytes": 1875,
-    "sha256": "b95498acdc72bd9ae759ff323f84a89ae6120f3b9e16a4cffa33ab385e529135"
+    "bytes": 1876,
+    "sha256": "74c20cf03bcf37a0e35e39e1ba8e73076cb3c61ea067447cd7400ba3d930847c"
   },
   "markdownImages": [
     {

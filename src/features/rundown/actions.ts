@@ -32,7 +32,7 @@ export function rundownBeatActions(current: () => RundownControls | null): Actio
   return [
     {
       id: "go-to-scene",
-      label: "Go to scene",
+      label: "Go to beat",
       group: "Open",
       availability: () => current() ? OPENED_FROM_ITS_VIEW : { enabled: false, visible: false },
       run: (_source, input) => {

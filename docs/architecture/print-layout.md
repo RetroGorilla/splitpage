@@ -14,15 +14,15 @@ P1's record of what the old `buildPdf` printed; that writer was deleted in P5.
 
 | Output in `buildPdf` | Captured input and existing projection | P1 destination |
 | --- | --- | --- |
-| Title, scene count, runtime, target/delta, shot count, calendar date | `ExportDocument`, `exportFacts`, `exportSummaryParts` | Script heading and facts line |
-| Shot state and status legend | `sceneFacts` statuses, `exportFacts` status counts and target | Grey shot-scene rows, written status and counts, grey-row key; target in facts line; no scene strip |
-| Scene number, start, status, read time and explicit-duration border | `sceneFacts` | Scene and Read columns |
-| Visual/audio words, bold, italic, underline, strike, highlight, links | Captured scene HTML decoded by `ExportServices`, `exportRuns` | Escaped semantic HTML in fixed-width columns |
+| Title, beat count, runtime, target/delta, filmed count, calendar date | `ExportDocument`, `exportFacts`, `exportSummaryParts` | Script heading and facts line |
+| Filmed state and status legend | `sceneFacts` statuses, `exportFacts` status counts and target | Grey filmed-beat rows, written status and counts, grey-row key; target in facts line; no beat strip |
+| Beat number, start, status, read time and explicit-duration border | `sceneFacts` | Beat and Read columns |
+| Visual/audio words, bold, italic, underline, strike, highlight, links | Captured beat HTML decoded by `ExportServices`, `exportRuns` | Escaped semantic HTML in fixed-width columns |
 | Tags, B-roll keys, stage directions, audio cues, thread anchors/numbers | `exportRuns`, captured `commentNumbers`, print palette | Category underline, chip, brackets, cue styling and numbered markers |
 | Main and gallery pictures; video references | Captured row/gallery refs, legacy data URLs, held `ExportAssets`, `rowVideoLinks`, `videoHostLabel`, `videoLinkText` | Embedded raster data URLs and safe text links with host labels; unavailable images get an explicit placeholder |
 | Production breakdown | Captured production entries and `breakdownGroups` | AQ-41 section renderer |
-| B-roll shot list appendix | Captured B-roll/people/scenes and `brollShotListForPrint` | AQ-41 section renderer |
-| Comments, quotes, authors, timestamps, assignees, resolution, replies and images | `exportComments({pieces:true})`, captured clock mode and held assets | Comments section, including title/deleted-scene threads |
+| B-roll shot list appendix | Captured B-roll/people/beats and `brollShotListForPrint` | AQ-41 section renderer |
+| Comments, quotes, authors, timestamps, assignees, resolution, replies and images | `exportComments({pieces:true})`, captured clock mode and held assets | Comments section, including title/deleted-beat threads |
 | Running title, page numbers, bookmarks, viewer title/date | Captured title/date plus pagination metadata | CSS page-margin title/counters and HTML title; desktop PDF metadata/bookmarks belong to P3 |
 
 The existing script PDF has no stage-direction toggle: it includes directions
@@ -32,12 +32,12 @@ not silently select live export-dialog settings.
 
 ## Modules and input contract
 
-Named script sections come from the captured document's optional `sections`
+Named script scenes come from the captured document's optional `sections`
 records. `scriptSectionFacts` derives each boundary's complete total, including
-shot scenes. Script print emits a table per section with a four-column divider
-in its repeated table head; initial unsectioned scenes use an unheaded table.
+filmed beats. Script print emits a table per scene with a four-column divider
+in its repeated table head; initial unsectioned beats use an unheaded table.
 Browser print and desktop PDF consume that same layout. Session folding does
-not enter the capture, so every scene still prints.
+not enter the capture, so every beat still prints.
 
 `src/adapters/formats/script-print.ts` accepts `ScriptPrintInput`: one frozen
 `ExportDocument`, its held `ExportAssets`, and the existing `ExportServices`.
@@ -49,7 +49,7 @@ capture. Missing or unsafe image bytes never become a remote URL.
 
 `scriptPrintSections(input)` returns the script followed by comments, if any.
 `buildScriptPrintPage(input)` wraps those sections as a standalone document.
-Facts, scene timings/statuses and comment numbering are supplied by the
+Facts, beat timings/statuses and comment numbering are supplied by the
 existing projections, rather than recalculated by the print renderer.
 
 `src/adapters/formats/print-page.ts` owns `buildPrintPage(title, sections)`,
@@ -64,13 +64,13 @@ SVG, arbitrary MIME values and missing bytes produce a placeholder.
 `ExportDocument` and existing `ExportServices`. No list needs assets. The
 renderer uses `breakdownGroups`, `brollShotListForPrint`, the category/status
 looks and print palette; it does not derive tags, B-roll references, owners,
-scene times or shot status from live state. Summary counts only aggregate the
+beat times or filmed status from live state. Summary counts only aggregate the
 projected rows, as in the old writer. No list fact calculation belongs in the shell.
 
 `packingPrintSection(input, catId)` and `shotListPrintSection(input, options)`
 return `PrintSection`s. `buildPackingListPrintPage` and `buildShotListPrintPage`
 wrap their respective sections with `buildPrintPage`. `listPrintSections(input)`
-returns the nonempty all-category production breakdown and all-shots, by-scene
+returns the nonempty all-category production breakdown and all-shots, by-beat
 appendix. `buildScriptWithListsPrintPage(input)` accepts `ScriptPrintInput`
 including held assets and composes `[script, ...listSections, ...comments]`.
 `buildScriptPrintPage` remains the P1 script/comments builder. The composed
@@ -82,11 +82,11 @@ headers, section page breaks, image bounds, list marks and wrapping.
 
 | Old output | Options, filters and grouping | Columns and detail | Marks, counts and captured facts | P2 destination |
 | --- | --- | --- | --- | --- |
-| `buildPackingListPdf(doc, "gear")` | Gear only, alphabetical by item name, including orphaned tags | Out, Back, Item, Status, Owner, Scenes; item notes and associated B-roll names; orphan label "Not in script" | Two empty boxes per item; four cumulative status steps, Needed/Sourcing/Have it/Returned key and fill-in hint; item count and nonzero status counts in have/sourcing/needed/returned order; category color; captured title/day; Packed by/Returned by and date lines | Standalone gear packing section/page |
+| `buildPackingListPdf(doc, "gear")` | Gear only, alphabetical by item name, including orphaned tags | Out, Back, Item, Status, Owner, Beats; item notes and associated B-roll names; orphan label "Not in script" | Two empty boxes per item; four cumulative status steps, Needed/Sourcing/Have it/Returned key and fill-in hint; item count and nonzero status counts in have/sourcing/needed/returned order; category color; captured title/day; Packed by/Returned by and date lines | Standalone gear packing section/page |
 | `buildPackingListPdf(doc, "prop")` | Props only, same ordering and orphan handling | Same six columns and details | Same marks, counts, signatures and captured facts; empty message "Nothing tagged Prop yet." (Gear for gear), with no table/signatures | Standalone prop packing section/page |
-| `buildPdf` production breakdown | All nonempty tag categories in `breakdownGroups` order, including categories outside gear/prop and orphaned items | Item, Status, Scenes, Assigned to; notes and associated B-roll names; missing owner em dash | Per-category color/count; status marks/labels; total item and nonzero status counts in category-status order; title/day supplied by script | `productionBreakdownPrintSection`, omitted when empty; not replaced by packing checklists |
-| `buildShotListPdf` | `all`, `unshot`, `flagged`, `shot`; group by `scene`, `location`, `person`; invalid values fall back to all/scene; added shots and missing location/person groups retained | Done, Scene/start, B-roll shot/name/description/audio reference, Location, Props with status, Assigned, Flagged/note, Notes; grouping field omitted from redundant cells | Grey completed rows, Done checkbox and dimmed shot names; flag mark; ruled notes space; whole-capture shot/flag summary even when filtered; projected scope and group counts; captured title/day | Standalone landscape shot section/page, including "No shots to list." for empty/filtered-empty results |
-| `shotListAppendixPages` from `buildPdf` | All shots by scene, regardless of panel settings; omitted when empty | Same eight columns and row details as standalone shot list | Same marks, counts and notes space; no repeated title/date at appendix heading, since script supplies them | Landscape shot appendix between production breakdown and comments |
+| `buildPdf` production breakdown | All nonempty tag categories in `breakdownGroups` order, including categories outside gear/prop and orphaned items | Item, Status, Beats, Assigned to; notes and associated B-roll names; missing owner em dash | Per-category color/count; status marks/labels; total item and nonzero status counts in category-status order; title/day supplied by script | `productionBreakdownPrintSection`, omitted when empty; not replaced by packing checklists |
+| `buildShotListPdf` | `all`, `unshot`, `flagged`, `shot`; group by `scene`, `location`, `person`; invalid values fall back to all/beat; added shots and missing location/person groups retained | Done, Beat/start, B-roll shot/name/description/audio reference, Location, Props with status, Assigned, Flagged/note, Notes; grouping field omitted from redundant cells | Grey completed rows, Done checkbox and dimmed shot names; flag mark; ruled notes space; whole-capture shot/flag summary even when filtered; projected scope and group counts; captured title/day | Standalone landscape shot section/page, including "No shots to list." for empty/filtered-empty results |
+| `shotListAppendixPages` from `buildPdf` | All shots by beat, regardless of panel settings; omitted when empty | Same eight columns and row details as standalone shot list | Same marks, counts and notes space; no repeated title/date at appendix heading, since script supplies them | Landscape shot appendix between production breakdown and comments |
 
 P2 removed or modified no old list output; P5 later deleted the old list
 writers with the rest of the generator. Standalone packing pages retain
@@ -104,14 +104,14 @@ data images. Links preserve safe HTTP(S)/mailto destinations without fetching
 them during rendering. There is no printable-document script.
 
 Table rows use `break-inside: avoid`; a row taller than a page may still split.
-Chromium decides page breaks and repeats table headers. Oversized scene rows
+Chromium decides page breaks and repeats table headers. Oversized beat rows
 can span pages without a hand-drawn pagination algorithm or a `cont.` label.
-Long words wrap within their column; text and scene content are not clipped.
+Long words wrap within their column; text and beat content are not clipped.
 Pictures retain their aspect ratio within column and page-height bounds.
 Gallery pictures flow vertically rather than the old three-thumbnail strip,
-so each remains legible. The target remains in the facts line. The scene-number
-strip is omitted from every print page. Shot script scenes and completed B-roll
-rows have a `#e6e6e6` cell background; written scene status and ticked Done boxes
+so each remains legible. The target remains in the facts line. The beat-number
+strip is omitted from every print page. Filmed script beats and completed B-roll
+rows have a `#e6e6e6` cell background; written beat status and ticked Done boxes
 remain. Inside shot rows only, comment numbers use the darker amber `#985500`
 and flagged-shot text uses the darker red `#BE2F29`; their original colours
 remain elsewhere. Every print text colour that can appear in a shot row meets
@@ -119,8 +119,8 @@ AA's 4.5:1 minimum against `#e6e6e6`, measured with WCAG relative luminance:
 
 | Text | Colour | Contrast on grey |
 | --- | --- | --- |
-| Main text, scene numbers and read times | `#171613` | 14.50:1 |
-| Scene metadata and list details | `#4E4D48` | 6.79:1 |
+| Main text, beat numbers and read times | `#171613` | 14.50:1 |
+| Beat metadata and list details | `#4E4D48` | 6.79:1 |
 | Dimmed shot names, directions and unavailable images | `#64635E` | 4.82:1 |
 | Links | `#2863AB` | 4.86:1 |
 | B-roll keys and checked boxes | `#00717F` | 4.59:1 |
@@ -156,8 +156,8 @@ old list PDFs are:
 
 - Full audio references replace the old 84-character opening excerpt and ellipsis.
 - Group labels wrap completely instead of keeping only the old first wrapped line.
-- Scene groups show their label and done/total count, and every shot repeats its
-  scene/start; the old table suppressed duplicate scene cells and scene bands.
+- Beat groups show their label and done/total count, and every shot repeats its
+  beat/start; the old table suppressed duplicate beat cells and beat bands.
 - Packing status labels accompany the four filled progress segments. The legend
   uses individually outlined status labels instead of a single empty pill.
 - Notes and descriptions retain captured line breaks; packing notes previously
@@ -191,10 +191,10 @@ Since P5 the four PDF exporters have a `printPage` and no `build`.
 
 | Action | Captured input/options | Previous browser result | P4 result |
 | --- | --- | --- | --- |
-| `export-pdf` | One `ExportDocument`, clock/day, picture-hash request and resolved assets; script always includes directions, all production groups, all shots by scene, comments/replies | Download script `.pdf` bytes | Composed script/list/comment print page |
+| `export-pdf` | One `ExportDocument`, clock/day, picture-hash request and resolved assets; script always includes directions, all production groups, all shots by beat, comments/replies | Download script `.pdf` bytes | Composed script/list/comment print page |
 | `export-packing-gear` | One capture, gear category | Download Gear packing `.pdf` | Gear packing print page |
 | `export-packing-prop` | One capture, prop category | Download Prop packing `.pdf` | Prop packing print page |
-| `export-broll-pdf` | One capture, frozen `brollView`; action defaults to all/scene, explicit filter/group resolved before awaiting assets | Download landscape shot-list `.pdf` | Named landscape shot print page |
+| `export-broll-pdf` | One capture, frozen `brollView`; action defaults to all/beat, explicit filter/group resolved before awaiting assets | Download landscape shot-list `.pdf` | Named landscape shot print page |
 | B-roll full page Print | One capture, current filter and page group frozen before awaiting assets | Download the visible scope's shot-list `.pdf` | Captured filtered/grouped landscape print page |
 | Export again | Remembered action, fresh capture and resolved options | Repeat that PDF download | Repeat that action's print flow |
 
@@ -223,7 +223,7 @@ The intended workflow replaces the browser download expectations in suites
 the same captured HTML by both routes, retain content/colour/picture-order
 checks, assert cleanup and no PDF download, and leave non-PDF checks intact.
 Suites 12/96 retain the Gear-panel and B-roll-page routes, checklist/signature
-and shot/person/flag details. Suite 96 checks the named shot's Scene cell and
+and shot/person/flag details. Suite 96 checks the named shot's Beat cell and
 start directly. Suite 65 verifies the held PNG/WebP/legacy images decode at
 their captured dimensions. P4 then forced the old desktop PDF route there and
 checked three JPEG image streams; since P3 that step forces the desktop
@@ -403,7 +403,7 @@ It retains all fixture text, including the non-Latin and emoji samples.
 
 | Rule | Check | Scratch fail-first probe |
 | --- | --- | --- |
-| a | Section/comment, scene and list-group headings share a page with the first line they introduce | Force the first paragraph after a heading onto the next page |
+| a | Section/comment, beat and list-group headings share a page with the first line they introduce | Force the first paragraph after a heading onto the next page |
 | b | Each script/list/table row occupies one physical page; oversized rows are measured at their printable width and reported | Remove row avoidance from a controlled short row positioned across a page break, independent of system-font pagination |
 | c | Every page carrying table body text has its complete column header | Render `gear-long` with a non-repeating header group |
 | d, layout | Advance-width/ascent/descent boxes stay inside the body content area or footer margin box with 1 pt tolerance (about 0.35 mm), below visible differences while rejecting real overflow; ink may overhang its box by side bearing | Translate `prop-rich` 60 pt left; separately widen the footer beyond its margin box |
@@ -464,7 +464,7 @@ Check free RAM before each browser run; keep at least 4 GB available.
 
 The fixture suite has its own suite directory; normal app suites need no
 generated fixtures. Suite `382-script-print.txt` checks the rich, long and empty pages,
-loaded pictures, complete scene tails, wrapping and horizontal bounds. The
+loaded pictures, complete beat tails, wrapping and horizontal bounds. The
 standalone inspector enables actual print media, tests those bounds at the
 printable width, and saves tagged Chromium PDFs, screenshots and `summary.txt`.
 Generated `_script-print-*.html` files beside the fixture generator are covered
@@ -499,7 +499,7 @@ Free RAM exceeded 4 GB before every browser run. The list inspector passed
 | Standalone shot list | 1 | 1 | 11 |
 | Script with breakdown, shots and comments | 4 | 1 | 22 |
 
-Each filtered/grouped fixture (flagged/location, shot/person, unshot/scene)
+Each filtered/grouped fixture (flagged/location, shot/person, unshot/beat)
 printed one page. Raster review of all 57 P2 fixture pages confirmed wrapping,
 repeating table heads, status/checkbox marks, signatures, notes space, page
 footers and portrait/landscape transitions without clipping. PDF text extraction
@@ -514,7 +514,7 @@ passed 18/18 checks: empty one page, rich two pages, long seven pages. All ten
 printed pages were rasterized for review; repeated table heads, continuation
 content, images, footers, comments and system-font non-Latin text were
 inspected. Extracted PDF text retained `Visual line 179`, `Audio line 159`,
-scene 18 and the final reply. The original PDF/export tests remain unchanged.
+beat 18 and the final reply. The original PDF/export tests remain unchanged.
 
 Review follow-up validation: six content tests passed with exact YouTube host
 label/address and local-file text assertions. Suite 382 passed 23/23 checks

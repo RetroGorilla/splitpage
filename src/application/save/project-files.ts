@@ -60,9 +60,9 @@ export function createProjectFiles(ports: ProjectFilesPorts) {
       const modal = ports.page.getElementById("md-rows-modal");
       if (!modal) { resolve("keep"); return; }
       (ports.page.getElementById("md-rows-detail") as { textContent: string | null }).textContent =
-        "This file's own record has " + blockRows + " scene" + (blockRows === 1 ? "" : "s") +
-        ", but the table in it now has " + tableRows + ". Scenes were added or removed " +
-        "somewhere other than Splitpage, so the two can no longer be lined up scene by scene.";
+        "This file's own record has " + blockRows + " beat" + (blockRows === 1 ? "" : "s") +
+        ", but the table in it now has " + tableRows + ". Beats were added or removed " +
+        "somewhere other than Splitpage, so the two can no longer be lined up beat by beat.";
       pendingMdRowChoice = resolve;
       modal.hidden = false;
     });

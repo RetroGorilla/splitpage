@@ -183,7 +183,7 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
     if (!entries.length) return;
     const here = mineNumbers.beats[id]?.full, disk = theirNumbers.beats[id]?.full;
     const label = here && disk && here !== disk
-      ? "Scene " + here + " (Open here) / " + disk + " (On disk)" : "Scene " + (here ?? disk ?? "");
+      ? "Beat " + here + " (Open here) / " + disk + " (On disk)" : "Beat " + (here ?? disk ?? "");
     groups.push({ label, note: mergeRowFate(bb, m, t), entries: entries });
   });
 
@@ -204,10 +204,10 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
 
   const brollEntries = mergeListEntries("B-roll", (mine as MergeReviewDocument).brollShots, theirs.brollShots,
     function (s) { return s.id; },
-    function (s) { return s.name || "Shot"; },
+    function (s) { return s.name || "Filmed"; },
     function (s) {
       return mergeItemSummary([s.name, s.desc, s.location, s.owner, s.audioRef, s.notes,
-        s.status === "shot" ? "Shot" : "To shoot", s.reshoot ? "Flagged" : "",
+        s.status === "shot" ? "Filmed" : "To film", s.reshoot ? "Flagged" : "",
         (Array.isArray(s.props) ? s.props : []).map(function (p: NonNullable<DocumentShot["props"]>[number]) { return p && p.name; }).filter(Boolean).join(", ")]);
     });
   if (brollEntries.length) groups.push({ label: "B-roll", entries: brollEntries });

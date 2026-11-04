@@ -415,7 +415,7 @@ const rowRoutePorts: RowRoutePorts = {
   cycleStatus: cycleRowStatus,
   expandHidden: expandHiddenShotStrip,
   reveal: function (rowId) { const doc = currentDocument(); if (doc) sceneView().reveal(doc, rowId); shotHiding().reveal(rowId); },
-  gone: function () { showToast("That scene is no longer here.", "warn"); }
+  gone: function () { showToast("That beat is no longer here.", "warn"); }
 };
 
 export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
@@ -452,7 +452,7 @@ const rowsEditorPorts: RowsEditorPorts = {
   scriptCell: isScriptCell,
   hasMedia: hasMediaFiles,
   insert: insertIntoScriptCell,
-  notMedia: function () { showToast("Only pictures and video files go in a scene's Image section.", "warn"); }
+  notMedia: function () { showToast("Only pictures and video files go in a beat's Image section.", "warn"); }
 };
 
 export function mountRowsEditingFeature(): ReturnType<typeof mountRowsEditor> {
@@ -696,7 +696,7 @@ function announceAttached(attached: PasteAttached, rowIndex: number, before: unk
   function n(count: number, one: string): string { return count === 1 ? one : count + " " + one + "s"; }
   const what = pics && vids ? n(pics, "picture") + " and " + n(vids, "video")
     : pics ? n(pics, "picture") : n(vids, "video");
-  const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to scene " + (numberedDocument.numbering().beats[currentDocument()?.rows[rowIndex]?.id ?? ""]?.full ?? "");
+  const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to beat " + (numberedDocument.numbering().beats[currentDocument()?.rows[rowIndex]?.id ?? ""]?.full ?? "");
   const entry = undoOwner().last();
   if (!entry || entry === before) { showToast(msg, "ok"); return; }
   showActionToast(msg, "ok", "Undo", function () {

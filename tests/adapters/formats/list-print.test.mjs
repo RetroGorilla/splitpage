@@ -22,7 +22,7 @@ test("gear and prop packing lists preserve alphabetic rows, captured facts, stat
     assert.equal(dom.querySelector("h1").textContent, group.label);
     assert.ok(dom.body.textContent.includes(input.doc.title));
     assert.ok(dom.body.textContent.includes(exportDateText(exportDay(input.doc))));
-    assert.deepEqual(texts(dom, "thead th"), ["Out", "Back", "Item", "Status", "Owner", "Scenes"]);
+    assert.deepEqual(texts(dom, "thead th"), ["Out", "Back", "Item", "Status", "Owner", "Beats"]);
     const rows = [...dom.querySelectorAll("tbody tr")];
     assert.equal(rows.length, items.length);
     items.forEach((item, i) => {
@@ -53,8 +53,8 @@ test("shot lists use every existing filter and grouping with projected counts an
     const dom = page(buildShotListPrintPage(input, options));
     assert.ok(dom.body.textContent.includes(data.summary + " · " + data.scope));
     assert.ok(dom.body.textContent.includes(exportDateText(exportDay(input.doc))));
-    assert.deepEqual(texts(dom, "thead th"), ["Done", "Scene", "B-roll shot", "Location", "Props", "Assigned", "Flagged", "Notes"]);
-    assert.deepEqual(texts(dom, ".list-group th"), data.groups.map((g) => g.label + " " + g.done + "/" + g.total + " shot"));
+    assert.deepEqual(texts(dom, "thead th"), ["Done", "Beat", "B-roll shot", "Location", "Props", "Assigned", "Flagged", "Notes"]);
+    assert.deepEqual(texts(dom, ".list-group th"), data.groups.map((g) => g.label + " " + g.done + "/" + g.total + " filmed"));
     const items = data.groups.flatMap((g) => g.items.map((item) => ({ item, kind: g.kind })));
     const rows = [...dom.querySelectorAll("tbody tr:not(.list-group)")];
     assert.equal(rows.length, items.length);
@@ -84,7 +84,7 @@ test("print rules use solid vector marks and preserve legible shot backgrounds w
   const { input } = listFixture();
   for (const html of [buildPackingListPrintPage(input, "prop"), buildShotListPrintPage(input), buildScriptWithListsPrintPage(input)]) {
     const dom = page(html);
-    assert.equal(dom.querySelector(".rundown,[aria-label='Scene rundown']"), null);
+    assert.equal(dom.querySelector(".rundown,[aria-label='Beat rundown']"), null);
     const css = dom.querySelector("style").textContent;
     assert.doesNotMatch(css, /gradient\(|\.rundown/);
     const rules = [...dom.styleSheets[0].cssRules];
@@ -121,13 +121,13 @@ test("script composition keeps every breakdown category, all scene-grouped shots
   const dom = page(buildScriptWithListsPrintPage(input));
   assert.equal(dom.querySelectorAll("section").length, 4);
   assert.deepEqual([...dom.querySelectorAll("section")].map((el) => el.id), ["script", "production-breakdown", "broll-shot-list", "comments"]);
-  assert.deepEqual(texts(dom, ".breakdown-table thead th"), ["Item", "Status", "Scenes", "Assigned to"]);
+  assert.deepEqual(texts(dom, ".breakdown-table thead th"), ["Item", "Status", "Beats", "Assigned to"]);
   assert.deepEqual(texts(dom, ".breakdown-table .list-group th"), breakdownGroups(input.doc).map((g) => g.label + " " + g.items.length));
   for (const group of breakdownGroups(input.doc)) for (const item of group.items) {
     const row = [...dom.querySelectorAll(".breakdown-table td:first-child")].find((cell) => cell.textContent.startsWith(item.name)).parentElement;
     for (const fact of [item.statusLabel, item.beats.join(", "), item.owner || "—", item.notes, ...item.broll]) assert.ok(row.textContent.includes(fact));
   }
-  assert.match(dom.querySelector("#broll-shot-list").textContent, /by scene/);
+  assert.match(dom.querySelector("#broll-shot-list").textContent, /by beat/);
   assert.equal(dom.querySelectorAll(".shot-table .list-checkbox").length, input.doc.broll.length);
   assert.match(dom.querySelector("#comments").textContent, /End reply/);
 });

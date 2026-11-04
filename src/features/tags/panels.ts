@@ -138,7 +138,7 @@ export function renderGearList() {
     listEl.innerHTML = '<div class="comments-empty">No gear tracked yet.<br><br>' +
       'Type <code>&lt;a lens&gt;</code> straight into the script, select words and ' +
       'press <strong>Tag</strong>, or just list it below — gear doesn’t have to be ' +
-      'written into a scene to be tracked.</div>';
+      'written into a beat to be tracked.</div>';
     return;
   }
 
@@ -147,7 +147,7 @@ export function renderGearList() {
     listEl.innerHTML = renderProductionByBeat(entries.filter(function (e) { return !e.orphaned; })) +
       (untracked ? '<div class="tag-orphan-note">' + untracked +
         (untracked === 1 ? " item isn't" : " items aren't") +
-        ' mentioned in any scene — switch to List to see ' +
+        ' mentioned in any beat — switch to List to see ' +
         (untracked === 1 ? "it" : "them") + '.</div>' : '');
     return;
   }
@@ -211,7 +211,7 @@ function beatLinksHtml(item: PresentedProductionEntry) {
   order.sort(function (a, b) { return a.m.rowIndex - b.m.rowIndex; });
   return joinBeatLinks(order.map(function (s) {
     const num = ((ports as TagPanelPorts).document.numbering().beats[s.m.rowId]?.full ?? "");
-    const label = "Scene " + num + " · " +
+    const label = "Beat " + num + " · " +
       (s.visual && s.audio ? "Visual and Audio" : s.visual ? "Visual" : "Audio") +
       (s.n > 1 ? " · " + s.n + " mentions" : "") + " — go to it";
     return '<button type="button" class="tag-scene jump-link" data-action="jump-tag" data-row="' +
@@ -232,7 +232,7 @@ function mentionLinksHtml(item: PresentedProductionEntry) {
     const entry = seen[k] as { n: number; m: PanelTagMention };
     const num = ((ports as TagPanelPorts).document.numbering().beats[entry.m.rowId]?.full ?? "");
     return '<button type="button" class="tag-mention jump-link" data-action="jump-tag" data-row="' +
-      escapeHtml(entry.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="Go to this mention in scene ' +
+      escapeHtml(entry.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="Go to this mention in beat ' +
       num + '"><span class="tag-figure">' + num + '</span> ' +
       (entry.m.field === "visualText" ? "Visual" : "Audio") +
       (entry.n > 1 ? ' <span class="tag-figure">×' + entry.n + '</span>' : '') + '</button>';
@@ -449,7 +449,7 @@ function renderProductionByBeat(all: readonly PresentedProductionEntry[]) {
   return indexes.map(function (idx) {
     const items = Object.keys(byRow[idx] as Record<string, PresentedProductionEntry>).map(function (k) { return (byRow[idx] as Record<string, PresentedProductionEntry>)[k] as PresentedProductionEntry; });
     return '<section class="tag-scene-group">' +
-      '<h3 class="tag-scene-group-head">Scene <span class="tag-figure">' + ((ports as TagPanelPorts).document.numbering().beats[(ports as TagPanelPorts).document.current()?.rows[idx]?.id ?? ""]?.full ?? "") + '</span></h3>' +
+      '<h3 class="tag-scene-group-head">Beat <span class="tag-figure">' + ((ports as TagPanelPorts).document.numbering().beats[(ports as TagPanelPorts).document.current()?.rows[idx]?.id ?? ""]?.full ?? "") + '</span></h3>' +
       '<ul class="tag-pills">' +
         items.map(function (item) {
           return '<li class="tag-pill" style="--dot:' + item.cat.color + '">' +
@@ -543,16 +543,16 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
         '<span class="tag-cat-dot"' + (key ? ' data-tag-cat="' + (TAG_CATEGORIES[1] as TagCategoryLook).id + '"' : '') + ' aria-hidden="true"></span>' +
         '<span class="shoot-name">' + escapeHtml(g.name) + '</span>' +
         '<span class="shoot-progress' + (done ? ' is-done' : '') + '">' +
-          '<span class="tag-figure">' + shot + '/' + g.rows.length + '</span> shot · ' +
+          '<span class="tag-figure">' + shot + '/' + g.rows.length + '</span> filmed · ' +
           '<span class="tag-figure">' + formatDuration(secs) + '</span></span>' +
       '</h3>' +
       '<dl class="shoot-detail">' +
-        '<dt>Scenes</dt>' +
+        '<dt>Beats</dt>' +
         '<dd class="tag-scenes">' +
           joinBeatLinks(g.rows.map(function (i) {
             const row = doc.rows[i] as DocumentView["rows"][number];
             const st = rowStatus(row.status) || (ROW_STATUSES[0] as PanelRowStatus);
-            const label = "Scene " + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
+            const label = "Beat " + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
             return '<button type="button" class="tag-scene jump-link' + (row.status === "shot" ? ' is-shot' : '') +
               '" data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
               '" aria-label="' + escapeHtml(label) + '">' + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") +
@@ -623,7 +623,7 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
     listEl.innerHTML = '<div class="comments-empty">Nothing labelled yet.<br><br>' +
       'Type <code>[a prop]</code>, <code>{a location}</code> or <code>~an effect~</code> ' +
       'straight into the script, or select any words and press <strong>Tag</strong>. ' +
-      'Everything you label shows up here with every scene it appears in — and you can ' +
+      'Everything you label shows up here with every beat it appears in — and you can ' +
       'assign who is responsible for it, track it from Needed through to Returned, ' +
       'and keep notes and links against it.</div>';
     return;
@@ -636,7 +636,7 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
     listEl.innerHTML = renderProductionByBeat(entries.filter(function (e) { return !e.orphaned; })) +
       (orphanCount ? '<div class="tag-orphan-note">' + orphanCount +
         (orphanCount === 1 ? " item doesn't" : " items don't") +
-        ' appear in any scene — group by category or person to see ' +
+        ' appear in any beat — group by category or person to see ' +
         (orphanCount === 1 ? "it" : "them") + '.</div>' : '');
     return;
   }
@@ -688,7 +688,7 @@ function findTagByKey(key: string | null) {
 export function jumpToTag(rowId: string | null, key: string | null) {
   ((ports as TagPanelPorts).shotHiding.reveal as PanelNullableCall<TagPanelPorts["shotHiding"]["reveal"], "0">)(rowId);
   const row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
-  if (!row) { (ports as TagPanelPorts).notices.show("That scene is no longer here.", "warn"); return; }
+  if (!row) { (ports as TagPanelPorts).notices.show("That beat is no longer here.", "warn"); return; }
   row.scrollIntoView({ behavior: "smooth", block: "center" });
   const item = findTagByKey(key);
   if (!item) return;

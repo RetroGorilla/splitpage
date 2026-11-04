@@ -89,7 +89,7 @@ jsclick #file-menu [data-file-action="toggle-hide-shot"]
 sleep 400
 expect document.getElementById('runtime-total').textContent == 0:12 / 0:24
 expect document.querySelector('#runtime-total .rd-length-of').textContent === ' / 0:24'
-expect len().title.indexOf('still to shoot') !== -1
+expect len().title.indexOf('still to film') !== -1
 jsclick #file-menu [data-file-action="toggle-hide-shot"]
 sleep 400
 expect document.getElementById('runtime-total').textContent == 0:24

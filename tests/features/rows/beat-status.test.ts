@@ -73,7 +73,7 @@ test("scene status: the progress chip shows only once a scene is shot", () => {
   const second = setup({ status: "shot" });
   second.owner.updateScriptStats();
   assert.equal(document.getElementById("progress-chip")?.hidden, false);
-  assert.equal(document.getElementById("progress-text")?.textContent, "1/2 shot");
+  assert.equal(document.getElementById("progress-text")?.textContent, "1/2 filmed");
 });
 
 test("scene status: the stats follow status, length and target changes only", () => {

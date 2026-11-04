@@ -1678,7 +1678,7 @@ function buildMenu() {
       },
       { label: "Use Chromium Speech Recognition", click: () => sendMenuCommand("prompter-open-in-chromium") },
       { type: "separator" },
-      { label: "Hide shot scenes", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuCommand("toggle-hide-shot") },
+      { label: "Hide filmed beats", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuCommand("toggle-hide-shot") },
       { label: "Minimise the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
       { type: "separator" },
       ...(app.isPackaged ? [] : [

@@ -10,13 +10,13 @@ export interface Starter {
   state: typeof toCamera | typeof interview | typeof thirtySecondSpot | typeof longDemo;
 }
 export const STARTERS: Starter[] = [
-  { id: "to-camera", name: "To-camera video", desc: "Hook, intro, sections, call to action.", state: toCamera },
+  { id: "to-camera", name: "To-camera video", desc: "Hook, intro, scenes, call to action.", state: toCamera },
   { id: "interview", name: "Interview", desc: "Questions on the right, cutaways on the left.", state: interview },
   { id: "spot-30", name: "30-second spot", desc: "Six timed beats with a packshot.", state: thirtySecondSpot }
 ];
 
 export const LONG_DEMO: Starter = {
-  id: "long-demo", name: "Long demo", desc: "Thirty scenes, every feature in use.", state: longDemo
+  id: "long-demo", name: "Long demo", desc: "Thirty beats, every feature in use.", state: longDemo
 };
 
 export function starterById(id: string): Starter | null {

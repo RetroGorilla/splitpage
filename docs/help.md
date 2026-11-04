@@ -11,6 +11,8 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new in 0.4.1
 
+- **Scenes, beats and filmed.** Scene headers group beats; the production status is now **Filmed**.
+
 - **New version numbers.** 0.4.1 follows 3.1 and the 4.0 beta. Those copies
   won't offer it as an update, so download it from the
   [releases page](https://github.com/RetroGorilla/splitpage/releases).
@@ -18,31 +20,30 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **A title from your first filename.** Save an untouched untitled script as
   `Headset ad v3.md` and it becomes **Headset ad**, with a small **v3** tag.
   A title you typed stays yours. Download-only browsers leave both unchanged.
-- **Section headers** group scenes without changing their running order.
-  Open a scene's **⋯** menu and choose **Add Section Header** to name a
-  section. Its header shows the scene count and total time, including shot
-  scenes. Click the name to rename it; the ⋯ menu moves or removes the header.
-  Drag the grip to move the whole section, or drag a scene across a header
-  to change its section. The fold chevron hides scenes for this session only;
+- **Scene headers** group beats without changing their running order.
+  Open a beat's **⋯** menu and choose **Add Scene Header** to name a
+  scene. Its header shows the beat count and total time, including filmed beats. Click the name to rename it; the ⋯ menu moves or removes the header.
+  Drag the grip to move the whole scene, or drag a beat across a header
+  to change its scene. The fold chevron hides beats for this session only;
   folding changes neither the saved file nor the running order.
-  Section names appear above rundown blocks and in Present's top bar as
+  Scene names appear above rundown blocks and in Present's top bar as
   visual cues. They are never spoken or used by Follow My Voice. Print/PDF,
   full-script Word and Markdown exports retain headings and totals and include
-  every scene, including folded ones. Narration Word keeps heading cues;
-  plain narration text omits section headings. CSV/XLSX keep their existing columns.
-  At the start of a scene after a header, press Backspace once to show
-  “Press Backspace again to remove the section header”. Press it again
+  every beat, including folded ones. Narration Word keeps heading cues;
+  plain narration text omits scene headings. CSV and XLSX use beat labels.
+  At the start of a beat after a header, press Backspace once to show
+  “Press Backspace again to remove the scene header”. Press it again
   within two seconds, without another key, click or caret move, to remove
-  only the header. The scenes join the section above, or become unsectioned
-  at the top. A further Backspace joins scenes normally. Delete at the end
-  of the preceding scene works the same way. Other input, a caret move or
+  only the header. The beats join the scene above, or join automatic Scene A
+  at the top. A further Backspace joins beats normally. Delete at the end
+  of the preceding beat works the same way. Other input, a caret move or
   waiting two seconds cancels the hint. Undo restores the header and its
   name in one step.
   - If <kbd>Alt</kbd>+<kbd>↑</kbd> or <kbd>Alt</kbd>+<kbd>↓</kbd> would move a
-    section's only scene across its header, the first press changes nothing
-    and shows “Press again to remove the section header”. Repeat the same
+    scene's only beat across its header, the first press changes nothing
+    and shows “Press again to remove the scene header”. Repeat the same
     shortcut within two seconds, without another non-modifier key, click or caret move,
-    to move the scene and remove the emptied header. Undo restores both.
+    to move the beat and remove the emptied header. Undo restores both.
     Releasing and pressing Alt again does not cancel the hint; the same
     confirmation also applies when Shift is held with the shortcut.
 
@@ -281,7 +282,7 @@ Release notes for every version are on the
 A new tab opens on a start screen rather than a document. The browser app
 shows it too, on a fresh copy nothing has been opened in.
 
-- **Blank script**: one empty scene.
+- **Blank script**: one empty beat.
 - **Starter scripts**: **To-camera video**, **Interview** and **30-second
   spot**. Each opens as a new, unsaved script to write over.
 - **Open a file**, or drop a `.md`, `.splitpage`, `.docx`, `.txt` or `.csv`
@@ -292,8 +293,8 @@ shows it too, on a fresh copy nothing has been opened in.
   **Continue** at the top reopens the most recent.
 - **Take the tour**, or **Look at the example script** (or <kbd>Esc</kbd>)
   to close the start screen and see the demo script.
-- **Open the long demo (30 scenes)**: a whole video, nearly ten minutes
-  long, with every feature in use (all three scene statuses, every tag
+- **Open the long demo (30 beats)**: a whole video, nearly ten minutes
+  long, with every feature in use (all three beat statuses, every tag
   category, b-roll, comments, stage directions, set read times and a target
   length), to see how Splitpage handles a real-length script. Like a
   starter, it opens as a new, unsaved copy. The command menu
@@ -324,26 +325,29 @@ The launcher needs Node. Without it, open `index.html` directly.
 
 ## Writing and planning
 
-Each scene is a row: **Visual** on the left, **Audio** on the right.
+Scenes contain beats. Scene letters continue after Z as AA, AB and so on. Beats restart at 1 within each scene: **B.8** is beat 8 in Scene B. B-roll shots follow tag order within a beat: **B.8.2** is its second shot. Beats before the first header belong to an automatic, unnamed Scene A. Moving scenes, beats or tags updates their numbers; plain-text references in notes and comments must be updated by hand. **Remove scene header** keeps its beats in the previous scene (or automatic Scene A at the top), and supports Undo.
+
+
+Each beat is a row: **Visual** on the left, **Audio** on the right.
 
 - **Format text**: select words and use the toolbar: bold
   (<kbd>Ctrl</kbd>+<kbd>B</kbd>), italic (<kbd>Ctrl</kbd>+<kbd>I</kbd>),
   underline (<kbd>Ctrl</kbd>+<kbd>U</kbd>), strikethrough, highlight, link,
   comment and tag.
-- **New scene**: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> starts the next scene and
+- **New beat**: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> starts the next beat and
   moves into it.
-- **Split a scene**: <kbd>Alt</kbd>+<kbd>Enter</kbd> moves everything after
-  the caret into a new scene below, in the same column.
-- **Move a scene**: <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd>,
-  or drag it by its number. The scene's **⋯** menu also has **Move up**,
-  **Move down**, **Insert scene**, **Add Section Header** and **Delete**. **Delete** asks for a
-  second click, unless the scene is empty (no words, pictures, set length
+- **Split a beat**: <kbd>Alt</kbd>+<kbd>Enter</kbd> moves everything after
+  the caret into a new beat below, in the same column.
+- **Move a beat**: <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd>,
+  or drag it by its number. The beat's **⋯** menu also has **Move up**,
+  **Move down**, **Insert beat**, **Add Scene Header** and **Delete**. **Delete** asks for a
+  second click, unless the beat is empty (no words, pictures, set length
   or comments): then one click does it. <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings
-  a deleted scene back.
-- **The rundown**: the strip under the header shows every scene as a block.
-  Hover it to magnify the scenes round the pointer, click a block to jump
-  to that scene, or drop a
-  dragged scene on it to move the scene. **File ▸ Minimise the rundown**
+  a deleted beat back.
+- **The rundown**: the strip under the header shows every beat as a block.
+  Hover it to magnify the beats round the pointer, click a block to jump
+  to that beat, or drop a
+  dragged beat on it to move the beat. **File ▸ Minimise the rundown**
   shrinks it to a line; click the line to bring it back.
 - **The header's buttons**: **Production**, **Gear**, **B-roll** and
   **Comments** open their panels; **Write** and **Present** are the two other
@@ -353,10 +357,10 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   two other ways to see it. In a narrower window the panel buttons shrink to
   their icons and counts, and Write to its icon. Point at one,
   or <kbd>Tab</kbd> to it, and its name slides out over its neighbours.
-- **Scene status**: click the lamp in the scene's gutter to cycle **To do →
-  Ready → Shot**.
-- **Hide shot scenes**: File ▸ Hide shot scenes
-  (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>) collapses Shot scenes into a
+- **Beat status**: click the lamp in the beat's gutter to cycle **To do →
+  Ready → Filmed**.
+- **Hide filmed beats**: File ▸ Hide filmed beats
+  (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>) collapses Filmed beats into a
   thin strip. Click the strip to see them.
 - **Undo and redo**: <kbd>Ctrl</kbd>+<kbd>Z</kbd> and
   <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> (or
@@ -381,17 +385,17 @@ On a Mac, read <kbd>Cmd</kbd> for <kbd>Ctrl</kbd> throughout.
 
 ### Timing
 
-Splitpage estimates each scene's read time from its Audio words, at the
+Splitpage estimates each beat's read time from its Audio words, at the
 script's reading speed. Visual notes, stage directions and sound cues don't
 count.
 
 - **Script length**: the small time at the end of the rundown, just after
-  the last scene (at the strip's right edge on a long script, and at the
-  right of the status line on a phone). With shot scenes hidden it reads
+  the last beat (at the strip's right edge on a long script, and at the
+  right of the status line on a phone). With shot beats hidden it reads
   what's left / the whole script. It stays on the minimized rundown.
 - **Reading speed**: click the script length. It's saved with the script.
-- **A scene's length by hand**, for a montage, a title card or a pause: click
-  the scene's time in the **Read** column, type `1:30`, `90`, `90s` or
+- **A beat's length by hand**, for a montage, a title card or a pause: click
+  the beat's time in the **Read** column, type `1:30`, `90`, `90s` or
   `1m30`, and press <kbd>Enter</kbd>. Clear it and press <kbd>Enter</kbd> to
   go back to the estimate. It turns amber if the words would take longer.
 - **Target length**: click the script length and pick or type a **Target
@@ -399,16 +403,16 @@ count.
   *4:32 / 5:00 · 0:28 left*, or how far over in red. **No target** removes
   it.
 
-### Whole scenes
+### Whole beats
 
 - **Select**: click in a text box and drag up or down past its edge. The
   page scrolls at the window's edge. <kbd>Esc</kbd> or a click lets go.
 - <kbd>Ctrl</kbd>+<kbd>C</kbd> copies, <kbd>Ctrl</kbd>+<kbd>X</kbd> cuts,
   <kbd>Delete</kbd> removes. Right-click for the same, plus **New script
-  from these scenes** (it replaces this tab's script; the old one goes to
+  from these beats** (it replaces this tab's script; the old one goes to
   Version history).
 - **Paste** with the caret in any script, in another tab or the desktop app
-  too: the scenes go in after that scene, or replace it if it's empty, with
+  too: the beats go in after that beat, or replace it if it's empty, with
   their comments, status, b-roll, breakdown details and pictures (up to
   16 MB of pictures per copy). One <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it.
 - **Into Word or Google Docs** they paste as a two-column table.
@@ -416,18 +420,18 @@ count.
 ### The writer
 
 **Write** in the header opens the Audio column as one flowing document, for
-when the job is writing narration. One paragraph is one scene. Its tools
+when the job is writing narration. One paragraph is one beat. Its tools
 sit along the top, under the title, and **Close** (or <kbd>Esc</kbd>) is
 beside **Save**.
 
-- <kbd>Enter</kbd> starts a new scene, <kbd>Shift</kbd>+<kbd>Enter</kbd> is
+- <kbd>Enter</kbd> starts a new beat, <kbd>Shift</kbd>+<kbd>Enter</kbd> is
   a line break, and <kbd>Backspace</kbd> at the start of a paragraph joins it
   to the one above.
-- The margin button cycles **Visuals** (each scene's visual, greyed; click
+- The margin button cycles **Visuals** (each beat's visual, greyed; click
   it to jump there), **Numbers** and **Compact**.
 - **Size** sets the text size for you on this device, not in the script.
 - Tags, formatting and Save work as in the split view.
-- Two scenes that both have a visual can't be joined here. Join them in the
+- Two beats that both have a visual can't be joined here. Join them in the
   split view.
 
 ### Stage directions
@@ -475,12 +479,12 @@ status.
 
 ### Pictures and video
 
-- **Add a picture**: **Add picture** under a scene's Visual text, or drop an
+- **Add a picture**: **Add picture** under a beat's Visual text, or drop an
   image file on the Visual column.
 - **Paste or drop** a picture, a video file or a video link (YouTube, Vimeo
-  and the like) into a scene and it goes into that scene's Image section,
+  and the like) into a beat and it goes into that beat's Image section,
   with **Undo** on the notice. The words you pasted with it stay in the text.
-- **Several per scene**: the first is the cover, the next ones sit beside
+- **Several per beat**: the first is the cover, the next ones sit beside
   it, and **+N** stands for the rest. Videos are also listed underneath.
 - **The gallery**: click any tile. Use **‹ ›** or <kbd>←</kbd>
   <kbd>→</kbd> to browse, <kbd>Shift</kbd>+<kbd>←</kbd> /
@@ -489,7 +493,7 @@ status.
 - **See a picture at full size**: click the big picture in the gallery
   (or press <kbd>Enter</kbd> on it). A large picture opens fitted to the
   window; click it or scroll to see it at 100 %, and drag to look around.
-  <kbd>←</kbd> <kbd>→</kbd> go through the scene's pictures, and
+  <kbd>←</kbd> <kbd>→</kbd> go through the beat's pictures, and
   <kbd>Esc</kbd>, **×** or a click outside goes back to the gallery.
 - **Draw on a picture**: pick it in the gallery and press **Annotate**.
   See [Annotating a picture](#annotating-a-picture).
@@ -507,7 +511,7 @@ A saved file carries all its pictures. One that can't be found shows as
 ### Annotating a picture
 
 Circle the thing that matters, highlight a corner, or write a note right on
-a picture. Open the scene's gallery, pick the picture and press
+a picture. Open the beat's gallery, pick the picture and press
 **Annotate**. It opens over the whole window with the tools along the top:
 
 - **Pen** and **Highlighter** draw where you drag, with a mouse, a pen or
@@ -527,7 +531,7 @@ a picture. Open the scene's gallery, pick the picture and press
   you've drawn something it asks first, so press it again to throw the
   marks away.
 
-The scene shows the picture with your marks everywhere: the script, the
+The beat shows the picture with your marks everywhere: the script, the
 exports and the teleprompter. The original is kept, so **Edit annotations**
 opens your marks again to change them, and **Remove annotations** puts the
 picture back as it was. Saving is one step of the script's undo, so
@@ -542,9 +546,9 @@ picture back as it was. Saving is one step of the script's undo, so
 - **Follow My Voice** scrolls as you read aloud.
 - **Mirror** (<kbd>M</kbd>) and **Flip** (<kbd>F</kbd>) are for a
   beam-splitter or an upside-down monitor.
-- **Skip shot** leaves out scenes marked Shot.
-- **Scene mode** plays one scene at a time and pauses at its end. The arrows
-  (or <kbd>←</kbd> / <kbd>→</kbd>) step between scenes.
+- **Skip shot** leaves out beats marked Filmed.
+- **Beat mode** plays one beat at a time and pauses at its end. The arrows
+  (or <kbd>←</kbd> / <kbd>→</kbd>) step between beats.
 
 In the desktop app, Follow My Voice uses Windows' speech recognition; see
 [Desktop app](#desktop-app).
@@ -552,14 +556,14 @@ In the desktop app, Follow My Voice uses Windows' speech recognition; see
 ### Getting the narration out
 
 **File ▸ Export… ▸ Narration only** writes the Audio column as `.docx` or
-`.txt`, one paragraph per scene; the `.docx` puts each scene's number in the
+`.txt`, one paragraph per beat; the `.docx` puts each beat's number in the
 margin, so a session can pick up "from 14". **Include stage directions** puts them in as
 *(beat)*. Sound cues are never in it. **Paste a script…** reads that shape back in.
 
 ## Tagging and the production breakdown
 
 Tag things in the script and they appear in the **Production** panel, with
-every scene they're in. While you type a tag you've used before,
+every beat they're in. While you type a tag you've used before,
 <kbd>Tab</kbd> accepts the completion Splitpage offers.
 
 **The tagging reference**: **File ▸ Tagging reference** (or search commands
@@ -602,7 +606,7 @@ as before.
   leaves your words as you typed them.
 
 **The Production panel**, grouped by category or person, is a table:
-**Item · Status · Scenes · Owner**. Click a scene number to jump to it.
+**Item · Status · Beats · Owner**. Click a beat number to jump to it.
 
 - **Open an item**: click its name, or the tag in the script. Set its
   **Status**, **Assigned to** (**Add person** adds a name), and **Notes &
@@ -614,7 +618,7 @@ as before.
   for a run) to assign, set status or delete them together. Deleting removes
   their tags from the script too; the words stay. <kbd>Esc</kbd> clears the
   selection.
-- **Group** by category, person or scene, or **Shoot** to see scenes grouped
+- **Group** by category, person or beat, or **Shoot** to see beats grouped
   by location, with what each needs.
 - **Untagged mentions**: write the name of something already tracked in
   the Visual column without tagging it, and it gets a dotted underline and a
@@ -629,7 +633,7 @@ as before.
 
 **Gear** in the header lists equipment: cameras, mics, lights. Gear that's
 never written in the script goes in the **Add gear** box at the foot of the
-panel, one item per line; press **Update list**. **List** or **Scene**
+panel, one item per line; press **Update list**. **List** or **Beat**
 changes the view. **Packing list** prints a checklist with a box for going
 out and one for coming back, and lines to sign.
 
@@ -640,7 +644,7 @@ on the **B-roll** list. Lines under it, up to the next marker, are its
 description.
 
 - **Mark a shot done**: tick its box.
-- **Filter** with **All / To shoot / Flagged / Shot**, and group by scene or
+- **Filter** with **All / To film / Flagged / Filmed**, and group by beat or
   location.
 - **Open a shot** to set its location, who's getting it, its props, a note,
   or **Flag for reshoot**. **⋯** has **Rename in script** and **Delete from
@@ -651,7 +655,7 @@ description.
   then mark, assign, move or flag them together.
 - **Add a shot** at the foot of the panel for one the script doesn't have.
 - **The shot list**: the arrows button beside the panel's **×** opens every
-  shot on one page, grouped by location, scene or person, with **CSV** and
+  shot on one page, grouped by location, beat or person, with **CSV** and
   **Print shot list**, which prints it as you see it there. **← Script** or
   <kbd>Esc</kbd> goes back.
 
@@ -660,7 +664,7 @@ description.
 **Save** (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes the script to a file. The
 first Save asks where, and in which format:
 
-- **Markdown (`.md`)**, the default: a readable table of scenes, then the
+- **Markdown (`.md`)**, the default: a readable table of beats, then the
   breakdown and comments, then a block Splitpage keeps for itself (tags,
   comment anchors, pictures, statuses). Leave that block alone.
 - **Splitpage (`.splitpage`)**: the same information without the readable
@@ -711,7 +715,7 @@ to do. The writer shows the same status.
 You can. Edit a cell in the table, save, and reopen it in Splitpage: your
 edit is kept, and tracked names in it are tagged again. A comment on words
 you rewrote loses its place. If you add or delete whole rows, Splitpage asks
-whether to keep its own record or rebuild the scenes from your table.
+whether to keep its own record or rebuild the beats from your table.
 
 If the file changes on disk while it's open here, Save offers **Merge
 them**, with a side-by-side view before anything is written. Where both
@@ -732,13 +736,13 @@ stay in their file.
 ## Reopening a saved project
 
 - **File ▸ Open…** (<kbd>Ctrl</kbd>+<kbd>O</kbd>) opens a `.md` or
-  `.splitpage` file with everything back: scenes, tags, comments, pictures.
+  `.splitpage` file with everything back: beats, tags, comments, pictures.
 - **A `.docx`, `.txt`, `.csv` or other Markdown file** opens as a new
   script, with an empty breakdown and no comments. It is not saved yet, like
   a new script: Save asks where to keep it, and Splitpage never changes the
   file you opened. For a Word, CSV or other file of it, use **File ▸ Export…**.
 - **A revised draft of the script you're in**: use **File ▸ Import ▸ Paste a
-  script…** instead. It replaces or appends the scenes and keeps this
+  script…** instead. It replaces or appends the beats and keeps this
   document's breakdown, cast, b-roll and comments. Paste text or **Choose a
   file…**. Tick **Look for B-roll lines** to track `B-roll:` lines.
 - **A Google Doc**: **File ▸ Import ▸ Google Doc link…** downloads it as a
@@ -764,15 +768,15 @@ so coming straight from 2.x, install 3.0 first to keep it.
 format, with a preview and the file name.
 
 - **The whole script**: **PDF**, **Word**, **Markdown**, **Spreadsheet**
-  (a row per scene, as Excel or CSV), or **SplitShare** (the script with the
+  (a row per beat, as Excel or CSV), or **SplitShare** (the script with the
   whole app built in, for any device).
 - **Part of it**: **Narration only**, the **Breakdown** as a spreadsheet, a
   **Packing list** of gear or props, or the **B-roll shot list**: a
-  landscape table of every shot with its scene, props, flags and their
+  landscape table of every shot with its beat, props, flags and their
   reasons, and lines for notes (or the same as a spreadsheet).
 
 **PDF** and **Word** lay the script out the way the app does: the running
-time and target at the top (the PDF shades shot rows grey), each scene's
+time and target at the top (the PDF shades filmed rows grey), each beat's
 number, start time, status and read time, tags in their colours, b-roll
 keys, and each open comment's number beside its words. At the end come the
 breakdown by category, the b-roll shot list and the numbered comments. The
@@ -789,11 +793,11 @@ chooses page breaks, without a continued-row label, and supplies no PDF
 bookmarks.
 
 The **desktop app** still saves a PDF file directly, with bookmarks to its
-sections. It prints the same page as the browser, so it also uses your
+scenes. It prints the same page as the browser, so it also uses your
 computer's fonts and lets the page breaks fall where they fit.
 
 **Markdown** comes in two shapes. **Stacked** reads like a script, one
-heading per scene with its start time, status and read time; with pictures
+heading per beat with its start time, status and read time; with pictures
 it becomes a `.zip` with an `images` folder. **Two columns** is a table,
 Visual beside Audio, that **Paste a script…** can read back in. The
 **Spreadsheet** has a column each for start time, status, read time, tags,
@@ -804,14 +808,14 @@ comes two ways. Pick one under **Format**:
 
 - **Excel (.xlsx)** opens laid out and ready to read or print: columns sized
   to fit, long lines wrapped, the header row frozen with filters on it, a
-  blank **Notes** column beside the scenes to write in, and a sheet each for
+  blank **Notes** column beside the beats to write in, and a sheet each for
   the script, the comments, the breakdown and the b-roll (only the ones your
   script has). It opens in Excel, Google Sheets and Numbers.
 - **CSV (.csv)** is the plain values and nothing else, for another tool to
   read. Splitpage can open a CSV of the script again.
 
 Exports are copies to read, print or send. Opening one again brings back
-its scenes only, not the tags, comment anchors or statuses a saved file
+its beats only, not the tags, comment anchors or statuses a saved file
 keeps. **Export again** in the File menu repeats the last format.
 
 ## The File menu
@@ -824,7 +828,7 @@ copy…**. Below:
 - **New & open**: New script, Open…, Open recent (desktop app), and Import
   (Paste a script, Google Doc link).
 - **Export**: Export…, and Export again.
-- **This document**: Version history, Find & replace, Hide shot scenes,
+- **This document**: Version history, Find & replace, Hide filmed beats,
   Minimise the rundown, and in the desktop app Present in browser and Use
   Chromium Speech Recognition.
 
@@ -842,10 +846,10 @@ are along the bottom. An item that can't work right now says why.
 | <kbd>Ctrl</kbd>+<kbd>K</kbd> | Search commands… |
 | <kbd>Ctrl</kbd>+<kbd>F</kbd> | Find & replace |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Undo / redo |
-| <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | New scene |
-| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Split the scene at the caret |
-| <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> | Move the scene |
-| <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> | Hide shot scenes |
+| <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | New beat |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Split the beat at the caret |
+| <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> | Move the beat |
+| <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> | Hide filmed beats |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | Present in browser (desktop app) |
 | <kbd>F1</kbd> | Help (desktop app) |
 | <kbd>Ctrl</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> | New tab / close tab (desktop app) |
@@ -867,9 +871,9 @@ change the script.
 - **Appearance**: theme, 12- or 24-hour clock (used for times such as the
   save status's "Last saved … at"), whether the rundown strip starts
   small, and **Show icons on tags**.
-- **Editor**: Hide shot scenes, Autosave, Fetch video thumbnails, the reading
+- **Editor**: Hide filmed beats, Autosave, Fetch video thumbnails, the reading
   speed for new scripts, the writer's text size and script zoom.
-- **Present**: the teleprompter's Mirror, Flip and One scene at a time.
+- **Present**: the teleprompter's Mirror, Flip and One beat at a time.
 - **You**: your name and colour. Clicking your name in the header opens these
   too.
 - **You**: your name and colour, which sign your edits and comments.
@@ -880,17 +884,17 @@ change the script.
 
 ## On a phone
 
-The whole app works on a phone, with the script first and scenes stacked
+The whole app works on a phone, with the script first and beats stacked
 (visual above audio).
 
 - **The bar at the bottom** opens **Write**, **Production**, **Gear**,
   **B-roll** and **Comments**; **Script** closes them. **File** and
   **Present** are at the top.
-- **A scene's times** show on the scene you're in.
+- **A beat's times** show on the beat you're in.
 - **Accept a tag completion**: tap it (there's no <kbd>Tab</kbd>).
 - **Find & replace** and **Search commands** are in the File menu.
 - **Select several breakdown items**: long-press one, then tap others.
-- **Move or add scenes** from a scene's **⋯** menu, or **+ Add scene** at the
+- **Move or add beats** from a beat's **⋯** menu, or **+ Add beat** at the
   bottom.
 
 ## Desktop app

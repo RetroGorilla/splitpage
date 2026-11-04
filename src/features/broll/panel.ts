@@ -222,7 +222,7 @@ function progressBarHtml(entries: readonly PanelShot[]) {
   const gap = n.all <= 12 ? 2 : n.all <= 24 ? 1 : 0;
   return '<div class="broll-bar" role="progressbar" aria-label="Shots done" aria-valuemin="0" aria-valuemax="' + n.all +
       '" aria-valuenow="' + n.shot + '" aria-valuetext="' +
-      escapeHtml(n.shot + " of " + n.all + " shot" + (n.flagged ? ", " + n.flagged + " flagged" : "")) +
+      escapeHtml(n.shot + " of " + n.all + " filmed" + (n.flagged ? ", " + n.flagged + " flagged" : "")) +
       '" style="--seg-gap:' + gap + 'px">' +
       brollSortedForList(entries).map(function (e) {
         const cls = e.reshoot ? "is-flagged" : e.status === "shot" ? "is-shot" : "is-todo";
@@ -234,7 +234,7 @@ function progressBarHtml(entries: readonly PanelShot[]) {
 function summaryHtml(entries: readonly PanelShot[]) {
   const n: Record<string, number> & ReturnType<typeof filterCounts> = filterCounts(entries);
   return '<span class="broll-summary-line"><span class="broll-summary-n">' + n.shot + '</span> of ' +
-      '<span class="broll-summary-n">' + n.all + '</span> shot</span>' +
+      '<span class="broll-summary-n">' + n.all + '</span> filmed</span>' +
     progressBarHtml(entries);
 }
 
@@ -345,8 +345,8 @@ function checkHtml(e: PanelShot) {
   const shot = e.status === "shot";
   return '<button type="button" class="broll-check" role="checkbox" aria-checked="' + (shot ? 'true' : 'false') +
     '" data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
-    escapeHtml("Shot: " + (e.name || "Untitled shot")) + '" title="' +
-    (shot ? 'Shot — click to mark To shoot' : 'To shoot — click to mark Shot') +
+    escapeHtml("Filmed: " + (e.name || "Untitled shot")) + '" title="' +
+    (shot ? 'Filmed — click to mark To film' : 'To film — click to mark Filmed') +
     '"><span class="broll-check-box">' + icon("check") + '</span></button>';
 }
 
@@ -364,8 +364,8 @@ function rowHtml(e: PanelShot, starts: Record<string, number>) {
       '</button>' +
       '<span class="broll-row-icons">' + rowStateIconsHtml(e) + '</span>' +
       (e.rowId
-        ? '<button type="button" class="broll-row-go" data-action="broll-jump" data-id="' + id + '" title="Go to scene ' +
-            beatLabel(e) + '">Go to scene' + icon("arrow-right") + '</button>'
+        ? '<button type="button" class="broll-row-go" data-action="broll-jump" data-id="' + id + '" title="Go to beat ' +
+            beatLabel(e) + '">Go to beat' + icon("arrow-right") + '</button>'
         : '') +
     '</div>' +
     (open ? cardHtml(e, starts) : '');
@@ -379,7 +379,7 @@ function chevronHtml() {
   return '<svg class="ev-chevron" aria-hidden="true" focusable="false"><use href="#i-chevron-down"/></svg>';
 }
 
-const SHOT_STATUSES = [{ id: "unshot", label: "To shoot" }, { id: "shot", label: "Shot" }];
+const SHOT_STATUSES = [{ id: "unshot", label: "To film" }, { id: "shot", label: "Filmed" }];
 
 function statusLampHtml(status: string) {
   return '<span class="broll-status-lamp' + (status === "shot" ? ' is-shot' : '') + '" aria-hidden="true">' +
@@ -404,7 +404,7 @@ function cardHtml(e: PanelShot, starts: Record<string, number>) {
 
   const when = startOf(e, starts);
   const beat = e.rowId
-    ? '<button type="button" class="jump-link broll-scene-link" data-action="broll-jump" data-id="' + id + '" title="Go to scene ' +
+    ? '<button type="button" class="jump-link broll-scene-link" data-action="broll-jump" data-id="' + id + '" title="Go to beat ' +
         beatLabel(e) + '"><span class="broll-scene-n">' + beatLabel(e) + '</span>' + (when ? ' · ' + when : '') + '</button>'
     : e.orphaned
       ? '<span class="broll-muted">No longer in the script — its line was deleted.</span>'
@@ -483,7 +483,7 @@ function cardHtml(e: PanelShot, starts: Record<string, number>) {
         : e.desc ? '<div class="broll-card-desc">' + escapeHtml(e.desc) + '</div>' : '') +
       '<dl class="broll-fields">' +
         field("Status", statusFieldHtml(e)) +
-        field("Scene", beat) +
+        field("Beat", beat) +
         field("Location", location) +
         field("Assigned", assigned) +
         field("Props", propsEditHtml(e)) +
@@ -507,7 +507,7 @@ function bulkBarHtml(entries: readonly PanelShot[]) {
   return '<div class="broll-bulk-row">' +
       '<span class="broll-bulk-n">' + chosen.length + ' selected</span>' +
       '<button type="button" class="broll-bulk-btn btn-outline is-small" data-action="broll-bulk-shot">' +
-        icon("check") + (allShot ? 'Mark to shoot' : 'Mark shot') + '</button>' +
+        icon("check") + (allShot ? 'Mark to film' : 'Mark filmed') + '</button>' +
       '<select class="broll-bulk-select" id="broll-bulk-owner" aria-label="Assign the selected shots">' +
         '<option value="__none__" selected>Assign</option>' +
         '<option value="">Unassigned</option>' +
@@ -622,8 +622,8 @@ function emptyListHtml(entries: readonly PanelShot[]) {
       '<code>B-roll:</code> and whatever follows it becomes a shot to track — or add one below.</div>';
   }
   const msg = ({
-    unshot: "Nothing left to shoot — everything on the list is in the can.",
-    shot: "Nothing shot yet.",
+    unshot: "Nothing left to film — everything on the list is in the can.",
+    shot: "Nothing filmed yet.",
     flagged: "Nothing flagged."
   } as Record<string, string>)[(ports as PanelPortUse).view.current().filter] || "No shots match.";
   return '<div class="broll-empty">' + escapeHtml(msg) + '</div>';
@@ -729,7 +729,7 @@ function bulkMarkShot() {
   const entries = (ports as PanelPortUse).records.brollEntries().filter(function (e) { return selection[e.id]; });
   const allShot = entries.length && entries.every(function (e) { return e.status === "shot"; });
   const want = allShot ? "unshot" : "shot";
-  bulkUpdate({ status: want }, function (n) { return "Marked " + shotsWord(n) + (want === "shot" ? " shot" : " to shoot") + "."; });
+  bulkUpdate({ status: want }, function (n) { return "Marked " + shotsWord(n) + (want === "shot" ? " filmed" : " to film") + "."; });
 }
 
 function bulkFlag() {
@@ -1196,7 +1196,7 @@ function pageGroupHeadHtml(g: PanelGroup) {
   }
   return '<tr class="broll-page-group"><th colspan="7" scope="rowgroup"><span class="broll-page-group-in">' + title +
     '<span class="broll-page-group-count' + (done === g.items.length ? ' is-done' : '') + '">' +
-    done + '/' + g.items.length + ' shot</span></span></th></tr>';
+    done + '/' + g.items.length + ' filmed</span></span></th></tr>';
 }
 
 function pageRowHtml(e: PanelShot) {
@@ -1207,8 +1207,8 @@ function pageRowHtml(e: PanelShot) {
     '<td class="broll-page-c-check">' + checkHtml(e) + '</td>' +
     '<td class="broll-page-c-shot" data-label="Shot"><span class="broll-row-name" title="' + escapeHtml(e.name || "Untitled shot") + '">' +
       (e.shotNumber ? escapeHtml(e.shotNumber) + " " : "") + escapeHtml(e.name || "Untitled shot") + '</span>' + rowStateIconsHtml(Object.assign({}, e, { notes: "", reshoot: false })) + '</td>' +
-    '<td class="broll-page-c-scene" data-label="Scene">' + (e.rowId
-      ? '<button type="button" class="broll-page-scene" data-action="broll-page-jump" data-id="' + id + '" title="Go to scene ' +
+    '<td class="broll-page-c-scene" data-label="Beat">' + (e.rowId
+      ? '<button type="button" class="broll-page-scene" data-action="broll-page-jump" data-id="' + id + '" title="Go to beat ' +
           beatLabel(e) + '">' + beatLabel(e) + '</button>'
       : '<span class="broll-muted" title="' + (e.orphaned ? 'No longer in the script' : 'Added here') + '">—</span>') + '</td>' +
     '<td class="broll-page-c-props" data-label="Props" style="--prop:' + catColor("prop") + '">' +
@@ -1243,7 +1243,7 @@ function renderBrollPage() {
       ? '<table class="broll-page-table">' +
           '<colgroup><col class="broll-page-w-check"><col class="broll-page-w-shot"><col class="broll-page-w-scene">' +
           '<col class="broll-page-w-props"><col class="broll-page-w-cuts"><col class="broll-page-w-owner"><col class="broll-page-w-note"></colgroup>' +
-          '<thead><tr><th scope="col"><span class="broll-sr">Shot or to shoot</span></th><th scope="col">Shot</th><th scope="col">Scene</th>' +
+          '<thead><tr><th scope="col"><span class="broll-sr">Filmed or to film</span></th><th scope="col">Shot</th><th scope="col">Beat</th>' +
             '<th scope="col">Props</th><th scope="col">Cuts against</th><th scope="col">Assigned</th><th scope="col">Note</th></tr></thead>' +
           brollGroups(shown, (ports as PanelPortUse).view.current().pageGroup).map(function (g) {
             return '<tbody>' + pageGroupHeadHtml(g) + g.items.map(pageRowHtml).join("") + '</tbody>';

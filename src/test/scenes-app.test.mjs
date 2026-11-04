@@ -77,7 +77,7 @@ test("singleton Alt moves require consecutive confirmation and undo restores the
     const before = state(), undo = undoOwner().sizes().undo;
     key(direction, cell, { altKey: true });
     assert.equal(state(), before);
-    assert.equal(document.querySelector('#rows [data-section-id="s1"] .section-hint').textContent, "Press again to remove the section header");
+    assert.equal(document.querySelector('#rows [data-section-id="s1"] .section-hint').textContent, "Press again to remove the scene header");
     key("ArrowRight", cell);
     key(direction, cell, { altKey: true });
     assert.equal(state(), before);
@@ -172,7 +172,7 @@ test("boundary hint uses one persistent live region and only the visible Writer 
   assert.ok(live); assert.equal(live.hidden, false); assert.equal(live.textContent, "");
   writer.openWriter(); caret("r3"); key("Backspace");
   assert.equal(document.getElementById("section-hint-live"), live);
-  assert.equal(live.textContent, "Press Backspace again to remove the section header");
+  assert.equal(live.textContent, "Press Backspace again to remove the scene header");
   assert.equal(document.querySelectorAll('.section-hint:not([hidden])').length, 1);
   assert.equal(document.querySelectorAll('.section-hint[role="status"]').length, 0);
   key("ArrowRight");
@@ -186,7 +186,7 @@ test("section dividers count all scenes, fold without an edit and reset when ano
   const header = document.querySelector('#rows [data-section-id="s1"]');
   assert.ok(header);
   assert.equal(header.classList.contains("row"), false);
-  assert.match(header.querySelector(".section-stats").textContent, /2 scenes/);
+  assert.match(header.querySelector(".section-stats").textContent, /2 beats/);
   assert.equal(header.querySelector("[data-section-total]").textContent, "0:30");
   header.querySelector(".section-fold").click();
   assert.equal(document.activeElement, document.querySelector('#rows [data-section-id="s1"] .section-fold'));
@@ -208,7 +208,7 @@ test("mounted Writer confirms Backspace once, removes only the header, and undo 
   assert.equal(key("Backspace").defaultPrevented, true);
   assert.equal(state(), before);
   assert.equal(hint().hidden, false);
-  assert.equal(hint().textContent, "Press Backspace again to remove the section header");
+  assert.equal(hint().textContent, "Press Backspace again to remove the scene header");
   assert.equal(undoOwner().sizes().undo, undo);
   key("Backspace");
   assert.deepEqual(ids(), ["r1", "r2", "r3", "r4"]);
@@ -250,7 +250,7 @@ test("mounted Writer Delete mirrors removal, and a further Backspace joins norma
   const before = state();
   key("Delete");
   assert.equal(state(), before);
-  assert.equal(hint().textContent, "Press Delete again to remove the section header");
+  assert.equal(hint().textContent, "Press Delete again to remove the scene header");
   key("Delete");
   assert.equal(currentDocument().sections.length, 1);
   assert.deepEqual(ids(), ["r1", "r2", "r3", "r4"]);

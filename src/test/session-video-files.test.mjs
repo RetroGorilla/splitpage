@@ -82,7 +82,7 @@ test("desktop opens only a successfully granted token and forwards the current d
   const link = { name: "desktop-characterization.mp4", size: 9 };
   useDesktopForTest({ grantVideoFile: (value) => { grants.push(value); return Promise.resolve("video-token"); }, openVideoFile: () => { throw new Error("old bridge must not open"); } });
   openVideoFile(link);
-  assert.match(heard[0][0], /drop “desktop-characterization.mp4” onto this scene again/);
+  assert.match(heard[0][0], /drop “desktop-characterization.mp4” onto this beat again/);
   assert.deepEqual(heard[0].slice(1), ["warn", true]);
   grantVideoFile(file, link);
   await Promise.resolve();

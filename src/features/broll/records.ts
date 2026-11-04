@@ -25,8 +25,8 @@ interface BrollStatusLook {
 }
 
 const BROLL_STATUS_LOOKS: Record<BrollStatusId, { readonly label: string; readonly color: string }> = {
-  unshot: { label: "To shoot", color: "var(--text-dim)" },
-  shot: { label: "Shot", color: "var(--ok)" }
+  unshot: { label: "To film", color: "var(--text-dim)" },
+  shot: { label: "Filmed", color: "var(--ok)" }
 };
 
 export const BROLL_STATUSES: readonly BrollStatusLook[] = BROLL_STATUS_IDS.map(function (id) {

@@ -51,7 +51,7 @@
     {"label":"csv-tag-cell-separator","file":"src/adapters/formats/csv.ts","find":"(tags[f.number] || []).join(\"; \")","replace":"(tags[f.number] || []).join(\", \")"},
     {"label":"csv-broll-cell-separator","file":"src/adapters/formats/csv.ts","find":"(broll[f.number] || []).join(\"; \")","replace":"(broll[f.number] || []).join(\", \")"},
     {"label":"csv-total-needs-scenes","file":"src/adapters/formats/csv.ts","find":"facts.beats ? facts.status.shot","replace":"true ? facts.status.shot"},
-    {"label":"csv-total-text","file":"src/adapters/formats/csv.ts","find":"\" of \" + facts.beats + \" shot\"","replace":"\"/\" + facts.beats + \" shot\""},
+    {"label":"csv-total-text","file":"src/adapters/formats/csv.ts","find":"\" of \" + facts.beats + \" filmed\"","replace":"\"/\" + facts.beats + \" filmed\""},
     {"label":"csv-target-needs-target","file":"src/adapters/formats/csv.ts","find":"if (facts.target) {","replace":"if (!facts.target) {"},
     {"label":"csv-target-on-target","file":"src/adapters/formats/csv.ts","find":"facts.target.delta === \"0:00\" ? \"on target\"","replace":"facts.target.delta === \"0:01\" ? \"on target\""},
     {"label":"csv-target-over-under","file":"src/adapters/formats/csv.ts","find":"(facts.target.over ? \" over\" : \" under\")","replace":"(facts.target.over ? \" under\" : \" over\")"},

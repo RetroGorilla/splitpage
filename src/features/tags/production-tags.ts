@@ -620,7 +620,7 @@ export function applyTag() {
 
   const cellEl = document.querySelector('#rows .row[data-id="' + safeId(ctx.rowId, "r") +
     '"] .' + (ctx.field === "visualText" ? "visual" : "audio") + '-cell .cell-editable');
-  if (!cellEl) { (showToast as NonNullable<typeof showToast>)("That scene is no longer here.", "warn"); return; }
+  if (!cellEl) { (showToast as NonNullable<typeof showToast>)("That beat is no longer here.", "warn"); return; }
 
   const idx = (readSession as NonNullable<typeof readSession>)(function (doc) { return rowIndexOf(doc, (ctx.rowId as NonNullable<typeof ctx.rowId>)); });
   if (idx === -1) return;

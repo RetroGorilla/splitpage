@@ -416,8 +416,8 @@ function commentLocationHtml(rowId: string, field: string) {
   if (field === "title") return "Document title";
   const idx = (ports as CommentsRuntimePorts).document.read(function (doc) { return rowIndexOf(doc, rowId); });
   const fieldLabel = field === "audioText" ? "Audio" : "Visual";
-  if (idx === -1) return "Deleted scene · " + fieldLabel;
-  return 'Scene <span class="comment-loc-num">' + ((ports as CommentsRuntimePorts).document.numbering().beats[rowId]?.full ?? "") + '</span> · ' + fieldLabel;
+  if (idx === -1) return "Deleted beat · " + fieldLabel;
+  return 'Beat <span class="comment-loc-num">' + ((ports as CommentsRuntimePorts).document.numbering().beats[rowId]?.full ?? "") + '</span> · ' + fieldLabel;
 }
 
 function commentThreadNumbers() {
@@ -958,7 +958,7 @@ export function restoreConflictValue(commentId: string | null) {
     return;
   }
   const ri = (ports as CommentsRuntimePorts).document.read(function (doc) { return rowIndexOf(doc, c.rowId); });
-  if (ri === -1) { (ports as CommentsRuntimePorts).notices.show("That scene no longer exists.", "warn"); return; }
+  if (ri === -1) { (ports as CommentsRuntimePorts).notices.show("That beat no longer exists.", "warn"); return; }
 
   (ports as CommentsRuntimePorts).history.keep("Before using your version of " + (c.conflictField || "a field"));
   const value: ConflictValue = c.field === "visualImage"

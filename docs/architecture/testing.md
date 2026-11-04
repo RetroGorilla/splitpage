@@ -121,7 +121,7 @@ point; compare a later run only under the same conditions.
 The long fixture ends with three redraw scenes, timed the way typing is (start of
 the input to the frame after it) with one click per sample and 500 ms between
 samples: `long stamp a scene` (cycles the status of scenes 3 to 8 twice, which
-stamps each row), `long hide shot scenes` (toggles Hide shot scenes eight times)
+stamps each row), `long hide shot scenes` (toggles Hide filmed beats eight times)
 and `long display preference` (switches the clock between 24 and 12 hours eight
 times, from the open Settings dialog). Their budget is the new-scene limit of
 65 ms. They run after the export timing, so the older cases are unchanged.
@@ -190,7 +190,7 @@ runtime (milestone 3, decisions D2 and D3).
   - `contentMemo` (`memo.ts`) takes the seal as its second argument, so every
     memo does: the production readers (`readers.ts`: `tagsInField`,
     `cueNamesInField`, `brollInField`, `brollPropsInField`, `wordCount`) and
-    the rundown's scene snippet (`05f-rundown.js`);
+    the rundown's beat snippet (`05f-rundown.js`);
   - the rich-text adapter's cell reader (`decode.ts`,
     `createCellReader(decode, seal)`), which is `cellOf`; `CellReader` returns
     `Frozen<Run[]>`, and a run's comment ids are `readonly string[]`;
@@ -364,10 +364,10 @@ from run to run are masked in one of two ways.
 | --- | --- |
 | `richtext` | `sanitizeHtml`, `fromHtml` and its media, `toHtml(fromHtml(x))`, `htmlToMarkdown`, `storedHtmlFromDom` and video-card HTML over a corpus; asserts INV-10 and that `toHtml` output is already in stored form |
 | `migrate` | `migrateRows`/`migrateDocument` JSON, the registry's records, the shas queued for persistence (through `setBackend`), idempotence and docIds, including a file saved before the tag registry; the file runs in its own process, so the registry starts empty |
-| `normalisers` | One table per normaliser that moves to core (`normalisers-<table>.json`), every case at a limit, one past it and one short of it: people names, the `migrateRows` field limits, `plainText`'s control characters, `plainName`, `safeId`, `safeHref`, `safeImageSrc`, the image size attributes, `DIRECTION_MAX` and `importDirections`, `normalizePersonColors`, `withPageHead`, scene and target lengths, gallery limits and b-roll props. Long repetitive strings are stored as runs, long lists and maps as a count with their first and last entries |
+| `normalisers` | One table per normaliser that moves to core (`normalisers-<table>.json`), every case at a limit, one past it and one short of it: people names, the `migrateRows` field limits, `plainText`'s control characters, `plainName`, `safeId`, `safeHref`, `safeImageSrc`, the image size attributes, `DIRECTION_MAX` and `importDirections`, `normalizePersonColors`, `withPageHead`, beat and target lengths, gallery limits and b-roll props. Long repetitive strings are stored as runs, long lists and maps as a count with their first and last entries |
 | `merge` | `mergeStates` over 66 cases, one fixture each (`merge-<case>.json`), each storing its three inputs and the result: every `STATE_FIELDS` key changed by each side, rows, text and conflict cards, comments, tags, b-roll, people, colours, gallery, docIds. Built inputs must match the stored ones as exact text. Also every branch of the list mergers (`merge-list-mergers`), a field with no strategy throwing, and ids that are `Object.prototype` names (`merge-prototype-ids-*`: merged like any other id since #278). The clock is fixed at `FIXED_ISO` and `Math.random` is seeded; conflict-card ids are masked after their shape is checked |
 | `production` | `productionEntries` and `brollEntries` reads, the records plan (`derivedRecordsPlan`, with `healTagRegistry` as its tag half) and cue retitling, over the long demo (as shipped, registry emptied, shots dropped) and crafted documents; reads are asserted not to change the document. Also the tag and b-roll limits and status cycles (`production-limits`) and the Gear panel's quick add (`production-gear-quick-add`) |
-| `exports` | The bytes of the project and text writers over five documents (`exports-<name>.json`, M5): the `.splitpage` file, the Markdown project, the standalone HTML's state data, title and description, the Markdown export, its three-scene preview and table form, the images it writes and the export facts, each as a digest, with the clock fixed and the date format pinned to UTC |
+| `exports` | The bytes of the project and text writers over five documents (`exports-<name>.json`, M5): the `.splitpage` file, the Markdown project, the standalone HTML's state data, title and description, the Markdown export, its three-beat preview and table form, the images it writes and the export facts, each as a digest, with the clock fixed and the date format pinned to UTC |
 | `undo` | Which `STATE_FIELDS` keys an edit records as an undo entry (`undo-state-fields`), so a list derived from field policies must equal `NO_UNDO_KEYS` in `src/core/document/fields.ts` |
 
 A fixture's name starts with its golden (`merge-…`, `production-…`,

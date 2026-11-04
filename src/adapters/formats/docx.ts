@@ -433,7 +433,7 @@ function tableBordersXml() {
     '<w:insideH ' + hair + '/><w:insideV w:val="nil"/></w:tblBorders>';
 }
 
-const BREAKDOWN_HEAD_WORDS = ["Item", "Status", "Scenes", "Assigned to", "Notes"];
+const BREAKDOWN_HEAD_WORDS = ["Item", "Status", "Beats", "Assigned to", "Notes"];
 
 const FLAG_COLOR = "C4302A";
 const SHOT_INDENT = 400;
@@ -460,7 +460,7 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
 
   let rowsXml = "";
   rowsXml += "<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>" +
-    headCellXml("Scene", COL_BEAT, null, { mar: { left: 0 } }) +
+    headCellXml("Beat", COL_BEAT, null, { mar: { left: 0 } }) +
     headCellXml("Visual", COL_VISUAL, PRINT_COLORS.visual) +
     headCellXml("Audio", COL_AUDIO, PRINT_COLORS.audio) +
     headCellXml("Read", COL_READ, null, { jc: "right", mar: { right: 0 } }) +
@@ -574,7 +574,7 @@ export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Ui
         textRunXml(g.label, { b: true, sz: 20 }) +
         (g.start ? textRunXml("  " + g.start, { color: PRINT_COLORS.faint, sz: 18 }) : "") +
         "<w:r><w:tab/></w:r>" +
-        textRunXml(g.done + "/" + g.total + " shot", { color: PRINT_COLORS.faint, sz: 18 }) + "</w:p>";
+        textRunXml(g.done + "/" + g.total + " filmed", { color: PRINT_COLORS.faint, sz: 18 }) + "</w:p>";
       g.items.forEach(function (it, k) {
         const details = [];
         if (it.location) details.push(textRunXml(it.location, { color: PRINT_COLORS.dim, sz: 17 }));
@@ -876,7 +876,7 @@ export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions 
   const wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
 
   let body = titleParaXml(doc.title || "Untitled Script") +
-    metaParaXml(["Narration", plural(rows.length, "scene"), groupDigits(words) + (words === 1 ? " word" : " words"),
+    metaParaXml(["Narration", plural(rows.length, "beat"), groupDigits(words) + (words === 1 ? " word" : " words"),
       "about " + formatDuration(words / Number(wpm) * 60) + " at " + String(wpm) + " wpm"].join(" · "));
 
   rows.forEach(function (row) {
@@ -1030,7 +1030,9 @@ const AUDIO_HEAD = /^(audio|voice|vo|narration|narrator|dialogue|dialog|script|l
 
 const BREAKDOWN_HEADERS = [
   ["category", "item", "status", "assigned to", "mentions", "scenes", "notes"],
-  ["item", "status", "scenes", "assigned to", "notes"]
+  ["category", "item", "status", "assigned to", "mentions", "beats", "notes"],
+  ["item", "status", "scenes", "assigned to", "notes"],
+  ["item", "status", "beats", "assigned to", "notes"]
 ];
 function isBreakdownHeader(head: readonly string[]): boolean {
   return BREAKDOWN_HEADERS.some(function (words) {
@@ -1355,7 +1357,7 @@ function stylesXml(): string {
       '<w:sz w:val="' + MARKER_SIZE + '"/><w:bdr w:val="single" w:sz="4" w:space="0" w:color="' + C.audio + '"/>') +
     charStyle(BROLL_STYLE, "B-roll key", '<w:b/><w:color w:val="' + C.broll + '"/><w:sz w:val="' + BROLL_SIZE + '"/>' +
       '<w:bdr w:val="single" w:sz="4" w:space="0" w:color="' + C.broll + '"/>') +
-    charStyle(BEAT_NO_STYLE, "Scene number", '<w:color w:val="' + C.faint + '"/><w:sz w:val="16"/>') +
+    charStyle(BEAT_NO_STYLE, "Beat number", '<w:color w:val="' + C.faint + '"/><w:sz w:val="16"/>') +
     '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/>' +
       '<w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/>' +
       '<w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>' +

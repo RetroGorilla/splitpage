@@ -121,7 +121,7 @@ function paint() {
   let videos = 0;
   slots.forEach(function (s) { videos += s.links.length; });
 
-  (document.getElementById("gallery-title") as HTMLElement).textContent = "Scene " + ((ports as OverlayPortUse).document.numbering().beats[(view as GalleryView).rowId]?.full ?? "") + " · Visual";
+  (document.getElementById("gallery-title") as HTMLElement).textContent = "Beat " + ((ports as OverlayPortUse).document.numbering().beats[(view as GalleryView).rowId]?.full ?? "") + " · Visual";
   const summary = [];
   if (pictures) summary.push(plural(pictures, "picture"));
   if (videos) summary.push(plural(videos, "video"));
@@ -267,7 +267,7 @@ function playState(poster: VideoLink | null | undefined): GalleryPlay | null {
     return why ? { note: why } : { can: true, embed: v };
   }
   if ((ports as OverlayPortUse).sessionVideos.has(poster)) return { can: true, file: true };
-  return { note: "Only this video’s name is kept, so it can’t play here. Drop the file on this scene again to play it." };
+  return { note: "Only this video’s name is kept, so it can’t play here. Drop the file on this beat again to play it." };
 }
 
 function hostName(play: GalleryPlay) {

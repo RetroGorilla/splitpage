@@ -74,7 +74,7 @@ function writerBlockHtml(row: WriterRow) {
   const id = escapeHtml(row.id);
   return '<div class="wr-block" data-row="' + id + '">' +
       '<div class="wr-gutter" data-action="writer-jump" data-row="' + id +
-        '" title="Open this scene in the split view">' +
+        '" title="Open this beat in the split view">' +
         '<span class="wr-num">' + ((numbering as WriterFeaturePorts["document"]["numbering"])().beats[row.id]?.full ?? "") + '</span>' +
         '<span class="wr-visual">' + visual + '</span>' +
       '</div>' +
@@ -111,7 +111,7 @@ export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
   if (document.activeElement !== titleEl) titleEl.value = draw.title;
   titleEl.readOnly = draw.readOnly;
   if (draw.html === null) {
-    doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a scene.</div>';
+    doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a beat.</div>';
   } else {
     doc.innerHTML = draw.html;
     doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
@@ -183,7 +183,7 @@ function mergeWriterRows(intoIdx: number) {
   const cur = rows[intoIdx + 1];
   if (!prev || !cur) return;
   if ((readSession as WriterFeaturePorts["document"]["read"])(bothBeatsHaveVisual(prev.id, (htmlToPlainText as WriterFeaturePorts["text"]["htmlToPlainText"])))) {
-    (showToast as WriterFeaturePorts["notices"]["show"])("Both scenes have a visual — join them in the split view, so you can pick which one to keep.", "warn");
+    (showToast as WriterFeaturePorts["notices"]["show"])("Both beats have a visual — join them in the split view, so you can pick which one to keep.", "warn");
     return;
   }
 

@@ -30,7 +30,7 @@ export function createSceneBoundaryRemoval(ports: BoundaryRemovalPorts): SceneBo
       cancel();
       if (confirms) { ports.remove(id, key); return true; }
       pending = { id, key, until: ports.timers.now() + 2000, timer: ports.timers.start(cancel, 2000) };
-      ports.hint(id, key.startsWith("Alt+") ? "Press again to remove the section header" : "Press " + key + " again to remove the section header");
+      ports.hint(id, key.startsWith("Alt+") ? "Press again to remove the scene header" : "Press " + key + " again to remove the scene header");
       return false;
     },
     cancel,

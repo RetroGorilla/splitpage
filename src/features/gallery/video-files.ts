@@ -61,7 +61,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     const token = videoFileTokens[videoLinkKey(link)];
     if (!token) {
       ports.notices.show("Splitpage only opens a video file you dropped or pasted in since it started — " +
-        "drop “" + name + "” onto this scene again to open it from here.", "warn", true);
+        "drop “" + name + "” onto this beat again to open it from here.", "warn", true);
       return;
     }
     Promise.resolve(ports.desktop.open(token)).then(function (res: DesktopVideoResult | null) {

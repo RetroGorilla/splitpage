@@ -144,7 +144,7 @@
               <div class="menu-group-head" id="fm-g-doc">This document</div>
               <button type="button" role="menuitem" class="mi" data-file-action="history"><svg class="mi-icon" aria-hidden="true"><use href="#i-history"/></svg><span class="mi-text"><span class="mi-label">Version history…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="find" data-keys="mod+f"><svg class="mi-icon" aria-hidden="true"><use href="#i-find"/></svg><span class="mi-text"><span class="mi-label">Find &amp; replace</span><span class="mi-why" hidden></span></span></button>
-              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-hide-shot" id="menu-hide-shot" data-keys="mod+alt+h" title="Collapse scenes marked Shot into a thin strip"><svg class="mi-icon" aria-hidden="true"><use href="#i-eye-off"/></svg><span class="mi-text"><span class="mi-label">Hide shot scenes</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
+              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-hide-shot" id="menu-hide-shot" data-keys="mod+alt+h" title="Collapse beats marked Filmed into a thin strip"><svg class="mi-icon" aria-hidden="true"><use href="#i-eye-off"/></svg><span class="mi-text"><span class="mi-label">Hide filmed beats</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimise the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-browser" id="menu-present-browser" data-keys="mod+shift+p" data-keys-only="desktop" hidden title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app"><svg class="mi-icon" aria-hidden="true"><use href="#i-present"/></svg><span class="mi-text"><span class="mi-label">Present in browser (Follow My Voice)</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-chromium" id="menu-present-chromium" hidden title="Opens this script's teleprompter in Edge, Chrome or another Chromium browser, which follows your voice with its own speech recognition"><svg class="mi-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="mi-text"><span class="mi-label">Use Chromium Speech Recognition</span><span class="mi-why" hidden></span></span></button>
@@ -199,7 +199,7 @@
     </div>
     <section class="rundown" id="rundown" aria-label="Rundown" hidden>
       <div class="rundown-ruler" aria-hidden="true"></div>
-      <div class="rundown-sections" aria-label="Sections" hidden></div>
+      <div class="rundown-sections" aria-label="Scenes" hidden></div>
       <div class="rundown-track">
         <div class="rundown-blocks"></div>
         <div class="rundown-overlay" id="rundown-overlay" aria-hidden="true"></div>
@@ -280,7 +280,7 @@
   </div>
 
   <div class="col-head">
-    <div class="col-head-cell scene">Scene</div>
+    <div class="col-head-cell scene">Beat</div>
     <div class="col-head-cell visual"><span class="col-lamp" aria-hidden="true"></span>Visual</div>
     <div class="col-head-cell audio"><span class="col-lamp" aria-hidden="true"></span>Audio</div>
     <div class="col-head-cell read">Read</div>
@@ -289,7 +289,7 @@
   <div id="rows"></div>
 
   <div class="add-row-bar">
-    <button class="add-row-btn" type="button" data-action="add-row">+ Add scene</button>
+    <button class="add-row-btn" type="button" data-action="add-row">+ Add beat</button>
   </div>
 </div>
 
@@ -345,7 +345,7 @@
     <h3 class="tagging-help-label">Keys</h3>
     <ul class="tagging-help-list tagging-help-keys">
       <li class="tagging-help-row"><span class="tagging-help-caps"><kbd>Tab</kbd></span><span>completes a tag you've already used, in its own category</span></li>
-      <li class="tagging-help-row"><span class="tagging-help-caps"><kbd>Ctrl</kbd><kbd>Enter</kbd></span><span>starts the next scene and jumps into it</span></li>
+      <li class="tagging-help-row"><span class="tagging-help-caps"><kbd>Ctrl</kbd><kbd>Enter</kbd></span><span>starts the next beat and jumps into it</span></li>
       <li class="tagging-help-row"><span class="tagging-help-caps"><kbd>Ctrl</kbd><kbd>F</kbd></span><span>find and replace across the whole script</span></li>
     </ul>
     <p class="tagging-help-note">Click a tag in the script, or its card in <strong>Production</strong>, to say who's responsible and keep notes, links or file paths against it.</p>
@@ -458,7 +458,7 @@
     <div class="pp-where">
       <span class="pp-section" id="pp-section" hidden></span>
       <span class="pp-scene-pos" id="pp-scene-pos" aria-hidden="true"></span><span class="pp-sr" id="pp-scene-pos-sr"></span>
-      <span class="pp-scene-start" id="pp-scene-start" title="Where this scene starts"></span>
+      <span class="pp-scene-start" id="pp-scene-start" title="Where this beat starts"></span>
     </div>
     <div class="pp-clock" id="pp-clock" role="timer">
       <span class="pp-elapsed" id="pp-elapsed">00:00</span>
@@ -506,14 +506,14 @@
       </div>
       <div class="div-sep" aria-hidden="true"></div>
       <div class="pp-group pp-modes">
-        <button id="pp-scene-mode" type="button" class="pp-btn" aria-pressed="false" title="Cue and auto-pause one scene at a time"><svg class="pp-icon" aria-hidden="true"><use href="#i-scene-mode"/></svg>Scene mode</button>
+        <button id="pp-scene-mode" type="button" class="pp-btn" aria-pressed="false" title="Cue and auto-pause one beat at a time"><svg class="pp-icon" aria-hidden="true"><use href="#i-scene-mode"/></svg>Beat mode</button>
         <div class="pp-stepper pp-scene-step" id="pp-scene-step" hidden>
-          <button id="pp-scene-prev" type="button" class="pp-step-btn" aria-label="Previous scene" title="Previous scene (←)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
+          <button id="pp-scene-prev" type="button" class="pp-step-btn" aria-label="Previous beat" title="Previous beat (←)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
           <span id="pp-scene-readout" class="pp-scene-readout" hidden></span>
-          <button id="pp-scene-next" type="button" class="pp-step-btn" aria-label="Next scene" title="Next scene (→)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+          <button id="pp-scene-next" type="button" class="pp-step-btn" aria-label="Next beat" title="Next beat (→)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
         </div>
         <button id="pp-voice" type="button" class="pp-btn"><svg class="pp-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="pp-lamp" aria-hidden="true"></span><span class="pp-voice-label">Follow My Voice</span></button>
-        <button id="pp-skip-shot" type="button" class="pp-btn" aria-pressed="false" title="Leave out the scenes already marked Shot"><svg class="pp-icon" aria-hidden="true"><use href="#i-eye-off"/></svg>Skip shot</button>
+        <button id="pp-skip-shot" type="button" class="pp-btn" aria-pressed="false" title="Leave out the beats already marked Filmed"><svg class="pp-icon" aria-hidden="true"><use href="#i-eye-off"/></svg>Skip filmed</button>
       </div>
       <div class="pp-group pp-rig">
         <button id="pp-mirror" type="button" class="pp-btn" aria-pressed="false" title="Flip left-right — for a glass beam-splitter in front of the lens (M)"><svg class="pp-icon" aria-hidden="true"><use href="#i-mirror"/></svg>Mirror</button>
@@ -532,7 +532,7 @@
     <input type="text" class="writer-title" id="writer-title" aria-label="Script title" spellcheck="false">
     <span id="writer-version" class="title-version" hidden></span>
     <span class="writer-stats">
-      <span><b id="wr-scenes">0</b> scenes</span>
+      <span><b id="wr-scenes">0</b> beats</span>
       <span><b id="wr-words">0</b> words</span>
       <span>⏱ <b id="wr-runtime">0:00</b></span>
     </span>
@@ -557,9 +557,9 @@
       <input id="wr-size" type="range" min="16" max="34" value="19" aria-label="Text size">
     </div>
     <div class="div-sep"></div>
-    <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the scene's visual, just its number, or nothing at all">Visuals</button>
+    <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the beat's visual, just its number, or nothing at all">Visuals</button>
     <button type="button" id="wr-export">Export narration</button>
-    <span class="writer-hint">Enter starts a new scene · Shift+Enter is a line break</span>
+    <span class="writer-hint">Enter starts a new beat · Shift+Enter is a line break</span>
   </div>
   <div class="writer-scroll" id="writer-scroll">
     <div class="writer-doc" id="writer-doc"></div>
@@ -657,7 +657,7 @@
   <div class="modal-panel scene-gallery-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-title" aria-describedby="gallery-summary">
     <div class="scene-gallery-head">
       <div class="scene-gallery-heading">
-        <h2 id="gallery-title">Scene · Visual</h2>
+        <h2 id="gallery-title">Beat · Visual</h2>
         <p class="scene-gallery-summary" id="gallery-summary"></p>
       </div>
       <button type="button" class="scene-gallery-close" id="gallery-close" aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
@@ -712,11 +712,11 @@
 <div class="modal-backdrop" id="md-rows-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="md-rows-title">
     <div class="modal-header">
-      <h2 id="md-rows-title">This file's scenes don't line up</h2>
+      <h2 id="md-rows-title">This file's beats don't line up</h2>
     </div>
     <p class="modal-hint" id="md-rows-detail"></p>
     <p class="modal-hint">Keeping Splitpage's record ignores the table and opens the script exactly as it
-      was last saved here. Using the table's text rebuilds the scenes from it, in order — your
+      was last saved here. Using the table's text rebuilds the beats from it, in order — your
       breakdown, crew, comments and reading speed are kept either way.</p>
     <div class="modal-footer">
       <span></span>
@@ -738,14 +738,14 @@
     <div class="panel-tabs" id="production-modes" role="radiogroup" aria-label="Group the breakdown by">
       <button type="button" class="panel-tab" data-group="cat" role="radio" aria-checked="true">Category</button>
       <button type="button" class="panel-tab" data-group="person" role="radio" aria-checked="false">Person</button>
-      <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Scene</button>
+      <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Beat</button>
       <button type="button" class="panel-tab" data-group="shoot" role="radio" aria-checked="false">Shoot</button>
     </div>
     <button type="button" class="btn-outline is-small" data-action="export-breakdown" title="Export this breakdown as a spreadsheet" aria-label="Export this breakdown as a spreadsheet (CSV)"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>CSV</button>
   </div>
   <div class="bulk-bar" id="production-bulk" hidden></div>
   <div class="tag-col-labels" id="production-cols" aria-hidden="true" hidden>
-    <span>Item</span><span>Status</span><span>Scenes</span><span>Owner</span>
+    <span>Item</span><span>Status</span><span>Beats</span><span>Owner</span>
   </div>
   <div class="comments-list" id="production-list"></div>
 </div>
@@ -762,7 +762,7 @@
   <div class="panel-tabbar">
     <div class="panel-tabs" id="gear-modes" role="radiogroup" aria-label="Group gear by">
       <button type="button" class="panel-tab" data-group="flat" role="radio" aria-checked="true">List</button>
-      <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Scene</button>
+      <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Beat</button>
     </div>
     <button type="button" class="gear-packing-btn" data-action="export-packing-gear" title="Export a printable packing list" aria-label="Packing list: export a printable PDF"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>Packing list</button>
   </div>
@@ -813,7 +813,7 @@
         <label class="broll-page-group-pick">Group
           <select id="broll-page-group">
             <option value="location">Location</option>
-            <option value="scene">Scene</option>
+            <option value="scene">Beat</option>
             <option value="person">Person</option>
           </select>
         </label>
@@ -994,7 +994,7 @@
       <div class="newtab-cards" id="newtab-cards" role="group" aria-label="Starter scripts">
         <button type="button" class="newtab-card is-blank" data-newtab-action="new">
           <strong class="newtab-card-name">Blank script</strong>
-          <span class="newtab-card-desc">One empty scene, and nothing else.</span>
+          <span class="newtab-card-desc">One empty beat, and nothing else.</span>
           <span class="newtab-preview is-blank" aria-hidden="true">
             <svg class="nt-icon" aria-hidden="true"><use href="#i-plus"/></svg>
           </span>
@@ -1024,7 +1024,7 @@
         <span class="newtab-foot-sep" aria-hidden="true">·</span>
         <a href="#" data-newtab-action="dismiss">Look at the example script</a>
         <span class="newtab-foot-sep" aria-hidden="true">·</span>
-        <a href="#" data-newtab-action="long-demo">Open the long demo (30 scenes)</a>
+        <a href="#" data-newtab-action="long-demo">Open the long demo (30 beats)</a>
         <span class="newtab-desktop" id="newtab-desktop">
           <svg class="nt-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
           <span>Want its own window and unlimited version history?</span>

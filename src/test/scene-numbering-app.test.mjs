@@ -70,7 +70,7 @@ test("#1186: an old document reorders, saves and reopens with identity, statuses
   Object.defineProperty(track, "clientWidth", { configurable: true, value: 1200 });
   renderRundown();
   assert.deepEqual(Array.from(document.querySelectorAll(".rd-num"), el => el.textContent), ["1", "1", "2", "1"]);
-  assert.deepEqual(Array.from(document.querySelectorAll(".rd-block"), el => el.title.split(" · ")[0]), expected.map(n => "Scene " + n));
+  assert.deepEqual(Array.from(document.querySelectorAll(".rd-block"), el => el.title.split(" · ")[0]), expected.map(n => "Beat " + n));
   openBrollPanel();
   assert.match(document.querySelector('#broll-list [data-id="bs_one"] .broll-row-name').textContent, /^C\.1\.1 /);
   assert.match(document.querySelector('#broll-list [data-id="bs_two"] .broll-row-name').textContent, /^C\.1\.2 /);
@@ -82,11 +82,11 @@ test("#1186: an old document reorders, saves and reopens with identity, statuses
   writer.closeWriter();
   present.openPrompter();
   present.setPrompterBeatMode(true);
-  assert.equal(document.getElementById("pp-scene-readout").textContent, "Scene C.1 of 4");
+  assert.equal(document.getElementById("pp-scene-readout").textContent, "Beat C.1 of 4");
   for (let i = 0; i < 3; i++) present.stepBeat(-1);
-  assert.equal(document.getElementById("pp-scene-readout").textContent, "Scene A.1 of 4");
+  assert.equal(document.getElementById("pp-scene-readout").textContent, "Beat A.1 of 4");
   for (let i = 0; i < 3; i++) present.stepBeat(1);
-  assert.equal(document.getElementById("pp-scene-readout").textContent, "Scene C.1 of 4");
+  assert.equal(document.getElementById("pp-scene-readout").textContent, "Beat C.1 of 4");
   present.closePrompter();
   const exported = exportDocumentOf(reopened);
   assert.deepEqual(beatFacts(exported).map(row => row.number), expected);

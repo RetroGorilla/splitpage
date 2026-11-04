@@ -146,12 +146,12 @@ export function exportFacts(doc: ExportDocument, services: ExportServices = expo
 }
 
 export function exportSummaryParts(facts: ExportFacts): string[] {
-  const out = [plural(facts.beats, "scene"), facts.runtime + " running time"];
+  const out = [plural(facts.beats, "beat"), facts.runtime + " running time"];
   if (facts.target) {
     out.push("Target " + facts.target.text + " · " +
       (facts.target.delta === "0:00" ? "on target" : facts.target.delta + (facts.target.over ? " over" : " under")));
   }
-  if (facts.beats) out.push(facts.status.shot + " of " + facts.beats + " shot");
+  if (facts.beats) out.push(facts.status.shot + " of " + facts.beats + " filmed");
   return out;
 }
 
@@ -163,7 +163,7 @@ export function exportComments(doc: ExportDocument, opts?: CommentOptions | null
     return Object.assign(c, {
       number: nums[c.id] || null,
       beat: beat,
-      where: c.field === "title" ? "Document title" : beat ? "Scene " + beat + " · " + field : "Deleted scene"
+      where: c.field === "title" ? "Document title" : beat ? "Beat " + beat + " · " + field : "Deleted beat"
     });
   });
   let i = 0;
@@ -212,7 +212,7 @@ export function exportBrollBeats(doc: ExportDocument, services: ExportServices =
     if (!g) {
       const f = e.rowIndex === -1 ? null : facts[e.rowIndex];
       g = byRow[key] = {
-        label: f ? "Scene " + f.number : "Not in the script",
+        label: f ? "Beat " + f.number : "Not in the script",
         beat: f ? f.number : "",
         start: f ? f.start : "",
         done: 0,
@@ -234,5 +234,5 @@ export function brollSummaryText(groups: readonly BrollBeat[]): string {
   groups.forEach(function (g) {
     g.items.forEach(function (r) { all++; if (r.shot) shot++; if (r.flagged) flagged++; });
   });
-  return shot + " of " + all + " shot" + (flagged ? " · " + flagged + " flagged" : "");
+  return shot + " of " + all + " filmed" + (flagged ? " · " + flagged + " flagged" : "");
 }

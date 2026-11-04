@@ -425,7 +425,7 @@ test("E3: two scenes with visuals are refused with no effect at all, whatever th
     const h = opened(() => joinOf(beat("a", "One.", s[1]), beat("b", "Two.", s[2])));
     const before = snapshot(h);
     const p = ports();
-    assert.deepEqual(runConfined(h.session, joinBeatsCommand("a", p)), { kind: "rejected", reason: "both scenes have a visual" }, s[0]);
+    assert.deepEqual(runConfined(h.session, joinBeatsCommand("a", p)), { kind: "rejected", reason: "both beats have a visual" }, s[0]);
     assert.equal(snapshot(h), before, s[0]);
     assert.equal(p.asked(), 0, s[0]);
     assert.deepEqual(h.log, [], s[0]);

@@ -27,7 +27,7 @@ jsclick #comments-panel-close
 eval document.querySelector('#rows [data-section-id="p"] .section-fold').click();document.querySelector('#rows .row[data-id="c"] .audio-cell .cell-editable').focus();window.beforeMove=JSON.stringify(F.state());true
 key alt+shift ArrowUp
 expect JSON.stringify(F.state()) === beforeMove
-expect document.getElementById('section-hint-live').textContent === 'Press again to remove the section header'
+expect document.getElementById('section-hint-live').textContent === 'Press again to remove the scene header'
 eval var c=document.activeElement;c.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',altKey:true,repeat:true,bubbles:true}));true
 key alt+shift ArrowUp
 wait F.state().rows.map(function(r){return r.id;}).join(',') === 'a,c,b,d'

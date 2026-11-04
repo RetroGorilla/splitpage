@@ -534,13 +534,13 @@ function blockHtml(row: BeatRow, b: RundownBlock, isCurrent: boolean, focusable:
   const st = rowStatus(row.status) || ROW_STATUSES[0] as StatusLook;
   const num = ports.document.numbering().beats[row.id]?.full ?? "";
   const len = formatDuration(b.seconds);
-  const label = "Scene " + num + ", " + len + ", " + st.label.toLowerCase() + (isCurrent ? " — current scene" : "");
+  const label = "Beat " + num + ", " + len + ", " + st.label.toLowerCase() + (isCurrent ? " — current beat" : "");
   const snip = beatSnippet(row);
   return '<button type="button" class="rd-block is-' + escapeHtml(st.id) + (isCurrent ? ' is-current' : '') +
     '" data-row="' + escapeHtml(row.id) + '" data-i="' + b.index + '" tabindex="' + (focusable ? '0' : '-1') + '"' +
     (isCurrent ? ' aria-current="true"' : '') +
     ' style="left:' + b.left + 'px;width:' + b.width + 'px" aria-label="' + escapeHtml(label) +
-    '" title="Scene ' + num + ' · ' + len + ' · ' + escapeHtml(st.label) + '">' +
+    '" title="Beat ' + num + ' · ' + len + ' · ' + escapeHtml(st.label) + '">' +
     '<span class="rd-in"><span class="rd-num">' + (ports.document.numbering().beats[row.id]?.short ?? "") + '</span>' +
     (st.id === "shot" ? CHECK_SVG : '') +
     '<span class="rd-len">' + len + '</span>' +
@@ -1031,7 +1031,7 @@ function showDrop(x: number): void {
   const gx = tenth(gapX(K, g));
   els.marker.hidden = false;
   els.marker.style.left = gx + "px";
-  const words = g === 0 ? "Move to the start" : "Move to after scene " + (ports.document.numbering().beats[ports.document.current()?.rows[g - 1]?.id ?? ""]?.full ?? "");
+  const words = g === 0 ? "Move to the start" : "Move to after beat " + (ports.document.numbering().beats[ports.document.current()?.rows[g - 1]?.id ?? ""]?.full ?? "");
   if (els.label.textContent !== words) els.label.textContent = words;
   els.label.hidden = false;
   const half = (els.label.offsetWidth || 0) / 2;

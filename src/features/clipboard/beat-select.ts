@@ -190,7 +190,7 @@ function prefetchPictures() {
   if (shas.length) (ports as BeatSelectPorts).pictures.ensureBytes(shas);
 }
 
-function count(n: number) { return n === 1 ? "1 scene" : n + " scenes"; }
+function count(n: number) { return n === 1 ? "1 beat" : n + " beats"; }
 
 function writeBeats(cd: DataTransfer, cut: boolean) {
   const ids = selectedBeatIds();
@@ -327,7 +327,7 @@ function pasteClip(clip: NonNullable<ReturnType<typeof parseBeatPayload>>, after
     (ports as BeatSelectPorts).pictures.ensureBytes(want).then(function (missing) {
       if (!missing.length) return;
       (ports as BeatSelectPorts).notices.show((missing.length === 1 ? "A picture" : missing.length + " pictures") +
-        " in the pasted scenes could not be found here — the scenes show where each one was.", "warn");
+        " in the pasted beats could not be found here — the beats show where each one was.", "warn");
     });
   }
   return res;
@@ -402,10 +402,10 @@ function ensureMenu() {
   menuEl.setAttribute("role", "menu");
   menuEl.hidden = true;
   menuEl.innerHTML =
-    menuItem("copy", "i-copy", "Copy scenes", "Ctrl+C") +
-    menuItem("cut", "i-clipboard", "Cut scenes", "Ctrl+X") +
-    menuItem("delete", "i-trash", "Delete scenes", "Del", true) +
-    menuItem("new", "i-file-plus", "New script from these scenes", "");
+    menuItem("copy", "i-copy", "Copy beats", "Ctrl+C") +
+    menuItem("cut", "i-clipboard", "Cut beats", "Ctrl+X") +
+    menuItem("delete", "i-trash", "Delete beats", "Del", true) +
+    menuItem("new", "i-file-plus", "New script from these beats", "");
   menuEl.addEventListener("mousedown", function (e) { e.preventDefault(); });
   menuEl.addEventListener("click", function (e) {
     const btn = (e.target as Element).closest<HTMLButtonElement>("[data-scene-action]");

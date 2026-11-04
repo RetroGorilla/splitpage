@@ -148,7 +148,7 @@ test("clean to read: widths, wrapping, the heading frozen, filtered and printed 
     const i = script.rows.findIndex((r, n) => n > 0 && r[2] === label);
     return look(book, script, "C" + (i + 1));
   };
-  assert.equal(statusCell("Shot").bold, true);
+  assert.equal(statusCell("Filmed").bold, true);
   assert.deepEqual([statusCell("Ready").color, statusCell("Ready").fill], [PRINT_COLORS.audio, PRINT_COLORS.audioSoft]);
   assert.equal(statusCell("To do").color, PRINT_COLORS.faint);
   assert.equal(look(book, script, "A32").bold, true);

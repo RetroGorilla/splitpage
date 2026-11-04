@@ -13,7 +13,7 @@ interface RowStatusLook {
 const ROW_STATUS_LOOKS: Record<RowStatusId, { label: string; cls: string; color: string }> = {
   todo: { label: "To do", cls: "is-open", color: "var(--text-faint)" },
   ready: { label: "Ready", cls: "is-half", color: "var(--audio)" },
-  shot: { label: "Shot", cls: "", color: "var(--text)" }
+  shot: { label: "Filmed", cls: "", color: "var(--text)" }
 };
 
 export const ROW_STATUSES: readonly RowStatusLook[] = ROW_STATUS_IDS.map(function (id) {

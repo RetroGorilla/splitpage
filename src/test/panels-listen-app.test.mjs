@@ -140,7 +140,7 @@ test("status, scene length and target length changes update the length chips wit
   runCommand(beatStatusCommand("r1", sessionStamps));
   runCommand(beatStatusCommand("r1", sessionStamps));
   assert.equal(el("progress-chip").hidden, false);
-  assert.equal(el("progress-text").textContent, "1/2 shot");
+  assert.equal(el("progress-text").textContent, "1/2 filmed");
 });
 
 test("the panel listeners stop when the feature is stopped", () => {

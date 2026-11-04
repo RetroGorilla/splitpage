@@ -60,7 +60,7 @@ function openReadTimeEditor(btn: HTMLElement | null) {
   input.setAttribute("inputmode", "text");
   input.setAttribute("autocomplete", "off");
   input.setAttribute("spellcheck", "false");
-  input.setAttribute("aria-label", "Scene " + ((ports as ReadTimePortUse).document.numbering().beats[row.id]?.full ?? "") + " length");
+  input.setAttribute("aria-label", "Beat " + ((ports as ReadTimePortUse).document.numbering().beats[row.id]?.full ?? "") + " length");
   input.placeholder = estimate;
   input.title = "A length like 1:30, 90 or 1m30s. Leave it empty to use the estimate (" + estimate + ").";
   btn.hidden = true;
@@ -89,7 +89,7 @@ function closeReadTimeEditor(commit: boolean, fromBlur?: boolean) {
           ed.input.select();
           return false;
         }
-        (ports as ReadTimePortUse).notices.show("Scene length unchanged — “" + text + "” isn’t a length.", "error");
+        (ports as ReadTimePortUse).notices.show("Beat length unchanged — “" + text + "” isn’t a length.", "error");
       } else {
         editing = null;
         teardown(ed);

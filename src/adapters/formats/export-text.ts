@@ -161,7 +161,7 @@ function appendExportTail(lines: string[], doc: ExportDocument, services: Export
     groups.forEach(function (g) {
       lines.push("### " + g.label + " (" + g.items.length + ")");
       lines.push("");
-      lines.push("| Item | Status | Scenes | Assigned to | Notes |");
+      lines.push("| Item | Status | Beats | Assigned to | Notes |");
       lines.push("| --- | --- | --- | --- | --- |");
       g.items.forEach(function (r) {
         lines.push("| " + [r.name, r.statusLabel, r.beats.join(", "), r.owner || "—", r.notes].map(mdCell).join(" | ") + " |");
@@ -177,7 +177,7 @@ function appendExportTail(lines: string[], doc: ExportDocument, services: Export
     lines.push("_" + brollSummaryText(broll) + "_");
     lines.push("");
     broll.forEach(function (g) {
-      lines.push("**" + g.label + "**" + (g.start ? " · " + g.start : "") + " · " + g.done + "/" + g.total + " shot");
+      lines.push("**" + g.label + "**" + (g.start ? " · " + g.start : "") + " · " + g.done + "/" + g.total + " filmed");
       lines.push("");
       g.items.forEach(function (r) { lines.push(mdBrollTask(r)); });
       lines.push("");
@@ -268,7 +268,7 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
   lines.push("# " + facts.title);
   lines.push("");
   if (!doc.beats.length) {
-    lines.push("_No scenes yet._");
+    lines.push("_No beats yet._");
     lines.push("");
   } else {
     lines.push("_" + exportMetaLine(facts) + "_");
@@ -279,17 +279,17 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
     if (heading) lines.push("## " + markdownSectionName(heading.name) + " · " + heading.total, "");
     const f = beats[i];
     if (!f) throw new Error("Missing scene facts");
-    lines.push("### Scene " + f.number + " · " + f.start);
+    lines.push("### Beat " + f.number + " · " + f.start);
     lines.push("");
     lines.push(mdBeatFactsLine(f));
     lines.push("");
     if (markdownHasPicture(row, assets)) {
-      lines.push("![visual for scene " + f.number + "](" + markdownImagePath(doc, row) + ")");
+      lines.push("![visual for beat " + f.number + "](" + markdownImagePath(doc, row) + ")");
       lines.push("");
     }
     const more = markdownMorePictures(doc, row, assets);
     more.forEach(function (m, k) {
-      lines.push("![visual " + (k + 2) + " for scene " + f.number + "](" + m.path + ")");
+      lines.push("![visual " + (k + 2) + " for beat " + f.number + "](" + m.path + ")");
       lines.push("");
     });
     const vlinks = rowVideoLinks(row);
@@ -309,7 +309,7 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
       lines.push(amd);
       lines.push("");
     } else if (!vmd && !markdownHasPicture(row, assets) && !more.length && !vlinks.length) {
-      lines.push("_(blank scene)_");
+      lines.push("_(blank beat)_");
       lines.push("");
     }
     lines.push("---");
@@ -341,7 +341,7 @@ export function mdBeatCellSource(row: Row, i: number, model?: boolean, assets?: 
   let visual = text;
   const image = assets ? capturedRowDataUrl(assets, row) : rowImageDataUrl(row);
   if (image) {
-    visual = "![visual for scene " + (number ?? pad2(i + 1)) + "](" + image + ")" + (visual ? "<br>" + visual : "");
+    visual = "![visual for beat " + (number ?? pad2(i + 1)) + "](" + image + ")" + (visual ? "<br>" + visual : "");
   }
   return {
     visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),
@@ -364,7 +364,7 @@ export function toMarkdownTableDoc(doc: ExportDocument, opts?: MarkdownOptions |
     lines.push("");
   }
   if (!s.rows.length) {
-    lines.push(exporting ? "_No scenes yet._" : "_No rows yet._");
+    lines.push(exporting ? "_No beats yet._" : "_No rows yet._");
   } else if (exporting) {
     const beats = beatFacts(doc, services);
     const headings = new Map(scriptSceneFacts(doc, beats).map(group => [group.start, group]));
@@ -411,7 +411,7 @@ export function htmlToPlainScript(doc: ExportDocument, services: ExportServices 
       const where = r.inScript === "no"
         ? "not in script"
         : r.mentions + " mention" + (r.mentions === 1 ? "" : "s") +
-          (r.beats.length ? ", scene" + (r.beats.length === 1 ? " " : "s ") + r.beats.join(", ") : "");
+          (r.beats.length ? ", beat" + (r.beats.length === 1 ? " " : "s ") + r.beats.join(", ") : "");
       lines.push(r.categoryLabel + ": " + r.name +
         "  [" + r.statusLabel + "]" +
         (r.owner ? "  —  " + r.owner : "") +

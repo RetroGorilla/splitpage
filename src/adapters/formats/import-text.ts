@@ -41,8 +41,8 @@ export function detectTwoColumnFormat(text: string) {
   return null;
 }
 
-const MD_BEAT_HEADING_RE = /^###\s+Scene\s+(?:[A-Z]+\.)?\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
-const MD_BEAT_META_RE = /^_\d+ scenes? · (est\. )?\S+ running time( · .*)?_$/;
+const MD_BEAT_HEADING_RE = /^###\s+(?:Scene|Beat)\s+(?:[A-Z]+\.)?\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
+const MD_BEAT_META_RE = /^_\d+ (?:scenes?|beats?) · (est\. )?\S+ running time( · .*)?_$/;
 const MD_BEAT_FACTS_RE = /^\*\*[^*]+\*\* · Read \d+(:\d\d)+(, set by hand)?$/;
 const MD_MARKER_RE = /<sup>\d+<\/sup>/g;
 const MD_VISUAL_LEAD_RE = /^\*Visual —\*\s?/;
@@ -88,7 +88,7 @@ function parseStackedMarkdownExport(text: string) {
     const audio = sc.slice(k).join("\n").trim();
     return {
       visualText: cellText(visual.join("\n")).trim(),
-      audioText: audio === "_(blank scene)_" ? "" : cellText(audio)
+      audioText: /^(?:_\(blank scene\)_|_\(blank beat\)_)$/.test(audio) ? "" : cellText(audio)
     };
   });
 }

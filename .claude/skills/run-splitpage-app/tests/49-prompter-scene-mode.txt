@@ -44,27 +44,27 @@ wait !document.getElementById('prompter').hidden
 jsclick #pp-scene-mode
 sleep 300
 expect !document.getElementById('pp-scene-prev').hidden
-expect document.getElementById('pp-scene-readout').textContent == Scene A.3 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.3 of 4
 
 # --- Next / Previous, by button and by keyboard ----------------------------
 jsclick #pp-scene-next
 sleep 250
-expect document.getElementById('pp-scene-readout').textContent == Scene A.4 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.4 of 4
 jsclick #pp-scene-prev
 sleep 250
-expect document.getElementById('pp-scene-readout').textContent == Scene A.3 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.3 of 4
 key ArrowLeft
 sleep 250
-expect document.getElementById('pp-scene-readout').textContent == Scene A.2 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.2 of 4
 key ArrowRight
 sleep 250
-expect document.getElementById('pp-scene-readout').textContent == Scene A.3 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.3 of 4
 
 # --- back to scene 1, then simulate scrolling into its last word -----------
 jsclick #pp-scene-prev
 jsclick #pp-scene-prev
 sleep 250
-expect document.getElementById('pp-scene-readout').textContent == Scene A.1 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.1 of 4
 expect window.__prompterTest.checkSceneBoundaryNow() == false
 
 jsclick #pp-play
@@ -84,7 +84,7 @@ expect (function(){ var scroller = document.getElementById('prompter-scroll'); v
 
 # --- auto-pause fired once, moved the target on, and did NOT re-scroll ---
 sleep 200
-expect document.getElementById('pp-scene-readout').textContent == Scene A.2 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.2 of 4
 expect !document.getElementById('pp-play').classList.contains('is-active')
 expect window.__prompterTest.checkSceneBoundaryNow() == false
 
@@ -92,17 +92,17 @@ expect window.__prompterTest.checkSceneBoundaryNow() == false
 jsclick #pp-play
 sleep 200
 expect document.getElementById('pp-play').classList.contains('is-active')
-expect document.getElementById('pp-scene-readout').textContent == Scene A.2 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.2 of 4
 jsclick #pp-play
 
 # --- Follow My Voice: the recognised word position, not the scroll, is
 #     what trips the same boundary (no microphone needed for this half) ---
 jsclick #pp-scene-prev
 sleep 250
-expect document.getElementById('pp-scene-readout').textContent == Scene A.1 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.1 of 4
 eval window.__prompterTest.simulateVoiceWordCursor(document.querySelectorAll('#prompter-content .w').length)
 sleep 200
-expect document.getElementById('pp-scene-readout').textContent == Scene A.2 of 4
+expect document.getElementById('pp-scene-readout').textContent == Beat A.2 of 4
 
 jsclick #pp-close
 
@@ -124,7 +124,7 @@ wait !document.getElementById('prompter').hidden
 expect !document.getElementById('pp-scene-prev').hidden
 # r2 is Shot and hidden — down to 3 scenes, and scene 3 (audio "…reading
 # test.") is now the SECOND one, not the third
-expect document.getElementById('pp-scene-readout').textContent == Scene A.3 of 3
+expect document.getElementById('pp-scene-readout').textContent == Beat A.3 of 3
 expect document.getElementById('prompter-content').textContent.indexOf("viewer sees") === -1
 jsclick #pp-close
 key ctrl+alt KeyH

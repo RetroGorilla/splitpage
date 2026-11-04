@@ -39,16 +39,16 @@ test("the document's facts: scenes, running time, target, shot count", (t) => {
   assert.equal(f.status.shot, 13);
   assert.ok(f.words > 1000);
   assert.match(f.date, /2026/);
-  assert.deepEqual(exportSummaryParts(f), ["30 scenes", "9:44 running time", "Target 9:00 · 0:44 over", "13 of 30 shot"]);
+  assert.deepEqual(exportSummaryParts(f), ["30 beats", "9:44 running time", "Target 9:00 · 0:44 over", "13 of 30 filmed"]);
 });
 
 test("a script with no target and one scene says so in the singular", () => {
   loadTestDocument(migrateRows({ schema: 2, title: "One", comments: [],
     rows: [{ id: "r0", visualText: "", audioText: "Hello there, and welcome to a line long enough to take a few seconds.", status: "todo" }] }));
   const parts = exportSummaryParts(exportFacts(exportDocumentOf(currentDocument())));
-  assert.equal(parts[0], "1 scene");
+  assert.equal(parts[0], "1 beat");
   assert.equal(parts.some((p) => /Target/.test(p)), false);
-  assert.equal(parts[2], "0 of 1 shot");
+  assert.equal(parts[2], "0 of 1 filmed");
   currentDocument().targetSeconds = 1;
   assert.match(exportSummaryParts(exportFacts(exportDocumentOf(currentDocument())))[2], / over$/);
   currentDocument().targetSeconds = 3600;
@@ -67,7 +67,7 @@ test("each scene's gutter: number, start timecode, read time, set by hand or not
   for (let i = 1; i < beats.length; i++) assert.ok(beats[i].startSeconds >= beats[i - 1].startSeconds);
   assert.equal(beats.filter((s) => s.readSet).length, 2);
   assert.equal(beats[1].readSet, true);
-  assert.deepEqual(beats[0].status, { id: "shot", label: "Shot" });
+  assert.deepEqual(beats[0].status, { id: "shot", label: "Filmed" });
   assert.ok(beats.some((s) => s.status.id === "ready") && beats.some((s) => s.status.id === "todo"));
 });
 
@@ -83,7 +83,7 @@ test("the open threads are numbered down the script, a resolved one not at all",
   assert.equal(list.length, currentDocument().comments.length);
   const numbered = list.filter((c) => c.number);
   assert.deepEqual(numbered.map((c) => c.number), [1, 2, 3]);
-  assert.equal(list[0].where, "Scene A.3 · Audio");
+  assert.equal(list[0].where, "Beat A.3 · Audio");
   assert.equal(list.find((c) => c.resolved).number, null);
 });
 
@@ -143,10 +143,10 @@ test("the b-roll by scene, with each scene's start and count", () => {
   const groups = exportBrollBeats(exportDocumentOf(currentDocument()));
   const all = groups.reduce((n, g) => n + g.items.length, 0);
   assert.equal(all, 9);
-  assert.equal(groups[0].label, "Scene A.4");
+  assert.equal(groups[0].label, "Beat A.4");
   assert.equal(groups[0].start, "01:03");
   assert.equal(groups[0].done, 1);
-  assert.equal(brollSummaryText(groups), "3 of 9 shot · 1 flagged");
+  assert.equal(brollSummaryText(groups), "3 of 9 filmed · 1 flagged");
   const s = currentDocument().brollShots.length;
   exportBrollBeats(exportDocumentOf(currentDocument()));
   assert.equal(currentDocument().brollShots.length, s, "reading the list adds nothing to it");

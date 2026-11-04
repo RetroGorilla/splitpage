@@ -3,7 +3,7 @@
 How Splitpage talks to a person. `src/test/wording.test.mjs` holds the
 mechanical rules; the rest is judgement.
 
-- **Scene, not row.** A scene is what a person sees. "Row" belongs to the
+- **Beat, not row.** A beat is what a person sees. "Row" belongs to the
   code and to the exported comments appendix (`Row 03`), which files read
   back in and so keep.
 - **British spelling:** colour, labelled, minimise, centre (in words a

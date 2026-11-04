@@ -305,7 +305,7 @@ test("narration .docx: a direction in its own style, or not there at all", async
   assert.match(withDirs, /<w:rStyle w:val="SplitpageDirection"\/><w:i\/><w:color w:val="6B6A65"\/><\/w:rPr><w:t xml:space="preserve">\(<\/w:t>/);
   assert.ok(withDirs.includes(">beat<"));
   const without = await documentXml(off);
-  assert.ok(!without.includes("beat") && !without.includes("slowly") && !without.includes("SplitpageDirection"));
+  assert.ok(!without.includes(">beat<") && !without.includes("slowly") && !without.includes("SplitpageDirection"));
   assert.ok(without.includes(">Pour it<") && without.includes(">.<"));
 });
 

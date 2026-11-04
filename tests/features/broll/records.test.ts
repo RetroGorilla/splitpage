@@ -41,8 +41,8 @@ function doc(shots: unknown[], visualText = ""): ValidatedDocument {
 }
 
 test("b-roll records: statuses look up by id, and anything else is none", () => {
-  assert.equal(brollStatus("shot")?.label, "Shot");
-  assert.equal(brollStatus("unshot")?.label, "To shoot");
+  assert.equal(brollStatus("shot")?.label, "Filmed");
+  assert.equal(brollStatus("unshot")?.label, "To film");
   assert.equal(brollStatus("bogus"), null);
 });
 

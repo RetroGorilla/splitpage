@@ -598,7 +598,7 @@ test("the breakdown CSV names the b-roll shots each prop is needed for, after th
   propsDoc();
   addBrollProp("b2", "Kettle");
   const lines = buildBreakdownCsv(liveDoc()).replace(/^\uFEFF/, "").split("\r\n");
-  assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group");
+  assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Beats,In script,Notes,B-roll shots,First beat at,Group");
   const kettle = lines.find((l) => l.startsWith("Prop,Kettle,"));
   assert.ok(kettle.endsWith(",A.2.1 drone over the pier,,Props & set dressing"), kettle);
   const mug = lines.find((l) => l.startsWith("Prop,Red mug,"));
@@ -614,10 +614,10 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   const before = JSON.stringify(s.brollShots);
   const lines = buildBrollCsv(liveDoc()).replace(/^\uFEFF/, "").split("\r\n");
   assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
-  assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start");
+  assert.equal(lines[0], "Beat,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Beat start");
   assert.equal(lines.length, 4);
   const at = (i) => beatFacts(exportDocumentOf(currentDocument()))[i].start;
-  assert.equal(lines[1], "A.1,A.1.1 the red mug on the sill,To shoot,,,Red mug,,,,,00:00");
-  assert.equal(lines[2], 'A.2,A.2.1 drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
-  assert.equal(lines[3], "A.3,A.3.1 an unanchored line,To shoot,,,,,,,," + at(2));
+  assert.equal(lines[1], "A.1,A.1.1 the red mug on the sill,To film,,,Red mug,,,,,00:00");
+  assert.equal(lines[2], 'A.2,A.2.1 drone over the pier,To film,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
+  assert.equal(lines[3], "A.3,A.3.1 an unanchored line,To film,,,,,,,," + at(2));
 });

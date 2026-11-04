@@ -84,7 +84,7 @@ expect new TextDecoder().decode(window.__parts['docProps/core.xml']).indexOf('<d
 
 # the scene gutter visible in the document (#169): a "Scene" header, "01"/"02"
 # cells, a start timecode each; a "Read" header on the right
-expect window.__docXml.indexOf('>Scene<') !== -1 && window.__docXml.indexOf('>Read<') !== -1
+expect window.__docXml.indexOf('>Beat<') !== -1 && window.__docXml.indexOf('>Read<') !== -1
 expect window.__docXml.indexOf('>A.1<') !== -1
 expect window.__docXml.indexOf('>A.2<') !== -1
 expect window.__docXml.indexOf('>00:00<') !== -1
@@ -150,7 +150,7 @@ jsclick #file-menu [data-file-action="export-md"]
 sleep 1200
 eval (async function(){window.__md = await window.__blobs[window.__blobs.length-1].text(); return window.__md.length;})()
 
-expect window.__md.indexOf('### Scene A.1') !== -1
+expect window.__md.indexOf('### Beat A.1') !== -1
 # no bold-label-per-field pattern
 expect window.__md.indexOf('**Visual**') === -1
 expect window.__md.indexOf('**Audio**') === -1

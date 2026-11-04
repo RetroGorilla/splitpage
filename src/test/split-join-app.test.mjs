@@ -186,7 +186,7 @@ test("a split makes a todo scene after it with the cut-off half in the same fiel
   assert.deepEqual(Object.keys(made), ["id", "visualText", "imageRef", "audioText", "status", "updatedAt", "updatedBy"]);
   assert.equal(made.visualText, "");
   assert.equal(made.imageRef, null);
-  assert.equal(made.status, "todo", "the new scene is todo whatever the split scene's status was");
+  assert.equal(made.status, "todo", "the new beat is todo whatever the split beat's status was");
   assert.equal(row("r2").status, "ready");
   assert.equal(made.updatedBy, row("r2").updatedBy);
   assert.equal(made.updatedBy, "Anonymous");
@@ -401,7 +401,7 @@ const waitRefresh = () => new Promise((r) => setTimeout(r, 400));
 
 const PANELS = [
   { name: "production", open: openProductionPanel, beats: productionBeats, labels: (n) => ["A." + n] },
-  { name: "b-roll", open: openBrollPanel, beats: brollBeats, labels: (n) => ["Scene A." + n] }
+  { name: "b-roll", open: openBrollPanel, beats: brollBeats, labels: (n) => ["Beat A." + n] }
 ];
 
 async function openPanelUnderWriter(panel) {
@@ -597,7 +597,7 @@ test("two scenes with visuals are refused with the toast, whatever the visual is
     const got = observe(() => key(p, "Backspace"));
     assert.deepEqual(got, { seq: 0, generation: 0, published: [], refreshed: [], render: 0, undo: 0, steps: [] }, name);
     assert.equal(JSON.stringify(currentDocument()), before, name);
-    assert.equal(toasts().at(-1), "Both scenes have a visual — join them in the split view, so you can pick which one to keep.", name);
+    assert.equal(toasts().at(-1), "Both beats have a visual — join them in the split view, so you can pick which one to keep.", name);
     writer.closeWriter();
   }
 });
@@ -751,7 +751,7 @@ test("a grid split whose commit is followed by a throw still draws the new scene
   const created = currentDocument().rows[1].id;
   assert.deepEqual(reported, ["listener broke"]);
   assert.equal(row(created).audioText, " there");
-  assert.ok(cellOf(created, "audioText"), "the new scene is on screen");
+  assert.ok(cellOf(created, "audioText"), "the new beat is on screen");
   assert.equal(unsavedChanges(), true);
 });
 
@@ -764,7 +764,7 @@ test("a Writer join whose commit is followed by a throw still redraws the Writer
   const reported = withThrowingListener(() => key(p, "Backspace"));
   assert.deepEqual(reported, ["listener broke"]);
   assert.deepEqual(ids(), ["j1"]);
-  assert.equal(para("j2"), null, "the joined scene left the Writer");
+  assert.equal(para("j2"), null, "the joined beat left the Writer");
   assert.equal(unsavedChanges(), true);
   writer.closeWriter();
 });
