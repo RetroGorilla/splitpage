@@ -1,6 +1,6 @@
 import { createSceneBoundaryRemoval } from "../../application/editing/scene-boundary.ts";
 import { removeSceneCommand } from "../../application/commands/scenes.ts";
-import { sceneGroups } from "../../core/document/scenes.ts";
+import { sceneGroups, soleBeatSceneMovedBy } from "../../core/document/scenes.ts";
 import { mountSceneBoundary } from "../../features/editing/scene-boundary.ts";
 import { mountSceneControls } from "../../features/rows/scene-controls.ts";
 import { documentReader } from "./ports/document.ts";
@@ -11,7 +11,7 @@ import { focusMemory, rowDrag, sceneView } from "./editor-owners.ts";
 import { stopDragScroll, updateDragScroll } from "./rows.ts";
 import { undoOwner } from "./undo.ts";
 
-export function mountSceneHeaders(): { dispose: () => void } {
+export function mountSceneHeaders(): { confirmMove: (rowId: string, dir: -1 | 1) => boolean; dispose: () => void } {
   const controls = mountSceneControls(window, {
     document: documentReader, edits, scenes: sceneView(), focus: focusMemory(),
     drag: rowDrag(), ids, notices, scroll: updateDragScroll, stopScroll: stopDragScroll
@@ -44,5 +44,10 @@ export function mountSceneHeaders(): { dispose: () => void } {
   syncInput();
   const offChange = documentReader.onChange(syncInput);
   const offReplaced = documentReader.onReplaced(() => { syncInput(); controls.reset(); });
-  return { dispose() { offChange(); offReplaced(); input?.dispose(); boundary.dispose(); controls.dispose(); } };
+  function confirmMove(rowId: string, dir: -1 | 1): boolean {
+    const doc = documentReader.current();
+    const scene = doc && edits.allowed() ? soleBeatSceneMovedBy(doc, rowId, dir) : undefined;
+    return !!scene && !boundary.press(scene.id, dir < 0 ? "Alt+ArrowUp" : "Alt+ArrowDown");
+  }
+  return { confirmMove, dispose() { offChange(); offReplaced(); input?.dispose(); boundary.dispose(); controls.dispose(); } };
 }

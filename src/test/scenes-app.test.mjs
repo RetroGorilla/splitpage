@@ -92,6 +92,33 @@ test("singleton Alt moves require consecutive confirmation and undo restores the
   }
 });
 
+test("row menu Move up and Move down confirm before removing a one-beat scene header, like Alt+Arrow", async () => {
+  for (const [action, expected] of [["move-up", ["r2", "r1", "r3", "r4"]], ["move-down", ["r1", "r3", "r2", "r4"]]]) {
+    await open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);
+    const button = () => document.querySelector('#rows .row[data-id="r2"] [data-action="' + action + '"]');
+    const before = state(), undo = undoOwner().sizes().undo;
+    button().click();
+    assert.equal(state(), before);
+    assert.equal(document.querySelector('#rows [data-section-id="s1"] .section-hint').textContent, "Press again to remove the scene header");
+    button().click();
+    assert.deepEqual(ids(), expected);
+    assert.equal(currentDocument().sections.length, 1);
+    undoOwner().flush();
+    assert.equal(undoOwner().sizes().undo, undo + 1);
+    undoOwner().undo();
+    assert.equal(state(), before);
+  }
+});
+
+test("row menu Move without a header to remove moves at once", async () => {
+  await open();
+  const before = undoOwner().sizes().undo;
+  document.querySelector('#rows .row[data-id="r1"] [data-action="move-down"]').click();
+  assert.deepEqual(ids(), ["r2", "r1", "r3", "r4"]);
+  undoOwner().flush();
+  assert.equal(undoOwner().sizes().undo, before + 1);
+});
+
 test("singleton move confirmation survives modifier-only keydowns, including repeated Alt and Alt+Shift", async () => {
   for (const shiftKey of [false, true]) {
     await open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);

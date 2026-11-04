@@ -400,6 +400,8 @@ export const stopMediaFeature = mediaRoutes.stop;
 
 const rowRoutes = owned<ReturnType<typeof mountRowRoutes>>();
 
+let sceneHeaders: ReturnType<typeof mountSceneHeaders> | null = null;
+
 const rowRoutePorts: RowRoutePorts = {
   dragging: function () { return rowDrag().dragging(); },
   setDragging: function (rowId) { if (rowId) rowDrag().start(rowId); else rowDrag().end(); },
@@ -409,7 +411,7 @@ const rowRoutePorts: RowRoutePorts = {
   stopScroll: stopDragScroll,
   move: function (rowId, targetId, after) { cellEditing().moveRow(rowId, targetId, after); },
   add: addRow,
-  moveBy: function (rowId, dir) { moveRow(rowId, dir); refocusRowMenu(rowId); },
+  moveBy: function (rowId, dir) { if (!sceneHeaders?.confirmMove(rowId, dir)) moveRow(rowId, dir); refocusRowMenu(rowId); },
   toggleMenu: toggleRowMenu,
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
@@ -422,7 +424,8 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
   return rowRoutes.replace(function () {
     const routes = mountRowRoutes({ window: window, rows: document.getElementById("rows") as Element, ports: rowRoutePorts });
     const scenes = mountSceneHeaders();
-    return { ...routes, dispose() { scenes.dispose(); routes.dispose(); } };
+    sceneHeaders = scenes;
+    return { ...routes, dispose() { if (sceneHeaders === scenes) sceneHeaders = null; scenes.dispose(); routes.dispose(); } };
   }, function (owner) {
     return [
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
