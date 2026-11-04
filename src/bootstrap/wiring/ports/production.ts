@@ -11,6 +11,7 @@ export const renderProduction = {
 };
 
 export const tagPanelState: TagPanelState = {
+  prep: () => tagPanelStateOwner().prep(),
   tagRenamingKey: () => tagPanelStateOwner().tagRenamingKey(),
   setTagRenaming: (key) => { tagPanelStateOwner().setTagRenaming(key); },
   tagExpandedKey: () => tagPanelStateOwner().tagExpandedKey(),

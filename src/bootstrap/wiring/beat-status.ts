@@ -47,3 +47,7 @@ export function onScriptStats(listener: (targetSeconds: number) => void): () => 
 export function cycleRowStatus(rowId: string): void {
   beatStatus.owner()?.cycleRowStatus(rowId);
 }
+
+export function setBeatFilmed(rowId: string, filmed: boolean): void {
+  beatStatus.owner()?.setFilmed(rowId, filmed);
+}

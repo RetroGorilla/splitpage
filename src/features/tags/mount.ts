@@ -14,6 +14,9 @@ interface EntityPorts {
   readonly queueAutoSave: () => void;
 }
 export interface TagsPorts extends EntityPorts, Pick<ButtonActions, "runFromButton"> {
+  readonly clickProductionOutline: (e: MouseEvent) => boolean;
+  readonly changeProductionOutline: (target: HTMLElement) => void;
+  readonly revealProductionItem: (rowId: string | null, key: string) => void;
   readonly acceptTagGhost: () => void;
   readonly acceptUntaggedMention: () => void;
   readonly applyTag: () => void;
@@ -118,7 +121,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
       if (e.pointerType === "mouse") return;
       const card = e.target.closest(".tag-entity");
       if (!card) return;
-      if (e.target.closest(".tag-entity-detail, .tag-rename-input")) return;
+      if (e.target.closest(".tag-entity-detail, .prep-resource-detail, .tag-rename-input")) return;
       touchPress.key = card.getAttribute("data-key");
       touchPress.fired = false;
       touchPress.x = e.clientX; touchPress.y = e.clientY;
@@ -192,6 +195,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
     }
   });
   listen(doc.getElementById("production-panel"), "change", function (e) {
+    ports.changeProductionOutline(e.target);
     if (e.target.id === "bulk-owner") {
       if (e.target.value !== "__none__") ports.bulkSetOwner(e.target.value);
       return;
@@ -254,6 +258,8 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
           return true;
         }
       }
+
+      if (ports.clickProductionOutline(e)) return true;
 
       const bulkClear = e.target.closest('[data-action="bulk-clear"]');
       if (bulkClear) { ports.clearProductionSelection(); ports.renderProduction(); return true; }
@@ -321,7 +327,9 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
       const groupBtn = e.target.closest("#production-modes [data-group]");
       if (groupBtn) {
         ports.setProductionGroup(groupBtn.getAttribute("data-group"));
-        if (ports.productionGroup() !== "cat" && ports.productionGroup() !== "person") ports.clearProductionSelection();
+        if (!["cat", "person", "prep"].includes(ports.productionGroup())) ports.clearProductionSelection();
+        const picker = groupBtn.closest("details");
+        if (picker) picker.open = false;
         ports.renderProduction();
         return true;
       }
@@ -367,6 +375,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
         const owns = ports.capture();
         const panel = doc.getElementById("production-panel");
         ports.openProductionPanel();
+        ports.revealProductionItem(tagEl.closest(".row")?.getAttribute("data-id") ?? null, key);
         const timer = realm.setTimeout(function () {
           timers.delete(timer);
           if (!life.active() || !owns() || !panel?.isConnected || doc.getElementById("production-panel") !== panel) return;

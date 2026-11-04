@@ -81,6 +81,7 @@ export interface BrollPanelPorts {
 }
 
 export interface BrollPanelState {
+  readonly openShot: (id: string) => void;
   readonly openBrollPanel: () => void;
   readonly dispose: () => void;
 }

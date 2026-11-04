@@ -85,6 +85,11 @@ export function updateBrollBadge(): void {
 const panelState = owned<BrollPanelState>();
 const panelEvents = owned<{ dispose: () => void }>();
 
+export const productionFootage = {
+  entries: () => broll.owner()?.brollEntries() ?? [],
+  open: (id: string) => { panelState.owner()?.openShot(id); }
+};
+
 export function mountBrollPanelStateFeature(): BrollPanelState {
   return panelState.replace(() => {
     const ports: BrollPanelPorts = {

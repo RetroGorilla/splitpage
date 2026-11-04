@@ -98,7 +98,8 @@ test("CSS aggregation preserves listed order, separators and single-file bytes",
     "src/features/panels/styles-open-transition.css",
     "src/features/imports/styles-new-document.css",
     "src/features/file-menu/styles-merge.css",
-    "src/styles/overrides.css"
+    "src/styles/overrides.css",
+    "src/features/tags/styles-outline.css"
   ]);
   assert.equal(cssInputs[0], "src/styles/base.css");
   assert.equal(appCss(), cssInputs.map((path) => readFileSync(new URL(path, repoUrl), "utf8")).join("\n"));

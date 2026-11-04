@@ -1,4 +1,5 @@
 import { numberHtml } from "../common/number-html.ts";
+import { prepContext, prepSceneKey, renderProductionOutline } from "./outline.ts";
 import type { Person } from "../../core/production/records.ts";
 import type { TagPanelPorts } from "./ports.ts";
 import type { RemoveTagPorts } from "../../application/commands/production-actions.ts";
@@ -72,6 +73,19 @@ function personById(id: string | null) {
 export function openProductionPanel() {
   if (!(ports as TagPanelPorts).document.current()) return;
   (ports as TagPanelPorts).panels.open("production-panel");
+  renderProduction();
+}
+
+export function revealProductionItem(rowId: string | null, key: string): void {
+  const p = ports as TagPanelPorts;
+  if (p.view.productionGroupBy() !== "prep" || !rowId) return;
+  const beat = p.document.numbering().beats[rowId];
+  if (!beat) return;
+  renderProduction();
+  const rows = p.document.current()?.rows.slice(beat.scene.start, beat.scene.end) ?? [];
+  const showFilmed = p.view.prep().current().filmed.has(prepSceneKey(beat.scene.id));
+  const position = rows.filter(row => row.status !== "shot" || showFilmed || row.id === rowId).findIndex(row => row.id === rowId);
+  p.view.prep().reveal(prepSceneKey(beat.scene.id), rowId, position, prepContext('beat:' + rowId, key));
   renderProduction();
 }
 
@@ -308,7 +322,7 @@ export function tagAllMentions(key: string | null) {
   (ports as TagPanelPorts).notices.show("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
 }
 
-function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, gear: boolean, detailId: string) {
+function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, gear: boolean, detailId: string, prep = false) {
   const k = escapeHtml(item.key);
   const name = escapeHtml(item.name);
   const st = tagStatus(item.status) || (TAG_STATUSES[0] as PanelTagStatus);
@@ -402,6 +416,16 @@ function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, 
           'placeholder="Reference link, file path, spec, where it’s coming from…">\n' + escapeHtml(item.notes) + '</textarea>' +
       '</dd>' +
     '</dl>';
+  if (prep) return '<div class="prep-notes" id="' + detailId + '">' +
+    (renaming ? '<div class="tag-rename-row"><input type="text" class="tag-rename-input ev-field" value="' + name +
+      '" data-key="' + k + '" data-registry-id="' + escapeHtml(item.id || '') + '" data-document-epoch="' +
+      (ports as TagPanelPorts).lifetime.epoch() + '" aria-label="Item name">' +
+      '<button type="button" class="btn-outline is-small" data-action="tag-rename-save" data-key="' + k + '">Save</button>' +
+      '<button type="button" class="tag-quiet-btn" data-action="tag-rename-cancel">Cancel</button></div>' : '') +
+    '<label for="' + notesId + '">Notes &amp; links</label>' +
+    '<textarea class="tag-notes-input ev-field" id="' + notesId + '" data-key="' + k + '" rows="2" placeholder="Reference link, spec, where it is coming from">\n' + escapeHtml(item.notes) + '</textarea>' +
+    '<div class="prep-notes-tools">' + addPerson + more + '</div>' + personRow +
+    '<dl class="prep-untagged">' + untaggedMentionsHtml(item) + '</dl></div>';
   if (!gear) return dl;
   return dl +
     '<div class="tag-detail-foot">' +
@@ -606,6 +630,9 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
   const panel = document.getElementById("production-panel");
   if (!listEl || !panel || panel.hidden || !(ports as TagPanelPorts).document.current()) return;
   entries = entries || productionEntries();
+  const group = (ports as TagPanelPorts).view.productionGroupBy();
+  const viewLabel = document.getElementById("production-view-label");
+  if (viewLabel) viewLabel.textContent = ({ prep: "Scene prep", cat: "Category", person: "Person", scene: "Beat", shoot: "Shoot" } as Record<string, string>)[group] ?? "Scene prep";
 
   document.querySelectorAll("#production-modes [data-group]").forEach(function (b) {
     const on = b.getAttribute("data-group") === (ports as TagPanelPorts).view.productionGroupBy();
@@ -618,6 +645,46 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
   if (cols) {
     cols.hidden = !groups.length ||
       ((ports as TagPanelPorts).view.productionGroupBy() !== "cat" && (ports as TagPanelPorts).view.productionGroupBy() !== "person");
+  }
+
+  if (group === "prep") {
+    const rename = listEl.querySelector<HTMLInputElement>(".tag-rename-input");
+    const keepRename = rename && rename.getAttribute("data-key") === (ports as TagPanelPorts).view.tagRenamingKey();
+    const active = document.activeElement;
+    const focused = active && listEl.contains(active) ? active as HTMLElement : null;
+    const identity = focused ? {
+      prep: focused.getAttribute("data-prep"), id: focused.getAttribute("data-id"),
+      key: focused.getAttribute("data-key"), row: focused.getAttribute("data-row"),
+      className: focused.className, value: isPrepTextField(focused) ? focused.value : null,
+      context: focused.closest(".prep-resource")?.getAttribute("data-prep-context") ?? null,
+      start: isPrepTextField(focused) ? focused.selectionStart : null,
+      end: isPrepTextField(focused) ? focused.selectionEnd : null,
+      direction: isPrepTextField(focused) ? focused.selectionDirection : null
+    } : null;
+    const scroll = listEl.scrollTop;
+    const html = renderProductionOutline(ports as TagPanelPorts, entries, (item, id) =>
+      tagEntityDetailHtml(item, (ports as TagPanelPorts).view.tagRenamingKey() === item.key, false, id, true));
+    if (listEl.innerHTML === html) return;
+    listEl.innerHTML = html;
+    const replacement = listEl.querySelector<HTMLInputElement>(".tag-rename-input");
+    if (keepRename && replacement && replacement.getAttribute("data-registry-id") === rename.getAttribute("data-registry-id") &&
+      replacement.getAttribute("data-document-epoch") === rename.getAttribute("data-document-epoch")) replacement.replaceWith(rename);
+    if (identity) {
+      const next = Array.from(listEl.querySelectorAll<HTMLElement>("button, select, input, textarea, a")).find(el =>
+        el.className === identity.className && el.getAttribute("data-prep") === identity.prep &&
+        (el.closest(".prep-resource")?.getAttribute("data-prep-context") ?? null) === identity.context &&
+        el.getAttribute("data-id") === identity.id && el.getAttribute("data-key") === identity.key && el.getAttribute("data-row") === identity.row);
+      if (next) {
+        if ((isPrepTextField(next)) && identity.value !== null) {
+          next.value = identity.value;
+          if (identity.start !== null && identity.end !== null) next.setSelectionRange(identity.start, identity.end, identity.direction ?? undefined);
+        }
+        if (next.matches(":disabled")) next.closest(".prep-resource")?.querySelector<HTMLSelectElement>(".prep-status-select")?.focus({ preventScroll: true });
+        else next.focus({ preventScroll: true });
+      }
+    }
+    listEl.scrollTop = scroll;
+    return;
   }
 
   if ((ports as TagPanelPorts).view.productionGroupBy() === "shoot") {
@@ -664,6 +731,60 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
       '</ul>' +
     '</section>';
   }).join("");
+}
+
+function isPrepTextField(el: Element): el is HTMLInputElement | HTMLTextAreaElement {
+  return el.tagName === "TEXTAREA" || el.tagName === "INPUT" && (el as HTMLInputElement).type !== "checkbox";
+}
+
+function prepNotice(message: string): void {
+  const p = ports as TagPanelPorts;
+  const epoch = p.lifetime.epoch();
+  const last = p.undo.last();
+  p.notices.showAction(message, "ok", "Undo", () => {
+    if (ports !== p || p.lifetime.epoch() !== epoch || p.undo.last() !== last) return;
+    p.undo.undo();
+    renderProduction();
+  });
+}
+
+export function clickProductionOutline(e: MouseEvent): boolean {
+  const target = e.target as Element;
+  const button = target.closest<HTMLElement>("#production-list [data-prep]");
+  if (!button) return false;
+  const id = button.dataset["id"] ?? "";
+  const p = ports as TagPanelPorts;
+  const state = p.view.prep();
+  switch (button.dataset["prep"]) {
+    case "scene": state.toggleScene(id); break;
+    case "beat": state.toggleBeat(id); p.view.setTagRenaming(null); p.view.setTagAddingPerson(null); break;
+    case "requirements": state.toggleRequirements(id); break;
+    case "filmed": state.toggleFilmed(id); break;
+    case "more": state.showMore(id); break;
+    case "earlier": state.showEarlier(id); break;
+    case "ready-fold": state.toggleReady(id); break;
+    case "notes": state.toggleNotes(id); p.view.setTagRenaming(null); p.view.setTagAddingPerson(null); break;
+    case "selection": state.toggleSelecting(); p.selection.clear(); break;
+    case "select": p.selection.toggle(id); break;
+    case "jump": p.beats.reveal(id); return true;
+    case "shot": p.footage.open(id); return true;
+    case "ready": setTagStatus(id, "have"); prepNotice("Marked as Have it"); return true;
+    default: return false;
+  }
+  renderProduction();
+  return true;
+}
+
+export function changeProductionOutline(target: HTMLElement): void {
+  if (target.tagName === "SELECT" && target.classList.contains("prep-status-select")) {
+    setTagStatus(target.dataset["key"] ?? null, (target as HTMLSelectElement).value);
+    prepNotice("Requirement status updated");
+  } else if (target.tagName === "INPUT" && target.classList.contains("prep-film-input")) {
+    (ports as TagPanelPorts).undo.breakCoalescing();
+    (ports as TagPanelPorts).beats.setFilmed(target.dataset["row"] ?? "", (target as HTMLInputElement).checked);
+    renderProduction();
+    prepNotice((target as HTMLInputElement).checked ? "Beat marked as Filmed" : "Beat marked as To do");
+  }
 }
 
 function jsonRows() {
@@ -854,7 +975,7 @@ function renderBulkBar(entries?: readonly PresentedProductionEntry[]) {
   const bar = document.getElementById("production-bulk");
   if (!bar) return;
   const items = selectedEntries(entries);
-  const cardView = (ports as TagPanelPorts).view.productionGroupBy() === "cat" || (ports as TagPanelPorts).view.productionGroupBy() === "person";
+  const cardView = ["prep", "cat", "person"].includes((ports as TagPanelPorts).view.productionGroupBy());
   if (!items.length || !cardView) { bar.hidden = true; bar.innerHTML = ""; return; }
 
   const n = items.length;

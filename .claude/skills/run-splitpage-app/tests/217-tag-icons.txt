@@ -86,6 +86,7 @@ expect __txt() === __rows0
 
 # --- the panels: category heads and dots become the icon --------------------
 click #btn-production
+jsclick #production-modes [data-group="cat"]
 wait !document.getElementById('production-panel').hidden
 sleep 300
 expect document.querySelectorAll('#production-list .tag-group-head .tag-cat-dot[data-tag-cat]').length >= 3
