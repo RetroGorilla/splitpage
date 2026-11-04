@@ -18,7 +18,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 - **Enter** starts a new paragraph and a new beat. **Alt+Enter** starts a new beat in the same paragraph. **Shift+Enter** is a line break inside a beat.
 - Existing scripts open with each scene as one paragraph, because old files have no saved breaks. Text imports keep their source paragraph breaks.
 - The teleprompter keeps its sentence rule and also starts a paragraph at every saved break. Table exports stay per beat.
-- Narration export: see 7.1.
+- Narration export stays one paragraph per beat for now, and we circle back to it later (7.1).
 
 ### Editing
 
@@ -66,7 +66,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
   - A line still holding several beats on leaving: the `# ` is removed, the line goes back to normal, and a notice says "A scene header can't hold several beats. Press Enter after the header's words." The caret stays where it was clicked.
   - Only `# ` on the line: the marker is removed.
 - A converted beat with no visual goes away. One with a visual stays, empty, under the new header.
-- Enter in a heading: the text after the caret becomes the scene's first beat. Backspace at a heading's start: the header goes away and its text becomes a new beat that flows into the paragraph above.
+- Enter in a heading: the text after the caret becomes the scene's first beat. Backspace at a heading's start: the header goes away and its text becomes a new beat that flows into the paragraph above. Backspace at the start of the first beat under a header: the caret moves to the end of the header and nothing changes.
 
 ### Find
 
@@ -82,7 +82,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 
 ### Left for later
 
-Bullets and the Outline view (scenes as bullets, beats as sub-bullets), dragging selected text, pasted Markdown converting, a Visual box shortcut. Split-view restyling of headers (#1166, #1168) and scene descriptions (#1171) stay separate.
+Narration export following the writer's paragraphs, bullets and the Outline view (scenes as bullets, beats as sub-bullets), dragging selected text, pasted Markdown converting, a Visual box shortcut. Split-view restyling of headers (#1166, #1168) and scene descriptions (#1171) stay separate.
 
 ### To judge on the test page
 
@@ -187,8 +187,8 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 
 ## 7. Found while planning: for Adam
 
-1. **Narration export can't follow paragraphs.** `splitImportText()` reads narration back as one paragraph per beat, so grouping beats would merge them on re-import. It was conditional in the discussion, so it stays one paragraph per beat. A "narration as written" export could be added later.
-2. **The 2026-10-31 two-press Backspace.** At a scene boundary, Backspace at the following beat's start currently warns, then removes the header on the second press. It predates the new heading rules. Proposal: in the writer, that Backspace moves the caret to the end of the header and changes nothing, and the split view keeps two-press. Needs Adam's sign-off because it changes a keystroke.
+1. **Narration export: circle back later (Adam, 2026-11-04).** `splitImportText()` reads narration back as one paragraph per beat, so grouping beats would merge them on re-import. It stays one paragraph per beat for now. A "narration as written" export is one option when we return to it.
+2. **Backspace under a scene header: decided (Adam, 2026-11-04).** In the writer, Backspace at the start of the first beat under a header moves the caret to the end of the header and changes nothing. The split view keeps the two-press removal chosen on 2026-10-31.
 3. **A selection that fully contains a header and is deleted removes the header.** It's an explicit deletion, and it's one Ctrl+Z.
 4. **Headings are plain text, up to 200 characters.** Bold in a heading isn't stored, because scene names are plain.
 5. **`# Title` then Enter at the end of the script creates a blank first beat,** because a scene can't exist without one.
