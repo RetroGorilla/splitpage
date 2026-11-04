@@ -33,16 +33,16 @@ test("the tags feature releases both click routes when its later mousedown route
   stopTagsFeature();
   const before = rootRoutesTaken();
   assert.deepEqual(before.click.filter((slot) => slot === "tags" || slot === "tags-jump"), []);
-  assert.deepEqual(before.mousedown, []);
+  assert.deepEqual(before.mousedown.filter((slot) => slot === "tags-anchor"), []);
   const unblock = routeRootMouseDown("tags-anchor", () => false);
   try {
     assert.throws(() => mountTagsFeature(), /already taken/);
-    assert.deepEqual(rootRoutesTaken(), { click: before.click, mousedown: ["tags-anchor"] });
+    assert.deepEqual(rootRoutesTaken(), { click: before.click, mousedown: ["tags-anchor", ...before.mousedown] });
   } finally {
     unblock();
   }
   assert.deepEqual(rootRoutesTaken(), before);
   mountTagsFeature();
   assert.deepEqual(rootRoutesTaken().click.filter((slot) => slot === "tags" || slot === "tags-jump"), ["tags-jump", "tags"]);
-  assert.deepEqual(rootRoutesTaken().mousedown, ["tags-anchor"]);
+  assert.deepEqual(rootRoutesTaken().mousedown, ["tags-anchor", ...before.mousedown]);
 });
