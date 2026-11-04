@@ -78,7 +78,7 @@ export interface ProductionTagPorts {
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml" | "productionReaders">;
   readonly production: () => Pick<ProductionIndexOwner, "entries" | "current" | "recordsPlan" | "derived" | "resetDerived">;
   readonly editing: {
-    readonly cells: () => Pick<CellEditing<Element>, "edit" | "open">;
+    readonly cells: () => Pick<CellEditing<Element>, "edit" | "sync">;
     readonly focus: () => Pick<FocusMemory<Element>, "promptMutedFor">;
   };
   readonly undo: Pick<UndoControl, "breakCoalescing">;
