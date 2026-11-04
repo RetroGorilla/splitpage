@@ -244,4 +244,4 @@ wait kw() === 1
 expect st(19) === window.base.st && U.sizes().undo === window.base.steps
 key alt Enter
 wait kw() === 0
-expect F.state().rows.every(function(r){ return r.visualText.indexOf('prop') === -1; })
+expect st(19) === 'Wo' && st(20) === 'rds'
