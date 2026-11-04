@@ -29,8 +29,8 @@ test("script print preserves captured facts, scene metadata, rich text and annot
   assert.equal(dom.querySelector(".tag").style.color, "rgb(118, 74, 162)");
   assert.equal(dom.querySelector(".comment-marker").textContent, "1");
   assert.match(dom.querySelector(".script-table").textContent, /中文 日本語 العربية हिन्दी 😀/);
-  assert.equal(dom.querySelector(".rundown,[aria-label='Scene rundown']"), null);
-  assert.match(dom.body.textContent, /Grey rows: shot scenes/);
+  assert.equal(dom.querySelector(".rundown,[aria-label='Beat rundown']"), null);
+  assert.match(dom.body.textContent, /Grey rows: filmed beats/);
   assert.deepEqual([...dom.querySelectorAll("td p")].map((el) => el.textContent), [
     "YouTube https://www.youtube.com/watch?v=aqz-KE-bpKQ", "Local clip (video file)"
   ]);
@@ -45,16 +45,16 @@ test("shot scenes have grey rows and retain their written status without a scene
   assert.equal(rows[0].classList.contains("shot-done"), false);
   for (const row of rows.slice(1)) {
     assert.equal(row.classList.contains("shot-done"), true);
-    assert.match(row.querySelector("td").textContent, /Shot/);
+    assert.match(row.querySelector("td").textContent, /Filmed/);
   }
-  assert.equal(dom.querySelector(".rundown,[aria-label='Scene rundown']"), null);
+  assert.equal(dom.querySelector(".rundown,[aria-label='Beat rundown']"), null);
 });
 
 test("comments retain anchors, locations, quotes, authors, assignments, resolution, replies and pictures in order", () => {
   const dom = page(scriptFixture().input);
   const comments = dom.querySelector("#comments");
   assert.match(comments.textContent, /2 open · 1 resolved/);
-  for (const text of ["Scene A.1 · Audio", "Document title", "Deleted scene", "Ann <script>", "Captured words", "Assigned to Jo", "Resolved by Sam", "Bob", "End reply"]) {
+  for (const text of ["Beat A.1 · Audio", "Document title", "Deleted beat", "Ann <script>", "Captured words", "Assigned to Jo", "Resolved by Sam", "Bob", "End reply"]) {
     assert.ok(comments.textContent.includes(text), text);
   }
   const thread = [...comments.querySelectorAll(".comment")].find((el) => el.textContent.includes("Before"));
@@ -110,7 +110,7 @@ test("rendering a capture after edits keeps captured words, facts, comments and 
 
 test("empty and long scripts preserve all content, with sections composable through the shared shell", () => {
   const empty = page(scriptFixture("empty").input);
-  assert.match(empty.body.textContent, /No scenes yet/);
+  assert.match(empty.body.textContent, /No beats yet/);
   assert.equal(empty.querySelectorAll("table,#comments,.rundown").length, 0);
   const { input } = scriptFixture("long");
   const sections = scriptPrintSections(input);

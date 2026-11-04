@@ -52,15 +52,15 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
   const facts = exportFacts(doc, services);
   const beats = beatFacts(doc, services);
   const summary = exportSummaryParts(facts).concat(facts.date).join(" · ");
-  const statusSummary = beats.length ? `<p class="print-meta">Shot ${facts.status.shot} · Ready ${facts.status.ready} · To do ${facts.status.todo} · Grey rows: shot scenes</p>` : "";
+  const statusSummary = beats.length ? `<p class="print-meta">Filmed ${facts.status.shot} · Ready ${facts.status.ready} · To do ${facts.status.todo} · Grey rows: filmed beats</p>` : "";
   const rows = doc.beats.map((row, index) => {
     const beat = beats[index];
     if (!beat) throw new Error("Missing captured scene facts");
     const image = rowImage(row);
     const legacy = image?.dataUrl ? decodeImageDataUrl(image.dataUrl) : null;
     const picture = image?.ref ? assets.picture(image.ref.sha256) : legacy ? { bytes: legacy.bytes, mime: legacy.ref.mime } : null;
-    const main = image ? printPicture(picture, "Scene " + beat.number + " picture") : "";
-    const more = morePictureRefs(row).map((ref) => printPicture(assets.picture(ref.sha256), "Scene " + beat.number + " gallery picture")).join("");
+    const main = image ? printPicture(picture, "Beat " + beat.number + " picture") : "";
+    const more = morePictureRefs(row).map((ref) => printPicture(assets.picture(ref.sha256), "Beat " + beat.number + " gallery picture")).join("");
     const links = rowVideoLinks(row).map((link) => `<p>${link.href ? escapeHtml(videoHostLabel(link)) + " " : ""}${printLink(String(videoLinkText(link)), link.href)}</p>`).join("");
     return `<tr${beat.status.id === "shot" ? ' class="shot-done"' : ""}><td><strong class="scene-number">${beat.number}</strong><span class="scene-meta">${escapeHtml(beat.start)}</span>
 <span class="scene-meta">${escapeHtml(beat.status.label)}</span></td>
@@ -71,12 +71,12 @@ export function scriptPrintSections(input: ScriptPrintInput): PrintSection[] {
   const groups = scriptSceneFacts(doc, beats);
   function table(from: number, to: number, heading = ""): string {
     return `<table class="script-table"><colgroup><col style="width:10%"><col style="width:40%"><col style="width:40%"><col style="width:10%"></colgroup>
-<thead><tr><th>Scene</th><th class="visual-head">Visual</th><th class="audio-head">Audio</th><th>Read</th></tr>${heading}</thead><tbody>${rows.slice(from, to).join("")}</tbody></table>`;
+<thead><tr><th>Beat</th><th class="visual-head">Visual</th><th class="audio-head">Audio</th><th>Read</th></tr>${heading}</thead><tbody>${rows.slice(from, to).join("")}</tbody></table>`;
   }
   const tables = groups.length ? (groups[0] && groups[0].start > 0 ? table(0, groups[0].start) : "") + groups.map(group =>
     table(group.start, group.end, `<tr class="script-section"><th colspan="4"><span>${escapeHtml(group.name)}</span><span class="script-section-total">${escapeHtml(group.total)}</span></th></tr>`)).join("") : table(0, rows.length);
   const script = `<h1>${escapeHtml(facts.title)}</h1><p class="print-meta">${escapeHtml(summary)}</p>${statusSummary}` +
-    (rows.length ? tables : "<p>No scenes yet.</p>");
+    (rows.length ? tables : "<p>No beats yet.</p>");
   const scenes: PrintSection[] = [{ id: "script", title: "Script", html: script }];
   const comments = exportComments(doc, { pieces: true }, services);
   if (comments.length) {

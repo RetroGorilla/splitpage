@@ -39,8 +39,8 @@ const SHA = "a".repeat(64);
 const SHA2 = "b".repeat(64);
 const img = (sha) => `<img data-blob="${sha}">`;
 
-const BREAKDOWN_HEAD = "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group";
-const BROLL_HEAD = "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start";
+const BREAKDOWN_HEAD = "Category,Item,Status,Assigned to,Mentions,Beats,In script,Notes,B-roll shots,First beat at,Group";
+const BROLL_HEAD = "Beat,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Beat start";
 
 test("the breakdown sheet quotes a cell only when it has to, and doubles its quotes", () => {
   const doc = demo();
@@ -87,7 +87,7 @@ test("a b-roll sheet with no shots says so in a single row", () => {
 test("the script sheet's header and column count", () => {
   const doc = demo();
   const table = scriptTable(doc);
-  assert.deepEqual(table.head, ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"]);
+  assert.deepEqual(table.head, ["Beat", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"]);
   assert.deepEqual(table.commentHead, ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"]);
   assert.equal(buildCsv(doc).slice(1).split("\r\n")[0], table.head.join(","));
 });
@@ -98,7 +98,7 @@ test("a scene's row has its number, start, status, read time and whether the rea
   const doc = small({ rows: [TIMED[0], row("r1", { audioText: "One two three four five six seven eight nine ten." })] });
   const table = scriptTable(doc);
   assert.equal(table.beats.length, 2);
-  assert.deepEqual(table.beats[0].cells.slice(0, 7), ["A.1", "00:00", "Shot", "1:00", "yes", "Wide shot", "Hello"]);
+  assert.deepEqual(table.beats[0].cells.slice(0, 7), ["A.1", "00:00", "Filmed", "1:00", "yes", "Wide shot", "Hello"]);
   assert.equal(table.beats[0].status, "shot");
   assert.equal(table.beats[1].cells[0], "A.2");
   assert.equal(table.beats[1].cells[1], "01:00");
@@ -110,7 +110,7 @@ test("a scene's row has its number, start, status, read time and whether the rea
 test("the total row counts shot scenes and the running time", () => {
   const table = scriptTable(small({ rows: TIMED }));
   assert.equal(table.summary.length, 1);
-  assert.deepEqual(table.summary[0].slice(0, 4), ["Total", "", "1 of 2 shot", "1:30"]);
+  assert.deepEqual(table.summary[0].slice(0, 4), ["Total", "", "1 of 2 filmed", "1:30"]);
   assert.equal(table.summary[0].length, table.head.length);
 });
 
@@ -161,9 +161,9 @@ test("each comment is a row with its number, place, status, author and text, and
   const comments = scriptTable(commented()).comments;
   const byBody = (text) => comments.find((c) => c.cells[7] === text);
   assert.equal(comments.length, 11 + 2 + 1 + 1 + 1 + 1 + 1);
-  assert.deepEqual(byBody("Note c0").cells.slice(0, 5), [1, "Scene A.1 · Audio", "Open", "", "Ann"]);
+  assert.deepEqual(byBody("Note c0").cells.slice(0, 5), [1, "Beat A.1 · Audio", "Open", "", "Ann"]);
   assert.deepEqual(byBody("Note c0").reply, false);
-  assert.deepEqual(byBody("Note done").cells.slice(0, 5), ["", "Scene A.1 · Audio", "Resolved by Sam", "", "Ann"]);
+  assert.deepEqual(byBody("Note done").cells.slice(0, 5), ["", "Beat A.1 · Audio", "Resolved by Sam", "", "Ann"]);
   assert.equal(byBody("Note done2").cells[2], "Resolved");
   assert.equal(byBody("Note late").cells[0], 12);
   assert.equal(byBody("Note title").cells[1], "Document title");
@@ -345,20 +345,20 @@ test("the print list honours the filter and grouping asked for, and says so in i
   const flaggedCount = all.filter((e) => e.reshoot).length;
   const total = (p) => p.groups.reduce((n, g) => n + g.total, 0);
   const plain = brollShotListForPrint(doc);
-  assert.equal(plain.scope, "by scene");
+  assert.equal(plain.scope, "by beat");
   assert.equal(total(plain), all.length);
-  assert.equal(brollShotListForPrint(doc, {}).scope, "by scene");
-  assert.equal(brollShotListForPrint(doc, "shot").scope, "by scene");
-  assert.equal(brollShotListForPrint(doc, null).scope, "by scene");
-  assert.equal(brollShotListForPrint(doc, { filter: "nonsense", group: "nonsense" }).scope, "by scene");
+  assert.equal(brollShotListForPrint(doc, {}).scope, "by beat");
+  assert.equal(brollShotListForPrint(doc, "shot").scope, "by beat");
+  assert.equal(brollShotListForPrint(doc, null).scope, "by beat");
+  assert.equal(brollShotListForPrint(doc, { filter: "nonsense", group: "nonsense" }).scope, "by beat");
   const shot = brollShotListForPrint(doc, { filter: "shot" });
-  assert.equal(shot.scope, "Shot, by scene");
+  assert.equal(shot.scope, "Filmed, by beat");
   assert.equal(total(shot), shotCount);
   const flagged = brollShotListForPrint(doc, { filter: "flagged", group: "location" });
   assert.equal(flagged.scope, "Flagged, by location");
   assert.equal(total(flagged), flaggedCount);
   const unshot = brollShotListForPrint(doc, { filter: "unshot", group: "person" });
-  assert.equal(unshot.scope, "To shoot, by person");
+  assert.equal(unshot.scope, "To film, by person");
   assert.equal(total(unshot), all.length - shotCount);
   assert.equal(brollShotListForPrint(doc, { filter: "all", group: "location" }).scope, "by location");
   assert.equal(brollShotListForPrint(doc, { group: "location" }).scope, "by location");
@@ -369,7 +369,7 @@ test("the print list's summary counts every shot, whatever the filter shows", ()
   const all = doc.broll;
   const shotCount = all.filter((e) => e.status === "shot").length;
   const flaggedCount = all.filter((e) => e.reshoot).length;
-  const expected = shotCount + " of " + all.length + " shot" + (flaggedCount ? " · " + flaggedCount + " flagged" : "");
+  const expected = shotCount + " of " + all.length + " filmed" + (flaggedCount ? " · " + flaggedCount + " flagged" : "");
   for (const filter of ["all", "shot", "unshot", "flagged"]) {
     assert.equal(brollShotListForPrint(doc, { filter }).summary, expected, filter);
   }
@@ -389,7 +389,7 @@ test("each print group counts its shots, marks the unplaced group and carries it
   const beats = beatFacts(doc);
   const byBeat = brollShotListForPrint({ ...doc, broll: [b, a, added] }, { group: "scene" });
   assert.deepEqual(byBeat.groups.map((g) => [g.label, g.kind, g.none, g.start, g.done, g.total]), [
-    ["Scene A.4", "scene", false, beats[3].start, 1, 2],
+    ["Beat A.4", "scene", false, beats[3].start, 1, 2],
     ["Added here", "added", false, "", 0, 1]
   ]);
   assert.deepEqual(byBeat.groups[0].items.map((i) => [i.name, i.start]), [["A.4.1 A", beats[3].start], ["A.4.2 B", beats[3].start]]);

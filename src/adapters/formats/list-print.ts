@@ -52,7 +52,7 @@ export function packingPrintSection(input: ListPrintInput, catId: string): Print
   const html = items.length ? `${header}<p class="print-meta">${escapeHtml(itemSummary(items, ["have", "sourcing", "needed", "returned"]))}</p>
 <div class="packing-key"><span>Status</span>${TAG_STATUSES.map((status) => `<span>${escapeHtml(status.label)}</span>`).join("")}<em>Fill in each step as it happens</em></div>
 <table class="packing-table"><colgroup><col style="width:5%"><col style="width:5%"><col style="width:38%"><col style="width:16%"><col style="width:21%"><col style="width:15%"></colgroup>
-<thead><tr><th>Out</th><th>Back</th><th>Item</th><th>Status</th><th>Owner</th><th>Scenes</th></tr></thead><tbody>${items.map((item) =>
+<thead><tr><th>Out</th><th>Back</th><th>Item</th><th>Status</th><th>Owner</th><th>Beats</th></tr></thead><tbody>${items.map((item) =>
     `<tr><td>${checkBox("Out")}</td><td>${checkBox("Back")}</td><td><strong>${escapeHtml(item.name)}</strong>${itemDetails(item)}</td>
 <td>${packingStatus(item)}</td><td>${escapeHtml(item.owner)}</td><td>${escapeHtml(item.inScript === "no" ? "Not in script" : item.beats.join(", "))}</td></tr>`).join("")}</tbody></table>
 <div class="packing-signatures">${["Packed by", "Returned by"].map((label) => `<p>${label}<span class="signature-line"></span>Date<span class="signature-line"></span></p>`).join("")}</div>`
@@ -70,7 +70,7 @@ export function productionBreakdownPrintSection(input: ListPrintInput): PrintSec
   if (!groups.length) return null;
   const html = `<h2>Production breakdown</h2><p class="print-meta">${escapeHtml(itemSummary(groups.flatMap((group) => group.items), TAG_STATUSES.map((status) => status.id)))}</p>
 <table class="breakdown-table"><colgroup><col style="width:38%"><col style="width:18%"><col style="width:22%"><col style="width:22%"></colgroup>
-<thead><tr><th>Item</th><th>Status</th><th>Scenes</th><th>Assigned to</th></tr></thead>${groups.map((group) =>
+<thead><tr><th>Item</th><th>Status</th><th>Beats</th><th>Assigned to</th></tr></thead>${groups.map((group) =>
     `<tbody><tr class="list-group"><th colspan="4">${categoryHeading(group.label, group.color)} <span class="print-meta">${group.items.length}</span></th></tr>${group.items.map((item) =>
       `<tr><td>${escapeHtml(item.name)}${itemDetails(item)}</td><td><span class="status-mark ${item.status}" aria-hidden="true"></span>${escapeHtml(item.statusLabel)}</td>
 <td>${escapeHtml(item.beats.join(", "))}</td><td>${escapeHtml(item.owner || "—")}</td></tr>`).join("")}</tbody>`).join("")}</table>`;
@@ -82,8 +82,8 @@ export function shotListPrintSection(input: ListPrintInput, options?: unknown, a
   const heading = appendix ? "<h2>B-roll shot list</h2>" : `<p class="print-meta">B-roll shot list</p><h1>${escapeHtml(data.title)}</h1>`;
   const html = `${heading}<p class="print-meta">${escapeHtml(data.summary + " · " + data.scope)}${appendix ? "" : " · " + escapeHtml(exportDateText(exportDay(input.doc)))}</p>` +
     (data.groups.length ? `<table class="shot-table"><colgroup>${[4, 6, 27, 11, 14, 10, 12, 16].map((width) => `<col style="width:${width}%">`).join("")}</colgroup>
-<thead><tr>${["Done", "Scene", "B-roll shot", "Location", "Props", "Assigned", "Flagged", "Notes"].map((label) => `<th>${label}</th>`).join("")}</tr></thead>${data.groups.map((group) =>
-      `<tbody><tr class="list-group"><th colspan="8">${escapeHtml(group.label)} <span class="print-meta">${group.done}/${group.total} shot</span></th></tr>${group.items.map((item) =>
+<thead><tr>${["Done", "Beat", "B-roll shot", "Location", "Props", "Assigned", "Flagged", "Notes"].map((label) => `<th>${label}</th>`).join("")}</tr></thead>${data.groups.map((group) =>
+      `<tbody><tr class="list-group"><th colspan="8">${escapeHtml(group.label)} <span class="print-meta">${group.done}/${group.total} filmed</span></th></tr>${group.items.map((item) =>
         `<tr${item.shot ? ' class="shot-done"' : ""}><td>${checkBox(item.status, item.shot)}</td><td>${escapeHtml(item.beat)}<span class="scene-meta">${escapeHtml(item.start)}</span></td>
 <td><strong>${escapeHtml(item.name)}</strong>${item.desc ? `<div class="print-text list-detail">${escapeHtml(item.desc)}</div>` : ""}${item.cuts ? `<div class="list-detail"><em>“${escapeHtml(item.cuts)}”</em></div>` : ""}</td>
 <td>${escapeHtml(group.kind === "location" ? "" : item.location)}</td><td>${item.propsWithStatus.map((prop) => `<div>${escapeHtml(prop)}</div>`).join("")}</td>

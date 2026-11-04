@@ -38,7 +38,7 @@ export function buildBrollCsv(doc: ExportDocument, services: ExportServices = ex
   return "﻿" + lines.join("\r\n");
 }
 
-const CSV_HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
+const CSV_HEAD = ["Beat", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
 
 function beatTagLists(doc: ExportDocument): Record<string, string[]> {
   const byBeat: Record<string, { label: string; names: string[] }[]> = {};
@@ -108,7 +108,7 @@ export function scriptTable(doc: ExportDocument, services: ExportServices = expo
       (open[i] || []).sort(function (a, b) { return a - b; }).join(", ")
     ] });
   });
-  out.summary.push(summary("Total", facts.beats ? facts.status.shot + " of " + facts.beats + " shot" : "", facts.runtime));
+  out.summary.push(summary("Total", facts.beats ? facts.status.shot + " of " + facts.beats + " filmed" : "", facts.runtime));
   if (facts.target) {
     out.summary.push(summary("Target", facts.target.delta === "0:00" ? "on target"
       : facts.target.delta + (facts.target.over ? " over" : " under"), facts.target.text));
@@ -193,7 +193,7 @@ export function csvToRows(text: unknown): ImportedRow[] {
   const hv = head.findIndex(function (c) { return /^(visual|video|picture|image|shot|action)s?$/.test(c); });
   const ha = head.findIndex(function (c) { return /^(audio|voice|vo|narration|dialogue|script|line)s?\b/.test(c); });
   const looksLikeHeader = hv !== -1 || ha !== -1 ||
-    head.some(function (c) { return /^(scene|shot|no\.?|#|number|index)$/.test(c); });
+    head.some(function (c) { return /^(scene|beat|shot|no\.?|#|number|index)$/.test(c); });
 
   if (hv !== -1 && ha !== -1) {
     vi = hv; ai = ha; start = 1;
@@ -206,7 +206,7 @@ export function csvToRows(text: unknown): ImportedRow[] {
   }
   if (looksLikeHeader && start === 0) start = 1;
 
-  const ours = head[0] === "scene" && head.indexOf("status") !== -1 && hv !== -1 && ha !== -1;
+  const ours = (head[0] === "scene" || head[0] === "beat") && head.indexOf("status") !== -1 && hv !== -1 && ha !== -1;
 
   const out: ImportedRow[] = [];
   for (let i = start; i < table.length; i++) {

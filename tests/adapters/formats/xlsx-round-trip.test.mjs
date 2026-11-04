@@ -25,7 +25,7 @@ test("every row is a sheet row, in order, blank rows included, with its text, li
     assert.ok(beats[i].Visual === want.visual, "visual text of scene " + (i + 1));
     assert.ok(beats[i].Audio === want.audio, "audio text of scene " + (i + 1));
   });
-  assert.deepEqual(beats.map((r) => r.Status), ["Shot", "To do", "To do", "Ready", "To do", "To do", "To do", "To do", "To do", "To do"]);
+  assert.deepEqual(beats.map((r) => r.Status), ["Filmed", "To do", "To do", "Ready", "To do", "To do", "To do", "To do", "To do", "To do"]);
   assert.deepEqual(records.slice(beats.length).map((r) => r.Scene), ["Total"]);
 });
 
@@ -87,9 +87,9 @@ test("comments: a row per comment and per reply, each with its author, quote, wo
   const comments = recordsOf(sheetNamed(book, "Comments"));
   assert.equal(comments.length, 3);
   const [open, reply, resolved] = comments;
-  assert.deepEqual([open["No."], open.Location, open.Status, open["Quoted text"]], [1, "Scene A.1 · Audio", "Open", "anchored words"]);
+  assert.deepEqual([open["No."], open.Location, open.Status, open["Quoted text"]], [1, "Beat A.1 · Audio", "Open", "anchored words"]);
   assert.deepEqual([reply.Author, reply.Comment, reply["No."]], ["↳ Sam", "Done — ‘ok’.", ""]);
-  assert.deepEqual([resolved.Location, resolved.Status, resolved.Author, resolved.Comment], ["Scene A.9 · Visual", "Resolved by Ann", "Ann", "Resolved note"]);
+  assert.deepEqual([resolved.Location, resolved.Status, resolved.Author, resolved.Comment], ["Beat A.9 · Visual", "Resolved by Ann", "Ann", "Resolved note"]);
   assert.equal(recordsOf(sheetNamed(book, "Script"))[0]["Open comments"], "1");
 });
 
@@ -124,5 +124,5 @@ test("the b-roll sheet keeps each shot's scene, name, status, flag, location and
   const [shot] = recordsOf(sheet);
   assert.equal(sheet.rows.length, 2);
   assert.deepEqual([shot.Scene, shot.Shot, shot.Status, shot.Flagged, shot.Location, shot.Note],
-    ["A.1", "A.1.1 Café façade 😀", "Shot", "yes", "Rue Saint-Honoré", "Needs a “warm” haze."]);
+    ["A.1", "A.1.1 Café façade 😀", "Filmed", "yes", "Rue Saint-Honoré", "Needs a “warm” haze."]);
 });
