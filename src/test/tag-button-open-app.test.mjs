@@ -150,26 +150,129 @@ for (const end of ["Enter", "Escape", "blur", "Tab"]) {
   });
 }
 
-test("Tag refuses collapsed carets in Audio, a link, a tag or after a word, as typed keywords do", () => {
-  for (const [html, target, offset, audio] of [
-    ["Words", null, 5, false],
-    ['<b>Words</b>', "b, strong", 5, false],
-    ['<a href="https://example.com">Link</a>', "a", 0, false],
-    ['<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp">Lamp</span>', ".tag-anchor", 0, false],
-    ["", null, 0, true]
-  ]) {
+function notice() {
+  return [...document.querySelectorAll("#toasts .toast, .toast")].map((el) => el.textContent).join("|");
+}
+
+for (const [label, html, node, offset, tail] of [
+  ["right after a word", "Words", (cell) => cell.firstChild, 5, ""],
+  ["inside a word", "Words", (cell) => cell.firstChild, 2, "rds"],
+  ["inside bold text", "<b>Words</b>", (cell) => cell.querySelector("b, strong").firstChild, 5, ""]
+]) {
+  test(`Tag opens the category menu ${label} and adds no space`, () => {
+    const { cell, button, modal } = fixture(html);
+    caret(cell, node(cell), offset);
+    const plain = cell.textContent;
+    const before = currentDocument().rows[0].visualText;
+    const steps = undoOwner().sizes().undo;
+    button.click();
+    assert.equal(modal.hidden, false);
+    assert.equal(modal.classList.contains("is-category-only"), true);
+    assert.equal(currentDocument().rows[0].visualText, before);
+    modal.querySelector('[data-tag-cat="prop"]').click();
+    assert.equal(modal.hidden, true);
+    assert.equal(currentPlainTags().isOpen(cell), true);
+    assert.equal(cell.querySelector(".plain-tag-keyword").textContent, "prop:");
+    assert.equal(cell.querySelector(".plain-tag-keyword").nextSibling.data, "​" + tail);
+    assert.equal(cell.textContent.replace(/\u200b/g, ""), plain.slice(0, offset) + "prop:" + plain.slice(offset));
+    assert.equal(undoOwner().sizes().undo, steps + 1);
+    undoOwner().undo();
+    assert.equal(currentDocument().rows[0].visualText, before);
+  });
+}
+
+test("Tag after a word: Tab names the tag from what is typed and keeps the text before it", () => {
+  const { cell, button, modal } = fixture("Words");
+  caret(cell, cell.firstChild, 5);
+  button.click();
+  modal.querySelector('[data-tag-cat="prop"]').click();
+  type(cell, "Lamp");
+  key(cell, "Tab");
+  assert.match(currentDocument().rows[0].visualText, /^Words<span[^>]*data-tag-cat="prop" data-tag-name="Lamp"/);
+  assert.equal(currentPlainTags().isOpen(), false);
+});
+
+test("Tag after a word: Escape leaves the plain text and one undo restores the cell", () => {
+  const { cell, button, modal } = fixture("Words");
+  caret(cell, cell.firstChild, 5);
+  const before = currentDocument().rows[0].visualText;
+  button.click();
+  modal.querySelector('[data-tag-cat="prop"]').click();
+  key(cell, "Escape");
+  currentPlainTags().refresh();
+  assert.equal(currentPlainTags().isOpen(), false);
+  assert.equal(currentDocument().rows[0].visualText, "Wordsprop:");
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, before);
+});
+
+test("Tag inside a word: the text after the cursor is neither lost nor reordered", () => {
+  const typedName = fixture("Words");
+  caret(typedName.cell, typedName.cell.firstChild, 2);
+  typedName.button.click();
+  typedName.modal.querySelector('[data-tag-cat="prop"]').click();
+  type(typedName.cell, "Lamp");
+  key(typedName.cell, "Tab");
+  const named = currentDocument().rows[0].visualText;
+  assert.match(named, /^Wo<span[^>]*data-tag-name="Lamp"[^>]*>Lamp<\/span>rds$/);
+
+  const escaped = fixture("Words");
+  caret(escaped.cell, escaped.cell.firstChild, 2);
+  const before = currentDocument().rows[0].visualText;
+  escaped.button.click();
+  escaped.modal.querySelector('[data-tag-cat="prop"]').click();
+  key(escaped.cell, "Escape");
+  currentPlainTags().refresh();
+  assert.equal(currentDocument().rows[0].visualText, "Woprop:rds");
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, before);
+});
+
+test("Tag inside a word: Tab with no name typed tags the rest of the line, as an open keyword before text does", () => {
+  const { cell, button, modal } = fixture("Words more<br>next line");
+  caret(cell, cell.firstChild, 2);
+  button.click();
+  modal.querySelector('[data-tag-cat="prop"]').click();
+  key(cell, "Tab");
+  assert.match(currentDocument().rows[0].visualText, /^Wo<span[^>]*data-tag-name="rds more"[^>]*>[^<]*<\/span><br>next line$/);
+});
+test("typing a keyword right after a word still starts no tag", () => {
+  const { cell } = fixture("Words");
+  caret(cell, cell.firstChild, 5);
+  type(cell, "prop:");
+  assert.equal(currentPlainTags().isOpen(), false);
+  assert.equal(cell.querySelector(".plain-tag-keyword"), null);
+});
+
+for (const [label, html, target, offset, audio, message] of [
+  ["Audio", "", null, 0, true, /Visual column/],
+  ["a link", '<a href="https://example.com">Link</a>', "a", 0, false, /inside a link/],
+  ["a tag", '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp">Lamp</span>', ".tag-anchor", 0, false, /inside another tag/]
+]) {
+  test(`Tag still refuses a collapsed caret in ${label} and says why`, () => {
     const h = fixture(html, "Audio ");
     const cell = audio ? document.querySelector('#rows .audio-cell .cell-editable') : h.cell;
     const container = target ? cell.querySelector(target) : cell;
     assert.ok(container, `${target}: ${cell.innerHTML}`);
-    const node = target ? container.firstChild : cell.firstChild || cell;
-    caret(cell, node, offset);
-    const before = JSON.stringify(currentDocument());
+    caret(cell, target ? container.firstChild : cell.firstChild || cell, offset);
+    const before = currentDocument().rows[0].visualText;
     cell.closest(".field-wrap").querySelector(".tb-tag").click();
-    assert.equal(h.modal.hidden, true, html || "Audio");
+    assert.equal(h.modal.hidden, true);
     assert.equal(currentPlainTags().isOpen(), false);
-    assert.equal(JSON.stringify(currentDocument()), before);
-  }
+    assert.equal(currentDocument().rows[0].visualText, before);
+    assert.match(notice(), message);
+    assert.doesNotMatch(notice(), /Select the words/);
+  });
+}
+
+test("Tag says an open tag is in progress when one is already open", () => {
+  const { cell, button, modal } = fixture("Before ");
+  caret(cell, cell.firstChild, 7);
+  button.click();
+  modal.querySelector('[data-tag-cat="prop"]').click();
+  button.click();
+  assert.equal(modal.hidden, true);
+  assert.match(notice(), /already open/);
 });
 
 test("a selection still opens the full composer and adds its chosen label", () => {

@@ -32,8 +32,10 @@ export interface PlainTagPorts {
   readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
 }
 
+export type TagCaretRefusal = "audio" | "link" | "tag" | "open" | "elsewhere";
+
 export interface PlainTagControl {
-  readonly openCategoryAtCaret: (cellEl: HTMLElement, marks: Marks) => boolean;
+  readonly openCategoryAtCaret: (cellEl: HTMLElement, marks: Marks) => TagCaretRefusal | null;
   readonly chooseCategory: (cat: string | null) => boolean;
   readonly cancelCategory: () => boolean;
   readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;

@@ -10,7 +10,7 @@ import { FORMAT_MARKS, namedTagId, projection } from "../../core/text/runs.ts";
 import { registryEntryOf } from "../../core/production/records.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import type { TagCategoryId } from "../../core/document/tags.ts";
-import type { PlainTagMount, PlainTagPorts } from "./ports.ts";
+import type { PlainTagMount, PlainTagPorts, TagCaretRefusal } from "./ports.ts";
 
 export const PLAIN_TAG_KEYWORDS: Record<string, TagCategoryId> = {
   prop: "prop",
@@ -96,33 +96,32 @@ interface TagCategoryCaret {
 
 let categoryCaret: TagCategoryCaret | null = null;
 
-function tagCaret(cellEl: Element): Range | null {
-  if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows") || plainTagOpen()) return null;
+function tagCaret(cellEl: Element): Range | TagCaretRefusal {
+  if (cellEl.getAttribute("data-field") === "audioText") return "audio";
+  if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows")) return "elsewhere";
+  if (plainTagOpen()) return "open";
   const sel = window.getSelection();
-  if (!sel?.rangeCount || !sel.isCollapsed) return null;
+  if (!sel?.rangeCount || !sel.isCollapsed) return "elsewhere";
   const range = sel.getRangeAt(0);
   const node = range.startContainer;
-  if (!cellEl.contains(node)) return null;
+  if (!cellEl.contains(node)) return "elsewhere";
   const element = node.nodeType === 1 ? node as Element : node.parentElement;
-  if (isInsideTagOrLink(element)) return null;
-  const pos = domToPos(cellEl, node, range.startOffset);
-  if (pos === null) return null;
-  if (!ports) return null;
-  const html = ports.text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, ""));
-  const before = projection(ports.text.fromHtml(html)).slice(0, pos);
-  return matchPlainTagKeyword(before + "prop:") ? range : null;
+  if (element?.closest(".tag-anchor")) return "tag";
+  if (element?.closest("a")) return "link";
+  return domToPos(cellEl, node, range.startOffset) === null ? "elsewhere" : range;
 }
 
-function openCategoryAtCaret(cellEl: HTMLElement, marks: Marks): boolean {
+function openCategoryAtCaret(cellEl: HTMLElement, marks: Marks): TagCaretRefusal | null {
   const range = tagCaret(cellEl);
+  if (typeof range === "string") return range;
   const modal = document.getElementById("tag-modal");
-  if (!range || !modal || !modal.hidden || !ports) return false;
+  if (!modal || !modal.hidden || !ports) return "elsewhere";
   categoryCaret = { cellEl, range: range.cloneRange(), node: range.startContainer, offset: range.startOffset, html: cellEl.innerHTML, marks };
   ports.renderCategories(null);
   modal.classList.add("is-category-only");
   modal.hidden = false;
   modal.querySelector<HTMLElement>(".tag-cat-btn")?.focus();
-  return true;
+  return null;
 }
 
 function categoryCaretStillThere(saved: TagCategoryCaret): boolean {
@@ -153,14 +152,14 @@ function chooseCategory(cat: string | null): boolean {
   if (!saved) return false;
   cancelCategory();
   if (!categoryCaretStillThere(saved) || !tagCategory(cat)) return true;
-  if (!tagCaret(saved.cellEl) || !ports) return true;
+  if (typeof tagCaret(saved.cellEl) === "string" || !ports) return true;
   const keyword = (cat === "sound" ? "sfx" : cat) + ":";
   const cellEl = ports.cells.edit(saved.cellEl, function (cell, selection) {
     if (!selection || selection.from !== selection.to) return null;
     const end = selection.from + keyword.length;
     return { cell: insertText(cell, selection.from, keyword, saved.marks), sel: { from: end, to: end } };
   });
-  if (cellEl) maybeOpenPlainTag({ inputType: "insertText", data: ":" }, cellEl);
+  if (cellEl) openKeywordAtCaret(cellEl, false);
   return true;
 }
 
@@ -271,6 +270,10 @@ function plainTagEmptyAtCaret() {
 
 export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null }, cellEl: Element) {
   if (e.inputType !== "insertText" || !e.data || e.data.charAt(e.data.length - 1) !== ":") return;
+  openKeywordAtCaret(cellEl, true);
+}
+
+function openKeywordAtCaret(cellEl: Element, atWordStart: boolean) {
   if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows")) return;
   if (plainTagOpen()) return;
   if (open) { open = null; clearPaint(); }
@@ -287,8 +290,8 @@ export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null 
   if (!tail) return;
   const kwStart = offset - tail[0].length;
   let before = raw.slice(0, kwStart).replace(ZWSP_RE, "");
-  if (!before) before = charBeforeNode(cellEl, node);
-  const kw = matchPlainTagKeyword(before + tail[0]);
+  if (!before && atWordStart) before = charBeforeNode(cellEl, node);
+  const kw = atWordStart ? matchPlainTagKeyword(before + tail[0]) : matchPlainTagKeyword(tail[0]);
   if (!kw) return;
 
   const rest = node.splitText(offset);

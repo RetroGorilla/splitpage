@@ -3,7 +3,7 @@ import type { Availability, ActionDefinition } from "../../application/actions.t
 import type { ScreenState } from "../../application/screen.ts";
 import { EVERY_OVERLAY, availableUnless, firstRefusal } from "../../application/screen.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
-import type { PlainTagControl, TagPanelMount } from "./ports.ts";
+import type { PlainTagControl, TagCaretRefusal, TagPanelMount } from "./ports.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import { cleanMarks } from "../../core/text/runs.ts";
 
@@ -64,12 +64,22 @@ function opener(id: string, label: string, run: (input: unknown) => void): Actio
   };
 }
 
+const CARET_REFUSAL_NOTICE: Readonly<Record<TagCaretRefusal, string>> = {
+  audio: "Tags go in the Visual column. Put the cursor there, or select words to label.",
+  link: "A tag can't start inside a link. Move the cursor outside the link first.",
+  tag: "A tag can't start inside another tag. Move the cursor outside it first.",
+  open: "A tag is already open. Type its name and press Tab, or Esc to cancel.",
+  elsewhere: "Select the words you want to label first."
+};
+
 export function tagComposerActions(current: () => PlainTagControl | null, notices: Pick<NoticePort, "show">): ActionDefinition[] {
   return [opener("tag-selection", "Tag selection", (input) => {
     if (typeof input === "object" && input !== null && "caret" in input) {
       if (!(input.caret instanceof HTMLElement)) throw new TypeError("tag-selection needs a caret cell");
       const marks = cleanMarks("marks" in input ? input.marks : {}, false);
-      if (!current()?.openCategoryAtCaret(input.caret, marks)) notices.show("Select the words you want to label first.", "warn");
+      const owner = current();
+      const refusal = owner ? owner.openCategoryAtCaret(input.caret, marks) : "elsewhere";
+      if (refusal) notices.show(CARET_REFUSAL_NOTICE[refusal], "warn");
       return;
     }
     openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]) as Parameters<typeof openTagComposer>[0]);
