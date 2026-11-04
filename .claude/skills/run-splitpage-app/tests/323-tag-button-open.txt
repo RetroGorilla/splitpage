@@ -98,8 +98,14 @@ expect modal.hidden && kw() === 0
 caret #rows .row:nth-of-type(10) .visual-cell .cell-editable
 press word
 click #rows .row:nth-of-type(10) .visual-cell button.tb-tag
-expect modal.hidden && kw() === 0
-expect st(9) == word
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect st(9) == wordprop:
+press Lamp
+key Tab
+wait kw() === 0 && cell(9).querySelector('.tag-anchor') !== null
+expect st(9).indexOf('word<span') === 0
 
 eval (function(){ document.querySelector('[data-action="add-row"]').click(); document.querySelector('[data-action="add-row"]').click(); return true; })()
 caret #rows .row:nth-of-type(11) .visual-cell .cell-editable
