@@ -149,6 +149,7 @@ sleep 200
 expect document.querySelectorAll('.hidden-shot-strip').length == 1
 
 click #btn-production
+jsclick #production-modes [data-group="cat"]
 wait document.querySelectorAll('#production-list .tag-entity').length == 1
 jsclick .tag-entity-head
 wait document.querySelectorAll('.tag-scene').length == 1
