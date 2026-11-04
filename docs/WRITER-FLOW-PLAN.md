@@ -15,7 +15,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 ### Structure
 
 - A paragraph holds one or more beats, running together as flowing text. A beat never crosses a paragraph break.
-- **Enter** starts a new paragraph and a new beat. **Alt+Enter** starts a new beat in the same paragraph. **Shift+Enter** is a line break inside a beat.
+- **Enter** starts a new beat in the same paragraph, and a second **Enter** starts a paragraph there, Adam's pick on the test page. Between two beats, that second Enter leaves no empty beat behind: the text after it starts the paragraph. **Shift+Enter** is a line break inside a beat. Alt+Enter isn't needed any more, so it goes away unless Adam wants it kept.
 - Existing scripts open with the sentence rule, Adam's pick on the test page: a beat starts a paragraph when the beat before it ended a sentence. Old files have no saved breaks, so the rule runs once, when such a script first opens in the new writer, and writes ordinary flags. A document-level marker records that it ran, because a new script deliberately written as one paragraph also has no flags and must not be broken up. It shares one sentence-end definition with the teleprompter. Text imports keep their source paragraph breaks.
 - The teleprompter keeps its sentence rule and also starts a paragraph at every saved break. Table exports stay per beat.
 - Narration export stays one paragraph per beat for now, and we circle back to it later (7.1).
@@ -49,7 +49,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 - A clean centred column of narration. Filmed beats and folded scenes always show in full, whatever their split-view setting.
 - A small number marks each boundary, Adam's pick on the test page, and a filmed beat's number is coloured. The beat holding the caret gets a very light tint. Its visual shows as a quiet note beside the line, and clicking the note opens the floating box. The Visuals, Numbers and Compact margin button goes away.
 - A beat with a visual and no narration shows as a chip in the text, Adam's pick on the test page, like `▣ Drone over the harbour · 0:04`, with the time only if one is set. It shows the writer there's a small break for a visual without being a paragraph break. Typing on it adds narration and makes it a normal beat.
-- A beat with neither narration nor a visual shows a small placeholder. Enter on one does nothing, so repeated Enter cannot fill the script with blank beats.
+- A beat with neither narration nor a visual shows a small placeholder. Once such a beat starts a paragraph, Enter on it does nothing, so repeated Enter cannot fill the script with blank beats.
 - `((direction))` stays inline. `SFX:` and `Music:` cues stay on their own line and do not start a paragraph or beat.
 - Switching modes keeps your place: the writer opens on the beat you were in, and closing returns you to the beat you were writing in.
 - Comments stay visible and can be added, with the comments panel open beside the writer.
@@ -94,7 +94,7 @@ Narration export following the writer's paragraphs, bullets and the Outline view
 
 ### To judge on the test page
 
-Enter versus double Enter, the Backspace rules, and whether a paragraph's first beat gets a number. Already picked: the sentence rule for existing scripts, the chip for a visual with no narration, numbers for ticks, and typing going where the caret is.
+The Backspace rules, and whether a paragraph's first beat gets a number. Already picked: the sentence rule for existing scripts, the chip for a visual with no narration, numbers for ticks, typing going where the caret is, and Enter for a new beat with a second Enter for a paragraph.
 
 ## 3. How it fits the code today
 
@@ -125,7 +125,7 @@ Enter versus double Enter, the Backspace rules, and whether a paragraph's first 
   | Whole paragraph moved between paragraphs, including a first paragraph with no stored flag | It stays its own paragraph, with the flag written on its first beat |
   | Beats moved or pasted mid-paragraph | They run on at the destination |
   | Join | The joined beat keeps the first beat's state, and the beat after it is untouched |
-  | Alt+Enter, or Add beat in the split view | The new beat runs on |
+  | Enter, or Add beat in the split view | The new beat runs on |
   | Scene header removed | The scene's first beat gets the flag, so its text doesn't join the paragraph above |
   | Scene header added, or a scene moved | Implicit starts cover it, and no flags change |
 
@@ -207,7 +207,7 @@ Alternatives considered:
 | 0b | Small in-app slice of the same engine: undo replay, real paint notifications, toolbar and comment focus, save flush, Electron undo routing | `feat/writer-flow` | It holds up. If 0a or 0b fails, we reconsider the engine before anything lands on `main` |
 | 1 | `paragraphStart`, merge and equality rules, `src/core/flow/`, commands, shared command changes, fuzz tests. No shipping UI writes the flag yet | `main`, after 0b | Unit, merge, differential and failure-path tests; Full review because it touches merge and saved data |
 | 2 | Single-host surface: render, caret, typing, tags, directions, undo ownership, patching, mode switching, and a minimal comment jump | `feat/writer-flow` | Typing `perf-ab` against `main`, correctness suites |
-| 3 | Cross-beat selection, delete, format, Enter, Alt+Enter, Backspace, Join, cut and paste | same | Browser suites |
+| 3 | Cross-beat selection, delete, format, Enter, Backspace, Join, cut and paste | same | Browser suites |
 | 4 | Markdown and headings | same | Browser suites; wording signed off |
 | 5 | Ticks, visual note, visual-only chips, floating box | same | Browser suites |
 | 6 | Find and the Visuals toggle | same | Browser suites |

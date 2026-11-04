@@ -440,13 +440,58 @@ export function startBeat(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): FlowOut
   return splitBeat(doc, index, pos.offset, false, ports);
 }
 
-export function setParagraphStart(doc: FlowDoc, rowId: string): FlowOutcome {
-  const index = indexOfRow(doc, rowId);
+function blankAfter(doc: FlowDoc, index: number, ports: FlowPorts): FlowEdit {
+  const fresh = blankRow(ports.newId(), false);
+  const rows = doc.rows.slice();
+  rows.splice(index + 1, 0, fresh);
+  return edit(doc, rows, caretAt(beatPos(fresh.id, 0)));
+}
+
+function blankBefore(doc: FlowDoc, index: number, pos: FlowPos, ports: FlowPorts): FlowEdit {
+  const row = doc.rows[index] as FlowRow;
+  const fresh = blankRow(ports.newId(), !!row.paragraphStart);
+  const rows = doc.rows.slice();
+  rows[index] = withoutFlag(row);
+  rows.splice(index, 0, fresh);
+  const sections = scenesOf(doc).map(scene => scene.firstSceneId === row.id ? withSceneFirstBeat(scene, fresh.id) : scene);
+  return edit(doc, rows, caretAt(pos), { sections: sections.length ? sections : undefined });
+}
+
+function enterAtCaret(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): FlowOutcome {
+  if (pos.kind !== "beat") return null;
+  const index = indexOfRow(doc, pos.rowId);
   const row = doc.rows[index];
   if (!row) return null;
+  const len = cellLength(ports.cells(row.audioText));
+  if (pos.offset >= len && len) return blankAfter(doc, index, ports);
+  if (pos.offset > 0) return splitBeat(doc, index, pos.offset, false, ports);
+  if (!len && ports.hasVisual(row)) return blankAfter(doc, index, ports);
+  const starts = startsParagraph(doc, index);
+  if (len) {
+    if (starts) return blankBefore(doc, index, pos, ports);
+    const rows = doc.rows.slice();
+    rows[index] = withFlag(row);
+    return edit(doc, rows, caretAt(pos));
+  }
+  if (starts) return null;
+  const next = doc.rows[index + 1];
   const rows = doc.rows.slice();
+  // why: a second Enter between two beats means the text after it starts the paragraph, so no empty beat stays behind
+  if (next && !startsParagraph(doc, index + 1)) {
+    rows[index + 1] = withFlag(next);
+    rows.splice(index, 1);
+    return edit(doc, rows, caretAt(beatPos(next.id, 0)));
+  }
   rows[index] = withFlag(row);
-  return edit(doc, rows, caretAt(beatPos(rowId, 0)));
+  return edit(doc, rows, caretAt(pos));
+}
+
+export function enterAt(doc: FlowDoc, range: FlowRange, ports: FlowPorts): FlowOutcome {
+  if (isCollapsed(range)) return enterAtCaret(doc, range.head, ports);
+  const cleared = replaceRange(doc, range, [], ports);
+  if (!isEdit(cleared)) return cleared;
+  const next = enterAtCaret(afterEdit(doc, cleared), cleared.selection.head, ports);
+  return isEdit(next) ? { ...next, removedComments: cleared.removedComments, notice: cleared.notice } : cleared;
 }
 
 const STATUS_RANK: Readonly<Record<string, number>> = { todo: 0, ready: 1, shot: 2 };

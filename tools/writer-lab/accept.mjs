@@ -137,7 +137,7 @@ const fixture = () => ({
 });
 async function fresh(raw) {
   await closeBars();
-  await ev(`__lab.setting("enter","single"); __lab.setting("tick","delete"); __lab.setting("gapTyping","here"); __lab.setting("markdown",true); __lab.load(${JSON.stringify(raw ?? fixture())})`);
+  await ev(`__lab.setting("enter","double"); __lab.setting("tick","delete"); __lab.setting("gapTyping","here"); __lab.setting("markdown",true); __lab.load(${JSON.stringify(raw ?? fixture())})`);
   await settle();
 }
 const ids = list => list.map(r => r.id).join(",");
@@ -612,26 +612,31 @@ async function run() {
     same(await textOf("wb"), " bought some milk", "second keeps the rest");
   });
 
-  await t("switch: Enter twice mode", async () => {
+  await t("switch: Enter as new paragraph", async () => {
     await fresh(midSentence());
-    await ev(`__lab.setting("enter","double")`);
+    await ev(`__lab.setting("enter","single")`);
     await caret("wb", 3);
     await key("Enter");
     let now = await rows();
-    same(now.length, 7, "first Enter splits");
-    ok(!now[2].start, "no paragraph yet");
+    same(now.length, 7, "splits");
+    ok(now[2].start, "starts a paragraph");
+    await fresh(midSentence());
+    await ev(`__lab.setting("enter","single")`);
+    await caret("wa", 20);
     await key("Enter");
     now = await rows();
-    same(now.length, 7, "second Enter adds no beat");
-    ok(now[2].start, "second Enter starts the paragraph");
+    same(now.length, 6, "no new beat");
+    ok(now[1].start, "next beat flagged");
+    same((await sel()).head, beat("wb", 0), "caret");
     await fresh(midSentence());
-    await ev(`__lab.setting("enter","double")`);
+    await ev(`__lab.setting("enter","single")`);
     await caret("wf", 14);
-    await key("Enter");
     await key("Enter");
     now = await rows();
     same(now.length, 7, "a new beat at the end");
     ok(now[6].start, "and a paragraph");
+    await key("Enter");
+    same((await rows()).length, 7, "Enter on a blank does nothing");
   });
 
   await t("switch: Backspace at a tick joins", async () => {
@@ -908,44 +913,111 @@ async function run() {
     same(await sel(), { anchor: beat("ra", 0), head: beat("rb", 5) }, "selection");
   });
 
-  await t("enter: mid-beat starts a new paragraph and a new beat, keeps the visual on the first half", async () => {
+  await t("enter: mid-beat starts a new beat, keeps the visual on the first half, and a second Enter starts the paragraph", async () => {
     await fresh();
     const before = await snapshot();
     await caret("rb", 5);
     await key("Enter");
-    const now = await rows();
+    let now = await rows();
     same(now.length, 11, "count");
     same(now[1].text, "Bravo", "first half");
     same(now[1].visual, "Desk shot", "visual");
     same(now[2].text, " two.", "second half");
-    ok(now[2].start, "paragraph flag");
+    ok(!now[2].start, "same paragraph after one Enter");
     same((await sel()).head, beat(now[2].id, 0), "caret");
+    await key("Enter");
+    now = await rows();
+    same(now.length, 11, "second Enter adds no beat");
+    ok(now[2].start, "second Enter starts the paragraph");
+    same((await sel()).head, beat(now[2].id, 0), "caret stays");
+    await key("Enter");
+    same((await rows()).length, 12, "a third Enter pushes the text down with a new beat");
+    await key("z", "ctrl");
+    await key("z", "ctrl");
     await undoRestores(before);
   });
 
-  await t("enter: at a beat's end with a run-on next beat just starts a paragraph", async () => {
+  await t("enter: at a beat's end makes a new beat to type in, and a second Enter leaves no empty beat behind", async () => {
     await fresh();
     await caret("ra", 10);
     await key("Enter");
-    const now = await rows();
-    same(now.length, 10, "no new beat");
-    ok(now[1].start, "next beat flagged");
+    let now = await rows();
+    same(now.length, 11, "new beat");
+    same(now[1].text, "", "empty");
+    ok(!now[1].start, "same paragraph");
+    same((await sel()).head, beat(now[1].id, 0), "caret in it");
+    await key("Enter");
+    now = await rows();
+    same(ids(now), "ra,rb,rc,rd,re,rf,rg,rh,ri,rj", "the empty beat is gone");
+    ok(now[1].start, "the next beat starts the paragraph");
     same((await sel()).head, beat("rb", 0), "caret");
+    same(await textOf("ra"), "Alpha one.", "text before");
+    same(await textOf("rb"), "Bravo two.", "text after");
   });
 
-  await t("enter: at the last beat's end makes a new blank beat, and Enter there does nothing", async () => {
+  await t("enter: at the last beat's end, the second Enter starts a paragraph, and a third does nothing", async () => {
     await fresh();
     await caret("rj", 11);
     await key("Enter");
-    const now = await rows();
+    let now = await rows();
     same(now.length, 11, "new beat");
-    ok(now[10].start, "flag");
+    ok(!now[10].start, "same paragraph");
     const blank = now[10].id;
     await key("Enter");
-    same((await rows()).length, 11, "still 11");
+    now = await rows();
+    same(now.length, 11, "still 11");
+    ok(now[10].start, "now a paragraph");
     same((await sel()).head, beat(blank, 0), "caret");
+    await key("Enter");
+    same((await rows()).length, 11, "nothing on a blank paragraph");
     await type("New");
     same(await textOf(blank), "New", "typing");
+  });
+
+  await t("enter: at a paragraph's start pushes the text down, and at a scene's first beat keeps the scene above", async () => {
+    await fresh();
+    const before = await snapshot();
+    await caret("rc", 0);
+    await key("Enter");
+    let now = await rows();
+    same(now.length, 11, "new beat above");
+    same(now[2].text, "", "empty");
+    ok(now[2].start, "the empty beat takes the paragraph start");
+    same(now[3].id, "rc", "text moves down");
+    ok(!now[3].start, "same paragraph");
+    same((await sel()).head, beat("rc", 0), "caret stays with the text");
+    await undoRestores(before);
+    await fresh();
+    await caret("rf", 0);
+    await key("Enter");
+    now = await rows();
+    const scene = (await ev("__lab.doc().sections")).find(s => s.id === "s2");
+    same(scene.firstSceneId, now[5].id, "the scene moves to the new beat");
+    same(now[6].id, "rf", "text below it");
+    same(await ev(`document.querySelector('[data-scene="s2"]').nextElementSibling.querySelector('.wr-beat').getAttribute("data-id")`), now[5].id, "screen order");
+  });
+
+  await t("enter: on a chip makes a new beat after it, and the chip keeps its visual", async () => {
+    await fresh();
+    await caret("rd", 0);
+    await key("Enter");
+    const now = await rows();
+    same(now.length, 11, "new beat");
+    same(now[3].visual, "Street b-roll", "chip keeps the visual");
+    same(now[4].text, "", "new beat is empty");
+    same((await sel()).head, beat(now[4].id, 0), "caret after the chip");
+  });
+
+  await t("enter: over a selection across beats is one undo", async () => {
+    await fresh();
+    const before = await snapshot();
+    await select(beat("ra", 6), beat("rb", 5));
+    await key("Enter");
+    const now = await rows();
+    same(now[0].text, "Alpha ", "first");
+    same(now[1].text, "", "new beat");
+    same(now[2].text, " two.", "last");
+    await undoRestores(before);
   });
 
   await t("enter: Alt+Enter starts a beat in the same paragraph", async () => {

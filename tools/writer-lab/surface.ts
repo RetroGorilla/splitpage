@@ -1,7 +1,7 @@
 import {
-  backspaceAt, beatPos, caretAt, comparePos, deleteForwardAt, enterInHeading, finalizeHeading, flowOf, headingPos, inlineMarkdown,
+  backspaceAt, beatPos, caretAt, comparePos, deleteForwardAt, enterAt, enterInHeading, finalizeHeading, flowOf, headingPos, inlineMarkdown,
   isCollapsed, isPendingHeading, joinWithPrevious, lineBreakAt, logicalText, orderedRange, pasteText, renameHeading, replaceRange,
-  setMarkAcross, setParagraphStart, selectionToOwnBeat, startBeat, startParagraph, stepFrom, typeWithMarks, withinOneBeat
+  setMarkAcross, selectionToOwnBeat, startBeat, startParagraph, stepFrom, typeWithMarks, withinOneBeat
 } from "../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowEdit, FlowOutcome, FlowPorts, FlowPos, FlowRange, FlowRow } from "../../src/core/flow/flow.ts";
 import { typingMarks } from "../../src/core/text/edits.ts";
@@ -590,6 +590,10 @@ export function createSurface(ports: SurfacePorts): Surface {
       apply("line-break", lineBreakAt(doc, range, ports.flow), range);
       return;
     }
+    if (!isCollapsed(range) && !event.altKey && ports.settings().enter === "double") {
+      apply("enter", enterAt(doc, range, ports.flow), range);
+      return;
+    }
     let caret = range;
     if (!isCollapsed(range)) {
       const cleared = replaceRange(doc, range, [], ports.flow);
@@ -613,14 +617,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       return;
     }
     if (ports.settings().enter === "double") {
-      const current = ports.doc();
-      const index = current.rows.findIndex(item => item.id === pos.rowId);
-      const row = current.rows[index];
-      if (row && index > 0 && pos.offset === 0 && !row.paragraphStart) {
-        apply("double-enter", setParagraphStart(current, row.id), caret);
-        return;
-      }
-      apply("start-beat", startBeat(current, pos, ports.flow), caret);
+      apply("enter", enterAt(ports.doc(), caret, ports.flow), caret);
       return;
     }
     apply("start-paragraph", startParagraph(ports.doc(), pos, ports.flow), caret);

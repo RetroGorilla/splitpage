@@ -45,7 +45,7 @@ function readSaved(): Partial<LabSettings> {
 }
 
 const settings: LabSettings = {
-  enter: "single", tick: "delete", gapTyping: "here", markdown: true, tickStyle: "number", visualOnly: "chip", opening: "sentence",
+  enter: "double", tick: "delete", gapTyping: "here", markdown: true, tickStyle: "number", visualOnly: "chip", opening: "sentence",
   tint: true, note: true, script: "demo", size: 19, ...saved
 };
 
