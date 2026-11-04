@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: draft for outside review. Nothing here is built. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Nothing here is built. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -27,6 +27,9 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 - Bold, italic, underline, strikethrough and highlight work across beats. Comments, tags and links stay within one beat. With a selection across beats, those three buttons are disabled and say why.
 - Backspace at a paragraph's start removes only the paragraph break. Backspace just after a tick deletes the previous character and leaves the boundary. Text typed at a tick goes into the beat before it.
 - Beats join only through Alt+Backspace or Join on the tick, still refused when both have visuals.
+- Deleting a selection takes a comment with it only when none of that comment's marked text survives. A comment stays alive if a split left part of its text in a surviving beat.
+- The writer always has somewhere to type: Ctrl+A then Delete leaves one empty beat.
+- Beats display with a single space between them unless the text already has whitespace there. Selection, copy and Find treat that gap the same way. The space is not stored, so it costs no read time and doesn't reach exports.
 
 ### Cut and paste
 
@@ -66,6 +69,8 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
   - A line still holding several beats on leaving: the `# ` is removed, the line goes back to normal, and a notice says "A scene header can't hold several beats. Press Enter after the header's words." The caret stays where it was clicked.
   - Only `# ` on the line: the marker is removed.
 - A converted beat with no visual goes away. One with a visual stays, empty, under the new header.
+- The heading takes the beat's first line, up to any Shift+Enter. Later lines stay as narration in that beat.
+- A line over the scene name limit of 200 characters is refused the same way, with its own notice and all its narration kept.
 - Enter in a heading: the text after the caret becomes the scene's first beat. Backspace at a heading's start: the header goes away and its text becomes a new beat that flows into the paragraph above. Backspace at the start of the first beat under a header: the caret moves to the end of the header and nothing changes.
 
 ### Find
@@ -93,11 +98,13 @@ Tick style, Enter versus double Enter, the Backspace rules, the visual-only line
 - `src/features/writer/writer.ts` renders one `contenteditable` `.wr-para` per beat, each a real `.cell-editable` with `data-id` and `data-field`. Browsers cannot make one text edit span two editing hosts, so continuous selection needs one host.
 - The cell-editing owner (`src/application/editing/cell-editing.ts`) reads and writes one cell element through `CellPage`. Typing is native, then synced by decoding the cell's HTML into a `cellTextCommand`. Formatting, Enter and pending marks are already model edits.
 - Everything assumes a cell is its own focused element. On `feat/writer-flow` at `87957b3f`, in the editing, rows, tags, undo, clipboard, comments, find, writer and common features plus `wiring/editor.ts`, non-test code has 34 `activeElement` lines, 21 `isScriptCell`/`closest` lines, 57 `cell-editable` lines and 29 `wr-para`/`writer-doc` lines. Not all of them need changing, and this is the largest known risk.
-- One command is one undo entry, and multi-row commands exist (`joinBeatsCommand`, `pasteBeatsCommand`, `removeBeatsCommand`). The held selection (`src/application/editing/selection.ts`) is one row, one field, anchor and head.
-- Whole-beat clipboard (`src/features/clipboard/beat-clip.ts`) already carries everything and treats a cut as a move, but pastes after the current beat, not at the caret.
+- A command is one transaction with rollback, and multi-row commands exist (`joinBeatsCommand`, `pasteBeatsCommand`, `removeBeatsCommand`). Adjacent one-cell commands can coalesce into one undo entry. Undo finds the caret by guessing from the first text step, for one cell. The held selection (`src/application/editing/selection.ts`) is one row, one field, anchor and head.
+- Whole-beat clipboard (`src/features/clipboard/beat-clip.ts`) carries comments, status, b-roll and pictures up to a size cap, and treats a cut as a move. It pastes after the current beat, not at the caret, and it doesn't carry scene headers.
+- `removeBeatsCommand` leaves comments in place at their last position. A split deliberately keeps one comment's mark in both halves, so removing comments by their `rowId` could delete a thread that still has surviving text.
+- The app has no runtime dependencies today.
 - Scenes must be non-empty: no synthetic beats, and a scene with no beats loses its header (`docs/architecture/sections.md`). `name` is plain text capped at 200.
-- `mergeRow` starts from a copy of "theirs" and only reconciles named fields, so a new row field needs its own rule or a local change to it is lost.
-- Invariants that change: INV-15 (one paragraph is one row), the split-field invariant (Enter), the panel-closing and z-order invariant (side panels 140, writer 145), writer focus containment, and the Save button mirror. `docs/HANDOFF.md` 3.9 and `docs/DOCUMENT-MODEL.md`'s non-goals also need updating.
+- `mergeRow` starts from a copy of "theirs" and only reconciles named fields, so a new row field needs its own rule or a local change to it is lost. `rowContentEqual` also ignores unnamed fields, so a delete-versus-edit merge wouldn't see a paragraph-only change.
+- Invariants that change: INV-15 (one paragraph is one row), the split-field invariant (Enter), the panel-closing and z-order invariant (side panels 140, writer 145), writer focus containment, the Save button mirror, and INV-18 for comments removed with whole beats. INV-03 stays: Find still stops at tags and b-roll. `docs/HANDOFF.md` 3.9 and `docs/DOCUMENT-MODEL.md`'s non-goals also need updating.
 
 ## 4. Proposed design
 
@@ -106,23 +113,27 @@ Tick style, Enter versus double Enter, the Backspace rules, the visual-only line
 - New optional row field `paragraphStart: true`. Absent means the beat runs on from the one before. The first beat of the script and of each scene always starts a paragraph, whatever the field says.
 - Old files keep their exact bytes, because the key is only written when true. No schema bump. Paragraphs are never stored as a separate structure.
 - Any combination of values renders correctly, so a merge cannot produce an invalid layout.
-- Merge: changed side wins against the base, with incoming winning a real conflict, the same shape as `lengthSeconds`.
-- Removing or moving a paragraph's first beat hands `paragraphStart` to the next beat in that paragraph, so a paragraph doesn't silently join the one above. This lives in the commands used by both views.
+- Merge: changed side wins against the base, with incoming winning a real conflict, the same shape as `lengthSeconds`. The field also joins `rowContentEqual`, so a paragraph-only change counts as an edit against a concurrent delete. Tests cover both orientations and merges with no base.
+- Each operation defines what happens to the flag. The first beat of a paragraph is deleted, cut or moved alone: the next beat in that paragraph takes the flag, so the paragraph doesn't join the one above. A whole paragraph moves: its flag moves with it. Explicit Join: the joined beat keeps the first beat's state, and a following beat is untouched. Survivors' flag changes are part of the same command and undo entry.
 - Beat clipboard payloads carry the field. Exports ignore it, except the teleprompter.
+- Known limit: project Markdown's table reuses rows by position, so inserting or deleting rows in an external editor can attach a flag to different text. It only moves a paragraph break, and a test records it.
 
 ### 4.2 Pure logic
 
 A new `src/core/document/flow.ts` with no DOM:
 
 - `flowOf(doc)`: the derived list of headers and paragraphs, used by the writer and teleprompter.
-- A flow position `{ rowId, offset }` and a flow range between two positions.
-- Pure functions returning the next rows and sections: replace a range, toggle a mark across a range, start a paragraph, start a beat, remove a break, move or insert beats at a position, make a heading, cut a selection into its own beat, and find and replace across a paragraph.
+- A flow position that can address everything the caret can reach: `{ kind: "beat", rowId, offset }`, `{ kind: "heading", sceneId, offset }`, and an affinity for which side of a boundary it sits on. Empty beats and visual-only beats are real positions at offset 0. A flow range has an anchor and a head, so direction is kept, and belongs to one document lifetime.
+- One definition of the logical text of a paragraph, including the display gap between beats and its offset mapping, shared by rendering, selection, copy, delete and Find.
+- Pure functions returning a result of next rows, next sections, comment changes and next selection: replace a range, set a mark across a range (one decision over the whole selection, not a toggle per beat), start a paragraph, start a beat, remove a break, move or insert beats at a position, make a heading, cut a selection into its own beat, and find and replace across a paragraph. Search logic shared with `find.ts` moves down into core first.
 
-Each is wrapped as one command in `src/application/commands/flow.ts`. Under the review policy, parsing and transformation get seeded fuzzing, with properties such as: text outside the range is unchanged, no beat is duplicated, undo restores the exact document, scenes are never empty.
+Each is wrapped as one command in `src/application/commands/flow.ts`, with comments in the declared change set. Each records its selection before and after, including direction, so undo and redo restore it rather than guessing. Conversions such as Markdown break coalescing, so Ctrl+Z straight after gives back the typed characters.
+
+Under the review policy, parsing and transformation get seeded fuzzing, with properties such as: text outside the range is unchanged, no beat is duplicated, undo restores the document's content and structure (timestamps are bookkeeping and are excluded), scenes are never empty. Merge changes also get the mandatory differential and failure-path tests.
 
 ### 4.3 The editing surface (the key decision)
 
-Recommended: **one editing host, with each beat an inline element inside it.**
+Recommended: **one editing host, with native text entry inside a beat, behind a writer-specific input adapter.** The outside review agreed with one host, but not with "reuse the cell path, then repair the spans" on its own.
 
 ```html
 <div id="writer-doc" contenteditable="true">
@@ -131,46 +142,71 @@ Recommended: **one editing host, with each beat an inline element inside it.**
     <span class="wr-beat" data-id="..." data-field="audioText">First beat. </span>
     <span class="wr-beat" data-id="..." data-field="audioText">Second beat.</span>
   </div>
-  <div class="wr-visual-line" data-id="..." contenteditable="false">...</div>
+  <div class="wr-par">
+    <span class="wr-beat" data-id="..." data-field="audioText" data-empty></span>
+    <span class="wr-visual-note" contenteditable="false">Drone over the harbour · 0:04</span>
+  </div>
 </div>
 ```
 
-- Ticks are CSS on `.wr-beat + .wr-beat`, not DOM nodes, so the caret has nothing to get stuck on.
-- **Inside one beat:** a collapsed caret types natively, then syncs that beat through the existing cell path. This keeps typing fast and keeps tag shortcuts, direction shortcuts, the completion ghost and spellcheck.
-- **Anything crossing or changing structure:** `beforeinput` and `keydown` are cancelled, one flow command runs, the affected paragraphs repaint and the selection is restored from model positions.
-- **Finding the current beat:** a selection-derived `currentBeat()` replaces `activeElement` and `event.target`, because both now report the host. `CellPage` keeps working on a beat element.
-- **Repair:** after native input, any text that landed outside a `.wr-beat`, or a merged or split span, is folded back into the right beat and that paragraph is repainted from the model.
+- Ticks, placeholders and visual labels are decorations, never serialized and never in copied text. Every beat has a real narration position, including a visual-only beat, whose compact line is a styled beat span with its label beside it. Clicks and keys on the label map to that position.
+- **Input decisions use the operation's target range, not the caret.** A collapsed caret can still delete across beats with Ctrl+Backspace, or replace text through spellcheck. Before each input the adapter reads the input type and `getTargetRanges()`.
+- **Inside one beat:** the input goes native, then syncs that beat. This keeps typing fast and keeps tag shortcuts, direction shortcuts, the completion ghost and spellcheck.
+- **Crossing beats or changing structure:** `beforeinput` and `keydown` are cancelled, one flow command runs, and the DOM is patched with the selection restored from model positions.
+- **Repair:** after native input, any text outside a `.wr-beat`, or a merged or split span, is folded back into the right beat before anything is saved, and never during composition.
+- **Patches, not paragraph repaints.** An old script opens as one huge paragraph per scene, so repainting "the paragraph" could mean nearly the whole document. Ordinary edits patch the affected beat.
+- **IME:** Adam doesn't use one and IME-only bugs go on the never-do list (#1144), so there is no tuning. The one rule is that text is never discarded: no repaint or repair during composition, and all touched beats sync when it ends. Suite `289-script-cell-ime` has to keep passing or be updated on purpose.
+
+Integrations this must adapt, beyond `currentBeat()`, because the host is now the event target and active element:
+
+- **Undo:** `ownsItsUndo` (`features/undo/routes.ts`) treats a non-script editable as having its own undo. The host needs explicit document-undo ownership on keyboard, menu and `beforeinput`, or Ctrl+Z reaches browser history and the DOM diverges from the model. This is a data-integrity blocker for phase 2. Comment drafts keep their separate undo.
+- **Pending marks:** `forgetStalePendingMarks` compares against `activeElement`, so Ctrl+B then typing would lose the mark. These move to model positions.
+- **Tag shortcuts:** `plain-tags.ts` checks focus and keeps span references that a repaint invalidates.
+- **Leaving a beat:** sanitising, syncing and b-roll anchoring run on blur today, and moving between beats won't blur. A model-level "left this beat" transition runs them, separate from host blur, window blur and closing the writer.
+- **Clipboard:** `clipboard/routes.ts` routes on `.cell-editable`, so the host needs its own range-aware route, or native paste bypasses sanitising.
 - **Held selection:** a second selection shape for flow ranges, with the existing one-cell shape left for the split view.
 
-Alternatives for the review to challenge:
+Alternatives considered:
 
 | Option | For | Against |
 | --- | --- | --- |
-| One host, native typing inside a beat (recommended) | Reuses the input pipeline, smallest typing cost | Native edits at span edges can escape, needing repair; many `activeElement` assumptions |
-| One host, every keystroke through the model | No escape, no repair | Typing path gets slower, breaks autocorrect and spellcheck replacement more easily, more new code |
-| ProseMirror or similar, for the writer only | Solved selection, schema and repair | A second engine beside the split view; tags, ghost, b-roll, shortcuts and comments rebuilt on it; a new runtime dependency |
-| Keep one host per beat and paint our own selection | Least disruption to existing code | Not native: no real selection, drag or browser copy; fragile |
+| One host, native typing inside a beat, input adapter (recommended) | Reuses the input pipeline, smallest typing cost | Native edits at span edges can escape, needing repair; many focus assumptions to adapt |
+| One host, every keystroke through the model | No escape, no repair | Composition still needs native handling; breaks spellcheck replacement more easily; more new code. Its typing cost is unmeasured |
+| ProseMirror or similar, for the writer only | Solved selection, schema and repair | A second engine beside the split view; tags, ghost, b-roll, shortcuts and comments rebuilt on it; the app's first runtime dependency. **This is the fallback if phase 0 fails** |
+| Keep one host per beat and paint our own selection | Least disruption to existing code | Not native: no real selection, drag or browser copy; the weakest fit for the decided behaviour |
 
 ### 4.4 Other parts
 
-- **Find:** a writer-only search over `flowOf`, sharing `matchesInPieces` where possible. Whether it extends `find.ts` or sits beside it is left to the Find phase.
-- **Comments panel beside the writer:** the smallest change to the panel-closing and z-order rules. No comment behaviour work beyond that.
+- **Clipboard:** a flow clipboard format holding partial end pieces, whole rows, paragraph edges and selected scenes, with id handling for copy versus move, and plain text and HTML fallbacks. It builds on the beat payload, and the size cap and its "pictures left out" report still apply.
+- **Find:** a writer-only search over `flowOf`, using search logic moved down into core. Matches still stop at tags and b-roll (INV-03). A scene-name replacement over 200 characters is refused.
+- **Comments beside the writer:** this is more than stacking order. Jumping to a comment searches `#rows` today, so it needs writer-aware jumps, selection capture for new comments, anchor highlighting, focus return and comment draft undo. No other comment behaviour changes.
 - **Top bar:** one shared header with mode-specific slots, replacing `.writer-bar`.
-- **Teleprompter:** `prompter.ts` keeps its sentence rule and also breaks at a beat with `paragraphStart`.
+- **Teleprompter:** `prompter.ts` works out paragraph membership before it filters out skipped and empty beats, then keeps its sentence rule and also breaks where a paragraph started. Otherwise a skipped or visual-only first beat would lose the break.
 
 ## 5. Phases
 
 | Phase | Work | Lands | Exit |
 | --- | --- | --- | --- |
-| 0 | Standalone test page with a demo script, using the 4.3 surface, with switches for section 2's open items | Not merged | Adam picks the settings |
-| 1 | `paragraphStart`, merge rule, `flow.ts`, commands, fuzz tests | `main`, inert | Unit and merge tests; Full review because it touches merge and saved data |
-| 2 | Single-host surface: render, caret, typing, tags, directions, undo, repaint, mode switching | `feat/writer-flow` | Typing `perf-ab` against `main` |
+| 0 | Standalone test page, built on the real text model and real undo: the 4.3 surface and adapter, section 2's switches, and the acceptance set below | Not merged | Acceptance set passes in Chrome and Electron's Chromium, and Adam picks the settings. If it fails, we reconsider the engine before anything lands |
+| 1 | `paragraphStart`, merge and equality rules, `flow.ts`, commands, fuzz tests | `main`, inert | Unit, merge, differential and failure-path tests; Full review because it touches merge and saved data |
+| 2 | Single-host surface: render, caret, typing, tags, directions, undo ownership, patching, mode switching, and a minimal comment jump | `feat/writer-flow` | Typing `perf-ab` against `main`, correctness suites |
 | 3 | Cross-beat selection, delete, format, Enter, Alt+Enter, Backspace, Join, cut and paste | same | Browser suites |
 | 4 | Markdown and headings | same | Browser suites; wording signed off |
 | 5 | Ticks, visual note, visual-only lines, floating box | same | Browser suites |
 | 6 | Find and the Visuals toggle | same | Browser suites |
 | 7 | Shared top bar, save status, comments beside the writer | same | Browser suites, desktop smoke groups |
 | 8 | Teleprompter rule, invariants and docs, help and changelog, full browser run, one perf comparison, one real script used by Adam | merge to `main` | Green gate, Normal review, Adam's okay |
+
+Phase 0's acceptance set, each with checks that untouched text, row ids and metadata survive and that the model matches what's on screen:
+
+- Mapping between the DOM and model positions, saving the model back out, and undo and redo.
+- Replacing a selection across beats, Backspace and Delete at boundaries, Ctrl+Backspace, paste and cut, spellcheck replacement.
+- Pending formatting, tags, comment marks, headings, empty beats and visual-only beats.
+- Typing at both edges of a beat span, beside tags and at formatting boundaries.
+- Repainting while text is selected, focus moving to the toolbar and back, and IME commit and cancel losing no text.
+- A short script and a long, sectionless old script as one huge paragraph, with typing timed on the long one.
+
+The page can't check Electron's menu routing, app focus or saving, so those stay in-app checks in phases 2 and 7.
 
 Phases 2 and 3 are one lane at a time, because they share the surface. Phases 4 to 7 can run in parallel once 3 lands. Inert work merges to `main` early so the feature branch doesn't drift from a fast-moving `main`. The old writer stays until the phase 8 merge.
 
@@ -179,11 +215,12 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 ## 6. Known risks
 
 1. **Native edits escaping a beat span.** Chromium may place typed text outside a span at its edge, or merge adjacent spans on delete. Phase 0 tests this directly, before anything lands.
-2. **Long scripts in one host.** Layout and selection cost grow with the document, and today's repaint replaces all of `#writer-doc`. Phase 2 repaints only affected paragraphs and measures typing on the long fixture.
-3. **Undo and selection.** History restores carets for one cell, so multi-beat edits need range restore.
-4. **Comment anchors.** Splitting and moving beats must keep anchors in the right row. Existing `comment-anchors` tests cover splits, not ranges.
+2. **Long scripts in one host.** Layout and selection cost grow with the document, and an old script opens as very large paragraphs. Phase 0 times exactly that shape, and phase 2 patches beats instead of repainting paragraphs.
+3. **Undo and selection.** Undo must own every route in the host, and multi-beat edits need their selection recorded rather than guessed.
+4. **Comment anchors.** Splitting, moving and deleting beats must keep threads whose text survives. Existing `comment-anchors` tests cover splits, not ranges.
 5. **Pending heading.** The text stays a literal `# ` in the beat until decided, so autosave can write it. If the app dies mid-heading, the script holds `# Title` as narration, which is harmless and visible.
 6. **Replacing without a fallback.** With no setting, a serious bug has no way back but a release revert, so phase 8 includes real use on a real script before the merge.
+7. **The engine decision comes late if phase 0 is shallow.** Phase 0 is therefore bigger than a mock-up, because tags, repair and visual-only beats could otherwise force a redesign after phase 1 has landed.
 
 ## 7. Found while planning: for Adam
 
@@ -192,12 +229,14 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 3. **A selection that fully contains a header and is deleted removes the header.** It's an explicit deletion, and it's one Ctrl+Z.
 4. **Headings are plain text, up to 200 characters.** Bold in a heading isn't stored, because scene names are plain.
 5. **`# Title` then Enter at the end of the script creates a blank first beat,** because a scene can't exist without one.
+6. **Open: forward Delete above a scene header.** The Backspace decision in 7.2 doesn't cover it. Proposal: Delete at the end of the last beat above a header moves the caret to the start of the header and changes nothing. Needs Adam's sign-off because it changes a keystroke.
 
-## 8. Questions for the outside review
+## 8. Outside review
 
-1. Is one host with native typing inside a beat right, or is one of the alternatives better? What would fail first?
-2. Which assumptions about a cell being its own focused element will break in ways the plan doesn't name?
-3. Is `paragraphStart` on the row right, including its hand-off rule and merge rule? What breaks through undo, history, drafts, project Markdown, or the on-disk merge?
-4. Are multi-beat commands, undo and comment anchoring workable as described?
-5. Is the phase order right, and is phase 0 able to answer the riskiest questions?
-6. Where do the section 2 rules contradict each other or the invariants?
+Round 1 (Codex Sol, High, read-only, at `97586dc0`). Blockers: undo ownership in the host, positions that couldn't address headings, row equality in merge, comment deletion semantics, headers missing from the clipboard, and heading conversion truncating narration over 200 characters. All are addressed in the sections above. Its call on the editing surface: one host with a writer-specific input adapter, keeping a writer-only editor engine as a credible fallback, which this plan adopts.
+
+Not adopted from round 1: IME-specific composition identity and undo handling, beyond "never discard text", because IME-only bugs go on the never-do list (#1144).
+
+The failure scenarios in round 1 were predicted from the code and event contract, not reproduced in a browser. Phase 0 is where they get tested.
+
+Round 2: pending.
