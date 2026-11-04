@@ -28,7 +28,7 @@ export interface TagPanelMount extends TagPanelCommands {
 export interface PlainTagPorts {
   readonly renderCategories: (selected: string | null) => void;
   readonly document: Pick<DocumentReader, "current">;
-  readonly cells: Pick<CellEditing<Element>, "edit" | "sync">;
+  readonly cells: Pick<CellEditing<Element>, "edit" | "open">;
   readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
 }
 
@@ -44,6 +44,7 @@ export interface PlainTagControl {
   readonly close: () => boolean;
   readonly isOpen: (cellEl?: Element | null) => boolean;
   readonly emptyAtCaret: () => boolean;
+  readonly cancelOnBackspace: () => boolean;
   readonly onTagged: (listener: () => void) => () => void;
 }
 
@@ -77,7 +78,7 @@ export interface ProductionTagPorts {
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml" | "productionReaders">;
   readonly production: () => Pick<ProductionIndexOwner, "entries" | "current" | "recordsPlan" | "derived" | "resetDerived">;
   readonly editing: {
-    readonly cells: () => Pick<CellEditing<Element>, "edit" | "sync">;
+    readonly cells: () => Pick<CellEditing<Element>, "edit" | "open">;
     readonly focus: () => Pick<FocusMemory<Element>, "promptMutedFor">;
   };
   readonly undo: Pick<UndoControl, "breakCoalescing">;

@@ -76,7 +76,12 @@ interface OpenPlainTag {
   tail: Text;
   cat: TagCategoryId;
   keyword: string;
-  added: Node[] | null;
+  silent: SilentTag | null;
+}
+
+interface SilentTag {
+  marks: Marks;
+  wrappers: Node[];
 }
 
 let ports: PlainTagPorts | null = null;
@@ -87,7 +92,7 @@ function tagPorts(): PlainTagPorts {
   if (!ports) throw new TypeError("Plain tags are not mounted");
   return ports;
 }
-interface TagCategoryCaret {
+interface TagCaretSnapshot {
   cellEl: HTMLElement;
   range: Range;
   node: Node;
@@ -96,7 +101,7 @@ interface TagCategoryCaret {
   marks: Marks;
 }
 
-let categoryCaret: TagCategoryCaret | null = null;
+let categoryCaret: TagCaretSnapshot | null = null;
 
 function tagCaret(cellEl: Element): Range | TagCaretRefusal {
   if (cellEl.getAttribute("data-field") === "audioText") return "audio";
@@ -126,7 +131,7 @@ function openCategoryAtCaret(cellEl: HTMLElement, marks: Marks): TagCaretRefusal
   return null;
 }
 
-function categoryCaretStillThere(saved: TagCategoryCaret): boolean {
+function categoryCaretStillThere(saved: TagCaretSnapshot): boolean {
   return saved.cellEl.isConnected && saved.cellEl.innerHTML === saved.html && saved.cellEl.contains(saved.node) &&
     saved.range.startContainer === saved.node && saved.range.startOffset === saved.offset;
 }
@@ -149,7 +154,7 @@ function cancelCategory(): boolean {
   return true;
 }
 
-function startsAWord(saved: TagCategoryCaret): boolean {
+function afterOrInsideWord(saved: TagCaretSnapshot): boolean {
   if (!ports) return false;
   const pos = domToPos(saved.cellEl, saved.node, saved.offset);
   if (pos === null) return false;
@@ -162,44 +167,57 @@ function sameMarks(a: Marks, b: Marks): boolean {
   return key(a) === key(b);
 }
 
-function insertKeywordInDom(saved: TagCategoryCaret, keyword: string): Node[] | null {
-  if (!ports) return null;
+function openSilentTag(saved: TagCaretSnapshot, cat: TagCategoryId, keyword: string): void {
+  if (!ports || !ports.cells.open(saved.cellEl) || !categoryCaretStillThere(saved)) return;
   const { node, offset, cellEl } = saved;
   const pos = domToPos(cellEl, node, offset);
-  if (pos === null) return null;
+  if (pos === null) return;
   const sel = window.getSelection();
-  if (!sel) return null;
-  const caret = document.createRange();
-  if (node.nodeType === 3 && sameMarks(typingMarks(ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, ""))), pos), saved.marks)) {
-    (node as Text).insertData(offset, keyword);
-    caret.setStart(node, offset + keyword.length);
-    sel.removeAllRanges();
-    sel.addRange(caret);
-    return [];
+  if (!sel) return;
+  const current = ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, "")));
+  const rest = node.nodeType === 3
+    ? (node as Text).splitText(offset)
+    : node.insertBefore(document.createTextNode(""), node.childNodes[offset] ?? null) as Text;
+  const span = document.createElement("span");
+  span.className = "plain-tag-keyword";
+  span.setAttribute("contenteditable", "false");
+  let tail = rest;
+  let wrappers: Node[] = [];
+  const parent = rest.parentNode as Node;
+  if (sameMarks(typingMarks(current, pos), saved.marks)) {
+    parent.insertBefore(span, rest);
+  } else {
+    const holder = document.createElement("template");
+    holder.innerHTML = toHtml(insertText([], 0, "x", saved.marks));
+    wrappers = Array.from(holder.content.childNodes);
+    let inner: Node | null = wrappers[wrappers.length - 1] ?? null;
+    while (inner?.lastChild) inner = inner.lastChild;
+    if (!inner || inner.nodeType !== 3) { cellEl.normalize(); return; }
+    tail = inner as Text;
+    tail.data = "";
+    (tail.parentNode as Node).insertBefore(span, tail);
+    parent.insertBefore(holder.content, rest);
   }
-  const holder = document.createElement("template");
-  holder.innerHTML = toHtml(insertText([], 0, keyword, saved.marks));
-  const added = Array.from(holder.content.childNodes);
-  saved.range.insertNode(holder.content);
-  let last: Node | null = added[added.length - 1] ?? null;
-  while (last?.lastChild) last = last.lastChild;
-  if (!last || last.nodeType !== 3) return null;
-  caret.setStart(last, (last as Text).length);
+  tail.insertData(0, ZWSP);
+  const caret = document.createRange();
+  caret.setStart(tail, 1);
+  caret.collapse(true);
   sel.removeAllRanges();
   sel.addRange(caret);
-  return added;
+  open = { cellEl: cellEl, span: span, tail: tail, cat: cat, keyword: keyword, silent: { marks: saved.marks, wrappers: wrappers } };
+  paint(open, 1);
 }
 
 function chooseCategory(cat: string | null): boolean {
   const saved = categoryCaret;
   if (!saved) return false;
   cancelCategory();
-  if (!categoryCaretStillThere(saved) || !tagCategory(cat)) return true;
+  const look = tagCategory(cat);
+  if (!categoryCaretStillThere(saved) || !look) return true;
   if (typeof tagCaret(saved.cellEl) === "string" || !ports) return true;
   const keyword = (cat === "sound" ? "sfx" : cat) + ":";
-  if (startsAWord(saved)) {
-    const added = insertKeywordInDom(saved, keyword);
-    if (added) openKeywordAtCaret(saved.cellEl, false, added);
+  if (afterOrInsideWord(saved)) {
+    openSilentTag(saved, look.id, keyword);
     return true;
   }
   const cellEl = ports.cells.edit(saved.cellEl, function (cell, selection) {
@@ -207,10 +225,9 @@ function chooseCategory(cat: string | null): boolean {
     const end = selection.from + keyword.length;
     return { cell: insertText(cell, selection.from, keyword, saved.marks), sel: { from: end, to: end } };
   });
-  if (cellEl) openKeywordAtCaret(cellEl, false);
+  if (cellEl) maybeOpenPlainTag({ inputType: "insertText", data: ":" }, cellEl);
   return true;
 }
-
 function highlightApiOk() {
   return !!(window.CSS && CSS.highlights && window.Highlight);
 }
@@ -280,27 +297,18 @@ function paint(o: OpenPlainTag, offset: number) {
   el.style.top = top + "px";
 }
 
-function dropKeyword(o: OpenPlainTag) {
+function dropSilent(o: OpenPlainTag, silent: SilentTag) {
   const cellEl = o.cellEl;
   const sel = cellEl.isConnected ? cellSelection(cellEl) : null;
-  const at = domToPos(cellEl, o.span.firstChild as Node, 0);
-  if (o.tail.isConnected && o.tail.previousSibling === o.span && o.tail.data.charAt(0) === ZWSP) {
-    o.tail.deleteData(0, 1);
-  }
+  if (o.tail.isConnected && o.tail.data.charAt(0) === ZWSP) o.tail.deleteData(0, 1);
   o.span.remove();
-  (o.added ?? []).forEach(function (n) { if (n.isConnected && !n.textContent) n.parentNode?.removeChild(n); });
+  silent.wrappers.forEach(function (n) { if (n.isConnected && !n.textContent) n.parentNode?.removeChild(n); });
   cellEl.normalize();
-  if (sel && at !== null && document.activeElement === cellEl) {
-    const len = o.keyword.length;
-    const shift = (p: number) => p >= at + len ? p - len : Math.min(p, at);
-    setCellSelection(cellEl, shift(sel.from), shift(sel.to));
-  }
-  if (cellEl.isConnected) tagPorts().cells.sync(cellEl);
+  if (sel && document.activeElement === cellEl) setCellSelection(cellEl, sel.from, sel.to);
 }
-
 function unwrap(o: OpenPlainTag) {
   if (!o.span.isConnected) return;
-  if (o.added) { dropKeyword(o); return; }
+  if (o.silent) { dropSilent(o, o.silent); return; }
   const sel = o.cellEl.isConnected ? cellSelection(o.cellEl) : null;
   const parent = o.span.parentNode as ParentNode;
   if (o.tail.isConnected && o.tail.previousSibling === o.span && o.tail.data.charAt(0) === ZWSP) {
@@ -328,6 +336,12 @@ export function refreshPlainTag() {
   paint(o, at);
 }
 
+function cancelOnBackspace(): boolean {
+  const silent = !!open?.silent;
+  cancelPlainTag();
+  return silent;
+}
+
 function plainTagEmptyAtCaret() {
   const o = open;
   if (!o || !stillThere(o)) return false;
@@ -337,10 +351,6 @@ function plainTagEmptyAtCaret() {
 
 export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null }, cellEl: Element) {
   if (e.inputType !== "insertText" || !e.data || e.data.charAt(e.data.length - 1) !== ":") return;
-  openKeywordAtCaret(cellEl, true);
-}
-
-function openKeywordAtCaret(cellEl: Element, atWordStart: boolean, added: Node[] | null = null) {
   if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows")) return;
   if (plainTagOpen()) return;
   if (open) { open = null; clearPaint(); }
@@ -357,8 +367,8 @@ function openKeywordAtCaret(cellEl: Element, atWordStart: boolean, added: Node[]
   if (!tail) return;
   const kwStart = offset - tail[0].length;
   let before = raw.slice(0, kwStart).replace(ZWSP_RE, "");
-  if (!before && atWordStart) before = charBeforeNode(cellEl, node);
-  const kw = atWordStart ? matchPlainTagKeyword(before + tail[0]) : matchPlainTagKeyword(tail[0]);
+  if (!before) before = charBeforeNode(cellEl, node);
+  const kw = matchPlainTagKeyword(before + tail[0]);
   if (!kw) return;
 
   const rest = node.splitText(offset);
@@ -374,7 +384,7 @@ function openKeywordAtCaret(cellEl: Element, atWordStart: boolean, added: Node[]
   r.collapse(true);
   sel.removeAllRanges();
   sel.addRange(r);
-  open = { cellEl: cellEl, span: span, tail: rest, cat: kw.cat, keyword: kwNode.data, added: added };
+  open = { cellEl: cellEl, span: span, tail: rest, cat: kw.cat, keyword: kwNode.data, silent: null };
   paint(open, 1);
 }
 
@@ -436,10 +446,14 @@ export function closePlainTag() {
   const entry = registryEntryOf(tagPorts().document.current(), o.cat, phrase.name);
   const name = entry ? entry.name : phrase.name;
   const done = tagPorts().cells.edit(o.cellEl, function (cell) {
-    const from = domToPos(o.cellEl, o.span.firstChild as Node, 0);
+    const from = domToPos(o.cellEl, o.silent ? o.span : o.span.firstChild as Node, 0);
     if (from === null || to === null) return null;
-    if (projection(cell).slice(from, to) !== o.keyword + typed.replace(ZWSP_RE, "")) return null;
-    const res = applyPlainTag(cell, from, to, o.cat, name);
+    const written = typed.replace(ZWSP_RE, "");
+    if (projection(cell).slice(from, to) !== (o.silent ? "" : o.keyword) + written) return null;
+    const base = o.silent
+      ? insertText(cell, from, o.keyword, written ? typingMarks(cell, from + 1) : o.silent.marks)
+      : cell;
+    const res = applyPlainTag(base, from, o.silent ? to + o.keyword.length : to, o.cat, name);
     if (!res) return null;
     return { cell: res.cell, sel: { from: res.caret, to: res.caret }, records: { tags: [{ cat: o.cat, name: res.name }] } };
   });
@@ -461,6 +475,7 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
     close: closePlainTag,
     isOpen: plainTagOpen,
     emptyAtCaret: plainTagEmptyAtCaret,
+    cancelOnBackspace,
     onTagged: onPlainTagged,
     dispose: function () {
       if (disposed) return;

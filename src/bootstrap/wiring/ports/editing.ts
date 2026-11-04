@@ -31,9 +31,9 @@ export const undoControl: UndoControl = {
   last: () => undoOwner().last()
 };
 
-export const cells: Pick<CellEditing<Element>, "edit" | "sync"> = {
+export const cells: Pick<CellEditing<Element>, "edit" | "open"> = {
   edit: (cell, change) => cellEditing().edit(cell, change),
-  sync: (cell) => { cellEditing().sync(cell); }
+  open: (cell) => cellEditing().open(cell)
 };
 
 export const selection: Pick<EditorSelection<Element, Range, Element>, "dropLink" | "remember" | "forget" | "paintedEpoch" | "resolve"> = {

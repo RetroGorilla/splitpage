@@ -182,9 +182,9 @@ for (const [label, html, node, offset, tail] of STUCK) {
     h.modal.querySelector('[data-tag-cat="prop"]').click();
     assert.equal(h.modal.hidden, true);
     assert.equal(currentPlainTags().isOpen(h.cell), true);
-    assert.equal(h.cell.querySelector(".plain-tag-keyword").textContent, "prop:");
+    assert.equal(h.cell.querySelector(".plain-tag-keyword").textContent, "");
     assert.equal(h.cell.querySelector(".plain-tag-keyword").nextSibling.data, "\u200b" + tail);
-    assert.equal(h.cell.textContent.replace(/\u200b/g, ""), plain.slice(0, offset) + "prop:" + plain.slice(offset));
+    assert.equal(h.cell.textContent.replace(/\u200b/g, ""), plain);
     assert.equal(currentDocument().rows[0].visualText, before.doc);
     assert.deepEqual(undoOwner().sizes(), before.steps);
   });
@@ -230,7 +230,7 @@ for (const end of ["Escape", "blur"]) {
   });
 }
 
-test("Tag after a word: Enter-style caret movement with a name typed never leaves the keyword stuck to the word", () => {
+test("Tag after a word: moving the caret away with a name typed never leaves the keyword stuck to the word", () => {
   const h = fixture("Words");
   caret(h.cell, h.cell.firstChild, 5);
   pickProp(h);
@@ -252,6 +252,7 @@ test("Tag after a word with Bold pending: Escape removes the keyword and its emp
   assert.equal(h.cell.innerHTML, before.html);
   assert.equal(currentDocument().rows[0].visualText, before.doc);
   assert.deepEqual(undoOwner().sizes(), before.steps);
+  h.cell.closest(".field-wrap").querySelector('[data-cmd="bold"]').click();
 });
 
 test("Tag after a word: Tab with a name typed still makes the tag and keeps the word", () => {
@@ -279,6 +280,93 @@ test("Tag inside a word: Tab with no name typed tags the rest of the line, as an
   modal.querySelector('[data-tag-cat="prop"]').click();
   key(cell, "Tab");
   assert.match(currentDocument().rows[0].visualText, /^Wo<span[^>]*data-tag-name="rds more"[^>]*>[^<]*<\/span><br>next line$/);
+});
+function press(target, value, init = {}) {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: value, ...init });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function never(text) {
+  assert.doesNotMatch(text, /prop:/);
+  assert.doesNotMatch(text, /plain-tag-keyword/);
+}
+
+test("Tag in a word: Backspace with nothing typed cancels, is swallowed and leaves the cell as it was", () => {
+  const h = fixture("Words");
+  caret(h.cell, h.cell.firstChild, 2);
+  const before = snapshot(h.cell);
+  pickProp(h);
+  const event = press(h.cell, "Backspace");
+  currentPlainTags().refresh();
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(currentPlainTags().isOpen(), false);
+  assert.equal(h.cell.innerHTML, before.html);
+  assert.equal(currentDocument().rows[0].visualText, before.doc);
+  assert.deepEqual(undoOwner().sizes(), before.steps);
+});
+
+test("Tag in a word: Backspace after a name was typed is left to the browser", () => {
+  const h = fixture("Words");
+  caret(h.cell, h.cell.firstChild, 2);
+  pickProp(h);
+  type(h.cell, "L");
+  assert.equal(press(h.cell, "Backspace").defaultPrevented, false);
+  assert.equal(currentPlainTags().isOpen(), true);
+});
+
+test("a typed keyword's Backspace with nothing typed still cancels and is not swallowed", () => {
+  const h = fixture("Before ");
+  caret(h.cell, h.cell.firstChild, 7);
+  type(h.cell, "prop:");
+  assert.equal(currentPlainTags().isOpen(), true);
+  assert.equal(press(h.cell, "Backspace").defaultPrevented, false);
+  assert.equal(currentPlainTags().isOpen(), false);
+});
+
+test("Tag in a word: no edit while the tag is open ever stores the keyword", () => {
+  const h = fixture("Words");
+  caret(h.cell, h.cell.firstChild, 2);
+  pickProp(h);
+  never(currentDocument().rows[0].visualText);
+  h.cell.closest(".field-wrap").querySelector('[data-cmd="bold"]').click();
+  never(JSON.stringify(currentDocument()));
+  type(h.cell, "Lamp");
+  never(JSON.stringify(currentDocument()));
+  press(h.cell, "Enter");
+  never(JSON.stringify(currentDocument()));
+  currentPlainTags().refresh();
+  never(JSON.stringify(currentDocument()));
+  assert.equal(h.cell.querySelector(".plain-tag-keyword"), null);
+});
+
+test("Tag in a word: undo and redo of the tag never hold the keyword", () => {
+  const h = fixture("Words");
+  caret(h.cell, h.cell.firstChild, 2);
+  pickProp(h);
+  type(h.cell, "Lamp");
+  key(h.cell, "Tab");
+  const tagged = currentDocument().rows[0].visualText;
+  assert.match(tagged, /data-tag-name="Lamp"/);
+  undoOwner().undo();
+  never(currentDocument().rows[0].visualText);
+  assert.equal(currentDocument().rows[0].visualText, "WoLamprds");
+  undoOwner().redo();
+  assert.equal(currentDocument().rows[0].visualText, tagged);
+  undoOwner().undo();
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "Words");
+});
+
+test("Tag after typing: the name does not merge into the typing before it", () => {
+  const h = fixture("");
+  caret(h.cell, h.cell, 0);
+  type(h.cell, "Words");
+  pickProp(h);
+  type(h.cell, "Lamp");
+  assert.equal(currentDocument().rows[0].visualText, "WordsLamp");
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "Words");
 });
 test("typing a keyword right after a word still starts no tag", () => {
   const { cell } = fixture("Words");

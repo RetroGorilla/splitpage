@@ -738,7 +738,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (plainTag && plainTag.isOpen(cellEl)) {
     if (e.key === "Tab") { e.preventDefault(); plainTag.close(); return; }
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); plainTag.cancel(); return; }
-    if (e.key === "Backspace" && plainTag.emptyAtCaret()) plainTag.cancel();
+    if (e.key === "Backspace" && plainTag.emptyAtCaret() && plainTag.cancelOnBackspace()) { e.preventDefault(); return; }
   }
   const ghost = shownTagGhost();
   if (e.key === "Tab" && ghost && ghost.cellEl === cellEl) {

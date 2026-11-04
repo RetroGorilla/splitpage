@@ -101,7 +101,7 @@ click #rows .row:nth-of-type(10) .visual-cell button.tb-tag
 wait !modal.hidden
 click #tag-cats [data-tag-cat="prop"]
 wait kw() === 1
-expect cell(9).textContent.replace(/\u200b/g, '') == wordprop:
+expect cell(9).textContent.replace(/\u200b/g, '') == word
 press Lamp
 key Tab
 wait kw() === 0 && cell(9).querySelector('.tag-anchor') !== null
@@ -135,7 +135,7 @@ click #rows .row:nth-of-type(13) .visual-cell button.tb-tag
 wait !modal.hidden
 click #tag-cats [data-tag-cat="prop"]
 wait kw() === 1
-expect cell(12).textContent.replace(/\u200b/g, '') == wordprop:
+expect cell(12).textContent.replace(/\u200b/g, '') == word
 expect st(12) === window.st13 && U.sizes().undo === window.steps13
 key Escape
 wait kw() === 0
@@ -150,3 +150,98 @@ press Lamp
 key Escape
 wait kw() === 0
 expect st(12) == wordLamp
+
+eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
+caret #rows .row:nth-of-type(14) .visual-cell .cell-editable
+press Words
+eval (function(){ U.flush(); var c = cell(13); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(13), steps: U.sizes().undo }; return true; })()
+click #rows .row:nth-of-type(14) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect st(13) === window.base.st && U.sizes().undo === window.base.steps
+key Enter
+wait kw() === 0
+expect st(13) === 'Wo<br>rds'
+eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
+caret #rows .row:nth-of-type(15) .visual-cell .cell-editable
+press Words
+eval (function(){ U.flush(); var c = cell(14); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(14), steps: U.sizes().undo }; return true; })()
+click #rows .row:nth-of-type(15) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect st(14) === window.base.st && U.sizes().undo === window.base.steps
+press Lamp
+key Enter
+wait kw() === 0
+expect st(14) === 'WoLamp<br>rds'
+eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
+caret #rows .row:nth-of-type(16) .visual-cell .cell-editable
+press Words
+eval (function(){ U.flush(); var c = cell(15); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(15), steps: U.sizes().undo }; return true; })()
+click #rows .row:nth-of-type(16) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect st(15) === window.base.st && U.sizes().undo === window.base.steps
+key Backspace
+wait kw() === 0
+expect st(15) === 'Words' && cell(15).innerHTML === window.base.html
+expect U.sizes().undo === window.base.steps
+expect document.activeElement === cell(15) && getSelection().anchorOffset === 2
+eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
+caret #rows .row:nth-of-type(17) .visual-cell .cell-editable
+press Words
+eval (function(){ U.flush(); var c = cell(16); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(16), steps: U.sizes().undo }; return true; })()
+click #rows .row:nth-of-type(17) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect st(16) === window.base.st && U.sizes().undo === window.base.steps
+key ctrl KeyB
+key Escape
+wait kw() === 0
+expect st(16) === 'Words'
+expect U.sizes().undo === window.base.steps
+eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
+caret #rows .row:nth-of-type(18) .visual-cell .cell-editable
+press Words
+eval (function(){ U.flush(); var c = cell(17); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(17), steps: U.sizes().undo }; return true; })()
+click #rows .row:nth-of-type(18) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect st(17) === window.base.st && U.sizes().undo === window.base.steps
+key ctrl KeyB
+press Lamp
+key Tab
+wait kw() === 0
+expect st(17).indexOf('prop') === -1 && st(17).indexOf('Lamp') !== -1
+eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
+caret #rows .row:nth-of-type(19) .visual-cell .cell-editable
+press Words
+eval (function(){ U.flush(); var c = cell(18); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(18), steps: U.sizes().undo }; return true; })()
+click #rows .row:nth-of-type(19) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect st(18) === window.base.st && U.sizes().undo === window.base.steps
+eval (function(){ var dt = new DataTransfer(); dt.setData('text/plain', 'PASTED'); cell(18).dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()
+wait st(18).indexOf('PASTED') !== -1
+expect st(18).indexOf('prop') === -1
+key Escape
+wait kw() === 0
+expect st(18) === 'WoPASTEDrds'
+eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
+caret #rows .row:nth-of-type(20) .visual-cell .cell-editable
+press Words
+eval (function(){ U.flush(); var c = cell(19); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(19), steps: U.sizes().undo }; return true; })()
+click #rows .row:nth-of-type(20) .visual-cell button.tb-tag
+wait !modal.hidden
+click #tag-cats [data-tag-cat="prop"]
+wait kw() === 1
+expect st(19) === window.base.st && U.sizes().undo === window.base.steps
+key alt Enter
+wait kw() === 0
+expect F.state().rows.every(function(r){ return r.visualText.indexOf('prop') === -1; })

@@ -34,7 +34,7 @@ function fixture(html: string, model: string | Run[]) {
         changes.push(res);
         return target;
       },
-      sync: () => {}
+      open: () => ({ rowId: "r1", field: "visualText", html: "", sel: null })
     },
     text: text.text
   };
