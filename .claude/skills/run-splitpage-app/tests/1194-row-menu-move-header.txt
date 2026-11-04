@@ -1,0 +1,95 @@
+﻿# why: the confirmation lives across focus, blur and click, which only real input exercises; every press here is a real one.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.opened = 0; window.load = function(){ var old = F.state(); window.opened++; F.openFile(new File([JSON.stringify({ schema: 2, title: 'Menu move ' + window.opened, rows: ['One.', 'Two.', 'Three.', 'Four.'].map(function(w, i){ return { id: 'r' + (i + 1), visualText: '', audioText: w, status: 'todo' }; }), sections: [ { id: 's1', name: 'Only', firstSceneId: 'r2' }, { id: 's2', name: 'Ending', firstSceneId: 'r3' } ] })], 'menu-move-' + window.opened + '.splitpage')); return old; }; window.row = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"]'); }; window.item = function(id, action){ return row(id).querySelector('[data-action="' + action + '"]'); }; window.pt = function(el){ var r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }; window.ids = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; window.hint = function(){ return document.querySelector('#rows [data-section-id="s1"] .section-hint'); }; window.menuOpen = function(){ return !row('r2').querySelector('.row-menu').hidden; }; return true; })()
+eval window.old = load(); true
+wait F.state() !== old && F.state().title === 'Menu move 1' && !!row('r2')
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
+sleep 300
+eval window.before = JSON.stringify(F.state()); U.flush(); window.undoBefore = U.sizes().undo; true
+
+mouse click pt(row('r2').querySelector('.row-more'))
+sleep 400
+expect menuOpen()
+mouse click pt(item('r2', 'move-up'))
+expect JSON.stringify(F.state()) === before
+expect hint().textContent === 'Press again to remove the scene header'
+expect menuOpen()
+mouse click pt(item('r2', 'move-up'))
+wait ids() === 'r2,r1,r3,r4'
+expect F.state().sections.length === 1
+eval U.flush(); true
+expect U.sizes().undo === undoBefore + 1
+eval row('r2').querySelector('.audio-cell .cell-editable').focus(); true
+key ctrl KeyZ
+wait ids() === 'r1,r2,r3,r4'
+expect JSON.stringify(F.state()) === before
+
+eval window.old = load(); true
+wait F.state() !== old && F.state().title === 'Menu move 2' && !!row('r2')
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
+sleep 300
+eval window.before = JSON.stringify(F.state()); U.flush(); window.undoBefore = U.sizes().undo; true
+mouse click pt(row('r2').querySelector('.row-more'))
+sleep 400
+expect menuOpen()
+mouse click pt(item('r2', 'move-down'))
+expect JSON.stringify(F.state()) === before
+expect hint().textContent === 'Press again to remove the scene header'
+expect menuOpen()
+mouse click pt(item('r2', 'move-down'))
+wait ids() === 'r1,r3,r2,r4'
+expect F.state().sections.length === 1
+eval U.flush(); true
+expect U.sizes().undo === undoBefore + 1
+eval row('r2').querySelector('.audio-cell .cell-editable').focus(); true
+key ctrl KeyZ
+wait ids() === 'r1,r2,r3,r4'
+expect JSON.stringify(F.state()) === before
+
+eval window.old = load(); true
+wait F.state() !== old && F.state().title === 'Menu move 3' && !!row('r2')
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
+sleep 300
+eval window.before = JSON.stringify(F.state()); true
+mouse click pt(row('r2').querySelector('.row-more'))
+sleep 400
+eval item('r2', 'move-down').focus(); true
+key none Enter
+expect JSON.stringify(F.state()) === before
+expect hint().textContent === 'Press again to remove the scene header'
+key none Enter
+wait ids() === 'r1,r3,r2,r4'
+expect F.state().sections.length === 1
+eval row('r2').querySelector('.audio-cell .cell-editable').focus(); true
+key ctrl KeyZ
+wait ids() === 'r1,r2,r3,r4'
+
+eval window.old = load(); true
+wait F.state() !== old && F.state().title === 'Menu move 4' && !!row('r2')
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
+sleep 300
+eval window.before = JSON.stringify(F.state()); true
+mouse click pt(row('r2').querySelector('.row-more'))
+sleep 400
+mouse click pt(item('r2', 'move-down'))
+expect hint().textContent === 'Press again to remove the scene header'
+mouse click pt(row('r2').querySelector('.row-more'))
+sleep 400
+wait hint().hidden
+mouse click pt(row('r2').querySelector('.row-more'))
+sleep 400
+mouse click pt(item('r2', 'move-down'))
+expect JSON.stringify(F.state()) === before
+
+eval window.old = load(); true
+wait F.state() !== old && F.state().title === 'Menu move 5' && !!row('r2')
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
+sleep 300
+eval window.before = JSON.stringify(F.state()); true
+mouse click pt(row('r1').querySelector('.row-more'))
+sleep 400
+mouse click pt(item('r1', 'move-down'))
+wait ids() === 'r2,r1,r3,r4'
+expect F.state().sections.length === 2
