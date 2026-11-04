@@ -97,7 +97,7 @@ wait !__sticky.isConnected
 eval (function(){var cell=document.querySelector('#rows .row .audio-cell .cell-editable');cell.focus();var dt=new DataTransfer();dt.setData('text/plain','https://www.youtube.com/watch?v=dQw4w9WgXcQ');cell.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
 wait document.querySelector('#toast-host .toast.has-action:not(.is-leaving)')
 eval window.__action=document.querySelector('#toast-host .toast.has-action:not(.is-leaving)');window.__media=JSON.stringify(F.state().rows[0].imageLinks)
-expect __spoken.filter(function(s){return s.indexOf('Video added to scene') === 0;}).length === 1
+expect __spoken.filter(function(s){return s.indexOf('Video added to beat') === 0;}).length === 1
 eval document.documentElement.setAttribute('data-theme','dark')
 sleep 300
 shot sweep-ui-toast-action-dark

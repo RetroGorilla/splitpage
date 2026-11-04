@@ -270,7 +270,7 @@ jsclick #file-menu [data-file-action="toggle-hide-shot"]
 sleep 300
 expect document.getElementById('runtime-total').textContent == 1:35
 expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:25 left
-expect document.getElementById('runtime-chip').title.indexOf('still to shoot') !== -1
+expect document.getElementById('runtime-chip').title.indexOf('still to film') !== -1
 jsclick #file-menu [data-file-action="toggle-hide-shot"]
 sleep 300
 
