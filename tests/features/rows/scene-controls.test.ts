@@ -13,7 +13,7 @@ function fixture(existing = false, moving: string | null = null) {
   const h = harness();
   h.session.adopt({ rows: [{ id: "r1" }, { id: "r2" }], sections: existing ? [{ id: "s1", name: "Opening", firstSceneId: "r2" }] : [] });
   document.body.innerHTML = '<div id="rows">' +
-    (existing ? '<div class="section-header" data-section-id="s1"><button class="section-name">Opening</button></div>' : '') +
+    (existing ? '<div class="section-header" data-section-id="s1"><span role="heading"><button class="section-name">Opening</button></span></div>' : '') +
     '<div class="row" data-id="r2"><button class="row-more"></button><div class="row-menu" hidden>' +
     '<button class="row-menu-item" data-action="add-section" data-id="r2"><span>Add Section Header</span></button></div></div></div>';
   let allowed = true;
@@ -49,7 +49,8 @@ test("section controls add before the menu's scene without consulting scene sele
     assert.equal(document.querySelector<HTMLDivElement>(".row-menu")?.hidden, true);
     assert.equal(f.more.getAttribute("aria-expanded"), "false");
     assert.equal(document.activeElement, input);
-    assert.equal(form.closest(".row")?.getAttribute("data-id"), "r2");
+    assert.equal(form.closest(".row"), null);
+    assert.equal(form.nextElementSibling?.getAttribute("data-id"), "r2");
     input.value = " Middle ";
     form.requestSubmit();
     assert.deepEqual(f.h.session.read(doc => doc?.sections), [{ id: "created", name: "Middle", firstSceneId: "r2" }]);
