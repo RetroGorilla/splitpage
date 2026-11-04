@@ -105,7 +105,7 @@ expect row('bs1').querySelector('.broll-meta-props').textContent === 'Fishing ne
 # each prop's status as the breakdown's lamp before its name (#169, where
 # it was a dot): Have it lit in --text, Needed an unlit outline
 expect Array.prototype.map.call(row('bs1').querySelectorAll('.broll-meta-props .item-lamp'), function(d){ return (d.classList.contains('is-have') ? 'is-have' : d.classList.contains('is-needed') ? 'is-needed' : '?') + ':' + d.getAttribute('title'); }).join('|') === 'is-have:Have it|is-needed:Needed'
-expect getComputedStyle(row('bs1').querySelector('.item-lamp.is-have')).backgroundColor === 'rgb(23, 22, 19)'
+expect getComputedStyle(row('bs1').querySelector('.item-lamp.is-have')).backgroundColor === 'rgb(46, 125, 50)'
 expect getComputedStyle(row('bs1').querySelector('.item-lamp.is-needed')).backgroundColor === 'rgba(0, 0, 0, 0)'
 expect row('bs1').querySelector('.broll-meta-props').getAttribute('title') === 'Fishing nets (Have it), Drone (Needed)'
 expect row('bs1').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
