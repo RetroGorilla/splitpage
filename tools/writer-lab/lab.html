@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Writer test page</title>
+<style>/*CSS*/</style>
+</head>
+<body>
+<div id="bar">
+  <span class="title">Writer test page</span>
+  <button data-mark="b" title="Bold (Ctrl+B)"><span class="mark-b">B</span></button>
+  <button data-mark="i" title="Italic (Ctrl+I)"><span class="mark-i">I</span></button>
+  <button data-mark="u" title="Underline (Ctrl+U)"><span class="mark-u">U</span></button>
+  <button data-mark="s" title="Strikethrough"><span class="mark-s">S</span></button>
+  <button data-mark="hl" title="Highlight">Highlight</button>
+  <span class="sep"></span>
+  <button data-one-beat title="Links">Link</button>
+  <button data-one-beat title="Comments">Comment</button>
+  <button data-one-beat title="Tags">Tag</button>
+  <span class="sep"></span>
+  <button id="open-visual" title="Edit this beat's visual, or give the selected text its own beat and visual">Visual</button>
+  <span class="grow"></span>
+  <button id="toggle-switches">Switches</button>
+  <button id="toggle-beats">Beats list</button>
+  <button id="reset">Start over</button>
+</div>
+<div id="main">
+  <div id="switches">
+    <h3>Try these</h3>
+    <label>Script <select data-setting="script"><option value="demo">Demo</option><option value="long">Very long (900 beats)</option><option value="blank">Blank</option></select></label>
+    <label>Old scripts open as <select data-setting="opening"><option value="scene">One paragraph per scene</option><option value="sentence">Sentence rule</option></select></label>
+    <label>Enter <select data-setting="enter"><option value="single">New paragraph</option><option value="double">New beat, twice for paragraph</option></select></label>
+    <label>Backspace at a tick <select data-setting="tick"><option value="delete">Deletes a character</option><option value="join">Joins the beats</option></select></label>
+    <label>Typing just after a gap <select data-setting="gapTyping"><option value="before">Goes in the beat before</option><option value="here">Goes where the caret is</option></select></label>
+    <label>Tick style <select data-setting="tickStyle"><option value="line">Line</option><option value="dot">Dot</option><option value="number">Number</option><option value="none">None</option></select></label>
+    <label>Visual with no words <select data-setting="visualOnly"><option value="line">Own line</option><option value="chip">Chip in the text</option></select></label>
+    <label>Tint the current beat <input type="checkbox" data-setting="tint"></label>
+    <label>Show the visual note <input type="checkbox" data-setting="note"></label>
+    <label>Markdown (* ** ~~ #) <input type="checkbox" data-setting="markdown"></label>
+    <label>Text size <input type="range" min="15" max="30" data-setting="size"></label>
+  </div>
+  <div id="scroll">
+    <div id="doc" contenteditable="true" spellcheck="true" tabindex="0"></div>
+    <div id="note" hidden></div>
+  </div>
+  <div id="find" hidden>
+    <input id="find-text" placeholder="Find" aria-label="Find">
+    <span id="find-count"></span>
+    <button id="find-next">Next</button>
+    <input id="find-replace" placeholder="Replace with" aria-label="Replace with">
+    <button id="find-one">Replace</button>
+    <button id="find-all">All</button>
+    <button id="find-close" aria-label="Close">×</button>
+  </div>
+  <div id="beats" hidden></div>
+</div>
+<div id="visual-box" hidden>
+  <strong>Visual</strong>
+  <textarea id="visual-text" placeholder="What's on screen for this beat"></textarea>
+  <button id="visual-done">Done</button>
+</div>
+<div id="status">
+  <span id="stat-words"></span>
+  <span id="stat-selection"></span>
+  <span id="stat-beats"></span>
+  <span id="stat-paras"></span>
+  <span class="grow"></span>
+  <span id="stat-check"></span>
+</div>
+<div id="notice" hidden></div>
+<script>/*JS*/</script>
+</body>
+</html>

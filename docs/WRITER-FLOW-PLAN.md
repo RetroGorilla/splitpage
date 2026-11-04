@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Nothing here is built. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phase 0a's test page is built in `tools/writer-lab/` (section 9) and waiting on Adam's picks. Nothing is in the app yet. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -25,11 +25,12 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 - Selecting, typing over, deleting, Ctrl+A and arrow keys all work across beats. Each edit is one Ctrl+Z.
 - Deleting a selection removes beats fully inside it, with their visuals, comments and status. Partly selected beats keep their remaining text and their visuals. A notice says what went, such as "Removed 3 beats: 2 with visuals, 1 filmed".
 - Bold, italic, underline, strikethrough and highlight work across beats. Comments, tags and links stay within one beat. With a selection across beats, those three buttons are disabled and say why.
-- Backspace at a paragraph's start removes only the paragraph break. Backspace just after a tick deletes the previous character and leaves the boundary. Text typed at a tick goes into the beat before it.
+- Backspace at a paragraph's start removes only the paragraph break. Backspace just after a tick deletes the previous character and leaves the boundary. Text typed at a tick goes into the beat before it. The caret now has a stop on each side of the gap, so Adam is choosing on the test page whether text typed at the right-hand stop follows this rule or stays where the caret is.
 - Beats join only through Alt+Backspace or Join on the tick, still refused when both have visuals.
+- A selection inside one beat, even of all its text, is ordinary text editing: the beat stays, empty or with just its visual.
 - A beat fully inside a deleted selection takes its comments with it, unless part of a comment's marked text survives in another beat, which can happen after a split. Deleting words inside a surviving beat treats comments as the split view does today: the comment stays at its last position.
 - The writer always has somewhere to type: Ctrl+A then Delete leaves one empty beat.
-- Beats display with a gap the width of a space between them, unless the text already has whitespace there. The gap is painted, not text: it can't be selected alone, typed into or deleted, and the caret crosses it as the boundary between the two beats. A selection crossing it copies it as one space. It isn't stored, so it costs no read time and doesn't reach exports.
+- Beats display with a gap the width of a space between them, unless the text already has whitespace there. The gap's width is painted, and a run-on beat's span starts with a zero-width space so the browser sees a word break there. Neither can be typed into or deleted, and the caret stops once on each side, as it would at a real space. A selection crossing the gap copies it as one space. It isn't stored, so it costs no read time and doesn't reach exports.
 - Typing a space at a tick is an ordinary character in the beat before it, and the painted gap then steps aside.
 
 ### Cut and paste
@@ -73,7 +74,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 - A converted beat with no visual goes away. One with a visual stays, empty, under the new header.
 - The heading takes the beat's first line, up to any Shift+Enter. Later lines stay as narration in that beat.
 - A line over the scene name limit of 200 characters is refused the same way, with its own notice and all its narration kept.
-- Enter in a heading: the text after the caret becomes the scene's first beat. Backspace at a heading's start: the header goes away and its text becomes a new beat that flows into the paragraph above. Backspace at the start of the first beat under a header: the caret moves to the end of the header and nothing changes.
+- Enter in a heading: the text after the caret becomes the scene's first beat. Backspace at a heading's start: the header goes away and its text becomes a new beat that flows into the paragraph above. Backspace at the start of the first beat under a header: the caret moves to the end of the header and nothing changes. Delete at the end of the last beat above a header: the caret moves to the start of the header and nothing changes.
 
 ### Find
 
@@ -166,7 +167,7 @@ Recommended: **one editing host, with native text entry inside a beat, behind a 
 - Ticks, placeholders and visual labels are decorations, never serialized and never in copied text. Every beat has a real narration position, including a visual-only beat, whose compact line is a styled beat span with its label beside it. Clicks and keys on the label map to that position.
 - **Input decisions use the operation's target range, not the caret.** A collapsed caret can still delete across beats with Ctrl+Backspace, or replace text through spellcheck. Before each input the adapter reads the input type and `getTargetRanges()`.
 - **Inside one beat:** when the target range sits within one beat and touches no decoration, the input goes native, then syncs that beat through `cellTextCommand`. This keeps typing fast and keeps tag shortcuts, direction shortcuts, the completion ghost and spellcheck.
-- **The gap is painted, with no text node:** CSS on the boundary, so native editing has nothing to absorb into a beat. Repair and the save path assert that no synthetic whitespace reaches storage.
+- **The gap is a painted margin plus a zero-width space:** the space is the first character of a run-on beat's span, and only when a gap shows. CSS alone isn't enough (section 9). The cell reader already strips `​`, and repair and the save path assert that no synthetic whitespace reaches storage.
 - **Crossing beats or changing structure:** `beforeinput` and `keydown` are cancelled, one flow command runs, and the DOM is patched with the selection restored from model positions.
 - **Repair:** after native input, any text outside a `.wr-beat`, or a merged or split span, is folded back into the right beat before anything is saved, and never during composition.
 - **Patches, not paragraph repaints.** An old script opens as one huge paragraph per scene, so repainting "the paragraph" could mean nearly the whole document. Ordinary edits patch the affected beat. This has to cover the app's own paint path: full renders on structural edits and replay reach `wiring/panels.ts`, which calls `paintWriterDraw`, and that replaces all of `#writer-doc`. Left alone, it overwrites patches, kills tag references and disturbs the selection.
@@ -249,7 +250,7 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 3. **A selection that fully contains a header and is deleted removes the header.** It's an explicit deletion, and it's one Ctrl+Z.
 4. **Headings are plain text, up to 200 characters.** Bold in a heading isn't stored, because scene names are plain.
 5. **`# Title` then Enter at the end of the script creates a blank first beat,** because a scene can't exist without one.
-6. **Open: forward Delete above a scene header.** The Backspace decision in 7.2 doesn't cover it. Proposal: Delete at the end of the last beat above a header moves the caret to the start of the header and changes nothing. Needs Adam's sign-off because it changes a keystroke.
+6. **Forward Delete above a scene header: decided (Adam, 2026-11-04).** Delete at the end of the last beat above a header moves the caret to the start of the header and changes nothing, mirroring 7.2.
 
 ## 8. Outside review
 
@@ -264,3 +265,20 @@ Round 2 (Codex Sol, xhigh, read-only, at `b087ecfb`, with small in-memory probes
 Two responses differ from what round 2 suggested. Rather than a native-sync transaction with comment candidates, within-beat deletion keeps today's split-view comment behaviour, which matches Adam's decision (comments go with fully selected beats) and the deferral of comment behaviour work. Native edits keep today's undo caret placement too, and only flow commands record selections.
 
 Browser behaviour in both rounds is predicted, not reproduced. Phase 0a is where it gets tested.
+
+## 9. Phase 0a results
+
+The page is `tools/writer-lab/`. `node tools/writer-lab/build.mjs` builds it and `node tools/writer-lab/accept.mjs` runs its key-press checks. It isn't meant to merge, apart from `src/core/flow/`.
+
+**The painted gap failed.** With CSS alone, the browser reads two beats as one word when the first ends mid-sentence: double-clicking "store" selected "storeand", Ctrl+Right skipped the boundary, and spellcheck underlined "store and" as one word. Neither outside review caught this. `gap-probe.mjs` compared four ways of building the gap. A zero-width space fixed double-click, Ctrl+arrow and the underline in that probe. Inside the beat's span, it also passes the page's wrapping and typing checks, and the caret gets one stop on each side of the gap.
+
+**Not yet shown:**
+
+- Spellcheck on the real page. The probe's underline result used a zero-width space between the spans, not inside them, and a planted typo never got underlined on the page itself, so the page's screenshot proves nothing.
+- Choosing a spellcheck suggestion from the right-click menu. The check selects a word and inserts text instead.
+- Real Ctrl+C and Ctrl+V. The checks fire clipboard events directly, so they don't touch the PC's clipboard.
+- A real IME. The checks use simulated composition events.
+- Typing time with spellcheck actually running. Since the planted typo was never underlined, no run shows that case. Typing in a 900-beat paragraph took about one frame (16 ms) in the final Chromium and Electron runs. One Edge run measured 62 ms of page work per key and 1,016 ms per frame, on the long script only. The one-second frames also appeared in some earlier Edge runs, so they look like headless pacing, but that isn't proven.
+- Electron's menu routing, app focus and saving, which phase 0b covers. The Electron run used a hidden off-screen window on 44.4.5, not the repo's 44.10.
+
+`src/core/flow/` has no unit tests yet. Phase 1 adds them.
