@@ -69,7 +69,8 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     made.addEventListener("keydown", event => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelName(); }
     });
-    parent.appendChild(made);
+    const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
+    if (heading) heading.after(made); else parent.before(made);
     form = made;
     input.focus(); input.select();
   }
@@ -113,6 +114,17 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       nameAt(beat ?? add.parentElement ?? add, "", name => {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(row.id, created, name));
+        header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
+      });
+      return;
+    }
+    if (action === "name-automatic" && divider) {
+      const automatic = ports.document.numbering().scenes.find(scene => scene.id === null);
+      const first = automatic && state.rows[automatic.start];
+      if (!first) return;
+      nameAt(divider, "", name => {
+        const created = ports.ids.id("section");
+        ports.edits.run(addSceneCommand(first.id, created, name));
         header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
       });
       return;

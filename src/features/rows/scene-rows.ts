@@ -36,9 +36,10 @@ export function sceneHeaderHtml(entry: SceneDivider, readOnly = false, total = "
   const id = escapeHtml(entry.scene.id);
   const name = escapeHtml(entry.scene.name);
   const label = escapeHtml(entry.letter ?? "");
-  if (entry.automatic) return '<header class="section-header" data-section-id=""><span role="heading" aria-level="2">' + label + '</span>' +
-    '<span class="section-stats">' + entry.count + ' beat' + (entry.count === 1 ? '' : 's') + '</span></header>';
   const disabled = readOnly ? " disabled" : "";
+  if (entry.automatic) return '<header class="section-header" data-section-id=""><span role="heading" aria-level="2">' + label + '</span>' +
+    '<button type="button" class="section-name section-name-empty" data-section-action="name-automatic"' + disabled + '>Add a name</button>' +
+    '<span class="section-stats">' + entry.count + ' beat' + (entry.count === 1 ? '' : 's') + '</span></header>';
   return '<header class="section-header" data-section-id="' + id + '">' +
     '<button type="button" class="section-grip" draggable="true" aria-label="Drag scene ' + name + '"' + disabled + '>⠿</button>' +
     '<button type="button" class="section-fold" data-section-action="fold" aria-expanded="' + !entry.folded + '" aria-label="' +

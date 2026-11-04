@@ -35,3 +35,18 @@ wait F.state().rows.map(r=>r.id).join('|') === 'c|a|b'
 expect F.state().sections[0].firstSceneId === 'b'
 expect Array.from(document.querySelectorAll('#rows .row-num'),e=>e.textContent).join('|') === 'A1|A2|B1'
 expect F.state().sections.length === 1
+expect document.querySelector('#rows .section-header[data-section-id=""] .section-name').textContent === 'Add a name'
+click #rows .section-header[data-section-id=""] .section-name
+wait document.activeElement === document.querySelector('.section-rename input')
+expect (function(){var h=document.querySelector('#rows .section-header[data-section-id=""]'),i=h.querySelector('.section-rename input').getBoundingClientRect(),s=h.querySelector('.section-stats').getBoundingClientRect();return s.width>0&&s.left>=i.right&&i.width<h.getBoundingClientRect().width*0.6&&h.querySelector('[role="heading"]').getBoundingClientRect().width>0;})()
+press Intro
+key none Enter
+wait F.state().sections.length === 2
+expect F.state().sections[0].name === 'Intro' && F.state().sections[0].firstSceneId === 'c'
+expect Array.from(document.querySelectorAll('#rows .section-header [role="heading"]'),e=>e.textContent).join('|') === 'A Intro|B Opening'
+expect Array.from(document.querySelectorAll('#rows .row-num'),e=>e.textContent).join('|') === 'A1|A2|B1'
+expect document.querySelectorAll('#rows .section-header[data-section-id=""]').length === 0
+eval document.querySelector('#rows .row[data-id="a"] .audio-cell .cell-editable').focus(); true
+key ctrl KeyZ
+wait F.state().sections.length === 1
+expect document.querySelectorAll('#rows .section-header[data-section-id=""]').length === 1
