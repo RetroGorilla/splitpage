@@ -190,7 +190,7 @@ test("a new script from selected scenes takes its title in the same transaction 
   await settle();
   assert.equal(currentDocument().rows.length, 1);
   assert.equal(currentDocument().rows[0].audioText, "Mara mends nets.");
-  assert.equal(currentDocument().title, "Scene clipboard — 1 scene");
+  assert.equal(currentDocument().title, "Scene clipboard — 1 beat");
   assert.deepEqual(undoSizes(), { undo: 1, redo: 0 }, "the scenes and the title are one step");
   undo();
   assert.equal(currentDocument().title, "Untitled Script", "undo takes the title back with the scenes");

@@ -56,7 +56,7 @@ test("scene selection: Delete removes the selected scenes through the edits port
   press("Delete");
   assert.equal(edits.ran.length, 1);
   assert.deepEqual(calls, ["break", "flush", "break"]);
-  assert.deepEqual(notices.shown.map((n) => n.message), ["2 scenes deleted."]);
+  assert.deepEqual(notices.shown.map((n) => n.message), ["2 beats deleted."]);
   owner.dispose();
 });
 
