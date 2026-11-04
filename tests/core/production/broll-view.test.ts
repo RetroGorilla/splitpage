@@ -50,9 +50,9 @@ test("each filter keeps the shots it names: to shoot, flagged, shot, or all", ()
 test("the counts and the page summary say how many are shot and how many flagged", () => {
   const shots = [entry("a"), entry("b", { status: "shot", reshoot: true }), entry("c", { status: "shot" }), entry("d", { reshoot: true })];
   assert.deepEqual(filterCounts(shots), { all: 4, unshot: 2, shot: 2, flagged: 2 });
-  assert.equal(pageSummaryText(shots), "2 of 4 shot · 2 flagged");
-  assert.equal(pageSummaryText([entry("a", { status: "shot" })]), "1 of 1 shot");
-  assert.equal(pageSummaryText([]), "0 of 0 shot");
+  assert.equal(pageSummaryText(shots), "2 of 4 filmed · 2 flagged");
+  assert.equal(pageSummaryText([entry("a", { status: "shot" })]), "1 of 1 filmed");
+  assert.equal(pageSummaryText([]), "0 of 0 filmed");
 });
 
 test("a scene uses the shared unpadded number, a start is a timecode, and a shot with no scene has neither", () => {
@@ -72,12 +72,12 @@ test("a shot's file record names its scene, owner, status and props, with defaul
     props: [{ key: "t:k", id: "t_k", name: "Kettle", status: "have" }, { key: "n:x", id: "", name: "Boat hook", status: "" }]
   });
   assert.deepEqual(shotRecordForFile(full, PEOPLE), {
-    beat: "A.3", name: "A.3.1 Gulls", status: "Shot", shot: true, flagged: true, location: "Pier",
+    beat: "A.3", name: "A.3.1 Gulls", status: "Filmed", shot: true, flagged: true, location: "Pier",
     props: ["Kettle", "Boat hook"], propsWithStatus: ["Kettle (have it)", "Boat hook"],
     cuts: "cut 3", owner: "Sam", note: "wide", desc: "over the pier"
   });
   assert.deepEqual(shotRecordForFile(entry("b", { name: undefined, rowId: null, rowIndex: -1 }), PEOPLE), {
-    beat: "", name: "Untitled shot", status: "To shoot", shot: false, flagged: false, location: "",
+    beat: "", name: "Untitled shot", status: "To film", shot: false, flagged: false, location: "",
     props: [], propsWithStatus: [], cuts: "", owner: "", note: "", desc: ""
   });
 });
@@ -92,8 +92,8 @@ test("shots group by scene in script order with the added ones last, or flat in 
   ];
   const groups = brollGroups(shots, "scene", { rows: rows, people: PEOPLE });
   assert.deepEqual(groups.map((g) => [g.key, g.kind, g.label, g.none, g.items.map((e) => e.id)]), [
-    ["r:r1", "scene", "Scene A.1", false, ["one-a", "one-b"]],
-    ["r:r2", "scene", "Scene A.2", false, ["two"]],
+    ["r:r1", "scene", "Beat A.1", false, ["one-a", "one-b"]],
+    ["r:r2", "scene", "Beat A.2", false, ["two"]],
     ["added", "added", "Added here", false, ["added"]]
   ]);
   assert.equal(groups[0]?.row?.id, "r1");

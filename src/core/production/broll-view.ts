@@ -39,14 +39,14 @@ export function oneOf(list: readonly { id: string }[], id: unknown, fallback: st
 
 export const FILTERS = [
   { id: "all",     label: "All" },
-  { id: "unshot",  label: "To shoot" },
+  { id: "unshot",  label: "To film" },
   { id: "flagged", label: "Flagged" },
-  { id: "shot",    label: "Shot" }
+  { id: "shot",    label: "Filmed" }
 ];
 
 export const PAGE_GROUPS = [
   { id: "location", label: "Location" },
-  { id: "scene",    label: "Scene" },
+  { id: "scene",    label: "Beat" },
   { id: "person",   label: "Person" }
 ];
 
@@ -68,7 +68,7 @@ export function filterCounts(entries: readonly Shot[]) {
 
 export function pageSummaryText(entries: readonly Shot[]): string {
   const n = filterCounts(entries);
-  return n.shot + " of " + n.all + " shot" + (n.flagged ? " · " + n.flagged + " flagged" : "");
+  return n.shot + " of " + n.all + " filmed" + (n.flagged ? " · " + n.flagged + " flagged" : "");
 }
 
 export function personIn(people: readonly Person[], id: string): Person | null {
@@ -92,7 +92,7 @@ export function shotRecordForFile(e: Shot, people: readonly Person[]): ShotRecor
   return {
     beat: e.rowId ? beatLabel(e) : "",
     name: (e.shotNumber ? e.shotNumber + " " : "") + (e.name || "Untitled shot"),
-    status: e.status === "shot" ? "Shot" : "To shoot",
+    status: e.status === "shot" ? "Filmed" : "To film",
     shot: e.status === "shot",
     flagged: !!e.reshoot,
     location: e.location || "",
@@ -121,7 +121,7 @@ export function brollGroups(entries: readonly Shot[], by: string, from: { rows: 
     let row: Row | null = null;
     if (by === "scene") {
       if (e.rowIndex === -1) { key = "added"; label = "Added here"; kind = "added"; }
-      else { key = "r:" + e.rowId; label = "Scene " + beatLabel(e); row = rows[e.rowIndex] || null; }
+      else { key = "r:" + e.rowId; label = "Beat " + beatLabel(e); row = rows[e.rowIndex] || null; }
     } else if (by === "location") {
       key = e.location ? "l:" + normalizeTagName(e.location) : "none";
       label = e.location || "No location";
@@ -149,7 +149,7 @@ export function brollGroups(entries: readonly Shot[], by: string, from: { rows: 
 
 
 export const BROLL_PANEL_GROUPS = [
-  { id: "scene", label: "Scene", button: "By scene" },
+  { id: "scene", label: "Beat", button: "By beat" },
   { id: "location", label: "Location", button: "By location" },
   { id: "flat", label: "None", button: "Not grouped" }
 ];

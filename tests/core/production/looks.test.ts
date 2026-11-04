@@ -9,7 +9,7 @@ test("the looks tables follow the id lists, in order", () => {
 });
 
 test("a lookup finds its entry and answers null for anything else, including inherited names", () => {
-  assert.equal(rowStatus("shot")?.label, "Shot");
+  assert.equal(rowStatus("shot")?.label, "Filmed");
   assert.equal(tagStatus("have")?.label, "Have it");
   assert.equal(tagCategory("sound")?.label, "Music/SFX");
   for (const bad of ["nope", "__proto__", "constructor", "", null, undefined, 3]) {
