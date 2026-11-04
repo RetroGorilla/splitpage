@@ -43,6 +43,8 @@ appear in the app under **Help**. The format follows
   its blocks and ruler instead of rebuilding them on every resize step.
 
 ### Fixed
+- The automatic Scene A at the top of a script can now be named: **Add a name**
+  on its header turns it into a normal scene you can rename, move or fold.
 - The comments panel's filter and sort dropdowns follow dark mode.
 - Move up and Move down in a beat's menu ask before removing a one-beat scene's
   header, as Alt+Up and Alt+Down already did.

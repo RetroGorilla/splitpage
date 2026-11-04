@@ -117,6 +117,17 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       });
       return;
     }
+    if (action === "name-automatic" && divider) {
+      const automatic = ports.document.numbering().scenes.find(scene => scene.id === null);
+      const first = automatic && state.rows[automatic.start];
+      if (!first) return;
+      nameAt(divider, "", name => {
+        const created = ports.ids.id("section");
+        ports.edits.run(addSceneCommand(first.id, created, name));
+        header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
+      });
+      return;
+    }
     if (!id || !divider) return;
     divider.querySelector<HTMLDetailsElement>("details")?.removeAttribute("open");
     if (action === "rename") rename(id, divider);

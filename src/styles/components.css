@@ -783,6 +783,7 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 .section-fold { width: calc(24 * var(--u)); flex: none; }
 .section-header [role="heading"] { min-width: 0; }
 .section-header .section-name { font-weight: 600; text-align: left; overflow-wrap: anywhere; }
+.section-header .section-name-empty { color: var(--text-faint); font-weight: 450; }
 .section-stats { flex: none; color: var(--text-faint); font: calc(11 * var(--u)) var(--font-display); white-space: nowrap; }
 .section-more { margin-left: auto; flex: none; }
 .section-more summary { list-style: none; font-size: calc(18 * var(--u)); line-height: 1; }
