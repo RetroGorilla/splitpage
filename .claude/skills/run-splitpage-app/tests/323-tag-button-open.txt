@@ -101,7 +101,7 @@ click #rows .row:nth-of-type(10) .visual-cell button.tb-tag
 wait !modal.hidden
 click #tag-cats [data-tag-cat="prop"]
 wait kw() === 1
-expect st(9) == wordprop:
+expect cell(9).textContent.replace(/\u200b/g, '') == wordprop:
 press Lamp
 key Tab
 wait kw() === 0 && cell(9).querySelector('.tag-anchor') !== null
