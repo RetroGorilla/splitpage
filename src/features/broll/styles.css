@@ -179,8 +179,8 @@
     margin: 0 var(--space-4) 0 1px; vertical-align: 0.5px; box-sizing: border-box;
   }
   .broll-st-dot.is-needed { border: 1.5px solid var(--text-faint); background: transparent; }
-  .broll-st-dot.is-sourcing { background: var(--audio); }
-  .broll-st-dot.is-have { background: var(--ok); }
+  .broll-st-dot.is-sourcing { background: var(--status-sourcing); }
+  .broll-st-dot.is-have { background: var(--status-have); }
   .broll-st-dot.is-returned { background: var(--text-dim); }
   .broll-avatar { letter-spacing: 0; }
   .broll-row-icons { flex: none; display: flex; align-items: center; gap: var(--space-6); height: 32px; }

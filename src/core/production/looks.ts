@@ -76,8 +76,8 @@ interface TagStatusLook {
 
 const TAG_STATUS_LOOKS: Record<TagStatusId, { label: string; color: string }> = {
   needed: { label: "Needed", color: "var(--text-faint)" },
-  sourcing: { label: "Sourcing", color: "var(--audio)" },
-  have: { label: "Have it", color: "var(--text)" },
+  sourcing: { label: "Sourcing", color: "var(--status-sourcing)" },
+  have: { label: "Have it", color: "var(--status-have)" },
   returned: { label: "Returned", color: "var(--text-faint)" }
 };
 
