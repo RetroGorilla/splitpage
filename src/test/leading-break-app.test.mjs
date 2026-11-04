@@ -108,6 +108,7 @@ test("a tag's notes box shows a leading line break and keeps it on edit", () => 
   load();
   try {
     openProductionPanel();
+    document.querySelector('#production-modes [data-group="cat"]').click();
     document.querySelector('#production-panel [data-action="tag-expand"].tag-entity-head').click();
     const box = document.querySelector("#production-panel .tag-notes-input");
     assert.ok(box, "the notes box shows");

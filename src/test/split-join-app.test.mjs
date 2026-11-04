@@ -416,6 +416,7 @@ async function openPanelUnderWriter(panel) {
   await open(panelDoc());
   writer.openWriter();
   panel.open();
+  if (panel.name === "production") document.querySelector('#production-modes [data-group="cat"]').click();
   await waitRefresh();
   assert.deepEqual(panel.beats(), panel.labels(2), panel.name);
 }

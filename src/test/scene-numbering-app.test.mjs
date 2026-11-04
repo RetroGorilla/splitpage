@@ -77,6 +77,7 @@ test("#1186: an old document reorders, saves and reopens with identity, statuses
   assert.match(document.querySelector('#broll-list [data-id="bs_two"] .broll-row-name').textContent, /^C\.1\.2 /);
   assert.equal(document.querySelector('#broll-list [data-id="bs_added"] .broll-row-name').textContent, "Added");
   openProductionPanel();
+  document.querySelector('#production-modes [data-group="cat"]').click();
   assert.equal(document.querySelector('.tag-scene[data-row="r3"]').textContent, "1");
   writer.openWriter();
   assert.deepEqual(Array.from(document.querySelectorAll("#writer-doc .wr-num"), el => el.textContent), expected);
