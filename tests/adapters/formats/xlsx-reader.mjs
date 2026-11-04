@@ -44,5 +44,5 @@ export function sheetNamed(book, name) {
 
 export function recordsOf(sheet) {
   const [head, ...rows] = sheet.rows;
-  return rows.map((row) => Object.fromEntries(head.map((h, i) => [h, row[i] === undefined ? "" : row[i]])));
+  return rows.map((row) => Object.fromEntries(head.map((h, i) => [h === "Scene" ? "Beat" : h === "Scenes" ? "Beats" : h, row[i] === undefined ? "" : row[i]])));
 }

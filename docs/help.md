@@ -30,7 +30,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   visual cues. They are never spoken or used by Follow My Voice. Print/PDF,
   full-script Word and Markdown exports retain headings and totals and include
   every beat, including folded ones. Narration Word keeps heading cues;
-  plain narration text omits scene headings. CSV uses beat labels; XLSX keeps its existing column keys.
+  plain narration text omits scene headings. CSV and XLSX use beat labels.
   At the start of a beat after a header, press Backspace once to show
   “Press Backspace again to remove the scene header”. Press it again
   within two seconds, without another key, click or caret move, to remove

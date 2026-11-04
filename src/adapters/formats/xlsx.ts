@@ -277,7 +277,7 @@ function looks(styles: Styles) {
 function fill<T>(n: number, v: T): T[] { const a: T[] = []; for (let i = 0; i < n; i++) a.push(v); return a; }
 
 function scriptSheet(L: Looks, t: ScriptTable): WorkbookSheet {
-  const head = t.head.map(h => h === "Beat" ? "Scene" : h === "Beats" ? "Scenes" : h).concat(["Notes"]);
+  const head = t.head.concat(["Notes"]);
   const headStyles = head.map(function (h) { return h === "Visual" ? L.headVisual : h === "Audio" ? L.headAudio : L.head; });
   const rows: WorkbookSheet["rows"] = t.beats.map(function (s) {
     const st = Object.entries(STATUS_PRINT).find(([id]) => id === s.status)?.[1] || STATUS_PRINT.todo;
@@ -336,7 +336,7 @@ function breakdownSheet(doc: ExportDocument, L: Looks, standalone: boolean, serv
   if (!rows.length) rows.push({ cells: ["(nothing labelled yet)"].concat(fill(t.head.length - 1, "")), styles: fill(t.head.length, L.dim) });
   return {
     name: "Breakdown",
-    head: t.head.map(h => h === "Beat" ? "Scene" : h === "Beats" ? "Scenes" : h),
+    head: t.head,
     headStyles: fill(t.head.length, L.head),
     cols: [13, 28, 11, 16, 10, 16, 9, 44, 30, 12, 22],
     rows: rows
@@ -370,7 +370,7 @@ function brollSheet(doc: ExportDocument, L: Looks, standalone: boolean, services
   if (!rows.length) rows.push({ cells: ["(no b-roll yet)"].concat(fill(t.head.length - 1, "")), styles: fill(t.head.length, L.dim) });
   return {
     name: "B-roll",
-    head: t.head.map(h => h === "Beat" ? "Scene" : h === "Beats" ? "Scenes" : h),
+    head: t.head,
     headStyles: fill(t.head.length, L.head),
     cols: [7, 32, 10, 9, 18, 26, 30, 16, 40, 40, 11],
     rows: rows

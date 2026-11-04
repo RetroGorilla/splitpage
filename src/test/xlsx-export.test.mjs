@@ -88,7 +88,7 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
 
   const t = scriptTable(liveDoc());
   const script = book.sheets[0];
-  assert.deepEqual(script.rows[0], t.head.map(h => h === "Beat" ? "Scene" : h).concat(["Notes"]));
+  assert.deepEqual(script.rows[0], t.head.concat(["Notes"]));
   const want = t.beats.map((s) => s.cells).concat(t.summary).map((r) => pad(r, 11));
   assert.deepEqual(asText(script.rows.slice(1)), asText(want));
   assert.equal(script.rows.length, 1 + 30 + t.summary.length);
@@ -162,7 +162,7 @@ test("the breakdown's and the shot list's own workbooks, and empty ones", async 
   demo();
   const bd = await open(buildBreakdownXlsx(liveDoc()));
   assert.deepEqual(bd.sheets.map((s) => s.name), ["Breakdown"]);
-  assert.deepEqual(bd.sheets[0].rows[0], breakdownTable(exportDocumentOf(currentDocument())).head.map(h => h === "Beats" ? "Scenes" : h));
+  assert.deepEqual(bd.sheets[0].rows[0], breakdownTable(exportDocumentOf(currentDocument())).head);
   const br = await open(buildBrollXlsx(liveDoc()));
   assert.deepEqual(br.sheets.map((s) => s.name), ["B-roll"]);
   assert.equal(br.sheets[0].rows.length, brollTable(liveDoc()).rows.length + 1);

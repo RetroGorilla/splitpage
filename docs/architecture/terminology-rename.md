@@ -18,7 +18,7 @@ This inventory is for PR 2 of #1186. Old "scene" means beat and old "section" me
 | `application/x-splitpage-section` | **Stay.** Drag data is an external DataTransfer type: `src/features/rows/scene-controls.ts:151`. |
 | `toggle-hide-shot`, `go-to-scene` | **Stay.** Action IDs are registered at `src/features/rows/actions.ts:33`, `src/features/rundown/actions.ts:34`; the desktop menu sends `toggle-hide-shot` at `desktop/main.ts:1681`. Keep IDs even if labels and internal functions change. |
 | CSV/DOCX legacy headings and recognizers | **Keep reading old names.** CSV recognizes `scene` and `shot` on import at `src/adapters/formats/csv.ts:193`, `:209`; DOCX recognizes visual `shot` and generated headings including `B-roll shot list` at `src/adapters/formats/docx.ts:1028`, `:1032`, `:1042`. Visible exported wording can change in PR 4 only with compatible import. |
-| XLSX `Scene` and `Scenes` column headings | **Stay.** These exported headers are also keys when workbook rows are read by the round-trip tests. |
+| XLSX `Scene` and `Scenes` column headings | **Export as `Beat` and `Beats` (Adam's decision for PR 4).** Readers must accept old and new headings. The workbook reader preserves raw headings; the round-trip record reader normalizes legacy keys to `Beat`/`Beats`. There is no product XLSX importer. |
 | `__sceneSelectTest` and its tracking `scene` field | **Stay.** Browser suites use this test hook to exercise scene selection. |
 | `__prompterTest.checkSceneBoundaryNow` | **Stay.** The prompter browser suite calls this test hook. |
 | `__perfScene` | **Stay.** The performance suite's generated script and its test exchange this hook name. |
