@@ -110,6 +110,7 @@ expect document.querySelectorAll('#rows .row:nth-of-type(2) .visual-cell .tag-an
 
 # --- the breakdown now counts the mention it was missing --------------------
 click #btn-production
+jsclick #production-modes [data-group="cat"]
 sleep 600
 # scoped to the item under test - the sections above deliberately add others.
 # Since #169 a row shows its scenes ("01"), not "N mentions"; both of gaffer

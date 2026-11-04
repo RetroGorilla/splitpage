@@ -3,6 +3,7 @@ caret #rows .row .audio-cell .cell-editable
 press  Grab the [gaffer tape] in the {kitchen}.
 sleep 400
 click #btn-production
+jsclick #production-modes [data-group="cat"]
 wait !document.getElementById('production-panel').hidden
 wait !!document.querySelector('#production-list .tag-beat-links .tag-scene')
 eval (function(){var links=document.querySelector('#production-list .tag-beat-links');var one=links.querySelector('.tag-scene');for(var i=0;i<60;i++)links.appendChild(one.cloneNode(true));return true;})()

@@ -86,6 +86,7 @@ expect document.querySelectorAll('#rows .visual-cell .tag-anchor').length == 1
 # Production from the bottom bar: it clicks the header's button, which a
 # phone does not draw (#169, B-Phone)
 click #phone-bar [data-for="btn-production"]
+jsclick #production-modes [data-group="cat"]
 sleep 600
 expect document.querySelectorAll('#production-list .tag-entity').length >= 1
 expect document.querySelector('#phone-bar [data-for="btn-production"]').getAttribute('aria-current') == page

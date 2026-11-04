@@ -15,6 +15,7 @@ expect loose() === 0
 eval (function(){ U.flush(); window.__before = F.state().rows[0].visualText; window.__n = U.sizes().undo; return true; })()
 
 jsclick #btn-production
+jsclick #production-modes [data-group="cat"]
 wait document.querySelector('#production-list') && document.querySelectorAll('#production-list .tag-entity-head').length > 0
 eval (function(){ var h = document.querySelector('#production-list .tag-entity-head'); h.click(); return !!h; })()
 wait document.querySelector('[data-action="tag-all-mentions"]')
