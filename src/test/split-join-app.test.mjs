@@ -396,11 +396,19 @@ function panelDoc() {
 
 const texts = (selector) => Array.from(document.querySelectorAll(selector)).map((el) => el.textContent);
 const brollBeats = () => texts("#broll-panel .broll-group-scene");
-const productionBeats = () => texts("#production-panel .tag-scene");
+const productionBeats = () => {
+  for (const link of document.querySelectorAll("#production-panel .tag-scene")) {
+    const letter = link.closest(".tag-beat-group").querySelector(".tag-beat-letter").textContent;
+    assert.equal(letter, "A");
+    assert.ok(link.getAttribute("aria-label").startsWith("Beat " + letter + "." + link.textContent + " "));
+    assert.equal(link.title, link.getAttribute("aria-label"));
+  }
+  return texts("#production-panel .tag-scene");
+};
 const waitRefresh = () => new Promise((r) => setTimeout(r, 400));
 
 const PANELS = [
-  { name: "production", open: openProductionPanel, beats: productionBeats, labels: (n) => ["A." + n] },
+  { name: "production", open: openProductionPanel, beats: productionBeats, labels: (n) => [String(n)] },
   { name: "b-roll", open: openBrollPanel, beats: brollBeats, labels: (n) => ["Beat A." + n] }
 ];
 

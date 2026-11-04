@@ -2187,3 +2187,5 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
   }
   .newtab-drop-text { flex-direction: column; align-items: center; }
 }
+
+.number-dot { margin-inline: -0.16em; }

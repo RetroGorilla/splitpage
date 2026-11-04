@@ -1,3 +1,4 @@
+import { numberHtml } from "../common/number-html.ts";
 import type { Person } from "../../core/production/records.ts";
 import type { TagPanelPorts } from "./ports.ts";
 import type { RemoveTagPorts } from "../../application/commands/production-actions.ts";
@@ -192,12 +193,16 @@ export function applyGearQuickAdd() {
   (ports as TagPanelPorts).notices.show("Gear list updated — " + parts.join(", ") + ".", "ok");
 }
 
-function joinBeatLinks(links: readonly string[]) {
-  return links.map(function (html, i) {
-    return i < links.length - 1
-      ? '<span class="tag-scene-unit">' + html + '<span class="tag-scene-sep">,</span></span>'
-      : html;
-  }).join('<span class="tag-scene-sep"> </span>');
+function joinBeatLinks(rowIds: readonly string[], link: (rowId: string) => string) {
+  const groups = new Map<string, string[]>();
+  for (const rowId of rowIds) {
+    const letter = (ports as TagPanelPorts).document.numbering().beats[rowId]?.scene.letter ?? "";
+    const links = groups.get(letter) ?? [];
+    links.push(link(rowId));
+    groups.set(letter, links);
+  }
+  return Array.from(groups, ([letter, links]) => '<span class="tag-beat-group"><span class="tag-beat-letter">' +
+    escapeHtml(letter) + '</span> <span class="tag-beat-links">' + links.join(' ') + '</span></span>').join(' ');
 }
 
 function beatLinksHtml(item: PresentedProductionEntry) {
@@ -209,15 +214,16 @@ function beatLinksHtml(item: PresentedProductionEntry) {
     if (m.field === "visualText") s.visual = true; else s.audio = true;
   });
   order.sort(function (a, b) { return a.m.rowIndex - b.m.rowIndex; });
-  return joinBeatLinks(order.map(function (s) {
+  return joinBeatLinks(order.map(s => s.m.rowId), function (rowId) {
+    const s = byRow[rowId] as BeatMentionGroup;
     const num = ((ports as TagPanelPorts).document.numbering().beats[s.m.rowId]?.full ?? "");
     const label = "Beat " + num + " · " +
       (s.visual && s.audio ? "Visual and Audio" : s.visual ? "Visual" : "Audio") +
       (s.n > 1 ? " · " + s.n + " mentions" : "") + " — go to it";
     return '<button type="button" class="tag-scene jump-link" data-action="jump-tag" data-row="' +
       escapeHtml(s.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="' +
-      escapeHtml(label) + '" aria-label="' + escapeHtml(label) + '">' + num + '</button>';
-  }));
+      escapeHtml(label) + '" aria-label="' + escapeHtml(label) + '">' + escapeHtml((ports as TagPanelPorts).document.numbering().beats[rowId]?.short ?? "") + '</button>';
+  });
 }
 
 function mentionLinksHtml(item: PresentedProductionEntry) {
@@ -233,7 +239,7 @@ function mentionLinksHtml(item: PresentedProductionEntry) {
     const num = ((ports as TagPanelPorts).document.numbering().beats[entry.m.rowId]?.full ?? "");
     return '<button type="button" class="tag-mention jump-link" data-action="jump-tag" data-row="' +
       escapeHtml(entry.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="Go to this mention in beat ' +
-      num + '"><span class="tag-figure">' + num + '</span> ' +
+      num + '"><span class="tag-figure">' + numberHtml(num) + '</span> ' +
       (entry.m.field === "visualText" ? "Visual" : "Audio") +
       (entry.n > 1 ? ' <span class="tag-figure">×' + entry.n + '</span>' : '') + '</button>';
   }).join(", ");
@@ -449,7 +455,7 @@ function renderProductionByBeat(all: readonly PresentedProductionEntry[]) {
   return indexes.map(function (idx) {
     const items = Object.keys(byRow[idx] as Record<string, PresentedProductionEntry>).map(function (k) { return (byRow[idx] as Record<string, PresentedProductionEntry>)[k] as PresentedProductionEntry; });
     return '<section class="tag-scene-group">' +
-      '<h3 class="tag-scene-group-head">Beat <span class="tag-figure">' + ((ports as TagPanelPorts).document.numbering().beats[(ports as TagPanelPorts).document.current()?.rows[idx]?.id ?? ""]?.full ?? "") + '</span></h3>' +
+      '<h3 class="tag-scene-group-head">Beat <span class="tag-figure">' + numberHtml((ports as TagPanelPorts).document.numbering().beats[(ports as TagPanelPorts).document.current()?.rows[idx]?.id ?? ""]?.full ?? "") + '</span></h3>' +
       '<ul class="tag-pills">' +
         items.map(function (item) {
           return '<li class="tag-pill" style="--dot:' + item.cat.color + '">' +
@@ -549,15 +555,15 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
       '<dl class="shoot-detail">' +
         '<dt>Beats</dt>' +
         '<dd class="tag-scenes">' +
-          joinBeatLinks(g.rows.map(function (i) {
-            const row = doc.rows[i] as DocumentView["rows"][number];
+          joinBeatLinks(g.rows.map(i => (doc.rows[i] as DocumentView["rows"][number]).id), function (rowId) {
+            const row = doc.rows.find(row => row.id === rowId) as DocumentView["rows"][number];
             const st = rowStatus(row.status) || (ROW_STATUSES[0] as PanelRowStatus);
             const label = "Beat " + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
             return '<button type="button" class="tag-scene jump-link' + (row.status === "shot" ? ' is-shot' : '') +
               '" data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
-              '" aria-label="' + escapeHtml(label) + '">' + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") +
+              '" aria-label="' + escapeHtml(label) + '">' + escapeHtml((ports as TagPanelPorts).document.numbering().beats[row.id]?.short ?? "") +
               (row.status === "shot" ? iconHtml("i-check", "tag-scene-tick") : '') + '</button>';
-          })) +
+          }) +
         '</dd>' +
         (g.needOrder.length
           ? '<dt>Needs on the day</dt>' +

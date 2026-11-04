@@ -1,3 +1,4 @@
+import { numberHtml } from "../common/number-html.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { CommentStatePorts } from "./ports.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
@@ -417,7 +418,7 @@ function commentLocationHtml(rowId: string, field: string) {
   const idx = (ports as CommentsRuntimePorts).document.read(function (doc) { return rowIndexOf(doc, rowId); });
   const fieldLabel = field === "audioText" ? "Audio" : "Visual";
   if (idx === -1) return "Deleted beat · " + fieldLabel;
-  return 'Beat <span class="comment-loc-num">' + ((ports as CommentsRuntimePorts).document.numbering().beats[rowId]?.full ?? "") + '</span> · ' + fieldLabel;
+  return 'Beat <span class="comment-loc-num">' + numberHtml((ports as CommentsRuntimePorts).document.numbering().beats[rowId]?.full ?? "") + '</span> · ' + fieldLabel;
 }
 
 function commentThreadNumbers() {
