@@ -28,12 +28,14 @@ export interface TagPanelMount extends TagPanelCommands {
 export interface PlainTagPorts {
   readonly renderCategories: (selected: string | null) => void;
   readonly document: Pick<DocumentReader, "current">;
-  readonly cells: Pick<CellEditing<Element>, "edit">;
+  readonly cells: Pick<CellEditing<Element>, "edit" | "open">;
   readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
 }
 
+export type TagCaretRefusal = "audio" | "link" | "tag" | "open" | "elsewhere";
+
 export interface PlainTagControl {
-  readonly openCategoryAtCaret: (cellEl: HTMLElement, marks: Marks) => boolean;
+  readonly openCategoryAtCaret: (cellEl: HTMLElement, marks: Marks) => TagCaretRefusal | null;
   readonly chooseCategory: (cat: string | null) => boolean;
   readonly cancelCategory: () => boolean;
   readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
@@ -42,6 +44,7 @@ export interface PlainTagControl {
   readonly close: () => boolean;
   readonly isOpen: (cellEl?: Element | null) => boolean;
   readonly emptyAtCaret: () => boolean;
+  readonly cancelOnBackspace: () => boolean;
   readonly onTagged: (listener: () => void) => () => void;
 }
 

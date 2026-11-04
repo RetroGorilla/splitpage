@@ -33,7 +33,8 @@ function fixture(html: string, model: string | Run[]) {
         if (!res) return null;
         changes.push(res);
         return target;
-      }
+      },
+      open: () => ({ rowId: "r1", field: "visualText", html: "", sel: null })
     },
     text: text.text
   };
