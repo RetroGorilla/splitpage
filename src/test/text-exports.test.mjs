@@ -56,7 +56,7 @@ test("the script's sheet: a row per scene with its start, status, read time, tag
   assert.equal(beat(5)[7], "Prop: toothpick, light seal kit, naphtha; Gear: overhead rig");
   assert.equal(beat(21)[7], "", "nothing tagged in beat 21");
   assert.equal(beat(4)[8], "A.4.1 fingertip pushing on the sticky old foam (filmed)");
-  assert.equal(beat(6)[8], "A.6.1 the toothpick lifting a long strand of goo (shot, flagged)");
+  assert.equal(beat(6)[8], "A.6.1 the toothpick lifting a long strand of goo (filmed, flagged)");
   assert.equal(beat(22)[8], "A.22.1 feet on the gravel path, low angle (to film)");
   assert.deepEqual([3, 9, 18, 24].map((n) => beat(n)[9]), ["1", "", "2", "3"]);
   assert.deepEqual(beat(10).slice(0, 4), ["A.10", "02:48", "Ready", "0:38"]);
