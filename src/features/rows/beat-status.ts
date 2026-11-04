@@ -58,11 +58,11 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
         tc.delta + (tc.over ? ' over' : ' left') + '</span>';
       title = "Read time " + totalText + " against a " + tc.target + " target, " +
         tc.delta + (tc.over ? " over" : " left") +
-        (ports.hideShot() ? " (" + formatDuration(remaining) + " still to shoot)" : "") +
+        (ports.hideShot() ? " (" + formatDuration(remaining) + " still to film)" : "") +
         " — click to change the target or your reading speed";
     } else if (ports.hideShot()) {
       totalHtml = formatDuration(remaining) + '<span class="rd-length-of"> / ' + totalText + '</span>';
-      title = formatDuration(remaining) + " still to shoot of " + totalText +
+      title = formatDuration(remaining) + " still to film of " + totalText +
         " — click to set your reading speed or a target length";
     }
     paintLength(ports.element("runtime-chip"), totalHtml, slotHtml, title);
@@ -76,7 +76,7 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
     const shot = rows.filter(function (r) { return r.status === "shot"; }).length;
     if (!shot) { chip.hidden = true; return; }
     chip.hidden = false;
-    text.textContent = shot + "/" + rows.length + " shot";
+    text.textContent = shot + "/" + rows.length + " filmed";
   }
 
   return {

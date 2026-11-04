@@ -18,7 +18,7 @@ export interface HideShotControls {
 
 export function hiddenShotStripHtml(ids: readonly string[]): string {
   const count = ids.length;
-  const label = count + " shot scene" + (count === 1 ? "" : "s") + " hidden";
+  const label = count + " filmed beat" + (count === 1 ? "" : "s") + " hidden";
   return '<button type="button" class="hidden-shot-strip" data-action="expand-hidden-shot" data-ids="' +
     escapeHtml(ids.join(",")) + '" title="Click to show">' +
       '<span class="hidden-shot-label">' + escapeHtml(label) + '</span>' +
@@ -43,8 +43,8 @@ export function createHideShot(ports: HideShotPorts): HideShotControls {
     toggle: function () {
       set(!ports.shots.on());
       ports.notices.show(ports.shots.on()
-        ? "Hiding shot scenes — collapsed into strips you can click open."
-        : "Showing every scene again.", "ok");
+        ? "Hiding filmed beats — collapsed into strips you can click open."
+        : "Showing every beat again.", "ok");
     },
     expand: function (idsAttr) {
       if (!idsAttr) return;

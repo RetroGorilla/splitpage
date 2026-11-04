@@ -58,7 +58,7 @@ test("sectionless rendering never requests the fold owner", () => {
   } finally { mounted.dispose(); }
 });
 
-test("scene menus place Add Section Header between Insert scene and Delete and include it in keyboard navigation", () => {
+test("scene menus place Add Scene Header between Insert beat and Delete and include it in keyboard navigation", () => {
   document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
   const mounted = startRowsRender(fixture(true).ports);
   try {
@@ -67,7 +67,7 @@ test("scene menus place Add Section Header between Insert scene and Delete and i
     assert.ok(more);
     toggleRowMenu(more, true);
     const items = Array.from(document.querySelectorAll<HTMLButtonElement>(".row-menu-item"));
-    assert.deepEqual(items.map(item => item.textContent), ["Move up", "Move down", "Insert scene", "Add Section Header", "Delete"]);
+    assert.deepEqual(items.map(item => item.textContent), ["Move up", "Move down", "Insert beat", "Add Scene Header", "Delete"]);
     const insert = items[2], scene = items[3], remove = items[4];
     assert.ok(insert && scene && remove);
     assert.equal(scene.getAttribute("role"), "menuitem");

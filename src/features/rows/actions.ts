@@ -10,7 +10,7 @@ export function rowActions(rows: RowControls): ActionDefinition[] {
   return [
     {
       id: "reveal-row",
-      label: "Show scene",
+      label: "Show beat",
       group: "Open",
       availability: () => ({ enabled: true, visible: false }),
       run: (_source, input) => {
@@ -31,11 +31,11 @@ export function hideShotActions(ports: HideShotActionPorts): ActionDefinition[] 
   return [
     {
       id: "toggle-hide-shot",
-      label: "Hide shot scenes",
+      label: "Hide filmed beats",
       group: "This document",
       icon: "i-eye-off",
       keys: ["mod+alt+h", "mod+alt+shift+h"],
-      words: "collapse done finished filter shot scenes",
+      words: "collapse done finished filter filmed beats",
       availability: () => availableUnless(["loading", "dialog"], ports.screen(), ports.hidden()),
       run: () => { ports.toggle(); }
     }

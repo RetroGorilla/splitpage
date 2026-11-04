@@ -36,8 +36,8 @@ test("hide shot: toggling sets the owner, ticks the menu item and says what chan
   controls.toggle();
   assert.equal(document.getElementById("menu-hide-shot")?.getAttribute("aria-checked"), "false");
   assert.deepEqual(notices.shown.map((n) => n.message), [
-    "Hiding shot scenes — collapsed into strips you can click open.",
-    "Showing every scene again."
+    "Hiding filmed beats — collapsed into strips you can click open.",
+    "Showing every beat again."
   ]);
 });
 

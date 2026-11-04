@@ -192,21 +192,21 @@ function rowGutterHtml(row: Row): string {
         '<span class="row-num">' + num + '</span><span class="row-start"></span>' +
       '</div>';
   const controls = '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
-        '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene ' + num + ' status: ' +
+        '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Beat ' + num + ' status: ' +
         escapeHtml(st.label) + '. Change status">' + lamp + '</button>' +
       '<div class="row-tools">' +
-        '<span class="row-grip" data-action="drag-grip" data-id="' + row.id + '" title="Drag to move this scene" aria-hidden="true">' +
+        '<span class="row-grip" data-action="drag-grip" data-id="' + row.id + '" title="Drag to move this beat" aria-hidden="true">' +
           '<svg aria-hidden="true"><use href="#i-grip"/></svg></span>' +
         '<div class="row-menu-wrap">' +
           '<button class="row-more" type="button" data-action="row-menu" data-id="' + row.id +
-            '" aria-haspopup="menu" aria-expanded="false" aria-label="Scene ' + num + ' actions" title="Move, insert or delete this scene">' +
+            '" aria-haspopup="menu" aria-expanded="false" aria-label="Beat ' + num + ' actions" title="Move, insert or delete this beat">' +
             '<svg aria-hidden="true"><use href="#i-more"/></svg></button>' +
-          '<div class="row-menu" role="menu" aria-label="Scene ' + num + '" hidden>' +
-            rowMenuItemHtml(row, "move-up", "i-arrow-up", "Move up", "Move this scene up (Alt+Up)") +
-            rowMenuItemHtml(row, "move-down", "i-arrow-down", "Move down", "Move this scene down (Alt+Down)") +
-            rowMenuItemHtml(row, "insert-below", "i-plus", "Insert scene", "Insert an empty scene below this one") +
-            rowMenuItemHtml(row, "add-section", "i-plus", "Add Section Header", "Insert a section header above this scene") +
-            rowMenuItemHtml(row, "delete-row", "i-trash", "Delete", "Delete this scene", true) +
+          '<div class="row-menu" role="menu" aria-label="Beat ' + num + '" hidden>' +
+            rowMenuItemHtml(row, "move-up", "i-arrow-up", "Move up", "Move this beat up (Alt+Up)") +
+            rowMenuItemHtml(row, "move-down", "i-arrow-down", "Move down", "Move this beat down (Alt+Down)") +
+            rowMenuItemHtml(row, "insert-below", "i-plus", "Insert beat", "Insert an empty beat below this one") +
+            rowMenuItemHtml(row, "add-section", "i-plus", "Add Scene Header", "Insert a scene header above this beat") +
+            rowMenuItemHtml(row, "delete-row", "i-trash", "Delete", "Delete this beat", true) +
           '</div>' +
         '</div>' +
       '</div>';
@@ -263,7 +263,7 @@ function paintReadTime(btn: HTMLElement | null, row: Row, secs: number, doc: Doc
     ? "Set by hand · estimate " + formatDuration(est) +
       (over ? " — the Audio now reads longer than this" : "") +
       ". Click to change; clear it to use the estimate"
-    : "Estimated read time — click to set this scene’s length";
+    : "Estimated read time — click to set this beat’s length";
   if (btn.title !== title) btn.title = title;
 }
 
@@ -343,7 +343,7 @@ function rowGalleryHtml(row: Row, slots: readonly Slot[]): string {
   return '<div class="image-thumb-wrap scene-gallery ' + (single ? 'is-single' : 'is-mosaic') + '" data-id="' + row.id + '" data-count="' + n + '">' +
       tiles +
       '<div class="image-thumb-actions">' +
-        '<button type="button" data-action="image-add-more" data-id="' + row.id + '" title="Add another picture to this scene">Add</button>' +
+        '<button type="button" data-action="image-add-more" data-id="' + row.id + '" title="Add another picture to this beat">Add</button>' +
         (single
           ? '<button type="button" data-action="image-replace" data-id="' + row.id + '" data-slot="0">Replace</button>' +
             '<button type="button" data-action="image-remove" data-id="' + row.id + '" data-slot="0">Remove</button>'
@@ -362,7 +362,7 @@ function rowMediaHtml(row: Row): string {
   } else {
     imageBlock =
       '<button type="button" class="image-clip" data-action="image-add" data-id="' + row.id +
-        '" title="Add a picture — or drag one anywhere onto this scene’s visual column">' +
+        '" title="Add a picture — or drag one anywhere onto this beat’s visual column">' +
         '<svg class="clip-icon" aria-hidden="true"><use href="#i-image"/></svg>Add picture</button>';
   }
   return '<div class="visual-media' + (img ? '' : ' is-empty') + '" data-id="' +

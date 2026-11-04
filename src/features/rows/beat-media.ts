@@ -64,7 +64,7 @@ function addPicture(rowId: string, file: File, slot?: number) {
     (ports as BeatMediaPortUse).pictures.persist([rec.sha256]);
     const replacing = typeof slot === "number";
     const number = (ports as BeatMediaPortUse).document.numbering().beats[rowId]?.full ?? "";
-    (ports as BeatMediaPortUse).cells.editGallery(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + number, function (row) {
+    (ports as BeatMediaPortUse).cells.editGallery(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " beat " + number, function (row) {
       if (replacing && !replaceGalleryPicture(row, slot, rec, file.name)) return false;
       if (!replacing) addGalleryPicture(row, rec, file.name);
       return true;

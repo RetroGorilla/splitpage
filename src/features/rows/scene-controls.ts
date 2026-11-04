@@ -53,7 +53,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     made.className = "section-rename";
     const input = doc.createElement("input");
     input.type = "text"; input.maxLength = 200; input.required = true; input.value = value;
-    input.setAttribute("aria-label", "Section name");
+    input.setAttribute("aria-label", "Scene name");
     const submit = doc.createElement("button"), cancel = doc.createElement("button");
     submit.type = "submit"; submit.textContent = "Save";
     cancel.type = "button"; cancel.textContent = "Cancel";
@@ -105,7 +105,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     if (!ports.edits.allowed()) return;
     if (add) {
       const row = state.rows.find(item => item.id === add.getAttribute("data-id"));
-      if (!row) { ports.notices.show("Add a scene before creating a section.", "warn"); return; }
+      if (!row) { ports.notices.show("Add a beat before creating a scene.", "warn"); return; }
       closeRowMenus();
       beat?.querySelector<HTMLElement>(".row-more")?.focus();
       const existing = sceneBeforeBeat(state, row.id);
