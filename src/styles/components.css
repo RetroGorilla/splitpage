@@ -757,7 +757,6 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
   cursor: pointer;
 }
 .section-header {
-  --u: calc(var(--script-scale, 1) * 1px);
   position: relative;
   display: flex;
   align-items: center;
@@ -820,9 +819,12 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 }
 .section-rename input { flex: 1; min-width: 0; padding: calc(4 * var(--u)) calc(6 * var(--u)); font: calc(13 * var(--u)) var(--font-body); }
 .section-rename button { padding: calc(4 * var(--u)) calc(8 * var(--u)); font: calc(12 * var(--u)) var(--font-body); cursor: pointer; }
-#writer-doc .section-header { --u: calc(var(--wr-font) / 19); margin: calc(12 * var(--u)) 0; }
+.section-header, .section-rename { --u: calc(var(--script-scale, 1) * 1px); }
+#writer-doc .section-header, #writer-doc .section-rename { --u: calc(var(--wr-font) / 19); }
+#writer-doc .section-header { margin: calc(12 * var(--u)) 0; }
 @media (hover: none), (pointer: coarse) {
-  .section-header { --u: max(1px, calc(var(--script-scale, 1) * 1px)); }
+  .section-header, .section-rename { --u: max(1px, calc(var(--script-scale, 1) * 1px)); }
+  #writer-doc .section-header, #writer-doc .section-rename { --u: max(1px, calc(var(--wr-font) / 19)); }
 }
 @media (max-width: 600px) {
   .section-header { flex-wrap: wrap; gap: calc(4 * var(--u)); padding: calc(4 * var(--u)) calc(6 * var(--u)); }

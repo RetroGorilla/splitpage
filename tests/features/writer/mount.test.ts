@@ -132,6 +132,29 @@ test("writer: small pinch steps add up to a size step, and a slider move starts 
   h.window.close();
 });
 
+test("writer: Ctrl+wheel scrolls the writer to keep the point under the pointer where it was", () => {
+  const h = setup();
+  const owners = h.mount();
+  let height = 100;
+  const block = h.document.createElement("div");
+  block.className = "wr-block";
+  block.getBoundingClientRect = () => ({ top: 50, height } as DOMRect);
+  h.el("writer-doc").append(block);
+  (h.p1 as { applyWriterSize: (size: number, persist: boolean) => void }).applyWriterSize = () => { height = 200; };
+  h.el("wr-size").value = "20";
+  const scroller = h.el("writer-scroll");
+  scroller.scrollTop = 40;
+  h.fire(block, "wheel", { ctrlKey: true, deltaY: -300, deltaMode: 0, clientY: 100 });
+  assert.equal(scroller.scrollTop, 90, "the block doubled, so the point halfway down it moved 50px and the scroll follows");
+  scroller.scrollTop = 40;
+  height = 100;
+  h.el("wr-size").value = "20";
+  h.fire(h.el("writer-doc"), "wheel", { ctrlKey: true, deltaY: -300, deltaMode: 0, clientY: 100 });
+  assert.equal(scroller.scrollTop, 40, "with no block under the pointer there is nothing to hold");
+  owners.forEach((owner) => owner.dispose());
+  h.window.close();
+});
+
 test("writer: Ctrl+wheel stays inside the slider's range and counts lines and pages like pixels", () => {
   const { h, owners, wheel } = wheelHarness(33);
   assert.deepEqual(wheel(-5000).sizes, [[34, true]]);
