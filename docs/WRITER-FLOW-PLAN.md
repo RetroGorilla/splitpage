@@ -16,7 +16,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 
 - A paragraph holds one or more beats, running together as flowing text. A beat never crosses a paragraph break.
 - **Enter** starts a new paragraph and a new beat. **Alt+Enter** starts a new beat in the same paragraph. **Shift+Enter** is a line break inside a beat.
-- Existing scripts open with each scene as one paragraph, because old files have no saved breaks. Text imports keep their source paragraph breaks.
+- Existing scripts open with the sentence rule, Adam's pick on the test page: a beat starts a paragraph when the beat before it ended a sentence. Old files have no saved breaks, so the rule runs once, when such a script first opens in the new writer, and writes ordinary flags. A document-level marker records that it ran, because a new script deliberately written as one paragraph also has no flags and must not be broken up. It shares one sentence-end definition with the teleprompter. Text imports keep their source paragraph breaks.
 - The teleprompter keeps its sentence rule and also starts a paragraph at every saved break. Table exports stay per beat.
 - Narration export stays one paragraph per beat for now, and we circle back to it later (7.1).
 
@@ -26,7 +26,7 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 - Deleting a selection removes beats fully inside it, with their visuals, comments and status. Partly selected beats keep their remaining text and their visuals. A notice says what went, such as "Removed 3 beats: 2 with visuals, 1 filmed".
 - Bold, italic, underline, strikethrough and highlight work across beats. Comments, tags and links stay within one beat. With a selection across beats, those three buttons are disabled and say why.
 - Backspace at a paragraph's start removes only the paragraph break. Backspace just after a tick deletes the previous character and leaves the boundary. Text typed at a tick goes into the beat before it. The caret now has a stop on each side of the gap, so Adam is choosing on the test page whether text typed at the right-hand stop follows this rule or stays where the caret is.
-- Beats join only through Alt+Backspace or Join on the tick, still refused when both have visuals.
+- Beats join only through Alt+Backspace or Join on the tick. If both have visuals, the joined beat keeps both: the words with a line break between them, and the pictures in order, with a notice saying so. It takes the higher status, as a join does today. Only a scene header or the picture limit refuses a join. This replaces the refusal in `joinBeatsCommand`, so the two tests that assert the refusal change with it (`split-join-app`, `text-editing-app`).
 - A selection inside one beat, even of all its text, is ordinary text editing: the beat stays, empty or with just its visual.
 - A beat fully inside a deleted selection takes its comments with it, unless part of a comment's marked text survives in another beat, which can happen after a split. Deleting words inside a surviving beat treats comments as the split view does today: the comment stays at its last position.
 - The writer always has somewhere to type: Ctrl+A then Delete leaves one empty beat.
@@ -47,8 +47,8 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 ### What you see
 
 - A clean centred column of narration. Filmed beats and folded scenes always show in full, whatever their split-view setting.
-- A faint tick marks each boundary. Hovering shows its number, and a filmed beat's tick is coloured. The beat holding the caret gets a very light tint. Its visual shows as a quiet note beside the line, and clicking the note opens the floating box. The Visuals, Numbers and Compact margin button goes away.
-- A beat with a visual and no narration gets its own compact line, like `▣ Drone over the harbour · 0:04`, with the time only if one is set. It breaks the flow visually without being a paragraph break. Typing on it adds narration and makes it a normal beat.
+- A small number marks each boundary, Adam's pick on the test page, and a filmed beat's number is coloured. The beat holding the caret gets a very light tint. Its visual shows as a quiet note beside the line, and clicking the note opens the floating box. The Visuals, Numbers and Compact margin button goes away.
+- A beat with a visual and no narration shows as a chip in the text, Adam's pick on the test page, like `▣ Drone over the harbour · 0:04`, with the time only if one is set. It shows the writer there's a small break for a visual without being a paragraph break. Typing on it adds narration and makes it a normal beat.
 - A beat with neither narration nor a visual shows a small placeholder. Enter on one does nothing, so repeated Enter cannot fill the script with blank beats.
 - `((direction))` stays inline. `SFX:` and `Music:` cues stay on their own line and do not start a paragraph or beat.
 - Switching modes keeps your place: the writer opens on the beat you were in, and closing returns you to the beat you were writing in.
@@ -94,7 +94,7 @@ Narration export following the writer's paragraphs, bullets and the Outline view
 
 ### To judge on the test page
 
-Tick style, Enter versus double Enter, the Backspace rules, the visual-only line versus an inline chip, and the wall of text in existing scripts. The sentence rule is the fallback for that last one.
+Enter versus double Enter, the Backspace rules, and typing just after a gap. Already picked: the sentence rule for existing scripts, the chip for a visual with no narration, and numbers for ticks.
 
 ## 3. How it fits the code today
 
@@ -164,13 +164,13 @@ Recommended: **one editing host, with native text entry inside a beat, behind a 
 </div>
 ```
 
-- Ticks, placeholders and visual labels are decorations, never serialized and never in copied text. Every beat has a real narration position, including a visual-only beat, whose compact line is a styled beat span with its label beside it. Clicks and keys on the label map to that position.
+- Ticks, placeholders and visual labels are decorations, never serialized and never in copied text. Every beat has a real narration position, including a visual-only beat, whose chip is a styled beat span with its label inside it. Clicks and keys on the label map to that position.
 - **Input decisions use the operation's target range, not the caret.** A collapsed caret can still delete across beats with Ctrl+Backspace, or replace text through spellcheck. Before each input the adapter reads the input type and `getTargetRanges()`.
 - **Inside one beat:** when the target range sits within one beat and touches no decoration, the input goes native, then syncs that beat through `cellTextCommand`. This keeps typing fast and keeps tag shortcuts, direction shortcuts, the completion ghost and spellcheck.
 - **The gap is a painted margin plus a zero-width space:** the space is the first character of a run-on beat's span, and only when a gap shows. CSS alone isn't enough (section 9). The cell reader already strips `​`, and repair and the save path assert that no synthetic whitespace reaches storage.
 - **Crossing beats or changing structure:** `beforeinput` and `keydown` are cancelled, one flow command runs, and the DOM is patched with the selection restored from model positions.
 - **Repair:** after native input, any text outside a `.wr-beat`, or a merged or split span, is folded back into the right beat before anything is saved, and never during composition.
-- **Patches, not paragraph repaints.** An old script opens as one huge paragraph per scene, so repainting "the paragraph" could mean nearly the whole document. Ordinary edits patch the affected beat. This has to cover the app's own paint path: full renders on structural edits and replay reach `wiring/panels.ts`, which calls `paintWriterDraw`, and that replaces all of `#writer-doc`. Left alone, it overwrites patches, kills tag references and disturbs the selection.
+- **Patches, not paragraph repaints.** A script with little punctuation can still open as one huge paragraph, so repainting "the paragraph" could mean nearly the whole document. Ordinary edits patch the affected beat. This has to cover the app's own paint path: full renders on structural edits and replay reach `wiring/panels.ts`, which calls `paintWriterDraw`, and that replaces all of `#writer-doc`. Left alone, it overwrites patches, kills tag references and disturbs the selection.
 - **IME:** Adam doesn't use one and IME-only bugs go on the never-do list (#1144), so there is no tuning. The one rule is that text is never discarded: no repaint or repair during composition, and all touched beats sync when it ends. Suite `289-script-cell-ime` has to keep passing or be updated on purpose.
 
 Integrations this must adapt, beyond `currentBeat()`, because the host is now the event target and active element:
@@ -209,7 +209,7 @@ Alternatives considered:
 | 2 | Single-host surface: render, caret, typing, tags, directions, undo ownership, patching, mode switching, and a minimal comment jump | `feat/writer-flow` | Typing `perf-ab` against `main`, correctness suites |
 | 3 | Cross-beat selection, delete, format, Enter, Alt+Enter, Backspace, Join, cut and paste | same | Browser suites |
 | 4 | Markdown and headings | same | Browser suites; wording signed off |
-| 5 | Ticks, visual note, visual-only lines, floating box | same | Browser suites |
+| 5 | Ticks, visual note, visual-only chips, floating box | same | Browser suites |
 | 6 | Find and the Visuals toggle | same | Browser suites |
 | 7 | Shared top bar, save status, comments beside the writer | same | Browser suites, desktop smoke groups |
 | 8 | Teleprompter rule, invariants and docs, help and changelog, full browser run, one perf comparison, one real script used by Adam | merge to `main` | Green gate, Normal review, Adam's okay |
@@ -222,7 +222,7 @@ Phase 0a's acceptance set, each with checks that untouched text, row ids and met
 - Pending formatting, tags, comment marks, heading positions, empty beats and visual-only beats.
 - Typing at both edges of a beat span, beside tags and at formatting boundaries.
 - Repainting while text is selected, focus moving to the toolbar and back, and IME commit and cancel losing no text.
-- A short script and a long, sectionless old script as one huge paragraph, with typing timed on the long one.
+- A short script and a long, sectionless script as one huge paragraph, with typing timed on the long one.
 
 Full Markdown, clipboard polish and the Visual box aren't needed to decide the engine, and can follow. The page can't check Electron's menu routing, app focus or saving, which is why 0b exists.
 
@@ -235,7 +235,7 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 ## 6. Known risks
 
 1. **Native edits escaping a beat span.** Chromium may place typed text outside a span at its edge, or merge adjacent spans on delete. Phase 0 tests this directly, before anything lands.
-2. **Long scripts in one host.** Layout and selection cost grow with the document, and an old script opens as very large paragraphs. Phase 0 times exactly that shape, and phase 2 patches beats instead of repainting paragraphs.
+2. **Long scripts in one host.** Layout and selection cost grow with the document, and an old script with little punctuation can open as very large paragraphs. Phase 0 times exactly that shape, and phase 2 patches beats instead of repainting paragraphs.
 3. **Undo and selection.** Undo must own every route in the host, and multi-beat edits need their selection recorded rather than guessed.
 4. **Comment anchors.** Splitting, moving and deleting beats must keep threads whose text survives. Existing `comment-anchors` tests cover splits, not ranges.
 5. **Pending heading.** The text stays a literal `# ` in the beat until decided, so autosave can write it. If the app dies mid-heading, the script holds `# Title` as narration, which is harmless and visible.
@@ -278,7 +278,7 @@ The page is `tools/writer-lab/`. `node tools/writer-lab/build.mjs` builds it and
 - Choosing a spellcheck suggestion from the right-click menu. The check selects a word and inserts text instead.
 - Real Ctrl+C and Ctrl+V. The checks fire clipboard events directly, so they don't touch the PC's clipboard.
 - A real IME. The checks use simulated composition events.
-- Typing time with spellcheck actually running. Since the planted typo was never underlined, no run shows that case. Typing in a 900-beat paragraph took about one frame (16 ms) in the final Chromium and Electron runs. One Edge run measured 62 ms of page work per key and 1,016 ms per frame, on the long script only. The one-second frames also appeared in some earlier Edge runs, so they look like headless pacing, but that isn't proven.
+- Typing time with spellcheck actually running. Since the planted typo was never underlined, no run shows that case. Typing in a 900-beat paragraph took about one frame in the last Chromium and Electron runs (median 15 to 19 ms by run position, worst 51 ms). The last two Edge runs measured 62 to 69 ms of page work per key and 1,016 ms per frame, on the long script only. Those one-second frames also appeared in earlier Edge runs, so they look like headless pacing, but that isn't proven.
 - Electron's menu routing, app focus and saving, which phase 0b covers. The Electron run used a hidden off-screen window on 44.4.5, not the repo's 44.10.
 
 `src/core/flow/` has no unit tests yet. Phase 1 adds them.

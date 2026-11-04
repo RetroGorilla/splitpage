@@ -1,3 +1,4 @@
+import { MAX_MORE, rowSlots, setRowSlots } from "../document/gallery.ts";
 import { normalizeScenes, sceneBeforeBeat, scenesAfterRemoval, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
 import type { DocumentScene } from "../document/scenes.ts";
 import { breakLine, deleteRange, explode, insertCell, insertText, joinCells, markThroughout, setMark, sliceCell, splitCell } from "../text/edits.ts";
@@ -448,21 +449,46 @@ export function setParagraphStart(doc: FlowDoc, rowId: string): FlowOutcome {
   return edit(doc, rows, caretAt(beatPos(rowId, 0)));
 }
 
+const STATUS_RANK: Readonly<Record<string, number>> = { todo: 0, ready: 1, shot: 2 };
+
+function statusRank(status: unknown): number {
+  return typeof status === "string" ? STATUS_RANK[status] ?? 0 : 0;
+}
+
+function joinedPictures(prev: FlowRow, row: FlowRow): ReturnType<typeof rowSlots> {
+  const seen = new Set<string>();
+  return rowSlots(prev).concat(rowSlots(row)).filter(function (slot) {
+    if (!slot.ref) return true;
+    if (seen.has(slot.ref.sha256)) return false;
+    seen.add(slot.ref.sha256);
+    return true;
+  });
+}
+
+function joinedVisualText(prev: FlowRow, row: FlowRow, ports: FlowPorts): string {
+  const first = prev.visualText ?? "", second = row.visualText ?? "";
+  if (!cellLength(ports.cells(second))) return first;
+  if (!cellLength(ports.cells(first))) return second;
+  // why: joined as stored HTML, so nothing in either visual passes through a decoder and gets lost
+  return first + "<br>" + second;
+}
+
 export function joinWithPrevious(doc: FlowDoc, rowId: string, ports: FlowPorts): FlowOutcome {
   const index = indexOfRow(doc, rowId);
   const row = doc.rows[index], prev = doc.rows[index - 1];
   if (!row || !prev) return null;
   if (sceneBeforeBeat({ rows: doc.rows, sections: doc.sections }, row.id)) return { refused: "A beat can't join across a scene header." };
-  if (ports.hasVisual(prev) && ports.hasVisual(row)) return { refused: "Both beats have a visual. Join them in the split view, so you can pick which one to keep." };
+  const pictures = joinedPictures(prev, row);
+  if (pictures.length > MAX_MORE + 1) return { refused: "These beats have too many pictures to join. A beat can hold " + (MAX_MORE + 1) + "." };
   const a = ports.cells(prev.audioText), b = ports.cells(row.audioText);
   const glue = cellLength(a) && cellLength(b) && !/\s$/.test(projection(a)) ? " " : "";
-  const joined = joinCells(a, b, glue);
-  const merged: FlowRow = ports.hasVisual(row)
-    ? { ...row, id: prev.id, audioText: toHtml(joined), paragraphStart: prev.paragraphStart }
-    : { ...prev, audioText: toHtml(joined) };
+  const merged: Record<string, unknown> = { ...prev, audioText: toHtml(joinCells(a, b, glue)), visualText: joinedVisualText(prev, row, ports) };
+  if (rowSlots(row).length) setRowSlots(merged, pictures);
+  if (statusRank(row.status) > statusRank(prev.status)) merged.status = row.status;
   const rows = doc.rows.slice();
-  rows.splice(index - 1, 2, prev.paragraphStart ? withFlag(merged) : withoutFlag(merged));
-  return edit(doc, rows, caretAt(beatPos(prev.id, cellLength(a) + glue.length)));
+  rows.splice(index - 1, 2, merged as FlowRow);
+  const bothVisuals = ports.hasVisual(prev) && ports.hasVisual(row);
+  return edit(doc, rows, caretAt(beatPos(prev.id, cellLength(a) + glue.length)), bothVisuals ? { notice: "Joined the beats and kept both visuals." } : undefined);
 }
 
 function removeHeader(doc: FlowDoc, scene: DocumentScene, ports: FlowPorts): FlowEdit {

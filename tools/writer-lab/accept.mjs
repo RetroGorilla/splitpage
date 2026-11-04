@@ -632,13 +632,72 @@ async function run() {
       same((await sel()).head, beat("rb", 0), tick + " caret");
     }
     await ev(`document.querySelector('[data-setting="tickStyle"]').value = "line"; document.querySelector('[data-setting="tickStyle"]').dispatchEvent(new Event("change"))`);
-    await ev(`document.querySelector('[data-setting="visualOnly"]').value = "chip"; document.querySelector('[data-setting="visualOnly"]').dispatchEvent(new Event("change"))`);
+    same(await ev(`document.body.getAttribute("data-visual-only")`), "chip", "the chip is the default");
     await caret("rc", 17);
     await key("ArrowRight");
     same((await sel()).head.rowId, "rd", "into the chip");
     await type("x");
     same(await textOf("rd"), "x", "typing in a chip");
+    await fresh();
     await ev(`document.querySelector('[data-setting="visualOnly"]').value = "line"; document.querySelector('[data-setting="visualOnly"]').dispatchEvent(new Event("change"))`);
+    await caret("rc", 17);
+    await key("ArrowRight");
+    same((await sel()).head.rowId, "rd", "into the line");
+    await ev(`document.querySelector('[data-setting="visualOnly"]').value = "chip"; document.querySelector('[data-setting="visualOnly"]').dispatchEvent(new Event("change"))`);
+  });
+
+  const SHA_A = "a".repeat(64), SHA_B = "b".repeat(64);
+  const picture = sha => ({ sha256: sha, width: 640, height: 480, mime: "image/png" });
+  const twoVisuals = () => {
+    const raw = midSentence();
+    Object.assign(raw.rows[0], { visualText: "Desk shot", imageRef: picture(SHA_A), status: "todo" });
+    Object.assign(raw.rows[1], { visualText: "Street <strong>wide</strong>", imageRef: picture(SHA_B), status: "shot" });
+    return raw;
+  };
+
+  await t("join: both visuals combine, with both pictures and the higher status, as one undo", async () => {
+    await fresh(twoVisuals());
+    const before = await snapshot();
+    await caret("wb", 0);
+    await key("Backspace", "alt");
+    const now = await rows();
+    same(now.length, 5, "joined");
+    same(now[0].text, "We went to the store and bought some milk", "narration");
+    const joined = (await ev("__lab.doc().rows"))[0];
+    same(joined.id, "wa", "keeps the first beat's id");
+    same(joined.visualText, "Desk shot<br>Street <strong>wide</strong>", "both visuals' words");
+    same(joined.imageRef.sha256, SHA_A, "first picture");
+    same(joined.moreImages.map(item => item.imageRef.sha256), [SHA_B], "second picture");
+    same(joined.status, "shot", "higher status");
+    ok((await ev(`document.getElementById("notice").textContent`)).includes("kept both visuals"), "says so");
+    await ev(`__lab.load(JSON.parse(JSON.stringify(__lab.doc())))`);
+    await settle();
+    same((await ev("__lab.doc().rows"))[0].moreImages.length, 1, "survives reopening");
+    await fresh(twoVisuals());
+    await caret("wb", 0);
+    await key("Backspace", "alt");
+    await key("z", "ctrl");
+    same(await snapshot(), before, "undo");
+  });
+
+  await t("join: the same picture in both beats is kept once", async () => {
+    const raw = twoVisuals();
+    raw.rows[1].imageRef = picture(SHA_A);
+    await fresh(raw);
+    await caret("wb", 0);
+    await key("Backspace", "alt");
+    const joined = (await ev("__lab.doc().rows"))[0];
+    same(joined.imageRef.sha256, SHA_A, "picture");
+    ok(!joined.moreImages, "no copy");
+  });
+
+  await t("join: a scene header still refuses, and changes nothing", async () => {
+    await fresh();
+    const before = await snapshot();
+    await caret("rf", 0);
+    await key("Backspace", "alt");
+    same(await snapshot(), before, "unchanged");
+    ok((await ev(`document.getElementById("notice").textContent`)).includes("scene header"), "says why");
   });
 
   await t("switch: scripts and the sentence rule load", async () => {
@@ -649,10 +708,10 @@ async function run() {
     await type("hi");
     same((await rows())[0].text, "hi", "typing in the blank script");
     await pick("script", "demo");
+    await pick("opening", "scene");
     const sceneRule = await ev(`document.querySelectorAll(".wr-par").length`);
     await pick("opening", "sentence");
     ok(await ev(`document.querySelectorAll(".wr-par").length`) > sceneRule, "sentence rule makes more paragraphs");
-    await pick("opening", "scene");
     await pick("script", "long");
     same((await rows()).length, 900, "long script");
     await pick("script", "demo");

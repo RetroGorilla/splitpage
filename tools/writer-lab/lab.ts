@@ -45,7 +45,7 @@ function readSaved(): Partial<LabSettings> {
 }
 
 const settings: LabSettings = {
-  enter: "single", tick: "delete", gapTyping: "before", markdown: true, tickStyle: "line", visualOnly: "line", opening: "scene",
+  enter: "single", tick: "delete", gapTyping: "before", markdown: true, tickStyle: "number", visualOnly: "chip", opening: "sentence",
   tint: true, note: true, script: "demo", size: 19, ...saved
 };
 
@@ -58,7 +58,8 @@ function decode(html: string | null | undefined): Run[] {
   const text = html ?? "";
   const hit = cache.get(text);
   if (hit) return hit;
-  const made = richText.decode(text);
+  // why: the screen-position code counts pictures and video cards, so the decoder has to keep them too
+  const made = richText.decode(text, { media: true });
   if (cache.size > 20000) cache.clear();
   cache.set(text, made);
   return made;
