@@ -1,11 +1,13 @@
-import { mountBrollPanelFeature } from "./broll.ts";
+import { mountBrollPanelFeature, productionFootage } from "./broll.ts";
+import { setBeatFilmed } from "./beat-status.ts";
+import { actions as portActions } from "./ports/actions.ts";
 import { startTagPanels as mountPanelState } from "../../features/tags/panels.ts";
 import type { TagPanelMount, TagPanelPorts } from "../../features/tags/ports.ts";
 import { tagPanelActions as panelDefinitions } from "../../features/tags/actions.ts";
 import * as tagPanelCommands from "../../application/tag-panel-commands.ts";
 import { installTagPanelCommands } from "../../application/tag-panel-commands.ts";
 import { documentReader as portDocument, documentLifetime as portLifetime } from "./ports/document.ts";
-import { edits as portEdits, productionSelection as portSelection, undoControl as portUndo } from "./ports/editing.ts";
+import { edits as portEdits, focus as portFocus, productionSelection as portSelection, undoControl as portUndo } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
 import { production as portProduction, deletion as portDeletion, tagPanelState as portView } from "./ports/production.ts";
 import { panelControl as portPanels, sidePanels } from "./ports/panels.ts";
@@ -35,6 +37,9 @@ import { currentPlainTags } from "./plain-tags.ts";
 import {
   IS_TOUCH,
   addPersonForTag,
+  clickProductionOutline,
+  changeProductionOutline,
+  revealProductionItem,
   applyGearQuickAdd,
   armDeleteTag,
   armPersonDelete,
@@ -68,6 +73,8 @@ const panelState = owned<TagPanelMount>();
 export function mountTagPanelsFeature(): TagPanelMount {
   return panelState.replace(() => {
     const ports: TagPanelPorts = {
+      focus: portFocus, footage: productionFootage,
+      beats: { setFilmed: setBeatFilmed, reveal: (id) => { portActions.invoke("reveal-row", "button", id); } },
       view: portView, document: portDocument, lifetime: portLifetime, edits: portEdits, text: portText,
       production: portProduction, deletion: portDeletion, selection: portSelection,
       panels: portPanels, personColors: portPersonColors, shotHiding: portShotHiding,
@@ -103,6 +110,9 @@ export function tagPanelActions() {
 export function mountTagsFeature(): ReturnType<typeof mountTags> {
   return tags.replace(function () {
     const ports: TagsPorts = {
+      clickProductionOutline,
+      changeProductionOutline,
+      revealProductionItem,
       acceptTagGhost: acceptTagGhost,
       acceptUntaggedMention: acceptUntaggedMention,
       applyTag: applyTag,

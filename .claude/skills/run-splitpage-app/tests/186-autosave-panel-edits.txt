@@ -16,6 +16,7 @@ eval (function(){ A.timing().idle = 40; A.timing().max = 400; window.__log = [];
 
 # ===== the Production panel =====================================================
 click #btn-production
+jsclick #production-modes [data-group="cat"]
 wait entity('#production-list', 'Kettle')
 
 # --- an item's status, from its pill ----------------------------------------------

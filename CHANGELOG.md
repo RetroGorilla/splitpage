@@ -14,6 +14,10 @@ appear in the app under **Help**. The format follows
   window in the browser, and in your default browser in the desktop app.
 - In the writer, Ctrl+scroll changes the text size, the same setting as the
   Size slider.
+- Production now opens in **Scene prep**, an outline of scenes and beats. Under
+  each beat you can mark what you already have, set its status, assign it and
+  add notes. The Category, Person, Beat, Shoot, CSV and Gear views are still
+  there.
 
 ### Changed
 - New words throughout the app. A section is now a **scene**, and a scene is now

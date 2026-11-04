@@ -155,6 +155,7 @@ press  <a lens> for the close-up.
 sleep 500
 eval document.activeElement.blur()
 jsclick #btn-production
+jsclick #production-modes [data-group="cat"]
 sleep 500
 expect !document.getElementById('production-panel').hidden
 jsclick #btn-gear

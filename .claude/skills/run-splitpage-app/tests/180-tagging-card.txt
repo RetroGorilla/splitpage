@@ -94,6 +94,7 @@ expect document.getElementById('find-count').textContent == 1 of 1
 jsclick #find-close
 sleep 200
 jsclick #btn-production
+jsclick #production-modes [data-group="cat"]
 sleep 500
 expect document.getElementById('production-panel').hidden == false
 expect document.querySelectorAll('#production-list .tag-entity').length == 6

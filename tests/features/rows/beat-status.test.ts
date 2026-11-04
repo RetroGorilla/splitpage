@@ -12,6 +12,25 @@ import { fakeDocument, fakeEdits } from "../fakes.ts";
 
 const TEN = "one two three four five six seven eight nine ten";
 
+test("the Production checkbox films a To do beat in one command and clears its hidden-shot grace when unchecked", () => {
+  const h = setup({ applies: true, hideShot: true });
+  h.owner.setFilmed("r1", true);
+  assert.equal(h.doc.rows[0]?.status, "shot");
+  assert.deepEqual(h.edits.ran.map(command => command.name), ["set-beat-filmed"]);
+  assert.deepEqual(h.grace, ["arm:r1"]);
+  h.owner.setFilmed("r1", false);
+  assert.equal(h.doc.rows[0]?.status, "todo");
+  assert.deepEqual(h.grace, ["arm:r1", "clear:r1"]);
+});
+
+test("setting Filmed is a no-op for a missing beat or an unchanged status", () => {
+  const h = setup();
+  h.owner.setFilmed("r1", false);
+  h.owner.setFilmed("missing", true);
+  for (const command of h.edits.ran) assert.equal(command.plan(h.doc, { edit: () => ({ allowed: true }) }), null);
+  assert.deepEqual(h.grace, []);
+});
+
 function setup(opts: { targetSeconds?: number; hideShot?: boolean; status?: string; applies?: boolean } = {}) {
   document.body.innerHTML = '<button id="runtime-chip"><span class="rd-length-total"></span><span class="rd-length-slot"></span></button>' +
     '<span id="progress-chip" hidden><span id="progress-text"></span></span>';

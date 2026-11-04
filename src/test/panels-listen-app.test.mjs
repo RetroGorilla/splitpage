@@ -103,6 +103,7 @@ test("tagging text with an existing tag refreshes the open production panel with
   open();
   runCommand(registerTagCommand({ cat: "prop", name: "Lamp" }));
   openProductionPanel();
+  document.querySelector('#production-modes [data-group="cat"]').click();
   const list = el("production-list");
   assert.equal(list.innerHTML.includes("tag-orphan-badge"), true);
   const cellEl = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');

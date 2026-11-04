@@ -1,0 +1,88 @@
+open
+viewport 1280 960
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){var doc={schema:2,title:"The Desk Setup",rows:Array.from({length:200},function(_,i){return {id:"r"+i,visualText:"Beat "+(i+1)+": <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Camera\">Camera</span>",audioText:"Plan the desk setup.",status:i<2?"shot":"todo"};}),sections:Array.from({length:6},function(_,i){return {id:"s"+i,name:["Intro","The problem","Planning","Desk build","Lighting","Reveal"][i],firstSceneId:"r"+(i*34)};}),productionTags:[{id:"camera",cat:"prop",name:"Camera",status:"needed",notes:"Reference: https://example.com/camera"}],people:[{id:"adam",name:"Adam"}]};doc.rows[2].visualText+="<br><span class=\"broll-key\" data-broll-id=\"bs1\">B-roll:</span> Camera close-up";doc.brollShots=[{id:"bs1",name:"Camera close-up",status:"unshot"}];window.F=window.__splitpageFormats;window.U=window.__undoTest;return F.openFile(new File([JSON.stringify(doc)],"outline.splitpage"));})()
+wait document.querySelectorAll('#rows .row').length === 200
+click #btn-production
+wait document.querySelectorAll('.prep-scene').length === 6
+wait document.getAnimations().every(function(a){return a.playState==='finished'||a.playState==='idle'||a.effect.getTiming().iterations===Infinity;})
+expect document.querySelectorAll('.prep-beat').length === 8
+expect document.querySelector('.prep-overview').textContent.includes('200 beats')
+expect document.querySelectorAll('.prep-resource').length === 1
+expect !document.querySelector('.prep-beat-title').textContent.includes('Camera close-up')
+click .prep-resource-name button
+wait document.querySelector('.tag-notes-input') !== null
+expect document.querySelector('.prep-owner select').selectedOptions[0].textContent === 'Assign'
+eval document.querySelector('[data-prep="ready"]').focus()
+key Enter
+wait document.querySelector('.prep-status-select').value === 'have'
+expect document.activeElement === document.querySelector('.prep-status-select')
+expect document.querySelectorAll('.prep-resource').length === 1
+expect document.querySelector('.tag-notes-input') !== null
+eval document.querySelector(".prep-owner select").focus()
+expect getComputedStyle(document.querySelector('.prep-owner select')).outlineStyle === 'none'
+eval document.documentElement.setAttribute("data-theme","light")
+shot production-outline-light
+eval document.documentElement.setAttribute("data-theme","dark")
+shot production-outline-dark
+eval (function(){var s=document.querySelector(".prep-owner select");s.value="adam";s.dispatchEvent(new Event("change",{bubbles:true}));return true;})()
+wait F.state().productionTags[0].owner === 'adam'
+expect document.querySelector('.prep-owner select').value === 'adam'
+eval document.activeElement.blur()
+eval U.flush()
+key ctrl KeyZ
+wait document.querySelector('.prep-owner select').value === ''
+eval (function(){var s=document.querySelector(".prep-status-select");s.value="sourcing";s.dispatchEvent(new Event("change",{bubbles:true}));return true;})()
+wait F.state().productionTags[0].status === 'sourcing'
+eval document.activeElement.blur()
+eval U.flush()
+key ctrl KeyZ
+wait document.querySelector('.prep-status-select').value === 'have'
+eval (function(){var t=document.querySelector(".tag-notes-input");t.value="Pick up on Friday";t.dispatchEvent(new Event("input",{bubbles:true}));t.blur();return true;})()
+wait F.state().productionTags[0].notes === 'Pick up on Friday'
+eval U.flush()
+eval document.activeElement.blur()
+eval U.flush()
+key ctrl KeyZ
+wait F.state().productionTags[0].notes.includes('example.com')
+eval U.flush()
+eval window.__beforeFilmed=U.sizes().undo
+click .prep-film-input[data-row="r2"]
+wait F.state().rows[2].status === 'shot'
+eval U.flush()
+expect U.sizes().undo === window.__beforeFilmed + 1
+expect document.querySelector('.prep-beat.is-open').dataset.beat === 'r2'
+eval document.activeElement.blur()
+eval U.flush()
+key ctrl KeyZ
+wait F.state().rows[2].status === 'todo'
+click [data-prep="requirements"]
+wait document.querySelectorAll('.prep-resource').length === 2
+expect Array.from(document.querySelectorAll('.prep-status-select')).every(function(s){return s.value==='have';})
+click [data-prep="selection"]
+click .prep-resource [data-prep="select"]
+wait !document.getElementById('production-bulk').hidden
+expect document.querySelectorAll('.prep-resource.is-selected').length === 2
+eval (function(){var s=document.getElementById("bulk-status");s.value="sourcing";s.dispatchEvent(new Event("change",{bubbles:true}));return true;})()
+wait Array.from(document.querySelectorAll('.prep-status-select')).every(function(s){return s.value==='sourcing';})
+key Escape
+wait document.getElementById('production-bulk').hidden
+click [data-prep="selection"]
+click [data-prep="requirements"]
+click [data-prep="more"]
+wait document.querySelectorAll('.prep-beat').length === 16
+eval window.__beforeView=U.sizes().undo
+click [data-prep="scene"][data-id="scene:s3"]
+wait document.querySelectorAll('.prep-scene.is-open').length === 2
+expect U.sizes().undo === window.__beforeView
+click [data-prep="scene"][data-id="scene:s3"]
+eval document.querySelector('[data-prep="shot"][data-id="bs1"]').scrollIntoView({block:"center"})
+click [data-prep="shot"][data-id="bs1"]
+wait !document.getElementById('broll-panel').hidden
+expect document.querySelector('.broll-row.is-open [data-id="bs1"]') !== null
+click #broll-close
+click #btn-production
+wait document.querySelectorAll('.prep-beat').length === 16
+viewport 920 760
+expect document.getElementById('production-list').scrollWidth <= document.getElementById('production-list').clientWidth
+quit

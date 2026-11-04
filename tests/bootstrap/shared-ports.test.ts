@@ -229,7 +229,7 @@ test("new-tab production reset forwards panel reset, tag disarming and selection
     assert.deepEqual(stops, [[null, null, "tag", ["tag"]], [null, null, null, []]]);
     assert.equal(panel.tagExpandedKey(), null);
     assert.equal(panel.tagAddingPersonKey(), null);
-    assert.equal(panel.productionGroupBy(), "cat");
+    assert.equal(panel.productionGroupBy(), "prep");
     assert.equal(productionSelection().anchorKey(), null);
   } finally { observing = false; stop(); }
 });

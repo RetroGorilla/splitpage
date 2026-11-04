@@ -1276,7 +1276,15 @@ export function startBrollPanel(nextPorts: BrollPanelPorts): BrollPanelState {
     selected: function () { return Object.keys(selection); }
   }; }, function (withdraw) { withdrawHook = withdraw; });
   let active = true;
-  return { openBrollPanel: function () { if (active) openBrollPanel(); }, dispose: function () {
+  return { openShot: function (id) {
+    if (!active) return;
+    const entry = (ports as PanelPortUse).records.brollEntries().find(shot => shot.id === id);
+    if (!entry) return;
+    if (!matchesFilter(entry, (ports as PanelPortUse).view.current().filter)) (ports as PanelPortUse).view.setFilter("all");
+    openId = id;
+    openBrollPanel();
+    document.querySelector<HTMLElement>('.broll-row-main[data-id="' + cssAttr(id) + '"]')?.scrollIntoView({ block: "nearest" });
+  }, openBrollPanel: function () { if (active) openBrollPanel(); }, dispose: function () {
     if (!active) return;
     active = false;
     stopBrollFeature();

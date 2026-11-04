@@ -18,6 +18,7 @@ import type { TagPanelState } from "../../application/tag-panel-state.ts";
 import type { TagPanelCommands } from "../../application/tag-panel-commands.ts";
 import type { BulkTagRows } from "../../application/commands/bulk-tags.ts";
 import type { Marks } from "../../core/text/runs.ts";
+import type { BrollEntry } from "../../core/production/broll.ts";
 
 export interface TagPanelMount extends TagPanelCommands {
   readonly openProductionPanel: () => void;
@@ -53,7 +54,10 @@ export interface PlainTagMount extends PlainTagControl {
 }
 
 export interface TagPanelPorts {
-  readonly view: Pick<TagPanelState, "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
+  readonly view: Pick<TagPanelState, "prep" | "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
+  readonly focus: Pick<FocusMemory<HTMLElement>, "lastRow">;
+  readonly beats: { readonly setFilmed: (rowId: string, filmed: boolean) => void; readonly reveal: (rowId: string) => void };
+  readonly footage: { readonly entries: () => readonly BrollEntry[]; readonly open: (id: string) => void };
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly lifetime: Pick<DocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
@@ -64,8 +68,8 @@ export interface TagPanelPorts {
   readonly shotHiding: Pick<ShotHiding, "reveal">;
   readonly panels: Pick<SidePanels, "open">;
   readonly personColors: PersonColorLookup;
-  readonly undo: Pick<UndoControl, "breakCoalescing">;
-  readonly notices: Pick<NoticePort, "show">;
+  readonly undo: Pick<UndoControl, "breakCoalescing" | "undo" | "last">;
+  readonly notices: Pick<NoticePort, "show" | "showAction">;
   readonly ids: IdSource;
   readonly bulkTag: BulkTagRows;
 }

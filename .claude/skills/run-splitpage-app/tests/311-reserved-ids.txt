@@ -54,6 +54,7 @@ expect clean()
 
 # --- the production panel: scene links, and by person ------------------------
 click #btn-production
+jsclick #production-modes [data-group="cat"]
 wait !document.getElementById('production-panel').hidden
 expect document.querySelectorAll('#production-list .tag-entity').length === 12
 expect Array.from(document.querySelectorAll('#production-list .tag-scene[data-row]')).map(function(b){ return b.getAttribute('data-row'); }).sort().join(',') === P.slice().sort().join(',')

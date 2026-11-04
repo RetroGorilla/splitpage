@@ -731,16 +731,20 @@
 <div class="comments-panel" id="production-panel" hidden>
   <div class="comments-panel-resize-handle" id="production-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
-    <h2>Production breakdown</h2>
+    <h2>Production</h2>
     <button type="button" class="modal-close" id="production-close" aria-label="Close Production"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
   <div class="panel-tabbar">
-    <div class="panel-tabs" id="production-modes" role="radiogroup" aria-label="Group the breakdown by">
-      <button type="button" class="panel-tab" data-group="cat" role="radio" aria-checked="true">Category</button>
+    <details class="production-view-picker">
+    <summary><span id="production-view-label">Scene prep</span><svg aria-hidden="true" focusable="false"><use href="#i-chevron-down"/></svg></summary>
+    <div class="panel-tabs" id="production-modes" role="radiogroup" aria-label="Production view">
+      <button type="button" class="panel-tab" data-group="prep" role="radio" aria-checked="true">Scene prep</button>
+      <button type="button" class="panel-tab" data-group="cat" role="radio" aria-checked="false">Category</button>
       <button type="button" class="panel-tab" data-group="person" role="radio" aria-checked="false">Person</button>
       <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Beat</button>
       <button type="button" class="panel-tab" data-group="shoot" role="radio" aria-checked="false">Shoot</button>
     </div>
+    </details>
     <button type="button" class="btn-outline is-small" data-action="export-breakdown" title="Export this breakdown as a spreadsheet" aria-label="Export this breakdown as a spreadsheet (CSV)"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>CSV</button>
   </div>
   <div class="bulk-bar" id="production-bulk" hidden></div>
