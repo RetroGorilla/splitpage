@@ -8,15 +8,22 @@ import {
 } from "./beat-clip.ts";
 import { pasteBeatsCommand, removeBeatsCommand } from "../../application/commands/beats.ts";
 import { cappedLongText } from "../../core/document/text-policy.ts";
+import { EVERY_OVERLAY, inFront } from "../../application/screen.ts";
+import { IS_MAC } from "../common/key-chips.ts";
 
 const TOLERANCE = 4;
 const SCROLL_ZONE = 120;
 const SCROLL_MIN = 6;
 const SCROLL_MAX = 28;
+const NOT_A_BEAT_CLICK = "a[href], button, input, textarea, select, summary, label, .row-menu, .link-popover, .video-popover, .mini-toolbar";
+const BEAT_PICTURE = ".scene-gallery-tile";
+const HIDES_BEATS = '#rows .hidden-shot-strip, #rows .section-fold[aria-expanded="false"]';
 
 let ports: BeatSelectPorts | null = null;
 let track: { cell: HTMLElement; rowId: string | null; x: number; y: number; beat: boolean } | null = null;
-let sel: { anchor: string | null | undefined; focus: string | null | undefined; doc: DocumentView | null } | null = null;
+let sel: { anchor: string | null | undefined; focus: string | null | undefined; ids: Set<string>; doc: DocumentView | null } | null = null;
+let lastClicked: { id: string; doc: DocumentView | null } | null = null;
+let swallowClick = false;
 let scroll: { dir: number; speed: number; raf: number } | null = null;
 let styleEl: HTMLStyleElement | null = null;
 let menuEl: HTMLDivElement | null = null;
@@ -31,24 +38,121 @@ function hasBeatSelection() {
 function selectedBeatIds() {
   if (!hasBeatSelection()) return [];
   const rows = ((ports as BeatSelectPorts).document.current() as DocumentView).rows;
+  const chosen = (sel as NonNullable<typeof sel>).ids;
+  const ids = rows.filter(function (r) { return chosen.has(r.id); }).map(function (r) { return r.id; });
+  if (!document.querySelector(HIDES_BEATS)) return ids;
+  const shown = new Set(Array.from(rowEls(), function (el) { return el.getAttribute("data-id"); }));
+  return ids.filter(function (id) { return shown.has(id); });
+}
+
+function beatsBetween(anchorId: string | null | undefined, focusId: string | null | undefined) {
+  const rows = ((ports as BeatSelectPorts).document.current() as DocumentView).rows;
   let a = -1, b = -1;
   rows.forEach(function (r, i) {
-    if (r.id === (sel as NonNullable<typeof sel>).anchor) a = i;
-    if (r.id === (sel as NonNullable<typeof sel>).focus) b = i;
+    if (r.id === anchorId) a = i;
+    if (r.id === focusId) b = i;
   });
-  if (a === -1 && b === -1) return [];
+  if (a === -1 && b === -1) return new Set<string>();
   if (a === -1) a = b;
   if (b === -1) b = a;
-  let ids = rows.slice(Math.min(a, b), Math.max(a, b) + 1).map(function (r) { return r.id; });
-  if (document.querySelector("#rows .hidden-shot-strip")) {
-    ids = ids.filter(function (id) { return !!document.querySelector('#rows .row[data-id="' + cssAttr(id) + '"]'); });
-  }
-  return ids;
+  return new Set(rows.slice(Math.min(a, b), Math.max(a, b) + 1).map(function (r) { return r.id; }));
 }
 
 export function selectBeats(anchorId: string | null | undefined, focusId?: string | null | undefined) {
-  sel = { anchor: anchorId, focus: focusId || anchorId, doc: (ports as BeatSelectPorts).document.current() };
+  const focus = focusId || anchorId;
+  sel = { anchor: anchorId, focus: focus, ids: beatsBetween(anchorId, focus), doc: (ports as BeatSelectPorts).document.current() };
   paint();
+}
+
+function overlayInFront() {
+  return !!inFront(["loading", ...EVERY_OVERLAY], (ports as BeatSelectPorts).screen());
+}
+
+function leaveText() {
+  const s = window.getSelection();
+  if (s) s.removeAllRanges();
+  if (inEditable()) (document.activeElement as HTMLElement).blur();
+  (ports as BeatSelectPorts).rows.closeMenus();
+}
+
+function selectAllBeats() {
+  const doc = (ports as BeatSelectPorts).document.current();
+  if (!doc || inEditable() || overlayInFront()) return false;
+  closeBeatMenu();
+  if (!doc.rows.length) return true;
+  const ids = new Set(doc.rows.map(function (r) { return r.id; }));
+  const first = (doc.rows[0] as NonNullable<typeof doc.rows[number]>).id;
+  sel = { anchor: first, focus: first, ids: ids, doc: doc };
+  leaveText();
+  paint();
+  prefetchPictures();
+  return true;
+}
+
+function beatUnder(target: Element) {
+  if (!target.closest || (!target.closest(BEAT_PICTURE) && target.closest(NOT_A_BEAT_CLICK))) return null;
+  const cell = target.closest(".cell-editable");
+  if (cell && !(ports as BeatSelectPorts).scriptCell(cell)) return null;
+  const row = target.closest("#rows .row[data-id]");
+  return row ? row.getAttribute("data-id") : null;
+}
+
+function cursorBeat() {
+  const a = document.activeElement;
+  return a && a.classList.contains("cell-editable") && a.closest("#rows") && (ports as BeatSelectPorts).scriptCell(a) ? a.getAttribute("data-id") : null;
+}
+
+function rangeStart() {
+  const doc = (ports as BeatSelectPorts).document.current();
+  const id = cursorBeat() || (lastClicked && lastClicked.doc === doc ? lastClicked.id : null);
+  return id && doc && doc.rows.some(function (r) { return r.id === id; }) ? id : null;
+}
+
+function extendTo(id: string) {
+  const anchor = hasBeatSelection() ? (sel as NonNullable<typeof sel>).anchor : rangeStart();
+  if (!sel && (!anchor || anchor === id)) return false;
+  const doc = (ports as BeatSelectPorts).document.current();
+  sel = { anchor: anchor, focus: id, ids: beatsBetween(anchor, id), doc: doc };
+  return true;
+}
+
+function toggleBeat(id: string) {
+  const doc = (ports as BeatSelectPorts).document.current();
+  const ids = hasBeatSelection() ? (sel as NonNullable<typeof sel>).ids : new Set<string>();
+  if (ids.has(id)) ids.delete(id); else ids.add(id);
+  sel = ids.size ? { anchor: id, focus: id, ids: ids, doc: doc } : null;
+}
+
+function selectionClick(e: MouseEvent) {
+  const toggle = (IS_MAC ? e.metaKey : e.ctrlKey) && !e.shiftKey && !e.altKey;
+  const extend = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+  if (e.button !== 0 || (!toggle && !extend) || (ports as BeatSelectPorts).rowDrag.dragging() || overlayInFront()) return false;
+  const id = beatUnder(e.target as Element);
+  if (!id) return false;
+  if (toggle) toggleBeat(id);
+  else if (!extendTo(id)) return false;
+  lastClicked = { id: id, doc: (ports as BeatSelectPorts).document.current() };
+  e.preventDefault();
+  e.stopPropagation();
+  swallowClick = true;
+  leaveText();
+  paint();
+  if (sel) prefetchPictures();
+  return true;
+}
+
+function noteClickedBeat(e: MouseEvent) {
+  if (e.button !== 0) return;
+  const row = (e.target as Element).closest && (e.target as Element).closest("#rows .row[data-id]");
+  const id = row ? row.getAttribute("data-id") : null;
+  if (id) lastClicked = { id: id, doc: (ports as BeatSelectPorts).document.current() };
+}
+
+function onDocClick(e: MouseEvent) {
+  if (!swallowClick) return;
+  swallowClick = false;
+  e.preventDefault();
+  e.stopPropagation();
 }
 
 function clearBeatSelection() {
@@ -70,11 +174,23 @@ function paint() {
   if (!ids.length) { styleEl.textContent = ""; return; }
   const of = function (id: string) { return '#rows .row[data-id="' + cssAttr(id) + '"]'; };
   const bar = "inset 3px 0 0 var(--focus-ring)";
+  const top = ",inset 0 2px 0 var(--focus-ring)";
+  const bottom = ",inset 0 -2px 0 var(--focus-ring)";
+  const place = new Map(((ports as BeatSelectPorts).document.current() as DocumentView).rows.map(function (r, i) { return [r.id, i] as const; }));
+  const follows = function (a: string | undefined, b: string | undefined) {
+    return a !== undefined && b !== undefined && (place.get(a) as number) + 1 === place.get(b);
+  };
+  const tops: string[] = [], bottoms: string[] = [], both: string[] = [];
+  ids.forEach(function (id, i) {
+    const opens = !follows(ids[i - 1], id), closes = !follows(id, ids[i + 1]);
+    if (opens && closes) both.push(of(id));
+    else if (opens) tops.push(of(id));
+    else if (closes) bottoms.push(of(id));
+  });
+  const edge = function (list: string[], shadow: string) { return list.length ? list.join(",") + "{box-shadow:" + bar + shadow + ";}" : ""; };
   styleEl.textContent =
     ids.map(of).join(",") + "{background:var(--selection);box-shadow:" + bar + ";}" +
-    of(ids[0] as string) + "{box-shadow:" + bar + ",inset 0 2px 0 var(--focus-ring);}" +
-    of(ids[ids.length - 1] as string) + "{box-shadow:" + bar + (ids.length === 1 ? ",inset 0 2px 0 var(--focus-ring)" : "") +
-      ",inset 0 -2px 0 var(--focus-ring);}";
+    edge(tops, top) + edge(bottoms, bottom) + edge(both, top + bottom);
 }
 
 function rowEls() {
@@ -114,22 +230,18 @@ function onMouseMove(e: MouseEvent) {
 
 function startBeats() {
   (track as NonNullable<typeof track>).beat = true;
-  sel = { anchor: (track as NonNullable<typeof track>).rowId, focus: (track as NonNullable<typeof track>).rowId, doc: (ports as BeatSelectPorts).document.current() };
+  selectBeats((track as NonNullable<typeof track>).rowId);
   document.body.classList.add("is-scene-selecting");
   const s = window.getSelection();
   if (s) s.removeAllRanges();
   if (document.activeElement === (track as NonNullable<typeof track>).cell) (track as NonNullable<typeof track>).cell.blur();
   (ports as BeatSelectPorts).rows.closeMenus();
-  paint();
 }
 
 function followPointer() {
   if (!track || !sel) return;
   const id = rowIdAtY(track.y);
-  if (id && id !== sel.focus) {
-    sel.focus = id;
-    paint();
-  }
+  if (id && id !== sel.focus) selectBeats(sel.anchor, id);
 }
 
 function endTrack() {
@@ -368,7 +480,9 @@ export function newScriptFromSelection() {
 }
 
 function onKeyDown(e: KeyboardEvent) {
-  if (!hasBeatSelection() || e.isComposing) return;
+  if (e.isComposing) return;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && String(e.key).toLowerCase() === "a" && selectAllBeats()) { e.preventDefault(); return; }
+  if (!hasBeatSelection()) return;
   if (menuEl && !menuEl.hidden) {
     if (e.key === "Escape") { e.preventDefault(); closeBeatMenu(); return; }
     if (menuEl.contains(e.target as Node | null)) return;
@@ -454,13 +568,18 @@ function onDocMouseDown(e: MouseEvent) {
     if (row && (selectedBeatIds().indexOf as (id: string | null) => number)(row.getAttribute("data-id")) !== -1) { e.preventDefault(); return; }
   }
   closeBeatMenu();
+  swallowClick = false;
+  if (selectionClick(e)) return;
   if (sel) clearBeatSelection();
+  noteClickedBeat(e);
 }
 
 export function startBeatSelect(given: BeatSelectPorts) {
   ports = given;
   track = null;
   sel = null;
+  lastClicked = null;
+  swallowClick = false;
   scroll = null;
   pendingCut = false;
   clipWritten = null;
@@ -471,6 +590,7 @@ export function startBeatSelect(given: BeatSelectPorts) {
   }
   listen(document, "mousedown", onDocMouseDown as EventListener, true);
   listen(document, "mousedown", onRowsMouseDown as EventListener);
+  listen(document, "click", onDocClick as EventListener, true);
   listen(document, "mousemove", onMouseMove as EventListener);
   listen(document, "mouseup", onMouseUp);
   listen(document, "dragstart", onDragStart, true);
@@ -499,6 +619,7 @@ export function startBeatSelect(given: BeatSelectPorts) {
     stopScroll();
     track = null;
     sel = null;
+    lastClicked = null;
     document.body.classList.remove("has-scene-selection", "is-scene-selecting");
     if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
     if (menuEl && menuEl.parentNode) menuEl.parentNode.removeChild(menuEl);

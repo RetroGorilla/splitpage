@@ -198,6 +198,93 @@ test("a new script from selected scenes takes its title in the same transaction 
   assert.equal(currentDocument().rows[0].audioText, "");
 });
 
+function ctrlClickBeat(id) {
+  cellOf(id, "audioText").dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ctrlKey: true }));
+}
+
+test("copying beats with a gap puts only those beats on the clipboard, in script order, with their comment", async () => {
+  await open();
+  ctrlClickBeat("r3");
+  ctrlClickBeat("r1");
+  assert.deepEqual(window.__sceneSelectTest.ids(), ["r1", "r3"]);
+  const cd = clipboardWith({});
+  const event = new window.Event("copy", { bubbles: true, cancelable: true });
+  event.clipboardData = cd;
+  document.dispatchEvent(event);
+  const payload = JSON.parse(cd.store[BEATS_MIME]);
+  assert.deepEqual(payload.rows.map((r) => r.id), ["r1", "r3"]);
+  assert.deepEqual(payload.comments.map((c) => c.id), ["c1"]);
+  assert.deepEqual(ids(), ["r1", "r2", "r3"], "a copy changes nothing");
+});
+
+test("cutting beats with a gap is one undo entry that leaves the beat between, and its paste lands them together", async () => {
+  await open();
+  ctrlClickBeat("r1");
+  ctrlClickBeat("r3");
+  const cd = clipboardWith({});
+  const was = counters();
+  const w = watch();
+  try {
+    assert.equal(cutEvent(cd).defaultPrevented, true);
+  } finally {
+    w.stop();
+  }
+  assert.deepEqual(ids(), ["r2"]);
+  assert.equal(w.seen.length, 1);
+  assert.deepEqual(w.seen[0].changes.rowsRemoved, ["r1", "r3"]);
+  assert.deepEqual(undoSizes(), { undo: was.sizes.undo + 1, redo: 0 });
+
+  pasteBeatsAt(cd, cellOf("r2", "audioText"));
+  assert.deepEqual(ids(), ["r2", "r1", "r3"], "the paste keeps the cut beats' ids, gathered after the caret's beat");
+  undo();
+  assert.deepEqual(ids(), ["r2"]);
+  undo();
+  assert.deepEqual(ids(), ["r1", "r2", "r3"], "the undo puts each beat back in its own place");
+});
+
+test("deleting beats with a gap is one transaction, and its undo puts each back in its own place", async () => {
+  await open();
+  ctrlClickBeat("r1");
+  ctrlClickBeat("r3");
+  const w = watch();
+  try {
+    deleteSelectedBeats();
+  } finally {
+    w.stop();
+  }
+  assert.deepEqual(ids(), ["r2"]);
+  assert.equal(w.seen.length, 1);
+  assert.deepEqual(w.seen[0].changes.rowsRemoved, ["r1", "r3"]);
+  undo();
+  assert.deepEqual(ids(), ["r1", "r2", "r3"]);
+  assert.equal(currentDocument().comments[0].rowId, "r1");
+});
+
+test("a new script from beats with a gap holds only those beats, in script order", async () => {
+  await open();
+  ctrlClickBeat("r3");
+  ctrlClickBeat("r1");
+  newScriptFromSelection();
+  await settle();
+  assert.deepEqual(currentDocument().rows.map((r) => r.visualText), ["Wide", "End"]);
+  assert.equal(currentDocument().title, "Scene clipboard — 2 beats");
+});
+
+test("selecting beats changes neither the saved document nor undo", async () => {
+  await open();
+  const before = JSON.stringify(currentDocument());
+  const was = counters();
+  ctrlClickBeat("r1");
+  ctrlClickBeat("r3");
+  window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  document.body.focus();
+  window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true, cancelable: true }));
+  assert.deepEqual(window.__sceneSelectTest.ids(), ["r1", "r2", "r3"]);
+  assert.equal(JSON.stringify(currentDocument()), before);
+  assert.equal(liveSession().generation(), was.generation);
+  assert.deepEqual(undoSizes(), was.sizes);
+});
+
 test("a scene paste that fails part way is thrown and leaves the document, the edit count and undo as they were", async () => {
   await open();
   const cd = copiedBeats(["r1", "r2"]);
