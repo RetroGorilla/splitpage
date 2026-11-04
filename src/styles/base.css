@@ -57,6 +57,8 @@
   --visual-soft: #E3ECF7;
   --audio: #9E5800;
   --audio-soft: #F6EBDC;
+  --status-sourcing: #A67C00;
+  --status-have: #2E7D32;
 
   --tag-prop: #764AA2;
   --tag-prop-tint: #F5ECFF;
@@ -143,6 +145,8 @@
     --visual-soft: #1E2F42;
     --audio: #F9B64F;
     --audio-soft: #4A3A1C;
+    --status-sourcing: #F0D04A;
+    --status-have: #5FCB7A;
     --tag-prop: #CBA1FA;
     --tag-prop-tint: #2D2437;
     --tag-location: #73D4AC;

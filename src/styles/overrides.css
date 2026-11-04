@@ -22,10 +22,10 @@
   vertical-align: middle;
 }
 .item-lamp.is-sourcing {
-  border: 1.5px solid var(--audio);
-  background: linear-gradient(90deg, var(--audio) 50%, transparent 50%) padding-box;
+  border: 1.5px solid var(--status-sourcing);
+  background: linear-gradient(90deg, var(--status-sourcing) 50%, transparent 50%) padding-box;
 }
-.item-lamp.is-have { background: var(--text); }
+.item-lamp.is-have { background: var(--status-have); }
 .item-lamp.is-returned {
   width: 12px; height: 12px;
   border-radius: 0;

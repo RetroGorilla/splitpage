@@ -178,6 +178,14 @@ async function startBrowser() {
   }
   const exe = findBrowser();
   userDataDir = path.join(os.tmpdir(), `splitpage-edge-${opts.runId}-${Math.random().toString(16).slice(2, 10)}`);
+  // why: a download the app starts lands in the profile's folder, never the PC's real Downloads
+  const downloadDir = path.join(userDataDir, "downloads");
+  fs.mkdirSync(path.join(userDataDir, "Default"), { recursive: true });
+  fs.mkdirSync(downloadDir, { recursive: true });
+  fs.writeFileSync(path.join(userDataDir, "Default", "Preferences"), JSON.stringify({
+    download: { default_directory: downloadDir, prompt_for_download: false, directory_upgrade: true },
+    savefile: { default_directory: downloadDir },
+  }));
   const args = [
     `--remote-debugging-port=${opts.cdpProxy ? 0 : opts.cdpPort}`,
     `--user-data-dir=${userDataDir}`,

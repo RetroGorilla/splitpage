@@ -108,6 +108,7 @@ const RESOURCE_ROWS = {
   prompterFocus: ["document focusin/B"],
   sceneControls: ["document click/B", "document dragstart/C", "document dragover/C", "document drop/C", "document dragend/C", "document keydown/B"],
   phoneBar: ["#phone-bar click/B"],
+  writerZoom: ["#writer wheel/B"],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
   S26: ["#production-panel change/B", "#production-panel click/B", "#production-panel focusout/B", "#production-panel input/B", "#production-panel keydown/B"],
   S27: ["#gear-panel change/B", "#gear-panel click/B", "#gear-panel focusout/B", "#gear-panel input/B", "#gear-panel keydown/B"],
@@ -180,7 +181,7 @@ test("after a remount every registration has exactly one handler: each ledger re
 });
 
 test("every delegated click route and the tag anchor route are taken once, in the ledger's order", () => {
-  assert.equal(firstRoutes.click.length, 13);
+  assert.equal(firstRoutes.click.length, 14);
   assert.equal(firstRoutes.mousedown.length, 1);
   assert.deepEqual(firstRoutes, { click: [...ROOT_CLICK_ORDER], mousedown: [...ROOT_MOUSEDOWN_ORDER] });
   assert.deepEqual(rootRoutesTaken(), firstRoutes);

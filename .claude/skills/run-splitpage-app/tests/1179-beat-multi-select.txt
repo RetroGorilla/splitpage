@@ -119,7 +119,7 @@ eval out()
 
 eval (function(){ window.__link = null; document.addEventListener('click', function(e){ if (e.target.closest && e.target.closest('a')) window.__link = { ctrl: e.ctrlKey, prevented: e.defaultPrevented }; }); return true; })()
 mouse ctrl click pt(cell('r2', 'audioText').querySelector('a'))
-expect __link && __link.ctrl && !__link.prevented
+expect __link && __link.ctrl && __link.prevented
 expect T.ids().length === 0
 eval out()
 mouse ctrl click pt(row('r1').querySelector('.status-btn'))

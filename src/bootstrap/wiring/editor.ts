@@ -96,6 +96,8 @@ import {
 import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.ts";
 import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-media.ts";
 import { videoFiles } from "./video-files.ts";
+import { externalLinks } from "./ports/desktop.ts";
+import { IS_MAC } from "../../features/common/key-chips.ts";
 import {
   acceptTagGhost,
   acceptUntaggedMention,
@@ -208,6 +210,8 @@ function refocusRowMenu(rowId: string): void {
 
 export function onRootMouseDown(e: MouseEvent): void {
   hideTagGhost();
+  const links = rowRoutes.owner();
+  if (links && links.linkMouseDown(e)) return;
   const target = e.target as Element;
   const grip = target.closest('[data-action="drag-grip"]');
   if (grip) {
@@ -402,7 +406,19 @@ const rowRoutes = owned<ReturnType<typeof mountRowRoutes>>();
 
 let sceneHeaders: ReturnType<typeof mountSceneHeaders> | null = null;
 
+function openLinkInNewWindow(href: string): void {
+  try {
+    if (externalLinks.available()) externalLinks.open(href);
+    else window.open(href, "_blank", "noopener");
+  } catch {
+    showToast("That link could not be opened — its address is not complete.", "warn");
+  }
+}
+
 const rowRoutePorts: RowRoutePorts = {
+  mac: IS_MAC,
+  scriptCell: isScriptCell,
+  openLink: openLinkInNewWindow,
   dragging: function () { return rowDrag().dragging(); },
   setDragging: function (rowId) { if (rowId) rowDrag().start(rowId); else rowDrag().end(); },
   clearMarkers: clearDropMarkers,
@@ -432,6 +448,7 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
     return { ...routes, dispose() { if (sceneHeaders === scenes) sceneHeaders = null; scenes.dispose(); routes.dispose(); } };
   }, function (owner) {
     return [
+      function () { return routeRootClick("cell-link", function (e) { return owner.linkClick(e); }); },
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
       function () { return routeRootClick("rows-scene", function (e) { return owner.beatClick(e); }); },
       function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); },

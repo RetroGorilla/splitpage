@@ -41,7 +41,8 @@ export const ROOT_CLICK_ORDER = [
   "rows-menu",
   "media-picker",
   "gallery",
-  "media-link"
+  "media-link",
+  "cell-link"
 ] as const;
 
 export type RootClickSlot = (typeof ROOT_CLICK_ORDER)[number];
