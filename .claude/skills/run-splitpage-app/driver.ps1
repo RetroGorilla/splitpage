@@ -566,16 +566,19 @@ $KeyMap = @{
 # box, which only a held button moving across the page can make). `move`
 # carries the held left button; `right` is a right-click (press + release).
 function Mouse-Event([string]$Rest) {
-  if ($Rest -notmatch '^\s*(down|move|up|right|hover)\s+(.+)$') { throw 'mouse needs: down|move|up|right|hover <js giving {x,y}>' }
-  $what = $Matches[1]; $expr = $Matches[2]
+  if ($Rest -notmatch '^\s*(?:(ctrl|shift|meta)\s+)?(down|move|up|right|hover|click)\s+(.+)$') { throw 'mouse needs: [ctrl|shift|meta] down|move|up|right|hover|click <js giving {x,y}>' }
+  $modifier = $Matches[1]; $what = $Matches[2]; $expr = $Matches[3]
+  $modifiers = switch ($modifier) { 'ctrl' { 2 } 'shift' { 8 } 'meta' { 4 } default { 0 } }
   $pt = Invoke-Js $expr
   if (-not $pt) { throw "mouse ${what}: no point from $expr" }
   $x = [int]$pt.x; $y = [int]$pt.y
   switch ($what) {
-    'down'  { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mousePressed'; x = $x; y = $y; button = 'left'; buttons = 1; clickCount = 1 } }
-    'move'  { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseMoved'; x = $x; y = $y; button = 'left'; buttons = 1 } }
+    'click' { foreach ($t in @('mousePressed','mouseReleased')) {
+                $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = $t; x = $x; y = $y; button = 'left'; buttons = $(if ($t -eq 'mousePressed') { 1 } else { 0 }); clickCount = 1; modifiers = $modifiers } } }
+    'down'  { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mousePressed'; x = $x; y = $y; button = 'left'; buttons = 1; clickCount = 1; modifiers = $modifiers } }
+    'move'  { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseMoved'; x = $x; y = $y; button = 'left'; buttons = 1; modifiers = $modifiers } }
     'hover' { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseMoved'; x = $x; y = $y; button = 'none'; buttons = 0 } }
-    'up'    { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseReleased'; x = $x; y = $y; button = 'left'; buttons = 0; clickCount = 1 } }
+    'up'    { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseReleased'; x = $x; y = $y; button = 'left'; buttons = 0; clickCount = 1; modifiers = $modifiers } }
     'right' { foreach ($t in @('mousePressed','mouseReleased')) {
                 $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = $t; x = $x; y = $y; button = 'right'; buttons = $(if ($t -eq 'mousePressed') { 2 } else { 0 }); clickCount = 1 } } }
   }

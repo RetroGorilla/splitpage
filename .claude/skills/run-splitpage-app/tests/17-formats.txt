@@ -117,7 +117,7 @@ expect F.state().rows.length === window.__rows
 eval (function(){window.__added=window.__md.replace(/^\| 01 \|.*$/m,function(l){return l+'\n| 01b | extra visual | extra audio | todo |';});return window.__added.length>window.__md.length;})()
 eval (function(){F.openFile(new File([window.__added],'added.md'));return true;})()
 wait !document.getElementById('md-rows-modal').hidden
-expect document.getElementById('md-rows-detail').textContent.indexOf('scene') !== -1
+expect document.getElementById('md-rows-detail').textContent.indexOf('beat') !== -1
 # "Keep Splitpage's record" ignores the table
 click #md-rows-keep
 wait document.getElementById('md-rows-modal').hidden

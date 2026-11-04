@@ -21,7 +21,7 @@ wait !document.getElementById('production-panel').hidden
 wait document.querySelectorAll('#production-list .tag-entity .tag-scene').length === 14
 eval window.__cat = probe(document.querySelector('#production-list .tag-entity .tag-scenes'))
 expect window.__cat.indexOf('ok ') === 0
-expect document.querySelector('#production-list .tag-entity .tag-scenes').textContent.indexOf('01, 02, 03') === 0
+expect document.querySelector('#production-list .tag-entity .tag-scenes').textContent.indexOf('A.1, A.2, A.3') === 0
 shot 256-scene-list-commas
 
 # --- the Shoot view's Scenes list ------------------------------------------
@@ -29,6 +29,6 @@ jsclick #production-modes [data-group="shoot"]
 wait document.querySelectorAll('#production-list .shoot-group .tag-scene').length === 14
 eval window.__shoot = probe(document.querySelector('#production-list .shoot-group .tag-scenes'))
 expect window.__shoot.indexOf('ok ') === 0
-expect document.querySelector('#production-list .shoot-group .tag-scenes').textContent.indexOf('01, 02, 03') === 0
+expect document.querySelector('#production-list .shoot-group .tag-scenes').textContent.indexOf('A.1, A.2, A.3') === 0
 
 quit
