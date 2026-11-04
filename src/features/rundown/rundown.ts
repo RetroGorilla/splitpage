@@ -424,8 +424,11 @@ interface RundownState {
   extraSeconds: number;
   currentRowId: string | null;
   lastBlocksHtml: string;
+  lastBlocksShape: string;
   lastRulerHtml: string;
+  lastRulerShape: string;
   lastScenesHtml: string;
+  lastScenesShape: string;
   sceneLabels: { el: HTMLElement; start: number; end: number }[];
   lastLayout: LayoutView;
   lastKnotsKey: string;
@@ -443,8 +446,11 @@ function freshState(): RundownState {
     extraSeconds: 0,
     currentRowId: null,
     lastBlocksHtml: "",
+    lastBlocksShape: "",
     lastRulerHtml: "",
+    lastRulerShape: "",
     lastScenesHtml: "",
+    lastScenesShape: "",
     sceneLabels: [],
     lastLayout: { pxPerSecond: 0, spanSeconds: 0, totalSeconds: 0, width: 0, x: function () { return 0; } },
     lastKnotsKey: "",
@@ -509,7 +515,9 @@ export function rundownLayout(): LayoutView {
   };
 }
 
-const CHECK_SVG = '<svg class="rd-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const GEOMETRY_STYLE = / style="left:[^"]*"/g;
+
+const CHECK_SVG ='<svg class="rd-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 function beatSnippet(row: BeatRow): string {
   if (!state.snippetOf) {
@@ -627,10 +635,23 @@ export function renderRundown(): void {
           'px;width:' + (last.left + last.width - first.left) + 'px">' + escapeHtml(group.letter + (group.name ? " " + group.name : "")) + '</span>';
       }).join("");
       if (labels !== state.lastScenesHtml) {
-        scenesEl.innerHTML = labels; state.lastScenesHtml = labels;
-        state.sceneLabels = Array.from(scenesEl.querySelectorAll<HTMLElement>(".rd-section"), el => ({
-          el, start: Number(el.dataset.start), end: Number(el.dataset.end)
-        }));
+        const shape = labels.replace(GEOMETRY_STYLE, "");
+        const placed = groups.filter(group => blocks[group.start] && blocks[group.end - 1]);
+        if (shape === state.lastScenesShape && state.sceneLabels.length === placed.length && state.sceneLabels[0]?.el.parentElement === scenesEl) {
+          placed.forEach((group, i) => {
+            const first = blocks[group.start] as RundownBlock, last = blocks[group.end - 1] as RundownBlock;
+            const el = (state.sceneLabels[i] as { el: HTMLElement }).el;
+            el.style.left = first.left + "px";
+            el.style.width = (last.left + last.width - first.left) + "px";
+          });
+        } else {
+          scenesEl.innerHTML = labels;
+          state.lastScenesShape = shape;
+          state.sceneLabels = Array.from(scenesEl.querySelectorAll<HTMLElement>(".rd-section"), el => ({
+            el, start: Number(el.dataset.start), end: Number(el.dataset.end)
+          }));
+        }
+        state.lastScenesHtml = labels;
       }
     }
   }
@@ -644,24 +665,48 @@ export function renderRundown(): void {
       : blockHtml(rows[i] as BeatRow, b, (rows[i] as BeatRow).id === current, (rows[i] as BeatRow).id === tabRow);
   });
   let rewritten = false;
+  let repositioned = false;
   if (html !== state.lastBlocksHtml) {
-    const hadFocus = blocksEl.contains(document.activeElement) ? (document.activeElement as Element).getAttribute("data-row") : null;
-    blocksEl.innerHTML = html;
-    state.lastBlocksHtml = html;
-    rewritten = true;
-    if (hadFocus) {
-      const again = blocksEl.querySelector<HTMLElement>('.rd-block[data-row="' + cssAttr(hadFocus) + '"]');
-      if (again) again.focus({ preventScroll: true });
+    const shape = html.replace(GEOMETRY_STYLE, "");
+    const els = state.base.els;
+    if (!state.minimized && shape === state.lastBlocksShape && els.length === blocks.length && els[0]?.parentElement === blocksEl) {
+      blocks.forEach(function (b, i) {
+        (els[i] as HTMLElement).style.left = b.left + "px";
+        (els[i] as HTMLElement).style.width = b.width + "px";
+      });
+      repositioned = true;
+    } else {
+      const hadFocus = blocksEl.contains(document.activeElement) ? (document.activeElement as Element).getAttribute("data-row") : null;
+      blocksEl.innerHTML = html;
+      state.lastBlocksShape = shape;
+      rewritten = true;
+      if (hadFocus) {
+        const again = blocksEl.querySelector<HTMLElement>('.rd-block[data-row="' + cssAttr(hadFocus) + '"]');
+        if (again) again.focus({ preventScroll: true });
+      }
     }
+    state.lastBlocksHtml = html;
   }
 
   if (!state.minimized) {
-    const ruler = rundownTicks(span, s, width, lay.x).map(function (t) {
+    const ticks = rundownTicks(span, s, width, lay.x);
+    const ruler = ticks.map(function (t) {
       return '<span class="rd-tick' + (t.major ? ' is-major' : '') + '" style="left:' + t.x + 'px"></span>' +
         (t.label ? '<span class="rd-label" style="left:' + (t.x + 4) + 'px">' + t.label + '</span>' : '');
     }).join("");
     if (ruler !== state.lastRulerHtml) {
-      rulerEl.innerHTML = ruler;
+      const shape = ruler.replace(GEOMETRY_STYLE, "");
+      const marks = rulerEl.children;
+      if (shape === state.lastRulerShape && marks.length === ticks.length + ticks.filter(function (t) { return t.label; }).length) {
+        let m = 0;
+        ticks.forEach(function (t) {
+          (marks[m++] as HTMLElement).style.left = t.x + "px";
+          if (t.label) (marks[m++] as HTMLElement).style.left = (t.x + 4) + "px";
+        });
+      } else {
+        rulerEl.innerHTML = ruler;
+        state.lastRulerShape = shape;
+      }
       state.lastRulerHtml = ruler;
     }
   }
@@ -681,6 +726,9 @@ export function renderRundown(): void {
     state.base.lefts = blocks.map(function (b) { return b.left; });
     state.base.widths = blocks.map(function (b) { return b.width; });
     state.base.keep = [];
+  } else if (repositioned) {
+    state.base.lefts = blocks.map(function (b) { return b.left; });
+    state.base.widths = blocks.map(function (b) { return b.width; });
   }
   state.base.shot = rows.map(function (r) { const st = rowStatus(r.status); return !!st && st.id === "shot"; });
 
