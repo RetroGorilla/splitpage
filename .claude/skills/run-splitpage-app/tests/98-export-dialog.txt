@@ -115,7 +115,7 @@ jsclick .export-card[data-format="pdf"] input
 wait /^2 scenes · \d+:\d\d running time · 0 of 2 shot · /.test(document.querySelector('#export-preview .pv-meta').textContent)
 expect /^2 scenes · \d+:\d\d running time · 0 of 2 shot · /.test(document.querySelector('#export-preview .pv-meta').textContent)
 expect document.querySelectorAll('#export-preview .pv-rundown .pv-rd').length === 2
-expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-sc .pv-gut b'), function(b){return b.textContent;}).join(',') === '01,02'
+expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-sc .pv-gut b'), function(b){return b.textContent;}).join(',') === 'A.1,A.2'
 expect document.querySelector('#export-preview .pv-sc .pv-tc').textContent === '00:00' && !!document.querySelector('#export-preview .pv-sc .pv-lamp-todo')
 expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-mk'), function(m){return m.textContent;}).join(',') === '1'
 # a tag in its category's colour (the typed ones sit past the sketch's cut)
@@ -130,7 +130,7 @@ expect !!document.querySelector('#export-preview .pv-foot') && document.querySel
 expect document.getElementById('export-summary').textContent == 2 scenes with timecodes, status and read times · breakdown and numbered comments at the end
 jsclick .export-card[data-format="md"] input
 jsclick .export-seg input[value="stacked"]
-wait document.getElementById('export-preview').textContent.indexOf('### Scene 01 · 00:00') !== -1 && /\*\*To do\*\* · Read \d+:\d\d/.test(document.getElementById('export-preview').textContent)
+wait document.getElementById('export-preview').textContent.indexOf('### Scene A.1 · 00:00') !== -1 && /\*\*To do\*\* · Read \d+:\d\d/.test(document.getElementById('export-preview').textContent)
 jsclick .export-seg input[value="table"]
 wait document.getElementById('export-preview').textContent.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
 expect document.getElementById('export-preview').textContent.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
@@ -154,8 +154,8 @@ expect document.querySelector('.export-card[data-format="html"] .export-card-nam
 expect document.getElementById('export-summary').textContent.indexOf('the whole app built in') !== -1
 jsclick .export-card[data-format="narration"] input
 jsclick .export-seg input[value="docx"]
-wait !!document.querySelector('#export-preview .pv-margin') && document.querySelector('#export-preview .pv-margin').textContent === '01' && document.getElementById('export-summary').textContent.indexOf('2 scenes of narration · scene numbers in the margin · ') === 0
-expect document.querySelector('#export-preview .pv-margin').textContent === '01'
+wait !!document.querySelector('#export-preview .pv-margin') && document.querySelector('#export-preview .pv-margin').textContent === 'A.1' && document.getElementById('export-summary').textContent.indexOf('2 scenes of narration · scene numbers in the margin · ') === 0
+expect document.querySelector('#export-preview .pv-margin').textContent === 'A.1'
 expect document.getElementById('export-summary').textContent.indexOf('2 scenes of narration · scene numbers in the margin · ') === 0
 jsclick .export-seg input[value="txt"]
 wait document.getElementById('export-summary').textContent.indexOf('margin') === -1 && !document.querySelector('#export-preview .pv-margin')
@@ -184,8 +184,8 @@ expect document.getElementById('export-modal').hidden
 expect window.__files.length === 0
 
 # --- a b-roll line, for the shot list's two files ----------------------------
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return true;})()
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return true;})()
 press B-roll: steam off the kettle
 wait document.querySelectorAll('#rows .broll-key').length === 1
 eval document.activeElement.blur()

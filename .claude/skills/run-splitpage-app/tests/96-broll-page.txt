@@ -53,7 +53,7 @@ expect Array.prototype.map.call(prow('bs1').querySelectorAll('.broll-page-c-prop
 expect prow('bs3').querySelector('.broll-page-c-props .broll-st-dot').classList.contains('is-sourcing')
 expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(158, 88, 0)'
 expect prow('bs1').querySelector('.broll-page-c-cuts').textContent.indexOf('Every morning') === 0
-expect prow('bs1').querySelector('.broll-page-scene').textContent === '01'
+expect prow('bs1').querySelector('.broll-page-scene').textContent === 'A.1'
 expect prow('bs2').classList.contains('is-flagged') && !prow('bs4').classList.contains('is-flagged')
 expect getComputedStyle(prow('bs2').querySelector('td')).backgroundColor === 'rgb(255, 247, 245)'
 expect !!prow('bs2').querySelector('.broll-page-c-note .broll-flag-ico')
@@ -66,7 +66,7 @@ expect window.__brollTest.view().filter === 'flagged'
 click #broll-page .broll-chip[data-filter="all"]
 wait document.querySelectorAll('#broll-page .broll-page-row').length === 8
 eval (function(){ var s = document.getElementById('broll-page-group'); s.value = 'scene'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
-wait pheads() === 'Scene 01|Scene 02|Scene 03|Scene 04|Added here'
+wait pheads() === 'Scene A.1|Scene A.2|Scene A.3|Scene A.4|Added here'
 eval (function(){ var s = document.getElementById('broll-page-group'); s.value = 'person'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
 wait pheads() === 'Ada Brenner|Jordan Sato|Unassigned'
 expect JSON.parse(localStorage.getItem('splitpage-broll-view')).pageGroup === 'person'
@@ -105,13 +105,13 @@ wait window.__blobs.length === 1
 eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
 expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start'
 expect window.__csv.length === 9
-expect window.__csv[1].indexOf('01,gulls wheeling over the nets,Shot,,Harbour,Fishing nets; Drone,') === 0
+expect window.__csv[1].indexOf('A.1,A.1.1 gulls wheeling over the nets,Shot,,Harbour,Fishing nets; Drone,') === 0
 # the scene's start last (#169), after the columns a sheet may be built on;
 # a shot added by hand has no scene and no start
 expect /,00:00$/.test(window.__csv[1])
 expect window.__csv.slice(1).every(function(l){ return /,(\d\d:\d\d)?$/.test(l); })
 expect window.__csv.filter(function(l){ return l.indexOf('boats coming in at dawn,To shoot,yes,') !== -1; }).length === 1
-expect window.__csv.filter(function(l){ return l.indexOf(',hands mending a net,Shot,,Harbour,Fishing nets,,Ada Brenner,') !== -1; }).length === 1
+expect window.__csv.filter(function(l){ return l.indexOf(',A.3.1 hands mending a net,Shot,,Harbour,Fishing nets,,Ada Brenner,') !== -1; }).length === 1
 expect window.__csv[8].indexOf(',Establisher of the street, blue hour') === -1 && window.__csv[8].indexOf('"Establisher of the street, blue hour"') !== -1
 
 # ---- 6. Print: a PDF of the list as shown -------------------------------
@@ -128,8 +128,8 @@ expect window.__pdf.indexOf('hands mending a net') !== -1
 # "FLAGGED") with its reason (the note) under it, the footer
 expect window.__pdf.indexOf('B-roll shot list') !== -1 && window.__pdf.indexOf('Harbour town') !== -1
 expect window.__pdf.indexOf('@page shot-list { size: letter landscape; }') !== -1 && window.__pdf.indexOf('Notes') !== -1
-eval (function(){var doc=new DOMParser().parseFromString(window.__pdf,'text/html');var row=Array.from(doc.querySelectorAll('.shot-table tr')).find(function(r){return r.cells[2]&&r.cells[2].querySelector('strong')?.textContent==='gulls wheeling over the nets';});window.__printedScene=row&&row.cells[1];return !!__printedScene;})()
-expect __printedScene.firstChild.textContent.trim() === '01' && __printedScene.querySelector('.scene-meta').textContent === '00:00'
+eval (function(){var doc=new DOMParser().parseFromString(window.__pdf,'text/html');var row=Array.from(doc.querySelectorAll('.shot-table tr')).find(function(r){return r.cells[2]&&r.cells[2].querySelector('strong')?.textContent==='A.1.1 gulls wheeling over the nets';});window.__printedScene=row&&row.cells[1];return !!__printedScene;})()
+expect __printedScene.firstChild.textContent.trim() === 'A.1' && __printedScene.querySelector('.scene-meta').textContent === '00:00'
 expect window.__pdf.indexOf('Flagged') !== -1 && window.__pdf.indexOf('light was gone.') !== -1
 expect window.__pdf.indexOf('FLAGGED') === -1
 expect window.__pdf.indexOf('counter(page)') !== -1

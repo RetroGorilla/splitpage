@@ -17,7 +17,7 @@ expect document.querySelector('.comment-quote').classList.contains('orphaned') =
 expect document.querySelector('.comment-quote').textContent.indexOf('word for word') !== -1
 
 # --- edit the anchored words: drift the live span text away from quotedText -
-caret #rows .row:nth-child(2) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(2) .audio-cell .cell-editable
 eval (function(){var mark=document.querySelector('.cmt-anchor mark');var t=mark.firstChild;var r=document.createRange();r.setStart(t,t.nodeValue.length);r.setEnd(t,t.nodeValue.length);var s=getSelection();s.removeAllRanges();s.addRange(r);return t.nodeValue;})()
 type -ish
 sleep 300

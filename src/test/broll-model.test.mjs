@@ -553,8 +553,8 @@ test("the shots a prop is needed by: tagged on the line or added by hand, each o
   addBrollProp("b2", "Red mug");
   addBrollProp("b2", "Kettle");
   assert.deepEqual(shotsBy(), {
-    "prop red mug": ["the red mug on the sill", "drone over the pier"],
-    "prop kettle": ["drone over the pier"]
+    "prop red mug": ["A.1.1 the red mug on the sill", "A.2.1 drone over the pier"],
+    "prop kettle": ["A.2.1 drone over the pier"]
   });
 });
 
@@ -564,7 +564,7 @@ test("renaming a prop in the breakdown carries through to the shots that need it
   const id = s.brollShots[1].props[0].id;
   assert.ok(renameTag("prop", "Kettle", "Whistling kettle", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
   assert.deepEqual(s.brollShots[1].props, [{ id: id, name: "Whistling kettle" }]);
-  assert.deepEqual(shotsBy()["prop whistling kettle"], ["drone over the pier"]);
+  assert.deepEqual(shotsBy()["prop whistling kettle"], ["A.2.1 drone over the pier"]);
 });
 
 test("renaming a prop onto another's name re-points the shots at the one it folded into", () => {
@@ -580,7 +580,7 @@ test("a prop deleted from the breakdown still shows on the shot by its name, wit
   const s = propsDoc();
   addBrollProp("b2", "Kettle");
   s.productionTags = s.productionTags.filter((t) => t.name !== "Kettle");
-  assert.deepEqual(shotsBy()["prop kettle"], ["drone over the pier"]);
+  assert.deepEqual(shotsBy()["prop kettle"], ["A.2.1 drone over the pier"]);
 });
 
 test("a pasted copy of a shot's line gets none of its hand-added props", () => {
@@ -600,9 +600,9 @@ test("the breakdown CSV names the b-roll shots each prop is needed for, after th
   const lines = buildBreakdownCsv(liveDoc()).replace(/^\uFEFF/, "").split("\r\n");
   assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group");
   const kettle = lines.find((l) => l.startsWith("Prop,Kettle,"));
-  assert.ok(kettle.endsWith(",drone over the pier,,Props & set dressing"), kettle);
+  assert.ok(kettle.endsWith(",A.2.1 drone over the pier,,Props & set dressing"), kettle);
   const mug = lines.find((l) => l.startsWith("Prop,Red mug,"));
-  assert.ok(mug.endsWith(",the red mug on the sill,00:00,Props & set dressing"), mug);
+  assert.ok(mug.endsWith(",A.1.1 the red mug on the sill,00:00,Props & set dressing"), mug);
 });
 
 test("the shot list CSV: one row per shot in script order, with a Props column, nothing written", () => {
@@ -617,7 +617,7 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start");
   assert.equal(lines.length, 4);
   const at = (i) => beatFacts(exportDocumentOf(currentDocument()))[i].start;
-  assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,,00:00");
-  assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
-  assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,," + at(2));
+  assert.equal(lines[1], "A.1,A.1.1 the red mug on the sill,To shoot,,,Red mug,,,,,00:00");
+  assert.equal(lines[2], 'A.2,A.2.1 drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
+  assert.equal(lines[3], "A.3,A.3.1 an unanchored line,To shoot,,,,,,,," + at(2));
 });

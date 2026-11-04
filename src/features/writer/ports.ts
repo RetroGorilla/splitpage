@@ -15,7 +15,7 @@ import type { ScreenState } from "../../application/screen.ts";
 import type { ShotRow } from "../../application/shot-hiding.ts";
 
 export interface WriterFeaturePorts {
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "allowed" | "run" | "text">;
   readonly text: Pick<TextServices, "sanitizeHtml" | "storedHtmlFromDom" | "productionReaders" | "htmlToPlainText">;
   readonly editing: {

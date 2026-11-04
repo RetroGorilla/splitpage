@@ -12,9 +12,7 @@ import { actions } from "./ports/actions.ts";
 import { screen } from "./ports/screen.ts";
 import { splitRowFieldCore } from "./rows.ts";
 import { hiddenShotStripHtml } from "../../features/rows/hide-shot.ts";
-import { currentHideShot } from "./hide-shot.ts";
 import { sceneHeaderHtml, sceneRowEntries } from "../../features/rows/scene-rows.ts";
-import { sceneGroups } from "../../core/document/scenes.ts";
 import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { sceneView } from "./editor-owners.ts";
 import { shotHiding } from "./shot-hiding.ts";
@@ -43,10 +41,10 @@ export function mountWriterRuntimeFeature() {
       hiding: { renderGroups: (rows, renderRow) => {
         const doc = documentReader.current();
         if (!doc) return "";
-        if (!Array.isArray(doc.sections) || !doc.sections.length) return currentHideShot()?.renderGroups(rows, renderRow) ?? "";
-        const totals = new Map(sceneGroups(doc).map(group => [group.scene.id,
+        const numbering = documentReader.numbering();
+        const totals = new Map(numbering.scenes.map(group => [group.id ?? "",
           formatDuration(doc.rows.slice(group.start, group.end).reduce((sum, row) => sum + rowSeconds(row, doc, text.productionReaders), 0))]));
-        return sceneRowEntries({ rows, sections: doc.sections }, shotHiding(), sceneView()).map(item =>
+        return sceneRowEntries({ rows, sections: doc.sections }, shotHiding(), sceneView(), numbering).map(item =>
           "scene" in item ? sceneHeaderHtml(item, !edits.allowed(), totals.get(item.scene.id) ?? "") :
             "strip" in item ? hiddenShotStripHtml(item.strip) : renderRow(item.row, item.index)).join("");
       } },

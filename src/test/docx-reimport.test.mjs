@@ -259,14 +259,16 @@ test("the scene gutter and the read time sit either side of the script and are r
   assert.ok(trs[0].getElementsByTagNameNS(W, "tblHeader").length, "the header repeats on every page");
   assert.equal(prop(cells(trs[0])[1].getElementsByTagNameNS(W, "r")[0], "color"), "2863AB");
   assert.equal(prop(cells(trs[0])[2].getElementsByTagNameNS(W, "r")[0], "color"), "9E5800");
-  const gutter = kids(cells(trs[2])[0], "p").map((p) => p.textContent);
-  assert.deepEqual(gutter, ["02", "00:07", "● Ready"]);
-  assert.deepEqual(kids(cells(trs[1])[0], "p").map((p) => p.textContent)[2], "✓ Shot");
-  assert.deepEqual(kids(cells(trs[3])[0], "p").map((p) => p.textContent)[2], "○ To do");
+  assert.equal(cells(trs[1])[0].textContent, "A · 0:21");
+  const data = [trs[0], ...trs.slice(2)];
+  const gutter = kids(cells(data[2])[0], "p").map((p) => p.textContent);
+  assert.deepEqual(gutter, ["A.2", "00:07", "● Ready"]);
+  assert.deepEqual(kids(cells(data[1])[0], "p").map((p) => p.textContent)[2], "✓ Shot");
+  assert.deepEqual(kids(cells(data[3])[0], "p").map((p) => p.textContent)[2], "○ To do");
   const read = (tr) => cells(tr)[3].getElementsByTagNameNS(W, "r")[0];
-  assert.equal(read(trs[2]).textContent.split(THIN).join(""), "0:12");
-  assert.ok(read(trs[2]).getElementsByTagNameNS(W, "bdr").length);
-  assert.equal(read(trs[1]).getElementsByTagNameNS(W, "bdr").length, 0);
+  assert.equal(read(data[2]).textContent.split(THIN).join(""), "0:12");
+  assert.ok(read(data[2]).getElementsByTagNameNS(W, "bdr").length);
+  assert.equal(read(data[1]).getElementsByTagNameNS(W, "bdr").length, 0);
   assert.ok(trs.slice(1).every((tr) => tr.getElementsByTagNameNS(W, "cantSplit").length));
 });
 
@@ -287,7 +289,7 @@ test("the breakdown is grouped by category and no item's row splits across a pag
   assert.equal(prop(groups[0].getElementsByTagNameNS(W, "r")[1], "color"), "764AA2");
   assert.ok(groups.every((tr) => tr.getElementsByTagNameNS(W, "keepNext").length));
   const pentax = trs.find((tr) => kids(tr, "tc")[0].textContent === "Pentax K1000");
-  assert.deepEqual(kids(pentax, "tc").slice(1, 3).map((tc) => tc.textContent), ["○ Needed", "01"]);
+  assert.deepEqual(kids(pentax, "tc").slice(1, 3).map((tc) => tc.textContent), ["○ Needed", "A.1"]);
 });
 
 test("the b-roll shot list, by scene, with a box for each shot", async () => {
@@ -299,7 +301,7 @@ test("the b-roll shot list, by scene, with a box for each shot", async () => {
   const at = paras.indexOf("B-roll shot list");
   assert.ok(at > 0);
   assert.deepEqual(paras.slice(at + 1, at + 6), [
-    "1 of 1 shot · 1 flagged", "Scene 01  00:001/1 shot", "☑dust in the light", "Workbench  ·  Flagged", "Needs a haze."
+    "1 of 1 shot · 1 flagged", "Scene A.1  00:001/1 shot", "☑A.1.1 dust in the light", "Workbench  ·  Flagged", "Needs a haze."
   ]);
   assert.deepEqual(plainRows((await docxToRows(asFile(buildDocx(...liveWithAssets())))).rows).map((r) => r.v),
     ["Wide on the workbench, the Pentax K1000 in frame.\nB-roll: dust in the light", "Title card over the montage.", "Close on the needle.", ""]);
@@ -311,12 +313,13 @@ test("the narration: its meta line and each scene's number in the margin, none o
   const paras = kids(body, "p");
   assert.equal(paraStyle(paras[1]), "SplitpageMeta");
   assert.match(paras[1].textContent, /^Narration · 3 scenes · \d+ words · about 0:\d\d at 150 wpm$/);
-  const beats = paras.slice(2);
+  assert.equal(paras[2].textContent, "A · 0:21");
+  const beats = paras.slice(3);
   assert.ok(beats.every((p) => paraStyle(p) === "SplitpageNarration"));
   assert.deepEqual(beats.map((p) => {
     const r = p.getElementsByTagNameNS(W, "r")[0];
     return runStyle(r) + ":" + r.textContent;
-  }), ["SplitpageSceneNo:01", "SplitpageSceneNo:02", "SplitpageSceneNo:04"]);
+  }), ["SplitpageSceneNo:A.1", "SplitpageSceneNo:A.2", "SplitpageSceneNo:A.4"]);
   assert.ok(beats.every((p) => prop(p, "ind", "hanging") && p.getElementsByTagNameNS(W, "tab").length));
   assert.equal(body.getElementsByTagNameNS(W, "tbl").length, 0, "prose, not a table");
 });

@@ -52,7 +52,7 @@ eval (function(){ window.__undo0 = U.sizes().undo; return window.__undo0; })()
 expect pickUp('s2')
 expect over(afterLast())
 wait !marker().hidden
-expect label().textContent == Move to after scene 08
+expect label().textContent == Move to after scene A.8
 # the lens opens during the drag too
 expect RT.lens().on && RT.lens().src === 'drag'
 expect document.getElementById('rundown').classList.contains('is-lensed')
@@ -87,7 +87,7 @@ expect U.sizes().undo === window.__undo0
 expect pickUp('s2')
 eval (function(){ var a = blk(4).getBoundingClientRect(); window.__g5 = a.right + 1; return over(window.__g5); })()
 wait !marker().hidden
-expect label().textContent == Move to after scene 05
+expect label().textContent == Move to after scene A.5
 # the marker is in the gap: between block 5's right edge and block 6's left
 expect (function(){ var m = marker().getBoundingClientRect(); var cx = m.left + m.width / 2; return cx >= blk(4).getBoundingClientRect().right - 2 && cx <= blk(5).getBoundingClientRect().left + 2; })()
 eval endDrag()
@@ -101,7 +101,7 @@ eval (function(){ window.__undo1 = U.sizes().undo; return window.__undo1; })()
 expect pickUp('s2')
 expect over(afterLast())
 wait !marker().hidden
-expect label().textContent == Move to after scene 08
+expect label().textContent == Move to after scene A.8
 expect dropAt(afterLast())
 eval endDrag()
 expect order() == s1,s3,s4,s5,s6,s7,s8,s2

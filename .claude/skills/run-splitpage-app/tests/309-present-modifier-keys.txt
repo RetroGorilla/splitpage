@@ -101,9 +101,9 @@ expect localStorage.getItem('splitpage-prompter-mirror') != '1'
 jsclick #pp-close
 sleep 400
 expect document.getElementById('prompter').hidden
-caret #rows .row:nth-child(1) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(1) .audio-cell .cell-editable
 sleep 200
-eval window.__cellText = document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable').textContent
+eval window.__cellText = document.querySelector('#rows .row:nth-of-type(1) .audio-cell .cell-editable').textContent
 expect window.__cellText.length > 0
 click #btn-present
 wait !document.getElementById('prompter').hidden
@@ -112,7 +112,7 @@ press mf
 sleep 300
 expect document.getElementById('prompter-scroll').classList.contains('mirror')
 expect document.getElementById('prompter-scroll').classList.contains('flip')
-eval window.__same = document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable').textContent === window.__cellText
+eval window.__same = document.querySelector('#rows .row:nth-of-type(1) .audio-cell .cell-editable').textContent === window.__cellText
 expect window.__same
 
 quit

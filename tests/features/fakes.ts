@@ -1,3 +1,4 @@
+import { createNumberingReader } from "../../src/application/session/numbering.ts";
 import type { OnboardingPorts } from "../../src/features/onboarding/ports.ts";
 import type { DocumentPlace } from "../../src/application/location/document-place.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
@@ -332,7 +333,9 @@ export function fakeDocument<Current extends DocumentView = DocumentView>(initia
   const changes = listenerSet<SessionListener>();
   const replaced = listenerSet<() => void>();
   const refreshes = listenerSet<(jobs: ReadonlySet<string>) => void>();
+  const numbering = createNumberingReader();
   const document: DocumentReader<Current> = {
+    numbering: () => numbering.read(held),
     current: () => held,
     read: (select) => select(held),
     onChange: changes.add,

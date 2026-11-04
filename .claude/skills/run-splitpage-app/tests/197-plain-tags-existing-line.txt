@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 1
 eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.cell=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.st=function(i){return F.state().rows[i].visualText;}; window.kw=function(){return document.querySelectorAll('#rows .plain-tag-keyword').length;}; var s=JSON.parse(F.buildSplitpage()); s.title='Existing tag words'; s.rows=[' explosion in the background',' flare<br>next line',' glow <strong>across</strong> the logo',' rain <span class="tag-anchor" data-tag-cat="prop" data-tag-name="umbrella" contenteditable="false">umbrella</span> roof',' glow <a href="https://example.com/">link</a> after','&nbsp;old words','<span class="tag-anchor" data-tag-cat="prop" data-tag-name="cup" contenteditable="false">cup</span> shine',' flare<br>next paragraph',' glow <span class="cmt-anchor" data-cmt="c1">across</span> the logo','Lead <span class="cmt-anchor" data-cmt="c2">glow across</span> the logo',' glow <span class="stage-dir">across</span> the logo','Lead <span class="stage-dir">glow across</span> the logo'].map(function(html,i){return {id:'r'+(i+1),status:'todo',visualText:html,audioText:''};}); s.comments=[{id:'c1',rowId:'r9',field:'visualText',anchorId:'c1',quotedText:'across',kind:'anchor',text:'Keep anchor',replies:[]},{id:'c2',rowId:'r10',field:'visualText',anchorId:'c2',quotedText:'glow across',kind:'anchor',text:'Keep anchor',replies:[]}]; s.brollShots=[]; F.openFile(new File([JSON.stringify(s)],'existing.splitpage')); return true; })()
 wait F.state().title === 'Existing tag words' && document.querySelectorAll('#rows .row').length === 12
-caret #rows .row:nth-child(1) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable start
 press VFX:
 expect kw() === 1
 eval (function(){ U.flush(); window.before=st(0); window.steps=U.sizes().undo; return true; })()
@@ -14,12 +14,12 @@ key ctrl KeyZ
 expect st(0) === window.before && !cell(0).querySelector('.tag-anchor')
 key ctrl+shift KeyZ
 expect cell(0).querySelector('.tag-anchor[data-tag-name="explosion in the background"]') !== null
-caret #rows .row:nth-child(2) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable start
 press VFX:
 key shift Tab
 expect cell(1).querySelector('.tag-anchor').textContent === 'flare'
 expect /<\/span><br>next line$/.test(st(1))
-caret #rows .row:nth-child(3) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(3) .visual-cell .cell-editable start
 press VFX:
 eval (function(){U.flush();window.before=st(2);window.steps=U.sizes().undo;return true;})()
 key Tab
@@ -29,35 +29,35 @@ key ctrl KeyZ
 expect st(2) === window.before && cell(2).querySelector('strong').textContent === 'across'
 key ctrl+shift KeyZ
 expect cell(2).querySelector('.tag-anchor').textContent === 'glow across the logo'
-caret #rows .row:nth-child(4) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(4) .visual-cell .cell-editable start
 press SFX:
 key Tab
 expect cell(3).querySelectorAll('.tag-anchor').length === 2
 expect cell(3).querySelector('[data-tag-cat="sound"]').textContent === 'rain'
 expect cell(3).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
 expect /umbrella<\/span> roof$/.test(st(3))
-caret #rows .row:nth-child(5) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable start
 press VFX:
 key Tab
 expect cell(4).querySelector('.tag-anchor').textContent === 'glow'
 expect cell(4).querySelector('a').textContent === 'link'
-caret #rows .row:nth-child(6) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(6) .visual-cell .cell-editable start
 press VFX: new
 eval (function(){var r=getSelection().getRangeAt(0).cloneRange();r.setEnd(cell(5),cell(5).childNodes.length);window.rest=String(r).replace(/\u200B/g,'');return true;})()
 key Tab
 expect cell(5).querySelector('.tag-anchor').textContent === 'new'
 expect (function(){var r=document.createRange();r.setStartAfter(cell(5).querySelector('.tag-anchor'));r.setEnd(cell(5),cell(5).childNodes.length);return String(r).replace(/\u200B/g,'')===window.rest;})()
-caret #rows .row:nth-child(7) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(7) .visual-cell .cell-editable start
 press VFX:
 key Tab
 expect cell(6).querySelectorAll('.tag-anchor').length === 1
 expect /^VFX:/.test(st(6)) && kw() === 0
-caret #rows .row:nth-child(8) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(8) .visual-cell .cell-editable start
 press VFX:
 key Tab
 expect cell(7).querySelector('.tag-anchor').textContent === 'flare'
 expect cell(7).textContent.endsWith('next paragraph')
-caret #rows .row:nth-child(9) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(9) .visual-cell .cell-editable start
 press VFX:
 key Tab
 expect cell(8).querySelector('.tag-anchor').textContent === 'glow'
@@ -71,7 +71,7 @@ expect cell(9).querySelector('.tag-anchor') === null && kw() === 0
 expect st(9) === window.before && U.sizes().undo === window.steps
 expect cell(9).querySelector('[data-cmt="c2"]').textContent === 'glow across'
 expect /^Lead VFX:/.test(st(9))
-caret #rows .row:nth-child(11) .visual-cell .cell-editable start
+caret #rows .row:nth-of-type(11) .visual-cell .cell-editable start
 press VFX:
 key Tab
 expect cell(10).querySelector('.tag-anchor').textContent === 'glow'

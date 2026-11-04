@@ -16,24 +16,24 @@
     "description": "3 scenes · 0:15 running time · Target 0:30 · 0:15 under · 1 of 3 shot · October 13, 2026"
   },
   "markdownExport": {
-    "bytes": 1959,
-    "sha256": "5ac411e9e86f6644ff0fec59e32a3280246515cc57c8d39e8ca1edf6ed866133"
+    "bytes": 1990,
+    "sha256": "1062ae1fda89066a563589ed308c83edbf31e0f16d29cec6195a3b32ccf94dd2"
   },
   "markdownExportPreview": {
-    "bytes": 752,
-    "sha256": "06fec958255427ff6e780d8a1572e8b0fa61b6b9fa4348e33cbbcf0902dd18b9"
+    "bytes": 771,
+    "sha256": "96417a8c97f7be96d1807a0b6d01974c829336b086713d7e687cfaf30580ab9d"
   },
   "markdownTableExport": {
-    "bytes": 1844,
-    "sha256": "2261dd559258dfafd6127da062cd7e36d9701e2c6b0aa56eaaa2e4d58943deef"
+    "bytes": 1875,
+    "sha256": "b95498acdc72bd9ae759ff323f84a89ae6120f3b9e16a4cffa33ab385e529135"
   },
   "markdownImages": [
     {
-      "path": "images/scene-01.png",
+      "path": "images/beat-A-1.png",
       "bytes": 41
     },
     {
-      "path": "images/scene-01-2.jpg",
+      "path": "images/beat-A-1-2.jpg",
       "bytes": 23
     }
   ],

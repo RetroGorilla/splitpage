@@ -37,10 +37,10 @@ expect document.querySelectorAll('#rows .row').length == 4
 
 # 3rd row: a real {location} tag plus a unique findable word, typed for real
 # so the tag registry and the find index both see it exactly as the app would
-caret #rows .row:nth-child(3) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(3) .audio-cell .cell-editable
 press A {studio} shot with the rare word zephyrion in it.
 sleep 500
-expect document.querySelectorAll('#rows .row:nth-child(3) .tag-anchor').length == 1
+expect document.querySelectorAll('#rows .row:nth-of-type(3) .tag-anchor').length == 1
 
 # --- nothing collapses until the toggle is on -------------------------------
 jsclick #rows .row[data-id="r2"] .status-btn
@@ -99,10 +99,10 @@ expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 shot 
 # --- delayed hide: a scene turning Shot while visible stays put for a beat -
 # (the tagged 3rd row is still a plain .row at this position — only r2, right
 # before it, has folded into the strip so far)
-jsclick #rows .row:nth-child(3) .status-btn
-jsclick #rows .row:nth-child(3) .status-btn
+jsclick #rows .row:nth-of-type(2) .status-btn
+jsclick #rows .row:nth-of-type(2) .status-btn
 sleep 100
-expect document.querySelector('#rows .row:nth-child(3)').classList.contains('is-shot')
+expect document.querySelector('#rows .row:nth-of-type(2)').classList.contains('is-shot')
 # still visible right away — the click that set it must not yank it off screen
 expect document.querySelectorAll('#rows .row').length == 3
 expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 shot scene hidden") !== -1

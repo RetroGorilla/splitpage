@@ -452,7 +452,7 @@ function oldMdCell(value) {
     .replace(/\r\n|\r|\n/g, " ");
 }
 function oldAppendMarkdownTail(lines) {
-  var breakdown = breakdownRows(exportDocumentOf(currentDocument()));
+  var breakdown = breakdownRows(exportDocumentOf(currentDocument()), true);
   if (breakdown.length) {
     lines.push("## Production breakdown");
     lines.push("");
@@ -464,7 +464,7 @@ function oldAppendMarkdownTail(lines) {
     });
     lines.push("");
   }
-  var comments = commentEntries(exportDocumentOf(currentDocument()), { pieces: true });
+  var comments = commentEntries(exportDocumentOf(currentDocument()), { pieces: true, project: true });
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");

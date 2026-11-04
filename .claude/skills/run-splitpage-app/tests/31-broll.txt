@@ -14,7 +14,7 @@
 open
 
 # get from the 2 demo rows to 6 empty scenes to work with, one per case
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
 key ctrl Enter
 sleep 300
 key ctrl Enter
@@ -26,31 +26,31 @@ sleep 300
 expect document.querySelectorAll('#rows .row').length == 6
 
 # --- 1) control: plain text -------------------------------------------------
-caret #rows .row:nth-child(1) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return c.innerHTML;})()
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(1) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return c.innerHTML;})()
 press B-roll: penguins on ice
 sleep 600
-expect document.querySelectorAll('#rows .row:nth-child(1) .visual-cell .broll-key').length == 1
-expect document.querySelector('#rows .row:nth-child(1) .visual-cell .broll-key').textContent == B-roll:
-expect document.querySelector('#rows .row:nth-child(1) .visual-cell .broll-key').getAttribute('contenteditable') == false
-expect !!document.querySelector('#rows .row:nth-child(1) .visual-cell .broll-key').getAttribute('data-broll-id')
-expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').textContent.indexOf('penguins on ice') !== -1
+expect document.querySelectorAll('#rows .row:nth-of-type(1) .visual-cell .broll-key').length == 1
+expect document.querySelector('#rows .row:nth-of-type(1) .visual-cell .broll-key').textContent == B-roll:
+expect document.querySelector('#rows .row:nth-of-type(1) .visual-cell .broll-key').getAttribute('contenteditable') == false
+expect !!document.querySelector('#rows .row:nth-of-type(1) .visual-cell .broll-key').getAttribute('data-broll-id')
+expect document.querySelector('#rows .row:nth-of-type(1) .visual-cell .cell-editable').textContent.indexOf('penguins on ice') !== -1
 
 # --- 2) the bug's own repro: bold ON, then typed ----------------------------
-caret #rows .row:nth-child(2) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return c.innerHTML;})()
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return c.innerHTML;})()
 key ctrl KeyB
 sleep 300
 press B-roll: seagulls at the pier
 sleep 600
-expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .broll-key').length == 1
-expect document.querySelector('#rows .row:nth-child(2) .visual-cell .broll-key').textContent == B-roll:
-expect !!document.querySelector('#rows .row:nth-child(2) .visual-cell .broll-key').getAttribute('data-broll-id')
-expect document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable').textContent.indexOf('seagulls at the pier') !== -1
+expect document.querySelectorAll('#rows .row:nth-of-type(2) .visual-cell .broll-key').length == 1
+expect document.querySelector('#rows .row:nth-of-type(2) .visual-cell .broll-key').textContent == B-roll:
+expect !!document.querySelector('#rows .row:nth-of-type(2) .visual-cell .broll-key').getAttribute('data-broll-id')
+expect document.querySelector('#rows .row:nth-of-type(2) .visual-cell .cell-editable').textContent.indexOf('seagulls at the pier') !== -1
 
 # --- 3) bold ON, a real Enter starts a second line, marker typed there -----
-caret #rows .row:nth-child(3) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return c.innerHTML;})()
+caret #rows .row:nth-of-type(3) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(3) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return c.innerHTML;})()
 key ctrl KeyB
 sleep 300
 press Establishing shot.
@@ -58,11 +58,11 @@ key Enter
 sleep 300
 press B-roll: eagles soaring
 sleep 600
-expect document.querySelectorAll('#rows .row:nth-child(3) .visual-cell .broll-key').length == 1
-expect document.querySelector('#rows .row:nth-child(3) .visual-cell .broll-key').textContent == B-roll:
-expect document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editable').textContent.indexOf('eagles soaring') !== -1
+expect document.querySelectorAll('#rows .row:nth-of-type(3) .visual-cell .broll-key').length == 1
+expect document.querySelector('#rows .row:nth-of-type(3) .visual-cell .broll-key').textContent == B-roll:
+expect document.querySelector('#rows .row:nth-of-type(3) .visual-cell .cell-editable').textContent.indexOf('eagles soaring') !== -1
 # the first line, before the break, is untouched by the marker
-expect document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editable').textContent.indexOf('Establishing shot.') !== -1
+expect document.querySelector('#rows .row:nth-of-type(3) .visual-cell .cell-editable').textContent.indexOf('Establishing shot.') !== -1
 
 # --- 4) same shape, forced: the <br> sits INSIDE the bold element itself ---
 # Belt-and-braces on top of case 3, which depends on however the browser's
@@ -74,19 +74,19 @@ expect document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editab
 # "after" it collapses to sit before it instead — exactly the quirk that
 # comment describes. With the sentinel in place the caret genuinely lands
 # between the two <br>s, i.e. after the first one, same as a real Enter.
-eval (function(){var c=document.querySelector('#rows .row:nth-child(4) .visual-cell .cell-editable');c.innerHTML='<strong>Wide shot of the crowd.<br><br></strong>';var strong=c.querySelector('strong');var r=document.createRange();r.setStart(strong,2);r.collapse(true);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return c.innerHTML;})()
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(4) .visual-cell .cell-editable');c.innerHTML='<strong>Wide shot of the crowd.<br><br></strong>';var strong=c.querySelector('strong');var r=document.createRange();r.setStart(strong,2);r.collapse(true);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return c.innerHTML;})()
 press B-roll: crowd reactions
 sleep 600
-expect document.querySelectorAll('#rows .row:nth-child(4) .visual-cell .broll-key').length == 1
-expect document.querySelector('#rows .row:nth-child(4) .visual-cell .broll-key').textContent == B-roll:
-expect document.querySelector('#rows .row:nth-child(4) .visual-cell .cell-editable').textContent.indexOf('crowd reactions') !== -1
+expect document.querySelectorAll('#rows .row:nth-of-type(4) .visual-cell .broll-key').length == 1
+expect document.querySelector('#rows .row:nth-of-type(4) .visual-cell .broll-key').textContent == B-roll:
+expect document.querySelector('#rows .row:nth-of-type(4) .visual-cell .cell-editable').textContent.indexOf('crowd reactions') !== -1
 
 # --- 5) negative: "B-roll:" typed mid-sentence must NOT become a marker ----
-caret #rows .row:nth-child(5) .visual-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(5) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return c.innerHTML;})()
+caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(5) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return c.innerHTML;})()
 press Cut to some B-roll: nope
 sleep 600
-expect document.querySelectorAll('#rows .row:nth-child(5) .visual-cell .broll-key').length == 0
+expect document.querySelectorAll('#rows .row:nth-of-type(5) .visual-cell .broll-key').length == 0
 
 # --- 6) negative: "B-roll:" typed inside a link must NOT become a marker ---
 # isInsideTagOrLink() is the guard for this, separate from brollAtLineStart()
@@ -98,9 +98,9 @@ expect document.querySelectorAll('#rows .row:nth-child(5) .visual-cell .broll-ke
 # directly: the text is already inside the <a>, the caret sits right after
 # the colon as if it had just been typed there, and the same 'input' event
 # maybeCaptureBroll listens for is dispatched by hand.
-eval (function(){var c=document.querySelector('#rows .row:nth-child(6) .visual-cell .cell-editable');c.innerHTML='<a href="https://example.com">B-roll: nope</a>';var t=c.querySelector('a').firstChild;var idx=t.nodeValue.indexOf(':')+1;var r=document.createRange();r.setStart(t,idx);r.collapse(true);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);c.dispatchEvent(new InputEvent('input',{bubbles:true,cancelable:true,inputType:'insertText',data:':'}));return c.innerHTML;})()
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(6) .visual-cell .cell-editable');c.innerHTML='<a href="https://example.com">B-roll: nope</a>';var t=c.querySelector('a').firstChild;var idx=t.nodeValue.indexOf(':')+1;var r=document.createRange();r.setStart(t,idx);r.collapse(true);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);c.dispatchEvent(new InputEvent('input',{bubbles:true,cancelable:true,inputType:'insertText',data:':'}));return c.innerHTML;})()
 sleep 600
-expect document.querySelectorAll('#rows .row:nth-child(6) .visual-cell .broll-key').length == 0
+expect document.querySelectorAll('#rows .row:nth-of-type(6) .visual-cell .broll-key').length == 0
 
 # --- the b-roll panel agrees: every real marker made it into the list -----
 # By id, not text*=: the chips this suite just created are themselves

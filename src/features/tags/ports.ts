@@ -51,7 +51,7 @@ export interface PlainTagMount extends PlainTagControl {
 
 export interface TagPanelPorts {
   readonly view: Pick<TagPanelState, "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly lifetime: Pick<DocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "productionReaders" | "inertBody" | "retagBody" | "sanitizeHtml">;
@@ -68,7 +68,7 @@ export interface TagPanelPorts {
 }
 
 export interface ProductionTagPorts {
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly refresh: { readonly request: DocumentSession["refresh"]; readonly cancel: DocumentSession["cancelRefresh"] };
   readonly stamping: Pick<DocumentSession, "stamp">;

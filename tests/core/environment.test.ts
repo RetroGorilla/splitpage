@@ -21,6 +21,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/load-ids.ts": await import("../../src/core/document/load-ids.ts"),
   "document/media.ts": await import("../../src/core/document/media.ts"),
   "document/memo.ts": await import("../../src/core/document/memo.ts"),
+  "document/numbering.ts": await import("../../src/core/document/numbering.ts"),
   "document/people.ts": await import("../../src/core/document/people.ts"),
   "document/person-colors.ts": await import("../../src/core/document/person-colors.ts"),
   "document/ports.ts": await import("../../src/core/document/ports.ts"),

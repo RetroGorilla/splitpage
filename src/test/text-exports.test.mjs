@@ -46,21 +46,21 @@ test("the script's sheet: a row per scene with its start, status, read time, tag
   const rows = sheet(buildCsv(liveDoc()));
   assert.deepEqual(rows[0], HEAD);
   const beat = (n) => rows[n];
-  assert.deepEqual(beat(1).slice(0, 5), ["01", "00:00", "Shot", "0:10", ""]);
+  assert.deepEqual(beat(1).slice(0, 5), ["A.1", "00:00", "Shot", "0:10", ""]);
   assert.equal(beat(1)[5], toPlainText(cellOf(s.rows[0].visualText)));
   assert.equal(beat(1)[6], toPlainText(cellOf(s.rows[0].audioText)));
   assert.equal(beat(1)[7], "Prop: Pentax K1000; Location: workbench; Music/SFX: shutter click");
-  assert.deepEqual(beat(2).slice(0, 5), ["02", "00:10", "Shot", "0:06", "yes"]);
-  assert.deepEqual(beat(25).slice(0, 5), ["25", "08:14", "To do", "0:12", "yes"]);
+  assert.deepEqual(beat(2).slice(0, 5), ["A.2", "00:10", "Shot", "0:06", "yes"]);
+  assert.deepEqual(beat(25).slice(0, 5), ["A.25", "08:14", "To do", "0:12", "yes"]);
   assert.equal(rows.slice(1, 31).filter((r) => r[4] === "yes").length, 2);
   assert.equal(beat(5)[7], "Prop: toothpick, light seal kit, naphtha; Gear: overhead rig");
   assert.equal(beat(21)[7], "", "nothing tagged in scene 21");
-  assert.equal(beat(4)[8], "fingertip pushing on the sticky old foam (shot)");
-  assert.equal(beat(6)[8], "the toothpick lifting a long strand of goo (shot, flagged)");
-  assert.equal(beat(22)[8], "feet on the gravel path, low angle (to shoot)");
+  assert.equal(beat(4)[8], "A.4.1 fingertip pushing on the sticky old foam (shot)");
+  assert.equal(beat(6)[8], "A.6.1 the toothpick lifting a long strand of goo (shot, flagged)");
+  assert.equal(beat(22)[8], "A.22.1 feet on the gravel path, low angle (to shoot)");
   assert.deepEqual([3, 9, 18, 24].map((n) => beat(n)[9]), ["1", "", "2", "3"]);
-  assert.deepEqual(beat(10).slice(0, 4), ["10", "02:48", "Ready", "0:38"]);
-  assert.deepEqual(beat(13).slice(0, 4), ["13", "03:43", "To do", "0:45"]);
+  assert.deepEqual(beat(10).slice(0, 4), ["A.10", "02:48", "Ready", "0:38"]);
+  assert.deepEqual(beat(13).slice(0, 4), ["A.13", "03:43", "To do", "0:45"]);
 });
 
 test("the sheet's totals are labelled, the target beside them, and the comments carry their numbers", () => {
@@ -72,12 +72,12 @@ test("the sheet's totals are labelled, the target beside them, and the comments 
   assert.deepEqual(rows[34], ["Comments"]);
   assert.deepEqual(rows[35], ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"]);
   const c = rows.slice(36);
-  assert.deepEqual(c[0].slice(0, 5), ["1", "Scene 03 · Audio", "Open", "", "Jo (editor)"]);
+  assert.deepEqual(c[0].slice(0, 5), ["1", "Scene A.3 · Audio", "Open", "", "Jo (editor)"]);
   assert.equal(c[0][6], "Some of them really, really don't.");
   assert.deepEqual(c[1].slice(0, 5), ["", "", "", "", "↳ Sam"], "the reply under its thread");
-  assert.deepEqual(c[2].slice(0, 3), ["", "Scene 09 · Audio", "Resolved by Sam"], "resolved: no number");
-  assert.deepEqual(c[3].slice(0, 5), ["2", "Scene 18 · Audio", "Open", "Jo (editor)", "Sam"]);
-  assert.deepEqual(c[4].slice(0, 2), ["3", "Scene 24 · Audio"]);
+  assert.deepEqual(c[2].slice(0, 3), ["", "Scene A.9 · Audio", "Resolved by Sam"], "resolved: no number");
+  assert.deepEqual(c[3].slice(0, 5), ["2", "Scene A.18 · Audio", "Open", "Jo (editor)", "Sam"]);
+  assert.deepEqual(c[4].slice(0, 2), ["3", "Scene A.24 · Audio"]);
   assert.ok(!buildCsv(liveDoc()).includes("Row "), "the app says Scene");
 });
 
@@ -121,7 +121,7 @@ test("a script with no target and no comments: no Target row, no Comments block"
   loadTestDocument(migrateRows({ schema: 2, title: "Plain", rows: [{ id: "r0", visualText: "Wide", audioText: "Hello there.", status: "ready" }] }));
   const rows = sheet(buildCsv(liveDoc()));
   assert.equal(rows.length, 3);
-  assert.deepEqual(rows[1].slice(0, 3), ["01", "00:00", "Ready"]);
+  assert.deepEqual(rows[1].slice(0, 3), ["A.1", "00:00", "Ready"]);
   assert.equal(rows[2][0], "Total");
   assert.equal(rows[2][2], "0 of 1 shot");
   assert.equal(csvToRows(buildCsv(liveDoc())).length, 1);
@@ -148,8 +148,8 @@ test("the b-roll sheet: the scene's start after the columns it had", () => {
   assert.deepEqual(rows[0], ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
                              "Scene start"]);
   assert.equal(rows.length, 10);
-  assert.deepEqual([rows[1][0], rows[1][1], rows[1][10]], ["04", "fingertip pushing on the sticky old foam", "01:03"]);
-  assert.deepEqual([rows[2][0], rows[2][3], rows[2][10]], ["06", "yes", "01:50"]);
+  assert.deepEqual([rows[1][0], rows[1][1], rows[1][10]], ["A.4", "A.4.1 fingertip pushing on the sticky old foam", "01:03"]);
+  assert.deepEqual([rows[2][0], rows[2][3], rows[2][10]], ["A.6", "yes", "01:50"]);
   assert.deepEqual(rows.slice(1).map((r) => r[10]), ["01:03", "01:50", "02:48", "04:28", "05:11", "05:56", "06:43", "07:25", "08:28"]);
 });
 

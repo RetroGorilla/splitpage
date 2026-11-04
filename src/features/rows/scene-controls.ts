@@ -13,7 +13,7 @@ import { createViewLifetime } from "../common/view-lifetime.ts";
 import { closeRowMenus } from "./row-menu.ts";
 
 export interface SceneControlsPorts {
-  readonly document: Pick<DocumentReader, "current">;
+  readonly document: Pick<DocumentReader, "current" | "numbering">;
   readonly edits: Pick<DocumentEdits, "allowed" | "run">;
   readonly scenes: SceneView;
   readonly focus: Pick<FocusMemory<Element>, "focusedRow">;
@@ -130,8 +130,13 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
   });
   function dropTarget(event: DragEvent): { id: string; after: boolean; firstBeatId: string; header: Element } | null {
     const target = event.target as Element | null, state = ports.document.current();
-    if (!state || !Array.isArray(state.sections) || !state.sections.length || !target?.closest) return null;
+    if (!state || !target?.closest) return null;
     const divider = target.closest(".section-header"), row = target.closest(".row[data-id]");
+    if (divider?.getAttribute("data-section-id") === "") {
+      const automatic = ports.document.numbering().scenes.find(scene => scene.id === null);
+      const first = automatic && state.rows[automatic.start];
+      return first && !dragging ? { id: "", firstBeatId: first.id, after: false, header: divider } : null;
+    }
     const id = divider?.getAttribute("data-section-id") ?? (row && sceneForBeat(state, row.getAttribute("data-id") ?? "")?.id);
     const group = id && sceneGroups(state).find(item => item.scene.id === id);
     const shown = id && header(id);

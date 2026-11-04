@@ -12,9 +12,9 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
 eval (async function(){ var F = window.__splitpageFormats; var s = F.clone(F.state()); var r = s.rows.filter(function(r){ return r.id === 'r2'; })[0]; r.audioText = r.audioText.replace('<span class="cmt-anchor" data-cmt="c1">', '<span class="cmt-anchor tag-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Word card">'); if (r.audioText.indexOf('tag-anchor') === -1) return 'seed changed'; await F.openFile(new File([F.buildSplitpage(s)], 'comment-on-tag.splitpage')); return true; })()
-wait document.querySelector('#rows .row:nth-child(2) .audio-cell .tag-anchor') !== null
-expect document.querySelectorAll('#rows .row:nth-child(2) .audio-cell .cmt-anchor[data-cmt="c1"] .tag-anchor[data-tag-name="Word card"]').length === 1
-expect document.querySelector('#rows .row:nth-child(2) .audio-cell .cmt-anchor').textContent === 'word for word'
+wait document.querySelector('#rows .row:nth-of-type(2) .audio-cell .tag-anchor') !== null
+expect document.querySelectorAll('#rows .row:nth-of-type(2) .audio-cell .cmt-anchor[data-cmt="c1"] .tag-anchor[data-tag-name="Word card"]').length === 1
+expect document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cmt-anchor').textContent === 'word for word'
 expect window.__splitpageFormats.state().rows[1].audioText.indexOf('<span class="cmt-anchor" data-cmt="c1"><span class="tag-anchor"') !== -1
 expect window.__splitpageFormats.state().productionTags.some(function(t){ return t.cat === 'prop' && t.name === 'Word card'; })
 

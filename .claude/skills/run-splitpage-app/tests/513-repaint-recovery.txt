@@ -6,7 +6,7 @@ shot sweep-ui-onboarding-ready
 click #onboarding-modal .modal-close
 wait document.getElementById('onboarding-modal').hidden
 eval window.F=window.__splitpageFormats;window.R=window.__renderTest
-click #rows .row:first-child .row-read
+click #rows .row:first-of-type .row-read
 eval (function(){window.__length=document.querySelector('.row-read-input');window.__row=__length.closest('.row');return true;})()
 expect __row.classList.contains('is-setting-length')
 eval R.render()

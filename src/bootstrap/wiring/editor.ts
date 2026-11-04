@@ -1,3 +1,4 @@
+import { documentReader as numberedDocument } from "./ports/document.ts";
 import type { UndoRoutePorts } from "../../features/undo/routes.ts";
 import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
@@ -695,7 +696,7 @@ function announceAttached(attached: PasteAttached, rowIndex: number, before: unk
   function n(count: number, one: string): string { return count === 1 ? one : count + " " + one + "s"; }
   const what = pics && vids ? n(pics, "picture") + " and " + n(vids, "video")
     : pics ? n(pics, "picture") : n(vids, "video");
-  const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to scene " + (rowIndex + 1);
+  const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to scene " + (numberedDocument.numbering().beats[currentDocument()?.rows[rowIndex]?.id ?? ""]?.full ?? "");
   const entry = undoOwner().last();
   if (!entry || entry === before) { showToast(msg, "ok"); return; }
   showActionToast(msg, "ok", "Undo", function () {

@@ -34,7 +34,6 @@ import { plainText, safeId as safeIdFrom } from "../../core/document/text-policy
 import { editableCellHtml } from "../common/editable-cell.ts";
 import { formatTimestampAbsolute } from "../../../shared/clock.ts";
 
-import { pad2 } from "../../core/production/timing.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import {
   addCommentCommand,
@@ -418,7 +417,7 @@ function commentLocationHtml(rowId: string, field: string) {
   const idx = (ports as CommentsRuntimePorts).document.read(function (doc) { return rowIndexOf(doc, rowId); });
   const fieldLabel = field === "audioText" ? "Audio" : "Visual";
   if (idx === -1) return "Deleted scene · " + fieldLabel;
-  return 'Scene <span class="comment-loc-num">' + pad2(idx + 1) + '</span> · ' + fieldLabel;
+  return 'Scene <span class="comment-loc-num">' + ((ports as CommentsRuntimePorts).document.numbering().beats[rowId]?.full ?? "") + '</span> · ' + fieldLabel;
 }
 
 function commentThreadNumbers() {

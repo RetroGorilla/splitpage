@@ -157,14 +157,14 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
     assert.ok(tail.includes("Missing  \n[image]"), tail);
     assert.ok(!tail.includes("_(empty)_"), tail);
   }
-  assert.ok(toMarkdownDoc(exportDocumentOf(currentDocument())).includes("**Scene 01 · Audio** — Ann"));
+  assert.ok(toMarkdownDoc(exportDocumentOf(currentDocument())).includes("**Scene A.1 · Audio** — Ann"));
   assert.ok(toMarkdownTableDoc(exportDocumentOf(currentDocument())).includes("**Row 01 · Audio** — Ann"));
 
   const csv = buildCsv(liveDoc());
   assert.ok(csv.includes(',"Before\n[image]\nafter"'), csv);
   assert.ok(/,↳ Bob,[^\n]*,,\[image\]/.test(csv), csv);
   assert.equal(csv.split("\r\n").filter((l) => /,\[image\]$/.test(l)).length, 2, "the reply and the conflict card");
-  assert.ok(csv.includes("\r\n,Scene 01 · Audio,Open,,Ann,"), csv);
+  assert.ok(csv.includes("\r\n,Scene A.1 · Audio,Open,,Ann,"), csv);
 
   const [one, conflict, missing] = commentEntries(exportDocumentOf(currentDocument()), { pieces: true });
   assert.equal(commentBodyText(one), "Before\n[image]\nafter");

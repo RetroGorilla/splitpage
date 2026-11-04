@@ -88,7 +88,7 @@ export const BEATS = `(function () {
       perf.reset();
       for (var pass = 0; pass < ${STAMP_PASSES}; pass++) {
         for (var i = 0; i < rows.length; i++) {
-          var selector = '#rows .row:nth-child(' + rows[i] + ') [data-action="cycle-status"]';
+          var selector = '#rows .row:nth-of-type(' + rows[i] + ') [data-action="cycle-status"]';
           var button = document.querySelector(selector);
           need(button, 'no element for ' + selector);
           var id = button.getAttribute('data-id');
@@ -291,7 +291,7 @@ export const IMAGES = `(function () {
 const oneLine = (code) => code.replace(/\n\s*/g, " ");
 
 function typing(fixture) {
-  const lines = ["eval window.__perf.reset()", "caret #rows .row:nth-child(2) .audio-cell .cell-editable", "key end"];
+  const lines = ["eval window.__perf.reset()", "caret #rows .row:nth-of-type(2) .audio-cell .cell-editable", "key end"];
   for (const token of TYPED.match(/ ?[^ ]/g)) lines.push(`press ${token}`, `sleep ${KEY_GAP_MS}`);
   lines.push("sleep 1200", `eval window.__perf.take('${fixture} typing')`);
   return lines;
@@ -299,7 +299,7 @@ function typing(fixture) {
 
 function rowEdits(fixture) {
   const lines = ["eval window.__perf.reset()"];
-  for (let i = 0; i < SPLITS; i++) lines.push("caret #rows .row:nth-child(2) .audio-cell .cell-editable", "key ctrl Enter", "sleep 400");
+  for (let i = 0; i < SPLITS; i++) lines.push("caret #rows .row:nth-of-type(2) .audio-cell .cell-editable", "key ctrl Enter", "sleep 400");
   lines.push("sleep 800", `eval window.__perf.take('${fixture} new scene')`);
   return lines;
 }

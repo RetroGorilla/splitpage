@@ -3,7 +3,7 @@ wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){window.F=window.__splitpageFormats;window.D=window.__desktopTest;window.__spoken=[];window.__speech=new MutationObserver(function(rs){rs.forEach(function(r){r.addedNodes.forEach(function(n){__spoken.push(n.textContent);});});});['toast-status','toast-alert'].forEach(function(id){__speech.observe(document.getElementById(id),{childList:true,subtree:true,characterData:true});});window.__top=function(el){var r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));};return true;})()
 expect document.getElementById('toast-status').getAttribute('role') === 'status'
 expect document.getElementById('toast-alert').getAttribute('role') === 'alert'
-caret #rows .row:first-child .audio-cell .cell-editable
+caret #rows .row:first-of-type .audio-cell .cell-editable
 eval window.__editorOrigin=document.activeElement;window.__editorTextLength=__editorOrigin.textContent.length
 click #btn-present
 wait !document.getElementById('prompter').hidden

@@ -18,7 +18,7 @@ const MD_SECTION_HEADING_RE = /^## (?:\\[\\`*_[\]<>#|]|[^\\`*_[\]<>#|])+ · (?:[
 
 export function isStackedSectionHeading(lines: readonly string[], at: number): boolean {
   return MD_SECTION_HEADING_RE.test(lines[at] ?? "") && lines[at - 1] === "" && lines[at + 1] === "" &&
-    /^### Scene \d+ · (?:[1-9]\d*:)?[0-5]\d:[0-5]\d$/.test(lines[at + 2] ?? "");
+    /^### Scene (?:[A-Z]+\.)?\d+ · (?:[1-9]\d*:)?[0-5]\d:[0-5]\d$/.test(lines[at + 2] ?? "");
 }
 
 export function columnIndicesFromHeader(header: readonly string[]): ColumnIndices {

@@ -1,3 +1,4 @@
+import { deriveDocumentNumbering } from "../../core/document/numbering.ts";
 import "../../test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -31,7 +32,7 @@ function fixture() {
   const clock = { nowIso: () => "2026-10-23T12:00:00.000Z" };
   const ports: CommentStatePorts = {
     sort: { current: () => "position", choose: (value) => value === "recent" ? "recent" : "position" },
-    document: { current: () => null, read: (select) => select(null) },
+    document: { numbering: () => deriveDocumentNumbering({ rows: [] }), current: () => null, read: (select) => select(null) },
     edits: { edit: () => { calls.push("edit"); return true; }, stamps: { clock, editor: { name: () => "Ada" } } },
     notices: { show: () => { calls.push("notice"); return { isConnected: false, dismiss: () => {}, removeEventListener: () => {} }; } },
     preferences: {

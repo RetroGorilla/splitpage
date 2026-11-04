@@ -59,10 +59,10 @@ expect document.querySelector('.comment-assignee-select').innerHTML.indexOf('Ril
 expect document.querySelector('.comment-assignee-select').innerHTML.indexOf('Riley & Co<') === -1
 
 # --- leave a second comment (author "Jordan") on row 1 ----------------------
-caret #rows .row:nth-child(1) .audio-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,3);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.slice(0,3);})()
+caret #rows .row:nth-of-type(1) .audio-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(1) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,3);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.slice(0,3);})()
 sleep 300
-jsclick #rows .row:nth-child(1) .audio-cell .mini-toolbar [data-cmd="comment"]
+jsclick #rows .row:nth-of-type(1) .audio-cell .mini-toolbar [data-cmd="comment"]
 sleep 500
 eval (function(){document.getElementById('comment-name').value='Jordan';var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'Row1 note.');return b.textContent;})()
 jsclick #comment-post
@@ -71,10 +71,10 @@ expect document.querySelectorAll('.comment-card').length == 2
 expect document.getElementById('btn-save').classList.contains('is-dirty')
 
 # --- and a third (author "Sam") on row 2 -------------------------------------
-caret #rows .row:nth-child(2) .audio-cell .cell-editable
-eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,3);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.slice(0,3);})()
+caret #rows .row:nth-of-type(2) .audio-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-of-type(2) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,3);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.slice(0,3);})()
 sleep 300
-jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="comment"]
+jsclick #rows .row:nth-of-type(2) .audio-cell .mini-toolbar [data-cmd="comment"]
 sleep 500
 eval (function(){document.getElementById('comment-name').value='Sam';var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'Row2 note.');return b.textContent;})()
 jsclick #comment-post

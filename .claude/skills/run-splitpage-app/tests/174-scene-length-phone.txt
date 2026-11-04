@@ -30,13 +30,13 @@ expect parseFloat(getComputedStyle(document.querySelector('#rows .audio-cell .ce
 
 # --- the scene you are in shows its time, and a tap sets it -----------------------
 expect getComputedStyle(document.querySelector('#rows .row .row-rail')).display == none
-caret #rows .row:nth-child(1) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(1) .audio-cell .cell-editable
 sleep 300
 expect getComputedStyle(document.querySelector('#rows .row .row-rail')).display == block
 # the field with the caret carries its column's bar
-expect getComputedStyle(document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable')).boxShadow.indexOf('inset') !== -1
+expect getComputedStyle(document.querySelector('#rows .row:nth-of-type(1) .audio-cell .cell-editable')).boxShadow.indexOf('inset') !== -1
 expect document.querySelector('#rows .row .row-read').getBoundingClientRect().height >= 16
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 300
 expect document.activeElement.classList.contains('row-read-input')
 # 16px, or iOS zooms the page into it

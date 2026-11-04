@@ -276,6 +276,9 @@
   ],
   "brollRead": [
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.1",
+      "shortShotNumber": "1.1",
       "rec": {
         "stored": 0
       },
@@ -297,6 +300,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.2",
+      "shortShotNumber": "1.2",
       "rec": {
         "fresh": {
           "status": "unshot",
@@ -327,6 +333,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.3",
+      "shortShotNumber": "1.3",
       "rec": {
         "fresh": {
           "status": "unshot",
@@ -368,6 +377,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.2",
+      "shotNumber": "A.2.1",
+      "shortShotNumber": "2.1",
       "rec": {
         "fresh": {
           "status": "unshot",
@@ -398,6 +410,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.2",
+      "shotNumber": "A.2.2",
+      "shortShotNumber": "2.2",
       "rec": {
         "stored": 1
       },
@@ -440,6 +455,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.3",
+      "shotNumber": "A.3.1",
+      "shortShotNumber": "3.1",
       "rec": {
         "fresh": {
           "status": "unshot",
@@ -470,6 +488,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.3",
+      "shotNumber": "A.3.2",
+      "shortShotNumber": "3.2",
       "rec": {
         "stored": 2
       },
@@ -491,6 +512,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.4",
+      "shotNumber": "A.4.1",
+      "shortShotNumber": "4.1",
       "rec": {
         "stored": 3
       },
@@ -533,6 +557,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "",
+      "shotNumber": "",
+      "shortShotNumber": "",
       "rec": {
         "stored": 4
       },
@@ -554,6 +581,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "",
+      "shotNumber": "",
+      "shortShotNumber": "",
       "rec": {
         "stored": 5
       },
@@ -588,16 +618,16 @@
   ],
   "shotsByProp": {
     "prop kettle": [
-      "kettle steam rising",
-      "fresh name",
+      "A.1.3 kettle steam rising",
+      "A.4.1 fresh name",
       "pickup from the list"
     ],
     "prop tripod": [
-      "The Harbour",
-      "fresh name"
+      "A.2.2 The Harbour",
+      "A.4.1 fresh name"
     ],
     "prop boat hook": [
-      "The Harbour"
+      "A.2.2 The Harbour"
     ]
   },
   "readsWroteNothing": true,
@@ -607,6 +637,9 @@
   "healedAgain": 0,
   "brollRepair": [
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.1",
+      "shortShotNumber": "1.1",
       "rec": {
         "stored": 0
       },
@@ -628,6 +661,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.2",
+      "shortShotNumber": "1.2",
       "rec": {
         "stored": 6
       },
@@ -649,6 +685,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.3",
+      "shortShotNumber": "1.3",
       "rec": {
         "stored": 7
       },
@@ -681,6 +720,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.2",
+      "shotNumber": "A.2.1",
+      "shortShotNumber": "2.1",
       "rec": {
         "stored": 8
       },
@@ -702,6 +744,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.2",
+      "shotNumber": "A.2.2",
+      "shortShotNumber": "2.2",
       "rec": {
         "stored": 1
       },
@@ -744,6 +789,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.3",
+      "shotNumber": "A.3.1",
+      "shortShotNumber": "3.1",
       "rec": {
         "stored": 9
       },
@@ -765,6 +813,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.3",
+      "shotNumber": "A.3.2",
+      "shortShotNumber": "3.2",
       "rec": {
         "stored": 2
       },
@@ -786,6 +837,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.4",
+      "shotNumber": "A.4.1",
+      "shortShotNumber": "4.1",
       "rec": {
         "stored": 3
       },
@@ -828,6 +882,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "",
+      "shotNumber": "",
+      "shortShotNumber": "",
       "rec": {
         "stored": 4
       },
@@ -849,6 +906,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "",
+      "shotNumber": "",
+      "shortShotNumber": "",
       "rec": {
         "stored": 5
       },
@@ -1041,6 +1101,9 @@
   ],
   "brollAfterAnchoring": [
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.1",
+      "shortShotNumber": "1.1",
       "rec": {
         "stored": 0
       },
@@ -1062,6 +1125,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.2",
+      "shortShotNumber": "1.2",
       "rec": {
         "stored": 6
       },
@@ -1083,6 +1149,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.1",
+      "shotNumber": "A.1.3",
+      "shortShotNumber": "1.3",
       "rec": {
         "stored": 7
       },
@@ -1115,6 +1184,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.2",
+      "shotNumber": "A.2.1",
+      "shortShotNumber": "2.1",
       "rec": {
         "stored": 8
       },
@@ -1136,6 +1208,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.2",
+      "shotNumber": "A.2.2",
+      "shortShotNumber": "2.2",
       "rec": {
         "stored": 1
       },
@@ -1178,6 +1253,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.3",
+      "shotNumber": "A.3.1",
+      "shortShotNumber": "3.1",
       "rec": {
         "stored": 9
       },
@@ -1199,6 +1277,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.3",
+      "shotNumber": "A.3.2",
+      "shortShotNumber": "3.2",
       "rec": {
         "stored": 2
       },
@@ -1220,6 +1301,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "A.4",
+      "shotNumber": "A.4.1",
+      "shortShotNumber": "4.1",
       "rec": {
         "stored": 3
       },
@@ -1262,6 +1346,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "",
+      "shotNumber": "",
+      "shortShotNumber": "",
       "rec": {
         "stored": 4
       },
@@ -1283,6 +1370,9 @@
       "origin": "script"
     },
     {
+      "beatNumber": "",
+      "shotNumber": "",
+      "shortShotNumber": "",
       "rec": {
         "stored": 5
       },

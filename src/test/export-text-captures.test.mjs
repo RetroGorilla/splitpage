@@ -36,7 +36,7 @@ test("a Markdown export of a scene that holds only a picture writes the picture,
   const assets = exportAssetsNow(doc);
   assert.ok(assets.picture(doc.beats[0].imageRef.sha256), "setup: the bytes are held");
   const withBytes = toMarkdownDoc(doc, { assets });
-  assert.ok(withBytes.includes("![visual for scene 01](images/scene-01.jpg)"), withBytes);
+  assert.ok(withBytes.includes("![visual for scene A.1](images/beat-A-1.jpg)"), withBytes);
   assert.ok(!withBytes.includes("_(blank scene)_"));
   blobStore.forgetMemory();
   const gone = exportAssetsNow(doc);
@@ -68,7 +68,7 @@ test("the two-column Markdown table takes its picture from the operation's asset
   const held = exportAssetsNow(doc);
   blobStore.forgetMemory();
   const fromMap = toMarkdownTableDoc(doc, { export: true, assets: held });
-  assert.ok(fromMap.includes("![visual for scene 01](data:image/jpeg;base64,"), "the held bytes still give the picture");
+  assert.ok(fromMap.includes("![visual for scene A.1](data:image/jpeg;base64,"), "the held bytes still give the picture");
   const missing = exportAssetsNow(doc);
   intern(jpegBytes(30, 20, 52));
   const fromMissing = toMarkdownTableDoc(doc, { export: true, assets: missing });

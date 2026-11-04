@@ -25,7 +25,7 @@ expect rd(0).getAttribute('aria-disabled') === null
 expect F.state().rows.every(function (r) { return !('lengthSeconds' in r); })
 
 # --- a click opens the box, holding the time ---------------------------------
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 200
 expect document.activeElement.classList.contains('row-read-input')
 expect document.activeElement.value == 0:12
@@ -62,7 +62,7 @@ expect F.state().rows[0].lengthSeconds === 90
 expect document.getElementById('runtime-total').textContent == 1:42
 
 # --- shorter than the words: amber, and the tooltip says why ------------------
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 200
 expect document.activeElement.value == 1:30
 type 5
@@ -75,7 +75,7 @@ expect rd(0).title.indexOf('reads longer') !== -1
 expect getComputedStyle(rd(0)).color !== getComputedStyle(rd(1)).color
 
 # --- not a length: the box stays, marked, and nothing changes -----------------
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 200
 type abc
 key Enter
@@ -91,19 +91,19 @@ expect F.state().rows[0].lengthSeconds === 5
 expect document.activeElement === rd(0)
 
 # --- the other forms Adam signed off ------------------------------------------
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 200
 type 1m 30s
 key Enter
 sleep 300
 expect F.state().rows[0].lengthSeconds === 90
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 200
 type 90s
 key Enter
 sleep 300
 expect F.state().rows[0].lengthSeconds === 90
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 200
 type 1m30
 key Enter
@@ -111,7 +111,7 @@ sleep 300
 expect F.state().rows[0].lengthSeconds === 90
 
 # --- cleared: back to the estimate --------------------------------------------
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 200
 key Backspace
 key Enter
@@ -122,7 +122,7 @@ expect rd(0).classList.contains('is-set') === false
 expect document.getElementById('runtime-total').textContent == 0:24
 
 # --- the estimate, confirmed unchanged, is not turned into a set length -------
-click #rows .row:nth-child(1) .row-read
+click #rows .row:nth-of-type(1) .row-read
 sleep 200
 key Enter
 sleep 200
@@ -136,7 +136,7 @@ expect document.querySelectorAll('#rows .row').length == 3
 expect rd(2).textContent === ''
 # empty, it offers a way in on the row's hover or focus
 expect getComputedStyle(rd(2), '::after').content.indexOf('Set') !== -1
-click #rows .row:nth-child(3) .row-read
+click #rows .row:nth-of-type(3) .row-read
 sleep 200
 expect document.activeElement.classList.contains('row-read-input')
 expect document.activeElement.value === ''

@@ -21,7 +21,7 @@ interface PrompterOpening {
 }
 
 export interface PrompterFeaturePorts {
-  readonly document: Pick<DocumentReader, "current">;
+  readonly document: Pick<DocumentReader, "current" | "numbering">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf"> & {
     readonly productionReaders: Pick<TextServices["productionReaders"], "wordCount">;
   };

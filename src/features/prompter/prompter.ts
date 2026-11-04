@@ -1,5 +1,4 @@
-import { pad2, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
-import { sceneGroups } from "../../core/document/scenes.ts";
+import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { withoutCues } from "../../core/text/cues.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -202,10 +201,8 @@ export function buildPrompterContent(): void {
   state.beatRowIds = [];
   state.beatScenes = [];
   const sceneNames = new Map<string, string>();
-  if (Array.isArray(doc.sections) && doc.sections.length) {
-    for (const group of sceneGroups(doc)) {
-      for (let i = group.start; i < group.end; i++) sceneNames.set((doc.rows[i] as { id: string }).id, group.scene.name);
-    }
+  for (const group of ports.document.numbering().scenes) {
+    for (let i = group.start; i < group.end; i++) sceneNames.set((doc.rows[i] as { id: string }).id, group.letter + (group.name ? " " + group.name : ""));
   }
   state.beatWordStart = [];
   state.beatWordEnd = [];
@@ -310,8 +307,9 @@ export function updatePrompterStatus(): void {
   }
 
   const posEl = document.getElementById("pp-scene-pos");
-  setText(posEl, beat === -1 ? "" : pad2(beat + 1) + " / " + pad2(state.beatRowIds.length));
-  setText(document.getElementById("pp-scene-pos-sr"), beat === -1 ? "" : "Scene " + (beat + 1) + " of " + state.beatRowIds.length);
+  const number = ports.document.numbering().beats[state.beatRowIds[beat] ?? ""]?.full ?? "";
+  setText(posEl, number);
+  setText(document.getElementById("pp-scene-pos-sr"), beat === -1 ? "" : "Scene " + number + ", " + state.beatRowIds.length + " scenes");
   setText(document.getElementById("pp-scene-start"), beat === -1 ? "" : formatTimecode(state.beatStartSec[beat] as number));
   const sceneEl = document.getElementById("pp-section");
   const sceneName = beat === -1 ? "" : state.beatScenes[beat] ?? "";
@@ -409,7 +407,7 @@ export function updateBeatReadout(): void {
   const el = document.getElementById("pp-scene-readout");
   if (!el) return;
   if (!state.promptBeatMode || state.promptBeatIndex === -1 || !state.beatRowIds.length) { el.textContent = ""; return; }
-  el.textContent = "Scene " + (state.promptBeatIndex + 1) + " of " + state.beatRowIds.length;
+  el.textContent = "Scene " + (ports.document.numbering().beats[state.beatRowIds[state.promptBeatIndex] ?? ""]?.full ?? "") + " of " + state.beatRowIds.length;
 }
 
 function updatePrompterBeatModeUI(): void {

@@ -12,7 +12,7 @@ import type { TextServices } from "../../application/text/services.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 
 export interface ReadTimePorts {
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly text: Pick<TextServices, "productionReaders">;
   readonly edits: Pick<DocumentEdits, "run" | "stamps">;
   readonly undo: Pick<UndoControl, "undo" | "redo">;
@@ -61,7 +61,7 @@ export interface Beats {
 }
 
 export interface BeatMediaPorts {
-  readonly document: Pick<DocumentReader, "read">;
+  readonly document: Pick<DocumentReader, "read" | "numbering">;
   readonly notices: Pick<NoticePort, "show">;
   readonly ownership: Operations;
   readonly pictures: Pick<PictureStore, "internDataUrl" | "persist">;

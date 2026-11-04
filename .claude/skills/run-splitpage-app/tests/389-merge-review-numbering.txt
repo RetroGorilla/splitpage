@@ -1,0 +1,55 @@
+open
+eval window.F=window.__splitpageFormats; window.openNumberingBase=async function(title){window.base={schema:2,title:title,docId:'d'+'1'.repeat(32),rows:[{id:'a',visualText:'',audioText:'A',status:'todo'},{id:'c',visualText:'',audioText:'Original',status:'todo'}],comments:[]};window.t0=Date.now()-100000;window.disk={name:'numbering.splitpage',_body:JSON.stringify(base),_mtime:t0,writes:0,getFile:async function(){return new File([this._body],this.name,{lastModified:this._mtime});},createWritable:async function(){disk.writes++;return {write:async function(b){disk._body=b;},close:async function(){}};}};await F.openFile(await disk.getFile(),disk);if(F.autosave.enabled())document.getElementById('menu-autosave').click();return true;}; openNumberingBase('Inserted beat numbering')
+wait F.state().title === 'Inserted beat numbering' && F.hasDiskBase()
+expect !F.autosave.enabled()
+eval document.querySelector('#rows .row[data-id="a"] [data-action="insert-below"]').click(); true
+wait F.state().rows.length === 3
+eval window.inserted=F.state().rows[1].id; true
+caret #rows .row:nth-of-type(2) .audio-cell .cell-editable
+type Inserted
+eval document.activeElement.blur(); document.querySelector('#rows .row:nth-of-type(2) .row-more').click(); document.querySelector('#rows .row:nth-of-type(2) [data-action="add-section"]').click(); true
+wait !!document.querySelector('.section-rename input')
+press Local scene
+key none Enter
+wait F.state().sections && F.state().sections[0].firstSceneId === inserted
+expect document.querySelector('#rows .row:nth-of-type(2) .row-num').textContent === 'B.1'
+eval var changed=F.clone(base); changed.title='Disk title'; disk._body=JSON.stringify(changed); disk._mtime=t0+200000; F.save(); true
+wait !document.getElementById('file-conflict-modal').hidden && !document.getElementById('file-conflict-merge').hidden
+jsclick #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+expect Array.from(document.querySelectorAll('.merge-group-head'),h=>h.firstChild.textContent).filter(h=>h.startsWith('Scene ')).join('|') === 'Scene B.1'
+expect disk.writes === 0
+jsclick #merge-review-confirm
+wait document.getElementById('merge-review-modal').hidden
+expect F.state().rows.map(r=>r.id).join('|') === 'a|'+inserted+'|c'
+expect F.state().sections[0].firstSceneId === inserted
+expect Array.from(document.querySelectorAll('#rows .row-num'),n=>n.textContent).join('|') === 'A.1|B.1|B.2'
+expect disk.writes === 0
+eval openNumberingBase('Same order numbering')
+wait F.state().title === 'Same order numbering' && F.state().rows.length === 2
+caret #rows .row[data-id="c"] .audio-cell .cell-editable
+type Local
+eval document.activeElement.blur(); document.querySelector('#rows .row[data-id="c"] .row-more').click(); document.querySelector('#rows .row[data-id="c"] [data-action="add-section"]').click(); true
+wait !!document.querySelector('.section-rename input')
+press Local scene
+key none Enter
+wait F.state().sections && F.state().sections[0].firstSceneId === 'c'
+expect document.querySelector('#rows .row[data-id="c"] .row-num').textContent === 'B.1'
+eval var changed=F.clone(base); changed.rows[1].audioText='Disk words'; disk._body=JSON.stringify(changed); disk._mtime=t0+200000; F.save(); true
+wait !document.getElementById('file-conflict-modal').hidden && !document.getElementById('file-conflict-merge').hidden
+jsclick #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+expect document.querySelector('.merge-group-head').firstChild.textContent === 'Scene B.1 (Open here) / A.2 (On disk)'
+viewport 375 812 mobile
+eval document.querySelectorAll('#toast-host .toast-dismiss').forEach(b=>b.click()); true
+wait document.querySelectorAll('#toast-host .toast').length === 0 && getComputedStyle(document.getElementById('merge-review-modal')).opacity === '1' && getComputedStyle(document.querySelector('#merge-review-modal .modal-panel')).opacity === '1'
+expect document.documentElement.scrollWidth <= innerWidth
+expect document.querySelector('.merge-group-head').getBoundingClientRect().right <= innerWidth
+shot merge-references-phone
+jsclick #merge-review-confirm
+wait document.getElementById('merge-review-modal').hidden
+expect F.state().rows.map(r=>r.id).join('|') === 'a|c'
+expect F.state().sections[0].firstSceneId === 'c'
+expect document.querySelector('#rows .row[data-id="c"] .row-num').textContent === 'B.1'
+expect disk.writes === 0
+quit

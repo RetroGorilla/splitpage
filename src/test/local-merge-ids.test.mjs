@@ -44,7 +44,7 @@ test("merge review: a scene only I hold named constructor is listed, and a scene
       doc([row("r1", "one"), row("__proto__", "two, mine"), row("constructor", "MINE ONLY")]),
       doc([row("r1", "one"), row("__proto__", "two, theirs")])
     );
-    assert.deepEqual(r.heads, ["Scene 02", "Scene 03"]);
+    assert.deepEqual(r.heads, ["Scene A.2", "Scene A.3"]);
     assert.match(r.text, /MINE ONLY/);
   } finally {
     loadTestDocument(saved);

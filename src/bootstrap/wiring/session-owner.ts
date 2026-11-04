@@ -9,6 +9,8 @@ import { syncCommentAnchors } from "../../core/text/anchors.ts";
 import { systemClock } from "../../adapters/identity/ids.ts";
 import { cellOf, scriptCellOf } from "../richtext.ts";
 import { documentGuardOn, documentView, unwrapped } from "../../application/identity/document-guard.ts";
+import { createNumberingReader } from "../../application/session/numbering.ts";
+import type { DocumentNumberingReader } from "../../application/session/numbering.ts";
 
 export type SessionReplayRunner = (replay: Replay) => CommandOutcome;
 
@@ -30,6 +32,7 @@ export interface SessionBridgePorts {
 }
 
 interface Started {
+  readonly numbering: DocumentNumberingReader;
   readonly ports: SessionBridgePorts;
   current: DocumentSession;
   ended: boolean;
@@ -71,7 +74,7 @@ function hearing(entry: Hearing): SessionListener {
   };
 }
 
-function createSession(ports: SessionBridgePorts, after: SessionCounters): DocumentSession {
+function createSession(ports: SessionBridgePorts, after: SessionCounters, numbering: DocumentNumberingReader): DocumentSession {
   const made = createDocumentSession({
     entry: ports.entry,
     undo: ports.undo.adapter,
@@ -94,6 +97,7 @@ function createSession(ports: SessionBridgePorts, after: SessionCounters): Docum
     timers: ports.timers,
     after: after
   });
+  made.subscribe(change => { numbering.changed(change.changes); });
   changeListeners.forEach(function (entry) { made.subscribe(hearing(entry)); });
   return made;
 }
@@ -174,7 +178,8 @@ const STALE: CommandOutcome = Object.freeze({ kind: "noop" });
 
 export function startSessionBridge(ports: SessionBridgePorts): () => void {
   if (started) throw new Error("The document session is already started; stop it first");
-  const mine: Started = { ports: ports, current: createSession(ports, { epoch: 0, generation: 0 }), ended: false, mergeBase: null };
+  const numbering = createNumberingReader();
+  const mine: Started = { ports: ports, numbering, current: createSession(ports, { epoch: 0, generation: 0 }, numbering), ended: false, mergeBase: null };
   const releases: (() => void)[] = [];
   const release = (): void => {
     if (started === mine) started = null;
@@ -213,7 +218,7 @@ export function adoptReplacement(doc: ValidatedDocument): void {
   const now = running();
   if (now.ended) return;
   const old = now.current;
-  now.current = createSession(now.ports, { epoch: old.epoch(), generation: old.generation() });
+  now.current = createSession(now.ports, { epoch: old.epoch(), generation: old.generation() }, now.numbering);
   old.dispose();
   now.current.adopt(unwrapped(doc));
   announceReplaced();
@@ -226,6 +231,10 @@ export function heldDocument(): ValidatedDocument | null {
 export function currentDocument(): ValidatedDocument | null {
   const doc = heldDocument();
   return doc === null ? null : documentView(doc);
+}
+
+export function documentNumbering() {
+  return running().numbering.read(currentDocument());
 }
 
 

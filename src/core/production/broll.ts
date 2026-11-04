@@ -10,6 +10,8 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
+import { deriveDocumentNumbering } from "../document/numbering.ts";
+import type { DocumentNumbering } from "../document/numbering.ts";
 import { canShareLoadId } from "../document/load-ids.ts";
 import type { Frozen } from "../document/freeze.ts";
 import { cappedLongText, cappedName, plainText, unitCutName } from "../document/text-policy.ts";
@@ -86,6 +88,9 @@ type BrollEntryProp = {
 };
 
 export type BrollEntry = {
+  beatNumber: string;
+  shotNumber: string;
+  shortShotNumber: string;
   rec: BrollShot;
   id: string;
   name: string | undefined;
@@ -362,8 +367,12 @@ function brollEntryProps(rec: BrollShot, found: BrollFound | null, registry: Reg
   return out;
 }
 
-function brollEntryFrom(rec: BrollShot, found: BrollFound | null, registry: RegistryList): BrollEntry {
+function brollEntryFrom(rec: BrollShot, found: BrollFound | null, registry: RegistryList, numbering: DocumentNumbering): BrollEntry {
+  const shot = found ? numbering.shot(found.rowId, found.ordinal) : null;
   return {
+    beatNumber: found ? numbering.beats[found.rowId]?.full ?? "" : "",
+    shotNumber: shot?.full ?? "",
+    shortShotNumber: shot?.short ?? "",
     rec: rec,
     id: rec.id,
     name: found ? found.name : rec.name,
@@ -414,7 +423,8 @@ export function brollEntries(
   state: Frozen<ValidatedDocument>,
   readers: ProductionReaders,
   ids: IdSource,
-  plainTextOf: FieldText
+  plainTextOf: FieldText,
+  numbering: DocumentNumbering = deriveDocumentNumbering(state)
 ): BrollEntry[] {
   const shots = state.brollShots;
   const live = collectBrollFromRows(state.rows, readers);
@@ -433,11 +443,11 @@ export function brollEntries(
       rec = shots[at] as BrollShot;
     }
     claimed[rec.id] = true;
-    entries.push(brollEntryFrom(rec, found, state.productionTags));
+    entries.push(brollEntryFrom(rec, found, state.productionTags, numbering));
   });
 
   shots.forEach(function (rec) {
-    if (!claimed[rec.id]) entries.push(brollEntryFrom(rec, null, state.productionTags));
+    if (!claimed[rec.id]) entries.push(brollEntryFrom(rec, null, state.productionTags, numbering));
   });
 
   return entries;

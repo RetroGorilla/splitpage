@@ -36,6 +36,6 @@ expect document.getElementById('pp-speed-value').textContent === window.__speed0
 eval (function(){ var s = document.getElementById('prompter-scroll'); s.scrollTop = s.scrollHeight; s.dispatchEvent(new Event('scroll')); return true; })()
 sleep 300
 expect (function(){ var t = document.getElementById('pp-elapsed').textContent.split(':'); return (+t[0]) * 60 + (+t[1]) >= 24; })()
-expect document.getElementById('pp-scene-pos').textContent == 03 / 03
+expect document.getElementById('pp-scene-pos').textContent == A.3
 jsclick #pp-close
 wait document.getElementById('prompter').hidden

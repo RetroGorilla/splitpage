@@ -25,7 +25,7 @@ type PanelNullableCall<F extends (...args: never[]) => unknown, K extends keyof 
   (...args: PanelNullableArgs<Parameters<F>, K>) => ReturnType<F>;
 import { tagStatusLampHtml } from "../common/tag-status.ts";
 import { nextTagStatus, normalizeTagName } from "../../core/document/tags.ts";
-import { formatDuration, pad2, rowSeconds } from "../../core/production/timing.ts";
+import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../../core/production/looks.ts";
 import { cssAttr } from "../common/dom.ts";
 import { idMap } from "../../core/document/id-map.ts";
@@ -210,7 +210,7 @@ function beatLinksHtml(item: PresentedProductionEntry) {
   });
   order.sort(function (a, b) { return a.m.rowIndex - b.m.rowIndex; });
   return joinBeatLinks(order.map(function (s) {
-    const num = pad2(s.m.rowIndex + 1);
+    const num = ((ports as TagPanelPorts).document.numbering().beats[s.m.rowId]?.full ?? "");
     const label = "Scene " + num + " · " +
       (s.visual && s.audio ? "Visual and Audio" : s.visual ? "Visual" : "Audio") +
       (s.n > 1 ? " · " + s.n + " mentions" : "") + " — go to it";
@@ -230,7 +230,7 @@ function mentionLinksHtml(item: PresentedProductionEntry) {
   });
   return order.map(function (k) {
     const entry = seen[k] as { n: number; m: PanelTagMention };
-    const num = pad2(entry.m.rowIndex + 1);
+    const num = ((ports as TagPanelPorts).document.numbering().beats[entry.m.rowId]?.full ?? "");
     return '<button type="button" class="tag-mention jump-link" data-action="jump-tag" data-row="' +
       escapeHtml(entry.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="Go to this mention in scene ' +
       num + '"><span class="tag-figure">' + num + '</span> ' +
@@ -449,7 +449,7 @@ function renderProductionByBeat(all: readonly PresentedProductionEntry[]) {
   return indexes.map(function (idx) {
     const items = Object.keys(byRow[idx] as Record<string, PresentedProductionEntry>).map(function (k) { return (byRow[idx] as Record<string, PresentedProductionEntry>)[k] as PresentedProductionEntry; });
     return '<section class="tag-scene-group">' +
-      '<h3 class="tag-scene-group-head">Scene <span class="tag-figure">' + pad2(idx + 1) + '</span></h3>' +
+      '<h3 class="tag-scene-group-head">Scene <span class="tag-figure">' + ((ports as TagPanelPorts).document.numbering().beats[(ports as TagPanelPorts).document.current()?.rows[idx]?.id ?? ""]?.full ?? "") + '</span></h3>' +
       '<ul class="tag-pills">' +
         items.map(function (item) {
           return '<li class="tag-pill" style="--dot:' + item.cat.color + '">' +
@@ -552,10 +552,10 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
           joinBeatLinks(g.rows.map(function (i) {
             const row = doc.rows[i] as DocumentView["rows"][number];
             const st = rowStatus(row.status) || (ROW_STATUSES[0] as PanelRowStatus);
-            const label = "Scene " + pad2(i + 1) + " · " + st.label + " — go to it";
+            const label = "Scene " + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") + " · " + st.label + " — go to it";
             return '<button type="button" class="tag-scene jump-link' + (row.status === "shot" ? ' is-shot' : '') +
               '" data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
-              '" aria-label="' + escapeHtml(label) + '">' + pad2(i + 1) +
+              '" aria-label="' + escapeHtml(label) + '">' + ((ports as TagPanelPorts).document.numbering().beats[row.id]?.full ?? "") +
               (row.status === "shot" ? iconHtml("i-check", "tag-scene-tick") : '') + '</button>';
           })) +
         '</dd>' +

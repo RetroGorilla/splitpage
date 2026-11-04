@@ -1,3 +1,4 @@
+import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -16,10 +17,14 @@ type Entry = Parameters<typeof matchesFilter>[0];
 type Rows = Parameters<typeof brollGroups>[2]["rows"];
 
 function entry(id: string, extra?: Partial<Entry>): Entry {
-  return Object.assign({
+  const result = Object.assign({
     id: id, name: id, desc: "", rowId: "r1", rowIndex: 0, ordinal: 0, status: "unshot", reshoot: false,
     notes: "", owner: "", audioRef: "", location: "", props: []
   }, extra || {}) as Entry;
+  const rows = Array.from({ length: 12 }, (_, i) => ({ id: "r" + (i + 1) }));
+  const n = deriveDocumentNumbering({ rows });
+  const idAt = rows[result.rowIndex]?.id ?? null;
+  return { ...result, beatNumber: n.beats[idAt ?? ""]?.full ?? "", shotNumber: n.shot(idAt, result.ordinal)?.full ?? "" };
 }
 
 const PEOPLE = [{ id: "p1", name: "Sam" }, { id: "p2", name: "Alex" }];
@@ -50,9 +55,9 @@ test("the counts and the page summary say how many are shot and how many flagged
   assert.equal(pageSummaryText([]), "0 of 0 shot");
 });
 
-test("a scene is numbered from one with two digits, a start is a timecode, and a shot with no scene has neither", () => {
-  assert.equal(beatLabel(entry("a", { rowIndex: 0 })), "01");
-  assert.equal(beatLabel(entry("a", { rowIndex: 11 })), "12");
+test("a scene uses the shared unpadded number, a start is a timecode, and a shot with no scene has neither", () => {
+  assert.equal(beatLabel(entry("a", { rowIndex: 0 })), "A.1");
+  assert.equal(beatLabel(entry("a", { rowIndex: 11 })), "A.12");
   assert.equal(beatLabel(entry("a", { rowIndex: -1 })), "");
   const starts = { r1: 0, r2: 65 };
   assert.equal(startOf(entry("a", { rowId: "r1" }), starts), "00:00", "a scene that starts at zero still has a start");
@@ -67,7 +72,7 @@ test("a shot's file record names its scene, owner, status and props, with defaul
     props: [{ key: "t:k", id: "t_k", name: "Kettle", status: "have" }, { key: "n:x", id: "", name: "Boat hook", status: "" }]
   });
   assert.deepEqual(shotRecordForFile(full, PEOPLE), {
-    beat: "03", name: "Gulls", status: "Shot", shot: true, flagged: true, location: "Pier",
+    beat: "A.3", name: "A.3.1 Gulls", status: "Shot", shot: true, flagged: true, location: "Pier",
     props: ["Kettle", "Boat hook"], propsWithStatus: ["Kettle (have it)", "Boat hook"],
     cuts: "cut 3", owner: "Sam", note: "wide", desc: "over the pier"
   });
@@ -87,8 +92,8 @@ test("shots group by scene in script order with the added ones last, or flat in 
   ];
   const groups = brollGroups(shots, "scene", { rows: rows, people: PEOPLE });
   assert.deepEqual(groups.map((g) => [g.key, g.kind, g.label, g.none, g.items.map((e) => e.id)]), [
-    ["r:r1", "scene", "Scene 01", false, ["one-a", "one-b"]],
-    ["r:r2", "scene", "Scene 02", false, ["two"]],
+    ["r:r1", "scene", "Scene A.1", false, ["one-a", "one-b"]],
+    ["r:r2", "scene", "Scene A.2", false, ["two"]],
     ["added", "added", "Added here", false, ["added"]]
   ]);
   assert.equal(groups[0]?.row?.id, "r1");

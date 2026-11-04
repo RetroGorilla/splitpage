@@ -34,7 +34,7 @@ interface RowDraftEditing {
 }
 
 export interface RowsRenderPorts {
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "allowed">;
   readonly text: Pick<TextServices, "sanitizeHtml" | "storedHtmlFromDom" | "fromHtml" | "productionReaders">;
   readonly video: {

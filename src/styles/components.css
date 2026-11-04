@@ -1940,7 +1940,8 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
 .rd-section {
   position: absolute;
   box-sizing: border-box;
-  padding: 0 8px;
+  padding: 0;
+  text-indent: 8px;
   border-left: 1px solid var(--border-strong);
   overflow: hidden;
   text-overflow: ellipsis;

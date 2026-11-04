@@ -5,6 +5,7 @@ import { startLocalMerge } from "../../../src/features/merge/local-merge.ts";
 import type { MergeReviewPorts } from "../../../src/features/merge/ports.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
+import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 import { jsonCopy, migratedThenSet } from "../../core/migrate-ports.ts";
 import { textMergeContext } from "../../../src/core/merge/text-field.ts";
 import type { TagSide } from "../../../src/core/merge/text-field.ts";
@@ -18,7 +19,7 @@ realm.document = win.document;
 const DOC_ID = "d" + "1".repeat(32);
 
 interface Row { id: string; audioText: string; visualText: string; status: string; imageRef?: unknown }
-interface Doc { schema: number; title: string; docId: string; rows: Row[]; productionTags: unknown[]; people: unknown[]; brollShots: unknown[]; comments: unknown[] }
+interface Doc { schema: number; title: string; docId: string; rows: Row[]; sections?: DocumentScene[]; productionTags: unknown[]; people: unknown[]; brollShots: unknown[]; comments: unknown[] }
 
 function row(id: string, audioText: string, extra: Partial<Row> = {}): Row {
   return { id, audioText, visualText: "", status: "todo", ...extra };
@@ -111,6 +112,72 @@ function heads(): string[] {
   return Array.from(win.document.querySelectorAll("#merge-review-list .merge-group-head"), (h) => (h.firstChild as Text).textContent ?? "");
 }
 
+test("merge review numbers a locally inserted beat from its actual scene", async () => {
+  const base = doc([row("a", "A"), row("c", "C")]);
+  const mine = validated({ ...copy(base), rows: [row("a", "A"), row("b", "Inserted"), row("c", "C")],
+    sections: [{ id: "local", name: "Local scene", firstSceneId: "b" }] });
+  const { ports, calls } = setup({ mine, mergeBase: base, parsed: () => Promise.resolve({ state: copy(base) }) });
+  const merge = startLocalMerge(ports);
+  try {
+    await merge.offer(file(), null);
+    merge.open();
+    assert.deepEqual(heads(), ["Scene B.1"]);
+    assert.match(el("merge-review-list").textContent ?? "", /Inserted/);
+    assert.equal(calls.applied.length, 0);
+    assert.deepEqual(mine.rows.map(r => r.id), ["a", "b", "c"]);
+  } finally {
+    merge.dispose();
+  }
+});
+
+test("merge review identifies both actual references when only the local header changes membership", async () => {
+  const base = doc([row("a", "A"), row("b", "Original")]);
+  const mine = validated({ ...copy(base), rows: [row("a", "A"), row("b", "Local words")],
+    sections: [{ id: "local", name: "Local scene", firstSceneId: "b" }] });
+  const theirs = doc([row("a", "A"), row("b", "Disk words")]);
+  const { ports } = setup({ mine, mergeBase: base, parsed: () => Promise.resolve({ state: copy(theirs) }) });
+  const merge = startLocalMerge(ports);
+  try {
+    await merge.offer(file(), null);
+    merge.open();
+    assert.deepEqual(heads(), ["Scene B.1 (Open here) / A.2 (On disk)"]);
+    assert.deepEqual(Array.from(win.document.querySelectorAll(".merge-side-body"), side => side.textContent),
+      ["Local words", "Disk words"]);
+  } finally {
+    merge.dispose();
+  }
+});
+
+test("merge review numbers a disk-only beat from the complete disk layout", async () => {
+  const mine = doc([row("a", "A"), row("c", "C")]);
+  const theirs = validated({ ...copy(mine), rows: [row("a", "A"), row("b", "Disk insertion"), row("c", "C")],
+    sections: [{ id: "disk", name: "Disk scene", firstSceneId: "b" }] });
+  const { ports } = setup({ mine, parsed: () => Promise.resolve({ state: copy(theirs) }) });
+  const merge = startLocalMerge(ports);
+  try {
+    await merge.offer(file(), null);
+    merge.open();
+    assert.deepEqual(heads(), ["Scene B.1"]);
+  } finally {
+    merge.dispose();
+  }
+});
+
+test("merge review keeps side references when a common beat has moved", async () => {
+  const base = doc([row("a", "A"), row("b", "B")]);
+  const mine = doc([row("b", "Local words"), row("a", "A")]);
+  const theirs = doc([row("a", "A"), row("b", "Disk words")]);
+  const { ports } = setup({ mine, mergeBase: base, parsed: () => Promise.resolve({ state: copy(theirs) }) });
+  const merge = startLocalMerge(ports);
+  try {
+    await merge.offer(file(), null);
+    merge.open();
+    assert.deepEqual(heads(), ["Scene A.1 (Open here) / A.2 (On disk)"]);
+  } finally {
+    merge.dispose();
+  }
+});
+
 test("merge review: offers a file that parses, lists each side's changes and confirms through the ports", async () => {
   const base = doc([row("r1", "one two"), row("r2", "kept")]);
   const mine = doc([row("r1", "one two"), row("r2", "kept")]);
@@ -126,7 +193,7 @@ test("merge review: offers a file that parses, lists each side's changes and con
     merge.open();
     assert.equal(calls.contexts.length, 1);
     assert.deepEqual(calls.contexts[0], { base: base, mine: mine, theirs: theirs }, "the text context is asked for base, mine and theirs");
-    assert.deepEqual(heads(), ["Scene 01", "Scene 02"]);
+    assert.deepEqual(heads(), ["Scene A.1", "Scene A.2"]);
     assert.match(el("merge-review-list").innerHTML, /<span class="diff-del">two<\/span>/);
     assert.match(el("merge-review-list").innerHTML, /<span class="diff-add">three<\/span>/);
     assert.match(el("merge-review-list").textContent ?? "", /The file's version is taken/);

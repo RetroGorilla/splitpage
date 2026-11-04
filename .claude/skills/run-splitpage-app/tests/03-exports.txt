@@ -26,10 +26,10 @@ expect window.__md.indexOf('gaffer tape') !== -1
 # #169's look: the meta line, the gutter under each heading, the breakdown by
 # category with a table of its own
 expect /^_\d+ scenes? · \d+:\d\d running time · \d+ of \d+ shot · [^_\n]+_$/m.test(window.__md)
-expect /^### Scene 01 · 00:00\n\n\*\*(To do|Ready|Shot)\*\* · Read \d+:\d\d/m.test(window.__md)
+expect /^### Scene A\.1 · 00:00\n\n\*\*(To do|Ready|Shot)\*\* · Read \d+:\d\d/m.test(window.__md)
 expect window.__md.indexOf('### Props & set dressing (1)') !== -1
 expect window.__md.indexOf('| Item | Status | Scenes | Assigned to | Notes |') !== -1
-expect window.__md.indexOf('| gaffer tape | Needed | 01 | — |  |') !== -1
+expect window.__md.indexOf('| gaffer tape | Needed | A.1 | — |  |') !== -1
 expect window.__md.indexOf('| Category | Item |') === -1
 
 # --- Markdown, two columns ----------------------------------------------------
@@ -38,7 +38,7 @@ jsclick #file-menu [data-file-action="export-md-table"]
 sleep 1200
 eval (async function(){window.__mdt = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 expect window.__mdt.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
-expect /^\| 01 \| 00:00 \| (To do|Ready|Shot) \| /m.test(window.__mdt)
+expect /^\| A.1 \| 00:00 \| (To do|Ready|Shot) \| /m.test(window.__mdt)
 expect window.__mdt.indexOf('### Props & set dressing (1)') !== -1
 
 # --- breakdown CSV ----------------------------------------------------------
@@ -50,7 +50,7 @@ expect window.__csv.indexOf('Category,Item,Status,Assigned to') !== -1
 expect window.__csv.indexOf('Needed') !== -1
 # #169's columns only at the end, where a sheet built on the old ones never looks
 expect /^﻿?Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group\r\n/.test(window.__csv)
-expect window.__csv.indexOf('Prop,gaffer tape,Needed,,1,01,yes,,,00:00,Props & set dressing') !== -1
+expect window.__csv.indexOf('Prop,gaffer tape,Needed,,1,A.1,yes,,,00:00,Props & set dressing') !== -1
 
 # --- Word -------------------------------------------------------------------
 jsclick #btn-file
@@ -84,8 +84,8 @@ eval (async function(){window.__scsv = await window.__blobs[window.__blobs.lengt
 # #169: where each scene starts, its status and read time, the tags in it,
 # its b-roll and open threads — "Scene" first, Visual and Audio by name
 expect /^\uFEFF?Scene,Start,Status,Read,Read set by hand,Visual,Audio,Tags,B-roll,Open comments\r\n/.test(window.__scsv)
-expect /\r\n02,\d\d:\d\d,To do,\d+:\d\d,,[^\r]*word for word[^\r]*,,,1\r\n/.test(window.__scsv)
-expect /\r\n01,00:00,(To do|Ready|Shot),\d+:\d\d,,/.test(window.__scsv)
+expect /\r\nA\.2,\d\d:\d\d,To do,\d+:\d\d,,[^\r]*word for word[^\r]*,,,1\r\n/.test(window.__scsv)
+expect /\r\nA\.1,00:00,(To do|Ready|Shot),\d+:\d\d,,/.test(window.__scsv)
 expect window.__scsv.indexOf(',Prop: gaffer tape; Location: kitchen,,') !== -1
 expect /\r\nTotal,,\d+ of \d+ shot,\d+:\d\d,,,,,,/.test(window.__scsv)
 

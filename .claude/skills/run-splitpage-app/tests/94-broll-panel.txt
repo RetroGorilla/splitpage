@@ -92,7 +92,7 @@ expect Array.prototype.every.call(document.querySelectorAll('#broll-list .broll-
 expect row('bs6').getBoundingClientRect().height === 44
 expect document.querySelectorAll('#broll-panel .tag-scene, #broll-panel .tag-entity').length === 0
 expect document.getElementById('broll-panel').textContent.indexOf('No audio reference') === -1
-expect heads() === 'Scene 01|Scene 02|Scene 03|Scene 04|Added here'
+expect heads() === 'Scene A.1|Scene A.2|Scene A.3|Scene A.4|Added here'
 # where each scene starts, in the mono (#169: the board's group head; the
 # scene's audio used to follow, cut short)
 expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-group-head .broll-group-time'), function(t){ return t.textContent; }).join(' ') === '00:00 00:07 00:13 00:17'
@@ -137,8 +137,8 @@ expect document.querySelector('#broll-list .broll-card .broll-status-btn').textC
 expect document.querySelector('#broll-list .broll-card .broll-status-btn').getAttribute('data-status') === 'unshot'
 expect !document.querySelector('#broll-list .broll-card .broll-status-field .ev-chevron')
 expect document.querySelector('#broll-list .broll-card .broll-flag-btn').classList.contains('is-active')
-expect document.querySelector('#broll-list .broll-card .broll-scene-n').textContent === '01'
-expect document.querySelector('#broll-list .broll-card .broll-scene-link').textContent === '01 · 00:00'
+expect document.querySelector('#broll-list .broll-card .broll-scene-n').textContent === 'A.1'
+expect document.querySelector('#broll-list .broll-card .broll-scene-link').textContent === 'A.1 · 00:00'
 expect parseFloat(getComputedStyle(document.querySelector('#broll-list .broll-card .broll-label')).width) === 88
 # one value column for every row: a flagged shot with no description line
 # (this one) as much as one with (bs1, below)

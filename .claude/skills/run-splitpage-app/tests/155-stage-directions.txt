@@ -103,14 +103,14 @@ expect cellV().querySelector('.stage-dir') === null
 
 # --- the Direction button: on over the words, off again ----------------------
 eval document.activeElement.blur()
-caret #rows .row:nth-child(2) .audio-cell .cell-editable
+caret #rows .row:nth-of-type(2) .audio-cell .cell-editable
 eval clearCell(cellA(1))
 press Now hold up the mug and smile.
 sleep 300
 expect selText(cellA(1), 4, 16) === 'hold up the '
 expect !tb(1).classList.contains('is-active')
 eval window.__u0 = U.sizes().undo
-jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+jsclick #rows .row:nth-of-type(2) .audio-cell .mini-toolbar [data-cmd="direction"]
 sleep 250
 # its trailing space stays narration
 expect aud(1) == Now <span class="stage-dir">hold up the</span> mug and smile.
@@ -120,23 +120,23 @@ expect getSelection().toString() == hold up the
 expect tb(1).classList.contains('is-active')
 # pressed again over the same words: off
 eval selText(cellA(1), 4, 15)
-jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+jsclick #rows .row:nth-of-type(2) .audio-cell .mini-toolbar [data-cmd="direction"]
 sleep 250
 expect aud(1) == Now hold up the mug and smile.
 # with only a caret inside one, the button takes that one off
 eval selText(cellA(1), 20, 29)
-jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+jsclick #rows .row:nth-of-type(2) .audio-cell .mini-toolbar [data-cmd="direction"]
 sleep 250
 expect aud(1) == Now hold up the mug <span class="stage-dir">and smile</span>.
 eval selText(cellA(1), 24, 24)
 sleep 100
 expect tb(1).classList.contains('is-active')
-jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+jsclick #rows .row:nth-of-type(2) .audio-cell .mini-toolbar [data-cmd="direction"]
 sleep 250
 expect aud(1) == Now hold up the mug and smile.
 # and with nothing to act on, it says what to do
 eval selText(cellA(1), 2, 2)
-jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+jsclick #rows .row:nth-of-type(2) .audio-cell .mini-toolbar [data-cmd="direction"]
 sleep 250
 expect aud(1) == Now hold up the mug and smile.
 expect Array.prototype.some.call(document.querySelectorAll('.toast'), function (t) { return t.textContent.indexOf('((like this))') !== -1; })

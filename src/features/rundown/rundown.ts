@@ -1,9 +1,8 @@
 import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { sceneGroups } from "../../core/document/scenes.ts";
 import { contentMemo } from "../../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../../core/document/text-policy.ts";
-import { pad2, formatDuration, rowSeconds } from "../../core/production/timing.ts";
+import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import { brollCountIn } from "../../core/production/broll.ts";
 import { cssAttr } from "../common/dom.ts";
@@ -533,7 +532,7 @@ function brollTicksHtml(row: BeatRow): string {
 
 function blockHtml(row: BeatRow, b: RundownBlock, isCurrent: boolean, focusable: boolean): string {
   const st = rowStatus(row.status) || ROW_STATUSES[0] as StatusLook;
-  const num = pad2(b.index + 1);
+  const num = ports.document.numbering().beats[row.id]?.full ?? "";
   const len = formatDuration(b.seconds);
   const label = "Scene " + num + ", " + len + ", " + st.label.toLowerCase() + (isCurrent ? " — current scene" : "");
   const snip = beatSnippet(row);
@@ -542,7 +541,7 @@ function blockHtml(row: BeatRow, b: RundownBlock, isCurrent: boolean, focusable:
     (isCurrent ? ' aria-current="true"' : '') +
     ' style="left:' + b.left + 'px;width:' + b.width + 'px" aria-label="' + escapeHtml(label) +
     '" title="Scene ' + num + ' · ' + len + ' · ' + escapeHtml(st.label) + '">' +
-    '<span class="rd-in"><span class="rd-num">' + num + '</span>' +
+    '<span class="rd-in"><span class="rd-num">' + (ports.document.numbering().beats[row.id]?.short ?? "") + '</span>' +
     (st.id === "shot" ? CHECK_SVG : '') +
     '<span class="rd-len">' + len + '</span>' +
     '<span class="rd-stat">' + escapeHtml(st.label) + '</span>' +
@@ -615,17 +614,17 @@ export function renderRundown(): void {
   const right = Math.max(0, tenth(trackWidth - width)) + "px";
   if (blocksEl.style.right !== right) blocksEl.style.right = right;
 
-  const hasScenes = doc && Array.isArray(doc.sections) && doc.sections.length;
+  const hasScenes = !!rows.length;
   const scenesEl = hasScenes || state.lastScenesHtml ? strip.querySelector<HTMLElement>(".rundown-sections") : null;
   if (scenesEl) {
-    const groups = hasScenes ? sceneGroups(doc) : [];
+    const groups = ports.document.numbering().scenes;
     scenesEl.hidden = !groups.length || state.minimized;
     if (groups.length || state.lastScenesHtml) {
       const labels = groups.map(group => {
         const first = blocks[group.start], last = blocks[group.end - 1];
         if (!first || !last) return "";
-        return '<span class="rd-section" data-start="' + group.start + '" data-end="' + group.end + '" title="' + escapeHtml(group.scene.name) + '" style="left:' + first.left +
-          'px;width:' + (last.left + last.width - first.left) + 'px">' + escapeHtml(group.scene.name) + '</span>';
+        return '<span class="rd-section" data-start="' + group.start + '" data-end="' + group.end + '" title="' + escapeHtml(group.letter + (group.name ? " " + group.name : "")) + '" style="left:' + first.left +
+          'px;width:' + (last.left + last.width - first.left) + 'px">' + escapeHtml(group.letter + (group.name ? " " + group.name : "")) + '</span>';
       }).join("");
       if (labels !== state.lastScenesHtml) {
         scenesEl.innerHTML = labels; state.lastScenesHtml = labels;
@@ -1032,7 +1031,7 @@ function showDrop(x: number): void {
   const gx = tenth(gapX(K, g));
   els.marker.hidden = false;
   els.marker.style.left = gx + "px";
-  const words = g === 0 ? "Move to the start" : "Move to after scene " + pad2(g);
+  const words = g === 0 ? "Move to the start" : "Move to after scene " + (ports.document.numbering().beats[ports.document.current()?.rows[g - 1]?.id ?? ""]?.full ?? "");
   if (els.label.textContent !== words) els.label.textContent = words;
   els.label.hidden = false;
   const half = (els.label.offsetWidth || 0) / 2;
