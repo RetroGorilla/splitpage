@@ -99,7 +99,7 @@ function mouse(target, type) {
 function press(target, how) {
   target.focus();
   if (how === "mouse") { mouse(target, "pointerdown"); mouse(target, "mousedown"); mouse(target, "mouseup"); mouse(target, "click"); return; }
-  key("Enter", target);
+  key(how === "space" ? " " : "Enter", target);
   mouse(target, "click");
 }
 
@@ -114,7 +114,7 @@ function openMenu(id) {
 const singleton = () => open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);
 const hintOf = () => document.querySelector('#rows [data-section-id="s1"] .section-hint').textContent;
 
-for (const how of ["mouse", "keyboard"]) {
+for (const how of ["mouse", "keyboard", "space"]) {
   test("row menu Move up and Move down confirm by " + how + " before removing a one-beat scene header", async () => {
     for (const [action, expected] of [["move-up", ["r2", "r1", "r3", "r4"]], ["move-down", ["r1", "r3", "r2", "r4"]]]) {
       await singleton();
@@ -146,9 +146,26 @@ test("row menu Move that changes nothing drops a pending header confirmation", a
   press(menu.querySelector('[data-action="move-up"]'), "mouse");
   assert.equal(state(), before);
   assert.equal(hintOf(), "");
-  press(menu.querySelector('[data-action="move-down"]'), "mouse");
+  assert.equal(menu.hidden, true);
+  press(openMenu("r1").querySelector('[data-action="move-down"]'), "mouse");
   assert.equal(state(), before);
+  assert.equal(hintOf(), "Press again to remove the scene header");
 });
+
+test("row menu Move ignores a held Enter instead of confirming", async () => {
+  await singleton();
+  const button = openMenu("r2").querySelector('[data-action="move-down"]');
+  const before = state();
+  press(button, "keyboard");
+  assert.equal(hintOf(), "Press again to remove the scene header");
+  const held = key("Enter", button, { repeat: true });
+  assert.equal(held.defaultPrevented, true);
+  assert.equal(state(), before);
+  assert.equal(hintOf(), "Press again to remove the scene header");
+  press(button, "keyboard");
+  assert.deepEqual(ids(), ["r1", "r3", "r2", "r4"]);
+});
+
 test("row menu Move without a header to remove moves at once", async () => {
   await open();
   const before = undoOwner().sizes().undo;

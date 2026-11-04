@@ -1,4 +1,4 @@
-﻿# why: the confirmation lives across focus, blur and click, which only real input exercises; every press here is a real one.
+# why: the question spans focus, blur and click, which only real input exercises.
 
 open
 wait document.querySelectorAll('#rows .row').length > 0
@@ -6,7 +6,6 @@ eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undo
 eval window.old = load(); true
 wait F.state() !== old && F.state().title === 'Menu move 1' && !!row('r2')
 wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
-sleep 300
 eval window.before = JSON.stringify(F.state()); U.flush(); window.undoBefore = U.sizes().undo; true
 
 mouse click pt(row('r2').querySelector('.row-more'))
@@ -29,7 +28,6 @@ expect JSON.stringify(F.state()) === before
 eval window.old = load(); true
 wait F.state() !== old && F.state().title === 'Menu move 2' && !!row('r2')
 wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
-sleep 300
 eval window.before = JSON.stringify(F.state()); U.flush(); window.undoBefore = U.sizes().undo; true
 mouse click pt(row('r2').querySelector('.row-more'))
 sleep 400
@@ -51,7 +49,6 @@ expect JSON.stringify(F.state()) === before
 eval window.old = load(); true
 wait F.state() !== old && F.state().title === 'Menu move 3' && !!row('r2')
 wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
-sleep 300
 eval window.before = JSON.stringify(F.state()); true
 mouse click pt(row('r2').querySelector('.row-more'))
 sleep 400
@@ -69,7 +66,6 @@ wait ids() === 'r1,r2,r3,r4'
 eval window.old = load(); true
 wait F.state() !== old && F.state().title === 'Menu move 4' && !!row('r2')
 wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
-sleep 300
 eval window.before = JSON.stringify(F.state()); true
 mouse click pt(row('r2').querySelector('.row-more'))
 sleep 400
@@ -86,10 +82,42 @@ expect JSON.stringify(F.state()) === before
 eval window.old = load(); true
 wait F.state() !== old && F.state().title === 'Menu move 5' && !!row('r2')
 wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
-sleep 300
 eval window.before = JSON.stringify(F.state()); true
 mouse click pt(row('r1').querySelector('.row-more'))
 sleep 400
 mouse click pt(item('r1', 'move-down'))
 wait ids() === 'r2,r1,r3,r4'
 expect F.state().sections.length === 2
+
+viewport 375 812 mobile
+eval window.old = load(); true
+wait F.state() !== old && F.state().title === 'Menu move 6' && !!row('r2')
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
+eval window.before = JSON.stringify(F.state()); window.headerHeight = document.querySelector('#rows [data-section-id="s1"]').offsetHeight; true
+mouse click pt(row('r2').querySelector('.row-more'))
+sleep 400
+eval window.down = pt(item('r2', 'move-down')); true
+mouse click down
+expect JSON.stringify(F.state()) === before
+expect hint().textContent === 'Press again to remove the scene header' && menuOpen()
+expect document.querySelector('#rows [data-section-id="s1"]').offsetHeight === headerHeight
+expect JSON.stringify(pt(item('r2', 'move-down'))) === JSON.stringify(down)
+mouse click down
+wait ids() === 'r1,r3,r2,r4'
+expect F.state().sections.length === 1
+eval row('r2').querySelector('.audio-cell .cell-editable').focus(); true
+key ctrl KeyZ
+wait JSON.stringify(F.state()) === before
+eval window.old = load(); true
+wait F.state() !== old && F.state().title === 'Menu move 7' && !!row('r2')
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
+eval window.before = JSON.stringify(F.state()); true
+mouse click pt(row('r2').querySelector('.row-more'))
+sleep 400
+eval window.up = pt(item('r2', 'move-up')); true
+mouse click up
+expect JSON.stringify(F.state()) === before
+expect hint().textContent === 'Press again to remove the scene header' && menuOpen()
+mouse click up
+wait ids() === 'r2,r1,r3,r4'
+expect F.state().sections.length === 1

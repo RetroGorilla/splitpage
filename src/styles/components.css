@@ -821,7 +821,10 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 @media (max-width: 600px) {
   .section-header { flex-wrap: wrap; gap: 4px; padding: 4px 6px; }
   .section-header [role="heading"] { flex: 1; min-width: 60px; }
-  .section-hint { flex-basis: 100%; padding-left: 30px; }
+  .section-hint:not([hidden]) {
+    position: absolute; inset: 0 6px 0 30px; display: flex; align-items: center; pointer-events: none;
+    background: var(--surface-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
 }
 .empty-state {
   text-align: center;
