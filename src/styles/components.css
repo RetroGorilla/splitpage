@@ -829,7 +829,10 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 @media (max-width: 600px) {
   .section-header { flex-wrap: wrap; gap: calc(4 * var(--u)); padding: calc(4 * var(--u)) calc(6 * var(--u)); }
   .section-header [role="heading"] { flex: 1; min-width: calc(60 * var(--u)); }
-  .section-hint { flex-basis: 100%; padding-left: calc(30 * var(--u)); }
+  .section-hint:not([hidden]) {
+    position: absolute; inset: 0 calc(6 * var(--u)) 0 calc(30 * var(--u)); display: flex; align-items: center; pointer-events: none;
+    background: var(--surface-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
 }
 .empty-state {
   text-align: center;

@@ -92,6 +92,89 @@ test("singleton Alt moves require consecutive confirmation and undo restores the
   }
 });
 
+function mouse(target, type) {
+  target.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, detail: type === "click" ? 1 : 0 }));
+}
+
+function press(target, how) {
+  target.focus();
+  if (how === "mouse") { mouse(target, "pointerdown"); mouse(target, "mousedown"); mouse(target, "mouseup"); mouse(target, "click"); return; }
+  key(how === "space" ? " " : "Enter", target);
+  mouse(target, "click");
+}
+
+function openMenu(id) {
+  const more = document.querySelector('#rows .row[data-id="' + id + '"] .row-more');
+  press(more, "mouse");
+  const menu = more.parentNode.querySelector(".row-menu");
+  assert.equal(menu.hidden, false);
+  return menu;
+}
+
+const singleton = () => open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);
+const hintOf = () => document.querySelector('#rows [data-section-id="s1"] .section-hint').textContent;
+
+for (const how of ["mouse", "keyboard", "space"]) {
+  test("row menu Move up and Move down confirm by " + how + " before removing a one-beat scene header", async () => {
+    for (const [action, expected] of [["move-up", ["r2", "r1", "r3", "r4"]], ["move-down", ["r1", "r3", "r2", "r4"]]]) {
+      await singleton();
+      const menu = openMenu("r2");
+      const button = menu.querySelector('[data-action="' + action + '"]');
+      const before = state(), undo = undoOwner().sizes().undo;
+      press(button, how);
+      assert.equal(state(), before);
+      assert.equal(hintOf(), "Press again to remove the scene header");
+      assert.equal(menu.hidden, false);
+      assert.equal(document.activeElement, button);
+      press(button, how);
+      assert.deepEqual(ids(), expected);
+      assert.equal(currentDocument().sections.length, 1);
+      undoOwner().flush();
+      assert.equal(undoOwner().sizes().undo, undo + 1);
+      undoOwner().undo();
+      assert.equal(state(), before);
+    }
+  });
+}
+
+test("row menu Move that changes nothing drops a pending header confirmation", async () => {
+  await open([{ id: "s1", name: "Only scene", firstSceneId: "r1" }, { id: "s2", name: "Ending", firstSceneId: "r2" }]);
+  const menu = openMenu("r1");
+  press(menu.querySelector('[data-action="move-down"]'), "mouse");
+  assert.equal(hintOf(), "Press again to remove the scene header");
+  const before = state();
+  press(menu.querySelector('[data-action="move-up"]'), "mouse");
+  assert.equal(state(), before);
+  assert.equal(hintOf(), "");
+  assert.equal(menu.hidden, true);
+  press(openMenu("r1").querySelector('[data-action="move-down"]'), "mouse");
+  assert.equal(state(), before);
+  assert.equal(hintOf(), "Press again to remove the scene header");
+});
+
+test("row menu Move ignores a held Enter instead of confirming", async () => {
+  await singleton();
+  const button = openMenu("r2").querySelector('[data-action="move-down"]');
+  const before = state();
+  press(button, "keyboard");
+  assert.equal(hintOf(), "Press again to remove the scene header");
+  const held = key("Enter", button, { repeat: true });
+  assert.equal(held.defaultPrevented, true);
+  assert.equal(state(), before);
+  assert.equal(hintOf(), "Press again to remove the scene header");
+  press(button, "keyboard");
+  assert.deepEqual(ids(), ["r1", "r3", "r2", "r4"]);
+});
+
+test("row menu Move without a header to remove moves at once", async () => {
+  await open();
+  const before = undoOwner().sizes().undo;
+  press(openMenu("r1").querySelector('[data-action="move-down"]'), "mouse");
+  assert.deepEqual(ids(), ["r2", "r1", "r3", "r4"]);
+  undoOwner().flush();
+  assert.equal(undoOwner().sizes().undo, before + 1);
+});
+
 test("singleton move confirmation survives modifier-only keydowns, including repeated Alt and Alt+Shift", async () => {
   for (const shiftKey of [false, true]) {
     await open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);

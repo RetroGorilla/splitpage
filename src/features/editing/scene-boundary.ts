@@ -1,6 +1,6 @@
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { SceneBoundaryRemoval } from "../../application/editing/scene-boundary.ts";
-import { sceneBeforeBeat, sceneGroups } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, soleBeatSceneMovedBy } from "../../core/document/scenes.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export interface SceneBoundaryPorts {
@@ -35,21 +35,22 @@ export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts): {
     if (scriptCell && ports.allowed() && event.altKey && !event.ctrlKey && !event.metaKey && !event.isComposing &&
       (key === "ArrowUp" || key === "ArrowDown")) {
       const state = ports.document.current();
-      const at = state?.rows.findIndex(row => row.id === scriptCell.getAttribute("data-id")) ?? -1;
-      const group = state && sceneGroups(state).find(item => item.start === at && item.end === at + 1);
-      const next = state?.rows[at + (key === "ArrowUp" ? -1 : 1)];
-      if (group && next && selection) {
+      const scene = state && soleBeatSceneMovedBy(state, scriptCell.getAttribute("data-id") ?? "", key === "ArrowUp" ? -1 : 1);
+      if (scene && selection) {
         caret = { node: selection.anchorNode, offset: selection.anchorOffset, end: selection.focusNode, endOffset: selection.focusOffset };
         const chord = event.shiftKey ? (key === "ArrowUp" ? "Alt+Shift+ArrowUp" : "Alt+Shift+ArrowDown") :
           (key === "ArrowUp" ? "Alt+ArrowUp" : "Alt+ArrowDown");
-        if (!event.repeat && ports.boundary.press(group.scene.id, chord)) return;
+        if (!event.repeat && ports.boundary.press(scene.id, chord)) return;
         event.preventDefault(); event.stopImmediatePropagation();
         return;
       }
     }
     if (!cell || !ports.allowed() || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
       (key !== "Backspace" && key !== "Delete") || !selection?.rangeCount) {
-      if (!["Alt", "Shift", "Control", "Meta"].includes(key)) cancel();
+      const onMove = !!event.target.closest?.('[data-action="move-up"],[data-action="move-down"]');
+      const activates = onMove && (key === "Enter" || key === " ");
+      if (activates && event.repeat) event.preventDefault();
+      if (!["Alt", "Shift", "Control", "Meta"].includes(key) && !activates) cancel();
       return;
     }
     const range = selection.getRangeAt(0);
@@ -67,7 +68,9 @@ export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts): {
     ports.boundary.press(scene.id, key);
   }, true);
   for (const type of ["pointerdown", "mousedown", "click", "beforeinput", "input", "paste", "cut", "compositionstart", "blur"]) {
-    life.listen(doc, type, cancel, true);
+    life.listen(doc, type, event => {
+      if (!event.target.closest?.('[data-action="move-up"],[data-action="move-down"]')) cancel();
+    }, true);
   }
   life.listen(doc, "selectionchange", () => { if (caret && !sameCaret(window.getSelection())) cancel(); });
   return { dispose() { life.dispose(); cancel(); } };

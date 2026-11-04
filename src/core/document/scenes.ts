@@ -68,6 +68,12 @@ export function sceneForBeat(doc: SceneDocument, rowId: string): DocumentScene |
   return sceneGroups(doc).find(group => at >= group.start && at < group.end)?.scene;
 }
 
+export function soleBeatSceneMovedBy(doc: SceneDocument, rowId: string, dir: -1 | 1): DocumentScene | undefined {
+  const at = doc.rows.findIndex(row => row.id === rowId);
+  if (at === -1 || !doc.rows[at + dir]) return undefined;
+  return sceneGroups(doc).find(group => group.start === at && group.end === at + 1)?.scene;
+}
+
 export function sceneBeforeBeat(doc: SceneDocument, rowId: string): DocumentScene | undefined {
   return normalizeScenes(doc.sections)?.find(scene => scene.firstSceneId === rowId);
 }

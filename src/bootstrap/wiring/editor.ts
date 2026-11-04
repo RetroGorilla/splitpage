@@ -404,6 +404,8 @@ export const stopMediaFeature = mediaRoutes.stop;
 
 const rowRoutes = owned<ReturnType<typeof mountRowRoutes>>();
 
+let sceneHeaders: ReturnType<typeof mountSceneHeaders> | null = null;
+
 function openLinkInNewWindow(href: string): void {
   try {
     if (externalLinks.available()) externalLinks.open(href);
@@ -425,7 +427,11 @@ const rowRoutePorts: RowRoutePorts = {
   stopScroll: stopDragScroll,
   move: function (rowId, targetId, after) { cellEditing().moveRow(rowId, targetId, after); },
   add: addRow,
-  moveBy: function (rowId, dir) { moveRow(rowId, dir); refocusRowMenu(rowId); },
+  moveBy: function (rowId, dir) {
+    if (sceneHeaders?.confirmMove(rowId, dir)) return;
+    moveRow(rowId, dir);
+    refocusRowMenu(rowId);
+  },
   toggleMenu: toggleRowMenu,
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
@@ -438,7 +444,8 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
   return rowRoutes.replace(function () {
     const routes = mountRowRoutes({ window: window, rows: document.getElementById("rows") as Element, ports: rowRoutePorts });
     const scenes = mountSceneHeaders();
-    return { ...routes, dispose() { scenes.dispose(); routes.dispose(); } };
+    sceneHeaders = scenes;
+    return { ...routes, dispose() { if (sceneHeaders === scenes) sceneHeaders = null; scenes.dispose(); routes.dispose(); } };
   }, function (owner) {
     return [
       function () { return routeRootClick("cell-link", function (e) { return owner.linkClick(e); }); },
