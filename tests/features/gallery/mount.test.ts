@@ -5,7 +5,7 @@ import { viewHarness } from "../view-harness.ts";
 
 test("gallery and history: B43 and B55 register no listeners and disable both routes across remount", () => {
   const h = viewHarness();
-  const mount = () => mountHistoryGallery({ restore: h.log("restore"), open: h.log("open") });
+  const mount = () => mountHistoryGallery({ restore: h.log("restore"), open: h.log("open"), beatClicked: h.log("beat") });
   let owner = mount();
   assert.equal(h.entries.length, 0);
   const button = h.document.createElement("button");
@@ -32,5 +32,24 @@ test("gallery and history: B43 and B55 register no listeners and disable both ro
   ]);
   owner.dispose();
   assert.equal(h.entries.length, 0);
+  h.window.close();
+});
+
+test("gallery: a click inside a beat reports that beat and still falls through, a click elsewhere reports nothing", () => {
+  const h = viewHarness();
+  const owner = mountHistoryGallery({ restore: h.log("restore"), open: h.log("open"), beatClicked: h.log("beat") });
+  h.document.body.innerHTML = '<div id="rows"><div class="row" data-id="r7"><div class="cell"><button class="plain">x</button><button data-action="gallery-open" data-id="r7" data-slot="1">t</button></div></div></div><div class="row" data-id="r9"><span class="outside"></span></div>';
+  function click(selector: string): MouseEvent {
+    const event = new h.window.MouseEvent("click");
+    Object.defineProperty(event, "target", { value: h.document.querySelector(selector) });
+    return event;
+  }
+  assert.equal(owner.galleryClick(click(".plain")), false);
+  assert.equal(owner.galleryClick(click('[data-action="gallery-open"]')), true);
+  assert.equal(owner.galleryClick(click(".outside")), false);
+  assert.deepEqual(h.calls, [
+    { name: "beat", args: ["r7"] }, { name: "beat", args: ["r7"] }, { name: "open", args: ["r7", 1, false] }
+  ]);
+  owner.dispose();
   h.window.close();
 });

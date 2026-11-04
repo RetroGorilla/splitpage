@@ -1,9 +1,11 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../../shared/video-embed.ts";
-import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../../core/document/gallery.ts";
+import { normalizeVideoLink, rowSlots, setVideoThumbnail, videoLinkKey } from "../../core/document/gallery.ts";
+import { slotPoster } from "../common/gallery.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 
 import type { GalleryVideoMount, GalleryVideoPorts } from "./ports.ts";
+import type { VideoLink } from "../../core/document/gallery.ts";
 import type { DesktopVideoThumbnail } from "../../application/media/desktop-video.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
 import type { Step, StepRow } from "../../core/text/steps.ts";
@@ -129,6 +131,39 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
     });
   }
 
+  const failedKeys = new Set<string>();
+  const inFlightKeys = new Set<string>();
+
+  function thumbnailsOnBeatClick(rowId: string | null) {
+    if (!rowId || !thumbnailsAllowed() || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+    const wanted = ports.document.read(function (doc) {
+      const out: VideoLink[] = [];
+      const idx = doc ? rowIndexOf(doc, rowId) : -1;
+      if (!doc || idx === -1) return out;
+      rowSlots(doc.rows[idx]).forEach(function (slot) {
+        const poster = slotPoster(slot);
+        if (!poster || !poster.href || slot.ref || slot.dataUrl || !parseVideoLink(poster.href)) return;
+        const key = videoLinkKey(poster);
+        if (failedKeys.has(key) || inFlightKeys.has(key)) return;
+        inFlightKeys.add(key);
+        out.push(poster);
+      });
+      return out;
+    });
+    if (!wanted.length) return;
+    const ctx = ports.ownership.capture();
+    wanted.forEach(function (link) {
+      const key = videoLinkKey(link);
+      fetchThumbnailRecord(link.href as string).then(function (rec) {
+        inFlightKeys.delete(key);
+        if (!rec) { failedKeys.add(key); return; }
+        if (!ports.ownership.stillOwns(ctx)) return;
+        const done = ports.cells.editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
+        if (done) ports.viewer.refresh();
+      });
+    });
+  }
+
   let withdrawHook: (() => void) | null = null;
   exposeTestHook("__videoTest", function () { return {
     setFetch: function (fn: unknown) { testHooks.fetch = typeof fn === "function" ? fn as typeof fetch : null; },
@@ -144,6 +179,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
     thumbnailsAllowed: thumbnailsAllowed,
     fetchThumbnail: fetchThumbnailRecord,
     thumbnailsAfterPaste: thumbnailsAfterPaste,
+    thumbnailsOnBeatClick: thumbnailsOnBeatClick,
     dispose: function () {
       if (withdrawHook) withdrawHook();
     }

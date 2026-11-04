@@ -8,7 +8,7 @@ import { actions as portActions } from "./ports/actions.ts";
 import { changes as portChanges } from "./ports/preferences.ts";
 import { galleryActions as definitions } from "../../features/gallery/actions.ts";
 import { startAnnotate as mountGallery } from "../../features/gallery/annotate.ts";
-import { startGalleryOverlay as mountOverlay } from "../../features/gallery/overlay.ts";
+import { refreshGalleryOverlay, startGalleryOverlay as mountOverlay } from "../../features/gallery/overlay.ts";
 import { startGalleryVideo as mountVideo } from "../../features/gallery/video.ts";
 import type { GalleryMount, GalleryOverlayMount, GalleryOverlayPorts, GalleryPorts, GalleryVideoMount, GalleryVideoPorts } from "../../features/gallery/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -82,7 +82,9 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
       ownership: portOwnership,
       undo: { fold: (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change) },
       thumbnailsAllowed: () => preferences().videoThumbs(),
-      desktop: desktopVideo
+      desktop: desktopVideo,
+      cells: { editGallery: (...a) => cellEditing().editGallery(...a) },
+      viewer: { refresh: refreshGalleryOverlay }
     };
     return mountVideo(ports);
   });
@@ -92,4 +94,8 @@ export const stopGalleryVideoFeature = video.stop;
 
 export function thumbnailsAfterPaste(rowId: string | null, hrefs: readonly unknown[] | null | undefined, entry: unknown): void {
   video.owner()?.thumbnailsAfterPaste(rowId, hrefs, entry);
+}
+
+export function thumbnailsOnBeatClick(rowId: string | null): void {
+  video.owner()?.thumbnailsOnBeatClick(rowId);
 }
