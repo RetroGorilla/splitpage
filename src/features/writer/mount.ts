@@ -1,5 +1,6 @@
 import type { ButtonActions } from "../../application/actions.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 
 export type WriterOpenPorts = Pick<ButtonActions, "runFromButton">;
 
@@ -36,6 +37,29 @@ export function mountWriterNavigation(mount: { window: Window; ports: WriterNavi
   life.listen(element("wr-size"), "input", function (e) {
     ports.applyWriterSize(parseInt(e.target.value, 10), true);
   });
+
+  // why: the slider holds whole sizes, so a pinch's small steps are kept here until they add up to one.
+  let exact: number | null = null;
+  life.listen(element("writer"), "wheel", function (e) {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const current = Number(element("wr-size").value);
+    if (exact === null || Math.round(exact) !== current) exact = current;
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 33;
+    else if (e.deltaMode === 2) dy *= 600;
+    dy = Math.max(-300, Math.min(300, dy));
+    exact = Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, exact * Math.exp(-dy * 0.001)));
+    const next = Math.round(exact);
+    if (next === current) return;
+    const hold = e.target.closest<HTMLElement>(".wr-block, .section-header");
+    const rect = hold?.getBoundingClientRect();
+    const frac = rect && rect.height ? (e.clientY - rect.top) / rect.height : 0;
+    ports.applyWriterSize(next, true);
+    if (!hold || !rect || !hold.isConnected) return;
+    const now = hold.getBoundingClientRect();
+    element("writer-scroll").scrollTop += now.top + frac * now.height - e.clientY;
+  }, { passive: false });
   return { dispose: life.dispose };
 }
 
