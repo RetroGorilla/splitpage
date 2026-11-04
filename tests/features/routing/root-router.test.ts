@@ -55,7 +55,7 @@ test("the click and mousedown orders keep the ledger's B02 to B57 order", () => 
     "media-link",
     "cell-link"
   ]);
-  assert.deepEqual([...ROOT_MOUSEDOWN_ORDER], ["tags-anchor", "cell-link"]);
+  assert.deepEqual([...ROOT_MOUSEDOWN_ORDER], ["tags-anchor"]);
 });
 
 test("owned replaces its owner, unrouting and disposing the previous one first, and stop is idempotent", () => {

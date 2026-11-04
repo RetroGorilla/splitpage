@@ -1,4 +1,5 @@
 import { safeHref } from "../../core/document/text-policy.ts";
+import { linkOpenedBy } from "../common/link-press.ts";
 
 export interface RowRoutePorts {
   readonly mac: boolean;
@@ -75,11 +76,7 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
   }
 
   function linkUnder(e: MouseEvent): Element | null {
-    const held = ports.mac ? e.metaKey : e.ctrlKey;
-    if (e.button !== 0 || !held || e.shiftKey || e.altKey) return null;
-    const link = closest(e, "a[href]");
-    const cell = link && link.closest(".cell-editable");
-    return link && cell && ports.scriptCell(cell) ? link : null;
+    return linkOpenedBy(e, ports.mac, ports.scriptCell);
   }
 
   function onDragStart(e: Event): void {

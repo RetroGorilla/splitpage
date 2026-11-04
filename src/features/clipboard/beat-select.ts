@@ -10,6 +10,7 @@ import { pasteBeatsCommand, removeBeatsCommand } from "../../application/command
 import { cappedLongText } from "../../core/document/text-policy.ts";
 import { EVERY_OVERLAY, inFront } from "../../application/screen.ts";
 import { IS_MAC } from "../common/key-chips.ts";
+import { linkOpenedBy } from "../common/link-press.ts";
 
 const TOLERANCE = 4;
 const SCROLL_ZONE = 120;
@@ -570,6 +571,7 @@ function onDocMouseDown(e: MouseEvent) {
   closeBeatMenu();
   swallowClick = false;
   if (selectionClick(e)) return;
+  if (linkOpenedBy(e, IS_MAC, (ports as BeatSelectPorts).scriptCell)) return;
   if (sel) clearBeatSelection();
   noteClickedBeat(e);
 }

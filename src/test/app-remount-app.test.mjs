@@ -181,7 +181,7 @@ test("after a remount every registration has exactly one handler: each ledger re
 
 test("every delegated click route and the tag anchor route are taken once, in the ledger's order", () => {
   assert.equal(firstRoutes.click.length, 14);
-  assert.equal(firstRoutes.mousedown.length, 2);
+  assert.equal(firstRoutes.mousedown.length, 1);
   assert.deepEqual(firstRoutes, { click: [...ROOT_CLICK_ORDER], mousedown: [...ROOT_MOUSEDOWN_ORDER] });
   assert.deepEqual(rootRoutesTaken(), firstRoutes);
 });

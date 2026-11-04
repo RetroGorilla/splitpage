@@ -210,6 +210,8 @@ function refocusRowMenu(rowId: string): void {
 
 export function onRootMouseDown(e: MouseEvent): void {
   hideTagGhost();
+  const links = rowRoutes.owner();
+  if (links && links.linkMouseDown(e)) return;
   const target = e.target as Element;
   const grip = target.closest('[data-action="drag-grip"]');
   if (grip) {
@@ -403,8 +405,12 @@ export const stopMediaFeature = mediaRoutes.stop;
 const rowRoutes = owned<ReturnType<typeof mountRowRoutes>>();
 
 function openLinkInNewWindow(href: string): void {
-  if (externalLinks.available()) { externalLinks.open(href); return; }
-  window.open(href, "_blank", "noopener");
+  try {
+    if (externalLinks.available()) externalLinks.open(href);
+    else window.open(href, "_blank", "noopener");
+  } catch {
+    showToast("That link could not be opened — its address is not complete.", "warn");
+  }
 }
 
 const rowRoutePorts: RowRoutePorts = {
@@ -436,7 +442,6 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
   }, function (owner) {
     return [
       function () { return routeRootClick("cell-link", function (e) { return owner.linkClick(e); }); },
-      function () { return routeRootMouseDown("cell-link", function (e) { return owner.linkMouseDown(e); }); },
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
       function () { return routeRootClick("rows-scene", function (e) { return owner.beatClick(e); }); },
       function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); },
