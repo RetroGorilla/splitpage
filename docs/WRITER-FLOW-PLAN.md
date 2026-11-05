@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phases 0a, 0b, 1 and 2 are done (sections 9 to 12). Adam has picked every setting, apart from the two heading questions in section 7. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phase 3 is next. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phases 0a, 0b, 1 and 2 are done (sections 9 to 12). Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phase 3 is running. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -74,7 +74,9 @@ Desktop Chromium is the target: the Electron app and Chrome. Phones get the same
 - A converted beat with no visual goes away. One with a visual stays, empty, under the new header.
 - The heading takes the beat's first line, up to any Shift+Enter. Later lines stay as narration in that beat.
 - A line over the scene name limit of 200 characters is refused the same way, with its own notice and all its narration kept.
-- Enter in a heading: the text after the caret becomes the scene's first beat. Backspace at a heading's start: the header goes away and its text becomes a new beat that flows into the paragraph above. Backspace at the start of the first beat under a header: the caret moves to the end of the header and nothing changes. Delete at the end of the last beat above a header: the caret moves to the start of the header and nothing changes.
+- Enter in a heading: the text after the caret becomes the scene's first beat. Enter at a heading's very start: a blank beat goes above the heading and the caret moves into it (section 7.7).
+- Deleting all of a heading's text: the line stays empty while the caret is on it, so the name can be retyped. Leaving it empty removes the header (section 7.8).
+- Backspace at a heading's start: the header goes away and its text becomes a new beat that flows into the paragraph above. Backspace at the start of the first beat under a header: the caret moves to the end of the header and nothing changes. Delete at the end of the last beat above a header: the caret moves to the start of the header and nothing changes.
 
 ### Find
 
@@ -251,8 +253,8 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 4. **Headings are plain text, up to 200 characters.** Bold in a heading isn't stored, because scene names are plain.
 5. **`# Title` then Enter at the end of the script creates a blank first beat,** because a scene can't exist without one.
 6. **Forward Delete above a scene header: decided (Adam, 2026-11-04).** Delete at the end of the last beat above a header moves the caret to the start of the header and changes nothing, mirroring 7.2.
-7. **Enter at the very start of a heading: awaiting Adam.** For now it only moves the caret to the scene's first beat. In Google Docs it would push the heading down and leave a blank line above, but a scene name can't be empty here.
-8. **Deleting all of a heading's text: awaiting Adam.** For now nothing is written and the old name stays. Backspace at a heading's start still removes the header, as section 2 says.
+7. **Enter at the very start of a heading: decided (Adam, 2026-11-05), built in phase 4.** A blank beat goes above the heading and the caret moves into it, which is close to Google Docs without leaving a scene with no name. The blank beat ends the scene above. If the heading is the first thing in the script, the blank beat becomes unnamed scene A and the named scene moves to B. Until phase 4, Enter there only moves the caret to the scene's first beat.
+8. **Deleting all of a heading's text: decided (Adam, 2026-11-05), built in phase 4.** The line stays empty while the caret is on it, and the saved name doesn't change, because a saved scene needs a name. Leaving the line empty, including by closing the writer, removes the header. Its beats join the scene above, and one Ctrl+Z brings the header and its name back. If the app dies first, the old name is still saved. Backspace at a heading's start still removes the header, as section 2 says. Until phase 4, nothing is written and the old name stays.
 
 ## 8. Outside review
 
