@@ -206,6 +206,7 @@ test("seeded command sequences preserve untouched paragraph partners, nonempty s
           `trial ${trial}, step ${step}, ${command.name}: ${a.id}/${b.id}`);
       }
       for (const scene of scenesInOrder(after) ?? []) assert.ok(after.rows.some(row => row.id === scene.firstSceneId));
+      assert.equal(scenesInOrder(after)?.length ?? 0, Array.isArray(after.sections) ? after.sections.length : 0);
       assert.equal(new Set(after.rows.map(row => row.id)).size, after.rows.length);
       assert.ok(after.rows.every(row => !Object.hasOwn(row, "paragraphStart") || row.paragraphStart === true));
       history.record(diffStates(before, after), step * 2000);

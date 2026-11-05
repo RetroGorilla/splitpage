@@ -34,6 +34,17 @@ test("beat clipboard preserves paragraph flags and rejects non-true values throu
   assert.equal(doc.rows[1].paragraphStart, true);
 });
 
+test("beat clipboard materializes internal implicit or omitted starts without changing source rows", () => {
+  const doc = source();
+  doc.sections = [{ id: "scene", name: "Second scene", firstSceneId: "r2" }];
+  const before = JSON.stringify(doc);
+  const adjacent = parseBeatPayload(buildBeatPayload(doc, ["r1", "r2", "r3"]).json);
+  assert.deepEqual(adjacent.rows.map(row => row.paragraphStart), [undefined, true, undefined]);
+  const separated = parseBeatPayload(buildBeatPayload(doc, ["r1", "r3"]).json);
+  assert.deepEqual(separated.rows.map(row => row.paragraphStart), [undefined, true]);
+  assert.equal(JSON.stringify(doc), before);
+});
+
 function removeBeats(rowIds) {
   const outcome = runCommand(removeBeatsCommand(rowIds));
   assert.notEqual(outcome.kind, "failed", outcome.error && outcome.error.stack);

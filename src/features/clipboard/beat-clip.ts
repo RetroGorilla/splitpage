@@ -1,4 +1,5 @@
 import type { BeatPaste, BeatPastePlan } from "../../application/commands/beats.ts";
+import { paragraphMembership } from "../../application/commands/paragraphs.ts";
 
 type BeatCloned<T> = T extends readonly (infer V)[] ? BeatCloned<V>[] : T extends object ? { -readonly [K in keyof T]: BeatCloned<T[K]> } : T;
 type BeatWireData = Pick<DocumentShape, "rows" | "comments" | "people" | "productionTags" | "brollShots">;
@@ -80,7 +81,15 @@ export function buildBeatPayload(state: DocumentView | null, rowIds: readonly st
   opts = opts || {};
   const want = Object.create(null) as Record<string, boolean>;
   (rowIds || []).forEach(function (id) { want[id] = true; });
-  const rows = ((state as DocumentView).rows || []).filter(function (r) { return r && want[r.id]; }).map(clone);
+  const membership = paragraphMembership(state as DocumentView);
+  let previousParagraph: string | undefined;
+  const rows = ((state as DocumentView).rows || []).filter(function (r) { return r && want[r.id]; }).map(function (r) {
+    const row = clone(r);
+    const paragraph = membership.get(r.id);
+    if (previousParagraph !== undefined && paragraph !== previousParagraph) row.paragraphStart = true;
+    previousParagraph = paragraph;
+    return row;
+  });
   const rowSet = Object.create(null) as Record<string, boolean>;
   rows.forEach(function (r) { rowSet[r.id] = true; });
 
