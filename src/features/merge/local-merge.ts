@@ -1,6 +1,6 @@
 import { normalizeTagName, registryKey } from "../../core/document/tags.ts";
 import { mergeTextField } from "../../core/merge/text-field.ts";
-import { byId, rowFieldKey } from "../../core/merge/rows.ts";
+import { byId, rowContentEqual, rowFieldKey } from "../../core/merge/rows.ts";
 import { GALLERY_FIELDS, ROW_FIELDS } from "../../core/document/fields.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { rowStatus, tagCategory, tagStatus } from "../../core/production/looks.ts";
@@ -135,6 +135,8 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
   const theirNumbers = deriveDocumentNumbering(theirs);
   order.forEach(function (id) {
     const m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
+    const rowOutcome = m && t ? null : bb && rowContentEqual(bb, m || t)
+      ? (m ? "theirs" : "mine") : (m ? "mine" : "theirs");
     const entries: MergeReviewEntry[] = [];
     ROW_FIELDS.forEach(function (f) {
       if (GALLERY_FIELDS[f]) {
@@ -143,7 +145,7 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
         const gPair = mergeDiffPairHtml(gm, gt);
         entries.push({
           label: f === "imageLinks" ? "Video links" : "More pictures",
-          outcome: "both",
+          outcome: rowOutcome ?? "both",
           mineHtml: gPair.mine,
           theirsHtml: gPair.theirs
         });
@@ -154,7 +156,7 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
         if (mi === ti) return;
         entries.push({
           label: "Visual image",
-          outcome: mergeFieldOutcome(bb ? rowImageKey(bb) : null, mi, ti),
+          outcome: rowOutcome ?? mergeFieldOutcome(bb ? rowImageKey(bb) : null, mi, ti),
           mineHtml: mergeDiffImageHtml(m),
           theirsHtml: mergeDiffImageHtml(t)
         });
@@ -162,11 +164,11 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
       }
       const decided: MergeReviewDecision = m && t
         ? mergeTextField(bb ? (bb[f] || "") : undefined, m[f], t[f], textCtx)
-        : { outcome: mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null) };
+        : { outcome: rowOutcome };
       const outcome = decided.outcome;
       if (outcome === "same" || outcome === null) return;
       const mv = mergeFieldText(m, f), tv = mergeFieldText(t, f);
-      if (mv === tv && outcome !== "conflict") return;
+      if (mv === tv && outcome !== "conflict" && !(rowOutcome && f === "audioText")) return;
       const pair = mergeDiffPairHtml(mv, tv);
       entries.push({
         label: f === "audioText" ? "Audio" : "Visual",

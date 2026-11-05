@@ -12,6 +12,17 @@ import { scriptFixture, PNG } from "./fixtures/script-print-fixture.mjs";
 
 function page(input) { return new JSDOM(buildScriptPrintPage(input)).window.document; }
 
+test("print output ignores saved paragraph metadata", () => {
+  const { source, input } = scriptFixture();
+  const before = buildScriptPrintPage(input);
+  source.paragraphsDecided = true;
+  source.rows.forEach(row => { row.paragraphStart = true; });
+  const doc = buildExportDocument(source, input.doc.capturedAt, {
+    production: input.doc.production, commentNumbers: input.doc.commentNumbers, broll: input.doc.broll
+  }, { clockMode: input.doc.clockMode });
+  assert.equal(buildScriptPrintPage({ ...input, doc }), before);
+});
+
 test("script print preserves captured facts, scene metadata, rich text and annotations", () => {
   const { input } = scriptFixture();
   const dom = page(input);

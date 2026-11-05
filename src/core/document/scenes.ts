@@ -78,6 +78,14 @@ export function sceneBeforeBeat(doc: SceneDocument, rowId: string): DocumentScen
   return normalizeScenes(doc.sections)?.find(scene => scene.firstSceneId === rowId);
 }
 
+export function startsParagraph(
+  doc: SceneDocument & { readonly rows: readonly { readonly id: string; readonly paragraphStart?: unknown }[] },
+  rowId: string
+): boolean {
+  const at = doc.rows.findIndex(row => row.id === rowId);
+  return at !== -1 && (at === 0 || doc.rows[at]?.paragraphStart === true || !!sceneBeforeBeat(doc, rowId));
+}
+
 export function scenesAfterRemoval(doc: SceneDocument, removed: ReadonlySet<string>): DocumentScene[] | undefined {
   const scenes = sceneGroups(doc).flatMap(group => {
     const first = doc.rows.slice(group.start, group.end).find(row => !removed.has(row.id));

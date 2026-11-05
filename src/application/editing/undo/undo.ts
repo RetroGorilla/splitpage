@@ -165,7 +165,7 @@ export function createUndo(ports: UndoPorts): Undo {
     const stamps = replays.stamps;
     if (!stamps) return;
     steps.forEach(function (st) {
-      if (st.op !== "rowField") return;
+      if (st.op !== "rowField" || st.key === "paragraphStart") return;
       const row = state.rows.find(function (r) { return r.id === st.rowId; });
       if (!row) return;
       row["updatedAt"] = stamps.clock.nowIso();

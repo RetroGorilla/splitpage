@@ -9,6 +9,46 @@ The user-facing terms are defined in [the glossary](GLOSSARY.md). Existing saved
 
 These names describe the existing format, not a migration or a change to saved files.
 
+## Saved paragraphs
+
+`rows[].paragraphStart: true` starts a paragraph. The absent key means the beat
+runs on from its predecessor. The script's first beat and each scene's first beat
+start implicitly, regardless of the stored flag; `startsParagraph` in
+`src/core/document/scenes.ts` answers this effective membership.
+
+`paragraphsDecided: true` records that the new writer's sentence rule has run.
+It distinguishes an intentionally unbroken script from an old script with no
+paragraph decisions. No shipping entry point writes this marker or runs that
+rule yet. The current writer, split view, teleprompter and exports keep their
+existing presentation.
+
+Both fields are optional, retain only literal `true` on load, and are never
+written as `false`. Schema stays at 2. Unflagged project files retain their
+bytes through load and save. Clone and whole-beat clipboard retain row flags;
+both project formats retain the flag and document marker in their data record.
+Project Markdown's table still matches rows by position: accepting externally
+inserted or deleted table rows can attach a stored break to different text.
+The human-readable table and narration exports do not display the flag.
+
+The row flag merges like `lengthSeconds`: a change against the base wins,
+incoming wins a conflict, and with no base a present flag wins over absence.
+Paragraph-only edits count against concurrent row deletion in both directions.
+The document marker merges to true if either side has it.
+Paragraph flags are structural metadata: changing only a flag preserves the
+beat's `updatedAt` and `updatedBy` in commands, undo, redo and merge, and does not
+add an edited-row count to the merge report. Content edits still stamp normally.
+
+Shared delete, cut, move, swap and paste commands preserve effective paragraph
+boundaries inside their existing transaction and undo entry. Swap is a move of
+the selected beat across its neighbour. Beats moved into a paragraph run on;
+whole paragraphs moved between paragraphs stay separate. Paste keeps internal
+breaks, runs its first beat on in a paragraph, and forms a separate block at a
+paragraph boundary. Removing a scene header records a flag on its first beat;
+adding or moving a scene relies on implicit starts and changes no flags. Join
+keeps the first beat's state and leaves the following beat untouched; it still
+refuses two beats with visuals. Add, split and ordinary row import create
+run-on beats without inheriting flags.
+
 
 Status: **built** (2026-09-23), with the few leftovers §10 names — the
 model (`src/core/text/`), registry ids, the readers, every edit of a

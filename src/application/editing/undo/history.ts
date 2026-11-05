@@ -502,8 +502,10 @@ export function replayChanges(runs: HtmlRunDecoder, steps: readonly Step[], plan
   steps.forEach(function (s) {
     if (s.op === "rowField") {
       field(s.rowId, s.key);
-      field(s.rowId, "updatedAt");
-      field(s.rowId, "updatedBy");
+      if (s.key !== "paragraphStart") {
+        field(s.rowId, "updatedAt");
+        field(s.rowId, "updatedBy");
+      }
     } else if (s.op === "insertRow") {
       inserted.push(s.row.id as string);
     } else if (s.op === "deleteRow") {

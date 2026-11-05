@@ -4,6 +4,7 @@ export type DocumentRow = {
   id: string;
   visualText?: string | null | undefined;
   audioText?: string | null | undefined;
+  paragraphStart?: true | undefined;
   [key: string]: unknown;
 };
 
@@ -57,6 +58,7 @@ export type DocumentShape = {
   rev: number;
   schema: number;
   targetSeconds?: number | undefined;
+  paragraphsDecided?: true | undefined;
   rows: DocumentRow[];
   comments: DocumentComment[];
   people: { id: string; name: string; [key: string]: unknown }[];

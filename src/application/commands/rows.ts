@@ -7,6 +7,7 @@ import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import type { TextServices } from "../text/services.ts";
 import { scenesAfterRemoval, scenesInOrder, withSceneFirstBeat, writeScenes } from "../../core/document/scenes.ts";
+import { applyParagraphFlags, paragraphCells, paragraphFlagsAfterOrder } from "./paragraphs.ts";
 
 function indexOf(rows: DocumentView["rows"], rowId: string): number {
   return rows.findIndex(function (r) { return r.id === rowId; });
@@ -18,8 +19,8 @@ function liveIndex(rows: DocumentRow[], rowId: string, doing: string): number {
   return at;
 }
 
-function reorderedChange(scenes = false): ChangeSet {
-  return changeSet({ rowsMoved: true, docFields: scenes ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true });
+function reorderedChange(scenes = false, cells: ChangeSet["cells"] = []): ChangeSet {
+  return changeSet({ rowsMoved: true, cells, docFields: scenes ? ["sections"] : [], derive: CELL_TEXT_DERIVES, saveNow: true });
 }
 
 export function addBeatCommand(afterId: string | null, createdId: string, ports: StampPorts): Command {
@@ -51,11 +52,13 @@ export function deleteBeatCommand(rowId: string): Command {
       if (indexOf(doc.rows, rowId) === -1) return null;
       const hadScenes = !!scenesInOrder(doc);
       const scenes = scenesAfterRemoval(doc, new Set([rowId]));
+      const flags = paragraphFlagsAfterOrder(doc, idsOf(doc).filter(id => id !== rowId), scenes);
       return {
-        changes: changeSet({ rowsRemoved: [rowId], docFields: hadScenes ? ["sections"] : [], derive: CELL_TEXT_DERIVES }),
+        changes: changeSet({ rowsRemoved: [rowId], cells: paragraphCells(flags), docFields: hadScenes ? ["sections"] : [], derive: CELL_TEXT_DERIVES }),
         apply: function (live) {
           live.rows.splice(liveIndex(live.rows, rowId, "deleted"), 1);
           if (hadScenes) writeScenes(live, scenes);
+          applyParagraphFlags(live.rows, flags);
         }
       };
     }
@@ -101,10 +104,12 @@ export function moveBeatCommand(rowId: string, targetId: string, after: boolean,
       const scenes = scenesAfterRemoval(doc, new Set([rowId]))?.map(scene =>
         scene.id === intoScene ? withSceneFirstBeat(scene, rowId) : scene);
       if (sameOrder(ids, order) && (!intoScene || JSON.stringify(scenes) === JSON.stringify(original))) return null;
+      const flags = paragraphFlagsAfterOrder(doc, order, scenes, rowId);
       return {
-        changes: reorderedChange(!!original),
+        changes: reorderedChange(!!original, paragraphCells(flags)),
         apply: function (live) {
           reorderTo(live.rows, order);
+          applyParagraphFlags(live.rows, flags);
           if (original) {
             writeScenes(live, scenes);
             writeScenes(live, scenesInOrder(live));

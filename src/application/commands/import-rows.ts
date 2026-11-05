@@ -49,6 +49,7 @@ export function importRowsCommand(request: ImportRequest, ports: StampPorts): Re
           const by = ports.editor.name();
           const added = request.rows.map(function (row) {
             const made = copied(row);
+            delete made.paragraphStart;
             made.updatedAt = at;
             made.updatedBy = by;
             return made;

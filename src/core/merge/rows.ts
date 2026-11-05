@@ -16,6 +16,7 @@ interface Identified {
 export interface MergeRow extends Identified {
   status?: unknown;
   lengthSeconds?: unknown;
+  paragraphStart?: unknown;
   imageRef?: unknown;
   imageName?: unknown;
   imageAnnotation?: unknown;
@@ -93,7 +94,10 @@ export function rowFieldKey(row: Readonly<Record<string, unknown>> | null | unde
 }
 
 export function rowContentEqual(a: Readonly<Record<string, unknown>> | null | undefined, b: Readonly<Record<string, unknown>> | null | undefined): boolean {
-  if (!a || !b) return false;
+  return !!a && !!b && rowEditedContentEqual(a, b) && (a.paragraphStart === true) === (b.paragraphStart === true);
+}
+
+function rowEditedContentEqual(a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>): boolean {
   return ROW_FIELDS.every(function (f) { return rowFieldKey(a, f) === rowFieldKey(b, f); }) &&
     setLengthOf(a) === setLengthOf(b);
 }
@@ -165,11 +169,16 @@ export function mergeRows(base: RowSide | null | undefined, mine: RowSide, their
       if (len === null) delete out.lengthSeconds; else out.lengthSeconds = len;
       if (useMine) tookMine = true; else tookTheirs = true;
     }
+    const mp = m.paragraphStart === true, tp = t.paragraphStart === true, bp = b?.paragraphStart === true;
+    if (mp !== tp) {
+      const useMine = b ? tp === bp : !tp;
+      if (useMine ? mp : tp) out.paragraphStart = true; else delete out.paragraphStart;
+    }
     if (tookMine) {
       out.updatedAt = ctx.clock.nowIso();
       out.updatedBy = ctx.editor();
       stats.rowsFromMe++;
-    } else if (b ? tookTheirs : !rowContentEqual({}, t)) {
+    } else if (b ? tookTheirs : !rowEditedContentEqual({}, t)) {
       stats.rowsFromThem++;
     }
     return out;
