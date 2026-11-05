@@ -7,7 +7,7 @@ expect document.querySelectorAll('.toolbar .btn-accent').length === 1 && documen
 
 eval document.getElementById('btn-comments').focus()
 key Tab
-expect document.activeElement.id == btn-write
+expect document.activeElement.id == btn-present
 
 eval (function(){ var f=document.createElement('iframe'); f.id='hf'; f.style.cssText='position:fixed;left:0;top:0;width:1440px;height:800px;border:0;z-index:99999;background:#fff'; f.src='/index.html'; document.body.appendChild(f); return true; })()
 wait document.getElementById('hf').contentDocument && document.getElementById('hf').contentDocument.querySelectorAll('#rows .row').length > 0
@@ -110,7 +110,7 @@ sleep 500
 
 eval window.__at(990)
 sleep 400
-expect Math.round(window.__d().getElementById('btn-write').getBoundingClientRect().width) == 32
+expect Math.round(window.__d().getElementById('btn-write').getBoundingClientRect().width) == 100
 mouse hover window.__pt('btn-write')
 sleep 600
 expect window.__lab('btn-write') === 0

@@ -5,8 +5,8 @@ wait document.querySelectorAll('#rows .row').length > 0
 click #btn-write
 wait window.__writerFlowTest.on()
 eval window.__writerFlowTest.place({anchor:{kind:'beat',rowId:window.__splitpageFormats.state().rows[0].id,offset:0},head:{kind:'beat',rowId:window.__splitpageFormats.state().rows[0].id,offset:0}});true
-expect getComputedStyle(document.getElementById('writer-doc')).maxWidth === 'min(760px, 100% - 320px)'
-expect Math.round(document.getElementById('writer-doc').getBoundingClientRect().width) === 274
+expect getComputedStyle(document.getElementById('writer-doc')).maxWidth === 'min(760px, 100% - 240px)'
+expect Math.round(document.getElementById('writer-doc').getBoundingClientRect().width) === 354
 expect getComputedStyle(document.querySelector('.wr-visual-note')).position === 'absolute'
 expect document.querySelector('.wr-visual-note').getBoundingClientRect().left >= 0
 expect document.querySelector('.wr-visual-note').getBoundingClientRect().right <= document.getElementById('writer-scroll').getBoundingClientRect().right

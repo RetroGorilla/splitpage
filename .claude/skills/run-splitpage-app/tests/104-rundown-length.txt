@@ -25,7 +25,7 @@ expect document.querySelector('.topbar-row #runtime-chip') === null
 expect document.querySelector('.program-clock, .program-clock-wrap') === null
 expect document.querySelectorAll('.topbar-row > *').length === 2
 expect document.getElementById('runtime-chip').closest('#rundown .rundown-track') !== null
-expect getComputedStyle(document.getElementById('length-status')).display == none
+expect getComputedStyle(document.getElementById('length-status')).display == flex
 
 # --- just after the last block, in the tail ------------------------------------
 expect document.getElementById('runtime-total').textContent == 0:24
@@ -46,11 +46,11 @@ shot 104-length-rest
 # --- a click opens the reading speed and target popover, under it -------------
 click #runtime-chip
 wait document.getElementById('wpm-editor')
-expect document.getElementById('wpm-editor').getBoundingClientRect().top >= R(len()).bottom
+expect document.getElementById('wpm-editor').getBoundingClientRect().top >= R(document.getElementById('length-status')).bottom
 expect !document.getElementById('rundown').classList.contains('is-min')
 key Escape
 wait document.getElementById('wpm-editor') === null
-expect document.activeElement.id == runtime-chip
+expect document.activeElement.id == length-status
 
 # --- against a target: " / 2:00 · 1:36 left", the hatching quiet ---------------
 expect T.set(120) === true

@@ -164,7 +164,9 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
       const holder = parent?.getBoundingClientRect();
       if (rect && holder && parent) {
         note.style.top = rect.top - holder.top + parent.scrollTop + "px";
-        note.style.left = root.offsetLeft + root.offsetWidth + 16 + "px";
+        const left = root.offsetLeft + root.offsetWidth + 16;
+        note.style.left = left + "px";
+        note.style.maxWidth = Math.max(0, parent.clientWidth - left - 16) + "px";
       }
     }
     position();

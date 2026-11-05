@@ -46,7 +46,7 @@ click #wpm-editor .target-preset[data-target-seconds="120"]
 sleep 300
 expect document.getElementById('wpm-editor') === null
 expect F.state().targetSeconds === 120
-expect document.activeElement.id == runtime-chip
+expect document.activeElement.id == length-status
 expect document.getElementById('runtime-total').textContent == 1:35
 expect document.querySelector('#runtime-slot .rd-length-of').textContent === ' / 2:00'
 expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:25 left

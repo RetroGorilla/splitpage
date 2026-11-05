@@ -123,7 +123,6 @@ import {
 import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { configureUndo, undoOwner } from "./undo.ts";
-import { localFileMenuControls } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";

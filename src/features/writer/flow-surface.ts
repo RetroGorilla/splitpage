@@ -403,6 +403,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   // why: the app paints from outside on undo, reloads and merges; a beat whose text changed gets a new DOM, so the
   // selection is carried across by model position. Composing text must never be repainted, so that waits.
   function remapForRepaint(range: FlowRange): FlowRange | null {
+    if (!isCollapsed(range)) return rangeExists(range) && rangeFits(range) ? range : null;
     const key = (pos: FlowPos) => pos.kind === "beat" ? "beat:" + pos.rowId : "heading:" + pos.sceneId;
     const shown = new Map(Array.from(root.querySelectorAll<HTMLElement>(".wr-beat, .wr-heading"), el =>
       [el.classList.contains("wr-beat") ? "beat:" + el.dataset.id : "heading:" + el.dataset.scene, el]));
@@ -418,12 +419,8 @@ export function createSurface(ports: SurfacePorts): Surface {
         head: head.offset, affinity: anchor.offset > 0 ? "backward" : "forward" }, anchor.kind === "beat" ? domKeys(el) : (el.textContent ?? "").split(""), [...shown.keys()]), world);
     };
     const point = (id: string, offset: number): FlowPos => id.startsWith("beat:") ? beatPos(id.slice(5), offset) : headingPos(id.slice(8), offset);
-    if (key(range.anchor) === key(range.head)) {
-      const mapped = resolve(range.anchor, range.head);
-      return mapped ? { anchor: point(mapped.rowId, mapped.anchor), head: point(mapped.rowId, mapped.head) } : null;
-    }
-    const anchor = resolve(range.anchor, range.anchor), head = resolve(range.head, range.head);
-    return anchor && head ? { anchor: point(anchor.rowId, anchor.head), head: point(head.rowId, head.head) } : null;
+    const mapped = resolve(range.anchor, range.head);
+    return mapped ? { anchor: point(mapped.rowId, mapped.anchor), head: point(mapped.rowId, mapped.head) } : null;
   }
 
   function repaint(): void {

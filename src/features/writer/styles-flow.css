@@ -1,4 +1,4 @@
-  #writer-doc.is-flow { --wr-faint: var(--text-faint); max-width: min(760px, calc(100% - 320px)); outline: none; font-size: var(--wr-font); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #writer-doc.is-flow { --wr-faint: var(--text-faint); max-width: min(760px, calc(100% - 240px)); outline: none; font-size: var(--wr-font); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
   #writer-doc.is-flow .wr-heading { font-size: 1.25em; font-weight: 600; line-height: 1.3; margin: 1.5em 0 .55em; }
   #writer-doc.is-flow .wr-heading:first-child { margin-top: 0; }
   #writer-doc.is-flow .wr-par { margin: 0 0 .95em; }
@@ -59,6 +59,11 @@
   .wr-flow-visual-pictures { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .wr-flow-visual-thumb, .wr-flow-visual-text img { width: 72px; height: 56px; object-fit: cover; border-radius: 3px; }
   .wr-flow-visual-hint { margin-top: 8px; color: var(--text-faint); font-size: 12px; }
+  @media (min-width: 761px) and (max-width: 999px) {
+    .writer-flow-bar .topbar-left { gap: 6px; }
+    .writer-flow-bar .doc-title { min-width: 0; }
+    .writer-flow-bar .doc-meta #identity-name { max-width: 8ch; }
+  }
   @media (max-width: 850px) {
     #writer-doc.is-flow { max-width: calc(100% - 120px); margin-left: 0; }
     .wr-visual-note { width: 100px; }
@@ -66,5 +71,5 @@
   @media (min-width: 851px) and (max-width: 1100px) {
     .writer-flow-open.panel-open .writer { right: min(var(--open-panel-width, 488px), 35vw); }
     .writer-flow-open #comments-panel { width: min(var(--panel-width, 488px), 35vw); }
-    .writer-flow-open #writer-doc.is-flow { max-width: calc(100% - 160px); margin-left: 0; }
+    .writer-flow-open #writer-doc.is-flow { max-width: calc(100% - 140px); margin-left: 0; }
   }

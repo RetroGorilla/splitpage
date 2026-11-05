@@ -69,17 +69,17 @@ wait document.getElementById('wpm-editor')
 expect document.getElementById('wpm-editor').parentNode === document.body
 expect document.getElementById('wpm-editor').classList.contains('anchor-popover')
 expect window.__inView(document.getElementById('wpm-editor'))
-expect document.getElementById('wpm-editor').getBoundingClientRect().top >= document.getElementById('runtime-chip').getBoundingClientRect().bottom
+expect document.getElementById('wpm-editor').getBoundingClientRect().top >= document.getElementById('length-status').getBoundingClientRect().bottom
 expect document.querySelector('#rundown #wpm-editor') === null
 expect (function(){var r=document.getElementById('wpm-editor').getBoundingClientRect();var el=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return !!el && !!el.closest('#wpm-editor');})()
 # centred under the script's length at the end of the rundown (#207)
-expect (function(){var a=document.getElementById('wpm-editor').getBoundingClientRect(),b=document.getElementById('runtime-chip').getBoundingClientRect();return Math.abs((a.left+a.width/2)-(b.left+b.width/2)) < 2;})()
+expect (function(){var a=document.getElementById('wpm-editor').getBoundingClientRect(),b=document.getElementById('length-status').getBoundingClientRect();return Math.abs((a.left+a.width/2)-(b.left+b.width/2)) < 2;})()
 # only one box at a time
 expect document.getElementById('identity-editor') === null
 shot 130-speed-box-light
 key Escape
 expect document.getElementById('wpm-editor') === null
-expect document.activeElement.id === 'runtime-chip'
+expect document.activeElement.id === 'length-status'
 
 # Set stores the speed on the document and closes
 click #runtime-chip
@@ -88,7 +88,7 @@ eval document.getElementById('wpm-input').value = '180'
 click #wpm-save
 expect document.getElementById('wpm-editor') === null
 expect window.__splitpageFormats.state().wordsPerMinute === 180
-expect document.activeElement.id === 'runtime-chip'
+expect document.activeElement.id === 'length-status'
 
 # a click outside closes it without setting anything
 click #runtime-chip

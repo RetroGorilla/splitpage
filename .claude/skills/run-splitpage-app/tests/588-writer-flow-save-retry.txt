@@ -1,7 +1,6 @@
 open
 viewport 1440 900
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1')
 goto /index.html
 wait document.body.classList.contains('writer-flow-bar')
 eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.A=F.autosave; window.B=document.getElementById('btn-save'); window.raw=JSON.stringify({schema:2,title:'Retry save',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo.',visualText:''}],comments:[]}); window.h={name:'retry.splitpage',_text:raw,_time:Date.now()-10000,_writes:0,fail:true,createWritable:async()=>{h._writes++;return {write:async b=>{if(h.fail)throw new Error('Permission denied');h._text=typeof b==='string'?b:await new Response(b).text()},close:async()=>{h._time=Date.now()}}},getFile:async()=>new File([h._text],h.name,{lastModified:h._time})}; F.openFile(new File([raw],h.name,{lastModified:h._time}),h)

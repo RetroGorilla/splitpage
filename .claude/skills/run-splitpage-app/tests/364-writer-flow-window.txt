@@ -1,7 +1,6 @@
 open
 viewport 1024 768
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1')
 goto /index.html
 wait document.body.classList.contains('writer-flow-bar')
 eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.hit=e=>{var r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}; window.box=document.getElementById('btn-write').getBoundingClientRect(); window.controls=['btn-file','btn-write','btn-save','length-status']

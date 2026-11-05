@@ -1,6 +1,7 @@
 open
+eval window.__splitpageFormats.state().paragraphsDecided=true;true
 eval (function(){window.D=window.__desktopTest;D.setBackend(D.makeFakeBackend());D.initDesktop();window.importPicks=0;document.getElementById('import-app-data-input').click=function(){window.importPicks++;};window.shown=function(id){return !document.getElementById(id).hidden;};window.notes=function(){return document.getElementById('toast-host').textContent;};window.clearNotes=function(){document.getElementById('toast-host').innerHTML='';return true;};return true;})()
-eval D.runMenuCommand('write')
+eval window.__splitpageFormats.state().paragraphsDecided=true;D.runMenuCommand('write')
 wait shown('writer')
 eval D.runMenuCommand('tour')
 expect !shown('tour-overlay')
@@ -53,6 +54,7 @@ expect window.importPicks === 0
 expect notes().includes('Finish or skip the tour first')
 jsclick #tour-skip
 wait !shown('tour-overlay')
+eval window.__splitpageFormats.state().paragraphsDecided=true; true
 open /index.html?newtab=1
 wait !document.getElementById('newtab-page').hidden
 eval window.__desktopTest.runMenuCommand('tour')
