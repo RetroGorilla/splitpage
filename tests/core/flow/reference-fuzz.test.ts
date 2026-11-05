@@ -82,7 +82,7 @@ test("seeded reference: 1800 replacements compare headings, text, beat identitie
     undo.adopt(h.session.held());
     const unroute = undo.routeReplays(h.session.replay, null);
     const before = observedFlowContent(h.session.held() as FlowDoc, doc, p);
-    const expected = referenceReplacement(h.session.held() as FlowDoc, range, "X", p);
+    const expected = referenceReplacement(h.session.held() as FlowDoc, range, "X", p, true);
     const out = runConfined(h.session, flowCommand("reference-replace", current => replaceRange(current, range, [{ text: "X", marks: {} }], p), stamps));
     assert.equal(out.kind, "applied", "session seed=" + seed);
     assert.deepEqual(observedFlowContent(h.session.held() as FlowDoc, doc, p), expected, "session seed=" + seed);
