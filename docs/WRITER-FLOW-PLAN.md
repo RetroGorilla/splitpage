@@ -400,6 +400,8 @@ These two rows aren't a controlled before and after. Electron's typing figure is
 
 `perf-ab` against `main`, three rounds, measures the shipping paths with the switch off, not the new writer. Median p50: short typing 2.5 to 2.6, long typing 2.8 to 2.7, long undo 28.3 to 30.8 (up 8.8%). The review found no switch-off undo path in 2b's diff that explains the undo figure. Noise is more likely, but that's unproven, so phase 8's comparison has to look at it again. Long HTML export also went from 2.2 to 3.5.
 
-**Still unproven:** a real IME, the real clipboard, right-click spellcheck, a physical Ctrl+Z against the menu, the one-second gap on a single key from section 10, the comments panel beside the writer, and a real script in Adam's hands. The full browser set hasn't run locally on the branch since 0b; CI's shards ran it on each phase PR.
+**Still unproven:** a real IME, the real clipboard, right-click spellcheck, a physical Ctrl+Z against the menu, the one-second gap on a single key from section 10, the comments panel beside the writer, and a real script in Adam's hands. CI on a phase PR runs only the core and security-policy browser suites and a fixed list of flow suites, and the nightly full run covers `main`, not this branch, so a full browser run on the branch has to be done locally.
+
+**Full browser run at the end of phase 2, switch off:** 10,161 of 10,163 across 212 suites. `219-sound-cues` is the known failure on this PC, from section 10. `388-scene-numbering` failed on clean `main` too: it still expected rows to stay identical when a scene header is removed, and #1220 deliberately adds the paragraph flag there. #1225 updates the suite. A phase PR's CI can't catch this kind of miss, so each phase from here ends with one full local run.
 
 The first `tests/core/flow/` file covers the rules Adam picked. Fuzz, merge and differential tests are phase 1.
