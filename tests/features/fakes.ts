@@ -22,6 +22,7 @@ import type { DocumentEdits } from "../../src/application/session/document-edits
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";
+import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
@@ -101,6 +102,12 @@ export function fakeFindPresent() {
     onViewChange: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; }
   };
   return { present, state, jumps, changed: () => { for (const listener of listeners) listener(); } };
+}
+
+export function fakeFindWriter(initial: WriterFindAccess | null = null) {
+  let current = initial;
+  const writer: NonNullable<FindPorts["writer"]> = () => current;
+  return { writer, set: (value: WriterFindAccess | null) => { current = value; } };
 }
 
 export function fakePrompterPorts(initial: DocumentView | null = null) {

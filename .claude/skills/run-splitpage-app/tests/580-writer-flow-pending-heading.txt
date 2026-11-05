@@ -1,0 +1,46 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; F.openFile(new File([JSON.stringify({schema:2,title:'Pending headings',paragraphsDecided:true,rows:[{id:'a',audioText:'Title',visualText:''},{id:'b',audioText:'Body',visualText:'Desk'},{id:'c',audioText:'Outside',visualText:'',paragraphStart:true},{id:'d',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'pending.splitpage'))
+wait F.state().title === 'Pending headings'
+click #btn-write
+wait W.on()
+eval at('a',0)
+press # X
+key Backspace
+expect F.state().rows[0].audioText === '# Title' && F.state().sections === undefined
+expect document.querySelector('.wr-beat[data-id="a"]').classList.contains('is-pending-heading')
+expect parseFloat(getComputedStyle(document.querySelector('.wr-beat[data-id="a"]')).fontSize) > parseFloat(getComputedStyle(document.querySelector('.wr-beat[data-id="b"]')).fontSize)
+eval at('b',2)
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})})
+expect F.state().rows[0].audioText === '# Title' && F.state().sections === undefined
+click .wr-beat[data-id="c"]
+expect F.state().rows[0].audioText === 'Title' && F.state().sections === undefined
+expect document.getElementById('toast-host').textContent.includes("A scene header can't hold several beats. Press Enter after the header's words.")
+expect W.selection().head.rowId === 'c'
+expect !document.querySelector('.wr-beat[data-id="a"]').classList.contains('is-pending-heading')
+key ctrl KeyZ
+expect F.state().rows[0].audioText === '# Title'
+eval at('a',7)
+key Enter
+expect F.state().sections[0].name === 'Title' && F.state().sections[0].firstSceneId === 'b'
+expect F.state().rows.map(function(r){return r.id}).join() === 'b,c,d' && F.state().rows[0].visualText === 'Desk'
+expect W.selection().head.rowId === 'b' && W.selection().head.offset === 0
+key ctrl KeyZ
+expect F.state().rows[0].audioText === '# Title' && F.state().rows[0].id === 'a' && F.state().sections === undefined
+eval at('c',0)
+press # X
+key Backspace
+eval document.getElementById('writer-doc').dispatchEvent(new FocusEvent('focusout',{bubbles:true,relatedTarget:null})); window.dispatchEvent(new Event('blur'))
+expect F.state().rows[2].audioText === '# Outside' && F.state().sections === undefined
+eval document.getElementById('writer-title').focus()
+wait F.state().sections && F.state().sections.some(function(s){return s.name === 'Outside'})
+expect document.activeElement.id === 'writer-title'
+expect !F.state().rows.some(function(r){return r.id === 'c'}) && F.state().rows[2].id === 'd'
+eval at('b',0)
+key ctrl KeyZ
+expect F.state().rows[2].id === 'c' && F.state().rows[2].audioText === '# Outside'
+eval at('c',9)
+click #wr-close
+expect F.state().sections[0].name === 'Outside' && !F.state().rows.some(function(r){return r.id === 'c'})
+key ctrl KeyZ
+expect F.state().sections === undefined && F.state().rows[2].audioText === '# Outside'

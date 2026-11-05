@@ -1269,10 +1269,13 @@ async function run() {
     await undoRestores(before);
   });
 
-  await t("heading: emptying one removes it", async () => {
+  await t("heading: emptying one waits until the caret leaves to remove it", async () => {
     await fresh();
     await select(heading("s2", 0), heading("s2", 6));
     await key("Backspace");
+    same((await ev("__lab.doc().sections")).map(s => s.id), ["s1", "s2"], "scene kept while editing");
+    same(await ev(`document.querySelector('.wr-heading[data-scene="s2"]').textContent`), "", "empty line");
+    await caret("rf", 0);
     same((await ev("__lab.doc().sections")).map(s => s.id), ["s1"], "scene gone");
     same(ids(await rows()), "ra,rb,rc,rd,re,rf,rg,rh,ri,rj", "ids");
     ok((await rows()).find(r => r.id === "rf").start, "first beat starts a paragraph");

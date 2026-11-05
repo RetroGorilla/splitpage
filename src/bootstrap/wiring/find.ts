@@ -13,6 +13,7 @@ import { shotHiding } from "./ports/shot-hiding.ts";
 import { bulkTagRows } from "./production-index.ts";
 import { prompterControls } from "./prompter.ts";
 import { prompterState } from "./ports/preferences.ts";
+import { writerControls } from "./writer.ts";
 
 const find = owned<FindControls>();
 const events = owned<ReturnType<typeof mountFindEvents>>();
@@ -20,6 +21,7 @@ const events = owned<ReturnType<typeof mountFindEvents>>();
 export function mountFindFeature(): FindControls {
   return find.replace(() => {
     const ports: FindPorts = {
+      writer: () => writerControls()?.writerFlowControl()?.find ?? null,
       document: portDocument,
       edits: portEdits,
       text: portText,
@@ -59,5 +61,5 @@ export function mountFindEventsFeature(): ReturnType<typeof mountFindEvents> {
 export const stopFindEventsFeature = events.stop;
 
 export function findActions(): ActionDefinition[] {
-  return definitions(find.owner, { screen: portScreen, flags: portFlags });
+  return definitions(find.owner, { screen: portScreen, flags: portFlags, flowWriterOpen: () => !!writerControls()?.writerFlowControl() });
 }

@@ -8,9 +8,9 @@ import { normalizeBeatLength, rowStatusId } from "../document/timing.ts";
 import { normalizeScenes, scenesAfterRemoval as removedSceneAnchors, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
 import type { DocumentScene } from "../document/scenes.ts";
 import type { DocumentShape } from "../document/validated.ts";
-import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, setMark, sliceCell, splitCell } from "../text/edits.ts";
+import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, replaceText, setMark, sliceCell, splitCell } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
-import { cellLength, commentIds, normalizeCell, projection } from "../text/runs.ts";
+import { cellLength, commentIds, normalizeCell, OBJ, projection } from "../text/runs.ts";
 import type { MarkName, Marks, Run } from "../text/runs.ts";
 
 export const SCENE_NAME_MAX = 200;
@@ -658,6 +658,12 @@ export function enterInHeading(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): Fl
   if (pos.kind !== "heading") return null;
   const scene = scenesOf(doc).find(item => item.id === pos.sceneId);
   if (!scene) return null;
+  if (pos.offset === 0) {
+    const rows = doc.rows.slice();
+    const fresh = blankRow(ports.newId(), false);
+    rows.splice(indexOfRow(doc, scene.firstSceneId), 0, fresh);
+    return edit(doc, rows, caretAt(beatPos(fresh.id, 0)));
+  }
   const head = scene.name.slice(0, pos.offset), tail = scene.name.slice(pos.offset);
   if (!tail) return { move: beatPos(scene.firstSceneId, 0) };
   if (!head) return { move: beatPos(scene.firstSceneId, 0) };
@@ -683,7 +689,9 @@ function withoutMarker(doc: FlowDoc, index: number, ports: FlowPorts, selection:
   const row = doc.rows[index] as FlowRow;
   const rows = doc.rows.slice();
   rows[index] = writeCell(row, deleteRange(ports.cells(row.audioText), 0, HEADING_MARKER.length));
-  return edit(doc, rows, selection, notice ? { notice } : undefined);
+  const remap = (pos: FlowPos): FlowPos => pos.kind === "beat" && pos.rowId === row.id
+    ? { ...pos, offset: Math.max(0, pos.offset - HEADING_MARKER.length) } : pos;
+  return edit(doc, rows, { anchor: remap(selection.anchor), head: remap(selection.head) }, notice ? { notice } : undefined);
 }
 
 export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | null, keep: FlowRange | null, ports: FlowPorts): FlowOutcome {
@@ -695,11 +703,14 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   const lineEnd = text.indexOf("\n") === -1 ? text.length : text.indexOf("\n");
   const end = enterAt === null ? lineEnd : Math.min(enterAt, lineEnd);
   const name = text.slice(HEADING_MARKER.length, end).trim();
-  const fallback = keep ?? caretAt(beatPos(row.id, Math.max(0, (enterAt ?? text.length) - HEADING_MARKER.length)));
+  const fallback = keep ?? caretAt(beatPos(row.id, enterAt ?? text.length));
   if (!name) return withoutMarker(doc, index, ports, fallback);
+  if (sliceCell(cell, 0, end).some(run => !!run.marks.tag || !!run.marks.cmt?.length)) {
+    return withoutMarker(doc, index, ports, fallback, "A scene header can't hold tags or comments.");
+  }
   const follower = doc.rows[index + 1];
   const anchors = sceneAnchors(doc);
-  const hasRunOn = !!follower && !startsParagraph(doc, index + 1);
+  const hasRunOn = lineEnd === text.length && !!follower && !startsParagraph(doc, index + 1);
   if (enterAt === null && hasRunOn) {
     return withoutMarker(doc, index, ports, fallback, "A scene header can't hold several beats. Press Enter after the header's words.");
   }
@@ -711,11 +722,16 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   const rows = doc.rows.slice();
   const existing = anchors.get(row.id);
   let first: FlowRow;
-  const removeBeat = !cellLength(rest) && !ports.hasVisual(row) && !!follower && !anchors.has(follower.id) && !existing;
+  const removeBeat = !cellLength(rest) && !ports.hasVisual(row);
   if (removeBeat) {
     rows.splice(index, 1);
-    first = withoutFlag(follower as FlowRow);
-    rows[index] = first;
+    if (follower && !anchors.has(follower.id)) {
+      first = withoutFlag(follower);
+      rows[index] = first;
+    } else {
+      first = blankRow(ports.newId(), false);
+      rows.splice(index, 0, first);
+    }
   } else {
     first = withoutFlag(writeCell(row, rest));
     rows[index] = first;
@@ -730,7 +746,12 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   }
   scenes.push(fresh);
   const sections = scenesOf({ rows, sections: scenes });
-  const selection = keep ?? caretAt(beatPos(first.id, 0));
+  const remap = (pos: FlowPos): FlowPos => {
+    if (pos.kind !== "beat" || pos.rowId !== row.id) return pos;
+    if (pos.offset < restStart) return headingPos(fresh.id, Math.min(name.length, Math.max(0, pos.offset - HEADING_MARKER.length)));
+    return beatPos(first.id, Math.min(cellLength(rest), pos.offset - restStart));
+  };
+  const selection = keep ? { anchor: remap(keep.anchor), head: remap(keep.head) } : caretAt(beatPos(first.id, 0));
   return edit(doc, rows, selection, { sections });
 }
 
@@ -747,7 +768,8 @@ export interface InlineMarkdown {
 }
 
 export function inlineMarkdown(cell: readonly Run[], caret: number): InlineMarkdown | null {
-  const text = projection(cell);
+  // why: tags stop delimiter matching, while their widths must stay aligned with the cell's positions
+  const text = normalizeCell(cell).map(run => run.marks.tag ? "\n".repeat(run.atom ? 1 : run.text.length) : run.atom ? OBJ : run.text).join("");
   for (const rule of INLINE_RULES) {
     const size = rule.marker.length;
     if (text.slice(caret - size, caret) !== rule.marker) continue;
@@ -864,8 +886,7 @@ export function replaceMatch(doc: FlowDoc, range: FlowRange, text: string, ports
     const cell = ports.cells(row.audioText);
     const a = index === start ? from.offset : 0;
     const b = index === end ? to.offset : cellLength(cell);
-    const left = deleteRange(cell, a, b);
-    rows[index] = writeCell(row, index === start && text ? insertCell(left, a, [{ text, marks: {} }]).cell : left);
+    rows[index] = writeCell(row, index === start ? replaceText(cell, a, b, text) : deleteRange(cell, a, b));
   }
   return edit(doc, rows, caretAt(beatPos(from.rowId, from.offset + text.length)));
 }
