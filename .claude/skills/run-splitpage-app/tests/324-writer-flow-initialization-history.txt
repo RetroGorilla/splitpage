@@ -1,0 +1,53 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; window.loadHistoryCase = function(title){return F.openFile(new File([JSON.stringify({schema:2,title:title,rows:[{id:'a',audioText:'Alpha.Bravo',visualText:''}],comments:[]})],'history.splitpage'));}; window.splitCaret = function(){var el=document.querySelector('#rows .cell-editable[data-id="a"][data-field="audioText"]'); el.focus(); getSelection().setBaseAndExtent(el.firstChild,6,el.firstChild,6);}; return loadHistoryCase('First-open split history'); })()
+wait F.state().title === 'First-open split history'
+eval splitCaret()
+key alt Enter
+eval U.flush()
+expect F.state().rows.length === 2 && F.state().rows[1].audioText === 'Bravo'
+expect U.sizes().undo === 1 && U.sizes().redo === 0
+click #btn-write
+wait W.on()
+expect F.state().rows[1].paragraphStart === true
+click #wr-close
+key ctrl KeyZ
+expect F.state().rows.length === 1 && F.state().rows[0].audioText === 'Alpha.Bravo'
+expect U.sizes().undo === 0 && U.sizes().redo === 1
+expect F.state().paragraphsDecided === true
+key ctrl KeyY
+expect F.state().rows.length === 2 && F.state().rows[1].audioText === 'Bravo' && F.state().rows[1].paragraphStart === true
+expect U.sizes().undo === 1 && U.sizes().redo === 0
+eval loadHistoryCase('First-open multi-entry history')
+wait F.state().title === 'First-open multi-entry history'
+eval splitCaret()
+key alt Enter
+eval W.outsideEdit('a','Changed alpha.')
+eval U.flush()
+eval W.outsideEdit(F.state().rows[1].id,'Changed bravo')
+eval U.flush()
+expect U.sizes().undo === 3
+key ctrl KeyZ
+expect F.state().rows[1].audioText === 'Bravo' && U.sizes().redo === 1
+click #btn-write
+wait W.on()
+click #wr-close
+expect U.sizes().undo === 2 && U.sizes().redo === 1
+key ctrl KeyY
+expect F.state().rows[1].audioText === 'Changed bravo' && U.sizes().undo === 3 && U.sizes().redo === 0
+key ctrl KeyZ
+expect F.state().rows[1].audioText === 'Bravo'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha.'
+key ctrl KeyZ
+expect F.state().rows.length === 1 && F.state().rows[0].audioText === 'Alpha.Bravo'
+expect U.sizes().undo === 0 && U.sizes().redo === 3 && F.state().paragraphsDecided === true
+click #btn-write
+wait W.on()
+click #wr-close
+expect U.sizes().undo === 0 && U.sizes().redo === 3
+key ctrl KeyY
+key ctrl KeyY
+key ctrl KeyY
+expect F.state().rows.length === 2 && F.state().rows[0].audioText === 'Changed alpha.' && F.state().rows[1].audioText === 'Changed bravo'
+expect U.sizes().undo === 3 && U.sizes().redo === 0 && F.state().paragraphsDecided === true

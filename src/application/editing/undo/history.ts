@@ -9,6 +9,7 @@ import { FIELD_LIST_MERGERS } from "../../../core/merge/state-fields.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import { commentIds, normalizeCell } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
+import type { FlowSelectionPair } from "../../../core/flow/flow.ts";
 import { invertSteps } from "../../../core/text/steps.ts";
 import type { DocFieldStep, RowFieldStep, Step, StepRow } from "../../../core/text/steps.ts";
 
@@ -36,6 +37,7 @@ interface Watched {
 }
 
 export interface UndoEntry {
+  readonly selection?: FlowSelectionPair;
   n: number;
   steps: Step[];
   at: number;
@@ -120,13 +122,14 @@ export interface Standing {
 }
 
 export interface UndoHistory {
-  readonly record: (steps: Step[], now: number) => void;
+  readonly record: (steps: Step[], now: number, selection?: FlowSelectionPair) => void;
   readonly undo: (state: UndoState) => StepResult;
   readonly redo: (state: UndoState) => StepResult;
   readonly prepare: (dir: "undo" | "redo", state: UndoState) => PreparedReplay | null;
   readonly forget: (touched: Touched) => void;
   readonly standing: (entry: UndoEntry | null | undefined, hits: (entry: UndoEntry) => boolean) => Standing;
   readonly amend: (entry: UndoEntry, steps: Step[]) => void;
+  readonly initializeParagraphs: (starts: readonly string[]) => void;
   readonly breakCoalescing: () => void;
   readonly markCell: (rowId: string, key: string, value: unknown) => CellMark;
   readonly dropEmptySince: (mark: CellMark, cancelled?: boolean) => boolean;
@@ -583,7 +586,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     parked = null;
   }
 
-  function record(steps: Step[], now: number): void {
+  function record(steps: Step[], now: number, selection?: FlowSelectionPair): void {
     if (!steps.length) return;
     const cell = onlyCell(steps);
     const last = done[done.length - 1];
@@ -591,7 +594,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     const first = steps[0] as RowFieldStep;
     const from = cell ? projectionOf(runs, first.before) : "", to = cell ? projectionOf(runs, first.after) : "";
     const ins = cell ? insertedText(from, to) : "";
-    if (cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
+    if (!selection && !last?.selection && cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
       const startsWord = /\S/.test(ins) && last.endsInSpace;
       if (!startsWord) {
         const lastStep = last.steps[0] as RowFieldStep;
@@ -608,7 +611,8 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
         return;
       }
     }
-    push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null });
+    push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null,
+      ...(selection ? { selection: JSON.parse(JSON.stringify(selection)) as FlowSelectionPair } : {}) });
   }
 
   function push(entry: UndoEntry): void {
@@ -822,6 +826,47 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     entry.cell = null;
   }
 
+  function initializeParagraphs(starts: readonly string[]): void {
+    const past = [...done, ...done.flatMap(entry => entry.evicted ? [entry.evicted] : [])].sort((a, b) => a.n - b.n);
+    function at(serial: number): Set<string> {
+      const active = new Set(starts);
+      for (const entry of past) {
+        if (entry.n <= serial) continue;
+        for (const step of entry.steps) {
+          if (step.op === "insertRow") active.delete(idKey(step.row.id));
+          if (step.op === "rowField" && step.key === "paragraphStart") active.delete(step.rowId);
+        }
+      }
+      return active;
+    }
+    const parkedStarts = parked ? at(parked.top?.n ?? 0) : null;
+    const markedStarts = current ? at(current.n) : null;
+    const visited = new Set<UndoEntry>();
+    // why: initialization travels through snapshots only until an earlier paragraph edit or the beat's creation
+    function rebase(entries: readonly UndoEntry[], backward: boolean, active: Set<string>): void {
+      for (const entry of entries.slice().reverse()) {
+        const write = !visited.has(entry);
+        visited.add(entry);
+        const steps = backward ? entry.steps.slice().reverse() : entry.steps;
+        for (const step of steps) {
+          if (step.op === "docField" && step.key === "paragraphsDecided") {
+            if (write) { step.before = true; step.after = true; }
+          } else if (step.op === "rowField" && step.key === "paragraphStart" && active.has(step.rowId)) {
+            if (write) { if (backward) step.after = true; else step.before = true; }
+            active.delete(step.rowId);
+          } else if ((step.op === "insertRow" || step.op === "deleteRow") && active.has(idKey(step.row.id))) {
+            if (write) step.row.paragraphStart = true;
+            if (backward === (step.op === "insertRow")) active.delete(idKey(step.row.id));
+          }
+        }
+      }
+    }
+    rebase(past, true, new Set(starts));
+    rebase(undone, false, new Set(starts));
+    if (parked && parkedStarts) rebase(parked.redo, false, parkedStarts);
+    if (current && markedStarts) rebase(current.redo, false, markedStarts);
+  }
+
   return {
     record: record,
     undo: function (state) { return step("undo", state); },
@@ -830,6 +875,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     forget: forget,
     standing: standing,
     amend: amend,
+    initializeParagraphs,
     breakCoalescing: function () { const last = done[done.length - 1]; if (last) last.cell = null; },
     markCell: markCell,
     dropEmptySince: dropEmptySince,

@@ -12,6 +12,25 @@ function harness() {
   return fakeWriterPorts(migrateRows({ title: "Writer mount", rows: [] }, fakeMigration().ports));
 }
 
+test("viewing-only flow host cancels input and editing keys before its surface handlers", () => {
+  const h = harness();
+  h.state.allowed = false;
+  const root = document.getElementById("writer-doc") as HTMLElement;
+  root.classList.add("is-flow");
+  let bubbled = 0;
+  root.addEventListener("beforeinput", () => { bubbled++; });
+  const writer = startWriter(h.ports);
+  try {
+    const input = new window.InputEvent("beforeinput", { inputType: "insertText", data: "x", bubbles: true, cancelable: true });
+    root.dispatchEvent(input);
+    assert.equal(input.defaultPrevented, true);
+    assert.equal(bubbled, 0);
+    const key = new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    root.dispatchEvent(key);
+    assert.equal(key.defaultPrevented, true);
+  } finally { writer.dispose(); }
+});
+
 test("writer runtime closes panels before opening, schedules its existing idle job, and clears modal and redo state on dispose", () => {
   const h = harness();
   const first = startWriter(h.ports);

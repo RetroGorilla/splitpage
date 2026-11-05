@@ -17,6 +17,7 @@ import type { ShotRow } from "../../application/shot-hiding.ts";
 
 export interface FlowWriterMaker {
   readonly enabled: () => boolean;
+  readonly refreshSplit: (rowId?: string) => void;
   readonly create: (root: HTMLElement, selectionMoved: () => void, undoStep: (dir: UndoDirection) => void) => FlowWriter;
 }
 

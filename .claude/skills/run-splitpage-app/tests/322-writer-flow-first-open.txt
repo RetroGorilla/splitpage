@@ -1,0 +1,22 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'First flow open',rows:[{id:'a',audioText:'A sentence.',visualText:''},{id:'b',audioText:'A continuation',visualText:''},{id:'c',audioText:'without a stop',visualText:''}],comments:[]})],'first.splitpage')); })()
+wait F.state().title === 'First flow open'
+eval U.flush()
+eval window.beforeUndo = U.sizes().undo
+click #btn-write
+wait W.on()
+expect F.state().paragraphsDecided === true
+expect F.state().rows[1].paragraphStart === true && F.state().rows[2].paragraphStart === undefined
+expect document.querySelectorAll('#writer-doc .wr-par').length === 2
+expect U.sizes().undo === beforeUndo
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:0},head:{kind:'beat',rowId:'b',offset:0}})
+key Backspace
+expect F.state().rows[1].paragraphStart === undefined
+expect U.sizes().undo === beforeUndo + 1
+click #wr-close
+click #btn-write
+wait W.on()
+expect F.state().rows[1].paragraphStart === undefined && F.state().paragraphsDecided === true
+expect document.querySelectorAll('#writer-doc .wr-par').length === 1
+expect W.check().length === 0

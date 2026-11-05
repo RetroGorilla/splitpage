@@ -1,0 +1,28 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow undo',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha one.',visualText:''},{id:'b',audioText:'Bravo two.',visualText:''}],comments:[]})],'undo.splitpage')); })()
+wait F.state().title === 'Flow undo'
+click #btn-write
+wait W.on()
+eval (function(){ window.before = {anchor:{kind:'beat',rowId:'a',offset:4},head:{kind:'beat',rowId:'a',offset:1}}; W.place(before); return true; })()
+key ctrl KeyB
+expect F.state().rows[0].audioText === 'A<strong>lph</strong>a one.'
+expect U.sizes().undo === 1
+eval (function(){ var e = new InputEvent('beforeinput',{inputType:'historyUndo',bubbles:true,cancelable:true}); document.getElementById('writer-doc').dispatchEvent(e); return e.defaultPrevented; })()
+expect F.state().rows[0].audioText === 'Alpha one.'
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect U.sizes().undo === 0 && U.sizes().redo === 1
+key ctrl KeyZ
+expect document.getElementById('writer').hidden
+key ctrl+shift KeyZ
+wait W.on()
+eval (function(){ var e = new InputEvent('beforeinput',{inputType:'historyRedo',bubbles:true,cancelable:true}); document.getElementById('writer-doc').dispatchEvent(e); return e.defaultPrevented; })()
+expect F.state().rows[0].audioText === 'A<strong>lph</strong>a one.'
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect U.sizes().undo === 1 && U.sizes().redo === 0
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha one.'
+key ctrl KeyY
+expect F.state().rows[0].audioText === 'A<strong>lph</strong>a one.'
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect W.check().length === 0

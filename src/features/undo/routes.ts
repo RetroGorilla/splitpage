@@ -48,6 +48,8 @@ export function mountUndoRoutes(mount: UndoRoutesMount): UndoRoutes {
 
   function scriptCellAround(target: EventTarget | null): boolean {
     if (!(target instanceof realm.Element)) return false;
+    const host = target.closest("[contenteditable]");
+    if (host?.getAttribute("data-undo-owner") === "document") return true;
     const cell = target.closest(".cell-editable");
     return cell !== null && ports.scriptCell(cell);
   }
@@ -85,6 +87,7 @@ export function mountUndoRoutes(mount: UndoRoutesMount): UndoRoutes {
   }
 
   function onBeforeInput(e: Event): void {
+    if (e.defaultPrevented) return;
     const inputType = (e as InputEvent).inputType;
     if (inputType !== "historyUndo" && inputType !== "historyRedo") return;
     if (!scriptCellAround(e.target)) return;

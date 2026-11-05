@@ -44,6 +44,11 @@ export interface FlowRange {
   readonly head: FlowPos;
 }
 
+export interface FlowSelectionPair {
+  readonly before: FlowRange;
+  readonly after: FlowRange;
+}
+
 export interface FlowPorts {
   readonly cells: (html: string | null | undefined) => readonly Run[];
   readonly newId: () => string;

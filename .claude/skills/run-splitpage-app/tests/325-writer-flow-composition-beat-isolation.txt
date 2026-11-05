@@ -1,0 +1,21 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Composition beat isolation',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'composition.splitpage')); })()
+wait F.state().title === 'Composition beat isolation'
+click #btn-write
+wait W.on()
+eval (function(){ W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:5}}); var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); var beat=document.querySelector('.wr-beat[data-id="a"]'); beat.textContent='COMPOSED ALPHA'; beat.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:'COMPOSED ALPHA'})); W.outsideEdit('b','REMOTE BRAVO'); W.fullRender(); return true; })()
+expect document.querySelector('.wr-beat[data-id="b"]').textContent.replace(/\u200b/g,'') === 'Bravo'
+expect F.state().rows[1].audioText === 'REMOTE BRAVO'
+eval (function(){ document.getElementById('writer-doc').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); document.getElementById('wr-close').click(); return true; })()
+expect F.state().rows[0].audioText === 'COMPOSED ALPHA'
+expect F.state().rows[1].audioText === 'REMOTE BRAVO'
+click #btn-write
+wait W.on()
+expect W.check().length === 0
+expect document.querySelector('.wr-beat[data-id="b"]').textContent.replace(/\u200b/g,'') === 'REMOTE BRAVO'
+eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); var beat=document.querySelector('.wr-beat[data-id="a"]'); beat.textContent='SECOND COMPOSITION'; beat.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:'SECOND COMPOSITION'})); W.outsideEdit('b','SECOND REMOTE'); W.fullRender(); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); return true; })()
+wait F.state().rows[0].audioText === 'SECOND COMPOSITION'
+expect F.state().rows[1].audioText === 'SECOND REMOTE'
+expect document.querySelector('.wr-beat[data-id="b"]').textContent.replace(/\u200b/g,'') === 'SECOND REMOTE'
+expect W.check().length === 0

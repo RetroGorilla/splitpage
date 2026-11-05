@@ -7,6 +7,8 @@ import { bothBeatsHaveVisual, joinBeatsCommand } from "../../application/command
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { placeCaretAtTextOffset } from "../common/caret.ts";
+import { domToPos, posToDom } from "../common/cell-dom.ts";
+import { beatPos, caretAt } from "../../core/flow/flow.ts";
 import { gallerySize } from "../../core/document/gallery.ts";
 import { escapeHtml, truncateForPreview } from "../../core/document/text-policy.ts";
 
@@ -110,6 +112,12 @@ export function drawWriter() {
 
 export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
   const doc = (document.getElementById("writer-doc") as HTMLElement);
+  if (flowWriter && !flowWriter.isCurrent()) {
+    detachFlowWriter();
+    attachFlowWriter();
+    writerUndoMark = (undoMark as WriterFeaturePorts["undo"]["mark"])();
+    reopenOnRedo = null;
+  }
   if (flowWriter) {
     const title = (document.getElementById("writer-title") as HTMLInputElement);
     if (document.activeElement !== title) title.value = draw.title;
@@ -314,6 +322,14 @@ export function cycleWriterGutter() {
 }
 
 export function openWriter(keepMark?: number | null) {
+  const flow = !!flowMaker?.enabled();
+  const selection = window.getSelection();
+  const node = selection?.focusNode;
+  const cell = (node?.nodeType === 3 ? node.parentElement : node as Element | null)?.closest?.('#rows .cell-editable[data-id]');
+  const offset = cell && node ? domToPos(cell, node, selection?.focusOffset ?? 0) : null;
+  const remembered = flow ? (editorSelection as WriterFeaturePorts["editing"]["selection"])().resolve() : null;
+  const rowId = cell?.getAttribute("data-id") ?? remembered?.rowId;
+  const at = flow && rowId ? caretAt(beatPos(rowId, offset ?? remembered?.head ?? 0)) : null;
   const el = (document.getElementById("writer") as HTMLElement);
   writerUndoMark = keepMark == null ? (undoMark as WriterFeaturePorts["undo"]["mark"])() : keepMark;
   reopenOnRedo = null;
@@ -334,7 +350,8 @@ export function openWriter(keepMark?: number | null) {
   for (let i = 0; i < rows.length; i++) {
     if (!(htmlToPlainText as WriterFeaturePorts["text"]["htmlToPlainText"])((rows[i] as WriterRow).audioText)) { blank = rows[i]; break; }
   }
-  if (blank) focusWriterBlock(blank.id, 0);
+  if (flowWriter && at) flowWriter.place(at);
+  else if (blank) focusWriterBlock(blank.id, 0);
   else if (rows.length) focusWriterBlock((rows[rows.length - 1] as WriterRow).id, "end");
   updateWriterFormatState();
 }
@@ -344,6 +361,7 @@ function attachFlowWriter() {
   const root = (document.getElementById("writer-doc") as HTMLElement);
   root.textContent = "";
   root.classList.add("is-flow");
+  root.setAttribute("data-undo-owner", "document");
   root.setAttribute("spellcheck", "true");
   root.setAttribute("tabindex", "0");
   (document.querySelector('.writer-bar .wr-fmt[data-cmd="comment"]') as HTMLElement).hidden = false;
@@ -356,6 +374,7 @@ function detachFlowWriter() {
   flowWriter = null;
   const root = (document.getElementById("writer-doc") as HTMLElement);
   root.classList.remove("is-flow");
+  root.removeAttribute("data-undo-owner");
   root.removeAttribute("contenteditable");
   root.removeAttribute("spellcheck");
   root.removeAttribute("tabindex");
@@ -379,6 +398,8 @@ export function writerFlowControl() {
 export function closeWriter() {
   const el = (document.getElementById("writer") as HTMLElement);
   if (el.hidden) return;
+  const flow = flowWriter;
+  const at = flow?.finish()?.head;
   detachFlowWriter();
   const active = document.activeElement;
   if (active && active.classList && active.classList.contains("wr-para")) {
@@ -392,6 +413,19 @@ export function closeWriter() {
   (viewFlags as WriterFeaturePorts["view"])().setWriterOpen(false);
   (focusMemory as WriterFeaturePorts["editing"]["focus"])().focusedParagraph(null);
   (hideTagGhost as WriterFeaturePorts["dismissTagGhost"])();
+  if (flow) {
+    flowMaker?.refreshSplit(at?.kind === "beat" ? at.rowId : undefined);
+    if (at?.kind === "beat") {
+      const cell = document.querySelector<HTMLElement>('#rows .cell-editable[data-id="' + cssAttr(at.rowId) + '"][data-field="audioText"]');
+      if (cell) {
+        cell.focus({ preventScroll: true });
+        const point = posToDom(cell, at.offset);
+        window.getSelection()?.setBaseAndExtent(point.node, point.offset, point.node, point.offset);
+        rememberCellSelection((editorSelection as WriterFeaturePorts["editing"]["selection"])(), cell);
+        cell.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }
 }
 
 export function writerUndoStep(dir: string) {
@@ -451,7 +485,7 @@ function attemptsEdit(e: Event) {
   const target = e.target as Element | null;
   if (!target || !target.closest) return false;
   if (e.type === "click") return !!target.closest(".wr-fmt");
-  if (!target.closest(".wr-para") && target.id !== "writer-title") return false;
+  if (!target.closest(".wr-para, #writer-doc.is-flow") && target.id !== "writer-title") return false;
   return e.type !== "keydown" || isEditKey(e as KeyboardEvent);
 }
 
