@@ -33,7 +33,9 @@ import { undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { liveSession } from "./session-owner.ts";
 import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
-import { anchorBrollInLeftCell } from "./broll.ts";
+import { anchorBrollInLeftCell, maybeCaptureBroll } from "./broll.ts";
+import { pictures } from "./ports/pictures.ts";
+import { currentPlainTags } from "./plain-tags.ts";
 import { mountFlowClipboardRoutes } from "../../features/clipboard/routes.ts";
 import { copyFlowClipboard, pasteFlowClipboard } from "../../features/clipboard/flow-clip.ts";
 import { randomHexBytes } from "../../adapters/identity/ids.ts";
@@ -102,6 +104,31 @@ export function mountWriterRuntimeFeature() {
           const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
           if (initialized.kind === "failed") throw initialized.error;
           return createFlowWriter({
+            pictures,
+            visualInput: (event, cell) => {
+              maybeAutoTagShortcut(event, cell);
+              maybeCaptureBroll(event, cell);
+              currentPlainTags()?.maybeOpen(event, cell);
+              currentPlainTags()?.refresh();
+              updateTagGhost(cell);
+            },
+            visualLeave: cell => {
+              if (currentPlainTags()?.isOpen(cell)) currentPlainTags()?.close();
+              cell.innerHTML = text.sanitizeHtml(cell.innerHTML);
+              writerEditing.cells().sync(cell);
+              anchorBrollInLeftCell(cell);
+              hideTagGhost();
+            },
+            visualKeydown: (event, cell) => {
+              const plain = currentPlainTags();
+              if (plain?.isOpen(cell)) {
+                if (event.key === "Tab") { event.preventDefault(); plain.close(); return true; }
+                if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); plain.cancel(); return true; }
+                if (event.key === "Backspace" && plain.emptyAtCaret() && plain.cancelOnBackspace()) { event.preventDefault(); return true; }
+              }
+              if (event.key === "Tab" && tagGhost?.cellEl === cell && acceptTagGhost()) { event.preventDefault(); return true; }
+              return false;
+            },
             clipboard: {
               mount: handlers => mountFlowClipboardRoutes(root, handlers),
               copy: (range, data, cut) => {
@@ -193,6 +220,8 @@ export function mountWriterRuntimeFeature() {
       check: () => mounted.writerFlowControl()?.check() ?? ["the flow writer isn't open"],
       fullRender: () => { currentRowsRender()?.render(); },
       outsideEdit: (rowId: string, words: string) => edits.run(cellTextCommand(rowId, "audioText", cellRuns(flowCell(words)), edits.text)),
+      outsideVisual: (rowId: string, words: string) => edits.run(cellTextCommand(rowId, "visualText", cellRuns(flowCell(words)), edits.text)),
+      openVisual: (rowId: string, highlight?: { from: number; to: number }) => { mounted.writerFlowControl()?.openVisual(rowId, highlight); },
       outsideRemove: (rowId: string) => edits.run(deleteBeatCommand(rowId))
     }), (withdraw) => { withdrawHook = withdraw; });
     const control = { ...mounted, dispose: () => {

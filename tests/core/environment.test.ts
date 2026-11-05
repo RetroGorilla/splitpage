@@ -32,6 +32,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/timing.ts": await import("../../src/core/document/timing.ts"),
   "document/validated.ts": await import("../../src/core/document/validated.ts"),
   "flow/flow.ts": await import("../../src/core/flow/flow.ts"),
+  "flow/visual.ts": await import("../../src/core/flow/visual.ts"),
   "merge-states.ts": await import("../../src/core/merge-states.ts"),
   "merge/cells.ts": await import("../../src/core/merge/cells.ts"),
   "merge/lists.ts": await import("../../src/core/merge/lists.ts"),
