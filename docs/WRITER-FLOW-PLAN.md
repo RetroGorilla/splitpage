@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phases 0a, 0b, 1, 2 and 3 are done (sections 9 to 13). Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phases 4 to 7 are next, in parallel lanes. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phases 0a to 7 are done (sections 9 to 14). Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phase 8 is running. Its merge to `main` waits for Adam to use a real script and say okay. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -421,3 +421,20 @@ Phase 3 took three PRs into `feat/writer-flow`: #1226 (selection across beats an
 **Existing tests changed on purpose:** `tests/core/flow/reload.test.ts` gains the two clipboard operations, and the shared model behind `fuzz.test.ts` and `reference-fuzz.test.ts` states section 7.10's rule. Nothing else moved.
 
 **Still unproven:** the real clipboard, a real IME, right-click spellcheck, a physical Ctrl+Z against the menu, and a real script in Adam's hands. All clipboard checks use synthetic events.
+
+## 14. Phases 4 to 7 results
+
+Four parallel lanes merged into `feat/writer-flow`: #1230 (phase 5), #1229 (phase 6), #1231 (phase 4) and #1233 (phase 7). Reviews found real bugs in three of the four, including Replace losing formatting and comment anchors, heading conversion losing tags and comments, and a failed Save retry hiding the save problem. All were fixed before merge.
+
+**Full browser run, all four together:** 11,334 of 11,335 across 276 suites at #1233's final head, `548a09c6`, with only `219-sound-cues` failing. Writer suites 1,381 of 1,381 across 77, units 5,961 of 5,961.
+
+**Coordinator's rulings Adam can overrule:**
+- A heading line holding tags or comments refuses to convert, with the notice "A scene header can't hold tags or comments."
+- On an emptied heading, Backspace and Enter both count as leaving it empty, so the header goes, no blank beat is added, and one Ctrl+Z brings it back.
+- Clicking Visual on a pending heading finalises it first. If the beat went away, the box stays closed and the caret stays on the heading.
+
+**Wording awaiting Adam:** "Visuals must stay within one beat.", "Put the caret in a beat to edit its visual.", "Add pictures in the split view.", "A scene header can't hold tags or comments.", "Split view", "Not saved yet", "Autosave off", "Tags must stay within one beat.", "Links must stay within one beat." and "Save to choose where this script is kept."
+
+**Left for phase 8:** #1232 (the Visual box repaints every beat per keystroke, to measure), #1234 (Find starting from a stale position after a pending heading), removing Alt+Enter, and rechecking long undo and long HTML export.
+
+**Still unproven:** a real IME, the real clipboard, right-click spellcheck, physical window and menu interactions, and a real script in Adam's hands.
