@@ -1,5 +1,5 @@
 import { sliceCell } from "../../core/text/edits.ts";
-import { cellLength, projection } from "../../core/text/runs.ts";
+import { cellLength, normalizeCell, projection } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 
 export function clipboardEndsInBlock(body: Element): boolean {
@@ -11,6 +11,9 @@ export function clipboardEndsInBlock(body: Element): boolean {
   return !!(last && last.nodeType === 1 && ((last as Element).tagName === "P" || (last as Element).tagName === "DIV"));
 }
 
-export function trimClipboardBlockEnd(cell: Run[], endsInBlock: boolean): Run[] {
-  return endsInBlock && projection(cell).slice(-1) === "\n" ? sliceCell(cell, 0, cellLength(cell) - 1) : cell;
+export function clipboardContent(cell: Run[], endsInBlock: boolean, fallback: () => string): { cell: Run[]; text: string | null } {
+  const trimmed = endsInBlock && projection(cell).slice(-1) === "\n" ? sliceCell(cell, 0, cellLength(cell) - 1) : cell;
+  if (cellLength(trimmed)) return { cell: trimmed, text: null };
+  const text = fallback();
+  return { cell: normalizeCell([{ text: text, marks: {} }]), text: text };
 }

@@ -29,7 +29,7 @@ type PasteTarget = Pick<PasteRequest, "rowId" | "field"> & { rest: readonly Run[
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { cellLength, commentIds, normalizeCell } from "../../core/text/runs.ts";
 import { sliceCell } from "../../core/text/edits.ts";
-import { clipboardEndsInBlock, trimClipboardBlockEnd } from "../common/clipboard-blocks.ts";
+import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
 import { flattenDirections } from "../../core/text/directions.ts";
 import { toHtml } from "../../core/text/html.ts";
 import {
@@ -171,25 +171,28 @@ export function cellFromClipboard(html: unknown, text: unknown, opts?: Clipboard
   opts = opts || {};
   let media = 0, lost = 0;
   let attach: Attachment[] = [];
+  let cell: Run[] = [];
+  let endsInBlock = false;
+  let fromCut = false;
   if (html) {
     const raw = String(html);
-    const fromCut = !!(opts.nonce && cutNonceIn(raw) === opts.nonce);
+    fromCut = !!(opts.nonce && cutNonceIn(raw) === opts.nonce);
     const prep = prepareHtml(raw, opts);
     media = prep.media;
     lost = prep.lost;
     attach = prep.attach;
     const textPort = (ports as CellClipboardPorts).text;
-    let cell = textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
+    cell = textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
     if (opts.cleanLinks !== false) cell = textPort.cleanPastedCell(cell);
-    cell = trimClipboardBlockEnd(cell, prep.endsInBlock);
-    if (cellLength(cell)) {
-      return { cell: cell, text: null, media: media, lost: lost, attach: attach, fromCut: fromCut, comments: fromCut ? commentIds(cell) : [] };
-    }
+    endsInBlock = prep.endsInBlock;
   }
-  const vt = videoLinksInText(text);
-  vt.links.forEach(function (href) { addAttachment(attach, { kind: "video", href: href }); });
-  const t = vt.text;
-  return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, lost: lost, attach: attach, fromCut: false, comments: [] };
+  const content = clipboardContent(cell, endsInBlock, function () {
+    const vt = videoLinksInText(text);
+    vt.links.forEach(function (href) { addAttachment(attach, { kind: "video", href: href }); });
+    return vt.text;
+  });
+  const keptCut = content.text === null && fromCut;
+  return { ...content, media: media, lost: lost, attach: attach, fromCut: keptCut, comments: keptCut ? commentIds(content.cell) : [] };
 }
 
 export function brollIdsTaken(state: BrollScope | null, rowId: PasteRequest["rowId"], field: PasteRequest["field"], rest: readonly Run[] | null, fromCut: boolean) {

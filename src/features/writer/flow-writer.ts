@@ -21,7 +21,7 @@ import { cellLength } from "../../core/text/runs.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { createFlowVisualBox } from "./flow-visual-box.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
-import { clipboardEndsInBlock, trimClipboardBlockEnd } from "../common/clipboard-blocks.ts";
+import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
 
 export interface FlowUndoPorts {
   readonly step: (dir: UndoDirection) => void;
@@ -224,14 +224,14 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       holder.querySelectorAll("img, .video-embed-card").forEach(element => element.remove());
       const endsInBlock = clipboardEndsInBlock(holder);
       const html = holder.innerHTML;
-      const pasted = trimClipboardBlockEnd(html ? ports.decode(html) : [{ text: data.getData("text/plain"), marks: {} }], endsInBlock);
+      const pasted = clipboardContent(html ? ports.decode(html) : [], endsInBlock, () => data.getData("text/plain"));
       const old = ports.decode(ports.storedHtml(cell.innerHTML));
       const line = !html && data.getData("text/plain") === "\n" ? breakLine(old, selection.from, selection.to) : null;
-      const next = line ?? insertCell(deleteRange(old, selection.from, selection.to), selection.from, pasted);
+      const next = line ?? insertCell(deleteRange(old, selection.from, selection.to), selection.from, pasted.cell);
       const restore = ports.visualBeforeWrite?.(cell);
       cell.innerHTML = toHtml(next.cell);
       ensureTrailingCaretSpot(cell);
-      const at = line?.pos ?? selection.from + cellLength(pasted);
+      const at = line?.pos ?? selection.from + cellLength(pasted.cell);
       setCellSelection(cell, at, at);
       restore?.();
     }

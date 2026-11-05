@@ -30,6 +30,24 @@ expect W.check().length === 0
 eval W.openVisual('a')
 key ctrl KeyA
 press prop:
+eval (function(){var dt=new DataTransfer();dt.setData('text/plain','\n');dt.setData('text/html','<p><br></p>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+expect F.state().rows[0].visualText === 'prop:<br>'
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+key Tab
+expect F.state().rows[0].visualText === 'prop:<br>'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('b')
+key ctrl KeyA
+press prop:
+eval (function(){var dt=new DataTransfer();dt.setData('text/plain','\n');dt.setData('text/html','<div><br></div>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+expect F.state().rows[1].visualText === 'prop:<br>'
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+key Tab
+expect F.state().rows[1].visualText === 'prop:<br>'
+eval document.querySelector('.wr-flow-visual-close').click()
+expect W.check().length === 0
+eval W.openVisual('a')
+key ctrl KeyA
+press prop:
 eval (function(){var dt=new DataTransfer();dt.setData('text/plain','Lamp');dt.setData('text/html','<p>La<em>mp</em></p>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
 expect F.state().rows[0].visualText === 'prop:La<em>mp</em>'
 expect c().querySelector('.plain-tag-keyword') !== null

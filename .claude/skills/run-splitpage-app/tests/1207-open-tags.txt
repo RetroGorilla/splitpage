@@ -92,6 +92,20 @@ expect c().querySelector('.tag-anchor[data-tag-name="Lamp"]')?.textContent === '
 expect c().querySelector('.tag-anchor em')?.textContent === 'mp'
 eval fresh()
 press prop:
+eval paste('<p><br></p>', '\n')
+expect st() === 'prop:<br>'
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+key Tab
+expect st() === 'prop:<br>'
+eval fresh()
+press prop:
+eval paste('<div><br></div>', '\n')
+expect st() === 'prop:<br>'
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+key Tab
+expect st() === 'prop:<br>'
+eval fresh()
+press prop:
 eval paste('<div>La<em>mp</em></div>', 'Lamp')
 expect st() === 'prop:La<em>mp</em>'
 expect c().querySelector('.plain-tag-keyword') !== null

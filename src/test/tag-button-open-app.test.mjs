@@ -426,6 +426,30 @@ test("an unchanged input in an open silent tag preserves the earlier typing grou
 
 for (const editor of ["split", "writer"]) {
   for (const wrapper of ["p", "div"]) {
+    test(`${editor} tag keeps the newline from an empty ${wrapper}-wrapped paste`, () => {
+      const h = fixture("");
+      try {
+        if (editor === "writer") {
+          openWriter();
+          writerFlowControl().openVisual("r1");
+        }
+        const cell = editor === "writer" ? document.querySelector(".wr-flow-visual-text") : h.cell;
+        caret(cell, cell, 0);
+        type(cell, "prop:");
+        const event = new window.Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "clipboardData", { value: {
+          types: ["text/plain", "text/html"], files: [],
+          getData: kind => kind === "text/plain" ? "\n" : `<${wrapper}><br></${wrapper}>`
+        } });
+        cell.dispatchEvent(event);
+        assert.equal(currentDocument().rows[0].visualText, "prop:<br>");
+        assert.equal(currentPlainTags().isOpen(cell), false);
+        assert.equal(cell.querySelector(".plain-tag-keyword, .tag-anchor"), null);
+        key(cell, "Tab");
+        assert.equal(currentDocument().rows[0].visualText, "prop:<br>");
+      } finally { closeWriter(); }
+    });
+
     test(`${editor} tag keeps a single ${wrapper}-wrapped HTML paste open and formatted`, () => {
       const h = fixture("");
       try {
