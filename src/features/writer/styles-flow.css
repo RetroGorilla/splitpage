@@ -20,7 +20,7 @@
   .writer-scroll:has(#writer-doc.is-flow) { position: relative; }
   .wr-visual-note { position: absolute; width: 140px; padding: .25em 0; text-align: left; font: 12px/1.4 var(--font-body); color: var(--text-faint); background: transparent; border: 0; cursor: pointer; overflow-wrap: anywhere; }
   .wr-visual-note:hover { color: var(--visual); }
-  .wr-flow-visual-box { position: fixed; z-index: 148; box-sizing: border-box; max-height: calc(100vh - 24px); overflow: auto; padding: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 28px #0003; font: 14px/1.5 var(--font-body); }
+  .wr-flow-visual-box { position: fixed; z-index: 148; box-sizing: border-box; max-height: calc(100vh - 24px); overflow: auto; padding: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); font: 14px/1.5 var(--font-body); }
   .wr-flow-visual-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .wr-flow-visual-close { color: var(--text-dim); background: transparent; border: 0; cursor: pointer; }
   .wr-flow-visual-text { min-height: 80px; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
