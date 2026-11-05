@@ -31,6 +31,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/text-policy.ts": await import("../../src/core/document/text-policy.ts"),
   "document/timing.ts": await import("../../src/core/document/timing.ts"),
   "document/validated.ts": await import("../../src/core/document/validated.ts"),
+  "flow/flow.ts": await import("../../src/core/flow/flow.ts"),
   "merge-states.ts": await import("../../src/core/merge-states.ts"),
   "merge/cells.ts": await import("../../src/core/merge/cells.ts"),
   "merge/lists.ts": await import("../../src/core/merge/lists.ts"),
@@ -60,6 +61,8 @@ const modules: Record<string, Record<string, unknown>> = {
   "text/ports.ts": await import("../../src/core/text/ports.ts"),
   "text/projections.ts": await import("../../src/core/text/projections.ts"),
   "text/runs.ts": await import("../../src/core/text/runs.ts"),
+  "text/search.ts": await import("../../src/core/text/search.ts"),
+  "text/sentences.ts": await import("../../src/core/text/sentences.ts"),
   "text/selection.ts": await import("../../src/core/text/selection.ts"),
   "text/steps.ts": await import("../../src/core/text/steps.ts"),
   "text/tree.ts": await import("../../src/core/text/tree.ts")

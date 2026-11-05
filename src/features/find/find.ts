@@ -1,10 +1,10 @@
+import { countInPieces, countInTags, findInCell, matchesInPieces, searchablePieces } from "../../core/text/search.ts";
 import type { FindControls, FindPorts } from "./ports.ts";
 import type { FindOptions } from "../../application/find-options.ts";
 import type { BulkTagTotals } from "../../application/commands/bulk-tags.ts";
 import type { CellRewrite } from "../../application/commands/document-edit.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { DocumentRow, DocumentTag } from "../../core/document/validated.ts";
-import type { Run } from "../../core/text/runs.ts";
 
 type FindDocumentView = { readonly rows: DocumentView["rows"]; readonly productionTags: DocumentView["productionTags"] };
 type FindRuntimePorts = { readonly [K in Exclude<keyof FindPorts, "document">]: FindPorts[K] } & {
@@ -14,9 +14,6 @@ type FindRuntimePorts = { readonly [K in Exclude<keyof FindPorts, "document">]: 
   };
 };
 
-type SearchPiece = { start: number; text: string };
-type TaggedPiece = SearchPiece & { tag: string };
-type SearchPieces = { free: SearchPiece[]; tagged: TaggedPiece[] };
 type FindMatch = { rowId: string; field: string; nth: number };
 
 import { domRangeFor } from "../common/find-dom.ts";
@@ -55,69 +52,6 @@ function matchCount() {
 
 function findNeedle() {
   return (document.getElementById("find-input") as HTMLInputElement).value || "";
-}
-
-function escapeRegExpLiteral(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function findAllMatches(text: string, needle: string, matchCase: boolean) {
-  needle = withoutLoneSurrogates(needle);
-  if (!needle) return [];
-  const re = new RegExp(escapeRegExpLiteral(needle), matchCase ? "g" : "gi");
-  const out: { start: number; end: number }[] = [];
-  let m;
-  while ((m = re.exec(text))) {
-    out.push({ start: m.index, end: m.index + m[0].length });
-    if (m[0].length === 0) re.lastIndex++;
-  }
-  return out;
-}
-
-function searchablePieces(cell: readonly Run[]) {
-  const free: SearchPiece[] = [], tagged: TaggedPiece[] = [];
-  let pos = 0, cur: SearchPiece | null = null, curTag: TaggedPiece | null = null;
-  cell.forEach(function (r) {
-    if (r.atom) { cur = null; curTag = null; pos += 1; return; }
-    const tag = r.marks.tag;
-    if (tag) {
-      cur = null;
-      if (curTag && curTag.tag === tag) curTag.text += r.text;
-      else tagged.push(curTag = { tag: tag, start: pos, text: r.text });
-    } else {
-      curTag = null;
-      if (cur) cur.text += r.text;
-      else free.push(cur = { start: pos, text: r.text });
-    }
-    pos += r.text.length;
-  });
-  return { free: free, tagged: tagged };
-}
-
-export function findInCell(cell: readonly Run[], needle: string, matchCase: boolean) {
-  if (!needle) return [];
-  return matchesInPieces(searchablePieces(cell), needle, matchCase);
-}
-
-function matchesInPieces(pieces: SearchPieces, needle: string, matchCase: boolean) {
-  const out: { from: number; to: number }[] = [];
-  pieces.free.forEach(function (p) {
-    findAllMatches(p.text, needle, matchCase).forEach(function (m) {
-      out.push({ from: p.start + m.start, to: p.start + m.end });
-    });
-  });
-  return out;
-}
-
-export function countInTags(cell: readonly Run[], needle: string, matchCase: boolean) {
-  if (!needle) return 0;
-  return countInPieces(searchablePieces(cell), needle, matchCase);
-}
-
-function countInPieces(pieces: SearchPieces, needle: string, matchCase: boolean) {
-  return pieces.tagged.reduce(function (n, p) {
-    return n + findAllMatches(p.text, needle, matchCase).length;
-  }, 0);
 }
 
 export function findInRows(rows: readonly DocumentRow[] | null | undefined, needle: string, matchCase: boolean) {

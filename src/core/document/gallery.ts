@@ -94,7 +94,7 @@ interface GalleryItemInput {
 }
 
 const MAX_LINKS = 20;
-const MAX_MORE = 60;
+export const MAX_MORE = 60;
 const MAX_MARKS = 500;
 const MAX_POINTS = 2000;
 const MAX_TEXT = 500;
