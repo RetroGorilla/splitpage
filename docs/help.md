@@ -432,8 +432,9 @@ each beat. Its tools sit along the top, under the title, and **Close** (or
   whole beats were removed, and those beats take their visuals with them.
 - <kbd>Backspace</kbd> at the start of a paragraph removes the paragraph break.
   Just after a beat's number it deletes a character and leaves the beats apart.
-- To join a beat to the one before, press <kbd>Alt</kbd>+<kbd>Backspace</kbd>
-  or **Join**. If both have visuals, the joined beat keeps both.
+- Click a beat's number for a menu: **Join Back**, **Join Next** and
+  **Add Visual**. <kbd>Alt</kbd>+<kbd>Backspace</kbd> also joins a beat to the
+  one before. If both have visuals, the joined beat keeps both.
 - <kbd>Alt</kbd>+<kbd>Up</kbd> and <kbd>Alt</kbd>+<kbd>Down</kbd> move the
   beat with the caret.
 - The caret's beat shows its visual as a note beside the line. Click the note
