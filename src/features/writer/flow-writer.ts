@@ -9,6 +9,7 @@ import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange, FlowRow, FlowSelection
 import { addComment } from "../../core/text/edits.ts";
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
+import type { SurfacePorts } from "./flow-surface.ts";
 
 export interface FlowUndoPorts {
   readonly step: (dir: UndoDirection) => void;
@@ -19,6 +20,7 @@ export interface FlowUndoPorts {
 }
 
 export interface FlowWriterPorts {
+  readonly clipboard?: SurfacePorts["clipboard"];
   readonly lifetime: Pick<DocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
@@ -105,6 +107,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   }
 
   const surface = createSurface({
+    ...(ports.clipboard ? { clipboard: ports.clipboard } : {}),
     root,
     lifetime: ports.lifetime,
     heldSelection: ports.heldSelection,

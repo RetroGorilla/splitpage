@@ -1,0 +1,13 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1');window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};F.openFile(new File([JSON.stringify({schema:2,title:'Clipboard safety',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Keep'},{id:'b',audioText:'Bravo',visualText:''}]})],'safety.splitpage'))
+wait F.state().title === 'Clipboard safety'
+click #btn-write
+wait W.on()
+eval W.place({anchor:bp('a',5),head:bp('a',5)});window.data=new DataTransfer();data.setData('text/plain','Paste');var host=document.getElementById('writer-doc');host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));var el=document.querySelector('.wr-beat[data-id="a"]');el.textContent='AlphaComposed';getSelection().setBaseAndExtent(el,1,el,1);host.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:'Composed'}));clip('paste',data)
+expect document.querySelector('.wr-beat[data-id="a"]').textContent === 'AlphaComposed'
+eval document.getElementById('writer-doc').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}))
+expect F.state().rows[0].audioText === 'AlphaComposedPaste' && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('b',2),head:bp('b',2)});window.data=new DataTransfer();data.setData('application/x-splitpage-flow','{"format":"splitpage-flow","version":1,"text":"lost","beats":{"invalid":true}}');data.setData('text/plain','<b>Safe</b>');clip('paste',data)
+expect F.state().rows[1].audioText === 'Br&lt;b&gt;Safe&lt;/b&gt;avo' && !document.querySelector('#writer-doc b') && W.check().length === 0

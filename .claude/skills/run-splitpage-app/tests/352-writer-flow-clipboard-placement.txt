@@ -1,0 +1,48 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1');window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.U=window.__undoTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};window.doc={schema:2,title:'Clipboard placement',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'A'},{id:'b',audioText:'Bravo',visualText:'B'},{id:'c',audioText:'Charlie',visualText:'C'},{id:'d',audioText:'Target',visualText:'D',paragraphStart:true},{id:'e',audioText:'Follower',visualText:'E'},{id:'f',audioText:'Last',visualText:'F',paragraphStart:true}]};F.openFile(new File([JSON.stringify(doc)],'placement.splitpage'))
+wait F.state().title === 'Clipboard placement'
+click #btn-write
+wait W.on()
+eval W.place({anchor:bp('a',0),head:bp('c',0)});window.data=new DataTransfer();clip('copy',data)
+eval W.place({anchor:bp('d',0),head:bp('d',0)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Alpha|Bravo|Target|Follower|Last'
+expect F.state().rows.map(function(r){return !!r.paragraphStart}).join() === 'false,false,false,true,false,true,false,true'
+expect W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('d',6),head:bp('d',6)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Target|Alpha|Bravo|Follower|Last'
+expect F.state().rows.map(function(r){return !!r.paragraphStart}).join() === 'false,false,false,true,false,false,false,true'
+expect W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('e',8),head:bp('e',8)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Target|Follower|Alpha|Bravo|Last'
+expect F.state().rows.map(function(r){return !!r.paragraphStart}).join() === 'false,false,false,true,false,true,false,true'
+expect W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('d',3),head:bp('d',3)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Tar|Alpha|Bravo|get|Follower|Last'
+expect F.state().rows.map(function(r){return !!r.paragraphStart}).join() === 'false,false,false,true,false,false,false,false,true'
+expect W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('c',0),head:bp('a',0)});window.data=new DataTransfer();clip('copy',data)
+eval W.place({anchor:bp('d',0),head:bp('d',0)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Alpha|Bravo|Target|Follower|Last'
+expect F.state().rows.map(function(r){return !!r.paragraphStart}).join() === 'false,false,false,true,false,true,false,true'
+expect W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('d',6),head:bp('d',6)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Target|Alpha|Bravo|Follower|Last'
+expect F.state().rows.map(function(r){return !!r.paragraphStart}).join() === 'false,false,false,true,false,false,false,true'
+expect W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('e',8),head:bp('e',8)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Target|Follower|Alpha|Bravo|Last'
+expect F.state().rows.map(function(r){return !!r.paragraphStart}).join() === 'false,false,false,true,false,true,false,true'
+expect W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('d',3),head:bp('d',3)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Tar|Alpha|Bravo|get|Follower|Last'
+expect F.state().rows.map(function(r){return !!r.paragraphStart}).join() === 'false,false,false,true,false,false,false,false,true'
+expect W.check().length === 0
+key ctrl KeyZ

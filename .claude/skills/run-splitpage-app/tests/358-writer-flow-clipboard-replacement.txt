@@ -1,0 +1,37 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1');window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.U=window.__undoTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.hp=function(id,n){return {kind:'heading',sceneId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};F.openFile(new File([JSON.stringify({schema:2,title:'Clipboard replacement review',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Visual A'},{id:'b',audioText:'Bravo',visualText:'Visual B'}]})],'replacement.splitpage'))
+wait F.state().title === 'Clipboard replacement review'
+click #btn-write
+wait W.on()
+eval W.place({anchor:bp('a',0),head:bp('b',5)});window.before=W.selection();window.data=new DataTransfer();data.setData('application/x-splitpage-flow',JSON.stringify({format:'splitpage-flow',version:1,text:''}));data.setData('text/plain','Replacement');U.flush();window.depth=U.sizes().undo;clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Replacement'
+eval U.flush()
+expect U.sizes().undo === depth+1 && W.check().length === 0
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id+':'+r.visualText}).join('|') === 'a:Visual A|b:Visual B' && JSON.stringify(W.selection()) === JSON.stringify(before)
+eval W.place({anchor:bp('b',5),head:bp('a',0)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Replacement' && W.check().length === 0
+key ctrl KeyZ
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Copied source',paragraphsDecided:true,rows:[{id:'copied',audioText:'Whole',visualText:'Copied visual',status:'shot'}],sections:[{id:'source',name:'Copied header',firstSceneId:'copied'}]})],'source.splitpage'))
+wait F.state().title === 'Copied source' && W.on()
+eval W.place({anchor:hp('source',0),head:bp('copied',5)});window.copied=new DataTransfer();clip('copy',copied);F.openFile(new File([JSON.stringify({schema:2,title:'Structural destination',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Visual A'},{id:'b',audioText:'Bravo',visualText:'Visual B'}]})],'destination.splitpage'))
+wait F.state().title === 'Structural destination' && W.on()
+eval W.place({anchor:bp('a',0),head:bp('b',5)});window.before=W.selection();U.flush();window.depth=U.sizes().undo;clip('paste',copied)
+expect F.state().rows.length === 1 && F.state().rows[0].audioText === 'Whole' && F.state().rows[0].visualText === 'Copied visual' && F.state().rows[0].status === 'shot'
+expect F.state().sections.length === 1 && F.state().sections[0].name === 'Copied header' && F.state().sections[0].firstSceneId === F.state().rows[0].id
+eval U.flush()
+expect U.sizes().undo === depth+1 && W.check().length === 0
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && JSON.stringify(W.selection()) === JSON.stringify(before)
+eval W.place({anchor:bp('b',5),head:bp('a',0)});clip('paste',copied)
+expect F.state().rows.length === 1 && F.state().rows[0].audioText === 'Whole' && F.state().sections[0].firstSceneId === F.state().rows[0].id && W.check().length === 0
+key ctrl KeyZ
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Surviving empty endpoint',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Visual A'},{id:'b',audioText:'',visualText:'Keep endpoint',status:'shot'},{id:'c',audioText:'Tail',visualText:''}],comments:[{id:'keep',rowId:'b',field:'visualText',body:'Keep comment',author:'Tester'}]})],'surviving.splitpage'))
+wait F.state().title === 'Surviving empty endpoint' && W.on()
+eval W.place({anchor:bp('a',0),head:bp('b',0)});clip('paste',copied)
+expect F.state().rows.length === 3 && F.state().rows[0].audioText === 'Whole' && F.state().rows[1].id === 'b' && F.state().rows[2].id === 'c'
+expect F.state().rows[1].audioText === '' && F.state().rows[1].visualText === 'Keep endpoint' && F.state().rows[1].status === 'shot' && F.state().comments.some(function(c){return c.id==='keep' && c.rowId==='b'}) && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('b',0),head:bp('a',0)});clip('paste',copied)
+expect F.state().rows.length === 3 && F.state().rows[1].id === 'b' && F.state().rows[1].visualText === 'Keep endpoint' && F.state().rows[1].status === 'shot' && F.state().comments.some(function(c){return c.id==='keep'}) && W.check().length === 0
