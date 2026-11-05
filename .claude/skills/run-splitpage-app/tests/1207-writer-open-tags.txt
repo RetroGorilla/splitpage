@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Open visual tags',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'open-tags.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Open visual tags',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'c',audioText:'Charlie',visualText:''},{id:'d',audioText:'Delta',visualText:''},{id:'e',audioText:'Echo',visualText:''}],comments:[]})],'open-tags.splitpage'))
 wait F.state().title === 'Open visual tags'
 click #btn-write
 wait W.on()
@@ -27,22 +27,20 @@ expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
 expect F.state().rows[2].visualText === 'prop:RedLamp<br>Chair'
 eval document.querySelector('.wr-flow-visual-close').click()
 expect W.check().length === 0
-eval W.openVisual('a')
-key ctrl KeyA
+eval W.openVisual('d')
 press prop:
 eval (function(){var dt=new DataTransfer();dt.setData('text/plain','\n');dt.setData('text/html','<p><br></p>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
-expect F.state().rows[0].visualText === 'prop:<br>'
+expect F.state().rows[3].visualText === 'prop:<br>'
 expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
 key Tab
-expect F.state().rows[0].visualText === 'prop:<br>'
-eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('b')
-key ctrl KeyA
+expect F.state().rows[3].visualText === 'prop:<br>'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('e')
 press prop:
 eval (function(){var dt=new DataTransfer();dt.setData('text/plain','\n');dt.setData('text/html','<div><br></div>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
-expect F.state().rows[1].visualText === 'prop:<br>'
+expect F.state().rows[4].visualText === 'prop:<br>'
 expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
 key Tab
-expect F.state().rows[1].visualText === 'prop:<br>'
+expect F.state().rows[4].visualText === 'prop:<br>'
 eval document.querySelector('.wr-flow-visual-close').click()
 expect W.check().length === 0
 eval W.openVisual('a')
