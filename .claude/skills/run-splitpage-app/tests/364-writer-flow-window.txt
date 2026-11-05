@@ -1,0 +1,23 @@
+open
+viewport 1024 768
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1')
+goto /index.html
+wait document.body.classList.contains('writer-flow-bar')
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.hit=e=>{var r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}; window.box=document.getElementById('btn-write').getBoundingClientRect(); window.controls=['btn-file','btn-write','btn-save','length-status']
+expect controls.every(id=>hit(document.getElementById(id)))
+expect getComputedStyle(document.getElementById('btn-save'),'::before').content.includes(document.getElementById('btn-save').getAttribute('data-status'))
+click #btn-write
+wait W.on()
+wait hit(document.getElementById('comments-panel'))
+expect ['btn-file','wr-close','btn-save','length-status','wr-size','wr-words'].every(id=>hit(document.getElementById(id)))
+expect Math.abs(document.getElementById('wr-close').getBoundingClientRect().x-box.x)<1 && Math.abs(document.getElementById('wr-close').getBoundingClientRect().y-box.y)<1
+expect document.getElementById('writer-doc').getBoundingClientRect().width >= 450
+expect document.querySelector('.writer-bar').getBoundingClientRect().right<=document.getElementById('comments-panel').getBoundingClientRect().left+1
+shot phase-7-comments-1024
+click #comments-panel-close
+wait document.getElementById('comments-panel').hidden
+expect W.on() && document.getElementById('writer').getBoundingClientRect().width>=innerWidth-1
+click #wr-close
+wait !W.on()
+expect controls.every(id=>hit(document.getElementById(id)))

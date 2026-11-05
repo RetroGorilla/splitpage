@@ -35,7 +35,7 @@ export interface WriterFeaturePorts {
   readonly undo: Pick<Undo, "breakCoalescing" | "last" | "nextRedo" | "lifetime" | "mark" | "serial">;
   readonly rows: { readonly splitField: (cell: Element) => { readonly id: string; readonly field: string } | null };
   readonly hiding: { readonly renderGroups: <R extends ShotRow>(rows: readonly R[], render: (row: R, index: number) => string) => string };
-  readonly panels: () => Pick<SidePanels, "closeAll">;
+  readonly panels: () => Pick<SidePanels, "closeAll" | "open">;
   readonly preferences: () => Pick<Preferences, "writerSize" | "setWriterSize">;
   readonly view: () => Pick<ViewFlags, "writerOpen" | "setWriterOpen" | "findOpen">;
   readonly notices: Pick<NoticePort, "show">;
@@ -44,6 +44,9 @@ export interface WriterFeaturePorts {
     readonly state: (cell: Element) => object | null;
     readonly direction: (cell: Element) => Element | null;
     readonly toggle: (cell: Element, command: string) => Element | null;
+    readonly selection: (button: Element, cell: HTMLElement, wrap: Element) => void;
+    readonly confirmLink: (wrap: Element, cell: HTMLElement | null) => void;
+    readonly cancelLink: (wrap: Element) => void;
   };
   readonly dismissTagGhost: () => void;
   readonly scheduleStats: (job: string) => void;

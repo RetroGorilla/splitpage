@@ -179,7 +179,10 @@ export function mountWriterRuntimeFeature() {
       formatting: {
         state: render.cellFormatState,
         direction: render.toggleCellDirection,
-        toggle: render.toggleCellFormat
+        toggle: render.toggleCellFormat,
+        selection: render.handleToolbarCmd,
+        confirmLink: render.confirmLink,
+        cancelLink: render.cancelLink
       },
       dismissTagGhost: hideTagGhost, scheduleStats: scheduleIdleRefresh,
       cancelStats: () => { refresh.cancel(["writerStats"]); }

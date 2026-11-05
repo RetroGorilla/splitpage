@@ -67,6 +67,9 @@ let activeWriter: object | null = null;
 let flowMaker: FlowWriterMaker | null = null;
 let flowWriter: FlowWriter | null = null;
 let flowUndoStep: ((dir: UndoDirection) => void) | null = null;
+let selectionFormatting: WriterFeaturePorts["formatting"] | null = null;
+let writerLinkCell: HTMLElement | null = null;
+let stopWriterLinks: (() => void) | null = null;
 
 let writerGutterMode = "visuals";
 let writerUndoMark = 0;
@@ -157,6 +160,8 @@ export function updateWriterStats() {
   if (!(viewFlags as WriterFeaturePorts["view"])().writerOpen() || !doc) return;
   let words = 0;
   doc.rows.forEach(function (row) { words += (productionReaders as WriterFeaturePorts["text"]["productionReaders"]).wordCount(row.audioText); });
+  const selected = flowWriter?.selectedText();
+  if (selected != null) words = (productionReaders as WriterFeaturePorts["text"]["productionReaders"]).wordCount(escapeHtml(selected));
   (document.getElementById("wr-scenes") as HTMLElement).textContent = String(doc.rows.length);
   (document.getElementById("wr-words") as HTMLElement).textContent = words.toLocaleString();
   (document.getElementById("wr-runtime") as HTMLElement).textContent = formatDuration(totalSeconds((currentDocument as WriterCurrentDocument)() as WriterDocument, (productionReaders as WriterFeaturePorts["text"]["productionReaders"])));
@@ -261,7 +266,17 @@ export function onWriterKeydown(e: KeyboardEvent) {
 export function onWriterFormat(btn: Element) {
   if (flowWriter) {
     const command = btn.getAttribute("data-cmd") ?? "";
-    if (command === "comment") flowWriter.comment();
+    if (command === "tag" || command === "link") {
+      const range = flowWriter.selection();
+      if (!range || !withinOneBeat(range) || range.head.kind !== "beat") return;
+      flowWriter.place(range);
+      const beat = document.querySelector<HTMLElement>('#writer-doc .wr-beat[data-id="' + cssAttr(range.head.rowId) + '"]');
+      if (!beat) return;
+      if (command === "link") writerLinkCell = beat;
+      const bar = document.querySelector(".writer-bar");
+      if (bar) selectionFormatting?.selection(btn, beat, bar);
+    }
+    else if (command === "comment") flowWriter.comment();
     else flowWriter.format(command);
     updateWriterFormatState();
     return;
@@ -283,10 +298,18 @@ export function updateWriterFormatState() {
     comment.disabled = crossBeat;
     comment.title = crossBeat ? "Comments must stay within one beat." : "Comment on the selected words";
   }
+  ["tag", "link"].forEach(command => {
+    const button = document.querySelector<HTMLButtonElement>('.writer-bar .wr-fmt[data-cmd="' + command + '"]');
+    if (!button) return;
+    button.disabled = crossBeat;
+    button.title = crossBeat ? (command === "tag" ? "Tags" : "Links") + " must stay within one beat."
+      : command === "tag" ? "Label as a prop, location, cast member or effect" : "Add link";
+  });
+  if (flowWriter) updateWriterStats();
   const paragraph = (viewFlags as WriterFeaturePorts["view"])().writerOpen() ? (focusMemory as WriterFeaturePorts["editing"]["focus"])().writerParagraph() : null;
   const live = paragraph && paragraph.isConnected;
   const model = flowWriter ? flowWriter.marks() : live ? (cellFormatState as WriterFeaturePorts["formatting"]["state"])(paragraph) : null;
-  ["bold", "italic", "underline", "direction"].forEach(function (cmd) {
+  ["bold", "italic", "underline", "strikeThrough", "direction"].forEach(function (cmd) {
     const btn = document.querySelector<HTMLElement>('.writer-bar .wr-fmt[data-cmd="' + cmd + '"]');
     if (btn) btn.classList.toggle("is-active", !!(model && (model as Record<string, unknown>)[cmd]));
   });
@@ -341,7 +364,8 @@ export function openWriter(keepMark?: number | null) {
   const el = (document.getElementById("writer") as HTMLElement);
   writerUndoMark = keepMark == null ? (undoMark as WriterFeaturePorts["undo"]["mark"])() : keepMark;
   reopenOnRedo = null;
-  (sidePanels as WriterFeaturePorts["panels"])().closeAll();
+  if (flow) (sidePanels as WriterFeaturePorts["panels"])().open("comments-panel");
+  else (sidePanels as WriterFeaturePorts["panels"])().closeAll();
   if ((viewFlags as WriterFeaturePorts["view"])().findOpen()) (appActions as WriterFeaturePorts["actions"]).invoke("find", "button", "close");
   (document.getElementById("writer-title") as HTMLInputElement).value = ((currentDocument as WriterCurrentDocument)() as WriterDocument).title || "";
   applyWriterSize(readWriterSize(), false);
@@ -374,10 +398,13 @@ function attachFlowWriter() {
   root.setAttribute("tabindex", "0");
   (document.querySelector('.writer-bar .wr-fmt[data-cmd="comment"]') as HTMLElement).hidden = false;
   flowWriter = flowMaker.create(root, updateWriterFormatState, (dir) => { flowUndoStep?.(dir); });
+  stopWriterLinks = mountWriterLinks();
 }
 
 function detachFlowWriter() {
   if (!flowWriter) return;
+  stopWriterLinks?.();
+  stopWriterLinks = null;
   flowWriter.dispose();
   flowWriter = null;
   updateWriterFormatState();
@@ -509,6 +536,42 @@ function guardWriterEdit(e: Event) {
   }
 }
 
+function mountWriterLinks(): () => void {
+  const formatting = selectionFormatting as WriterFeaturePorts["formatting"];
+  const bar = document.querySelector<HTMLElement>(".writer-bar") as HTMLElement;
+  function finishLink(confirm: boolean): void {
+    const range = flowWriter?.selection();
+    if (confirm) formatting.confirmLink(bar, writerLinkCell);
+    else formatting.cancelLink(bar);
+    writerLinkCell = null;
+    flowWriter?.repaint();
+    if (range && withinOneBeat(range) && range.head.kind === "beat") {
+      flowWriter?.place(confirm ? caretAt(beatPos(range.head.rowId, Math.max(range.anchor.offset, range.head.offset))) : range);
+    }
+  }
+  function onClick(event: MouseEvent): void {
+    const button = (event.target as Element).closest('[data-action="link-confirm"], [data-action="link-cancel"]');
+    if (!button) return;
+    event.stopPropagation();
+    finishLink(button.getAttribute("data-action") === "link-confirm");
+  }
+  function onKey(event: KeyboardEvent): void {
+    if (!(event.target as Element).matches(".link-popover input")) return;
+    if (event.key !== "Enter" && event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    finishLink(event.key === "Enter");
+  }
+  bar.addEventListener("click", onClick);
+  bar.addEventListener("keydown", onKey);
+  return () => {
+    bar.removeEventListener("click", onClick);
+    bar.removeEventListener("keydown", onKey);
+    formatting.cancelLink(bar);
+    writerLinkCell = null;
+  };
+}
+
 export function startWriter(given: WriterFeaturePorts) {
   flowMaker = given.flow ?? null;
   numbering = given.document.numbering;
@@ -543,6 +606,7 @@ export function startWriter(given: WriterFeaturePorts) {
   toggleCellFormat = given.formatting.toggle;
   hideTagGhost = given.dismissTagGhost;
   scheduleIdleRefresh = given.scheduleStats;
+  selectionFormatting = given.formatting;
   const mine = {};
   activeWriter = mine;
   let disposed = false;
@@ -561,6 +625,8 @@ export function startWriter(given: WriterFeaturePorts) {
       GUARDED_EVENTS.forEach(function (type) { root.removeEventListener(type, guardWriterEdit, true); });
       closeWriter();
       detachFlowWriter();
+      selectionFormatting = null;
+      writerLinkCell = null;
       flowMaker = null;
       flowUndoStep = null;
       given.cancelStats();

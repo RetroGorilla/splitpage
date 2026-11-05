@@ -1,0 +1,21 @@
+open
+viewport 1280 800
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1')
+goto /index.html
+wait document.body.classList.contains('writer-flow-bar')
+click #btn-write
+wait document.querySelector('#writer-doc.is-flow') !== null
+click #length-status
+wait document.getElementById('wpm-editor') !== null
+expect document.activeElement.id === 'wpm-input'
+eval window.popup=document.getElementById('wpm-editor'); window.r=popup.getBoundingClientRect()
+expect r.top >= document.getElementById('length-status').getBoundingClientRect().bottom && popup.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))
+eval document.getElementById('wpm-input').value='180'
+click #wpm-save
+expect document.getElementById('wpm-editor') === null && !document.getElementById('writer').hidden
+click #identity-chip
+wait document.getElementById('identity-editor') !== null
+expect document.activeElement.id === 'identity-input'
+key Escape
+expect document.getElementById('identity-editor') === null && !document.getElementById('writer').hidden

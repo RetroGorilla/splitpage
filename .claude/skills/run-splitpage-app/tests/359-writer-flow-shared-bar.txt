@@ -1,0 +1,19 @@
+open
+viewport 1440 900
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Shared writer bar',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo charlie.',visualText:''},{id:'b',audioText:'Delta echo.',visualText:''}],comments:[]})],'bar.splitpage'))
+wait F.state().title === 'Shared writer bar'
+click #btn-write
+wait W.on()
+eval window.visible=function(id){var e=document.getElementById(id),r=e.getBoundingClientRect();return r.width>0&&r.height>0&&document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('#'+id)===e}; window.modeBox=document.getElementById('wr-close').getBoundingClientRect()
+expect visible('btn-file') && visible('wr-close') && visible('btn-save') && visible('length-status')
+expect !visible('wr-save') && !visible('btn-write') && visible('wr-size')
+click #btn-file
+wait !document.getElementById('file-menu').hidden
+expect document.activeElement.closest('#file-menu') !== null
+click #btn-file
+click #wr-close
+wait !W.on()
+expect visible('btn-file') && visible('btn-write') && visible('btn-save') && visible('length-status')
+expect Math.abs(document.getElementById('btn-write').getBoundingClientRect().x-modeBox.x)<1 && Math.abs(document.getElementById('btn-write').getBoundingClientRect().y-modeBox.y)<1
+expect !visible('wr-size')

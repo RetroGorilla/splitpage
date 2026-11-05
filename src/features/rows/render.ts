@@ -1160,9 +1160,9 @@ export function updateToolbarState(cellEl: Element): void {
   if (dirBtn) dirBtn.classList.toggle("is-active", !!(model && model.direction));
 }
 
-export function handleToolbarCmd(btn: Element): void {
-  const wrap = btn.closest(".field-wrap") as Element;
-  const cellEl = wrap.querySelector(".cell-editable") as HTMLElement;
+export function handleToolbarCmd(btn: Element, cellOverride?: HTMLElement, wrapOverride?: Element): void {
+  const wrap = wrapOverride ?? btn.closest(".field-wrap") as Element;
+  const cellEl = cellOverride ?? wrap.querySelector(".cell-editable") as HTMLElement;
   const cmd = btn.getAttribute("data-cmd") as string;
   cellEl.focus();
   if (FORMAT_MARKS[cmd]) {
@@ -1272,12 +1272,12 @@ function rangeInside(range: Range | null, el: Element | null): boolean {
          el.contains(range.commonAncestorContainer);
 }
 
-export function confirmLink(wrap: Element | null): void {
+export function confirmLink(wrap: Element | null, cellOverride?: Element | null): void {
   if (!wrap) return;
   const popover = wrap.querySelector(".link-popover") as HTMLElement;
   const input = popover.querySelector("input") as HTMLInputElement;
   let url = (input.value || "").trim();
-  const owner = wrap.querySelector(".cell-editable");
+  const owner = cellOverride ?? wrap.querySelector(".cell-editable");
   const link = ports.editing.selection().heldLink();
   if (!url || !link || link.cell !== owner || !document.contains(link.cell)) {
     popover.hidden = true;
