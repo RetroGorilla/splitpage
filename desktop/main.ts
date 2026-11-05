@@ -1572,6 +1572,15 @@ function sendMenuCommand(command: string) {
   if (contents) contents.send("splitpage:menu-command", command);
 }
 
+// why: the undo and redo roles run Chromium's own command, which does nothing while its stack is empty, and script
+// edits are never on that stack. The same keys reach every undo route the page has, including text boxes.
+function pressMenuShortcut(keyCode: string) {
+  const contents = activeTabContents();
+  if (!contents) return;
+  contents.sendInputEvent({ type: "keyDown", keyCode, modifiers: ["control"] });
+  contents.sendInputEvent({ type: "keyUp", keyCode, modifiers: ["control"] });
+}
+
 function focusedWindowRecord() {
   const focused = BrowserWindow.getFocusedWindow();
   if (focused) {
@@ -1636,11 +1645,17 @@ function buildMenu() {
     ]
   };
 
+  // why: macOS text boxes undo through native key bindings, which an injected key doesn't carry,
+  // so the roles stay there.
+  const undoItems: Electron.MenuItemConstructorOptions[] = isMac ? [{ role: "undo" }, { role: "redo" }] : [
+    { label: "Undo", accelerator: "Ctrl+Z", registerAccelerator: false, click: () => pressMenuShortcut("z") },
+    { label: "Redo", accelerator: "Ctrl+Y", registerAccelerator: false, click: () => pressMenuShortcut("y") }
+  ];
+
   const editMenu: Electron.MenuItemConstructorOptions = {
     label: "Edit",
     submenu: [
-      { role: "undo" },
-      { role: "redo" },
+      ...undoItems,
       { type: "separator" },
       { role: "cut" },
       { role: "copy" },
@@ -1799,7 +1814,7 @@ const { registerTabStripIpc } = createTabStripIpc({
 });
 
 const { registerTestModeIpc } = createTestModeIpc({
-  testMode: TEST_MODE, app, BrowserWindow, tabOf, tabs, windowsById, requestCloseTab,
+  testMode: TEST_MODE, app, BrowserWindow, Menu, tabOf, tabs, windowsById, requestCloseTab,
   draftStore: () => draftStore, draftsPreviousSession: () => draftsPreviousSession, chooseDuplicateLoser,
   shellStateForWindow, createTab, activateTab, reorderTab, createTabWindow, moveTabToWindow, liveWindows,
   testExternalOpens, testChromiumLaunches, testVideoOpens, prompterShare: voice.prompterShare,
