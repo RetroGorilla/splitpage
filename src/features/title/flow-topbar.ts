@@ -18,7 +18,8 @@ export function mountFlowTopbar(window: Window): { refresh: () => void; dispose:
   const closeHome = document.createTextNode("");
   close.before(closeHome);
   const bar = document.querySelector<HTMLElement>(".writer-bar");
-  const oldButtons = Array.from(bar?.querySelectorAll(".wr-fmt") ?? []);
+  const oldButtons = Array.from(bar?.querySelectorAll(".wr-fmt") ?? []).filter(button =>
+    ["bold", "italic", "underline", "highlight", "direction", "comment"].includes(button.getAttribute("data-cmd") ?? ""));
   const exportButton = document.getElementById("wr-export");
   const exportHome = document.createTextNode("");
   exportButton?.before(exportHome);
