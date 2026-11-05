@@ -10,6 +10,8 @@ expect !document.querySelector('.wr-flow-visual-box input[type="file"]')
 key ctrl KeyA
 press [Camera]
 expect F.state().rows[0].visualText.includes('data-tag-cat="prop" data-tag-name="Camera"')
+press  view
+expect document.querySelector('.wr-flow-visual-text').textContent.replace(/\u200b/g,'') === 'Camera view'
 key End
 key Enter
 press B-roll:

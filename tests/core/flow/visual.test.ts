@@ -39,3 +39,33 @@ test("a caret visual changes its beat without splitting or changing metadata", (
   assert.deepEqual(result.rows, [{ ...doc.rows[0], visualText: "Harbour" }]);
   assert.deepEqual(result.selection, range);
 });
+
+test("seeded visual selections preserve narration, scene membership and the original beat's metadata", () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const narration = "Before " + "word ".repeat(seed % 8 + 1) + "after";
+    const from = seed % narration.length;
+    const to = from + 1 + seed % (narration.length - from);
+    let next = 0;
+    const ports: FlowPorts = { cells: html => fromHtml(html ?? ""), newId: () => "new" + ++next, hasVisual: row => !!row.visualText };
+    const scene = { id: "scene", name: "Harbour", firstSceneId: "a" };
+    const row = { id: "a", audioText: narration, visualText: "Original", status: "shot", lengthSeconds: 4, paragraphStart: true };
+    const doc: FlowDoc = { rows: [row], sections: [scene], comments: [] };
+    const a = beatPos("a", from), h = beatPos("a", to);
+    for (const range of [{ anchor: a, head: h }, { anchor: h, head: a }]) {
+      const result = setVisualForRange(doc, range, "Drone", ports);
+      assert.ok(result && "rows" in result, "seed " + seed);
+      assert.equal(result.rows.map(beat => beat.audioText).join(""), narration);
+      assert.equal(new Set(result.rows.map(beat => beat.id)).size, result.rows.length);
+      const chosen = result.rows.find(beat => beat.visualText === "Drone");
+      assert.equal(chosen?.audioText, narration.slice(from, to));
+      assert.equal(result.sections?.[0]?.firstSceneId, result.rows[0]?.id);
+      if (from || to < narration.length) {
+        const original = result.rows.find(beat => beat.id === "a");
+        assert.equal(original?.visualText, "Original");
+        assert.equal(original?.status, "shot");
+        assert.equal(original?.lengthSeconds, 4);
+      }
+      assert.deepEqual(doc, { rows: [row], sections: [scene], comments: [] });
+    }
+  }
+});

@@ -174,7 +174,12 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     dirty = true;
     if (composing || (event as InputEvent).isComposing) return;
     save();
-    ports.input(event as InputEvent, cell);
+    saving = true;
+    try { ports.input(event as InputEvent, cell); }
+    finally {
+      if (target?.head.kind === "beat") shownHtml = rowOf(target.head.rowId)?.visualText ?? "";
+      saving = false;
+    }
     refresh();
   }
 
