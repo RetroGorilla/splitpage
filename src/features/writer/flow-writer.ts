@@ -33,6 +33,11 @@ export interface FlowWriterPorts {
   readonly changed: () => void;
   readonly selectionMoved: () => void;
   readonly plainVisual: (row: FlowRow) => string;
+  readonly beatInput: (event: InputEvent, beat: HTMLElement) => void;
+  readonly typeAtBeatEdge: (beat: HTMLElement, text: string) => boolean;
+  readonly beatKeydown: (event: KeyboardEvent, beat: HTMLElement) => boolean;
+  readonly beatSelection: (beat: HTMLElement | null) => void;
+  readonly leaveBeat: (beat: HTMLElement) => void;
   readonly newCommentId: () => string;
   readonly openComment: (at: { readonly id: string; readonly rowId: string; readonly field: string; readonly quotedText: string }) => void;
 }
@@ -47,6 +52,7 @@ export interface FlowWriter {
   readonly beforeReplay: (dir: UndoDirection) => void;
   readonly afterReplay: (steps: readonly unknown[]) => void;
   readonly comment: () => void;
+  readonly jumpComment: (id: string, rowId?: string | null, field?: string | null) => void;
   readonly selection: () => FlowRange | null;
   readonly place: (range: FlowRange) => void;
   readonly check: () => string[];
@@ -111,7 +117,12 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     selectionMoved: ports.selectionMoved,
     settings: () => SETTINGS,
     openFind: () => { ports.notice("Find isn't in this build of the writer yet.", "warn"); },
-    plainVisual: ports.plainVisual
+    plainVisual: ports.plainVisual,
+    beatInput: (event, beat) => { if (isCurrent()) ports.beatInput(event, beat); },
+    typeAtBeatEdge: (beat, words) => isCurrent() && ports.typeAtBeatEdge(beat, words),
+    beatKeydown: (event, beat) => isCurrent() && ports.beatKeydown(event, beat),
+    beatSelection: beat => { if (isCurrent()) ports.beatSelection(beat); },
+    leaveBeat: beat => { if (isCurrent()) ports.leaveBeat(beat); }
   });
 
   function rowOf(rowId: string): FlowRow | undefined {
@@ -183,6 +194,28 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     ports.openComment({ id, rowId: row.id, field: "audioText", quotedText });
   }
 
+  function jumpComment(id: string, rowId?: string | null, field?: string | null): void {
+    if (!isCurrent()) return;
+    if (field === "visualText" && rowId && rowOf(rowId)) { caret(rowId, 0); return; }
+    for (const row of ports.doc().rows) {
+      let offset = 0;
+      for (const run of ports.flow.cells(row.audioText)) {
+        if (run.marks.cmt?.includes(id)) {
+          caret(row.id, offset);
+          const anchor = root.querySelector<HTMLElement>('.wr-beat[data-id="' + CSS.escape(row.id) + '"] .cmt-anchor[data-cmt="' + CSS.escape(id) + '"]');
+          if (anchor) {
+            anchor.classList.remove("flash");
+            void anchor.offsetWidth;
+            anchor.classList.add("flash");
+          }
+          return;
+        }
+        offset += run.atom ? 1 : run.text.length;
+      }
+    }
+    ports.notice("That text is no longer in the script.", "warn");
+  }
+
   // why: a comment box takes the keyboard while it is open, so the caret goes back to where it was when it closes
   const dialog = root.ownerDocument.getElementById("comment-modal");
   const observer = new MutationObserver(() => {
@@ -200,6 +233,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     beforeReplay,
     afterReplay,
     comment,
+    jumpComment,
     selection: surface.selection,
     place: range => { surface.place(range); },
     check: surface.domCheck,

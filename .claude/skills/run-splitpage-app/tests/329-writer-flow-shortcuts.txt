@@ -1,0 +1,45 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow shortcuts',paragraphsDecided:true,rows:[{id:'a',audioText:'Start ',visualText:''},{id:'b',audioText:'Next ',visualText:''}],comments:[]})],'shortcuts.splitpage')); })()
+wait F.state().title === 'Flow shortcuts'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:6},head:{kind:'beat',rowId:'a',offset:6}})
+press [Camera
+press ]
+expect F.state().rows[0].audioText.includes('data-tag-cat="prop" data-tag-name="Camera"')
+expect document.querySelector('#writer-doc .wr-beat[data-id="a"] .tag-anchor').textContent === 'Camera'
+expect document.activeElement.id === 'writer-doc'
+expect W.selection().head.rowId === 'a' && W.selection().head.offset === 12
+expect W.check().length === 0
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Start [Camera]'
+key ctrl KeyY
+expect F.state().rows[0].audioText.includes('data-tag-cat="prop" data-tag-name="Camera"')
+expect W.check().length === 0
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:5},head:{kind:'beat',rowId:'b',offset:5}})
+press ((quiet
+press ))
+expect F.state().rows[1].audioText === 'Next <span class="stage-dir">quiet</span>'
+key ctrl KeyZ
+expect F.state().rows[1].audioText === 'Next ((quiet))'
+key ctrl KeyY
+expect F.state().rows[1].audioText === 'Next <span class="stage-dir">quiet</span>'
+press  voice
+expect F.state().rows[1].audioText.replace(/&nbsp;/g, ' ') === 'Next <span class="stage-dir">quiet</span> voice'
+expect W.check().length === 0
+press  {Harbour} ~Mist~ <Tripod>
+expect document.querySelector('.wr-beat[data-id="b"] [data-tag-cat="location"][data-tag-name="Harbour"]') !== null
+expect document.querySelector('.wr-beat[data-id="b"] [data-tag-cat="vfx"][data-tag-name="Mist"]') !== null
+expect document.querySelector('.wr-beat[data-id="b"] [data-tag-cat="gear"][data-tag-name="Tripod"]') !== null
+key shift Enter
+press prop: literal
+key Tab
+expect F.state().rows[1].audioText.includes('prop: literal')
+expect document.querySelector('.wr-beat[data-id="b"] .plain-tag-keyword') === null
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:0}})
+press SFX
+press :
+expect document.querySelector('.wr-beat[data-id="a"] .audio-cue') !== null
+key ctrl KeyZ
+expect F.state().rows[0].audioText.startsWith('SFX:') && !F.state().rows[0].audioText.includes('audio-cue')

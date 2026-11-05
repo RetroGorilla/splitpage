@@ -1,0 +1,23 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow leave',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'B-roll: untouched'},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'leave.splitpage')); })()
+wait F.state().title === 'Flow leave'
+click #btn-write
+wait W.on()
+eval (function(){ window.at = function(id,n){ W.place({anchor:{kind:'beat',rowId:id,offset:n},head:{kind:'beat',rowId:id,offset:n}}); }; at('a',5); return true; })()
+eval (function(){ var beat=document.querySelector('.wr-beat[data-id="a"]'); beat.innerHTML='<b>Alpha</b><font color="red"> changed</font>'; window.dispatchEvent(new Event('blur')); return true; })()
+expect F.state().rows[0].audioText === 'Alpha'
+expect document.querySelector('.wr-beat[data-id="a"] font') !== null
+eval at('b',2)
+wait F.state().rows[0].audioText === '<strong>Alpha</strong> changed'
+expect document.querySelector('.wr-beat[data-id="a"] font') === null
+expect document.activeElement.id === 'writer-doc'
+expect W.selection().head.rowId === 'b' && W.selection().head.offset === 2
+expect F.state().rows[0].visualText === 'B-roll: untouched'
+expect W.check().length === 0
+eval (function(){ document.querySelector('.wr-beat[data-id="b"]').innerHTML='<b>Bravo</b> title'; document.getElementById('writer-title').focus(); return true; })()
+wait F.state().rows[1].audioText === '<strong>Bravo</strong> title'
+expect document.activeElement.id === 'writer-title'
+eval (function(){ at('b',11); document.querySelector('.wr-beat[data-id="b"]').innerHTML='<b>Bravo</b> close'; document.getElementById('wr-close').click(); return true; })()
+wait !W.on()
+expect F.state().rows[1].audioText === '<strong>Bravo</strong> close'

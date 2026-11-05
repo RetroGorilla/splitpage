@@ -17,7 +17,7 @@ import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { sceneView } from "./editor-owners.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { currentRowsRender } from "./render.ts";
-import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.ts";
+import { acceptTagGhost, hideTagGhost, maybeAutoTagShortcut, scheduleIdleRefresh, tagGhost, updateTagGhost } from "../../features/tags/production-tags.ts";
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { createFlowWriter } from "../../features/writer/flow-writer.ts";
 import { caretAfterStep } from "../../features/undo/caret.ts";
@@ -31,6 +31,8 @@ import { paintGuard } from "./editor-owners.ts";
 import { undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { liveSession } from "./session-owner.ts";
+import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
+import { anchorBrollInLeftCell } from "./broll.ts";
 
 const MEDIA_CELL = Object.freeze({ media: true });
 const flowCells = new Map<string, Run[]>();
@@ -116,6 +118,27 @@ export function mountWriterRuntimeFeature() {
             changed: () => { ["production", "broll", "writerStats"].forEach(job => { scheduleIdleRefresh(job); }); },
             selectionMoved,
             plainVisual,
+            beatInput: (event, beat) => {
+              maybeAutoTagShortcut(event, beat);
+              maybeDirectionShortcut(event, beat);
+              maybeCueShortcut(event, beat);
+            },
+            typeAtBeatEdge: (beat, words) => !!typeAtDirectionEdge(beat, words),
+            beatKeydown: (event, beat) => {
+              if (event.key === "Tab" && tagGhost?.cellEl === beat && acceptTagGhost()) {
+                event.preventDefault();
+                return true;
+              }
+              if (["Escape", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) hideTagGhost();
+              return false;
+            },
+            beatSelection: beat => { if (beat) updateTagGhost(beat); else hideTagGhost(); },
+            leaveBeat: beat => {
+              const clean = text.sanitizeHtml(beat.innerHTML);
+              if (clean !== text.storedHtmlFromDom(beat.innerHTML)) beat.innerHTML = clean;
+              writerEditing.cells().sync(beat);
+              anchorBrollInLeftCell(beat);
+            },
             newCommentId: () => randomIds.id("c"),
             openComment: at => { actions.invoke("comment-on-selection", "button", at); }
           });

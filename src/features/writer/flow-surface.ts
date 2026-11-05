@@ -29,6 +29,11 @@ export interface SurfacePorts {
   readonly settings: () => SurfaceSettings;
   readonly openFind: () => void;
   readonly plainVisual: (row: FlowRow) => string;
+  readonly beatInput?: (event: InputEvent, beat: HTMLElement) => void;
+  readonly typeAtBeatEdge?: (beat: HTMLElement, text: string) => boolean;
+  readonly beatKeydown?: (event: KeyboardEvent, beat: HTMLElement) => boolean;
+  readonly beatSelection?: (beat: HTMLElement | null) => void;
+  readonly leaveBeat?: (beat: HTMLElement) => void;
 }
 
 export interface SurfaceSettings {
@@ -325,6 +330,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     held = range;
     root.focus({ preventScroll: true });
     sel.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
+    noteSelection();
     if (scroll) {
       const target = elementOf(h.node);
       if (target) target.scrollIntoView({ block: "nearest" });
@@ -341,6 +347,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     const now = selection();
     const doc = ports.doc();
     if (!now || comparePos(doc, now.anchor, before.anchor) !== 0 || comparePos(doc, now.head, before.head) !== 0) place(before);
+    noteSelection();
   }
 
   function focusBack(): void {
@@ -469,6 +476,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     const beat = el?.closest<HTMLElement>(".wr-beat") ?? null;
     const heading = el?.closest<HTMLElement>(".wr-heading") ?? null;
     if (beat) {
+      ports.beatInput?.(input, beat);
       syncBeatEl(beat);
       if (input.inputType === "insertText" && input.data && /[*~]$/.test(input.data)) maybeInlineMarkdown();
     } else if (heading) {
@@ -483,6 +491,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     }
     if (repaired) paint();
     ports.changed();
+    noteSelection();
   }
 
   function range0(event: InputEvent): FlowRange | null {
@@ -533,14 +542,25 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (!range) return;
     if (type === "insertText" || type === "insertReplacementText") {
       const data = input.data ?? input.dataTransfer?.getData("text/plain") ?? "";
-      if (pending && isCollapsed(range) && comparePos(ports.doc(), pending.pos, range.head) === 0 && input.data) {
+      const target = range0(input) ?? range;
+      if (pending && type === "insertText" && isCollapsed(target) && isCollapsed(range) &&
+          comparePos(ports.doc(), pending.pos, target.head) === 0 && comparePos(ports.doc(), pending.pos, range.head) === 0 && input.data) {
         event.preventDefault();
         const marks = pending.marks;
         apply("type", doc => typeWithMarks(doc, range.head, input.data ?? "", marks, ports.flow), range);
         pending = null;
         return;
       }
-      const target = range0(input) ?? range;
+      pending = null;
+      if (isCollapsed(target) && withinOneBeat(range) && range.head.kind === "beat" && data) {
+        const beat = beatEl(range.head.rowId);
+        if (beat && ports.typeAtBeatEdge?.(beat, data)) {
+          event.preventDefault();
+          syncBeatEl(beat);
+          ports.changed();
+          return;
+        }
+      }
       if (!isCollapsed(target) && !withinOneBeat(target)) {
         event.preventDefault();
         ports.breakCoalescing();
@@ -713,6 +733,14 @@ export function createSurface(ports: SurfacePorts): Surface {
       return;
     }
     if (!range) return;
+    if (withinOneBeat(range) && range.head.kind === "beat") {
+      const beat = beatEl(range.head.rowId);
+      if (beat && ports.beatKeydown?.(event, beat)) {
+        syncBeatEl(beat);
+        ports.changed();
+        return;
+      }
+    }
     if (key === "Enter") { onEnter(event, range); return; }
     if ((key === "ArrowRight" || key === "ArrowLeft") && !ctrl && !event.shiftKey && !event.altKey && isCollapsed(range) && range.head.kind === "beat" && !beatLength(range.head.rowId)) {
       // why: an empty beat's caret spot has two sides but looks like one, so a native press seems to do nothing
@@ -778,13 +806,37 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (range) held = range;
     const head = range?.head;
     const currentBeat = head && head.kind === "beat" ? head.rowId : null;
-    if (lastBeat !== currentBeat) {
-      if (lastBeat) beatEl(lastBeat)?.classList.remove("is-current");
-      if (currentBeat) beatEl(currentBeat)?.classList.add("is-current");
-      lastBeat = currentBeat;
-    }
+    if (range && document.activeElement === root && !composing) transitionBeat(currentBeat);
     if (pending && (!range || !isCollapsed(range) || comparePos(ports.doc(), pending.pos, range.head) !== 0)) pending = null;
+    ports.beatSelection?.(currentBeat && document.activeElement === root && !composing ? beatEl(currentBeat) : null);
     ports.selectionMoved(range);
+  }
+
+  function transitionBeat(next: string | null): void {
+    if (lastBeat === next) return;
+    const previous = lastBeat;
+    lastBeat = next;
+    if (previous) {
+      const beat = beatEl(previous);
+      if (beat) {
+        beat.classList.remove("is-current");
+        const before = selection();
+        ports.leaveBeat?.(beat);
+        syncBeatEl(beat);
+        if (before && document.activeElement === root) {
+          const after = selection();
+          if (!after || comparePos(ports.doc(), before.anchor, after.anchor) !== 0 ||
+              comparePos(ports.doc(), before.head, after.head) !== 0) place(before);
+        }
+      }
+    }
+    if (next) beatEl(next)?.classList.add("is-current");
+  }
+
+  function onHostBlur(event: Event): void {
+    if (!(event as FocusEvent).relatedTarget || composing) return;
+    transitionBeat(null);
+    ports.beatSelection?.(null);
   }
 
   function leavePendingHeading(): void {
@@ -842,6 +894,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     const at = selection() ?? held;
     composing = false;
     syncComposition();
+    transitionBeat(null);
     return at;
   }
 
@@ -916,6 +969,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     [root, "compositionstart", onCompositionStart],
     [root, "compositionend", onCompositionEnd],
     [root, "mousedown", onMouseDown],
+    [root, "focusout", onHostBlur],
     [window, "mouseup", onMouseUp],
     [document, "selectionchange", onSelectionChange]
   ];

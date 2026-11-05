@@ -19,6 +19,7 @@ import { shotHiding } from "./ports/shot-hiding.ts";
 import { resetDraftHistory } from "../../features/editing/draft-edit.ts";
 import type { CommentsPorts } from "../../features/comments/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
+import { writerControls } from "./writer.ts";
 import { runFromButton } from "./ports/actions.ts";
 import { mountComments } from "../../features/comments/mount.ts";
 import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.ts";
@@ -94,7 +95,12 @@ export function mountCommentsFeature(): ReturnType<typeof mountComments> {
       deleteComment: armDeleteComment,
       restoreConflict: restoreConflictValue,
       menu: toggleCommentMenu,
-      jump: jumpToAnchor,
+      jump: id => {
+        const flow = writerControls()?.writerFlowControl();
+        if (!flow) { jumpToAnchor(id); return; }
+        const comment = portDocument.current()?.comments.find(item => item.id === id);
+        if (comment) flow.jumpComment(comment.id, comment.rowId, comment.field);
+      },
       openPanel: function () { runFromButton("panel-comments"); },
       closePanel: () => { sidePanels().close("comments-panel"); },
       assigneeFilter: setCommentAssigneeFilter,
