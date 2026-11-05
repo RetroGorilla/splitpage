@@ -34,6 +34,10 @@ import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { liveSession } from "./session-owner.ts";
 import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
 import { anchorBrollInLeftCell } from "./broll.ts";
+import { mountFlowClipboardRoutes } from "../../features/clipboard/routes.ts";
+import { copyFlowClipboard, pasteFlowClipboard } from "../../features/clipboard/flow-clip.ts";
+import { randomHexBytes } from "../../adapters/identity/ids.ts";
+import { migrateRows } from "../document-ports.ts";
 
 const MEDIA_CELL = Object.freeze({ media: true });
 const flowCells = new Map<string, Run[]>();
@@ -98,6 +102,19 @@ export function mountWriterRuntimeFeature() {
           const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
           if (initialized.kind === "failed") throw initialized.error;
           return createFlowWriter({
+            clipboard: {
+              mount: handlers => mountFlowClipboardRoutes(root, handlers),
+              copy: (range, data, cut) => {
+                const doc = documentReader.current();
+                if (doc && copyFlowClipboard(doc, range, data, flowPorts, cut ? randomHexBytes(16) : null, migrateRows)) {
+                  notices.show("Some pictures didn't fit on the clipboard: they paste only where their files are available.", "warn");
+                }
+              },
+              paste: (range, data) => {
+                const doc = documentReader.current();
+                return doc ? pasteFlowClipboard(doc, range, data, flowPorts, text.inertBody, migrateRows) : null;
+              }
+            },
             lifetime: documentLifetime,
             heldSelection: writerEditing.selection(),
             root,

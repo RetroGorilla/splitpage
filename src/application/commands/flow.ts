@@ -54,6 +54,7 @@ export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutco
       const docFields: string[] = [];
       if (sectionsChanged) docFields.push("sections");
       docFields.push("comments");
+      if (result.clipboard) docFields.push("people", "productionTags", "brollShots");
       const stamped = new Set(cells.filter(cell => cell.field === "audioText" || cell.field === "visualText").map(cell => cell.rowId).concat(inserted));
       for (const rowId of stamped) {
         if (was.has(rowId)) cells.push({ rowId, field: "updatedAt" }, { rowId, field: "updatedBy" });
@@ -72,6 +73,12 @@ export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutco
           });
           live.rows.splice(0, live.rows.length, ...next);
           if (sectionsChanged) writeScenes(live as unknown as Record<string, unknown>, result.sections as readonly DocumentScene[] | undefined);
+          if (result.clipboard) {
+            live.comments = JSON.parse(JSON.stringify(result.clipboard.comments)) as ValidatedDocument["comments"];
+            live.people = JSON.parse(JSON.stringify(result.clipboard.people)) as ValidatedDocument["people"];
+            live.productionTags = JSON.parse(JSON.stringify(result.clipboard.productionTags)) as ValidatedDocument["productionTags"];
+            live.brollShots = JSON.parse(JSON.stringify(result.clipboard.brollShots)) as ValidatedDocument["brollShots"];
+          }
           if (result.removedComments.length) {
             const gone = new Set(result.removedComments);
             live.comments = live.comments.filter(comment => !gone.has(comment.id));

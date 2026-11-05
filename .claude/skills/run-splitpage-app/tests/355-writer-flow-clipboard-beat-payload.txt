@@ -1,0 +1,13 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1');window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};F.openFile(new File([JSON.stringify({schema:2,title:'Beat payload to flow',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'A'},{id:'b',audioText:'Bravo',visualText:'B'}]})],'beat-clip.splitpage'))
+wait F.state().title === 'Beat payload to flow'
+click #btn-write
+wait W.on()
+eval window.data=new DataTransfer();data.setData('application/x-splitpage-scenes',JSON.stringify({format:'splitpage-scenes',version:1,rows:[{id:'source',audioText:'Copied beat',visualText:'Copied visual',status:'shot',lengthSeconds:17}]}));data.setData('text/plain','Visual: Copied visual\nAudio: Copied beat');W.place({anchor:bp('a',2),head:bp('a',2)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Al|Copied beat|pha|Bravo'
+expect F.state().rows[1].visualText === 'Copied visual' && F.state().rows[1].status === 'shot' && F.state().rows[1].lengthSeconds === 17 && F.state().rows[2].visualText === '' && W.check().length === 0
+key ctrl KeyZ
+eval window.html=new DataTransfer();html.setData('text/html','<table data-splitpage-scenes="'+data.getData('application/x-splitpage-scenes').replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"><tr><td>Copied visual</td><td>Copied beat</td></tr></table>');W.place({anchor:bp('b',0),head:bp('b',0)});clip('paste',html)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Copied beat|Bravo' && F.state().rows[1].visualText === 'Copied visual'
+expect !F.state().rows[1].paragraphStart && !F.state().rows[2].paragraphStart && W.check().length === 0

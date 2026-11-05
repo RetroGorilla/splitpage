@@ -20,6 +20,11 @@ const INPUT_MARKS: Readonly<Record<string, MarkName>> = {
 };
 
 export interface SurfacePorts {
+  readonly clipboard?: {
+    readonly mount: (handlers: Readonly<Record<"copy" | "cut" | "paste", (event: ClipboardEvent) => void>>) => () => void;
+    readonly copy: (range: FlowRange, data: DataTransfer, cut: boolean) => void;
+    readonly paste: (range: FlowRange, data: Pick<DataTransfer, "getData">) => FlowOutcome | undefined;
+  };
   readonly lifetime: Pick<DocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
@@ -97,6 +102,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   const epoch = ports.lifetime.epoch();
   const rendered = new WeakMap<HTMLElement, string>();
   let composing = false;
+  const queuedPastes: Pick<DataTransfer, "getData">[] = [];
   let mouseDown = false;
   let clicks = 0;
   let pending: { pos: FlowPos; marks: Marks } | null = null;
@@ -874,26 +880,39 @@ export function createSurface(ports: SurfacePorts): Surface {
     const range = selection();
     if (!range || isCollapsed(range) || !event.clipboardData) return;
     event.preventDefault();
-    event.clipboardData.setData("text/plain", logicalText(ports.doc(), range, ports.flow));
+    if (ports.clipboard) ports.clipboard.copy(range, event.clipboardData, false);
+    else event.clipboardData.setData("text/plain", logicalText(ports.doc(), range, ports.flow));
   }
 
   function onCut(event: ClipboardEvent): void {
-    onCopy(event);
     const range = selection();
-    if (!range || isCollapsed(range)) return;
+    if (!range || isCollapsed(range) || !event.clipboardData) return;
     event.preventDefault();
+    if (ports.clipboard) ports.clipboard.copy(range, event.clipboardData, true);
+    else event.clipboardData.setData("text/plain", logicalText(ports.doc(), range, ports.flow));
     ports.breakCoalescing();
     apply("cut", doc => replaceRange(doc, range, [], ports.flow), range);
   }
 
   function onPaste(event: ClipboardEvent): void {
     event.preventDefault();
+    if (!event.clipboardData) return;
+    const values = new Map(Array.from(event.clipboardData.types, type => [type, event.clipboardData?.getData(type) ?? ""]));
+    const data = { getData: (type: string) => values.get(type) ?? "" };
+    if (composing) { queuedPastes.push(data); return; }
+    pasteData(data);
+  }
+
+  function pasteData(data: Pick<DataTransfer, "getData">): void {
     const range = selection();
-    const text = event.clipboardData?.getData("text/plain") ?? "";
-    if (!range || !text) return;
+    const text = data.getData("text/plain");
+    if (!range) return;
     const paragraphs = text.replace(/\r\n?/g, "\n").split(/\n+/);
     ports.breakCoalescing();
-    apply("paste", doc => pasteText(doc, range, paragraphs, ports.flow), range);
+    apply("paste", doc => {
+      const structural = ports.clipboard?.paste(range, data);
+      return structural === undefined ? text ? pasteText(doc, range, paragraphs, ports.flow) : null : structural;
+    }, range);
   }
 
   function noteSelection(): void {
@@ -959,6 +978,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     syncComposition();
     ports.changed();
     if (repaintOwed) repaint();
+    for (const data of queuedPastes.splice(0)) pasteData(data);
   }
 
   function syncComposition(): void {
@@ -989,6 +1009,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     const at = selection() ?? heldRange();
     composing = false;
     syncComposition();
+    for (const data of queuedPastes.splice(0)) pasteData(data);
     transitionBeat(null);
     return at;
   }
@@ -1059,9 +1080,11 @@ export function createSurface(ports: SurfacePorts): Surface {
     [root, "beforeinput", onBeforeInput],
     [root, "input", onInput],
     [root, "keydown", onKeydown as EventListener],
-    [root, "copy", onCopy as EventListener],
-    [root, "cut", onCut as EventListener],
-    [root, "paste", onPaste as EventListener],
+    ...ports.clipboard ? [] : [
+      [root, "copy", onCopy as EventListener] as [EventTarget, string, EventListener],
+      [root, "cut", onCut as EventListener] as [EventTarget, string, EventListener],
+      [root, "paste", onPaste as EventListener] as [EventTarget, string, EventListener]
+    ],
     [root, "compositionstart", onCompositionStart],
     [root, "compositionend", onCompositionEnd],
     [root, "mousedown", onMouseDown],
@@ -1070,6 +1093,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     [document, "selectionchange", onSelectionChange]
   ];
   listeners.forEach(([target, name, handler]) => target.addEventListener(name, handler));
+  const stopClipboard = ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste });
 
   return {
     finish,
@@ -1085,9 +1109,11 @@ export function createSurface(ports: SurfacePorts): Surface {
     domRange,
     domCheck,
     dispose: () => {
+      stopClipboard?.();
       joinControl.dispose();
       if (ports.lifetime.epoch() === epoch) ports.heldSelection.forget();
       compositionTargets.clear();
+      queuedPastes.length = 0;
       listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
     }
   };

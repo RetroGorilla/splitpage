@@ -19,6 +19,7 @@ interface ParsedBeatClipboard extends BeatWireData {
 }
 type BeatPayloadInput = { [K in keyof BeatWirePayload]?: unknown };
 interface BeatInsertOptions {
+  preserveBrollDetails?: boolean | undefined;
   state?: ValidatedDocument | null | undefined;
   rowMap?: Record<string, string> | undefined;
   afterRowId?: string | null | undefined;
@@ -342,6 +343,7 @@ export function insertBeats(clip: BeatClip, opts?: BeatInsertOptions) {
   const takenKeys = brollIdsTaken(state, null, null, null, move);
   const kept: string[] = []; let minted: string[] = [];
   const mintedByRow = Object.create(null) as Record<string, { cell: Run[]; ids: string[] }>;
+  const copiedBroll = new Map<string, string>();
   const rows = clip.rows.map(function (r) {
     const row = clone(r);
     row.id = rowMap[r.id] as string;
@@ -353,6 +355,13 @@ export function insertBeats(clip: BeatClip, opts?: BeatInsertOptions) {
         return Object.assign({}, run, { marks: marks });
       });
       const fresh = freshBrollIds(normalizeCell(cell), takenKeys, function () { return mint("bs"); });
+      if (opts.preserveBrollDetails) {
+        const before = normalizeCell(cell);
+        fresh.cell.forEach((run, index) => {
+          const old = before[index];
+          if (run.atom && run.id && old?.atom && old.id && fresh.minted.includes(run.id)) copiedBroll.set(run.id, old.id);
+        });
+      }
       fresh.cell.forEach(function (run) {
         if (!run.atom || !run.id) return;
         takenKeys[run.id] = true;
@@ -420,6 +429,16 @@ export function insertBeats(clip: BeatClip, opts?: BeatInsertOptions) {
     rec.props = normalizeBrollProps((b.props || []).map(function (p) { return { id: "", name: (p as NonNullable<typeof p>).name }; }), registry);
     shots.push(rec);
   });
+  for (const [id, original] of copiedBroll) {
+    const source = clip.brollShots.find(shot => shot.id === original);
+    if (!source || haveShot[id]) continue;
+    const rec = clone(source);
+    rec.id = id;
+    rec.owner = ownerFor(source.owner);
+    rec.props = normalizeBrollProps((source.props || []).map(prop => ({ id: "", name: prop?.name })), registry);
+    shots.push(rec);
+    haveShot[id] = true;
+  }
   Object.keys(mintedByRow).forEach(function (rowId) {
     (ports as BeatClipPorts).recordPastedBroll(state, rowId, (mintedByRow[rowId] as NonNullable<typeof mintedByRow[string]>).cell, (mintedByRow[rowId] as NonNullable<typeof mintedByRow[string]>).ids);
   });

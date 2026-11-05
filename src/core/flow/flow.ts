@@ -7,6 +7,7 @@ import { cappedText } from "../document/text-policy.ts";
 import { normalizeBeatLength, rowStatusId } from "../document/timing.ts";
 import { normalizeScenes, scenesAfterRemoval as removedSceneAnchors, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
 import type { DocumentScene } from "../document/scenes.ts";
+import type { DocumentShape } from "../document/validated.ts";
 import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, setMark, sliceCell, splitCell } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
 import { cellLength, commentIds, normalizeCell, projection } from "../text/runs.ts";
@@ -61,6 +62,7 @@ export interface FlowEdit {
   readonly removedComments: readonly string[];
   readonly selection: FlowRange;
   readonly notice?: string | undefined;
+  readonly clipboard?: Pick<DocumentShape, "comments" | "people" | "productionTags" | "brollShots">;
 }
 
 export interface FlowRefusal {
@@ -1063,4 +1065,97 @@ export function moveBeats(doc: FlowDoc, rowIds: readonly string[], pos: FlowPos,
   const sections = scenesAfterRemoval({ rows: doc.rows, sections: doc.sections }, wanted);
   const detached: FlowDoc = { ...doc, rows, sections };
   return insertBeats(detached, pos, beats, ports);
+}
+
+export interface FlowClipboardSlice {
+  readonly text: string;
+  readonly rows: readonly FlowRow[];
+  readonly wholeIds: readonly string[];
+  readonly headers: readonly { readonly index: number; readonly scene: DocumentScene }[];
+}
+
+export function copyFlowRange(doc: FlowDoc, range: FlowRange, ports: FlowPorts): FlowClipboardSlice {
+  const rows: FlowRow[] = [], wholeIds: string[] = [], headers: { index: number; scene: DocumentScene }[] = [];
+  const { from, to } = orderedRange(doc, range);
+  if (!isCollapsed(range)) {
+    for (const block of flowOf(doc)) {
+      if (block.kind === "heading") {
+        const start = { kind: "heading", sceneId: block.scene.id, offset: 0 } as const;
+        const end = { ...start, offset: block.scene.name.length };
+        if (comparePos(doc, from, start) <= 0 && comparePos(doc, to, end) >= 0) {
+          headers.push({ index: rows.length, scene: block.scene });
+        } else if (comparePos(doc, from, end) < 0 && comparePos(doc, to, start) > 0) {
+          const text = block.scene.name.slice(from.kind === "heading" && from.sceneId === block.scene.id ? from.offset : 0,
+            to.kind === "heading" && to.sceneId === block.scene.id ? to.offset : undefined);
+          rows.push({ ...blankRow(ports.newId(), false), audioText: toHtml([{ text, marks: {} }]) });
+        }
+        continue;
+      }
+      for (const row of block.beats) {
+        const cell = ports.cells(row.audioText), length = cellLength(cell);
+        const start = beatPos(row.id, 0), end = beatPos(row.id, length);
+        if (comparePos(doc, from, end) > 0 || comparePos(doc, to, start) < 0) continue;
+        const atStart = from.kind === "beat" && from.rowId === row.id;
+        const atEnd = to.kind === "beat" && to.rowId === row.id;
+        if (!length && atEnd && !atStart && row.id !== doc.rows.at(-1)?.id) continue;
+        const a = atStart ? from.offset : 0, b = atEnd ? to.offset : length;
+        if (a === b && length) continue;
+        const whole = !withinOneBeat(range) && a === 0 && b === length;
+        if (whole) wholeIds.push(row.id);
+        const piece = whole ? row : { ...blankRow(row.id, false), audioText: toHtml(sliceCell(cell, a, b)) };
+        rows.push(rows.length && row.id === block.beats[0]?.id ? { ...piece, paragraphStart: true } : piece);
+      }
+    }
+  }
+  return { text: logicalText(doc, range, ports), rows, wholeIds, headers };
+}
+
+export function pasteFlowRange(doc: FlowDoc, range: FlowRange, clip: FlowClipboardSlice, ports: FlowPorts): FlowOutcome {
+  if (!clip.wholeIds.length && !clip.headers.length) {
+    return replaceRange(doc, range, clip.text ? [{ text: clip.text, marks: {} }] : [], ports);
+  }
+  const cleared = isCollapsed(range) ? null : replaceRange(doc, range, [], ports);
+  if (cleared && !("rows" in cleared)) return cleared;
+  const current = cleared ? { ...doc, rows: cleared.rows, sections: cleared.sections } : doc;
+  const at = cleared?.selection ?? range;
+  const marker = blankRow(ports.newId(), false);
+  const beats = clip.rows.length ? clip.rows : [marker];
+  const inserted = insertBeats(current, at.head, beats, ports);
+  if (!inserted || !("rows" in inserted)) return inserted;
+  const rows = inserted.rows.slice();
+  const index = rows.findIndex(row => row.id === beats[0]?.id);
+  const sections = inserted.sections?.slice() ?? [];
+  const originalAnchors = new Map(flowOf(current).flatMap(block => block.kind === "heading" ? [[block.scene.id, block.scene.firstSceneId]] : []));
+  let insertionIndex = index;
+  if (!clip.rows.length) {
+    rows.splice(index, 1);
+    for (let i = 0; i < sections.length; i++) {
+      const scene = sections[i] as DocumentScene;
+      if (scene.firstSceneId !== marker.id) continue;
+      const blank = blankRow(ports.newId(), false);
+      rows.splice(index, 0, blank);
+      sections[i] = { ...scene, firstSceneId: blank.id };
+      insertionIndex++;
+    }
+  }
+  const anchors = clip.headers.map(header => ({ header, id: rows[insertionIndex + header.index]?.id }));
+  for (const { header, id } of anchors) {
+    const offset = id ? rows.findIndex(row => row.id === id) : rows.length;
+    if (!rows[offset]) rows.push(blankRow(ports.newId(), false));
+    let first = rows[offset] as FlowRow;
+    const existing = sections.find(scene => scene.firstSceneId === first.id);
+    if (existing) {
+      const blank = blankRow(ports.newId(), false);
+      rows.splice(offset, 0, blank);
+      if (originalAnchors.get(existing.id) !== first.id) sections[sections.indexOf(existing)] = { ...existing, firstSceneId: blank.id };
+      else first = blank;
+    }
+    sections.push({ ...header.scene, id: ports.newId(), firstSceneId: first.id });
+  }
+  const last = rows.find(row => row.id === sections.at(-1)?.firstSceneId) ?? rows.at(-1) as FlowRow;
+  const positions = new Map(rows.map((row, offset) => [row.id, offset]));
+  sections.sort((a, b) => (positions.get(a.firstSceneId) ?? 0) - (positions.get(b.firstSceneId) ?? 0));
+  return { ...inserted, rows, sections: sections.length ? sections : undefined,
+    removedComments: cleared?.removedComments ?? [], notice: cleared?.notice,
+    selection: clip.rows.length ? inserted.selection : caretAt(beatPos(last.id, 0)) };
 }
