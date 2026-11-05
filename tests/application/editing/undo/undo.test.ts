@@ -140,6 +140,33 @@ test("flow selections belong to their undo entry, survive replay and do not coal
   assert.equal(u.owner.last(), null);
 });
 
+test("initialization stops rebasing at the nearest paragraph transition across off-on-off history", () => {
+  const u = setup();
+  typeInto(u.doc(), "Alpha.");
+  u.doc().rows.push({ ...u.doc().rows[0], id: "r2", audioText: "Bravo", paragraphStart: true } as ValidatedDocument["rows"][number]);
+  u.owner.reset();
+  const row = u.doc().rows[1];
+  assert.ok(row);
+  for (const start of [false, true, false]) {
+    if (start) row.paragraphStart = true; else delete row.paragraphStart;
+    u.owner.noteEdit();
+    u.owner.flush();
+  }
+  initializeParagraphs(u);
+  assert.deepEqual(u.owner.sizes(), { undo: 3, redo: 0 });
+  for (const [index, expected] of [true, undefined, true].entries()) {
+    assert.equal(u.owner.undo().ok, true, "paragraph undo " + (index + 1));
+    assert.equal(row.paragraphStart, expected);
+    assert.equal(u.doc().paragraphsDecided, true);
+    assert.deepEqual(u.owner.sizes(), { undo: 2 - index, redo: index + 1 });
+  }
+  for (const expected of [undefined, true, true]) {
+    assert.equal(u.owner.redo().ok, true);
+    assert.equal(row.paragraphStart, expected);
+  }
+  assert.deepEqual(u.owner.sizes(), { undo: 3, redo: 0 });
+});
+
 test("undo owner: a reported edit is recorded on flush, and undo replays it through the unrouted runner", () => {
   const u = setup();
   typeInto(u.doc(), "ab");
