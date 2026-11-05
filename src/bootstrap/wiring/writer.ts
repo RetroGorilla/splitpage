@@ -165,6 +165,12 @@ export function mountWriterRuntimeFeature() {
             },
             typeAtBeatEdge: (beat, words) => !!typeAtDirectionEdge(beat, words),
             beatKeydown: (event, beat) => {
+              if (event.key === "Escape" && tagGhost?.cellEl === beat) {
+                event.preventDefault();
+                event.stopPropagation();
+                hideTagGhost();
+                return true;
+              }
               if (event.key === "Tab" && tagGhost?.cellEl === beat && acceptTagGhost()) {
                 event.preventDefault();
                 return true;

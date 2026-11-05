@@ -73,9 +73,7 @@ wait document.getElementById('tag-ghost').classList.contains('is-visible')
 expect parseInt(getComputedStyle(document.getElementById('tag-ghost')).zIndex,10) > parseInt(getComputedStyle(document.getElementById('writer')).zIndex,10)
 expect document.getElementById('tag-ghost').getBoundingClientRect().width > 0 && document.getElementById('tag-ghost').getBoundingClientRect().left < innerWidth
 key Escape
-expect document.getElementById('writer').hidden
-click #btn-write
-wait W.on()
+expect !document.getElementById('writer').hidden && !document.getElementById('tag-ghost').classList.contains('is-visible')
 eval at('b',4)
 key Enter
 eval window.anchorBeat=F.state().comments.find(function(c){return c.id==='c1'}).rowId;true
