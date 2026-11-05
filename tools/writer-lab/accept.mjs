@@ -1,14 +1,17 @@
-// Runs the page's acceptance set with real key events through the browser's debugging port.
-// usage: node tools/writer-lab/accept.mjs [--browser <exe>] [--only <text>] [--port <n>]
 import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const arg = name => { const at = process.argv.indexOf("--" + name); return at === -1 ? null : process.argv[at + 1]; };
-const port = Number(arg("port") || 9417);
+const port = Number(arg("port")) || await new Promise((resolve, reject) => {
+  const server = net.createServer();
+  server.once("error", reject);
+  server.listen(0, "127.0.0.1", () => { const free = server.address().port; server.close(() => resolve(free)); });
+});
 const only = arg("only");
 const exe = arg("browser") || [
   `${process.env["ProgramFiles(x86)"]}\\Microsoft\\Edge\\Application\\msedge.exe`,
@@ -25,7 +28,8 @@ const env = { ...process.env, WRITER_LAB_PAGE: path.join(here, "dist", "writer-l
 delete env.ELECTRON_RUN_AS_NODE;
 const browser = spawn(exe, isElectron
   ? [path.join(here, "electron-main.cjs"), `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--disable-gpu"]
-  : ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--window-size=1440,960", "--enable-features=WinUseBrowserSpellChecker", page],
+  // why: without msImplicitSignin, a fresh Edge profile signs in to the PC's Microsoft account and starts syncing
+  : ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--window-size=1440,960", "--enable-features=WinUseBrowserSpellChecker", "--disable-features=msImplicitSignin", page],
 { stdio: "ignore", env });
 
 let ws, id = 0;
@@ -42,7 +46,7 @@ async function connect() {
   for (let i = 0; i < 80; i++) {
     try {
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-      const target = list.find(t => t.type === "page");
+      const target = list.find(t => t.type === "page" && t.url.startsWith(page));
       if (target) {
         ws = new WebSocket(target.webSocketDebuggerUrl);
         await new Promise((res, rej) => { ws.addEventListener("open", res, { once: true }); ws.addEventListener("error", rej, { once: true }); });
@@ -60,7 +64,7 @@ async function connect() {
         });
         return;
       }
-    } catch { /* still starting */ }
+    } catch {}
     await sleep(250);
   }
   throw new Error("browser never opened its debugging port");
@@ -142,7 +146,12 @@ async function fresh(raw) {
 }
 const ids = list => list.map(r => r.id).join(",");
 // why: undo stamps updatedAt and updatedBy on purpose, so they can't be part of "back to how it was"
-const withoutStamps = list => list.map(({ updatedAt: _at, updatedBy: _by, ...row }) => row);
+const withoutStamps = list => list.map(row => {
+  const copy = { ...row };
+  delete copy.updatedAt;
+  delete copy.updatedBy;
+  return copy;
+});
 const snapshot = async () => JSON.stringify({ rows: withoutStamps(await ev("__lab.doc().rows")), sections: await ev("__lab.doc().sections ?? null"), comments: await ev("__lab.comments()") });
 function same(a, b, label) {
   const x = JSON.stringify(a), y = JSON.stringify(b);
@@ -1495,13 +1504,13 @@ try {
 } catch (error) {
   console.log("run stopped: " + (error.stack || error));
 } finally {
-  try { ws?.close(); } catch { /* closing */ }
+  try { ws?.close(); } catch {}
   browser.kill();
   if (process.platform === "win32") {
     const name = path.basename(profile);
     const ps = `Get-CimInstance Win32_Process -Filter "Name='msedge.exe' OR Name='chrome.exe' OR Name='electron.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${name}') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
-    try { execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { stdio: "ignore", timeout: 30000 }); } catch { /* best effort */ }
+    try { execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { stdio: "ignore", timeout: 30000 }); } catch {}
   }
-  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ }
+  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3 }); } catch {}
 }
 process.exit(exitCode);

@@ -16,8 +16,8 @@ const out = esbuild.buildSync({
 const js = out.outputFiles[0].text.replace(/<\/script/gi, "<\\/script");
 const css = readFileSync(join(here, "lab.css"), "utf8");
 const html = readFileSync(join(here, "lab.html"), "utf8")
-  .replace("/*CSS*/", () => css)
-  .replace("/*JS*/", () => js);
+  .replace("LAB_CSS", () => css)
+  .replace("LAB_JS", () => js);
 mkdirSync(join(here, "dist"), { recursive: true });
 writeFileSync(join(here, "dist", "writer-lab.html"), html);
 console.log("built", join(here, "dist", "writer-lab.html"), Math.round(html.length / 1024) + " KB");
