@@ -252,7 +252,9 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
     const isFrom = start.kind === from.kind && comparePos(doc, start, { ...from, offset: 0 }) === 0;
     const isTo = start.kind === to.kind && comparePos(doc, start, { ...to, offset: 0 }) === 0;
     const touches = comparePos(doc, from, end) <= 0 && comparePos(doc, start, to) <= 0;
-    if (!touches) { parts.push(part); continue; }
+    const exclusiveEmptyEndpoint = part.kind === "beat" && !length && isTo && !isFrom
+      && to.offset === 0 && part.row.id !== doc.rows[doc.rows.length - 1]?.id;
+    if (!touches || exclusiveEmptyEndpoint) { parts.push(part); continue; }
     const a = isFrom ? from.offset : 0, b = isTo ? to.offset : length;
     const whole = a === 0 && b === length;
     if (part.kind === "heading") {

@@ -8,8 +8,11 @@ test("seeded typing replacements keep outside words, scene anchors and partial-b
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     const text = "Narration" + seed;
     const offset = 1 + seed % (text.length - 1);
-    const rows = [{ id: "p", audioText: "Before" }, { id: "a", audioText: "Selected", visualText: "Removed", status: "shot", paragraphStart: true },
-      { id: "b", audioText: text, visualText: "Kept", status: "ready", paragraphStart: true }, { id: "z", audioText: "After" }];
+    const removedImage = { sha256: "a".repeat(64), mime: "image/png", width: 1, height: 1 };
+    const keptImage = { sha256: "b".repeat(64), mime: "image/png", width: 1, height: 1 };
+    const rows = [{ id: "p", audioText: "Before" }, { id: "a", audioText: "Selected", visualText: "Removed", status: "shot", paragraphStart: true,
+      imageRef: removedImage, moreImages: [{ imageRef: removedImage }] },
+      { id: "b", audioText: text, visualText: "Kept", status: "ready", paragraphStart: true, imageRef: keptImage }, { id: "z", audioText: "After" }];
     const from = beatPos("a", 0), to = beatPos("b", offset);
     const result = replaceRange({ rows, sections: [{ id: "s", name: "Scene", firstSceneId: "a" }], comments: [] },
       i % 2 ? { anchor: to, head: from } : { anchor: from, head: to }, [{ text: "New", marks: {} }],
@@ -20,9 +23,12 @@ test("seeded typing replacements keep outside words, scene anchors and partial-b
     assert.equal(result.rows[0], rows[0]);
     assert.equal(result.rows[3], rows[3]);
     assert.equal(result.rows[1]?.visualText, "");
+    assert.ok(!result.rows[1]?.imageRef);
+    assert.equal(result.rows[1]?.moreImages, undefined);
     assert.equal(result.rows[1]?.paragraphStart, true);
     assert.equal(result.rows[2]?.visualText, "Kept");
     assert.equal(result.rows[2]?.status, "ready");
+    assert.deepEqual(result.rows[2]?.imageRef, keptImage);
     assert.ok(!result.rows[2]?.paragraphStart);
     assert.equal(result.sections?.[0]?.firstSceneId, "new");
   }

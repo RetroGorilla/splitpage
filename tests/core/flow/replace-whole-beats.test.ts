@@ -7,8 +7,11 @@ import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 for (const backward of [false, true]) {
   test(`typing over fully selected beats removes their metadata (${backward ? "backward" : "forward"})`, () => {
     const rows = [
-      { id: "a", audioText: '<span class="cmt-anchor" data-cmt="gone">Alpha</span>', visualText: "First", status: "shot" },
-      { id: "b", audioText: "Bravo", visualText: "Second", status: "ready" }
+      { id: "a", audioText: '<span class="cmt-anchor" data-cmt="gone">Alpha</span>', visualText: "First", status: "shot",
+        imageRef: { sha256: "a".repeat(64), mime: "image/png", width: 1, height: 1 },
+        moreImages: [{ imageRef: { sha256: "c".repeat(64), mime: "image/png", width: 1, height: 1 } }] },
+      { id: "b", audioText: "Bravo", visualText: "Second", status: "ready",
+        imageRef: { sha256: "b".repeat(64), mime: "image/png", width: 1, height: 1 } }
     ];
     const from = beatPos("a", 0), to = beatPos("b", 5);
     const result = replaceRange({ rows, comments: [{ id: "gone", rowId: "a", anchorId: "gone" }] },
@@ -20,6 +23,8 @@ for (const backward of [false, true]) {
     assert.equal(result.rows[0]?.audioText, "New");
     assert.equal(result.rows[0]?.visualText, "");
     assert.notEqual(result.rows[0]?.status, "shot");
+    assert.ok(!result.rows[0]?.imageRef);
+    assert.equal(result.rows[0]?.moreImages, undefined);
     assert.deepEqual(result.removedComments, ["gone"]);
     assert.equal(result.notice, "Removed 2 beats: 2 with visuals, 1 filmed");
     assert.deepEqual(result.selection, { anchor: beatPos("new", 3), head: beatPos("new", 3) });
