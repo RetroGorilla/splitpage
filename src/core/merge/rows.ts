@@ -16,6 +16,7 @@ interface Identified {
 export interface MergeRow extends Identified {
   status?: unknown;
   lengthSeconds?: unknown;
+  paragraphStart?: unknown;
   imageRef?: unknown;
   imageName?: unknown;
   imageAnnotation?: unknown;
@@ -95,7 +96,7 @@ export function rowFieldKey(row: Readonly<Record<string, unknown>> | null | unde
 export function rowContentEqual(a: Readonly<Record<string, unknown>> | null | undefined, b: Readonly<Record<string, unknown>> | null | undefined): boolean {
   if (!a || !b) return false;
   return ROW_FIELDS.every(function (f) { return rowFieldKey(a, f) === rowFieldKey(b, f); }) &&
-    setLengthOf(a) === setLengthOf(b);
+    setLengthOf(a) === setLengthOf(b) && (a.paragraphStart === true) === (b.paragraphStart === true);
 }
 
 function setLengthOf(row: { lengthSeconds?: unknown }): number | null {
@@ -163,6 +164,12 @@ export function mergeRows(base: RowSide | null | undefined, mine: RowSide, their
       const useMine = b ? (tl === bl) : (tl === null);
       const len = useMine ? ml : tl;
       if (len === null) delete out.lengthSeconds; else out.lengthSeconds = len;
+      if (useMine) tookMine = true; else tookTheirs = true;
+    }
+    const mp = m.paragraphStart === true, tp = t.paragraphStart === true, bp = b?.paragraphStart === true;
+    if (mp !== tp) {
+      const useMine = b ? tp === bp : !tp;
+      if (useMine ? mp : tp) out.paragraphStart = true; else delete out.paragraphStart;
       if (useMine) tookMine = true; else tookTheirs = true;
     }
     if (tookMine) {

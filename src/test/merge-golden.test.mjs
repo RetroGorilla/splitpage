@@ -108,6 +108,10 @@ const shot = (id, name, extra) => Object.assign({
 
 const CASES = [
   {
+    name: "paragraphs-decided-both", spec: doc(),
+    mine: (s) => { s.paragraphsDecided = true; }, theirs: (s) => { s.paragraphsDecided = true; }
+  },
+  {
     name: "file-title-mine-only", spec: doc(),
     mine: (s) => { s.titleOrigin = "file"; s.titleVersion = "v3"; }
   },

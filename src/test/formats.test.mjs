@@ -19,8 +19,57 @@ import { STORED } from "./_stored-cells.mjs";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
+import { projectFileServices } from "../application/formats/project-file-services.ts";
+import { buildCsv, buildBreakdownCsv, buildBrollCsv } from "../adapters/formats/csv.ts";
+import { buildDocx, buildNarrationDocx, buildNarrationText } from "../adapters/formats/docx.ts";
+import { buildScriptXlsx, buildBreakdownXlsx, buildBrollXlsx } from "../adapters/formats/xlsx.ts";
+import { toMarkdownDoc, htmlToPlainScript } from "../adapters/formats/export-text.ts";
 
 initTags();
+
+test("paragraph fields round-trip in projects, while old files and every text/table export keep their bytes", async () => {
+  const old = fixture();
+  const split = buildSplitpageFile(exportDocumentOf(old));
+  const md = buildMarkdownProject(exportDocumentOf(old));
+  assert.doesNotMatch(split, /paragraphStart|paragraphsDecided/);
+  assert.equal(buildSplitpageFile(exportDocumentOf(migrateRows(parseSplitpageFile(split)))), split);
+  assert.equal(buildMarkdownProject(exportDocumentOf(await applyMarkdownProject(parseMarkdownProject(md), { noAsk: true }))), md);
+  const flagged = structuredClone(old);
+  flagged.rows[1].paragraphStart = true;
+  flagged.paragraphsDecided = true;
+  for (const write of [buildSplitpageFile, buildMarkdownProject]) {
+    const bytes = write(exportDocumentOf(flagged));
+    const loaded = write === buildSplitpageFile ? migrateRows(parseSplitpageFile(bytes))
+      : await applyMarkdownProject(parseMarkdownProject(bytes), { noAsk: true });
+    assert.equal(loaded.rows[1].paragraphStart, true);
+    assert.equal(loaded.paragraphsDecided, true);
+    assert.equal(write(exportDocumentOf(loaded)), bytes);
+  }
+  for (const write of [buildCsv, buildBreakdownCsv, buildBrollCsv, buildDocx, buildNarrationDocx, buildNarrationText,
+    buildScriptXlsx, buildBreakdownXlsx, buildBrollXlsx, toMarkdownDoc, toMarkdownTableDoc, htmlToPlainScript]) {
+    assert.deepEqual(write(exportDocumentOf(flagged)), write(exportDocumentOf(old)), write.name);
+  }
+});
+
+test("project Markdown's known paragraph limit: accepted table insertions and deletions reuse flags by position", async () => {
+  const source = migrateRows({ schema: 2, title: "Positions", paragraphsDecided: true,
+    rows: [{ id: "a", audioText: "First" }, { id: "b", audioText: "Second", paragraphStart: true }, { id: "c", audioText: "Third" }] });
+  const md = buildMarkdownProject(exportDocumentOf(source));
+  const services = { ...projectFileServices(), askMarkdownRows: async () => "table" };
+  const inserted = md.replace(/^\| 01 \|.*$/m, line => line + "\n| new | new visual | Inserted | todo |");
+  const added = await applyMarkdownProject(parseMarkdownProject(inserted), {}, services);
+  assert.equal(added.rows.length, 4);
+  assert.equal(added.rows[1].audioText, "Inserted");
+  assert.equal(added.rows[1].paragraphStart, true);
+  assert.equal(added.rows[2].audioText, "Second");
+  assert.equal(added.rows[2].paragraphStart, undefined);
+  const removed = md.replace(/^\| 01 \|.*\n/m, "");
+  const deleted = await applyMarkdownProject(parseMarkdownProject(removed), {}, services);
+  assert.equal(deleted.rows.length, 2);
+  assert.equal(deleted.rows[1].audioText, "Third");
+  assert.equal(deleted.rows[1].paragraphStart, true);
+  assert.equal(deleted.paragraphsDecided, true);
+});
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const PNG_BYTES = Buffer.from(PNG.slice(PNG.indexOf(",") + 1), "base64");

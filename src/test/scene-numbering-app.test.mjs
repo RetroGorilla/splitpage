@@ -101,18 +101,20 @@ test("Remove scene header acts immediately, retains beats, and undoes the first 
   await open(JSON.stringify({ title: "Remove first", rows: [{ id: "r1", audioText: "First." }, { id: "r2", audioText: "Second." }],
     sections: [{ id: "first", name: "Named A", firstSceneId: "r1" }] }), "remove.splitpage");
   const before = JSON.parse(JSON.stringify(currentDocument()));
-  const rows = JSON.stringify(currentDocument().rows);
+  const rows = JSON.parse(JSON.stringify(currentDocument().rows));
   const count = undoOwner().sizes().undo;
   const button = document.querySelector('#rows [data-section-id="first"] [data-section-action="remove"]');
   assert.equal(button.textContent, "Remove scene header");
   button.click();
   assert.equal(currentDocument().sections, undefined);
-  assert.equal(JSON.stringify(currentDocument().rows), rows);
+  assert.deepEqual(currentDocument().rows, rows.map((row, at) => at === 0 ? { ...row, paragraphStart: true } : row));
   assert.equal(documentReader.numbering().scenes[0].id, null);
   assert.deepEqual(Array.from(document.querySelectorAll("#rows .row-num"), el => el.textContent), ["A1", "A2"]);
   undoOwner().flush();
   assert.equal(undoOwner().sizes().undo, count + 1);
   undoOwner().undo();
+  before.rows[0].updatedAt = currentDocument().rows[0].updatedAt;
+  before.rows[0].updatedBy = currentDocument().rows[0].updatedBy;
   assert.deepEqual(currentDocument(), before);
   assert.equal(document.querySelector('#rows [data-section-id="first"] .section-letter').textContent, "A");
 });

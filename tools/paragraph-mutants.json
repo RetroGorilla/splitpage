@@ -1,0 +1,14 @@
+{
+  "tests": ["tests/core/paragraphs.test.ts", "tests/application/paragraph-commands.test.ts"],
+  "mutants": [
+    { "label": "load accepts truthy row flags", "file": "src/core/migrate.ts", "find": "if (r.paragraphStart !== true)", "replace": "if (!r.paragraphStart)" },
+    { "label": "load accepts truthy decision markers", "file": "src/core/document/fields.ts", "find": "value => value === true ? true : undefined", "replace": "value => value ? true : undefined" },
+    { "label": "paragraph-only edits lose to deletes", "file": "src/core/merge/rows.ts", "find": " && (a.paragraphStart === true) === (b.paragraphStart === true)", "replace": "" },
+    { "label": "incoming flag always wins", "file": "src/core/merge/rows.ts", "find": "const useMine = b ? tp === bp : !tp;", "replace": "const useMine = false;" },
+    { "label": "decision marker requires both sides", "file": "src/core/merge/states.ts", "find": "run.mine[f.key] === true || run.theirs[f.key] === true", "replace": "run.mine[f.key] === true && run.theirs[f.key] === true" },
+    { "label": "effective starts ignore scenes", "file": "src/core/document/scenes.ts", "find": " || !!sceneBeforeBeat(doc, rowId)", "replace": "" },
+    { "label": "removal loses surviving paragraph starts", "file": "src/application/commands/paragraphs.ts", "find": "const flag = implicit ? row.paragraphStart === true : start;", "replace": "const flag = row.paragraphStart === true;" },
+    { "label": "mid-paragraph moves retain source membership", "file": "src/application/commands/paragraphs.ts", "find": "membership.set(moved, before);", "replace": "membership.set(moved, membership.get(moved));" },
+    { "label": "removed scene header loses its break", "file": "src/application/commands/scenes.ts", "find": "first.paragraphStart = true;", "replace": "delete first.paragraphStart;" }
+  ]
+}

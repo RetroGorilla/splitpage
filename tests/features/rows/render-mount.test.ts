@@ -58,6 +58,24 @@ test("sectionless rendering never requests the fold owner", () => {
   } finally { mounted.dispose(); }
 });
 
+test("paragraph bookkeeping inside an already painted edit queues no additional row or full render", () => {
+  document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
+  const first = fixture(true);
+  const mounted = startRowsRender({ ...first.ports, hiding: () => ({ groups: () => [] }) });
+  try {
+    const listeners = mounted.screenListeners();
+    mounted.renderFirstDraw();
+    let paints = 0;
+    const off = mounted.onPainted(() => { paints++; });
+    first.paint.whileShown(() => {
+      listeners.session({ kind: "edit", changes: changeSet({ rowsRemoved: ["previous"],
+        cells: [{ rowId: "r1", field: "paragraphStart" }] }) });
+    });
+    assert.equal(paints, 0);
+    off();
+  } finally { mounted.dispose(); }
+});
+
 test("scene menus place Add Scene Header between Insert beat and Delete and include it in keyboard navigation", () => {
   document.body.innerHTML = '<div id="rows"></div><input id="doc-title">';
   const mounted = startRowsRender(fixture(true).ports);

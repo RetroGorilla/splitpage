@@ -231,6 +231,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     r.status = rowStatusId(r.status) ? r.status : "todo";
     const setLength = normalizeBeatLength(r.lengthSeconds);
     if (setLength === undefined) delete r.lengthSeconds; else r.lengthSeconds = setLength;
+    if (r.paragraphStart !== true) delete r.paragraphStart;
     r.visualText = sanitize(legacy ? legacyMdToHtml(r.visualText || "") : textOf(r.visualText || ""));
     r.audioText = sanitize(legacy ? legacyMdToHtml(r.audioText || "") : textOf(r.audioText || ""));
     const legacyImage = safeImageSrc(r.visualImage);

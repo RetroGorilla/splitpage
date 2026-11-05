@@ -264,6 +264,7 @@ export function beatPaste(clip: BeatClip, opts?: BeatPasteOptions) {
         inserted: clip.rows.map(function (r) { return rowMap[r.id] as string; }),
         replaced: (planned as NonNullable<typeof planned>).replaceRowId,
         title: !!opts.title,
+        afterRowId: opts.afterRowId,
         saveNow: true
       };
     },

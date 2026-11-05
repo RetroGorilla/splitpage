@@ -21,6 +21,19 @@ import { currentDocument, runCommand } from "../bootstrap/wiring/session-owner.t
 
 initTags();
 
+test("beat clipboard preserves paragraph flags and rejects non-true values through migration", () => {
+  const doc = source();
+  doc.rows[1].paragraphStart = true;
+  const built = buildBeatPayload(doc, ["r1", "r2"]);
+  assert.equal(built.payload.rows[0].paragraphStart, undefined);
+  assert.equal(built.payload.rows[1].paragraphStart, true);
+  const clip = parseBeatPayload(built.json);
+  assert.equal(clip.rows[1].paragraphStart, true);
+  built.payload.rows[0].paragraphStart = "true";
+  assert.equal(Object.hasOwn(parseBeatPayload(JSON.stringify(built.payload)).rows[0], "paragraphStart"), false);
+  assert.equal(doc.rows[1].paragraphStart, true);
+});
+
 function removeBeats(rowIds) {
   const outcome = runCommand(removeBeatsCommand(rowIds));
   assert.notEqual(outcome.kind, "failed", outcome.error && outcome.error.stack);
