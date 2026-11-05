@@ -711,8 +711,14 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function format(mark: MarkName, target?: FlowRange | null): void {
     const before = selection() ?? ports.heldSelection.resolveFlow();
-    const range = target ?? before;
+    let range = target ?? before;
     if (!range) return;
+    if (target && before) {
+      const doc = ports.doc();
+      const selected = orderedRange(doc, before);
+      const intended = orderedRange(doc, target);
+      if (comparePos(doc, selected.from, intended.from) === 0 && comparePos(doc, selected.to, intended.to) === 0) range = before;
+    }
     place(range);
     if (isCollapsed(range)) {
       if (range.head.kind !== "beat") return;
