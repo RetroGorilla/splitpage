@@ -4,13 +4,15 @@ import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
-import { beatPos, caretAt, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
+import { beatPos, caretAt, comparePos, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
 import { setVisualForRange } from "../../core/flow/visual.ts";
 import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange, FlowRow, FlowSelectionPair } from "../../core/flow/flow.ts";
 import { addComment, breakLine, deleteRange, insertCell } from "../../core/text/edits.ts";
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
 import type { SurfacePorts } from "./flow-surface.ts";
+import { flowMatchStart, replaceFlowMatches, searchFlow, visualMatchHighlight } from "./flow-find.ts";
+import type { WriterFindAccess } from "../common/writer-find.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import { rowSlots } from "../../core/document/gallery.ts";
 import { escapeHtml, safeImageSrc } from "../../core/document/text-policy.ts";
@@ -29,6 +31,8 @@ export interface FlowUndoPorts {
 }
 
 export interface FlowWriterPorts {
+  readonly openFind?: () => void;
+  readonly closeFind?: () => void;
   readonly pictures?: Pick<PictureStore, "imgHtml">;
   readonly visualInput?: (event: InputEvent, cell: HTMLElement) => void;
   readonly visualLeave?: (cell: HTMLElement) => void;
@@ -60,6 +64,8 @@ export interface FlowWriterPorts {
 }
 
 export interface FlowWriter {
+  readonly find: WriterFindAccess;
+  readonly openVisual: (rowId: string, highlight?: { from: number; to: number }) => void;
   readonly isCurrent: () => boolean;
   readonly finish: () => FlowRange | null;
   readonly repaint: () => void;
@@ -69,7 +75,6 @@ export interface FlowWriter {
   readonly beforeReplay: (dir: UndoDirection) => void;
   readonly afterReplay: (steps: readonly unknown[]) => void;
   readonly comment: () => void;
-  readonly openVisual: (rowId: string, highlight?: { from: number; to: number }) => void;
   readonly jumpComment: (id: string, rowId?: string | null, field?: string | null) => void;
   readonly selection: () => FlowRange | null;
   readonly place: (range: FlowRange) => void;
@@ -95,6 +100,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const isCurrent = () => ports.lifetime.epoch() === epoch;
   let replaying: FlowSelectionPair | null = null;
   let replayDir: UndoDirection = "undo";
+  let findVisuals = false;
   let visual: ReturnType<typeof createFlowVisualBox> | null = null;
 
   function took(outcome: CommandOutcome): boolean {
@@ -138,7 +144,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     changed: ports.changed,
     selectionMoved: () => { ports.selectionMoved(); visual?.refresh(); },
     settings: () => SETTINGS,
-    openFind: () => { ports.notice("Find isn't in this build of the writer yet.", "warn"); },
+    openFind: () => { ports.openFind?.(); },
     plainVisual: ports.plainVisual,
     beatInput: (event, beat) => { if (isCurrent()) ports.beatInput(event, beat); },
     typeAtBeatEdge: (beat, words) => isCurrent() && ports.typeAtBeatEdge(beat, words),
@@ -294,7 +300,58 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   });
   if (dialog) observer.observe(dialog, { attributes: true, attributeFilter: ["hidden"] });
 
-  return {
+  const writer: FlowWriter = {
+    openVisual: (rowId, highlight) => {
+      if (!isCurrent() || !rowOf(rowId)) return;
+      surface.place(caretAt(beatPos(rowId, 0)), true);
+      visual?.open(caretAt(beatPos(rowId, 0)), highlight);
+    },
+    find: {
+      visuals: () => findVisuals,
+      setVisuals: value => { findVisuals = value; },
+      search: (needle, matchCase) => isCurrent() ? searchFlow(ports.doc(), needle, matchCase, findVisuals, ports.flow) : { matches: [], inTags: 0 },
+      reveal: match => {
+        if (!isCurrent()) return null;
+        if (match.kind === "visual") {
+          writer.openVisual(match.rowId, visualMatchHighlight(ports.doc(), match, ports.flow));
+          return null;
+        }
+        const range = surface.domRange(match.range);
+        const node = range?.startContainer;
+        (node?.nodeType === 3 ? node.parentElement : node as HTMLElement | undefined)?.scrollIntoView({ block: "center" });
+        return range;
+      },
+      replace: (matches, text) => {
+        const before = surface.selection();
+        const result = commit("writer-find-replace", doc => replaceFlowMatches(doc, matches, text, ports.flow), before);
+        if (!result || !("rows" in result)) return false;
+        surface.repaint();
+        visual?.refresh();
+        ports.changed();
+        return true;
+      },
+      leave: match => {
+        if (!isCurrent()) return;
+        if (match?.kind === "visual") {
+          writer.openVisual(match.rowId, visualMatchHighlight(ports.doc(), match, ports.flow));
+          visual?.close(false);
+          caret(match.rowId, 0);
+        }
+        else if (match) surface.place(match.range, true);
+        else surface.focusBack();
+      },
+      selection: surface.selection,
+      pickedText: () => {
+        const range = surface.selection();
+        return range && !isCollapsed(range) ? logicalText(ports.doc(), range, ports.flow) : "";
+      },
+      firstFrom: (matches, range) => {
+        if (!range) return 0;
+        const from = orderedRange(ports.doc(), range).from;
+        const index = matches.findIndex(match => comparePos(ports.doc(), flowMatchStart(match), from) >= 0);
+        return index < 0 ? 0 : index;
+      }
+    },
     isCurrent,
     finish: () => { visual?.close(false); return isCurrent() ? surface.finish() : null; },
     repaint: () => { if (isCurrent()) { surface.repaint(); visual?.refresh(); } },
@@ -304,19 +361,16 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     beforeReplay,
     afterReplay,
     comment,
-    openVisual: (rowId, highlight) => {
-      if (!isCurrent() || !rowOf(rowId)) return;
-      surface.place(caretAt(beatPos(rowId, 0)), true);
-      visual?.open(caretAt(beatPos(rowId, 0)), highlight);
-    },
     jumpComment,
     selection: surface.selection,
     place: range => { surface.place(range); },
     check: surface.domCheck,
     dispose: () => {
+      ports.closeFind?.();
       observer.disconnect();
       visual?.dispose();
       surface.dispose();
     }
   };
+  return writer;
 }
