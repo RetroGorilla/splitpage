@@ -287,6 +287,107 @@ function press(target, value, init = {}) {
   return event;
 }
 
+for (const route of ["button", "keyword"]) {
+  for (const edit of ["bold", "italic", "underline", "paste", "rich paste", "mixed paste"]) {
+    test(`open ${route} tag survives ${edit} until Tab`, () => {
+      const h = fixture(route === "button" ? "Words" : "Wo rds");
+      caret(h.cell, h.cell.firstChild, route === "button" ? 2 : 3);
+      if (route === "button") pickProp(h);
+      else type(h.cell, "prop:");
+      if (["bold", "italic", "underline"].includes(edit)) {
+        press(h.cell, { bold: "b", italic: "i", underline: "u" }[edit], { ctrlKey: true });
+        type(h.cell, "Lamp");
+      } else {
+        const event = new window.Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "clipboardData", { value: {
+          types: ["text/plain", "text/html"], files: [],
+          getData: kind => kind === "text/plain" ? "Lamp" : edit === "rich paste" ? "<strong>Lamp</strong>" : edit === "mixed paste" ? "La<em>mp</em>" : ""
+        } });
+        h.cell.dispatchEvent(event);
+      }
+      assert.equal(currentPlainTags().isOpen(), true);
+      key(h.cell, "Tab");
+      const tag = h.cell.querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]');
+      assert.equal(tag?.textContent, "Lamp");
+      if (edit !== "paste") {
+        const selector = { bold: "strong", italic: "em", underline: "u", "rich paste": "strong", "mixed paste": "em" }[edit];
+        assert.equal(tag.querySelector(selector)?.textContent, edit === "mixed paste" ? "mp" : "Lamp");
+      }
+      assert.equal(h.cell.textContent, route === "button" ? "WoLamprds" : "Wo Lamprds");
+    });
+  }
+}
+
+for (const route of ["button", "keyword"]) {
+  for (const [html, text] of [["", "Lamp\nChair"], ["<p>Lamp</p><p><strong>Chair</strong></p>", "Lamp\nChair"], ["Lamp<br>Chair", "Lamp\nChair"]]) {
+    test(`open ${route} tag cancels on multiline paste ${JSON.stringify(html)} without losing text`, () => {
+      const h = fixture(route === "button" ? "Words" : "Wo rds");
+      caret(h.cell, h.cell.firstChild, route === "button" ? 2 : 3);
+      if (route === "button") pickProp(h);
+      else type(h.cell, "prop:");
+      type(h.cell, "Red ");
+      const event = new window.Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: {
+        types: ["text/plain", "text/html"], files: [], getData: kind => kind === "text/plain" ? text : html
+      } });
+      h.cell.dispatchEvent(event);
+      assert.equal(currentPlainTags().isOpen(), false);
+      assert.equal(h.cell.querySelector(".tag-anchor, .plain-tag-keyword"), null);
+      const stored = currentDocument().rows[0].visualText;
+      assert.match(stored, route === "button" ? /^WoRed Lamp<br>/ : /^Wo prop:Red Lamp<br>/);
+      assert.match(stored, /Chair(?:<\/strong>)?rds$/);
+      if (html.includes("strong")) assert.equal(h.cell.querySelector("strong")?.textContent, "Chair");
+      key(h.cell, "Tab");
+      assert.equal(currentDocument().rows[0].visualText, stored);
+      undoOwner().undo();
+      assert.equal(currentDocument().rows[0].visualText, route === "button" ? "WoRed rds" : "Wo prop:Red rds");
+      undoOwner().redo();
+      assert.equal(currentDocument().rows[0].visualText, stored);
+    });
+  }
+}
+
+test("formatted tag creation keeps conversion and the formatting edit's own undo steps", () => {
+  const h = fixture("");
+  caret(h.cell, h.cell, 0);
+  type(h.cell, "Words");
+  pickProp(h);
+  press(h.cell, "b", { ctrlKey: true });
+  type(h.cell, "Lamp");
+  const named = currentDocument().rows[0].visualText;
+  assert.equal(named, "Words<strong>Lamp</strong>");
+  key(h.cell, "Tab");
+  const tagged = currentDocument().rows[0].visualText;
+  assert.match(tagged, /data-tag-name="Lamp"/);
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, named);
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "Words<strong>L</strong>");
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "Words");
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "");
+  undoOwner().redo();
+  undoOwner().redo();
+  undoOwner().redo();
+  undoOwner().redo();
+  assert.equal(currentDocument().rows[0].visualText, tagged);
+});
+
+for (const pick of [false, true]) {
+  test(`empty tag cancellation ${pick ? "after" : "before"} picking preserves the typing undo group`, () => {
+    const h = fixture("");
+    caret(h.cell, h.cell, 0);
+    type(h.cell, "Words");
+    if (pick) pickProp(h);
+    else h.button.click();
+    key(document.activeElement, "Escape");
+    type(h.cell, "Lamp");
+    undoOwner().undo();
+    assert.equal(currentDocument().rows[0].visualText, "");
+  });
+}
+
 function never(text) {
   assert.doesNotMatch(text, /prop:/);
   assert.doesNotMatch(text, /plain-tag-keyword/);

@@ -25,6 +25,7 @@ function fixture(html: string, model: string | Run[]) {
   const ports: PlainTagPorts = {
     renderCategories: fakeTagCategories().renderCategories,
     document: fakeDocument(null).document,
+    undo: { breakCoalescing: () => {} },
     cells: {
       edit: (target: Element, change: CellEdit) => {
         assert.equal(target, cell);
@@ -143,7 +144,7 @@ test("plain tags mount with fake ports: the keyword opens, Tab edits through the
     assert.equal(projection(change.cell), "Shot flare");
     assert.deepEqual(change.sel, { from: 10, to: 10 });
     assert.deepEqual(change.records, { tags: [{ cat: "vfx", name: "flare" }] });
-    assert.equal(h.calls.length, 0);
+    assert.deepEqual(h.calls.map(call => call.method), ["storedHtmlFromDom", "fromHtml"]);
   } finally {
     control.dispose();
   }

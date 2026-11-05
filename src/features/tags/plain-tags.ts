@@ -1,11 +1,11 @@
 import { tagCategory } from "../../core/production/looks.ts";
 import type { TagCategoryLook } from "../../core/production/looks.ts";
 import { isBlankTagName } from "../../core/production/tags.ts";
-import { domToPos } from "../common/cell-dom.ts";
+import { domToPos, posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { isInsideTagOrLink } from "../common/dom.ts";
 import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
-import { insertText, marksAt, replaceText, replaceWithTag, typingMarks } from "../../core/text/edits.ts";
+import { deleteRange, insertText, marksAt, replaceText, setMark, typingMarks } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { FORMAT_MARKS, namedTagId, projection } from "../../core/text/runs.ts";
 import { registryEntryOf } from "../../core/production/records.ts";
@@ -61,13 +61,16 @@ export function applyPlainTag(cell: readonly Run[], from: number, to: number, ca
   const p = plainTagPhrase(words.slice(colon + 1));
   if (!p) return null;
   const tagName = name || p.name;
-  const r = replaceWithTag(cell, from, to - p.trail, p.text, namedTagId(cat, tagName));
-  let out = r.cell;
-  const after = projection(out).slice(r.end);
+  const start = from + colon + 1 + p.lead;
+  const end = to - p.trail;
+  let out = setMark(cell, start, end, "tag", namedTagId(cat, tagName));
+  out = deleteRange(out, from, start);
+  const at = from + p.text.length;
+  const after = projection(out).slice(at);
   if (p.trail && after.length === p.trail && after.indexOf(" ") !== -1) {
-    out = replaceText(out, r.end, r.end + p.trail, after.replace(/ /g, NBSP));
+    out = replaceText(out, at, at + p.trail, after.replace(/ /g, NBSP));
   }
-  return { cell: out, caret: r.end + p.trail, name: tagName, cat: cat };
+  return { cell: out, caret: at + p.trail, name: tagName, cat: cat };
 }
 
 interface OpenPlainTag {
@@ -82,6 +85,7 @@ interface OpenPlainTag {
 interface SilentTag {
   marks: Marks;
   wrappers: Node[];
+  pending: boolean;
 }
 
 let ports: PlainTagPorts | null = null;
@@ -168,7 +172,7 @@ function sameMarks(a: Marks, b: Marks): boolean {
 }
 
 function openSilentTag(saved: TagCaretSnapshot, cat: TagCategoryId, keyword: string): void {
-  if (!ports || !ports.cells.open(saved.cellEl) || !categoryCaretStillThere(saved)) return;
+  if (!ports || !ports.cells.open(saved.cellEl, false) || !categoryCaretStillThere(saved)) return;
   const { node, offset, cellEl } = saved;
   const pos = domToPos(cellEl, node, offset);
   if (pos === null) return;
@@ -204,8 +208,8 @@ function openSilentTag(saved: TagCaretSnapshot, cat: TagCategoryId, keyword: str
   caret.collapse(true);
   sel.removeAllRanges();
   sel.addRange(caret);
-  open = { cellEl: cellEl, span: span, tail: tail, cat: cat, keyword: keyword, silent: { marks: saved.marks, wrappers: wrappers } };
-  paint(open, 1);
+  open = { cellEl: cellEl, span: span, tail: tail, cat: cat, keyword: keyword, silent: { marks: saved.marks, wrappers: wrappers, pending: true } };
+  paint(open);
 }
 
 function chooseCategory(cat: string | null): boolean {
@@ -249,8 +253,49 @@ function caretInOpen(o: OpenPlainTag) {
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount || !sel.isCollapsed) return null;
   const r = sel.getRangeAt(0);
-  if (r.startContainer !== o.tail) return null;
-  return r.startOffset;
+  const start = domToPos(o.cellEl, o.tail, 0);
+  const end = domToPos(o.cellEl, r.startContainer, r.startOffset);
+  if (start === null || end === null || end < start) return null;
+  return end - start + 1;
+}
+
+function notePlainTagInput(cellEl: Element): void {
+  const o = open;
+  if (!o || o.cellEl !== cellEl || !o.silent?.pending || !stillThere(o)) return;
+  const at = caretInOpen(o);
+  if (at === null || at === 1) return;
+  o.silent.pending = false;
+  tagPorts().undo.breakCoalescing();
+}
+
+function beforePlainTagWrite(cellEl: Element): (() => void) | null {
+  const o = open;
+  if (!o || o.cellEl !== cellEl || !stillThere(o) || caretInOpen(o) === null) return null;
+  const from = domToPos(cellEl, o.span, 0);
+  if (from === null) return null;
+  const width = o.silent ? 0 : o.keyword.length;
+  return function () {
+    if (open !== o) return;
+    const sel = cellSelection(cellEl);
+    const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(cellEl.innerHTML));
+    const start = from + width;
+    if (!sel || sel.from !== sel.to || sel.from < start || existingPlainTagEnd(cell, start) < sel.to ||
+      (!o.silent && projection(cell).slice(from, start) !== o.keyword)) {
+      cancelPlainTag();
+      return;
+    }
+    const a = posToDom(cellEl, from), b = posToDom(cellEl, start);
+    const range = document.createRange();
+    range.setStart(a.node, a.offset);
+    range.setEnd(b.node, b.offset);
+    range.deleteContents();
+    range.insertNode(o.span);
+    o.tail = document.createTextNode(ZWSP);
+    o.span.after(o.tail);
+    if (o.silent) { o.silent.pending = false; o.silent.wrappers = []; }
+    setCellSelection(cellEl, sel.from, sel.to);
+    paint(o);
+  };
 }
 
 function clearPaint() {
@@ -263,15 +308,14 @@ function clearPaint() {
   if (el) el.classList.remove("is-visible");
 }
 
-function paint(o: OpenPlainTag, offset: number) {
+function paint(o: OpenPlainTag) {
   if (highlightApiOk()) {
     try {
-      let from = 0;
-      const data = o.tail.data;
-      while (from < offset && (data.charAt(from) === ZWSP || /\s/.test(data.charAt(from)))) from++;
       const range = document.createRange();
-      range.setStart(o.tail, from);
-      range.setEnd(o.tail, offset);
+      range.setStart(o.tail, 0);
+      const end = window.getSelection()?.getRangeAt(0);
+      if (!end) return;
+      range.setEnd(end.startContainer, end.startOffset);
       CSS.highlights.set(HL_PREFIX + o.cat, new Highlight(range));
     } catch (e) { }
   }
@@ -333,7 +377,7 @@ export function refreshPlainTag() {
   if (!stillThere(o)) { open = null; clearPaint(); return; }
   const at = caretInOpen(o);
   if (at === null) { cancelPlainTag(); return; }
-  paint(o, at);
+  paint(o);
 }
 
 function cancelOnBackspace(): boolean {
@@ -346,7 +390,7 @@ function plainTagEmptyAtCaret() {
   const o = open;
   if (!o || !stillThere(o)) return false;
   const at = caretInOpen(o);
-  return at !== null && !o.tail.data.slice(0, at).replace(ZWSP_RE, "");
+  return at === 1;
 }
 
 export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null }, cellEl: Element) {
@@ -385,7 +429,7 @@ export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null 
   sel.removeAllRanges();
   sel.addRange(r);
   open = { cellEl: cellEl, span: span, tail: rest, cat: kw.cat, keyword: kwNode.data, silent: null };
-  paint(open, 1);
+  paint(open);
 }
 
 function charBeforeNode(cellEl: Element, node: Node) {
@@ -430,13 +474,18 @@ export function closePlainTag() {
   const o = open;
   if (!o || !stillThere(o)) { open = null; clearPaint(); return false; }
   const at = caretInOpen(o);
-  let to = at === null ? null : domToPos(o.cellEl, o.tail, at);
-  let typed = at === null ? "" : o.tail.data.slice(0, at);
+  const start = domToPos(o.cellEl, o.tail, 0);
+  let to = at === null || start === null ? null : start + at - 1;
+  const html = tagPorts().text.storedHtmlFromDom(o.cellEl.innerHTML.replace(ZWSP_RE, ""));
+  const current = tagPorts().text.fromHtml(html, { media: true });
+  if (start !== null && to !== null && existingPlainTagEnd(current, start) < to) {
+    cancelPlainTag();
+    return true;
+  }
+  let typed = to === null || start === null ? "" : projection(current).slice(start, to);
   if (at === 1 && to !== null) {
-    const html = tagPorts().text.storedHtmlFromDom(o.cellEl.innerHTML.replace(ZWSP_RE, ""));
-    const cell = tagPorts().text.fromHtml(html, { media: true });
-    const end = existingPlainTagEnd(cell, to);
-    typed = projection(cell).slice(to, end);
+    const end = existingPlainTagEnd(current, to);
+    typed = projection(current).slice(to, end);
     to = end;
   }
   const phrase = at === null ? null : plainTagPhrase(typed);
@@ -471,6 +520,8 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
     cancelCategory,
     maybeOpen: maybeOpenPlainTag,
     refresh: refreshPlainTag,
+    beforeWrite: beforePlainTagWrite,
+    noteInput: notePlainTagInput,
     cancel: cancelPlainTag,
     close: closePlainTag,
     isOpen: plainTagOpen,

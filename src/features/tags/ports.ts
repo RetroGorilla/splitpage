@@ -30,6 +30,7 @@ export interface PlainTagPorts {
   readonly renderCategories: (selected: string | null) => void;
   readonly document: Pick<DocumentReader, "current">;
   readonly cells: Pick<CellEditing<Element>, "edit" | "open">;
+  readonly undo: Pick<UndoControl, "breakCoalescing">;
   readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
 }
 
@@ -41,6 +42,8 @@ export interface PlainTagControl {
   readonly cancelCategory: () => boolean;
   readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
   readonly refresh: () => void;
+  readonly beforeWrite: (cellEl: Element) => (() => void) | null;
+  readonly noteInput: (cellEl: Element) => void;
   readonly cancel: () => void;
   readonly close: () => boolean;
   readonly isOpen: (cellEl?: Element | null) => boolean;

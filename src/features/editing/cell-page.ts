@@ -4,11 +4,13 @@ import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 export interface CellPagePorts {
   readonly storedHtml: (html: string) => string;
   readonly caretSpot: (cellEl: Element) => void;
+  readonly beforeWrite?: (cellEl: Element) => (() => void) | null;
 }
 
 const ZWSP = /\u200B/g;
 
 export function createCellPage(ports: CellPagePorts): CellPage<Element, unknown> {
+  let restore: (() => void) | null = null;
   return {
     address: function (cellEl) {
       return { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };
@@ -20,12 +22,16 @@ export function createCellPage(ports: CellPagePorts): CellPage<Element, unknown>
     },
     selection: cellSelection,
     write: function (cellEl, html) {
+      restore = ports.beforeWrite?.(cellEl) ?? null;
       cellEl.innerHTML = html as string;
       ports.caretSpot(cellEl);
     },
     focus: function (cellEl, sel) {
       (cellEl as HTMLElement).focus({ preventScroll: true });
       if (sel) setCellSelection(cellEl, sel.from, sel.to);
+      const after = restore;
+      restore = null;
+      after?.();
     }
   };
 }
