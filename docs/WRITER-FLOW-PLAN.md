@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phases 0a, 0b, 1 and 2 are done (sections 9 to 12). Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phase 3's selection, delete and Join work is merged (#1226, #1227), and its clipboard part is running. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phases 0a, 0b, 1, 2 and 3 are done (sections 9 to 13). Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phases 4 to 7 are next, in parallel lanes. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -411,3 +411,13 @@ These two rows aren't a controlled before and after. Electron's typing figure is
 **Full browser run at the end of phase 2, switch off:** 10,161 of 10,163 across 212 suites. `219-sound-cues` is the known failure on this PC, from section 10. `388-scene-numbering` failed on clean `main` too: it still expected rows to stay identical when a scene header is removed, and #1220 deliberately adds the paragraph flag there. #1225 updates the suite. A phase PR's CI can't catch this kind of miss, so each phase from here ends with one full local run.
 
 The first `tests/core/flow/` file covers the rules Adam picked. Fuzz, merge and differential tests are phase 1.
+
+## 13. Phase 3 results
+
+Phase 3 took three PRs into `feat/writer-flow`: #1226 (selection across beats and formatting), #1227 (delete, typing over a selection, boundary keys, Join) and #1228 (cut, copy and paste). Reviews found real bugs in all three, and every one was fixed before merge. The worst were Delete removing a picture-only beat the selection stopped in front of, and an empty payload in the app's clipboard format deleting the selection and ignoring the plain text beside it.
+
+**Full browser run:** 10,686 of 10,687 across 236 suites at #1228's first head, `678e74ae`, with only `219-sound-cues` failing. The fix round after it touched writer-only clipboard paths and re-ran the writer suites, 751 of 751 across 38 suites, and the unit tests, 5,914 of 5,914.
+
+**Existing tests changed on purpose:** `tests/core/flow/reload.test.ts` gains the two clipboard operations, and the shared model behind `fuzz.test.ts` and `reference-fuzz.test.ts` states section 7.10's rule. Nothing else moved.
+
+**Still unproven:** the real clipboard, a real IME, right-click spellcheck, a physical Ctrl+Z against the menu, and a real script in Adam's hands. All clipboard checks use synthetic events.
