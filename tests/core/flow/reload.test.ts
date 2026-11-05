@@ -6,17 +6,12 @@ import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 import { flowCommand } from "../../../src/application/commands/flow.ts";
 import { syncCommentAnchors } from "../../../src/core/text/anchors.ts";
 import { harness, runConfined } from "../../application/session-fakes.ts";
-import { createFlowLoadRuntime } from "./load.ts";
+import { createFlowLoadRuntime, expectedHeadingWhitespaceOnReload } from "./load.ts";
 import { observedFlowContent, referenceReplacement } from "./reference.ts";
 
 const stamps = { clock: { nowIso: () => "2026-11-04T12:00:00Z" }, editor: { name: () => "Editor" } };
 const image = (n: number) => ({ sha256: n.toString(16).padStart(64, "0"), width: 1, height: 1, mime: "image/png" });
 const mark = { kind: "text", color: "#111111", size: 0.1, x: 0.2, y: 0.3, text: "Caption" };
-function canonical(input: unknown): unknown {
-  const copy = JSON.parse(JSON.stringify(input)) as { sections?: { name: string }[] };
-  copy.sections?.forEach(scene => { scene.name = scene.name.trimEnd(); });
-  return copy;
-}
 function fixture(seed: number) {
   const annotation = { imageRef: image(100), marks: Array.from({ length: 500 }, () => ({ ...mark, text: "Caption".repeat(70).slice(0, 500) })) };
   const gallery = { imageRef: image(1), imageName: "N".repeat(200), imageAnnotation: annotation };
@@ -56,7 +51,7 @@ test("reference sequences: 60 varied headings retain six successive inserts, whi
       const live = h.session.held() as FlowDoc;
       const name = ((live.sections ?? []) as DocumentScene[])[0]?.name ?? "";
       assert.equal(selection.head.offset, name.length, "caret seed=" + seed);
-      assert.deepEqual(canonical(rt.load(live)), canonical(live), "sequence reload seed=" + seed);
+      assert.deepEqual(rt.load(live), expectedHeadingWhitespaceOnReload(live), "sequence reload seed=" + seed);
     }
     h.session.dispose();
   }
@@ -75,7 +70,10 @@ test("reload stability: all 21 flow transformations retain complete documents th
     joinWithPrevious: doc => flow.joinWithPrevious(doc, "b", rt.ports),
     backspaceAt: doc => flow.backspaceAt(doc, flow.beatPos("b", 0), rt.ports, { tick: "delete" }),
     deleteForwardAt: doc => flow.deleteForwardAt(doc, flow.beatPos("a", 10), rt.ports),
-    renameHeading: doc => flow.renameHeading(doc, "s", "Scene " + doc.rows.length + " ", 8),
+    renameHeading: doc => {
+      const name = [" Scene", "Scene ", "  Scene  ", "   ", "\t", "\u00a0", "S", "Room"][Number(doc.rows[0]?.["renameCase"] ?? 0)] as string;
+      return flow.renameHeading(doc, "s", name, name.length);
+    },
     enterInHeading: doc => flow.enterInHeading(doc, flow.headingPos("s", 2), rt.ports),
     finalizeHeading: doc => flow.finalizeHeading(doc, "a", 9, null, rt.ports),
     lineBreakAt: (doc, range) => flow.lineBreakAt(doc, range, rt.ports),
@@ -84,7 +82,8 @@ test("reload stability: all 21 flow transformations retain complete documents th
     selectionToOwnBeat: doc => flow.selectionToOwnBeat(doc, { anchor: flow.beatPos("a", 1), head: flow.beatPos("a", 3) }, rt.ports),
     replaceMatch: (doc, range) => flow.replaceMatch(doc, range, "Word", rt.ports),
     replaceAll: doc => flow.replaceAll(doc, "o", "oo", false, rt.ports),
-    insertBeats: doc => flow.insertBeats(doc, flow.beatPos("a", 2), [{ id: "inserted", audioText: "New", visualText: "" }], rt.ports),
+    insertBeats: doc => flow.insertBeats(doc, flow.beatPos("a", 2), [{ id: "inserted", audioText: "New", visualText: "" },
+      { id: "tail", audioText: "Tail", paragraphStart: [false, true, 0, 1, "true", null, {}, []][Number(doc.rows[0]?.["renameCase"] ?? 0)] }] as unknown as flow.FlowRow[], rt.ports),
     moveBeats: doc => flow.moveBeats(doc, ["a"], flow.beatPos("c", 0), rt.ports),
     sentenceParagraphs: doc => ({ rows: flow.sentenceParagraphs(doc, rt.ports), sections: doc.sections as DocumentScene[], removedComments: [], selection: flow.caretAt(flow.beatPos("a", 0)) }),
     inlineMarkdown: doc => {
@@ -102,6 +101,7 @@ test("reload stability: all 21 flow transformations retain complete documents th
     await t.test(name, () => {
       for (let seed = 1; seed <= 8; seed++) {
         const input = fixture(seed);
+        Object.assign(input.rows[0] as object, { renameCase: seed - 1 });
         if (name === "finalizeHeading") input.rows[0] = { ...input.rows[0] as typeof input.rows[0], id: "a", audioText: "# Heading", visualText: "" };
         if (name === "sentenceParagraphs") {
           const first = input.rows[0], second = input.rows[1];
@@ -118,7 +118,7 @@ test("reload stability: all 21 flow transformations retain complete documents th
           assert.ok(["applied", "noop", "rejected"].includes(out.kind), name + " seed=" + seed + " " + JSON.stringify(out));
           if (out.kind === "applied") applied.add(name);
           const live = h.session.held() as FlowDoc;
-          assert.deepEqual(canonical(rt.load(live)), canonical(live), name + " reload seed=" + seed + " notice=" + (outcome as FlowEdit | null)?.notice);
+          assert.deepEqual(rt.load(live), expectedHeadingWhitespaceOnReload(live), name + " reload seed=" + seed + " notice=" + (outcome as FlowEdit | null)?.notice);
         } finally {
           h.session.dispose();
         }
