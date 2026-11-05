@@ -38,7 +38,26 @@ export function renameSceneCommand(id: string, name: string): Command {
 }
 
 export function removeSceneCommand(id: string): Command {
-  return sceneEdit("remove-section", doc => (scenesInOrder(doc) ?? []).filter(scene => scene.id !== id));
+  return {
+    name: "remove-section", needs: "edit",
+    plan(doc): Plan | null {
+      const scenes = scenesInOrder(doc);
+      const scene = scenes?.find(item => item.id === id);
+      if (!scene) return null;
+      const rowId = sceneFirstBeatId(scene);
+      const changes = doc.rows.find(row => row.id === rowId)?.paragraphStart === true
+        ? [] : [{ rowId, field: "paragraphStart" }];
+      return {
+        changes: changeSet({ cells: changes, docFields: ["sections"], derive: CELL_TEXT_DERIVES, saveNow: true }),
+        apply(live) {
+          const first = live.rows.find(row => row.id === rowId);
+          if (!first) throw new Error("scene's first beat left before its header was removed");
+          first.paragraphStart = true;
+          writeScenes(live, scenes?.filter(item => item.id !== id));
+        }
+      };
+    }
+  };
 }
 
 export function moveSceneCommand(id: string, targetId: string, after: boolean): Command {

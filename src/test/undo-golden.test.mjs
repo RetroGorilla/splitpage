@@ -57,6 +57,7 @@ const EDITS = [
   ["targetSeconds", "changed", (s) => { s.targetSeconds = 420; }],
   ["targetSeconds", "removed", (s) => { delete s.targetSeconds; }],
   ["sections", "header added", (s) => { s.sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" }]; }],
+  ["paragraphsDecided", "sentence rule recorded", (s) => { s.paragraphsDecided = true; }],
   ["schema", "changed", (s) => { s.schema = 3; }]
 ];
 

@@ -125,7 +125,7 @@ function currentDoc(): FlowDoc {
 }
 
 function flowCommand(name: string, result: FlowEdit): Command {
-  return sharedFlowCommand(name, result, stamps);
+  return sharedFlowCommand(name, () => result, stamps);
 }
 
 let surface: Surface;

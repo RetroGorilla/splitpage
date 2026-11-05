@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phases 0a and 0b are done and the engine holds up (sections 9 and 10). Adam has picked every setting. The in-app slice sits behind a switch on `feat/writer-flow`, and nothing is on `main` yet. Phase 1 is next. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phases 0a, 0b and 1 are done (sections 9 to 11). Adam has picked every setting, apart from the two heading questions in section 7. The saved flag and the pure engine are on `main` with no shipping caller, and the in-app slice sits behind a switch on `feat/writer-flow`. Phase 2 is next. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -206,13 +206,13 @@ Alternatives considered:
 | 0a | Engine slice and test page: a first cut of `src/core/flow/`, the 4.3 surface and adapter, the real text decoder, session and undo through a separate composition root, section 2's switches, and the acceptance set below | Not merged | Acceptance set passes in Chrome and Electron's Chromium, and Adam picks the settings |
 | 0b | Small in-app slice of the same engine: undo replay, real paint notifications, toolbar and comment focus, save flush, Electron undo routing | `feat/writer-flow` | It holds up. If 0a or 0b fails, we reconsider the engine before anything lands on `main` |
 | 1 | `paragraphStart`, merge and equality rules, `src/core/flow/`, commands, shared command changes, fuzz tests. No shipping UI writes the flag yet | `main`, after 0b | Unit, merge, differential and failure-path tests; Full review because it touches merge and saved data |
-| 2 | Single-host surface: render, caret, typing, tags, directions, undo ownership, patching, mode switching, and a minimal comment jump | `feat/writer-flow` | Typing `perf-ab` against `main`, correctness suites |
+| 2 | Single-host surface: render, caret, typing, tags, directions, undo ownership and the selection pair, patching, mode switching, the sentence rule on first open, and a minimal comment jump | `feat/writer-flow` | Typing `perf-ab` against `main`, correctness suites |
 | 3 | Cross-beat selection, delete, format, Enter, Backspace, Join, cut and paste | same | Browser suites |
 | 4 | Markdown and headings | same | Browser suites; wording signed off |
 | 5 | Ticks, visual note, visual-only chips, floating box | same | Browser suites |
 | 6 | Find and the Visuals toggle | same | Browser suites |
 | 7 | Shared top bar, save status, comments beside the writer | same | Browser suites, desktop smoke groups |
-| 8 | Teleprompter rule, invariants and docs, help and changelog, full browser run, one perf comparison, one real script used by Adam | merge to `main` | Green gate, Normal review, Adam's okay |
+| 8 | Remove the switch and the old writer, update the suites that expect it, teleprompter rule, invariants and docs, help and changelog, full browser run, one perf comparison, one real script used by Adam | merge to `main` | Green gate, Normal review, Adam's okay |
 
 Phase 0a's acceptance set, each with checks that untouched text, row ids and metadata survive and that the model matches what's on screen:
 
@@ -228,7 +228,7 @@ Full Markdown, clipboard polish and the Visual box aren't needed to decide the e
 
 Only additions and extractions that demonstrably keep the old interfaces and behaviour merge to `main` early. Shared editing and focus routes, undo hooks, clipboard routing, render and panel wiring, and the top bar stay on `feat/writer-flow` until phase 8, because the old writer depends on them: removing `.writer-bar`, for one, breaks its mount lookup. The branch merges `main` in regularly to limit drift.
 
-Phases 2 and 3 are one lane at a time, because they share the surface. Phases 4 to 7 can run in parallel once 3 lands. The old writer stays on `main` until the phase 8 merge.
+Phases 2 and 3 are one lane at a time, because they share the surface. Phases 4 to 7 can run in parallel once 3 lands. The old writer stays on `main` until the phase 8 merge. The switch stays on the branch through phase 7: new suites turn it on, and the old suites keep running against the old writer, so each phase PR's CI stays meaningful. Phase 8 flips it for good.
 
 Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-split-join-model`) and the others that touch the writer's DOM (18 suites mention `.wr-para`, `#writer-doc` or `#writer`) are updated where the behaviour is meant to change, never weakened (AGENTS.md rule 2). New suites cover each section 2 rule.
 
@@ -251,16 +251,18 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 4. **Headings are plain text, up to 200 characters.** Bold in a heading isn't stored, because scene names are plain.
 5. **`# Title` then Enter at the end of the script creates a blank first beat,** because a scene can't exist without one.
 6. **Forward Delete above a scene header: decided (Adam, 2026-11-04).** Delete at the end of the last beat above a header moves the caret to the start of the header and changes nothing, mirroring 7.2.
+7. **Enter at the very start of a heading: awaiting Adam.** For now it only moves the caret to the scene's first beat. In Google Docs it would push the heading down and leave a blank line above, but a scene name can't be empty here.
+8. **Deleting all of a heading's text: awaiting Adam.** For now nothing is written and the old name stays. Backspace at a heading's start still removes the header, as section 2 says.
 
 ## 8. Outside review
 
-Round 1 (Codex Sol, High, read-only, at `97586dc0`). Blockers: undo ownership in the host, positions that couldn't address headings, row equality in merge, comment deletion semantics, headers missing from the clipboard, and heading conversion truncating narration over 200 characters. All are addressed in the sections above. Its call on the editing surface: one host with a writer-specific input adapter, keeping a writer-only editor engine as a credible fallback, which this plan adopts.
+Round 1 (read-only, at `97586dc0`). Blockers: undo ownership in the host, positions that couldn't address headings, row equality in merge, comment deletion semantics, headers missing from the clipboard, and heading conversion truncating narration over 200 characters. All are addressed in the sections above. Its call on the editing surface: one host with a writer-specific input adapter, keeping a writer-only editor engine as a credible fallback, which this plan adopts.
 
 Not adopted from round 1: IME-specific composition identity and undo handling, beyond "never discard text", because IME-only bugs go on the never-do list (#1144).
 
 The failure scenarios in round 1 were predicted from the code and event contract, not reproduced in a browser. Phase 0 is where they get tested.
 
-Round 2 (Codex Sol, xhigh, read-only, at `b087ecfb`, with small in-memory probes of the real commands, session and undo). Blockers: `flow.ts` in a layer that can't import text, and contradictory clipboard rules for a selection holding a header but no whole beat. Concerns: no editing contract for the display gap, native sync bypassing the comment and selection guarantees, shared split-view commands not preserving paragraphs, and a standalone page not being enough to justify landing phase 1. All are addressed above. A standalone page was judged buildable through injected dependencies.
+Round 2 (read-only, at `b087ecfb`, with small in-memory probes of the real commands, session and undo). Blockers: `flow.ts` in a layer that can't import text, and contradictory clipboard rules for a selection holding a header but no whole beat. Concerns: no editing contract for the display gap, native sync bypassing the comment and selection guarantees, shared split-view commands not preserving paragraphs, and a standalone page not being enough to justify landing phase 1. All are addressed above. A standalone page was judged buildable through injected dependencies.
 
 Two responses differ from what round 2 suggested. Rather than a native-sync transaction with comment candidates, within-beat deletion keeps today's split-view comment behaviour, which matches Adam's decision (comments go with fully selected beats) and the deferral of comment behaviour work. Native edits keep today's undo caret placement too, and only flow commands record selections.
 
@@ -324,12 +326,46 @@ Electron's typing figure isn't in the table because it isn't useful. It sits nea
 - A gap of about one second appeared on a single key in some Electron runs, always about 1,000 to 1,090 ms, in both writers. The page had no long task and the main process was nearly idle (44 ms of fsync) during it. Timers weren't throttled and the window was visible, which ruled out my first guess. Its cause is unknown, and it needs watching with real keys on a real screen.
 - Spellcheck on the real page, right-click suggestions, real Ctrl+C and Ctrl+V, and a real IME, as in section 9.
 - Real keyboard Ctrl+Z against the menu in Electron. CDP keys may not pass through accelerators, though the new items have `registerAccelerator: false`, as Find does.
-- The full Electron smoke (`desktop/test/smoke.mjs`) on the menu change. It opens windows on screen, so it's left to CI on the PR. The desktop unit set ran locally.
-- `tools/perf-ab.mjs`, which AGENTS.md requires for typing changes. It runs on the PR that carries the typing fixes.
 - A real script in Adam's hands.
+
+The full Electron smoke and `tools/perf-ab.mjs` were outstanding here too. Both have since run, and section 11 has the results.
 
 **Deliberately outside the slice:** the sentence rule on first open, Find, tags and direction shortcuts, the tag ghost, the comments panel beside the writer and its jumps, whole-beat clipboard, and the viewing-only guard. A script with no flags opens as one paragraph per scene until the sentence rule lands.
 
 **Noted for later:** each idle refresh re-adds all 900 rundown buttons, even with the writer covering them, and the `body:has(...)` rules still cost a style pass of about 40 ms each time. Neither runs per key.
+
+## 11. Phase 1 results
+
+**On `main`, none of it called by the shipping writer yet:**
+
+| PR | What |
+| --- | --- |
+| #1220 | The `paragraphStart` flag and `paragraphsDecided` marker, load, merge and equality rules, and paragraph membership in the shared commands |
+| #1219 | `src/core/flow/`, `flowCommand`, the moved Find and sentence rules, and the fuzz and reload tests |
+| #1217 | Typing no longer restyles the whole page |
+| #1218 | Edit > Undo and Redo work in the script |
+
+**Names and rules as built:**
+
+- The document marker is `paragraphsDecided: true`. It merges true if either side has it. The row flag merges like `lengthSeconds`.
+- Load keeps both only as a literal `true`, so a flag that's `false` is never stored.
+- A flag-only change counts as a change for row equality, but adds no attribution or edited-row counts.
+- `flowCommand` takes an operation, `(doc) => FlowOutcome`, and plans it against the live document. The slice still computes its edit first and passes `() => edit`. Phase 2 moves operations inside.
+- A heading name with no content, whether empty or only whitespace, writes nothing (section 7.8).
+- Joined galleries follow the saved limits: 20 links, one poster per picture, and the same link counted once. A join only says a poster was kept when one was. If the link limit drops the only poster link, the notice says the link was dropped.
+
+**Left for the branch:**
+
+- `UndoEntry`'s selection pair (section 4.2). The slice keeps its own map of selections for now.
+- `joinBeatsCommand`'s refusal of two visuals. It stays until the new writer ships, because the old writer depends on it. The flow engine's own join already combines them.
+- Deleting `tools/writer-lab/` before the phase 8 merge. `lab.ts` is in no tsconfig, so `node tools/typecheck.mjs` exits 1 on this branch for that one reason, until then.
+- Taking `feat/writer-flow` back out of `ci.yml`'s `pull_request` branches at phase 8. It's there so phase PRs get CI.
+
+**Results outstanding from section 10:**
+
+- Full Electron smoke on #1218, in CI on Linux under Xvfb: 881 of 881, 1 skipped.
+- `perf-ab` on #1217, one run with other work on the PC, so read it as a direction, median p50: short typing 4.4 to 2.7 ms, long typing 6.6 to 3.4, long new scene 57.2 to 38.5, long undo 56.8 to 34.2. Every median in the table improved. The only worse p95 was short typing, up 5.2%.
+
+**The branch after merging `main`:** in-app slice 25 of 25 in Electron and 19 of 19 in Edge, test page 88 of 88 in Edge. 166 focused flow, render-guard and CSS tests pass. The full unit and browser sets didn't run on this merge.
 
 The first `tests/core/flow/` file covers the rules Adam picked. Fuzz, merge and differential tests are phase 1.

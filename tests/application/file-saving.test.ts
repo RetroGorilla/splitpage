@@ -134,6 +134,40 @@ function write(h: ReturnType<typeof harness>, kind: string, owns = true): Promis
 
 const FILE_HOME = { kind: "file", handle: fileHandle("pilot.md"), format: "md", name: "pilot.md", lastModified: 50 } as unknown as Home;
 
+test("paragraph metadata is captured before asset loading, survives reload, and a failed save leaves live edits intact", async () => {
+  for (const fails of [false, true]) {
+    const h = harness({ home: { ...FILE_HOME }, writtenOut: true, ...(fails ? { writeFails: new Error("disk full") } : {}) });
+    h.doc.rows.push({ id: "paragraph", audioText: "Captured", paragraphStart: true });
+    h.doc.paragraphsDecided = true;
+    let release = () => {};
+    let loading = () => {};
+    const reached = new Promise<void>(resolve => { loading = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const ports: FileSavingPorts = { ...h.ports, pictures: { ensureBytes: async () => { loading(); await held; return []; } } };
+    h.mounted.dispose();
+    const mounted = mountFileSaving(ports) as FileSavingMount;
+    try {
+      const pending = mounted.destination().write(job("save").value);
+      await reached;
+      const row = h.doc.rows[0];
+      assert.ok(row);
+      delete row.paragraphStart;
+      row.audioText = "Edited while loading";
+      release();
+      assert.equal((await pending).kind, fails ? "failed" : "saved");
+      const captured = h.built[0]?.document;
+      assert.ok(captured);
+      const reopened = migrateRows(JSON.parse(JSON.stringify(captured)), fakeMigration().ports);
+      assert.equal(reopened.rows[0]?.paragraphStart, true);
+      assert.equal(reopened.rows[0]?.audioText, "Captured");
+      assert.equal(reopened.paragraphsDecided, true);
+      assert.equal(h.doc.rows[0]?.paragraphStart, undefined);
+      assert.equal(h.doc.rows[0]?.audioText, "Edited while loading");
+      if (fails) assert.equal(h.log.some(line => line.startsWith("setBaseline:")), false);
+    } finally { release(); mounted.dispose(); }
+  }
+});
+
 test("first picked save writes the filename title and trailing version into the captured document", async () => {
   const h = harness({ pick: { kind: "handle", handle: fileHandle("Headset ad v3.md"), picked: true } });
   h.doc.title = "Untitled Script";

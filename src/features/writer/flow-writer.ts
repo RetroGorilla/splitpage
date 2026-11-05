@@ -80,7 +80,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   }
 
   function commit(name: string, edit: FlowEdit, before: FlowRange | null): void {
-    ports.shown(() => { took(ports.run(flowCommand(name, edit, ports.text))); });
+    ports.shown(() => { took(ports.run(flowCommand(name, () => edit, ports.text))); });
     ports.undo.flush();
     const top = ports.undo.last();
     if (top) selections.set(top.n, { before, after: edit.selection });

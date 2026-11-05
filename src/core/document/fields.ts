@@ -19,6 +19,7 @@ export const STRATEGY_IDS = [
   "person-colors",
   "target-length",
   "sections",
+  "true-if-either",
   "constant"
 ] as const;
 
@@ -55,6 +56,7 @@ const FIELDS: StateField[] = [
   { key: "personColors",   normalize: function (v) { return normalizePersonColors(v) || undefined; }, merge: "person-colors", undo: false },
   { key: "targetSeconds",  normalize: normalizeTargetLength, merge: "target-length", undo: true },
   { key: "sections",       normalize: normalizeScenes, merge: "sections", undo: true },
+  { key: "paragraphsDecided", normalize: value => value === true ? true : undefined, merge: "true-if-either", undo: true },
   { key: "schema",         merge: "constant", undo: false }
 ];
 

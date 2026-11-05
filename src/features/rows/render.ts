@@ -860,7 +860,7 @@ export function renderFirstDraw(): boolean {
 
 const ABSORBED: Readonly<Record<string, true>> = { adopt: true, disk: true, recovery: true, reload: true };
 
-const ON_SCREEN_ALREADY: Readonly<Record<string, true>> = { visualText: true, audioText: true, paragraphStart: true, updatedAt: true, updatedBy: true };
+const ON_SCREEN_ALREADY: Readonly<Record<string, true>> = { visualText: true, audioText: true, updatedAt: true, updatedBy: true, paragraphStart: true };
 
 const ONE_ROW: Readonly<Record<string, true>> = { status: true, lengthSeconds: true, updatedAt: true, updatedBy: true };
 

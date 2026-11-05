@@ -10,7 +10,8 @@
     "brollShots",
     "wordsPerMinute",
     "targetSeconds",
-    "sections"
+    "sections",
+    "paragraphsDecided"
   ],
   "notUndone": [
     "docId",
@@ -332,6 +333,24 @@
       "changedBetween": {
         "doc": [
           "sections"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "paragraphsDecided",
+      "edit": "sentence rule recorded",
+      "undoEntries": 1,
+      "steps": [
+        "docField:paragraphsDecided"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "restamped": false,
+      "changedBetween": {
+        "doc": [
+          "paragraphsDecided"
         ],
         "rowFields": [],
         "structure": false

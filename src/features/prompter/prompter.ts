@@ -1,3 +1,4 @@
+import { endsSentence } from "../../core/text/sentences.ts";
 import { numberHtml } from "../common/number-html.ts";
 import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { withoutCues } from "../../core/text/cues.ts";
@@ -154,7 +155,6 @@ export function trimPrompterCell(cell: CellInput): Run[] {
   return lead + tail >= p.length ? [] : sliceCell(cell, lead, p.length - tail);
 }
 
-const SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
 export function buildPrompterContent(): void {
   const skippingShot = ports.state.skipsShot() || ports.viewFlags.hideShot();
@@ -170,7 +170,7 @@ export function buildPrompterContent(): void {
 
   const paragraphs: string[] = [];
   lines.forEach(function (e, i) {
-    const prevEndsSentence = i === 0 || SENTENCE_END_RE.test(toPlainText((lines[i - 1] as BeatLine).cell));
+    const prevEndsSentence = i === 0 || endsSentence(toPlainText((lines[i - 1] as BeatLine).cell));
     if (prevEndsSentence) paragraphs.push(e.view.html);
     else paragraphs[paragraphs.length - 1] += " " + e.view.html;
   });

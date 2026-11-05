@@ -35,7 +35,7 @@ function doc(over?: Partial<MergeDoc>): ValidatedDocument {
   return migratedThenSet(Object.assign({
     title: "Lighthouse", titleOrigin: "file", titleVersion: "v3", docId: DOC, rows: [row("r1", ONE)], comments: [], people: [], productionTags: [], brollShots: [],
     wordsPerMinute: 150, rev: 4, lastEditedBy: "Base", lastEditedAt: OLD, personColors: { Sam: "#80BDFB" }, targetSeconds: 300,
-    schema: SCHEMA_VERSION
+    schema: SCHEMA_VERSION, paragraphsDecided: true
   }, over || {}));
 }
 
@@ -87,17 +87,18 @@ test("every strategy merges its field, in the table's order", () => {
     personColors: { Sam: "#CBA1FA" },
     targetSeconds: 420,
     sections: [{ id: "s1", name: "Opening", firstSceneId: "r1" }],
+    paragraphsDecided: true,
     schema: SCHEMA_VERSION
   });
   assert.deepEqual(r.conflicts, []);
   assert.deepEqual(r.stats, { rowsFromThem: 0, rowsFromMe: 1, rowsAddedByMe: 0, rowsAddedByThem: 0 });
 });
 
-test("person colours, target length and sections that no side has leave no key behind", () => {
-  const strip = (d: ValidatedDocument) => { delete d.personColors; delete d.targetSeconds; return d; };
+test("person colours, target length, sections and paragraph decisions that no side has leave no key behind", () => {
+  const strip = (d: ValidatedDocument) => { delete d.personColors; delete d.targetSeconds; delete d.paragraphsDecided; return d; };
   const { decode } = fakeDecoder(CELLS);
   const r = mergeStateFields(strip(doc()), strip(doc()), strip(doc()), fakePorts(decode));
-  assert.deepEqual(Object.keys(r.merged), STATE_FIELDS.map((f) => f.key).filter((k) => k !== "personColors" && k !== "targetSeconds" && k !== "sections"));
+  assert.deepEqual(Object.keys(r.merged), STATE_FIELDS.map((f) => f.key).filter((k) => !["personColors", "targetSeconds", "sections", "paragraphsDecided"].includes(k)));
 });
 
 test("file naming metadata survives merge, including version removal from either side", () => {

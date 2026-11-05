@@ -1,16 +1,19 @@
 import { writeScenes } from "../../core/document/scenes.ts";
 import type { DocumentScene } from "../../core/document/scenes.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import type { FlowEdit, FlowRow } from "../../core/flow/flow.ts";
+import type { FlowDoc, FlowOutcome, FlowRow } from "../../core/flow/flow.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 
-export function flowCommand(name: string, result: FlowEdit, ports: Pick<CellTextPorts, "clock" | "editor">): Command {
+export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutcome, ports: Pick<CellTextPorts, "clock" | "editor">): Command {
   return {
     name,
     needs: "edit",
     plan: function (doc: DocumentView) {
+      const result = operation(doc);
+      if (!result || "move" in result) return null;
+      if ("refused" in result) return result;
       const was = new Map(doc.rows.map(row => [row.id, row as unknown as FlowRow]));
       const now = new Map(result.rows.map(row => [row.id, row]));
       const cells: { rowId: string; field: string }[] = [];
@@ -23,14 +26,21 @@ export function flowCommand(name: string, result: FlowEdit, ports: Pick<CellText
       });
       const inserted = result.rows.filter(row => !was.has(row.id)).map(row => row.id);
       const removed = doc.rows.filter(row => !now.has(row.id)).map(row => row.id);
+      const oldOrder = doc.rows.filter(row => now.has(row.id)).map(row => row.id);
+      const newOrder = result.rows.filter(row => was.has(row.id)).map(row => row.id);
+      const rowsMoved = oldOrder.some((id, index) => id !== newOrder[index]);
       const sectionsChanged = JSON.stringify(doc["sections"] ?? null) !== JSON.stringify(result.sections ?? null);
       const docFields: string[] = [];
       if (sectionsChanged) docFields.push("sections");
-      if (result.removedComments.length) docFields.push("comments");
+      docFields.push("comments");
+      const stamped = new Set(cells.filter(cell => cell.field === "audioText" || cell.field === "visualText").map(cell => cell.rowId).concat(inserted));
+      for (const rowId of stamped) {
+        if (was.has(rowId)) cells.push({ rowId, field: "updatedAt" }, { rowId, field: "updatedBy" });
+      }
+      if (!cells.length && !inserted.length && !removed.length && !rowsMoved && !sectionsChanged && !result.removedComments.length) return null;
       return {
-        changes: changeSet({ cells, rowsInserted: inserted, rowsRemoved: removed, rowsMoved: false, runsMoved: true, docFields, derive: [] }),
+        changes: changeSet({ cells, rowsInserted: inserted, rowsRemoved: removed, rowsMoved, runsMoved: true, docFields, derive: ["production", "broll"] }),
         apply: function (live: ValidatedDocument) {
-          const stamped = new Set(cells.filter(cell => cell.field === "audioText" || cell.field === "visualText").map(cell => cell.rowId).concat(inserted));
           const nowIso = ports.clock.nowIso();
           const editor = ports.editor.name();
           const next = result.rows.map(function (row) {
