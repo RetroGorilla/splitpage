@@ -1,5 +1,3 @@
-// Phase 0b: drives the real app with the flow writer switched on, in real Electron and headless Edge.
-// usage: node tools/writer-lab/slice.mjs [--target electron|edge] [--only <text>] [--old-timing] [--profile]
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
@@ -52,7 +50,7 @@ class Cdp {
       this.ws.send(JSON.stringify({ id: n, method, params }));
     });
   }
-  close() { try { this.ws.close(); } catch { /* closing */ } }
+  close() { try { this.ws.close(); } catch {} }
 }
 
 let cdp, mainCdp = null, pageUrl = "";
@@ -115,7 +113,12 @@ const sel = () => ev("__writerFlowTest.selection()");
 const shown = () => ev(`Array.from(document.querySelectorAll("#writer-doc .wr-beat")).map(el => el.textContent.replace(/\\u200B/g, ""))`);
 const plain = html => String(html ?? "").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
 async function textOf(id) { return plain((await state()).rows.find(r => r.id === id)?.audioText); }
-const withoutStamps = rows => rows.map(({ updatedAt: _a, updatedBy: _b, ...row }) => row);
+const withoutStamps = rows => rows.map(row => {
+  const copy = { ...row };
+  delete copy.updatedAt;
+  delete copy.updatedBy;
+  return copy;
+});
 async function snapshot() {
   const s = await state();
   return JSON.stringify({ rows: withoutStamps(s.rows), sections: s.sections ?? null, comments: s.comments.map(c => c.id) });
@@ -434,8 +437,8 @@ const stats = list => {
 };
 const TYPED = "the quick brown fox jumps over the lazy dog";
 
-// why: `typing` starts at keydown and `work` at the character. In off-screen Electron both sit near 60 ms on any script in
-// either writer, with the page idle for most of it, so Electron's cost per key comes from --profile's task time instead.
+// why: `typing` starts at keydown and `work` at the character. Off-screen Electron sits near 60 ms on any script in
+// either writer, with the page idle for most of it, so Electron's cost per key comes from --profile's task time.
 async function installTimers() {
   await ev(`(function(){
     window.__typing = []; window.__work = []; window.__commands = []; window.__keyAt = 0; window.__charAt = 0;
@@ -475,7 +478,6 @@ async function commandTime(name, mods) {
   return Math.round((await ev("window.__commands[0] ?? -1")) * 10) / 10;
 }
 
-// Answers what the first keys after opening cost, and what makes Chromium restyle: its own records plus the DOM changes.
 async function traceStyle() {
   const events = [];
   cdp.on("Tracing.dataCollected", params => { events.push(...params.value); });
@@ -554,7 +556,7 @@ async function timing() {
     raw.title = "Long";
     raw.docId = "d" + "4".repeat(32);
     raw.rows = [];
-    for (let i = 0; i < 150; i++) base.forEach(row => { const { paragraphStart: _flag, ...kept } = row; raw.rows.push({ ...kept, id: row.id + i }); });
+    for (let i = 0; i < 150; i++) base.forEach(row => { const kept = { ...row, id: row.id + i }; delete kept.paragraphStart; raw.rows.push(kept); });
     raw.sections = [];
     await loadDoc(raw);
     await ev(`document.getElementById("btn-write").click()`);
@@ -625,7 +627,7 @@ async function electron() {
         probe.close();
         if (out.result.value) { page = candidate; break; }
       }
-    } catch { /* starting */ }
+    } catch {}
     if (!page) await sleep(250);
   }
   ok(page, "Electron never opened the app's page");
@@ -634,7 +636,7 @@ async function electron() {
   await cdp.open();
   let main = null;
   for (let i = 0; i < 40 && !main; i++) {
-    try { main = (await list(inspect))[0]; } catch { /* starting */ }
+    try { main = (await list(inspect))[0]; } catch {}
     if (!main) await sleep(150);
   }
   ok(main, "no inspector on Electron's main process");
@@ -652,10 +654,10 @@ async function electron() {
     stop: async () => {
       cdp.close();
       mainCdp.close();
-      try { process.kill(proc.pid); } catch { /* gone */ }
+      try { process.kill(proc.pid); } catch {}
       spawn("taskkill", ["/PID", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
       await sleep(400);
-      try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ }
+      try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3 }); } catch {}
     },
     profile
   };
@@ -673,10 +675,11 @@ async function edge() {
   const url = `http://127.0.0.1:${server.address().port}/index.html`;
   const port = await freePort();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "writer-slice-"));
-  const proc = spawn(exe, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--window-size=1440,960", url], { stdio: "ignore" });
+  // why: without msImplicitSignin, a fresh Edge profile signs in to the PC's Microsoft account and starts syncing
+  const proc = spawn(exe, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--window-size=1440,960", "--disable-features=msImplicitSignin", url], { stdio: "ignore" });
   let page = null;
   for (let i = 0; i < 80 && !page; i++) {
-    try { page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t => t.type === "page"); } catch { /* starting */ }
+    try { page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t => t.type === "page" && t.url.startsWith(url)); } catch {}
     if (!page) await sleep(200);
   }
   ok(page, "Edge never opened a page");
@@ -689,7 +692,7 @@ async function edge() {
       server.close();
       spawn("taskkill", ["/PID", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
       await sleep(400);
-      try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ }
+      try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3 }); } catch {}
     }
   };
 }

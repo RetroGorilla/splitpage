@@ -1,4 +1,4 @@
-// Opens the test page in a hidden off-screen Electron window so accept.mjs can drive it.
+const process = require("node:process");
 const { app, BrowserWindow } = require("electron");
 
 app.whenReady().then(function () {

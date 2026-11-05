@@ -1,17 +1,13 @@
 import { randomIds } from "../../src/adapters/identity/ids.ts";
 import { createRichText } from "../../src/adapters/richtext/richtext.ts";
 import { createDocumentSession } from "../../src/application/session/document-session.ts";
-import type { Command, DocumentView } from "../../src/application/session/document-session.ts";
-import { changeSet } from "../../src/application/session/change-set.ts";
+import type { Command } from "../../src/application/session/document-session.ts";
 import { cellRuns, cellTextCommand } from "../../src/application/commands/cell-text.ts";
 import { createUndo } from "../../src/application/editing/undo/undo.ts";
 import type { Step } from "../../src/core/text/steps.ts";
 import { createImageIngestion } from "../../src/core/document/media.ts";
 import { deepFreeze } from "../../src/core/document/freeze.ts";
 import { gallerySize } from "../../src/core/document/gallery.ts";
-import { writeScenes } from "../../src/core/document/scenes.ts";
-import type { DocumentScene } from "../../src/core/document/scenes.ts";
-import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import { STATE_FIELDS } from "../../src/core/merge/state-fields.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import type { MigratePorts } from "../../src/core/migrate.ts";
@@ -38,7 +34,7 @@ interface LabSettings extends SurfaceSettings {
   size: number;
 }
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const saved = readSaved();
 
 function readSaved(): Partial<LabSettings> {
@@ -65,7 +61,7 @@ function decode(html: string | null | undefined): Run[] {
   cache.set(text, made);
   return made;
 }
-const cellOf = richText.createCellReader(deepFreeze as never);
+const cellOf = richText.createCellReader(deepFreeze as unknown as Parameters<typeof richText.createCellReader>[0]);
 const mediaRuns = (html: unknown): Run[] => richText.decode(html == null ? "" : html, { media: true });
 
 function plainVisual(row: FlowRow): string {
@@ -86,13 +82,13 @@ const migratePorts: MigratePorts = {
   htmlIds: html => Array.from(richText.inertBody(html).getElementsByTagName("*")).flatMap(el => [el.getAttribute("data-cmt") || "", el.getAttribute("data-broll-id") || ""]),
   decode: (html, opts) => richText.decode(html, opts),
   videoCardHtml: href => richText.videoCardHtml(href),
-  readers: createProductionReaders(cellOf, deepFreeze as never),
+  readers: createProductionReaders(cellOf, deepFreeze as unknown as Parameters<typeof createProductionReaders>[1]),
   ids: randomIds,
   fields: STATE_FIELDS
 };
 
-const stamps = { clock: { nowIso: () => new Date().toISOString(), now: () => Date.now() }, editor: { name: () => "Adam" } } as never;
-const textPorts = { ...(stamps as object), cells: cellOf } as never;
+const stamps = { clock: { nowIso: () => new Date().toISOString(), now: () => Date.now() }, editor: { name: () => "Adam" } };
+const textPorts = { ...stamps, cells: cellOf };
 
 const undo = createUndo({
   held: () => session.held(),
@@ -104,9 +100,9 @@ const undo = createUndo({
 const session = createDocumentSession({
   entry: raw => migrateRows(raw, migratePorts),
   undo: {
-    adopt: doc => undo.adopt(doc as never),
+    adopt: doc => undo.adopt(doc as unknown as Parameters<typeof undo.adopt>[0]),
     record: () => undo.noteEdit(),
-    absorbDisk: doc => undo.noteRemote(doc as never),
+    absorbDisk: doc => undo.noteRemote(doc as unknown as Parameters<typeof undo.noteRemote>[0]),
     absorbReload: () => undo.absorbRemote()
   },
   effects: { dirty: () => undefined, draft: () => undefined, save: () => undefined, refresh: () => undefined },
@@ -124,7 +120,6 @@ function currentDoc(): FlowDoc {
   return session.read(doc => doc as unknown as FlowDoc);
 }
 
-let surface: Surface;
 let noticeTimer = 0;
 
 function notice(text: string): void {
@@ -169,7 +164,7 @@ function replayUndo(dir: "undo" | "redo"): void {
   } else {
     const step = steps.find(item => item.op === "rowField" && (item as { key?: string }).key === "audioText") as { rowId: string } | undefined;
     if (step) {
-      const offset = caretAfterStep(mediaRuns as never, step as never);
+      const offset = caretAfterStep(mediaRuns as unknown as Parameters<typeof caretAfterStep>[0], step as unknown as Parameters<typeof caretAfterStep>[1]);
       surface.place({ anchor: { kind: "beat", rowId: step.rowId, offset }, head: { kind: "beat", rowId: step.rowId, offset } }, true);
     }
   }
@@ -346,7 +341,7 @@ function bindSwitches(): void {
   });
   document.querySelectorAll<HTMLButtonElement>("[data-mark]").forEach(function (button) {
     button.addEventListener("mousedown", event => event.preventDefault());
-    button.addEventListener("click", () => surface.format(button.getAttribute("data-mark") as never));
+    button.addEventListener("click", () => surface.format(button.getAttribute("data-mark") as Parameters<Surface["format"]>[0]));
   });
   document.querySelectorAll<HTMLButtonElement>("[data-one-beat]").forEach(function (button) {
     button.setAttribute("data-title", button.title);
@@ -367,8 +362,8 @@ function bindSwitches(): void {
 
 function bindFind(): void {
   const bar = $("find");
-  const input = $<HTMLInputElement>("find-text");
-  const replacement = $<HTMLInputElement>("find-replace");
+  const input = $("find-text") as HTMLInputElement;
+  const replacement = $("find-replace") as HTMLInputElement;
   const count = $("find-count");
   let at = -1;
   function matches() { return findInFlow(currentDoc(), input.value, false, flowPorts); }
@@ -445,7 +440,7 @@ function bindFind(): void {
 
 function bindVisualBox(): void {
   const box = $("visual-box");
-  const area = $<HTMLTextAreaElement>("visual-text");
+  const area = $("visual-text") as HTMLTextAreaElement;
   let rowId: string | null = null;
   let pendingOwn = false;
   let opened: FlowRange | null = null;
@@ -506,7 +501,7 @@ function bindVisualBox(): void {
   $("visual-done").addEventListener("click", close);
 }
 
-surface = createSurface({
+const surface: Surface = createSurface({
   root: $("doc"),
   doc: currentDoc,
   flow: flowPorts,

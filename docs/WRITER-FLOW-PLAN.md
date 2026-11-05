@@ -358,7 +358,7 @@ The full Electron smoke and `tools/perf-ab.mjs` were outstanding here too. Both 
 
 - `UndoEntry`'s selection pair (section 4.2). The slice keeps its own map of selections for now.
 - `joinBeatsCommand`'s refusal of two visuals. It stays until the new writer ships, because the old writer depends on it. The flow engine's own join already combines them.
-- Deleting `tools/writer-lab/` before the phase 8 merge. `lab.ts` is in no tsconfig, so `node tools/typecheck.mjs` exits 1 on this branch for that one reason, until then.
+- Deleting `tools/writer-lab/` before the phase 8 merge, and taking `lab.ts` back out of `tsconfig.web.json`. Until then the page's files pass the same gates as everything else, because CI runs them on every phase PR. `gap-probe.mjs` has done its job and is gone; it's in history at `01ef194b`.
 - Taking `feat/writer-flow` back out of `ci.yml`'s `pull_request` branches at phase 8. It's there so phase PRs get CI.
 
 **Results outstanding from section 10:**
