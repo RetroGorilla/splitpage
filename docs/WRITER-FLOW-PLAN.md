@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phases 0a, 0b, 1 and 2 are done (sections 9 to 12). Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phase 3 is running. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phases 0a, 0b, 1 and 2 are done (sections 9 to 12). Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phase 3's selection, delete and Join work is merged (#1226, #1227), and its clipboard part is running. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -255,6 +255,10 @@ Existing writer suites (`06-writer`, `08-writer-width`, `267-writer-undo`, `78-s
 6. **Forward Delete above a scene header: decided (Adam, 2026-11-04).** Delete at the end of the last beat above a header moves the caret to the start of the header and changes nothing, mirroring 7.2.
 7. **Enter at the very start of a heading: decided (Adam, 2026-11-05), built in phase 4.** A blank beat goes above the heading and the caret moves into it, which is close to Google Docs without leaving a scene with no name. The blank beat ends the scene above. If the heading is the first thing in the script, the blank beat becomes unnamed scene A and the named scene moves to B. Until phase 4, Enter there only moves the caret to the scene's first beat.
 8. **Deleting all of a heading's text: decided (Adam, 2026-11-05), built in phase 4.** The line stays empty while the caret is on it, and the saved name doesn't change, because a saved scene needs a name. Leaving the line empty, including by closing the writer, removes the header. Its beats join the scene above, and one Ctrl+Z brings the header and its name back. If the app dies first, the old name is still saved. Backspace at a heading's start still removes the header, as section 2 says. Until phase 4, nothing is written and the old name stays.
+9. **Backspace on a blank beat: decided (Adam, 2026-11-05).** It removes the beat and passes any paragraph break to the next beat. This is the one exception to "Backspace at a paragraph's start removes only the paragraph break".
+10. **A selection ending at the start of an empty beat: coordinator's call (2026-11-05, #1227).** That beat stays, with its visual, status and comments, because the selection stops before it. The exception is the script's last beat, which counts as selected because a selection can't reach past it. Adam can overrule this.
+11. **Tag and Link buttons: phase 7.** The new writer has no such buttons yet, so their cross-beat limit arrives with the toolbar. Comment already has it.
+12. **Alt+Enter: still works, removed by phase 8.** Section 2 drops it unless Adam wants it kept.
 
 ## 8. Outside review
 
