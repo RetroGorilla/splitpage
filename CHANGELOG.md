@@ -73,6 +73,14 @@ appear in the app under **Help**. The format follows
   header, as Alt+Up and Alt+Down already did.
 - Selecting across a folded scene no longer includes its hidden beats, so Delete
   can't remove beats you can't see.
+- A link with an incomplete address now shows a warning in the desktop app too,
+  when you Ctrl+click or Cmd+click it.
+- Ctrl+press or Cmd+press on a link no longer changes your beat selection or
+  starts a beat drag. The link opens only if you let go on it.
+- Formatting or pasting while a tag is open no longer ends the tag: Tab still
+  makes it, and text you formatted stays formatted. A paste with several lines
+  cancels the open tag and keeps all the text.
+- Cancelling a tag with nothing typed no longer adds an extra undo step.
 
 ## 0.4.1 — 2026-11-02
 
