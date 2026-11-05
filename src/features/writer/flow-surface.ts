@@ -815,7 +815,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function syncComposition(): void {
-    if (composing || syncingComposition || !compositionTargets.size) return;
+    if (composing || syncingComposition) return;
     syncingComposition = true;
     try {
       const at = selection()?.head;

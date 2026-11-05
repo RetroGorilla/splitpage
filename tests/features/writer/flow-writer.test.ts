@@ -61,6 +61,36 @@ test("writer operations plan after entering the command and carry the directed s
   } finally { writer.dispose(); }
 });
 
+test("closing keeps composed text that landed outside its beat, with no beat marked as touched", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    const beat = h.root.querySelector('.wr-beat[data-id="a"]');
+    assert.ok(beat);
+    h.root.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    const orphan = document.createTextNode("LOCAL");
+    beat.after(orphan);
+    window.getSelection()?.setBaseAndExtent(orphan, 5, orphan, 5);
+    h.root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", isComposing: true, data: "LOCAL" }));
+    h.root.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "LOCAL" }));
+    h.writer.finish();
+    assert.equal(h.doc().rows[0]?.audioText, "AlphaLOCAL");
+  } finally { h.writer.dispose(); }
+});
+
+test("closing a retired writer never repairs its old DOM into a replacement document", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    const beat = h.root.querySelector('.wr-beat[data-id="a"]');
+    assert.ok(beat);
+    beat.after(document.createTextNode("Stale"));
+    h.replace();
+    h.writer.finish();
+    assert.equal(h.doc().rows[0]?.audioText, "Replacement");
+  } finally { h.writer.dispose(); }
+});
+
 test("closing a retired writer never syncs its old DOM into a replacement document with reused beat ids", () => {
   const h = harness();
   try {
