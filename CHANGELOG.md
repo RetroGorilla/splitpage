@@ -20,6 +20,18 @@ appear in the app under **Help**. The format follows
   there.
 
 ### Changed
+- The writer is new and types like a word processor. Beats flow together inside
+  paragraphs: Enter starts a beat, Enter again starts a paragraph, and
+  Shift+Enter is a line break. You can select, type over, delete, cut and paste
+  across beats, and each edit is one Ctrl+Z. Every beat has a small number. The
+  caret's beat shows its visual beside the line, and **Visual** edits it in a
+  small box. `# ` starts a scene header, and `**bold**`, `*italic*` and
+  `~~strike~~` convert as you type. Joining two beats that both have visuals
+  now keeps both. The old writer and its Visuals, Numbers and Compact button are
+  gone. Older scripts get their paragraphs once, by sentence, the first time
+  they open in the writer. See [The writer](docs/help.md#the-writer).
+- The teleprompter also starts a paragraph at each paragraph break from the
+  writer.
 - New words throughout the app. A section is now a **scene**, and a scene is now
   a **beat**. As a status, Shot is now **Filmed** and To shoot is **To film**.
   Scene mode in Present is now **Beat mode**.
@@ -47,6 +59,11 @@ appear in the app under **Help**. The format follows
   its blocks and ruler instead of rebuilding them on every resize step.
 
 ### Fixed
+- Edit > Undo and Redo now work in the script whenever the keyboard shortcuts
+  do.
+- The merge review now says what really happens to a beat that one side edited
+  and the other deleted.
+- Each key typed restyles much less of the page.
 - The automatic Scene A at the top of a script can now be named: **Add a name**
   on its header turns it into a normal scene you can rename, move or fold.
 - Naming a scene no longer covers the header or the whole beat. The name box has
