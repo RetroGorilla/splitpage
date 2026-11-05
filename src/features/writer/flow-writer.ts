@@ -5,13 +5,22 @@ import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
 import { beatPos, caretAt, comparePos, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
+import { setVisualForRange } from "../../core/flow/visual.ts";
 import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange, FlowRow, FlowSelectionPair } from "../../core/flow/flow.ts";
-import { addComment } from "../../core/text/edits.ts";
+import { addComment, breakLine, deleteRange, insertCell } from "../../core/text/edits.ts";
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
 import type { SurfacePorts } from "./flow-surface.ts";
 import { flowMatchStart, replaceFlowMatches, searchFlow } from "./flow-find.ts";
 import type { WriterFindAccess } from "../common/writer-find.ts";
+import type { PictureStore } from "../../application/media/picture-store.ts";
+import { rowSlots } from "../../core/document/gallery.ts";
+import { escapeHtml, safeImageSrc } from "../../core/document/text-policy.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { cellLength } from "../../core/text/runs.ts";
+import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
+import { createFlowVisualBox } from "./flow-visual-box.ts";
+import { ensureTrailingCaretSpot } from "../common/dom.ts";
 
 export interface FlowUndoPorts {
   readonly step: (dir: UndoDirection) => void;
@@ -24,6 +33,10 @@ export interface FlowUndoPorts {
 export interface FlowWriterPorts {
   readonly openFind?: () => void;
   readonly closeFind?: () => void;
+  readonly pictures?: Pick<PictureStore, "imgHtml">;
+  readonly visualInput?: (event: InputEvent, cell: HTMLElement) => void;
+  readonly visualLeave?: (cell: HTMLElement) => void;
+  readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
   readonly lifetime: Pick<DocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
@@ -88,6 +101,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   let replaying: FlowSelectionPair | null = null;
   let replayDir: UndoDirection = "undo";
   let findVisuals = false;
+  let visual: ReturnType<typeof createFlowVisualBox> | null = null;
 
   function took(outcome: CommandOutcome): boolean {
     if (outcome.kind === "failed") throw outcome.error;
@@ -128,7 +142,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     breakCoalescing: ports.undo.breakCoalescing,
     notice: text => { ports.notice(text, "ok"); },
     changed: ports.changed,
-    selectionMoved: ports.selectionMoved,
+    selectionMoved: () => { ports.selectionMoved(); visual?.refresh(); },
     settings: () => SETTINGS,
     openFind: () => { ports.openFind?.(); },
     plainVisual: ports.plainVisual,
@@ -137,6 +151,54 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     beatKeydown: (event, beat) => isCurrent() && ports.beatKeydown(event, beat),
     beatSelection: beat => { if (isCurrent()) ports.beatSelection(beat); },
     leaveBeat: beat => { if (isCurrent()) ports.leaveBeat(beat); }
+  });
+
+  visual = createFlowVisualBox({
+    root, doc: ports.doc, selection: surface.selection, place: range => { surface.place(range); }, current: isCurrent,
+    plainVisual: ports.plainVisual,
+    thumbnails: row => rowSlots(row).map(slot => {
+      if (slot.ref && ports.pictures) return ports.pictures.imgHtml(slot.ref, "wr-flow-visual-thumb");
+      const url = safeImageSrc(slot.dataUrl);
+      return url ? '<img class="wr-flow-visual-thumb" src="' + escapeHtml(url) + '" alt="' + escapeHtml(slot.name || "Picture") + '">' : "";
+    }).join(""),
+    save: (range, html, first) => {
+      if (!isCurrent() || range.head.kind !== "beat") return null;
+      const clean = toHtml(ports.decode(ports.storedHtml(html)));
+      let after = range;
+      if (first) {
+        const result = commit("visual-selection", doc => setVisualForRange(doc, range, clean, ports.flow), range);
+        if (!result || !("selection" in result)) return null;
+        after = result.selection;
+      } else {
+        const outcome = ports.shown(() => ports.run(cellTextCommand(range.head.kind === "beat" ? range.head.rowId : "", "visualText", cellRuns(ports.decode(clean)), ports.text)));
+        if (!took(outcome) && outcome.kind !== "noop") return null;
+      }
+      ports.heldSelection.rememberFlow(epoch, after);
+      surface.repaint();
+      ports.changed();
+      return after;
+    },
+    input: (event, cell) => { if (isCurrent()) ports.visualInput?.(event, cell); },
+    leave: cell => { if (isCurrent()) { ports.visualLeave?.(cell); surface.repaint(); } },
+    keydown: (event, cell) => isCurrent() && !!ports.visualKeydown?.(event, cell),
+    notice: message => { ports.notice(message, "warn"); },
+    undo: dir => { if (isCurrent()) ports.undo.step(dir); },
+    paste: (cell, data) => {
+      const selection = cellSelection(cell);
+      if (!selection) return;
+      const holder = document.createElement("div");
+      holder.innerHTML = data.getData("text/html");
+      holder.querySelectorAll("img, .video-embed-card").forEach(element => element.remove());
+      const html = holder.innerHTML;
+      const pasted = html ? ports.decode(html) : [{ text: data.getData("text/plain"), marks: {} }];
+      const old = ports.decode(ports.storedHtml(cell.innerHTML));
+      const line = !html && data.getData("text/plain") === "\n" ? breakLine(old, selection.from, selection.to) : null;
+      const next = line ?? insertCell(deleteRange(old, selection.from, selection.to), selection.from, pasted);
+      cell.innerHTML = toHtml(next.cell);
+      ensureTrailingCaretSpot(cell);
+      const at = line?.pos ?? selection.from + cellLength(pasted);
+      setCellSelection(cell, at, at);
+    }
   });
 
   function rowOf(rowId: string): FlowRow | undefined {
@@ -170,6 +232,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   }
 
   function beforeReplay(dir: UndoDirection): void {
+    visual?.close(false);
     const entry = dir === "undo" ? ports.undo.last() : ports.undo.nextRedo();
     replaying = entry?.selection ?? null;
     replayDir = dir;
@@ -238,7 +301,11 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   if (dialog) observer.observe(dialog, { attributes: true, attributeFilter: ["hidden"] });
 
   const writer: FlowWriter = {
-    openVisual: rowId => { if (isCurrent()) caret(rowId, 0); },
+    openVisual: (rowId, highlight) => {
+      if (!isCurrent() || !rowOf(rowId)) return;
+      surface.place(caretAt(beatPos(rowId, 0)), true);
+      visual?.open(caretAt(beatPos(rowId, 0)), highlight);
+    },
     find: {
       visuals: () => findVisuals,
       setVisuals: value => { findVisuals = value; },
@@ -264,7 +331,11 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       },
       leave: match => {
         if (!isCurrent()) return;
-        if (match?.kind === "visual") writer.openVisual(match.rowId, { from: match.from, to: match.to });
+        if (match?.kind === "visual") {
+          writer.openVisual(match.rowId, { from: match.from, to: match.to });
+          visual?.close(false);
+          caret(match.rowId, 0);
+        }
         else if (match) surface.place(match.range, true);
         else surface.focusBack();
       },
@@ -281,8 +352,8 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       }
     },
     isCurrent,
-    finish: () => isCurrent() ? surface.finish() : null,
-    repaint: () => { if (isCurrent()) surface.repaint(); },
+    finish: () => { visual?.close(false); return isCurrent() ? surface.finish() : null; },
+    repaint: () => { if (isCurrent()) { surface.repaint(); visual?.refresh(); } },
     caret,
     format,
     marks,
@@ -296,6 +367,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     dispose: () => {
       ports.closeFind?.();
       observer.disconnect();
+      visual?.dispose();
       surface.dispose();
     }
   };

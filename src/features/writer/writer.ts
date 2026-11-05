@@ -494,7 +494,7 @@ function attemptsEdit(e: Event) {
   const target = e.target as Element | null;
   if (!target || !target.closest) return false;
   if (e.type === "click") return !!target.closest(".wr-fmt");
-  if (!target.closest(".wr-para, #writer-doc.is-flow") && target.id !== "writer-title") return false;
+  if (!target.closest(".wr-para, #writer-doc.is-flow, .wr-flow-visual-text") && target.id !== "writer-title") return false;
   return e.type !== "keydown" || isEditKey(e as KeyboardEvent);
 }
 

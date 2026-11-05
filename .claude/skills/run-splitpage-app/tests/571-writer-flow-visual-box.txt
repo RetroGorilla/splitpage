@@ -1,0 +1,46 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow visual box',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha Bravo Charlie',visualText:'Original'},{id:'b',audioText:'Delta',visualText:'The quay'}],comments:[]})],'visual.splitpage'))
+wait F.state().title === 'Flow visual box'
+click #btn-write
+wait W.on()
+expect !!document.querySelector('#wr-visual')
+expect getComputedStyle(document.querySelector('#wr-gutter-mode')).display === 'none'
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:2},head:{kind:'beat',rowId:'a',offset:2}})
+expect !!document.querySelector('.wr-beat[data-id="a"].is-current')
+expect !!document.querySelector('.wr-visual-note:not([hidden])') && document.querySelector('.wr-visual-note').textContent === 'Original'
+eval document.querySelector('.wr-visual-note')?.click()
+expect !!document.querySelector('.wr-flow-visual-box:not([hidden])')
+expect document.activeElement.classList.contains('wr-flow-visual-text') && document.activeElement.textContent === 'Original'
+key ctrl KeyA
+type Harbour
+expect F.state().rows[0].visualText === 'Harbour' && F.state().rows.length === 2
+expect F.state().rows[0].audioText === 'Alpha Bravo Charlie'
+eval document.querySelector('.wr-flow-visual-close')?.click()
+expect document.activeElement.id === 'writer-doc' && W.selection().head.rowId === 'a' && W.selection().head.offset === 2
+eval window.before={anchor:{kind:'beat',rowId:'a',offset:6},head:{kind:'beat',rowId:'a',offset:11}}; W.place(before); U.flush(); window.depth=U.sizes().undo; document.querySelector('#wr-visual')?.click()
+expect F.state().rows.length === 2 && U.sizes().undo === depth
+expect document.querySelector('.wr-flow-visual-text')?.textContent === ''
+type Drone
+expect F.state().rows.length === 4 && F.state().rows[1].audioText === 'Bravo' && F.state().rows[1].visualText === 'Drone'
+expect F.state().rows[0].visualText === 'Harbour' && F.state().rows[2].audioText === ' Charlie'
+eval document.querySelector('.wr-flow-visual-close')?.click(); U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect F.state().rows.length === 2 && F.state().rows[0].audioText === 'Alpha Bravo Charlie' && F.state().rows[0].visualText === 'Harbour'
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+key ctrl+shift KeyZ
+expect F.state().rows.length === 4 && F.state().rows[1].visualText === 'Drone'
+key ctrl KeyZ
+eval window.before={anchor:{kind:'beat',rowId:'a',offset:11},head:{kind:'beat',rowId:'a',offset:6}}; W.place(before); U.flush(); window.depth=U.sizes().undo; document.querySelector('#wr-visual')?.click()
+type Boats
+expect F.state().rows.length === 4 && F.state().rows[1].audioText === 'Bravo' && F.state().rows[1].visualText === 'Boats'
+eval document.querySelector('.wr-flow-visual-close')?.click(); U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect JSON.stringify(W.selection()) === JSON.stringify(before) && F.state().rows.length === 2
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:2},head:{kind:'beat',rowId:'b',offset:3}}); document.querySelector('#wr-visual')?.click()
+expect !document.querySelector('.wr-flow-visual-box:not([hidden])') && document.body.textContent.includes('Visuals must stay within one beat.')
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:3},head:{kind:'beat',rowId:'a',offset:2}}); document.querySelector('#wr-visual')?.click()
+expect !document.querySelector('.wr-flow-visual-box:not([hidden])') && document.body.textContent.includes('Visuals must stay within one beat.')
+expect W.check().length === 0

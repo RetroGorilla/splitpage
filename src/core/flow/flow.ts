@@ -19,6 +19,7 @@ export interface FlowRow {
   readonly id: string;
   readonly audioText?: string | null | undefined;
   readonly visualText?: string | null | undefined;
+  readonly lengthSeconds?: unknown;
   readonly paragraphStart?: boolean | undefined;
   readonly [key: string]: unknown;
 }

@@ -1,0 +1,24 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find visual box',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'A <strong>red</strong> sky'},{id:'b',audioText:'Bravo',visualText:'Another red view'}],comments:[]})],'find-box.splitpage'))
+wait F.state().title === 'Find visual box'
+click #btn-write
+wait W.on()
+key ctrl KeyF
+eval var input=document.getElementById('find-input');input.value='red';input.dispatchEvent(new Event('input',{bubbles:true}))
+expect document.getElementById('find-count').textContent === 'No matches'
+click #find-visuals
+expect document.getElementById('find-count').textContent === '1 of 2'
+expect !!document.querySelector('.wr-flow-visual-box:not([hidden])')
+expect document.querySelector('.wr-flow-visual-text').dataset.id === 'a' && document.querySelector('.wr-flow-visual-text').innerHTML === 'A <strong>red</strong> sky'
+expect String(window.getSelection()) === 'red' && window.getSelection().anchorNode.parentElement.closest('.wr-flow-visual-text') !== null
+expect !document.getElementById('findbar').hidden && document.activeElement.closest('#findbar') !== null
+click #find-next
+expect document.getElementById('find-count').textContent === '2 of 2'
+expect !!document.querySelector('.wr-flow-visual-box:not([hidden])') && document.querySelector('.wr-flow-visual-text').dataset.id === 'b'
+expect String(window.getSelection()) === 'red' && window.getSelection().anchorOffset === 8 && window.getSelection().focusOffset === 11
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('writer').hidden
+key Escape
+expect document.getElementById('writer').hidden && !document.querySelector('.wr-flow-visual-box')
+expect F.state().rows[0].visualText === 'A <strong>red</strong> sky' && F.state().rows[1].visualText === 'Another red view'
