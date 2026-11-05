@@ -473,7 +473,8 @@ mkdirSync(out, { recursive: true });
 log("Printed PDF artifacts: " + out);
 const chrome = chromiumExecutable();
 assert.ok(existsSync(chrome), "Set SPLITPAGE_CHROME to a Chromium executable");
-const browser = spawn(chrome, ["--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+// why: without msImplicitSignin, a fresh Edge profile signs in to the PC's Microsoft account and starts syncing
+const browser = spawn(chrome, ["--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-features=msImplicitSignin",
   ...(process.platform === "linux" ? ["--no-sandbox", "--disable-dev-shm-usage"] : []),
   ...(process.env.SPLITPAGE_CHROME_ARGS || "").split(/\s+/).filter(Boolean),
   "--remote-debugging-port=" + (process.env.PRINT_CDP_PORT || "0"), "--user-data-dir=" + join(out, "profile"), "about:blank"],
