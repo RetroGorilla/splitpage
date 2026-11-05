@@ -1,0 +1,19 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Repaint range',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'repaint.splitpage'))
+wait F.state().title === 'Repaint range'
+click #btn-write
+wait W.on()
+eval window.backward = {anchor:{kind:'beat',rowId:'b',offset:3},head:{kind:'beat',rowId:'a',offset:2}}; W.place(backward); document.getElementById('writer-doc').blur(); W.outsideEdit('a','ALPHA'); W.fullRender()
+click .writer-bar [data-cmd="bold"]
+expect F.state().rows[0].audioText === 'AL<strong>PHA</strong>'
+expect F.state().rows[1].audioText === '<strong>Bra</strong>vo'
+expect JSON.stringify(W.selection()) === JSON.stringify(backward)
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'ALPHA' && F.state().rows[1].audioText === 'Bravo'
+eval window.forward = {anchor:backward.head,head:backward.anchor}; W.place(forward); document.getElementById('writer-doc').blur(); W.outsideEdit('a','Alpha'); W.fullRender()
+click .writer-bar [data-cmd="bold"]
+expect F.state().rows[0].audioText === 'Al<strong>pha</strong>'
+expect F.state().rows[1].audioText === '<strong>Bra</strong>vo'
+expect JSON.stringify(W.selection()) === JSON.stringify(forward)
+expect W.check().length === 0

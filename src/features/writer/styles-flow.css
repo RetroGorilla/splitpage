@@ -12,3 +12,4 @@
   #writer-doc.is-flow .wr-beat.is-visual-only::before { content: attr(data-num) "  ▣ " attr(data-visual); white-space: pre; color: var(--text-dim); font-size: .78em; line-height: 1.5; }
   #writer-doc.is-flow .wr-beat.is-visual-only { padding: .08em .5em; margin: 0 .25em; background: var(--surface-2); border-radius: 5px; }
   #writer-doc.is-flow .wr-beat.is-filmed:not(.is-visual-only):not(.is-blank)::before { color: var(--accent); }
+  .wr-flow-join { position: fixed; z-index: 146; padding: .4em .8em; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }

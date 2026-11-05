@@ -19,6 +19,7 @@ import { shotHiding } from "./shot-hiding.ts";
 import { currentRowsRender } from "./render.ts";
 import { acceptTagGhost, hideTagGhost, maybeAutoTagShortcut, scheduleIdleRefresh, tagGhost, updateTagGhost } from "../../features/tags/production-tags.ts";
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
+import { deleteBeatCommand } from "../../application/commands/rows.ts";
 import { createFlowWriter } from "../../features/writer/flow-writer.ts";
 import { caretAfterStep } from "../../features/undo/caret.ts";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
@@ -174,7 +175,8 @@ export function mountWriterRuntimeFeature() {
       place: (range: never) => { mounted.writerFlowControl()?.place(range); },
       check: () => mounted.writerFlowControl()?.check() ?? ["the flow writer isn't open"],
       fullRender: () => { currentRowsRender()?.render(); },
-      outsideEdit: (rowId: string, words: string) => edits.run(cellTextCommand(rowId, "audioText", cellRuns(flowCell(words)), edits.text))
+      outsideEdit: (rowId: string, words: string) => edits.run(cellTextCommand(rowId, "audioText", cellRuns(flowCell(words)), edits.text)),
+      outsideRemove: (rowId: string) => edits.run(deleteBeatCommand(rowId))
     }), (withdraw) => { withdrawHook = withdraw; });
     const control = { ...mounted, dispose: () => {
       withdrawHook?.();

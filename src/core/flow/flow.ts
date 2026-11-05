@@ -229,7 +229,7 @@ type RangeFlowPart =
   | { readonly kind: "heading"; readonly scene: DocumentScene; readonly origin: FlowPos }
   | { readonly kind: "beat"; readonly row: FlowRow; readonly origin: FlowPos };
 
-export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Run[], ports: FlowPorts): FlowOutcome {
+export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Run[], ports: FlowPorts, removeWholeStart = false): FlowOutcome {
   insert = normalizeCell(insert);
   const { from, to } = orderedRange(doc, range);
   const insertLength = cellLength(insert), insertedName = projection(insert);
@@ -244,6 +244,7 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
   const parts: RangeFlowPart[] = [];
   const removed: FlowRow[] = [];
   const removedHeaders = new Set<string>();
+  let replacementRow: FlowRow | undefined;
   for (const part of source) {
     const start = part.origin;
     const length = part.kind === "heading" ? part.scene.name.length : cellLength(ports.cells(part.row.audioText));
@@ -259,8 +260,12 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
       if (Array.from(name).length > SCENE_NAME_MAX) return { refused: "A scene name can be up to " + SCENE_NAME_MAX + " characters." };
       if (!name.trim()) removedHeaders.add(part.scene.id);
       else parts.push({ ...part, scene: { ...part.scene, name } });
-    } else if (whole && !withinOneBeat(range) && !(isFrom && insertLength)) {
+    } else if (whole && !withinOneBeat(range) && (removeWholeStart || !(isFrom && insertLength))) {
       removed.push(part.row);
+      if (isFrom && insertLength) {
+        replacementRow = writeCell(blankRow(ports.newId(), !!part.row.paragraphStart), insert);
+        parts.push({ ...part, row: replacementRow });
+      }
     } else {
       const cell = ports.cells(part.row.audioText);
       const left = a < b ? deleteRange(cell, a, b) : cell;
@@ -272,7 +277,7 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
   for (const block of flowOf(doc)) {
     if (block.kind !== "paragraph") continue;
     const first = block.beats[0] as FlowRow;
-    const survivor = block.beats.find(row => kept.has(row.id));
+    const survivor = block.beats.find(row => kept.has(row.id) || replacementRow && from.kind === "beat" && row.id === from.rowId);
     if (survivor && first.id !== survivor.id && [...kept.keys()].indexOf(survivor.id) > 0) {
       kept.set(survivor.id, withFlag(kept.get(survivor.id) as FlowRow));
     }
@@ -288,7 +293,7 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
       protectedBreaks.add(survivor.id);
     }
   });
-  if (from.kind === "beat" && to.kind === "beat" && from.rowId !== to.rowId && kept.has(from.rowId)) {
+  if (from.kind === "beat" && to.kind === "beat" && from.rowId !== to.rowId && (kept.has(from.rowId) || replacementRow)) {
     const tail = kept.get(to.rowId);
     const scene = headings.get(to.rowId);
     if (tail && !protectedBreaks.has(tail.id) && (!scene || removedHeaders.has(scene.id))) kept.set(tail.id, withoutFlag(tail));
@@ -307,7 +312,7 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
   const sections = repaired.flatMap((part, index) => part.kind === "heading"
     ? [withSceneFirstBeat(part.scene, (repaired[index + 1] as { row: FlowRow }).row.id)] : []);
   let caret: FlowPos;
-  const firstRow = from.kind === "beat" ? kept.get(from.rowId) : undefined;
+  const firstRow = from.kind === "beat" ? kept.get(from.rowId) ?? replacementRow : undefined;
   const firstHeading = from.kind === "heading" ? sections.find(scene => scene.id === from.sceneId) : undefined;
   if (firstHeading) caret = headingPos(firstHeading.id, from.offset + insertedName.length);
   else if (firstRow) caret = beatPos(firstRow.id, from.offset + insertLength);

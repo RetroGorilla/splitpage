@@ -1,0 +1,113 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.words=function(){return F.state().rows.map(function(r){var d=document.createElement('div');d.innerHTML=r.audioText;return d.textContent}).join('|')}; window.content=function(){var s=F.state();return JSON.stringify({rows:s.rows.map(function(r){var c=Object.assign({},r);delete c.updatedAt;delete c.updatedBy;return c}),sections:s.sections,comments:s.comments})}; F.openFile(new File([JSON.stringify({schema:2,title:'Destructive selections',paragraphsDecided:true,sections:[{id:'scene',name:'Middle',firstSceneId:'b'}],rows:[{id:'a',audioText:'<span class="cmt-anchor" data-cmt="stay">Alpha</span>',visualText:'First',status:'ready'},{id:'b',audioText:'<span class="cmt-anchor" data-cmt="gone">Bravo</span><span class="cmt-anchor" data-cmt="shared">!</span>',visualText:'Middle',status:'shot'},{id:'c',audioText:'Cha<span class="cmt-anchor" data-cmt="shared">rlie</span>',visualText:'Last'}],comments:['stay','gone','shared'].map(function(id,i){return {id:id,anchorId:id,rowId:i?'b':'a',field:'audioText',kind:'anchor',body:id,author:'Tester',createdAt:'2026-11-04T00:00:00Z',replies:[]}})})],'destructive.splitpage'))
+wait F.state().title === 'Destructive selections'
+click #btn-write
+wait W.on()
+eval window.original=content()
+eval window.before={anchor:bp('a',2),head:bp('c',3)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+key Delete
+expect words() === 'Al|rlie'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
+expect F.state().rows[0].visualText === 'First' && F.state().rows[1].visualText === 'Last'
+expect !(F.state().sections||[]).length
+expect F.state().comments.map(function(c){return c.id}).sort().join() === 'shared,stay'
+expect F.state().comments.find(function(c){return c.id==='shared'}).rowId === 'c'
+expect document.body.textContent.includes('Removed 1 beat: 1 with a visual, 1 filmed')
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect content() === original
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect W.check().length === 0
+eval window.before={anchor:bp('a',2),head:bp('c',3)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+key Backspace
+expect words() === 'Al|rlie'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
+expect F.state().rows[0].visualText === 'First' && F.state().rows[1].visualText === 'Last'
+expect !(F.state().sections||[]).length
+expect F.state().comments.map(function(c){return c.id}).sort().join() === 'shared,stay'
+expect F.state().comments.find(function(c){return c.id==='shared'}).rowId === 'c'
+expect document.body.textContent.includes('Removed 1 beat: 1 with a visual, 1 filmed')
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect content() === original
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect W.check().length === 0
+eval window.before={anchor:bp('a',2),head:bp('c',3)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+type Q
+expect words() === 'AlQ|rlie'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
+expect F.state().rows[0].visualText === 'First' && F.state().rows[1].visualText === 'Last'
+expect !(F.state().sections||[]).length
+expect F.state().comments.map(function(c){return c.id}).sort().join() === 'shared,stay'
+expect F.state().comments.find(function(c){return c.id==='shared'}).rowId === 'c'
+expect document.body.textContent.includes('Removed 1 beat: 1 with a visual, 1 filmed')
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect content() === original
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect W.check().length === 0
+eval window.before={anchor:bp('c',3),head:bp('a',2)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+key Delete
+expect words() === 'Al|rlie'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
+expect F.state().rows[0].visualText === 'First' && F.state().rows[1].visualText === 'Last'
+expect !(F.state().sections||[]).length
+expect F.state().comments.map(function(c){return c.id}).sort().join() === 'shared,stay'
+expect F.state().comments.find(function(c){return c.id==='shared'}).rowId === 'c'
+expect document.body.textContent.includes('Removed 1 beat: 1 with a visual, 1 filmed')
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect content() === original
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect W.check().length === 0
+eval window.before={anchor:bp('c',3),head:bp('a',2)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+key Backspace
+expect words() === 'Al|rlie'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
+expect F.state().rows[0].visualText === 'First' && F.state().rows[1].visualText === 'Last'
+expect !(F.state().sections||[]).length
+expect F.state().comments.map(function(c){return c.id}).sort().join() === 'shared,stay'
+expect F.state().comments.find(function(c){return c.id==='shared'}).rowId === 'c'
+expect document.body.textContent.includes('Removed 1 beat: 1 with a visual, 1 filmed')
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect content() === original
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect W.check().length === 0
+eval window.before={anchor:bp('c',3),head:bp('a',2)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+type Q
+expect words() === 'AlQ|rlie'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
+expect F.state().rows[0].visualText === 'First' && F.state().rows[1].visualText === 'Last'
+expect !(F.state().sections||[]).length
+expect F.state().comments.map(function(c){return c.id}).sort().join() === 'shared,stay'
+expect F.state().comments.find(function(c){return c.id==='shared'}).rowId === 'c'
+expect document.body.textContent.includes('Removed 1 beat: 1 with a visual, 1 filmed')
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect content() === original
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+expect W.check().length === 0
+eval W.place({anchor:bp('a',0),head:bp('c',7)}); U.flush(); window.depth=U.sizes().undo
+type New
+expect words() === 'New' && F.state().rows.length === 1
+expect !['a','b','c'].includes(F.state().rows[0].id) && F.state().rows[0].visualText === ''
+expect F.state().comments.length === 0
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect content() === original
+key ctrl KeyA
+key Delete
+expect F.state().rows.length === 1 && words() === ''
+expect F.state().comments.length === 0
+type Ready
+expect words() === 'Ready'
+expect W.check().length === 0
