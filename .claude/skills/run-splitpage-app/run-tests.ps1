@@ -4,6 +4,7 @@
 #   ... -Only 02            run just the suite whose filename starts with 02
 #   ... -Headed             watch it happen in a real Edge window (forces -Parallel 1)
 #   ... -Port 9601 -CdpPort 10201   pin the port bases instead of auto-picking
+#   ... -LogDir C:\some\folder      keep logs and the digest there, for runs alongside another worktree's
 #
 # Each suite gets its own driver process, its own server port and its own
 # browser, so one wedged suite cannot take the others down with it. Up to
@@ -23,7 +24,8 @@ param(
   [int]$CdpPort = 0,
   [int]$TimeoutSec = 180,
   [int]$Parallel,
-  [switch]$Headed
+  [switch]$Headed,
+  [string]$LogDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,7 +33,7 @@ $FreezeCaches = $env:SPLITPAGE_FREEZE_CACHES -eq '1'
 $DocumentGuard = $env:SPLITPAGE_DOCUMENT_GUARD -eq '1'
 $here  = $PSScriptRoot
 $tests = Join-Path $here 'tests'
-$logs  = Join-Path $env:TEMP 'splitpage-testlogs'
+$logs  = if ($LogDir) { $LogDir } else { Join-Path $env:TEMP 'splitpage-testlogs' }
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 Remove-Item (Join-Path $logs 'digest.txt'), (Join-Path $logs 'verdicts.json') -ErrorAction SilentlyContinue
 if ($Headed) { $Parallel = 1 }
