@@ -66,10 +66,12 @@ test("R4 property 1: 60 shrink-pad-blank rename sequences retain later edits and
 
 test("R4 property 2: 120 gallery joins preserve duplicate-link posters by identity and honest notices", t => {
   const rt = createFlowLoadRuntime();
+  const covered = new Set<string>();
   for (let seed = 1; seed <= 120; seed++) {
-    const mode = seed % 6, count = 1 + seed % 20;
+    const mode = (seed - 1) % 6, count = 1 + Math.floor((seed - 1) / 6);
+    covered.add(mode + ":" + count);
     const same = mode < 4;
-    const secondHref = "https://example.com/" + (same ? mode === 3 && count > 1 ? 1 : 0 : count);
+    const secondHref = "https://example.com/" + (same ? mode === 3 ? 1 : 0 : count);
     const firstPoster = mode !== 1 && mode !== 4;
     const secondPoster = mode !== 0;
     const links = Array.from({ length: count }, (_, i) => ({ href: "https://example.com/" + i, ...(i === 0 && firstPoster ? { poster: true } : {}) }));
@@ -83,11 +85,14 @@ test("R4 property 2: 120 gallery joins preserve duplicate-link posters by identi
     const expectedPosters = ids.some(id => posters.has(id)) ? 1 : 0;
     assert.equal(slot.links.filter(link => link.poster).length, expectedPosters, "poster seed=" + seed);
     assert.equal(!!slotPoster(slot), expectedPosters > 0, "slotPoster seed=" + seed);
+    assert.equal(slotPoster(slot)?.href ?? null, ids.find(id => posters.has(id)) ?? null, "poster identity seed=" + seed);
     if (posters.size <= 1 || expectedPosters === 0) assert.doesNotMatch(out.notice ?? "", /Kept one poster/, "notice seed=" + seed);
+    else assert.match(out.notice ?? "", /Kept one poster/, "notice seed=" + seed);
     assert.deepEqual(slot.links.map(link => link.href), ids, "link ids seed=" + seed);
     const live = { ...doc, rows: out.rows, sections: out.sections };
     assert.deepEqual(rowSlots(rt.load(live).rows[0]), rowSlots(out.rows[0]), "gallery reload seed=" + seed);
   }
+  assert.equal(covered.size, 120, "all six poster modes must cover link counts 1..20");
   t.diagnostic("120 gallery identity/poster cases; seeds 1..120");
 });
 

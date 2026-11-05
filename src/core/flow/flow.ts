@@ -1,7 +1,10 @@
 import { findAllMatches, findInCell } from "../text/search.ts";
 import { endsSentence } from "../text/sentences.ts";
 import { toPlainText } from "../text/projections.ts";
-import { MAX_MORE, migrateGallery, rowSlots, setRowSlots } from "../document/gallery.ts";
+import { MAX_MORE, migrateGallery, rowSlots, setRowSlots, videoLinkKey } from "../document/gallery.ts";
+import type { VideoLink } from "../document/gallery.ts";
+import { cappedText } from "../document/text-policy.ts";
+import { normalizeBeatLength, rowStatusId } from "../document/timing.ts";
 import { normalizeScenes, scenesAfterRemoval as removedSceneAnchors, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
 import type { DocumentScene } from "../document/scenes.ts";
 import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, setMark, sliceCell, splitCell } from "../text/edits.ts";
@@ -482,8 +485,14 @@ function joinedPictures(prev: FlowRow, row: FlowRow): ReturnType<typeof rowSlots
     const at = slot.ref ? slots.findIndex(item => item.ref?.sha256 === slot.ref?.sha256) : -1;
     const first = slots[at];
     if (!first) { slots.push(slot); continue; }
-    const links = first.links.concat(slot.links).filter((link, index, all) =>
-      all.findIndex(item => JSON.stringify(item) === JSON.stringify(link)) === index);
+    const byKey = new Map<string, VideoLink>();
+    for (const link of first.links.concat(slot.links)) {
+      const key = videoLinkKey(link);
+      const kept = byKey.get(key);
+      if (!kept) byKey.set(key, { ...link });
+      else if (link.poster && !kept.poster) byKey.set(key, { ...kept, poster: true });
+    }
+    const links = [...byKey.values()];
     slots[at] = { ...first, name: first.name || slot.name, annotation: first.annotation || slot.annotation, links };
   }
   return slots;
@@ -512,8 +521,8 @@ export function joinWithPrevious(doc: FlowDoc, rowId: string, ports: FlowPorts):
   migrateGallery(merged, { known: () => null, fromDataUrl: () => null });
   const afterGallery = rowSlots(merged);
   const droppedLinks = beforeGallery.reduce((sum, slot) => sum + slot.links.length, 0) - afterGallery.reduce((sum, slot) => sum + slot.links.length, 0);
-  const posterChanges = beforeGallery.reduce((sum, slot) => sum + slot.links.filter(link => link.poster).length, 0)
-    - afterGallery.reduce((sum, slot) => sum + slot.links.filter(link => link.poster).length, 0);
+  const posterChanges = beforeGallery.some((slot, index) => slot.links.filter(link => link.poster).length > 1
+    && afterGallery[index]?.links.filter(link => link.poster).length === 1);
   const galleryNotices: string[] = [];
   if (droppedLinks) galleryNotices.push("Left out " + plural(droppedLinks, "picture link") + " under the saved gallery limits.");
   if (posterChanges) galleryNotices.push("Kept one poster link per picture under the saved gallery limits.");
@@ -624,8 +633,8 @@ export function deleteForwardAt(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): F
 }
 
 export function renameHeading(doc: FlowDoc, sceneId: string, name: string, caret: number): FlowOutcome {
+  if (!cappedText(name, SCENE_NAME_MAX)) return null;
   if (Array.from(name).length > SCENE_NAME_MAX) return { refused: "A scene name can be up to " + SCENE_NAME_MAX + " characters." };
-  if (!name) return null;
   const sections = scenesOf(doc).map(item => item.id === sceneId ? { ...item, name } : item);
   return edit(doc, doc.rows, caretAt(headingPos(sceneId, caret)), { sections });
 }
@@ -1012,8 +1021,13 @@ export function insertBeats(doc: FlowDoc, pos: FlowPos, beats: readonly FlowRow[
       if (boundary) rows[index] = withFlag(row);
     }
   }
-  const placed: FlowRow[] = beats.map(row => ({ ...blankRow(row.id, false), ...row,
-    audioText: toHtml(ports.cells(row.audioText)), visualText: row.visualText ?? "", imageRef: row.imageRef ?? null, status: row.status ?? "todo" }));
+  const placed: FlowRow[] = beats.map(row => {
+    const copy: Record<string, unknown> = { ...blankRow(row.id, false), ...(row.paragraphStart === true ? row : withoutFlag(row)),
+      audioText: toHtml(ports.cells(row.audioText)), visualText: row.visualText ?? "", imageRef: row.imageRef ?? null, status: rowStatusId(row.status) ?? "todo" };
+    const length = normalizeBeatLength(row.lengthSeconds);
+    if (length === undefined) delete copy.lengthSeconds; else copy.lengthSeconds = length;
+    return copy as FlowRow;
+  });
   placed[0] = boundary ? withFlag(placed[0] as FlowRow) : withoutFlag(placed[0] as FlowRow);
   rows.splice(index, 0, ...placed);
   rows = rows.slice();

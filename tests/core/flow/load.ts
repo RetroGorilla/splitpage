@@ -8,7 +8,7 @@ import { jsdomParser } from "../../adapters/richtext/jsdom.mjs";
 import { countingIds } from "../migrate-ports.ts";
 
 export function expectedHeadingWhitespaceOnReload(input: unknown): unknown {
-  const expected = JSON.parse(JSON.stringify(input)) as { sections?: { name: string }[] };
+  const expected = structuredClone(input) as { sections?: { name: string }[] };
   expected.sections?.forEach(scene => { scene.name = scene.name.trim(); });
   return expected;
 }
