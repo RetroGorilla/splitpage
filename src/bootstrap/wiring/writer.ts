@@ -92,7 +92,7 @@ export function mountWriterRuntimeFeature() {
         },
         create: (root, selectionMoved, undoStep) => {
           undoOwner().flush();
-          const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, () => { undoOwner().settleAfterApply(); }));
+          const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
           if (initialized.kind === "failed") throw initialized.error;
           return createFlowWriter({
             lifetime: documentLifetime,

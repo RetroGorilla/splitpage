@@ -8,7 +8,7 @@ import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Replay } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 
-export function initializeFlowParagraphs(ports: FlowPorts, allowed: () => boolean, settled: () => void): Replay {
+export function initializeFlowParagraphs(ports: FlowPorts, allowed: () => boolean, settled: (starts: readonly string[]) => void): Replay {
   return {
     name: "initialize-flow-paragraphs",
     plan: doc => {
@@ -21,7 +21,7 @@ export function initializeFlowParagraphs(ports: FlowPorts, allowed: () => boolea
           for (const row of live.rows) if (starts.includes(row.id)) row.paragraphStart = true;
           live.paragraphsDecided = true;
         },
-        settle: settled
+        settle: () => { settled(starts); }
       };
     }
   };

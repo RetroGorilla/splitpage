@@ -7,6 +7,7 @@ import type { ValidatedDocument } from "../../../../src/core/document/validated.
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { cellRuns } from "../../../../src/test/_cell-runs.mjs";
 import { beatPos, caretAt } from "../../../../src/core/flow/flow.ts";
+import { initializeFlowParagraphs } from "../../../../src/application/commands/flow.ts";
 
 function setup() {
   const doc: ValidatedDocument = migrateRows({ title: "Owner", rows: [{ id: "r1", visualText: "", audioText: "a" }] });
@@ -29,6 +30,94 @@ function setup() {
 function typeInto(doc: ValidatedDocument, text: string): void {
   Object.assign((doc.rows as unknown as { audioText: string }[])[0] as object, { audioText: text });
 }
+
+function initializeParagraphs(u: ReturnType<typeof setup>): void {
+  const initialization = initializeFlowParagraphs({ cells: cellRuns, newId: () => "unused", hasVisual: () => false },
+    () => true, starts => { u.owner.settleAfterApply(starts); });
+  const plan = initialization.plan(u.doc());
+  assert.ok(plan && !("refused" in plan));
+  plan.apply(u.doc());
+  plan.settle();
+}
+
+test("first-open initialization preserves split undo and redo without weakening changed-content refusal", () => {
+  for (const changed of [false, true]) {
+    const u = setup();
+    typeInto(u.doc(), "Alpha.Bravo");
+    u.owner.reset();
+    typeInto(u.doc(), "Alpha.");
+    u.doc().rows.push({ ...u.doc().rows[0], id: "r2", audioText: "Bravo" } as ValidatedDocument["rows"][number]);
+    u.owner.noteEdit();
+    u.owner.flush();
+    initializeParagraphs(u);
+    assert.deepEqual(u.owner.sizes(), { undo: 1, redo: 0 });
+    if (changed) {
+      Object.assign(u.doc().rows[1] as object, { audioText: "Remote bravo" });
+      const refused = u.owner.undo();
+      assert.equal(refused.ok, false);
+      assert.ok("reason" in refused && refused.reason === "that beat has changed since");
+      assert.equal(u.doc().rows[1]?.audioText, "Remote bravo");
+    } else {
+      assert.equal(u.owner.undo().ok, true);
+      assert.equal(u.doc().rows.length, 1);
+      assert.equal(u.doc().rows[0]?.audioText, "Alpha.Bravo");
+      assert.equal(u.doc().paragraphsDecided, true);
+      assert.deepEqual(u.owner.sizes(), { undo: 0, redo: 1 });
+      assert.equal(u.owner.redo().ok, true);
+      assert.equal(u.doc().rows[1]?.audioText, "Bravo");
+      assert.equal(u.doc().rows[1]?.paragraphStart, true);
+      assert.equal(u.doc().paragraphsDecided, true);
+    }
+  }
+});
+
+test("initialization keeps redo deletion snapshots and the older split in replay order", () => {
+  const u = setup();
+  typeInto(u.doc(), "Alpha.Bravo");
+  u.owner.reset();
+  typeInto(u.doc(), "Alpha.");
+  u.doc().rows.push({ ...u.doc().rows[0], id: "r2", audioText: "Bravo" } as ValidatedDocument["rows"][number]);
+  u.owner.noteEdit();
+  u.owner.flush();
+  u.doc().rows.pop();
+  u.owner.noteEdit();
+  u.owner.flush();
+  assert.equal(u.owner.undo().ok, true);
+  initializeParagraphs(u);
+  assert.deepEqual(u.owner.sizes(), { undo: 1, redo: 1 });
+  assert.equal(u.owner.redo().ok, true);
+  assert.equal(u.doc().rows.length, 1);
+  assert.equal(u.owner.undo().ok, true);
+  assert.equal(u.doc().rows[1]?.paragraphStart, true);
+  assert.equal(u.owner.undo().ok, true);
+  assert.equal(u.doc().rows[0]?.audioText, "Alpha.Bravo");
+  assert.equal(u.doc().paragraphsDecided, true);
+});
+
+test("initialization preserves earlier paragraph edits at their own history boundaries", () => {
+  const u = setup();
+  typeInto(u.doc(), "Alpha.");
+  u.doc().rows.push({ ...u.doc().rows[0], id: "r2", audioText: "Bravo" } as ValidatedDocument["rows"][number]);
+  u.owner.reset();
+  const row = u.doc().rows[1];
+  assert.ok(row);
+  row.paragraphStart = true;
+  u.owner.noteEdit();
+  u.owner.flush();
+  delete row.paragraphStart;
+  u.owner.noteEdit();
+  u.owner.flush();
+  initializeParagraphs(u);
+  assert.deepEqual(u.owner.sizes(), { undo: 2, redo: 0 });
+  assert.equal(u.owner.undo().ok, true);
+  assert.equal(row.paragraphStart, true);
+  assert.equal(u.owner.undo().ok, true);
+  assert.equal(row.paragraphStart, undefined);
+  assert.equal(u.owner.redo().ok, true);
+  assert.equal(u.owner.redo().ok, true);
+  assert.equal(row.paragraphStart, true);
+  assert.equal(u.doc().paragraphsDecided, true);
+});
 
 test("flow selections belong to their undo entry, survive replay and do not coalesce with native typing", () => {
   const u = setup();

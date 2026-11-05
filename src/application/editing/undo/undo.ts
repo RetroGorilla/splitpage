@@ -42,7 +42,7 @@ export interface Undo {
   readonly reset: () => void;
   readonly undo: () => UndoResult;
   readonly redo: () => UndoResult;
-  readonly settleAfterApply: () => void;
+  readonly settleAfterApply: (paragraphStarts?: readonly string[]) => void;
   readonly foldIntoEdit: (entry: UndoEntry | null | undefined, touches: (step: Step) => boolean, change: (draft: UndoState) => boolean) => boolean;
   readonly breakCoalescing: () => void;
   readonly sizes: () => { undo: number; redo: number };
@@ -235,9 +235,10 @@ export function createUndo(ports: UndoPorts): Undo {
     return { ok: false, empty: true };
   }
 
-  function settleAfterApply(): void {
+  function settleAfterApply(paragraphStarts?: readonly string[]): void {
     const live = held();
     if (!live || live !== tracked) return;
+    if (paragraphStarts) history.initializeParagraphs(paragraphStarts);
     base = clone(live);
   }
 
