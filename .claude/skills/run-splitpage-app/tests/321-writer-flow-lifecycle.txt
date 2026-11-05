@@ -19,7 +19,7 @@ expect document.activeElement.textContent === 'BraXvo two.'
 click #btn-write
 wait W.on()
 expect W.selection().head.rowId === 'b' && W.selection().head.offset === 4
-eval (function(){ var host = document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); document.querySelector('.wr-beat[data-id="b"]').textContent = 'Committed composition'; host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); document.getElementById('wr-close').click(); return true; })()
+eval (function(){ var host = document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); var beat=document.querySelector('.wr-beat[data-id="b"]'); beat.textContent = 'Committed composition'; beat.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:'Committed composition'})); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); document.getElementById('wr-close').click(); return true; })()
 expect F.state().rows[1].audioText === 'Committed composition'
 click #btn-write
 wait W.on()

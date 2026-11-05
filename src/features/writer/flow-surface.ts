@@ -91,7 +91,8 @@ export function createSurface(ports: SurfacePorts): Surface {
   let painting = false;
   let held: FlowRange | null = null;
   let repaintOwed = false;
-  let compositionTimer: number | null = null;
+  const compositionTargets = new Set<HTMLElement>();
+  let syncingComposition = false;
 
   function cellOf(row: FlowRow): readonly Run[] { return ports.flow.cells(row.audioText); }
 
@@ -161,6 +162,10 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function paint(): void {
+    // why: a composed batch can publish edits that re-enter paint before its remaining targets have synced
+    if (composing || syncingComposition) { repaintOwed = true; return; }
+    syncComposition();
+    repaintOwed = false;
     painting = true;
     const doc = ports.doc();
     const keptBeats = new Map<string, HTMLElement>();
@@ -187,7 +192,6 @@ export function createSurface(ports: SurfacePorts): Surface {
         }
         keptHeads.delete(block.scene.id);
         if (el.textContent !== block.scene.name) el.textContent = block.scene.name;
-        rendered.set(el, block.scene.name);
         sceneLetter++;
         beatNumber = 0;
         sceneTag = String.fromCharCode(65 + (sceneLetter % 26));
@@ -330,7 +334,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   // why: the app paints from outside on undo, reloads and merges; a beat whose text changed gets a new DOM, so the
   // selection is carried across by model position. Composing text must never be repainted, so that waits.
   function repaint(): void {
-    if (composing) { repaintOwed = true; return; }
+    if (composing || syncingComposition) { repaintOwed = true; return; }
     const before = selection();
     paint();
     if (!before || document.activeElement !== root) return;
@@ -451,7 +455,13 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function onInput(event: Event): void {
-    if (composing || painting) return;
+    if (painting) return;
+    if (composing) {
+      const target = elementOf(event.target as Node | null)?.closest<HTMLElement>(".wr-beat, .wr-heading")
+        ?? elementOf(window.getSelection()?.focusNode ?? null)?.closest<HTMLElement>(".wr-beat, .wr-heading");
+      if (target && root.contains(target)) compositionTargets.add(target);
+      return;
+    }
     const input = event as InputEvent;
     const repaired = repairOrphans();
     const sel = window.getSelection();
@@ -799,42 +809,39 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function onCompositionEnd(): void {
     composing = false;
-    compositionTimer = window.setTimeout(function () {
-      compositionTimer = null;
-      syncTouchedText();
-      ports.changed();
-      if (repaintOwed) { repaintOwed = false; repaint(); }
-    }, 0);
+    syncComposition();
+    ports.changed();
+    if (repaintOwed) repaint();
   }
 
-  function syncTouchedText(): void {
-    const at = selection()?.head;
-    const headings = Array.from(root.querySelectorAll<HTMLElement>(".wr-heading")).flatMap(el => {
-      const id = el.getAttribute("data-scene");
-      const name = (el.textContent ?? "").replace(ZWSP_ALL, "");
-      return id && name && name !== rendered.get(el) ? [{ id, name,
-        offset: at?.kind === "heading" && at.sceneId === id ? at.offset : name.length }] : [];
-    });
-    repairOrphans();
-    root.querySelectorAll<HTMLElement>(".wr-beat").forEach(function (el) {
-      const row = ports.doc().rows.find(item => item.id === el.getAttribute("data-id"));
-      if (!row) return;
-      const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
-      const before = (rendered.get(el) ?? "").replace(ZWSP_ALL, "");
-      // why: a deferred paint can leave untouched DOM behind a newer model value; only local DOM changes may sync
-      if (toHtml(ports.decode(stored)) !== toHtml(ports.decode(before))) syncBeatEl(el);
-    });
-    for (const { id, name, offset } of headings) {
-      apply("rename-scene", doc => renameHeading(doc, id, name, offset), null);
+  function syncComposition(): void {
+    if (composing || syncingComposition || !compositionTargets.size) return;
+    syncingComposition = true;
+    try {
+      const at = selection()?.head;
+      const targets = Array.from(compositionTargets).filter(el => root.contains(el));
+      const headings = targets.filter(el => el.classList.contains("wr-heading")).map(el => ({
+        id: el.getAttribute("data-scene") as string, name: (el.textContent ?? "").replace(ZWSP_ALL, "")
+      }));
+      repairOrphans();
+      for (const el of targets) {
+        if (el.classList.contains("wr-beat") && root.contains(el)) syncBeatEl(el);
+      }
+      for (const { id, name } of headings) {
+        if (!name) continue;
+        const offset = at?.kind === "heading" && at.sceneId === id ? at.offset : name.length;
+        apply("rename-scene", doc => renameHeading(doc, id, name, offset), null);
+      }
+      compositionTargets.clear();
+    } finally {
+      syncingComposition = false;
     }
   }
 
   function finish(): FlowRange | null {
     const at = selection() ?? held;
-    if (compositionTimer !== null) window.clearTimeout(compositionTimer);
-    compositionTimer = null;
     composing = false;
-    syncTouchedText();
+    syncComposition();
     return at;
   }
 
@@ -928,7 +935,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     domRange,
     domCheck,
     dispose: () => {
-      if (compositionTimer !== null) window.clearTimeout(compositionTimer);
+      compositionTargets.clear();
       listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
     }
   };
