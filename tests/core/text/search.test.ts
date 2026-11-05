@@ -89,11 +89,18 @@ test("seeded differential: extracted Find matches the base on 1000 cells and que
   }
 });
 
+const BASE_SENTENCE_END_RE = /[.!?]["'??)\]]*$/;
+
+test("R2-C: the frozen sentence oracle recognizes smart closing quotes", () => {
+  assert.equal(BASE_SENTENCE_END_RE.test("Text.\u2019"), true);
+  assert.equal(BASE_SENTENCE_END_RE.test("Text.\u201d"), true);
+});
+
 test("seeded differential: sentence endings match the teleprompter's base definition", () => {
-  const base = /[.!?]["'??)\]]*$/;
+
   const endings = [".", "!", "?", "...", '.?', "?)", "x", "", " ", "\n", "']", "?"];
   for (let seed = 1; seed <= 1000; seed++) {
     const text = "Text" + endings[seed % endings.length] + endings[Math.floor(seed / endings.length) % endings.length];
-    assert.equal(endsSentence(text), base.test(text), "seed=" + seed);
+    assert.equal(endsSentence(text), BASE_SENTENCE_END_RE.test(text), "seed=" + seed);
   }
 });
