@@ -821,7 +821,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       const beat = beatEl(range.head.rowId);
       if (beat) syncBeatEl(beat);
     }
-    if (event.shiftKey) {
+    if (event.shiftKey && !(event.ctrlKey || event.metaKey)) {
       apply("line-break", doc => lineBreakAt(doc, range, ports.flow), range);
       return;
     }

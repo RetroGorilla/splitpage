@@ -200,3 +200,14 @@ test("Alt+Up and Alt+Down move the caret's beat through one command with its dir
     assert.equal(h.breaks(), 2);
   } finally { h.writer.dispose(); }
 });
+test("Ctrl+Shift+Enter retains the shipped beat split instead of inserting a line break", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.caret("a", 2);
+    h.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual(h.doc().rows.map(row => row.audioText), ["Al", "pha", "Bravo"]);
+    assert.deepEqual(h.writer.selection(), { anchor: beatPos("new", 0), head: beatPos("new", 0) });
+    assert.equal(h.breaks(), 1);
+  } finally { h.writer.dispose(); }
+});
