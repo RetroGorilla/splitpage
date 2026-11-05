@@ -1,0 +1,38 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find refresh',paragraphsDecided:true,rows:[{id:'a',audioText:'fox one; fox two; fox three',visualText:'fox visual'}],comments:[]})],'find-refresh.splitpage'))
+wait F.state().title === 'Find refresh'
+click #btn-write
+wait W.on()
+key ctrl KeyF
+eval window.query=function(s){var el=document.getElementById('find-input');el.value=s;el.dispatchEvent(new Event('input',{bubbles:true}))}; window.hit=function(){return Array.from(CSS.highlights.get('splitpage-find-match')||[])[0]}; query('fox')
+click #find-next
+expect document.getElementById('find-count').textContent === '2 of 3'
+expect hit().startOffset === 9 && hit().toString() === 'fox'
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:0}})
+eval document.execCommand('insertText',false,'new fox; ')
+wait F.state().rows[0].audioText === 'new fox; fox one; fox two; fox three'
+expect document.getElementById('find-count').textContent === '1 of 4'
+expect hit().startOffset === 4 && hit().toString() === 'fox'
+expect W.selection().head.offset === 9 && document.activeElement.id === 'writer-doc'
+eval document.getElementById('replace-input').value='DOG'
+click #find-replace
+expect F.state().rows[0].audioText === 'new DOG; fox one; fox two; fox three'
+eval W.outsideEdit('a','fox only')
+wait document.getElementById('find-count').textContent === '1 of 1'
+expect hit().toString() === 'fox' && hit().startContainer.isConnected
+eval W.outsideEdit('a','No matches')
+wait document.getElementById('find-count').textContent === 'No matches'
+expect !CSS.highlights.has('splitpage-find-match')
+eval W.outsideEdit('a','fox returns')
+wait document.getElementById('find-count').textContent === '1 of 1'
+click #find-visuals
+expect document.getElementById('find-count').textContent === '1 of 2'
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:0}})
+eval document.execCommand('insertText',false,'new ')
+wait F.state().rows[0].audioText === 'new fox returns'
+expect document.activeElement.id === 'writer-doc' && W.selection().head.offset === 4
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('writer').hidden
+eval W.outsideEdit('a','fox after close')
+expect document.getElementById('findbar').hidden && !CSS.highlights.has('splitpage-find-match') && W.check().length === 0

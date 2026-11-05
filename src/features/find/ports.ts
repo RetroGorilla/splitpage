@@ -13,7 +13,7 @@ import type { WriterFindAccess } from "../common/writer-find.ts";
 
 export interface FindPorts {
   readonly writer?: () => WriterFindAccess | null;
-  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "onChange">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml">;
   readonly shotHiding: () => Pick<ShotHiding, "reveal">;

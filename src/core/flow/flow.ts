@@ -8,7 +8,7 @@ import { normalizeBeatLength, rowStatusId } from "../document/timing.ts";
 import { normalizeScenes, scenesAfterRemoval as removedSceneAnchors, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
 import type { DocumentScene } from "../document/scenes.ts";
 import type { DocumentShape } from "../document/validated.ts";
-import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, setMark, sliceCell, splitCell } from "../text/edits.ts";
+import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, replaceText, setMark, sliceCell, splitCell } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
 import { cellLength, commentIds, normalizeCell, projection } from "../text/runs.ts";
 import type { MarkName, Marks, Run } from "../text/runs.ts";
@@ -864,8 +864,7 @@ export function replaceMatch(doc: FlowDoc, range: FlowRange, text: string, ports
     const cell = ports.cells(row.audioText);
     const a = index === start ? from.offset : 0;
     const b = index === end ? to.offset : cellLength(cell);
-    const left = deleteRange(cell, a, b);
-    rows[index] = writeCell(row, index === start && text ? insertCell(left, a, [{ text, marks: {} }]).cell : left);
+    rows[index] = writeCell(row, index === start ? replaceText(cell, a, b, text) : deleteRange(cell, a, b));
   }
   return edit(doc, rows, caretAt(beatPos(from.rowId, from.offset + text.length)));
 }

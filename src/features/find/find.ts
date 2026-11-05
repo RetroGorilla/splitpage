@@ -9,6 +9,7 @@ import type { DocumentRow, DocumentTag } from "../../core/document/validated.ts"
 type FindDocumentView = { readonly rows: DocumentView["rows"]; readonly productionTags: DocumentView["productionTags"] };
 type FindRuntimePorts = Omit<FindPorts, "document"> & {
   readonly document: {
+    readonly onChange: FindPorts["document"]["onChange"];
     readonly current: () => FindDocumentView | null;
     readonly read: <T>(select: (doc: FindDocumentView | null) => T) => T;
   };
@@ -47,6 +48,9 @@ let writerFind: WriterFindAccess | null = null;
 let writerMatches: readonly WriterSearchMatch[] = [];
 let restoreFindBar: (() => void) | null = null;
 let stopWriterFindEvents: (() => void) | null = null;
+let flushWriterFind: (() => void) | null = null;
+let writerFindUpdating = false;
+let writerRevealOwed = false;
 
 function findingInPresent() {
   return !!document.getElementById("findbar")?.classList.contains("is-present");
@@ -175,11 +179,15 @@ function highlightsSupported() {
   return !!(window.CSS && CSS.highlights && window.Highlight);
 }
 
-function revealFindMatch() {
+function revealFindMatch(navigate = true) {
   if (writerFind) {
     const match = writerMatches[findIndex];
     const active = document.activeElement as HTMLElement | null;
-    const range = match ? writerFind.reveal(match) : null;
+    const updating = writerFindUpdating;
+    writerFindUpdating = true;
+    let range: Range | null;
+    try { range = match && (navigate || match.kind === "narration") ? writerFind.reveal(match) : null; }
+    finally { writerFindUpdating = updating; }
     if (active && document.getElementById("findbar")?.contains(active)) active.focus({ preventScroll: true });
     if (highlightsSupported()) {
       if (range) CSS.highlights.set(FIND_HL, new Highlight(range));
@@ -284,11 +292,16 @@ export function replaceAll() {
 
 function replaceWriterMatches(all: boolean) {
   if (!writerFind || !findNeedle()) return;
-  refreshFindMatches(true);
+  flushWriterFind?.();
   const matches = all ? writerMatches : writerMatches[findIndex] ? [writerMatches[findIndex] as WriterSearchMatch] : [];
   if (!matches.length) return;
   const replacement = (document.getElementById("replace-input") as HTMLInputElement).value || "";
-  if (!writerFind.replace(matches, replacement)) return;
+  revealFindMatch();
+  writerFindUpdating = true;
+  let changed: boolean;
+  try { changed = writerFind.replace(matches, replacement); }
+  finally { writerFindUpdating = false; }
+  if (!changed) return;
   refreshFindMatches(!all);
   revealFindMatch();
   if (all) (ports as FindRuntimePorts).notices.show("Replaced " + matches.length + " match" + (matches.length === 1 ? "" : "es"), "ok");
@@ -311,6 +324,28 @@ function paintFindVisuals() {
 
 function mountWriterFindEvents() {
   if (stopWriterFindEvents) return;
+  let active = true;
+  let queued = false;
+  const bar = document.getElementById("findbar");
+  function flush() {
+    if (!active || !queued) return;
+    queued = false;
+    refreshFindMatches(false);
+    const navigate = !!bar?.contains(document.activeElement);
+    writerRevealOwed = !navigate && writerMatches[findIndex]?.kind === "visual";
+    revealFindMatch(navigate);
+  }
+  flushWriterFind = flush;
+  const stopChanges = (ports as FindRuntimePorts).document.onChange(() => {
+    if (writerFindUpdating || queued) return;
+    queued = true;
+    queueMicrotask(flush);
+  });
+  function focused() {
+    if (!writerRevealOwed || writerFindUpdating) return;
+    writerRevealOwed = false;
+    revealFindMatch();
+  }
   function escape(event: KeyboardEvent) {
     if (event.key !== "Escape" || event.isComposing) return;
     event.preventDefault();
@@ -319,8 +354,14 @@ function mountWriterFindEvents() {
   }
   const button = document.getElementById("find-visuals");
   button?.addEventListener("click", toggleFindVisuals);
+  bar?.addEventListener("focusin", focused);
   window.addEventListener("keydown", escape, true);
   stopWriterFindEvents = () => {
+    active = false;
+    stopChanges();
+    bar?.removeEventListener("focusin", focused);
+    flushWriterFind = null;
+    writerRevealOwed = false;
     button?.removeEventListener("click", toggleFindVisuals);
     window.removeEventListener("keydown", escape, true);
   };

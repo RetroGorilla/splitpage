@@ -11,7 +11,7 @@ import { addComment, breakLine, deleteRange, insertCell } from "../../core/text/
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
 import type { SurfacePorts } from "./flow-surface.ts";
-import { flowMatchStart, replaceFlowMatches, searchFlow } from "./flow-find.ts";
+import { flowMatchStart, replaceFlowMatches, searchFlow, visualMatchHighlight } from "./flow-find.ts";
 import type { WriterFindAccess } from "../common/writer-find.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import { rowSlots } from "../../core/document/gallery.ts";
@@ -313,7 +313,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       reveal: match => {
         if (!isCurrent()) return null;
         if (match.kind === "visual") {
-          writer.openVisual(match.rowId, { from: match.from, to: match.to });
+          writer.openVisual(match.rowId, visualMatchHighlight(ports.doc(), match, ports.flow));
           return null;
         }
         const range = surface.domRange(match.range);
@@ -326,13 +326,14 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         const result = commit("writer-find-replace", doc => replaceFlowMatches(doc, matches, text, ports.flow), before);
         if (!result || !("rows" in result)) return false;
         surface.repaint();
+        visual?.refresh();
         ports.changed();
         return true;
       },
       leave: match => {
         if (!isCurrent()) return;
         if (match?.kind === "visual") {
-          writer.openVisual(match.rowId, { from: match.from, to: match.to });
+          writer.openVisual(match.rowId, visualMatchHighlight(ports.doc(), match, ports.flow));
           visual?.close(false);
           caret(match.rowId, 0);
         }
