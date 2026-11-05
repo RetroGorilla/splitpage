@@ -1,0 +1,259 @@
+import { beatPos, caretAt, isCollapsed, withinOneBeat } from "../../core/flow/flow.ts";
+import type { FlowDoc, FlowRange, FlowRow } from "../../core/flow/flow.ts";
+import { hasSetLength } from "../../core/document/timing.ts";
+import { formatDuration } from "../../core/production/timing.ts";
+import { posToDom } from "../common/cell-dom.ts";
+
+export interface FlowVisualBoxPorts {
+  readonly root: HTMLElement;
+  readonly doc: () => FlowDoc;
+  readonly selection: () => FlowRange | null;
+  readonly place: (range: FlowRange) => void;
+  readonly current: () => boolean;
+  readonly plainVisual: (row: FlowRow) => string;
+  readonly thumbnails: (row: FlowRow) => string;
+  readonly save: (range: FlowRange, html: string, first: boolean) => FlowRange | null;
+  readonly input: (event: InputEvent, cell: HTMLElement) => void;
+  readonly leave: (cell: HTMLElement) => void;
+  readonly keydown: (event: KeyboardEvent, cell: HTMLElement) => boolean;
+  readonly notice: (text: string) => void;
+  readonly undo: (dir: "undo" | "redo") => void;
+  readonly paste: (cell: HTMLElement, data: Pick<DataTransfer, "getData">) => void;
+}
+
+export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
+  const root = ports.root;
+  const doc = root.ownerDocument;
+  const parent = root.parentElement;
+  const note = doc.createElement("button");
+  note.type = "button";
+  note.className = "wr-visual-note";
+  note.hidden = true;
+  note.title = "Edit visual";
+  const box = doc.createElement("div");
+  box.className = "wr-flow-visual-box";
+  box.hidden = true;
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-label", "Visual");
+  box.innerHTML = '<div class="wr-flow-visual-heading"><strong>Visual</strong><button type="button" class="wr-flow-visual-close" aria-label="Close visual">Close</button></div>' +
+    '<div class="wr-flow-visual-text cell-editable" contenteditable="true" role="textbox" aria-label="Visual text" aria-multiline="true" spellcheck="true" data-field="visualText" data-undo-owner="document"></div>' +
+    '<div class="wr-flow-visual-pictures"></div><div class="wr-flow-visual-hint">Add pictures in the split view.</div>';
+  const cell = box.querySelector<HTMLElement>(".wr-flow-visual-text") as HTMLElement;
+  const pictures = box.querySelector<HTMLElement>(".wr-flow-visual-pictures") as HTMLElement;
+  const closeButton = box.querySelector<HTMLButtonElement>(".wr-flow-visual-close") as HTMLButtonElement;
+  const toolbar = doc.querySelector(".writer-bar");
+  const gutter = doc.getElementById("wr-gutter-mode");
+  const gutterWasHidden = gutter?.hidden ?? false;
+  if (gutter) gutter.hidden = true;
+  const button = doc.createElement("button");
+  button.type = "button";
+  button.id = "wr-visual";
+  button.textContent = "Visual";
+  button.title = "Edit this beat's visual";
+  if (toolbar) toolbar.insertBefore(button, gutter?.parentNode === toolbar ? gutter : null);
+  parent?.append(note, box);
+  let target: FlowRange | null = null;
+  let first = false;
+  let composing = false;
+  let dirty = false;
+  let noteRow: string | null = null;
+  let shownHtml = "";
+  let saving = false;
+
+  function rowOf(id: string): FlowRow | undefined { return ports.doc().rows.find(row => row.id === id); }
+
+  function save(): void {
+    if (!target || !dirty || !ports.current() || composing) return;
+    dirty = false;
+    let next: FlowRange | null;
+    saving = true;
+    try { next = ports.save(target, cell.innerHTML, first); }
+    finally { saving = false; }
+    if (!next || next.head.kind !== "beat") return;
+    target = next;
+    first = false;
+    cell.dataset.id = next.head.rowId;
+    shownHtml = rowOf(next.head.rowId)?.visualText ?? "";
+  }
+
+  function close(restore = true): void {
+    if (box.hidden) return;
+    composing = false;
+    save();
+    if (!first && ports.current()) ports.leave(cell);
+    const range = target;
+    target = null;
+    box.hidden = true;
+    if (restore && range && ports.current()) ports.place(range);
+  }
+
+  function position(): void {
+    if (!target || target.head.kind !== "beat") return;
+    const beat = root.querySelector<HTMLElement>('.wr-beat[data-id="' + CSS.escape(target.head.rowId) + '"]');
+    const rect = beat?.getClientRects()[0];
+    if (!rect) return;
+    const width = Math.min(360, window.innerWidth - 24);
+    box.style.width = width + "px";
+    box.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)) + "px";
+    const height = box.getBoundingClientRect().height;
+    box.style.top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - height - 12)) + "px";
+  }
+
+  function open(range: FlowRange | null, highlight?: { from: number; to: number }): void {
+    close(false);
+    if (!ports.current() || !range) return;
+    if (!withinOneBeat(range)) { ports.notice("Visuals must stay within one beat."); return; }
+    if (range.head.kind !== "beat") { ports.notice("Put the caret in a beat to edit its visual."); return; }
+    const row = rowOf(range.head.rowId);
+    if (!row) return;
+    target = range;
+    first = !isCollapsed(range);
+    dirty = false;
+    cell.dataset.id = row.id;
+    cell.innerHTML = first ? "" : row.visualText ?? "";
+    shownHtml = row.visualText ?? "";
+    pictures.innerHTML = first ? "" : ports.thumbnails(row);
+    box.hidden = false;
+    position();
+    cell.focus({ preventScroll: true });
+    const selection = window.getSelection();
+    if (highlight) {
+      const points: { node: Node; offset: number }[] = [];
+      function walk(parent: Node): void {
+        Array.from(parent.childNodes).forEach((node, index) => {
+          if (node.nodeType === 3) {
+            const text = node as Text;
+            for (let offset = 0; offset < text.length; offset++) {
+              if (text.data[offset] !== "\u200b") points.push({ node: text, offset });
+            }
+          } else if (node instanceof HTMLElement && node.tagName === "BR") points.push({ node: parent, offset: index });
+          else if (node instanceof HTMLElement && !node.matches("img, .video-embed-card")) walk(node);
+        });
+      }
+      walk(cell);
+      const point = (offset: number) => points[Math.max(0, offset)] ?? { node: cell, offset: cell.childNodes.length };
+      const a = point(highlight.from), h = point(highlight.to);
+      selection?.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
+    } else {
+      const at = posToDom(cell, Number.MAX_SAFE_INTEGER);
+      selection?.setBaseAndExtent(at.node, at.offset, at.node, at.offset);
+    }
+  }
+
+  function refresh(): void {
+    if (!ports.current()) { close(false); note.hidden = true; return; }
+    if (target?.head.kind === "beat" && !rowOf(target.head.rowId)) close(false);
+    if (target?.head.kind === "beat" && !first && !composing && !dirty && !saving) {
+      const row = rowOf(target.head.rowId);
+      if (row && (row.visualText ?? "") !== shownHtml) {
+        shownHtml = row.visualText ?? "";
+        cell.innerHTML = shownHtml;
+        pictures.innerHTML = ports.thumbnails(row);
+      }
+    }
+    const range = ports.selection();
+    const head = range?.head;
+    const row = head?.kind === "beat" ? rowOf(head.rowId) : undefined;
+    const label = row ? ports.plainVisual(row) : "";
+    noteRow = row?.id ?? null;
+    note.hidden = !label || !range || !isCollapsed(range);
+    if (row && !note.hidden) {
+      note.textContent = label + (hasSetLength(row) ? " · " + formatDuration(row.lengthSeconds) : "");
+      const beat = root.querySelector<HTMLElement>('.wr-beat[data-id="' + CSS.escape(row.id) + '"]');
+      const rect = beat?.getClientRects()[0];
+      const holder = parent?.getBoundingClientRect();
+      if (rect && holder && parent) {
+        note.style.top = rect.top - holder.top + parent.scrollTop + "px";
+        note.style.left = root.offsetLeft + root.offsetWidth + 16 + "px";
+      }
+    }
+    position();
+  }
+
+  function onInput(event: Event): void {
+    dirty = true;
+    if (composing || (event as InputEvent).isComposing) return;
+    save();
+    ports.input(event as InputEvent, cell);
+    refresh();
+  }
+
+  function onKeydown(event: KeyboardEvent): void {
+    if (event.isComposing || composing) return;
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && ["z", "y"].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      event.stopPropagation();
+      const redo = event.key.toLowerCase() === "y" || event.shiftKey;
+      close();
+      ports.undo(redo ? "redo" : "undo");
+      return;
+    }
+    if (ports.keydown(event, cell)) return;
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      ports.paste(cell, { getData: type => type === "text/plain" ? "\n" : "" });
+      dirty = true;
+      save();
+    }
+  }
+
+  function onBeforeInput(event: Event): void {
+    const input = event as InputEvent;
+    if (input.inputType === "historyUndo" || input.inputType === "historyRedo") {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      ports.undo(input.inputType === "historyUndo" ? "undo" : "redo");
+    }
+    if (input.inputType === "insertParagraph" || input.inputType === "insertLineBreak") {
+      event.preventDefault();
+      ports.paste(cell, { getData: type => type === "text/plain" ? "\n" : "" });
+      dirty = true;
+      save();
+    }
+  }
+
+  function onCompositionStart(): void { composing = true; }
+  function onCompositionEnd(): void { composing = false; save(); refresh(); }
+  function onPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.clipboardData) ports.paste(cell, event.clipboardData);
+    dirty = true;
+    save();
+  }
+  function onDrop(event: Event): void { event.preventDefault(); event.stopPropagation(); }
+  function keepSelection(event: Event): void { event.preventDefault(); }
+  function onButton(): void { open(ports.selection()); }
+  function onNote(): void {
+    if (!noteRow) return;
+    const range = ports.selection();
+    open(range?.head.kind === "beat" && range.head.rowId === noteRow ? range : caretAt(beatPos(noteRow, 0)));
+  }
+  function onClose(): void { close(); }
+  function outside(event: Event): void {
+    const element = event.target as Node;
+    if (!box.hidden && !box.contains(element) && !button.contains(element) && !note.contains(element)) close(false);
+  }
+  const listeners: [EventTarget, string, EventListener][] = [
+    [cell, "input", onInput], [cell, "keydown", onKeydown as EventListener], [cell, "beforeinput", onBeforeInput],
+    [cell, "compositionstart", onCompositionStart], [cell, "compositionend", onCompositionEnd],
+    [cell, "paste", onPaste as EventListener], [cell, "drop", onDrop],
+    [button, "mousedown", keepSelection], [button, "click", onButton], [note, "mousedown", keepSelection], [note, "click", onNote],
+    [closeButton, "click", onClose], [doc, "mousedown", outside], [window, "resize", refresh]
+  ];
+  if (parent) listeners.push([parent, "scroll", refresh]);
+  listeners.forEach(([element, event, handler]) => element.addEventListener(event, handler));
+  return {
+    open,
+    refresh,
+    close,
+    dispose(): void {
+      close(false);
+      listeners.forEach(([element, event, handler]) => element.removeEventListener(event, handler));
+      button.remove(); note.remove(); box.remove();
+      if (gutter) gutter.hidden = gutterWasHidden;
+    }
+  };
+}

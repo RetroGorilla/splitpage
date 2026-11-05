@@ -1,0 +1,30 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow visual content',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'First<br>Drone over the harbour',visualImage:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='}],comments:[]})],'visual-content.splitpage'))
+wait F.state().title === 'Flow visual content'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:2},head:{kind:'beat',rowId:'a',offset:2}}); document.querySelector('#wr-visual')?.click()
+expect document.querySelectorAll('.wr-flow-visual-pictures img').length === 1
+expect !document.querySelector('.wr-flow-visual-box input[type="file"]')
+key ctrl KeyA
+press [Camera]
+expect F.state().rows[0].visualText.includes('data-tag-cat="prop" data-tag-name="Camera"')
+key End
+key Enter
+press B-roll:
+type  Boats at the quay
+expect F.state().rows[0].visualText.includes('broll-key') && F.state().rows[0].visualText.includes('Boats at the quay')
+key Enter
+press prop: Lens
+expect !!document.querySelector('.wr-flow-visual-text .plain-tag-keyword')
+key Tab
+expect F.state().rows[0].visualText.includes('data-tag-name="Lens"') && !F.state().rows[0].visualText.includes('plain-tag-keyword')
+eval window.oldPictures=JSON.stringify(F.state().rows[0].imageRef); var data=new DataTransfer(); data.setData('text/html','<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=="> pasted'); document.querySelector('.wr-flow-visual-text').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}))
+expect !F.state().rows[0].visualText.includes('<img') && F.state().rows[0].visualText.includes('pasted') && JSON.stringify(F.state().rows[0].imageRef) === oldPictures
+eval document.querySelector('.wr-flow-visual-close')?.click(); W.outsideVisual?.('a','First<br>Drone <strong>over</strong> the harbour'); W.openVisual?.('a',{from:6,to:16})
+expect !!document.querySelector('.wr-flow-visual-box:not([hidden])') && getSelection().toString() === 'Drone over'
+expect document.activeElement.classList.contains('wr-flow-visual-text')
+shot phase5-visual-box
+eval document.querySelector('.wr-flow-visual-close')?.click()
+expect W.check().length === 0
