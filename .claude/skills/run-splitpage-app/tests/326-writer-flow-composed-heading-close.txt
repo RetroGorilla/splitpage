@@ -14,5 +14,5 @@ eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchE
 wait F.state().sections[0].name === 'Deferred heading'
 expect F.state().sections[0].name === 'Deferred heading'
 eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); var heading=document.querySelector('.wr-heading[data-scene="s"]'); heading.textContent=''; heading.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:''})); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); document.getElementById('wr-close').click(); return true; })()
-expect F.state().sections[0].name === 'Deferred heading' && F.state().sections.length === 1
+expect F.state().sections === undefined
 expect F.state().rows[0].audioText === 'Alpha'

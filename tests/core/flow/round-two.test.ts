@@ -96,11 +96,14 @@ test("R2-7: Delete above a heading moves the caret without removing an empty bea
   assert.deepEqual(out.rows.map(beat => beat.id), ["a", "b"]);
 });
 
-test("R2-8: empty scene names are invalid, so Enter at heading start retains caret-only behavior", () => {
+test("R2-8: Enter at heading start adds an unnamed beat above the valid named scene", () => {
   assert.equal(normalizeScenes([scene("s", "a", "")]), undefined);
   const doc: FlowDoc = { rows: [row("a", "Body")], sections: [scene("s", "a")], comments: [] };
   const before = JSON.stringify(doc);
-  assert.deepEqual(enterInHeading(doc, headingPos("s", 0), ports()), { move: beatPos("a", 0) });
+  const out = edit(enterInHeading(doc, headingPos("s", 0), ports()));
+  assert.deepEqual(out.rows.map(beat => [beat.id, beat.audioText, !!beat.paragraphStart]), [["new1", "", false], ["a", "Body", false]]);
+  assert.deepEqual(out.sections, [scene("s", "a")]);
+  assert.deepEqual(out.selection, caretAt(beatPos("new1", 0)));
   assert.equal(JSON.stringify(doc), before);
 });
 

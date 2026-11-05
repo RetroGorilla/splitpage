@@ -1,0 +1,46 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; F.openFile(new File([JSON.stringify({schema:2,title:'Heading rules',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:''},{id:'b',audioText:'Body',visualText:'',paragraphStart:true},{id:'c',audioText:'Title<br>Later',visualText:'Desk',paragraphStart:true},{id:'d',audioText:'x'.repeat(201),visualText:'',paragraphStart:true},{id:'e',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'rules.splitpage'))
+wait F.state().title === 'Heading rules'
+click #btn-write
+wait W.on()
+eval at('a',0)
+press # Title
+key ArrowDown
+wait F.state().sections && F.state().sections[0].name === 'Title'
+expect !F.state().rows.some(function(r){return r.id === 'a'}) && F.state().sections[0].firstSceneId === 'b'
+key ctrl KeyZ
+expect F.state().rows[0].id === 'a' && F.state().rows[0].audioText === '# Title'
+eval at('c',0)
+press # X
+key Backspace
+eval at('b',2)
+wait F.state().sections && F.state().sections[0].name === 'Title'
+expect F.state().rows.find(function(r){return r.id === 'c'}).audioText === 'Later' && F.state().rows.find(function(r){return r.id === 'c'}).visualText === 'Desk'
+expect W.selection().head.rowId === 'b' && W.selection().head.offset === 2
+key ctrl KeyZ
+expect F.state().rows.find(function(r){return r.id === 'c'}).audioText === '# Title<br>Later'
+eval at('d',0)
+press # X
+key Backspace
+eval at('d',203)
+key Enter
+expect F.state().rows.find(function(r){return r.id === 'd'}).audioText === 'x'.repeat(201)
+expect document.getElementById('toast-host').textContent.includes('A scene name can be up to 200 characters, so this stays as narration.')
+expect !F.state().sections || !F.state().sections.some(function(s){return s.name.length > 200})
+key ctrl KeyZ
+expect F.state().rows.find(function(r){return r.id === 'd'}).audioText === '# ' + 'x'.repeat(201)
+eval at('e',0)
+press # x
+key Backspace
+eval at('b',1)
+wait F.state().rows.find(function(r){return r.id === 'e'}).audioText === ''
+expect W.selection().head.rowId === 'b' && W.selection().head.offset === 1
+eval at('e',0)
+press # Last
+key Enter
+expect F.state().sections.some(function(s){return s.name === 'Last'}) && !F.state().rows.some(function(r){return r.id === 'e'})
+expect F.state().rows[F.state().rows.length-1].audioText === '' && W.selection().head.rowId === F.state().rows[F.state().rows.length-1].id
+key ctrl KeyZ
+expect F.state().rows.find(function(r){return r.id === 'e'}).audioText === '# Last'
+expect W.check().length === 0

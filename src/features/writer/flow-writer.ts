@@ -173,10 +173,10 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     const recorded = replaying;
     replaying = null;
     if (recorded) {
-      surface.place(replayDir === "undo" ? recorded.before ?? recorded.after : recorded.after, true);
+      surface.restoreAfterReplay(replayDir === "undo" ? recorded.before ?? recorded.after : recorded.after);
     } else {
       const step = (steps as readonly RowStep[]).find(item => item.op === "rowField" && item.key === "audioText");
-      if (step && step.rowId) surface.place(caretAt(beatPos(step.rowId, ports.caretAfterStep(step))), true);
+      if (step && step.rowId) surface.restoreAfterReplay(caretAt(beatPos(step.rowId, ports.caretAfterStep(step))));
     }
     ports.changed();
   }

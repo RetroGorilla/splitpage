@@ -63,6 +63,7 @@ export interface Surface {
   readonly focusBack: () => void;
   readonly selection: () => FlowRange | null;
   readonly place: (range: FlowRange, scroll?: boolean) => void;
+  readonly restoreAfterReplay: (range: FlowRange) => void;
   readonly format: (mark: MarkName) => void;
   readonly pendingMarks: () => Marks | null;
   readonly apply: (name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null) => FlowOutcome;
@@ -107,6 +108,8 @@ export function createSurface(ports: SurfacePorts): Surface {
   let clicks = 0;
   let pending: { pos: FlowPos; marks: Marks } | null = null;
   let pendingHeading: string | null = null;
+  const headingCandidates = new Set<string>();
+  const emptyHeadings = new Map<string, string>();
   let lastBeat: string | null = null;
   let painting = false;
   let repaintOwed = false;
@@ -175,6 +178,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     el.classList.toggle("is-blank", !text && !visual);
     el.classList.toggle("is-filmed", row.status === "shot");
     el.classList.toggle("no-gap", noGap);
+    el.classList.toggle("is-pending-heading", headingCandidates.has(row.id) && isPendingHeading(ports.doc(), row.id, ports.flow));
     if (el.getAttribute("data-num") !== label) el.setAttribute("data-num", label);
     if (!text && visual) {
       const note = ports.plainVisual(row);
@@ -215,7 +219,8 @@ export function createSurface(ports: SurfacePorts): Surface {
           el.setAttribute("data-scene", block.scene.id);
         }
         keptHeads.delete(block.scene.id);
-        if (el.textContent !== block.scene.name) el.textContent = block.scene.name;
+        const name = emptyHeadings.get(block.scene.id) ?? block.scene.name;
+        if (el.textContent !== name) el.textContent = name;
         sceneLetter++;
         beatNumber = 0;
         sceneTag = String.fromCharCode(65 + (sceneLetter % 26));
@@ -418,13 +423,14 @@ export function createSurface(ports: SurfacePorts): Surface {
     else root.focus({ preventScroll: true });
   }
 
-  function apply(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
+  function apply(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null, focus = true): FlowOutcome {
     const outcome = ports.commit(name, operation, before ?? selection());
     if (!outcome) return null;
     if ("refused" in outcome) { ports.notice(outcome.refused); return outcome; }
     if ("move" in outcome) { place(caretAt(outcome.move), true); return outcome; }
     paint();
-    place(outcome.selection, true);
+    if (focus) place(outcome.selection, true);
+    else ports.heldSelection.rememberFlow(epoch, outcome.selection);
     if (outcome.notice) ports.notice(outcome.notice);
     ports.changed();
     noteSelection();
@@ -471,7 +477,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     return found;
   }
 
-  function syncBeatEl(el: HTMLElement): void {
+  function syncBeatEl(el: HTMLElement, typed = false): void {
     const rowId = el.getAttribute("data-id");
     if (!rowId) return;
     const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
@@ -487,11 +493,13 @@ export function createSurface(ports: SurfacePorts): Surface {
       const next = doc.rows[index + 1];
       if (nextEl && next) decorate(nextEl, next, nextEl.getAttribute("data-num") || "");
     }
-    updatePendingHeading(rowId, el);
+    updatePendingHeading(rowId, el, typed);
   }
 
-  function updatePendingHeading(rowId: string, el: HTMLElement): void {
-    const isPending = isPendingHeading(ports.doc(), rowId, ports.flow);
+  function updatePendingHeading(rowId: string, el: HTMLElement, typed = false): void {
+    const eligible = isPendingHeading(ports.doc(), rowId, ports.flow);
+    if (typed && eligible) headingCandidates.add(rowId);
+    const isPending = eligible && headingCandidates.has(rowId);
     el.classList.toggle("is-pending-heading", isPending);
     if (isPending) pendingHeading = rowId;
     else if (pendingHeading === rowId) pendingHeading = null;
@@ -522,6 +530,14 @@ export function createSurface(ports: SurfacePorts): Surface {
     pending = { pos: beatPos(row.id, made.caret), marks: withMark(typingMarks(made.cell, made.caret), made.mark, false) };
   }
 
+  function typedInModel(text: string, at: number): void {
+    const range = selection();
+    if (range?.head.kind !== "beat") return;
+    const beat = beatEl(range.head.rowId);
+    if (beat) updatePendingHeading(range.head.rowId, beat, at < 2);
+    if (/[*~]$/.test(text)) maybeInlineMarkdown();
+  }
+
   function onInput(event: Event): void {
     if (painting) return;
     if (composing) {
@@ -538,16 +554,18 @@ export function createSurface(ports: SurfacePorts): Surface {
     const heading = el?.closest<HTMLElement>(".wr-heading") ?? null;
     if (beat) {
       ports.beatInput?.(input, beat);
-      syncBeatEl(beat);
+      const offset = selection()?.head.offset ?? 2;
+      syncBeatEl(beat, input.inputType === "insertText" && offset - (input.data?.length ?? 0) < 2);
       if (input.inputType === "insertText" && input.data && /[*~]$/.test(input.data)) maybeInlineMarkdown();
     } else if (heading) {
       const id = heading.getAttribute("data-scene") as string;
       const name = (heading.textContent || "").replace(ZWSP_ALL, "");
       const pos = selection()?.head ?? headingPos(id, name.length);
-      if (name) {
+      if (name.trim()) {
+        emptyHeadings.delete(id);
         apply("rename-scene", doc => renameHeading(doc, id, name, pos.offset), null);
       } else {
-        apply("remove-scene", doc => replaceRange(doc, { anchor: headingPos(id, 0), head: headingPos(id, 0) }, [], ports.flow), null);
+        emptyHeadings.set(id, name);
       }
     }
     if (repaired) paint();
@@ -624,6 +642,8 @@ export function createSurface(ports: SurfacePorts): Surface {
         ? lineBreakAt(doc, target, ports.flow)
         : isCollapsed(target) && target.head.kind === "heading"
           ? enterInHeading(doc, target.head, ports.flow)
+          : isCollapsed(target) && target.head.kind === "beat" && pendingHeading === target.head.rowId
+            ? finalizeHeading(doc, target.head.rowId, target.head.offset, null, ports.flow)
           : enterAt(doc, target, ports.flow), range);
       return;
     }
@@ -636,6 +656,7 @@ export function createSurface(ports: SurfacePorts): Surface {
         const marks = pending.marks;
         apply("type", doc => typeWithMarks(doc, range.head, input.data ?? "", marks, ports.flow), range);
         pending = null;
+        typedInModel(input.data, range.head.offset);
         return;
       }
       pending = null;
@@ -699,15 +720,6 @@ export function createSurface(ports: SurfacePorts): Surface {
     }
     const isHeadingOnly = resolved.anchor.kind === "heading" && resolved.head.kind === "heading" && resolved.anchor.sceneId === resolved.head.sceneId;
     if (isHeadingOnly) {
-      const scene = resolved.anchor.sceneId;
-      const whole = comparePos(ports.doc(), resolved.anchor, resolved.head) !== 0
-        && Math.min(resolved.anchor.offset, resolved.head.offset) === 0
-        && Math.max(resolved.anchor.offset, resolved.head.offset) >= (headingEl(scene)?.textContent || "").length;
-      if (whole) {
-        event.preventDefault();
-        ports.breakCoalescing();
-        apply("remove-scene", doc => replaceRange(doc, resolved, [], ports.flow), range);
-      }
       return;
     }
     if (isCollapsed(resolved)) {
@@ -907,6 +919,11 @@ export function createSurface(ports: SurfacePorts): Surface {
     const range = selection();
     const text = data.getData("text/plain");
     if (!range) return;
+    const { from } = orderedRange(ports.doc(), range);
+    if (from.kind === "beat" && from.offset < 2) {
+      headingCandidates.delete(from.rowId);
+      if (pendingHeading === from.rowId) pendingHeading = null;
+    }
     const paragraphs = text.replace(/\r\n?/g, "\n").split(/\n+/);
     ports.breakCoalescing();
     apply("paste", doc => {
@@ -919,6 +936,11 @@ export function createSurface(ports: SurfacePorts): Surface {
     const range = selection();
     if (range) ports.heldSelection.rememberFlow(epoch, range);
     const head = range?.head;
+    if (head?.kind === "beat" && headingCandidates.has(head.rowId) && isPendingHeading(ports.doc(), head.rowId, ports.flow)) {
+      const row = ports.doc().rows.find(item => item.id === head.rowId);
+      const lineEnd = row ? projection(cellOf(row)).indexOf("\n") : -1;
+      if (lineEnd === -1 || head.offset <= lineEnd) pendingHeading = head.rowId;
+    }
     const currentBeat = head && head.kind === "beat" ? head.rowId : null;
     if (range && document.activeElement === root && !composing) transitionBeat(currentBeat);
     if (pending && (!range || !isCollapsed(range) || comparePos(ports.doc(), pending.pos, range.head) !== 0)) pending = null;
@@ -948,27 +970,57 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function onHostBlur(event: Event): void {
-    if (!(event as FocusEvent).relatedTarget || composing) return;
+    const next = (event as FocusEvent).relatedTarget;
+    if (!next || next === document.body || composing) return;
     transitionBeat(null);
+    leavePendingHeading(true);
+    leaveEmptyHeadings(true);
     ports.beatSelection?.(null);
   }
 
-  function leavePendingHeading(): void {
-    if (!pendingHeading || mouseDown || composing) return;
+  function leaveEmptyHeadings(force = false): void {
+    if (composing || mouseDown) return;
     const range = selection();
-    if (!range) return;
-    const at = range.head;
-    if (at.kind === "beat" && at.rowId === pendingHeading) return;
+    if (!force && !range) return;
+    for (const [id] of emptyHeadings) {
+      if (!force && range?.head.kind === "heading" && range.head.sceneId === id) continue;
+      const scene = flowOf(ports.doc()).find(block => block.kind === "heading" && block.scene.id === id);
+      emptyHeadings.delete(id);
+      if (!scene || scene.kind !== "heading") continue;
+      const before = caretAt(headingPos(id, 0));
+      apply("remove-empty-heading", doc => {
+        const result = replaceRange(doc, { anchor: headingPos(id, 0), head: headingPos(id, scene.scene.name.length) }, [], ports.flow);
+        if (!result || !("selection" in result)) return result;
+        const keep = range && [range.anchor, range.head].every(pos => pos.kind !== "heading" || pos.sceneId !== id);
+        return keep ? { ...result, selection: range } : result;
+      }, before, document.activeElement === root);
+    }
+  }
+
+  function leavePendingHeading(force = false): void {
+    if (!pendingHeading || mouseDown || composing) return;
+    const range = selection() ?? heldRange();
+    if (!force) {
+      if (!range || document.activeElement !== root) return;
+      const block = flowOf(ports.doc()).find(item => item.kind === "paragraph" && item.beats.some(row => row.id === pendingHeading));
+      const at = range.head;
+      if (block?.kind === "paragraph" && at.kind === "beat" && block.beats.some(row => row.id === at.rowId)) {
+        const first = block.beats.find(row => row.id === pendingHeading);
+        const lineEnd = first ? projection(cellOf(first)).indexOf("\n") : -1;
+        if (lineEnd === -1 || (at.rowId === pendingHeading && at.offset <= lineEnd)) return;
+      }
+    }
     const row = pendingHeading;
     pendingHeading = null;
     ports.breakCoalescing();
-    apply("make-heading", doc => finalizeHeading(doc, row, null, range, ports.flow), null);
+    apply("make-heading", doc => finalizeHeading(doc, row, null, range, ports.flow), range, document.activeElement === root);
   }
 
   function onSelectionChange(): void {
     if (painting) return;
     noteSelection();
     leavePendingHeading();
+    if (document.activeElement === root) leaveEmptyHeadings();
   }
 
   function onCompositionStart(): void { composing = true; }
@@ -992,10 +1044,11 @@ export function createSurface(ports: SurfacePorts): Surface {
       }));
       repairOrphans();
       for (const el of targets) {
-        if (el.classList.contains("wr-beat") && root.contains(el)) syncBeatEl(el);
+        if (el.classList.contains("wr-beat") && root.contains(el)) syncBeatEl(el, true);
       }
       for (const { id, name } of headings) {
-        if (!name) continue;
+        if (!name.trim()) { emptyHeadings.set(id, name); continue; }
+        emptyHeadings.delete(id);
         const offset = at?.kind === "heading" && at.sceneId === id ? at.offset : name.length;
         apply("rename-scene", doc => renameHeading(doc, id, name, offset), null);
       }
@@ -1011,7 +1064,9 @@ export function createSurface(ports: SurfacePorts): Surface {
     syncComposition();
     for (const data of queuedPastes.splice(0)) pasteData(data);
     transitionBeat(null);
-    return at;
+    leavePendingHeading(true);
+    leaveEmptyHeadings(true);
+    return at && rangeExists(at) ? at : heldRange();
   }
 
   function onMouseDown(event: Event): void {
@@ -1038,6 +1093,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (clicks === 3) trimTripleClick();
     clicks = 0;
     leavePendingHeading();
+    if (document.activeElement === root) leaveEmptyHeadings();
   }
 
   function toOwnBeat(range: FlowRange): string | null {
@@ -1102,6 +1158,14 @@ export function createSurface(ports: SurfacePorts): Surface {
     focusBack,
     selection: () => selection() ?? heldRange(),
     place,
+    restoreAfterReplay: range => {
+      pendingHeading = null;
+      if (emptyHeadings.size) {
+        emptyHeadings.clear();
+        paint();
+      }
+      place(range, true);
+    },
     format,
     pendingMarks: () => pending ? pending.marks : null,
     apply,

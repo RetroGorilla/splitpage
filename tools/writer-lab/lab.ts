@@ -161,7 +161,7 @@ function replayUndo(dir: "undo" | "redo"): void {
   const steps = (result as { steps?: readonly Step[] }).steps ?? [];
   const target = recorded ? (dir === "undo" ? recorded.before ?? recorded.after : recorded.after) : null;
   if (target) {
-    surface.place(target, true);
+    surface.restoreAfterReplay(target);
   } else {
     const step = steps.find(item => item.op === "rowField" && (item as { key?: string }).key === "audioText") as { rowId: string } | undefined;
     if (step) {
