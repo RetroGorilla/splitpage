@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phases 0a to 7 are done (sections 9 to 14). Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phase 8 is running. Its merge to `main` waits for Adam to use a real script and say okay. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phases 0a to 7 are done (sections 9 to 14). Phase 8 is implemented for review against `feat/writer-flow` (section 15): the flow writer is the only writer and the switch is gone. Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller. The writer's merge to `main` waits for Adam to use a real script and say okay. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -438,3 +438,17 @@ Four parallel lanes merged into `feat/writer-flow`: #1230 (phase 5), #1229 (phas
 **Left for phase 8:** #1232 (the Visual box repaints every beat per keystroke, to measure), #1234 (Find starting from a stale position after a pending heading), removing Alt+Enter, and rechecking long undo and long HTML export.
 
 **Still unproven:** a real IME, the real clipboard, right-click spellcheck, physical window and menu interactions, and a real script in Adam's hands.
+
+## 15. Phase 8 results
+
+The review candidate makes flow the only writer, shares the header/save status in both modes, removes the switch and lab, combines visuals through the shared join command, and resolves pending/empty headings before Find reads its start. Present computes paragraph membership before skipped/empty filtering. Alt+Enter is gone. Saved formats and goldens are unchanged.
+
+**Measured at `7ccb6fd0`:** final verification passed, including 5,960 of 5,960 unit cases, 30 desktop script files and 23 tool script files. The final full headless browser run passed 11,288 of 11,289 across 277 suites; only the known `219-sound-cues` failed. 174 existing suite files changed, none were deleted, and one measurement suite was added. The PR lists every suite by reason.
+
+**One performance comparison, three rounds, `origin/main` to `7ccb6fd0`:** long undo p50 29.1 to 30.8 ms (+5.8%), long HTML export 2.5 to 2.1 ms (-16.0%). The undo gap remains unexplained; this run does not establish its cause. Short HTML export rose from 0.3 to 0.9 ms (+200.0%). All 20 cases, medians and changes are in the PR. The tool types and undoes in split-view cells: it does not measure old-versus-new writer latency.
+
+**#1232:** Visual typing now updates only the affected beat's decorations. The failing regression counted six updates on an unrelated beat; the fixed count is zero. A separate final 900-beat writer probe recorded 24 ordinary keys and 24 Visual keys: key-to-next-frame medians 18.2 and 17.4 ms respectively. This is one browser sample, not a controlled old/new writer comparison or an Electron measurement. Earlier diagnostic timings with a reused timestamp are excluded.
+
+**Carried over on the coordinator's ruling:** Alt+Up/Down moves the caret's beat through the existing command as one undo step, with scene/paragraph flags following that command. Refused flow edits keep the typing undo group. Ctrl+Shift+Enter still splits a beat; Escape dismisses tag completion while keeping the writer open. Adam has not tried beat movement in flowing text.
+
+**Still unproven:** local full Electron smoke was intentionally not run; desktop CI on this head, real IME/clipboard/spellcheck/window/menu interactions, wording, and Adam's real-script acceptance remain outstanding. This candidate targets `feat/writer-flow` only. Nothing reaches `main` before that acceptance.
