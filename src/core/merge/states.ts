@@ -88,6 +88,9 @@ const STRATEGY_TABLE: Record<StrategyId, FieldStrategy> = {
   "sections": function (f, run) {
     if (run.sections) run.out[f.key] = run.sections;
   },
+  "true-if-either": function (f, run) {
+    if (run.mine[f.key] === true || run.theirs[f.key] === true) run.out[f.key] = true;
+  },
   "constant": function (f, run) { run.out[f.key] = SCHEMA_VERSION; }
 };
 

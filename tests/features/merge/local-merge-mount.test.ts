@@ -10,6 +10,9 @@ import { jsonCopy, migratedThenSet } from "../../core/migrate-ports.ts";
 import { textMergeContext } from "../../../src/core/merge/text-field.ts";
 import type { TagSide } from "../../../src/core/merge/text-field.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
+import { mergeStates } from "../../../src/core/merge-states.ts";
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -18,7 +21,7 @@ realm.document = win.document;
 
 const DOC_ID = "d" + "1".repeat(32);
 
-interface Row { id: string; audioText: string; visualText: string; status: string; imageRef?: unknown }
+interface Row { id: string; audioText: string; visualText: string; status: string; imageRef?: unknown; paragraphStart?: true; lengthSeconds?: number }
 interface Doc { schema: number; title: string; docId: string; rows: Row[]; sections?: DocumentScene[]; productionTags: unknown[]; people: unknown[]; brollShots: unknown[]; comments: unknown[] }
 
 function row(id: string, audioText: string, extra: Partial<Row> = {}): Row {
@@ -111,6 +114,64 @@ function file(name = "disk.splitpage", lastModified = 1234): { name: string; las
 function heads(): string[] {
   return Array.from(win.document.querySelectorAll("#merge-review-list .merge-group-head"), (h) => (h.firstChild as Text).textContent ?? "");
 }
+
+for (const field of ["paragraphStart", "lengthSeconds"] as const) {
+  for (const audioText of ["Text", ""]) {
+    for (const editedSide of ["mine", "theirs"] as const) {
+      test(`merge review keeps ${editedSide}'s ${field}-only edited ${audioText ? "text" : "blank"} beat against deletion`, async () => {
+        const base = doc([row("a", audioText)]);
+        const changed = doc([row("a", audioText, field === "paragraphStart" ? { paragraphStart: true } : { lengthSeconds: 12 })]);
+        const deleted = doc([]);
+        const mine = editedSide === "mine" ? changed : deleted, theirs = editedSide === "mine" ? deleted : changed;
+        const { ports } = setup({ mine, mergeBase: base, parsed: () => Promise.resolve({ state: copy(theirs) }) });
+        const merge = startLocalMerge(ports);
+        try {
+          await merge.offer(file(), { kind: "file", diskBase: base } as Home);
+          merge.open();
+          assert.deepEqual(heads(), ["Beat A.1"]);
+          const entries = Array.from(win.document.querySelectorAll(".merge-entry"));
+          assert.equal(entries.length, 1);
+          assert.equal(entries[0]?.getAttribute("data-outcome"), editedSide);
+          assert.equal(entries[0]?.querySelector(".merge-entry-outcome")?.textContent,
+            editedSide === "mine" ? "Your version is kept" : "The file's version is taken");
+          assert.match(el("merge-review-detail").textContent ?? "", /^One field differs/);
+          assert.match(el("merge-review-list").textContent ?? "", editedSide === "mine" ? /your version stays/ : /it comes back/);
+          const migration = fakeMigration();
+          const merged = mergeStates(base, mine, theirs, { migrate: migration.ports, ids: migration.ids, decode,
+            clock: { nowIso: () => "2030-01-01T00:00:00.000Z" }, editor: () => "Bob" });
+          assert.deepEqual(merged.merged.rows, migrateRows(copy(changed), migration.ports).rows);
+        } finally {
+          merge.dispose();
+        }
+      });
+    }
+  }
+}
+
+test("merge review gives every text and media entry the whole beat's retained or deleted fate", async () => {
+  const imageRef = { sha256: "a".repeat(64), width: 10, height: 10, mime: "image/png" };
+  const withMedia = { ...row("a", "Audio", { visualText: "Visual", imageRef }),
+    moreImages: [{ imageRef, name: "Extra" }], imageLinks: [{ href: "https://example.com/video", name: "Clip" }] };
+  const base = doc([withMedia]);
+  for (const retained of [false, true]) {
+    const changed = copy(base);
+    if (retained) Object.assign(changed.rows[0] as object, { paragraphStart: true });
+    for (const presentSide of ["mine", "theirs"] as const) {
+      const mine = presentSide === "mine" ? changed : doc([]), theirs = presentSide === "mine" ? doc([]) : changed;
+      const { ports } = setup({ mine, parsed: () => Promise.resolve({ state: copy(theirs) }) });
+      const merge = startLocalMerge(ports);
+      try {
+        await merge.offer(file(), { kind: "file", diskBase: base } as Home);
+        merge.open();
+        const outcomes = Array.from(win.document.querySelectorAll(".merge-entry"), entry => entry.getAttribute("data-outcome"));
+        const expected = retained ? presentSide : presentSide === "mine" ? "theirs" : "mine";
+        assert.deepEqual(outcomes, Array(5).fill(expected));
+      } finally {
+        merge.dispose();
+      }
+    }
+  }
+});
 
 test("merge review numbers a locally inserted beat from its actual scene", async () => {
   const base = doc([row("a", "A"), row("c", "C")]);

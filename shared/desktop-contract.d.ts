@@ -194,6 +194,7 @@ export interface DesktopWireTestShellArgs {
   windowId?: string | null;
   tabId?: string;
   index?: number;
+  label?: string;
 }
 
 export type DesktopWireTestShellResult = DesktopWireShellState | string | boolean | null | string[] |

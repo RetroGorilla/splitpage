@@ -30,7 +30,7 @@ test("sections: add, rename and remove are confined single transactions and keep
   assert.equal(sceneForBeat(snapshot(h), "c")?.name, "The middle");
   assert.equal(runConfined(h.session, removeSceneCommand("middle")).kind, "applied");
   assert.equal(sceneForBeat(snapshot(h), "c")?.id, "s1");
-  assert.deepEqual(snapshot(h).rows, rows);
+  assert.deepEqual(snapshot(h).rows, rows.map(row => row.id === "c" ? { ...row, paragraphStart: true } : row));
   assert.equal(h.log.filter(item => item === "undo.record").length, 3);
   assert.equal(runConfined(h.session, removeSceneCommand("s1")).kind, "applied");
   assert.equal(sceneForBeat(snapshot(h), "b"), undefined);
@@ -73,13 +73,13 @@ test("sections: a group move carries every scene and leaves the unsectioned pref
   assert.equal(h.log.filter(item => item === "undo.record").length, 1);
 });
 
-test("sections: undo restores a removed header and its name in one step; redo removes only the header", () => {
+test("sections: undo restores a removed header and its name in one entry; redo removes it and records its break", () => {
   const h = opened();
   const before = snapshot(h);
   runConfined(h.session, removeSceneCommand("s1"));
   const after = snapshot(h);
   const steps = diffStates(before, after);
-  assert.equal(steps.length, 1);
+  assert.equal(steps.length, 2);
   const history = createUndoHistory(() => []);
   history.record(steps, 0);
   assert.equal(history.undo(after).ok, true);
@@ -87,7 +87,7 @@ test("sections: undo restores a removed header and its name in one step; redo re
   assert.deepEqual(after.rows, before.rows);
   assert.equal(history.redo(after).ok, true);
   assert.deepEqual(after.sections, snapshot(h).sections);
-  assert.deepEqual(after.rows, before.rows);
+  assert.deepEqual(after.rows, before.rows.map(row => row.id === "b" ? { ...row, paragraphStart: true } : row));
 });
 
 test("sections: bulk deletion advances boundaries and a join cannot silently remove a header", () => {

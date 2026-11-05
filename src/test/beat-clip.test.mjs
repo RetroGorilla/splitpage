@@ -21,6 +21,30 @@ import { currentDocument, runCommand } from "../bootstrap/wiring/session-owner.t
 
 initTags();
 
+test("beat clipboard preserves paragraph flags and rejects non-true values through migration", () => {
+  const doc = source();
+  doc.rows[1].paragraphStart = true;
+  const built = buildBeatPayload(doc, ["r1", "r2"]);
+  assert.equal(built.payload.rows[0].paragraphStart, undefined);
+  assert.equal(built.payload.rows[1].paragraphStart, true);
+  const clip = parseBeatPayload(built.json);
+  assert.equal(clip.rows[1].paragraphStart, true);
+  built.payload.rows[0].paragraphStart = "true";
+  assert.equal(Object.hasOwn(parseBeatPayload(JSON.stringify(built.payload)).rows[0], "paragraphStart"), false);
+  assert.equal(doc.rows[1].paragraphStart, true);
+});
+
+test("beat clipboard materializes internal implicit or omitted starts without changing source rows", () => {
+  const doc = source();
+  doc.sections = [{ id: "scene", name: "Second scene", firstSceneId: "r2" }];
+  const before = JSON.stringify(doc);
+  const adjacent = parseBeatPayload(buildBeatPayload(doc, ["r1", "r2", "r3"]).json);
+  assert.deepEqual(adjacent.rows.map(row => row.paragraphStart), [undefined, true, undefined]);
+  const separated = parseBeatPayload(buildBeatPayload(doc, ["r1", "r3"]).json);
+  assert.deepEqual(separated.rows.map(row => row.paragraphStart), [undefined, true]);
+  assert.equal(JSON.stringify(doc), before);
+});
+
 function removeBeats(rowIds) {
   const outcome = runCommand(removeBeatsCommand(rowIds));
   assert.notEqual(outcome.kind, "failed", outcome.error && outcome.error.stack);

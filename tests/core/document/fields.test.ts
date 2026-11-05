@@ -23,7 +23,7 @@ const UNDO_GOLDEN = JSON.parse(readFileSync(new URL("../../../src/test/fixtures/
 
 const KEYS = [
   "title", "titleOrigin", "titleVersion", "docId", "rows", "comments", "people", "productionTags", "brollShots",
-  "wordsPerMinute", "rev", "lastEditedBy", "lastEditedAt", "personColors", "targetSeconds", "sections", "schema"
+  "wordsPerMinute", "rev", "lastEditedBy", "lastEditedAt", "personColors", "targetSeconds", "sections", "paragraphsDecided", "schema"
 ];
 
 test("the document is schema 2, with its fields in their saved order", () => {
@@ -53,7 +53,7 @@ test("every field names a merge strategy from the closed list", () => {
     docId: "doc-id", rows: "rows", comments: "comments",
     people: "list-union-with-base", productionTags: "list-union-with-base", brollShots: "list-union-with-base",
     wordsPerMinute: "changed-side-wins", rev: "max-plus-one", lastEditedBy: "theirs-wins", lastEditedAt: "theirs-wins",
-    personColors: "person-colors", targetSeconds: "target-length", sections: "sections", schema: "constant"
+    personColors: "person-colors", targetSeconds: "target-length", sections: "sections", paragraphsDecided: "true-if-either", schema: "constant"
   });
   assert.ok(STATE_FIELDS.every((f) => !("mergeList" in f)), "core holds no merge callbacks");
 });
@@ -67,9 +67,9 @@ test("defaults are fresh values, and only the fields a document always has carry
   assert.notEqual(rows?.def?.(), rows?.def?.());
 });
 
-test("normalize: seven fields carry one, and undefined from it means the field goes", () => {
+test("normalize: eight fields carry one, and undefined from it means the field goes", () => {
   assert.deepEqual(STATE_FIELDS.filter((f) => f.normalize).map((f) => f.key),
-    ["titleOrigin", "titleVersion", "wordsPerMinute", "lastEditedBy", "personColors", "targetSeconds", "sections"]);
+    ["titleOrigin", "titleVersion", "wordsPerMinute", "lastEditedBy", "personColors", "targetSeconds", "sections", "paragraphsDecided"]);
   const norm = (key: string, v: unknown) => (STATE_FIELDS.find((f) => f.key === key)?.normalize as (v: unknown) => unknown)(v);
   assert.equal(norm("wordsPerMinute", "212.5"), 213);
   assert.equal(norm("wordsPerMinute", undefined), DEFAULT_WPM);
@@ -88,6 +88,8 @@ test("normalize: seven fields carry one, and undefined from it means the field g
   assert.equal(norm("targetSeconds", 0), undefined);
   assert.equal(norm("targetSeconds", "60"), undefined);
   assert.equal(norm("sections", []), undefined);
+  assert.equal(norm("paragraphsDecided", true), true);
+  assert.equal(norm("paragraphsDecided", "true"), undefined);
   assert.deepEqual(norm("sections", [{ id: "s1", name: "Opening", firstSceneId: "r1" }]), [{ id: "s1", name: "Opening", firstSceneId: "r1" }]);
 });
 

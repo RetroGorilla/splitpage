@@ -1,6 +1,6 @@
 import type { DesktopMainTab, DesktopMainWindow, DesktopLookupMap } from "./main-types.d.ts";
 
-import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, NativeTheme, Shell } from "electron";
+import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, Menu, NativeTheme, Shell } from "electron";
 import type { chooseDuplicateLoser } from "../shared/doc-id-policy.ts";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
@@ -119,6 +119,7 @@ export interface DesktopTabStripIpcDependencies extends Pick<DesktopMainCommon, 
 export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, "testMode" | "tabOf" | "tabs" | "windowsById" | "requestCloseTab" | "draftStore" | "draftsPreviousSession" | "shellStateForWindow" | "createTab" | "activateTab" | "reorderTab" | "moveTabToWindow"> {
   app: Pick<App, "quit">;
   BrowserWindow: Pick<typeof BrowserWindow, "fromWebContents">;
+  Menu: Pick<typeof Menu, "getApplicationMenu">;
   chooseDuplicateLoser: typeof chooseDuplicateLoser;
   createTabWindow: (options: object) => DesktopMainWindow;
   liveWindows: () => DesktopMainWindow[];
