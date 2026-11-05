@@ -1,7 +1,7 @@
 open
 viewport 1280 720
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Comments beside writer',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha <span class="cmt-anchor" data-cmt="c-one">marked words</span> tail',visualText:''},{id:'b',audioText:'Bravo words.',visualText:''}],comments:[{id:'c-one',rowId:'a',field:'audioText',author:'Tester',body:'Check this',quotedText:'marked words',createdAt:'2026-11-04T12:00:00.000Z'}]})],'comments.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Comments beside writer',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha <span class="cmt-anchor" data-cmt="c-one">marked words</span> tail',visualText:''},{id:'b',audioText:'Bravo words.',visualText:''}],comments:[{id:'c-one',rowId:'a',field:'audioText',author:'Tester',body:'Check this',quotedText:'marked words',createdAt:'2026-11-04T12:00:00.000Z'}]})],'comments.splitpage'))
 wait F.state().title === 'Comments beside writer'
 click #btn-comments
 wait !document.getElementById('comments-panel').hidden

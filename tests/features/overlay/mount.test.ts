@@ -14,7 +14,7 @@ function harness() {
   doc.body.innerHTML = '<div class="toolbar" id="toolbar"><button class="btn"><span id="toolbar-button"></span></button><input id="toolbar-input"></div>' +
     '<div class="row-menu-wrap"><button id="menu-item"></button></div><input id="outside">' +
     '<div id="production-panel" hidden></div><div id="comment-modal" hidden></div><div id="comments-panel" hidden></div>' +
-    '<div id="writer"><div id="writer-doc"><p class="wr-para" id="first" tabindex="0"></p><p class="wr-para" id="second" tabindex="0"></p></div><button id="wr-close"></button>' +
+    '<div id="writer"><div id="writer-doc" class="is-flow" tabindex="0"><p class="wr-beat" id="first" tabindex="0"></p><p class="wr-beat" id="second" tabindex="0"></p></div><button id="wr-close"></button>' +
     '<div class="writer-bar" id="writer-bar"><button class="wr-fmt"><span id="writer-button"></span></button><input id="writer-input"></div></div>' +
     '<div class="modal-backdrop" id="modal"><input id="modal-input"></div><div class="toast"><button id="toast-button"></button></div>';
   const el = (id: string): HTMLElement => {
@@ -90,7 +90,7 @@ test("Writer focus yields to the screen overlay in front", () => {
       h.view.state[blocker] = false;
     }
     h.el("outside").focus();
-    assert.equal(h.doc.activeElement, h.el("first"));
+    assert.equal(h.doc.activeElement, h.el("writer-doc"));
   } finally { owner.dispose(); h.win.close(); }
 });
 
@@ -187,21 +187,21 @@ test("overlay: Writer focus trap preserves paint, closed Writer, modal, toast an
     h.fire(h.doc, "focusin");
     assert.deepEqual(h.calls, []);
     h.el("outside").focus();
-    assert.deepEqual(h.calls, ["focus:first"]);
-    assert.equal(h.doc.activeElement, h.el("first"));
+    assert.deepEqual(h.calls, ["focus:writer-doc"]);
+    assert.equal(h.doc.activeElement, h.el("writer-doc"));
     h.calls.length = 0; h.el("modal").hidden = true;
     h.fire(h.el("modal-input"), "focusin");
-    assert.deepEqual(h.calls, ["focus:first"]);
+    assert.deepEqual(h.calls, ["focus:writer-doc"]);
     h.calls.length = 0; h.el("first").remove();
     h.fire(h.el("outside"), "focusin");
-    assert.deepEqual(h.calls, ["focus:second"]);
-    h.calls.length = 0; h.el("second").remove();
+    assert.deepEqual(h.calls, ["focus:writer-doc"]);
+    h.calls.length = 0; h.el("writer-doc").classList.remove("is-flow");
     h.fire(h.el("outside"), "focusin");
     assert.deepEqual(h.calls, ["focus:wr-close"]);
     h.calls.length = 0; h.el("wr-close").remove();
     h.fire(h.el("outside"), "focusin");
     assert.deepEqual(h.calls, []);
-    owner.dispose(); h.el("writer-doc").innerHTML = '<p class="wr-para" tabindex="0"></p>';
+    owner.dispose(); h.el("writer-doc").classList.add("is-flow");
     h.el("outside").focus();
     assert.deepEqual(h.calls, []);
     assert.equal(h.doc.activeElement, h.el("outside"));
@@ -244,7 +244,7 @@ test("overlay: every row acts once after remount and retained handlers stop at d
     h.fire(h.win, "keydown", "Escape");
     h.fire(h.el("writer-button"), "mousedown");
     h.fire(h.el("outside"), "focusin");
-    assert.deepEqual(h.calls, ["close-menus", "close-menus", "comments", "writer", "close-menus", "focus:first"]);
+    assert.deepEqual(h.calls, ["close-menus", "close-menus", "comments", "writer", "close-menus", "focus:writer-doc"]);
     owner.dispose(); h.calls.length = 0;
     for (const r of h.records) {
       for (const entry of r.held) {

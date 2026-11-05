@@ -12,12 +12,12 @@ const { caretTextOffset, placeCaretAtTextOffset } = await import("../../../src/f
 function page() {
   doc.body.innerHTML =
     '<div id="rows"><div class="cell-editable" contenteditable="true" data-id="r1" data-field="audioText">Hello​ there</div></div>' +
-    '<div id="writer-doc"><div class="cell-editable wr-para" contenteditable="true" data-id="r1" data-field="audioText">Para</div></div>' +
+    '<div id="writer-doc"><div class="cell-editable wr-beat" contenteditable="true" data-id="r1" data-field="audioText">Para</div></div>' +
     '<div id="composer"><div class="cell-editable" contenteditable="true">Draft</div></div>' +
     '<div id="tags"><span class="tag-anchor" contenteditable="false">Pentax</span></div>';
   return {
     cell: doc.querySelector("#rows .cell-editable") as HTMLElement,
-    para: doc.querySelector("#writer-doc .wr-para") as HTMLElement,
+    para: doc.querySelector("#writer-doc .wr-beat") as HTMLElement,
     draft: doc.querySelector("#composer .cell-editable") as HTMLElement
   };
 }

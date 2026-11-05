@@ -137,6 +137,7 @@
               <div class="menu-group-head" id="fm-g-export">Export</div>
               <button type="button" role="menuitem" class="mi" data-file-action="export" id="menu-export" data-keys="mod+e" title="PDF, Word, Markdown, a spreadsheet, a SplitShare, or part of the script"><svg class="mi-icon" aria-hidden="true"><use href="#i-export"/></svg><span class="mi-text"><span class="mi-label">Export…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="export-again" id="menu-export-again" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-repeat"/></svg><span class="mi-text"><span class="mi-label">Export again</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="export-narration-docx" id="menu-export-narration"><svg class="mi-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="mi-text"><span class="mi-label">Export narration</span></span></button>
               <div class="menu-hidden-actions" hidden></div>
             </div>
 
@@ -529,39 +530,21 @@
 
 <div class="writer" id="writer" hidden>
   <div class="writer-top">
-    <span class="writer-kicker">Narration</span>
     <input type="text" class="writer-title" id="writer-title" aria-label="Script title" spellcheck="false">
-    <span id="writer-version" class="title-version" hidden></span>
     <span class="writer-stats">
       <span><b id="wr-scenes">0</b> beats</span>
       <span><b id="wr-words">0</b> words</span>
       <span>⏱ <b id="wr-runtime">0:00</b></span>
     </span>
-    <span class="file-chip" id="wr-file-chip" hidden>
-      <span class="file-chip-icon">📄</span>
-      <span id="wr-file-chip-name"></span>
-      <span class="file-chip-state" id="wr-file-chip-state"></span>
-    </span>
-    <span class="save-status" id="wr-save-status" role="status" aria-live="polite" hidden></span>
-    <button class="btn btn-primary" id="wr-save" type="button">Save</button>
     <button class="btn" id="wr-close" type="button" title="Close the writer (Esc)" aria-keyshortcuts="Escape">Close</button>
   </div>
   <div class="writer-bar">
-    <button type="button" class="wr-fmt" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
-    <button type="button" class="wr-fmt" data-cmd="italic" title="Italic (Ctrl+I)">I</button>
-    <button type="button" class="wr-fmt" data-cmd="underline" title="Underline (Ctrl+U)">U</button>
-    <button type="button" class="wr-fmt" data-cmd="highlight" title="Highlight">▮</button>
-    <button type="button" class="wr-fmt" data-cmd="direction" title="Stage direction — shown in the teleprompter, not read aloud. Or type ((…))" aria-label="Stage direction">( )</button>
-    <button type="button" class="wr-fmt" data-cmd="comment" title="Comment on the selected words" hidden>Comment</button>
     <div class="div-sep"></div>
     <div class="grp">
       <label for="wr-size">Size</label>
       <input id="wr-size" type="range" min="16" max="34" value="19" aria-label="Text size">
     </div>
     <div class="div-sep"></div>
-    <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the beat's visual, just its number, or nothing at all">Visuals</button>
-    <button type="button" id="wr-export">Export narration</button>
-    <span class="writer-hint">Enter starts a new beat · Shift+Enter is a line break</span>
   </div>
   <div class="writer-scroll" id="writer-scroll">
     <div class="writer-doc" id="writer-doc"></div>

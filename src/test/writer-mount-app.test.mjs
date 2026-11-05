@@ -19,7 +19,7 @@ const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 after(closeApp);
 
 function type(cell, character) {
-  cell.focus();
+  (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
   const node = cell.firstChild;
   node.data += character;
   const range = document.createRange();
@@ -32,7 +32,7 @@ function type(cell, character) {
 }
 
 function key(cell, name, modifiers = {}) {
-  cell.focus();
+  (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
   const event = new window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...modifiers });
   cell.dispatchEvent(event);
   return event;
@@ -77,16 +77,14 @@ test("stopping Writer disconnects main-editor stats and undo, and remount reconn
     assert.equal(appActions.view("write", "command-menu").enabled, true, JSON.stringify({ view: appActions.view("write", "command-menu"), dialogs: Array.from(document.querySelectorAll(".modal-backdrop:not([hidden])"), el => el.id) }));
     assert.equal(appActions.invoke("write", "button").kind, "ran");
     assert.equal(viewFlags().writerOpen(), true);
-    const paragraph = document.querySelector("#writer-doc .wr-para");
+    const paragraph = document.querySelector("#writer-doc .wr-beat");
     type(paragraph, "Y");
     assert.equal(currentDocument().rows[0].audioText, "HelloXY");
     key(paragraph, "Enter");
     assert.equal(currentDocument().rows.length, 2);
-    key(document.querySelectorAll("#writer-doc .wr-para")[1], "z", { ctrlKey: true });
+    key(document.querySelectorAll("#writer-doc .wr-beat")[1], "z", { ctrlKey: true });
     assert.equal(currentDocument().rows.length, 1);
     assert.equal(viewFlags().writerOpen(), true);
-    document.getElementById("wr-gutter-mode").click();
-    assert.equal(document.getElementById("writer").getAttribute("data-gutter"), "numbers");
     const size = document.getElementById("wr-size");
     size.value = "24";
     size.dispatchEvent(new window.Event("input", { bubbles: true }));
@@ -94,12 +92,11 @@ test("stopping Writer disconnects main-editor stats and undo, and remount reconn
     document.getElementById("wr-close").click();
     assert.equal(viewFlags().writerOpen(), false);
     appActions.invoke("write", "button");
-    key(document.querySelector("#writer-doc .wr-para"), "Escape");
+    key(document.querySelector("#writer-doc .wr-beat"), "Escape");
     assert.equal(viewFlags().writerOpen(), false);
     appActions.invoke("write", "button");
-    document.querySelector("#writer-doc .wr-gutter").click();
+    document.getElementById("wr-close").click();
     assert.equal(viewFlags().writerOpen(), false);
-    assert.equal(document.querySelector("#rows .row").classList.contains("just-merged"), true);
     window.__settingsTest.open();
     const settingSize = document.getElementById("settings-writer-size");
     settingSize.value = "26";

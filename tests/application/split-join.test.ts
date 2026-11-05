@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
-import { bothBeatsHaveVisual, cellHtml, joinBeatsCommand, splitBeatCommand, textCut } from "../../src/application/commands/split-join.ts";
+import { cellHtml, joinBeatsCommand, splitBeatCommand, textCut } from "../../src/application/commands/split-join.ts";
 import type { JoinPorts } from "../../src/application/commands/split-join.ts";
 import { syncCommentAnchors } from "../../src/core/text/anchors.ts";
 import { clampRange } from "../../src/core/text/edits.ts";
@@ -379,7 +379,7 @@ test("a join into a scene with no visual takes the later scene's visual text and
 
 test("a join takes a whole gallery of pictures: the first picture, its name and annotation, and the further ones", () => {
   const ref = (c: string) => ({ sha256: c.repeat(64), width: 10, height: 8, mime: "image/png" });
-  const marks = [{ kind: "arrow" }];
+  const marks = [{ kind: "pen", color: "#e5383b", width: 0.01, points: [0.1, 0.2, 0.7, 0.8] }];
   const h = opened(() => joinOf(beat("a", "One."), beat("b", "Two.", {
     imageRef: ref("a"), imageName: "first", imageAnnotation: { imageRef: ref("c"), marks: marks },
     moreImages: [{ imageRef: ref("b"), name: "second" }]
@@ -403,18 +403,9 @@ test("a join into a scene that has the visual keeps it, and does not declare the
   assert.deepEqual(fields, ["audioText", "updatedAt", "updatedBy"]);
 });
 
-test("a visual of only a line break or space is not a visual; a gallery slot alone is", () => {
-  const p = ports();
-  const none = opened(() => joinOf(beat("a", "One.", { visualText: "One" }), beat("b", "Two.", { visualText: " " })));
-  assert.equal(none.session.read(bothBeatsHaveVisual("a", p.plainText)), false);
-  const gallery = opened(() => joinOf(beat("a", "One.", { imageLinks: LINKS }), beat("b", "Two.", { visualText: "Two" })));
-  assert.equal(gallery.session.read(bothBeatsHaveVisual("a", p.plainText)), true);
-  assert.equal(gallery.session.read(bothBeatsHaveVisual("b", p.plainText)), false, "the last scene has no later one to join");
-  assert.equal(gallery.session.read(bothBeatsHaveVisual("gone", p.plainText)), false);
-  assert.equal(harness().session.read(bothBeatsHaveVisual("a", p.plainText)), false);
-});
 
-test("E3: two scenes with visuals are refused with no effect at all, whatever the visuals are made of", () => {
+
+test("E3: joining two visuals keeps their words and pictures in order", () => {
   const shapes: [string, Row, Row][] = [
     ["text and text", { visualText: "One" }, { visualText: "Two" }],
     ["gallery and text", { imageLinks: LINKS }, { visualText: "Two" }],
@@ -423,14 +414,13 @@ test("E3: two scenes with visuals are refused with no effect at all, whatever th
   ];
   shapes.forEach(function (s) {
     const h = opened(() => joinOf(beat("a", "One.", s[1]), beat("b", "Two.", s[2])));
-    const before = snapshot(h);
     const p = ports();
-    assert.deepEqual(runConfined(h.session, joinBeatsCommand("a", p)), { kind: "rejected", reason: "both beats have a visual" }, s[0]);
-    assert.equal(snapshot(h), before, s[0]);
-    assert.equal(p.asked(), 0, s[0]);
-    assert.deepEqual(h.log, [], s[0]);
-    assert.equal(h.session.generation(), 0, s[0]);
-    assert.equal(h.clock.armed(), 0, s[0]);
+    assert.equal(runConfined(h.session, joinBeatsCommand("a", p)).kind, "applied", s[0]);
+    assert.deepEqual(idsOf(h), ["a", "z"], s[0]);
+    assert.equal(rowOf(h, "a")?.visualText, s[0] === "text and text" ? "One<br>Two" : s[0] === "text and gallery" ? "One" : s[0] === "gallery and text" ? "Two" : "", s[0]);
+    assert.equal(rowOf(h, "a")?.audioText, "One. Two.", s[0]);
+    assert.deepEqual(rowOf(h, "a")?.imageLinks ?? [], s[0] === "text and text" ? [] : LINKS, s[0]);
+    assert.equal(h.session.generation(), 1, s[0]);
   });
 });
 
@@ -562,7 +552,7 @@ test("E9 (seeded): split and join leave every comment where reconciliation would
   }
   assert.ok(splits > 300, "splits: " + splits);
   assert.ok(joins > 200, "joins: " + joins);
-  assert.ok(refused > 20, "refusals: " + refused);
+  assert.equal(refused, 0, "visuals no longer refuse a join");
   assert.ok(moved > 50, "and a good share of them move a comment: " + moved);
 });
 

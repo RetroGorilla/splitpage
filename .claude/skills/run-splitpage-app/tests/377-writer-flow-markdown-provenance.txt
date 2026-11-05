@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; F.openFile(new File([JSON.stringify({schema:2,title:'Markdown provenance',paragraphsDecided:true,rows:[{id:'a',audioText:'Title',visualText:''},{id:'b',audioText:'Outside',visualText:'',paragraphStart:true},{id:'c',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'provenance.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; F.openFile(new File([JSON.stringify({schema:2,title:'Markdown provenance',paragraphsDecided:true,rows:[{id:'a',audioText:'Title',visualText:''},{id:'b',audioText:'Outside',visualText:'',paragraphStart:true},{id:'c',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'provenance.splitpage'))
 wait F.state().title === 'Markdown provenance'
 click #btn-write
 wait W.on()

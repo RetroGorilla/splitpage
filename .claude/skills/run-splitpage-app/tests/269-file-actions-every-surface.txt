@@ -128,11 +128,10 @@ sleep 200
 expect !__shown('cmdk')
 key ctrl KeyF
 sleep 200
-expect !__shown('findbar')
+expect __shown('findbar') && document.activeElement.id === 'find-input'
 jsclick #wr-close
 wait document.getElementById('writer').hidden
 wait __settled()
 
-# nothing here edited the document
-expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('save-status').textContent === 'Unsaved changes' && window.__splitpageFormats.state().paragraphsDecided === true
+expect document.getElementById('btn-save').textContent == Not saved yet

@@ -16,7 +16,7 @@ eval (function(){ window.F = window.__splitpageFormats; window.A = F.autosave; w
 
 # --- no destination yet -----------------------------------------------------------
 expect st() === 'hidden'
-expect btn() === 'Save | Save | none | Save | Save this script'
+expect btn() === 'Not saved yet | Not saved yet | pending | Not saved yet. Save now | Save to choose where this script is kept. Click to save now.'
 expect chip() === 'hidden'
 expect card() === 'Not saved yet :: Save to choose where it’s kept'
 expect back() === 'none'
@@ -24,14 +24,14 @@ expect A.target() === null
 eval edit(' more')
 sleep 200
 expect st() === 'Unsaved changes | Press Save to choose where this script is kept. | save-status is-pending'
-expect btn() === 'Save • | Unsaved changes | pending | Unsaved changes. Save now | Press Save to choose where this script is kept. Click to save now.'
+expect btn() === 'Not saved yet | Not saved yet | pending | Not saved yet. Save now | Press Save to choose where this script is kept. Click to save now.'
 expect card() === 'Not saved yet :: Save to choose where it’s kept'
 
 # --- a browser file ---------------------------------------------------------------
 eval (function(){ window.__a = fakeFile('first.splitpage', doc('First', 'Opening words.')); return F.openFile(new File([__a._text], 'first.splitpage', { lastModified: __a._mtime }), __a); })()
 wait F.docFile().name === 'first.splitpage'
 expect st() === 'Saved | Up to date with first.splitpage. | save-status is-ok'
-expect btn() === 'Save | All changes saved | ok | All changes saved. Save now | Up to date with first.splitpage. Click to save now.'
+expect btn() === 'All changes saved | All changes saved | ok | All changes saved | Up to date with first.splitpage.'
 expect chip() === 'hidden'
 expect card() === 'first.splitpage :: All changes saved [Last saved at T] · Splitpage file'
 expect A.target() == file
@@ -39,12 +39,12 @@ eval (function(){ if (A.enabled()) A.toggle(); return A.enabled(); })()
 eval edit(' more')
 sleep 200
 expect st() === 'Unsaved changes | Autosave is off — press Save to write these to first.splitpage. | save-status is-pending'
-expect btn() === 'Save • | Unsaved changes | pending | Unsaved changes. Save now | Autosave is off — press Save to write these to first.splitpage. Click to save now.'
+expect btn() === 'Autosave off | Autosave off | pending | Autosave off. Save now | Autosave is off — press Save to write these to first.splitpage. Click to save now.'
 expect card() === 'first.splitpage :: Unsaved changes (unsaved) · Splitpage file'
 eval (function(){ if (!A.enabled()) A.toggle(); return A.enabled(); })()
 eval edit(' again')
 wait st() === 'Saved | Last saved to first.splitpage at T. | save-status is-ok'
-expect btn() === 'Save | Saved just now | ok | Saved just now. Save now | Last saved to first.splitpage at T. Click to save now.'
+expect btn() === 'Saved just now | Saved just now | ok | Saved just now | Last saved to first.splitpage at T.'
 expect card() === 'first.splitpage :: Saved just now [Last saved at T] · Splitpage file'
 expect __a._text.indexOf('again') !== -1
 

@@ -1,0 +1,20 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;F.openFile(new File([JSON.stringify({schema:2,title:'Typing work',paragraphsDecided:true,rows:Array.from({length:900},function(_,i){return {id:'r'+i,audioText:'Narration for beat '+i+' carries a camera past the quiet window and into the next room.',visualText:'Visual for beat '+i,...(i%5===0?{paragraphStart:true}:{})}}),comments:[]})],'typing-work.splitpage'))
+wait F.state().title === 'Typing work'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'r450',offset:20},head:{kind:'beat',rowId:'r450',offset:20}});true
+wait document.querySelector('.wr-visual-note').textContent === 'Visual for beat 450'
+eval window.work={noteWrites:0,statsWrites:0,fullScans:0,unrelatedDecorations:0};window.noteObserver=new MutationObserver(function(records){work.noteWrites+=records.filter(function(r){return r.type==='childList'}).length});noteObserver.observe(document.querySelector('.wr-visual-note'),{childList:true});window.statsObserver=new MutationObserver(function(records){work.statsWrites+=records.filter(function(r){return r.type==='childList'}).length});['wr-words','wr-scenes','wr-runtime'].forEach(function(id){statsObserver.observe(document.getElementById(id),{childList:true})});window.qsa=Element.prototype.querySelectorAll;Element.prototype.querySelectorAll=function(selector){if(this.id==='writer-doc'&&(selector.includes('.wr-par')||selector.includes('.wr-beat .wr-beat')))work.fullScans++;return qsa.call(this,selector)};window.toggle=DOMTokenList.prototype.toggle;var other=document.querySelector('.wr-beat[data-id="r2"]').classList;other.toggle=function(){work.unrelatedDecorations++;return toggle.apply(this,arguments)};true
+press z
+eval document.dispatchEvent(new Event('selectionchange'));new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(function(){resolve(JSON.stringify(work))})})})
+expect work.noteWrites === 0
+expect work.statsWrites === 0
+expect work.fullScans === 0
+expect work.unrelatedDecorations === 0
+expect F.state().rows[450].audioText === 'Narration for beat 4z50 carries a camera past the quiet window and into the next room.'
+expect W.check().length === 0
+eval W.outsideVisual('r450','Changed visual');true
+expect document.querySelector('.wr-visual-note').textContent === 'Changed visual'
+expect work.noteWrites === 0

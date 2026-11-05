@@ -35,8 +35,8 @@ wait __went()
 eval window.__at = Date.now()
 expect __a._text.indexOf('more words') !== -1
 expect __tip() === 'Last saved to first.splitpage at ' + __sys(__at) + '.'
-expect document.getElementById('btn-save').title === __tip() + ' Click to save now.'
-expect document.getElementById('btn-save').getAttribute('aria-label') === 'Saved just now. Save now'
+expect document.getElementById('btn-save').title === __tip()
+expect document.getElementById('btn-save').getAttribute('aria-label') === 'Saved just now'
 # the File menu's card says it the same way, the time in its tooltip
 jsclick #btn-file
 wait !document.getElementById('file-menu').hidden

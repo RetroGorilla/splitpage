@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.composeInput=function(text){var el=document.querySelector('.wr-beat[data-id="a"]'); el.textContent=text; getSelection().setBaseAndExtent(el,el.childNodes.length,el,el.childNodes.length); document.getElementById('writer-doc').dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:text}));}; return F.openFile(new File([JSON.stringify({schema:2,title:'Composition touched input',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'touched.splitpage')); })()
+eval (function(){ window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.composeInput=function(text){var el=document.querySelector('.wr-beat[data-id="a"]'); el.textContent=text; getSelection().setBaseAndExtent(el,el.childNodes.length,el,el.childNodes.length); document.getElementById('writer-doc').dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:text}));}; return F.openFile(new File([JSON.stringify({schema:2,title:'Composition touched input',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'touched.splitpage')); })()
 wait F.state().title === 'Composition touched input'
 click #btn-write
 wait W.on()

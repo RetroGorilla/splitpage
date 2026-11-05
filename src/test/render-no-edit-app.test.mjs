@@ -1,6 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { domToPos, posToDom } from "../features/common/cell-dom.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
@@ -34,7 +35,7 @@ session.subscribe((c) => { published.push(c.kind); });
 const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 function fixture(title) {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: title,
     rows: [
       { id: "r1", visualText: "Wide", audioText: "Mine one.", status: "todo" },
@@ -55,7 +56,7 @@ function fresh(title) {
   return currentDocument();
 }
 
-const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
+const para = (id) => document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
 const gridCell = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + (field || "audioText") + '"]');
 const row = (id) => currentDocument().rows.find((r) => r.id === id);
 
@@ -64,9 +65,10 @@ const gridTexts = () => Array.from(document.querySelectorAll("#rows > .row")).ma
   const id = el.getAttribute("data-id");
   return [id, gridCell(id, "visualText").textContent, gridCell(id, "audioText").textContent];
 });
-const writerTexts = () => Array.from(document.querySelectorAll("#writer-doc .wr-para")).map((el) => [el.getAttribute("data-id"), el.textContent]);
+const writerTexts = () => Array.from(document.querySelectorAll("#writer-doc .wr-beat")).map((el) => [el.getAttribute("data-id"), el.textContent.replace(/\u200b/g, "")]);
 
 function textNodeAt(el, offset) {
+  if (el.matches(".wr-beat")) { const point = posToDom(el, offset); return [point.node, point.offset]; }
   const walker = document.createTreeWalker(el, 4);
   let at = 0;
   while (walker.nextNode()) {
@@ -78,7 +80,7 @@ function textNodeAt(el, offset) {
 }
 
 function caretAt(el, offset) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   const [node, at] = textNodeAt(el, offset);
   const r = document.createRange();
   r.setStart(node, at);
@@ -90,6 +92,7 @@ function caretAt(el, offset) {
 
 function caretOffset(el) {
   const sel = window.getSelection();
+  if (el.id === "writer-doc") { const beat = sel.focusNode?.parentElement?.closest(".wr-beat"); return beat ? domToPos(beat, sel.focusNode, sel.focusOffset) : null; }
   if (!sel.rangeCount || !el.contains(sel.getRangeAt(0).startContainer)) return null;
   const probe = document.createRange();
   probe.selectNodeContents(el);
@@ -241,9 +244,9 @@ test("R2a: a render with a Writer paragraph focused redraws the Writer from the 
     const got = observe(() => render());
     holds(got, [["r1", "Wide", "Theirs one."], ["r2", "Close", "Theirs two."], ["r3", "Theirs detail.", "Mine three."]], "R2a", { writer: true });
   });
-  assert.ok(removals.some((r) => r.id === "r2" && r.writer && r.text === "Mine two."), "the old paragraph lost focus while it held the old text");
+  assert.deepEqual(removals, [], "the editing host keeps focus while its beats are patched");
   assert.deepEqual(calls.filter((el) => el.closest("#rows")).map((el) => el.getAttribute("data-id")), [], "no cell of the hidden grid was focused");
-  assert.equal(document.activeElement, para("r2"));
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
   assert.equal(caretOffset(document.activeElement), "Theirs".length, "the caret at the end of the replaced word maps to the end of its replacement (#464)");
   writer.closeWriter();
 });
@@ -259,7 +262,7 @@ test("R2b: a render with a Writer paragraph focused after scenes were added befo
     holds(got, [["r9", "New", "Theirs new."], ["r1", "Wide", "Mine one."], ["r2", "Close", "Mine two."]], "R2b", { writer: true });
   });
   assert.deepEqual(calls.filter((el) => el.closest("#rows")), [], "no cell of the hidden grid was focused");
-  assert.equal(document.activeElement, para("r2"));
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
   assert.equal(caretOffset(document.activeElement), 2);
   writer.closeWriter();
 });
@@ -430,7 +433,7 @@ function screenMarkup() {
   const rows = {};
   document.querySelectorAll("#rows > .row").forEach((el) => { rows[el.getAttribute("data-id")] = el.innerHTML; });
   const paras = {};
-  document.querySelectorAll("#writer-doc .wr-block").forEach((el) => { paras[el.getAttribute("data-row")] = el.innerHTML; });
+  document.querySelectorAll("#writer-doc .wr-beat").forEach((el) => { paras[el.getAttribute("data-id")] = el.innerHTML; });
   return {
     rowOrder: Object.keys(rows),
     rows: rows,
@@ -468,7 +471,7 @@ for (const place of PLACES) {
         assert.equal(screenIsStale(), true);
         assert.equal(unsavedChanges(), false);
         const stale = run.target;
-        const staleText = stale.textContent;
+        const staleText = stale.textContent.replace(/\u200b/g, "");
         assert.equal(staleText, "Mine two.", "the cell the user was in still shows the old text");
         const probe = observe(() => {
           stale.dispatchEvent(new window.FocusEvent("blur"));
@@ -573,7 +576,7 @@ function focusGridUnderWriter(cell) {
   const hold = (e) => e.stopImmediatePropagation();
   window.addEventListener("focusin", hold, true);
   try {
-    cell.focus();
+    (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
   } finally {
     window.removeEventListener("focusin", hold, true);
   }
@@ -589,7 +592,7 @@ test("R5a: with the Writer open and a Writer paragraph focused, restoring the re
     holds(observe(() => render()), expected, "R5a", { writer: true });
   });
   assert.deepEqual(calls.filter((el) => el.closest("#rows")), []);
-  assert.equal(document.activeElement, para("r3"));
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
   assert.equal(caretOffset(document.activeElement), "Theirs ".length, "the caret after the kept space stays after it (#464)");
   writer.closeWriter();
 });

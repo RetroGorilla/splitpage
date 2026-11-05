@@ -602,7 +602,10 @@ function trapTab(e: KeyboardEvent) {
 function syncExportMenu() {
   const host = document.querySelector("#file-menu .menu-hidden-actions");
   if (!host) return;
-  host.innerHTML = exportFormats.exporters().map(function (e) {
+  host.innerHTML = exportFormats.exporters().filter(function (e) {
+    return !Array.from(document.querySelectorAll("#file-menu [data-file-action]")).some(item =>
+      !host.contains(item) && item.getAttribute("data-file-action") === e.action);
+  }).map(function (e) {
     return '<button type="button" data-file-action="' + escapeHtml(e.action) + '">' + escapeHtml(e.menuLabel) + '</button>';
   }).join("");
 }

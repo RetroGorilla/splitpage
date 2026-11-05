@@ -18,9 +18,11 @@ start implicitly, regardless of the stored flag; `startsParagraph` in
 
 `paragraphsDecided: true` records that the new writer's sentence rule has run.
 It distinguishes an intentionally unbroken script from an old script with no
-paragraph decisions. No shipping entry point writes this marker or runs that
-rule yet. The current writer, split view, teleprompter and exports keep their
-existing presentation.
+paragraph decisions. Opening an undecided script in the writer applies the
+sentence rule once, outside the undo stack, and records the marker. Present
+keeps its sentence rule and also respects effective paragraph membership,
+computed before skipped or empty beats are removed. Table and narration
+exports retain their existing per-beat presentation.
 
 Both fields are optional, retain only literal `true` on load, and are never
 written as `false`. Schema stays at 2. Unflagged project files retain their
@@ -45,8 +47,9 @@ whole paragraphs moved between paragraphs stay separate. Paste keeps internal
 breaks, runs its first beat on in a paragraph, and forms a separate block at a
 paragraph boundary. Removing a scene header records a flag on its first beat;
 adding or moving a scene relies on implicit starts and changes no flags. Join
-keeps the first beat's state and leaves the following beat untouched; it still
-refuses two beats with visuals. Add, split and ordinary row import create
+keeps the first beat's paragraph state and leaves the following beat untouched.
+Both visual descriptions and their ordered pictures are combined; only a scene
+header or the saved picture limit refuses a join. Add, split and ordinary row import create
 run-on beats without inheriting flags.
 
 
@@ -128,8 +131,9 @@ What that costs, with the current numbers:
 
 **Non-goals**
 
-- New formatting. No lists, headings, fonts or colours. Cells stay flat
-  inline text with line breaks.
+- New inline formatting. Cells remain flat runs with line breaks. Writer
+  headings are scenes, and paragraphs derive from beat boundaries and flags;
+  neither requires a nested cell format. Lists, fonts and colours remain out of scope.
 - Real-time co-editing (CRDT/OT). ROADMAP rejected it. Collaboration stays
   save, pull and three-way merge.
 - Comments spanning rows. A comment stays inside one cell.
@@ -246,8 +250,7 @@ ledger's INV-18.
   rows does the same. **Built:** `splitSceneCommand`
   (`src/application/commands/split-join.ts`, run by `splitRowFieldCore` in
   `src/bootstrap/wiring/rows.ts`) is `splitCell` at the caret;
-  `joinScenesCommand` (the same file, run by `mergeWriterRows` in
-  `src/features/writer/writer.ts`) is
+  `joinBeatsCommand` (the same file) and the writer flow engine use
   `joinCells`, whose glue space carries a comment (or link) the text on
   both sides of it is in, so a phrase a split cut in two is one anchor
   again when joined back.
@@ -762,8 +765,8 @@ until step 4.
      gets an id of its own unless a cut is moving it (§3.3). Pictures and video
      cards are dropped from pasted script text and moved out of existing
      cells into comments on load (D7).
-   - splitting a beat (Enter in the writer, Alt+Enter) is `splitCell` at
-     the caret and joining two (Backspace/Delete at a paragraph's edge) is
+   - splitting a beat (Enter in the writer, Alt+Enter in the split view) is `splitCell` at
+     the caret and joining two (Alt+Backspace or Join in the writer) uses
      `joinCells`; comments follow their marks (`syncCommentAnchors`, §3.2).
      Tests: `comment-anchors.test.mjs`, browser suite 78.
    The edits made away from the selection are model edits too: applying
@@ -842,8 +845,9 @@ words.
   each new path. No step deletes an old path until its replacement has
   passed the full browser run on Windows.
 - **Caret restore after re-render.** Position-based restore exists already
-  (the writer's `(rowId, char offset)`, `src/features/writer/writer.ts`). It gets one shared
-  implementation used by every re-render.
+  (the writer's directed beat/heading range in `src/features/writer/flow-surface.ts`).
+  Incoming updates reuse the text-selection mapper; structural commands record
+  their before and after positions.
 - **IME and spellcheck.** These are left to the browser (§5) exactly because
   they are the risk. The by-hand check list gets a Japanese-IME and a
   spellcheck-replacement line, in a script cell and in a comment or reply

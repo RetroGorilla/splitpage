@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Exact boundaries',paragraphsDecided:true,sections:[{id:'scene',name:'Middle',firstSceneId:'b'}],rows:[{id:'a',audioText:'Alpha',visualText:'First'},{id:'b',audioText:'Bravo',visualText:'Second'},{id:'c',audioText:'Charlie',visualText:'Third'}],comments:[]})],'exact.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Exact boundaries',paragraphsDecided:true,sections:[{id:'scene',name:'Middle',firstSceneId:'b'}],rows:[{id:'a',audioText:'Alpha',visualText:'First'},{id:'b',audioText:'Bravo',visualText:'Second'},{id:'c',audioText:'Charlie',visualText:'Third'}],comments:[]})],'exact.splitpage'))
 wait F.state().title === 'Exact boundaries'
 click #btn-write
 wait W.on()

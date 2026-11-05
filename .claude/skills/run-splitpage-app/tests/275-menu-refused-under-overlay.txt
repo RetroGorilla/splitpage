@@ -66,6 +66,7 @@ wait __settled()
 expect __toasts().indexOf('first.') === -1
 
 # --- under a dialog: refused, and the toast says why --------------------------
+eval __tidy()
 eval __run('about')
 wait __shown('about-modal')
 eval __tidy()
@@ -233,9 +234,8 @@ expect !__shown('cmdk')
 expect __toasts() === 'Close the writer first.'
 eval __tidy()
 eval __run('find')
-wait __toastUp()
-expect !__shown('findbar')
-expect __toasts() === 'Close the writer first.'
+wait __shown('findbar')
+expect __toasts() === ''
 eval __tidy()
 eval __run('present')
 wait __toastUp()
@@ -248,12 +248,12 @@ eval __run('toggle-gear')
 wait __toastUp()
 expect __toasts() === 'Close the writer first.'
 eval __run('toggle-comments')
-wait __toastUp()
-expect __toasts() === 'Close the writer first.'
+wait __shown('comments-panel')
+expect __toasts() === ''
 eval __run('history')
 wait __toastUp()
 expect __toasts() === 'Close the writer first.'
-expect __panels() === ''
+expect __panels() === 'comments-panel'
 eval __tidy()
 # ...and Save, Save a copy and Hide shot scenes still act there
 eval __run('save')
@@ -289,14 +289,14 @@ wait __toastUp()
 expect !__shown('prompter')
 expect __toasts() === 'Close the open dialog first.'
 eval __tidy()
-jsclick #wr-save
+jsclick #btn-save
 wait __toastUp()
 expect __take() === ''
 expect __toasts() === 'Close the open dialog first.'
 jsclick #about-modal .modal-close
 wait !__shown('about-modal')
 eval __tidy()
-jsclick #wr-save
+jsclick #btn-save
 wait __pickedAny()
 expect __take() === 'save'
 jsclick #wr-close
@@ -547,5 +547,5 @@ wait __pickedAny()
 expect __take() === 'open'
 
 # nothing here edited the document
-expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent === 'Not saved yet' && document.getElementById('btn-save').dataset.actionable === 'true'
+expect document.getElementById('btn-save').textContent == Not saved yet

@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow range formatting',paragraphsDecided:true,sections:[{id:'scene',name:'Second scene',firstSceneId:'b'}],rows:[{id:'a',audioText:'Alpha',visualText:'First visual',status:'shot'},{id:'b',audioText:'<strong>Bravo</strong>',visualText:'Second visual'},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'formats.splitpage')); })()
+eval (function(){ window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow range formatting',paragraphsDecided:true,sections:[{id:'scene',name:'Second scene',firstSceneId:'b'}],rows:[{id:'a',audioText:'Alpha',visualText:'First visual',status:'shot'},{id:'b',audioText:'<strong>Bravo</strong>',visualText:'Second visual'},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'formats.splitpage')); })()
 wait F.state().title === 'Flow range formatting'
 click #btn-write
 wait W.on()

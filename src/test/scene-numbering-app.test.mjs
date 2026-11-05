@@ -80,7 +80,7 @@ test("#1186: an old document reorders, saves and reopens with identity, statuses
   document.querySelector('#production-modes [data-group="cat"]').click();
   assert.equal(document.querySelector('.tag-scene[data-row="r3"]').textContent, "1");
   writer.openWriter();
-  assert.deepEqual(Array.from(document.querySelectorAll("#writer-doc .wr-num"), el => el.textContent), expected);
+  assert.deepEqual(Array.from(document.querySelectorAll("#writer-doc .wr-beat"), el => el.dataset.num), ["A1", "B1", "B2", "C1"]);
   writer.closeWriter();
   present.openPrompter();
   present.setPrompterBeatMode(true);

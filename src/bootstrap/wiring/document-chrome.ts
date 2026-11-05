@@ -14,7 +14,7 @@ let stopChrome: (() => void) | null = null;
 export function mountDocumentChromeFeature(): void {
   stopDocumentChromeFeature();
   const stops: (() => void)[] = [];
-  for (const refresh of [(...args: Parameters<ReturnType<typeof localFileMenuControls>["updateFileChip"]>) => localFileMenuControls().updateFileChip(...args), (...args: Parameters<ReturnType<typeof localFileMenuControls>["mirrorFileChipToWriter"]>) => localFileMenuControls().mirrorFileChipToWriter(...args), refreshOpenFileMenu]) {
+  for (const refresh of [(...args: Parameters<ReturnType<typeof localFileMenuControls>["updateFileChip"]>) => localFileMenuControls().updateFileChip(...args), refreshOpenFileMenu]) {
     const chip = localFileMenuControls().fileChipListeners(refresh);
     stops.push(
       onSessionChange(chip.session),
@@ -39,7 +39,6 @@ export function mountDocumentChromeFeature(): void {
     onSaveChange(desktop.save),
     viewFlags().onChange((change) => {
       if (change.flag === "writerOpen") refreshWriterChrome();
-      if (change.flag === "writerOpen" && change.value) localFileMenuControls().mirrorFileChipToWriter();
     })
   );
   stopChrome = () => {

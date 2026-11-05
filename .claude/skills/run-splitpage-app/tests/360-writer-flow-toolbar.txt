@@ -1,7 +1,7 @@
 open
 viewport 1280 800
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Writer toolbar',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo charlie.',visualText:''},{id:'b',audioText:'Delta echo.',visualText:''}],comments:[]})],'toolbar.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Writer toolbar',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo charlie.',visualText:''},{id:'b',audioText:'Delta echo.',visualText:''}],comments:[]})],'toolbar.splitpage'))
 wait F.state().title === 'Writer toolbar'
 click #btn-write
 wait W.on()
@@ -28,4 +28,4 @@ wait document.querySelector('#length-status .rd-length-total').textContent !== b
 expect document.querySelector('#length-status .rd-length-total').textContent === document.getElementById('wr-runtime').textContent
 eval window.slider=document.getElementById('wr-size'); slider.value='28'; slider.dispatchEvent(new Event('input',{bubbles:true}))
 expect getComputedStyle(document.getElementById('writer-doc')).fontSize === '28px' && localStorage.getItem('splitpage-writer-size') === '28'
-expect document.querySelector('#file-menu #wr-export') !== null && document.querySelector('.writer-bar #wr-export') === null
+expect document.querySelector('#file-menu [data-file-action="export-narration-docx"]') !== null && document.querySelector('.writer-bar [data-file-action="export-narration-docx"]') === null

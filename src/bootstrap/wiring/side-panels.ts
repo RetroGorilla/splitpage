@@ -12,6 +12,10 @@ export function mountScriptPlaceFeature(): ReturnType<typeof mountScriptPlace> {
   return scriptPlace.replace(() => mountScriptPlace(window));
 }
 
+export function releaseScriptPlace(): void {
+  scriptPlace.owner()?.releaseScriptPlace();
+}
+
 const PANEL_BUTTONS: readonly (readonly [string, string])[] = [
   ["production-panel", "btn-production"],
   ["gear-panel", "btn-gear"],

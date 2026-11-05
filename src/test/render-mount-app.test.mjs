@@ -15,20 +15,20 @@ after(closeApp);
 
 test("paint-driven Writer and rundown updates survive render replacement and stop/remount without duplicates", () => {
   documentTransitions().open({ from: { raw: {
-    title: "Paint subscriptions", rows: [{ id: "r1", status: "todo", audioText: "One", visualText: "" }], comments: []
+    title: "Paint subscriptions", paragraphsDecided: true, rows: [{ id: "r1", status: "todo", audioText: "One", visualText: "" }], comments: []
   } }, reason: "render-panel-mount" });
   const track = document.querySelector("#rundown .rundown-track");
   const writer = document.getElementById("writer-doc");
   Object.defineProperty(track, "clientWidth", { configurable: true, value: 900 });
   openWriter();
-  const html = Object.getOwnPropertyDescriptor(window.Element.prototype, "innerHTML");
+  const firstBeat = writer.querySelector(".wr-beat");
+  const toggle = firstBeat.classList.toggle.bind(firstBeat.classList);
   let writes = 0;
-  Object.defineProperty(writer, "innerHTML", {
-    configurable: true,
-    get() { return html.get.call(this); },
-    set(value) { writes++; html.set.call(this, value); }
-  });
-  const writerRows = () => Array.from(writer.querySelectorAll(".wr-block"), (el) => el.getAttribute("data-row"));
+  firstBeat.classList.toggle = (name, ...args) => {
+    if (name === "no-gap") writes++;
+    return toggle(name, ...args);
+  };
+  const writerRows = () => Array.from(writer.querySelectorAll(".wr-beat"), (el) => el.getAttribute("data-id"));
   const rundownRows = () => Array.from(document.querySelectorAll("#rundown .rd-block"), (el) => el.getAttribute("data-row"));
   const expectedRows = () => currentDocument().rows.map((row) => row.id);
   function addAndCheck(label) {
@@ -61,7 +61,7 @@ test("paint-driven Writer and rundown updates survive render replacement and sto
     mountPanelListenersFeature();
     addAndCheck("after replacing the panel subscriptions twice");
   } finally {
-    delete writer.innerHTML;
+    delete firstBeat.classList.toggle;
     delete track.clientWidth;
     mountPanelListenersFeature();
     closeWriter();

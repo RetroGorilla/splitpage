@@ -55,7 +55,6 @@ interface LocalFileChipListeners {
 export interface LocalFileMenuControls {
   readonly updateFileChip: () => void;
   readonly fileChipListeners: (refresh: () => void) => LocalFileChipListeners;
-  readonly mirrorFileChipToWriter: () => void;
   readonly exportFileName: (kind: string, baseName: string, options?: FileNameOptions) => string;
   readonly exportBaseName: () => string;
   readonly exportRequest: (kind: string, options?: Readonly<Record<string, unknown>>) => unknown;

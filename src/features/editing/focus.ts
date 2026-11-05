@@ -6,13 +6,11 @@ export interface EditorFocusPorts {
   readonly typeAtMarks: (cellEl: Element, data: string) => Element | null;
   readonly typed: (cellEl: Element, data: string) => void;
   readonly focusedRow: (rowId: string) => void;
-  readonly focusedParagraph: (paraEl: Element) => void;
   readonly selectionChanged: (active: Element | null) => void;
 }
 
 export interface EditorFocusMount {
   readonly rows: EventTarget;
-  readonly writer: EventTarget;
   readonly doc: Document;
   readonly ports: EditorFocusPorts;
 }
@@ -60,10 +58,6 @@ export function mountEditorFocus(mount: EditorFocusMount): () => void {
     if (rowId) ports.focusedRow(rowId);
   }
 
-  function onWriterFocusIn(e: Event): void {
-    if (isElement(e.target) && e.target.classList.contains("wr-para")) ports.focusedParagraph(e.target);
-  }
-
   function onSelectionChange(): void {
     ports.selectionChanged(mount.doc.activeElement);
   }
@@ -71,9 +65,6 @@ export function mountEditorFocus(mount: EditorFocusMount): () => void {
   const bindings: ReadonlyArray<readonly [EventTarget, string, Listener]> = [
     [mount.rows, "focusout", onBlur],
     [mount.rows, "beforeinput", onBeforeInput],
-    [mount.writer, "focusout", onBlur],
-    [mount.writer, "beforeinput", onBeforeInput],
-    [mount.writer, "focusin", onWriterFocusIn],
     [mount.doc, "focusin", onDocFocusIn],
     [mount.doc, "selectionchange", onSelectionChange]
   ];

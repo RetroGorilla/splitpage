@@ -1,20 +1,22 @@
+import { swapBeatsCommand } from "../../../src/application/commands/rows.ts";
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
 import type { FlowWriterPorts } from "../../../src/features/writer/flow-writer.ts";
 import { beatPos } from "../../../src/core/flow/flow.ts";
+import { scenesInOrder } from "../../../src/core/document/scenes.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 
-function harness() {
+function harness(initial?: Parameters<typeof migrateRows>[0]) {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
   window.HTMLElement.prototype.scrollIntoView = () => {};
   document.body.innerHTML = '<div id="writer-doc" contenteditable="true"></div>';
   const root = document.getElementById("writer-doc") as HTMLElement;
-  const doc = migrateRows({ paragraphsDecided: true, rows: [
+  const doc = migrateRows(initial ?? { paragraphsDecided: true, rows: [
     { id: "a", audioText: "Alpha", visualText: "A <strong>red</strong> sky" },
     { id: "b", audioText: "Bravo", visualText: "Red view" }
   ] }, fakeMigration().ports);
@@ -30,6 +32,7 @@ function harness() {
     heldSelection: createEditorSelection({ epoch: () => epoch, order: () => [], keys: () => null }),
     flow: { cells: html => fromHtml(html ?? ""), newId: () => "new", hasVisual: row => !!row.visualText },
     decode: fromHtml, storedHtml: html => html,
+    moveBeat: swapBeatsCommand,
     run: command => {
       const plan = command.plan(doc, { edit: () => ({ allowed: true }) });
       if (!plan) return { kind: "noop" };
@@ -39,6 +42,7 @@ function harness() {
       return { kind: "applied", generation: 1, changes: plan.changes };
     },
     shown: edit => edit(),
+    editingBlocked: () => false,
     text: { cells: fromHtml, clock: { nowIso: () => "2026-11-05T12:00:00.000Z" }, editor: { name: () => "Editor" } },
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
     caretAfterStep: () => 0, notice: message => { notices.push(message); }, changed: () => {}, selectionMoved: () => {},
@@ -126,4 +130,55 @@ test("Ctrl+F uses the shared Find action and disposal closes its session", () =>
   assert.equal(h.opens(), 1);
   h.writer.dispose();
   assert.equal(h.closes(), 1);
+});
+
+test("Visual input updates only its beat's decorations", t => {
+  const h = harness();
+  try {
+    h.writer.openVisual("a");
+    const other = h.root.querySelector<HTMLElement>('[data-id="b"]');
+    assert.ok(other);
+    const spy = t.mock.method(other.classList, "toggle");
+    const cell = document.querySelector<HTMLElement>(".wr-flow-visual-text");
+    assert.ok(cell);
+    cell.innerHTML = "New visual";
+    cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "l" }));
+    assert.equal(h.doc.rows[0]?.visualText, "New visual");
+    assert.equal(spy.mock.callCount(), 0);
+  } finally { h.writer.dispose(); }
+});
+
+test("Find resolves a pending heading before capturing its starting position", () => {
+  const h = harness({ paragraphsDecided: true, rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo", paragraphStart: true }] });
+  try {
+    h.writer.caret("b", 5);
+    const beat = h.root.querySelector<HTMLElement>('[data-id="b"]');
+    assert.ok(beat);
+    beat.textContent = "# Bravo";
+    assert.ok(beat.firstChild);
+    window.getSelection()?.setBaseAndExtent(beat.firstChild, 4, beat.firstChild, 4);
+    h.root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "# Bravo" }));
+    const at = h.writer.find.selection();
+    assert.equal(h.doc.rows.some(row => row.id === "b"), false);
+    assert.equal(scenesInOrder(h.doc)?.[0]?.name, "Bravo");
+    assert.equal(at?.head.kind, "heading");
+    assert.equal(h.writer.find.firstFrom(h.writer.find.search("Bravo", false).matches, at), 0);
+  } finally { h.writer.dispose(); }
+});
+
+test("Find resolves an emptied heading before capturing its starting position", () => {
+  const h = harness({ paragraphsDecided: true, rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" }],
+    sections: [{ id: "scene", name: "Heading", firstSceneId: "b" }] });
+  try {
+    h.writer.place({ anchor: { kind: "heading", sceneId: "scene", offset: 0 }, head: { kind: "heading", sceneId: "scene", offset: 0 } });
+    const heading = h.root.querySelector<HTMLElement>(".wr-heading");
+    assert.ok(heading);
+    heading.textContent = "";
+    window.getSelection()?.setBaseAndExtent(heading, 0, heading, 0);
+    h.root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+    const at = h.writer.find.selection();
+    assert.equal(scenesInOrder(h.doc), undefined);
+    assert.equal(at?.head.kind, "beat");
+    assert.equal(h.doc.rows[1]?.audioText, "Bravo");
+  } finally { h.writer.dispose(); }
 });

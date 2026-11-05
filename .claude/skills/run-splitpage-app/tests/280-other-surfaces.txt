@@ -129,4 +129,4 @@ sleep 200
 expect !__shown('history-panel')
 
 # nothing here edited the document
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet

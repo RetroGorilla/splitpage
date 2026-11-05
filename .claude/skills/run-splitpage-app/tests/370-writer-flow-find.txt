@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow Find',paragraphsDecided:true,sections:[{id:'scene',name:'Red title',firstSceneId:'a'}],rows:[{id:'a',audioText:'Red fox',visualText:'Red sky',status:'shot'},{id:'b',audioText:'jumps red',visualText:'Desk'},{id:'c',audioText:'fox red',visualText:'Red view',paragraphStart:true}],comments:[]})],'find.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow Find',paragraphsDecided:true,sections:[{id:'scene',name:'Red title',firstSceneId:'a'}],rows:[{id:'a',audioText:'Red fox',visualText:'Red sky',status:'shot'},{id:'b',audioText:'jumps red',visualText:'Desk'},{id:'c',audioText:'fox red',visualText:'Red view',paragraphStart:true}],comments:[]})],'find.splitpage'))
 wait F.state().title === 'Flow Find'
 click #btn-write
 wait W.on()

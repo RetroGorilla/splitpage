@@ -75,8 +75,9 @@ test("one provider and one registration put a new exporter in the menu, the pale
     const button = document.querySelector('#file-menu .menu-hidden-actions [data-file-action="export-demo-sheet"]');
     assert.ok(button, "a menu entry is drawn from the declaration");
     assert.equal(button.textContent, "Demo sheet (.demo)");
-    assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 17);
+    assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 16);
 
+    assert.equal(document.querySelectorAll('#file-menu [data-file-action="export-narration-docx"]').length, 1);
     const listed = exportItems("zebra");
     assert.deepEqual(listed.map((i) => i.cmd.id), ["export-demo-sheet"], "the palette finds it by its words");
     assert.equal(listed[0].view.label, "Export as Demo sheet");
@@ -127,7 +128,7 @@ test("one provider and one registration put a new exporter in the menu, the pale
   assert.deepEqual(exportItems("zebra"), []);
   assert.equal(lastExportAction(), null, "an action nobody registers is not offered again");
   assert.equal(exportAgainItemState().hidden, true);
-  assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 16);
+  assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 15);
 });
 
 test("an exporter's own availability reason greys it out everywhere", async () => {

@@ -45,8 +45,10 @@ export interface FlowWriterPorts {
   readonly flow: FlowPorts;
   readonly decode: (html: string) => Run[];
   readonly storedHtml: (html: string) => string;
+  readonly moveBeat: (rowId: string, direction: -1 | 1) => Command;
   readonly run: (command: Command) => CommandOutcome;
   readonly shown: <T>(edit: () => T) => T;
+  readonly editingBlocked: () => boolean;
   readonly text: CellTextPorts;
   readonly undo: FlowUndoPorts;
   readonly caretAfterStep: (step: { readonly before?: unknown; readonly after?: unknown }) => number;
@@ -78,7 +80,7 @@ export interface FlowWriter {
   readonly jumpComment: (id: string, rowId?: string | null, field?: string | null) => void;
   readonly selection: () => FlowRange | null;
   readonly selectedText: () => string | null;
-  readonly place: (range: FlowRange) => void;
+  readonly place: (range: FlowRange, scroll?: boolean) => void;
   readonly check: () => string[];
   readonly dispose: () => void;
 }
@@ -112,18 +114,29 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
 
   // why: the surface paints its own edits, and the rows behind the writer are redrawn when it closes
   function syncBeat(rowId: string, runs: readonly Run[]): void {
-    if (!isCurrent()) return;
+    if (!isCurrent() || ports.editingBlocked()) return;
     ports.shown(() => { took(ports.run(cellTextCommand(rowId, "audioText", cellRuns(runs), ports.text))); });
   }
 
+  function runPlanned(command: Command): CommandOutcome {
+    return ports.shown(() => ports.run({
+      ...command,
+      plan: (doc, capability) => {
+        const plan = command.plan(doc, capability);
+        if (plan && !("refused" in plan)) ports.undo.breakCoalescing();
+        return plan;
+      }
+    }));
+  }
+
   function commit(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
-    if (!isCurrent()) return null;
-    ports.undo.breakCoalescing();
+    if (!isCurrent() || ports.editingBlocked()) return null;
     let result: FlowOutcome = null;
-    const outcome = ports.shown(() => ports.run(flowCommand(name, doc => {
+    const command = flowCommand(name, doc => {
       result = operation(doc);
       return result;
-    }, ports.text, before)));
+    }, ports.text, before);
+    const outcome = runPlanned(command);
     const applied = took(outcome);
     return applied || outcome.kind === "noop" ? result : null;
   }
@@ -138,9 +151,25 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     decode: ports.decode,
     storedHtml: ports.storedHtml,
     syncBeat,
+    editingBlocked: ports.editingBlocked,
+    moveBeat: (range, direction) => {
+      if (!isCurrent() || ports.editingBlocked() || range.head.kind !== "beat") return;
+      const command = ports.moveBeat(range.head.rowId, direction);
+      const moved = runPlanned({
+        ...command,
+        plan: (doc, capability) => {
+          const plan = command.plan(doc, capability);
+          return plan && !("refused" in plan) ? { ...plan, selection: { before: range, after: range } } : plan;
+        }
+      });
+      if (took(moved)) {
+        surface.repaint();
+        surface.place(range);
+        ports.changed();
+      }
+    },
     commit,
     undo: dir => { if (isCurrent()) ports.undo.step(dir); },
-    breakCoalescing: ports.undo.breakCoalescing,
     notice: text => { ports.notice(text, "ok"); },
     changed: ports.changed,
     selectionMoved: () => { ports.selectionMoved(); visual?.refresh(); },
@@ -175,12 +204,13 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         if (!took(outcome) && outcome.kind !== "noop") return null;
       }
       ports.heldSelection.rememberFlow(epoch, after);
-      surface.repaint();
+      if (first) surface.repaint();
+      else surface.refreshBeat(range.head.rowId);
       ports.changed();
       return after;
     },
     input: (event, cell) => { if (isCurrent()) ports.visualInput?.(event, cell); },
-    leave: cell => { if (isCurrent()) { ports.visualLeave?.(cell); surface.repaint(); } },
+    leave: cell => { if (isCurrent()) { ports.visualLeave?.(cell); if (cell.dataset.id) surface.refreshBeat(cell.dataset.id); } },
     keydown: (event, cell) => isCurrent() && !!ports.visualKeydown?.(event, cell),
     notice: message => { ports.notice(message, "warn"); },
     undo: dir => { if (isCurrent()) ports.undo.step(dir); },
@@ -341,7 +371,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         else if (match) surface.place(match.range, true);
         else surface.focusBack();
       },
-      selection: surface.selection,
+      selection: () => isCurrent() ? surface.finish() : null,
       pickedText: () => {
         const range = surface.selection();
         return range && !isCollapsed(range) ? logicalText(ports.doc(), range, ports.flow) : "";
@@ -368,7 +398,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       const range = surface.selection();
       return range && !isCollapsed(range) ? logicalText(ports.doc(), range, ports.flow) : null;
     },
-    place: range => { surface.place(range); },
+    place: (range, scroll) => { surface.place(range, scroll); },
     check: surface.domCheck,
     dispose: () => {
       ports.closeFind?.();

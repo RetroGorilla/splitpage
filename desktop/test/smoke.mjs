@@ -349,7 +349,7 @@ async function addMarkerRow(cdp, marker) {
     "var cell = cells[cells.length - 1]; if (!cell) return false; cell.textContent = " + JSON.stringify(marker) + "; " +
     "cell.dispatchEvent(new Event('input', { bubbles: true })); return true; })()";
   const ok = await evalPage(cdp, expr, { awaitPromise: false });
-  await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+  await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000);
   return ok;
 }
 
@@ -382,7 +382,7 @@ async function waitForDialogAnswered(cdp, before, timeoutMs) {
 }
 
 async function isDirty(cdp) {
-  return evalPage(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()");
+  return evalPage(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()");
 }
 
 async function toastContaining(cdp, substr, timeoutMs) {
@@ -410,7 +410,7 @@ function readDesktopStateFile(userDataDir) {
 
 async function dirtyTabForTest(cdp) {
   await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
-  await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+  await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000);
 }
 
 async function fireShell(cdp, op, args) {
@@ -994,8 +994,13 @@ async function caseFirstSaveTitle(target, fixturesDir) {
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
     const named = await poll(cdp, "window.__splitpageFormats.state().title === 'Headset ad' && window.__splitpageFormats.writtenOut()", 10000);
     record(tag + ": first Save uses the native chosen filename", !!named);
-    record(tag + ": both title areas show the small version tag", await evalPage(cdp,
-      "['doc-version','writer-version'].every(function(id){var e=document.getElementById(id);return e && !e.hidden && e.textContent==='v3';})"));
+    record(tag + ": the shared title shows the small version tag in split view", await evalPage(cdp,
+      "(function(){var e=document.getElementById('doc-version');return e && !e.hidden && e.textContent==='v3';})()"));
+    await evalPage(cdp, "document.getElementById('btn-write').click(); true");
+    await poll(cdp, "!document.getElementById('writer').hidden", 5000);
+    record(tag + ": the shared title shows the same small version tag in the writer", await evalPage(cdp,
+      "(function(){var e=document.getElementById('doc-version');return e && !e.hidden && e.textContent==='v3';})()"));
+    await evalPage(cdp, "document.getElementById('wr-close').click(); true");
     const disk = JSON.parse(fs.readFileSync(first, "utf8"));
     record(tag + ": disk carries title, version and provenance", disk.title === "Headset ad" && disk.titleVersion === "v3" && disk.titleOrigin === "file");
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
@@ -1552,8 +1557,8 @@ async function caseUnsavedChangesClose(target) {
     await evalPage(cdp,
       "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return !!b; })()",
       { userGesture: true });
-    const dirtyShown = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
-    record(tag + ": editing marks the document dirty (Save button shows the dot)", !!dirtyShown);
+    const dirtyShown = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000);
+    record(tag + ": editing marks the document dirty in the shared Save control", !!dirtyShown);
 
     const seenBeforeClose = await dialogsSeen(cdp);
     await fireEval(cdp, "window.close()", { awaitPromise: false, userGesture: true });
@@ -1569,7 +1574,7 @@ async function caseUnsavedChangesClose(target) {
       "exitCode=" + app.proc.exitCode + " pageStillThere=" + pageStillThere);
 
     const stillDirty = await evalPage(cdp,
-      "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()"
+      "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()"
     ).catch(() => null);
     record(tag + ": the same dirty document is still showing after 'cancel'", stillDirty === true, String(stillDirty));
 
@@ -1593,7 +1598,7 @@ async function caseUnsavedChangesClose(target) {
     await evalPage(cdp2,
       "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return !!b; })()",
       { userGesture: true });
-    await poll(cdp2, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    await poll(cdp2, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000);
 
     const seenBeforeClose2 = await dialogsSeen(cdp2);
     await fireEval(cdp2, "window.close()", { awaitPromise: false, userGesture: true });
@@ -1626,7 +1631,7 @@ async function caseCloseAuthorityNoGesture(target) {
     await waitForRows(cdp, 20000);
 
     await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
-    const dirtyShown = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    const dirtyShown = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000);
     record(tag + ": markDirtyForTest() dirties the document with zero DOM interaction", !!dirtyShown);
 
     await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
@@ -1664,7 +1669,7 @@ async function caseCloseFromPageIsUnguarded(target) {
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
     await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
-    await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000);
     await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
 
     await fireEval(cdp, "window.close()", { awaitPromise: false });
@@ -1688,7 +1693,7 @@ async function caseQuitAuthorityNoGesture(target) {
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
     await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
-    await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000);
     await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
 
     const seenBeforeQuit = await dialogsSeen(cdp);
@@ -2066,7 +2071,7 @@ async function caseTearOffPreservesState(target) {
     await evalPage(cdp2,
       "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return !!b; })()",
       { userGesture: true });
-    await poll(cdp2, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    await poll(cdp2, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000);
     const rowsBefore = await evalPage(cdp2, "window.__splitpageFormats.state().rows.length");
     const marker = "preserved-" + Date.now();
     await evalPage(cdp2, "window.__marker = " + JSON.stringify(marker) + "; true", { awaitPromise: false });
@@ -5451,7 +5456,7 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
     }
 
     await addMarkerRow(cdp, marker);
-    const dirtyNow = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()", 10000).catch(() => false);
+    const dirtyNow = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.dataset.dirty === 'true' && b.dataset.state !== 'busy'); })()", 10000).catch(() => false);
     record(tag + ": setup — the tab is dirty", !!dirtyNow);
     await evalPage(cdp, "document.getElementById('btn-present').click(); true", { awaitPromise: false });
     await poll(cdp, "!document.getElementById('prompter').hidden", 10000);

@@ -53,7 +53,7 @@ expect document.querySelector('#length-status .rd-length-total').getBoundingClie
 expect getComputedStyle(document.querySelector('#length-status .rd-length-slot .rd-length-of')).display == none
 expect getComputedStyle(document.querySelector('#length-status .rd-length-delta'), '::before').content.indexOf('·') !== -1
 # small, like the status line's other items
-expect parseFloat(getComputedStyle(document.getElementById('length-status')).fontSize) <= 12
+expect parseFloat(getComputedStyle(document.getElementById('length-status')).fontSize) === 14
 # the strip has no length label of its own here
 expect getComputedStyle(document.getElementById('runtime-chip')).display == none
 

@@ -1,3 +1,4 @@
+import { swapBeatsCommand } from "../../../src/application/commands/rows.ts";
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,21 +10,24 @@ import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 
-function harness(changeBeforePlan = false) {
+function harness(changeBeforePlan = false, refusePaste = false) {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
   window.HTMLElement.prototype.scrollIntoView = () => {};
   document.body.innerHTML = '<div id="writer-doc" contenteditable="true"></div>';
   const root = document.getElementById("writer-doc") as HTMLElement;
   let doc = migrateRows({ rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" }] }, fakeMigration().ports);
   let epoch = 1;
+  let breaks = 0;
   const left: string[] = [];
   let recorded: FlowSelectionPair | undefined;
   const writer = createFlowWriter({
     root, doc: () => doc,
+    ...(refusePaste ? { clipboard: { mount: () => () => {}, copy: () => {}, paste: () => ({ refused: "Paste refused" }) } } : {}),
     lifetime: { epoch: () => epoch },
     heldSelection: createEditorSelection({ epoch: () => epoch, order: () => [], keys: () => null }),
     flow: { cells: html => fromHtml(html ?? ""), newId: () => "new", hasVisual: () => false },
     decode: fromHtml, storedHtml: html => html,
+    moveBeat: swapBeatsCommand,
     run: command => {
       if (changeBeforePlan) {
         const [first, second] = doc.rows;
@@ -38,18 +42,33 @@ function harness(changeBeforePlan = false) {
       return { kind: "applied", generation: 1, changes: plan.changes };
     },
     shown: edit => edit(),
+    editingBlocked: () => false,
     text: { cells: fromHtml, clock: { nowIso: () => "2026-11-04T12:00:00.000Z" }, editor: { name: () => "Editor" } },
-    undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
+    undo: { step: () => {}, flush: () => {}, breakCoalescing: () => { breaks++; }, last: () => null, nextRedo: () => null },
     caretAfterStep: () => 0, notice: () => {}, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: beat => { left.push(beat.dataset.id ?? ""); },
     newCommentId: () => "c", openComment: () => {}
   });
-  return { writer, root, left, doc: () => doc, recorded: () => recorded, replace: () => {
+  return { writer, root, left, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
     epoch++;
     doc = migrateRows({ rows: [{ id: "a", audioText: "Replacement" }] }, fakeMigration().ports);
   } };
 }
+
+test("Alt+Enter does not edit the writer", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.caret("a", 2);
+    const before = JSON.stringify(h.doc());
+    const key = new window.KeyboardEvent("keydown", { key: "Enter", altKey: true, bubbles: true, cancelable: true });
+    h.root.dispatchEvent(key);
+    assert.equal(key.defaultPrevented, true);
+    assert.equal(JSON.stringify(h.doc()), before);
+    assert.deepEqual(h.writer.selection(), { anchor: beatPos("a", 2), head: beatPos("a", 2) });
+  } finally { h.writer.dispose(); }
+});
 
 test("a retired writer never sends its beat departure to the current document's services", () => {
   const h = harness();
@@ -143,5 +162,52 @@ test("closing a retired writer never syncs its old DOM into a replacement docume
     h.replace();
     h.writer.finish();
     assert.equal(h.doc().rows[0]?.audioText, "Replacement");
+  } finally { h.writer.dispose(); }
+});
+
+test("refused paste and join preserve the typing group", () => {
+  const h = harness(false, true);
+  try {
+    h.doc().sections = [{ id: "s", name: "Scene", firstSceneId: "b" }];
+    h.writer.repaint();
+    h.writer.caret("b", 0);
+    h.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Backspace", altKey: true, bubbles: true, cancelable: true }));
+    assert.equal(h.breaks(), 0);
+    const event = new window.Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { types: ["text/plain"], getData: () => "X" } });
+    h.root.dispatchEvent(event);
+    assert.equal(h.breaks(), 0);
+    assert.deepEqual(h.doc().rows.map(row => row.audioText), ["Alpha", "Bravo"]);
+  } finally { h.writer.dispose(); }
+});
+test("Alt+Up and Alt+Down move the caret's beat through one command with its directed selection", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    const range = { anchor: beatPos("b", 4), head: beatPos("b", 1) };
+    h.writer.place(range);
+    h.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual(h.doc().rows.map(row => row.id), ["b", "a"]);
+    assert.deepEqual(h.writer.selection(), range);
+    assert.deepEqual(h.recorded(), { before: range, after: range });
+    assert.equal(h.breaks(), 1);
+    h.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual(h.doc().rows.map(row => row.id), ["b", "a"]);
+    assert.equal(h.breaks(), 1);
+    h.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual(h.doc().rows.map(row => row.id), ["a", "b"]);
+    assert.deepEqual(h.writer.selection(), range);
+    assert.equal(h.breaks(), 2);
+  } finally { h.writer.dispose(); }
+});
+test("Ctrl+Shift+Enter retains the shipped beat split instead of inserting a line break", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.caret("a", 2);
+    h.root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual(h.doc().rows.map(row => row.audioText), ["Al", "pha", "Bravo"]);
+    assert.deepEqual(h.writer.selection(), { anchor: beatPos("new", 0), head: beatPos("new", 0) });
+    assert.equal(h.breaks(), 1);
   } finally { h.writer.dispose(); }
 });

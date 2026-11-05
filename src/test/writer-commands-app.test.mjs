@@ -1,3 +1,4 @@
+import { posToDom as testDomPoint } from "../features/common/cell-dom.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -18,7 +19,6 @@ const breakUndoCoalescing = () => undoOwner().breakCoalescing();
 const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
-const { focusMemory } = await import("../bootstrap/wiring/editor-owners.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
@@ -32,7 +32,7 @@ const OLD = "2020-01-01T00:00:00.000Z";
 
 function fixture() {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: "Writer commands",
     rows: [
       { id: "r1", visualText: "", audioText: "First line", status: "todo", updatedAt: OLD, updatedBy: "Old" },
@@ -59,23 +59,17 @@ async function openInWriter() {
 
 const settle = () => new Promise((r) => setImmediate(r));
 const ids = () => currentDocument().rows.map((r) => r.id);
-const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
+const para = (id) => document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
 const writerTitle = () => document.getElementById("writer-title");
 const docTitle = () => document.getElementById("doc-title");
 
 function textNodeAt(el, offset) {
-  const walker = document.createTreeWalker(el, 4);
-  let at = 0;
-  while (walker.nextNode()) {
-    const n = walker.currentNode;
-    if (offset <= at + n.data.length) return [n, offset - at];
-    at += n.data.length;
-  }
-  return null;
+  const point = testDomPoint(el, offset);
+  return [point.node, point.offset];
 }
 
 function selectText(el, from, to) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   const start = textNodeAt(el, from), end = textNodeAt(el, to);
   const r = document.createRange();
   r.setStart(start[0], start[1]);
@@ -86,7 +80,7 @@ function selectText(el, from, to) {
 }
 
 function typeChar(el, ch) {
-  const end = el.textContent.length;
+  const end = el.textContent.replace(/\u200b/g, "").length;
   selectText(el, end, end);
   const [node] = textNodeAt(el, end);
   node.data += ch;
@@ -184,11 +178,11 @@ test("writer: Enter splits the scene through the session in one undo step", asyn
   writer.closeWriter();
 });
 
-test("writer: Backspace at the start of a paragraph joins it to the one before through the session", async () => {
+test("writer: Alt+Backspace at the start of a beat joins it to the one before through the session", async () => {
   await openInWriter();
   const p = para("r2");
   selectText(p, 0, 0);
-  const changes = await throughSession(() => key(p, "Backspace"));
+  const changes = await throughSession(() => key(p, "Backspace", { altKey: true }));
   assert.deepEqual(changes.rowsRemoved, ["r2"]);
   assert.deepEqual(ids(), ["r1", "r3"]);
   undo();
@@ -197,12 +191,11 @@ test("writer: Backspace at the start of a paragraph joins it to the one before t
   writer.closeWriter();
 });
 
-test("writer: Delete at the end of a paragraph joins the next one through the session", async () => {
+test("writer: Alt+Backspace joins the next beat through the session", async () => {
   await openInWriter();
-  const p = para("r1");
-  const end = p.textContent.length;
-  selectText(p, end, end);
-  const changes = await throughSession(() => key(p, "Delete"));
+  const p = para("r2");
+  selectText(p, 0, 0);
+  const changes = await throughSession(() => key(p, "Backspace", { altKey: true }));
   assert.deepEqual(changes.rowsRemoved, ["r2"]);
   assert.deepEqual(ids(), ["r1", "r3"]);
   writer.closeWriter();
@@ -212,7 +205,6 @@ test("writer: the bar's Bold button formats the selection as one edit", async ()
   await openInWriter();
   const p = para("r1");
   selectText(p, 0, 5);
-  focusMemory().focusedParagraph(p);
   const changes = await throughSession(() => click(document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]')));
   assert.ok(changes.cells.some((c) => c.rowId === "r1" && c.field === "audioText"));
   assert.match(currentDocument().rows[0].audioText, /<(b|strong)>First<\/(b|strong)>/);

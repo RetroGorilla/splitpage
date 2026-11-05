@@ -32,7 +32,7 @@ expect window.__ids.indexOf(F.state().docId) === -1
 expect window.__splitpageFormats.docFile().kind === null
 expect F.docFile().name === null
 expect document.getElementById('file-chip').hidden == true
-expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+expect (document.getElementById('save-status').textContent === 'Unsaved changes') == false
 
 # --- what it is there to show, drawn --------------------------------------
 # the rundown: a block per scene, some of them slivers
@@ -60,13 +60,13 @@ shot 200-long-demo
 # still exactly a fresh copy of the demo: opening it changed nothing
 sleep 1500
 expect window.__canon(F.state()) === window.__canon(window.__newTab.starterState('long-demo'))
-expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+expect (document.getElementById('save-status').textContent === 'Unsaved changes') == false
 eval (function(){ window.__ids.push(F.state().docId); return window.__ids.length; })()
 
 # --- from the command menu, over a script with an edit in it ----------------
 caret #rows .row .audio-cell .cell-editable
 type Edited.
-wait document.getElementById('btn-save').classList.contains('is-dirty') == true
+wait (document.getElementById('save-status').textContent === 'Unsaved changes') == true
 key ctrl KeyK
 wait !document.getElementById('cmdk').hidden
 press long demo
@@ -79,7 +79,7 @@ wait F.state().rows[0].audioText.indexOf('Edited.') === -1
 expect F.state().rows.length == 30
 expect window.__ids.indexOf(F.state().docId) === -1
 expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
-expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+expect (document.getElementById('save-status').textContent === 'Unsaved changes') == false
 # the edited copy went into Version history, and the toast says so
 wait Array.prototype.some.call(document.querySelectorAll('#toast-host > *'), function(t){ return t.textContent.indexOf('The long demo') !== -1 && t.textContent.indexOf('Version history') !== -1; })
 sleep 1500
@@ -88,7 +88,7 @@ expect window.__canon(F.state()) === window.__canon(window.__newTab.starterState
 # --- typing into it makes it dirty, but there is nowhere to autosave to -----
 caret #rows .row .audio-cell .cell-editable
 type More.
-wait document.getElementById('btn-save').classList.contains('is-dirty') == true
+wait (document.getElementById('save-status').textContent === 'Unsaved changes') == true
 expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 expect F.docFile().name === null
 

@@ -5,10 +5,8 @@ import { mountSaveStatus } from "../../../src/features/title/save-status.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
 import { fakeNotices, fakeSaveState } from "../fakes.ts";
 
-for (const flow of [true, false]) {
-  test("a failed retry keeps the actionable problem only with the flow switch " + (flow ? "on" : "off"), () => {
+  test("a failed retry keeps the actionable save problem", () => {
     document.body.innerHTML = '<button id="btn-save"></button><span id="save-status"></span>';
-    window.localStorage.setItem("splitpage-writer-flow", flow ? "1" : "0");
     const save = fakeSaveState({ unsaved: true, busy: false });
     let halted = "Permission denied. Press Save to try again.";
     const mount = mountSaveStatus({
@@ -29,9 +27,9 @@ for (const flow of [true, false]) {
       save.state.busy = false;
       mount.listeners().save("running");
       assert.equal(button.disabled, false);
-      assert.equal(button.getAttribute("data-status"), flow ? "Not saving" : "Unsaved changes");
-      assert.equal(button.getAttribute("data-state"), flow ? "warn" : "pending");
-      assert.equal(button.title.includes("Permission denied"), flow);
+      assert.equal(button.getAttribute("data-status"), "Not saving");
+      assert.equal(button.getAttribute("data-state"), "warn");
+      assert.equal(button.title.includes("Permission denied"), true);
       save.state.unsaved = false;
       mount.listeners().save("running");
       assert.equal(button.getAttribute("data-state"), "ok");
@@ -41,7 +39,5 @@ for (const flow of [true, false]) {
       assert.equal(button.getAttribute("data-status"), "Unsaved changes");
     } finally {
       mount.dispose();
-      window.localStorage.removeItem("splitpage-writer-flow");
     }
   });
-}

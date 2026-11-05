@@ -56,25 +56,25 @@ function onImport() {
 test("an edit made through the session marks the save buttons and the status line dirty without a call into them", () => {
   const target = createHeldFileHandle({ name: "listening.splitpage" });
   open(onFile(target.handle));
-  assert.equal(button().textContent, "Save");
-  assert.equal(button().classList.contains("is-dirty"), false);
+  assert.equal(button().textContent, "Autosave off");
+  assert.equal(button().dataset.actionable, "true");
   assert.equal(status().textContent, "Saved");
   assert.equal(runCommand(titleCommand("Edited")).kind, "applied");
-  assert.equal(button().textContent, "Save •");
-  assert.equal(button().classList.contains("is-dirty"), true);
-  assert.equal(el("wr-save").textContent, "Save •");
+  assert.equal(button().textContent, "Autosave off");
+  assert.equal(button().dataset.actionable, "true");
+  assert.equal(el("wr-save"), null);
   assert.equal(status().textContent, "Unsaved changes");
 });
 
 test("a legacy edit and an absorbed change refresh the buttons through the save coordinator", () => {
   open(onImport);
   noteSessionEdit();
-  assert.equal(button().textContent, "Save •");
+  assert.equal(button().textContent, "Not saved yet");
   confirmSavedNow();
-  assert.equal(button().textContent, "Save");
+  assert.equal(button().textContent, "Not saved yet");
   noteAbsorbedDirty("disk");
   assert.equal(unsavedChanges(), true);
-  assert.equal(button().textContent, "Save •");
+  assert.equal(button().textContent, "Not saved yet");
 });
 
 test("confirming a save drops autosave's halt and timers, and the status line shows it saved", () => {
@@ -91,7 +91,7 @@ test("confirming a save drops autosave's halt and timers, and the status line sh
   assert.equal(autoSavePolicy().halted(), "");
   assert.equal(autoSavePolicy().pending(), false);
   assert.equal(status().textContent, "Saved");
-  assert.equal(button().textContent, "Save");
+  assert.equal(button().textContent, "All changes saved");
   autoSavePolicy().setEnabled(false);
 });
 
@@ -108,7 +108,7 @@ test("a running save shows Saving… from its start and the saved state when it 
   target.gates.releaseAll("file.createWritable");
   await saving;
   assert.equal(target.commits.length, 1, "the save wrote the file");
-  assert.equal(button().textContent, "Save");
+  assert.equal(button().textContent, "Autosave off");
   assert.equal(button().disabled, false);
   assert.equal(status().textContent, "Saved");
   assert.match(status().title, /^Last saved to listening\.splitpage at /);
@@ -189,7 +189,7 @@ test("typing paints the save buttons once per key and the status line once per p
   }
   assert.equal(labels, 5);
   assert.equal(lines, 5);
-  assert.equal(labelTexts, 1);
+  assert.equal(labelTexts, 0);
   assert.equal(lineTexts, 1);
 });
 

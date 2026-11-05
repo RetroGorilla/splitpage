@@ -3,6 +3,6 @@
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
-  "include": ["types/*.d.ts", "shared/*.ts", "src/adapters/**/*.ts", "src/features/**/*.ts", "src/bootstrap/**/*.ts", "src/legacy/**/*.ts", "src/starters/**/*.ts", "tools/writer-lab/lab.ts"],
+  "include": ["types/*.d.ts", "shared/*.ts", "src/adapters/**/*.ts", "src/features/**/*.ts", "src/bootstrap/**/*.ts", "src/legacy/**/*.ts", "src/starters/**/*.ts"],
   "exclude": ["**/*.test.ts"]
 }

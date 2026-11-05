@@ -10,16 +10,12 @@ import { writerPreferences, writerView } from "./ports/preferences.ts";
 import { notices } from "./ports/effects.ts";
 import { actions } from "./ports/actions.ts";
 import { screen } from "./ports/screen.ts";
-import { splitRowFieldCore } from "./rows.ts";
-import { hiddenShotStripHtml } from "../../features/rows/hide-shot.ts";
-import { sceneHeaderHtml, sceneRowEntries } from "../../features/rows/scene-rows.ts";
-import { formatDuration, rowSeconds } from "../../core/production/timing.ts";
-import { sceneView } from "./editor-owners.ts";
 import { shotHiding } from "./shot-hiding.ts";
+import { releaseScriptPlace } from "./side-panels.ts";
 import { currentRowsRender } from "./render.ts";
 import { acceptTagGhost, hideTagGhost, maybeAutoTagShortcut, scheduleIdleRefresh, tagGhost, updateTagGhost } from "../../features/tags/production-tags.ts";
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
-import { deleteBeatCommand } from "../../application/commands/rows.ts";
+import { deleteBeatCommand, swapBeatsCommand } from "../../application/commands/rows.ts";
 import { createFlowWriter } from "../../features/writer/flow-writer.ts";
 import { caretAfterStep } from "../../features/undo/caret.ts";
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
@@ -28,7 +24,8 @@ import { gallerySize } from "../../core/document/gallery.ts";
 import type { FlowDoc, FlowPorts, FlowRow } from "../../core/flow/flow.ts";
 import { projection } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
-import { paintGuard } from "./editor-owners.ts";
+import { paintGuard, sceneView, undoGuard } from "./editor-owners.ts";
+import { screenIsStale } from "../../features/rows/render.ts";
 import { undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { liveSession } from "./session-owner.ts";
@@ -67,11 +64,6 @@ const flowPorts: FlowPorts = {
   hasVisual: row => !!projection(flowCell(row.visualText)) || !!gallerySize(row)
 };
 
-// why: a switch for this branch only, so the old writer's suites keep running until the new writer replaces it
-function writerFlowOn(): boolean {
-  try { return window.localStorage.getItem("splitpage-writer-flow") === "1"; } catch { return false; }
-}
-
 const writer = owned<ReturnType<typeof startWriter>>();
 const connections = new Set<(control: ReturnType<typeof startWriter> | null) => void>();
 
@@ -90,19 +82,20 @@ export function mountWriterRuntimeFeature() {
     if (!render) throw new Error("Writer needs the row renderer to be mounted");
     const ports: WriterFeaturePorts = {
       flow: {
-        enabled: writerFlowOn,
-        refreshSplit: rowId => {
+        splitReady: () => !screenIsStale(),
+        prepareSplit: rowId => {
+          releaseScriptPlace();
           const doc = documentReader.current();
           if (rowId && doc) {
             sceneView().reveal(doc, rowId);
             shotHiding().reveal(rowId);
           }
-          currentRowsRender()?.render();
         },
         create: (root, selectionMoved, undoStep) => {
           undoOwner().flush();
           const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
           if (initialized.kind === "failed") throw initialized.error;
+          let dismissedGhost: typeof tagGhost = null;
           return createFlowWriter({
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
@@ -152,7 +145,9 @@ export function mountWriterRuntimeFeature() {
             decode: flowCell,
             storedHtml: text.storedHtmlFromDom,
             run: edits.run,
+            moveBeat: swapBeatsCommand,
             shown: edit => paintGuard().whileShown(edit),
+            editingBlocked: () => paintGuard().painting() || undoGuard().applying() || screenIsStale(),
             text: edits.text,
             undo: {
               step: undoStep,
@@ -173,6 +168,13 @@ export function mountWriterRuntimeFeature() {
             },
             typeAtBeatEdge: (beat, words) => !!typeAtDirectionEdge(beat, words),
             beatKeydown: (event, beat) => {
+              if (event.key === "Escape" && tagGhost?.cellEl === beat) {
+                dismissedGhost = tagGhost;
+                event.preventDefault();
+                event.stopPropagation();
+                hideTagGhost();
+                return true;
+              }
               if (event.key === "Tab" && tagGhost?.cellEl === beat && acceptTagGhost()) {
                 event.preventDefault();
                 return true;
@@ -180,8 +182,17 @@ export function mountWriterRuntimeFeature() {
               if (["Escape", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) hideTagGhost();
               return false;
             },
-            beatSelection: beat => { if (beat) updateTagGhost(beat); else hideTagGhost(); },
+            beatSelection: beat => {
+              if (!beat) { dismissedGhost = null; hideTagGhost(); return; }
+              updateTagGhost(beat);
+              if (tagGhost && dismissedGhost &&
+                  tagGhost.cellEl.getAttribute("data-id") === dismissedGhost.cellEl.getAttribute("data-id") &&
+                  tagGhost.openAt === dismissedGhost.openAt && tagGhost.offset === dismissedGhost.offset &&
+                  tagGhost.phrase === dismissedGhost.phrase) hideTagGhost();
+              else dismissedGhost = null;
+            },
             leaveBeat: beat => {
+              if (paintGuard().painting() || undoGuard().applying() || screenIsStale()) return;
               const clean = text.sanitizeHtml(beat.innerHTML);
               if (clean !== text.storedHtmlFromDom(beat.innerHTML)) beat.innerHTML = clean;
               writerEditing.cells().sync(beat);
@@ -193,22 +204,8 @@ export function mountWriterRuntimeFeature() {
         }
       },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,
-      rows: { splitField: splitRowFieldCore },
-      hiding: { renderGroups: (rows, renderRow) => {
-        const doc = documentReader.current();
-        if (!doc) return "";
-        const numbering = documentReader.numbering();
-        const totals = new Map(numbering.scenes.map(group => [group.id ?? "",
-          formatDuration(doc.rows.slice(group.start, group.end).reduce((sum, row) => sum + rowSeconds(row, doc, text.productionReaders), 0))]));
-        return sceneRowEntries({ rows, sections: doc.sections }, shotHiding(), sceneView(), numbering).map(item =>
-          "scene" in item ? sceneHeaderHtml(item, !edits.allowed(), totals.get(item.scene.id) ?? "") :
-            "strip" in item ? hiddenShotStripHtml(item.strip) : renderRow(item.row, item.index)).join("");
-      } },
       panels: writerPanels, preferences: writerPreferences, view: writerView, notices, actions,
       formatting: {
-        state: render.cellFormatState,
-        direction: render.toggleCellDirection,
-        toggle: render.toggleCellFormat,
         selection: render.handleToolbarCmd,
         confirmLink: render.confirmLink,
         cancelLink: render.cancelLink

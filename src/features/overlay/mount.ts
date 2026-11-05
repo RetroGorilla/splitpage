@@ -2,7 +2,6 @@ import { createViewLifetime } from "../common/view-lifetime.ts";
 import { inFront } from "../../application/screen.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import { writerFocusTarget } from "../common/writer-focus.ts";
-import { writerFlowEnabled } from "../common/writer-flow-enabled.ts";
 
 export interface OverlayPorts {
   readonly screen: () => ScreenState;
@@ -74,7 +73,7 @@ export function mountOverlay(mount: { window: Window; ports: OverlayPorts }): Ov
         const el = e.target;
         if (!el?.closest) return;
         if (el.closest("#writer")) return;
-        if (writerFlowEnabled(win) && el.closest(".topbar, #comments-panel, #wpm-editor, #identity-editor")) return;
+        if (el.closest(".topbar, #comments-panel, #wpm-editor, #identity-editor")) return;
         if (el.closest(".toast")) return;
         const back = writerFocusTarget(doc);
         if (back) ports.focus(back);

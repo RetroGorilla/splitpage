@@ -1,4 +1,5 @@
 import { endsSentence } from "../../core/text/sentences.ts";
+import { flowOf } from "../../core/flow/flow.ts";
 import { numberHtml } from "../common/number-html.ts";
 import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { withoutCues } from "../../core/text/cues.ts";
@@ -6,6 +7,7 @@ import { sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import { projection } from "../../core/text/runs.ts";
+import type { DocumentView } from "../../application/session/document-session.ts";
 import type { CellInput, Run } from "../../core/text/runs.ts";
 import type { PrompterRecognition } from "../../application/prompter-services.ts";
 import type { PrompterFeaturePorts, PrompterRuntime } from "./ports.ts";
@@ -25,8 +27,7 @@ type VoiceRecognition = PrompterRecognition & {
 };
 
 type TimerHandle = ReturnType<typeof setTimeout>;
-type PrompterDoc = {
-  readonly rows: readonly (Parameters<typeof rowSeconds>[0] & { readonly id: string; readonly status?: string | undefined })[];
+type PrompterDoc = Pick<DocumentView, "rows"> & {
   readonly wordsPerMinute?: number | null | undefined;
   readonly sections?: unknown;
 };
@@ -159,6 +160,10 @@ export function trimPrompterCell(cell: CellInput): Run[] {
 export function buildPrompterContent(): void {
   const skippingShot = ports.state.skipsShot() || ports.viewFlags.hideShot();
   const doc = ports.document.current() as PrompterDoc;
+  const membership = new Map<string, number>();
+  flowOf({ ...doc, comments: [] }).forEach((block, index) => {
+    if (block.kind === "paragraph") for (const beat of block.beats) membership.set(beat.id, index);
+  });
   const source = skippingShot
     ? doc.rows.filter(function (row) { return row.status !== "shot"; })
     : doc.rows;
@@ -171,7 +176,8 @@ export function buildPrompterContent(): void {
   const paragraphs: string[] = [];
   lines.forEach(function (e, i) {
     const prevEndsSentence = i === 0 || endsSentence(toPlainText((lines[i - 1] as BeatLine).cell));
-    if (prevEndsSentence) paragraphs.push(e.view.html);
+    const startsParagraph = i === 0 || membership.get(e.id) !== membership.get((lines[i - 1] as BeatLine).id);
+    if (prevEndsSentence || startsParagraph) paragraphs.push(e.view.html);
     else paragraphs[paragraphs.length - 1] += " " + e.view.html;
   });
 

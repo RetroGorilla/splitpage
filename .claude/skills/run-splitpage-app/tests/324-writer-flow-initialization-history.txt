@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; window.loadHistoryCase = function(title){return F.openFile(new File([JSON.stringify({schema:2,title:title,rows:[{id:'a',audioText:'Alpha.Bravo',visualText:''}],comments:[]})],'history.splitpage'));}; window.splitCaret = function(){var el=document.querySelector('#rows .cell-editable[data-id="a"][data-field="audioText"]'); el.focus(); getSelection().setBaseAndExtent(el.firstChild,6,el.firstChild,6);}; return loadHistoryCase('First-open split history'); })()
+eval (function(){ window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; window.loadHistoryCase = function(title){return F.openFile(new File([JSON.stringify({schema:2,title:title,rows:[{id:'a',audioText:'Alpha.Bravo',visualText:''}],comments:[]})],'history.splitpage'));}; window.splitCaret = function(){var el=document.querySelector('#rows .cell-editable[data-id="a"][data-field="audioText"]'); el.focus(); getSelection().setBaseAndExtent(el.firstChild,6,el.firstChild,6);}; return loadHistoryCase('First-open split history'); })()
 wait F.state().title === 'First-open split history'
 eval splitCaret()
 key alt Enter

@@ -43,7 +43,7 @@ const REDRAW = "Could not redraw the script after the update. Nothing was lost â
 
 function fixture(title) {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: title,
     rows: [
       { id: "r1", visualText: "Wide", audioText: "Mine one.", status: "todo" },
@@ -95,7 +95,7 @@ for (const remaining of [["r1", "r2"], ["r2"], []]) {
     console.error = () => {};
     try {
       assert.equal(renderAbsorbed(), false);
-      loadTestDocument(migrateRows({ title: "Writer redraw", rows: remaining.map(id => ({ id, audioText: id })) }));
+      loadTestDocument(migrateRows({ paragraphsDecided: true, title: "Writer redraw", rows: remaining.map(id => ({ id, audioText: id })) }));
       writer.renderWriter();
     } finally {
       delete title.value;
@@ -110,7 +110,7 @@ for (const remaining of [["r1", "r2"], ["r2"], []]) {
       assert.ok(toast);
       toast.querySelector(".toast-action").focus();
       toast.querySelector(".toast-action").click();
-      assert.equal(document.activeElement, document.querySelector("#writer-doc .wr-para") || document.getElementById("wr-close"));
+      assert.equal(document.activeElement, document.getElementById("writer-doc"));
       assert.deepEqual(focused, []);
       assert.equal(document.body.classList.contains("is-stale-screen"), false);
     } finally {
@@ -120,7 +120,7 @@ for (const remaining of [["r1", "r2"], ["r2"], []]) {
   });
 }
 
-const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
+const para = (id) => document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
 const gridCell = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + (field || "audioText") + '"]');
 const audio = (id) => currentDocument().rows.find((r) => r.id === id).audioText;
 
@@ -136,7 +136,7 @@ function textNodeAt(el, offset) {
 }
 
 function caretAt(el, offset) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   const [node, at] = textNodeAt(el, offset);
   const r = document.createRange();
   r.setStart(node, at);
@@ -226,11 +226,11 @@ test("an update drawn while a Writer paragraph has focus keeps the incoming text
   assert.equal(audio("r1"), "Theirs one.");
   assert.equal(audio("r2"), "Theirs two.");
   assert.equal(unsavedChanges(), false);
-  assert.ok(removals.some((r) => r.id === "r2" && r.text === "Mine two."), "the old paragraph lost focus while it held the old text");
+  assert.equal(removals.filter(r => r.id === "r2").length, 0, "the writer patches the beat without removing it");
   const active = document.activeElement;
-  assert.equal(active, para("r2"), "the focus stays in the Writer, on the same scene");
-  assert.equal(active.textContent, "Theirs two.");
-  assert.equal(caretOffset(active), "Theirs".length, "the caret at the end of the replaced word maps to the end of its replacement (#464)");
+  assert.equal(active, document.getElementById("writer-doc"), "the focus stays in the writer host");
+  assert.equal(para("r2").textContent.replace(/\u200b/g, ""), "Theirs two.");
+  assert.equal(writer.writerFlowControl().selection().head.offset, "Theirs".length, "the caret at the end of the replaced word maps to the end of its replacement (#464)");
   assert.equal(gridCell("r2").textContent, "Theirs two.");
   writer.closeWriter();
 });
@@ -284,7 +284,7 @@ test("a Writer redraw on its own does not write the focused paragraph's old text
   const got = observe(() => writer.renderWriter());
   assert.deepEqual(noEdit(got), NO_EDIT);
   assert.equal(audio("r1"), "Changed under the Writer.");
-  assert.equal(document.activeElement, para("r1"));
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
   assert.equal(para("r1").textContent, "Changed under the Writer.");
   writer.closeWriter();
 });
@@ -327,7 +327,7 @@ test("a render that throws between the grid and the Writer makes no edit, and ty
     .find((el) => el.firstChild && el.firstChild.nodeValue === REDRAW);
   assert.ok(toast, "the redraw toast is offered");
   toast.querySelector(".toast-action").click();
-  assert.equal(para("r2").textContent, "Theirs two.");
+  assert.equal(para("r2").textContent.replace(/\u200b/g, ""), "Theirs two.");
   const p = para("r2");
   caretAt(p, "Theirs two.".length);
   const typed = observe(() => {
@@ -341,7 +341,7 @@ test("a render that throws between the grid and the Writer makes no edit, and ty
   const blurred = observe(() => {
     const [node] = textNodeAt(p, "Theirs two.!".length);
     node.data += "?";
-    p.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+    p.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "?" }));
   });
   assert.equal(blurred.edits, 1, "a focusout after the redraw saves the cell again");
   assert.equal(audio("r2"), "Theirs two.!?");

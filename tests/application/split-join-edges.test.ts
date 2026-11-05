@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bothBeatsHaveVisual, joinBeatsCommand, splitBeatCommand, textCut } from "../../src/application/commands/split-join.ts";
+import { joinBeatsCommand, splitBeatCommand, textCut } from "../../src/application/commands/split-join.ts";
 import type { JoinPorts } from "../../src/application/commands/split-join.ts";
 import { deepFreeze } from "../../src/core/document/freeze.ts";
 import type { Run } from "../../src/core/text/runs.ts";
@@ -51,16 +51,4 @@ test("a status that is not a string ranks as todo, so a join neither declares no
   assert.equal(live.rows[0]?.status, "todo");
   const raised = planOf(joinBeatsCommand("r1", ports), viewOf({ rows: rows([["r1", "", "One."], ["r2", "", "Two."]]).map(function (r, i) { return { ...r, status: i ? "shot" : "todo" }; }) }));
   assert.equal(raised.changes.cells.some(function (c) { return c.field === "status"; }), true);
-});
-
-test("the visual check is false for the last scene, and when only the later scene has a visual", () => {
-  const check = bothBeatsHaveVisual("r2", ports.plainText);
-  assert.equal(check(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""]]) })), false, "r2 has nothing below it");
-  assert.equal(check(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""], ["r3", "", ""]]) })), false);
-  assert.equal(check(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""], ["r3", "Far", ""]]) })), true);
-  const later = bothBeatsHaveVisual("r1", ports.plainText);
-  assert.equal(later(viewOf({ rows: rows([["r1", "", ""], ["r2", "Close", ""]]) })), false, "the scene above has no visual");
-  assert.equal(later(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "", ""]]) })), false, "the scene below has no visual");
-  assert.equal(later(viewOf({ rows: rows([["r1", "Wide", ""], ["r2", "Close", ""]]) })), true);
-  assert.equal(later(null), false);
 });

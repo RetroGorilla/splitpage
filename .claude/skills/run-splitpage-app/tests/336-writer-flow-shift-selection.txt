@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow shift selection',paragraphsDecided:true,sections:[{id:'scene',name:'Next scene',firstSceneId:'d'}],rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'empty',audioText:'',visualText:''},{id:'visual',audioText:'',visualText:'A drone shot'},{id:'c',audioText:'Charlie',visualText:'',paragraphStart:true},{id:'d',audioText:'Delta',visualText:''}],comments:[]})],'shift.splitpage')); })()
+eval (function(){ window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow shift selection',paragraphsDecided:true,sections:[{id:'scene',name:'Next scene',firstSceneId:'d'}],rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'empty',audioText:'',visualText:''},{id:'visual',audioText:'',visualText:'A drone shot'},{id:'c',audioText:'Charlie',visualText:'',paragraphStart:true},{id:'d',audioText:'Delta',visualText:''}],comments:[]})],'shift.splitpage')); })()
 wait F.state().title === 'Flow shift selection'
 click #btn-write
 wait W.on()

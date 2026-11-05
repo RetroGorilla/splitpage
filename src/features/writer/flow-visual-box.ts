@@ -31,6 +31,8 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   note.className = "wr-visual-note";
   note.hidden = true;
   note.title = "Edit visual";
+  const noteText = doc.createTextNode("");
+  note.append(noteText);
   const box = doc.createElement("div");
   box.className = "wr-flow-visual-box";
   box.hidden = true;
@@ -43,15 +45,12 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   const pictures = box.querySelector<HTMLElement>(".wr-flow-visual-pictures") as HTMLElement;
   const closeButton = box.querySelector<HTMLButtonElement>(".wr-flow-visual-close") as HTMLButtonElement;
   const toolbar = doc.querySelector(".writer-bar");
-  const gutter = doc.getElementById("wr-gutter-mode");
-  const gutterWasHidden = gutter?.hidden ?? false;
-  if (gutter) gutter.hidden = true;
   const button = doc.createElement("button");
   button.type = "button";
   button.id = "wr-visual";
   button.textContent = "Visual";
   button.title = "Edit this beat's visual";
-  if (toolbar) toolbar.insertBefore(button, gutter?.parentNode === toolbar ? gutter : null);
+  toolbar?.append(button);
   parent?.append(note, box);
   let target: FlowRange | null = null;
   let first = false;
@@ -161,13 +160,16 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     noteRow = row?.id ?? null;
     note.hidden = !label || !range || !isCollapsed(range);
     if (row && !note.hidden) {
-      note.textContent = label + (hasSetLength(row) ? " · " + formatDuration(row.lengthSeconds) : "");
+      const caption = label + (hasSetLength(row) ? " · " + formatDuration(row.lengthSeconds) : "");
+      if (noteText.data !== caption) noteText.data = caption;
       const beat = root.querySelector<HTMLElement>('.wr-beat[data-id="' + CSS.escape(row.id) + '"]');
       const rect = beat?.getClientRects()[0];
       const holder = parent?.getBoundingClientRect();
       if (rect && holder && parent) {
         note.style.top = rect.top - holder.top + parent.scrollTop + "px";
-        note.style.left = root.offsetLeft + root.offsetWidth + 16 + "px";
+        const left = root.offsetLeft + root.offsetWidth + 16;
+        note.style.left = left + "px";
+        note.style.maxWidth = Math.max(0, parent.clientWidth - left - 16) + "px";
       }
     }
     position();
@@ -261,7 +263,6 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
       close(false);
       listeners.forEach(([element, event, handler]) => element.removeEventListener(event, handler));
       button.remove(); note.remove(); box.remove();
-      if (gutter) gutter.hidden = gutterWasHidden;
     }
   };
 }

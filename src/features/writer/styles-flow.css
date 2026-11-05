@@ -31,7 +31,7 @@
   .writer-flow-bar .save-btn[data-state="warn"] { color: var(--danger); }
   .writer-flow-open .topbar { z-index: 146; }
   .writer-flow-open .topbar .toolbar, .writer-flow-open .topbar .rundown,
-  .writer-flow-open #doc-title, .writer-flow-open #doc-version { display: none; }
+  .writer-flow-open #doc-title { display: none; }
   .writer-flow-open #writer-title { display: block; }
   .writer-flow-open #btn-write { display: none; }
   .writer-flow-open #wr-close { display: inline-flex; }
@@ -48,8 +48,7 @@
   .writer-flow-bar .writer-format button { display: inline-flex; align-items: center; justify-content: center; padding: 6px; min-width: 30px; height: 32px; }
   .writer-flow-bar .writer-format button:disabled { opacity: .45; cursor: default; }
   .writer-flow-bar .writer-stats { margin-left: auto; }
-  .writer-flow-bar .writer-stats > span:not(:nth-child(2)),
-  .writer-flow-bar #wr-gutter-mode, .writer-flow-bar .writer-hint { display: none; }
+  .writer-flow-bar .writer-stats > span:not(:nth-child(2)) { display: none; }
   .writer-scroll:has(#writer-doc.is-flow) { position: relative; }
   .wr-visual-note { position: absolute; width: 140px; padding: .25em 0; text-align: left; font: 12px/1.4 var(--font-body); color: var(--text-faint); background: transparent; border: 0; cursor: pointer; overflow-wrap: anywhere; }
   .wr-visual-note:hover { color: var(--visual); }
@@ -60,6 +59,11 @@
   .wr-flow-visual-pictures { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .wr-flow-visual-thumb, .wr-flow-visual-text img { width: 72px; height: 56px; object-fit: cover; border-radius: 3px; }
   .wr-flow-visual-hint { margin-top: 8px; color: var(--text-faint); font-size: 12px; }
+  @media (min-width: 761px) and (max-width: 999px) {
+    .writer-flow-bar .topbar-left { gap: 6px; }
+    .writer-flow-bar .doc-title { min-width: 0; }
+    .writer-flow-bar .doc-meta #identity-name { max-width: 8ch; }
+  }
   @media (max-width: 850px) {
     #writer-doc.is-flow { max-width: calc(100% - 120px); margin-left: 0; }
     .wr-visual-note { width: 100px; }

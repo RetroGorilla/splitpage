@@ -101,36 +101,36 @@ expect document.querySelector('#rows .row[data-id="'+window.__r2+'"]').classList
 eval document.activeElement.blur()
 jsclick #btn-write
 sleep 700
-expect document.querySelectorAll('#writer-doc .wr-para').length == 3
-expect document.querySelectorAll('#writer-doc .wr-block')[0].getAttribute('data-row') === window.__r1
-expect document.querySelectorAll('#writer-doc .wr-block')[1].getAttribute('data-row') === window.__r2
-expect document.querySelectorAll('#writer-doc .wr-block')[2].getAttribute('data-row') === window.__r3
+expect document.querySelectorAll('#writer-doc .wr-beat').length == 3
+expect document.querySelectorAll('#writer-doc .wr-beat')[0].getAttribute('data-id') === window.__r1
+expect document.querySelectorAll('#writer-doc .wr-beat')[1].getAttribute('data-id') === window.__r2
+expect document.querySelectorAll('#writer-doc .wr-beat')[2].getAttribute('data-id') === window.__r3
 
-eval (function(){var cell=document.querySelector('#writer-doc .wr-para[data-id="'+window.__r2+'"]');cell.focus();var t=cell.firstChild;var i=t.nodeValue.indexOf('left');var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);window.__wrOffset=i;return i;})()
+eval (function(){var cell=document.querySelector('#writer-doc .wr-beat[data-id="'+window.__r2+'"]');document.getElementById('writer-doc').focus();var t=cell.firstChild;var i=t.nodeValue.indexOf('left');var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);window.__wrOffset=i;return i;})()
 key alt ArrowUp
 sleep 400
-expect document.querySelectorAll('#writer-doc .wr-block')[0].getAttribute('data-row') === window.__r2
-expect document.querySelectorAll('#writer-doc .wr-block')[1].getAttribute('data-row') === window.__r1
-expect document.activeElement.getAttribute('data-id') === window.__r2
-expect (function(){var s=getSelection();var r=s.getRangeAt(0);var probe=document.createRange();probe.selectNodeContents(document.activeElement);probe.setEnd(r.startContainer,r.startOffset);return probe.toString().length===window.__wrOffset;})()
+expect document.querySelectorAll('#writer-doc .wr-beat')[0].getAttribute('data-id') === window.__r2
+expect document.querySelectorAll('#writer-doc .wr-beat')[1].getAttribute('data-id') === window.__r1
+expect document.activeElement === document.getElementById('writer-doc') && window.__writerFlowTest.selection().head.rowId === window.__r2
+expect (function(){var s=getSelection();var r=s.getRangeAt(0);var probe=document.createRange();probe.selectNodeContents(document.querySelector('#writer-doc .wr-beat[data-id="'+window.__r2+'"]'));probe.setEnd(r.startContainer,r.startOffset);return probe.toString().replace(/\u200b/g,'').length===window.__wrOffset;})()
 
 # no wrap: r2 is first now, Alt+Up does nothing
 key alt ArrowUp
 sleep 400
-expect document.querySelectorAll('#writer-doc .wr-block')[0].getAttribute('data-row') === window.__r2
+expect document.querySelectorAll('#writer-doc .wr-beat')[0].getAttribute('data-id') === window.__r2
 
 # Alt+Down moves it back down, restoring the original order
 key alt ArrowDown
 sleep 400
-expect document.querySelectorAll('#writer-doc .wr-block')[0].getAttribute('data-row') === window.__r1
-expect document.querySelectorAll('#writer-doc .wr-block')[1].getAttribute('data-row') === window.__r2
-expect document.activeElement.getAttribute('data-id') === window.__r2
+expect document.querySelectorAll('#writer-doc .wr-beat')[0].getAttribute('data-id') === window.__r1
+expect document.querySelectorAll('#writer-doc .wr-beat')[1].getAttribute('data-id') === window.__r2
+expect document.activeElement === document.getElementById('writer-doc') && window.__writerFlowTest.selection().head.rowId === window.__r2
 
 # no wrap at the other end either
-eval (function(){var cell=document.querySelector('#writer-doc .wr-para[data-id="'+window.__r3+'"]');cell.focus();var r=document.createRange();r.selectNodeContents(cell);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+eval (function(){var cell=document.querySelector('#writer-doc .wr-beat[data-id="'+window.__r3+'"]');document.getElementById('writer-doc').focus();var r=document.createRange();r.selectNodeContents(cell);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
 key alt ArrowDown
 sleep 400
-expect document.querySelectorAll('#writer-doc .wr-block')[2].getAttribute('data-row') === window.__r3
+expect document.querySelectorAll('#writer-doc .wr-beat')[2].getAttribute('data-id') === window.__r3
 
 jsclick #wr-close
 sleep 500

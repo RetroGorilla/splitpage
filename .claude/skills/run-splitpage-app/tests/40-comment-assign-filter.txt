@@ -16,7 +16,7 @@ expect document.querySelectorAll('.comment-card').length == 1
 expect F.state().comments[0].resolvedBy === null
 expect F.state().comments[0].resolvedAt === null
 expect F.state().comments[0].assignee === ''
-expect !document.getElementById('btn-save').classList.contains('is-dirty')
+expect !(document.getElementById('save-status').textContent === 'Unsaved changes')
 
 # --- default filter is Open, with counts, replacing "hide resolved" --------
 expect document.querySelector('#comments-filter-seg [data-filter="open"]').classList.contains('is-active')
@@ -30,7 +30,7 @@ sleep 300
 expect document.querySelector('.comments-empty') !== null
 eval (function(){var s=document.getElementById('comments-assignee-filter');s.value='__unassigned__';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
 sleep 300
-expect !document.getElementById('btn-save').classList.contains('is-dirty')
+expect !(document.getElementById('save-status').textContent === 'Unsaved changes')
 goto /index.html
 sleep 900
 click #btn-comments
@@ -68,7 +68,7 @@ eval (function(){document.getElementById('comment-name').value='Jordan';var b=do
 jsclick #comment-post
 sleep 600
 expect document.querySelectorAll('.comment-card').length == 2
-expect document.getElementById('btn-save').classList.contains('is-dirty')
+expect (document.getElementById('save-status').textContent === 'Unsaved changes')
 
 # --- and a third (author "Sam") on row 2 -------------------------------------
 caret #rows .row:nth-of-type(2) .audio-cell .cell-editable

@@ -1,7 +1,6 @@
 open
 viewport 1280 800
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1')
 goto /index.html
 wait document.body.classList.contains('writer-flow-bar')
 click #btn-write

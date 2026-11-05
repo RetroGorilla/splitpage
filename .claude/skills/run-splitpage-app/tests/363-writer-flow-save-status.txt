@@ -1,7 +1,6 @@
 open
 viewport 1440 900
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1')
 goto /index.html
 wait document.body.classList.contains('writer-flow-bar')
 eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.A=F.autosave; window.B=document.getElementById('btn-save'); window.picks=0; window.showSaveFilePicker=()=>{picks++;return Promise.reject(new DOMException('cancelled','AbortError'))}; window.__saveStatusTest.refresh()

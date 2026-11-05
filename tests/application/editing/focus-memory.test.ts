@@ -4,19 +4,12 @@ import { createFocusMemory } from "../../../src/application/editing/focus-memory
 
 interface Cell { readonly id: string }
 
-test("focus memory starts empty and keeps the last scene and Writer paragraph the editor focused", () => {
+test("focus memory starts empty and keeps the last scene the editor focused", () => {
   const memory = createFocusMemory<Cell>();
   assert.equal(memory.lastRow(), null);
-  assert.equal(memory.writerParagraph(), null);
-  const para = { id: "p1" };
   memory.focusedRow("r1");
-  memory.focusedParagraph(para);
   memory.focusedRow("r2");
   assert.equal(memory.lastRow(), "r2");
-  assert.equal(memory.writerParagraph(), para);
-  memory.focusedParagraph(null);
-  assert.equal(memory.writerParagraph(), null);
-  assert.equal(memory.lastRow(), "r2", "forgetting the paragraph keeps the scene");
 });
 
 test("the untagged prompt stays muted for one cell until it is unmuted", () => {

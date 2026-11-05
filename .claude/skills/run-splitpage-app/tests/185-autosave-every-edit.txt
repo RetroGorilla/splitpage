@@ -208,19 +208,20 @@ expect __same()
 
 # --- the writer: typing, and Enter splitting a scene ----------------------------------------------
 click #btn-write
-wait document.querySelectorAll('#writer-doc .wr-para').length === 5
+wait document.querySelectorAll('#writer-doc .wr-beat').length === 5
+wait __same()
 eval __arm()
-caret #writer-doc .wr-para
+caret #writer-doc .wr-beat
 press  WRITERWORDS
 eval document.activeElement.blur()
 wait __cycled()
 expect __doc().rows[0].audioText.indexOf('WRITERWORDS') !== -1
 # the writer's own status says the same
-expect document.getElementById('wr-save-status').textContent === 'Saved'
+expect document.getElementById('btn-save').textContent === 'Saved just now'
 sleep 300
 expect __same()
 eval __arm()
-eval (function(){ var p = document.querySelectorAll('#writer-doc .wr-para')[0]; p.focus(); var w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT); var t = w.nextNode(); var r = document.createRange(); r.setStart(t, 0); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+eval (function(){ var p = document.querySelectorAll('#writer-doc .wr-beat')[0]; p.focus(); var w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT); var t = w.nextNode(); var r = document.createRange(); r.setStart(t, 0); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
 key End
 key Enter
 press WRITERSCENE

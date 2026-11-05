@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find visual box',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'<span class="broll-key" data-broll-id="bsabcdef" contenteditable="false">B-roll:</span> A <strong>red</strong> sky'},{id:'b',audioText:'Bravo',visualText:'Another red view'}],comments:[]})],'find-box.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find visual box',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'<span class="broll-key" data-broll-id="bsabcdef" contenteditable="false">B-roll:</span> A <strong>red</strong> sky'},{id:'b',audioText:'Bravo',visualText:'Another red view'}],comments:[]})],'find-box.splitpage'))
 wait F.state().title === 'Find visual box'
 eval window.visualBefore=JSON.stringify(F.state().rows.map(function(row){return row.visualText}))
 click #btn-write

@@ -85,7 +85,7 @@ test("the tag count follows a tag registered through the session, without a whol
 test("an open writer repaints from a scene added through the session", () => {
   open();
   writer.openWriter();
-  assert.equal(document.querySelectorAll("#writer-doc .wr-para").length > 0, true);
+  assert.equal(document.querySelectorAll("#writer-doc .wr-beat").length > 0, true);
   const before = el("wr-scenes").textContent;
   runCommand(addBeatCommand("r1", "w1", sessionStamps));
   assert.equal(el("wr-scenes").textContent, String(Number(before) + 1));
