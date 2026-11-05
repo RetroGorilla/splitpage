@@ -141,6 +141,27 @@ test("formatting the words were typed in stays on the tag", () => {
     '<span class="tag-anchor" data-tag-cat="vfx" data-tag-name="big flare" contenteditable="false"><strong>big flare</strong></span> after');
 });
 
+test("mixed formatting and every character survive tag creation and its stored round trip (seed 1207)", () => {
+  let seed = 1207;
+  const next = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
+  const formats = ["strong", "em", "u", "s", "mark"];
+  for (let sample = 0; sample < 64; sample++) {
+    const words = Array.from({ length: 2 + next() % 8 }, (_, i) => {
+      const format = formats[next() % formats.length];
+      return `<${format}>${String.fromCharCode(65 + next() % 26)}${i}</${format}>`;
+    }).join(" ");
+    const before = fromHtml("prop: " + words + " after");
+    const end = projection(before).length - " after".length;
+    const result = applyPlainTag(before, 0, end, "prop");
+    assert.ok(result);
+    const expected = fromHtml(words + " after");
+    const actual = result.cell.map(run => ({ ...run, marks: Object.fromEntries(Object.entries(run.marks).filter(([key]) => key !== "tag")) }));
+    assert.deepEqual(actual, expected);
+    assert.deepEqual(fromHtml(toHtml(result.cell)), result.cell);
+    assert.equal(result.cell.filter(run => run.marks.tag).map(run => run.text).join(""), projection(before).slice(6, end));
+  }
+});
+
 test("a name given (an item already tracked) is used, the words keep their casing", () => {
   const cell = fromHtml("Prop: Red Mug");
   const res = applyPlainTag(cell, 0, 13, "prop", "red mug");

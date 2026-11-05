@@ -1,0 +1,65 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Open visual tags',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'c',audioText:'Charlie',visualText:''},{id:'d',audioText:'Delta',visualText:''},{id:'e',audioText:'Echo',visualText:''}],comments:[]})],'open-tags.splitpage'))
+wait F.state().title === 'Open visual tags'
+click #btn-write
+wait W.on()
+eval window.c=function(){return document.querySelector('.wr-flow-visual-text');}; W.openVisual('a')
+press prop:
+key ctrl KeyB
+press Lamp
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]')?.textContent === 'Lamp'
+expect c().querySelector('.tag-anchor strong, .tag-anchor b')?.textContent === 'Lamp'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('b')
+press prop:
+eval (function(){var dt=new DataTransfer();dt.setData('text/plain','Lamp');dt.setData('text/html','La<em>mp</em>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]')?.textContent === 'Lamp'
+expect c().querySelector('.tag-anchor em')?.textContent === 'mp'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('c')
+press prop:
+press Red
+eval (function(){var dt=new DataTransfer();dt.setData('text/plain','Lamp\nChair');dt.setData('text/html','<p>Lamp</p><p>Chair</p>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+expect F.state().rows[2].visualText === 'prop:RedLamp<br>Chair'
+eval document.querySelector('.wr-flow-visual-close').click()
+expect W.check().length === 0
+eval W.openVisual('d')
+press prop:
+eval (function(){var dt=new DataTransfer();dt.setData('text/plain','\n');dt.setData('text/html','<p><br></p>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+expect F.state().rows[3].visualText === 'prop:<br>'
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+key Tab
+expect F.state().rows[3].visualText === 'prop:<br>'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('e')
+press prop:
+eval (function(){var dt=new DataTransfer();dt.setData('text/plain','\n');dt.setData('text/html','<div><br></div>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+expect F.state().rows[4].visualText === 'prop:<br>'
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+key Tab
+expect F.state().rows[4].visualText === 'prop:<br>'
+eval document.querySelector('.wr-flow-visual-close').click()
+expect W.check().length === 0
+eval W.openVisual('a')
+key ctrl KeyA
+press prop:
+eval (function(){var dt=new DataTransfer();dt.setData('text/plain','Lamp');dt.setData('text/html','<p>La<em>mp</em></p>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+expect F.state().rows[0].visualText === 'prop:La<em>mp</em>'
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]')?.textContent === 'Lamp'
+expect c().querySelector('.tag-anchor em')?.textContent === 'mp'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('b')
+key ctrl KeyA
+press prop:
+eval (function(){var dt=new DataTransfer();dt.setData('text/plain','Lamp');dt.setData('text/html','<div>La<em>mp</em></div>');c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;})()
+expect F.state().rows[1].visualText === 'prop:La<em>mp</em>'
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]')?.textContent === 'Lamp'
+expect c().querySelector('.tag-anchor em')?.textContent === 'mp'
+eval document.querySelector('.wr-flow-visual-close').click()
+expect W.check().length === 0

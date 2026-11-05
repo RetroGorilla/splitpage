@@ -290,7 +290,8 @@ const MEDIA_CELL = Object.freeze({ media: true });
 export function mountCellEditingFeature(): { readonly dispose: () => void } {
   return cellEditingMount.replace(function () {
     const editing = createCellEditing<Element, unknown>({
-      page: createCellPage({ storedHtml: function (html) { return storedHtmlFromDom(html); }, caretSpot: ensureTrailingCaretSpot }),
+      page: createCellPage({ storedHtml: function (html) { return storedHtmlFromDom(html); }, caretSpot: ensureTrailingCaretSpot,
+        beforeWrite: cell => currentPlainTags()?.beforeWrite(cell) ?? null }),
       document: liveDocument.current,
       run: runCommand,
       text: sessionTextPorts,
@@ -514,6 +515,7 @@ export function onRootInput(e: RootInput): void {
   const cellEl = target && target.classList && target.classList.contains("cell-editable") ? target : null;
   if (!cellEl) return;
   if (!isScriptCell(cellEl)) { noteDraftInput(cellEl); return; }
+  currentPlainTags()?.noteInput(cellEl);
   maybeAutoTagShortcut(e as InputEvent, cellEl);
   maybeDirectionShortcut(e as InputEvent, cellEl);
   maybeCueShortcut(e as InputEvent, cellEl);

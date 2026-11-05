@@ -1,0 +1,114 @@
+open
+wait document.querySelectorAll('#rows .row').length > 1
+eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.c=function(){return document.querySelectorAll('#rows .row')[window.n].querySelector('.visual-cell .cell-editable');}; window.st=function(){return F.state().rows[window.n].visualText;}; window.fresh=function(){ document.querySelector('[data-action="add-row"]').click(); window.n=F.state().rows.length-1; var el=c(); el.focus(); var r=document.createRange(); r.selectNodeContents(el); r.collapse(true); var s=getSelection(); s.removeAllRanges(); s.addRange(r); return true; }; window.pick=function(){c().closest('.field-wrap').querySelector('.tb-tag').click(); document.querySelector('#tag-cats [data-tag-cat="prop"]').click(); return true;}; window.paste=function(html,text){var dt=new DataTransfer();dt.setData('text/plain',text);if(html)dt.setData('text/html',html);c().dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return true;}; return fresh(); })()
+press prop:
+key ctrl KeyB
+press Lamp
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelectorAll('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]').length === 1
+expect c().querySelector('.tag-anchor strong').textContent === 'Lamp'
+expect c().textContent.replace(/\u200B/g, '') === 'Lamp'
+eval fresh()
+press prop:
+eval paste('La<em>mp</em>', 'Lamp')
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelectorAll('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]').length === 1
+expect c().querySelector('.tag-anchor em').textContent === 'mp'
+eval fresh()
+press Words
+eval pick()
+key Escape
+press Lamp
+expect st() === 'WordsLamp'
+key ctrl KeyZ
+expect st() === ''
+eval fresh()
+press Words
+eval (function(){c().closest('.field-wrap').querySelector('.tb-tag').click();return true;})()
+key Escape
+press Lamp
+key ctrl KeyZ
+expect st() === ''
+eval fresh()
+press Words
+eval pick()
+press Lamp
+key Tab
+expect c().querySelector('.tag-anchor').textContent === 'Lamp'
+key ctrl KeyZ
+expect st() === 'WordsLamp'
+key ctrl KeyZ
+expect st() === 'Words'
+key ctrl KeyZ
+expect st() === ''
+key ctrl+shift KeyZ
+key ctrl+shift KeyZ
+key ctrl+shift KeyZ
+expect c().querySelector('.tag-anchor').textContent === 'Lamp'
+eval fresh()
+press Words
+eval (function(){var r=document.createRange();r.setStart(c().firstChild,2);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return pick();})()
+press Red
+eval paste('<p>Lamp</p><p><strong>Chair</strong></p>', 'Lamp\nChair')
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+expect st() === 'WoRedLamp<br><strong>Chair</strong>rds'
+key Tab
+expect st() === 'WoRedLamp<br><strong>Chair</strong>rds'
+key ctrl KeyZ
+expect st() === 'WoRedrds'
+key ctrl+shift KeyZ
+expect st() === 'WoRedLamp<br><strong>Chair</strong>rds'
+eval fresh()
+press prop:
+press Red
+eval paste('', 'Lamp\nChair')
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+expect st() === 'prop:RedLamp<br>Chair'
+key Tab
+expect st() === 'prop:RedLamp<br>Chair'
+key ctrl KeyZ
+expect st() === 'prop:Red'
+key ctrl+shift KeyZ
+expect st() === 'prop:RedLamp<br>Chair'
+eval fresh()
+press Words
+eval (function(){var r=document.createRange();r.setStart(c().firstChild,2);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return pick();})()
+key Delete
+expect st() === 'Wods'
+key Escape
+key ctrl KeyZ
+expect st() === 'Words'
+key ctrl KeyZ
+expect st() === ''
+eval fresh()
+press prop:
+eval paste('<p>La<em>mp</em></p>', 'Lamp')
+expect st() === 'prop:La<em>mp</em>'
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelector('.tag-anchor[data-tag-name="Lamp"]')?.textContent === 'Lamp'
+expect c().querySelector('.tag-anchor em')?.textContent === 'mp'
+eval fresh()
+press prop:
+eval paste('<p><br></p>', '\n')
+expect st() === 'prop:<br>'
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+key Tab
+expect st() === 'prop:<br>'
+eval fresh()
+press prop:
+eval paste('<div><br></div>', '\n')
+expect st() === 'prop:<br>'
+expect c().querySelector('.plain-tag-keyword, .tag-anchor') === null
+key Tab
+expect st() === 'prop:<br>'
+eval fresh()
+press prop:
+eval paste('<div>La<em>mp</em></div>', 'Lamp')
+expect st() === 'prop:La<em>mp</em>'
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelector('.tag-anchor[data-tag-name="Lamp"]')?.textContent === 'Lamp'
+expect c().querySelector('.tag-anchor em')?.textContent === 'mp'

@@ -217,7 +217,9 @@ key ctrl KeyB
 press Lamp
 key Tab
 wait kw() === 0
-expect st(17).indexOf('prop') === -1 && st(17).indexOf('Lamp') !== -1
+expect cell(17).querySelectorAll('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]').length === 1
+expect cell(17).querySelector('.tag-anchor strong').textContent === 'Lamp'
+expect cell(17).textContent === 'WoLamprds'
 eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
 caret #rows .row:nth-of-type(19) .visual-cell .cell-editable
 press Words
@@ -230,9 +232,11 @@ expect st(18) === window.base.st && U.sizes().undo === window.base.steps
 eval (function(){ var dt = new DataTransfer(); dt.setData('text/plain', 'PASTED'); cell(18).dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()
 wait st(18).indexOf('PASTED') !== -1
 expect st(18).indexOf('prop') === -1
-key Escape
+expect kw() === 1
+key Tab
 wait kw() === 0
-expect st(18) === 'WoPASTEDrds'
+expect cell(18).querySelectorAll('.tag-anchor[data-tag-cat="prop"][data-tag-name="PASTED"]').length === 1
+expect cell(18).textContent === 'WoPASTEDrds'
 eval (function(){ document.querySelector('[data-action="add-row"]').click(); return true; })()
 caret #rows .row:nth-of-type(20) .visual-cell .cell-editable
 press Words

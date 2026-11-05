@@ -183,6 +183,13 @@ test("opening refuses a stale screen, a missing scene, a field that is not scrip
   assert.ok(!r.calls.includes("undo.break"), "a refused media cell does not break coalescing");
 });
 
+test("opening for a pending tag reads the cell without separating earlier typing", () => {
+  const r = rig();
+  const c = cell("r1", "visualText", "Wide", { from: 2, to: 2 });
+  assert.deepEqual(r.editing.open(c, false), { rowId: "r1", field: "visualText", html: "Wide", sel: { from: 2, to: 2 } });
+  assert.deepEqual(r.calls, ["page.html", "run:set-cell-text", "painted"]);
+});
+
 test("an edit runs one cell-text command, then writes the cell, syncs it, puts the selection back and closes the undo step", () => {
   const r = rig();
   const c = cell("r1", "audioText", "Every morning.", { from: 0, to: 5 });
@@ -210,6 +217,7 @@ test("an edit that returns nothing changes nothing and leaves the cell alone", (
   assert.equal(r.editing.edit(c, function () { return null; }), null);
   assert.equal(c.shown, "Every morning.");
   assert.ok(!r.calls.includes("page.write"));
+  assert.ok(!r.calls.includes("undo.break"));
   assert.equal(r.h.session.generation(), 0);
 });
 

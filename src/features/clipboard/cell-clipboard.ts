@@ -27,8 +27,9 @@ interface CellPasteResult {
 type PasteTarget = Pick<PasteRequest, "rowId" | "field"> & { rest: readonly Run[] };
 
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { cellLength, commentIds, normalizeCell, projection } from "../../core/text/runs.ts";
+import { cellLength, commentIds, normalizeCell } from "../../core/text/runs.ts";
 import { sliceCell } from "../../core/text/edits.ts";
+import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
 import { flattenDirections } from "../../core/text/directions.ts";
 import { toHtml } from "../../core/text/html.ts";
 import {
@@ -162,12 +163,7 @@ function prepareHtml(html: string, opts?: ClipboardOptions) {
   Array.prototype.forEach.call(body.querySelectorAll("style, script, template, noscript, title, meta, link"), function (el: Element) {
     if (el.parentNode) el.parentNode.removeChild(el);
   });
-  let last = body.lastChild;
-  while (last && (last.nodeType === 8 || (last.nodeType === 3 && !/\S/.test(last.nodeValue as string)))) {
-    body.removeChild(last);
-    last = body.lastChild;
-  }
-  const endsInBlock = !!(last && last.nodeType === 1 && ((last as Element).tagName === "P" || (last as Element).tagName === "DIV"));
+  const endsInBlock = clipboardEndsInBlock(body);
   return { html: body.innerHTML, media: media, lost: lost, attach: attach, endsInBlock: endsInBlock };
 }
 
@@ -175,25 +171,28 @@ export function cellFromClipboard(html: unknown, text: unknown, opts?: Clipboard
   opts = opts || {};
   let media = 0, lost = 0;
   let attach: Attachment[] = [];
+  let cell: Run[] = [];
+  let endsInBlock = false;
+  let fromCut = false;
   if (html) {
     const raw = String(html);
-    const fromCut = !!(opts.nonce && cutNonceIn(raw) === opts.nonce);
+    fromCut = !!(opts.nonce && cutNonceIn(raw) === opts.nonce);
     const prep = prepareHtml(raw, opts);
     media = prep.media;
     lost = prep.lost;
     attach = prep.attach;
     const textPort = (ports as CellClipboardPorts).text;
-    let cell = textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
+    cell = textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
     if (opts.cleanLinks !== false) cell = textPort.cleanPastedCell(cell);
-    if (prep.endsInBlock && projection(cell).slice(-1) === "\n") cell = sliceCell(cell, 0, cellLength(cell) - 1);
-    if (cellLength(cell)) {
-      return { cell: cell, text: null, media: media, lost: lost, attach: attach, fromCut: fromCut, comments: fromCut ? commentIds(cell) : [] };
-    }
+    endsInBlock = prep.endsInBlock;
   }
-  const vt = videoLinksInText(text);
-  vt.links.forEach(function (href) { addAttachment(attach, { kind: "video", href: href }); });
-  const t = vt.text;
-  return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, lost: lost, attach: attach, fromCut: false, comments: [] };
+  const content = clipboardContent(cell, endsInBlock, function () {
+    const vt = videoLinksInText(text);
+    vt.links.forEach(function (href) { addAttachment(attach, { kind: "video", href: href }); });
+    return vt.text;
+  });
+  const keptCut = content.text === null && fromCut;
+  return { ...content, media: media, lost: lost, attach: attach, fromCut: keptCut, comments: keptCut ? commentIds(content.cell) : [] };
 }
 
 export function brollIdsTaken(state: BrollScope | null, rowId: PasteRequest["rowId"], field: PasteRequest["field"], rest: readonly Run[] | null, fromCut: boolean) {

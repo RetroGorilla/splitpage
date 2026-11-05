@@ -25,6 +25,7 @@ function fixture(html: string, model: string | Run[]) {
   const ports: PlainTagPorts = {
     renderCategories: fakeTagCategories().renderCategories,
     document: fakeDocument(null).document,
+    undo: { breakCoalescing: () => {} },
     cells: {
       edit: (target: Element, change: CellEdit) => {
         assert.equal(target, cell);
@@ -53,6 +54,32 @@ function caretAt(node: Node, offset: number): void {
 function typedColon(): Pick<InputEvent, "inputType" | "data"> {
   return { inputType: "insertText", data: ":" };
 }
+
+test("closed tag refresh and input do not read a selection or decode cell content", () => {
+  const h = fixture("Words", "Words");
+  const control = startPlainTags(h.ports);
+  const getSelection = win.getSelection;
+  let reads = 0;
+  win.getSelection = () => { reads++; return getSelection.call(win); };
+  try {
+    control.refresh();
+    control.noteInput(h.cell);
+    assert.equal(control.beforeWrite(h.cell), null);
+    assert.equal(reads, 0);
+    assert.deepEqual(h.calls, []);
+    h.cell.textContent = "prop:";
+    h.cell.focus();
+    caretAt(h.cell.firstChild as Node, 5);
+    control.maybeOpen(typedColon(), h.cell);
+    assert.equal(control.isOpen(), true);
+    reads = 0;
+    control.refresh();
+    assert.ok(reads > 0);
+  } finally {
+    win.getSelection = getSelection;
+    control.dispose();
+  }
+});
 
 for (const [html, words] of [
   ["VFX: explosion in the background", "explosion in the background"],
@@ -143,7 +170,7 @@ test("plain tags mount with fake ports: the keyword opens, Tab edits through the
     assert.equal(projection(change.cell), "Shot flare");
     assert.deepEqual(change.sel, { from: 10, to: 10 });
     assert.deepEqual(change.records, { tags: [{ cat: "vfx", name: "flare" }] });
-    assert.equal(h.calls.length, 0);
+    assert.deepEqual(h.calls.map(call => call.method), ["storedHtmlFromDom", "fromHtml"]);
   } finally {
     control.dispose();
   }

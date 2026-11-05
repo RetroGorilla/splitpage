@@ -33,7 +33,7 @@ export const undoControl: UndoControl = {
 
 export const cells: Pick<CellEditing<Element>, "edit" | "open"> = {
   edit: (cell, change) => cellEditing().edit(cell, change),
-  open: (cell) => cellEditing().open(cell)
+  open: (cell, separate) => cellEditing().open(cell, separate)
 };
 
 export const selection: Pick<EditorSelection<Element, Range, Element>, "dropLink" | "remember" | "forget" | "paintedEpoch" | "resolve"> = {

@@ -71,7 +71,7 @@ export interface CellEditResult {
 export type CellEdit = (cell: Run[], sel: CellRange | null) => CellEditResult | null | undefined;
 
 export interface CellEditing<E, Html = never> {
-  readonly open: (cell: E) => OpenCell | null;
+  readonly open: (cell: E, separate?: boolean) => OpenCell | null;
   readonly close: (cell: E, html: string | Html, sel: CellRange | null | undefined) => E;
   readonly edit: (cell: E, change: CellEdit) => E | null;
   readonly sync: (cell: E) => void;
@@ -111,7 +111,7 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
     if (doc) ports.painted(cell, field, doc.rows[idx] as ShownRow);
   }
 
-  function open(cell: E): OpenCell | null {
+  function open(cell: E, separate = true): OpenCell | null {
     if (ports.stale()) return null;
     const at = page.address(cell);
     const idx = rowIndexOf(ports.document(), at.rowId);
@@ -122,7 +122,7 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
     const html = row ? row[at.field] || "" : "";
     if (holdsMedia(html)) return null;
     const sel = page.selection(cell);
-    ports.undo.breakCoalescing();
+    if (separate) ports.undo.breakCoalescing();
     return { rowId: at.rowId as string, field: at.field, html: html, sel: sel };
   }
 
@@ -140,10 +140,11 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
   }
 
   function editShown(cell: E, change: CellEdit): E | null {
-    const opened = open(cell);
+    const opened = open(cell, false);
     if (!opened) return null;
     const out = change(ports.decode.text(opened.html), opened.sel);
     if (!out || !out.cell) return null;
+    ports.undo.breakCoalescing();
     const next = toHtml(out.cell);
     if (next !== opened.html) {
       const outcome = ports.run(cellTextCommand(opened.rowId, opened.field, cellRuns(out.cell), ports.text, out.records));
