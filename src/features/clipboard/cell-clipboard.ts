@@ -27,7 +27,7 @@ interface CellPasteResult {
 type PasteTarget = Pick<PasteRequest, "rowId" | "field"> & { rest: readonly Run[] };
 
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { cellLength, commentIds, normalizeCell, projection } from "../../core/text/runs.ts";
+import { cellLength, commentIds, normalizeCell } from "../../core/text/runs.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { clipboardEndsInBlock, trimClipboardBlockEnd } from "../common/clipboard-blocks.ts";
 import { flattenDirections } from "../../core/text/directions.ts";
