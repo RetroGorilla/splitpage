@@ -1,0 +1,13 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow comment jump',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo <span class="cmt-anchor" data-cmt="c-one">marked words</span> tail',visualText:''}],comments:[{id:'c-one',rowId:'b',field:'audioText',author:'Tester',body:'Check these words',quotedText:'marked words',createdAt:'2026-11-04T12:00:00.000Z'}]})],'jump.splitpage')); })()
+wait F.state().title === 'Flow comment jump'
+click #btn-write
+wait W.on()
+eval (function(){ W.place({anchor:{kind:'beat',rowId:'a',offset:1},head:{kind:'beat',rowId:'a',offset:1}}); document.querySelector('.comment-card[data-id="c-one"] .comment-loc').click(); return true; })()
+expect W.on()
+expect document.activeElement.id === 'writer-doc'
+expect W.selection().head.rowId === 'b' && W.selection().head.offset === 6
+expect document.querySelector('#writer-doc .cmt-anchor[data-cmt="c-one"]').classList.contains('flash')
+expect F.state().rows[1].audioText === 'Bravo <span class="cmt-anchor" data-cmt="c-one">marked words</span> tail'
+expect W.check().length === 0

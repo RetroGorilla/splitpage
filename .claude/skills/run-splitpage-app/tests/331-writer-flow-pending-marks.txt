@@ -1,0 +1,27 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow marks',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'marks.splitpage')); })()
+wait F.state().title === 'Flow marks'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:5},head:{kind:'beat',rowId:'a',offset:5}})
+key ctrl KeyB
+eval W.fullRender()
+press XY
+expect F.state().rows[0].audioText === 'Alpha<strong>XY</strong>'
+key ctrl KeyB
+press z
+expect F.state().rows[0].audioText === 'Alpha<strong>XY</strong>z'
+key ctrl KeyI
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:5},head:{kind:'beat',rowId:'b',offset:5}})
+press Q
+expect F.state().rows[1].audioText === 'BravoQ'
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:8},head:{kind:'beat',rowId:'a',offset:8}})
+press R
+expect F.state().rows[0].audioText === 'Alpha<strong>XY</strong>zR'
+expect W.check().length === 0
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:6},head:{kind:'beat',rowId:'b',offset:6}})
+key ctrl KeyB
+eval (function(){ var beat = document.querySelector('.wr-beat[data-id="b"]'); var node = beat.firstChild; var event = new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertReplacementText',data:'Changed'}); event.getTargetRanges = function(){ return [{startContainer:node,startOffset:1,endContainer:node,endOffset:6}]; }; document.getElementById('writer-doc').dispatchEvent(event); window.replacementCancelled = event.defaultPrevented; return true; })()
+expect !window.replacementCancelled
+expect F.state().rows[1].audioText === 'BravoQ'

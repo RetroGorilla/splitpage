@@ -38,13 +38,39 @@ function harness(changeBeforePlan = false) {
     text: { cells: fromHtml, clock: { nowIso: () => "2026-11-04T12:00:00.000Z" }, editor: { name: () => "Editor" } },
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
     caretAfterStep: () => 0, notice: () => {}, changed: () => {}, selectionMoved: () => {},
-    plainVisual: () => "", newCommentId: () => "c", openComment: () => {}
+    plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
+    beatKeydown: () => false, beatSelection: () => {}, leaveBeat: () => {}, newCommentId: () => "c", openComment: () => {}
   });
   return { writer, root, doc: () => doc, recorded: () => recorded, replace: () => {
     epoch++;
     doc = migrateRows({ rows: [{ id: "a", audioText: "Replacement" }] }, fakeMigration().ports);
   } };
 }
+
+test("comment jumps follow the surviving narration mark instead of a stale comment row", () => {
+  const h = harness();
+  const row = h.doc().rows[1];
+  assert.ok(row);
+  row.audioText = 'Bravo <span class="cmt-anchor" data-cmt="c">marked</span> tail';
+  try {
+    h.writer.repaint();
+    h.writer.jumpComment("c", "a", "audioText");
+    assert.deepEqual(h.writer.selection(), { anchor: beatPos("b", 6), head: beatPos("b", 6) });
+    assert.equal(h.root.querySelector('.cmt-anchor[data-cmt="c"]')?.classList.contains("flash"), true);
+    assert.equal(h.recorded(), undefined);
+  } finally { h.writer.dispose(); }
+});
+
+test("a visual comment jumps to its beat without changing the narration", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.jumpComment("visual-comment", "b", "visualText");
+    assert.deepEqual(h.writer.selection(), { anchor: beatPos("b", 0), head: beatPos("b", 0) });
+    assert.equal(h.doc().rows[1]?.audioText, "Bravo");
+    assert.equal(h.recorded(), undefined);
+  } finally { h.writer.dispose(); }
+});
 
 test("writer operations plan after entering the command and carry the directed selection", () => {
   const h = harness(true);
