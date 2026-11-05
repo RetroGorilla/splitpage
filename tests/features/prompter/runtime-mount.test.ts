@@ -22,6 +22,29 @@ function harness() {
   return fakePrompterPorts(doc);
 }
 
+test("Present keeps saved and implicit paragraphs through skipped and empty first beats, and keeps its sentence rule", () => {
+  harness();
+  const doc = migrateRows({ paragraphsDecided: true, rows: [
+    { id: "a", audioText: "First" },
+    { id: "b", audioText: "Skipped", paragraphStart: true, status: "shot" },
+    { id: "c", audioText: "Second" },
+    { id: "d", audioText: "", visualText: "Picture", paragraphStart: true },
+    { id: "e", audioText: "Third." },
+    { id: "f", audioText: "Fourth" },
+    { id: "g", audioText: "", visualText: "Scene picture" },
+    { id: "h", audioText: "Fifth" },
+    { id: "i", audioText: "continues" }
+  ], sections: [{ id: "scene", name: "Scene", firstSceneId: "g" }] }, fakeMigration().ports);
+  const h = fakePrompterPorts(doc);
+  const runtime = startPrompter(h.ports);
+  try {
+    runtime.setSkipShot(true);
+    runtime.buildPrompterContent();
+    assert.deepEqual(Array.from(document.querySelectorAll(".prompter-line"), line => line.textContent),
+      ["First", "Second", "Third.", "Fourth", "Fifth continues"]);
+  } finally { runtime.dispose(); }
+});
+
 test("prompter runtime uses fake document, preferences, panels and tag container ports", () => {
   const h = harness();
   h.flags.prompterMirror = true;

@@ -121,7 +121,6 @@ export function mountSave(mount: { window: Window; ports: SavePorts }): { dispos
   life.listen(element("btn-save"), "click", ports.saveFromButton);
   life.listen(element("btn-save"), "mouseenter", ports.updateSaveStatus);
   life.listen(element("btn-save"), "focus", ports.updateSaveStatus);
-  life.listen(element("wr-save-status"), "mouseenter", ports.updateSaveStatus);
   return { dispose: life.dispose };
 }
 

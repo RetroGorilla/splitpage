@@ -1,0 +1,98 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; window.words=function(){return F.state().rows.map(function(r){return r.audioText}).join('|')}; F.openFile(new File([JSON.stringify({schema:2,title:'Boundary keys',paragraphsDecided:true,sections:[{id:'scene',name:'Next scene',firstSceneId:'d'}],rows:[{id:'a',audioText:'Alpha one',visualText:'A'},{id:'b',audioText:'Bravo two',visualText:'B'},{id:'c',audioText:'Charlie',visualText:'C',paragraphStart:true},{id:'d',audioText:'Delta',visualText:'D'}],comments:[]})],'boundaries.splitpage'))
+wait F.state().title === 'Boundary keys'
+click #btn-write
+wait W.on()
+eval at('b',0); U.flush(); window.depth=U.sizes().undo
+key Backspace
+expect F.state().rows[0].audioText === 'Alpha on' && F.state().rows[1].audioText === 'Bravo two'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta' && F.state().rows[2].paragraphStart === true
+expect W.check().length === 0
+eval at('a',9); U.flush(); window.depth=U.sizes().undo
+key Delete
+expect F.state().rows[0].audioText === 'Alpha one' && F.state().rows[1].audioText === 'ravo two'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta' && F.state().rows[2].paragraphStart === true
+expect W.check().length === 0
+eval at('c',0); U.flush(); window.depth=U.sizes().undo
+key Backspace
+expect !F.state().rows[2].paragraphStart && words() === 'Alpha one|Bravo two|Charlie|Delta'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta' && F.state().rows[2].paragraphStart === true
+expect W.check().length === 0
+eval at('b',9); U.flush(); window.depth=U.sizes().undo
+key Delete
+expect !F.state().rows[2].paragraphStart && words() === 'Alpha one|Bravo two|Charlie|Delta'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta' && F.state().rows[2].paragraphStart === true
+expect W.check().length === 0
+eval at('b',0); U.flush(); window.depth=U.sizes().undo
+key ctrl Backspace
+expect F.state().rows[0].audioText === 'Alpha ' && F.state().rows[1].audioText === 'Bravo two'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta' && F.state().rows[2].paragraphStart === true
+expect W.check().length === 0
+eval at('c',0); U.flush(); window.depth=U.sizes().undo
+key ctrl Backspace
+expect !F.state().rows[2].paragraphStart && words() === 'Alpha one|Bravo two|Charlie|Delta'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta' && F.state().rows[2].paragraphStart === true
+expect W.check().length === 0
+eval at('d',0); U.flush(); window.depth=U.sizes().undo
+key Backspace
+expect W.selection().head.kind === 'heading' && W.selection().head.sceneId === 'scene' && W.selection().head.offset === 10
+expect U.sizes().undo === depth && words() === 'Alpha one|Bravo two|Charlie|Delta'
+eval at('c',7)
+key Delete
+expect W.selection().head.kind === 'heading' && W.selection().head.sceneId === 'scene' && W.selection().head.offset === 0
+expect U.sizes().undo === depth && words() === 'Alpha one|Bravo two|Charlie|Delta'
+eval at('a',5)
+key Enter
+expect F.state().rows.length === 5 && F.state().rows[0].audioText === 'Alpha' && F.state().rows[1].audioText === ' one' && !F.state().rows[1].paragraphStart
+expect F.state().rows[0].visualText === 'A' && F.state().rows[1].visualText === ''
+key Enter
+expect F.state().rows.length === 5 && F.state().rows[1].paragraphStart === true
+key ctrl KeyZ
+expect F.state().rows.length === 5 && !F.state().rows[1].paragraphStart
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta'
+eval at('a',9)
+key Enter
+expect F.state().rows.length === 5 && F.state().rows[1].audioText === ''
+key Enter
+expect F.state().rows.length === 4 && F.state().rows[1].id === 'b' && F.state().rows[1].paragraphStart === true
+key ctrl KeyZ
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta' && !F.state().rows[1].paragraphStart
+eval at('a',5)
+key shift Enter
+expect F.state().rows.length === 4 && F.state().rows[0].audioText === 'Alpha<br> one'
+key ctrl KeyZ
+expect words() === 'Alpha one|Bravo two|Charlie|Delta'
+eval at('d',5)
+key Enter
+key Enter
+eval window.count=F.state().rows.length
+key Enter
+expect F.state().rows.length === count && F.state().rows[count-1].paragraphStart === true
+expect W.check().length === 0

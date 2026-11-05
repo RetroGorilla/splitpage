@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createEditorSelection, createSelectionModel } from "../../../src/application/editing/selection.ts";
 import { cellKeys } from "../../../src/core/text/selection.ts";
 import type { SelectionField } from "../../../src/core/text/selection.ts";
+import { beatPos, headingPos } from "../../../src/core/flow/flow.ts";
 
 function fakeDocument() {
   const doc = {
@@ -125,4 +126,27 @@ test("the link target is held with its cell until it is dropped, and a new hold 
   assert.equal(editor.heldLink(), null);
   editor.dropLink();
   assert.equal(editor.heldLink(), null, "dropping twice is harmless");
+});
+
+test("held flow ranges preserve both endpoints, direction and lifetime separately from cell selections", () => {
+  const { doc, editor } = fakeEditor();
+  const range = { anchor: beatPos("r1", 8), head: headingPos("scene", 2) };
+  editor.remember(taken("r1", 4, 4, "Mine one."));
+  editor.rememberFlow(1, range);
+  assert.equal(editor.resolve(), null);
+  assert.equal(editor.snapshot(), null);
+  assert.deepEqual(editor.resolveFlow(), range);
+  assert.notEqual(editor.resolveFlow(), range);
+  assert.notEqual(editor.resolveFlow()?.anchor, range.anchor);
+  doc.epoch++;
+  assert.equal(editor.resolveFlow(), null);
+  doc.epoch--;
+  assert.equal(editor.resolveFlow(), null);
+  editor.rememberFlow(1, range);
+  editor.remember(taken("r1", 4, 4, "Mine one."));
+  assert.equal(editor.resolveFlow(), null);
+  assert.equal(editor.resolve()?.head, 4);
+  editor.rememberFlow(1, range);
+  editor.forget();
+  assert.equal(editor.resolveFlow(), null);
 });

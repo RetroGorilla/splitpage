@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flowCommand } from "../../src/application/commands/flow.ts";
+import { flowCommand, initializeFlowParagraphs } from "../../src/application/commands/flow.ts";
 import { beatPos, caretAt, joinWithPrevious, renameHeading, replaceRange } from "../../src/core/flow/flow.ts";
-import type { FlowPorts } from "../../src/core/flow/flow.ts";
+import type { FlowPorts, FlowSelectionPair } from "../../src/core/flow/flow.ts";
 import { migratedThenSet } from "../core/migrate-ports.ts";
 import { harness, runConfined } from "./session-fakes.ts";
 
@@ -10,6 +10,60 @@ const ports: FlowPorts = { cells: text => text ? [{ text, marks: {} }] : [], new
 const stamps = { clock: { nowIso: () => "2026-11-04T12:00:00.000Z" }, editor: { name: () => "Editor" } };
 const original = { rows: [{ id: "a", audioText: "Alpha", visualText: "" }, { id: "b", audioText: "Bravo", visualText: "" }],
   sections: [{ id: "s", name: "Scene", firstSceneId: "b" }], comments: [{ id: "c", rowId: "b", field: "audioText", body: "Keep" }] };
+
+test("the session records a flow selection only after the command commits", () => {
+  const recorded: Array<FlowSelectionPair | undefined> = [];
+  const h = harness(undefined, { entry: () => migratedThenSet(structuredClone(original)), record: pair => { recorded.push(pair); } });
+  h.session.adopt({});
+  const before = { anchor: beatPos("a", 4), head: beatPos("a", 1) };
+  const operation = (doc: Parameters<typeof replaceRange>[0]) => replaceRange(doc, before, [{ text: "Q", marks: {} }], ports);
+  const failed = flowCommand("replace", operation, { ...stamps, clock: { nowIso: () => { throw new Error("clock"); } } }, before);
+  assert.equal(h.session.run(failed).kind, "failed");
+  assert.equal(recorded.length, 0);
+  assert.equal(runConfined(h.session, flowCommand("replace", operation, stamps, before)).kind, "applied");
+  assert.deepEqual(recorded[0], { before, after: caretAt(beatPos("a", 2)) });
+  h.session.dispose();
+});
+
+test("first-open paragraph initialization persists once without an undo edit and never writes viewing-only documents", () => {
+  const h = harness(undefined, { entry: () => migratedThenSet({ ...original, sections: [], rows: [
+    { id: "a", audioText: "Sentence." }, { id: "b", audioText: "Continuation" }, { id: "c", audioText: "Still running" }
+  ] }) });
+  h.session.adopt({});
+  h.log.length = 0;
+  let settled = 0;
+  const before = JSON.stringify(h.session.held());
+  assert.equal(h.session.amend(initializeFlowParagraphs(ports, () => false, () => { settled++; })).kind, "noop");
+  assert.equal(JSON.stringify(h.session.held()), before);
+  assert.equal(h.session.generation(), 0);
+  assert.equal(h.log.length, 0);
+  const initialization = initializeFlowParagraphs(ports, () => true, () => { settled++; });
+  assert.equal(h.session.amend(initialization).kind, "applied");
+  assert.equal(h.session.held()?.paragraphsDecided, true);
+  assert.equal(h.session.held()?.rows[1]?.paragraphStart, true);
+  assert.equal(h.session.held()?.rows[2]?.paragraphStart, undefined);
+  assert.equal(h.log.includes("undo.record"), false);
+  assert.equal(h.log.includes("dirty:1"), true);
+  assert.equal(h.log.includes("save:1"), true);
+  assert.equal(settled, 1);
+  assert.equal(h.session.amend(initialization).kind, "noop");
+  assert.equal(settled, 1);
+  h.session.dispose();
+});
+
+test("first-open initialization keeps imported paragraph flags and marks an intentional unbroken document", () => {
+  for (const paragraphStart of [undefined, true]) {
+    const h = harness(undefined, { entry: () => migratedThenSet({ ...original, rows: [
+      { id: "a", audioText: "No stop" }, { id: "b", audioText: "More", ...(paragraphStart ? { paragraphStart } : {}) }
+    ] }) });
+    h.session.adopt({});
+    const before = JSON.stringify(h.session.held()?.rows);
+    assert.equal(h.session.amend(initializeFlowParagraphs(ports, () => true, () => {})).kind, "applied");
+    assert.equal(JSON.stringify(h.session.held()?.rows), before);
+    assert.equal(h.session.held()?.paragraphsDecided, true);
+    h.session.dispose();
+  }
+});
 
 test("flow operations plan against the current document and publish one command including comments", () => {
   const h = harness(undefined, { entry: () => migratedThenSet(original) });

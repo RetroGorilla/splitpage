@@ -1,0 +1,27 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow display',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha <span class="stage-dir">quiet</span> words',visualText:''},{id:'b',audioText:'<span class="audio-cue">SFX: Wave</span><br><span class="audio-cue">Music: Piano</span><br>Bravo',visualText:'',status:'shot'},{id:'c',audioText:'',visualText:'The quay',lengthSeconds:0,status:'shot'}],sections:[{id:'s',name:'Harbour',firstSceneId:'b'}],comments:[]})],'display.splitpage'))
+wait F.state().title === 'Flow display'
+jsclick #menu-hide-shot
+click #rows .section-header[data-section-id="s"] .section-fold
+click #btn-write
+wait W.on()
+expect document.querySelectorAll('#writer-doc .wr-beat').length === 3 && document.querySelectorAll('#writer-doc .wr-heading').length === 1
+expect document.querySelectorAll('#writer-doc .wr-par').length === 2
+expect getComputedStyle(document.querySelector('#writer-doc .stage-dir')).fontStyle === 'italic'
+expect getComputedStyle(document.querySelector('#writer-doc .stage-dir'),'::before').content.includes('(')
+expect getComputedStyle(document.querySelector('#writer-doc .audio-cue')).color === getComputedStyle(document.documentElement).getPropertyValue('--tag-sound').trim() || getComputedStyle(document.querySelector('#writer-doc .audio-cue')).fontSize !== getComputedStyle(document.getElementById('writer-doc')).fontSize
+expect document.querySelector('.wr-beat[data-id="b"]').innerText.includes('Bravo') && document.querySelector('.wr-beat[data-id="c"]').dataset.visual === 'The quay · 0:00'
+eval W.place({anchor:{kind:'beat',rowId:'c',offset:0},head:{kind:'beat',rowId:'c',offset:0}})
+mouse click (function(){var r=document.querySelector('.wr-beat[data-id="c"]').getClientRects()[0];return {x:r.left+1,y:r.top+2};})()
+expect !!document.querySelector('.wr-flow-join:not([hidden])')
+eval document.querySelector('.wr-flow-join')?.click()
+expect F.state().rows.length === 2 && F.state().rows[1].visualText === 'The quay'
+key ctrl KeyZ
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:5},head:{kind:'beat',rowId:'b',offset:5}})
+click #wr-close
+expect document.activeElement.dataset.id === 'b' && document.activeElement.dataset.field === 'audioText'
+click #btn-write
+wait W.on()
+expect W.selection().head.rowId === 'b' && W.selection().head.offset === 5
+expect W.check().length === 0

@@ -126,7 +126,7 @@ jobs:
 
       - name: Browser suites for save, typing, undo and export
         if: needs.changes.outputs.app == 'true'
-        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites-flows" '^(19-save-conflict|28-autosave|185-autosave-every-edit|261-import-save-back-late-edit|270-save-open-every-surface|283-save-status-by-destination|285-save-buttons-one-state|06-writer|81-draft-edit|282-editor-operations|289-script-cell-ime|73-undo|84-undo-caret|267-writer-undo|03-exports|41-export-polish|259-xlsx-export|284-exports-from-a-fixture|98-export-dialog)\.txt$' --lanes 2 --port-base "$PORT_BASE"
+        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites-flows" '^(19-save-conflict|28-autosave|185-autosave-every-edit|261-import-save-back-late-edit|270-save-open-every-surface|283-save-status-by-destination|285-save-buttons-one-state|06-writer|81-draft-edit|282-editor-operations|289-script-cell-ime|73-undo|84-undo-caret|267-writer-undo|03-exports|41-export-polish|259-xlsx-export|284-exports-from-a-fixture|98-export-dialog|595-writer-flow-mode-position|596-writer-flow-typing-work)\.txt$' --lanes 2 --port-base "$PORT_BASE"
 
       - name: Upload the suite logs
         if: failure()

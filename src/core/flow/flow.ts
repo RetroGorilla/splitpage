@@ -7,9 +7,10 @@ import { cappedText } from "../document/text-policy.ts";
 import { normalizeBeatLength, rowStatusId } from "../document/timing.ts";
 import { normalizeScenes, scenesAfterRemoval as removedSceneAnchors, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
 import type { DocumentScene } from "../document/scenes.ts";
-import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, setMark, sliceCell, splitCell } from "../text/edits.ts";
+import type { DocumentShape } from "../document/validated.ts";
+import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, replaceText, setMark, sliceCell, splitCell } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
-import { cellLength, commentIds, normalizeCell, projection } from "../text/runs.ts";
+import { cellLength, commentIds, normalizeCell, OBJ, projection } from "../text/runs.ts";
 import type { MarkName, Marks, Run } from "../text/runs.ts";
 
 export const SCENE_NAME_MAX = 200;
@@ -18,6 +19,7 @@ export interface FlowRow {
   readonly id: string;
   readonly audioText?: string | null | undefined;
   readonly visualText?: string | null | undefined;
+  readonly lengthSeconds?: unknown;
   readonly paragraphStart?: boolean | undefined;
   readonly [key: string]: unknown;
 }
@@ -44,6 +46,11 @@ export interface FlowRange {
   readonly head: FlowPos;
 }
 
+export interface FlowSelectionPair {
+  readonly before: FlowRange;
+  readonly after: FlowRange;
+}
+
 export interface FlowPorts {
   readonly cells: (html: string | null | undefined) => readonly Run[];
   readonly newId: () => string;
@@ -56,6 +63,7 @@ export interface FlowEdit {
   readonly removedComments: readonly string[];
   readonly selection: FlowRange;
   readonly notice?: string | undefined;
+  readonly clipboard?: Pick<DocumentShape, "comments" | "people" | "productionTags" | "brollShots">;
 }
 
 export interface FlowRefusal {
@@ -224,7 +232,7 @@ type RangeFlowPart =
   | { readonly kind: "heading"; readonly scene: DocumentScene; readonly origin: FlowPos }
   | { readonly kind: "beat"; readonly row: FlowRow; readonly origin: FlowPos };
 
-export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Run[], ports: FlowPorts): FlowOutcome {
+export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Run[], ports: FlowPorts, removeWholeStart = false): FlowOutcome {
   insert = normalizeCell(insert);
   const { from, to } = orderedRange(doc, range);
   const insertLength = cellLength(insert), insertedName = projection(insert);
@@ -239,6 +247,7 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
   const parts: RangeFlowPart[] = [];
   const removed: FlowRow[] = [];
   const removedHeaders = new Set<string>();
+  let replacementRow: FlowRow | undefined;
   for (const part of source) {
     const start = part.origin;
     const length = part.kind === "heading" ? part.scene.name.length : cellLength(ports.cells(part.row.audioText));
@@ -246,7 +255,9 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
     const isFrom = start.kind === from.kind && comparePos(doc, start, { ...from, offset: 0 }) === 0;
     const isTo = start.kind === to.kind && comparePos(doc, start, { ...to, offset: 0 }) === 0;
     const touches = comparePos(doc, from, end) <= 0 && comparePos(doc, start, to) <= 0;
-    if (!touches) { parts.push(part); continue; }
+    const exclusiveEmptyEndpoint = part.kind === "beat" && !length && isTo && !isFrom
+      && to.offset === 0 && part.row.id !== doc.rows[doc.rows.length - 1]?.id;
+    if (!touches || exclusiveEmptyEndpoint) { parts.push(part); continue; }
     const a = isFrom ? from.offset : 0, b = isTo ? to.offset : length;
     const whole = a === 0 && b === length;
     if (part.kind === "heading") {
@@ -254,8 +265,12 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
       if (Array.from(name).length > SCENE_NAME_MAX) return { refused: "A scene name can be up to " + SCENE_NAME_MAX + " characters." };
       if (!name.trim()) removedHeaders.add(part.scene.id);
       else parts.push({ ...part, scene: { ...part.scene, name } });
-    } else if (whole && !withinOneBeat(range) && !(isFrom && insertLength)) {
+    } else if (whole && !withinOneBeat(range) && (removeWholeStart || !(isFrom && insertLength))) {
       removed.push(part.row);
+      if (isFrom && insertLength) {
+        replacementRow = writeCell(blankRow(ports.newId(), !!part.row.paragraphStart), insert);
+        parts.push({ ...part, row: replacementRow });
+      }
     } else {
       const cell = ports.cells(part.row.audioText);
       const left = a < b ? deleteRange(cell, a, b) : cell;
@@ -267,7 +282,7 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
   for (const block of flowOf(doc)) {
     if (block.kind !== "paragraph") continue;
     const first = block.beats[0] as FlowRow;
-    const survivor = block.beats.find(row => kept.has(row.id));
+    const survivor = block.beats.find(row => kept.has(row.id) || replacementRow && from.kind === "beat" && row.id === from.rowId);
     if (survivor && first.id !== survivor.id && [...kept.keys()].indexOf(survivor.id) > 0) {
       kept.set(survivor.id, withFlag(kept.get(survivor.id) as FlowRow));
     }
@@ -283,7 +298,7 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
       protectedBreaks.add(survivor.id);
     }
   });
-  if (from.kind === "beat" && to.kind === "beat" && from.rowId !== to.rowId && kept.has(from.rowId)) {
+  if (from.kind === "beat" && to.kind === "beat" && from.rowId !== to.rowId && (kept.has(from.rowId) || replacementRow)) {
     const tail = kept.get(to.rowId);
     const scene = headings.get(to.rowId);
     if (tail && !protectedBreaks.has(tail.id) && (!scene || removedHeaders.has(scene.id))) kept.set(tail.id, withoutFlag(tail));
@@ -302,7 +317,7 @@ export function replaceRange(doc: FlowDoc, range: FlowRange, insert: readonly Ru
   const sections = repaired.flatMap((part, index) => part.kind === "heading"
     ? [withSceneFirstBeat(part.scene, (repaired[index + 1] as { row: FlowRow }).row.id)] : []);
   let caret: FlowPos;
-  const firstRow = from.kind === "beat" ? kept.get(from.rowId) : undefined;
+  const firstRow = from.kind === "beat" ? kept.get(from.rowId) ?? replacementRow : undefined;
   const firstHeading = from.kind === "heading" ? sections.find(scene => scene.id === from.sceneId) : undefined;
   if (firstHeading) caret = headingPos(firstHeading.id, from.offset + insertedName.length);
   else if (firstRow) caret = beatPos(firstRow.id, from.offset + insertLength);
@@ -643,6 +658,12 @@ export function enterInHeading(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): Fl
   if (pos.kind !== "heading") return null;
   const scene = scenesOf(doc).find(item => item.id === pos.sceneId);
   if (!scene) return null;
+  if (pos.offset === 0) {
+    const rows = doc.rows.slice();
+    const fresh = blankRow(ports.newId(), false);
+    rows.splice(indexOfRow(doc, scene.firstSceneId), 0, fresh);
+    return edit(doc, rows, caretAt(beatPos(fresh.id, 0)));
+  }
   const head = scene.name.slice(0, pos.offset), tail = scene.name.slice(pos.offset);
   if (!tail) return { move: beatPos(scene.firstSceneId, 0) };
   if (!head) return { move: beatPos(scene.firstSceneId, 0) };
@@ -668,7 +689,9 @@ function withoutMarker(doc: FlowDoc, index: number, ports: FlowPorts, selection:
   const row = doc.rows[index] as FlowRow;
   const rows = doc.rows.slice();
   rows[index] = writeCell(row, deleteRange(ports.cells(row.audioText), 0, HEADING_MARKER.length));
-  return edit(doc, rows, selection, notice ? { notice } : undefined);
+  const remap = (pos: FlowPos): FlowPos => pos.kind === "beat" && pos.rowId === row.id
+    ? { ...pos, offset: Math.max(0, pos.offset - HEADING_MARKER.length) } : pos;
+  return edit(doc, rows, { anchor: remap(selection.anchor), head: remap(selection.head) }, notice ? { notice } : undefined);
 }
 
 export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | null, keep: FlowRange | null, ports: FlowPorts): FlowOutcome {
@@ -680,11 +703,14 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   const lineEnd = text.indexOf("\n") === -1 ? text.length : text.indexOf("\n");
   const end = enterAt === null ? lineEnd : Math.min(enterAt, lineEnd);
   const name = text.slice(HEADING_MARKER.length, end).trim();
-  const fallback = keep ?? caretAt(beatPos(row.id, Math.max(0, (enterAt ?? text.length) - HEADING_MARKER.length)));
+  const fallback = keep ?? caretAt(beatPos(row.id, enterAt ?? text.length));
   if (!name) return withoutMarker(doc, index, ports, fallback);
+  if (sliceCell(cell, 0, end).some(run => !!run.marks.tag || !!run.marks.cmt?.length)) {
+    return withoutMarker(doc, index, ports, fallback, "A scene header can't hold tags or comments.");
+  }
   const follower = doc.rows[index + 1];
   const anchors = sceneAnchors(doc);
-  const hasRunOn = !!follower && !startsParagraph(doc, index + 1);
+  const hasRunOn = lineEnd === text.length && !!follower && !startsParagraph(doc, index + 1);
   if (enterAt === null && hasRunOn) {
     return withoutMarker(doc, index, ports, fallback, "A scene header can't hold several beats. Press Enter after the header's words.");
   }
@@ -696,11 +722,16 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   const rows = doc.rows.slice();
   const existing = anchors.get(row.id);
   let first: FlowRow;
-  const removeBeat = !cellLength(rest) && !ports.hasVisual(row) && !!follower && !anchors.has(follower.id) && !existing;
+  const removeBeat = !cellLength(rest) && !ports.hasVisual(row);
   if (removeBeat) {
     rows.splice(index, 1);
-    first = withoutFlag(follower as FlowRow);
-    rows[index] = first;
+    if (follower && !anchors.has(follower.id)) {
+      first = withoutFlag(follower);
+      rows[index] = first;
+    } else {
+      first = blankRow(ports.newId(), false);
+      rows.splice(index, 0, first);
+    }
   } else {
     first = withoutFlag(writeCell(row, rest));
     rows[index] = first;
@@ -715,7 +746,12 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   }
   scenes.push(fresh);
   const sections = scenesOf({ rows, sections: scenes });
-  const selection = keep ?? caretAt(beatPos(first.id, 0));
+  const remap = (pos: FlowPos): FlowPos => {
+    if (pos.kind !== "beat" || pos.rowId !== row.id) return pos;
+    if (pos.offset < restStart) return headingPos(fresh.id, Math.min(name.length, Math.max(0, pos.offset - HEADING_MARKER.length)));
+    return beatPos(first.id, Math.min(cellLength(rest), pos.offset - restStart));
+  };
+  const selection = keep ? { anchor: remap(keep.anchor), head: remap(keep.head) } : caretAt(beatPos(first.id, 0));
   return edit(doc, rows, selection, { sections });
 }
 
@@ -732,7 +768,8 @@ export interface InlineMarkdown {
 }
 
 export function inlineMarkdown(cell: readonly Run[], caret: number): InlineMarkdown | null {
-  const text = projection(cell);
+  // why: tags stop delimiter matching, while their widths must stay aligned with the cell's positions
+  const text = normalizeCell(cell).map(run => run.marks.tag ? "\n".repeat(run.atom ? 1 : run.text.length) : run.atom ? OBJ : run.text).join("");
   for (const rule of INLINE_RULES) {
     const size = rule.marker.length;
     if (text.slice(caret - size, caret) !== rule.marker) continue;
@@ -849,8 +886,7 @@ export function replaceMatch(doc: FlowDoc, range: FlowRange, text: string, ports
     const cell = ports.cells(row.audioText);
     const a = index === start ? from.offset : 0;
     const b = index === end ? to.offset : cellLength(cell);
-    const left = deleteRange(cell, a, b);
-    rows[index] = writeCell(row, index === start && text ? insertCell(left, a, [{ text, marks: {} }]).cell : left);
+    rows[index] = writeCell(row, index === start ? replaceText(cell, a, b, text) : deleteRange(cell, a, b));
   }
   return edit(doc, rows, caretAt(beatPos(from.rowId, from.offset + text.length)));
 }
@@ -1051,4 +1087,99 @@ export function moveBeats(doc: FlowDoc, rowIds: readonly string[], pos: FlowPos,
   const sections = scenesAfterRemoval({ rows: doc.rows, sections: doc.sections }, wanted);
   const detached: FlowDoc = { ...doc, rows, sections };
   return insertBeats(detached, pos, beats, ports);
+}
+
+export interface FlowClipboardSlice {
+  readonly text: string;
+  readonly rows: readonly FlowRow[];
+  readonly wholeIds: readonly string[];
+  readonly headers: readonly { readonly index: number; readonly scene: DocumentScene }[];
+}
+
+export function copyFlowRange(doc: FlowDoc, range: FlowRange, ports: FlowPorts): FlowClipboardSlice {
+  const rows: FlowRow[] = [], wholeIds: string[] = [], headers: { index: number; scene: DocumentScene }[] = [];
+  const { from, to } = orderedRange(doc, range);
+  if (!isCollapsed(range)) {
+    for (const block of flowOf(doc)) {
+      if (block.kind === "heading") {
+        const start = { kind: "heading", sceneId: block.scene.id, offset: 0 } as const;
+        const end = { ...start, offset: block.scene.name.length };
+        if (comparePos(doc, from, start) <= 0 && comparePos(doc, to, end) >= 0) {
+          headers.push({ index: rows.length, scene: block.scene });
+        } else if (comparePos(doc, from, end) < 0 && comparePos(doc, to, start) > 0) {
+          const text = block.scene.name.slice(from.kind === "heading" && from.sceneId === block.scene.id ? from.offset : 0,
+            to.kind === "heading" && to.sceneId === block.scene.id ? to.offset : undefined);
+          rows.push({ ...blankRow(ports.newId(), false), audioText: toHtml([{ text, marks: {} }]) });
+        }
+        continue;
+      }
+      for (const row of block.beats) {
+        const cell = ports.cells(row.audioText), length = cellLength(cell);
+        const start = beatPos(row.id, 0), end = beatPos(row.id, length);
+        if (comparePos(doc, from, end) > 0 || comparePos(doc, to, start) < 0) continue;
+        const atStart = from.kind === "beat" && from.rowId === row.id;
+        const atEnd = to.kind === "beat" && to.rowId === row.id;
+        if (!length && atEnd && !atStart && row.id !== doc.rows.at(-1)?.id) continue;
+        const a = atStart ? from.offset : 0, b = atEnd ? to.offset : length;
+        if (a === b && length) continue;
+        const whole = !withinOneBeat(range) && a === 0 && b === length;
+        if (whole) wholeIds.push(row.id);
+        const piece = whole ? row : { ...blankRow(row.id, false), audioText: toHtml(sliceCell(cell, a, b)) };
+        rows.push(rows.length && row.id === block.beats[0]?.id ? { ...piece, paragraphStart: true } : piece);
+      }
+    }
+  }
+  return { text: logicalText(doc, range, ports), rows, wholeIds, headers };
+}
+
+export function pasteFlowRange(doc: FlowDoc, range: FlowRange, clip: FlowClipboardSlice, ports: FlowPorts): FlowOutcome {
+  if (!clip.wholeIds.length && !clip.headers.length) {
+    return replaceRange(doc, range, clip.text ? [{ text: clip.text, marks: {} }] : [], ports);
+  }
+  const cleared = isCollapsed(range) ? null : replaceRange(doc, range, [], ports);
+  if (cleared && !("rows" in cleared)) return cleared;
+  const candidate = cleared?.rows.length === 1 && !cleared.sections?.length ? cleared.rows[0] : undefined;
+  const generatedPlaceholder = candidate && !doc.rows.some(row => row.id === candidate.id) ? candidate.id : null;
+  const current = cleared ? { ...doc, rows: cleared.rows, sections: cleared.sections } : doc;
+  const at = cleared?.selection ?? range;
+  const marker = blankRow(ports.newId(), false);
+  const beats = clip.rows.length ? clip.rows : [marker];
+  const inserted = insertBeats(current, at.head, beats, ports);
+  if (!inserted || !("rows" in inserted)) return inserted;
+  const rows = inserted.rows.filter(row => row.id !== generatedPlaceholder);
+  const index = rows.findIndex(row => row.id === beats[0]?.id);
+  const sections = inserted.sections?.slice() ?? [];
+  const originalAnchors = new Map(flowOf(current).flatMap(block => block.kind === "heading" ? [[block.scene.id, block.scene.firstSceneId]] : []));
+  let insertionIndex = index;
+  if (!clip.rows.length) {
+    rows.splice(index, 1);
+    for (let i = 0; i < sections.length; i++) {
+      const scene = sections[i] as DocumentScene;
+      if (scene.firstSceneId !== marker.id) continue;
+      const blank = blankRow(ports.newId(), false);
+      rows.splice(index, 0, blank);
+      sections[i] = { ...scene, firstSceneId: blank.id };
+      insertionIndex++;
+    }
+  }
+  const anchors = clip.headers.map(header => ({ header, id: rows[insertionIndex + header.index]?.id }));
+  for (const { header, id } of anchors) {
+    const offset = id ? rows.findIndex(row => row.id === id) : rows.length;
+    if (!rows[offset]) rows.push(blankRow(ports.newId(), false));
+    let first = rows[offset] as FlowRow;
+    const existing = sections.find(scene => scene.firstSceneId === first.id);
+    if (existing) {
+      const blank = blankRow(ports.newId(), false);
+      rows.splice(offset, 0, blank);
+      if (originalAnchors.get(existing.id) !== first.id) sections[sections.indexOf(existing)] = { ...existing, firstSceneId: blank.id };
+      else first = blank;
+    }
+    sections.push({ ...header.scene, id: ports.newId(), firstSceneId: first.id });
+  }
+  const last = rows.find(row => row.id === sections.at(-1)?.firstSceneId) ?? rows.at(-1) as FlowRow;
+  const positions = new Map(rows.map((row, offset) => [row.id, offset]));
+  sections.sort((a, b) => (positions.get(a.firstSceneId) ?? 0) - (positions.get(b.firstSceneId) ?? 0));
+  return { ...inserted, rows, sections: sections.length ? sections : undefined,
+    removedComments: cleared?.removedComments ?? [], notice: cleared?.notice,
+    selection: clip.rows.length ? inserted.selection : caretAt(beatPos(last.id, 0)) };
 }

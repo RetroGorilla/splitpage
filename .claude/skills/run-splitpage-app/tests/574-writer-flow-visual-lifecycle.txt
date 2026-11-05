@@ -1,0 +1,36 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow visual lifecycle',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Original'},{id:'b',audioText:'',visualText:'Drone'},{id:'c',audioText:'Charlie',visualText:'Last'}],comments:[]})],'visual-life.splitpage'))
+wait F.state().title === 'Flow visual lifecycle'
+click #btn-write
+wait W.on()
+mouse click (function(){var r=document.querySelector('.wr-beat[data-id="b"]').getClientRects()[0];return {x:r.left+r.width*.7,y:r.top+r.height/2};})()
+type Aerial
+expect F.state().rows[1].audioText === 'Aerial' && F.state().rows[0].audioText === 'Alpha' && F.state().rows[2].audioText === 'Charlie'
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:1},head:{kind:'beat',rowId:'a',offset:4}}); U.flush(); window.depth=U.sizes().undo; document.querySelector('#wr-visual').click(); document.querySelector('.wr-flow-visual-close').click(); U.flush()
+expect F.state().rows.length === 3 && U.sizes().undo === depth
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:2},head:{kind:'beat',rowId:'a',offset:2}}); document.querySelector('#wr-visual').click()
+key ctrl KeyA
+type Changed
+key ctrl KeyZ
+expect F.state().rows[0].visualText === 'Original' && !document.querySelector('.wr-flow-visual-box:not([hidden])')
+key ctrl KeyY
+expect F.state().rows[0].visualText === 'Changed'
+eval document.querySelector('#wr-visual').click(); W.outsideVisual('a','Remote')
+expect document.querySelector('.wr-flow-visual-text').textContent === 'Remote'
+key End
+type !
+expect F.state().rows[0].visualText === 'Remote!'
+eval document.querySelector('.wr-flow-visual-close').click()
+eval document.querySelector('#wr-visual').click(); window.visual=document.querySelector('.wr-flow-visual-text'); visual.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); visual.textContent='Kept composition'; visual.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',data:'Kept composition',isComposing:true})); W.fullRender()
+expect document.querySelector('.wr-flow-visual-text').textContent === 'Kept composition' && F.state().rows[0].visualText === 'Remote!'
+eval visual.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'Kept composition'}))
+expect F.state().rows[0].visualText === 'Kept composition'
+click #wr-close
+expect F.state().rows[0].visualText === 'Kept composition' && !document.querySelector('#wr-visual') && !document.querySelector('.wr-flow-visual-box')
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:0}}); document.querySelector('#wr-visual').click(); window.stale=document.querySelector('.wr-flow-visual-text'); F.openFile(new File([JSON.stringify({schema:2,title:'Replacement visual',paragraphsDecided:true,rows:[{id:'a',audioText:'Replacement',visualText:'New visual'}],comments:[]})],'replacement-visual.splitpage'))
+wait F.state().title === 'Replacement visual'
+eval stale.textContent='Stale'; stale.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'Stale'}))
+expect F.state().rows[0].visualText === 'New visual' && F.state().rows[0].audioText === 'Replacement'

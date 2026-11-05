@@ -23,7 +23,7 @@ expect true
 expect Array.from(document.querySelectorAll('#rows .audio-cell a')).some(function (a) { return a.getAttribute('href') === tracked; })
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-caret #writer-doc .cell-editable
+caret #writer-doc .wr-beat
 eval pasteLink(document.activeElement, tracked)
 expect true
 wait Array.from(document.querySelectorAll('#writer-doc a')).some(function (a) { return a.getAttribute('href') === cleaned; })

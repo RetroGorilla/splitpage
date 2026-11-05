@@ -26,7 +26,7 @@ expect document.querySelector('.prompter-bar') !== null
 
 # --- a rig preference, not an edit to the script — nothing marks it dirty --
 expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet
 
 # --- Mirror toggles on its own (scaleX(-1)), Flip stays off ----------------
 jsclick #pp-mirror
@@ -68,7 +68,7 @@ expect getComputedStyle(document.getElementById('prompter-scroll')).transform.in
 # nothing has dirtied the document
 expect getComputedStyle(document.querySelector('.prompter-bar')).transform == none
 expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet
 
 # back to a known (off/off) state before driving the rest from the keyboard
 jsclick #pp-mirror

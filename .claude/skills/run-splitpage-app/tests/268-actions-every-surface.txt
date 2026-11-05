@@ -124,4 +124,4 @@ sleep 200
 
 # none of it touched the document
 expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet

@@ -351,7 +351,7 @@ function plainTagEmptyAtCaret() {
 
 export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null }, cellEl: Element) {
   if (e.inputType !== "insertText" || !e.data || e.data.charAt(e.data.length - 1) !== ":") return;
-  if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows")) return;
+  if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows, .wr-flow-visual-box")) return;
   if (plainTagOpen()) return;
   if (open) { open = null; clearPaint(); }
   const sel = window.getSelection() as Selection;

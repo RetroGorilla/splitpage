@@ -1,5 +1,6 @@
 import { cssDurationMs } from "../common/css-duration.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { mountFlowTopbar } from "./flow-topbar.ts";
 
 interface PartMeasurement {
   top: number;
@@ -13,6 +14,8 @@ export function mountTopbar({ window }: { window: Window }) {
   const document = window.document;
   const life = createViewLifetime(window);
   const { listen } = life;
+  const flow = mountFlowTopbar(window);
+  life.release(flow.dispose);
   (function setupToolbarLabels() {
     const buttons = document.querySelectorAll<HTMLElement>(".toolbar .panel-toggle, .toolbar .btn-mode");
     if (!buttons.length) return;
@@ -64,6 +67,7 @@ export function mountTopbar({ window }: { window: Window }) {
       buttons.forEach(function (btn) { btn.classList.remove("is-label-open"); });
     });
     function widthNow(w: number) {
+      flow.refresh();
       const jump = lastWidth >= 0 && Math.abs(w - lastWidth) > 24;
       lastWidth = w;
       if (!jump || !toolbar) return;
@@ -249,5 +253,5 @@ export function mountTopbar({ window }: { window: Window }) {
     listen(window, "scroll", onScroll, { passive: true });
     applyCondensedState(false);
   })();
-  return { dispose: life.dispose };
+  return { refreshWriterChrome: flow.refresh, dispose: life.dispose };
 }

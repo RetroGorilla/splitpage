@@ -16,7 +16,7 @@ eval window.__tip = function(){return document.getElementById('save-status').tit
 eval (function(){window.__realNow = window.__realNow || Date.now;var d=new Date();d.setHours(12,0,30,0);window.__pinOff = d.getTime() - window.__realNow();window.__setClock = function(extra){Date.now = function(){return window.__realNow() + window.__pinOff + extra;};return true;};return window.__setClock(0);})()
 
 # --- a document with a file, saved ----------------------------------------
-eval (function(){window.__md = F.buildMarkdown();window.__t0 = Date.now() - 100000;window.__fakeHandle = {name:'clock.md',_mtime: window.__t0,createWritable: async function(){return {write: async function(b){window.__body = b;}, close: async function(){window.__fakeHandle._mtime = Date.now();}};},getFile: async function(){return new File([window.__md],'clock.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});}};return true;})()
+eval (function(){F.state().paragraphsDecided=true;window.__md = F.buildMarkdown();window.__t0 = Date.now() - 100000;window.__fakeHandle = {name:'clock.md',_mtime: window.__t0,createWritable: async function(){return {write: async function(b){window.__body = b;}, close: async function(){window.__fakeHandle._mtime = Date.now();}};},getFile: async function(){return new File([window.__md],'clock.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});}};return true;})()
 eval (function(){var f = new File([window.__md],'clock.md',{type:'text/markdown', lastModified: window.__t0});return F.openFile(f, window.__fakeHandle);})()
 wait F.docFile().kind === 'md'
 caret #rows .row .audio-cell .cell-editable
@@ -62,14 +62,14 @@ expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(w
 eval window.__timed = 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
 eval window.__dated = 'Last saved to clock.md at ' + new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(window.__savedAt)) + '.'
 eval window.__center = function(id){var r=document.getElementById(id).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};}
-expect document.getElementById('btn-save').title === window.__timed + ' Click to save now.'
+expect document.getElementById('btn-save').title === window.__timed
 mouse hover ({x: 5, y: 5})
 mouse hover window.__center('btn-save')
-expect document.getElementById('btn-save').title === window.__dated + ' Click to save now.'
+expect document.getElementById('btn-save').title === window.__dated
 expect window.__tip() === window.__dated
 
 # --- keyboard focus: the same refresh --------------------------------------
-eval (function(){window.__setClock(0);return true;})()
+eval (function(){if(F.autosave.enabled())F.autosave.toggle();window.__setClock(0);return true;})()
 expect document.getElementById('btn-save').title === window.__dated + ' Click to save now.'
 eval document.getElementById('btn-save').focus()
 expect document.activeElement.id === 'btn-save'
@@ -79,12 +79,12 @@ eval document.activeElement.blur()
 # --- the Writer's status: the same refresh on hover ------------------------
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-wait !document.getElementById('wr-save-status').hidden && document.getElementById('wr-save-status').getBoundingClientRect().width > 0
+wait !document.getElementById('btn-save').hidden && document.getElementById('btn-save').getBoundingClientRect().width > 0
 eval (function(){window.__setClock(26*3600000);return true;})()
-expect document.getElementById('wr-save-status').title === window.__timed
+expect document.getElementById('btn-save').title === window.__timed + ' Click to save now.'
 mouse hover ({x: 5, y: 5})
-mouse hover window.__center('wr-save-status')
-expect document.getElementById('wr-save-status').title === window.__dated
+mouse hover window.__center('btn-save')
+expect document.getElementById('btn-save').title === window.__dated + ' Click to save now.'
 jsclick #wr-close
 wait document.getElementById('writer').hidden
 eval (function(){Date.now = window.__realNow;return true;})()

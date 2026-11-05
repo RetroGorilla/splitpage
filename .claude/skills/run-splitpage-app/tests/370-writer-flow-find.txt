@@ -1,0 +1,46 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow Find',paragraphsDecided:true,sections:[{id:'scene',name:'Red title',firstSceneId:'a'}],rows:[{id:'a',audioText:'Red fox',visualText:'Red sky',status:'shot'},{id:'b',audioText:'jumps red',visualText:'Desk'},{id:'c',audioText:'fox red',visualText:'Red view',paragraphStart:true}],comments:[]})],'find.splitpage'))
+wait F.state().title === 'Flow Find'
+click #btn-write
+wait W.on()
+key ctrl KeyF
+expect !document.getElementById('findbar').hidden && document.activeElement.id === 'find-input'
+eval window.query=function(s){var el=document.getElementById('find-input');el.value=s;el.dispatchEvent(new Event('input',{bubbles:true}))}; query('red')
+expect document.getElementById('find-count').textContent === '1 of 4'
+expect !document.getElementById('find-visuals').hidden && document.getElementById('find-visuals').getAttribute('aria-pressed') === 'false'
+expect CSS.highlights.get('splitpage-find-match').size === 1
+key Enter
+expect document.getElementById('find-count').textContent === '2 of 4'
+key shift Enter
+expect document.getElementById('find-count').textContent === '1 of 4'
+eval query('fox jumps')
+expect document.getElementById('find-count').textContent === '1 of 1'
+expect Array.from(CSS.highlights.get('splitpage-find-match'))[0].startContainer.parentElement.closest('.wr-beat').dataset.id === 'a' && Array.from(CSS.highlights.get('splitpage-find-match'))[0].endContainer.parentElement.closest('.wr-beat').dataset.id === 'b'
+eval document.getElementById('replace-input').value='cat'; U.flush(); window.depth=U.sizes().undo
+click #find-replace
+expect F.state().rows[0].audioText === 'Red cat' && F.state().rows[1].audioText === ' red' && F.state().rows.length === 3
+expect F.state().rows[0].status === 'shot' && F.state().rows[1].visualText === 'Desk' && F.state().rows[2].paragraphStart === true
+eval U.flush()
+expect U.sizes().undo === depth+1 && W.check().length === 0
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('writer').hidden
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Red fox' && F.state().rows[1].audioText === 'jumps red'
+key ctrl KeyF
+eval query(' ')
+expect document.getElementById('find-count').textContent === '1 of 4'
+eval query('red'); document.getElementById('replace-input').value='Blue'; U.flush(); window.depth=U.sizes().undo
+click #find-replace-all
+expect F.state().sections[0].name === 'Blue title' && F.state().rows.map(function(r){return r.audioText}).join('|') === 'Blue fox|jumps Blue|fox Blue'
+expect F.state().rows[0].visualText === 'Red sky'
+eval U.flush()
+expect U.sizes().undo === depth+1 && W.check().length === 0
+key Escape
+key ctrl KeyZ
+expect F.state().sections[0].name === 'Red title' && F.state().rows.map(function(r){return r.audioText}).join('|') === 'Red fox|jumps red|fox red'
+key ctrl KeyF
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('writer').hidden
+key Escape
+expect document.getElementById('writer').hidden

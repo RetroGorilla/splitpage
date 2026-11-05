@@ -42,7 +42,7 @@ eval (function(){window.__finish(); return true;})()
 wait window.__dl === 1
 wait F.docFile().kind === 'md'
 sleep 300
-expect __state() === 'pending'
+expect FM.cardView().bits[0].unsaved === true
 expect window.__writes === 0
 
 # --- the next Save writes the picked file, never the imported one ---------

@@ -107,7 +107,7 @@ expect scale() === 1.5
 
 # --- the Writer keeps the browser's own keys and its own size control ----------------
 jsclick #btn-write
-wait document.querySelectorAll('#writer-doc .wr-para').length > 0
+wait document.querySelectorAll('#writer-doc .wr-beat').length > 0
 sleep 300
 expect ctrlKey('=', 'Equal') === false
 sleep 300

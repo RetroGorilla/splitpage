@@ -95,7 +95,7 @@ test("reload stability: all 21 flow transformations retain complete documents th
   assert.equal(Object.keys(operations).length, 21);
   const readers = ["beatPos", "headingPos", "caretAt", "flowOf", "startsParagraph", "comparePos", "orderedRange", "isCollapsed", "withinOneBeat",
     "isPendingHeading", "logicalText", "findInFlow", "normalizedSections", "stepFrom"];
-  assert.deepEqual(Object.keys(flow).filter(name => typeof flow[name as keyof typeof flow] === "function").sort(), Object.keys(operations).concat(readers).sort());
+  assert.deepEqual(Object.keys(flow).filter(name => typeof flow[name as keyof typeof flow] === "function").sort(), Object.keys(operations).concat(readers, ["copyFlowRange", "pasteFlowRange"]).sort());
   const applied = new Set<string>();
   for (const [name, run] of Object.entries(operations)) {
     await t.test(name, () => {
@@ -126,5 +126,44 @@ test("reload stability: all 21 flow transformations retain complete documents th
     });
   }
   assert.deepEqual([...applied].sort(), Object.keys(operations).sort());
+  await t.test("copyFlowRange", () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const h = harness(undefined, { entry: rt.load, reconcile: doc => syncCommentAnchors(doc, rt.cells) });
+      h.session.adopt(fixture(seed));
+      try {
+        const doc = h.session.held() as FlowDoc;
+        const before = JSON.stringify(doc);
+        const range = { anchor: flow.headingPos("s", 0), head: flow.beatPos("b", 6) };
+        const clip = flow.copyFlowRange(doc, range, rt.ports);
+        const sections = clip.headers.map(header => ({ ...header.scene, firstSceneId: (clip.rows[header.index] as flow.FlowRow).id }));
+        const copied = rt.load({ ...doc, rows: clip.rows, sections });
+        assert.deepEqual(clip.wholeIds, ["a", "b"], "copy seed=" + seed);
+        assert.deepEqual(rt.load(copied), expectedHeadingWhitespaceOnReload(copied), "copy reload seed=" + seed);
+        assert.equal(JSON.stringify(doc), before, "copy leaves source unchanged seed=" + seed);
+        assert.equal(h.session.generation(), 0, "copy records no edit seed=" + seed);
+      } finally {
+        h.session.dispose();
+      }
+    }
+  });
+  await t.test("pasteFlowRange", () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const h = harness(undefined, { entry: rt.load, reconcile: doc => syncCommentAnchors(doc, rt.cells) });
+      h.session.adopt(fixture(seed));
+      try {
+        const doc = h.session.held() as FlowDoc;
+        const clip = flow.copyFlowRange(doc, { anchor: flow.headingPos("s", 0), head: flow.beatPos("b", 6) }, rt.ports);
+        const prepared = { ...clip, rows: clip.rows.map(row => ({ ...row, id: "copied-" + row.id })) };
+        const out = runConfined(h.session, flowCommand("pasteFlowRange", current => flow.pasteFlowRange(current,
+          flow.caretAt(flow.beatPos("a", 2)), prepared, rt.ports), stamps));
+        assert.equal(out.kind, "applied", "paste seed=" + seed);
+        const live = h.session.held() as FlowDoc;
+        assert.deepEqual(rt.load(live), expectedHeadingWhitespaceOnReload(live), "paste reload seed=" + seed);
+        assert.deepEqual(live.rows.filter(row => row.id.startsWith("copied-")).map(row => row.id), ["copied-a", "copied-b"], "paste ids seed=" + seed);
+      } finally {
+        h.session.dispose();
+      }
+    }
+  });
   t.diagnostic("168 operation reloads in " + (performance.now() - started).toFixed(0) + " ms; seeds 1..8");
 });

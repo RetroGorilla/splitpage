@@ -1,3 +1,4 @@
+import { posToDom as testDomPoint } from "../features/common/cell-dom.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -37,7 +38,7 @@ const comment = (id, rowId, field) => ({ id, rowId, field, anchorId: id, quotedT
 
 function fixture() {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: "Text characterisation",
     rows: [
       { id: "r1", visualText: "Wide", audioText: "Hello there", status: "todo" },
@@ -94,7 +95,7 @@ function input(el, data, extra) {
 }
 
 function typeChar(el, ch, extra) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   const node = lastText(el);
   node.data += ch;
   caretAt(node, node.data.length);
@@ -126,14 +127,8 @@ function clip(type, el, data) {
 }
 
 function selectText(el, from, to) {
-  const walker = document.createTreeWalker(el, 4);
-  let at = 0, start = null, end = null;
-  while (walker.nextNode()) {
-    const n = walker.currentNode, len = n.data.length;
-    if (!start && from <= at + len) start = [n, from - at];
-    if (!end && to <= at + len) { end = [n, to - at]; break; }
-    at += len;
-  }
+  const first = testDomPoint(el, from), last = testDomPoint(el, to);
+  const start = [first.node, first.offset], end = [last.node, last.offset];
   const r = document.createRange();
   r.setStart(start[0], start[1]);
   r.setEnd(end[0], end[1]);
@@ -362,13 +357,13 @@ function selectAll(el) {
   sel.addRange(r);
 }
 
-const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
+const para = (id) => document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
 const toasts = () => Array.from(document.querySelectorAll("#toast-host .toast")).map((t) => t.textContent);
 
 test("a split (Alt+Enter) through a commented phrase: one entry, one dirty, one render; both halves marked, the comment stays", async () => {
   await open();
   const el = cellOf("r2", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 12, 12);
   const stamp = row("r2").updatedAt;
   const got = record(() => key(el, "Enter", { altKey: true }));
@@ -388,7 +383,7 @@ test("a split (Alt+Enter) through a commented phrase: one entry, one dirty, one 
 test("a split before a commented phrase moves its comment to the new scene in the same entry; one undo puts both back", async () => {
   await open();
   const el = cellOf("r2", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 3, 3);
   const got = record(() => key(el, "Enter", { altKey: true }));
   const created = currentDocument().rows[2].id;
@@ -407,15 +402,15 @@ test("a Writer join (Backspace at a scene's start): one entry; words glued with 
   const p4 = para("r4");
   p4.focus();
   selectText(p4, 0, 0);
-  const got = record(() => key(p4, "Backspace"));
+  const got = record(() => key(p4, "Backspace", { altKey: true }));
   assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["deleteRow:r4", "rowField:r3.audioText", "rowField:r3.status", "docField:comments"] });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3"]);
   assert.equal(row("r3").audioText, "Three. Four " + cmt("c2", "words") + ".");
   assert.equal(row("r3").status, "shot", "the joined beat takes the further status");
   assert.equal(row("r3").visualText, KEY("bsA") + " gulls");
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r3", "audioText"]]);
-  assert.equal(document.activeElement, para("r3"));
-  assert.equal(caretTextOffset(document.activeElement), "Three.".length, "the caret lands where the two met");
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
+  assert.equal(writer.writerFlowControl().selection().head.offset, "Three. ".length, "the caret lands where the two met");
   assert.equal(undo().ok, true);
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
   assert.equal(row("r3").status, "todo");
@@ -423,17 +418,19 @@ test("a Writer join (Backspace at a scene's start): one entry; words glued with 
   writer.closeWriter();
 });
 
-test("a Writer join of two scenes that both have a visual is refused with a toast and changes nothing", async () => {
+test("a Writer join of two visuals keeps both and is one undo step", async () => {
   await open();
   writer.openWriter();
-  const before = JSON.stringify(currentDocument());
+  const before = JSON.stringify(currentDocument(), (key, value) => key === "updatedAt" || key === "updatedBy" ? undefined : value);
   const p2 = para("r2");
-  p2.focus();
   selectText(p2, 0, 0);
-  const got = record(() => key(p2, "Backspace"));
-  assert.deepEqual(got, { seq: 0, render: 0, undo: 0, steps: [] });
-  assert.equal(JSON.stringify(currentDocument()), before);
-  assert.equal(toasts().at(-1), "Both beats have a visual \u2014 join them in the split view, so you can pick which one to keep.");
+  const got = record(() => key(p2, "Backspace", { altKey: true }));
+  assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["deleteRow:r2", "rowField:r1.visualText", "rowField:r1.audioText", "rowField:r1.status", "docField:comments"] });
+  assert.equal(row("r1").visualText, "Wide<br>Close");
+  assert.equal(row("r1").status, "ready");
+  assert.equal(toasts().at(-1), "Joined the beats and kept both visuals.");
+  assert.equal(undo().ok, true);
+  assert.equal(JSON.stringify(currentDocument(), (key, value) => key === "updatedAt" || key === "updatedBy" ? undefined : value), before);
   writer.closeWriter();
 });
 
@@ -449,15 +446,15 @@ test("a Writer split (Enter) before a commented word: one entry, and the comment
   assert.equal(row("r4").audioText, "Fo");
   assert.equal(row(created).audioText, "ur " + cmt("c2", "words") + ".");
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", created, "audioText"]]);
-  assert.equal(document.activeElement, para(created));
-  assert.equal(caretTextOffset(document.activeElement), 0);
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
+  assert.equal(writer.writerFlowControl().selection().head.offset, 0);
   writer.closeWriter();
 });
 
 test("a cut is one entry and one dirty; its comment keeps its last place until the words land again", async () => {
   await open();
   const el = cellOf("r2", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 6, 19);
   let store;
   const got = record(() => { store = clip("cut", el); });
@@ -471,7 +468,7 @@ test("a cut is one entry and one dirty; its comment keeps its last place until t
 test("pasting that cut elsewhere is one entry holding the cell and the comment, and dirties once", async () => {
   await open();
   const el = cellOf("r2", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 6, 19);
   const store = clip("cut", el);
   const to = cellOf("r4", "audioText");
@@ -491,7 +488,7 @@ test("pasting that cut elsewhere is one entry holding the cell and the comment, 
 test("a copied b-roll key pasted onto an empty line gets a fresh id and a shot record of its own", async () => {
   await open();
   const el = cellOf("r3", "visualText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectAll(el);
   const store = clip("copy", el);
   assert.equal(row("r3").visualText, KEY("bsA") + " gulls", "a copy changes nothing");
@@ -511,7 +508,7 @@ test("a copied b-roll key pasted onto an empty line gets a fresh id and a shot r
 test("a cut b-roll key pasted in the same tab keeps its id and makes no second record", async () => {
   await open();
   const el = cellOf("r3", "visualText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectAll(el);
   const store = clip("cut", el);
   assert.equal(row("r3").visualText, "");
@@ -535,7 +532,7 @@ test("a Writer join into a scene with no visual takes the later scene's visual a
   const p4 = para("r4");
   p4.focus();
   selectText(p4, 0, 0);
-  const got = record(() => key(p4, "Backspace"));
+  const got = record(() => key(p4, "Backspace", { altKey: true }));
   assert.equal(got.seq, 1);
   assert.equal(got.undo, 1);
   assert.ok(got.steps.includes("deleteRow:r4"));
@@ -554,21 +551,17 @@ test("a Writer join into a scene with no visual takes the later scene's visual a
   writer.closeWriter();
 });
 
-test("a Writer join by Delete at a scene's end pulls the next scene up into it, in one entry", async () => {
+test("Writer Delete at a tick removes a character and keeps both beats", async () => {
   await open();
   writer.openWriter();
   const p3 = para("r3");
-  p3.focus();
-  selectText(p3, "Three.".length, "Three.".length);
-  const got = record(() => key(p3, "Delete"));
-  assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["deleteRow:r4", "rowField:r3.audioText", "rowField:r3.status", "docField:comments"] });
-  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3"]);
-  assert.equal(row("r3").audioText, "Three. Four " + cmt("c2", "words") + ".");
-  assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r3", "audioText"]]);
-  assert.equal(document.activeElement, para("r3"));
-  assert.equal(caretTextOffset(document.activeElement), "Three.".length);
-  assert.equal(undo().ok, true);
-  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
+  selectText(p3, 6, 6);
+  const got = record(() => { const input = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "deleteContentForward" }); input.getTargetRanges = () => []; p3.dispatchEvent(input); });
+  assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["rowField:r4.audioText"] });
+  assert.equal(row("r3").audioText, "Three.");
+  assert.equal(row("r4").audioText, "our " + cmt("c2", "words") + ".");
+  assert.equal(row("r3").status, "todo");
+  assert.equal(currentDocument().rows.length, 4);
   writer.closeWriter();
 });
 
@@ -603,7 +596,7 @@ test("a composition straight after typing in the same cell joins the typing's en
 test("any same-tab cut then paste counts one edit in one entry, even with no comment in it", async () => {
   await open();
   const el = cellOf("r1", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 0, 6);
   const store = clip("cut", el);
   assert.equal(row("r1").audioText, "there");

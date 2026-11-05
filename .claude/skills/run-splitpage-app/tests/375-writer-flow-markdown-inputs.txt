@@ -1,0 +1,39 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.hp=function(n){return {kind:'heading',sceneId:'s',offset:n}}; window.at=function(p){W.place({anchor:p,head:p})}; window.clip=function(type,data){return document.getElementById('writer-doc').dispatchEvent(new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data}))}; F.openFile(new File([JSON.stringify({schema:2,title:'Markdown inputs',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:''},{id:'b',audioText:'',visualText:'',paragraphStart:true},{id:'c',audioText:'Body',visualText:'Desk',paragraphStart:true},{id:'d',audioText:'',visualText:'',paragraphStart:true}],sections:[{id:'s',name:'Title',firstSceneId:'c'}],comments:[]})],'inputs.splitpage'))
+wait F.state().title === 'Markdown inputs'
+click #btn-write
+wait W.on()
+eval at(bp('a',0))
+press # Heading
+eval document.getElementById('writer-doc').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertParagraph'}))
+expect F.state().sections.some(function(s){return s.name === 'Heading'}) && !F.state().rows.some(function(r){return r.id === 'a'})
+key ctrl KeyZ
+expect F.state().rows[0].audioText === '# Heading'
+eval at(bp('b',0))
+press *word
+key ctrl KeyU
+press *
+expect document.querySelector('.wr-beat[data-id="b"] em').textContent === 'word'
+key ctrl KeyZ
+expect document.querySelector('.wr-beat[data-id="b"]').textContent.replace(/\u200B/g,'') === '*word*'
+eval W.place({anchor:hp(0),head:hp(5)}); window.data=new DataTransfer(); clip('cut',data)
+expect !F.state().sections.some(function(s){return s.id === 's'}) && !document.querySelector('.wr-heading[data-scene="s"]')
+expect data.getData('text/plain') === 'Title'
+eval at(bp('c',1))
+wait !F.state().sections || !F.state().sections.some(function(s){return s.id === 's'})
+key ctrl KeyZ
+expect F.state().sections.some(function(s){return s.id === 's' && s.name === 'Title'})
+eval W.place({anchor:hp(5),head:hp(0)}); window.data=new DataTransfer(); clip('cut',data)
+expect !F.state().sections.some(function(s){return s.id === 's'}) && !document.querySelector('.wr-heading[data-scene="s"]')
+eval at(bp('c',1))
+wait !F.state().sections || !F.state().sections.some(function(s){return s.id === 's'})
+key ctrl KeyZ
+expect F.state().sections.some(function(s){return s.id === 's' && s.name === 'Title'}) && F.state().rows.find(function(r){return r.id === 'c'}).audioText === 'Body'
+eval at(bp('d',0)); window.data=new DataTransfer(); data.setData('text/plain','# Pasted'); clip('paste',data)
+eval at(bp('c',2))
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})})
+expect F.state().rows.find(function(r){return r.id === 'd'}).audioText === '# Pasted' && !F.state().sections.some(function(s){return s.name === 'Pasted'})
+eval W.place({anchor:bp('d',0),head:bp('d',8)}); window.data=new DataTransfer(); data.setData('text/plain','**bold**'); clip('paste',data)
+expect F.state().rows.find(function(r){return r.id === 'd'}).audioText === '**bold**'
+expect W.check().length === 0

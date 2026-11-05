@@ -1,0 +1,24 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find visual replacement',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Red sky'},{id:'b',audioText:'Bravo',visualText:'Red view'}],comments:[]})],'find-visual-replace.splitpage'))
+wait F.state().title === 'Find visual replacement'
+click #btn-write
+wait W.on()
+key ctrl KeyF
+eval var input=document.getElementById('find-input');input.value='Red';input.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('replace-input').value='Blue'
+click #find-visuals
+expect document.querySelector('.wr-flow-visual-text').textContent === 'Red sky'
+click #find-replace-all
+expect F.state().rows[0].visualText === 'Blue sky' && F.state().rows[1].visualText === 'Blue view'
+expect document.querySelector('.wr-flow-visual-text').textContent === 'Blue sky'
+click #wr-close
+expect document.getElementById('writer').hidden && F.state().rows[0].visualText === 'Blue sky' && F.state().rows[1].visualText === 'Blue view'
+click #btn-write
+key ctrl KeyF
+eval var input=document.getElementById('find-input');input.value='Blue';input.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('replace-input').value='Green'
+click #find-visuals
+click #find-replace
+expect F.state().rows[0].visualText === 'Green sky' && F.state().rows[1].visualText === 'Blue view'
+expect document.querySelector('.wr-flow-visual-text').dataset.id === 'b' && document.querySelector('.wr-flow-visual-text').textContent === 'Blue view'
+click #wr-close
+expect F.state().rows[0].visualText === 'Green sky' && F.state().rows[1].visualText === 'Blue view'

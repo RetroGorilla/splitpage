@@ -1,0 +1,45 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; window.settle=function(){return new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})})}; window.openOn=function(id){return !document.querySelector('.wr-flow-visual-box').hidden && document.activeElement.classList.contains('wr-flow-visual-text') && document.activeElement.dataset.id===id}; F.openFile(new File([JSON.stringify({schema:2,title:'Visual heading refusals',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:''},{id:'b',audioText:'Run-on',visualText:'Keep neighbour'},{id:'l',audioText:'x'.repeat(201),visualText:'',paragraphStart:true},{id:'t',audioText:'#<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Camera" contenteditable="false">Camera</span>',visualText:'',paragraphStart:true},{id:'c',audioText:'<span class="cmt-anchor" data-cmt="comment">Title</span>',visualText:'',paragraphStart:true}],comments:[{id:'comment',anchorId:'comment',rowId:'c',field:'audioText',kind:'anchor',body:'Keep',author:'Tester',createdAt:'2026-11-04T00:00:00Z',replies:[]}]})],'visual-refusals.splitpage'))
+wait F.state().title === 'Visual heading refusals'
+click #btn-write
+wait W.on()
+eval at('a',0)
+press # Title
+click #wr-visual
+eval settle()
+expect openOn('a') && F.state().rows[0].audioText === 'Title' && F.state().sections === undefined
+expect document.getElementById('toast-host').textContent.includes("A scene header can't hold several beats. Press Enter after the header's words.")
+type Run-on visual
+expect F.state().rows[0].visualText === 'Run-on visual' && F.state().rows[1].visualText === 'Keep neighbour'
+click .wr-flow-visual-close
+eval at('l',0)
+press # X
+key Backspace
+click #wr-visual
+eval settle()
+expect openOn('l') && F.state().rows.find(function(r){return r.id === 'l'}).audioText === 'x'.repeat(201) && F.state().sections === undefined
+expect document.getElementById('toast-host').textContent.includes('A scene name can be up to 200 characters, so this stays as narration.')
+type Long visual
+expect F.state().rows.find(function(r){return r.id === 'l'}).visualText === 'Long visual'
+click .wr-flow-visual-close
+eval at('t',1)
+press  X
+key Backspace
+click #wr-visual
+eval settle()
+expect openOn('t') && F.state().rows.find(function(r){return r.id === 't'}).audioText.includes('data-tag-name="Camera"') && F.state().sections === undefined
+expect document.getElementById('toast-host').textContent.includes("A scene header can't hold tags or comments.")
+type Tag visual
+expect F.state().rows.find(function(r){return r.id === 't'}).visualText === 'Tag visual'
+click .wr-flow-visual-close
+eval at('c',0)
+press # X
+key Backspace
+click #wr-visual
+eval settle()
+expect openOn('c') && F.state().rows.find(function(r){return r.id === 'c'}).audioText.includes('data-cmt="comment"') && F.state().sections === undefined
+expect F.state().comments.length === 1 && F.state().comments[0].rowId === 'c' && document.getElementById('toast-host').textContent.includes("A scene header can't hold tags or comments.")
+type Comment visual
+expect F.state().rows.find(function(r){return r.id === 'c'}).visualText === 'Comment visual' && F.state().rows[1].visualText === 'Keep neighbour'
+expect W.check().length === 0

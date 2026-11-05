@@ -31,7 +31,7 @@ const writer = await import("../features/writer/writer.ts");
 const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { screen } = await import("../bootstrap/wiring/ports/screen.ts");
 const { EVERY_OVERLAY, inFront } = await import("../application/screen.ts");
-const { cellEditing, focusMemory, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
+const { cellEditing, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const find = await import("../features/find/find.ts");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { localFilesOwner, localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
@@ -404,7 +404,7 @@ test("a desktop file draft over an untouched file whose render throws still rest
 const STALE_PARTS = ["#rows", ".add-row-bar", "#doc-title", "#writer-title", "#writer-doc", "#writer .wr-fmt",
   "#replace-input", "#find-replace", "#find-replace-all", "#find-tag-go", "#tag-ghost", "#tag-suggest"];
 const THEIRS = "Theirs, not drawn yet.";
-const cellOf = (id, field, root = "#rows") => document.querySelector(root + ' .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
+const cellOf = (id, field, root = "#rows") => document.querySelector(root + (root === "#writer-doc" ? ' .wr-beat[data-id="' : ' .cell-editable[data-id="') + id + '"][data-field="' + field + '"]');
 const inertParts = () => STALE_PARTS.flatMap((sel) => Array.from(document.querySelectorAll(sel)).map((el) => [sel, el.hasAttribute("inert")]));
 const dimmedParts = () => STALE_PARTS.flatMap((sel) => Array.from(document.querySelectorAll(sel)).map((el) => [sel, el.classList.contains("is-stale-part")]));
 
@@ -557,8 +557,8 @@ const EDITS = [
   { name: "Tag all as… in the find bar", act: () => { findAndReplace("Wide", ""); find.openBulkTag(); find.pickBulkTagCat("prop"); document.getElementById("find-tag-go").click(); }, teardown: () => find.closeFindBar() },
   { name: "typing in the Writer", setup: openTheWriter, act: () => typeChar(inWriter("r1"), "x"), teardown: closeTheWriter, closeRedraws: true },
   { name: "a new scene in the Writer (Enter)", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 6); key(p, "Enter"); }, teardown: closeTheWriter, closeRedraws: true },
-  { name: "joining scenes in the Writer (Backspace)", setup: openTheWriter, act: () => { const p = inWriter("r2"); p.focus(); select(p, 0); key(p, "Backspace"); }, teardown: closeTheWriter, closeRedraws: true },
-  { name: "the Writer's Bold", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 0, 5); focusMemory().focusedParagraph(p); document.querySelector('#writer .wr-fmt[data-cmd="bold"]').click(); }, teardown: closeTheWriter, closeRedraws: true },
+  { name: "joining beats in the Writer (Alt+Backspace)", setup: openTheWriter, act: () => { const p = inWriter("r2"); p.focus(); select(p, 0); key(p, "Backspace", { altKey: true }); }, teardown: closeTheWriter, closeRedraws: true },
+  { name: "the Writer's Bold", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 0, 5); document.querySelector('#writer .wr-fmt[data-cmd="bold"]').click(); }, teardown: closeTheWriter, closeRedraws: true },
   { name: "typing the Writer's title", setup: openTheWriter, act: () => retitle(document.getElementById("writer-title"), "Writer title"), teardown: closeTheWriter, closeRedraws: true }
 ];
 
@@ -575,6 +575,7 @@ for (const edit of EDITS) {
       if (edit.teardown) edit.teardown();
       if (edit.closeRedraws) assert.deepEqual([redrawToasts().length, rowsInert()], [0, false], "closing the Writer redraws through the guard (#458)");
       else await pressRedraw();
+      if (edit.closeRedraws) await edit.setup();
       const drawn = editState();
       const allowed = await logging(async () => { await edit.act(); await idle(); });
       assert.equal(allowed.threw, null, edit.name + " threw after Redraw: " + (allowed.threw && allowed.threw.stack));
@@ -589,7 +590,7 @@ for (const edit of EDITS) {
 test("a stale screen makes the script, the titles and the editing controls inert and moves the focus from the script to Redraw, which keeps it until a Redraw draws and then gives it back (#443)", async () => {
   await staleScreen(() => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3, 7); });
   const parts = inertParts();
-  assert.equal(parts.length, STALE_PARTS.length + 4, "every part is on the page: " + JSON.stringify(parts));
+  assert.equal(parts.length, STALE_PARTS.length + 8, "every part is on the page: " + JSON.stringify(parts));
   assert.deepEqual(parts.filter((p) => !p[1]), [], "every part is inert");
   assert.deepEqual(dimmedParts().filter((p) => !p[1]), [], "every part is dimmed");
   const toast = redrawToasts()[0];

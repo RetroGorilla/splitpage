@@ -39,7 +39,7 @@ const STORED_CARD = sanitizeHtml(CARD);
 
 function fixture() {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: "Media cells",
     rows: [
       { id: "r1", visualText: "Wide", audioText: "Hello there", status: "todo" },
@@ -51,7 +51,7 @@ function fixture() {
 
 function joinFixture() {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: "Media join",
     rows: [
       { id: "j1", visualText: "", audioText: "<strong>Bold </strong>", status: "todo" },
@@ -71,10 +71,10 @@ async function open(doc) {
 
 const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
-const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
+const para = (id) => document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
 
 function store(el, html) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   el.innerHTML = html;
   el.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "" }));
 }
@@ -203,7 +203,7 @@ test("a join with media in the later scene joins the runs: no doubled space, for
   flushEdits();
   const start = textNodeAt(p, 0);
   caretAt(start[0], start[1]);
-  key(p, "Backspace");
+  key(p, "Backspace", { altKey: true });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["j1"]);
   assert.equal(row("j1").audioText, "<strong>Bold more</strong> " + STORED_CARD);
   writer.closeWriter();

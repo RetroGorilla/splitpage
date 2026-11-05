@@ -1,0 +1,17 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.composeInput=function(text){var el=document.querySelector('.wr-beat[data-id="a"]'); el.textContent=text; getSelection().setBaseAndExtent(el,el.childNodes.length,el,el.childNodes.length); document.getElementById('writer-doc').dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:text}));}; return F.openFile(new File([JSON.stringify({schema:2,title:'Composition touched input',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'touched.splitpage')); })()
+wait F.state().title === 'Composition touched input'
+click #btn-write
+wait W.on()
+eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); W.outsideEdit('a','REMOTE'); W.outsideEdit('b','REMOTE BRAVO'); W.fullRender(); composeInput('Alph'); composeInput('Alpha'); return true; })()
+expect F.state().rows[0].audioText === 'REMOTE' && F.state().rows[1].audioText === 'REMOTE BRAVO'
+expect document.querySelector('.wr-beat[data-id="a"]').textContent === 'Alpha'
+eval (function(){ document.getElementById('writer-doc').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); document.getElementById('wr-close').click(); return true; })()
+expect F.state().rows[0].audioText === 'Alpha'
+expect F.state().rows[1].audioText === 'REMOTE BRAVO'
+click #btn-write
+wait W.on()
+expect W.check().length === 0
+expect document.querySelector('.wr-beat[data-id="a"]').textContent === 'Alpha'
+expect document.querySelector('.wr-beat[data-id="b"]').textContent.replace(/\u200b/g,'') === 'REMOTE BRAVO'

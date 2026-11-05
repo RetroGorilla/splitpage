@@ -9,7 +9,7 @@
 
 open
 viewport 1400 900
-eval (function(){ window.F = window.__splitpageFormats; window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__prevented = null; window.addEventListener('keydown', function (e) { window.__prevented = e.defaultPrevented; }); window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__cmdRun = function (q, id) { var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); if (it) it.click(); return !!it; }; return true; })()
+eval (function(){ window.F = window.__splitpageFormats; if(F.autosave.enabled())F.autosave.toggle(); window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__prevented = null; window.addEventListener('keydown', function (e) { window.__prevented = e.defaultPrevented; }); window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__cmdRun = function (q, id) { var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); if (it) it.click(); return !!it; }; return true; })()
 
 # --- with no file yet, Save asks where ---------------------------------------
 key ctrl KeyS
@@ -106,7 +106,7 @@ sleep 300
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
 sleep 600
-jsclick #wr-save
+jsclick #btn-save
 sleep 400
 expect __take() === 'write'
 key ctrl KeyS

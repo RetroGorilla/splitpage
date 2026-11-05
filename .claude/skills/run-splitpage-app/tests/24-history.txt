@@ -63,12 +63,12 @@ expect localStorage.getItem('splitpage-snapshots') === null
 # is the one chance to observe the boot-fresh pristine document at all.
 # =============================================================================
 eval (function(){window.__pristineId = F.docId(); return window.__pristineId;})()
-expect !document.getElementById('btn-save').classList.contains('is-dirty')
+expect !(document.getElementById('save-status').textContent === 'Unsaved changes')
 eval (async function(){ await F.openFile(new File(['Plain text, nothing fancy.'], 'note.txt')); await H.idle(); return true; })()
 wait F.docFile().kind === null
 eval (async function(){ window.__pristineRec = await H.docRecord(__pristineId); return window.__pristineRec; })()
 expect window.__pristineRec === null
-expect document.getElementById('btn-save').classList.contains('is-dirty')
+expect (document.getElementById('save-status').textContent === 'Unsaved changes')
 # that open started a NEW document (issue #7), so the second open's capture
 # belongs to THAT one — not to the pristine seed, which still has none
 eval (function(){window.__afterPristineId = F.docId(); return window.__afterPristineId;})()

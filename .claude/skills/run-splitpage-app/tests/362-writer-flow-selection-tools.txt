@@ -1,0 +1,39 @@
+open
+viewport 1440 900
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Selection tools',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo Alpha.',visualText:''},{id:'b',audioText:'Delta echo.',visualText:''}],comments:[]})],'tools.splitpage'))
+wait F.state().title === 'Selection tools'
+click #btn-write
+wait W.on()
+eval window.select=(n,m)=>W.place({anchor:{kind:'beat',rowId:'a',offset:n},head:{kind:'beat',rowId:'a',offset:m}}); select(12,17)
+click .writer-bar [data-cmd="tag"]
+wait !document.getElementById('tag-modal').hidden
+expect document.getElementById('tag-name').value === 'Alpha'
+click #tag-cats [data-tag-cat="prop"]
+click #tag-apply
+wait F.state().rows[0].audioText.includes('tag-anchor')
+expect F.state().rows[0].audioText.startsWith('Alpha bravo <span') && F.state().rows[0].audioText.includes('data-tag-cat="prop"')
+expect document.activeElement.id === 'writer-doc'
+eval select(0,5)
+click .writer-bar [data-cmd="link"]
+wait document.querySelector('.writer-bar .link-popover')?.hidden === false
+expect document.activeElement.matches('.writer-bar .link-popover input')
+type example.com
+key Enter
+wait F.state().rows[0].audioText.includes('href="https://example.com"')
+expect document.activeElement.id === 'writer-doc'
+expect document.querySelector('#writer-doc a').textContent === 'Alpha'
+eval select(6,11)
+click .writer-bar [data-cmd="link"]
+wait document.querySelector('.writer-bar .link-popover')?.hidden === false
+key Escape
+expect document.querySelector('.writer-bar .link-popover').hidden && W.on() && document.activeElement.id === 'writer-doc'
+expect !F.state().rows[0].audioText.includes('>bravo</a>') && W.check().length === 0
+eval select(18,18)
+type  typed
+eval select(6,11)
+click .writer-bar [data-cmd="tag"]
+wait !document.getElementById('tag-modal').hidden
+click #tag-apply
+wait (F.state().rows[0].audioText.match(/tag-anchor/g)||[]).length === 2
+expect F.state().rows[0].audioText.includes('typed') && W.check().length === 0

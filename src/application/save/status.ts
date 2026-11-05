@@ -63,3 +63,11 @@ export function saveStatus(input: SaveStatusInput): SaveStatus {
   const view = line(input);
   return Object.freeze({ line: view ? Object.freeze(view) : null, button: saveButtonView(input) });
 }
+
+export function flowSaveStatus(input: SaveStatusInput): { readonly text: string; readonly actionable: boolean; readonly problem: boolean } {
+  if (input.busy) return { text: SAVING_LABEL, actionable: false, problem: false };
+  if (input.halted) return { text: "Not saving", actionable: true, problem: true };
+  if (!input.target) return { text: "Not saved yet", actionable: true, problem: false };
+  if (!input.autoSaveOn) return { text: "Autosave off", actionable: true, problem: false };
+  return { text: input.dirty ? "Unsaved changes" : "Saved", actionable: false, problem: false };
+}

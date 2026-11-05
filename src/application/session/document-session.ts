@@ -1,4 +1,5 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
+import type { FlowSelectionPair } from "../../core/flow/flow.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
 import { WHOLE_DOCUMENT, changeSet, combined, isEmpty, needsReconciliation } from "./change-set.ts";
 import type { ChangeSet, SessionChange, TransactionKind } from "./change-set.ts";
@@ -15,6 +16,7 @@ export type DeepReadonly<T> =
 export type DocumentView = DeepReadonly<ValidatedDocument>;
 
 export interface Plan {
+  readonly selection?: FlowSelectionPair;
   readonly changes: ChangeSet;
   readonly apply: (doc: ValidatedDocument) => void;
 }
@@ -228,11 +230,11 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     reported(errors);
   }
 
-  function commit(kind: "edit" | "replay" | "amend", changes: ChangeSet): { generation: number; errors: unknown[] } {
+  function commit(kind: "edit" | "replay" | "amend", changes: ChangeSet, selection?: FlowSelectionPair): { generation: number; errors: unknown[] } {
     generation++;
     const at = generation;
     const errors: unknown[] = [];
-    if (kind === "edit") attempt(errors, function () { ports.undo.record(changes); });
+    if (kind === "edit") attempt(errors, function () { ports.undo.record(changes, selection); });
     const change = changeOf(kind, changes);
     scheduler.pass(change).forEach(function (error) { errors.push(error); });
     publish(change, errors);
@@ -310,7 +312,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     if (!plan) return { kind: "noop" };
     if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
     if (isEmpty(plan.changes)) return { kind: "noop" };
-    return transact("edit", doc, plan.changes, plan.apply, null);
+    return transact("edit", doc, plan.changes, plan.apply, null, plan.selection);
   }
 
   function replay(task: Replay): CommandOutcome {
@@ -333,7 +335,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     return transact(kind, doc, plan.changes, plan.apply, plan.settle);
   }
 
-  function transact(kind: "edit" | "replay" | "amend", doc: ValidatedDocument, planned: ChangeSet, apply: (doc: ValidatedDocument) => void, settle: (() => void) | null): CommandOutcome {
+  function transact(kind: "edit" | "replay" | "amend", doc: ValidatedDocument, planned: ChangeSet, apply: (doc: ValidatedDocument) => void, settle: (() => void) | null, selection?: FlowSelectionPair): CommandOutcome {
     let signed: Plan | null;
     try {
       signed = ports.attribution.attribute(doc);
@@ -365,7 +367,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
       restore();
       return { kind: "failed", error: error };
     }
-    const done = commit(kind, changes);
+    const done = commit(kind, changes, selection);
     if (done.errors.length) return { kind: "committed", generation: done.generation, changes: changes, errors: done.errors.slice() };
     return { kind: "applied", generation: done.generation, changes: changes };
   }

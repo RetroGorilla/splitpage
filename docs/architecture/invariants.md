@@ -142,17 +142,16 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Replacement:** — (`TAG_PRINT_COLORS` stays a deliberate second copy, held to `:root` by `palette.test.mjs`).
 - **Acceptance:** `palette.test.mjs` passes, reading the token files produced when CSS is split (M6).
 
-### INV-15 — The Writer never re-parses the document into rows
+### INV-15 — The writer edits the document through one host
 
-- **Behaviour:** The Writer edits rows in place: one paragraph is one row's `audioText`. The row list changes only by a split (`splitWriterRow()`) or a join (`mergeWriterRows()`), and the Writer's DOM is rebuilt only through `renderWriter()`.
-- **Tests:** browser `06-writer.txt`, `78-split-join-model.txt`, `267-writer-undo.txt`.
-- **Owner:** `src/features/writer` · **Milestone:** 6 · **Class:** absorb
-- **Replacement:** the Writer reads row selectors and issues split and join commands (the M3 command set, migrated in M6). It holds no writable document it could rebuild.
-- **Acceptance:** the three suites pass. The dependency gate rejects any import of a project or HTML row parser from `src/features/writer`.
+- **Behaviour:** A paragraph contains one or more beats. The writer derives headings and paragraphs with `flowOf`, keeps a model position for each beat and heading, and issues commands through the session. It never reparses a document into rows. Ordinary narration and Visual edits patch only the affected beat. Structural edits preserve the directed selection in their undo entry. Old scripts receive the sentence rule once, recorded by `paragraphsDecided`.
+- **Tests:** `tests/core/flow/`, `tests/features/writer/`, browser `06-writer.txt` and the writer-flow suites.
+- **Owner:** `src/core/flow`, `src/application/commands/flow.ts`, `src/features/writer`.
+- **Acceptance:** Editing across beats is one undo step; text and metadata survive save and reload; a synthetic gap is never stored.
 
 ### INV-16 — Full-screen views close the side panels
 
-- **Behaviour:** Present, the Writer, Help, the tour, the setup wizard and the full-page shot list close every open side panel through one path, which clears `body.panel-open` and `#root`'s padding. Leaving these views reopens no panel, except that the shot list reopens B-roll if it was opened from there. The z-index order is: side panels 140, Writer and Present 145, modals 150, toasts 200.
+- **Behaviour:** Present, Help, the tour, the setup wizard and the full-page shot list close every open side panel through one path, which clears `body.panel-open` and `#root`'s padding. Leaving these views reopens no panel, except that the shot list reopens B-roll if it was opened from there. The writer opens the comments panel beside its narration and closes other side panels. The shared header remains reachable at 146; writer, comments and Present use 145, modals 150 and toasts 200.
 - **Tests:** browser `128-side-panels-modes.txt` (every panel against both modes), `150-mode-transitions.txt` (z-index 145), `96-broll-page.txt`, `61-transitions.txt`.
 - **Owner:** `src/features/overlay` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** an overlay and focus owner (M6) that preserves panel closure and restoration and the stacking order. A new full-screen view or side panel registers with it.
@@ -169,7 +168,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-18 — A comment is anchored by its mark
 
-- **Behaviour:** A comment is anchored by its `cmt` mark in the script. Every path that moves words between rows (split, join, cut then paste) moves them as runs, and the session reconciles in the same transaction and undo entry: `syncCommentAnchors(doc)` points each comment at the first cell holding its mark. A comment whose words are gone keeps its last position. `migrateRows()` (`src/core/migrate.ts`, reading cells through its `readers` port) runs the same pass on every load and merge.
+- **Behaviour:** A comment is anchored by its `cmt` mark in the script. Every path that moves words between rows (split, join, cut then paste) moves them as runs, and the session reconciles in the same transaction and undo entry: `syncCommentAnchors(doc)` points each comment at the first cell holding its mark. Inside a surviving beat, a comment whose words are gone keeps its last position. A fully removed writer beat takes its comments unless their marks survive elsewhere. `migrateRows()` (`src/core/migrate.ts`, reading cells through its `readers` port) runs the same pass on every load and merge.
 - **Malformed row ids (#1041):** On load, the first scene keeps a repeated normalized id; later scenes receive deterministic suffixes (`id-1`, `id-2`, skipping reserved ids), retaining their content. Reloading the same damaged file preserves scene identity for draft recovery. Ambiguous row-id references and section boundaries stay on the first scene. Comment marks are retained on every scene, and the normal first-mark reconciliation above still determines an anchored comment's position. A section's `firstSceneId` is cleaned only when it names a duplicated normalized id; a nonduplicated reference keeps the existing normalization behavior. `tests/core/migrate.test.ts` covers collisions and unchanged bytes; `src/test/migrate-rows.test.mjs` covers stable reloads, comments, anchors, sections, b-roll and media; `src/test/merge-states.test.mjs` covers malformed-file merges and independently loaded draft recovery.
 - **Missing ids (#1049):** Load repairs use a namespace derived from canonical source data, retaining array order and sorting object keys recursively. Markdown without an embedded document ID also canonicalizes its fenced data before deriving the synthetic document ID. Changed source data cannot recycle a repaired identity, including twins and displaced reservations. Editing keeps its separate random namespace. External insertions, reordering and edits can retain duplicate records during recovery; unsaved text and comments are kept. Only identity-replacement draft recovery retains a scene for a changed comment and separates retained copies' anchor identities; ordinary row merging is unchanged. A replace-all draft of 30 scenes and a revision-only disk change retain 60 scenes without conflict cards. The reservation scan and hashing run only when repair is needed. `src/test/stable-row-ids-app.test.mjs` covers recovery, twin and empty records, nested IDs, embedded keys, comment ownership and unchanged project bytes.
 - **Tests:** `src/test/comment-anchors.test.mjs`; `tests/application/split-join.test.ts` ("E9: a split before a commented phrase…", "E9: a join brings the later scene's comments…", "E9 (seeded): split and join leave every comment where reconciliation would put it…"), `tests/application/clipboard.test.ts` ("a paste carrying a cut's comments reconciles in the transaction…", "E9: a cut and the paste of it are one generation and one undo record each"), `tests/application/cell-text.test.ts` ("a cell edit that adds or drops a comment anchor reconciles in the transaction…"), `tests/application/session-anchors.test.ts` (the seeded property that a one-cell edit moves an anchor only when its comment ids change); `src/test/split-join-app.test.mjs`, `src/test/cut-paste-app.test.mjs`; browser `78-split-join-model.txt`, `77-clipboard-model.txt`, `20-comment-drift.txt`, `246-scene-delete-comments.txt`.
@@ -180,28 +179,25 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-19 — A full-screen overlay owns focus and stacking
 
-- **Behaviour:** While the Writer or Present is open, focus cannot leave it except to modals and toasts, and to Find while searching Present. Anything meant to show above it, such as `.tag-ghost-hint` at z-index 146, does.
+- **Behaviour:** While the Writer or Present is open, focus stays within the active view and its permitted controls. The writer permits the shared header, comments panel, Find, Visual box, modals and toasts; Present permits Find, modals and toasts. Anything meant to show above it, such as `.tag-ghost-hint` at z-index 146, does.
 - **Tests:** partial. Browser `150-mode-transitions.txt` (z-index 145; a Writer that is fading out holds no focus), `457-toast-accessibility.txt` (Present focus, dialogs and toasts in fullscreen), `458-find-in-present.txt` (Find stacking, focus and Escape), `459-find-keyboard-lock-fallback.txt` (unsupported/refused capture); `tests/features/prompter/mount.test.ts` (focus containment and shortcut ownership), `src/features/find/keyboard-lock.test.ts` (Find-scoped capture lifetime). No test covers the stacking of `.tag-ghost-hint`.
 - **Owner:** `src/features/overlay` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** the overlay and focus owner (M6). Escape and Tab handling, focus containment and stacking are set when an overlay registers, not by per-view CSS and listeners.
 - **Acceptance:** browser: with the Writer open, Tab and focus moved programmatically to `#rows` both stay inside the Writer, while a modal and a toast stay reachable. The completion ghost draws above the Writer.
 
-### INV-20 — Two Save buttons, one save state
+### INV-20 — One shared save status, one save state
 
-- **Behaviour:** The header Save and the Writer's Save always show the same label, dirty mark and disabled state, taken from one save state (`setSaveButtons()`, `mirrorFileChipToWriter()`).
-- **Tests:** browser `06-writer.txt` ("you can save from in here": `#wr-save` label and dirty mark); `285-save-buttons-one-state.txt` (the acceptance below: after an edit, during a save, after a failed save and after one that went through, both buttons show the same text, dirty mark and disabled state, and neither button, the native menu nor Ctrl+S starts a second save while one runs; passes against 4.0-development 47c0309 too); `283-save-status-by-destination.txt` (what the header says for each destination).
-- **Owner:** `src/application` (save status), `src/features/writer` · **Milestone:** 4 · **Class:** absorb
-- **Replacement:** one Save action in the action registry (M1, done: both buttons, Ctrl+S, the command menu and the native menu invoke `save`; `docs/architecture/actions.md`), plus one destination-specific save-status selector from the save coordinator (M4) that every Save control renders.
-- **Acceptance:** browser: during a save, after a failed save and after an edit, both Save buttons show the same text, dirty mark and disabled state. `06-writer.txt` passes.
-- **Milestone 4 (4.22):** done. `saveStatus(input)` (`src/application/save/status.ts`, 4.9) is the one selector; `setSaveButtons` renders both buttons from `saveButtonView`, and both read the coordinator's running state, so no second save starts while one runs (saves queue per destination). Each destination has its own dirty state (`dirty(identity)`). Tests: `tests/application/save-status.test.ts` ("INV-20: the Save buttons render one view…"), `tests/application/save-coordinator.test.ts`, matrix cases F5-*, S7 and S10 in `src/test/m4-matrix-*.test.mjs`; the browser suites above are re-run at the gate. Left: the selector's inputs (`dirty`, `halted`, `target`, `signedOut`, `linkOff`) are still read from legacy globals (saving.md §8). `docs/HANDOFF.md` §5.20 now points here.
+- **Behaviour:** Both modes use the same header save control and File menu. `flowSaveStatus` renders quiet status, actionable for a new script, Autosave off or a save problem. A failed retry keeps its problem until a successful save or clean document clears it. Ctrl+S and menus retain the existing coordinator and destination queues.
+- **Tests:** `tests/features/title/save-status.test.ts`, `flow-save-retry.test.ts`, `src/test/save-label-late-app.test.mjs`, browser `283-save-status-by-destination.txt`, `285-save-buttons-one-state.txt`, `363-writer-flow-save-status.txt` and `588-writer-flow-save-retry.txt`.
+- **Owner:** `src/application/save`, `src/features/title/save-status.ts`.
+- **Acceptance:** Running saves cannot be submitted again through the shared control. A late completion paints the current document's state, and a failed retry remains actionable.
 
-### INV-21 — One place splits a field
+### INV-21 — Field splits and writer structure share text primitives
 
-- **Behaviour:** Enter in the Writer and Alt+Enter in the split view split a field through the same core (`splitRowFieldCore()`) with identical results. The selection is deleted first, both halves are written with `toHtml`, comments are re-pointed, and the whole split is one undo entry.
-- **Tests:** browser `09-alt-enter-and-scroll.txt`, `06-writer.txt`, `78-split-join-model.txt`; `src/test/doc-model.test.mjs` ("split and join are inverses…"); `src/test/comment-anchors.test.mjs` ("a split through a commented phrase marks both halves…").
-- **Owner:** `src/application` (split command) over `splitCell` in `src/core/text` · **Milestone:** 6 · **Class:** absorb
-- **Replacement:** one split-field command in DocumentSession, invoked by both the Writer and split-view bindings (M6 editing migration).
-- **Acceptance:** application test: for a given cell and caret, the split command gives the same state and undo entry whether invoked from the Writer or from the split view. The three suites pass.
+- **Behaviour:** Split view Alt+Enter runs `splitBeatCommand`. Writer Enter starts a beat, a second Enter starts a paragraph, and Shift+Enter inserts a line break through the flow engine. Writer Alt+Enter has no action. Both paths use the same text-run primitives and session reconciliation, so formatting and comment marks follow surviving text. Alt+Backspace or Join combines visuals and keeps the higher status; scene headers and the picture limit refuse joins.
+- **Tests:** `tests/application/split-join.test.ts`, `tests/core/flow/`, `src/test/split-join-app.test.mjs`, `src/test/text-editing-app.test.mjs`, browser `06-writer.txt`, `09-alt-enter-and-scroll.txt` and `78-split-join-model.txt`.
+- **Owner:** `src/application/commands`, `src/core/text`, `src/core/flow`.
+- **Acceptance:** Each structural gesture is one undo step. Joining retains both visual descriptions, ordered pictures and comment anchors.
 
 ### INV-22 — Scroll to the caret, not the cell
 

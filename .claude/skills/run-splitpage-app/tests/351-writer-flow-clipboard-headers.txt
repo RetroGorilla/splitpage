@@ -1,0 +1,44 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.U=window.__undoTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.hp=function(id,n){return {kind:'heading',sceneId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};window.doc={schema:2,title:'Clipboard headers',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Keep A'},{id:'b',audioText:'Bravo',visualText:'Keep B',status:'shot'},{id:'c',audioText:'Charlie',visualText:'Keep C'},{id:'d',audioText:'Target',visualText:'Keep target',paragraphStart:true}],sections:[{id:'scene',name:'New scene',firstSceneId:'b'}]};F.openFile(new File([JSON.stringify(doc)],'headers.splitpage'))
+wait F.state().title === 'Clipboard headers'
+click #btn-write
+wait W.on()
+eval window.before={anchor:bp('a',2),head:bp('b',2)};W.place(before);window.data=new DataTransfer();clip('copy',data);W.place({anchor:bp('d',3),head:bp('d',3)});U.flush();window.depth=U.sizes().undo;clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Tar|pha|Br|get'
+expect F.state().sections.length === 2 && F.state().sections[1].name === 'New scene' && F.state().sections[1].firstSceneId === F.state().rows[5].id
+expect F.state().rows[4].visualText === '' && F.state().rows[5].visualText === '' && F.state().rows[0].visualText === 'Keep A' && F.state().rows[1].visualText === 'Keep B'
+eval U.flush()
+expect U.sizes().undo === depth+1 && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:hp('scene',0),head:hp('scene',9)});window.header=new DataTransfer();clip('copy',header);W.place({anchor:bp('d',6),head:bp('d',6)});clip('paste',header)
+expect F.state().rows.length === 5 && F.state().rows[4].audioText === '' && F.state().sections.length === 2 && F.state().sections[1].firstSceneId === F.state().rows[4].id
+expect F.state().sections[1].name === 'New scene' && F.state().rows[3].visualText === 'Keep target' && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:hp('scene',0),head:hp('scene',9)});window.saved=W.selection();window.header=new DataTransfer();clip('cut',header)
+expect !F.state().sections && F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+key ctrl KeyZ
+expect F.state().sections[0].firstSceneId === 'b' && JSON.stringify(W.selection()) === JSON.stringify(saved)
+eval W.place({anchor:bp('b',0),head:bp('b',0)});clip('paste',header)
+expect F.state().sections.length === 2 && F.state().rows[1].audioText === '' && F.state().sections[0].firstSceneId === F.state().rows[1].id && F.state().sections[1].firstSceneId === 'b'
+expect W.check().length === 0
+key ctrl KeyZ
+eval window.before={anchor:bp('b',2),head:bp('a',2)};W.place(before);window.data=new DataTransfer();clip('copy',data);W.place({anchor:bp('d',3),head:bp('d',3)});U.flush();window.depth=U.sizes().undo;clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|Charlie|Tar|pha|Br|get'
+expect F.state().sections.length === 2 && F.state().sections[1].name === 'New scene' && F.state().sections[1].firstSceneId === F.state().rows[5].id
+expect F.state().rows[4].visualText === '' && F.state().rows[5].visualText === '' && F.state().rows[0].visualText === 'Keep A' && F.state().rows[1].visualText === 'Keep B'
+eval U.flush()
+expect U.sizes().undo === depth+1 && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:hp('scene',9),head:hp('scene',0)});window.header=new DataTransfer();clip('copy',header);W.place({anchor:bp('d',6),head:bp('d',6)});clip('paste',header)
+expect F.state().rows.length === 5 && F.state().rows[4].audioText === '' && F.state().sections.length === 2 && F.state().sections[1].firstSceneId === F.state().rows[4].id
+expect F.state().sections[1].name === 'New scene' && F.state().rows[3].visualText === 'Keep target' && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:hp('scene',9),head:hp('scene',0)});window.saved=W.selection();window.header=new DataTransfer();clip('cut',header)
+expect !F.state().sections && F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+key ctrl KeyZ
+expect F.state().sections[0].firstSceneId === 'b' && JSON.stringify(W.selection()) === JSON.stringify(saved)
+eval W.place({anchor:bp('b',0),head:bp('b',0)});clip('paste',header)
+expect F.state().sections.length === 2 && F.state().rows[1].audioText === '' && F.state().sections[0].firstSceneId === F.state().rows[1].id && F.state().sections[1].firstSceneId === 'b'
+expect W.check().length === 0
+key ctrl KeyZ

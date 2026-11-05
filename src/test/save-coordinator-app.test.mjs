@@ -51,9 +51,9 @@ function warnings() {
 }
 
 function buttons() {
-  return ["btn-save", "wr-save"].map((id) => {
+  return ["btn-save"].map((id) => {
     const btn = document.getElementById(id);
-    return { text: btn.textContent, disabled: btn.disabled, dirty: btn.classList.contains("is-dirty") };
+    return { text: btn.textContent, disabled: btn.disabled, actionable: btn.dataset.actionable === "true" };
   });
 }
 
@@ -109,13 +109,13 @@ test("INV-20: while a save waits behind another, both Save buttons stay busy unt
   edit("Second.");
   const second = saveDoc({ force: true });
   assert.equal(saves.savesWaiting(), 1, "the second save waits its turn");
-  assert.deepEqual(buttons(), [{ text: "Saving…", disabled: true, dirty: false }, { text: "Saving…", disabled: true, dirty: false }]);
+  assert.deepEqual(buttons(), [{ text: "Saving…", disabled: true, actionable: false }]);
   target.gates.releaseAll("file.write");
   await first;
   assert.equal(saves.saveRunning(), true, "the waiting save started as the first finished");
   await second;
   assert.equal(saves.unsavedChanges(), false);
-  assert.deepEqual(buttons(), [{ text: "Save", disabled: false, dirty: false }, { text: "Save", disabled: false, dirty: false }]);
+  assert.deepEqual(buttons(), [{ text: "Autosave off", disabled: false, actionable: true }]);
   assert.ok(target.text().includes("Second."), "the file ends with the later save");
 }));
 

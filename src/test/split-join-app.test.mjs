@@ -1,3 +1,4 @@
+import { posToDom as testDomPoint } from "../features/common/cell-dom.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -37,7 +38,7 @@ const LINKS = [{ href: "https://youtu.be/abc" }];
 
 function fixture() {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: "Split and join characterisation",
     rows: [
       { id: "r1", visualText: "Wide", audioText: "Hello there", status: "todo" },
@@ -60,7 +61,7 @@ async function open(doc) {
 const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const ids = () => currentDocument().rows.map((r) => r.id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
-const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
+const para = (id) => document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
 const anchors = () => currentDocument().comments.map((c) => [c.id, c.rowId, c.field]);
 const toasts = () => Array.from(document.querySelectorAll("#toast-host .toast")).map((t) => t.textContent);
 const settle = () => new Promise((r) => setImmediate(r));
@@ -73,14 +74,8 @@ function lastText(el) {
 }
 
 function textNodeAt(el, offset) {
-  const walker = document.createTreeWalker(el, 4);
-  let at = 0;
-  while (walker.nextNode()) {
-    const n = walker.currentNode;
-    if (offset <= at + n.data.length) return [n, offset - at];
-    at += n.data.length;
-  }
-  return null;
+  const point = testDomPoint(el, offset);
+  return [point.node, point.offset];
 }
 
 function selectText(el, from, to) {
@@ -99,7 +94,7 @@ function selectText(el, from, to) {
 }
 
 function typeChar(el, ch) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   const node = lastText(el);
   node.data += ch;
   const r = document.createRange();
@@ -114,6 +109,11 @@ function typeChar(el, ch) {
 function key(el, name, mods) {
   const ev = new window.KeyboardEvent("keydown", Object.assign({ key: name, bubbles: true, cancelable: true }, mods || {}));
   el.dispatchEvent(ev);
+  if (name === "Delete" && !ev.defaultPrevented && el.matches(".wr-beat")) {
+    const input = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "deleteContentForward" });
+    input.getTargetRanges = () => [];
+    el.dispatchEvent(input);
+  }
   return ev;
 }
 
@@ -154,7 +154,7 @@ const DECLARED = { kind: "edit", whole: false, rows: 1, saveNow: false, derive: 
 const GRID_REFRESH = ["broll", "untagged"];
 
 function storeMedia(el, html) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   el.innerHTML = html;
   el.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "" }));
 }
@@ -164,7 +164,7 @@ beforeEach(() => { clock += 10_000; });
 test("a grid split (Alt+Enter) publishes one declared edit: one generation, one dirty, one render, production and b-roll derived", async () => {
   await open();
   const el = cellOf("r1", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 5, 5);
   const stamp = row("r1").updatedAt;
   const got = observe(() => key(el, "Enter", { altKey: true }));
@@ -179,7 +179,7 @@ test("a grid split (Alt+Enter) publishes one declared edit: one generation, one 
 test("a split makes a todo scene after it with the cut-off half in the same field and an empty other field, keys in this order", async () => {
   await open();
   const el = cellOf("r2", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 3, 3);
   key(el, "Enter", { altKey: true });
   const made = currentDocument().rows[2];
@@ -197,7 +197,7 @@ test("a split makes a todo scene after it with the cut-off half in the same fiel
 test("a split in the visual field puts the second half in the new scene's visual field", async () => {
   await open();
   const el = cellOf("r1", "visualText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 2, 2);
   const got = observe(() => key(el, "Enter", { altKey: true }));
   const created = currentDocument().rows[1].id;
@@ -229,7 +229,7 @@ test("a split at the very start leaves an empty first half; at the very end an e
 test("a split with a selection deletes it first; a selection over a whole commented phrase leaves its comment where it was", async () => {
   await open();
   const el = cellOf("r2", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 6, 19);
   const got = observe(() => key(el, "Enter", { altKey: true }));
   const created = currentDocument().rows[2].id;
@@ -244,7 +244,7 @@ test("a split with a selection deletes it first; a selection over a whole commen
 test("a split before a commented phrase moves its comment: one entry holding the cell, the scene and the comment, and redo moves it again", async () => {
   await open();
   const el = cellOf("r2", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 6, 6);
   const got = observe(() => key(el, "Enter", { altKey: true }));
   const created = currentDocument().rows[2].id;
@@ -265,7 +265,7 @@ test("a comment anchored in the scene's other field stays with the split scene",
   doc.comments.push(comment("c3", "r2", "visualText"));
   await open(doc);
   const el = cellOf("r2", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 3, 3);
   key(el, "Enter", { altKey: true });
   assert.deepEqual(anchors(), [["c1", currentDocument().rows[2].id, "audioText"], ["c2", "r4", "audioText"], ["c3", "r2", "visualText"]]);
@@ -344,7 +344,7 @@ test("typing and then splitting inside the 1,000 ms window are two entries; the 
 test("a keystroke not yet stored is stored by the split and counts as its own edit", async () => {
   await open();
   const el = cellOf("r1", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   el.appendChild(document.createTextNode("?"));
   selectText(el, 3, 3);
   const got = observe(() => key(el, "Enter", { altKey: true }));
@@ -363,8 +363,8 @@ test("a Writer split is the same single edit with no grid render", async () => {
   selectText(p, 5, 5);
   const got = observe(() => key(p, "Enter"));
   const created = currentDocument().rows[1].id;
-  assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: [], render: 0, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
-  assert.equal(document.activeElement, para(created));
+  assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: ["production", "broll", "writerStats"], render: 0, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
   writer.closeWriter();
 });
 
@@ -384,7 +384,7 @@ const SHOT_KEY = '<span class="broll-key" data-broll-id="bsA" contenteditable="f
 
 function panelDoc() {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: "Panels",
     rows: [
       { id: "p1", visualText: "", audioText: "Hello there", status: "todo" },
@@ -441,7 +441,7 @@ test("a Writer join refreshes the production and b-roll panels with the scene nu
     const p = para("p2");
     p.focus();
     selectText(p, 0, 0);
-    key(p, "Backspace");
+    key(p, "Backspace", { altKey: true });
     assert.equal(currentDocument().rows.length, 1, panel.name);
     await waitRefresh();
     assert.deepEqual(panel.beats(), panel.labels(1), panel.name);
@@ -451,7 +451,7 @@ test("a Writer join refreshes the production and b-roll panels with the scene nu
 
 function joinDoc(statuses) {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: "Join",
     rows: statuses.map((status, i) => ({ id: "j" + (i + 1), visualText: "", audioText: "Line " + (i + 1) + ".", status })),
     comments: []
@@ -464,7 +464,7 @@ async function joinWithBackspace(doc, intoId, curId) {
   const p = para(curId);
   p.focus();
   selectText(p, 0, 0);
-  const got = observe(() => key(p, "Backspace"));
+  const got = observe(() => key(p, "Backspace", { altKey: true }));
   return Object.assign(got, { into: row(intoId), id: curId });
 }
 
@@ -486,7 +486,7 @@ test("a join of a scene with a status outside the ranks counts it as todo", asyn
   const p = para("j2");
   p.focus();
   selectText(p, 0, 0);
-  key(p, "Backspace");
+  key(p, "Backspace", { altKey: true });
   assert.equal(row("j1").status, "bespoke");
   writer.closeWriter();
   await open(joinDoc(["todo", "ready"]));
@@ -495,7 +495,7 @@ test("a join of a scene with a status outside the ranks counts it as todo", asyn
   const q = para("j2");
   q.focus();
   selectText(q, 0, 0);
-  key(q, "Backspace");
+  key(q, "Backspace", { altKey: true });
   assert.equal(row("j1").status, "ready", "a rank above the unknown one's 0 wins");
   writer.closeWriter();
 });
@@ -503,7 +503,7 @@ test("a join of a scene with a status outside the ranks counts it as todo", asyn
 test("a join publishes one declared edit: one generation, one dirty, production and b-roll derived, one entry removing the later scene and writing the earlier one", async () => {
   const got = await joinWithBackspace(joinDoc(["todo", "ready"]), "j1", "j2");
   assert.deepEqual(got, Object.assign({}, got, {
-    seq: 1, generation: 1, published: [DECLARED], refreshed: [], render: 0, undo: 1,
+    seq: 1, generation: 1, published: [DECLARED], refreshed: ["production", "broll", "writerStats"], render: 0, undo: 1,
     steps: ["deleteRow:j2", "rowField:j1.audioText", "rowField:j1.status"]
   }));
   assert.equal(got.into.audioText, "Line 1. Line 2.");
@@ -525,7 +525,7 @@ test("a join glues with a space only when both sides have text and the earlier o
     const p = para(id);
     p.focus();
     selectText(p, 0, 0);
-    key(p, "Backspace");
+    key(p, "Backspace", { altKey: true });
   }
   assert.deepEqual(ids(), ["j1"]);
   assert.equal(row("j1").audioText, "Ends with space next after empty");
@@ -539,7 +539,7 @@ test("a join where the later scene has media in its audio concatenates the store
   storeMedia(p, "see " + CARD);
   assert.match(row("j2").audioText, /^see <a class="video-embed-card"/);
   selectText(p, 0, 0);
-  const got = observe(() => key(p, "Backspace"));
+  const got = observe(() => key(p, "Backspace", { altKey: true }));
   assert.deepEqual(ids(), ["j1"]);
   assert.match(row("j1").audioText, /^Line 1\. see <a class="video-embed-card"/);
   assert.equal(got.undo, 1);
@@ -557,7 +557,7 @@ test("a join into a scene with a visual and nothing in the later one keeps the e
   const p = para("j2");
   p.focus();
   selectText(p, 0, 0);
-  const got = observe(() => key(p, "Backspace"));
+  const got = observe(() => key(p, "Backspace", { altKey: true }));
   assert.deepEqual(got.steps, ["deleteRow:j2", "rowField:j1.audioText"]);
   assert.equal(row("j1").visualText, "Keep me");
   assert.equal(JSON.stringify(row("j1").imageLinks), links);
@@ -574,7 +574,7 @@ test("a join into a scene with no visual takes the later scene's visual text and
   const p = para("j2");
   p.focus();
   selectText(p, 0, 0);
-  const got = observe(() => key(p, "Backspace"));
+  const got = observe(() => key(p, "Backspace", { altKey: true }));
   assert.deepEqual(got.steps, ["deleteRow:j2", "rowField:j1.visualText", "rowField:j1.audioText", "rowField:j1.imageLinks", "docField:comments"]);
   assert.equal(got.undo, 1);
   assert.equal(row("j1").visualText, "Drone " + cmt("c9", "over") + " the bay");
@@ -587,7 +587,7 @@ test("a join into a scene with no visual takes the later scene's visual text and
   writer.closeWriter();
 });
 
-test("two scenes with visuals are refused with the toast, whatever the visual is made of, and nothing changes or is counted", async () => {
+test("two beats with visuals keep both in one undoable join", async () => {
   const kinds = [
     ["text and text", (d) => { d.rows[0].visualText = "One"; d.rows[1].visualText = "Two"; }],
     ["gallery and text", (d) => { d.rows[0].imageLinks = LINKS; d.rows[1].visualText = "Two"; }],
@@ -599,14 +599,21 @@ test("two scenes with visuals are refused with the toast, whatever the visual is
     shape(doc);
     await open(doc);
     writer.openWriter();
-    const before = JSON.stringify(currentDocument());
+    const before = JSON.stringify(currentDocument(), (key, value) => key === "updatedAt" || key === "updatedBy" ? undefined : value);
     const p = para("j2");
     p.focus();
     selectText(p, 0, 0);
-    const got = observe(() => key(p, "Backspace"));
-    assert.deepEqual(got, { seq: 0, generation: 0, published: [], refreshed: [], render: 0, undo: 0, steps: [] }, name);
-    assert.equal(JSON.stringify(currentDocument()), before, name);
-    assert.equal(toasts().at(-1), "Both beats have a visual — join them in the split view, so you can pick which one to keep.", name);
+    const got = observe(() => key(p, "Backspace", { altKey: true }));
+    assert.equal(got.seq, 1, name);
+    assert.equal(got.generation, 1, name);
+    assert.equal(got.render, 0, name);
+    assert.equal(got.undo, 1, name);
+    assert.deepEqual(ids(), ["j1"], name);
+    assert.equal(row("j1").visualText, name === "text and text" ? "One<br>Two" : name === "text and gallery" ? "One" : name === "gallery and text" ? "Two" : "", name);
+    assert.deepEqual(row("j1").imageLinks ?? [], name === "text and text" ? [] : LINKS, name);
+    assert.equal(toasts().at(-1), "Joined the beats and kept both visuals.", name);
+    assert.equal(undo().ok, true);
+    assert.equal(JSON.stringify(currentDocument(), (key, value) => key === "updatedAt" || key === "updatedBy" ? undefined : value), before, name);
     writer.closeWriter();
   }
 });
@@ -620,17 +627,16 @@ test("a visual of only whitespace or an empty line break does not count as a vis
   const p = para("j2");
   p.focus();
   selectText(p, 0, 0);
-  const got = observe(() => key(p, "Backspace"));
+  const got = observe(() => key(p, "Backspace", { altKey: true }));
   assert.equal(got.undo, 1);
   assert.deepEqual(ids(), ["j1"]);
-  assert.equal(row("j1").visualText, "One");
+  assert.equal(row("j1").visualText, "One<br><br>");
   writer.closeWriter();
 });
 
 test("a refused join does not end the typing group: typing again afterwards joins the earlier entry", async () => {
   const doc = joinDoc(["todo", "todo"]);
-  doc.rows[0].visualText = "One";
-  doc.rows[1].visualText = "Two";
+  doc.sections = [{ id: "later", name: "Later", firstSceneId: "j2" }];
   await open(doc);
   writer.openWriter();
   const p = para("j2");
@@ -640,8 +646,8 @@ test("a refused join does not end the typing group: typing again afterwards join
   assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
   selectText(p, 0, 0);
   clock += 5;
-  key(p, "Backspace");
-  assert.equal(toasts().at(-1).slice(0, 4), "Both");
+  key(p, "Backspace", { altKey: true });
+  assert.equal(toasts().at(-1), "A beat can't join across a scene header.");
   clock += 5;
   typeChar(p, "?");
   await settle();
@@ -660,7 +666,7 @@ test("a join ends the typing group: typing then joining are two entries", async 
   p2.focus();
   selectText(p2, 0, 0);
   clock += 5;
-  key(p2, "Backspace");
+  key(p2, "Backspace", { altKey: true });
   flushEdits();
   assert.equal(undoSizes().undo, 2);
   assert.equal(undo().ok, true);
@@ -678,7 +684,7 @@ test("a join ends the typing group even when the key it follows has not been rec
   const p2 = para("j2");
   p2.focus();
   selectText(p2, 0, 0);
-  key(p2, "Backspace");
+  key(p2, "Backspace", { altKey: true });
   flushEdits();
   assert.equal(undoSizes().undo, 2);
   assert.equal(undo().ok, true);
@@ -703,18 +709,19 @@ test("a Writer split stores text the cell holds but the model does not yet, as i
   writer.closeWriter();
 });
 
-test("a join by Delete at the end of the earlier scene is the same edit as Backspace at the start of the later one", async () => {
+test("Delete at a tick keeps the beats and removes the next character", async () => {
   await open(joinDoc(["ready", "todo", "shot"]));
   writer.openWriter();
   const p = para("j1");
   p.focus();
   selectText(p, 7, 7);
   const got = observe(() => key(p, "Delete"));
-  assert.deepEqual(got.steps, ["deleteRow:j2", "rowField:j1.audioText"]);
+  assert.deepEqual(got.steps, ["rowField:j2.audioText"]);
   assert.equal(got.seq, 1);
-  assert.equal(row("j1").audioText, "Line 1. Line 2.");
+  assert.equal(row("j1").audioText, "Line 1.");
   assert.equal(row("j1").status, "ready");
-  assert.deepEqual(ids(), ["j1", "j3"]);
+  assert.equal(row("j2").audioText, "ine 2.");
+  assert.deepEqual(ids(), ["j1", "j2", "j3"]);
   writer.closeWriter();
 });
 
@@ -730,7 +737,7 @@ test("a join of a commented phrase cut in two by a split gives one anchor back, 
   const q = para(created);
   q.focus();
   selectText(q, 0, 0);
-  const got = observe(() => key(q, "Backspace"));
+  const got = observe(() => key(q, "Backspace", { altKey: true }));
   assert.equal(got.undo, 1);
   assert.equal(row("r2").audioText, "Alpha " + cmt("c1", "bra vo charlie") + " delta");
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
@@ -754,7 +761,7 @@ function withThrowingListener(run) {
 test("a grid split whose commit is followed by a throw still draws the new scene, and the throw is only reported", async () => {
   await open();
   const el = cellOf("r1", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   selectText(el, 5, 5);
   const reported = withThrowingListener(() => key(el, "Enter", { altKey: true }));
   const created = currentDocument().rows[1].id;
@@ -770,7 +777,7 @@ test("a Writer join whose commit is followed by a throw still redraws the Writer
   const p = para("j2");
   p.focus();
   selectText(p, 0, 0);
-  const reported = withThrowingListener(() => key(p, "Backspace"));
+  const reported = withThrowingListener(() => key(p, "Backspace", { altKey: true }));
   assert.deepEqual(reported, ["listener broke"]);
   assert.deepEqual(ids(), ["j1"]);
   assert.equal(para("j2"), null, "the joined beat left the Writer");

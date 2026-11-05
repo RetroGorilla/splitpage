@@ -13,7 +13,8 @@ export function commentsPanelActions(screen: () => ScreenState, panels: Pick<Sid
     words: "comments notes review feedback show hide toggle",
     availability: () => {
       const button = document.getElementById("btn-comments");
-      const availability = firstRefusal(availableUnless(["loading"], screen()), availableUnless(EVERY_OVERLAY, screen()));
+      const overlays = EVERY_OVERLAY.filter(overlay => overlay !== "writer");
+      const availability = firstRefusal(availableUnless(["loading"], screen()), availableUnless(overlays, screen()));
       return button !== null && !button.hidden ? availability : { ...availability, visible: false };
     },
     run: () => {

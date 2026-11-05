@@ -127,7 +127,7 @@ expect window.fakeP.openPrompterInBrowser.length === 0
 
 # --- dirty: saved first (no dialog — it has a file), then asked ------------
 eval (function(){ F.state().title = 'Saved before the browser'; D.markDirtyForTest(); return true; })()
-wait document.getElementById('btn-save').textContent.indexOf('•') !== -1
+wait document.getElementById('save-status').textContent === 'Unsaved changes'
 jsclick #pp-voice
 wait window.fakeP._prompterCalls === 2
 expect window.fakeP._text(window.__pid).indexOf('Saved before the browser') !== -1

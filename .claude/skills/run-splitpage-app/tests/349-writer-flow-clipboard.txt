@@ -1,0 +1,34 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented}; window.doc={schema:2,title:'Clipboard ranges',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'First visual',status:'shot'},{id:'b',audioText:'<strong>Bravo</strong>',visualText:'Middle visual',status:'ready'},{id:'c',audioText:'Charlie',visualText:'Last visual',status:'shot'},{id:'d',audioText:'Target',visualText:'Target visual',status:'shot',paragraphStart:true}]}; F.openFile(new File([JSON.stringify(doc)],'clipboard.splitpage'))
+wait F.state().title === 'Clipboard ranges'
+click #btn-write
+wait W.on()
+eval W.place({anchor:bp('a',2),head:bp('c',3)});window.data=new DataTransfer();window.copied=clip('copy',data)
+expect copied && data.getData('text/plain') === 'pha Bravo Cha'
+expect data.getData('application/x-splitpage-flow').length > 0
+eval W.place({anchor:bp('d',3),head:bp('d',3)});window.before=JSON.stringify(F.state().rows);U.flush();window.depth=U.sizes().undo;window.pasted=clip('paste',data)
+expect pasted && F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|<strong>Bravo</strong>|Charlie|Tar|pha|<strong>Bravo</strong>|Cha|get'
+expect F.state().rows[3].visualText === 'Target visual' && F.state().rows[3].status === 'shot' && F.state().rows[7].visualText === '' && F.state().rows[7].status === 'todo'
+expect F.state().rows[4].visualText === '' && F.state().rows[5].visualText === 'Middle visual' && F.state().rows[5].status === 'ready' && F.state().rows[6].visualText === ''
+eval U.flush()
+expect U.sizes().undo === depth+1 && W.check().length === 0
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d'
+eval W.place({anchor:bp('c',3),head:bp('a',2)});window.reverse=new DataTransfer();clip('copy',reverse)
+expect reverse.getData('text/plain') === data.getData('text/plain')
+eval window.selection=W.selection();U.flush();window.depth=U.sizes().undo;window.cutData=new DataTransfer();clip('cut',cutData)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Al|rlie|Target'
+expect F.state().rows[0].visualText === 'First visual' && F.state().rows[1].visualText === 'Last visual'
+eval U.flush()
+expect U.sizes().undo === depth+1 && cutData.getData('text/plain') === 'pha Bravo Cha'
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d' && JSON.stringify(W.selection()) === JSON.stringify(selection)
+eval W.place({anchor:bp('a',2),head:bp('b',2)});window.partial=new DataTransfer();clip('copy',partial);W.place({anchor:bp('d',3),head:bp('d',3)});clip('paste',partial)
+expect F.state().rows.length === 4 && F.state().rows[3].audioText === 'Tarpha Brget' && F.state().rows[3].visualText === 'Target visual'
+key ctrl KeyZ
+eval W.place({anchor:bp('a',5),head:bp('b',0)});window.gap=new DataTransfer();clip('copy',gap)
+expect gap.getData('text/plain') === ' '
+eval W.place({anchor:bp('d',3),head:bp('d',3)});window.external=new DataTransfer();external.setData('text/html','<p onclick="alert(1)"><b>First</b><script>bad()</script></p><p>Second</p>');external.setData('text/plain','First\n\nSecond');clip('paste',external)
+expect F.state().rows.slice(3).map(function(r){return r.audioText}).join('|') === 'TarFirst|Secondget'
+expect F.state().rows[4].paragraphStart === true && !document.querySelector('#writer-doc script') && !document.querySelector('#writer-doc [onclick]') && W.check().length === 0

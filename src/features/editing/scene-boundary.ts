@@ -1,6 +1,6 @@
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { SceneBoundaryRemoval } from "../../application/editing/scene-boundary.ts";
-import { sceneBeforeBeat, soleBeatSceneMovedBy } from "../../core/document/scenes.ts";
+import { soleBeatSceneMovedBy } from "../../core/document/scenes.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export interface SceneBoundaryPorts {
@@ -18,16 +18,7 @@ export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts): {
     return !!caret && !!selection && selection.anchorNode === caret.node && selection.anchorOffset === caret.offset &&
       selection.focusNode === caret.end && selection.focusOffset === caret.endOffset;
   }
-  function atEdge(cell: Element, range: Range, start: boolean): boolean {
-    const probe = doc.createRange();
-    probe.selectNodeContents(cell);
-    if (start) probe.setEnd(range.startContainer, range.startOffset);
-    else probe.setStart(range.endContainer, range.endOffset);
-    const fragment = probe.cloneContents();
-    return !fragment.textContent && !fragment.querySelector("br, img");
-  }
   life.listen(doc, "keydown", event => {
-    const cell = event.target.closest?.("#writer-doc .wr-para");
     const selection = window.getSelection();
     const key = event.key;
     if (caret && !sameCaret(selection)) cancel();
@@ -45,27 +36,10 @@ export function mountSceneBoundary(window: Window, ports: SceneBoundaryPorts): {
         return;
       }
     }
-    if (!cell || !ports.allowed() || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
-      (key !== "Backspace" && key !== "Delete") || !selection?.rangeCount) {
-      const onMove = !!event.target.closest?.('[data-action="move-up"],[data-action="move-down"]');
-      const activates = onMove && (key === "Enter" || key === " ");
-      if (activates && event.repeat) event.preventDefault();
-      if (!["Alt", "Shift", "Control", "Meta"].includes(key) && !activates) cancel();
-      return;
-    }
-    const range = selection.getRangeAt(0);
-    if (!range.collapsed || !cell.contains(range.startContainer) || !atEdge(cell, range, key === "Backspace")) { cancel(); return; }
-    const state = ports.document.current();
-    if (!state) { cancel(); return; }
-    const at = state.rows.findIndex(row => row.id === cell.getAttribute("data-id"));
-    const next = state.rows[key === "Backspace" ? at : at + 1];
-    const scene = at === -1 || !next ? undefined : sceneBeforeBeat(state, next.id);
-    if (!scene) { cancel(); return; }
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (event.repeat) return;
-    caret = { node: selection.anchorNode, offset: selection.anchorOffset, end: selection.focusNode, endOffset: selection.focusOffset };
-    ports.boundary.press(scene.id, key);
+    const onMove = !!event.target.closest?.('[data-action="move-up"],[data-action="move-down"]');
+    const activates = onMove && (key === "Enter" || key === " ");
+    if (activates && event.repeat) event.preventDefault();
+    if (!["Alt", "Shift", "Control", "Meta"].includes(key) && !activates) cancel();
   }, true);
   for (const type of ["pointerdown", "mousedown", "click", "beforeinput", "input", "paste", "cut", "compositionstart", "blur"]) {
     life.listen(doc, type, event => {

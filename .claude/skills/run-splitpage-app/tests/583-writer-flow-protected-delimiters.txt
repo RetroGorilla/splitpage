@@ -1,0 +1,23 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; window.tag=function(name){return '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="'+name+'" contenteditable="false">'+name+'</span>'}; F.openFile(new File([JSON.stringify({schema:2,title:'Protected delimiters',paragraphsDecided:true,rows:[{id:'a',audioText:tag('*Camera'),visualText:''},{id:'b',audioText:tag('**Camera'),visualText:'',paragraphStart:true},{id:'c',audioText:'*left '+tag('Camera')+' right',visualText:'',paragraphStart:true}],comments:[]})],'delimiters.splitpage'))
+wait F.state().title === 'Protected delimiters'
+click #btn-write
+wait W.on()
+eval at('a',7)
+key ctrl KeyU
+press *
+expect document.querySelector('.wr-beat[data-id="a"] .tag-anchor').textContent === '*Camera'
+expect document.querySelector('.wr-beat[data-id="a"] .tag-anchor').getAttribute('data-tag-name') === '*Camera' && !document.querySelector('.wr-beat[data-id="a"] em')
+expect document.querySelector('.wr-beat[data-id="a"]').textContent.replace(/\u200B/g,'') === '*Camera*' && W.selection().head.offset === 8
+key ctrl KeyZ
+expect document.querySelector('.wr-beat[data-id="a"]').textContent.replace(/\u200B/g,'') === '*Camera'
+eval at('b',8)
+press **
+expect document.querySelector('.wr-beat[data-id="b"] .tag-anchor').textContent === '**Camera' && !document.querySelector('.wr-beat[data-id="b"] strong')
+expect document.querySelector('.wr-beat[data-id="b"]').textContent.replace(/\u200B/g,'') === '**Camera**'
+eval at('c',18)
+press *
+expect document.querySelector('.wr-beat[data-id="c"]').textContent.replace(/\u200B/g,'') === '*left Camera right*' && !document.querySelector('.wr-beat[data-id="c"] em')
+expect document.querySelector('.wr-beat[data-id="c"] .tag-anchor').textContent === 'Camera'
+expect W.check().length === 0

@@ -1,0 +1,16 @@
+open
+viewport 1440 900
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Idle totals',paragraphsDecided:true,rows:Array.from({length:900},(_,i)=>({id:'r'+i,audioText:'Alpha bravo',visualText:''})),comments:[]})],'totals.splitpage'))
+wait F.state().title === 'Idle totals'
+click #btn-write
+wait W.on() && document.getElementById('wr-words').textContent === '1,800'
+eval W.place({anchor:{kind:'beat',rowId:'r0',offset:11},head:{kind:'beat',rowId:'r0',offset:11}}); window.syncWords=null; document.getElementById('writer-doc').addEventListener('input',()=>{syncWords=document.getElementById('wr-words').textContent},{once:true})
+type  extra
+expect F.state().rows[0].audioText === 'Alpha bravo extra'
+expect syncWords === '1,800'
+wait document.getElementById('wr-words').textContent === '1,801'
+eval W.place({anchor:{kind:'beat',rowId:'r0',offset:0},head:{kind:'beat',rowId:'r0',offset:5}})
+expect document.getElementById('wr-words').textContent === '1'
+eval W.place({anchor:{kind:'beat',rowId:'r0',offset:5},head:{kind:'beat',rowId:'r0',offset:5}})
+expect document.getElementById('wr-words').textContent === '1,801' && W.check().length === 0

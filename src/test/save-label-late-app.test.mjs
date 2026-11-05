@@ -18,13 +18,13 @@ const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
-const { saveStatus } = await import("../application/save/status.ts");
+const { flowSaveStatus, saveStatus } = await import("../application/save/status.ts");
 const { importSavingOwner } = await import("../bootstrap/wiring/local-files.ts");
 const flushEdits = () => undoOwner().flush();
 
 const ID = (letter) => "d" + letter.repeat(32);
-const SAVED = { label: "Save", wr: "Save", disabled: false, dirty: false, status: "Saved" };
-const UNSAVED = { label: "Save •", wr: "Save •", disabled: false, dirty: true, status: "Unsaved changes" };
+const SAVED = { label: "Autosave off", disabled: false, actionable: true, status: "Saved" };
+const UNSAVED = { label: "Autosave off", disabled: false, actionable: true, status: "Unsaved changes" };
 
 function script(title, docId) {
   return migrateRows({
@@ -53,9 +53,8 @@ function painted() {
   const btn = document.getElementById("btn-save");
   return {
     label: btn.textContent,
-    wr: document.getElementById("wr-save").textContent,
     disabled: btn.disabled,
-    dirty: btn.classList.contains("is-dirty"),
+    actionable: btn.dataset.actionable === "true",
     status: document.getElementById("save-status").textContent
   };
 }
@@ -63,7 +62,7 @@ function painted() {
 function projected() {
   const home = homeModule.currentHome();
   const where = home.kind === "file" ? (home.handle && home.handle.name) || "" : home.kind === "import" ? home.name || "" : "";
-  const view = saveStatus({
+  const input = {
     busy: saves.saveBusy(),
     dirty: saves.unsavedChanges(),
     halted: autoSavePolicy().halted(),
@@ -71,9 +70,10 @@ function projected() {
     target: saves.autoSaveTarget(),
     where: where,
     homeKind: home.kind
-  });
-  const b = view.button;
-  return { label: b.label, wr: b.label, disabled: b.disabled, dirty: b.dirty, status: view.line ? view.line.text : "" };
+  };
+  const view = saveStatus(input);
+  const flow = flowSaveStatus(input);
+  return { label: flow.text === "Saved" ? "Saved just now" : flow.text, disabled: !flow.actionable, actionable: flow.actionable, status: view.line ? view.line.text : "" };
 }
 
 function settledAs(expected) {
@@ -224,7 +224,7 @@ test("I-20: an autosave that runs while the user types and presses Save ends sav
     target.releaseOp("close");
     await auto;
     await manual;
-    settledAs(SAVED);
+    settledAs({ ...SAVED, label: "Saved just now", disabled: true, actionable: false });
   } finally {
     setAutoSaveEnabled(false);
   }
@@ -244,7 +244,7 @@ test("I-20: an import writeback that lands late repaints from the save state", b
   target.releaseOp("close");
   await saving;
   assert.equal(homeModule.currentHome().dirty, false, "the import reads written back");
-  settledAs(UNSAVED);
+  settledAs({ ...UNSAVED, label: "Not saved yet" });
 }));
 
 test("I-20: a save from a stopped app that lands after the restart leaves the new app's label alone", beat(async () => {

@@ -563,7 +563,7 @@ export function openTagComposer(ctx: TagComposerContext) {
     const range = selection.getRangeAt(0);
     const node = range.startContainer;
     const element = node.nodeType === 1 ? node as Element : node.parentElement;
-    const cell = element?.closest("#rows .cell-editable");
+    const cell = element?.closest("#rows .cell-editable, #writer-doc .wr-beat");
     if (cell && cell.getAttribute("data-id") === ctx.rowId && cell.getAttribute("data-field") === ctx.field &&
       cell.contains(range.endContainer) && Array.from(cell.querySelectorAll(".tag-anchor")).some(tag => range.intersectsNode(tag))) {
       (showToast as NonNullable<typeof showToast>)("That selection includes an existing tag. Select only untagged words.", "warn");
@@ -618,8 +618,10 @@ export function applyTag() {
     return;
   }
 
-  const cellEl = document.querySelector('#rows .row[data-id="' + safeId(ctx.rowId, "r") +
-    '"] .' + (ctx.field === "visualText" ? "visual" : "audio") + '-cell .cell-editable');
+  const flow = document.getElementById("writer")?.hidden === false;
+  const cellEl = flow ? document.querySelector('#writer-doc .wr-beat[data-id="' + safeId(ctx.rowId, "r") + '"]')
+    : document.querySelector('#rows .row[data-id="' + safeId(ctx.rowId, "r") +
+      '"] .' + (ctx.field === "visualText" ? "visual" : "audio") + '-cell .cell-editable');
   if (!cellEl) { (showToast as NonNullable<typeof showToast>)("That beat is no longer here.", "warn"); return; }
 
   const idx = (readSession as NonNullable<typeof readSession>)(function (doc) { return rowIndexOf(doc, (ctx.rowId as NonNullable<typeof ctx.rowId>)); });

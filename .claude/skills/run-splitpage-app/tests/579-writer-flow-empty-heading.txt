@@ -1,0 +1,52 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.hp=function(n){return {kind:'heading',sceneId:'s',offset:n}}; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(p){W.place({anchor:p,head:p})}; window.load=function(){return F.openFile(new File([JSON.stringify({schema:2,title:'Empty heading',paragraphsDecided:true,rows:[{id:'a',audioText:'Above',visualText:''},{id:'b',audioText:'Alpha',visualText:'Desk',status:'shot'}],sections:[{id:'s',name:'Title',firstSceneId:'b'}],comments:[]})],'empty.splitpage'))}; load()
+wait F.state().title === 'Empty heading'
+click #btn-write
+wait W.on()
+eval W.place({anchor:hp(0),head:hp(5)}); U.flush()
+key Backspace
+expect document.querySelector('.wr-heading[data-scene="s"]').textContent === ''
+expect F.state().sections[0].name === 'Title'
+expect W.selection().head.kind === 'heading' && W.selection().head.offset === 0
+eval W.fullRender()
+expect document.querySelector('.wr-heading[data-scene="s"]').textContent === '' && F.state().sections[0].name === 'Title'
+eval (function(){var host=document.getElementById('writer-doc');host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));var heading=document.querySelector('.wr-heading[data-scene="s"]');heading.textContent='  ';heading.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:'  '}));host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}));W.place({anchor:hp(2),head:hp(2)});W.fullRender()})()
+expect document.querySelector('.wr-heading[data-scene="s"]').textContent === '  ' && F.state().sections[0].name === 'Title'
+eval W.place({anchor:hp(2),head:hp(0)})
+key Backspace
+eval document.getElementById('writer-doc').dispatchEvent(new FocusEvent('focusout',{bubbles:true,relatedTarget:null})); window.dispatchEvent(new Event('blur'))
+expect F.state().sections[0].name === 'Title' && document.querySelector('.wr-heading[data-scene="s"]').textContent === ''
+eval document.getElementById('writer-doc').dispatchEvent(new FocusEvent('focusout',{bubbles:true,relatedTarget:document.body})); window.getSelection().removeAllRanges(); new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})})
+expect F.state().sections[0].name === 'Title' && document.querySelector('.wr-heading[data-scene="s"]').textContent === ''
+eval W.place({anchor:hp(0),head:hp(0)})
+type New name
+expect F.state().sections[0].name === 'New name'
+expect document.querySelector('.wr-heading[data-scene="s"]').textContent === 'New name'
+eval W.place({anchor:hp(8),head:hp(0)}); U.flush()
+key Delete
+expect F.state().sections[0].name === 'New name' && document.querySelector('.wr-heading[data-scene="s"]').textContent === ''
+eval at(bp('a',2)); U.flush(); window.depth=U.sizes().undo
+wait F.state().sections === undefined
+expect W.selection().head.rowId === 'a' && W.selection().head.offset === 2
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && F.state().rows[1].paragraphStart === true
+expect F.state().rows[1].audioText === 'Alpha' && F.state().rows[1].visualText === 'Desk' && F.state().rows[1].status === 'shot'
+key ctrl KeyZ
+expect F.state().sections[0].name === 'New name' && F.state().sections[0].firstSceneId === 'b'
+expect document.querySelector('.wr-heading[data-scene="s"]').textContent === 'New name'
+eval W.place({anchor:hp(0),head:hp(8)})
+key Backspace
+key ArrowDown
+wait F.state().sections === undefined
+key ctrl KeyZ
+expect F.state().sections[0].name === 'New name'
+eval W.place({anchor:hp(8),head:hp(0)})
+key Backspace
+click #wr-close
+expect F.state().sections === undefined && F.state().rows[1].audioText === 'Alpha'
+key ctrl KeyZ
+expect F.state().sections[0].name === 'New name'
+click #btn-write
+wait W.on()
+expect F.state().sections[0].name === 'New name' && document.querySelector('.wr-heading[data-scene="s"]').textContent === 'New name'
+expect W.check().length === 0

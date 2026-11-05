@@ -1,0 +1,41 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.hp=function(id,n){return {kind:'heading',sceneId:id,offset:n}}; window.at=function(p){W.place({anchor:p,head:p})}; F.openFile(new File([JSON.stringify({schema:2,title:'Heading keys',paragraphsDecided:true,rows:[{id:'a',audioText:'Above',visualText:'Sky'},{id:'b',audioText:'End',visualText:''},{id:'c',audioText:'Body',visualText:'Desk',status:'shot'}],sections:[{id:'first',name:'Opening',firstSceneId:'a'},{id:'s',name:'Title',firstSceneId:'c'}],comments:[]})],'keys.splitpage'))
+wait F.state().title === 'Heading keys'
+click #btn-write
+wait W.on()
+eval at(hp('first',0))
+key Enter
+expect F.state().rows.length === 4 && F.state().rows[0].audioText === '' && F.state().rows[0].visualText === '' && !F.state().rows[0].paragraphStart
+expect F.state().sections[0].name === 'Opening' && F.state().sections[0].firstSceneId === 'a'
+expect W.selection().head.rowId === F.state().rows[0].id && W.selection().head.offset === 0
+expect document.querySelector('.wr-heading[data-scene="first"]').getAttribute('data-letter') === 'B'
+expect document.querySelector('.wr-beat[data-id="a"]').getAttribute('data-num') === 'B1'
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c'
+eval at(hp('s',0))
+key Enter
+expect F.state().rows.length === 4 && F.state().rows[2].audioText === '' && !F.state().rows[2].paragraphStart
+expect F.state().sections[1].firstSceneId === 'c' && W.selection().head.rowId === F.state().rows[2].id
+expect document.querySelectorAll('.wr-par')[0].querySelectorAll('.wr-beat').length === 3
+key ctrl KeyZ
+eval at(hp('s',2))
+key Enter
+expect F.state().sections[1].name === 'Ti' && F.state().rows[2].audioText === 'tle' && F.state().sections[1].firstSceneId === F.state().rows[2].id
+expect F.state().rows[3].id === 'c' && F.state().rows[3].audioText === 'Body' && F.state().rows[3].paragraphStart === true && F.state().rows[3].visualText === 'Desk'
+key ctrl KeyZ
+eval at(hp('s',5)); U.flush(); window.depth=U.sizes().undo
+key Enter
+expect W.selection().head.rowId === 'c' && W.selection().head.offset === 0 && U.sizes().undo === depth
+key Backspace
+expect W.selection().head.kind === 'heading' && W.selection().head.sceneId === 's' && W.selection().head.offset === 5 && U.sizes().undo === depth
+eval at(bp('b',3))
+key Delete
+expect W.selection().head.kind === 'heading' && W.selection().head.offset === 0 && U.sizes().undo === depth
+key Backspace
+expect F.state().sections.length === 1 && F.state().rows[2].audioText === 'Title' && !F.state().rows[2].paragraphStart
+expect F.state().rows[3].id === 'c' && F.state().rows[3].paragraphStart === true && F.state().rows[3].status === 'shot'
+expect document.querySelectorAll('.wr-par')[0].querySelectorAll('.wr-beat').length === 3
+key ctrl KeyZ
+expect F.state().sections[1].name === 'Title' && F.state().rows.map(function(r){return r.id}).join() === 'a,b,c'
+expect W.check().length === 0

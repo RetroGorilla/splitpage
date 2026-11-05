@@ -34,4 +34,4 @@ eval (function(){ D.restoreBackend(); return true; })()
 expect !window.splitpageDesktop
 
 # nothing here edited the document
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet

@@ -1,0 +1,35 @@
+open
+viewport 1280 720
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Comments beside writer',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha <span class="cmt-anchor" data-cmt="c-one">marked words</span> tail',visualText:''},{id:'b',audioText:'Bravo words.',visualText:''}],comments:[{id:'c-one',rowId:'a',field:'audioText',author:'Tester',body:'Check this',quotedText:'marked words',createdAt:'2026-11-04T12:00:00.000Z'}]})],'comments.splitpage'))
+wait F.state().title === 'Comments beside writer'
+click #btn-comments
+wait !document.getElementById('comments-panel').hidden
+click #btn-write
+wait W.on()
+eval window.panel=document.getElementById('comments-panel'); window.writer=document.getElementById('writer'); window.reachable=e=>{var r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.left>=0&&r.top>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}
+wait !panel.hidden && reachable(panel)
+expect writer.getBoundingClientRect().right <= panel.getBoundingClientRect().left + 1
+expect document.getElementById('writer-doc').getBoundingClientRect().width >= 450
+shot phase-7-comments-1280
+click .comment-card[data-id="c-one"] .comment-loc
+expect W.on() && document.activeElement.id === 'writer-doc' && W.selection().head.rowId === 'a' && document.querySelector('#writer-doc .cmt-anchor').classList.contains('flash')
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:0},head:{kind:'beat',rowId:'b',offset:5}})
+click .writer-bar [data-cmd="comment"]
+wait !document.getElementById('comment-modal').hidden
+click #comment-body-editable
+type New writer comment
+key ctrl KeyZ
+expect !document.getElementById('comment-body-editable').textContent.includes('New writer comment') && F.state().rows[1].audioText.includes('Bravo')
+type New writer comment
+click #comment-post
+wait F.state().comments.length === 2
+wait !panel.hidden && reachable(panel) && document.activeElement.id === 'writer-doc'
+expect F.state().comments.some(c=>c.rowId==='b'&&c.quotedText==='Bravo'&&c.body.includes('New writer comment'))
+click #wr-close
+wait !W.on()
+expect !panel.hidden
+click #btn-write
+wait W.on()
+wait !panel.hidden && reachable(panel)
+expect W.check().length === 0

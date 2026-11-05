@@ -25,7 +25,8 @@ const CONVERTED = Object.freeze([
   "__targetTest",
   "__undoTest",
   "__updateTest",
-  "__videoTest"
+  "__videoTest",
+  "__writerFlowTest"
 ]);
 
 const FAKE_DESKTOP = Object.freeze(["_failNextDraftWrites", "_blobFailNext", "0.0.0-test"]);

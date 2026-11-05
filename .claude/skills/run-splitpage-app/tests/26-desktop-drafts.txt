@@ -56,7 +56,7 @@ expect window.__w2Log.length >= 2
 expect window.__w2Log[0].indexOf('W2-EDIT-A') !== -1
 expect window.__w2FinalJson.indexOf('W2-EDIT-B') !== -1
 eval (async function(){ await F.save({saveAs: true}); window.__w2CleanOnDisk = D.drafts.status().onDisk; return true; })()
-expect !document.getElementById('btn-save').classList.contains('is-dirty')
+expect !(window.__fileMenuTest.cardView().bits[0].unsaved === true)
 eval (async function(){ await D.drafts.flushNow(); window.__w2Discarded = window.fakeW2._drafts.current === null; window.__w2DiscardLog = window.fakeW2._draftLog.filter(function(e){ return e.op === 'discard'; }).length; return true; })()
 expect window.__w2Discarded
 expect window.__w2DiscardLog >= 1
@@ -128,7 +128,7 @@ expect window.__r56Rows.r2 === 'DISK R2'
 eval (function(){ window.__r56Conflict = F.state().comments.filter(function(c){ return c.kind === 'conflict' && c.rowId === 'r3'; })[0]; return window.__r56Conflict;})()
 expect !!window.__r56Conflict
 expect window.__r56Conflict.body.indexOf('MINE R3') !== -1
-expect document.getElementById('btn-save').classList.contains('is-dirty')
+expect (window.__fileMenuTest.cardView().bits[0].unsaved === true)
 eval (async function(){ window.__r56History = await H.listRaw(F.docId()); return true; })()
 expect window.__r56History.length >= 2
 expect window.__r56History[0].label === 'Before merging your unsaved changes'
@@ -137,7 +137,7 @@ expect sessionStorage.getItem('splitpage-conflict-stash') === 'SENTINEL-STASH'
 expect sessionStorage.getItem('splitpage-conflict-reloaded') === 'SENTINEL-RELOADED'
 sleep 3000
 expect window.fakeR56._text(window.__r56FileId) === window.__r56DiskBytesAtRestore
-expect document.getElementById('btn-save').classList.contains('is-dirty')
+expect (window.__fileMenuTest.cardView().bits[0].unsaved === true)
 
 # lastMergeUndo.id is the FIRST snapshot ("Before merging…"), not the second
 # — undo has to land back on the disk copy, not the recovered one.

@@ -31,6 +31,19 @@ type Realm = Window & typeof globalThis & { clipboardData?: DataTransfer | null 
 
 const ROUTES = ["paste", "copy", "cut"] as const;
 
+export function mountFlowClipboardRoutes(root: HTMLElement, handlers: Readonly<Record<(typeof ROUTES)[number], (event: ClipboardEvent) => void>>): () => void {
+  const routes = ROUTES.map(type => {
+    const handler = (event: Event): void => {
+      if (event.defaultPrevented) return;
+      if (type === "paste") event.preventDefault();
+      handlers[type](event as ClipboardEvent);
+    };
+    root.addEventListener(type, handler);
+    return () => { root.removeEventListener(type, handler); };
+  });
+  return () => { routes.forEach(dispose => { dispose(); }); };
+}
+
 export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutesMount<Owner, Place, Extra>): ClipboardRoutes {
   const ports = mount.ports;
   const realm = mount.window as Realm;

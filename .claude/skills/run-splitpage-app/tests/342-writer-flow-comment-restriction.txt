@@ -1,0 +1,21 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Comment restrictions',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'comments.splitpage'))
+wait F.state().title === 'Comment restrictions'
+click #btn-write
+wait W.on()
+eval window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.button=document.querySelector('.writer-bar [data-cmd="comment"]'); W.place({anchor:bp('a',2),head:bp('b',3)})
+expect button.disabled && button.title.includes('one beat')
+eval button.click()
+expect document.getElementById('comment-modal').hidden && F.state().comments.length === 0
+eval W.place({anchor:bp('b',3),head:bp('a',2)})
+expect button.disabled && button.title.includes('one beat')
+click #writer-title
+eval getSelection().removeAllRanges(); W.fullRender()
+expect button.disabled && button.title.includes('one beat')
+eval W.place({anchor:bp('a',1),head:bp('a',4)})
+expect !button.disabled && button.title === 'Comment on the selected words'
+click .writer-bar [data-cmd="comment"]
+expect !document.getElementById('comment-modal').hidden
+click #comment-cancel
+expect W.check().length === 0

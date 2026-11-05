@@ -23,7 +23,8 @@ param(
   [int]$CdpPort = 0,
   [int]$TimeoutSec = 180,
   [int]$Parallel,
-  [switch]$Headed
+  [switch]$Headed,
+  [string]$LogDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,7 +32,7 @@ $FreezeCaches = $env:SPLITPAGE_FREEZE_CACHES -eq '1'
 $DocumentGuard = $env:SPLITPAGE_DOCUMENT_GUARD -eq '1'
 $here  = $PSScriptRoot
 $tests = Join-Path $here 'tests'
-$logs  = Join-Path $env:TEMP 'splitpage-testlogs'
+$logs  = if ($LogDir) { $LogDir } else { Join-Path $env:TEMP 'splitpage-testlogs' }
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 Remove-Item (Join-Path $logs 'digest.txt'), (Join-Path $logs 'verdicts.json') -ErrorAction SilentlyContinue
 if ($Headed) { $Parallel = 1 }

@@ -191,7 +191,7 @@ test("scene removal materializes its implicit start; adding and moving scenes ch
   assert.deepEqual(flags(first), ["a"], "header removal explicitly records even a script-first break");
 });
 
-test("join keeps the first beat's flag, leaves the follower untouched and still refuses two visuals", () => {
+test("join keeps the first beat's flag, leaves the follower untouched when combining two visuals", () => {
   for (const sourceFlags of [["b"], ["c"], ["b", "c", "d"]]) {
     const h = opened(sourceFlags);
     const before = snapshot(h);
@@ -204,9 +204,15 @@ test("join keeps the first beat's flag, leaves the follower untouched and still 
   assert.ok(before.rows[0] && before.rows[1]);
   before.rows[0].visualText = "one";
   before.rows[1].visualText = "two";
+  const untouched = cloneState(before.rows.slice(2));
   h.session.adopt(before);
-  assert.equal(runConfined(h.session, joinBeatsCommand("a", ports)).kind, "rejected");
-  assert.deepEqual(snapshot(h), before);
+  assert.equal(runConfined(h.session, joinBeatsCommand("a", ports)).kind, "applied");
+  const joined = snapshot(h);
+  assert.deepEqual(joined.rows.map(row => row.id), ["a", "c", "d", "e", "f"]);
+  assert.equal(joined.rows[0]?.audioText, "a b");
+  assert.equal(joined.rows[0]?.visualText, "one<br>two");
+  assert.deepEqual(flags(h), []);
+  assert.deepEqual(joined.rows.slice(1), untouched);
 });
 
 test("paste adjusts the first copied flag at the destination, retains interior flags, and preserves a replaced start", () => {

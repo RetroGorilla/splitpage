@@ -211,7 +211,7 @@ wait __fx('prompter').display === 'none'
 # The Writer arriving: fades in, and the caret is there to type into at once
 # =============================================================================
 eval __slow(6000)
-eval (function(){document.getElementById('btn-write').click();window.__win0=__fx('writer');var a=document.activeElement;window.__win0.caretIn=!!(a&&a.classList&&a.classList.contains('wr-para'));window.__win0.lastId=__st().rows[__st().rows.length-1].id;window.__win0.caretRow=a&&a.getAttribute&&a.getAttribute('data-id');return JSON.stringify(window.__win0);})()
+eval (function(){var c=Array.from(document.querySelectorAll('#rows .audio-cell .cell-editable')).at(-1);c.focus();var rr=document.createRange();rr.selectNodeContents(c);rr.collapse(false);getSelection().removeAllRanges();getSelection().addRange(rr);document.getElementById('btn-write').click();window.__win0=__fx('writer');var a=document.activeElement;window.__win0.caretIn=!!(a&&a.classList&&a.id==='writer-doc');window.__win0.lastId=__st().rows[__st().rows.length-1].id;window.__win0.caretRow=window.__writerFlowTest.selection().head.rowId;return JSON.stringify(window.__win0);})()
 expect window.__win0.hidden === false
 expect window.__win0.inert === false
 expect window.__win0.fading == 1
@@ -226,7 +226,7 @@ shot 150-writer-arriving
 # typing during the fade lands, and in the document
 press  Typed mid-fade.
 expect __fx('writer').opacity < 1
-expect document.querySelector('#writer-doc .wr-para[data-id="' + window.__win0.lastId + '"]').textContent.indexOf('Typed mid-fade.') >= 0
+expect document.querySelector('#writer-doc .wr-beat[data-id="' + window.__win0.lastId + '"]').textContent.indexOf('Typed mid-fade.') >= 0
 expect __st().rows[__st().rows.length-1].audioText.indexOf('Typed mid-fade.') >= 0
 wait __fx('writer').opacity === 1 && __fx('writer').fading === 0
 
@@ -239,9 +239,9 @@ wait __fx('writer').opacity === 1 && __fx('writer').fading === 0
 # the close, whether the document already had them: the focusout the close
 # gives the paragraph, and the moment `hidden` is set (an own accessor on the
 # element wraps the real one).
-eval (function(){var p=document.querySelector('#writer-doc .wr-para[data-id="' + window.__win0.lastId + '"]');p.appendChild(document.createTextNode(' Unsynced tail.'));window.__order=[];var id=window.__win0.lastId;var has=function(){return __st().rows.find(function(r){return r.id===id;}).audioText.indexOf('Unsynced tail.')>=0;};window.__hasTail=has;p.addEventListener('focusout',function(){window.__order.push('focusout:'+has());},{once:true});var w=document.getElementById('writer');var d=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'hidden');Object.defineProperty(w,'hidden',{configurable:true,get:function(){return d.get.call(this);},set:function(v){if(v)window.__order.push('hide:'+has()+':fading='+this.getAnimations().length);d.set.call(this,v);}});return has();})()
+eval (function(){var p=document.querySelector('#writer-doc .wr-beat[data-id="' + window.__win0.lastId + '"]');p.appendChild(document.createTextNode(' Unsynced tail.'));window.__order=[];var id=window.__win0.lastId;var has=function(){return __st().rows.find(function(r){return r.id===id;}).audioText.indexOf('Unsynced tail.')>=0;};window.__hasTail=has;document.getElementById('writer-doc').addEventListener('focusout',function(){window.__order.push('focusout:'+has());},{once:true});var w=document.getElementById('writer');var d=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'hidden');Object.defineProperty(w,'hidden',{configurable:true,get:function(){return d.get.call(this);},set:function(v){if(v)window.__order.push('hide:'+has()+':fading='+this.getAnimations().length);d.set.call(this,v);}});return has();})()
 expect window.__hasTail() === false
-expect document.activeElement.classList.contains('wr-para')
+expect document.activeElement.id === 'writer-doc'
 # jsclick, not click: a real click on Close would blur the paragraph on
 # mousedown, before closeWriter() runs at all. This is the path Escape takes,
 # with the caret still in the paragraph when the close begins.
@@ -254,7 +254,7 @@ expect window.__hasTail()
 # and on screen in the split view, which was painted in the close
 expect Array.prototype.some.call(document.querySelectorAll('#rows .audio-cell .cell-editable'), function(c){return c.textContent.indexOf('Unsynced tail.')>=0;})
 eval (function(){delete document.getElementById('writer').hidden;return document.getElementById('writer').hidden;})()
-eval (async function(){window.__wout1=await __mid('writer');window.__wout1.center=__center();window.__wout1.active=document.activeElement===document.body;return JSON.stringify(window.__wout1);})()
+eval (async function(){window.__wout1=await __mid('writer');window.__wout1.center=__center();window.__wout1.active=!!document.activeElement.closest('#rows');return JSON.stringify(window.__wout1);})()
 expect window.__wout1.hidden === true
 expect window.__wout1.inert === true
 expect window.__wout1.pe == none
@@ -273,29 +273,6 @@ expect document.activeElement.textContent.indexOf('After.') >= 0
 eval document.activeElement.blur()
 wait __fx('writer').display === 'none'
 
-# =============================================================================
-# Jump to scene: the split view lands on and flashes the scene in the close,
-# and the writer fades out over it
-# =============================================================================
-eval __fast()
-jsclick #btn-write
-wait __fx('writer').opacity === 1 && __fx('writer').fading === 0
-eval __slow(3000)
-eval (function(){var ids=__st().rows.map(function(r){return r.id;});window.__jumpId=ids[ids.length-1];var g=document.querySelector('#writer-doc [data-action="writer-jump"][data-row="' + window.__jumpId + '"]');g.click();var row=document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]');window.__jump={flashed:row.classList.contains('just-merged'),w:__fx('writer')};return JSON.stringify(window.__jump);})()
-expect window.__jump.flashed
-expect window.__jump.w.hidden === true
-expect window.__jump.w.display == flex
-wait __fx('writer').display === 'none'
-wait (function(){var r=document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]').getBoundingClientRect();return r.top >= 0 && r.bottom <= innerHeight;})()
-
-# the same with the fade off (reduced motion's near-zero token)
-eval (function(){['prompter','writer'].forEach(function(id){var s=document.getElementById(id).style;s.setProperty('--dur-enter','0.01ms');s.setProperty('--dur-exit','0.01ms');});return true;})()
-jsclick #btn-write
-wait __fx('writer').opacity === 1
-eval (function(){var ids=__st().rows.map(function(r){return r.id;});window.__jumpId=ids[0];window.scrollTo(0,document.documentElement.scrollHeight);document.querySelector('#writer-doc [data-action="writer-jump"][data-row="' + window.__jumpId + '"]').click();return document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]').classList.contains('just-merged');})()
-expect document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]').classList.contains('just-merged')
-wait __fx('writer').display === 'none'
-wait (function(){var r=document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]').getBoundingClientRect();return r.top >= 0 && r.bottom <= innerHeight;})()
 eval __fast()
 
 # =============================================================================
@@ -315,7 +292,7 @@ wait __fx('writer').fading === 0
 jsclick #wr-close
 wait __fx('writer').display === 'none'
 
-jsclick #btn-comments
+eval if(document.getElementById('comments-panel').hidden) document.getElementById('btn-comments').click();true
 wait !document.getElementById('comments-panel').hidden
 sleep 400
 eval (function(){document.getElementById('btn-present').click();var p=document.getElementById('comments-panel').getAnimations().filter(function(a){return a.transitionProperty==='transform';});var w=document.getElementById('prompter').getAnimations().filter(function(a){return a.transitionProperty==='opacity';});window.__pan2={panel:p.length,writer:w.length,pd:p.length?p[0].effect.getTiming().duration:-1,wd:w.length?w[0].effect.getTiming().duration:-1};return JSON.stringify(window.__pan2);})()

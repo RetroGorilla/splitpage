@@ -65,7 +65,7 @@ export function mountScriptPlace(window: Window) {
   window.addEventListener("wheel", letGoOfScriptPlace, { passive: true });
   window.addEventListener("touchmove", letGoOfScriptPlace, { passive: true });
   window.addEventListener("keydown", letGoOfScriptPlace, true);
-  return { holdScriptPlace, sidePanelOpening, dispose() {
+  return { holdScriptPlace, sidePanelOpening, releaseScriptPlace: letGoOfScriptPlace, dispose() {
     if (disposed) return;
     disposed = true;
     window.removeEventListener("wheel", letGoOfScriptPlace);

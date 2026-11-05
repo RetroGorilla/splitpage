@@ -1,13 +1,13 @@
+import { joinWithPrevious } from "../../core/flow/flow.ts";
 import { gallerySize, rowSlots, setRowSlots } from "../../core/document/gallery.ts";
 import { sceneBeforeBeat } from "../../core/document/scenes.ts";
 import type { DocumentRow } from "../../core/document/validated.ts";
-import { clampRange, deleteRange, joinCells, splitCell } from "../../core/text/edits.ts";
+import { clampRange, deleteRange, splitCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
-import { cellLength, projection } from "../../core/text/runs.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
-import type { Command, DeepReadonly, DocumentView, Plan, CommandRefusal } from "../session/document-session.ts";
+import type { Command, DocumentView, Plan, CommandRefusal } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 
 export interface JoinPorts extends CellTextPorts {
@@ -22,14 +22,11 @@ export interface TextCut {
 
 export type SplitAt = TextCut;
 
-const BOTH_VISUALS = "both beats have a visual";
-
 const SPLIT_FIELDS: readonly string[] = Object.freeze(["visualText", "audioText"]);
 const VISUAL_CELLS: readonly string[] = Object.freeze([
   "visualText", "visualImage", "imageRef", "imageName", "imageLinks", "imageAnnotation", "moreImages"
 ]);
 const RANK: Readonly<Record<string, number>> = Object.freeze({ todo: 0, ready: 1, shot: 2 });
-const SPACE_END = /\s$/;
 
 export function textCut(from: number, to: number): TextCut {
   return Object.freeze({ kind: "text", from: from, to: to });
@@ -98,23 +95,9 @@ export function splitBeatCommand(rowId: string, field: string, at: SplitAt, crea
   };
 }
 
-function hasVisual(row: DeepReadonly<DocumentRow>, plainText: JoinPorts["plainText"]): boolean {
-  return !!(plainText(row.visualText) || gallerySize(row));
-}
-
-export function bothBeatsHaveVisual(intoId: string, plainText: JoinPorts["plainText"]): (doc: DocumentView | null) => boolean {
-  return function (doc) {
-    if (!doc) return false;
-    const at = doc.rows.findIndex(function (r) { return r.id === intoId; });
-    const prev = doc.rows[at], cur = doc.rows[at + 1];
-    return !!prev && !!cur && hasVisual(prev, plainText) && hasVisual(cur, plainText);
-  };
-}
-
-function joinedAudio(a: string, b: string, ports: CellTextPorts): string {
-  const ca = ports.cells(a), cb = ports.cells(b);
-  const glue = cellLength(ca) && cellLength(cb) && !SPACE_END.test(projection(ca)) ? " " : "";
-  return toHtml(joinCells(ca, cb, glue));
+function hasVisual(row: unknown, plainText: JoinPorts["plainText"]): boolean {
+  const visual = row as { readonly visualText?: string | null };
+  return !!(plainText(visual.visualText) || gallerySize(row));
 }
 
 function joinChanges(prevId: string, curId: string, takesVisual: boolean, raisesStatus: boolean): ChangeSet {
@@ -138,8 +121,10 @@ export function joinBeatsCommand(intoId: string, ports: JoinPorts): Command {
       if (!prev || !cur) return null;
       if (sceneBeforeBeat(doc, cur.id)) return { refused: "remove the scene header before joining these beats" };
       const curHasVisual = hasVisual(cur, ports.plainText);
-      if (hasVisual(prev, ports.plainText) && curHasVisual) return { refused: BOTH_VISUALS };
-      const audio = joinedAudio(textOf(prev.audioText), textOf(cur.audioText), ports);
+      const result = joinWithPrevious(doc, cur.id, { cells: html => ports.cells(html ?? ""), newId: () => "", hasVisual: row => hasVisual(row, ports.plainText) });
+      if (!result || !("rows" in result)) return result && "refused" in result ? result : null;
+      const joined = result.rows[at];
+      if (!joined) return null;
       const raisesStatus = rankOf(cur.status) > rankOf(prev.status);
       return {
         changes: joinChanges(prev.id, cur.id, curHasVisual, raisesStatus),
@@ -147,10 +132,10 @@ export function joinBeatsCommand(intoId: string, ports: JoinPorts): Command {
           const target = live.rows.find(function (r) { return r.id === intoId; });
           const next = target ? live.rows[live.rows.indexOf(target) + 1] : undefined;
           if (!target || !next) throw new Error("scenes " + intoId + " changed before they were joined");
-          target.audioText = audio;
+          target.audioText = joined.audioText;
           if (curHasVisual) {
-            target.visualText = next.visualText;
-            setRowSlots(target, rowSlots(next));
+            target.visualText = joined.visualText;
+            setRowSlots(target, rowSlots(joined));
           }
           if (raisesStatus) target.status = next.status;
           target.updatedAt = ports.clock.nowIso();

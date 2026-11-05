@@ -43,7 +43,7 @@ wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i
 
 # --- dirty: saved first, then asked -----------------------------------------
 eval (function(){ F.state().title = 'Saved before Chromium'; D.markDirtyForTest(); return true; })()
-wait document.getElementById('btn-save').textContent.indexOf('•') !== -1
+wait document.getElementById('save-status').textContent === 'Unsaved changes'
 eval D.runMenuCommand('prompter-open-in-chromium')
 wait window.fakeC._chromiumCalls === 2
 expect window.fakeC._text(window.__cid).indexOf('Saved before Chromium') !== -1

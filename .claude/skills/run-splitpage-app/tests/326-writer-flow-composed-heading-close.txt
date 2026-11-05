@@ -1,0 +1,18 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Composed heading close',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''}],sections:[{id:'s',name:'Old heading',firstSceneId:'a'}],comments:[]})],'heading.splitpage')); })()
+wait F.state().title === 'Composed heading close'
+click #btn-write
+wait W.on()
+eval (function(){ W.place({anchor:{kind:'heading',sceneId:'s',offset:0},head:{kind:'heading',sceneId:'s',offset:11}}); var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); var heading=document.querySelector('.wr-heading[data-scene="s"]'); heading.textContent='New heading'; heading.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:'New heading'})); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); document.getElementById('wr-close').click(); return true; })()
+expect F.state().sections[0].name === 'New heading'
+expect F.state().rows[0].audioText === 'Alpha'
+click #btn-write
+wait W.on()
+expect document.querySelector('.wr-heading[data-scene="s"]').textContent === 'New heading'
+eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); var heading=document.querySelector('.wr-heading[data-scene="s"]'); heading.textContent='Deferred heading'; heading.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:'Deferred heading'})); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); return true; })()
+wait F.state().sections[0].name === 'Deferred heading'
+expect F.state().sections[0].name === 'Deferred heading'
+eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); var heading=document.querySelector('.wr-heading[data-scene="s"]'); heading.textContent=''; heading.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:''})); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); document.getElementById('wr-close').click(); return true; })()
+expect F.state().sections === undefined
+expect F.state().rows[0].audioText === 'Alpha'

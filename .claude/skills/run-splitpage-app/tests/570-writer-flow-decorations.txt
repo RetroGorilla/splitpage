@@ -1,0 +1,25 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Flow decorations',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'The quay',status:'shot'},{id:'b',audioText:'',visualText:'Drone over the harbour',lengthSeconds:4,status:'shot'},{id:'c',audioText:'',visualText:'The boats'},{id:'d',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'decorations.splitpage'))
+wait F.state().title === 'Flow decorations'
+click #btn-write
+wait W.on()
+expect Array.from(document.querySelectorAll('.wr-beat')).every(function(b){return getComputedStyle(b,'::before').content.includes(b.dataset.num) || getComputedStyle(b,'::before').content === 'attr(data-num)'})
+expect getComputedStyle(document.querySelector('.wr-beat[data-id="b"]'),'::before').color === getComputedStyle(document.querySelector('.wr-beat[data-id="a"]'),'::before').color
+expect document.querySelector('.wr-beat[data-id="b"]').dataset.visual === 'Drone over the harbour · 0:04'
+expect document.querySelector('.wr-beat[data-id="c"]').dataset.visual === 'The boats'
+expect document.querySelector('.wr-beat[data-id="d"]').classList.contains('is-blank')
+eval W.place({anchor:{kind:'beat',rowId:'d',offset:0},head:{kind:'beat',rowId:'d',offset:0}}); U.flush(); window.depth=U.sizes().undo
+key Enter
+key Enter
+expect F.state().rows.length === 4 && U.sizes().undo === depth
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:0},head:{kind:'beat',rowId:'b',offset:0}})
+type Aerial
+wait F.state().rows[1].audioText === 'Aerial'
+expect !document.querySelector('.wr-beat[data-id="b"]').classList.contains('is-visual-only')
+expect F.state().rows[1].visualText === 'Drone over the harbour' && F.state().rows[1].lengthSeconds === 4
+expect W.check().length === 0
+eval window.clip={}; W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'d',offset:0}}); var data=new DataTransfer(); document.getElementById('writer-doc').dispatchEvent(new ClipboardEvent('copy',{bubbles:true,cancelable:true,clipboardData:data})); window.copied=data.getData('text/plain')
+expect !copied.includes('A1') && !copied.includes('Drone') && !copied.includes('0:04') && !copied.includes('empty beat')
+eval W.place({anchor:{kind:'beat',rowId:'d',offset:0},head:{kind:'beat',rowId:'a',offset:0}}); var data=new DataTransfer(); document.getElementById('writer-doc').dispatchEvent(new ClipboardEvent('copy',{bubbles:true,cancelable:true,clipboardData:data})); window.backward=data.getData('text/plain')
+expect backward === copied

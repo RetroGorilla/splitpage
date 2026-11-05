@@ -11,14 +11,6 @@ const expected: readonly Registration[] = [
     "click"
   ],
   [
-    "writer-doc",
-    "click"
-  ],
-  [
-    "wr-save",
-    "click"
-  ],
-  [
     "wr-size",
     "input"
   ],
@@ -40,9 +32,6 @@ export function setup() {
     runFromButton: h.log("runFromButton")
   };
   const p1: WriterNavigationPorts = {
-    jumpFromWriterToRow: h.log("jumpFromWriterToRow"),
-    expandHiddenShotStrip: h.log("expandHiddenShotStrip"),
-    saveFromButton: h.log("saveFromButton"),
     applyWriterSize: h.log("applyWriterSize")
   };
   const p2: WriterClosePorts = {
@@ -58,28 +47,16 @@ test("writer: every target, event, phase and multiplicity across dispose and rem
   h.window.close();
 });
 
-test("writer: jump precedes expansion and size, open, save and close reach their existing actions once", () => {
+test("writer: size, open and close reach their existing actions once", () => {
   const h = setup();
   const owners = h.mount();
-  const outer = h.document.createElement("div");
-  outer.dataset.action = "expand-hidden-shot";
-  outer.dataset.ids = "r1,r2";
-  const jump = h.document.createElement("button");
-  jump.dataset.action = "writer-jump";
-  jump.dataset.row = "r2";
-  outer.append(jump);
-  h.el("writer-doc").append(outer);
-  h.fire(jump, "click");
-  h.fire(outer, "click");
   h.el("wr-size").value = "24";
   h.fire(h.el("wr-size"), "input");
   h.fire(h.el("btn-write"), "click");
-  const saveEvent = h.fire(h.el("wr-save"), "click");
   h.fire(h.el("wr-close"), "click");
   assert.deepEqual(h.calls, [
-    { name: "jumpFromWriterToRow", args: ["r2"] }, { name: "expandHiddenShotStrip", args: ["r1,r2"] },
     { name: "applyWriterSize", args: [24, true] }, { name: "runFromButton", args: ["write"] },
-    { name: "saveFromButton", args: [saveEvent] }, { name: "closeWriter", args: [] }
+    { name: "closeWriter", args: [] }
   ]);
   owners.forEach((owner) => owner.dispose());
   h.window.close();
@@ -137,7 +114,7 @@ test("writer: Ctrl+wheel scrolls the writer to keep the point under the pointer 
   const owners = h.mount();
   let height = 100;
   const block = h.document.createElement("div");
-  block.className = "wr-block";
+  block.className = "wr-beat";
   block.getBoundingClientRect = () => ({ top: 50, height } as DOMRect);
   h.el("writer-doc").append(block);
   (h.p1 as { applyWriterSize: (size: number, persist: boolean) => void }).applyWriterSize = () => { height = 200; };

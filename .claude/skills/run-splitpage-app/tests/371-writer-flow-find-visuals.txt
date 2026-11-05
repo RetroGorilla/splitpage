@@ -1,0 +1,42 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Visual Find',paragraphsDecided:true,rows:[{id:'a',audioText:'The fox',visualText:'Red sky'},{id:'b',audioText:'runs',visualText:'Red view'}],comments:[]})],'visual-find.splitpage'))
+wait F.state().title === 'Visual Find'
+click #btn-write
+wait W.on()
+key ctrl KeyF
+eval window.query=function(s){var el=document.getElementById('find-input');el.value=s;el.dispatchEvent(new Event('input',{bubbles:true}))}; query('Red')
+expect document.getElementById('find-count').textContent === 'No matches'
+click #find-visuals
+expect document.getElementById('find-count').textContent === '1 of 2' && document.getElementById('find-visuals').getAttribute('aria-pressed') === 'true'
+expect document.activeElement.closest('#findbar') !== null
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('writer').hidden
+key ctrl KeyF
+eval query('Red')
+expect document.getElementById('find-visuals').getAttribute('aria-pressed') === 'true' && document.getElementById('find-count').textContent === '1 of 2'
+eval document.getElementById('replace-input').value='Blue'; U.flush(); window.depth=U.sizes().undo
+click #find-replace
+expect F.state().rows[0].visualText === 'Blue sky' && F.state().rows[1].visualText === 'Red view' && F.state().rows[0].audioText === 'The fox'
+eval U.flush()
+expect U.sizes().undo === depth+1
+key Escape
+key ctrl KeyZ
+expect F.state().rows[0].visualText === 'Red sky' && F.state().rows[1].visualText === 'Red view'
+key ctrl KeyF
+eval query('Red'); document.getElementById('replace-input').value='Green'; U.flush(); window.depth=U.sizes().undo
+click #find-replace-all
+expect F.state().rows[0].visualText === 'Green sky' && F.state().rows[1].visualText === 'Green view' && F.state().rows[0].audioText === 'The fox'
+eval U.flush()
+expect U.sizes().undo === depth+1 && W.check().length === 0
+click #wr-close
+expect document.getElementById('writer').hidden && document.getElementById('findbar').hidden
+click #btn-write
+key ctrl KeyF
+eval query('Green')
+expect document.getElementById('find-visuals').getAttribute('aria-pressed') === 'false' && document.getElementById('find-count').textContent === 'No matches'
+click #wr-close
+key ctrl KeyF
+eval query('Green')
+expect document.getElementById('find-visuals').hidden && document.getElementById('find-count').textContent === '1 of 2'
+expect document.getElementById('findbar').parentElement.closest('#writer') === null

@@ -1,0 +1,31 @@
+open
+viewport 1280 800
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Writer toolbar',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo charlie.',visualText:''},{id:'b',audioText:'Delta echo.',visualText:''}],comments:[]})],'toolbar.splitpage'))
+wait F.state().title === 'Writer toolbar'
+click #btn-write
+wait W.on()
+eval window.bp=(id,n)=>({kind:'beat',rowId:id,offset:n}); window.select=(a,n,b,m)=>W.place({anchor:bp(a,n),head:bp(b,m)}); window.button=cmd=>document.querySelector('.writer-bar [data-cmd="'+cmd+'"]')
+expect ['bold','italic','underline','strikeThrough','highlight','direction','tag','link','comment'].every(cmd=>button(cmd)&&!button(cmd).hidden)
+expect ['bold','italic','underline','strikeThrough','highlight','direction','tag','link','comment'].every(cmd=>button(cmd)?.innerHTML===document.querySelector('#rows .audio-cell .mini-toolbar [data-cmd="'+cmd+'"]')?.innerHTML)
+eval select('a',1,'b',3)
+expect ['tag','link','comment'].every(cmd=>button(cmd)?.disabled && button(cmd).title.includes('one beat'))
+eval select('b',3,'a',1)
+expect ['tag','link','comment'].every(cmd=>button(cmd)?.disabled && button(cmd).title.includes('one beat'))
+eval select('a',0,'b',5)
+click .writer-bar [data-cmd="strikeThrough"]
+expect F.state().rows[0].audioText === '<s>Alpha bravo charlie.</s>' && F.state().rows[1].audioText === '<s>Delta</s> echo.'
+expect button('strikeThrough').classList.contains('is-active')
+eval select('a',0,'a',5)
+expect document.getElementById('wr-words').textContent === '1'
+eval select('a',0,'b',5)
+expect document.getElementById('wr-words').textContent === '4'
+eval select('a',1,'a',1)
+expect document.getElementById('wr-words').textContent === '5'
+eval window.beforeLength=document.querySelector('#length-status .rd-length-total').textContent; select('b',11,'b',11)
+type  one two three four five six seven eight nine ten
+wait document.querySelector('#length-status .rd-length-total').textContent !== beforeLength
+expect document.querySelector('#length-status .rd-length-total').textContent === document.getElementById('wr-runtime').textContent
+eval window.slider=document.getElementById('wr-size'); slider.value='28'; slider.dispatchEvent(new Event('input',{bubbles:true}))
+expect getComputedStyle(document.getElementById('writer-doc')).fontSize === '28px' && localStorage.getItem('splitpage-writer-size') === '28'
+expect document.querySelector('#file-menu [data-file-action="export-narration-docx"]') !== null && document.querySelector('.writer-bar [data-file-action="export-narration-docx"]') === null

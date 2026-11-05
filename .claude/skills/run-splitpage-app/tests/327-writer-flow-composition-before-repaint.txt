@@ -1,0 +1,21 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.composeInput=function(selector,text){var el=document.querySelector(selector); el.textContent=text; getSelection().setBaseAndExtent(el,el.childNodes.length,el,el.childNodes.length); document.getElementById('writer-doc').dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:text}));}; return F.openFile(new File([JSON.stringify({schema:2,title:'Composition before repaint',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],sections:[{id:'s',name:'Old heading',firstSceneId:'a'}],comments:[]})],'repaint.splitpage')); })()
+wait F.state().title === 'Composition before repaint'
+click #btn-write
+wait W.on()
+eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); composeInput('.wr-heading[data-scene="s"]','New heading'); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); W.fullRender(); document.getElementById('wr-close').click(); return true; })()
+expect F.state().sections[0].name === 'New heading'
+click #btn-write
+wait W.on()
+eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); W.outsideEdit('a','REMOTE'); W.fullRender(); composeInput('.wr-beat[data-id="a"]','LOCAL'); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); W.fullRender(); document.getElementById('wr-close').click(); return true; })()
+expect F.state().rows[0].audioText === 'LOCAL'
+expect F.state().rows[1].audioText === 'Bravo'
+click #btn-write
+wait W.on()
+eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); composeInput('.wr-heading[data-scene="s"]','Batch heading'); composeInput('.wr-beat[data-id="a"]','Batch alpha'); composeInput('.wr-beat[data-id="b"]','Batch bravo'); W.fullRender(); host.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})); window.endState=JSON.parse(JSON.stringify(F.state())); W.fullRender(); return true; })()
+expect endState.sections[0].name === 'Batch heading' && endState.rows[0].audioText === 'Batch alpha' && endState.rows[1].audioText === 'Batch bravo'
+expect F.state().sections[0].name === 'Batch heading' && F.state().rows[0].audioText === 'Batch alpha' && F.state().rows[1].audioText === 'Batch bravo'
+expect W.check().length === 0
+eval (function(){ var host=document.getElementById('writer-doc'); host.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})); composeInput('.wr-heading[data-scene="s"]','Close heading'); composeInput('.wr-beat[data-id="a"]','Close alpha'); W.fullRender(); document.getElementById('wr-close').click(); return true; })()
+expect F.state().sections[0].name === 'Close heading' && F.state().rows[0].audioText === 'Close alpha'

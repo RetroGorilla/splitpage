@@ -1,0 +1,39 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow ghost',paragraphsDecided:true,rows:[{id:'a',audioText:'<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Camera" contenteditable="false">Camera</span>',visualText:''},{id:'b',audioText:'Next ',visualText:''}],comments:[]})],'ghost.splitpage')); })()
+wait F.state().title === 'Flow ghost'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:5},head:{kind:'beat',rowId:'b',offset:5}})
+press [Cam
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+expect document.getElementById('tag-ghost').textContent === 'era'
+eval W.fullRender()
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+key Tab
+expect F.state().rows[1].audioText.includes('data-tag-name="Camera"')
+expect W.selection().head.rowId === 'b' && W.selection().head.offset === 11
+expect document.activeElement.id === 'writer-doc'
+expect !document.getElementById('tag-ghost').classList.contains('is-visible')
+expect W.check().length === 0
+key ctrl KeyZ
+expect F.state().rows[1].audioText === 'Next [Cam'
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+eval W.outsideEdit('b','Next [Cam tail')
+expect W.selection().head.rowId === 'b' && W.selection().head.offset === 9
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+eval document.getElementById('tag-ghost').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true}))
+expect F.state().rows[1].audioText.includes('data-tag-name="Camera"') && F.state().rows[1].audioText.endsWith(' tail')
+expect W.check().length === 0
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:16},head:{kind:'beat',rowId:'b',offset:16}})
+press  [Cam
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+key Escape
+eval document.dispatchEvent(new Event('selectionchange')); true
+expect W.on() && !document.getElementById('tag-ghost').classList.contains('is-visible')
+press e
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:0}})
+expect !document.getElementById('tag-ghost').classList.contains('is-visible')
+expect W.check().length === 0

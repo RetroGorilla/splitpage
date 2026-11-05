@@ -1,0 +1,36 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow shift selection',paragraphsDecided:true,sections:[{id:'scene',name:'Next scene',firstSceneId:'d'}],rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'empty',audioText:'',visualText:''},{id:'visual',audioText:'',visualText:'A drone shot'},{id:'c',audioText:'Charlie',visualText:'',paragraphStart:true},{id:'d',audioText:'Delta',visualText:''}],comments:[]})],'shift.splitpage')); })()
+wait F.state().title === 'Flow shift selection'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:4},head:{kind:'beat',rowId:'a',offset:4}})
+key shift ArrowRight
+expect W.selection().anchor.rowId === 'a' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'a' && W.selection().head.offset === 5
+key shift ArrowRight
+expect W.selection().anchor.rowId === 'a' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'b' && W.selection().head.offset === 0
+key shift ArrowRight
+expect W.selection().anchor.rowId === 'a' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'b' && W.selection().head.offset === 1
+eval window.forward = W.selection(); W.fullRender()
+expect JSON.stringify(W.selection()) === JSON.stringify(window.forward)
+key shift ArrowLeft
+key shift ArrowLeft
+key shift ArrowLeft
+expect W.selection().anchor.rowId === 'a' && W.selection().anchor.offset === 4 && W.selection().head.rowId === 'a' && W.selection().head.offset === 4
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:1},head:{kind:'beat',rowId:'b',offset:1}})
+key shift ArrowLeft
+key shift ArrowLeft
+key shift ArrowLeft
+expect W.selection().anchor.rowId === 'b' && W.selection().anchor.offset === 1 && W.selection().head.rowId === 'a' && W.selection().head.offset === 4
+eval window.backward = W.selection(); W.fullRender()
+expect JSON.stringify(W.selection()) === JSON.stringify(window.backward)
+eval W.place({anchor:{kind:'heading',sceneId:'scene',offset:4},head:{kind:'beat',rowId:'empty',offset:0}}); window.headingRange = W.selection(); W.fullRender()
+expect JSON.stringify(W.selection()) === JSON.stringify(window.headingRange)
+eval W.place({anchor:{kind:'beat',rowId:'visual',offset:0},head:{kind:'beat',rowId:'empty',offset:0}}); window.emptyRange = W.selection(); W.fullRender()
+expect JSON.stringify(W.selection()) === JSON.stringify(window.emptyRange)
+key ctrl KeyA
+expect W.selection().anchor.kind === 'beat' && W.selection().anchor.rowId === 'a' && W.selection().anchor.offset === 0
+expect W.selection().head.kind === 'beat' && W.selection().head.rowId === 'd' && W.selection().head.offset === 5
+expect F.state().rows.length === 6 && F.state().sections[0].name === 'Next scene'
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|||Charlie|Delta'
+expect W.check().length === 0

@@ -1,0 +1,31 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.U=window.__undoTest;window.loadJoin=function(limit){var image=function(n){return {sha256:n.toString(16).padStart(64,'0'),mime:'image/png',width:1,height:1}};return F.openFile(new File([JSON.stringify({schema:2,title:limit?'Picture limit':'Scene refusal',paragraphsDecided:true,sections:limit?[]:[{id:'scene',name:'Middle',firstSceneId:'b'}],rows:[{id:'a',audioText:'Alpha',visualText:'First',imageRef:limit?image(1):undefined,moreImages:limit?Array.from({length:60},function(_,i){return {imageRef:image(i+2),name:'Picture '+i}}):undefined},{id:'b',audioText:'Bravo',visualText:'Second',imageRef:limit?image(62):undefined}],comments:[]})],'join-refusal.splitpage'))};loadJoin(false)
+wait F.state().title === 'Scene refusal'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:0},head:{kind:'beat',rowId:'b',offset:0}}); U.flush(); window.depth=U.sizes().undo;window.original=JSON.stringify(F.state().rows)
+key alt Backspace
+expect JSON.stringify(F.state().rows) === original && U.sizes().undo === depth
+expect document.body.textContent.includes('join across a scene header')
+expect W.check().length === 0
+mouse click (function(){var r=document.querySelector('.wr-beat[data-id="b"]').getClientRects()[0];return {x:r.left+1,y:r.top+2};})()
+expect !!document.querySelector('.wr-flow-join:not([hidden])')
+click .wr-flow-join
+expect JSON.stringify(F.state().rows) === original && U.sizes().undo === depth
+expect document.body.textContent.includes('join across a scene header')
+expect W.check().length === 0
+eval loadJoin(true)
+wait F.state().title === 'Picture limit'
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:0},head:{kind:'beat',rowId:'b',offset:0}}); U.flush(); window.depth=U.sizes().undo;window.original=JSON.stringify(F.state().rows)
+key alt Backspace
+expect JSON.stringify(F.state().rows) === original && U.sizes().undo === depth
+expect document.body.textContent.includes('too many pictures to join')
+expect W.check().length === 0
+mouse click (function(){var r=document.querySelector('.wr-beat[data-id="b"]').getClientRects()[0];return {x:r.left+1,y:r.top+2};})()
+expect !!document.querySelector('.wr-flow-join:not([hidden])')
+click .wr-flow-join
+expect JSON.stringify(F.state().rows) === original && U.sizes().undo === depth
+expect document.body.textContent.includes('too many pictures to join')
+expect W.check().length === 0

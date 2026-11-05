@@ -1,0 +1,61 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Exclusive empty endpoint',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'',visualText:'',status:'shot',imageRef:{sha256:'b'.repeat(64),mime:'image/png',width:1,height:1},imageName:'Keep this picture'},{id:'c',audioText:'Charlie',visualText:''}],comments:[{id:'keep',rowId:'b',field:'visualText',kind:'anchor',body:'Keep this comment',author:'Tester',createdAt:'2026-11-04T00:00:00Z',replies:[]}]})],'exclusive.splitpage'))
+wait F.state().title === 'Exclusive empty endpoint'
+click #btn-write
+wait W.on()
+eval window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.before={anchor:bp('a',0),head:bp('b',0)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+key Delete
+expect F.state().rows.map(function(r){return r.id}).join() === 'b,c'
+expect F.state().rows[0].imageRef.sha256 === 'b'.repeat(64) && F.state().rows[0].imageName === 'Keep this picture' && F.state().rows[0].status === 'shot'
+expect F.state().comments.length === 1 && F.state().comments[0].id === 'keep' && F.state().comments[0].rowId === 'b'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c'
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+eval window.before={anchor:bp('b',0),head:bp('a',0)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+key Delete
+expect F.state().rows.map(function(r){return r.id}).join() === 'b,c'
+expect F.state().rows[0].imageRef.sha256 === 'b'.repeat(64) && F.state().rows[0].status === 'shot'
+expect F.state().comments.length === 1 && F.state().comments[0].id === 'keep'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c' && JSON.stringify(W.selection()) === JSON.stringify(before)
+expect W.check().length === 0
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Endpoint before a heading',paragraphsDecided:true,sections:[{id:'scene',name:'Next scene',firstSceneId:'c'}],rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'',visualText:'',status:'shot',imageRef:{sha256:'b'.repeat(64),mime:'image/png',width:1,height:1},imageName:'Keep this picture'},{id:'c',audioText:'Charlie',visualText:''}],comments:[{id:'keep',rowId:'b',field:'visualText',kind:'anchor',body:'Keep this comment',author:'Tester',createdAt:'2026-11-04T00:00:00Z',replies:[]}]})],'heading-endpoint.splitpage'))
+wait F.state().title === 'Endpoint before a heading' && W.on()
+eval window.before={anchor:bp('a',0),head:bp('b',0)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+key Delete
+expect F.state().rows.map(function(r){return r.id}).join() === 'b,c'
+expect F.state().rows[0].imageRef.sha256 === 'b'.repeat(64) && F.state().rows[0].status === 'shot'
+expect F.state().comments.length === 1 && F.state().comments[0].id === 'keep'
+expect F.state().sections[0].firstSceneId === 'c' && F.state().sections[0].name === 'Next scene'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect F.state().rows.length === 3 && JSON.stringify(W.selection()) === JSON.stringify(before)
+eval window.before={anchor:bp('b',0),head:bp('a',0)}; W.place(before); U.flush(); window.depth=U.sizes().undo
+key Delete
+expect F.state().rows.map(function(r){return r.id}).join() === 'b,c'
+expect F.state().rows[0].imageRef.sha256 === 'b'.repeat(64) && F.state().rows[0].status === 'shot'
+expect F.state().comments.length === 1 && F.state().comments[0].id === 'keep'
+expect F.state().sections[0].firstSceneId === 'c' && F.state().sections[0].name === 'Next scene'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect F.state().rows.length === 3 && JSON.stringify(W.selection()) === JSON.stringify(before)
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Visual-only last beat',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'',visualText:'',status:'shot',imageRef:{sha256:'b'.repeat(64),mime:'image/png',width:1,height:1}}],comments:[{id:'keep',rowId:'b',field:'visualText',kind:'anchor',body:'Last comment',author:'Tester',createdAt:'2026-11-04T00:00:00Z',replies:[]}]})],'last-endpoint.splitpage'))
+wait F.state().title === 'Visual-only last beat' && W.on()
+eval W.place({anchor:bp('a',0),head:bp('a',0)}); U.flush(); window.depth=U.sizes().undo
+key ctrl KeyA
+key Delete
+expect F.state().rows.length === 1 && F.state().rows[0].audioText === '' && !F.state().rows[0].imageRef
+expect F.state().comments.length === 0 && F.state().rows[0].status !== 'shot'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && F.state().rows[1].imageRef.sha256 === 'b'.repeat(64)
+expect F.state().comments.length === 1 && F.state().rows[1].status === 'shot'
+expect W.check().length === 0

@@ -1,0 +1,17 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Visual cost',paragraphsDecided:true,rows:Array.from({length:900},function(_,i){return {id:'r'+i,audioText:'Ordinary narration for beat '+i,visualText:'Visual '+i}}),comments:[]})],'visual-cost.splitpage'))
+wait F.state().title === 'Visual cost'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'r450',offset:10},head:{kind:'beat',rowId:'r450',offset:10}}); window.keyTimes=[]; document.addEventListener('keydown',function(e){if(e.key.length===1){var started=performance.now();requestAnimationFrame(function(){keyTimes.push(performance.now()-started)})}},true); true
+press abcdefghijklmnopqrstuvwx
+wait keyTimes.length === 24
+eval window.ordinaryTimes=keyTimes.slice(); keyTimes=[]; W.openVisual('r450'); true
+caret .wr-flow-visual-text
+key end
+press abcdefghijklmnopqrstuvwx
+wait keyTimes.length === 24
+eval window.visualTimes=keyTimes.slice(); window.med=function(a){a=a.slice().sort(function(x,y){return x-y});return a[Math.floor(a.length/2)]}; JSON.stringify({ordinarySamples:ordinaryTimes.length,ordinaryMedian:med(ordinaryTimes),visualSamples:visualTimes.length,visualMedian:med(visualTimes)})
+expect ordinaryTimes.length === 24 && visualTimes.length === 24
+expect F.state().rows.length === 900 && W.check().length === 0

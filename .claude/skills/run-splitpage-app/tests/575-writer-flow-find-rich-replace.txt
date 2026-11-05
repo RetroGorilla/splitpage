@@ -1,0 +1,29 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find rich replacement',paragraphsDecided:true,rows:[{id:'a',audioText:'<strong>red</strong> <strong>red</strong>'},{id:'b',audioText:'<span class="stage-dir">quiet</span> <span class="stage-dir">quiet</span>'},{id:'c',audioText:'<span class="cmt-anchor" data-cmt="comment">marked</span> <span class="cmt-anchor" data-cmt="comment">marked</span>'}],comments:[{id:'comment',rowId:'c',field:'audioText',body:'Keep the thread',author:'Editor',createdAt:'2026-11-05T12:00:00.000Z'}]})],'find-rich.splitpage'))
+wait F.state().title === 'Find rich replacement'
+click #btn-write
+wait W.on()
+key ctrl KeyF
+eval window.query=function(s,replacement){var el=document.getElementById('find-input');el.value=s;el.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('replace-input').value=replacement}; query('red','blue')
+click #find-replace
+expect F.state().rows[0].audioText === '<strong>blue</strong> <strong>red</strong>'
+click #find-replace-all
+expect F.state().rows[0].audioText === '<strong>blue</strong> <strong>blue</strong>'
+eval query('quiet','soft')
+click #find-replace
+expect F.state().rows[1].audioText === '<span class="stage-dir">soft</span> <span class="stage-dir">quiet</span>'
+click #find-replace-all
+expect F.state().rows[1].audioText === '<span class="stage-dir">soft</span> <span class="stage-dir">soft</span>'
+eval query('marked','kept'); U.flush(); window.depth=U.sizes().undo
+click #find-replace
+expect F.state().rows[2].audioText === '<span class="cmt-anchor" data-cmt="comment">kept</span> <span class="cmt-anchor" data-cmt="comment">marked</span>'
+expect F.state().comments.length === 1 && F.state().comments[0].id === 'comment'
+click #find-replace-all
+expect F.state().rows[2].audioText === '<span class="cmt-anchor" data-cmt="comment">kept</span> <span class="cmt-anchor" data-cmt="comment">kept</span>'
+expect F.state().comments.length === 1 && F.state().comments[0].id === 'comment' && W.check().length === 0
+key Escape
+key ctrl KeyZ
+expect F.state().rows[2].audioText === '<span class="cmt-anchor" data-cmt="comment">kept</span> <span class="cmt-anchor" data-cmt="comment">marked</span>'
+key ctrl KeyZ
+expect F.state().rows[2].audioText === '<span class="cmt-anchor" data-cmt="comment">marked</span> <span class="cmt-anchor" data-cmt="comment">marked</span>'

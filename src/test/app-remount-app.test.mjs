@@ -93,6 +93,12 @@ const CONDITIONAL = {
   "window load/B": "only where service workers are supported and the page is not a file; jsdom has none, and tests/bootstrap/startup.test.ts covers the registration"
 };
 
+const RETIRED_WRITER_REGISTRATIONS = [
+  "#wr-save click/B", "#wr-save-status mouseenter/B", "#writer-doc beforeinput/B", "#writer-doc click/B",
+  "#writer-doc focusin/B", "#writer-doc focusout/B", "#writer-doc input/B", "#writer-doc keydown/B",
+  "#writer-doc keydown/C"
+];
+
 const RESOURCE_ROWS = {
   appearance: ["window storage/B"],
   preferenceWatch: ["document splitpage:pref/B", "window storage/B"],
@@ -172,6 +178,12 @@ test("after a remount every registration has exactly one handler: each ledger re
         if (!CONDITIONAL[key]) bump(key);
       }
     }
+  }
+  for (const key of RETIRED_WRITER_REGISTRATIONS) {
+    const count = expected.get(key);
+    assert.ok(count, key);
+    if (count === 1) expected.delete(key);
+    else expected.set(key, count - 1);
   }
   for (const keys of Object.values(RESOURCE_ROWS)) keys.forEach(bump);
   const want = Object.fromEntries([...expected].sort());

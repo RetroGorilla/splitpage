@@ -1,0 +1,38 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;F.openFile(new File([JSON.stringify({schema:2,title:'Single beat selections',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Keep this visual',status:'shot'},{id:'b',audioText:'Bravo',visualText:'Second'}],comments:[]})],'single.splitpage'))
+wait F.state().title === 'Single beat selections'
+click #btn-write
+wait W.on()
+eval window.before={anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:5}};W.place(before)
+key Delete
+expect F.state().rows[0].audioText === ''
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && F.state().rows[0].visualText === 'Keep this visual' && F.state().rows[0].status === 'shot'
+expect F.state().rows[1].audioText === 'Bravo'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha'
+expect W.check().length === 0
+eval window.before={anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:5}};W.place(before)
+type New
+expect F.state().rows[0].audioText === 'New'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && F.state().rows[0].visualText === 'Keep this visual' && F.state().rows[0].status === 'shot'
+expect F.state().rows[1].audioText === 'Bravo'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha'
+expect W.check().length === 0
+eval window.before={anchor:{kind:'beat',rowId:'a',offset:5},head:{kind:'beat',rowId:'a',offset:0}};W.place(before)
+key Delete
+expect F.state().rows[0].audioText === ''
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && F.state().rows[0].visualText === 'Keep this visual' && F.state().rows[0].status === 'shot'
+expect F.state().rows[1].audioText === 'Bravo'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha'
+expect W.check().length === 0
+eval window.before={anchor:{kind:'beat',rowId:'a',offset:5},head:{kind:'beat',rowId:'a',offset:0}};W.place(before)
+type New
+expect F.state().rows[0].audioText === 'New'
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && F.state().rows[0].visualText === 'Keep this visual' && F.state().rows[0].status === 'shot'
+expect F.state().rows[1].audioText === 'Bravo'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha'
+expect W.check().length === 0

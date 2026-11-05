@@ -126,6 +126,5 @@ jsclick #wr-close
 wait document.getElementById('writer').hidden
 wait __settled()
 
-# nothing here edited the document
-expect document.getElementById('save-status').textContent !== 'Unsaved changes'
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('save-status').textContent === 'Unsaved changes' && window.__splitpageFormats.state().paragraphsDecided === true
+expect document.getElementById('btn-save').textContent == Unsaved changes

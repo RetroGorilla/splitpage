@@ -29,8 +29,8 @@ click #btn-file
 wait !document.getElementById('file-menu').hidden
 # one item where there were thirteen; the formats' own buttons are still
 # there, hidden, for the dialog, the command menu and the desktop menu
-expect Array.prototype.filter.call(document.querySelectorAll('#file-menu [data-menu-group="export"] .mi'), function(b){return b.getClientRects().length > 0;}).length === 1
-expect document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action^="export-"]').length === 16
+expect Array.prototype.filter.call(document.querySelectorAll('#file-menu [data-menu-group="export"] .mi'), function(b){return b.getClientRects().length > 0;}).length === 2
+expect document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action^="export-"]').length === 15
 expect document.querySelector('#file-menu .menu-hidden-actions').getBoundingClientRect().height == 0
 expect document.getElementById('menu-export-again').hidden
 click #menu-export

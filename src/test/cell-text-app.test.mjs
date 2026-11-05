@@ -39,7 +39,7 @@ const CARD = '<a class="video-embed-card" href="https://youtu.be/abc" contentedi
 
 function fixture() {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: "Typing command",
     rows: [
       { id: "r1", visualText: "Wide", audioText: "Hello there", status: "todo" },
@@ -83,7 +83,7 @@ function input(el, data, extra) {
 }
 
 function typeChar(el, ch, extra) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   const node = lastText(el);
   node.data += ch;
   caretAt(node, node.data.length);
@@ -195,7 +195,7 @@ test("typing away a commented word reconciles in the transaction; the comment ke
 test("#380: a cancelled composition that began its own undo step leaves no step behind", async () => {
   await open();
   const el = cellOf("r3", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   flushEdits();
   const sizes = undoSizes();
   compose(el, "compositionstart", "");
@@ -219,14 +219,14 @@ test("#380: in the Writer too, a cancelled composition leaves no step", async ()
   await open();
   writer.openWriter();
   try {
-    const p = document.querySelector('#writer-doc .wr-para[data-id="r3"]');
+    const p = document.querySelector('#writer-doc .wr-beat[data-id="r3"]');
     p.focus();
     flushEdits();
     const sizes = undoSizes();
     compose(p, "compositionstart", "");
     clock += 5;
     typeChar(p, "x", { inputType: "insertCompositionText", isComposing: true });
-    assert.equal(row("r3").audioText, "Three.x");
+    assert.equal(p.textContent.replace(/\u200b/g, ""), "Three.x");
     await settle();
     const node = lastText(p);
     node.data = "Three.";
@@ -314,7 +314,7 @@ test("in the Writer, typing a letter and deleting it leaves no step, so the firs
   await open();
   writer.openWriter();
   try {
-    const p = document.querySelector('#writer-doc .wr-para[data-id="r3"]');
+    const p = document.querySelector('#writer-doc .wr-beat[data-id="r3"]');
     clock += 5;
     typeChar(p, "x");
     await settle();
@@ -386,7 +386,7 @@ for (const end of ["edge", "firefox", "safari"]) {
   test(`#380: a slow composition, each update more than a second apart, leaves no step when cancelled (${end} event order)`, async () => {
     await open();
     const el = cellOf("r3", "audioText");
-    el.focus();
+    (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
     flushEdits();
     const sizes = undoSizes();
     await slowComposition(el, "Three.", ["ね", "ねこ", "ねこが"], end);
@@ -401,7 +401,7 @@ test("#380: in the Writer too, a slow cancelled composition leaves no step", asy
   await open();
   writer.openWriter();
   try {
-    const p = document.querySelector('#writer-doc .wr-para[data-id="r3"]');
+    const p = document.querySelector('#writer-doc .wr-beat[data-id="r3"]');
     p.focus();
     flushEdits();
     const sizes = undoSizes();
@@ -417,7 +417,7 @@ for (const end of ["firefox", "safari"]) {
   test(`#380: a fast cancelled composition leaves no step when compositionend comes before the reverting input (${end} event order)`, async () => {
     await open();
     const el = cellOf("r3", "audioText");
-    el.focus();
+    (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
     flushEdits();
     const sizes = undoSizes();
     compose(el, "compositionstart", "");
@@ -437,7 +437,7 @@ for (const end of ["firefox", "safari"]) {
 test("#380: a slow committed composition keeps its steps, and so does deleting it again later with a key", async () => {
   await open();
   const el = cellOf("r1", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   flushEdits();
   compose(el, "compositionstart", "");
   for (const text of ["k", "ka", "か"]) {
@@ -459,7 +459,7 @@ test("#380: a slow committed composition keeps its steps, and so does deleting i
 test("#380: a composition start that never ended does not reach back past the next composition's own start", async () => {
   await open();
   const el = cellOf("r3", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   flushEdits();
   compose(el, "compositionstart", "");
   clock += 5;
@@ -516,7 +516,7 @@ for (const end of ["edge", "firefox", "safari"]) {
     await undoneBang();
     const sizes = undoSizes();
     const el = cellOf("r3", "audioText");
-    el.focus();
+    (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
     await slowComposition(el, "Three.", ["ね", "ねこ"], end);
     assert.equal(row("r3").audioText, "Three.");
     assert.deepEqual(undoSizes(), sizes);
@@ -562,7 +562,7 @@ for (const drop of ["type and delete", "slow cancel"]) {
     assert.equal(row("r3").audioText, "Three.x theirs");
     assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
     const el = cellOf("r1", "visualText");
-    el.focus();
+    (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
     if (drop === "slow cancel") {
       await slowComposition(el, "Wide", ["ね", "ねこ"], "edge");
     } else {
@@ -616,7 +616,7 @@ test("after an undo, typing a letter, Ctrl+Z, Ctrl+Y and deleting it within a se
   assert.equal(row("r3").audioText, "Three.x");
   clock += 5;
   const el = cellOf("r3", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   setText(el, "Three.", { inputType: "deleteContentBackward" });
   await settle();
   assert.deepEqual(undoSizes(), { undo: 0, redo: 1 });
@@ -628,7 +628,7 @@ test("after an undo, a slow composition with Ctrl+Z and Ctrl+Y in the middle, th
   await open();
   await undoneBang();
   let el = cellOf("r3", "audioText");
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   compose(el, "compositionstart", "");
   for (const text of ["ね", "ねこ"]) {
     clock += 1100;
@@ -650,14 +650,14 @@ test("after an undo, a slow composition with Ctrl+Z and Ctrl+Y in the middle, th
   assert.equal(row("r1").audioText, "Hello there!");
 });
 
-const scriptCell = (where, id) => where === "writer" ? document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]') : cellOf(id, "audioText");
+const scriptCell = (where, id) => where === "writer" ? document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]') : cellOf(id, "audioText");
 
 async function inPlace(where, fn) {
   await open();
   if (where === "writer") writer.openWriter();
   try {
     const el = scriptCell(where, "r3");
-    el.focus();
+    (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
     flushEdits();
     await fn(el);
   } finally {
@@ -913,7 +913,7 @@ test("a typing command that fails is thrown from the view and leaves the cell, t
   const real = Date.prototype.toISOString;
   Date.prototype.toISOString = function () { throw new Error("no clock"); };
   try {
-    el.focus();
+    (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
     lastText(el).data += "!";
     assert.throws(() => cellEditing().sync(el), /no clock/);
   } finally {

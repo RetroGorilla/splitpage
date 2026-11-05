@@ -92,6 +92,7 @@ wait document.getElementById('prompter').hidden
 wait __noPanel() && __settled()
 expect document.getElementById('history-panel').hidden
 expect __noPanel()
+eval window.__commentsOnly=function(){return document.body.classList.contains('panel-open') && !document.getElementById('comments-panel').hidden && ['production-panel','gear-panel','broll-panel','history-panel'].every(function(id){return document.getElementById(id).hidden;}) && document.getElementById('btn-comments').getAttribute('aria-pressed')==='true';};true
 # --- production-panel under Writer ---
 jsclick #btn-production
 wait !document.getElementById('production-panel').hidden
@@ -99,15 +100,17 @@ wait document.body.classList.contains('panel-open')
 wait getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-wait __noPanel() && __settled()
+wait __commentsOnly() && __settled()
 expect document.getElementById('production-panel').hidden
-expect !document.body.classList.contains('panel-open')
-expect __noPanel()
+expect document.body.classList.contains('panel-open')
+expect __commentsOnly()
 jsclick #wr-close
 wait document.getElementById('writer').hidden
-wait __noPanel() && __settled()
+wait __commentsOnly() && __settled()
 expect document.getElementById('production-panel').hidden
-expect __noPanel()
+expect __commentsOnly()
+jsclick #btn-comments
+wait __noPanel()
 # --- gear-panel under Writer ---
 jsclick #btn-gear
 wait !document.getElementById('gear-panel').hidden
@@ -115,15 +118,17 @@ wait document.body.classList.contains('panel-open')
 wait getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-wait __noPanel() && __settled()
+wait __commentsOnly() && __settled()
 expect document.getElementById('gear-panel').hidden
-expect !document.body.classList.contains('panel-open')
-expect __noPanel()
+expect document.body.classList.contains('panel-open')
+expect __commentsOnly()
 jsclick #wr-close
 wait document.getElementById('writer').hidden
-wait __noPanel() && __settled()
+wait __commentsOnly() && __settled()
 expect document.getElementById('gear-panel').hidden
-expect __noPanel()
+expect __commentsOnly()
+jsclick #btn-comments
+wait __noPanel()
 # --- broll-panel under Writer ---
 jsclick #btn-broll
 wait !document.getElementById('broll-panel').hidden
@@ -131,15 +136,17 @@ wait document.body.classList.contains('panel-open')
 wait getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-wait __noPanel() && __settled()
+wait __commentsOnly() && __settled()
 expect document.getElementById('broll-panel').hidden
-expect !document.body.classList.contains('panel-open')
-expect __noPanel()
+expect document.body.classList.contains('panel-open')
+expect __commentsOnly()
 jsclick #wr-close
 wait document.getElementById('writer').hidden
-wait __noPanel() && __settled()
+wait __commentsOnly() && __settled()
 expect document.getElementById('broll-panel').hidden
-expect __noPanel()
+expect __commentsOnly()
+jsclick #btn-comments
+wait __noPanel()
 # --- comments-panel under Writer ---
 jsclick #btn-comments
 wait !document.getElementById('comments-panel').hidden
@@ -147,15 +154,17 @@ wait document.body.classList.contains('panel-open')
 wait getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-wait __noPanel() && __settled()
-expect document.getElementById('comments-panel').hidden
-expect !document.body.classList.contains('panel-open')
-expect __noPanel()
+wait __commentsOnly() && __settled()
+expect !document.getElementById('comments-panel').hidden
+expect document.body.classList.contains('panel-open')
+expect __commentsOnly()
 jsclick #wr-close
 wait document.getElementById('writer').hidden
-wait __noPanel() && __settled()
-expect document.getElementById('comments-panel').hidden
-expect __noPanel()
+wait __commentsOnly() && __settled()
+expect !document.getElementById('comments-panel').hidden
+expect __commentsOnly()
+jsclick #btn-comments
+wait __noPanel()
 # --- history-panel under Writer ---
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
@@ -164,15 +173,17 @@ wait document.body.classList.contains('panel-open')
 wait getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-wait __noPanel() && __settled()
+wait __commentsOnly() && __settled()
 expect document.getElementById('history-panel').hidden
-expect !document.body.classList.contains('panel-open')
-expect __noPanel()
+expect document.body.classList.contains('panel-open')
+expect __commentsOnly()
 jsclick #wr-close
 wait document.getElementById('writer').hidden
-wait __noPanel() && __settled()
+wait __commentsOnly() && __settled()
 expect document.getElementById('history-panel').hidden
-expect __noPanel()
+expect __commentsOnly()
+jsclick #btn-comments
+wait __noPanel()
 # --- Help goes through the same helper: B-roll and History, which the old
 #     Writer list missed ---
 jsclick #btn-broll

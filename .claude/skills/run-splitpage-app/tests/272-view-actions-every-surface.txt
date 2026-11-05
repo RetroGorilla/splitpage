@@ -97,4 +97,4 @@ jsclick #pp-close
 wait !__shown('prompter')
 wait __settled()
 
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet

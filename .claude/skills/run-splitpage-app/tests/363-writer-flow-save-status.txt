@@ -1,0 +1,33 @@
+open
+viewport 1440 900
+wait document.querySelectorAll('#rows .row').length > 0
+goto /index.html
+wait document.body.classList.contains('writer-flow-bar')
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.A=F.autosave; window.B=document.getElementById('btn-save'); window.picks=0; window.showSaveFilePicker=()=>{picks++;return Promise.reject(new DOMException('cancelled','AbortError'))}; window.__saveStatusTest.refresh()
+expect B.getAttribute('data-status') === 'Not saved yet' && !B.disabled && B.getAttribute('data-actionable') === 'true'
+expect getComputedStyle(B).textDecorationLine.includes('underline')
+click #btn-save
+wait picks === 1
+click #btn-write
+wait W.on()
+key ctrl KeyS
+wait picks === 2
+eval window.raw=JSON.stringify({schema:2,title:'Quiet save',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo.',visualText:''}],comments:[]}); window.h={name:'quiet.splitpage',_text:raw,_time:Date.now()-10000,_writes:0,createWritable:async()=>{h._writes++;return {write:async b=>{if(h.fail)throw new Error('Permission denied');h._text=typeof b==='string'?b:await new Response(b).text()},close:async()=>{h._time=Date.now()}}},getFile:async()=>new File([h._text],h.name,{lastModified:h._time})}; F.openFile(new File([raw],h.name,{lastModified:h._time}),h)
+wait F.state().title === 'Quiet save'
+wait B.disabled && B.getAttribute('data-status') === 'All changes saved'
+expect !B.title.includes('Click to save') && B.getAttribute('aria-label') === 'All changes saved'
+eval if(A.enabled()) A.toggle()
+wait !B.disabled && B.getAttribute('data-status') === 'Autosave off'
+click #btn-save
+wait h._writes === 1
+eval if(!A.enabled()) A.toggle(); h.fail=true; A.timing().idle=40; A.timing().max=400; W.place({anchor:{kind:'beat',rowId:'a',offset:5},head:{kind:'beat',rowId:'a',offset:5}})
+type changed
+wait B.getAttribute('data-state') === 'warn' && !B.disabled
+expect B.getAttribute('data-status') === 'Not saving' && B.title.includes('Click to save')
+eval h.fail=false
+click #btn-save
+wait B.disabled && B.getAttribute('data-status') === 'Saved just now'
+expect h._text.includes('changed')
+key ctrl KeyS
+wait h._writes >= 3
+expect W.on() && W.check().length === 0

@@ -21,7 +21,7 @@ expect document.querySelector('#length-status .rd-length-total').textContent == 
 expect Math.abs(R(document.querySelector('#length-status .rd-length-total')).top - R(document.querySelector('.save-btn')).top) < 4
 expect R(document.getElementById('length-status')).left >= R(document.querySelector('.doc-meta')).right - 0.5
 expect R(document.getElementById('length-status')).right <= R(document.getElementById('btn-command')).left + 1
-expect parseFloat(getComputedStyle(document.getElementById('length-status')).fontSize) <= 12
+expect parseFloat(getComputedStyle(document.getElementById('length-status')).fontSize) === 14
 expect document.getElementById('length-status').title.indexOf('reading speed') !== -1
 eval window.__hdr()
 expect window.__last === ''

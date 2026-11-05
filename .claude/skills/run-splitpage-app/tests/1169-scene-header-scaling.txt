@@ -5,7 +5,7 @@ wait document.querySelectorAll('#rows .row').length > 0
 eval localStorage.removeItem('splitpage-script-scale'); localStorage.removeItem('splitpage-writer-size'); true
 goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.old=F.state(); var text='A line of narration that is long enough to sit on the page. '; F.openFile(new File([JSON.stringify({title:'Header scaling',rows:['r1','r2','r3','r4','r5','r6'].map(function(id,i){return {id:id,visualText:'Shot '+(i+1),audioText:text+(i+1),status:'todo',lengthSeconds:10};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r4'}]})],'scaling.splitpage'));return true;})()
+eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.old=F.state(); var text='A line of narration that is long enough to sit on the page. '.repeat(3); F.openFile(new File([JSON.stringify({paragraphsDecided:true,title:'Header scaling',rows:['r1','r2','r3','r4','r5','r6'].map(function(id,i){return {id:id,visualText:'Shot '+(i+1),audioText:text+(i+1),status:'todo',lengthSeconds:10};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r4'}]})],'scaling.splitpage'));return true;})()
 wait F.state() !== old && F.state().title === 'Header scaling'
 expect document.querySelectorAll('#rows .section-header').length === 2
 eval (function(){ window.num=function(sel,prop){return parseFloat(getComputedStyle(document.querySelector(sel))[prop||'fontSize']);}; window.scale=function(){return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale'));}; window.hh=function(sel){return document.querySelector(sel).getBoundingClientRect().height;}; window.ctrlKey=function(key,code){var ev=new KeyboardEvent('keydown',{key:key,code:code,ctrlKey:true,bubbles:true,cancelable:true});(document.activeElement||document.body).dispatchEvent(ev);return ev.defaultPrevented;}; window.wheelAt=function(el,dy,ctrl){var r=el.getBoundingClientRect();var ev=new WheelEvent('wheel',{ctrlKey:ctrl!==false,deltaY:dy,deltaMode:0,clientX:r.left+20,clientY:r.top+Math.min(20,r.height/2),bubbles:true,cancelable:true});el.dispatchEvent(ev);return ev.defaultPrevented;}; window.H='#rows [data-section-id="s1"]'; window.before=JSON.stringify(F.state()); window.undoBefore=U.sizes().undo; return true;})()
@@ -94,47 +94,24 @@ sleep 300
 click #btn-write
 sleep 700
 expect !document.getElementById('writer').hidden
-expect document.querySelectorAll('#writer-doc .section-header').length === 2
-eval window.W = '#writer-doc .section-header'; window.P = '#writer-doc .wr-para'; window.setSize = function(n){ var s = document.getElementById('wr-size'); s.value = n; s.dispatchEvent(new Event('input', { bubbles: true })); return document.getElementById('writer').style.getPropertyValue('--wr-font'); }; window.slider = function(){ return Number(document.getElementById('wr-size').value); }; window.wfont = function(){ return parseFloat(getComputedStyle(document.getElementById('writer')).getPropertyValue('--wr-font')); }; window.wh100 = hh(W); true
+expect document.querySelectorAll('#writer-doc .wr-heading').length === 2
+eval window.W = '#writer-doc .wr-heading'; window.P = '#writer-doc .wr-beat'; window.setSize = function(n){ var s = document.getElementById('wr-size'); s.value = n; s.dispatchEvent(new Event('input', { bubbles: true })); return document.getElementById('writer').style.getPropertyValue('--wr-font'); }; window.slider = function(){ return Number(document.getElementById('wr-size').value); }; window.wfont = function(){ return parseFloat(getComputedStyle(document.getElementById('writer')).getPropertyValue('--wr-font')); }; window.wh100 = hh(W); true
 expect wfont() === 19
 expect num(P) === 19
-expect num(W) === 13
-expect num(W + ' .section-stats') === 11
-expect num(W + ' .section-grip') === 17
+expect num(W) === 23.75
 shot 1169-writer-19
-eval window.WH = '#writer-doc [data-section-id="s1"]'; document.querySelector(WH + ' .section-name').click(); true
-wait !!document.querySelector('.section-rename input')
-expect eq(fv(), FORM)
-key none Escape
-wait !document.querySelector('.section-rename')
-eval document.querySelector(WH + ' .section-more summary').click(); true
-expect eq(mv(WH), MENU)
-eval document.querySelector(WH + ' details').open = false; true
-
 expect setSize(28) === '28px'
 expect num(P) === 28
-expect Math.abs(num(W) - 28 * 13 / 19) < 0.05
-expect Math.abs(num(W + ' .section-stats') - 28 * 11 / 19) < 0.05
-expect Math.abs(num(W + ' .section-name') - 28 * 13 / 19) < 0.05
+expect Math.abs(num(W) - 28 * 1.25) < 0.05
 expect Math.abs(hh(W) / wh100 - 28 / 19) < 0.04
 shot 1169-writer-28
-eval document.querySelector(WH + ' .section-name').click(); true
-wait !!document.querySelector('.section-rename input')
-expect eq(fv(), times(FORM, 28 / 19))
-shot 1169-writer-rename-28
-key none Escape
-wait !document.querySelector('.section-rename')
-eval document.querySelector(WH + ' .section-more summary').click(); true
-expect eq(mv(WH), times(MENU, 28 / 19))
-eval document.querySelector(WH + ' details').open = false; true
-
 expect setSize(16) === '16px'
-expect Math.abs(num(W) - 16 * 13 / 19) < 0.05
+expect Math.abs(num(W) - 16 * 1.25) < 0.05
 expect Math.abs(hh(W) / wh100 - 16 / 19) < 0.04
 shot 1169-writer-16
 
 expect setSize(34) === '34px'
-expect Math.abs(num(W) - 34 * 13 / 19) < 0.05
+expect Math.abs(num(W) - 34 * 1.25) < 0.05
 expect Math.abs(hh(W) / wh100 - 34 / 19) < 0.04
 shot 1169-writer-34
 
@@ -144,7 +121,7 @@ sleep 100
 expect wfont() > 20
 expect slider() === wfont()
 expect localStorage.getItem('splitpage-writer-size') === String(wfont())
-expect Math.abs(num(W) - wfont() * 13 / 19) < 0.05
+expect Math.abs(num(W) - wfont() * 1.25) < 0.05
 expect num(P) === wfont()
 eval window.afterUp = wfont(); true
 expect wheelAt(document.querySelector(P), 300) === true
@@ -171,19 +148,19 @@ expect wheelAt(document.querySelector(P), 5000) === true
 expect wheelAt(document.querySelector(P), 5000) === true
 expect wfont() === 16
 expect slider() === 16
-expect Math.abs(num(W) - 16 * 13 / 19) < 0.05
+expect Math.abs(num(W) - 16 * 1.25) < 0.05
 
 expect setSize(24) === '24px'
 expect wheelAt(document.querySelector(P), -300) === true
 sleep 100
-expect Math.abs(num(W) - wfont() * 13 / 19) < 0.05
+expect Math.abs(num(W) - wfont() * 1.25) < 0.05
 expect Math.abs(hh(W) / wh100 - wfont() / 19) < 0.04
 shot 1169-writer-ctrl-wheel
 
 expect setSize(20) === '20px'
 eval document.getElementById('writer-scroll').scrollTop = 150; true
 expect document.getElementById('writer-scroll').scrollTop === 150
-eval (function(){ window.PA = document.querySelector('#writer-doc .wr-para[data-id="r4"]'); var r = PA.getBoundingClientRect(); window.__y = r.top + Math.min(20, r.height / 2); window.__frac = (window.__y - r.top) / r.height; return window.__y; })()
+eval (function(){ window.PA = document.querySelector('#writer-doc .wr-beat[data-id="r4"]'); var r = PA.getBoundingClientRect(); window.__y = r.top + Math.min(20, r.height / 2); window.__frac = (window.__y - r.top) / r.height; return window.__y; })()
 expect wheelAt(PA, -300) === true
 sleep 100
 expect wfont() === 27
@@ -203,13 +180,13 @@ click #btn-write
 sleep 700
 expect wfont() === Number(localStorage.getItem('splitpage-writer-size'))
 expect slider() === wfont()
-expect Math.abs(num(W) - wfont() * 13 / 19) < 0.05
+expect Math.abs(num(W) - wfont() * 1.25) < 0.05
 
 viewport 390 844 mobile
 eval localStorage.setItem('splitpage-script-scale', '0.7'); localStorage.removeItem('splitpage-writer-size'); true
 goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ window.F=window.__splitpageFormats; window.old=F.state(); window.num=function(sel,prop){return parseFloat(getComputedStyle(document.querySelector(sel))[prop||'fontSize']);}; window.scale=function(){return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale'));}; window.hh=function(sel){return document.querySelector(sel).getBoundingClientRect().height;}; window.H='#rows [data-section-id="s1"]'; var text='A line of narration that is long enough to sit on the page. '; F.openFile(new File([JSON.stringify({title:'Header scaling',rows:['r1','r2','r3','r4','r5','r6'].map(function(id,i){return {id:id,visualText:'Shot '+(i+1),audioText:text+(i+1),status:'todo',lengthSeconds:10};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r4'}]})],'scaling.splitpage'));return true;})()
+eval (function(){ window.F=window.__splitpageFormats; window.old=F.state(); window.num=function(sel,prop){return parseFloat(getComputedStyle(document.querySelector(sel))[prop||'fontSize']);}; window.scale=function(){return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale'));}; window.hh=function(sel){return document.querySelector(sel).getBoundingClientRect().height;}; window.H='#rows [data-section-id="s1"]'; var text='A line of narration that is long enough to sit on the page. '.repeat(3); F.openFile(new File([JSON.stringify({paragraphsDecided:true,title:'Header scaling',rows:['r1','r2','r3','r4','r5','r6'].map(function(id,i){return {id:id,visualText:'Shot '+(i+1),audioText:text+(i+1),status:'todo',lengthSeconds:10};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r4'}]})],'scaling.splitpage'));return true;})()
 wait F.state() !== old && F.state().title === 'Header scaling'
 expect matchMedia('(pointer: coarse)').matches
 expect scale() === 0.7
@@ -227,34 +204,23 @@ wait !document.querySelector('.section-rename')
 jsclick #btn-write
 sleep 700
 expect !document.getElementById('writer').hidden
-eval window.WH = '#writer-doc [data-section-id="s1"]'; true
+eval window.WH = '#writer-doc [data-scene="s1"]'; true
 expect wfont() === 17
-expect num(WH) === 13
-expect num(WH + ' .section-stats') === 11
-expect num(WH + ' .section-grip') === 17
-expect parseFloat(getComputedStyle(document.querySelector(WH + ' .section-fold')).width) === 24
-expect hh(WH) >= 32
+expect num(WH) === wfont() * 1.25
+expect hh(WH) >= wfont() * 1.25 * 1.3
 shot 1169-phone-writer-17
-eval document.querySelector(WH + ' .section-name').click(); true
-wait !!document.querySelector('.section-rename input')
-expect eq(fv(), FORM)
-key none Escape
-wait !document.querySelector('.section-rename')
-eval document.querySelector(WH + ' .section-more summary').click(); true
-expect eq(mv(WH), MENU)
-eval document.querySelector(WH + ' details').open = false; true
 expect setSize(16) === 16
-expect num(WH) === 13
-expect hh(WH) >= 32
+expect num(WH) === wfont() * 1.25
+expect hh(WH) >= wfont() * 1.25 * 1.3
 expect setSize(28) === 28
-expect Math.abs(num(WH) - 28 * 13 / 19) < 0.05
+expect Math.abs(num(WH) - 28 * 1.25) < 0.05
 shot 1169-phone-writer-28
 jsclick #wr-close
 sleep 300
 eval localStorage.setItem('splitpage-script-scale', '1.5'); true
 goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ window.F=window.__splitpageFormats; window.old=F.state(); window.num=function(sel,prop){return parseFloat(getComputedStyle(document.querySelector(sel))[prop||'fontSize']);}; window.scale=function(){return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale'));}; window.hh=function(sel){return document.querySelector(sel).getBoundingClientRect().height;}; window.H='#rows [data-section-id="s1"]'; var text='A line of narration that is long enough to sit on the page. '; F.openFile(new File([JSON.stringify({title:'Header scaling',rows:['r1','r2','r3','r4','r5','r6'].map(function(id,i){return {id:id,visualText:'Shot '+(i+1),audioText:text+(i+1),status:'todo',lengthSeconds:10};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r4'}]})],'scaling.splitpage'));return true;})()
+eval (function(){ window.F=window.__splitpageFormats; window.old=F.state(); window.num=function(sel,prop){return parseFloat(getComputedStyle(document.querySelector(sel))[prop||'fontSize']);}; window.scale=function(){return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale'));}; window.hh=function(sel){return document.querySelector(sel).getBoundingClientRect().height;}; window.H='#rows [data-section-id="s1"]'; var text='A line of narration that is long enough to sit on the page. '.repeat(3); F.openFile(new File([JSON.stringify({paragraphsDecided:true,title:'Header scaling',rows:['r1','r2','r3','r4','r5','r6'].map(function(id,i){return {id:id,visualText:'Shot '+(i+1),audioText:text+(i+1),status:'todo',lengthSeconds:10};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r4'}]})],'scaling.splitpage'));return true;})()
 wait F.state() !== old && F.state().title === 'Header scaling'
 expect scale() === 1.5
 expect Math.abs(num(H) - 19.5) < 0.05

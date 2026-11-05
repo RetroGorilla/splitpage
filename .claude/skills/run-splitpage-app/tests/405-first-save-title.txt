@@ -9,7 +9,11 @@ wait !document.getElementById('btn-save').classList.contains('is-dirty')
 expect document.getElementById('doc-title').value === 'Headset ad'
 expect document.getElementById('doc-version').textContent === 'v3'
 expect document.getElementById('doc-version').hidden === false
-expect document.getElementById('writer-version').textContent === 'v3'
+click #btn-write
+wait !document.getElementById('writer').hidden
+expect document.getElementById('doc-version').textContent === 'v3' && getComputedStyle(document.getElementById('doc-version')).display !== 'none'
+click #wr-close
+wait document.getElementById('writer').hidden
 expect F.parseMarkdown(window.__files['Headset ad V3.md']).state.titleVersion === 'v3'
 expect F.parseMarkdown(window.__files['Headset ad V3.md']).state.titleOrigin === 'file'
 eval F.openFile(new File([window.__files['Headset ad V3.md']],'Headset ad V3.md'))

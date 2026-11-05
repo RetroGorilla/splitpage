@@ -1,0 +1,38 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.U=window.__undoTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};window.doc={schema:2,title:'Clipboard empty endpoint',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'First'},{id:'b',audioText:'',visualText:'Keep empty',status:'shot'},{id:'c',audioText:'Charlie',visualText:'Third'},{id:'d',audioText:'',visualText:'Last visual',status:'shot'}],comments:[{id:'keep',rowId:'b',field:'visualText',body:'Keep comment',author:'Tester'},{id:'last',rowId:'d',field:'visualText',body:'Last comment',author:'Tester'}]};F.openFile(new File([JSON.stringify(doc)],'endpoint.splitpage'))
+wait F.state().title === 'Clipboard empty endpoint'
+click #btn-write
+wait W.on()
+eval window.before={anchor:bp('a',0),head:bp('b',0)};W.place(before);U.flush();window.depth=U.sizes().undo;window.data=new DataTransfer();clip('cut',data)
+expect F.state().rows.map(function(r){return r.id}).join() === 'b,c,d' && F.state().rows[0].visualText === 'Keep empty' && F.state().rows[0].status === 'shot'
+expect F.state().comments.length === 2 && JSON.parse(data.getData('application/x-splitpage-flow')).beats.rows.map(function(r){return r.id}).join() === 'a'
+eval U.flush()
+expect U.sizes().undo === depth+1
+key ctrl KeyZ
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+eval window.before={anchor:bp('c',0),head:bp('d',0)};W.place(before);window.data=new DataTransfer();clip('cut',data)
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && F.state().comments.length === 1
+expect JSON.parse(data.getData('application/x-splitpage-flow')).beats.rows.map(function(r){return r.id}).join() === 'c,d'
+key ctrl KeyZ
+expect F.state().comments.length === 2 && JSON.stringify(W.selection()) === JSON.stringify(before) && W.check().length === 0
+eval window.before={anchor:bp('a',0),head:bp('b',0)};W.place(before);window.data=new DataTransfer();clip('cut',data);W.place({anchor:bp('c',3),head:bp('c',3)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === '|Cha|Alpha|rlie|' && F.state().rows[2].id === 'a'
+key ctrl KeyZ
+key ctrl KeyZ
+eval window.before={anchor:bp('b',0),head:bp('a',0)};W.place(before);U.flush();window.depth=U.sizes().undo;window.data=new DataTransfer();clip('cut',data)
+expect F.state().rows.map(function(r){return r.id}).join() === 'b,c,d' && F.state().rows[0].visualText === 'Keep empty' && F.state().rows[0].status === 'shot'
+expect F.state().comments.length === 2 && JSON.parse(data.getData('application/x-splitpage-flow')).beats.rows.map(function(r){return r.id}).join() === 'a'
+eval U.flush()
+expect U.sizes().undo === depth+1
+key ctrl KeyZ
+expect JSON.stringify(W.selection()) === JSON.stringify(before)
+eval window.before={anchor:bp('d',0),head:bp('c',0)};W.place(before);window.data=new DataTransfer();clip('cut',data)
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b' && F.state().comments.length === 1
+expect JSON.parse(data.getData('application/x-splitpage-flow')).beats.rows.map(function(r){return r.id}).join() === 'c,d'
+key ctrl KeyZ
+expect F.state().comments.length === 2 && JSON.stringify(W.selection()) === JSON.stringify(before) && W.check().length === 0
+eval window.before={anchor:bp('b',0),head:bp('a',0)};W.place(before);window.data=new DataTransfer();clip('cut',data);W.place({anchor:bp('c',3),head:bp('c',3)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === '|Cha|Alpha|rlie|' && F.state().rows[2].id === 'a'
+key ctrl KeyZ
+key ctrl KeyZ

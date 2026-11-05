@@ -1,0 +1,48 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; F.openFile(new File([JSON.stringify({schema:2,title:'Inline Markdown',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:'Desk',status:'shot'},{id:'b',audioText:'Replace',visualText:'',paragraphStart:true},{id:'c',audioText:'Replace',visualText:'',paragraphStart:true},{id:'d',audioText:'',visualText:'',paragraphStart:true},{id:'e',audioText:'',visualText:'',paragraphStart:true},{id:'f',audioText:'',visualText:'',paragraphStart:true},{id:'g',audioText:'Body',visualText:'',paragraphStart:true}],comments:[]})],'inline.splitpage'))
+wait F.state().title === 'Inline Markdown'
+click #btn-write
+wait W.on()
+eval at('a',0)
+press **bold*
+expect F.state().rows[0].audioText === '**bold*'
+press *
+expect F.state().rows[0].audioText === '<strong>bold</strong>'
+press x
+expect F.state().rows[0].audioText === '<strong>bold</strong>x'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === '<strong>bold</strong>'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === '**bold**' && W.selection().head.offset === 8
+key ctrl KeyY
+expect F.state().rows[0].audioText === '<strong>bold</strong>' && W.selection().head.offset === 4
+eval W.place({anchor:bp('b',7),head:bp('b',0)})
+press *italic
+press *
+expect F.state().rows[1].audioText === '<em>italic</em>'
+key ctrl KeyZ
+expect F.state().rows[1].audioText === '*italic*'
+eval W.place({anchor:bp('c',0),head:bp('c',7)})
+press ~~strike~
+expect F.state().rows[2].audioText === '~~strike~'
+press ~
+expect F.state().rows[2].audioText === '<s>strike</s>'
+key ctrl KeyZ
+expect F.state().rows[2].audioText === '~~strike~~'
+eval at('d',0)
+press * spaced*
+expect F.state().rows[3].audioText === '* spaced*'
+eval at('e',0)
+press *spaced *
+expect F.state().rows[4].audioText === '*spaced *'
+eval at('f',0)
+press **word
+key ctrl KeyU
+press *
+press *
+expect document.querySelector('.wr-beat[data-id="f"] strong').textContent === 'word'
+key ctrl KeyZ
+expect document.querySelector('.wr-beat[data-id="f"]').textContent.replace(/\u200B/g,'') === '**word**'
+expect F.state().rows[0].visualText === 'Desk' && F.state().rows[0].status === 'shot' && F.state().rows[6].audioText === 'Body'
+expect W.check().length === 0

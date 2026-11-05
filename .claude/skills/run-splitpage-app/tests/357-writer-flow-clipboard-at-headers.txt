@@ -1,0 +1,24 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.hp=function(id,n){return {kind:'heading',sceneId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};F.openFile(new File([JSON.stringify({schema:2,title:'Clipboard at headers',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'A'},{id:'b',audioText:'Bravo',visualText:'B'},{id:'d',audioText:'Target',visualText:'D'}],sections:[{id:'source',name:'Pasted',firstSceneId:'b'},{id:'dest',name:'Existing',firstSceneId:'d'}]})],'header-dest.splitpage'))
+wait F.state().title === 'Clipboard at headers'
+click #btn-write
+wait W.on()
+eval W.place({anchor:hp('source',0),head:hp('source',6)});window.data=new DataTransfer();clip('copy',data);W.place({anchor:hp('dest',0),head:hp('dest',0)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo||Target'
+expect F.state().sections.map(function(s){return s.name}).join('|') === 'Pasted|Pasted|Existing'
+expect F.state().sections[1].firstSceneId === F.state().rows[2].id && F.state().sections[2].firstSceneId === 'd' && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:bp('a',2),head:hp('source',6)});window.data=new DataTransfer();clip('copy',data);W.place({anchor:bp('b',5),head:bp('b',5)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|pha||Target'
+expect F.state().sections.map(function(s){return s.name}).join('|') === 'Pasted|Pasted|Existing' && F.state().sections[1].firstSceneId === F.state().rows[3].id && F.state().sections[2].firstSceneId === 'd' && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:hp('source',6),head:hp('source',0)});window.data=new DataTransfer();clip('copy',data);W.place({anchor:hp('dest',0),head:hp('dest',0)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo||Target'
+expect F.state().sections.map(function(s){return s.name}).join('|') === 'Pasted|Pasted|Existing'
+expect F.state().sections[1].firstSceneId === F.state().rows[2].id && F.state().sections[2].firstSceneId === 'd' && W.check().length === 0
+key ctrl KeyZ
+eval W.place({anchor:hp('source',6),head:bp('a',2)});window.data=new DataTransfer();clip('copy',data);W.place({anchor:bp('b',5),head:bp('b',5)});clip('paste',data)
+expect F.state().rows.map(function(r){return r.audioText}).join('|') === 'Alpha|Bravo|pha||Target'
+expect F.state().sections.map(function(s){return s.name}).join('|') === 'Pasted|Pasted|Existing' && F.state().sections[1].firstSceneId === F.state().rows[3].id && F.state().sections[2].firstSceneId === 'd' && W.check().length === 0
+key ctrl KeyZ

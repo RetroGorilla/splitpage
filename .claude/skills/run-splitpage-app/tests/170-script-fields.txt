@@ -93,8 +93,8 @@ expect window.__clip === false
 expect cs(document.querySelector('.col-head')).display !== 'none'
 eval document.activeElement.blur()
 jsclick #btn-write
-wait document.querySelectorAll('#writer-doc .wr-para').length > 0
-caret #writer-doc .wr-para
+wait document.querySelectorAll('#writer-doc .wr-beat').length > 0
+caret #writer-doc .wr-beat
 sleep 200
-expect cs(document.querySelector('#writer-doc .wr-para')).boxShadow.indexOf('2px 0px 0px 0px') === -1
-expect cs(document.querySelector('#writer-doc .wr-para')).outlineStyle !== 'dashed'
+expect cs(document.querySelector('#writer-doc .wr-beat')).boxShadow.indexOf('2px 0px 0px 0px') === -1
+expect cs(document.querySelector('#writer-doc .wr-beat')).outlineStyle !== 'dashed'
