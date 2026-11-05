@@ -1,0 +1,64 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow range formatting',paragraphsDecided:true,sections:[{id:'scene',name:'Second scene',firstSceneId:'b'}],rows:[{id:'a',audioText:'Alpha',visualText:'First visual',status:'shot'},{id:'b',audioText:'<strong>Bravo</strong>',visualText:'Second visual'},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'formats.splitpage')); })()
+wait F.state().title === 'Flow range formatting'
+click #btn-write
+wait W.on()
+eval window.before = {anchor:{kind:'beat',rowId:'b',offset:4},head:{kind:'beat',rowId:'a',offset:1}}; W.place(window.before); window.metadata = JSON.stringify(F.state().rows.map(function(r){ var copy = Object.assign({},r); delete copy.audioText; delete copy.updatedAt; delete copy.updatedBy; return copy; }))
+key ctrl KeyB
+expect F.state().rows[0].audioText === 'A<strong>lpha</strong>'
+expect F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect F.state().sections[0].name === 'Second scene'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.before)
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha' && F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.before)
+key ctrl KeyY
+expect F.state().rows[0].audioText === 'A<strong>lpha</strong>' && F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.before)
+key ctrl KeyB
+expect F.state().rows[0].audioText === 'Alpha' && F.state().rows[1].audioText === 'Brav<strong>o</strong>'
+key ctrl KeyZ
+key ctrl KeyZ
+click .writer-bar [data-cmd="italic"]
+expect F.state().rows[0].audioText === 'A<em>lpha</em>'
+expect F.state().rows[1].audioText === '<strong><em>Brav</em>o</strong>'
+key ctrl KeyZ
+click .writer-bar [data-cmd="underline"]
+expect F.state().rows[0].audioText === 'A<u>lpha</u>'
+expect F.state().rows[1].audioText === '<strong><u>Brav</u>o</strong>'
+key ctrl KeyZ
+click .writer-bar [data-cmd="highlight"]
+expect F.state().rows[0].audioText === 'A<mark>lpha</mark>'
+expect F.state().rows[1].audioText === '<mark><strong>Brav</strong></mark><strong>o</strong>'
+key ctrl KeyZ
+eval document.getElementById('writer-doc').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'formatStrikeThrough'}))
+expect F.state().rows[0].audioText === 'A<s>lpha</s>'
+expect F.state().rows[1].audioText === '<strong><s>Brav</s>o</strong>'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.before)
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha' && F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect F.state().rows[2].audioText === 'Charlie'
+expect JSON.stringify(F.state().rows.map(function(r){ var copy = Object.assign({},r); delete copy.audioText; delete copy.updatedAt; delete copy.updatedBy; return copy; })) === window.metadata
+expect W.check().length === 0
+eval window.caret = {anchor:{kind:'beat',rowId:'c',offset:3},head:{kind:'beat',rowId:'c',offset:3}}; W.place(window.caret)
+eval (function(){ var a=document.querySelector('.wr-beat[data-id="a"]').firstChild; var b=document.querySelector('.wr-beat[data-id="b"] strong').firstChild; var event=new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'formatBold'}); event.getTargetRanges=function(){return [{startContainer:a,startOffset:1,endContainer:b,endOffset:4}];}; document.getElementById('writer-doc').dispatchEvent(event); })()
+expect F.state().rows[0].audioText === 'A<strong>lpha</strong>' && F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect F.state().rows[2].audioText === 'Charlie'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha' && F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.caret)
+expect W.check().length === 0
+eval window.backward = {anchor:{kind:'beat',rowId:'b',offset:3},head:{kind:'beat',rowId:'a',offset:2}}; W.place(window.backward)
+eval (function(){ var a=document.querySelector('.wr-beat[data-id="a"]').firstChild; var b=document.querySelector('.wr-beat[data-id="b"] strong').firstChild; var event=new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'formatBold'}); event.getTargetRanges=function(){return [{startContainer:a,startOffset:2,endContainer:b,endOffset:3}];}; document.getElementById('writer-doc').dispatchEvent(event); })()
+expect F.state().rows[0].audioText === 'Al<strong>pha</strong>' && F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.backward)
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha' && F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.backward)
+key ctrl KeyY
+expect F.state().rows[0].audioText === 'Al<strong>pha</strong>' && F.state().rows[1].audioText === '<strong>Bravo</strong>'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.backward)
+key shift ArrowRight
+expect W.selection().anchor.kind === 'beat' && W.selection().anchor.rowId === 'b' && W.selection().anchor.offset === 3 && W.selection().head.kind === 'beat' && W.selection().head.rowId === 'a' && W.selection().head.offset === 3
+expect W.check().length === 0

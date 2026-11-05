@@ -1,6 +1,7 @@
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { flowCommand } from "../../application/commands/flow.ts";
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
+import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
 import { beatPos, caretAt, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
@@ -19,6 +20,7 @@ export interface FlowUndoPorts {
 
 export interface FlowWriterPorts {
   readonly lifetime: Pick<DocumentSession, "epoch">;
+  readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
   readonly doc: () => FlowDoc;
   readonly flow: FlowPorts;
@@ -104,6 +106,8 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
 
   const surface = createSurface({
     root,
+    lifetime: ports.lifetime,
+    heldSelection: ports.heldSelection,
     doc: ports.doc,
     flow: ports.flow,
     decode: ports.decode,

@@ -7,6 +7,7 @@ import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
+import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 
 function harness(changeBeforePlan = false) {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
@@ -20,6 +21,7 @@ function harness(changeBeforePlan = false) {
   const writer = createFlowWriter({
     root, doc: () => doc,
     lifetime: { epoch: () => epoch },
+    heldSelection: createEditorSelection({ epoch: () => epoch, order: () => [], keys: () => null }),
     flow: { cells: html => fromHtml(html ?? ""), newId: () => "new", hasVisual: () => false },
     decode: fromHtml, storedHtml: html => html,
     run: command => {

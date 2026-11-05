@@ -1,5 +1,6 @@
 import { resolveSelection, takeSnapshot } from "../../core/text/selection.ts";
 import type { ModelSelection, SelectionField, SelectionSnapshot } from "../../core/text/selection.ts";
+import type { FlowRange } from "../../core/flow/flow.ts";
 
 export interface SelectionPorts {
   readonly epoch: () => number;
@@ -60,6 +61,8 @@ export interface HeldLink<Range, Cell> {
 }
 
 export interface EditorSelection<Root extends object, Range, Cell> extends SelectionModel {
+  readonly rememberFlow: (epoch: number, range: FlowRange) => void;
+  readonly resolveFlow: () => FlowRange | null;
   readonly notePainted: (root: Root) => void;
   readonly paintedEpoch: (root: Root) => number;
   readonly holdLink: (range: Range, cell: Cell) => void;
@@ -73,12 +76,23 @@ export function createEditorSelection<Root extends object, Range, Cell>(ports: S
   const model = createSelectionModel(ports);
   const painted = new WeakMap<Root, number>();
   let link: HeldLink<Range, Cell> | null = null;
+  let flow: { readonly epoch: number; readonly range: FlowRange } | null = null;
 
   return {
-    remember: model.remember,
+    remember: function (taken) { flow = null; return model.remember(taken); },
     resolve: model.resolve,
     snapshot: model.snapshot,
-    forget: model.forget,
+    forget: function () { flow = null; model.forget(); },
+    rememberFlow: function (epoch, range) {
+      model.forget();
+      flow = { epoch, range: Object.freeze({
+        anchor: Object.freeze({ ...range.anchor }), head: Object.freeze({ ...range.head })
+      }) };
+    },
+    resolveFlow: function () {
+      if (flow?.epoch !== ports.epoch()) flow = null;
+      return flow?.range ?? null;
+    },
     notePainted: function (root) { painted.set(root, ports.epoch()); },
     paintedEpoch: function (root) {
       const epoch = painted.get(root);

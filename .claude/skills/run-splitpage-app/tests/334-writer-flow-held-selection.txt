@@ -1,0 +1,28 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Held flow selection',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'First visual'},{id:'b',audioText:'Bravo',visualText:'Second visual'},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'held.splitpage')); })()
+wait F.state().title === 'Held flow selection'
+click #btn-write
+wait W.on()
+eval window.before = {anchor:{kind:'beat',rowId:'b',offset:3},head:{kind:'beat',rowId:'a',offset:2}}; W.place(window.before)
+click #writer-title
+eval window.getSelection().removeAllRanges(); W.fullRender()
+click .writer-bar [data-cmd="bold"]
+expect F.state().rows[0].audioText === 'Al<strong>pha</strong>'
+expect F.state().rows[1].audioText === '<strong>Bra</strong>vo'
+expect F.state().rows[2].audioText === 'Charlie'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.before)
+expect F.state().rows[0].visualText === 'First visual' && F.state().rows[1].visualText === 'Second visual'
+key ctrl KeyZ
+expect F.state().rows[0].audioText === 'Alpha' && F.state().rows[1].audioText === 'Bravo'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.before)
+expect W.check().length === 0
+eval W.place(window.before)
+click #writer-title
+eval W.outsideEdit('a','ALPHA'); W.fullRender()
+wait document.querySelector('.wr-beat[data-id="a"]').textContent === 'ALPHA'
+click .writer-bar [data-cmd="italic"]
+expect F.state().rows[0].audioText === 'AL<em>PHA</em>'
+expect F.state().rows[1].audioText === '<em>Bra</em>vo'
+expect JSON.stringify(W.selection()) === JSON.stringify(window.before)
+expect W.check().length === 0

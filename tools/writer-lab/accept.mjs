@@ -938,6 +938,19 @@ async function run() {
     same(await sel(), { anchor: beat("ra", 0), head: beat("rb", 5) }, "selection");
   });
 
+  await t("format: toolbar click restores a held selection after the browser range is cleared", async () => {
+    await fresh();
+    await select(beat("ra", 0), beat("rb", 5));
+    await ev(`document.getElementById("doc").blur(); window.getSelection().removeAllRanges();`);
+    const box = await ev(`(() => { const r = document.querySelector('[data-mark="i"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: box.x, y: box.y, button: "left", buttons: 1, clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x, y: box.y, button: "left", buttons: 0, clickCount: 1 });
+    await settle();
+    ok((await rows())[0].html.includes("<em>"), "italic applied");
+    same(await ev(`document.activeElement.id`), "doc", "focus");
+    same(await sel(), { anchor: beat("ra", 0), head: beat("rb", 5) }, "selection");
+  });
+
   await t("enter: mid-beat starts a new beat, keeps the visual on the first half, and a second Enter starts the paragraph", async () => {
     await fresh();
     const before = await snapshot();

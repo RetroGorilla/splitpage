@@ -22,6 +22,7 @@ import { caretAfterStep } from "../../src/features/undo/caret.ts";
 import { LONG_DEMO } from "../../src/starters/index.ts";
 import { flowCommand as sharedFlowCommand } from "../../src/application/commands/flow.ts";
 import { createSurface } from "../../src/features/writer/flow-surface.ts";
+import { createEditorSelection } from "../../src/application/editing/selection.ts";
 import type { Surface, SurfaceSettings } from "../../src/features/writer/flow-surface.ts";
 
 interface LabSettings extends SurfaceSettings {
@@ -308,12 +309,18 @@ function loadScript(): void {
   else if (settings.script === "blank") raw = { title: "Blank", docId: "d" + "3".repeat(32), rows: [{ id: "first", audioText: "", visualText: "", status: "todo" }], comments: [] };
   else raw = demoScript();
   if (settings.opening === "sentence") raw = withSentenceBreaks(raw);
+  loadDocument(raw);
+  drawBeats();
+}
+
+function loadDocument(raw: unknown): void {
+  surface.dispose();
   session.adopt(raw);
   selections.clear();
   $("doc").innerHTML = "";
+  surface = makeSurface();
   surface.paint();
   updateStats();
-  drawBeats();
 }
 
 function applySettings(): void {
@@ -501,23 +508,29 @@ function bindVisualBox(): void {
   $("visual-done").addEventListener("click", close);
 }
 
-const surface: Surface = createSurface({
-  root: $("doc"),
-  doc: currentDoc,
-  flow: flowPorts,
-  decode: html => decode(html).slice(),
-  storedHtml: html => richText.storedHtmlFromDom(html) as string,
-  syncBeat,
-  commit,
-  undo: replayUndo,
-  breakCoalescing: () => undo.breakCoalescing(),
-  notice,
-  changed,
-  selectionMoved,
-  settings: () => settings,
-  openFind: () => (window as unknown as { __openFind: () => void }).__openFind(),
-  plainVisual
-});
+function makeSurface(): Surface {
+  return createSurface({
+    root: $("doc"),
+    lifetime: session,
+    heldSelection: createEditorSelection({ epoch: () => session.epoch(), order: () => [], keys: () => null }),
+    doc: currentDoc,
+    flow: flowPorts,
+    decode: html => decode(html).slice(),
+    storedHtml: html => richText.storedHtmlFromDom(html) as string,
+    syncBeat,
+    commit,
+    undo: replayUndo,
+    breakCoalescing: () => undo.breakCoalescing(),
+    notice,
+    changed,
+    selectionMoved,
+    settings: () => settings,
+    openFind: () => (window as unknown as { __openFind: () => void }).__openFind(),
+    plainVisual
+  });
+}
+
+let surface: Surface = makeSurface();
 
 bindSwitches();
 bindFind();
@@ -526,7 +539,7 @@ applySettings();
 loadScript();
 
 (window as unknown as Record<string, unknown>)["__lab"] = {
-  surface,
+  get surface() { return surface; },
   session,
   undo,
   settings,
@@ -538,7 +551,7 @@ loadScript();
   rows: () => currentDoc().rows.map(row => ({ id: row.id, text: projection(decode(row.audioText)), start: !!row.paragraphStart, visual: plainVisual(row), html: row.audioText })),
   sections: () => (currentDoc().sections ?? []) as unknown[],
   comments: () => currentDoc().comments.map(comment => comment.id),
-  load: (raw: unknown) => { session.adopt(raw); selections.clear(); $("doc").innerHTML = ""; surface.paint(); updateStats(); },
+  load: loadDocument,
   setting: (name: string, value: unknown) => { (settings as unknown as Record<string, unknown>)[name] = value; applySettings(); },
   check: () => surface.domCheck(),
   flush: () => undo.flush(),
