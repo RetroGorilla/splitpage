@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phases 0a to 7 are done (sections 9 to 14). Phase 8 is implemented for review against `feat/writer-flow` (section 15): the flow writer is the only writer and the switch is gone. Adam has picked every setting. The saved flag and the pure engine are on `main` with no shipping caller. The writer's merge to `main` waits for Adam to use a real script and say okay. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). All phases are done (sections 9 to 15) and on `main` through #1238: the flow writer is the only writer and the switch is gone. Adam has picked every setting. He chose to merge before trying a real script, so that trial is still open, and a revert of #1238 is the way back. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
