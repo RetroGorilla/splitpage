@@ -4,7 +4,6 @@
 #   ... -Only 02            run just the suite whose filename starts with 02
 #   ... -Headed             watch it happen in a real Edge window (forces -Parallel 1)
 #   ... -Port 9601 -CdpPort 10201   pin the port bases instead of auto-picking
-#   ... -LogDir C:\some\folder      keep logs and the digest there, for runs alongside another worktree's
 #
 # Each suite gets its own driver process, its own server port and its own
 # browser, so one wedged suite cannot take the others down with it. Up to
