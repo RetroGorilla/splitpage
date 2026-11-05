@@ -158,6 +158,7 @@ expect Math.abs(hh(W) / wh100 - wfont() / 19) < 0.04
 shot 1169-writer-ctrl-wheel
 
 expect setSize(20) === '20px'
+eval new Promise(function(resolve){var frames=3;function tick(){if(--frames===0)resolve(true);else requestAnimationFrame(tick);}requestAnimationFrame(tick);})
 eval document.getElementById('writer-scroll').scrollTop = 150; true
 expect document.getElementById('writer-scroll').scrollTop === 150
 eval (function(){ window.PA = document.querySelector('#writer-doc .wr-beat[data-id="r4"]'); var r = PA.getBoundingClientRect(); window.__y = r.top + Math.min(20, r.height / 2); window.__frac = (window.__y - r.top) / r.height; return window.__y; })()
