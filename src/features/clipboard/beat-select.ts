@@ -209,6 +209,7 @@ function rowIdAtY(y: number) {
 
 function onRowsMouseDown(e: MouseEvent) {
   if (e.button !== 0 || (ports as BeatSelectPorts).rowDrag.dragging()) return;
+  if (linkOpenedBy(e, IS_MAC, (ports as BeatSelectPorts).scriptCell)) return;
   const cell = (e.target as Element).closest && (e.target as Element).closest<HTMLElement>(".cell-editable");
   if (!cell || !(ports as BeatSelectPorts).scriptCell(cell) || !cell.closest("#rows")) return;
   track = { cell: cell, rowId: cell.getAttribute("data-id"), x: e.clientX, y: e.clientY, beat: false };
