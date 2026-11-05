@@ -1,0 +1,35 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find safety',paragraphsDecided:true,sections:[{id:'scene',name:'fox',firstSceneId:'a'}],rows:[{id:'a',audioText:'fox <span class="tag-anchor" data-tag-cat="prop" data-tag-name="fox" contenteditable="false">fox</span>',visualText:'fox'},{id:'b',audioText:'fox',visualText:'keep'}],comments:[]})],'find-safety.splitpage'))
+wait F.state().title === 'Find safety'
+click #btn-write
+wait W.on()
+key ctrl KeyF
+eval window.query=function(s){var el=document.getElementById('find-input');el.value=s;el.dispatchEvent(new Event('input',{bubbles:true}))}; query('FOX')
+expect document.getElementById('find-count').textContent === '1 of 3'
+click #find-case
+expect document.getElementById('find-count').textContent === 'No matches'
+click #find-case
+eval query('fox'); document.getElementById('replace-input').value='x'.repeat(201); U.flush(); window.depth=U.sizes().undo; window.before=JSON.stringify(F.state().rows)
+click #find-replace-all
+expect F.state().sections[0].name === 'fox' && JSON.stringify(F.state().rows) === before
+eval U.flush()
+expect U.sizes().undo === depth && Array.from(document.querySelectorAll('.toast')).some(function(el){return el.textContent.includes('200 characters')})
+eval document.getElementById('replace-input').value='cat'
+click #find-replace-all
+expect F.state().sections[0].name === 'cat' && F.state().rows[0].audioText.includes('cat ') && F.state().rows[0].audioText.includes('>fox</span>') && F.state().rows[1].audioText === 'cat'
+expect F.state().rows[0].visualText === 'fox' && document.getElementById('find-count').textContent.includes('1 in a tag')
+eval query('missing')
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('writer').hidden && document.activeElement.id === 'writer-doc'
+key ctrl KeyF
+eval query('cat'); document.getElementById('writer-doc').focus()
+key Escape
+expect document.getElementById('findbar').hidden && !document.getElementById('writer').hidden
+key ctrl KeyF
+eval query('cat')
+eval window.count=document.getElementById('find-count').textContent
+key ctrl KeyF
+expect document.activeElement.id === 'find-input' && document.getElementById('find-count').textContent === count
+click #wr-close
+expect document.getElementById('findbar').hidden && document.getElementById('writer').hidden

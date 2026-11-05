@@ -7,8 +7,9 @@ import type { DocumentView } from "../../application/session/document-session.ts
 import type { DocumentRow, DocumentTag } from "../../core/document/validated.ts";
 
 type FindDocumentView = { readonly rows: DocumentView["rows"]; readonly productionTags: DocumentView["productionTags"] };
-type FindRuntimePorts = { readonly [K in Exclude<keyof FindPorts, "document">]: FindPorts[K] } & {
+type FindRuntimePorts = Omit<FindPorts, "document"> & {
   readonly document: {
+    readonly onChange: FindPorts["document"]["onChange"];
     readonly current: () => FindDocumentView | null;
     readonly read: <T>(select: (doc: FindDocumentView | null) => T) => T;
   };
@@ -32,6 +33,8 @@ import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
 import { presentFindRanges } from "./present-ranges.ts";
 import { captureFindEscape } from "./keyboard-lock.ts";
+import type { WriterSearchMatch } from "../common/writer-find.ts";
+import type { WriterFindAccess } from "../common/writer-find.ts";
 
 let ports: FindRuntimePorts | null = null;
 
@@ -41,13 +44,20 @@ let findInTags = 0;
 let presentRanges: Range[] = [];
 let stopViewChange: (() => void) | null = null;
 let releaseEscapeLock: (() => void) | null = null;
+let writerFind: WriterFindAccess | null = null;
+let writerMatches: readonly WriterSearchMatch[] = [];
+let restoreFindBar: (() => void) | null = null;
+let stopWriterFindEvents: (() => void) | null = null;
+let flushWriterFind: (() => void) | null = null;
+let writerFindUpdating = false;
+let writerRevealOwed = false;
 
 function findingInPresent() {
   return !!document.getElementById("findbar")?.classList.contains("is-present");
 }
 
 function matchCount() {
-  return findingInPresent() ? presentRanges.length : findMatches.length;
+  return findingInPresent() ? presentRanges.length : writerFind ? writerMatches.length : findMatches.length;
 }
 
 function findNeedle() {
@@ -101,6 +111,14 @@ export function replaceInHtml(html: string, needle: string, replacement: unknown
 }
 
 function refreshFindMatches(keepIndex: boolean) {
+  if (writerFind) {
+    const found = writerFind.search(findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
+    writerMatches = found.matches;
+    findInTags = found.inTags;
+    findIndex = writerMatches.length ? keepIndex ? Math.max(0, Math.min(findIndex, writerMatches.length - 1)) : 0 : -1;
+    updateFindCount();
+    return;
+  }
   if (findingInPresent()) {
     findMatches = [];
     presentRanges = presentFindRanges(document.getElementById("prompter-content") as HTMLElement, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
@@ -161,7 +179,22 @@ function highlightsSupported() {
   return !!(window.CSS && CSS.highlights && window.Highlight);
 }
 
-function revealFindMatch() {
+function revealFindMatch(navigate = true) {
+  if (writerFind) {
+    const match = writerMatches[findIndex];
+    const active = document.activeElement as HTMLElement | null;
+    const updating = writerFindUpdating;
+    writerFindUpdating = true;
+    let range: Range | null;
+    try { range = match && (navigate || match.kind === "narration") ? writerFind.reveal(match) : null; }
+    finally { writerFindUpdating = updating; }
+    if (active && document.getElementById("findbar")?.contains(active)) active.focus({ preventScroll: true });
+    if (highlightsSupported()) {
+      if (range) CSS.highlights.set(FIND_HL, new Highlight(range));
+      else CSS.highlights.delete(FIND_HL);
+    }
+    return;
+  }
   if (findingInPresent()) {
     const range = presentRanges[findIndex];
     if (highlightsSupported()) {
@@ -198,6 +231,7 @@ function stepFind(dir: number) {
 
 function replaceCurrent() {
   if (findingInPresent()) return;
+  if (writerFind) { replaceWriterMatches(false); return; }
   const needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
   revealFindMatch();
@@ -219,6 +253,7 @@ function replaceCurrent() {
 
 export function replaceAll() {
   if (findingInPresent()) return;
+  if (writerFind) { replaceWriterMatches(true); return; }
   const needle = findNeedle();
   if (!needle) return;
   const replacement = (document.getElementById("replace-input") as HTMLInputElement).value || "";
@@ -253,6 +288,83 @@ export function replaceAll() {
   refreshFindMatches(false);
   revealFindMatch();
   (ports as FindRuntimePorts).notices.show("Replaced " + total + " match" + (total === 1 ? "" : "es") + tagNote, "ok");
+}
+
+function replaceWriterMatches(all: boolean) {
+  if (!writerFind || !findNeedle()) return;
+  flushWriterFind?.();
+  const matches = all ? writerMatches : writerMatches[findIndex] ? [writerMatches[findIndex] as WriterSearchMatch] : [];
+  if (!matches.length) return;
+  const replacement = (document.getElementById("replace-input") as HTMLInputElement).value || "";
+  revealFindMatch();
+  writerFindUpdating = true;
+  let changed: boolean;
+  try { changed = writerFind.replace(matches, replacement); }
+  finally { writerFindUpdating = false; }
+  if (!changed) return;
+  refreshFindMatches(!all);
+  revealFindMatch();
+  if (all) (ports as FindRuntimePorts).notices.show("Replaced " + matches.length + " match" + (matches.length === 1 ? "" : "es"), "ok");
+}
+
+function toggleFindVisuals() {
+  if (!writerFind) return;
+  writerFind.setVisuals(!writerFind.visuals());
+  paintFindVisuals();
+  findQueryChanged();
+}
+
+function paintFindVisuals() {
+  const button = document.getElementById("find-visuals");
+  if (!button) return;
+  button.hidden = !writerFind;
+  button.setAttribute("aria-pressed", writerFind?.visuals() ? "true" : "false");
+  button.classList.toggle("is-active", !!writerFind?.visuals());
+}
+
+function mountWriterFindEvents() {
+  if (stopWriterFindEvents) return;
+  let active = true;
+  let queued = false;
+  const bar = document.getElementById("findbar");
+  function flush() {
+    if (!active || !queued) return;
+    queued = false;
+    refreshFindMatches(false);
+    const navigate = !!bar?.contains(document.activeElement);
+    writerRevealOwed = !navigate && writerMatches[findIndex]?.kind === "visual";
+    revealFindMatch(navigate);
+  }
+  flushWriterFind = flush;
+  const stopChanges = (ports as FindRuntimePorts).document.onChange(() => {
+    if (writerFindUpdating || queued) return;
+    queued = true;
+    queueMicrotask(flush);
+  });
+  function focused() {
+    if (!writerRevealOwed || writerFindUpdating) return;
+    writerRevealOwed = false;
+    revealFindMatch();
+  }
+  function escape(event: KeyboardEvent) {
+    if (event.key !== "Escape" || event.isComposing) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    leaveFindAtMatch();
+  }
+  const button = document.getElementById("find-visuals");
+  button?.addEventListener("click", toggleFindVisuals);
+  bar?.addEventListener("focusin", focused);
+  window.addEventListener("keydown", escape, true);
+  stopWriterFindEvents = () => {
+    active = false;
+    stopChanges();
+    bar?.removeEventListener("focusin", focused);
+    flushWriterFind = null;
+    writerRevealOwed = false;
+    button?.removeEventListener("click", toggleFindVisuals);
+    window.removeEventListener("keydown", escape, true);
+  };
 }
 
 let bulkTagCat: string | null = null;
@@ -387,6 +499,18 @@ export function openFindBar() {
   (ports as FindRuntimePorts).flags.setFindOpen(true);
   const bar = document.getElementById("findbar") as HTMLElement;
   const present = (ports as FindRuntimePorts).present.isOpen();
+  writerFind = present ? null : (ports as FindRuntimePorts).writer?.() ?? null;
+  const writerFrom = writerFind?.selection() ?? null;
+  if (writerFind && !restoreFindBar) {
+    const parent = bar.parentNode;
+    const next = bar.nextSibling;
+    document.getElementById("writer")?.append(bar);
+    restoreFindBar = () => { parent?.insertBefore(bar, next?.parentNode === parent ? next : null); };
+    closeBulkTag();
+  }
+  bar.classList.toggle("is-writer", !!writerFind);
+  if (writerFind) mountWriterFindEvents();
+  paintFindVisuals();
   bar.classList.toggle("is-present", present);
   bar.hidden = false;
   if (present) {
@@ -396,14 +520,14 @@ export function openFindBar() {
   }
   const input = (document.getElementById("find-input") as HTMLInputElement);
   const sel = window.getSelection();
-  const picked = sel && !sel.isCollapsed ? String(sel).trim() : "";
+  const picked = writerFind ? writerFind.pickedText().trim() : sel && !sel.isCollapsed ? String(sel).trim() : "";
   if (picked && picked.length <= 200 && picked.indexOf("\n") === -1) input.value = picked;
   const from = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
   input.focus();
   input.select();
   refreshFindMatches(false);
-  if (findMatches.length) {
-    findIndex = firstMatchFrom(from);
+  if (matchCount()) {
+    findIndex = writerFind ? writerFind.firstFrom(writerMatches, writerFrom) : firstMatchFrom(from);
     updateFindCount();
   }
   revealFindMatch();
@@ -439,6 +563,8 @@ function firstMatchFrom(range: Range | null) {
 }
 
 export function closeFindBar() {
+  stopWriterFindEvents?.();
+  stopWriterFindEvents = null;
   releaseEscapeLock?.();
   releaseEscapeLock = null;
   const present = findingInPresent();
@@ -451,6 +577,12 @@ export function closeFindBar() {
   (document.getElementById("findbar") as HTMLElement).hidden = true;
   document.getElementById("findbar")?.classList.remove("is-present");
   presentRanges = [];
+  writerMatches = [];
+  writerFind = null;
+  restoreFindBar?.();
+  restoreFindBar = null;
+  document.getElementById("findbar")?.classList.remove("is-writer");
+  paintFindVisuals();
   findMatches = [];
   findIndex = -1;
   findInTags = 0;
@@ -462,6 +594,13 @@ export function closeFindBar() {
 
 function leaveFindAtMatch() {
   if (findingInPresent()) { closeFindBar(); return; }
+  if (writerFind) {
+    const writer = writerFind;
+    const match = writerMatches[findIndex];
+    closeFindBar();
+    writer.leave(match);
+    return;
+  }
   const hit = currentMatchRange();
   closeFindBar();
   if (!hit) return;
@@ -482,6 +621,11 @@ export function startFind(given: FindPorts): FindControls {
       disposed = true;
       if ((document.getElementById("findbar") as HTMLElement)) closeFindBar();
       else {
+        stopWriterFindEvents?.();
+        stopWriterFindEvents = null;
+        writerFind = null;
+        writerMatches = [];
+        restoreFindBar = null;
         releaseEscapeLock?.();
         releaseEscapeLock = null;
         stopViewChange?.();
