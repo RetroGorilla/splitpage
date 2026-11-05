@@ -9,12 +9,17 @@ type MutableSaveStatusLine = { -readonly [K in keyof SaveStatusLine]: SaveStatus
 
 let ports: SaveStatusPorts | null = null;
 
+// why: these paint on every key, and a replaced text node makes the page's body:has() rules restyle the whole page
+function setText(el: Element, text: string) {
+  if (el.textContent !== text) el.textContent = text;
+}
+
 function paintSaveButtons() {
   const view = saveButtonView({ busy: (ports as SaveStatusPorts).saves.busy(), dirty: (ports as SaveStatusPorts).saves.unsaved() });
   ["btn-save", "wr-save"].forEach(function (id) {
     const btn = document.getElementById(id);
     if (!btn) return;
-    btn.textContent = view.label;
+    setText(btn, view.label);
     (btn as HTMLButtonElement).disabled = view.disabled;
     btn.classList.toggle("is-dirty", view.dirty);
   });
@@ -95,8 +100,8 @@ function updateSaveStatus() {
     const el = document.getElementById(id);
     if (!el) return;
     el.hidden = !view;
-    if (!view) { el.textContent = ""; el.removeAttribute("title"); return; }
-    el.textContent = view.text;
+    if (!view) { setText(el, ""); el.removeAttribute("title"); return; }
+    setText(el, view.text);
     el.title = view.title;
     el.className = "save-status is-" + view.cls;
   });
