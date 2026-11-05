@@ -118,11 +118,11 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     settings: () => SETTINGS,
     openFind: () => { ports.notice("Find isn't in this build of the writer yet.", "warn"); },
     plainVisual: ports.plainVisual,
-    beatInput: ports.beatInput,
-    typeAtBeatEdge: ports.typeAtBeatEdge,
-    beatKeydown: ports.beatKeydown,
-    beatSelection: ports.beatSelection,
-    leaveBeat: ports.leaveBeat
+    beatInput: (event, beat) => { if (isCurrent()) ports.beatInput(event, beat); },
+    typeAtBeatEdge: (beat, words) => isCurrent() && ports.typeAtBeatEdge(beat, words),
+    beatKeydown: (event, beat) => isCurrent() && ports.beatKeydown(event, beat),
+    beatSelection: beat => { if (isCurrent()) ports.beatSelection(beat); },
+    leaveBeat: beat => { if (isCurrent()) ports.leaveBeat(beat); }
   });
 
   function rowOf(rowId: string): FlowRow | undefined {

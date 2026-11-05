@@ -15,6 +15,7 @@ function harness(changeBeforePlan = false) {
   const root = document.getElementById("writer-doc") as HTMLElement;
   let doc = migrateRows({ rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" }] }, fakeMigration().ports);
   let epoch = 1;
+  const left: string[] = [];
   let recorded: FlowSelectionPair | undefined;
   const writer = createFlowWriter({
     root, doc: () => doc,
@@ -39,13 +40,26 @@ function harness(changeBeforePlan = false) {
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
     caretAfterStep: () => 0, notice: () => {}, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
-    beatKeydown: () => false, beatSelection: () => {}, leaveBeat: () => {}, newCommentId: () => "c", openComment: () => {}
+    beatKeydown: () => false, beatSelection: () => {}, leaveBeat: beat => { left.push(beat.dataset.id ?? ""); },
+    newCommentId: () => "c", openComment: () => {}
   });
-  return { writer, root, doc: () => doc, recorded: () => recorded, replace: () => {
+  return { writer, root, left, doc: () => doc, recorded: () => recorded, replace: () => {
     epoch++;
     doc = migrateRows({ rows: [{ id: "a", audioText: "Replacement" }] }, fakeMigration().ports);
   } };
 }
+
+test("a retired writer never sends its beat departure to the current document's services", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.place({ anchor: beatPos("a", 2), head: beatPos("a", 2) });
+    h.replace();
+    h.writer.place({ anchor: beatPos("b", 2), head: beatPos("b", 2) });
+    assert.deepEqual(h.left, []);
+    assert.equal(h.doc().rows[0]?.audioText, "Replacement");
+  } finally { h.writer.dispose(); }
+});
 
 test("comment jumps follow the surviving narration mark instead of a stale comment row", () => {
   const h = harness();
