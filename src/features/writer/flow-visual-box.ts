@@ -31,6 +31,8 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   note.className = "wr-visual-note";
   note.hidden = true;
   note.title = "Edit visual";
+  const noteText = doc.createTextNode("");
+  note.append(noteText);
   const box = doc.createElement("div");
   box.className = "wr-flow-visual-box";
   box.hidden = true;
@@ -158,7 +160,8 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     noteRow = row?.id ?? null;
     note.hidden = !label || !range || !isCollapsed(range);
     if (row && !note.hidden) {
-      note.textContent = label + (hasSetLength(row) ? " · " + formatDuration(row.lengthSeconds) : "");
+      const caption = label + (hasSetLength(row) ? " · " + formatDuration(row.lengthSeconds) : "");
+      if (noteText.data !== caption) noteText.data = caption;
       const beat = root.querySelector<HTMLElement>('.wr-beat[data-id="' + CSS.escape(row.id) + '"]');
       const rect = beat?.getClientRects()[0];
       const holder = parent?.getBoundingClientRect();

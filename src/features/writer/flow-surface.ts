@@ -463,40 +463,61 @@ export function createSurface(ports: SurfacePorts): Surface {
     return outcome;
   }
 
-  function repairOrphans(): boolean {
+  function repairOrphans(edited?: HTMLElement | null): boolean {
     let found = false;
-    root.querySelectorAll<HTMLElement>(":scope > .wr-par").forEach(function (par) {
-      Array.from(par.childNodes).forEach(function (child) {
-        if (isElement(child) && child.classList.contains("wr-beat")) return;
+    const local = edited?.parentElement?.classList.contains("wr-par") ? edited : null;
+    const isBeat = (node: Node | null): node is HTMLElement => isElement(node) && node.classList.contains("wr-beat");
+    function repairChild(child: ChildNode): void {
+      if (isBeat(child)) return;
+      const text = (child.textContent || "").replace(ZWSP_ALL, "");
+      found = true;
+      if (text) {
+        const previous = child.previousSibling;
+        const next = child.nextSibling;
+        const home = isBeat(previous) ? previous : isBeat(next) ? next : null;
+        if (home) {
+          home.insertAdjacentText(home === previous ? "beforeend" : "afterbegin", text);
+          syncBeatEl(home);
+        }
+      }
+      child.remove();
+    }
+    if (local) {
+      let child = local.previousSibling;
+      if (child && !isBeat(child)) {
+        while (child.previousSibling && !isBeat(child.previousSibling)) child = child.previousSibling;
+        while (child && child !== local) {
+          const next: ChildNode | null = child.nextSibling;
+          repairChild(child);
+          child = next;
+        }
+      }
+      child = local.nextSibling;
+      while (child && !isBeat(child)) {
+        const next: ChildNode | null = child.nextSibling;
+        repairChild(child);
+        child = next;
+      }
+    } else {
+      root.querySelectorAll<HTMLElement>(":scope > .wr-par").forEach(par => {
+        Array.from(par.childNodes).forEach(repairChild);
+      });
+      Array.from(root.childNodes).forEach(function (child) {
+        if (isElement(child) && (child.classList.contains("wr-par") || child.classList.contains("wr-heading"))) return;
         const text = (child.textContent || "").replace(ZWSP_ALL, "");
         found = true;
         if (text) {
           const previous = child.previousSibling;
-          const next = child.nextSibling;
-          const home = isElement(previous) && previous.classList.contains("wr-beat") ? previous : isElement(next) && next.classList.contains("wr-beat") ? next : null;
+          const home = isElement(previous) ? (previous.classList.contains("wr-beat") ? previous : previous.querySelector<HTMLElement>(".wr-beat:last-child")) : null;
           if (home) {
-            home.insertAdjacentText(home === previous ? "beforeend" : "afterbegin", text);
+            home.insertAdjacentText("beforeend", text);
             syncBeatEl(home);
           }
         }
         child.remove();
       });
-    });
-    Array.from(root.childNodes).forEach(function (child) {
-      if (isElement(child) && (child.classList.contains("wr-par") || child.classList.contains("wr-heading"))) return;
-      const text = (child.textContent || "").replace(ZWSP_ALL, "");
-      found = true;
-      if (text) {
-        const previous = child.previousSibling;
-        const home = isElement(previous) ? (previous.classList.contains("wr-beat") ? previous : previous.querySelector<HTMLElement>(".wr-beat:last-child")) : null;
-        if (home) {
-          home.insertAdjacentText("beforeend", text);
-          syncBeatEl(home);
-        }
-      }
-      child.remove();
-    });
-    root.querySelectorAll<HTMLElement>(".wr-beat .wr-beat").forEach(function (inner) {
+    }
+    (local ?? root).querySelectorAll<HTMLElement>(local ? ".wr-beat" : ".wr-beat .wr-beat").forEach(function (inner) {
       found = true;
       inner.replaceWith(...Array.from(inner.childNodes));
     });
@@ -573,11 +594,11 @@ export function createSurface(ports: SurfacePorts): Surface {
       return;
     }
     const input = event as InputEvent;
-    const repaired = repairOrphans();
     const sel = window.getSelection();
     const el = elementOf(sel?.anchorNode ?? null);
     const beat = el?.closest<HTMLElement>(".wr-beat") ?? null;
     const heading = el?.closest<HTMLElement>(".wr-heading") ?? null;
+    const repaired = repairOrphans(beat);
     if (beat) {
       ports.beatInput?.(input, beat);
       const offset = selection()?.head.offset ?? 2;

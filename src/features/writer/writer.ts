@@ -82,11 +82,20 @@ export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
 
 let writerWordTotal = 0;
 
+function setWriterStat(id: string, value: string): void {
+  const el = document.getElementById(id) as HTMLElement;
+  if (el.textContent === value) return;
+  const child = el.firstChild;
+  // why: replacing text children invalidates body :has() rules across the hidden split view
+  if (child?.nodeType === 3 && el.childNodes.length === 1) (child as Text).data = value;
+  else el.textContent = value;
+}
+
 function updateWriterSelectionCount() {
   const selected = flowWriter?.selectedText();
   const words = selected == null ? writerWordTotal
     : (productionReaders as WriterFeaturePorts["text"]["productionReaders"]).wordCount(escapeHtml(selected));
-  (document.getElementById("wr-words") as HTMLElement).textContent = words.toLocaleString();
+  setWriterStat("wr-words", words.toLocaleString());
 }
 
 export function updateWriterStats() {
@@ -95,9 +104,9 @@ export function updateWriterStats() {
   let words = 0;
   doc.rows.forEach(function (row) { words += (productionReaders as WriterFeaturePorts["text"]["productionReaders"]).wordCount(row.audioText); });
   writerWordTotal = words;
-  (document.getElementById("wr-scenes") as HTMLElement).textContent = String(doc.rows.length);
+  setWriterStat("wr-scenes", String(doc.rows.length));
   updateWriterSelectionCount();
-  (document.getElementById("wr-runtime") as HTMLElement).textContent = formatDuration(totalSeconds((currentDocument as WriterCurrentDocument)() as WriterDocument, (productionReaders as WriterFeaturePorts["text"]["productionReaders"])));
+  setWriterStat("wr-runtime", formatDuration(totalSeconds((currentDocument as WriterCurrentDocument)() as WriterDocument, (productionReaders as WriterFeaturePorts["text"]["productionReaders"]))));
 }
 
 export function scheduleWriterStats() {
