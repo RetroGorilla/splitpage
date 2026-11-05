@@ -5,6 +5,11 @@
     background: var(--surface);
   }
   .findbar[hidden] { display: none; }
+  .findbar.is-writer {
+    position: fixed; top: 64px; left: 12px; right: 12px; z-index: 146;
+    margin: 0; color: var(--text);
+  }
+  .findbar.is-writer :is(#find-tag, #find-tag-row) { display: none; }
   .findbar.is-present {
     position: fixed; top: 64px; left: 12px; right: 12px; z-index: 146;
     margin: 0; color: var(--text);

@@ -9,8 +9,10 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { PrompterState } from "../../application/prompter-state.ts";
+import type { WriterFindAccess } from "../common/writer-find.ts";
 
 export interface FindPorts {
+  readonly writer?: () => WriterFindAccess | null;
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml">;
@@ -34,6 +36,7 @@ export interface FindControls {
 }
 
 export interface FindActionPorts {
+  readonly flowWriterOpen?: () => boolean;
   readonly screen: () => ScreenState;
   readonly flags: Pick<ViewFlags, "findOpen">;
 }

@@ -10,7 +10,7 @@ export function findActions(current: () => FindControls | null, ports: FindActio
     icon: "i-find",
     keys: ["mod+f", "mod+shift+f", "mod+alt+f", "mod+alt+shift+f"],
     words: "search replace look for",
-    availability: () => current() ? availableUnless(["loading", ...everyOverlayBut("launcher").filter((overlay) => overlay !== "prompter")], ports.screen()) : { enabled: false },
+    availability: () => current() ? availableUnless(["loading", ...everyOverlayBut("launcher").filter((overlay) => overlay !== "prompter" && !(overlay === "writer" && ports.flowWriterOpen?.()))], ports.screen()) : { enabled: false },
     run: (source, input) => {
       if (input === "close") { current()?.closeFindBar(); return; }
       const field = document.getElementById("find-input");

@@ -102,6 +102,8 @@ export function mountWriterRuntimeFeature() {
           const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
           if (initialized.kind === "failed") throw initialized.error;
           return createFlowWriter({
+            openFind: () => { actions.invoke("find", "shortcut"); },
+            closeFind: () => { actions.invoke("find", "button", "close"); },
             clipboard: {
               mount: handlers => mountFlowClipboardRoutes(root, handlers),
               copy: (range, data, cut) => {
