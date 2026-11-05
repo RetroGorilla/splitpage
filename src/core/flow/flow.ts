@@ -10,7 +10,7 @@ import type { DocumentScene } from "../document/scenes.ts";
 import type { DocumentShape } from "../document/validated.ts";
 import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, setMark, sliceCell, splitCell } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
-import { cellLength, commentIds, normalizeCell, projection } from "../text/runs.ts";
+import { cellLength, commentIds, normalizeCell, OBJ, projection } from "../text/runs.ts";
 import type { MarkName, Marks, Run } from "../text/runs.ts";
 
 export const SCENE_NAME_MAX = 200;
@@ -705,6 +705,9 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   const name = text.slice(HEADING_MARKER.length, end).trim();
   const fallback = keep ?? caretAt(beatPos(row.id, enterAt ?? text.length));
   if (!name) return withoutMarker(doc, index, ports, fallback);
+  if (sliceCell(cell, 0, end).some(run => !!run.marks.tag || !!run.marks.cmt?.length)) {
+    return withoutMarker(doc, index, ports, fallback, "A scene header can't hold tags or comments.");
+  }
   const follower = doc.rows[index + 1];
   const anchors = sceneAnchors(doc);
   const hasRunOn = lineEnd === text.length && !!follower && !startsParagraph(doc, index + 1);
@@ -765,7 +768,8 @@ export interface InlineMarkdown {
 }
 
 export function inlineMarkdown(cell: readonly Run[], caret: number): InlineMarkdown | null {
-  const text = projection(cell);
+  // why: tags stop delimiter matching, while their widths must stay aligned with the cell's positions
+  const text = normalizeCell(cell).map(run => run.marks.tag ? "\n".repeat(run.atom ? 1 : run.text.length) : run.atom ? OBJ : run.text).join("");
   for (const rule of INLINE_RULES) {
     const size = rule.marker.length;
     if (text.slice(caret - size, caret) !== rule.marker) continue;

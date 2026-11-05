@@ -640,6 +640,10 @@ export function createSurface(ports: SurfacePorts): Surface {
       event.preventDefault();
       ports.breakCoalescing();
       const target = range0(input) ?? range;
+      if (type === "insertParagraph" && isCollapsed(target) && target.head.kind === "heading" && emptyHeadings.has(target.head.sceneId)) {
+        removeEmptyHeading(target.head.sceneId, range, "below");
+        return;
+      }
       apply(type === "insertLineBreak" ? "line-break" : "enter", doc => type === "insertLineBreak"
         ? lineBreakAt(doc, target, ports.flow)
         : isCollapsed(target) && target.head.kind === "heading"
@@ -699,6 +703,10 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (atBoundary && isCollapsed(range) && type === "deleteContentBackward" && range.head.offset === 0) {
       event.preventDefault();
       ports.breakCoalescing();
+      if (range.head.kind === "heading" && emptyHeadings.has(range.head.sceneId)) {
+        removeEmptyHeading(range.head.sceneId, range, "above");
+        return;
+      }
       apply("backspace", doc => backspaceAt(doc, range.head, ports.flow, { tick: ports.settings().tick }), range);
       return;
     }
@@ -716,6 +724,10 @@ export function createSurface(ports: SurfacePorts): Surface {
       if (backward && effective.head.offset === 0) {
         event.preventDefault();
         ports.breakCoalescing();
+        if (effective.head.kind === "heading" && emptyHeadings.has(effective.head.sceneId)) {
+          removeEmptyHeading(effective.head.sceneId, range, "above");
+          return;
+        }
         apply("backspace", doc => backspaceAt(doc, effective.head, ports.flow, { tick: ports.settings().tick }), range);
       }
       return;
@@ -763,6 +775,10 @@ export function createSurface(ports: SurfacePorts): Surface {
     ports.breakCoalescing();
     if (event.shiftKey) {
       apply("line-break", doc => lineBreakAt(doc, range, ports.flow), range);
+      return;
+    }
+    if (!event.altKey && isCollapsed(range) && range.head.kind === "heading" && emptyHeadings.has(range.head.sceneId)) {
+      removeEmptyHeading(range.head.sceneId, range, "below");
       return;
     }
     if (!isCollapsed(range) && !event.altKey && ports.settings().enter === "double") {
@@ -980,22 +996,31 @@ export function createSurface(ports: SurfacePorts): Surface {
     ports.beatSelection?.(null);
   }
 
+  function removeEmptyHeading(id: string, range: FlowRange | null, landing: "above" | "below" | "keep"): void {
+    emptyHeadings.delete(id);
+    const before = caretAt(headingPos(id, 0));
+    apply("remove-empty-heading", doc => {
+      const scene = flowOf(doc).find(block => block.kind === "heading" && block.scene.id === id);
+      if (!scene || scene.kind !== "heading") return null;
+      const result = replaceRange(doc, { anchor: headingPos(id, 0), head: headingPos(id, scene.scene.name.length) }, [], ports.flow);
+      if (!result || !("selection" in result)) return result;
+      if (landing === "above") {
+        const index = doc.rows.findIndex(row => row.id === scene.scene.firstSceneId);
+        const previous = doc.rows[index - 1];
+        if (previous) return { ...result, selection: caretAt(beatPos(previous.id, cellLength(cellOf(previous)))) };
+      }
+      const keep = landing === "keep" && range && [range.anchor, range.head].every(pos => pos.kind !== "heading" || pos.sceneId !== id);
+      return keep ? { ...result, selection: range } : result;
+    }, before, document.activeElement === root);
+  }
+
   function leaveEmptyHeadings(force = false): void {
     if (composing || mouseDown) return;
     const range = selection();
     if (!force && !range) return;
     for (const [id] of emptyHeadings) {
       if (!force && range?.head.kind === "heading" && range.head.sceneId === id) continue;
-      const scene = flowOf(ports.doc()).find(block => block.kind === "heading" && block.scene.id === id);
-      emptyHeadings.delete(id);
-      if (!scene || scene.kind !== "heading") continue;
-      const before = caretAt(headingPos(id, 0));
-      apply("remove-empty-heading", doc => {
-        const result = replaceRange(doc, { anchor: headingPos(id, 0), head: headingPos(id, scene.scene.name.length) }, [], ports.flow);
-        if (!result || !("selection" in result)) return result;
-        const keep = range && [range.anchor, range.head].every(pos => pos.kind !== "heading" || pos.sceneId !== id);
-        return keep ? { ...result, selection: range } : result;
-      }, before, document.activeElement === root);
+      removeEmptyHeading(id, range, "keep");
     }
   }
 

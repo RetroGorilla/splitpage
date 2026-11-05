@@ -1,0 +1,60 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.hp=function(n){return {kind:'heading',sceneId:'s',offset:n}}; window.select=function(reverse){W.place({anchor:hp(reverse?5:0),head:hp(reverse?0:5)})}; window.ids=function(){return F.state().rows.map(function(r){return r.id}).join()}; window.restored=function(){return ids()==='a,b' && F.state().sections[0].name==='Title' && F.state().sections[0].firstSceneId==='b' && document.querySelector('.wr-heading[data-scene="s"]').textContent==='Title'}; F.openFile(new File([JSON.stringify({schema:2,title:'Empty heading keys',paragraphsDecided:true,rows:[{id:'a',audioText:'Above',visualText:''},{id:'b',audioText:'Body',visualText:'Desk',status:'shot'}],sections:[{id:'s',name:'Title',firstSceneId:'b'}],comments:[]})],'empty-keys.splitpage'))
+wait F.state().title === 'Empty heading keys'
+click #btn-write
+wait W.on()
+eval select(false)
+key Backspace
+expect F.state().sections[0].name === 'Title' && document.querySelector('.wr-heading[data-scene="s"]').textContent === ''
+eval U.flush(); window.depth=U.sizes().undo
+key Backspace
+expect F.state().sections === undefined && ids() === 'a,b' && F.state().rows[0].audioText === 'Above' && F.state().rows[1].audioText === 'Body'
+expect W.selection().head.kind === 'beat' && W.selection().head.rowId === 'a' && W.selection().head.offset === 5
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(function(){U.flush();resolve()})})})
+expect U.sizes().undo === depth+1
+key ctrl KeyZ
+expect restored()
+eval select(true)
+key Delete
+eval U.flush(); window.depth=U.sizes().undo
+key Backspace
+expect F.state().sections === undefined && ids() === 'a,b' && F.state().rows[0].audioText === 'Above' && F.state().rows[1].audioText === 'Body'
+expect W.selection().head.kind === 'beat' && W.selection().head.rowId === 'a' && W.selection().head.offset === 5
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(function(){U.flush();resolve()})})})
+expect U.sizes().undo === depth+1
+key ctrl KeyZ
+expect restored()
+eval select(false)
+key Delete
+eval U.flush(); window.depth=U.sizes().undo
+key Enter
+expect F.state().sections === undefined && ids() === 'a,b' && F.state().rows[1].audioText === 'Body' && F.state().rows[1].paragraphStart === true
+expect W.selection().head.kind === 'beat' && W.selection().head.rowId === 'b' && W.selection().head.offset === 0
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(function(){U.flush();resolve()})})})
+expect U.sizes().undo === depth+1
+key ctrl KeyZ
+expect restored()
+eval select(true)
+key Backspace
+eval U.flush(); window.depth=U.sizes().undo
+key Enter
+expect F.state().sections === undefined && ids() === 'a,b' && F.state().rows[1].audioText === 'Body'
+expect W.selection().head.kind === 'beat' && W.selection().head.rowId === 'b' && W.selection().head.offset === 0
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(function(){U.flush();resolve()})})})
+expect U.sizes().undo === depth+1
+key ctrl KeyZ
+expect restored()
+eval select(false)
+key Backspace
+eval U.flush(); window.depth=U.sizes().undo; document.getElementById('writer-doc').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertParagraph'})); U.flush()
+expect F.state().sections === undefined && ids() === 'a,b' && W.selection().head.rowId === 'b' && W.selection().head.offset === 0 && U.sizes().undo === depth+1
+key ctrl KeyZ
+expect restored()
+eval select(true)
+key Delete
+eval U.flush(); window.depth=U.sizes().undo; document.getElementById('writer-doc').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'deleteContentBackward'})); U.flush()
+expect F.state().sections === undefined && ids() === 'a,b' && W.selection().head.rowId === 'a' && W.selection().head.offset === 5 && U.sizes().undo === depth+1
+key ctrl KeyZ
+expect restored()
+expect F.state().rows[1].visualText === 'Desk' && F.state().rows[1].status === 'shot' && W.check().length === 0
