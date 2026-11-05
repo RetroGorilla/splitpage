@@ -182,7 +182,8 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     typeAtBeatEdge: (beat, words) => isCurrent() && ports.typeAtBeatEdge(beat, words),
     beatKeydown: (event, beat) => isCurrent() && ports.beatKeydown(event, beat),
     beatSelection: beat => { if (isCurrent()) ports.beatSelection(beat); },
-    leaveBeat: beat => { if (isCurrent()) ports.leaveBeat(beat); }
+    leaveBeat: beat => { if (isCurrent()) ports.leaveBeat(beat); },
+    openVisual: rowId => { writer.openVisual(rowId); }
   });
 
   visual = createFlowVisualBox({

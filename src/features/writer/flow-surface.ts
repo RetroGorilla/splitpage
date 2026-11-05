@@ -12,7 +12,7 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
-import { createFlowJoinControl } from "./flow-join-control.ts";
+import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { DocumentSession } from "../../application/session/document-session.ts";
 
@@ -51,6 +51,7 @@ export interface SurfacePorts {
   readonly beatKeydown?: (event: KeyboardEvent, beat: HTMLElement) => boolean;
   readonly beatSelection?: (beat: HTMLElement | null) => void;
   readonly leaveBeat?: (beat: HTMLElement) => void;
+  readonly openVisual?: (rowId: string) => void;
 }
 
 export interface SurfaceSettings {
@@ -121,8 +122,22 @@ export function createSurface(ports: SurfacePorts): Surface {
   let repaintOwed = false;
   const compositionTargets = new Set<HTMLElement>();
   let syncingComposition = false;
-  const joinControl = createFlowJoinControl(root, rowId => {
-    apply("join", doc => joinWithPrevious(doc, rowId, ports.flow), selection() ?? heldRange());
+  const beatMenu = createFlowBeatMenu(root, {
+    canJoin: rowId => {
+      const rows = ports.doc().rows;
+      const index = rows.findIndex(row => row.id === rowId);
+      return { back: index > 0, next: index >= 0 && index < rows.length - 1 };
+    },
+    joinBack: rowId => {
+      apply("join", doc => joinWithPrevious(doc, rowId, ports.flow), selection() ?? heldRange());
+    },
+    joinNext: rowId => {
+      apply("join", doc => {
+        const next = doc.rows[doc.rows.findIndex(row => row.id === rowId) + 1];
+        return next ? joinWithPrevious(doc, next.id, ports.flow) : null;
+      }, selection() ?? heldRange());
+    },
+    addVisual: rowId => { ports.openVisual?.(rowId); }
   });
 
   function cellOf(row: FlowRow): readonly Run[] { return ports.flow.cells(row.audioText); }
@@ -196,7 +211,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   function paint(): void {
     // why: a composed batch can publish edits that re-enter paint before its remaining targets have synced
     if (composing || syncingComposition) { repaintOwed = true; return; }
-    joinControl.hide();
+    beatMenu.hide();
     syncComposition();
     repaintOwed = false;
     painting = true;
@@ -1182,7 +1197,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function onMouseDown(event: Event): void {
-    if (!composing && joinControl.openAtTick(event as MouseEvent)) return;
+    if (!composing && beatMenu.openAtTick(event as MouseEvent)) return;
     mouseDown = true;
     clicks = (event as MouseEvent).detail;
   }
@@ -1292,7 +1307,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     domCheck,
     dispose: () => {
       stopClipboard?.();
-      joinControl.dispose();
+      beatMenu.dispose();
       if (ports.lifetime.epoch() === epoch) ports.heldSelection.forget();
       compositionTargets.clear();
       queuedPastes.length = 0;

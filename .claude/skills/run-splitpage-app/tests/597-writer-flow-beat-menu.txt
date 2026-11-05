@@ -1,0 +1,36 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.M=function(){return document.querySelector('.wr-flow-beat-menu:not([hidden])')}; window.tick=function(id){var r=document.querySelector('.wr-beat[data-id="'+id+'"]').getClientRects()[0];return {x:r.left+1,y:r.top+2}}; F.openFile(new File([JSON.stringify({schema:2,title:'Beat menu',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'First'},{id:'b',audioText:'Bravo',visualText:'Second'},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'beat-menu.splitpage'))
+wait F.state().title === 'Beat menu'
+click #btn-write
+wait W.on()
+mouse click tick('b')
+expect !!M()
+expect Array.from(M().querySelectorAll('button')).map(function(b){return b.textContent}).join() === 'Join Back,Join Next,Add Visual'
+expect Array.from(M().querySelectorAll('button')).every(function(b){return !b.disabled})
+key Escape
+expect !M() && W.on()
+mouse click tick('a')
+expect M().querySelector('[data-action="back"]').disabled && !M().querySelector('[data-action="next"]').disabled
+mouse click (function(){var r=document.querySelector('.wr-beat[data-id="c"]').getClientRects()[0];return {x:r.right-2,y:r.top+2};})()
+expect !M()
+mouse click tick('c')
+expect !M().querySelector('[data-action="back"]').disabled && M().querySelector('[data-action="next"]').disabled
+key Escape
+eval U.flush(); window.depth=U.sizes().undo
+mouse click tick('a')
+click .wr-flow-beat-menu [data-action="next"]
+expect !M()
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
+expect F.state().rows[0].audioText === 'Alpha Bravo' && F.state().rows[0].visualText === 'First<br>Second'
+eval U.flush()
+expect U.sizes().undo === depth + 1
+key ctrl KeyZ
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,b,c' && F.state().rows[0].audioText === 'Alpha'
+mouse click tick('c')
+click .wr-flow-beat-menu [data-action="visual"]
+expect !M()
+expect !!document.querySelector('.wr-flow-visual-box:not([hidden])') && document.querySelector('.wr-flow-visual-text').dataset.id === 'c'
+expect document.activeElement === document.querySelector('.wr-flow-visual-text')
+expect F.state().rows.length === 3
+expect W.check().length === 0
