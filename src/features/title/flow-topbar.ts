@@ -29,6 +29,24 @@ export function mountFlowTopbar(window: Window): { refresh: () => void; dispose:
   let tools: HTMLElement | null = null;
   let active = true;
 
+  function restoreControls(): void {
+    if (mode) modeHome.after(mode);
+    if (title) titleHome.after(title);
+    if (close) { closeHome.after(close); close.textContent = "Close"; }
+    tools?.remove();
+    tools = null;
+    if (bar) [...oldButtons].reverse().forEach(button => bar.prepend(button));
+    if (exportButton) {
+      exportHome.after(exportButton);
+      exportButton.classList.remove("mi");
+      exportButton.removeAttribute("role");
+      exportButton.removeAttribute("data-file-action");
+    }
+    if (stats) statsHome.after(stats);
+    body.classList.remove("writer-flow-bar", "writer-flow-open");
+    body.style.removeProperty("--writer-topbar-bottom");
+  }
+
   function measure(): void {
     if (!active) return;
     body.style.setProperty("--writer-topbar-bottom", row?.getBoundingClientRect().bottom + "px");
@@ -37,6 +55,10 @@ export function mountFlowTopbar(window: Window): { refresh: () => void; dispose:
   function sync(): void {
     if (!active) return;
     const enabled = writerFlowEnabled(window);
+    if (!enabled) {
+      if (tools) restoreControls();
+      return;
+    }
     const open = enabled && writer?.hidden === false;
     body.classList.toggle("writer-flow-bar", enabled);
     body.classList.toggle("writer-flow-open", open);
@@ -63,9 +85,6 @@ export function mountFlowTopbar(window: Window): { refresh: () => void; dispose:
       if (close && mainTitle && close.parentElement !== mainTitle.parentElement) mode?.after(close);
       if (close) close.textContent = "Split view";
       if (title && mainTitle && title.parentElement !== mainTitle.parentElement) mainTitle.before(title);
-    } else {
-      if (mode) modeHome.after(mode);
-      if (title) titleHome.after(title);
     }
     measure();
   }
@@ -74,25 +93,11 @@ export function mountFlowTopbar(window: Window): { refresh: () => void; dispose:
   return { refresh: sync, dispose: () => {
     if (!active) return;
     active = false;
-    modeHome.after(mode);
-    titleHome.after(title);
-    closeHome.after(close);
-    close.textContent = "Close";
-    tools?.remove();
-    if (bar) oldButtons.reverse().forEach(button => bar.prepend(button));
-    if (exportButton) {
-      exportHome.after(exportButton);
-      exportButton.classList.remove("mi");
-      exportButton.removeAttribute("role");
-      exportButton.removeAttribute("data-file-action");
-    }
-    if (stats) statsHome.after(stats);
+    restoreControls();
     exportHome.remove();
     statsHome.remove();
     modeHome.remove();
     titleHome.remove();
     closeHome.remove();
-    body.classList.remove("writer-flow-bar", "writer-flow-open");
-    body.style.removeProperty("--writer-topbar-bottom");
   } };
 }
