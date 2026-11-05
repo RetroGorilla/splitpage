@@ -17,15 +17,15 @@ open
 #     document (checked here, before anything else has a chance to dirty it
 #     for a real reason) ---------------------------------------------------
 expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet
 key ctrl+alt KeyH
 sleep 200
 expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet
 key ctrl+alt KeyH
 sleep 200
 expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet
 
 # --- build a small fixture on top of the two seed rows: r1, r2 (r2 already
 #     carries the seed's own comment — reused below for the comments test) --
@@ -158,7 +158,7 @@ wait Array.from(document.querySelectorAll('#rows .row')).some(function(r){return
 expect document.querySelectorAll('.hidden-shot-strip').length == 0
 click #production-close
 
-# --- the writer respects it too ---------------------------------------------
+# why: filmed beats stay visible in the writer while split-view hiding remains a separate preference.
 key ctrl+alt KeyH
 sleep 150
 key ctrl+alt KeyH
@@ -166,11 +166,10 @@ sleep 200
 expect document.querySelectorAll('.hidden-shot-strip').length == 1
 
 click #btn-write
-wait document.querySelectorAll('#writer-doc .wr-block').length == 2
-expect document.querySelectorAll('#writer-doc .hidden-shot-strip').length == 1
-jsclick #writer-doc .hidden-shot-strip
-wait document.querySelectorAll('#writer-doc .wr-block').length == 4
+wait document.querySelectorAll('#writer-doc .wr-beat').length == 4
 expect document.querySelectorAll('#writer-doc .hidden-shot-strip').length == 0
+expect document.querySelectorAll('#writer-doc .is-filmed').length == 2
+eval var row=window.__splitpageFormats.state().rows.find(function(r){return r.status==='shot'}); window.__writerFlowTest.place({anchor:{kind:'beat',rowId:row.id,offset:0},head:{kind:'beat',rowId:row.id,offset:0}});true
 jsclick #wr-close
 sleep 300
 

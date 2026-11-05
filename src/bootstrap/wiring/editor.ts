@@ -131,7 +131,6 @@ import { sceneView } from "./editor-owners.ts";
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
 let scheduleWriterStats: () => void = inactiveWriter;
-let updateWriterFormatState: () => void = inactiveWriter;
 
 type RootInput = Pick<Event, "target">;
 
@@ -257,8 +256,7 @@ function onDraftUndoKey(e: KeyboardEvent, box: Element): boolean {
 }
 
 function refreshFormatState(cellEl: Element): void {
-  if (cellEl.classList.contains("wr-para")) updateWriterFormatState();
-  else updateToolbarState(cellEl);
+  updateToolbarState(cellEl);
 }
 
 const noWriterReplay = (): boolean => false;
@@ -315,13 +313,10 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
     return { dispose: installCellEditing(editing) };
   }, () => [() => connectWriter((control) => {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
-    updateWriterFormatState = control?.updateWriterFormatState ?? inactiveWriter;
     undoRoutePorts.writerStep = control?.writerUndoStep ?? skipWriterUndo;
     writerReplayed = control?.writerReplayed ?? noWriterReplay;
     control?.connectFlowUndo((dir) => { undoRoutes.owner()?.step(dir); });
-    writerRoutePorts.editKeydown = control?.onWriterKeydown ?? inactiveWriter;
     writerRoutePorts.format = control?.onWriterFormat ?? inactiveWriter;
-    writerRoutePorts.gutter = control?.cycleWriterGutter ?? inactiveWriter;
   })]);
 }
 
@@ -592,17 +587,12 @@ export const stopTitlesFeature = titleRoutes.stop;
 const writerRoutes = owned<ReturnType<typeof mountWriterRoutes>>();
 
 const writerRoutePorts: { -readonly [K in keyof WriterRoutePorts]: WriterRoutePorts[K] } = {
-  input: onRootInput,
-  keydown: function (e) { onRootKeydown(e as KeyboardEvent); },
-  editKeydown: inactiveWriter,
-  format: inactiveWriter,
-  gutter: inactiveWriter,
-  exportNarration: function () { localFileMenuControls().runExport("export-narration-docx"); }
+  format: inactiveWriter
 };
 
 export function mountWriterFeature(): ReturnType<typeof mountWriterRoutes> {
   return writerRoutes.replace(function () {
-    return mountWriterRoutes({ window: window, doc: document.getElementById("writer-doc") as HTMLElement, bar: document.querySelector(".writer-bar") as HTMLElement, ports: writerRoutePorts });
+    return mountWriterRoutes({ window: window, bar: document.querySelector(".writer-bar") as HTMLElement, ports: writerRoutePorts });
   });
 }
 
@@ -631,15 +621,10 @@ const editorFocusPorts: EditorFocusPorts = {
   },
   typed: function (cellEl, data) { onRootInput({ target: cellEl, inputType: "insertText", data: data } as RootInput); },
   focusedRow: function (rowId) { focusMemory().focusedRow(rowId); },
-  focusedParagraph: function (paraEl) {
-    focusMemory().focusedParagraph(paraEl);
-    updateWriterFormatState();
-  },
   selectionChanged: function (active) {
     forgetStalePendingMarks();
     if (active && active.classList && active.classList.contains("cell-editable")) {
-      if (active.classList.contains("wr-para")) updateWriterFormatState();
-      else updateToolbarState(active);
+      updateToolbarState(active);
     }
     currentPlainTags()?.refresh();
     updateUntaggedPrompt();
@@ -653,7 +638,7 @@ const editorFocus = owned<{ readonly dispose: () => void }>();
 export function mountFocusFeature(): { readonly dispose: () => void } {
   return editorFocus.replace(function () {
     const roots = editorRoots();
-    return { dispose: mountEditorFocus({ rows: roots[0] as Element, writer: roots[1] as Element, doc: document, ports: editorFocusPorts }) };
+    return { dispose: mountEditorFocus({ rows: roots[0] as Element, doc: document, ports: editorFocusPorts }) };
   });
 }
 

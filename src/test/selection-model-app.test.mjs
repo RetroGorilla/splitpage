@@ -34,7 +34,7 @@ const session = liveSession();
 
 function fixture(title) {
   return {
-    schema: 2,
+    schema: 2, paragraphsDecided: true,
     title: title,
     rows: [
       { id: "r1", visualText: "Wide", audioText: "First one.", status: "todo" },
@@ -55,12 +55,12 @@ function fresh(title) {
   return currentDocument();
 }
 
-const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
+const para = (id) => document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
 const gridCell = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + (field || "audioText") + '"]');
 const audio = (id) => currentDocument().rows.find((r) => r.id === id).audioText;
 
 function select(el, anchor, head = anchor) {
-  el.focus();
+  (el.matches(".wr-beat") ? document.getElementById("writer-doc") : el).focus();
   const a = posToDom(el, anchor);
   const h = posToDom(el, head);
   window.getSelection().setBaseAndExtent(a.node, a.offset, h.node, h.offset);
@@ -144,7 +144,7 @@ test("#464: in the Writer, the caret maps through the update in the Writer parag
   const theirs = cloneState(doc);
   theirs.rows[1].audioText = "Their intro. Mine two words.";
   assert.deepEqual(noEdit(observe(() => merge(theirs))), NO_EDIT);
-  assert.equal(document.activeElement, para("r2"));
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
   assert.deepEqual(selectionIn(para("r2")), { anchor: 22, head: 22 }, "still just before \"words\"");
   assert.ok(!document.activeElement.closest("#rows"));
   writer.closeWriter();
@@ -165,7 +165,7 @@ test("#464: when the update removes the selected scene, the caret goes to the en
   const theirs2 = cloneState(doc2);
   theirs2.rows.splice(1, 1);
   merge(theirs2);
-  assert.equal(document.activeElement, para("r1"));
+  assert.equal(document.activeElement, document.getElementById("writer-doc"));
   assert.deepEqual(selectionIn(para("r1")), { anchor: 10, head: 10 });
   writer.closeWriter();
 });

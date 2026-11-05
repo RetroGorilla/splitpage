@@ -26,7 +26,7 @@ function target(name) {
   return file;
 }
 
-test("first save names the live title and both tags, stays clean, and undoes as one change without losing its file", async () => {
+test("first save names the live title and shared tag, stays clean, and undoes as one change without losing its file", async () => {
   fresh();
   target("Headset ad v3.md");
   document.getElementById("doc-title").focus();
@@ -38,7 +38,7 @@ test("first save names the live title and both tags, stays clean, and undoes as 
   assert.equal(unsavedChanges(), false);
   assert.equal(undoOwner().sizes().undo, before + 1);
   assert.equal(document.getElementById("doc-title").value, "Headset ad");
-  for (const id of ["doc-version", "writer-version"]) {
+  for (const id of ["doc-version"]) {
     assert.equal(document.getElementById(id)?.textContent, "v3");
     assert.equal(document.getElementById(id)?.hidden, false);
   }

@@ -14,9 +14,6 @@ export function mountWriterOpen(mount: { window: Window; ports: WriterOpenPorts 
 }
 
 export interface WriterNavigationPorts {
-  readonly jumpFromWriterToRow: (id: string | null) => void;
-  readonly expandHiddenShotStrip: (ids: string | null) => void;
-  readonly saveFromButton: () => void;
   readonly applyWriterSize: (size: number, persist: boolean) => void;
 }
 
@@ -25,15 +22,6 @@ export function mountWriterNavigation(mount: { window: Window; ports: WriterNavi
   const document = window.document;
   const life = createViewLifetime(window);
   const element = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
-  life.listen(element("writer-doc"), "click", function (e) {
-    const gutter = e.target.closest('[data-action="writer-jump"]');
-    if (gutter) { ports.jumpFromWriterToRow(gutter.getAttribute("data-row")); return; }
-    const expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
-    if (expandShotBtn) ports.expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids"));
-  });
-
-  life.listen(element("wr-save"), "click", ports.saveFromButton);
-
   life.listen(element("wr-size"), "input", function (e) {
     ports.applyWriterSize(parseInt(e.target.value, 10), true);
   });
@@ -52,7 +40,7 @@ export function mountWriterNavigation(mount: { window: Window; ports: WriterNavi
     exact = Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, exact * Math.exp(-dy * 0.001)));
     const next = Math.round(exact);
     if (next === current) return;
-    const hold = e.target.closest<HTMLElement>(".wr-block, .section-header");
+    const hold = e.target.closest<HTMLElement>(".wr-beat, .wr-heading");
     const rect = hold?.getBoundingClientRect();
     const frac = rect && rect.height ? (e.clientY - rect.top) / rect.height : 0;
     ports.applyWriterSize(next, true);

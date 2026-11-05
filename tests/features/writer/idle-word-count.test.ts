@@ -27,7 +27,7 @@ test("flow selection and input callbacks count only the selection until the idle
       reads++;
       return String(html).trim().split(/\s+/).length;
     } } },
-    flow: { enabled: () => true, refreshSplit: noop, create: (_root, moved) => { selectionMoved = moved; return flow; } }
+    flow: { prepareSplit: noop, splitReady: () => true, create: (_root, moved) => { selectionMoved = moved; return flow; } }
   });
   try {
     writer.openWriter();

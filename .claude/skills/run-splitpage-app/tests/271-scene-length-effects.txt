@@ -7,7 +7,7 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
 sleep 400
-eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.__snap = function () { return JSON.stringify({ row: F.state().rows[0], undo: U.sizes(), dirty: document.getElementById('btn-save').classList.contains('is-dirty') }); }; window.__s0 = __snap(); return true; })()
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.__snap = function () { return JSON.stringify({ row: F.state().rows[0], undo: U.sizes(), dirty: (document.getElementById('save-status').textContent === 'Unsaved changes') }); }; window.__s0 = __snap(); return true; })()
 expect JSON.parse(__s0).dirty === false
 
 # --- the estimate confirmed unchanged: nothing ------------------------------
@@ -48,7 +48,7 @@ type 1:30
 key Enter
 sleep 300
 expect F.state().rows[0].lengthSeconds === 90
-expect document.getElementById('btn-save').classList.contains('is-dirty')
+expect (document.getElementById('save-status').textContent === 'Unsaved changes')
 eval (function(){ window.__s1 = __snap(); return true; })()
 expect JSON.stringify(U.sizes()) !== JSON.stringify(JSON.parse(window.__s0).undo)
 

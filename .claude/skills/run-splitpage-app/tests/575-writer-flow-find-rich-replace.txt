@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find rich replacement',paragraphsDecided:true,rows:[{id:'a',audioText:'<strong>red</strong> <strong>red</strong>'},{id:'b',audioText:'<span class="stage-dir">quiet</span> <span class="stage-dir">quiet</span>'},{id:'c',audioText:'<span class="cmt-anchor" data-cmt="comment">marked</span> <span class="cmt-anchor" data-cmt="comment">marked</span>'}],comments:[{id:'comment',rowId:'c',field:'audioText',body:'Keep the thread',author:'Editor',createdAt:'2026-11-05T12:00:00.000Z'}]})],'find-rich.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find rich replacement',paragraphsDecided:true,rows:[{id:'a',audioText:'<strong>red</strong> <strong>red</strong>'},{id:'b',audioText:'<span class="stage-dir">quiet</span> <span class="stage-dir">quiet</span>'},{id:'c',audioText:'<span class="cmt-anchor" data-cmt="comment">marked</span> <span class="cmt-anchor" data-cmt="comment">marked</span>'}],comments:[{id:'comment',rowId:'c',field:'audioText',body:'Keep the thread',author:'Editor',createdAt:'2026-11-05T12:00:00.000Z'}]})],'find-rich.splitpage'))
 wait F.state().title === 'Find rich replacement'
 click #btn-write
 wait W.on()

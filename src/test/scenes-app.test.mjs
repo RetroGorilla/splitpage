@@ -29,9 +29,9 @@ async function open(sections = [{ id: "s1", name: "Opening", firstSceneId: "r1" 
 }
 
 function caret(id, end = false) {
-  const cell = document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
+  const cell = document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
   assert.ok(cell);
-  cell.focus();
+  (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
   const range = document.createRange();
   range.selectNodeContents(cell);
   range.collapse(!end);
@@ -43,17 +43,22 @@ function caret(id, end = false) {
 function key(name, cell = document.activeElement, options = {}) {
   const event = new window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options });
   cell.dispatchEvent(event);
+  if ((name === "Backspace" || name === "Delete") && !event.defaultPrevented && cell.closest("#writer")) {
+    const input = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: name === "Backspace" ? "deleteContentBackward" : "deleteContentForward" });
+    input.getTargetRanges = () => [];
+    cell.dispatchEvent(input);
+  }
   return event;
 }
 
 const state = () => JSON.stringify(currentDocument());
-const hint = () => document.querySelector('#writer-doc [data-section-id="s2"] .section-hint');
+
 const ids = () => currentDocument().rows.map(row => row.id);
 
 test("sectionless new-scene input does not inspect section boundaries", async (context) => {
   await open([]);
   const cell = document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable');
-  cell.focus();
+  (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
   const range = document.createRange();
   range.selectNodeContents(cell); range.collapse(true);
   const selection = window.getSelection();
@@ -61,7 +66,7 @@ test("sectionless new-scene input does not inspect section boundaries", async (c
   const closest = window.Element.prototype.closest;
   let probes = 0;
   context.mock.method(window.Element.prototype, "closest", function (selector) {
-    if (selector === "#writer-doc .wr-para") probes++;
+    if (selector === "#writer-doc .wr-beat") probes++;
     return closest.call(this, selector);
   });
   key("Enter", cell, { ctrlKey: true });
@@ -73,7 +78,7 @@ test("singleton Alt moves require consecutive confirmation and undo restores the
   for (const direction of ["ArrowUp", "ArrowDown"]) {
     await open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);
     const cell = document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable');
-    cell.focus();
+    (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
     const before = state(), undo = undoOwner().sizes().undo;
     key(direction, cell, { altKey: true });
     assert.equal(state(), before);
@@ -179,7 +184,7 @@ test("singleton move confirmation survives modifier-only keydowns, including rep
   for (const shiftKey of [false, true]) {
     await open([{ id: "s1", name: "Only scene", firstSceneId: "r2" }, { id: "s2", name: "Ending", firstSceneId: "r3" }]);
     const cell = document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable');
-    cell.focus();
+    (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
     const before = state();
     key("ArrowDown", cell, { altKey: true, shiftKey });
     assert.equal(state(), before);
@@ -197,7 +202,7 @@ test("moving a scene into a folded section reveals the destination and restores 
   await open();
   sceneView().toggle("s1");
   const cell = document.querySelector('#rows .row[data-id="r3"] .audio-cell .cell-editable');
-  cell.focus();
+  (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
   key("ArrowUp", cell, { altKey: true });
   assert.deepEqual(ids(), ["r1", "r3", "r2", "r4"]);
   assert.equal(sceneView().folded("s1"), false);
@@ -249,19 +254,7 @@ test("headers expose headings, Escape closes the menu, and non-element drag targ
   assert.deepEqual(errors, []);
 });
 
-test("boundary hint uses one persistent live region and only the visible Writer header", async () => {
-  await open();
-  const live = document.getElementById("section-hint-live");
-  assert.ok(live); assert.equal(live.hidden, false); assert.equal(live.textContent, "");
-  writer.openWriter(); caret("r3"); key("Backspace");
-  assert.equal(document.getElementById("section-hint-live"), live);
-  assert.equal(live.textContent, "Press Backspace again to remove the scene header");
-  assert.equal(document.querySelectorAll('.section-hint:not([hidden])').length, 1);
-  assert.equal(document.querySelectorAll('.section-hint[role="status"]').length, 0);
-  key("ArrowRight");
-  assert.equal(live.textContent, "");
-  assert.equal(document.getElementById("section-hint-live"), live);
-});
+
 
 test("section dividers count all scenes, fold without an edit and reset when another file opens", async () => {
   await open();
@@ -284,62 +277,46 @@ test("section dividers count all scenes, fold without an edit and reset when ano
   assert.equal(document.querySelectorAll("#rows .row").length, 4);
 });
 
-test("mounted Writer confirms Backspace once, removes only the header, and undo restores its name", async () => {
+test("mounted Writer navigates to the heading without editing, then removes it as text and undo restores its name", async () => {
   await open(); writer.openWriter();
   caret("r3");
   const before = state(), undo = undoOwner().sizes().undo;
-  assert.equal(key("Backspace").defaultPrevented, true);
-  assert.equal(state(), before);
-  assert.equal(hint().hidden, false);
-  assert.equal(hint().textContent, "Press Backspace again to remove the scene header");
-  assert.equal(undoOwner().sizes().undo, undo);
   key("Backspace");
-  assert.deepEqual(ids(), ["r1", "r2", "r3", "r4"]);
+  assert.equal(state(), before);
+  assert.equal(window.__writerFlowTest.selection().head.kind, "heading");
+  assert.equal(window.__writerFlowTest.selection().head.offset, 6);
+  assert.equal(undoOwner().sizes().undo, undo);
+  const heading = document.querySelector('.wr-heading[data-scene="s2"]');
+  const range = document.createRange();
+  range.selectNodeContents(heading); range.collapse(true);
+  window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+  key("Backspace");
   assert.equal(currentDocument().sections.length, 1);
+  assert.deepEqual(currentDocument().rows.map(row => row.audioText), ["One.", "Two.", "Ending", "Three.", "Four."]);
   undoOwner().flush();
   assert.equal(undoOwner().sizes().undo, undo + 1);
   undoOwner().undo();
   assert.equal(currentDocument().sections[1].name, "Ending");
 });
 
-test("mounted Writer cancels confirmation on another key, click or caret movement", async () => {
-  for (const interrupt of [
-    () => key("ArrowRight"),
-    () => document.body.dispatchEvent(new window.MouseEvent("click", { bubbles: true })),
-    () => { caret("r3", true); document.dispatchEvent(new window.Event("selectionchange")); caret("r3"); }
-  ]) {
-    await open(); writer.openWriter(); caret("r3");
-    const before = state();
-    key("Backspace");
-    interrupt();
-    assert.equal(hint().hidden, true);
-    key("Backspace");
-    assert.equal(state(), before);
-  }
-});
-
-test("boundary removal reveals a folded predecessor and preserves the current caret", async () => {
-  await open(); sceneView().toggle("s1"); writer.openWriter(); caret("r3");
-  key("Backspace"); key("Backspace");
+test("the writer reaches beats in folded scenes and reveals the caret's scene on return to split view", async () => {
+  await open(); sceneView().toggle("s1"); writer.openWriter();
+  caret("r2", true);
+  assert.equal(document.querySelectorAll("#writer-doc .wr-beat").length, 4);
+  assert.equal(sceneView().folded("s1"), true);
+  writer.closeWriter();
   assert.equal(sceneView().folded("s1"), false);
-  assert.equal(document.activeElement.getAttribute("data-id"), "r3");
-  assert.equal(currentDocument().sections.length, 1);
-  key("Backspace");
-  assert.deepEqual(ids(), ["r1", "r2", "r4"]);
+  assert.equal(document.activeElement.getAttribute("data-id"), "r2");
+  assert.equal(currentDocument().sections.length, 2);
 });
 
-test("mounted Writer Delete mirrors removal, and a further Backspace joins normally", async () => {
+test("mounted Writer Delete moves to the heading start without editing", async () => {
   await open(); writer.openWriter(); caret("r2", true);
   const before = state();
   key("Delete");
   assert.equal(state(), before);
-  assert.equal(hint().textContent, "Press Delete again to remove the scene header");
-  key("Delete");
-  assert.equal(currentDocument().sections.length, 1);
-  assert.deepEqual(ids(), ["r1", "r2", "r3", "r4"]);
-  caret("r3");
+  assert.deepEqual(window.__writerFlowTest.selection().head, { kind: "heading", sceneId: "s2", offset: 0 });
   key("Backspace");
-  assert.deepEqual(ids(), ["r1", "r2", "r4"]);
-  const joined = currentDocument().rows.find(row => row.id === "r2").audioText;
-  assert.match(joined, /Two/); assert.match(joined, /Three/);
+  assert.equal(currentDocument().sections.length, 1);
+  assert.deepEqual(currentDocument().rows.map(row => row.audioText), ["One.", "Two.", "Ending", "Three.", "Four."]);
 });

@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find safety',paragraphsDecided:true,sections:[{id:'scene',name:'fox',firstSceneId:'a'}],rows:[{id:'a',audioText:'fox <span class="tag-anchor" data-tag-cat="prop" data-tag-name="fox" contenteditable="false">fox</span>',visualText:'fox'},{id:'b',audioText:'fox',visualText:'keep'}],comments:[]})],'find-safety.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find safety',paragraphsDecided:true,sections:[{id:'scene',name:'fox',firstSceneId:'a'}],rows:[{id:'a',audioText:'fox <span class="tag-anchor" data-tag-cat="prop" data-tag-name="fox" contenteditable="false">fox</span>',visualText:'fox'},{id:'b',audioText:'fox',visualText:'keep'}],comments:[]})],'find-safety.splitpage'))
 wait F.state().title === 'Find safety'
 click #btn-write
 wait W.on()

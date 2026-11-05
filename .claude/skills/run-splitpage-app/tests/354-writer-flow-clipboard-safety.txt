@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1');window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};F.openFile(new File([JSON.stringify({schema:2,title:'Clipboard safety',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Keep'},{id:'b',audioText:'Bravo',visualText:''}]})],'safety.splitpage'))
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.clip=function(type,data){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});document.getElementById('writer-doc').dispatchEvent(e);return e.defaultPrevented};F.openFile(new File([JSON.stringify({schema:2,title:'Clipboard safety',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:'Keep'},{id:'b',audioText:'Bravo',visualText:''}]})],'safety.splitpage'))
 wait F.state().title === 'Clipboard safety'
 click #btn-write
 wait W.on()

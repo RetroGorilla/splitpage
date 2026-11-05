@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow shortcuts',paragraphsDecided:true,rows:[{id:'a',audioText:'Start ',visualText:''},{id:'b',audioText:'Next ',visualText:''}],comments:[]})],'shortcuts.splitpage')); })()
+eval (function(){ window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow shortcuts',paragraphsDecided:true,rows:[{id:'a',audioText:'Start ',visualText:''},{id:'b',audioText:'Next ',visualText:''}],comments:[]})],'shortcuts.splitpage')); })()
 wait F.state().title === 'Flow shortcuts'
 click #btn-write
 wait W.on()

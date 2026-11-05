@@ -1,7 +1,7 @@
 open
 viewport 1440 900
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Selection tools',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo Alpha.',visualText:''},{id:'b',audioText:'Delta echo.',visualText:''}],comments:[]})],'tools.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Selection tools',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha bravo Alpha.',visualText:''},{id:'b',audioText:'Delta echo.',visualText:''}],comments:[]})],'tools.splitpage'))
 wait F.state().title === 'Selection tools'
 click #btn-write
 wait W.on()

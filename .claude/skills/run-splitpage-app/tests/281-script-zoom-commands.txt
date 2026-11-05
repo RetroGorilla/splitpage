@@ -58,4 +58,4 @@ expect __listed('actual size') === false
 expect __listed('script') === false
 
 # nothing here edited the document
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet

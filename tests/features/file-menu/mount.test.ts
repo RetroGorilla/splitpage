@@ -79,10 +79,6 @@ const expected: readonly Registration[] = [
     "focus"
   ],
   [
-    "wr-save-status",
-    "mouseenter"
-  ],
-  [
     "btn-file",
     "click"
   ],
@@ -229,8 +225,7 @@ test("file-menu: main save and all status refresh registrations reach the coordi
   h.fire(h.el("btn-save"), "click");
   h.fire(h.el("btn-save"), "mouseenter");
   h.fire(h.el("btn-save"), "focus");
-  h.fire(h.el("wr-save-status"), "mouseenter");
-  assert.deepEqual(h.calls.map((call) => call.name), ["saveFromButton", "updateSaveStatus", "updateSaveStatus", "updateSaveStatus"]);
+  assert.deepEqual(h.calls.map((call) => call.name), ["saveFromButton", "updateSaveStatus", "updateSaveStatus"]);
   owner.dispose();
   h.window.close();
 });

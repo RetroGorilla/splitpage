@@ -185,9 +185,9 @@ expect !document.getElementById('writer').hidden
 expect document.getElementById('production-panel').hidden
 expect document.documentElement.scrollWidth <= innerWidth
 # the gutter stops hanging in a margin the phone does not have
-expect getComputedStyle(document.querySelector('#writer-doc .wr-gutter')).position == static
-expect document.querySelector('#writer-doc .wr-para').getBoundingClientRect().width <= innerWidth
-expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize) >= 16
+expect document.querySelector('#writer-doc .wr-gutter') === null && document.querySelectorAll('#writer-doc .wr-beat[data-num]').length === window.__splitpageFormats.state().rows.length
+expect document.querySelector('#writer-doc .wr-beat').getBoundingClientRect().width <= innerWidth
+expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-beat')).fontSize) >= 16
 shot 05-mobile-writer
 jsclick #wr-close
 sleep 600

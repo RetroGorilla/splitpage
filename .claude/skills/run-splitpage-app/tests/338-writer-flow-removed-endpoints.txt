@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Removed endpoints',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'removed.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Removed endpoints',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'removed.splitpage'))
 wait F.state().title === 'Removed endpoints'
 click #btn-write
 wait W.on()

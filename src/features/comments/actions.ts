@@ -3,7 +3,6 @@ import type { ScreenState } from "../../application/screen.ts";
 import { EVERY_OVERLAY, OPENS_A_DIALOG, availableUnless, firstRefusal } from "../../application/screen.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
 import { openCommentComposer, openCommentsPanel, showTaggingHelp } from "./comments.ts";
-import { writerFlowEnabled } from "../common/writer-flow-enabled.ts";
 
 export function commentsPanelActions(screen: () => ScreenState, panels: Pick<SidePanels, "close">): ActionDefinition[] {
   return [{
@@ -14,7 +13,7 @@ export function commentsPanelActions(screen: () => ScreenState, panels: Pick<Sid
     words: "comments notes review feedback show hide toggle",
     availability: () => {
       const button = document.getElementById("btn-comments");
-      const overlays = writerFlowEnabled(window) ? EVERY_OVERLAY.filter(overlay => overlay !== "writer") : EVERY_OVERLAY;
+      const overlays = EVERY_OVERLAY.filter(overlay => overlay !== "writer");
       const availability = firstRefusal(availableUnless(["loading"], screen()), availableUnless(overlays, screen()));
       return button !== null && !button.hidden ? availability : { ...availability, visible: false };
     },

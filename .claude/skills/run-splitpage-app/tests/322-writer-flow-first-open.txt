@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ localStorage.setItem('splitpage-writer-flow','1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'First flow open',rows:[{id:'a',audioText:'A sentence.',visualText:''},{id:'b',audioText:'A continuation',visualText:''},{id:'c',audioText:'without a stop',visualText:''}],comments:[]})],'first.splitpage')); })()
+eval (function(){ window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'First flow open',rows:[{id:'a',audioText:'A sentence.',visualText:''},{id:'b',audioText:'A continuation',visualText:''},{id:'c',audioText:'without a stop',visualText:''}],comments:[]})],'first.splitpage')); })()
 wait F.state().title === 'First flow open'
 eval U.flush()
 eval window.beforeUndo = U.sizes().undo

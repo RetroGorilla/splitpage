@@ -62,7 +62,7 @@ open dialog first", and a toast is a sentence), for every surface but a
 shortcut, which leaves the key to the browser. A refusal without a reason
 shows nothing. So every caller in the former numbered modules just calls `appActions.invoke()`
 and none of them imports the toast module for it, and no refusal is dropped:
-the File menu, the header and Writer buttons, the rundown's button, the
+the File menu, the shared header controls, the rundown's button, the
 Settings and wizard buttons, the native menu and a command run from the command menu all show theirs. The
 command menu also shows a refusal greyed out with the reason before anything
 runs. A key that a focused control already handled (`defaultPrevented`)
@@ -374,7 +374,7 @@ open when a command runs from the keyboard or a menu.
 | `find` | File menu, command menu, `mod+f` (Shift or Alt held too, as before) | `18-local-files.js`, `18d-command-menu.js`, a `21-events.js` keydown listener |
 | `export` | File menu, command menu, `mod+e` | `18-local-files.js`, `18d-command-menu.js`, an `18c-export-dialog.js` keydown listener |
 | `command-menu` | File menu, header button, `mod+k` (opens and closes) | `18-local-files.js`, `18d-command-menu.js` click and keydown listeners |
-| `save` | Header and Writer Save buttons, command menu, `mod+s`, desktop menu | `21-events.js` button listeners, `18d-command-menu.js` button mirror, an `18b-file-menu.js` keydown listener |
+| `save` | Shared header save status, command menu, `mod+s`, desktop menu | `21-events.js` button listeners, `18d-command-menu.js` button mirror, an `18b-file-menu.js` keydown listener |
 | `save-as` | File menu, command menu, `mod+shift+s`, desktop menu | `18-local-files.js`, `18d-command-menu.js`, `18b-file-menu.js` keydown |
 | `open` | File menu, command menu, `mod+o`, desktop menu | `18-local-files.js`, `18d-command-menu.js`, `18b-file-menu.js` keydown |
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |

@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; F.openFile(new File([JSON.stringify({schema:2,title:'Heading rules',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:''},{id:'b',audioText:'Body',visualText:'',paragraphStart:true},{id:'c',audioText:'Title<br>Later',visualText:'Desk',paragraphStart:true},{id:'d',audioText:'x'.repeat(201),visualText:'',paragraphStart:true},{id:'e',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'rules.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; F.openFile(new File([JSON.stringify({schema:2,title:'Heading rules',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:''},{id:'b',audioText:'Body',visualText:'',paragraphStart:true},{id:'c',audioText:'Title<br>Later',visualText:'Desk',paragraphStart:true},{id:'d',audioText:'x'.repeat(201),visualText:'',paragraphStart:true},{id:'e',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'rules.splitpage'))
 wait F.state().title === 'Heading rules'
 click #btn-write
 wait W.on()

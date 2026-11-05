@@ -7,11 +7,10 @@ import type { SaveStatusMount, SaveStatusPorts } from "../../../src/features/tit
 import type { Home } from "../../../src/application/location/document-location.ts";
 import type { PreferenceName } from "../../../src/application/preferences/preferences.ts";
 import type { AutoSaveTarget } from "../../../src/application/save/status.ts";
-import { SAVE_DIRTY_LABEL, SAVE_LABEL, SAVING_LABEL } from "../../../src/application/save/status.ts";
+import { SAVING_LABEL } from "../../../src/application/save/status.ts";
 import { fakeNotices, fakeSaveState } from "../fakes.ts";
 
-const PAGE = '<button id="btn-save"></button><button id="wr-save"></button>' +
-  '<span id="save-status" hidden></span><span id="wr-save-status" hidden></span>';
+const PAGE = '<button id="btn-save"></button><span id="save-status" hidden></span>';
 
 interface Given {
   home?: Home;
@@ -58,20 +57,20 @@ test("painting shows the buttons and the status line from the save state", () =>
   const { mount } = mounted({ unsaved: true });
   try {
     mount.listeners().paint();
-    for (const id of ["btn-save", "wr-save"]) {
-      assert.equal(byId(id).textContent, SAVE_DIRTY_LABEL);
-      assert.equal(byId(id).classList.contains("is-dirty"), true);
-      assert.equal((byId(id) as HTMLButtonElement).disabled, false);
+    for (const id of ["btn-save"]) {
+      assert.equal(byId(id).textContent, "Unsaved changes");
+      assert.equal(byId(id).getAttribute("data-actionable"), "false");
+      assert.equal((byId(id) as HTMLButtonElement).disabled, true);
     }
-    for (const id of ["save-status", "wr-save-status"]) {
+    for (const id of ["save-status"]) {
       assert.equal(byId(id).hidden, false);
       assert.equal(byId(id).textContent, "Unsaved changes");
       assert.equal(byId(id).className, "save-status is-pending");
       assert.equal(byId(id).title, "Autosave will write these to pilot.splitpage a moment after you stop typing.");
     }
     assert.equal(byId("btn-save").getAttribute("data-status"), "Unsaved changes");
-    assert.equal(byId("btn-save").getAttribute("data-state"), "pending");
-    assert.equal(byId("btn-save").getAttribute("aria-label"), "Unsaved changes. Save now");
+    assert.equal(byId("btn-save").getAttribute("data-state"), "ok");
+    assert.equal(byId("btn-save").getAttribute("aria-label"), "Unsaved changes");
   } finally {
     mount.dispose();
   }
@@ -113,7 +112,7 @@ test("a finished save shows when it was saved, and a clean confirmation forgets 
     assert.equal(byId("save-status").textContent, "Saved");
     assert.match(byId("save-status").title, /^Last saved to pilot\.splitpage at .+\.$/);
     assert.equal(byId("btn-save").getAttribute("data-status"), "Saved just now");
-    assert.equal(byId("btn-save").textContent, SAVE_LABEL);
+    assert.equal(byId("btn-save").textContent, "Saved just now");
     listeners.save("clean");
     assert.equal(byId("save-status").title, "Up to date with pilot.splitpage.");
     assert.equal(byId("btn-save").getAttribute("data-status"), "All changes saved");
@@ -147,9 +146,9 @@ test("with nowhere to save and nothing unsaved the line is hidden and the button
     assert.equal(byId("save-status").hidden, true);
     assert.equal(byId("save-status").textContent, "");
     assert.equal(byId("save-status").hasAttribute("title"), false);
-    assert.equal(byId("btn-save").getAttribute("data-status"), "Save");
-    assert.equal(byId("btn-save").getAttribute("data-state"), "none");
-    assert.equal(byId("btn-save").title, "Save this script");
+    assert.equal(byId("btn-save").getAttribute("data-status"), "Not saved yet");
+    assert.equal(byId("btn-save").getAttribute("data-state"), "pending");
+    assert.equal(byId("btn-save").title, "Save to choose where this script is kept. Click to save now.");
   } finally {
     mount.dispose();
   }

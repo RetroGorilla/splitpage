@@ -54,13 +54,6 @@ function open(kind = "import") {
   flushEdits();
 }
 
-function assertMirror() {
-  assert.equal(el("wr-file-chip").hidden, el("file-chip").hidden);
-  assert.equal(el("wr-file-chip-name").textContent, el("file-chip-name").textContent);
-  assert.equal(el("wr-file-chip-state").textContent, stateText());
-  assert.equal(el("wr-file-chip-state").classList.contains("unsaved"), el("file-chip-state").classList.contains("unsaved"));
-}
-
 function lastText(cell) {
   const walker = document.createTreeWalker(cell, 4);
   let last = null;
@@ -69,7 +62,7 @@ function lastText(cell) {
 }
 
 function typeChar(cell, ch) {
-  cell.focus();
+  (cell.matches(".wr-beat") ? document.getElementById("writer-doc") : cell).focus();
   const node = lastText(cell);
   node.data += ch;
   const range = document.createRange();
@@ -81,14 +74,12 @@ function typeChar(cell, ch) {
   cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: ch }));
 }
 
-test("a session arrival refreshes both file chips, identity and desktop state before returning", () => {
+test("a session arrival refreshes the shared file chip, identity and desktop state before returning", () => {
   open();
   el("file-chip-name").textContent = "Stale file";
-  el("wr-file-chip-name").textContent = "Stale mirror";
   el("identity-name").textContent = "Stale identity";
   noteDiskUpdate(script("Arrived", "#73D4AC"));
   assert.equal(el("file-chip-name").textContent, "listening.txt");
-  assertMirror();
   assert.equal(el("identity-name").textContent, "Rae");
   assert.equal(identityColour(), "#73D4AC");
   assert.equal(desktop._lastDocState.title, "Arrived");
@@ -97,40 +88,33 @@ test("a session arrival refreshes both file chips, identity and desktop state be
   assert.equal(desktop._lastDocState.title, "Replacement");
 });
 
-test("a merge publishes the disk kind to a session subscriber, and the file chips refresh on it", () => {
+test("a merge publishes the disk kind to a session subscriber, and the shared file chip refresh on it", () => {
   open();
   const heard = [];
   const stop = liveSession().subscribe((change) => heard.push(change.kind));
   el("file-chip-name").textContent = "Stale file";
-  el("wr-file-chip-name").textContent = "Stale mirror";
   applyMerge({ theirs: script("Merged"), source: "stash", unchanged: true, report: false });
   stop();
   assert.deepEqual(heard, ["disk"]);
   assert.equal(el("file-chip-name").textContent, "listening.txt");
-  assertMirror();
 });
 
-test("the location owner refreshes the file chips and desktop state synchronously", () => {
+test("the location owner refreshes the shared file chip and desktop state synchronously", () => {
   open();
   amendHome(currentHome(), { dirty: true });
   assert.match(stateText(), /unsaved changes/);
-  assertMirror();
   setHome("file", { format: "splitpage", handle: { _desktopId: "file-2" } });
   assert.equal(el("file-chip").hidden, true);
   assert.equal(desktop._lastDocState.fileId, "file-2");
-  assertMirror();
 });
 
 test("save coordinator status and autosave policy refresh the chips and desktop state synchronously", () => {
   open();
   noteSaveChange();
   assert.equal(desktop._lastDocState.dirty, true);
-  assertMirror();
   autoSavePolicy().halt("Paused");
-  assertMirror();
   confirmSavedNow();
   assert.equal(desktop._lastDocState.dirty, false);
-  assertMirror();
 });
 
 test("identity listens to name and colour preferences, and desktop listens to a title command", () => {
@@ -143,25 +127,16 @@ test("identity listens to name and colour preferences, and desktop listens to a 
   assert.equal(desktop._lastDocState.title, "Renamed");
 });
 
-test("opening the writer refreshes its file-chip mirror through the view owner", () => {
-  open();
-  el("wr-file-chip-name").textContent = "Stale";
-  writer.openWriter();
-  assertMirror();
-  writer.closeWriter();
-});
-
 for (const surface of ["rows", "writer"]) {
   for (const kind of ["import", "file"]) {
     test("typing in " + surface + " for a " + kind + " document keeps each display's synchronous refresh count per key", (t) => {
       open(kind);
       if (surface === "writer") writer.openWriter();
       const header = t.mock.method(el("file-chip-state").classList, "toggle");
-      const mirror = t.mock.method(el("wr-file-chip-state").classList, "toggle");
       const identity = t.mock.method(el("identity-chip").classList, "toggle");
       const sent = t.mock.method(desktop, "setDocumentState");
       const cell = document.querySelector(surface === "writer"
-        ? '#writer-doc .wr-para[data-id="r1"]'
+        ? '#writer-doc .wr-beat[data-id="r1"]'
         : '#rows .cell-editable[data-id="r1"][data-field="audioText"]');
       const chipCount = kind === "file" ? 0 : 1;
       let keys = 0;
@@ -169,8 +144,8 @@ for (const surface of ["rows", "writer"]) {
         typeChar(cell, ch);
         keys += 1;
         assert.deepEqual([
-          header.mock.callCount(), mirror.mock.callCount(), identity.mock.callCount(), sent.mock.callCount()
-        ], [keys * chipCount, keys * chipCount, 0, keys]);
+          header.mock.callCount(), identity.mock.callCount(), sent.mock.callCount()
+        ], [keys * chipCount, 0, keys]);
       }
     });
   }
@@ -187,10 +162,8 @@ test("stopping and remounting the listeners releases subscriptions and registers
   mountDocumentChromeFeature();
   mountDocumentChromeFeature();
   const header = t.mock.method(el("file-chip-state").classList, "toggle");
-  const mirror = t.mock.method(el("wr-file-chip-state").classList, "toggle");
   amendHome(currentHome(), { dirty: true });
   assert.equal(header.mock.callCount(), 1);
-  assert.equal(mirror.mock.callCount(), 1);
   assert.equal(el("file-chip-name").textContent, "while-stopped.txt");
   preferences().setCommentAuthor("Back");
   assert.equal(el("identity-name").textContent, "Back");

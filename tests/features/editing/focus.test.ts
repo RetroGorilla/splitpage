@@ -10,14 +10,14 @@ const doc: Document = win.document;
 function surfaces() {
   doc.body.innerHTML =
     '<div id="rows"><div class="field-wrap"><div class="cell-editable" data-id="r1" data-field="audioText" tabindex="0"></div><button class="inside">x</button></div></div>' +
-    '<div id="writer-doc"><div class="cell-editable wr-para" data-id="r1" data-field="audioText" tabindex="0"></div></div>' +
+    '<div id="writer-doc"><div class="cell-editable wr-beat" data-id="r1" data-field="audioText" tabindex="0"></div></div>' +
     '<div id="other"><div class="cell-editable draft" tabindex="0"></div></div>';
   return {
     rows: doc.getElementById("rows") as HTMLElement,
     writer: doc.getElementById("writer-doc") as HTMLElement,
     gridCell: doc.querySelector("#rows .cell-editable") as HTMLElement,
     inside: doc.querySelector("#rows .inside") as HTMLElement,
-    para: doc.querySelector("#writer-doc .wr-para") as HTMLElement,
+    para: doc.querySelector("#writer-doc .wr-beat") as HTMLElement,
     draft: doc.querySelector("#other .cell-editable") as HTMLElement
   };
 }
@@ -33,7 +33,6 @@ function harness(over: Partial<EditorFocusPorts> = {}) {
     typeAtMarks: () => state.fresh,
     typed: (el, data) => { calls.push("typed:" + (el.getAttribute("data-id") || "") + ":" + data); },
     focusedRow: (id) => { calls.push("row:" + id); },
-    focusedParagraph: (el) => { calls.push("para:" + (el.getAttribute("data-id") || "")); },
     selectionChanged: (active) => { calls.push("selection:" + (active && active.getAttribute("data-id") || "none")); },
     ...over
   };
@@ -71,15 +70,13 @@ function counted(targets: EventTarget[]) {
 test("a blur syncs its cell unless a paint or an undo is running, or the focus stays in the same field", () => {
   const s = surfaces();
   const h = harness();
-  const dispose = mountEditorFocus({ rows: s.rows, writer: s.writer, doc: doc, ports: h.ports });
+  const dispose = mountEditorFocus({ rows: s.rows, doc: doc, ports: h.ports });
   focusout(s.gridCell);
-  focusout(s.para);
-  assert.deepEqual(h.calls, ["left", "blurred:r1", "left", "blurred:r1"]);
+  assert.deepEqual(h.calls, ["left", "blurred:r1"]);
   h.calls.length = 0;
   h.state.suppressed = true;
   focusout(s.gridCell);
-  focusout(s.para);
-  assert.deepEqual(h.calls, ["left", "left"], "a paint's own blur only tidies up, it never writes the old DOM back");
+  assert.deepEqual(h.calls, ["left"], "a paint's own blur only tidies up, it never writes the old DOM back");
   h.state.suppressed = false;
   h.calls.length = 0;
   focusout(s.gridCell, s.inside);
@@ -90,24 +87,24 @@ test("a blur syncs its cell unless a paint or an undo is running, or the focus s
 test("typed text at pending marks or a direction edge is taken over once, and composition or other input is left alone", () => {
   const s = surfaces();
   const h = harness();
-  const dispose = mountEditorFocus({ rows: s.rows, writer: s.writer, doc: doc, ports: h.ports });
+  const dispose = mountEditorFocus({ rows: s.rows, doc: doc, ports: h.ports });
   assert.equal(beforeinput(s.gridCell, "a").defaultPrevented, false, "nothing pending: the browser types it");
-  h.state.fresh = s.para;
-  assert.equal(beforeinput(s.para, "b").defaultPrevented, true);
-  assert.equal(beforeinput(s.para, "c", true).defaultPrevented, false, "never during a composition");
+  h.state.fresh = s.gridCell;
+  assert.equal(beforeinput(s.gridCell, "b").defaultPrevented, true);
+  assert.equal(beforeinput(s.gridCell, "c", true).defaultPrevented, false, "never during a composition");
   assert.equal(beforeinput(s.draft, "d").defaultPrevented, false, "not a script cell");
   assert.deepEqual(h.calls, ["typed:r1:b"]);
   dispose();
 });
 
-test("focus and selection are remembered: the focused scene, the Writer paragraph, and each selection change", () => {
+test("focus and selection are remembered: the focused scene and each selection change", () => {
   const s = surfaces();
   const h = harness();
-  const dispose = mountEditorFocus({ rows: s.rows, writer: s.writer, doc: doc, ports: h.ports });
+  const dispose = mountEditorFocus({ rows: s.rows, doc: doc, ports: h.ports });
   focusin(s.gridCell);
   focusin(s.para);
   focusin(s.draft);
-  assert.deepEqual(h.calls, ["row:r1", "para:r1", "row:r1"], "a box with no scene is not remembered");
+  assert.deepEqual(h.calls, ["row:r1", "row:r1"], "a box with no scene is not remembered");
   s.para.focus();
   h.calls.length = 0;
   doc.dispatchEvent(new win.Event("selectionchange"));
@@ -115,26 +112,26 @@ test("focus and selection are remembered: the focused scene, the Writer paragrap
   dispose();
 });
 
-test("dispose and remount leave exactly one handler per row: seven bindings, all removed, one call per event", () => {
+test("dispose and remount leave exactly one handler per row: four bindings, all removed, one call per event", () => {
   const s = surfaces();
   const tally = counted([s.rows, s.writer, doc]);
   const h = harness();
-  const first = mountEditorFocus({ rows: s.rows, writer: s.writer, doc: doc, ports: h.ports });
-  assert.equal(tally.added, 7);
+  const first = mountEditorFocus({ rows: s.rows, doc: doc, ports: h.ports });
+  assert.equal(tally.added, 4);
   first();
-  assert.equal(tally.removed, 7);
+  assert.equal(tally.removed, 4);
   focusout(s.gridCell);
   focusin(s.para);
   doc.dispatchEvent(new win.Event("selectionchange"));
   assert.deepEqual(h.calls, [], "a disposed mount hears nothing");
-  const second = mountEditorFocus({ rows: s.rows, writer: s.writer, doc: doc, ports: h.ports });
+  const second = mountEditorFocus({ rows: s.rows, doc: doc, ports: h.ports });
   focusout(s.gridCell);
   focusin(s.para);
-  assert.deepEqual(h.calls, ["left", "blurred:r1", "para:r1", "row:r1"], "one handler each after remount");
+  assert.deepEqual(h.calls, ["left", "blurred:r1", "row:r1"], "one handler each after remount");
   first();
-  assert.equal(tally.removed, 7, "a second dispose removes nothing");
+  assert.equal(tally.removed, 4, "a second dispose removes nothing");
   second();
-  assert.equal(tally.removed, 14);
+  assert.equal(tally.removed, 8);
 });
 
 test("the shared blur handler serves other roots without a mount", () => {

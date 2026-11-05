@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, feat/writer-flow]
+    branches: [main]
   push:
     branches: [main, 'hotfix/**']
 

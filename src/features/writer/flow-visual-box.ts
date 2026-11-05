@@ -43,15 +43,12 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   const pictures = box.querySelector<HTMLElement>(".wr-flow-visual-pictures") as HTMLElement;
   const closeButton = box.querySelector<HTMLButtonElement>(".wr-flow-visual-close") as HTMLButtonElement;
   const toolbar = doc.querySelector(".writer-bar");
-  const gutter = doc.getElementById("wr-gutter-mode");
-  const gutterWasHidden = gutter?.hidden ?? false;
-  if (gutter) gutter.hidden = true;
   const button = doc.createElement("button");
   button.type = "button";
   button.id = "wr-visual";
   button.textContent = "Visual";
   button.title = "Edit this beat's visual";
-  if (toolbar) toolbar.insertBefore(button, gutter?.parentNode === toolbar ? gutter : null);
+  toolbar?.append(button);
   parent?.append(note, box);
   let target: FlowRange | null = null;
   let first = false;
@@ -261,7 +258,6 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
       close(false);
       listeners.forEach(([element, event, handler]) => element.removeEventListener(event, handler));
       button.remove(); note.remove(); box.remove();
-      if (gutter) gutter.hidden = gutterWasHidden;
     }
   };
 }

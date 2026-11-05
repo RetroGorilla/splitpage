@@ -61,7 +61,7 @@ breakdown for props/locations/cast/VFX/sound.
   installers). #75 deleted the rest of the packaging: `installer/` (the
   IExpress setup), `tools/fetch-runtime.mjs`, `start.ps1` (a third HTTP server
   implementation), `uninstall.*`, and the launcher's in-place self-update.
-- Began life as a Claude artifact, converted to standalone. Stale "the
+- Began life as a prototype, converted to standalone. Stale "the
   artifact" wording anywhere is a bug, not a quirk.
 
 ---
@@ -361,40 +361,35 @@ completion ghost, which wins outright. Visual column only, deliberately.
 
 ### 3.9 The writer edits rows, it does not import a document
 
-One paragraph is one row's `audioText`, a real `.cell-editable` carrying that
-row's `data-id`/`data-field` — no parse step, no second copy of the
-document. Only two operations change the row list: **`splitWriterRow()`**
-(Enter, via shared `splitRowFieldCore()`, §3.10) and **`mergeWriterRows()`**
-(Backspace/Delete at an edge; refuses when both rows have a visual; status
-accumulates by rank; the narration joined as models by `joinCells`, whose
-glue space stays inside a comment both sides are in). Both are views since
-milestone 3: they decide what the user asked, run `splitSceneCommand` or
-`joinScenesCommand` (`src/application/commands/split-join.ts`) through the
-session, and repaint. `caretAtEdge()` must not count empty inline wrappers —
-`Range.cloneContents()`'s empty `<strong></strong>` clone looked like
-content, blocking join on any beat starting with formatting.
+Paragraphs derive from the saved beat flags and implicit scene boundaries.
+`flowOf` supplies headings and paragraphs to one narration host; beat spans
+retain their row identity, with no second document or import step. Native
+input syncs one beat, and structural operations run through `flowCommand`.
+The session reconciles comments and records the directed before and after
+selection. Full repaints map incoming changes through the shared text
+selection logic; paint, undo and stale-screen guards prevent stale text
+from being written back during focus changes.
 
-`onWriterKeydown` runs capture-phase ahead of the shared `onRootKeydown`, so
-Enter means different things in each view; `onRootClick` isn't attached to
-the writer (stale split-view DOM). `renderWriter()` preserves the caret as
-`(rowId, char offset)`. `data-gutter` is three-state (visuals/numbers/compact);
-text size (`--wr-font`) lives in `localStorage`, floor 16px (iOS zoom).
+The writer now has one editing host and a range over beat and heading
+positions. Enter starts a beat, a second Enter starts a paragraph, and
+Shift+Enter inserts a line break. Alt+Enter has no writer action. Alt+Backspace
+or Join combines visuals and pictures and retains the higher status. The
+Visual box and numbered ticks replace the old gutter modes. Text size
+(`--wr-font`) remains a reader preference, with a 16px floor.
 Narration exports mirror this outward: one paragraph per row, read back by
 `splitImportText()` in paragraph mode.
 
-### 3.10 Splitting a field is shared between the writer and the split view
+### 3.10 Field splits and writer structure use the same text primitives
 
-Alt+Enter in `#rows` does what the writer's Enter always did: split the
-focused field at the caret, leaving the *other* column untouched on the
-original row. **`splitRowFieldCore(cellEl)`** is the shared core (reads
-`field` off `data-field`); `splitWriterRow()`/`splitCellField()` each add
-their own render/refocus. It splits the cell's model (#85): the caret as a
+Alt+Enter in `#rows` splits the focused field at the caret, leaving the
+other column untouched on the original row. `splitRowFieldCore(cellEl)`
+reads `field` off `data-field` and runs `splitBeatCommand`. The writer's
+flow commands implement its beat and paragraph decisions using the same
+text primitives. A split operates on the cell's model (#85): the caret as a
 model position (`cellSelection`), a selection deleted first, `splitCell`,
 each half written back with `toHtml`, the comments re-pointed by the
-session's reconciliation (invariant #18) — one undo entry, written by
-`splitSceneCommand`, not by the caller. A cell still holding a picture
-(pasted before design D7) is split through the model as well: a picture is one atom, so the split is a text cut (INV-10 in [invariants.md](architecture/invariants.md)). Alt+Enter never reaches `onRootKeydown` inside the
-writer (its capture handler treats every Enter as a split).
+session's reconciliation (invariant #18) — one undo entry. A cell still holding a picture
+(pasted before design D7) is split through the model as well: a picture is one atom, so the split is a text cut (INV-10 in [invariants.md](architecture/invariants.md)). Alt+Enter has no action in the writer.
 
 `keepCaretInView(cellEl)` is a near-always-no-op scroll (only fires outside a
 32px viewport margin). **Scroll to the caret's own rect, never the cell's**

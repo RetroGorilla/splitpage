@@ -19,7 +19,7 @@ import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
-import { writerFocusTarget } from "../common/writer-focus.ts";
+import { writerCaretBeat, writerFocusTarget } from "../common/writer-focus.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
 import { slotPoster } from "../common/gallery.ts";
@@ -734,7 +734,7 @@ function paintAll(): void {
   const titleInput = document.getElementById("doc-title") as HTMLInputElement;
   if (document.activeElement !== titleInput) titleInput.value = title;
   const version = typeof doc.titleVersion === "string" ? doc.titleVersion : "";
-  ["doc-version", "writer-version"].forEach(function (id) {
+  ["doc-version"].forEach(function (id) {
     const tag = document.getElementById(id);
     if (!tag) return;
     tag.textContent = version;
@@ -769,6 +769,10 @@ function offerRedraw(failed: string): void {
 }
 
 function focusPlace(el: Element): StalePlace | null {
+  if (el.id === "writer-doc") {
+    const row = writerCaretBeat(document);
+    if (row) return { row, field: "audioText" };
+  }
   const cellEl = el.closest(".cell-editable[data-id][data-field]");
   if (!cellEl) return el.id ? { id: el.id } : null;
   return { row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };

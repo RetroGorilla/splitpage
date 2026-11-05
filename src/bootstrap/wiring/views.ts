@@ -26,7 +26,6 @@ import { mountPhoneBar } from "../../features/notices/phone-bar.ts";
 import { importMode, prompterState } from "./ports/preferences.ts";
 import { captureOperation, openDocument, stillOwns } from "./transition-owners.ts";
 import { importHome } from "./location-owner.ts";
-import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { promptForName, promptForWpm } from "./title-chrome.ts";
 import { restoreSnapshotFromCard } from "./history-panel.ts";
 import { openGalleryOverlay } from "../../features/gallery/overlay.ts";
@@ -316,14 +315,10 @@ export function mountWriterOpenFeature(): ReturnType<typeof mountWriterOpen> {
 export function mountWriterNavigationFeature(): ReturnType<typeof mountWriterNavigation> {
   return replaceViewMount("mountWriterNavigation", function () {
     const ports: { -readonly [K in keyof WriterNavigationPorts]: WriterNavigationPorts[K] } = {
-      jumpFromWriterToRow: inactiveWriterNavigation,
-      expandHiddenShotStrip: expandHiddenShotStrip,
-      saveFromButton: saveFromButton,
       applyWriterSize: inactiveWriterNavigation
     };
     const mounted = mountWriterNavigation({ window: window, ports: ports });
     const disconnect = connectWriter((control) => {
-      ports.jumpFromWriterToRow = control?.jumpFromWriterToRow ?? inactiveWriterNavigation;
       ports.applyWriterSize = control?.applyWriterSize ?? inactiveWriterNavigation;
     });
     return { dispose: () => { disconnect(); mounted.dispose(); } };

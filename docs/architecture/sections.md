@@ -109,11 +109,11 @@ Old scripts without scenes retain their byte-identical round trip.
 
 ## Boundary deletion decision
 
-Adam chose this behavior on 2026-10-31. At a scene boundary, Backspace at
+Adam chose this split-view behavior on 2026-10-31. At a scene boundary, Backspace at
 the start of the following beat first shows “Press Backspace again to remove
 the scene header” beside the header and changes no document content.
 The next Backspace within two seconds removes only the header. It does not
-join beats; a further Backspace may join them normally. Delete at the end of
+join beats. Delete at the end of
 the preceding beat mirrors this, with Delete named in the hint. Any other
 key, input, click, caret move or timeout cancels the pending state and hides
 the hint. Undo restores the header and name in one step.
@@ -134,9 +134,11 @@ confirmation requires the same chord twice. Moving into a folded scene
 unfolds that destination before restoring the beat's caret. Find, Replace
 and comment jumps use the same scene-aware reveal port.
 
-One persistent live region announces boundary hints. Only the active view
-shows the visual hint, so Writer and the underlying table do not announce
-the same instruction twice. Scene names are level-two headings; Escape
+One persistent live region announces split-view boundary hints. The writer
+uses its own heading positions: Backspace under a heading and Delete above
+one move the caret into the heading without removing it. Backspace at a
+heading start turns its words into narration. Empty headings remain until
+departure. Filmed beats and folded scenes always appear in full in the writer. Scene names are level-two headings; Escape
 closes an open scene menu and restores focus to its summary.
 
 Folding is per-session view state, absent from saves, undo and running order.

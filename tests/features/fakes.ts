@@ -1,3 +1,4 @@
+import { swapBeatsCommand } from "../../src/application/commands/rows.ts";
 import { createNumberingReader } from "../../src/application/session/numbering.ts";
 import type { OnboardingPorts } from "../../src/features/onboarding/ports.ts";
 import type { DocumentPlace } from "../../src/application/location/document-place.ts";
@@ -24,6 +25,7 @@ import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts"
 import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
 import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
+import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
 import type { PrintDialogPort } from "../../src/application/export/print-dialog.ts";
@@ -61,8 +63,17 @@ export function fakeWriterPorts(initial: DocumentView) {
   const paint = createPaintGuard();
   const calls: unknown[][] = [];
   const state = { open: false, allowed: true, size: null as number | null, lifetime: 1, serial: 0 };
-  let paragraph: Element | null = null;
   const ports: WriterFeaturePorts = {
+    flow: { prepareSplit: () => {}, splitReady: () => true, create: (root, selectionMoved, step) => createFlowWriter({
+      root, selectionMoved, doc: () => initial, lifetime: { epoch: () => 0 }, heldSelection: selection,
+      flow: { cells: html => [{ text: String(html ?? ""), marks: {} }], newId: () => "new", hasVisual: row => !!row.visualText },
+      decode: html => [{ text: html, marks: {} }], storedHtml: html => html, run: editing.edits.run, moveBeat: swapBeatsCommand,
+      shown: edit => edit(), editingBlocked: () => false, text: { ...editing.edits.stamps, cells: () => [] },
+      undo: { step, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
+      caretAfterStep: () => 0, notice: () => {}, changed: () => {}, plainVisual: () => "",
+      beatInput: () => {}, typeAtBeatEdge: () => false, beatKeydown: () => false, beatSelection: () => {},
+      leaveBeat: () => {}, newCommentId: () => "c", openComment: () => {}
+    }) },
     document: reader.document,
     edits: { allowed: () => state.allowed, run: editing.edits.run, text: { ...editing.edits.stamps, cells: () => [] } },
     text: {
@@ -71,19 +82,15 @@ export function fakeWriterPorts(initial: DocumentView) {
       productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0 }
     },
     editing: {
-      cells: () => ({ sync: (cell) => { calls.push(["sync", cell]); } }),
-      selection: () => selection, paint: () => paint,
-      focus: () => ({ writerParagraph: () => paragraph, focusedParagraph: (cell) => { paragraph = cell; } })
+      selection: () => selection, paint: () => paint
     },
     undo: { breakCoalescing: () => {}, last: () => null, nextRedo: () => null, mark: () => 0, lifetime: () => state.lifetime, serial: () => state.serial },
-    rows: { splitField: () => null },
-    hiding: { renderGroups: (rows, render) => rows.map(render).join("") },
     panels: () => ({ closeAll: () => { calls.push(["closeAll"]); }, open: (id) => { calls.push(["openPanel", id]); } }),
     preferences: () => ({ writerSize: () => state.size, setWriterSize: (size) => { state.size = size; } }),
     view: () => ({ writerOpen: () => state.open, findOpen: () => false, setWriterOpen: (open) => { state.open = open; calls.push(["setOpen", open]); } }),
     notices: notices.notices,
     actions: { invoke: (id) => ({ kind: "unknown", id }) },
-    formatting: { state: () => null, direction: () => null, toggle: () => null, selection: () => {}, confirmLink: () => {}, cancelLink: () => {} },
+    formatting: { selection: () => {}, confirmLink: () => {}, cancelLink: () => {} },
     dismissTagGhost: () => { calls.push(["hideGhost"]); },
     scheduleStats: (job) => { calls.push(["schedule", job]); },
     cancelStats: () => { calls.push(["cancelStats"]); }

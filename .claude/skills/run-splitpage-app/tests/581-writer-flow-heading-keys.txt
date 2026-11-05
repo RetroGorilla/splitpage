@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.hp=function(id,n){return {kind:'heading',sceneId:id,offset:n}}; window.at=function(p){W.place({anchor:p,head:p})}; F.openFile(new File([JSON.stringify({schema:2,title:'Heading keys',paragraphsDecided:true,rows:[{id:'a',audioText:'Above',visualText:'Sky'},{id:'b',audioText:'End',visualText:''},{id:'c',audioText:'Body',visualText:'Desk',status:'shot'}],sections:[{id:'first',name:'Opening',firstSceneId:'a'},{id:'s',name:'Title',firstSceneId:'c'}],comments:[]})],'keys.splitpage'))
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.hp=function(id,n){return {kind:'heading',sceneId:id,offset:n}}; window.at=function(p){W.place({anchor:p,head:p})}; F.openFile(new File([JSON.stringify({schema:2,title:'Heading keys',paragraphsDecided:true,rows:[{id:'a',audioText:'Above',visualText:'Sky'},{id:'b',audioText:'End',visualText:''},{id:'c',audioText:'Body',visualText:'Desk',status:'shot'}],sections:[{id:'first',name:'Opening',firstSceneId:'a'},{id:'s',name:'Title',firstSceneId:'c'}],comments:[]})],'keys.splitpage'))
 wait F.state().title === 'Heading keys'
 click #btn-write
 wait W.on()

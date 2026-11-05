@@ -7,7 +7,7 @@ const views = await import("../bootstrap/wiring/views.ts");
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 after(closeApp);
 
-test("views app: main and Writer saves submit one existing action each after disposal and remount", () => {
+test("views app: the shared save submit one existing action each after disposal and remount", () => {
   views.mountSaveFeature().dispose();
   views.mountWriterNavigationFeature().dispose();
   const main = views.mountSaveFeature();
@@ -17,13 +17,11 @@ test("views app: main and Writer saves submit one existing action each after dis
   appActions.invoke = (id, source) => { calls.push([id, source]); return { kind: "ran", id }; };
   try {
     document.getElementById("btn-save").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    document.getElementById("wr-save").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    assert.deepEqual(calls, [["save", "button"], ["save", "button"]]);
+    assert.deepEqual(calls, [["save", "button"]]);
     main.dispose();
     writer.dispose();
     document.getElementById("btn-save").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    document.getElementById("wr-save").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 1);
   } finally {
     main.dispose();
     writer.dispose();

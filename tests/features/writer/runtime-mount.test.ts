@@ -8,6 +8,7 @@ import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeWriterPorts } from "../fakes.ts";
 
 function harness() {
+  Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
   document.documentElement.innerHTML = readFileSync(new URL("../../../src/page.html", import.meta.url), "utf8");
   return fakeWriterPorts(migrateRows({ title: "Writer mount", rows: [] }, fakeMigration().ports));
 }
@@ -31,11 +32,11 @@ test("viewing-only flow host cancels input and editing keys before its surface h
   } finally { writer.dispose(); }
 });
 
-test("writer runtime closes panels before opening, schedules its existing idle job, and clears modal and redo state on dispose", () => {
+test("writer runtime opens comments before opening, schedules its existing idle job, and clears modal and redo state on dispose", () => {
   const h = harness();
   const first = startWriter(h.ports);
   first.openWriter();
-  assert.deepEqual(h.calls.slice(0, 2), [["closeAll"], ["setOpen", true]]);
+  assert.deepEqual(h.calls.slice(0, 2), [["openPanel", "comments-panel"], ["setOpen", true]]);
   assert.equal(document.getElementById("writer")?.hidden, false);
   first.scheduleWriterStats();
   assert.equal(h.calls.filter(call => call[0] === "schedule").length, 1);

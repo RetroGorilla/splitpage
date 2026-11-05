@@ -59,7 +59,7 @@ expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-lab
 expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
 # a view setting, not an edit
 expect document.getElementById('save-status').hidden
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet
 
 # the playhead is kept, on the current scene's segment
 caret #rows .row:nth-of-type(2) .audio-cell .cell-editable

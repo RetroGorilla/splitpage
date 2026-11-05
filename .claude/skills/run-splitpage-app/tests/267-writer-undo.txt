@@ -31,7 +31,7 @@ expect !document.getElementById('writer').hidden
 expect aud(0) === window.__split
 
 # --- writer edits undo first, then writer closes -------------------------------
-caret #writer-doc .wr-para
+caret #writer-doc .wr-beat
 press  writerword
 sleep 1200
 expect aud(0).indexOf('writerword') !== -1

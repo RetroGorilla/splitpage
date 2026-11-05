@@ -25,4 +25,4 @@ expect !window.splitpageDesktop
 expect __item('present in browser', 'prompter-open-in-browser') === null
 
 # nothing here edited the document
-expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('btn-save').textContent == Not saved yet

@@ -71,7 +71,7 @@ wait document.getElementById('prompter').hidden
 click #btn-write
 wait !document.getElementById('writer').hidden
 sleep 300
-expect document.querySelectorAll('#writer-doc .wr-para .stage-dir').length === 3
+expect document.querySelectorAll('#writer-doc .wr-beat .stage-dir').length === 3
 expect getComputedStyle(document.querySelector('#writer-doc .stage-dir')).fontStyle == italic
 expect getComputedStyle(document.querySelector('#writer-doc .stage-dir'), '::before').content == "("
 expect document.getElementById('wr-words').textContent == 18

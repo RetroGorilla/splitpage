@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ localStorage.setItem('splitpage-writer-flow', '1'); window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow lifecycle',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha one.',visualText:''},{id:'b',audioText:'Bravo two.',visualText:''},{id:'c',audioText:'Charlie three.',visualText:''}],comments:[]})], 'flow.splitpage')); })()
+eval (function(){ window.F = window.__splitpageFormats; window.W = window.__writerFlowTest; window.U = window.__undoTest; return F.openFile(new File([JSON.stringify({schema:2,title:'Flow lifecycle',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha one.',visualText:''},{id:'b',audioText:'Bravo two.',visualText:''},{id:'c',audioText:'Charlie three.',visualText:''}],comments:[]})], 'flow.splitpage')); })()
 wait F.state().title === 'Flow lifecycle' && document.querySelector('#rows .cell-editable[data-id="b"][data-field="audioText"]')
 eval (function(){ var el = document.querySelector('#rows .cell-editable[data-id="b"][data-field="audioText"]'); el.focus(); getSelection().setBaseAndExtent(el.firstChild,3,el.firstChild,3); return true; })()
 click #btn-write

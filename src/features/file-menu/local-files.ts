@@ -55,19 +55,6 @@ function fileChipListeners(refresh: () => void): ReturnType<LocalFileMenuControl
   };
 }
 
-function mirrorFileChipToWriter() {
-  const src = document.getElementById("file-chip");
-  const dst = document.getElementById("wr-file-chip");
-  if (!src || !dst) return;
-  dst.hidden = src.hidden;
-  (document.getElementById("wr-file-chip-name") as HTMLElement).textContent =
-    (document.getElementById("file-chip-name") as HTMLElement).textContent;
-  const srcState = document.getElementById("file-chip-state");
-  const dstState = document.getElementById("wr-file-chip-state");
-  (dstState as HTMLElement).textContent = (srcState as HTMLElement).textContent;
-  (dstState as HTMLElement).classList.toggle("unsaved", (srcState as HTMLElement).classList.contains("unsaved"));
-}
-
 function updateHeaderFileChip() {
   const chip = document.getElementById("file-chip");
   const imported = importHome();
@@ -256,7 +243,7 @@ function handleFileMenuAction(action: string | null, source?: Parameters<LocalFi
 }
 
 
-  const controls: LocalFileMenuControls = { updateFileChip, fileChipListeners, mirrorFileChipToWriter, exportFileName, exportBaseName, exportRequest, buildFileData, showResumeBanner, hideResumeBanner, showFileConflictView, exportAs, runExport, onFileMenuChoice, noteFileMenuChoice, runExportAction, handleFileMenuAction, pendingHandle: function () { return pendingResumeHandle; }, dispose: function () {
+  const controls: LocalFileMenuControls = { updateFileChip, fileChipListeners, exportFileName, exportBaseName, exportRequest, buildFileData, showResumeBanner, hideResumeBanner, showFileConflictView, exportAs, runExport, onFileMenuChoice, noteFileMenuChoice, runExportAction, handleFileMenuAction, pendingHandle: function () { return pendingResumeHandle; }, dispose: function () {
     if (!active) return;
     active = false;
     fileConflictShowToken++;

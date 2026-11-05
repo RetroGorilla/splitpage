@@ -1,5 +1,4 @@
 import type { ProductionTagPorts } from "./ports.ts";
-import { writerFlowEnabled } from "../common/writer-flow-enabled.ts";
 import type { TagCategoryLook } from "../../core/production/looks.ts";
 import type { PresentedProductionEntry, TagRecordsPlan } from "../../core/production/index.ts";
 import type { FieldHtml, ProductionRow, FieldTag } from "../../core/production/ports.ts";
@@ -619,7 +618,7 @@ export function applyTag() {
     return;
   }
 
-  const flow = writerFlowEnabled(window) && document.getElementById("writer")?.hidden === false;
+  const flow = document.getElementById("writer")?.hidden === false;
   const cellEl = flow ? document.querySelector('#writer-doc .wr-beat[data-id="' + safeId(ctx.rowId, "r") + '"]')
     : document.querySelector('#rows .row[data-id="' + safeId(ctx.rowId, "r") +
       '"] .' + (ctx.field === "visualText" ? "visual" : "audio") + '-cell .cell-editable');
