@@ -98,6 +98,7 @@ export function mountWriterRuntimeFeature() {
           if (initialized.kind === "failed") throw initialized.error;
           return createFlowWriter({
             lifetime: documentLifetime,
+            heldSelection: writerEditing.selection(),
             root,
             doc: () => documentReader.current() as unknown as FlowDoc,
             flow: flowPorts,

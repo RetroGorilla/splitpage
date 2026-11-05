@@ -9,11 +9,18 @@ import { toHtml } from "../../core/text/html.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domToPos, posToDom } from "../common/cell-dom.ts";
+import type { EditorSelection } from "../../application/editing/selection.ts";
+import type { DocumentSession } from "../../application/session/document-session.ts";
 
 const ZWSP = String.fromCharCode(0x200B);
 const ZWSP_ALL = new RegExp(ZWSP, "g");
+const INPUT_MARKS: Readonly<Record<string, MarkName>> = {
+  formatBold: "b", formatItalic: "i", formatUnderline: "u", formatStrikeThrough: "s"
+};
 
 export interface SurfacePorts {
+  readonly lifetime: Pick<DocumentSession, "epoch">;
+  readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
   readonly doc: () => FlowDoc;
   readonly flow: FlowPorts;
@@ -86,6 +93,7 @@ function beatHtml(runs: readonly Run[]): string {
 
 export function createSurface(ports: SurfacePorts): Surface {
   const root = ports.root;
+  const epoch = ports.lifetime.epoch();
   const rendered = new WeakMap<HTMLElement, string>();
   let composing = false;
   let mouseDown = false;
@@ -94,7 +102,6 @@ export function createSurface(ports: SurfacePorts): Surface {
   let pendingHeading: string | null = null;
   let lastBeat: string | null = null;
   let painting = false;
-  let held: FlowRange | null = null;
   let repaintOwed = false;
   const compositionTargets = new Set<HTMLElement>();
   let syncingComposition = false;
@@ -327,7 +334,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     const a = domPoint(range.anchor), h = domPoint(range.head);
     const sel = window.getSelection();
     if (!a || !h || !sel) return;
-    held = range;
+    ports.heldSelection.rememberFlow(epoch, range);
     root.focus({ preventScroll: true });
     sel.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
     noteSelection();
@@ -342,6 +349,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   function repaint(): void {
     if (composing || syncingComposition) { repaintOwed = true; return; }
     const before = selection();
+    if (before) ports.heldSelection.rememberFlow(epoch, before);
     paint();
     if (!before || document.activeElement !== root) return;
     const now = selection();
@@ -352,7 +360,7 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function focusBack(): void {
     const first = ports.doc().rows[0];
-    const target = held ?? (first ? caretAt(beatPos(first.id, 0)) : null);
+    const target = ports.heldSelection.resolveFlow() ?? (first ? caretAt(beatPos(first.id, 0)) : null);
     if (target) place(target, true);
     else root.focus({ preventScroll: true });
   }
@@ -530,7 +538,13 @@ export function createSurface(ports: SurfacePorts): Surface {
       ports.undo(type === "historyUndo" ? "undo" : "redo");
       return;
     }
-    if (type === "insertFromPaste" || type === "insertFromDrop" || type === "deleteByCut" || type === "deleteByDrag" || type.startsWith("format")) {
+    if (type.startsWith("format")) {
+      event.preventDefault();
+      const mark = INPUT_MARKS[type];
+      if (mark) format(mark, range0(input));
+      return;
+    }
+    if (type === "insertFromPaste" || type === "insertFromDrop" || type === "deleteByCut" || type === "deleteByDrag") {
       event.preventDefault();
       return;
     }
@@ -695,9 +709,11 @@ export function createSurface(ports: SurfacePorts): Surface {
     apply("start-paragraph", doc => startParagraph(doc, pos, ports.flow), caret);
   }
 
-  function format(mark: MarkName): void {
-    const range = selection();
+  function format(mark: MarkName, target?: FlowRange | null): void {
+    const before = selection() ?? ports.heldSelection.resolveFlow();
+    const range = target ?? before;
     if (!range) return;
+    place(range);
     if (isCollapsed(range)) {
       if (range.head.kind !== "beat") return;
       const row = currentBeatRow(range);
@@ -708,7 +724,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       return;
     }
     ports.breakCoalescing();
-    apply("format", doc => setMarkAcross(doc, range, mark, ports.flow), range);
+    apply("format", doc => setMarkAcross(doc, range, mark, ports.flow), before);
   }
 
   function onKeydown(event: KeyboardEvent): void {
@@ -803,7 +819,7 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function noteSelection(): void {
     const range = selection();
-    if (range) held = range;
+    if (range) ports.heldSelection.rememberFlow(epoch, range);
     const head = range?.head;
     const currentBeat = head && head.kind === "beat" ? head.rowId : null;
     if (range && document.activeElement === root && !composing) transitionBeat(currentBeat);
@@ -891,7 +907,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function finish(): FlowRange | null {
-    const at = selection() ?? held;
+    const at = selection() ?? ports.heldSelection.resolveFlow();
     composing = false;
     syncComposition();
     transitionBeat(null);
@@ -989,6 +1005,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     domRange,
     domCheck,
     dispose: () => {
+      if (ports.lifetime.epoch() === epoch) ports.heldSelection.forget();
       compositionTargets.clear();
       listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
     }

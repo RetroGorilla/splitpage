@@ -929,6 +929,7 @@ async function run() {
   await t("format: toolbar click keeps the selection and focus", async () => {
     await fresh();
     await select(beat("ra", 0), beat("rb", 5));
+    await ev(`document.getElementById("doc").blur(); window.getSelection().removeAllRanges();`);
     const box = await ev(`(() => { const r = document.querySelector('[data-mark="i"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
     await send("Input.dispatchMouseEvent", { type: "mousePressed", x: box.x, y: box.y, button: "left", buttons: 1, clickCount: 1 });
     await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x, y: box.y, button: "left", buttons: 0, clickCount: 1 });
