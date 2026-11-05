@@ -842,6 +842,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     const parkedStarts = parked ? at(parked.top?.n ?? 0) : null;
     const markedStarts = current ? at(current.n) : null;
     const visited = new Set<UndoEntry>();
+    // why: initialization travels through snapshots only until an earlier paragraph edit or the beat's creation
     function rebase(entries: readonly UndoEntry[], backward: boolean, active: Set<string>): void {
       for (const entry of entries.slice().reverse()) {
         const write = !visited.has(entry);
