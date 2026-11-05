@@ -419,20 +419,39 @@ count.
 
 ### The writer
 
-**Write** in the header opens the Audio column as one flowing document, for
-when the job is writing narration. One paragraph is one beat. Its tools
-sit along the top, under the title, and **Close** (or <kbd>Esc</kbd>) is
-beside **Save**.
+**Write** in the header opens the Audio column as one flowing document that
+types like a word processor, for when the job is writing narration. A
+paragraph holds one or more beats running together, and a small number marks
+each beat. Its tools sit along the top, under the title, and **Close** (or
+<kbd>Esc</kbd>) is beside **Save**.
 
-- <kbd>Enter</kbd> starts a new beat, <kbd>Shift</kbd>+<kbd>Enter</kbd> is
-  a line break, and <kbd>Backspace</kbd> at the start of a paragraph joins it
-  to the one above.
-- The margin button cycles **Visuals** (each beat's visual, greyed; click
-  it to jump there), **Numbers** and **Compact**.
+- <kbd>Enter</kbd> starts a new beat, <kbd>Enter</kbd> again starts a new
+  paragraph, and <kbd>Shift</kbd>+<kbd>Enter</kbd> is a line break.
+- Select, type over, delete and use the arrow keys across beats as in any
+  document. Each edit is one <kbd>Ctrl</kbd>+<kbd>Z</kbd>. A notice says when
+  whole beats were removed, and those beats take their visuals with them.
+- <kbd>Backspace</kbd> at the start of a paragraph removes the paragraph break.
+  Just after a beat's number it deletes a character and leaves the beats apart.
+- To join a beat to the one before, press <kbd>Alt</kbd>+<kbd>Backspace</kbd>
+  or **Join**. If both have visuals, the joined beat keeps both.
+- <kbd>Alt</kbd>+<kbd>Up</kbd> and <kbd>Alt</kbd>+<kbd>Down</kbd> move the
+  beat with the caret.
+- The caret's beat shows its visual as a note beside the line. Click the note
+  or press **Visual** to edit it in a small box. Add pictures in the split view.
+  A beat with a visual and no narration shows as a chip in the text, and typing
+  on it adds narration.
+- Type `# ` at the start of a paragraph for a scene header, which takes effect
+  when the caret leaves the line. `**bold**`, `*italic*` and `~~strike~~`
+  convert as you type, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> straight after gives you
+  the characters back.
+- Bold, italic, underline, strikethrough and highlight work across beats. Tags,
+  links and comments stay within one beat.
+- Cut, copy and paste keep a whole beat's visual, comments, status, b-roll and
+  pictures.
 - **Size** sets the text size for you on this device, not in the script.
-- Tags, formatting and Save work as in the split view.
-- Two beats that both have a visual can't be joined here. Join them in the
-  split view.
+
+Scripts from before this writer get their paragraphs once, the first time they
+open in it: a beat starts a paragraph when the beat before it ended a sentence.
 
 ### Stage directions
 

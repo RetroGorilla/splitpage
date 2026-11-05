@@ -408,6 +408,7 @@ let sceneHeaders: ReturnType<typeof mountSceneHeaders> | null = null;
 
 function openLinkInNewWindow(href: string): void {
   try {
+    new URL(href);
     if (externalLinks.available()) externalLinks.open(href);
     else window.open(href, "_blank", "noopener");
   } catch {

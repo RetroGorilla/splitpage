@@ -969,6 +969,47 @@ async function caseBootAndSecurity(target) {
   }
 }
 
+async function caseIncompleteLink(target, fixturesDir) {
+  const tag = target.name + " incomplete link warning";
+  let app = null;
+  try {
+    const fixture = writeFixture(fixturesDir, "incomplete-link.splitpage", "Incomplete link", [
+      ["Visual", '<a href="https://">Incomplete link</a>']
+    ]);
+    app = await launchApp(target, { label: "incomplete-link", fixtures: [fixture] });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "document.title === 'Incomplete link — Splitpage'", 15000);
+    await evalPage(cdp, "document.getAnimations().forEach(function(a){a.finish();}); true");
+    const before = (await externalOpens(cdp)).length;
+    const point = await evalPage(cdp,
+      "(function(){ var c = document.querySelector('#rows .audio-cell .cell-editable'); " +
+      "var a = document.createElement('a'); a.href = 'https://'; a.textContent = 'Incomplete link'; " +
+      "a.id = 'incomplete-link'; c.replaceChildren(a); a.scrollIntoView({block:'center'}); " +
+      "var r = a.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()");
+    const modifiers = process.platform === "darwin" ? 4 : 2;
+    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", ...point, button: "left", buttons: 1, clickCount: 1, modifiers });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...point, button: "left", buttons: 0, clickCount: 1, modifiers });
+    const wording = "That link could not be opened — its address is not complete.";
+    const warned = await poll(cdp, "document.getElementById('toast-host').textContent === " + JSON.stringify(wording), 3000).catch(() => false);
+    record(tag + ": the renderer shows the approved warning", warned === true);
+    record(tag + ": no incomplete address reaches the shell", (await externalOpens(cdp)).length === before);
+    await evalPage(cdp, "window.splitpageDesktop.openExternal('file:///C:/Windows/win.ini'); true");
+    await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+    record(tag + ": main still rejects file addresses", (await externalOpens(cdp)).length === before);
+    await evalPage(cdp, "document.getElementById('incomplete-link').setAttribute('href','https://example.com/beat'); true");
+    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", ...point, button: "left", buttons: 1, clickCount: 1, modifiers });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...point, button: "left", buttons: 0, clickCount: 1, modifiers });
+    const opens = await waitForExternalOpens(cdp, before + 1, 3000);
+    record(tag + ": a complete link still opens once through main", !!opens && opens.length === before + 1 && opens[before] === "https://example.com/beat");
+  } finally {
+    if (app) {
+      await teardown(app, tag);
+      rmrf(app.userDataDir);
+    }
+  }
+}
+
 async function caseFirstSaveTitle(target, fixturesDir) {
   const tag = target.name + " first-save title and version";
   const first = path.join(fixturesDir, "Headset ad V3.splitpage");
@@ -5782,6 +5823,7 @@ async function runTargetSuite(target, groupFilter) {
   const hookFree = { hookFree: true };
   const groups = [
     ["open/boot/security", () => caseBootAndSecurity(target), hookFree],
+    ["incomplete link warning", () => caseIncompleteLink(target, fixturesDir), hookFree],
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
     ["first-save title and version", () => caseFirstSaveTitle(target, fixturesDir)],
     ["desktop PDF export: script, packing lists, shot list", () => caseDesktopPdfExport(target, fixturesDir)],
