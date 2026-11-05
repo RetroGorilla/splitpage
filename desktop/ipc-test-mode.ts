@@ -12,7 +12,7 @@ const { TAB_OR_WINDOW_ID_RE }: { TAB_OR_WINDOW_ID_RE: typeof DesktopStateIdPatte
 type TestTargetTab = Extract<DesktopWireTestShellResult, { windows: unknown }>["windows"][number]["tabs"][number];
 
 function createTestModeIpc({
-  testMode: TEST_MODE, app, BrowserWindow, tabOf, tabs, windowsById, requestCloseTab, draftStore,
+  testMode: TEST_MODE, app, BrowserWindow, Menu, tabOf, tabs, windowsById, requestCloseTab, draftStore,
   draftsPreviousSession, chooseDuplicateLoser, shellStateForWindow, createTab, activateTab, reorderTab,
   createTabWindow, moveTabToWindow, liveWindows, testExternalOpens, testChromiumLaunches, testVideoOpens,
   prompterShare, voiceHelperInstance
@@ -112,6 +112,14 @@ function createTestModeIpc({
               return moveTabToWindow(tab.id, created.id, 0) ? created.id : null;
             }
             return moveTabToWindow(tab.id, a.windowId, a.index);
+          }
+          case "clickEditMenuItem": {
+            const edit = Menu.getApplicationMenu()?.items.find((item) => item.label === "Edit");
+            const item = edit?.submenu?.items.find((entry) => entry.label === a.label);
+            if (!item) throw new Error("test-shell: no Edit menu item " + a.label);
+            const w = caller ? windowsById.get(caller.windowId) : null;
+            item.click(undefined, w ? w.win : undefined, event.sender);
+            return true;
           }
           case "listTargets":
             return listTargets();

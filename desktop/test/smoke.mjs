@@ -1811,6 +1811,43 @@ async function caseCtrlTNewTab(target) {
   }
 }
 
+async function caseEditMenuUndoRedo(target, fixturesDir) {
+  const tag = target.name + " Edit menu: Undo and Redo";
+  const fixture = writeFixture(fixturesDir, "case-edit-menu.splitpage", "Edit Menu Doc", [["Shot", "Narration"]]);
+  const cell = "document.querySelector('#rows .cell-editable[data-field=\"audioText\"]')";
+  const title = "document.getElementById('doc-title')";
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "edit-menu", fixtures: [fixture] });
+    const cdp = app.cdp;
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Edit Menu Doc'", 20000);
+    await waitForRows(cdp, 20000);
+    await evalPage(cdp, "window.__onboarding.autoShowDecided()");
+    await evalPage(cdp, "(function(){var m=document.getElementById('onboarding-modal');if(!m.hidden)m.querySelector('[data-onboard-action=skip]').click();return true;})()");
+    const shows = (expression) => poll(cdp, expression, 5000).catch(() => false);
+    const cellIs = (text) => cell + ".textContent === " + JSON.stringify(text);
+    const before = await evalPage(cdp, cell + ".textContent");
+    const typed = before + "X";
+
+    await evalPage(cdp, "(function(){var c=" + cell + ";c.focus();var s=getSelection();s.selectAllChildren(c);s.collapseToEnd();return true;})()");
+    await cdp.send("Input.insertText", { text: "X" });
+    record(tag + ": typing reaches the script cell", await shows(cellIs(typed)), await evalPage(cdp, cell + ".textContent"));
+    await shell(cdp, "clickEditMenuItem", { label: "Undo" });
+    record(tag + ": Undo takes back the script edit", await shows(cellIs(before)), await evalPage(cdp, cell + ".textContent"));
+    await shell(cdp, "clickEditMenuItem", { label: "Redo" });
+    record(tag + ": Redo puts the script edit back", await shows(cellIs(typed)), await evalPage(cdp, cell + ".textContent"));
+
+    await evalPage(cdp, "(function(){var t=" + title + ";t.focus();t.setSelectionRange(t.value.length,t.value.length);return true;})()");
+    await cdp.send("Input.insertText", { text: "Z" });
+    record(tag + ": typing reaches the title box", await shows(title + ".value === 'Edit Menu DocZ'"));
+    await shell(cdp, "clickEditMenuItem", { label: "Undo" });
+    record(tag + ": in the title box, Undo is the box's own", await shows(title + ".value === 'Edit Menu Doc'"), await evalPage(cdp, title + ".value"));
+    record(tag + ": the box's Undo leaves the script alone", await evalPage(cdp, cellIs(typed)));
+  } finally {
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
+  }
+}
+
 async function caseTabRoutingRules(target, fixturesDir) {
   const tag = target.name + " routing: pristine reuse, dirty->new tab, path dedupe (same and cross window)";
   const fixtureA = writeFixture(fixturesDir, "case-route-a.splitpage", "Route A Doc", [["1", "2"]]);
@@ -5757,6 +5794,7 @@ async function runTargetSuite(target, groupFilter) {
     ["clean close (regression)", () => caseCleanClose(target), hookFree],
     ["tabstrip origin", () => caseTabstripOrigin(target), hookFree],
     ["Ctrl+T new tab (__testShell createTab)", () => caseCtrlTNewTab(target)],
+    ["Edit menu: Undo and Redo", () => caseEditMenuUndoRedo(target, fixturesDir)],
     ["routing: pristine reuse / dirty->new tab / path dedupe", () => caseTabRoutingRules(target, fixturesDir)],
     ["close-tab: clean vs dirty, only that tab", () => caseCloseTabCleanAndDirty(target)],
     ["close-tab: last tab closes window, last window quits", () => caseLastTabClosesWindowLastWindowQuits(target)],

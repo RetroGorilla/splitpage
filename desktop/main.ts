@@ -1572,6 +1572,15 @@ function sendMenuCommand(command: string) {
   if (contents) contents.send("splitpage:menu-command", command);
 }
 
+// why: the undo and redo roles run Chromium's own command, which does nothing while its stack is empty, and script
+// edits are never on that stack. The same keys reach every undo route the page has, including text boxes.
+function pressMenuShortcut(keyCode: string, modifiers: ("control" | "meta" | "shift")[]) {
+  const contents = activeTabContents();
+  if (!contents) return;
+  contents.sendInputEvent({ type: "keyDown", keyCode, modifiers });
+  contents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
+}
+
 function focusedWindowRecord() {
   const focused = BrowserWindow.getFocusedWindow();
   if (focused) {
@@ -1639,8 +1648,21 @@ function buildMenu() {
   const editMenu: Electron.MenuItemConstructorOptions = {
     label: "Edit",
     submenu: [
-      { role: "undo" },
-      { role: "redo" },
+      {
+        label: "Undo",
+        accelerator: "CmdOrCtrl+Z",
+        registerAccelerator: false,
+        click: () => pressMenuShortcut("z", [process.platform === "darwin" ? "meta" : "control"])
+      },
+      {
+        label: "Redo",
+        accelerator: process.platform === "darwin" ? "Shift+Cmd+Z" : "Ctrl+Y",
+        registerAccelerator: false,
+        click: () => {
+          if (process.platform === "darwin") pressMenuShortcut("z", ["meta", "shift"]);
+          else pressMenuShortcut("y", ["control"]);
+        }
+      },
       { type: "separator" },
       { role: "cut" },
       { role: "copy" },
@@ -1799,7 +1821,7 @@ const { registerTabStripIpc } = createTabStripIpc({
 });
 
 const { registerTestModeIpc } = createTestModeIpc({
-  testMode: TEST_MODE, app, BrowserWindow, tabOf, tabs, windowsById, requestCloseTab,
+  testMode: TEST_MODE, app, BrowserWindow, Menu, tabOf, tabs, windowsById, requestCloseTab,
   draftStore: () => draftStore, draftsPreviousSession: () => draftsPreviousSession, chooseDuplicateLoser,
   shellStateForWindow, createTab, activateTab, reorderTab, createTabWindow, moveTabToWindow, liveWindows,
   testExternalOpens, testChromiumLaunches, testVideoOpens, prompterShare: voice.prompterShare,
