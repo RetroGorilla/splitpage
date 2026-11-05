@@ -4,7 +4,7 @@ eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.ope
 wait F.state().title === 'Visual cost'
 click #btn-write
 wait W.on()
-eval W.place({anchor:{kind:'beat',rowId:'r450',offset:10},head:{kind:'beat',rowId:'r450',offset:10}}); window.keyTimes=[]; window.keyStart=0; document.addEventListener('keydown',function(e){if(e.key.length===1){window.keyStart=performance.now();requestAnimationFrame(function(){keyTimes.push(performance.now()-keyStart)})}},true); true
+eval W.place({anchor:{kind:'beat',rowId:'r450',offset:10},head:{kind:'beat',rowId:'r450',offset:10}}); window.keyTimes=[]; document.addEventListener('keydown',function(e){if(e.key.length===1){var started=performance.now();requestAnimationFrame(function(){keyTimes.push(performance.now()-started)})}},true); true
 press abcdefghijklmnopqrstuvwx
 eval window.ordinaryTimes=keyTimes.slice(); keyTimes=[]; W.openVisual('r450'); true
 caret .wr-flow-visual-text
