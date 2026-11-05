@@ -14,8 +14,8 @@ expect getComputedStyle(document.querySelector('#writer-doc .audio-cue')).color 
 expect document.querySelector('.wr-beat[data-id="b"]').innerText.includes('Bravo') && document.querySelector('.wr-beat[data-id="c"]').dataset.visual === 'The quay · 0:00'
 eval W.place({anchor:{kind:'beat',rowId:'c',offset:0},head:{kind:'beat',rowId:'c',offset:0}})
 mouse click (function(){var r=document.querySelector('.wr-beat[data-id="c"]').getClientRects()[0];return {x:r.left+1,y:r.top+2};})()
-expect !!document.querySelector('.wr-flow-join:not([hidden])')
-eval document.querySelector('.wr-flow-join')?.click()
+expect !!document.querySelector('.wr-flow-beat-menu:not([hidden])')
+eval document.querySelector('.wr-flow-beat-menu [data-action="back"]')?.click()
 expect F.state().rows.length === 2 && F.state().rows[1].visualText === 'The quay'
 key ctrl KeyZ
 eval W.place({anchor:{kind:'beat',rowId:'b',offset:5},head:{kind:'beat',rowId:'b',offset:5}})
