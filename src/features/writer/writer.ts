@@ -155,15 +155,23 @@ export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
   updateWriterStats();
 }
 
+let writerWordTotal = 0;
+
+function updateWriterSelectionCount() {
+  const selected = flowWriter?.selectedText();
+  const words = selected == null ? writerWordTotal
+    : (productionReaders as WriterFeaturePorts["text"]["productionReaders"]).wordCount(escapeHtml(selected));
+  (document.getElementById("wr-words") as HTMLElement).textContent = words.toLocaleString();
+}
+
 export function updateWriterStats() {
   const doc = (currentDocument as WriterCurrentDocument)();
   if (!(viewFlags as WriterFeaturePorts["view"])().writerOpen() || !doc) return;
   let words = 0;
   doc.rows.forEach(function (row) { words += (productionReaders as WriterFeaturePorts["text"]["productionReaders"]).wordCount(row.audioText); });
-  const selected = flowWriter?.selectedText();
-  if (selected != null) words = (productionReaders as WriterFeaturePorts["text"]["productionReaders"]).wordCount(escapeHtml(selected));
+  writerWordTotal = words;
   (document.getElementById("wr-scenes") as HTMLElement).textContent = String(doc.rows.length);
-  (document.getElementById("wr-words") as HTMLElement).textContent = words.toLocaleString();
+  updateWriterSelectionCount();
   (document.getElementById("wr-runtime") as HTMLElement).textContent = formatDuration(totalSeconds((currentDocument as WriterCurrentDocument)() as WriterDocument, (productionReaders as WriterFeaturePorts["text"]["productionReaders"])));
 }
 
@@ -305,7 +313,7 @@ export function updateWriterFormatState() {
     button.title = crossBeat ? (command === "tag" ? "Tags" : "Links") + " must stay within one beat."
       : command === "tag" ? "Label as a prop, location, cast member or effect" : "Add link";
   });
-  if (flowWriter) updateWriterStats();
+  if (flowWriter) updateWriterSelectionCount();
   const paragraph = (viewFlags as WriterFeaturePorts["view"])().writerOpen() ? (focusMemory as WriterFeaturePorts["editing"]["focus"])().writerParagraph() : null;
   const live = paragraph && paragraph.isConnected;
   const model = flowWriter ? flowWriter.marks() : live ? (cellFormatState as WriterFeaturePorts["formatting"]["state"])(paragraph) : null;
@@ -632,6 +640,7 @@ export function startWriter(given: WriterFeaturePorts) {
       given.cancelStats();
       writerGutterMode = "visuals";
       writerUndoMark = 0;
+      writerWordTotal = 0;
       reopenOnRedo = null;
       lastRefusalAt = 0;
       currentDocument = null;

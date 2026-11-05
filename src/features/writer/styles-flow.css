@@ -37,6 +37,7 @@
   .writer-flow-open #wr-close { display: inline-flex; }
   .writer-flow-open .writer { top: var(--writer-topbar-bottom, 52px); }
   .writer-flow-open.panel-open .writer { right: min(var(--open-panel-width, 488px), 45vw); }
+  .writer-flow-open.panel-open .findbar.is-writer { right: calc(min(var(--open-panel-width, 488px), 45vw) + 12px); }
   .writer-flow-open #comments-panel { top: var(--writer-topbar-bottom, 52px); z-index: 145; width: min(var(--panel-width, 488px), 45vw); }
   .writer-flow-open .writer-top { display: none; }
   .writer-flow-open .writer-doc { max-width: min(100%, 900px); }

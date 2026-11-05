@@ -44,6 +44,7 @@ function saveStatusListeners(): SaveStatusListeners {
         if (!(ports as SaveStatusPorts).saves.busy()) setSaveButtons();
       } else if (change === "clean") {
         savedAt = 0;
+        flowProblem = "";
         setSaveButtons();
       } else if (change === "running") {
         setSaveButtons();
@@ -88,6 +89,7 @@ function saveStatusInput(): SaveStatusInput {
 
 let savedAt = 0;
 let lastViewText = "";
+let flowProblem = "";
 let justNowTimer: ReturnType<typeof setTimeout> | null = null;
 
 function updateSaveStatus() {
@@ -116,7 +118,9 @@ function updateSaveStatus() {
     btn.setAttribute("aria-label", view ? shown + ". Save now" : "Save");
     btn.title = view ? view.title + " Click to save now." : "Save this script";
     if (writerFlowEnabled(window)) {
-      const flow = flowSaveStatus(input);
+      if (!input.busy && !input.dirty) flowProblem = "";
+      if (input.halted) flowProblem = input.halted;
+      const flow = flowSaveStatus({ ...input, halted: input.halted || flowProblem });
       const label = flow.text === "Saved" ? savedStatusText(savedAt, Date.now()) : flow.text;
       setText(btn, label);
       btn.setAttribute("data-status", label);
@@ -124,7 +128,7 @@ function updateSaveStatus() {
       btn.setAttribute("data-state", flow.problem ? "warn" : flow.actionable ? "pending" : input.busy ? "busy" : "ok");
       btn.disabled = !flow.actionable;
       btn.setAttribute("aria-label", label + (flow.actionable ? ". Save now" : ""));
-      btn.title = (view?.title || (input.target ? "Everything is saved." : "Save to choose where this script is kept."))
+      btn.title = (flow.problem ? flowProblem : view?.title || (input.target ? "Everything is saved." : "Save to choose where this script is kept."))
         + (flow.actionable ? " Click to save now." : "");
     }
   }
@@ -167,6 +171,7 @@ export function mountSaveStatus(nextPorts: SaveStatusPorts) {
       justNowTimer = null;
       savedAt = 0;
       lastViewText = "";
+      flowProblem = "";
       ports = null;
     }
   };
