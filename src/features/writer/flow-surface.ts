@@ -812,7 +812,9 @@ export function createSurface(ports: SurfacePorts): Surface {
       const row = ports.doc().rows.find(item => item.id === el.getAttribute("data-id"));
       if (!row) return;
       const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
-      if (toHtml(ports.decode(stored)) !== toHtml(cellOf(row))) syncBeatEl(el);
+      const before = (rendered.get(el) ?? "").replace(ZWSP_ALL, "");
+      // why: a deferred paint can leave untouched DOM behind a newer model value; only local DOM changes may sync
+      if (toHtml(ports.decode(stored)) !== toHtml(ports.decode(before))) syncBeatEl(el);
     });
   }
 
