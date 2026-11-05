@@ -441,14 +441,37 @@ Four parallel lanes merged into `feat/writer-flow`: #1230 (phase 5), #1229 (phas
 
 ## 15. Phase 8 results
 
-The review candidate makes flow the only writer, shares the header/save status in both modes, removes the switch and lab, combines visuals through the shared join command, and resolves pending/empty headings before Find reads its start. Present computes paragraph membership before skipped/empty filtering. Alt+Enter is gone. Saved formats and goldens are unchanged.
+The flow writer is the only writer. The switch, old writer and lab are gone; the header, save status and version tag (`doc-version`) serve both modes. Shared joins combine visuals; Present derives paragraph membership before filtering; Find resolves pending/empty headings before taking its start. Alt+Enter is removed. Saved formats and goldens are unchanged.
 
-**Measured at `7ccb6fd0`:** final verification passed, including 5,960 of 5,960 unit cases, 30 desktop script files and 23 tool script files. The final full headless browser run passed 11,288 of 11,289 across 277 suites; only the known `219-sound-cues` failed. 174 existing suite files changed, none were deleted, and one measurement suite was added. The PR lists every suite by reason.
+**Final runtime `3e701d3a`:** 5,960 of 5,961 unit cases passed in verification; the only failure was the printed-layout 4 GB free-RAM guard. The requested isolated run passed both PDF tests (228 layout checks and 15 scene-layout checks), covering all 5,961 unit cases. Static checks, 30 desktop script files and 23 tool script files passed. The final Parallel-12 browser run passed 11,313 of 11,314 across 279 suites, with only known `219-sound-cues` failing. CI run [42044036527](https://github.com/RetroGorilla/splitpage/actions/runs/42044036527) passed all jobs on that source: 23 browser suites, 1,184 checks; desktop 882 of 882, with the existing Windows-only visible-window probe skipped on Linux. No local full Electron smoke ran. The later results commit changes documentation only.
 
-**One performance comparison, three rounds, `origin/main` to `7ccb6fd0`:** long undo p50 29.1 to 30.8 ms (+5.8%), long HTML export 2.5 to 2.1 ms (-16.0%). The undo gap remains unexplained; this run does not establish its cause. Short HTML export rose from 0.3 to 0.9 ms (+200.0%). All 20 cases, medians and changes are in the PR. The tool types and undoes in split-view cells: it does not measure old-versus-new writer latency.
+**Comparable writer measurement, ms median / p95:** headless Edge 156, 1400×900, one fixed 900-beat file with 180 flow paragraphs. Three alternating old/new rounds pooled 156 typing samples and 60 each for Enter/Undo per side. Each run excludes five warm-up Enter/Undo pairs, types the same 52 letters 60 ms apart, then measures 20 Enter/Undo pairs 400 ms apart. The hook runs from captured keydown to a timer after the next animation frame. The old-writer column is the final paired comparison; the before column comes from the earlier three-round comparison.
 
-**#1232:** Visual typing now updates only the affected beat's decorations. The failing regression counted six updates on an unrelated beat; the fixed count is zero. A separate final 900-beat writer probe recorded 24 ordinary keys and 24 Visual keys: key-to-next-frame medians 18.2 and 17.4 ms respectively. This is one browser sample, not a controlled old/new writer comparison or an Electron measurement. Earlier diagnostic timings with a reused timestamp are excluded.
+| Action | Main old: median / p95 | New before (0699065d) | New final (3e701d3a) | Samples per final side |
+| --- | --- | --- | --- | --- |
+| typing | 5.9 / 10.1 | 45.8 / 57.5 | 6.4 / 8.7 | 156 |
+| Enter | 97.3 / 111.9 | 88.2 / 111.7 | 59.5 / 73.4 | 60 |
+| Undo | 177.8 / 220.6 | 197.1 / 242.5 | 112.9 / 138.6 | 60 |
 
-**Carried over on the coordinator's ruling:** Alt+Up/Down moves the caret's beat through the existing command as one undo step, with scene/paragraph flags following that command. Refused flow edits keep the typing undo group. Ctrl+Shift+Enter still splits a beat; Escape dismisses tag completion while keeping the writer open. Adam has not tried beat movement in flowing text.
+Typing meets the target: +0.5 ms over main's median, p95 8.7 ms against the 16 ms ceiling. The earlier paired main baseline was 6.0 / 9.5 typing, 98.2 / 111.2 Enter and 177.7 / 201.3 Undo.
 
-**Still unproven:** local full Electron smoke was intentionally not run; desktop CI on this head, real IME/clipboard/spellcheck/window/menu interactions, wording, and Adam's real-script acceptance remain outstanding. This candidate targets `feat/writer-flow` only. Nothing reaches `main` before that acceptance.
+**Bisect with the same file, keys and hook:** one run per checkpoint, 52 typing and 20 Enter/Undo samples each. Every checkpoint had the switch set to `1` and rendered 180 flow paragraphs. The phase-2 lab measurement is a different method and is not used in this comparison.
+
+| Phase end | Commit | Typing median / p95 | Enter median / p95 | Undo median / p95 |
+| --- | --- | --- | --- | --- |
+| 2 | `e09a96e0` | 6.4 / 9.7 | 42.4 / 49.9 | 141.8 / 168.4 |
+| 3 | `5d4f4fd7` | 6.5 / 9.7 | 42.5 / 54.5 | 127.4 / 163.1 |
+| 5 | `c44a4672` | 44.4 / 64.2 | 58.9 / 65.7 | 180.5 / 220.6 |
+| 6 | `688af185` | 44 / 51.7 | 59.1 / 79.5 | 181.5 / 236.6 |
+| 4 | `21da2ad5` | 46 / 62.8 | 59.8 / 87.5 | 181 / 242.6 |
+| 7 | `09a50d84` | 59.1 / 74.7 | 90 / 118.2 | 158.6 / 184 |
+
+**Measured cause:** phase 5 introduces the first large jump. Text-child replacements in the Visual note, and later selection counters, invalidate body-level `:has()` rules; synchronous Visual geometry reads flush the style work twice per key. One profiled key spent 51.9 ms in style recalculation. After retaining text nodes and skipping unchanged values, the profiled input handler fell 35.3→4.5 ms and selectionchange 27.0→1.0 ms; remaining parsing, paint and layout measured 2.3, 1.9 and 1.4 ms. These overlapping single-key profile costs include tracing overhead. Removing the writer-scroll `:has()` rule alone did not help; that CSS is unchanged. Native-input orphan repair is local; composition/close retain full recovery.
+
+Fail-first guard `596-writer-flow-typing-work.txt` now counts zero redundant note/stat child replacements, zero full-host repair scans and zero unrelated beat decorations; it also checks changed caption content and exact narration. `595-writer-flow-mode-position.txt` checks visible position in both mode directions. Both are in CI. Escape's queued-selectionchange race, the omitted progress-chip visibility check and desktop shared-control consumers are fixed. 175 existing suite files changed, none were deleted, and three suites were added; the PR lists every filename by reason.
+
+**Required `perf-ab`, three rounds on final source:** split-view long undo 30.2→34.5 ms (+14.2%, unexplained); long HTML export 2.7→2.6 ms (-3.7%). All 20 cases and changes are in the PR. This tool does not open the writer. The separate final #1232 probe recorded 24 keys each, 9.8 ms ordinary / 8.7 ms Visual by its key-to-frame method; affected-beat decoration work remains local.
+
+**Carried over:** Alt+Up/Down uses the existing beat-move command as one undo step, with that command's scene/paragraph rules; refused edits retain typing coalescing; Ctrl+Shift+Enter splits; Escape dismisses completion without closing. Adam has not tried beat movement in flowing text.
+
+**Limits:** the fixed synthetic file is not an owner script. Timing omits physical keyboard/display latency, IME, Electron and work deferred past the callback; the PC remained in use. Real clipboard/spellcheck/window/menu interactions, wording and owner acceptance remain unproven. Code PR #1235 targets `feat/writer-flow`; #1236 is CI-only and must never merge. Nothing reaches `main` before real-script acceptance.
