@@ -7,6 +7,8 @@ import type { FlowDoc, FlowEdit, FlowOutcome, FlowPorts, FlowPos, FlowRange, Flo
 import { typingMarks } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
+import { hasSetLength } from "../../core/document/timing.ts";
+import { formatDuration } from "../../core/production/timing.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domToPos, posToDom } from "../common/cell-dom.ts";
 import { createFlowJoinControl } from "./flow-join-control.ts";
@@ -181,7 +183,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     el.classList.toggle("is-pending-heading", headingCandidates.has(row.id) && isPendingHeading(ports.doc(), row.id, ports.flow));
     if (el.getAttribute("data-num") !== label) el.setAttribute("data-num", label);
     if (!text && visual) {
-      const note = ports.plainVisual(row);
+      const note = ports.plainVisual(row) + (hasSetLength(row) ? " · " + formatDuration(row.lengthSeconds) : "");
       if (el.getAttribute("data-visual") !== note) el.setAttribute("data-visual", note);
     }
     else el.removeAttribute("data-visual");
