@@ -127,7 +127,8 @@ summary also lists the suites that never started. A suite that times out or
 leaves no readable `RESULT:` line is counted the same way.
 
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
-`%TEMP%\splitpage-shots\`.
+`%TEMP%\splitpage-shots\`. Runs from two worktrees at once overwrite each
+other's logs and verdicts unless each passes its own `-LogDir`.
 
 **Frozen caches.** With `SPLITPAGE_FREEZE_CACHES=1` in the environment,
 `run-tests.ps1` passes `-FreezeCaches` to every `driver.ps1`, and
