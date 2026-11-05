@@ -74,9 +74,20 @@ function undoFor(h: Harness) {
   return undo;
 }
 
-function assertUntouchedAttribution(before: DocumentShape, after: DocumentShape, label: string, edited = new Set<string>()): void {
-  const visible = (row: DocumentRow) => JSON.stringify(row, (key, value: unknown) =>
+function visible(row: DocumentRow): string {
+  return JSON.stringify(row, (key, value: unknown) =>
     ["paragraphStart", "updatedAt", "updatedBy"].includes(key) ? undefined : value);
+}
+
+function assertEditedAttribution(before: DocumentShape, after: DocumentShape, editor: string, label: string): void {
+  for (const row of after.rows) {
+    const was = before.rows.find(item => item.id === row.id);
+    if (!was || visible(was) === visible(row)) continue;
+    assert.deepEqual([row.updatedAt, row.updatedBy], [ports.clock.nowIso(), editor], `${label}: ${row.id} attribution`);
+  }
+}
+
+function assertUntouchedAttribution(before: DocumentShape, after: DocumentShape, label: string, edited = new Set<string>()): void {
   for (const row of before.rows) {
     if (edited.has(row.id)) continue;
     const next = after.rows.find(item => item.id === row.id);
@@ -117,6 +128,21 @@ test("content edits still stamp a beat when it also carries a paragraph flag", (
     assert.equal(replay().ok, true);
     assert.equal(snapshot(h).rows.find(row => row.id === "b")?.updatedBy, "Bob");
     assert.equal(snapshot(h).rows.find(row => row.id === "b")?.updatedAt, ports.clock.nowIso());
+  }
+  h.session.dispose();
+});
+
+test("one undo entry holding a paragraph flag and a content edit still stamps the edited beat on replay", () => {
+  const h = opened([], ["b"]), undo = undoFor(h);
+  const row = (id: string) => snapshot(h).rows.find(item => item.id === id);
+  runConfined(h.session, removeSceneCommand("sb"));
+  runConfined(h.session, joinBeatsCommand("b", ports));
+  assert.equal(row("b")?.paragraphStart, true);
+  undo.noteEdit(); undo.flush();
+  for (const replay of [undo.undo, undo.redo]) {
+    assert.equal(replay().ok, true);
+    assert.deepEqual([row("b")?.updatedAt, row("b")?.updatedBy], [ports.clock.nowIso(), "Bob"]);
+    assert.deepEqual([row("a")?.updatedAt, row("a")?.updatedBy], ["2020-01-01T00:00:00.000Z", "Alice"]);
   }
   h.session.dispose();
 });
@@ -279,6 +305,7 @@ test("seeded command sequences preserve untouched partners and attribution, none
       assert.ok(previous);
       assert.deepEqual(content(snapshot(h)), content(previous));
       assertUntouchedAttribution(before, snapshot(h), `trial ${trial}, undo ${at}`);
+      assertEditedAttribution(before, snapshot(h), "Bob", `trial ${trial}, undo ${at}`);
     }
     for (let at = 1; at < versions.length; at++) {
       const before = snapshot(h);
@@ -287,6 +314,7 @@ test("seeded command sequences preserve untouched partners and attribution, none
       assert.ok(next);
       assert.deepEqual(content(snapshot(h)), content(next));
       assertUntouchedAttribution(before, snapshot(h), `trial ${trial}, redo ${at}`);
+      assertEditedAttribution(before, snapshot(h), "Bob", `trial ${trial}, redo ${at}`);
     }
     h.session.dispose();
   }
