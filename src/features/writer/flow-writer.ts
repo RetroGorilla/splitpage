@@ -154,7 +154,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   });
 
   visual = createFlowVisualBox({
-    root, doc: ports.doc, selection: surface.selection, place: range => { surface.place(range); }, current: isCurrent,
+    root, doc: ports.doc, selection: surface.selection, prepare: surface.prepareVisual, place: range => { surface.place(range); }, current: isCurrent,
     plainVisual: ports.plainVisual,
     thumbnails: row => rowSlots(row).map(slot => {
       if (slot.ref && ports.pictures) return ports.pictures.imgHtml(slot.ref, "wr-flow-visual-thumb");

@@ -1,0 +1,58 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; window.settle=function(){return new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})})}; F.openFile(new File([JSON.stringify({schema:2,title:'Visual heading target',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:''},{id:'b',audioText:'Neighbour',visualText:'Keep neighbour',paragraphStart:true},{id:'c',audioText:'',visualText:'Desk',status:'shot',paragraphStart:true},{id:'d',audioText:'Title<br>Later',visualText:'',paragraphStart:true},{id:'e',audioText:'',visualText:'',paragraphStart:true},{id:'f',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'visual-heading.splitpage'))
+wait F.state().title === 'Visual heading target'
+click #btn-write
+wait W.on()
+eval window.visualOpened=0; window.boxObserver=new MutationObserver(function(changes){changes.forEach(function(change){if(change.oldValue!==null)visualOpened++})});boxObserver.observe(document.querySelector('.wr-flow-visual-box'),{attributes:true,attributeOldValue:true,attributeFilter:['hidden']}); at('a',0)
+press # Title
+click #wr-visual
+eval settle()
+expect document.querySelector('.wr-flow-visual-box').hidden && visualOpened === 0
+expect !F.state().rows.some(function(r){return r.id === 'a'}) && F.state().sections[0].name === 'Title'
+expect W.selection().head.kind === 'heading' && W.selection().head.sceneId === F.state().sections[0].id && W.selection().head.offset === 5
+expect document.activeElement.id === 'writer-doc' && document.getElementById('toast-host').textContent.includes('Put the caret in a beat to edit its visual.')
+expect F.state().rows.find(function(r){return r.id === 'b'}).visualText === 'Keep neighbour'
+key ctrl KeyZ
+expect F.state().rows[0].id === 'a' && F.state().rows[0].audioText === '# Title'
+key ctrl KeyY
+eval settle()
+expect W.selection().head.kind === 'heading' && F.state().sections[0].name === 'Title' && document.querySelector('.wr-flow-visual-box').hidden
+eval at('c',0)
+press # Visual
+click #wr-visual
+eval settle()
+expect !document.querySelector('.wr-flow-visual-box').hidden && document.activeElement.classList.contains('wr-flow-visual-text') && document.activeElement.dataset.id === 'c'
+expect F.state().rows.find(function(r){return r.id === 'c'}).audioText === '' && F.state().rows.find(function(r){return r.id === 'c'}).visualText === 'Desk'
+expect F.state().sections.some(function(s){return s.name === 'Visual' && s.firstSceneId === 'c'})
+type X
+expect F.state().rows.find(function(r){return r.id === 'c'}).visualText === 'DeskX' && F.state().rows.find(function(r){return r.id === 'b'}).visualText === 'Keep neighbour'
+click .wr-flow-visual-close
+eval at('d',0)
+press # X
+key Backspace
+click #wr-visual
+eval settle()
+expect !document.querySelector('.wr-flow-visual-box').hidden && document.activeElement.dataset.id === 'd'
+expect F.state().rows.find(function(r){return r.id === 'd'}).audioText === 'Later' && F.state().sections.some(function(s){return s.name === 'Title' && s.firstSceneId === 'd'})
+click .wr-flow-visual-close
+eval at('e',0)
+press # Forward
+eval window.before={anchor:bp('e',2),head:bp('e',9)};W.place(before);visualOpened=0
+click #wr-visual
+eval settle()
+expect document.querySelector('.wr-flow-visual-box').hidden && visualOpened === 0 && W.selection().head.kind === 'heading'
+expect !F.state().rows.some(function(r){return r.id === 'e'}) && F.state().sections.some(function(s){return s.name === 'Forward'})
+key ctrl KeyZ
+expect F.state().rows.some(function(r){return r.id === 'e' && r.audioText === '# Forward'}) && JSON.stringify(W.selection()) === JSON.stringify(before)
+eval at('f',0)
+press # Reverse
+eval window.before={anchor:bp('f',9),head:bp('f',2)};W.place(before);visualOpened=0
+click #wr-visual
+eval settle()
+expect document.querySelector('.wr-flow-visual-box').hidden && visualOpened === 0 && W.selection().head.kind === 'heading'
+expect !F.state().rows.some(function(r){return r.id === 'f'}) && F.state().sections.some(function(s){return s.name === 'Reverse'})
+key ctrl KeyZ
+expect F.state().rows.some(function(r){return r.id === 'f' && r.audioText === '# Reverse'}) && JSON.stringify(W.selection()) === JSON.stringify(before)
+expect F.state().rows.find(function(r){return r.id === 'b'}).visualText === 'Keep neighbour' && F.state().rows.find(function(r){return r.id === 'c'}).status === 'shot'
+expect W.check().length === 0

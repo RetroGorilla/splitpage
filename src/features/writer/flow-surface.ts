@@ -66,6 +66,7 @@ export interface Surface {
   readonly selection: () => FlowRange | null;
   readonly place: (range: FlowRange, scroll?: boolean) => void;
   readonly restoreAfterReplay: (range: FlowRange) => void;
+  readonly prepareVisual: (range: FlowRange) => FlowRange | null;
   readonly format: (mark: MarkName) => void;
   readonly pendingMarks: () => Marks | null;
   readonly apply: (name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null) => FlowOutcome;
@@ -1043,6 +1044,28 @@ export function createSurface(ports: SurfacePorts): Surface {
     apply("make-heading", doc => finalizeHeading(doc, row, null, range, ports.flow), range, document.activeElement === root);
   }
 
+  function prepareVisual(range: FlowRange): FlowRange | null {
+    if (!pendingHeading || composing || !withinOneBeat(range) || range.head.kind !== "beat") return range;
+    const row = pendingHeading;
+    const target = range.head;
+    pendingHeading = null;
+    ports.breakCoalescing();
+    const outcome = apply("make-heading", doc => {
+      const result = finalizeHeading(doc, row, null, range, ports.flow);
+      if (!result || !("selection" in result)) return result;
+      if (result.rows.some(beat => beat.id === target.rowId)) {
+        const selected = result.selection;
+        return withinOneBeat(selected) && selected.head.kind === "beat" && selected.head.rowId === target.rowId
+          ? result : { ...result, selection: caretAt(beatPos(target.rowId, 0)) };
+      }
+      const oldScenes = new Set(flowOf(doc).flatMap(block => block.kind === "heading" ? [block.scene.id] : []));
+      const heading = result.sections?.find(scene => !oldScenes.has(scene.id));
+      return heading ? { ...result, selection: caretAt(headingPos(heading.id, Math.min(heading.name.length, Math.max(0, target.offset - 2)))) } : result;
+    }, range);
+    if (!ports.doc().rows.some(beat => beat.id === target.rowId)) return null;
+    return outcome && "selection" in outcome ? outcome.selection : range;
+  }
+
   function onSelectionChange(): void {
     if (painting) return;
     noteSelection();
@@ -1193,6 +1216,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       }
       place(range, true);
     },
+    prepareVisual,
     format,
     pendingMarks: () => pending ? pending.marks : null,
     apply,

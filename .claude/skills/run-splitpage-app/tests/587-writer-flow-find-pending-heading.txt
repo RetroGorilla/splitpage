@@ -1,0 +1,39 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; window.query=function(text){var input=document.getElementById('find-input');input.value=text;input.dispatchEvent(new Event('input',{bubbles:true}))}; window.hit=function(){return Array.from(CSS.highlights.get('splitpage-find-match')||[])[0]}; F.openFile(new File([JSON.stringify({schema:2,title:'Find pending heading',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:''},{id:'b',audioText:'Title body',visualText:'Desk',paragraphStart:true},{id:'c',audioText:'',visualText:'',paragraphStart:true},{id:'d',audioText:'fox',visualText:'Keep neighbour'},{id:'e',audioText:'Outside',visualText:'',paragraphStart:true}],comments:[]})],'find-pending.splitpage'))
+wait F.state().title === 'Find pending heading'
+click #btn-write
+wait W.on()
+eval at('a',0)
+press # Title
+expect F.state().sections === undefined && F.state().rows[0].audioText === '# Title'
+key ctrl KeyF
+expect document.activeElement.id === 'find-input' && F.state().sections[0].name === 'Title' && !F.state().rows.some(function(r){return r.id === 'a'})
+eval query('Title')
+expect document.getElementById('find-count').textContent === '1 of 2' && hit().toString() === 'Title'
+expect hit().startContainer.isConnected && hit().startContainer.parentElement.closest('.wr-heading').dataset.scene === F.state().sections[0].id
+click #find-next
+expect document.getElementById('find-count').textContent === '2 of 2' && hit().startContainer.parentElement.closest('.wr-beat').dataset.id === 'b'
+click #find-prev
+eval document.getElementById('replace-input').value='Opening'
+click #find-replace
+expect F.state().sections[0].name === 'Opening' && F.state().rows[0].audioText === 'Title body' && F.state().rows[0].visualText === 'Desk'
+key Escape
+key ctrl KeyZ
+expect F.state().sections[0].name === 'Title' && F.state().rows[0].id === 'b'
+eval at('c',0)
+press # Green
+key ctrl KeyF
+expect document.activeElement.id === 'find-input' && F.state().rows.find(function(r){return r.id === 'c'}).audioText === 'Green'
+expect document.getElementById('toast-host').textContent.includes("A scene header can't hold several beats. Press Enter after the header's words.")
+eval query('Green fox')
+expect document.getElementById('find-count').textContent === '1 of 1' && hit().startContainer.isConnected && hit().endContainer.isConnected
+expect hit().startContainer.parentElement.closest('.wr-beat').dataset.id === 'c' && hit().endContainer.parentElement.closest('.wr-beat').dataset.id === 'd'
+eval document.getElementById('replace-input').value='Blue'
+click #find-replace
+expect F.state().rows.find(function(r){return r.id === 'c'}).audioText === 'Blue' && F.state().rows.find(function(r){return r.id === 'd'}).audioText === ''
+expect F.state().rows.find(function(r){return r.id === 'd'}).visualText === 'Keep neighbour' && F.state().sections[0].name === 'Title'
+key Escape
+key ctrl KeyZ
+expect F.state().rows.find(function(r){return r.id === 'c'}).audioText === 'Green' && F.state().rows.find(function(r){return r.id === 'd'}).audioText === 'fox'
+expect W.check().length === 0
