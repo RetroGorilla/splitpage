@@ -10,8 +10,8 @@ expect JSON.stringify(F.state().rows) === original && U.sizes().undo === depth
 expect document.body.textContent.includes('join across a scene header')
 expect W.check().length === 0
 mouse click (function(){var r=document.querySelector('.wr-beat[data-id="b"]').getClientRects()[0];return {x:r.left+1,y:r.top+2};})()
-expect !!document.querySelector('.wr-flow-join:not([hidden])')
-click .wr-flow-join
+expect !!document.querySelector('.wr-flow-beat-menu:not([hidden])')
+click .wr-flow-beat-menu [data-action="back"]
 expect JSON.stringify(F.state().rows) === original && U.sizes().undo === depth
 expect document.body.textContent.includes('join across a scene header')
 expect W.check().length === 0
@@ -24,8 +24,8 @@ expect JSON.stringify(F.state().rows) === original && U.sizes().undo === depth
 expect document.body.textContent.includes('too many pictures to join')
 expect W.check().length === 0
 mouse click (function(){var r=document.querySelector('.wr-beat[data-id="b"]').getClientRects()[0];return {x:r.left+1,y:r.top+2};})()
-expect !!document.querySelector('.wr-flow-join:not([hidden])')
-click .wr-flow-join
+expect !!document.querySelector('.wr-flow-beat-menu:not([hidden])')
+click .wr-flow-beat-menu [data-action="back"]
 expect JSON.stringify(F.state().rows) === original && U.sizes().undo === depth
 expect document.body.textContent.includes('too many pictures to join')
 expect W.check().length === 0

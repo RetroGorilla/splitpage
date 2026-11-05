@@ -20,8 +20,8 @@ expect F.state().rows[0].visualText === 'First visual' && F.state().rows[1].visu
 expect JSON.stringify(W.selection()) === JSON.stringify(before)
 eval U.flush(); window.depth=U.sizes().undo
 mouse click (function(){var r=document.querySelector('.wr-beat[data-id="b"]').getClientRects()[0];return {x:r.left+1,y:r.top+2};})()
-expect !!document.querySelector('.wr-flow-join:not([hidden])')
-eval document.querySelector('.wr-flow-join')?.click()
+expect !!document.querySelector('.wr-flow-beat-menu:not([hidden])')
+eval document.querySelector('.wr-flow-beat-menu [data-action="back"]')?.click()
 expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
 expect F.state().rows[0].visualText === 'First visual<br>Second visual' && F.state().rows[0].moreImages[0].name === 'Second picture'
 eval U.flush()
