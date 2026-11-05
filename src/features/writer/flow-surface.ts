@@ -187,6 +187,7 @@ export function createSurface(ports: SurfacePorts): Surface {
         }
         keptHeads.delete(block.scene.id);
         if (el.textContent !== block.scene.name) el.textContent = block.scene.name;
+        rendered.set(el, block.scene.name);
         sceneLetter++;
         beatNumber = 0;
         sceneTag = String.fromCharCode(65 + (sceneLetter % 26));
@@ -800,13 +801,20 @@ export function createSurface(ports: SurfacePorts): Surface {
     composing = false;
     compositionTimer = window.setTimeout(function () {
       compositionTimer = null;
-      syncTouchedBeats();
+      syncTouchedText();
       ports.changed();
       if (repaintOwed) { repaintOwed = false; repaint(); }
     }, 0);
   }
 
-  function syncTouchedBeats(): void {
+  function syncTouchedText(): void {
+    const at = selection()?.head;
+    const headings = Array.from(root.querySelectorAll<HTMLElement>(".wr-heading")).flatMap(el => {
+      const id = el.getAttribute("data-scene");
+      const name = (el.textContent ?? "").replace(ZWSP_ALL, "");
+      return id && name && name !== rendered.get(el) ? [{ id, name,
+        offset: at?.kind === "heading" && at.sceneId === id ? at.offset : name.length }] : [];
+    });
     repairOrphans();
     root.querySelectorAll<HTMLElement>(".wr-beat").forEach(function (el) {
       const row = ports.doc().rows.find(item => item.id === el.getAttribute("data-id"));
@@ -816,6 +824,9 @@ export function createSurface(ports: SurfacePorts): Surface {
       // why: a deferred paint can leave untouched DOM behind a newer model value; only local DOM changes may sync
       if (toHtml(ports.decode(stored)) !== toHtml(ports.decode(before))) syncBeatEl(el);
     });
+    for (const { id, name, offset } of headings) {
+      apply("rename-scene", doc => renameHeading(doc, id, name, offset), null);
+    }
   }
 
   function finish(): FlowRange | null {
@@ -823,7 +834,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (compositionTimer !== null) window.clearTimeout(compositionTimer);
     compositionTimer = null;
     composing = false;
-    syncTouchedBeats();
+    syncTouchedText();
     return at;
   }
 
