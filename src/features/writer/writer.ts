@@ -7,7 +7,7 @@ import { bothBeatsHaveVisual, joinBeatsCommand } from "../../application/command
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { placeCaretAtTextOffset } from "../common/caret.ts";
-import { domToPos } from "../common/cell-dom.ts";
+import { domToPos, posToDom } from "../common/cell-dom.ts";
 import { beatPos, caretAt } from "../../core/flow/flow.ts";
 import { gallerySize } from "../../core/document/gallery.ts";
 import { escapeHtml, truncateForPreview } from "../../core/document/text-policy.ts";
@@ -419,7 +419,8 @@ export function closeWriter() {
       const cell = document.querySelector<HTMLElement>('#rows .cell-editable[data-id="' + cssAttr(at.rowId) + '"][data-field="audioText"]');
       if (cell) {
         cell.focus({ preventScroll: true });
-        placeCaretAtTextOffset(cell, at.offset);
+        const point = posToDom(cell, at.offset);
+        window.getSelection()?.setBaseAndExtent(point.node, point.offset, point.node, point.offset);
         rememberCellSelection((editorSelection as WriterFeaturePorts["editing"]["selection"])(), cell);
         cell.scrollIntoView({ block: "nearest" });
       }

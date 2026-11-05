@@ -43,3 +43,13 @@ eval W.place({anchor:{kind:'beat',rowId:'b',offset:2},head:{kind:'beat',rowId:'b
 click #wr-close
 expect document.activeElement.getAttribute('data-id') === 'b'
 expect getSelection().focusOffset === 2
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Flow line break',paragraphsDecided:true,rows:[{id:'a',audioText:'One<br>Two',visualText:''}],comments:[]})],'line.splitpage'))
+wait F.state().title === 'Flow line break'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:5},head:{kind:'beat',rowId:'a',offset:5}})
+click #wr-close
+expect getSelection().focusNode.textContent === 'Two' && getSelection().focusOffset === 1
+click #btn-write
+wait W.on()
+expect W.selection().head.rowId === 'a' && W.selection().head.offset === 5
