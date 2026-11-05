@@ -9,6 +9,7 @@ import { toHtml } from "../../core/text/html.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domToPos, posToDom } from "../common/cell-dom.ts";
+import { createFlowJoinControl } from "./flow-join-control.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { DocumentSession } from "../../application/session/document-session.ts";
 
@@ -105,6 +106,10 @@ export function createSurface(ports: SurfacePorts): Surface {
   let repaintOwed = false;
   const compositionTargets = new Set<HTMLElement>();
   let syncingComposition = false;
+  const joinControl = createFlowJoinControl(root, rowId => {
+    ports.breakCoalescing();
+    apply("join", doc => joinWithPrevious(doc, rowId, ports.flow), selection() ?? heldRange());
+  });
 
   function cellOf(row: FlowRow): readonly Run[] { return ports.flow.cells(row.audioText); }
 
@@ -176,6 +181,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   function paint(): void {
     // why: a composed batch can publish edits that re-enter paint before its remaining targets have synced
     if (composing || syncingComposition) { repaintOwed = true; return; }
+    joinControl.hide();
     syncComposition();
     repaintOwed = false;
     painting = true;
@@ -313,7 +319,41 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (!root.contains(sel.anchorNode) || !root.contains(sel.focusNode)) return null;
     const anchor = posFromDom(sel.anchorNode, sel.anchorOffset);
     const head = posFromDom(sel.focusNode, sel.focusOffset);
-    return anchor && head ? { anchor, head } : null;
+    const range = anchor && head ? { anchor, head } : null;
+    if (range && !rangeExists(range)) {
+      ports.heldSelection.forget();
+      sel.removeAllRanges();
+      return null;
+    }
+    return range;
+  }
+
+  function rangeExists(range: FlowRange): boolean {
+    const doc = ports.doc();
+    return [range.anchor, range.head].every(pos => pos.kind === "beat"
+      ? doc.rows.some(row => row.id === pos.rowId)
+      : flowOf(doc).some(block => block.kind === "heading" && block.scene.id === pos.sceneId));
+  }
+
+  function heldRange(): FlowRange | null {
+    const range = ports.heldSelection.resolveFlow();
+    if (range && (!rangeExists(range) || !rangeFits(range))) {
+      ports.heldSelection.forget();
+      return null;
+    }
+    return range;
+  }
+
+  function rangeFits(range: FlowRange): boolean {
+    const doc = ports.doc();
+    return [range.anchor, range.head].every(pos => {
+      if (pos.offset < 0) return false;
+      if (pos.kind === "beat") {
+        const row = doc.rows.find(item => item.id === pos.rowId);
+        return !!row && pos.offset <= cellLength(cellOf(row));
+      }
+      return flowOf(doc).some(block => block.kind === "heading" && block.scene.id === pos.sceneId && pos.offset <= block.scene.name.length);
+    });
   }
 
   function domPoint(pos: FlowPos): { node: Node; offset: number } | null {
@@ -348,10 +388,17 @@ export function createSurface(ports: SurfacePorts): Surface {
   // selection is carried across by model position. Composing text must never be repainted, so that waits.
   function repaint(): void {
     if (composing || syncingComposition) { repaintOwed = true; return; }
-    const before = selection();
+    const selected = selection();
+    const before = selected && rangeFits(selected) ? selected : null;
+    if (selected && !before) {
+      ports.heldSelection.forget();
+      window.getSelection()?.removeAllRanges();
+    }
     if (before) ports.heldSelection.rememberFlow(epoch, before);
+    const focused = document.activeElement === root;
+    if (before && !focused) window.getSelection()?.removeAllRanges();
     paint();
-    if (!before || document.activeElement !== root) return;
+    if (!before || !focused) return;
     const now = selection();
     const doc = ports.doc();
     if (!now || comparePos(doc, now.anchor, before.anchor) !== 0 || comparePos(doc, now.head, before.head) !== 0) place(before);
@@ -360,7 +407,7 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function focusBack(): void {
     const first = ports.doc().rows[0];
-    const target = ports.heldSelection.resolveFlow() ?? (first ? caretAt(beatPos(first.id, 0)) : null);
+    const target = heldRange() ?? (first ? caretAt(beatPos(first.id, 0)) : null);
     if (target) place(target, true);
     else root.focus({ preventScroll: true });
   }
@@ -523,9 +570,22 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (from.kind === "beat" && to.kind === "beat" && from.rowId !== to.rowId && to.offset === 0) {
       const index = doc.rows.findIndex(row => row.id === (to as { rowId: string }).rowId);
       const prev = doc.rows[index - 1];
-      if (prev && prev.id === from.rowId) return { anchor: from, head: beatPos(prev.id, beatLength(prev.id)) };
+      const header = flowOf(doc).some(block => block.kind === "heading" && block.scene.firstSceneId === to.rowId);
+      if (prev && prev.id === from.rowId && !header) return { anchor: from, head: beatPos(prev.id, beatLength(prev.id)) };
     }
     return { anchor: from, head: to };
+  }
+
+  function onlyBoundary(range: FlowRange): boolean {
+    const doc = ports.doc();
+    const { from, to } = orderedRange(doc, range);
+    if (to.offset !== 0) return false;
+    const positions = flowOf(doc).flatMap(block => block.kind === "heading"
+      ? [{ pos: headingPos(block.scene.id, 0), length: block.scene.name.length }]
+      : block.beats.map(row => ({ pos: beatPos(row.id, 0), length: cellLength(cellOf(row)) })));
+    const index = positions.findIndex(item => comparePos(doc, item.pos, { ...from, offset: 0 }) === 0);
+    const start = positions[index], next = positions[index + 1];
+    return !!start && !!next && from.offset === start.length && comparePos(doc, next.pos, to) === 0;
   }
 
   function onBeforeInput(event: Event): void {
@@ -548,12 +608,19 @@ export function createSurface(ports: SurfacePorts): Surface {
       event.preventDefault();
       return;
     }
-    if (type === "insertParagraph" || type === "insertLineBreak") {
-      event.preventDefault();
-      return;
-    }
     const range = selection();
     if (!range) return;
+    if (type === "insertParagraph" || type === "insertLineBreak") {
+      event.preventDefault();
+      ports.breakCoalescing();
+      const target = range0(input) ?? range;
+      apply(type === "insertLineBreak" ? "line-break" : "enter", doc => type === "insertLineBreak"
+        ? lineBreakAt(doc, target, ports.flow)
+        : isCollapsed(target) && target.head.kind === "heading"
+          ? enterInHeading(doc, target.head, ports.flow)
+          : enterAt(doc, target, ports.flow), range);
+      return;
+    }
     if (type === "insertText" || type === "insertReplacementText") {
       const data = input.data ?? input.dataTransfer?.getData("text/plain") ?? "";
       const target = range0(input) ?? range;
@@ -578,7 +645,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       if (!isCollapsed(target) && !withinOneBeat(target)) {
         event.preventDefault();
         ports.breakCoalescing();
-        apply("replace-selection", doc => replaceRange(doc, target, data ? [{ text: data, marks: typingMarksFor(target, doc) }] : [], ports.flow), range);
+        apply("replace-selection", doc => replaceRange(doc, target, data ? [{ text: data, marks: typingMarksFor(target, doc) }] : [], ports.flow, true), range);
         return;
       }
       if (ports.settings().gapTyping === "before" && isCollapsed(range) && range.head.kind === "beat" && range.head.offset === 0 && beatLength(range.head.rowId)) {
@@ -596,13 +663,17 @@ export function createSurface(ports: SurfacePorts): Surface {
     }
     if (!type.startsWith("delete")) return;
     const backward = type.endsWith("Backward") || type === "deleteContentBackward";
-    if (isCollapsed(range) && type === "deleteContentBackward" && range.head.offset === 0) {
+    const target = range0(input);
+    const effective = target && !isCollapsed(target) ? target : range;
+    const resolved = isCollapsed(range) ? resolveInBeat(effective) : effective;
+    const atBoundary = isCollapsed(resolved) || onlyBoundary(effective);
+    if (atBoundary && isCollapsed(range) && type === "deleteContentBackward" && range.head.offset === 0) {
       event.preventDefault();
       ports.breakCoalescing();
       apply("backspace", doc => backspaceAt(doc, range.head, ports.flow, { tick: ports.settings().tick }), range);
       return;
     }
-    if (isCollapsed(range) && type === "deleteContentForward") {
+    if (atBoundary && isCollapsed(range) && type === "deleteContentForward") {
       const pos = range.head;
       const atEnd = pos.kind === "beat" ? pos.offset >= beatLength(pos.rowId) : (headingEl(pos.sceneId)?.textContent || "").length <= pos.offset;
       if (atEnd) {
@@ -612,8 +683,6 @@ export function createSurface(ports: SurfacePorts): Surface {
         return;
       }
     }
-    const target = range0(input);
-    const effective = target && !isCollapsed(target) ? target : range;
     if (isCollapsed(effective)) {
       if (backward && effective.head.offset === 0) {
         event.preventDefault();
@@ -622,7 +691,6 @@ export function createSurface(ports: SurfacePorts): Surface {
       }
       return;
     }
-    const resolved = resolveInBeat(effective);
     const isHeadingOnly = resolved.anchor.kind === "heading" && resolved.head.kind === "heading" && resolved.anchor.sceneId === resolved.head.sceneId;
     if (isHeadingOnly) {
       const scene = resolved.anchor.sceneId;
@@ -710,7 +778,12 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function format(mark: MarkName, target?: FlowRange | null): void {
-    const before = selection() ?? ports.heldSelection.resolveFlow();
+    const before = selection() ?? heldRange();
+    if (before && !rangeFits(before)) {
+      ports.heldSelection.forget();
+      window.getSelection()?.removeAllRanges();
+      return;
+    }
     let range = target ?? before;
     if (!range) return;
     if (target && before) {
@@ -913,7 +986,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function finish(): FlowRange | null {
-    const at = selection() ?? ports.heldSelection.resolveFlow();
+    const at = selection() ?? heldRange();
     composing = false;
     syncComposition();
     transitionBeat(null);
@@ -921,6 +994,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function onMouseDown(event: Event): void {
+    if (!composing && joinControl.openAtTick(event as MouseEvent)) return;
     mouseDown = true;
     clicks = (event as MouseEvent).detail;
   }
@@ -1002,7 +1076,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     paint,
     repaint,
     focusBack,
-    selection,
+    selection: () => selection() ?? heldRange(),
     place,
     format,
     pendingMarks: () => pending ? pending.marks : null,
@@ -1011,6 +1085,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     domRange,
     domCheck,
     dispose: () => {
+      joinControl.dispose();
       if (ports.lifetime.epoch() === epoch) ports.heldSelection.forget();
       compositionTargets.clear();
       listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler));

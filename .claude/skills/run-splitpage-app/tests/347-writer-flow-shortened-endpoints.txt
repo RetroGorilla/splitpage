@@ -1,0 +1,16 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.loadShort=function(title){return F.openFile(new File([JSON.stringify({schema:2,title:title,paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'shortened.splitpage'))}; loadShort('Shortened backward')
+wait F.state().title === 'Shortened backward'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:3},head:{kind:'beat',rowId:'a',offset:2}}); document.getElementById('writer-doc').blur(); W.outsideEdit('a','A'); W.fullRender()
+click .writer-bar [data-cmd="bold"]
+expect F.state().rows[0].audioText === 'A' && F.state().rows[1].audioText === 'Bravo'
+expect W.check().length === 0
+eval loadShort('Shortened forward')
+wait F.state().title === 'Shortened forward' && W.on()
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:2},head:{kind:'beat',rowId:'b',offset:3}}); document.getElementById('writer-doc').blur(); W.outsideEdit('a','A'); W.fullRender()
+click .writer-bar [data-cmd="bold"]
+expect F.state().rows[0].audioText === 'A' && F.state().rows[1].audioText === 'Bravo'
+expect W.check().length === 0

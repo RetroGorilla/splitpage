@@ -64,7 +64,9 @@ export function referenceReplacement(doc: FlowDoc, range: FlowRange, replacement
   for (const block of blocks) {
     const isStart = block.kind === start.kind && block.id === (start.kind === "beat" ? start.rowId : start.sceneId);
     const full = from <= block.start && to >= block.start + block.text.length;
-    if (full && !(block.kind === "beat" && localBeat) && !(isStart && inserted.length)) {
+    const exclusiveEmptyEndpoint = block.kind === "beat" && !block.text.length && block.start === to && !isStart
+      && block.id !== doc.rows[doc.rows.length - 1]?.id;
+    if (full && !exclusiveEmptyEndpoint && !(block.kind === "beat" && localBeat) && !(isStart && inserted.length)) {
       (block.kind === "heading" ? removedHeadings : removedRows).add(block.id);
       continue;
     }

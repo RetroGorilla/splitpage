@@ -4,6 +4,7 @@ import { formatDuration, totalSeconds } from "../../core/production/timing.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot, cssAttr } from "../common/dom.ts";
 import { bothBeatsHaveVisual, joinBeatsCommand } from "../../application/commands/split-join.ts";
+import { withinOneBeat } from "../../core/flow/flow.ts";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { placeCaretAtTextOffset } from "../common/caret.ts";
@@ -275,6 +276,13 @@ export function onWriterFormat(btn: Element) {
 }
 
 export function updateWriterFormatState() {
+  const range = flowWriter?.selection();
+  const crossBeat = !!range && !withinOneBeat(range);
+  const comment = document.querySelector<HTMLButtonElement>('.writer-bar .wr-fmt[data-cmd="comment"]');
+  if (comment) {
+    comment.disabled = crossBeat;
+    comment.title = crossBeat ? "Comments must stay within one beat." : "Comment on the selected words";
+  }
   const paragraph = (viewFlags as WriterFeaturePorts["view"])().writerOpen() ? (focusMemory as WriterFeaturePorts["editing"]["focus"])().writerParagraph() : null;
   const live = paragraph && paragraph.isConnected;
   const model = flowWriter ? flowWriter.marks() : live ? (cellFormatState as WriterFeaturePorts["formatting"]["state"])(paragraph) : null;
@@ -372,6 +380,7 @@ function detachFlowWriter() {
   if (!flowWriter) return;
   flowWriter.dispose();
   flowWriter = null;
+  updateWriterFormatState();
   const root = (document.getElementById("writer-doc") as HTMLElement);
   root.classList.remove("is-flow");
   root.removeAttribute("data-undo-owner");

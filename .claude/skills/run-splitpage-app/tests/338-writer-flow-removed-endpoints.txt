@@ -1,0 +1,28 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Removed endpoints',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'removed.splitpage'))
+wait F.state().title === 'Removed endpoints'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:3},head:{kind:'beat',rowId:'a',offset:2}}); W.outsideRemove('a'); W.fullRender()
+expect F.state().rows.map(function(r){return r.id}).join() === 'b,c'
+eval W.selection()
+click .writer-bar [data-cmd="bold"]
+eval W.selection()
+expect F.state().rows[0].audioText === 'Bravo' && F.state().rows[1].audioText === 'Charlie'
+expect !W.selection() || JSON.stringify(W.selection().anchor) === JSON.stringify(W.selection().head)
+expect W.check().length === 0
+eval W.place({anchor:{kind:'beat',rowId:'c',offset:3},head:{kind:'beat',rowId:'b',offset:2}}); document.getElementById('writer-doc').blur(); window.getSelection().removeAllRanges(); W.outsideRemove('c'); W.fullRender()
+expect F.state().rows.map(function(r){return r.id}).join() === 'b'
+click .writer-bar [data-cmd="bold"]
+expect F.state().rows[0].audioText === 'Bravo'
+expect !W.selection() || JSON.stringify(W.selection().anchor) === JSON.stringify(W.selection().head)
+expect W.check().length === 0
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Forward removed endpoint',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'c',audioText:'Charlie',visualText:''}],comments:[]})],'forward.splitpage'))
+wait F.state().title === 'Forward removed endpoint' && W.on()
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:2},head:{kind:'beat',rowId:'b',offset:3}}); document.getElementById('writer-doc').blur(); W.outsideRemove('b'); W.fullRender()
+click .writer-bar [data-cmd="bold"]
+expect F.state().rows.map(function(r){return r.id}).join() === 'a,c'
+expect F.state().rows[0].audioText === 'Alpha' && F.state().rows[1].audioText === 'Charlie'
+expect !W.selection() || JSON.stringify(W.selection().anchor) === JSON.stringify(W.selection().head)
+expect W.check().length === 0
