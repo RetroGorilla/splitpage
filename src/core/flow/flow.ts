@@ -1116,13 +1116,15 @@ export function pasteFlowRange(doc: FlowDoc, range: FlowRange, clip: FlowClipboa
   }
   const cleared = isCollapsed(range) ? null : replaceRange(doc, range, [], ports);
   if (cleared && !("rows" in cleared)) return cleared;
+  const candidate = cleared?.rows.length === 1 && !cleared.sections?.length ? cleared.rows[0] : undefined;
+  const generatedPlaceholder = candidate && !doc.rows.some(row => row.id === candidate.id) ? candidate.id : null;
   const current = cleared ? { ...doc, rows: cleared.rows, sections: cleared.sections } : doc;
   const at = cleared?.selection ?? range;
   const marker = blankRow(ports.newId(), false);
   const beats = clip.rows.length ? clip.rows : [marker];
   const inserted = insertBeats(current, at.head, beats, ports);
   if (!inserted || !("rows" in inserted)) return inserted;
-  const rows = inserted.rows.slice();
+  const rows = inserted.rows.filter(row => row.id !== generatedPlaceholder);
   const index = rows.findIndex(row => row.id === beats[0]?.id);
   const sections = inserted.sections?.slice() ?? [];
   const originalAnchors = new Map(flowOf(current).flatMap(block => block.kind === "heading" ? [[block.scene.id, block.scene.firstSceneId]] : []));

@@ -49,7 +49,10 @@ export function pasteFlowClipboard(doc: DocumentView, range: FlowRange, data: Pi
   const input = wire as Partial<FlowWirePayload>;
   if (input.format !== "splitpage-flow" || input.version !== 1 || typeof input.text !== "string") return undefined;
   const clip = legacy ?? (input.beats ? parseBeatPayload(input.beats) : null);
-  if (input.beats && !clip) return undefined;
+  if (!legacy && input.beats !== null && !clip) return undefined;
+  if (!Array.isArray(input.wholeIds) || !Array.isArray(input.headers)) return undefined;
+  const wholeIds: readonly unknown[] = input.wholeIds;
+  if (wholeIds.some(id => typeof id !== "string" || !clip?.rows.some(row => row.id === id))) return undefined;
   const headers: { index: number; scene: DocumentScene }[] = [];
   if (Array.isArray(input.headers)) {
     for (const header of input.headers as FlowClipboardSlice["headers"]) {
@@ -59,6 +62,7 @@ export function pasteFlowClipboard(doc: DocumentView, range: FlowRange, data: Pi
       headers.push({ index: header.index, scene: { id: ports.newId(), name: header.scene.name, firstSceneId: "" } });
     }
   }
+  if (!input.text && !wholeIds.length && !headers.length) return undefined;
   const state = migrate(JSON.parse(JSON.stringify(doc)) as unknown);
   const count = state.rows.length;
   const result = clip ? insertBeats(clip, { state, move: isMove(clip, doc), preserveBrollDetails: true }) : null;
