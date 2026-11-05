@@ -1,8 +1,8 @@
 import { findAllMatches, findInCell } from "../text/search.ts";
 import { endsSentence } from "../text/sentences.ts";
 import { toPlainText } from "../text/projections.ts";
-import { MAX_MORE, rowSlots, setRowSlots } from "../document/gallery.ts";
-import { normalizeScenes, sceneBeforeBeat, scenesAfterRemoval, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
+import { MAX_MORE, migrateGallery, rowSlots, setRowSlots } from "../document/gallery.ts";
+import { normalizeScenes, scenesAfterRemoval as removedSceneAnchors, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
 import type { DocumentScene } from "../document/scenes.ts";
 import { breakLine, deleteRange, insertCell, insertText, joinCells, markThroughout, setMark, sliceCell, splitCell } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
@@ -81,8 +81,21 @@ export function caretAt(pos: FlowPos): FlowRange {
   return { anchor: pos, head: pos };
 }
 
-function scenesOf(doc: FlowDoc): readonly DocumentScene[] {
-  return scenesInOrder({ rows: doc.rows, sections: doc.sections }) ?? [];
+function scenesOf(doc: Pick<FlowDoc, "rows" | "sections">): readonly DocumentScene[] {
+  const originals = Array.isArray(doc.sections) ? doc.sections as readonly DocumentScene[] : [];
+  return (scenesInOrder(doc) ?? []).map(scene => {
+    const original = originals.find(item => item?.id === scene.id && item.firstSceneId === scene.firstSceneId);
+    return typeof original?.name === "string" ? { ...scene, name: original.name } : scene;
+  });
+}
+
+function sceneBeforeBeat(doc: Pick<FlowDoc, "rows" | "sections">, rowId: string): DocumentScene | undefined {
+  return scenesOf(doc).find(scene => scene.firstSceneId === rowId);
+}
+
+function scenesAfterRemoval(doc: Pick<FlowDoc, "rows" | "sections">, removed: ReadonlySet<string>): readonly DocumentScene[] | undefined {
+  const names = new Map(scenesOf(doc).map(scene => [scene.id, scene.name]));
+  return removedSceneAnchors(doc, removed)?.map(scene => ({ ...scene, name: names.get(scene.id) ?? scene.name }));
 }
 
 function sceneAnchors(doc: FlowDoc): Map<string, DocumentScene> {
@@ -171,9 +184,10 @@ function isBlank(row: FlowRow, ports: FlowPorts): boolean {
 
 function edit(doc: FlowDoc, rows: readonly FlowRow[], selection: FlowRange, more?: { sections?: readonly DocumentScene[] | undefined; removedComments?: readonly string[]; notice?: string }): FlowEdit {
   const hasSections = !!more && "sections" in more;
+  const sections = hasSections ? more?.sections : scenesOf({ rows, sections: doc.sections });
   return {
     rows,
-    sections: hasSections ? (more as { sections?: readonly DocumentScene[] | undefined }).sections : scenesInOrder({ rows, sections: doc.sections }),
+    sections: hasSections ? sections : sections?.length ? sections : undefined,
     removedComments: more?.removedComments ?? [],
     selection,
     notice: more?.notice
@@ -494,6 +508,18 @@ export function joinWithPrevious(doc: FlowDoc, rowId: string, ports: FlowPorts):
   const glue = cellLength(a) && cellLength(b) && !/\s$/.test(projection(a)) ? " " : "";
   const merged: Record<string, unknown> = { ...prev, audioText: toHtml(joinCells(a, b, glue)), visualText: joinedVisualText(prev, row, ports) };
   if (rowSlots(row).length) setRowSlots(merged, pictures);
+  const beforeGallery = rowSlots(merged);
+  migrateGallery(merged, { known: () => null, fromDataUrl: () => null });
+  const afterGallery = rowSlots(merged);
+  const droppedLinks = beforeGallery.reduce((sum, slot) => sum + slot.links.length, 0) - afterGallery.reduce((sum, slot) => sum + slot.links.length, 0);
+  const posterChanges = beforeGallery.reduce((sum, slot) => sum + slot.links.filter(link => link.poster).length, 0)
+    - afterGallery.reduce((sum, slot) => sum + slot.links.filter(link => link.poster).length, 0);
+  const galleryNotices: string[] = [];
+  if (droppedLinks) galleryNotices.push("Left out " + plural(droppedLinks, "picture link") + " under the saved gallery limits.");
+  if (posterChanges) galleryNotices.push("Kept one poster link per picture under the saved gallery limits.");
+  if (beforeGallery.length !== afterGallery.length) galleryNotices.push("Removed duplicate or invalid gallery entries under the saved limits.");
+  if (beforeGallery.some((slot, index) => slot.name !== afterGallery[index]?.name)) galleryNotices.push("Normalized picture names to the saved limits.");
+  if (beforeGallery.some((slot, index) => JSON.stringify(slot.annotation) !== JSON.stringify(afterGallery[index]?.annotation))) galleryNotices.push("Normalized annotation details to the saved limits.");
   if (statusRank(row.status) > statusRank(prev.status)) merged.status = row.status;
   const rows = doc.rows.slice();
   rows.splice(index - 1, 2, merged as FlowRow);
@@ -501,7 +527,7 @@ export function joinWithPrevious(doc: FlowDoc, rowId: string, ports: FlowPorts):
   const originals = rowSlots(prev).concat(rowSlots(row));
   const duplicateDetails = originals.length > pictures.length
     ? " Combined duplicate pictures and their links; kept the first available name and annotations. Names: " + originals.map(slot => slot.name || "unnamed").join(", ") + "." : "";
-  const notice = duplicateDetails ? "Joined the beats." + duplicateDetails : bothVisuals ? "Joined the beats and kept both visuals." : undefined;
+  const notice = duplicateDetails || galleryNotices.length ? "Joined the beats." + duplicateDetails + (galleryNotices.length ? " " + galleryNotices.join(" ") : "") : bothVisuals ? "Joined the beats and kept both visuals." : undefined;
   return edit(doc, rows, caretAt(beatPos(prev.id, cellLength(a) + glue.length)), notice ? { notice } : undefined);
 }
 
@@ -679,7 +705,7 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
     scenes[stale] = withSceneFirstBeat(existing, blank.id);
   }
   scenes.push(fresh);
-  const sections = scenesInOrder({ rows, sections: scenes });
+  const sections = scenesOf({ rows, sections: scenes });
   const selection = keep ?? caretAt(beatPos(first.id, 0));
   return edit(doc, rows, selection, { sections });
 }
@@ -986,8 +1012,8 @@ export function insertBeats(doc: FlowDoc, pos: FlowPos, beats: readonly FlowRow[
       if (boundary) rows[index] = withFlag(row);
     }
   }
-  const placed = beats.map(row => ({ ...row,
-    ...(row.audioText == null ? {} : { audioText: toHtml(ports.cells(row.audioText)) }) }));
+  const placed: FlowRow[] = beats.map(row => ({ ...blankRow(row.id, false), ...row,
+    audioText: toHtml(ports.cells(row.audioText)), visualText: row.visualText ?? "", imageRef: row.imageRef ?? null, status: row.status ?? "todo" }));
   placed[0] = boundary ? withFlag(placed[0] as FlowRow) : withoutFlag(placed[0] as FlowRow);
   rows.splice(index, 0, ...placed);
   rows = rows.slice();

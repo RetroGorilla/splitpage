@@ -7,6 +7,7 @@ import { beatPos, deleteForwardAt, enterInHeading, headingPos, joinWithPrevious,
 import { rowSlots } from "../../../src/core/document/gallery.ts";
 import type { FlowDoc, FlowPorts, FlowPos, FlowRange } from "../../../src/core/flow/flow.ts";
 import type { DocumentScene } from "../../../src/core/document/scenes.ts";
+import type { Run } from "../../../src/core/text/runs.ts";
 import { flowCommand } from "../../../src/application/commands/flow.ts";
 import { createUndo } from "../../../src/application/editing/undo/undo.ts";
 import { syncCommentAnchors } from "../../../src/core/text/anchors.ts";
@@ -23,7 +24,7 @@ function ports(): FlowPorts {
 }
 const stamps = { clock: { nowIso: () => "2026-11-04T12:00:00Z" }, editor: { name: () => "Editor" } };
 const row = (id: string, audioText: string, visualText = "") => ({ id, audioText, visualText });
-const scene = (id: string, firstSceneId: string) => ({ id, firstSceneId, name: "Title" });
+const scene = (id: string, firstSceneId: string, name = "Title") => ({ id, firstSceneId, name });
 const marked = (word: string) => '<span class="cmt-anchor" data-cmt="quote">' + word + "</span>";
 
 const reviewShapes: { finding: number; doc: FlowDoc; range: FlowRange; text: string }[] = [
@@ -34,10 +35,11 @@ const reviewShapes: { finding: number; doc: FlowDoc; range: FlowRange; text: str
   { finding: 5, doc: { rows: [row("a", "", "Visual"), row("b", "Body")], sections: [scene("s", "a")], comments: [] }, range: { anchor: headingPos("s", 0), head: beatPos("b", 4) }, text: "" }
 ];
 
-function compare(doc: FlowDoc, range: FlowRange, text: string): void {
+function compare(doc: FlowDoc, range: FlowRange, text: string | readonly Run[]): void {
   const p = ports();
   const expected = referenceReplacement(doc, range, text, p);
-  const out = replaceRange(doc, range, text ? [{ text, marks: {} }] : [], p);
+  const piece = typeof text === "string" ? text ? [{ text, marks: {} }] : [] : text;
+  const out = replaceRange(doc, range, piece, p);
   assert.ok(out && "rows" in out, JSON.stringify(out));
   const next: FlowDoc = { rows: out.rows, sections: out.sections, comments: doc.comments.filter(comment => !out.removedComments.includes(comment.id)) };
   assert.deepEqual(observedFlowContent(next, doc, p), expected);
@@ -50,6 +52,12 @@ for (const shape of reviewShapes) {
   });
 }
 
+test("reference formatting: replacements preserve independent per-character marks", () => {
+  const doc: FlowDoc = { rows: [{ id: "a", audioText: "<strong>Alpha</strong> <em>beta</em>" },
+    { id: "b", audioText: "<u>Gamma</u> <s>delta</s> <mark>end</mark>" }], comments: [] };
+  compare(doc, { anchor: beatPos("a", 3), head: beatPos("b", 2) }, [{ text: "Bold", marks: { b: true, i: true, u: true, s: true, hl: true } }]);
+});
+
 test("seeded reference: 1800 replacements compare headings, text, beat identities, visuals, flags and comments", t => {
   const started = performance.now();
   for (let seed = 1; seed <= 300; seed++) {
@@ -57,17 +65,21 @@ test("seeded reference: 1800 replacements compare headings, text, beat identitie
     const pick = (limit: number): number => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return Math.floor(state / 65536) % limit; };
     const rows = Array.from({ length: 1 + pick(6) }, (_, i) => ({ ...row("r" + i, ["", "Alpha", "<strong>Body</strong>", marked("Quote")][pick(4)] as string, ["", "Visual", marked("Visual")][pick(3)] as string),
       ...(pick(3) === 0 ? { paragraphStart: true } : {}), ...(pick(5) === 0 ? { imageRef: { sha256: "a".repeat(64), width: 1, height: 1, mime: "image/png" }, imageName: "Picture" } : {}) }));
-    const sections: DocumentScene[] = rows.filter((_, i) => i === 0 ? !!pick(2) : pick(3) === 0).map((beat, i) => scene("s" + i, beat.id));
-    const doc: FlowDoc = { rows, sections, comments: [{ id: "thread", anchorId: "quote", rowId: rows[pick(rows.length)]?.id }] };
+    const names = ["Opening " + seed, "Room (night)", "Two  words", "Caf\u00e9", "Scene's end"];
+    const sections: DocumentScene[] = rows.filter((_, i) => i === 0 ? !!pick(2) : pick(3) === 0).map((beat, i) => scene("s" + i, beat.id, names[(seed + i) % names.length] as string));
+    const comment = { id: "thread", anchorId: "quote", rowId: rows[pick(rows.length)]?.id, kind: "anchor", field: "audioText", body: "<em>Keep " + seed + "</em>",
+      author: "Adam", resolved: !!(seed % 2), createdAt: "2026-11-01T00:00:00Z", replies: [{ id: "reply", body: "Reply " + seed, author: "Sam" }] };
+    const doc: FlowDoc = { rows, sections, comments: [comment] };
     const positions: FlowPos[] = rows.flatMap(beat => {
       const length = cells(beat.audioText).reduce((n, run) => n + run.text.length, 0);
       return [beatPos(beat.id, 0), beatPos(beat.id, Math.floor(length / 2)), beatPos(beat.id, length)];
     });
-    for (const section of sections) positions.push(headingPos(section.id, 0), headingPos(section.id, 2), headingPos(section.id, 5));
+    for (const section of sections) positions.push(headingPos(section.id, 0), headingPos(section.id, Math.floor(section.name.length / 2)), headingPos(section.id, section.name.length));
     for (let operation = 0; operation < 6; operation++) {
       const range = { anchor: positions[pick(positions.length)] as FlowPos, head: positions[pick(positions.length)] as FlowPos };
-      const text = operation % 2 ? "X" : "";
-      try { compare(doc, range, text); }
+      const piece: Run[] = [{ text: ["", "X", " ", "word ", " next", "  "][operation] as string,
+        marks: operation % 2 ? { b: true, i: true, u: true, s: true, hl: true } : {} }];
+      try { compare(doc, range, piece); }
       catch (error) { throw new Error("reference seed=" + seed + " operation=" + operation + " range=" + JSON.stringify(range), { cause: error }); }
     }
     const p = ports();

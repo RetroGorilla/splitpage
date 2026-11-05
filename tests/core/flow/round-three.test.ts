@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { flowCommand } from "../../../src/application/commands/flow.ts";
-import { caretAt, headingPos, joinWithPrevious, replaceRange } from "../../../src/core/flow/flow.ts";
+import { beatPos, caretAt, headingPos, insertBeats, joinWithPrevious, replaceRange } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowEdit, FlowOutcome } from "../../../src/core/flow/flow.ts";
 import { rowSlots } from "../../../src/core/document/gallery.ts";
 import { harness, runConfined } from "../../application/session-fakes.ts";
@@ -65,4 +65,32 @@ test("R3-B: joining two poster links applies the single-poster policy and disclo
   const out = edited(joinWithPrevious(doc, "b", rt.ports));
   assert.deepEqual(rowSlots(out.rows[0]), rowSlots(rt.load(nextDocument(doc, out)).rows[0]));
   assert.match(out.notice ?? "", /poster/i);
+});
+
+test("reload seed 1: inserted partial rows get stored defaults before entering a session", () => {
+  const rt = createFlowLoadRuntime();
+  const h = harness(undefined, { entry: rt.load });
+  h.session.adopt({ rows: [{ id: "a", audioText: "Body" }] });
+  const out = runConfined(h.session, flowCommand("insert", doc => insertBeats(doc, beatPos("a", 2), [{ id: "inserted", audioText: "New", visualText: "" }], rt.ports), stamps));
+  assert.equal(out.kind, "applied");
+  assert.deepEqual(h.session.held(), rt.load(h.session.held()));
+  h.session.dispose();
+});
+
+test("gallery cap audit: names, pictures, annotation marks, points and text survive a maximum-size join", () => {
+  const rt = createFlowLoadRuntime();
+  const textMark = { kind: "text", color: "#111111", size: 0.1, x: 0.2, y: 0.3, text: "T".repeat(500) };
+  const pen = { kind: "pen", color: "#111111", width: 0.05, points: Array.from({ length: 4000 }, (_, i) => i % 2 ? 0.2 : 0.1) };
+  const annotation = { imageRef: { ...image, sha256: "b".repeat(64) }, marks: [pen, ...Array.from({ length: 499 }, () => textMark)] };
+  const doc = rt.load({ rows: [{ id: "a", imageRef: image, imageName: "N".repeat(200), imageAnnotation: annotation,
+    moreImages: Array.from({ length: 60 }, (_, i) => ({ imageRef: { ...image, sha256: (i + 1).toString(16).padStart(64, "0") }, name: "N".repeat(200), links: Array.from({ length: 20 }, (_, n) => link(n)) })) },
+  { id: "b", imageRef: image, imageName: "Other" }] });
+  const out = edited(joinWithPrevious(doc, "b", rt.ports));
+  const slots = rowSlots(out.rows[0]);
+  assert.equal(slots.length, 61);
+  assert.equal(slots[0]?.name.length, 200);
+  assert.equal(slots[0]?.annotation?.marks.length, 500);
+  assert.equal((slots[0]?.annotation?.marks[0] as { points: number[] }).points.length, 4000);
+  assert.equal((slots[0]?.annotation?.marks[1] as { text: string }).text.length, 500);
+  assert.deepEqual(slots, rowSlots(rt.load(nextDocument(doc, out)).rows[0]));
 });

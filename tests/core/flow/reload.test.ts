@@ -63,7 +63,7 @@ test("reference sequences: 60 varied headings retain six successive inserts, whi
   t.diagnostic("360 successive edits and reloads in " + (performance.now() - started).toFixed(0) + " ms; seeds 1..60");
 });
 
-test("reload stability: all 21 flow transformations retain complete documents through the real load path", t => {
+test("reload stability: all 21 flow transformations retain complete documents through the real load path", async t => {
   const started = performance.now();
   const rt = createFlowLoadRuntime();
   const operations: Record<string, (doc: FlowDoc, range: FlowRange) => FlowOutcome> = {
@@ -74,7 +74,7 @@ test("reload stability: all 21 flow transformations retain complete documents th
     enterAt: doc => flow.enterAt(doc, flow.caretAt(flow.beatPos("a", 2)), rt.ports),
     joinWithPrevious: doc => flow.joinWithPrevious(doc, "b", rt.ports),
     backspaceAt: doc => flow.backspaceAt(doc, flow.beatPos("b", 0), rt.ports, { tick: "delete" }),
-    deleteForwardAt: doc => flow.deleteForwardAt(doc, flow.beatPos("b", 6), rt.ports),
+    deleteForwardAt: doc => flow.deleteForwardAt(doc, flow.beatPos("a", 10), rt.ports),
     renameHeading: doc => flow.renameHeading(doc, "s", "Scene " + doc.rows.length + " ", 8),
     enterInHeading: doc => flow.enterInHeading(doc, flow.headingPos("s", 2), rt.ports),
     finalizeHeading: doc => flow.finalizeHeading(doc, "a", 9, null, rt.ports),
@@ -94,20 +94,37 @@ test("reload stability: all 21 flow transformations retain complete documents th
     }
   };
   assert.equal(Object.keys(operations).length, 21);
-  for (let seed = 1; seed <= 8; seed++) {
-    for (const [name, run] of Object.entries(operations)) {
-      const input = fixture(seed);
-      if (name === "finalizeHeading") input.rows[0] = { ...input.rows[0] as typeof input.rows[0], id: "a", audioText: "# Heading", visualText: "" };
-      const h = harness(undefined, { entry: rt.load, reconcile: doc => syncCommentAnchors(doc, rt.cells) });
-      h.session.adopt(input);
-      const range = { anchor: flow.beatPos("a", 2), head: flow.beatPos("b", 3) };
-      let outcome: FlowOutcome = null;
-      const out = runConfined(h.session, flowCommand(name, current => { outcome = run(current, range); return outcome; }, stamps));
-      assert.ok(["applied", "noop", "rejected"].includes(out.kind), name + " seed=" + seed + " " + JSON.stringify(out));
-      const live = h.session.held() as FlowDoc;
-      assert.deepEqual(canonical(rt.load(live)), canonical(live), name + " reload seed=" + seed + " notice=" + (outcome as FlowEdit | null)?.notice);
-      h.session.dispose();
-    }
+  const readers = ["beatPos", "headingPos", "caretAt", "flowOf", "startsParagraph", "comparePos", "orderedRange", "isCollapsed", "withinOneBeat",
+    "isPendingHeading", "logicalText", "findInFlow", "normalizedSections", "stepFrom"];
+  assert.deepEqual(Object.keys(flow).filter(name => typeof flow[name as keyof typeof flow] === "function").sort(), Object.keys(operations).concat(readers).sort());
+  const applied = new Set<string>();
+  for (const [name, run] of Object.entries(operations)) {
+    await t.test(name, () => {
+      for (let seed = 1; seed <= 8; seed++) {
+        const input = fixture(seed);
+        if (name === "finalizeHeading") input.rows[0] = { ...input.rows[0] as typeof input.rows[0], id: "a", audioText: "# Heading", visualText: "" };
+        if (name === "sentenceParagraphs") {
+          const first = input.rows[0], second = input.rows[1];
+          assert.ok(first && second);
+          first.audioText = "Body.";
+          Reflect.deleteProperty(second, "paragraphStart");
+        }
+        const h = harness(undefined, { entry: rt.load, reconcile: doc => syncCommentAnchors(doc, rt.cells) });
+        h.session.adopt(input);
+        try {
+          const range = { anchor: flow.beatPos("a", 2), head: flow.beatPos("b", 3) };
+          let outcome: FlowOutcome = null;
+          const out = runConfined(h.session, flowCommand(name, current => { outcome = run(current, range); return outcome; }, stamps));
+          assert.ok(["applied", "noop", "rejected"].includes(out.kind), name + " seed=" + seed + " " + JSON.stringify(out));
+          if (out.kind === "applied") applied.add(name);
+          const live = h.session.held() as FlowDoc;
+          assert.deepEqual(canonical(rt.load(live)), canonical(live), name + " reload seed=" + seed + " notice=" + (outcome as FlowEdit | null)?.notice);
+        } finally {
+          h.session.dispose();
+        }
+      }
+    });
   }
+  assert.deepEqual([...applied].sort(), Object.keys(operations).sort());
   t.diagnostic("168 operation reloads in " + (performance.now() - started).toFixed(0) + " ms; seeds 1..8");
 });
