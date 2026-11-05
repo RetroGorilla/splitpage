@@ -136,6 +136,7 @@ expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-ca
 expect document.querySelector('#broll-list .broll-card .broll-status-btn').textContent === 'To film'
 expect document.querySelector('#broll-list .broll-card .broll-status-btn').getAttribute('data-status') === 'unshot'
 expect !document.querySelector('#broll-list .broll-card .broll-status-field .ev-chevron')
+expect getComputedStyle(document.querySelector('#broll-list .broll-card .broll-loc-field > .broll-picker')).paddingRight === '26px'
 expect document.querySelector('#broll-list .broll-card .broll-flag-btn').classList.contains('is-active')
 expect document.querySelector('#broll-list .broll-card .broll-scene-n').textContent === 'A.1'
 expect document.querySelector('#broll-list .broll-card .broll-scene-link').textContent === 'A.1 · 00:00'
