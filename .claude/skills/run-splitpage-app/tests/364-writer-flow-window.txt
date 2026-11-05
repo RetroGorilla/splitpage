@@ -13,6 +13,7 @@ wait hit(document.getElementById('comments-panel'))
 expect ['btn-file','wr-close','btn-save','length-status','wr-size','wr-words'].every(id=>hit(document.getElementById(id)))
 expect Math.abs(document.getElementById('wr-close').getBoundingClientRect().x-box.x)<1 && Math.abs(document.getElementById('wr-close').getBoundingClientRect().y-box.y)<1
 expect document.getElementById('writer-doc').getBoundingClientRect().width >= 450
+expect document.querySelector('.wr-visual-note').hidden || document.querySelector('.wr-visual-note').getBoundingClientRect().right <= document.getElementById('comments-panel').getBoundingClientRect().left
 expect document.querySelector('.writer-bar').getBoundingClientRect().right<=document.getElementById('comments-panel').getBoundingClientRect().left+1
 shot phase-7-comments-1024
 click #comments-panel-close
