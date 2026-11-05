@@ -94,9 +94,12 @@ export function rowFieldKey(row: Readonly<Record<string, unknown>> | null | unde
 }
 
 export function rowContentEqual(a: Readonly<Record<string, unknown>> | null | undefined, b: Readonly<Record<string, unknown>> | null | undefined): boolean {
-  if (!a || !b) return false;
+  return !!a && !!b && rowEditedContentEqual(a, b) && (a.paragraphStart === true) === (b.paragraphStart === true);
+}
+
+function rowEditedContentEqual(a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>): boolean {
   return ROW_FIELDS.every(function (f) { return rowFieldKey(a, f) === rowFieldKey(b, f); }) &&
-    setLengthOf(a) === setLengthOf(b) && (a.paragraphStart === true) === (b.paragraphStart === true);
+    setLengthOf(a) === setLengthOf(b);
 }
 
 function setLengthOf(row: { lengthSeconds?: unknown }): number | null {
@@ -170,13 +173,12 @@ export function mergeRows(base: RowSide | null | undefined, mine: RowSide, their
     if (mp !== tp) {
       const useMine = b ? tp === bp : !tp;
       if (useMine ? mp : tp) out.paragraphStart = true; else delete out.paragraphStart;
-      if (useMine) tookMine = true; else tookTheirs = true;
     }
     if (tookMine) {
       out.updatedAt = ctx.clock.nowIso();
       out.updatedBy = ctx.editor();
       stats.rowsFromMe++;
-    } else if (b ? tookTheirs : !rowContentEqual({}, t)) {
+    } else if (b ? tookTheirs : !rowEditedContentEqual({}, t)) {
       stats.rowsFromThem++;
     }
     return out;

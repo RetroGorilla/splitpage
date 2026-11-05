@@ -34,6 +34,9 @@ The row flag merges like `lengthSeconds`: a change against the base wins,
 incoming wins a conflict, and with no base a present flag wins over absence.
 Paragraph-only edits count against concurrent row deletion in both directions.
 The document marker merges to true if either side has it.
+Paragraph flags are structural metadata: changing only a flag preserves the
+beat's `updatedAt` and `updatedBy` in commands, undo, redo and merge, and does not
+add an edited-row count to the merge report. Content edits still stamp normally.
 
 Shared delete, cut, move, swap and paste commands preserve effective paragraph
 boundaries inside their existing transaction and undo entry. Swap is a move of

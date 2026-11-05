@@ -113,8 +113,6 @@ test("Remove scene header acts immediately, retains beats, and undoes the first 
   undoOwner().flush();
   assert.equal(undoOwner().sizes().undo, count + 1);
   undoOwner().undo();
-  before.rows[0].updatedAt = currentDocument().rows[0].updatedAt;
-  before.rows[0].updatedBy = currentDocument().rows[0].updatedBy;
   assert.deepEqual(currentDocument(), before);
   assert.equal(document.querySelector('#rows [data-section-id="first"] .section-letter').textContent, "A");
 });

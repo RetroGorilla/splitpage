@@ -47,8 +47,6 @@ function key(name, cell = document.activeElement, options = {}) {
 }
 
 const state = () => JSON.stringify(currentDocument());
-const contentState = text => JSON.stringify(JSON.parse(text), (key, value) =>
-  key === "updatedAt" || key === "updatedBy" ? undefined : value);
 const hint = () => document.querySelector('#writer-doc [data-section-id="s2"] .section-hint');
 const ids = () => currentDocument().rows.map(row => row.id);
 
@@ -90,7 +88,7 @@ test("singleton Alt moves require consecutive confirmation and undo restores the
     undoOwner().flush();
     assert.equal(undoOwner().sizes().undo, undo + 1);
     undoOwner().undo();
-    assert.equal(contentState(state()), contentState(before));
+    assert.equal(state(), before);
   }
 });
 
@@ -134,7 +132,7 @@ for (const how of ["mouse", "keyboard", "space"]) {
       undoOwner().flush();
       assert.equal(undoOwner().sizes().undo, undo + 1);
       undoOwner().undo();
-      assert.equal(contentState(state()), contentState(before));
+      assert.equal(state(), before);
     }
   });
 }

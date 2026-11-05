@@ -77,6 +77,26 @@ test("a paragraph-only edit survives a concurrent delete in either orientation, 
   }
 });
 
+test("paragraph-only merges preserve visible attribution and do not report a content edit", () => {
+  for (const baseFlag of [undefined, true] as const) {
+    const base = doc(baseFlag), changed = doc(baseFlag ? undefined : true);
+    for (const document of [base, changed]) {
+      for (const row of document.rows) {
+        row.updatedAt = "2020-01-01T00:00:00.000Z";
+        row.updatedBy = "Alice";
+      }
+    }
+    for (const ancestor of [base, null]) {
+      for (const [mine, theirs] of [[changed, base], [base, changed]] as const) {
+        const result = merge(ancestor, mine, theirs);
+        assert.equal(result.merged.rows[0]?.updatedAt, base.rows[0]?.updatedAt);
+        assert.equal(result.merged.rows[0]?.updatedBy, "Alice");
+        assert.deepEqual(result.stats, { rowsFromMe: 0, rowsFromThem: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 });
+      }
+    }
+  }
+});
+
 test("paragraphsDecided is true if either side has it; the base alone does not retain it", () => {
   for (const base of [null, doc(undefined), doc(undefined, true)]) {
     for (const mine of [undefined, true] as const) {
@@ -91,6 +111,8 @@ test("paragraphsDecided is true if either side has it; the base alone does not r
 
 test("a merge failure after a paragraph edit leaves all inputs intact, and retry survives reload", () => {
   const base = doc(), mine = doc(true, true), theirs = doc();
+  assert.ok(mine.rows[1]);
+  mine.rows[1].lengthSeconds = 12;
   const before = JSON.stringify([base, mine, theirs]);
   const migration = fakeMigration();
   assert.throws(() => mergeStates(base, mine, theirs, { migrate: migration.ports, ids: migration.ids,
@@ -102,4 +124,6 @@ test("a merge failure after a paragraph edit leaves all inputs intact, and retry
   assert.equal(JSON.stringify(migrateRows(JSON.parse(saved), fakeMigration().ports)), saved);
   assert.equal(result.rows[0]?.paragraphStart, true);
   assert.equal(result.paragraphsDecided, true);
+  assert.equal(result.rows[1]?.updatedBy, "Editor");
+  assert.equal(result.rows[1]?.updatedAt, fixedClock.nowIso());
 });

@@ -5,7 +5,7 @@ import { pasteBeatsCommand, removeBeatsCommand } from "../../src/application/com
 import { addSceneCommand, removeSceneCommand, moveSceneCommand } from "../../src/application/commands/scenes.ts";
 import { joinBeatsCommand, splitBeatCommand, textCut } from "../../src/application/commands/split-join.ts";
 import { importRowsCommand } from "../../src/application/commands/import-rows.ts";
-import { createUndoHistory, diffStates } from "../../src/application/editing/undo/history.ts";
+import { createUndo } from "../../src/application/editing/undo/undo.ts";
 import { scenesInOrder } from "../../src/core/document/scenes.ts";
 import { cloneState } from "../../src/core/document/clone.ts";
 import type { DocumentShape, DocumentRow } from "../../src/core/document/validated.ts";
@@ -22,7 +22,8 @@ const ports = {
 function opened(flags: string[] = [], sections: string[] = []): Harness {
   const h = harness();
   h.session.adopt({ schema: 2, title: "Paragraphs", rows: ["a", "b", "c", "d", "e", "f"].map(id => ({
-    id, audioText: id, ...(flags.includes(id) ? { paragraphStart: true } : {})
+    id, audioText: id, updatedAt: "2020-01-01T00:00:00.000Z", updatedBy: "Alice",
+    ...(flags.includes(id) ? { paragraphStart: true } : {})
   })), sections: sections.map(id => ({ id: "s" + id, name: id, firstSceneId: id })) });
   h.log.length = 0;
   return h;
@@ -63,6 +64,62 @@ function content(doc: DocumentShape): unknown {
   return JSON.parse(JSON.stringify(doc, (key, value: unknown) =>
     ["updatedAt", "updatedBy", "lastEditedAt", "lastEditedBy", "rev"].includes(key) ? undefined : value));
 }
+
+function undoFor(h: Harness) {
+  let now = 0;
+  const undo = createUndo({ held: h.session.held, runs: html => ports.cells(String(html ?? "")),
+    now: () => now += 2000, cleared: () => {} });
+  undo.track();
+  undo.routeReplays(h.session.replay, { clock: ports.clock, editor: { name: () => "Bob" } });
+  return undo;
+}
+
+function assertUntouchedAttribution(before: DocumentShape, after: DocumentShape, label: string, edited = new Set<string>()): void {
+  const visible = (row: DocumentRow) => JSON.stringify(row, (key, value: unknown) =>
+    ["paragraphStart", "updatedAt", "updatedBy"].includes(key) ? undefined : value);
+  for (const row of before.rows) {
+    if (edited.has(row.id)) continue;
+    const next = after.rows.find(item => item.id === row.id);
+    if (!next || visible(row) !== visible(next)) continue;
+    assert.deepEqual([next.updatedAt, next.updatedBy], [row.updatedAt, row.updatedBy], `${label}: ${row.id} attribution`);
+  }
+}
+
+test("paragraph-only command changes preserve attribution forward, on undo and on redo", () => {
+  for (const [command, rowId] of [
+    [moveBeatCommand("b", "a", false), "a"], [swapBeatsCommand("b", -1), "a"],
+    [removeSceneCommand("sb"), "b"], [deleteBeatCommand("d"), "e"],
+    [removeBeatsCommand(["d"]), "e"], [paste(null, [{ id: "new" }], "d"), "e"]
+  ] as const) {
+    const h = opened(["d"], ["b", "c"]), undo = undoFor(h);
+    const before = snapshot(h);
+    assert.equal(runConfined(h.session, command).kind, "applied");
+    const after = snapshot(h);
+    assert.equal(after.rows.find(row => row.id === rowId)?.paragraphStart, true, command.name);
+    assertUntouchedAttribution(before, after, command.name);
+    undo.noteEdit(); undo.flush();
+    assert.equal(undo.undo().ok, true);
+    assert.deepEqual(snapshot(h), before, `${command.name} undo`);
+    assert.deepEqual(h.published.at(-1)?.changes.cells, [{ rowId, field: "paragraphStart" }]);
+    assert.equal(undo.redo().ok, true);
+    assert.deepEqual(snapshot(h), after, `${command.name} redo`);
+    assert.deepEqual(h.published.at(-1)?.changes.cells, [{ rowId, field: "paragraphStart" }]);
+    h.session.dispose();
+  }
+});
+
+test("content edits still stamp a beat when it also carries a paragraph flag", () => {
+  const h = opened(["b"]), undo = undoFor(h);
+  runConfined(h.session, joinBeatsCommand("b", ports));
+  assert.equal(snapshot(h).rows.find(row => row.id === "b")?.updatedBy, "Editor");
+  undo.noteEdit(); undo.flush();
+  for (const replay of [undo.undo, undo.redo]) {
+    assert.equal(replay().ok, true);
+    assert.equal(snapshot(h).rows.find(row => row.id === "b")?.updatedBy, "Bob");
+    assert.equal(snapshot(h).rows.find(row => row.id === "b")?.updatedAt, ports.clock.nowIso());
+  }
+  h.session.dispose();
+});
 
 test("deleting paragraph starts promotes only the next survivor in the same paragraph", () => {
   const h = opened(["c", "f"]);
@@ -162,12 +219,12 @@ test("a failure after flag adjustments rolls back structure and flags without an
   assert.equal(h.session.generation(), 0);
 });
 
-test("seeded command sequences preserve untouched paragraph partners, nonempty scenes and undo content", () => {
+test("seeded command sequences preserve untouched partners and attribution, nonempty scenes and undo content", () => {
   let random = 0x1a202611;
   const pick = (n: number): number => { random = (Math.imul(random, 1664525) + 1013904223) >>> 0; return n ? (random >>> 8) % n : 0; };
   for (let trial = 0; trial < 80; trial++) {
     const h = opened(["b", "c", "d", "e", "f"].filter(() => pick(3) === 0), ["c", "e"].filter(() => pick(2) === 0));
-    const history = createUndoHistory(() => []);
+    const history = undoFor(h);
     const versions = [snapshot(h)];
     for (let step = 0; step < 45; step++) {
       const before = snapshot(h), groups = partners(before);
@@ -200,6 +257,9 @@ test("seeded command sequences preserve untouched paragraph partners, nonempty s
       assert.notEqual(outcome.kind, "failed", `trial ${trial}, step ${step}, ${command.name}`);
       if (outcome.kind !== "applied") continue;
       const after = snapshot(h), nextGroups = partners(after);
+      const edited = new Set(outcome.changes.cells.flatMap(cell =>
+        cell.field !== "paragraphStart" && cell.rowId ? [cell.rowId] : []));
+      assertUntouchedAttribution(before, after, `trial ${trial}, step ${step}, ${command.name}`, edited);
       const untouched = before.rows.filter(row => !touched.has(row.id) && nextGroups.has(row.id));
       for (const a of untouched) for (const b of untouched) {
         assert.equal(nextGroups.get(a.id) === nextGroups.get(b.id), groups.get(a.id) === groups.get(b.id),
@@ -209,17 +269,25 @@ test("seeded command sequences preserve untouched paragraph partners, nonempty s
       assert.equal(scenesInOrder(after)?.length ?? 0, Array.isArray(after.sections) ? after.sections.length : 0);
       assert.equal(new Set(after.rows.map(row => row.id)).size, after.rows.length);
       assert.ok(after.rows.every(row => !Object.hasOwn(row, "paragraphStart") || row.paragraphStart === true));
-      history.record(diffStates(before, after), step * 2000);
+      history.noteEdit(); history.flush();
       versions.push(after);
     }
-    const last = versions.pop();
-    assert.ok(last);
-    const restored = cloneState(last);
-    while (versions.length) {
-      assert.equal(history.undo(restored).ok, true, `trial ${trial}`);
-      const previous = versions.pop();
+    for (let at = versions.length - 2; at >= 0; at--) {
+      const before = snapshot(h);
+      assert.equal(history.undo().ok, true, `trial ${trial}`);
+      const previous = versions[at];
       assert.ok(previous);
-      assert.deepEqual(content(restored), content(previous));
+      assert.deepEqual(content(snapshot(h)), content(previous));
+      assertUntouchedAttribution(before, snapshot(h), `trial ${trial}, undo ${at}`);
     }
+    for (let at = 1; at < versions.length; at++) {
+      const before = snapshot(h);
+      assert.equal(history.redo().ok, true, `trial ${trial}`);
+      const next = versions[at];
+      assert.ok(next);
+      assert.deepEqual(content(snapshot(h)), content(next));
+      assertUntouchedAttribution(before, snapshot(h), `trial ${trial}, redo ${at}`);
+    }
+    h.session.dispose();
   }
 });
