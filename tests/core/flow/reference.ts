@@ -1,4 +1,4 @@
-import type { FlowDoc, FlowPorts, FlowRange } from "../../../src/core/flow/flow.ts";
+import type { FlowDoc, FlowPorts, FlowRange, FlowRow } from "../../../src/core/flow/flow.ts";
 import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 
 type Character = { value: string; anchors: readonly string[] };
@@ -9,18 +9,22 @@ type LinearBlock = {
   start: number;
   paragraph: number;
   flag: boolean;
-  visual: string;
+  visual: readonly unknown[];
   visualAnchors: string[];
 };
 
 export interface ReferenceFlowContent {
-  rows: { id: string; text: string; visual: string; flag: boolean }[];
+  rows: { id: string; text: string; visual: readonly unknown[]; flag: boolean }[];
   headings: { id: string; name: string; firstBeat: number }[];
   comments: string[];
 }
 
 function characters(html: string | null | undefined, ports: FlowPorts): Character[] {
   return ports.cells(html).flatMap(run => run.text.split("").map(value => ({ value, anchors: run.marks.cmt ?? [] })));
+}
+
+function visualOf(row: FlowRow): readonly unknown[] {
+  return [row.visualText ?? "", row.imageRef ?? null, row.imageName ?? null, row.imageLinks ?? null, row.moreImages ?? null, row.imageAnnotation ?? null];
 }
 
 export function referenceReplacement(doc: FlowDoc, range: FlowRange, replacement: string, ports: FlowPorts): ReferenceFlowContent {
@@ -31,13 +35,13 @@ export function referenceReplacement(doc: FlowDoc, range: FlowRange, replacement
     const scene = sections.find(item => item.firstSceneId === row.id);
     if (scene) {
       const text = scene.name.split("").map(value => ({ value, anchors: [] }));
-      blocks.push({ kind: "heading", id: scene.id, text, start: cursor, paragraph: -1, flag: false, visual: "", visualAnchors: [] });
+      blocks.push({ kind: "heading", id: scene.id, text, start: cursor, paragraph: -1, flag: false, visual: visualOf({ id: "" }), visualAnchors: [] });
       cursor += text.length + 1;
     }
     if (paragraph === -1 || scene || row.paragraphStart) paragraph++;
     const text = characters(row.audioText, ports);
     blocks.push({ kind: "beat", id: row.id, text, start: cursor, paragraph, flag: !!row.paragraphStart,
-      visual: row.visualText ?? "", visualAnchors: characters(row.visualText, ports).flatMap(char => char.anchors) });
+      visual: visualOf(row), visualAnchors: characters(row.visualText, ports).flatMap(char => char.anchors) });
     cursor += text.length + 1;
   }
   const position = (pos: FlowRange["head"]) => {
@@ -56,7 +60,7 @@ export function referenceReplacement(doc: FlowDoc, range: FlowRange, replacement
   const removedHeadings = new Set<string>();
   for (const block of blocks) {
     const isStart = block.kind === start.kind && block.id === (start.kind === "beat" ? start.rowId : start.sceneId);
-    const full = from <= block.start && to >= block.start + block.text.length && (block.text.length > 0 || to > block.start);
+    const full = from <= block.start && to >= block.start + block.text.length;
     if (full && !(block.kind === "beat" && localBeat) && !(isStart && replacement)) {
       (block.kind === "heading" ? removedHeadings : removedRows).add(block.id);
       continue;
@@ -85,13 +89,13 @@ export function referenceReplacement(doc: FlowDoc, range: FlowRange, replacement
   }
   for (let i = output.length - 1; i >= 0; i--) {
     if (output[i]?.kind === "heading" && output[i + 1]?.kind !== "beat") {
-      output.splice(i + 1, 0, { kind: "beat", id: "$new", text: [], start: -1, paragraph: -1, flag: false, visual: "", visualAnchors: [] });
+      output.splice(i + 1, 0, { kind: "beat", id: "$new", text: [], start: -1, paragraph: -1, flag: false, visual: visualOf({ id: "" }), visualAnchors: [] });
     }
   }
-  if (!output.some(block => block.kind === "beat")) output.push({ kind: "beat", id: "$new", text: [], start: -1, paragraph: -1, flag: false, visual: "", visualAnchors: [] });
+  if (!output.some(block => block.kind === "beat")) output.push({ kind: "beat", id: "$new", text: [], start: -1, paragraph: -1, flag: false, visual: visualOf({ id: "" }), visualAnchors: [] });
   const rows = output.filter(block => block.kind === "beat");
   const survivingAnchors = new Set(rows.flatMap(block => block.text.flatMap(char => char.anchors).concat(block.visualAnchors)));
-  const removedAnchors = new Set(blocks.filter(block => removedRows.has(block.id)).flatMap(block => block.text.flatMap(char => char.anchors)));
+  const removedAnchors = new Set(blocks.filter(block => removedRows.has(block.id)).flatMap(block => block.text.flatMap(char => char.anchors).concat(block.visualAnchors)));
   return {
     rows: rows.map(block => ({ id: originalRows.has(block.id) ? block.id : "$new", text: block.text.map(char => char.value).join(""), visual: block.visual, flag: block.flag })),
     headings: output.flatMap((block, index) => block.kind === "heading" ? [{ id: block.id, name: block.text.map(char => char.value).join(""), firstBeat: rows.indexOf(output[index + 1] as LinearBlock) }] : []),
@@ -105,7 +109,7 @@ export function referenceReplacement(doc: FlowDoc, range: FlowRange, replacement
 export function observedFlowContent(doc: FlowDoc, original: FlowDoc, ports: FlowPorts): ReferenceFlowContent {
   const oldIds = new Set(original.rows.map(row => row.id));
   return {
-    rows: doc.rows.map(row => ({ id: oldIds.has(row.id) ? row.id : "$new", text: characters(row.audioText, ports).map(char => char.value).join(""), visual: row.visualText ?? "", flag: !!row.paragraphStart })),
+    rows: doc.rows.map(row => ({ id: oldIds.has(row.id) ? row.id : "$new", text: characters(row.audioText, ports).map(char => char.value).join(""), visual: visualOf(row), flag: !!row.paragraphStart })),
     headings: ((doc.sections ?? []) as readonly DocumentScene[]).map(scene => ({ id: scene.id, name: scene.name, firstBeat: doc.rows.findIndex(row => row.id === scene.firstSceneId) })),
     comments: doc.comments.map(comment => comment.id)
   };

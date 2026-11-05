@@ -27,7 +27,7 @@ function edit(out: FlowOutcome): FlowEdit {
 const stamps = { clock: { nowIso: () => "2026-11-04T12:00:00Z" }, editor: { name: () => "Editor" } };
 
 function sessionResult(doc: FlowDoc, operation: (current: FlowDoc) => FlowOutcome): FlowDoc {
-  const h = harness(undefined, { entry: () => migratedThenSet(doc) });
+  const h = harness(undefined, { entry: () => migratedThenSet(JSON.parse(JSON.stringify(doc)) as FlowDoc) });
   h.session.adopt({});
   const out = runConfined(h.session, flowCommand("round-two", operation, stamps));
   assert.ok(out.kind === "applied" || out.kind === "noop", JSON.stringify(out));
@@ -102,4 +102,25 @@ test("R2-8: empty scene names are invalid, so Enter at heading start retains car
   const before = JSON.stringify(doc);
   assert.deepEqual(enterInHeading(doc, headingPos("s", 0), ports()), { move: beatPos("a", 0) });
   assert.equal(JSON.stringify(doc), before);
+});
+
+test("seed 8 regression: a selected empty start beat is removed even when both offsets are zero", () => {
+  const doc: FlowDoc = { rows: [row("a", ""), row("b", "Body")], comments: [] };
+  const out = edit(replaceRange(doc, { anchor: beatPos("a", 0), head: beatPos("b", 0) }, [], ports()));
+  assert.deepEqual(out.rows.map(beat => beat.id), ["b"]);
+});
+
+test("R2-5: an empty beat fully contained at the range end loses its visual", () => {
+  const doc: FlowDoc = { rows: [row("a", "Before"), row("b", "", "Visual")], comments: [] };
+  const out = edit(replaceRange(doc, { anchor: beatPos("a", 6), head: beatPos("b", 0) }, [], ports()));
+  assert.deepEqual(out.rows.map(beat => beat.id), ["a"]);
+  assert.equal(out.rows[0]?.visualText, "");
+});
+
+test("reference seed 1 regression: the first surviving beat under a retained heading needs no stored flag", () => {
+  const doc: FlowDoc = { rows: [row("a", "Body"), row("b", "Tail")], sections: [scene("s", "a")], comments: [] };
+  const out = edit(replaceRange(doc, { anchor: beatPos("a", 0), head: beatPos("b", 0) }, [], ports()));
+  assert.deepEqual(out.rows.map(beat => beat.id), ["b"]);
+  assert.equal(out.rows[0]?.paragraphStart, undefined);
+  assert.equal(out.sections?.[0]?.firstSceneId, "b");
 });

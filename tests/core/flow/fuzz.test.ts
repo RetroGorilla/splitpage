@@ -1,3 +1,4 @@
+import { observedFlowContent, referenceReplacement } from "./reference.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRichText } from "../../../src/adapters/richtext/richtext.ts";
@@ -130,13 +131,8 @@ test("seeded flow: 240 documents × 16 operations preserve structure, outside te
             if (rows.has(last.id) && ![5, 6].includes(operation)) assert.ok(projection(cells(rows.get(last.id)?.audioText)).endsWith(projection(cells(last.audioText)).slice(to)));
           }
           if ([0, 15].includes(operation)) {
-            const expected = doc.rows.filter((row, i) => {
-              if (a === b || i < a || i > b) return true;
-              const length = cellLength(cells(row.audioText));
-              const left = i === a ? from : 0, right = i === b ? to : length;
-              return (i === a || i === b) && left === right || !(left === 0 && right === length) || (operation === 0 && i === a);
-            }).map(row => row.id);
-            if (expected.length) assert.deepEqual(next.rows.map(row => row.id), expected, "only fully selected beats removed");
+            const expected = referenceReplacement(doc, range, operation === 0 ? "Q" : "", ports);
+            assert.deepEqual(observedFlowContent(next, doc, ports), expected, "independent replacement model");
           } else if ([1, 11, 14].includes(operation)) {
             assert.deepEqual(next.rows.map(row => row.id), doc.rows.map(row => row.id));
           } else if (operation === 13) {

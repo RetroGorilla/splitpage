@@ -89,7 +89,7 @@ test("seeded differential: extracted Find matches the base on 1000 cells and que
   }
 });
 
-const BASE_SENTENCE_END_RE = /[.!?]["'??)\]]*$/;
+const BASE_SENTENCE_END_RE = /[.!?]["'\u2019\u201d)\]]*$/;
 
 test("R2-C: the frozen sentence oracle recognizes smart closing quotes", () => {
   assert.equal(BASE_SENTENCE_END_RE.test("Text.\u2019"), true);
@@ -98,7 +98,7 @@ test("R2-C: the frozen sentence oracle recognizes smart closing quotes", () => {
 
 test("seeded differential: sentence endings match the teleprompter's base definition", () => {
 
-  const endings = [".", "!", "?", "...", '.?', "?)", "x", "", " ", "\n", "']", "?"];
+  const endings = [".", "!", "?", "...", ".\u2019", ".\u201d", "?)", "x", "", " ", "\n", "']", "\u3002", "\u2019", "\u201d"];
   for (let seed = 1; seed <= 1000; seed++) {
     const text = "Text" + endings[seed % endings.length] + endings[Math.floor(seed / endings.length) % endings.length];
     assert.equal(endsSentence(text), BASE_SENTENCE_END_RE.test(text), "seed=" + seed);
