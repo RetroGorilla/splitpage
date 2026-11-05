@@ -1,0 +1,31 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; F.openFile(new File([JSON.stringify({schema:2,title:'Markdown provenance',paragraphsDecided:true,rows:[{id:'a',audioText:'Title',visualText:''},{id:'b',audioText:'Outside',visualText:'',paragraphStart:true},{id:'c',audioText:'',visualText:'',paragraphStart:true}],comments:[]})],'provenance.splitpage'))
+wait F.state().title === 'Markdown provenance'
+click #btn-write
+wait W.on()
+eval at('a',0)
+press # X
+key Backspace
+eval at('b',1)
+wait F.state().sections && F.state().sections[0].name === 'Title'
+key ctrl KeyZ
+eval W.place({anchor:bp('a',0),head:bp('a',7)}); window.data=new DataTransfer(); data.setData('text/plain','# Pasted'); document.getElementById('writer-doc').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}))
+expect !document.querySelector('.wr-beat[data-id="a"]').classList.contains('is-pending-heading')
+eval at('b',2)
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})})
+expect F.state().sections === undefined && F.state().rows[0].audioText === '# Pasted'
+eval at('a',8)
+press more
+eval at('b',2)
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})})
+expect F.state().sections === undefined && F.state().rows[0].audioText === '# Pastedmore'
+eval at('c',0)
+key ctrl KeyU
+type # Typed
+expect document.querySelector('.wr-beat[data-id="c"]').classList.contains('is-pending-heading')
+key Enter
+expect F.state().sections.some(function(s){return s.name === 'Typed'}) && !F.state().rows.some(function(r){return r.id === 'c'})
+key ctrl KeyZ
+expect document.querySelector('.wr-beat[data-id="c"]').textContent.replace(/\u200B/g,'') === '# Typed'
+expect W.check().length === 0

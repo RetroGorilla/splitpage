@@ -8,6 +8,7 @@ export interface FlowVisualBoxPorts {
   readonly root: HTMLElement;
   readonly doc: () => FlowDoc;
   readonly selection: () => FlowRange | null;
+  readonly prepare: (range: FlowRange) => FlowRange | null;
   readonly place: (range: FlowRange) => void;
   readonly current: () => boolean;
   readonly plainVisual: (row: FlowRow) => string;
@@ -104,6 +105,8 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     if (!ports.current() || !range) return;
     if (!withinOneBeat(range)) { ports.notice("Visuals must stay within one beat."); return; }
     if (range.head.kind !== "beat") { ports.notice("Put the caret in a beat to edit its visual."); return; }
+    range = ports.prepare(range);
+    if (!range || range.head.kind !== "beat") { ports.notice("Put the caret in a beat to edit its visual."); return; }
     const row = rowOf(range.head.rowId);
     if (!row) return;
     target = range;

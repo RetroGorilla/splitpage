@@ -1,0 +1,50 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}}; window.at=function(id,n){W.place({anchor:bp(id,n),head:bp(id,n)})}; window.tag='#<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Camera" contenteditable="false">Camera</span>'; window.cmt=function(id){return '<span class="cmt-anchor" data-cmt="'+id+'">Title</span>'}; window.notice=function(){return document.getElementById('toast-host').textContent.includes("A scene header can't hold tags or comments.")}; F.openFile(new File([JSON.stringify({schema:2,title:'Protected headings',paragraphsDecided:true,rows:[{id:'a',audioText:tag,visualText:''},{id:'b',audioText:cmt('cb'),visualText:'',paragraphStart:true},{id:'c',audioText:tag,visualText:'',paragraphStart:true},{id:'d',audioText:cmt('cd'),visualText:'',paragraphStart:true},{id:'e',audioText:tag,visualText:'',paragraphStart:true},{id:'f',audioText:'Outside',visualText:'',paragraphStart:true},{id:'g',audioText:'<strong>Bold</strong>',visualText:'',paragraphStart:true}],comments:['b','d'].map(function(id){return {id:'c'+id,anchorId:'c'+id,rowId:id,field:'audioText',kind:'anchor',body:'Keep',author:'Tester',createdAt:'2026-11-04T00:00:00Z',replies:[]}})})],'protected.splitpage'))
+wait F.state().title === 'Protected headings'
+click #btn-write
+wait W.on()
+eval at('a',1)
+press  X
+key Backspace
+eval at('a',8)
+key Enter
+expect F.state().sections === undefined && F.state().rows[0].id === 'a' && F.state().rows[0].audioText.includes('data-tag-name="Camera"') && !F.state().rows[0].audioText.startsWith('# ')
+expect notice() && document.querySelector('.wr-beat[data-id="a"] .tag-anchor').textContent === 'Camera'
+eval at('b',0)
+press # X
+key Backspace
+eval at('b',7)
+key ArrowDown
+wait F.state().rows.find(function(r){return r.id === 'b'}).audioText.indexOf('# ') === -1
+expect F.state().sections === undefined && F.state().rows.find(function(r){return r.id === 'b'}).audioText.includes('data-cmt="cb"') && F.state().comments.find(function(c){return c.id === 'cb'}).rowId === 'b'
+expect notice()
+eval at('c',1)
+press  X
+key Backspace
+click .wr-beat[data-id="f"]
+expect F.state().sections === undefined && F.state().rows.find(function(r){return r.id === 'c'}).audioText.includes('data-tag-name="Camera"') && W.selection().head.rowId === 'f'
+expect notice()
+eval at('d',0)
+press # X
+key Backspace
+eval document.getElementById('writer-title').focus()
+wait F.state().rows.find(function(r){return r.id === 'd'}).audioText.indexOf('# ') === -1
+expect F.state().sections === undefined && F.state().rows.find(function(r){return r.id === 'd'}).audioText.includes('data-cmt="cd"') && F.state().comments.find(function(c){return c.id === 'cd'}).rowId === 'd'
+expect document.activeElement.id === 'writer-title' && notice()
+eval at('e',1)
+press  X
+key Backspace
+click #wr-close
+expect F.state().sections === undefined && F.state().rows.map(function(r){return r.id}).join() === 'a,b,c,d,e,f,g'
+expect F.state().rows[4].audioText.includes('data-tag-name="Camera"') && !F.state().rows[4].audioText.startsWith('# ') && notice()
+click #btn-write
+wait W.on()
+eval at('g',0)
+press # X
+key Backspace
+eval at('g',6)
+key Enter
+expect F.state().sections.length === 1 && F.state().sections[0].name === 'Bold'
+expect F.state().comments.length === 2 && F.state().comments.every(function(c){return F.state().rows.some(function(r){return r.id === c.rowId})})
+expect W.check().length === 0

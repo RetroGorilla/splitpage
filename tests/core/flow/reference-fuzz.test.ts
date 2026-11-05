@@ -140,7 +140,11 @@ test("reference property R2-8: 100 heading-start Enters preserve a valid nonempt
   for (let seed = 1; seed <= 100; seed++) {
     const doc: FlowDoc = { rows: [row("a", "Body")], sections: [{ ...scene("s", "a"), name: "Title" + seed }], comments: [] };
     const before = JSON.stringify(doc);
-    assert.deepEqual(enterInHeading(doc, headingPos("s", 0), ports()), { move: beatPos("a", 0) }, "heading seed=" + seed);
+    const out = enterInHeading(doc, headingPos("s", 0), ports());
+    assert.ok(out && "rows" in out, "heading seed=" + seed);
+    assert.deepEqual(out.rows.map(beat => [beat.id, beat.audioText, !!beat.paragraphStart]), [["new1", "", false], ["a", "Body", false]], "heading seed=" + seed);
+    assert.deepEqual(out.sections, [{ ...scene("s", "a"), name: "Title" + seed }], "heading seed=" + seed);
+    assert.deepEqual(out.selection, { anchor: beatPos("new1", 0), head: beatPos("new1", 0) }, "heading seed=" + seed);
     assert.equal(JSON.stringify(doc), before, "heading seed=" + seed);
   }
 });

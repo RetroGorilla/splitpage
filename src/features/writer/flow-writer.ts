@@ -154,7 +154,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   });
 
   visual = createFlowVisualBox({
-    root, doc: ports.doc, selection: surface.selection, place: range => { surface.place(range); }, current: isCurrent,
+    root, doc: ports.doc, selection: surface.selection, prepare: surface.prepareVisual, place: range => { surface.place(range); }, current: isCurrent,
     plainVisual: ports.plainVisual,
     thumbnails: row => rowSlots(row).map(slot => {
       if (slot.ref && ports.pictures) return ports.pictures.imgHtml(slot.ref, "wr-flow-visual-thumb");
@@ -243,10 +243,10 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     const recorded = replaying;
     replaying = null;
     if (recorded) {
-      surface.place(replayDir === "undo" ? recorded.before ?? recorded.after : recorded.after, true);
+      surface.restoreAfterReplay(replayDir === "undo" ? recorded.before ?? recorded.after : recorded.after);
     } else {
       const step = (steps as readonly RowStep[]).find(item => item.op === "rowField" && item.key === "audioText");
-      if (step && step.rowId) surface.place(caretAt(beatPos(step.rowId, ports.caretAfterStep(step))), true);
+      if (step && step.rowId) surface.restoreAfterReplay(caretAt(beatPos(step.rowId, ports.caretAfterStep(step))));
     }
     ports.changed();
   }
