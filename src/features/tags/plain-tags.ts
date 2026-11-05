@@ -86,6 +86,7 @@ interface SilentTag {
   marks: Marks;
   wrappers: Node[];
   pending: boolean;
+  initialHtml: string;
 }
 
 let ports: PlainTagPorts | null = null;
@@ -208,7 +209,8 @@ function openSilentTag(saved: TagCaretSnapshot, cat: TagCategoryId, keyword: str
   caret.collapse(true);
   sel.removeAllRanges();
   sel.addRange(caret);
-  open = { cellEl: cellEl, span: span, tail: tail, cat: cat, keyword: keyword, silent: { marks: saved.marks, wrappers: wrappers, pending: true } };
+  open = { cellEl: cellEl, span: span, tail: tail, cat: cat, keyword: keyword,
+    silent: { marks: saved.marks, wrappers: wrappers, pending: true, initialHtml: toHtml(current) } };
   paint(open);
 }
 
@@ -261,8 +263,8 @@ function caretInOpen(o: OpenPlainTag) {
 function notePlainTagInput(cellEl: Element): void {
   const o = open;
   if (!o || o.cellEl !== cellEl || !o.silent?.pending || !stillThere(o)) return;
-  const at = caretInOpen(o);
-  if (at === null || at === 1) return;
+  const html = tagPorts().text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, ""));
+  if (toHtml(tagPorts().text.fromHtml(html)) === o.silent.initialHtml) return;
   o.silent.pending = false;
   tagPorts().undo.breakCoalescing();
 }

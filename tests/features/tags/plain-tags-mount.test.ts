@@ -55,6 +55,32 @@ function typedColon(): Pick<InputEvent, "inputType" | "data"> {
   return { inputType: "insertText", data: ":" };
 }
 
+test("closed tag refresh and input do not read a selection or decode cell content", () => {
+  const h = fixture("Words", "Words");
+  const control = startPlainTags(h.ports);
+  const getSelection = win.getSelection;
+  let reads = 0;
+  win.getSelection = () => { reads++; return getSelection.call(win); };
+  try {
+    control.refresh();
+    control.noteInput(h.cell);
+    assert.equal(control.beforeWrite(h.cell), null);
+    assert.equal(reads, 0);
+    assert.deepEqual(h.calls, []);
+    h.cell.textContent = "prop:";
+    h.cell.focus();
+    caretAt(h.cell.firstChild as Node, 5);
+    control.maybeOpen(typedColon(), h.cell);
+    assert.equal(control.isOpen(), true);
+    reads = 0;
+    control.refresh();
+    assert.ok(reads > 0);
+  } finally {
+    win.getSelection = getSelection;
+    control.dispose();
+  }
+});
+
 for (const [html, words] of [
   ["VFX: explosion in the background", "explosion in the background"],
   ["VFX: glow <strong>across</strong> the logo", "glow across the logo"],

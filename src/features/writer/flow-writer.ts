@@ -21,6 +21,7 @@ import { cellLength } from "../../core/text/runs.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { createFlowVisualBox } from "./flow-visual-box.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
+import { clipboardEndsInBlock, trimClipboardBlockEnd } from "../common/clipboard-blocks.ts";
 
 export interface FlowUndoPorts {
   readonly step: (dir: UndoDirection) => void;
@@ -221,8 +222,9 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       const holder = document.createElement("div");
       holder.innerHTML = data.getData("text/html");
       holder.querySelectorAll("img, .video-embed-card").forEach(element => element.remove());
+      const endsInBlock = clipboardEndsInBlock(holder);
       const html = holder.innerHTML;
-      const pasted = html ? ports.decode(html) : [{ text: data.getData("text/plain"), marks: {} }];
+      const pasted = trimClipboardBlockEnd(html ? ports.decode(html) : [{ text: data.getData("text/plain"), marks: {} }], endsInBlock);
       const old = ports.decode(ports.storedHtml(cell.innerHTML));
       const line = !html && data.getData("text/plain") === "\n" ? breakLine(old, selection.from, selection.to) : null;
       const next = line ?? insertCell(deleteRange(old, selection.from, selection.to), selection.from, pasted);

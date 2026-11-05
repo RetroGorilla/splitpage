@@ -11,10 +11,12 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { currentPlainTags } = await import("../bootstrap/wiring/plain-tags.ts");
+const { openWriter, closeWriter, writerFlowControl } = await import("../features/writer/writer.ts");
 
 after(closeApp);
 
 function fixture(visualText = "Before  after", audioText = "Audio ") {
+  closeWriter();
   currentPlainTags().cancelCategory();
   currentPlainTags().cancel();
   loadTestDocument(migrateRows({ schema: 2, title: "Tag button", rows: [{ id: "r1", visualText, audioText, status: "todo" }] }));
@@ -386,6 +388,71 @@ for (const pick of [false, true]) {
     undoOwner().undo();
     assert.equal(currentDocument().rows[0].visualText, "");
   });
+}
+
+test("a first Delete in an open silent tag separates undo even when the caret stays put", () => {
+  const h = fixture("");
+  caret(h.cell, h.cell, 0);
+  type(h.cell, "Words");
+  caret(h.cell, h.cell.firstChild, 2);
+  pickProp(h);
+  assert.equal(press(h.cell, "Delete").defaultPrevented, false);
+  const tail = window.getSelection().anchorNode;
+  const offset = window.getSelection().anchorOffset;
+  tail.deleteData(offset, 1);
+  caret(h.cell, tail, offset);
+  h.cell.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentForward", data: null }));
+  assert.equal(currentDocument().rows[0].visualText, "Wods");
+  key(h.cell, "Escape");
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "Words");
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "");
+});
+
+test("an unchanged input in an open silent tag preserves the earlier typing group", () => {
+  const h = fixture("");
+  caret(h.cell, h.cell, 0);
+  type(h.cell, "Words");
+  caret(h.cell, h.cell.firstChild, 2);
+  pickProp(h);
+  h.cell.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: null }));
+  key(h.cell, "Escape");
+  type(h.cell, "Lamp");
+  assert.equal(currentDocument().rows[0].visualText, "WoLamprds");
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "");
+});
+
+for (const editor of ["split", "writer"]) {
+  for (const wrapper of ["p", "div"]) {
+    test(`${editor} tag keeps a single ${wrapper}-wrapped HTML paste open and formatted`, () => {
+      const h = fixture("");
+      try {
+        if (editor === "writer") {
+          openWriter();
+          writerFlowControl().openVisual("r1");
+        }
+        const cell = editor === "writer" ? document.querySelector(".wr-flow-visual-text") : h.cell;
+        caret(cell, cell, 0);
+        type(cell, "prop:");
+        const event = new window.Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "clipboardData", { value: {
+          types: ["text/plain", "text/html"], files: [],
+          getData: kind => kind === "text/plain" ? "Lamp" : `<${wrapper}>La<em>mp</em></${wrapper}>`
+        } });
+        cell.dispatchEvent(event);
+        assert.equal(currentDocument().rows[0].visualText, "prop:La<em>mp</em>");
+        assert.equal(currentPlainTags().isOpen(cell), true);
+        key(cell, "Tab");
+        const tag = cell.querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="Lamp"]');
+        assert.equal(tag?.textContent, "Lamp");
+        assert.equal(tag.querySelector("em")?.textContent, "mp");
+        assert.equal(currentDocument().rows[0].visualText,
+          '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp" contenteditable="false">La<em>mp</em></span>');
+      } finally { closeWriter(); }
+    });
+  }
 }
 
 function never(text) {

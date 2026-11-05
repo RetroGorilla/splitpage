@@ -72,3 +72,29 @@ key ctrl KeyZ
 expect st() === 'prop:Red'
 key ctrl+shift KeyZ
 expect st() === 'prop:RedLamp<br>Chair'
+eval fresh()
+press Words
+eval (function(){var r=document.createRange();r.setStart(c().firstChild,2);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return pick();})()
+key Delete
+expect st() === 'Wods'
+key Escape
+key ctrl KeyZ
+expect st() === 'Words'
+key ctrl KeyZ
+expect st() === ''
+eval fresh()
+press prop:
+eval paste('<p>La<em>mp</em></p>', 'Lamp')
+expect st() === 'prop:La<em>mp</em>'
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelector('.tag-anchor[data-tag-name="Lamp"]')?.textContent === 'Lamp'
+expect c().querySelector('.tag-anchor em')?.textContent === 'mp'
+eval fresh()
+press prop:
+eval paste('<div>La<em>mp</em></div>', 'Lamp')
+expect st() === 'prop:La<em>mp</em>'
+expect c().querySelector('.plain-tag-keyword') !== null
+key Tab
+expect c().querySelector('.tag-anchor[data-tag-name="Lamp"]')?.textContent === 'Lamp'
+expect c().querySelector('.tag-anchor em')?.textContent === 'mp'

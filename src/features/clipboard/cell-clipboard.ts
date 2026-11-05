@@ -29,6 +29,7 @@ type PasteTarget = Pick<PasteRequest, "rowId" | "field"> & { rest: readonly Run[
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { cellLength, commentIds, normalizeCell, projection } from "../../core/text/runs.ts";
 import { sliceCell } from "../../core/text/edits.ts";
+import { clipboardEndsInBlock, trimClipboardBlockEnd } from "../common/clipboard-blocks.ts";
 import { flattenDirections } from "../../core/text/directions.ts";
 import { toHtml } from "../../core/text/html.ts";
 import {
@@ -162,12 +163,7 @@ function prepareHtml(html: string, opts?: ClipboardOptions) {
   Array.prototype.forEach.call(body.querySelectorAll("style, script, template, noscript, title, meta, link"), function (el: Element) {
     if (el.parentNode) el.parentNode.removeChild(el);
   });
-  let last = body.lastChild;
-  while (last && (last.nodeType === 8 || (last.nodeType === 3 && !/\S/.test(last.nodeValue as string)))) {
-    body.removeChild(last);
-    last = body.lastChild;
-  }
-  const endsInBlock = !!(last && last.nodeType === 1 && ((last as Element).tagName === "P" || (last as Element).tagName === "DIV"));
+  const endsInBlock = clipboardEndsInBlock(body);
   return { html: body.innerHTML, media: media, lost: lost, attach: attach, endsInBlock: endsInBlock };
 }
 
@@ -185,7 +181,7 @@ export function cellFromClipboard(html: unknown, text: unknown, opts?: Clipboard
     const textPort = (ports as CellClipboardPorts).text;
     let cell = textPort.fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
     if (opts.cleanLinks !== false) cell = textPort.cleanPastedCell(cell);
-    if (prep.endsInBlock && projection(cell).slice(-1) === "\n") cell = sliceCell(cell, 0, cellLength(cell) - 1);
+    cell = trimClipboardBlockEnd(cell, prep.endsInBlock);
     if (cellLength(cell)) {
       return { cell: cell, text: null, media: media, lost: lost, attach: attach, fromCut: fromCut, comments: fromCut ? commentIds(cell) : [] };
     }
