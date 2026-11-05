@@ -3,6 +3,7 @@ import type { ChangeSet, SessionChange } from "./change-set.ts";
 
 import type { Clock } from "../../core/document/ports.ts";
 import type { CellDecoder } from "../../core/text/ports.ts";
+import type { FlowSelectionPair } from "../../core/flow/flow.ts";
 
 export type { Clock, IdSource } from "../../core/document/ports.ts";
 
@@ -23,7 +24,7 @@ export type DocumentEntry = (raw: unknown) => ValidatedDocument;
 
 export interface UndoPort {
   adopt: (doc: ValidatedDocument | null) => void;
-  record: (changes: ChangeSet) => void;
+  record: (changes: ChangeSet, selection?: FlowSelectionPair) => void;
   absorbDisk: (doc: ValidatedDocument | null) => void;
   absorbReload: () => void;
 }

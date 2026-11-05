@@ -3,6 +3,7 @@ import type { StampPorts } from "../../session/ports.ts";
 import { applySteps } from "../../../core/text/steps.ts";
 import type { Step } from "../../../core/text/steps.ts";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
+import type { FlowSelectionPair } from "../../../core/flow/flow.ts";
 import { changedBetween, cosmetic as cosmeticFor, createUndoHistory, diffStates, planSteps, replayChanges, writePlanned } from "./history.ts";
 import type { CellMark, HtmlRunDecoder, PreparedReplay, ReplayResult, StepResult, UndoEntry, UndoState } from "./history.ts";
 
@@ -35,7 +36,7 @@ export interface Undo {
   readonly adopt: (doc: UndoState | null | undefined) => void;
   readonly track: () => void;
   readonly flush: () => void;
-  readonly noteEdit: () => void;
+  readonly noteEdit: (selection?: FlowSelectionPair) => void;
   readonly noteRemote: (next: UndoState | null | undefined) => void;
   readonly absorbRemote: () => void;
   readonly reset: () => void;
@@ -71,6 +72,7 @@ export function createUndo(ports: UndoPorts): Undo {
   let base: UndoState | null = null;
   let tracked: UndoState | null = null;
   let flushQueued = false;
+  let queuedSelection: FlowSelectionPair | undefined;
   let applying = false;
   const hooks: { afterApply: UndoHooks["afterApply"] | null; onRefused: UndoHooks["onRefused"] | null } = { afterApply: null, onRefused: null };
   const UNROUTED: Replays = Object.freeze({ run: replayUnwired, amend: replayUnwired, stamps: null });
@@ -111,6 +113,7 @@ export function createUndo(ports: UndoPorts): Undo {
   }
 
   function restart(doc: UndoState | null | undefined): void {
+    queuedSelection = undefined;
     history.clear();
     lifetime++;
     tracked = doc || null;
@@ -129,19 +132,23 @@ export function createUndo(ports: UndoPorts): Undo {
 
   function flush(): void {
     const reported = flushQueued;
+    const selection = queuedSelection;
+    queuedSelection = undefined;
     flushQueued = false;
     if (applying) return;
     const live = held();
     if (!live || live !== tracked || !base) { restart(live); return; }
     const steps = diffStates(base, live);
     const content = steps.filter(function (s) { return !cosmetic(s); });
-    if (reported && content.length) history.record(content, ports.now());
+    if (reported && content.length) history.record(content, ports.now(), selection);
     try { base = applySteps(base, steps); } catch (e) { base = clone(live); }
   }
 
-  function noteEdit(): void {
+  function noteEdit(selection?: FlowSelectionPair): void {
     if (applying || flushQueued) return;
+    queuedSelection = selection;
     flushQueued = true;
+    if (selection) { flush(); return; }
     void Promise.resolve().then(flush);
   }
 

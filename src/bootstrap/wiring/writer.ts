@@ -2,7 +2,7 @@ import { startWriter } from "../../features/writer/writer.ts";
 import { writerActions as definitions } from "../../features/writer/actions.ts";
 import type { WriterFeaturePorts } from "../../features/writer/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { documentReader, refresh } from "./ports/document.ts";
+import { documentLifetime, documentReader, refresh } from "./ports/document.ts";
 import { edits, writerEditing, writerUndo } from "./ports/editing.ts";
 import { text } from "./ports/text.ts";
 import { writerPanels } from "./ports/panels.ts";
@@ -29,6 +29,8 @@ import { projection } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { paintGuard } from "./editor-owners.ts";
 import { undoOwner } from "./undo.ts";
+import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
+import { liveSession } from "./session-owner.ts";
 
 const MEDIA_CELL = Object.freeze({ media: true });
 const flowCells = new Map<string, Run[]>();
@@ -80,30 +82,44 @@ export function mountWriterRuntimeFeature() {
     const ports: WriterFeaturePorts = {
       flow: {
         enabled: writerFlowOn,
-        create: (root, selectionMoved, undoStep) => createFlowWriter({
-          root,
-          doc: () => documentReader.current() as unknown as FlowDoc,
-          flow: flowPorts,
-          decode: flowCell,
-          storedHtml: text.storedHtmlFromDom,
-          run: edits.run,
-          shown: edit => paintGuard().whileShown(edit),
-          text: edits.text,
-          undo: {
-            step: undoStep,
-            flush: () => { undoOwner().flush(); },
-            breakCoalescing: () => { undoOwner().breakCoalescing(); },
-            last: () => undoOwner().last(),
-            nextRedo: () => undoOwner().nextRedo()
-          },
-          caretAfterStep: step => caretAfterStep(html => flowCell(html as string | null | undefined), step),
-          notice: (message, tone) => { notices.show(message, tone); },
-          changed: () => { ["production", "broll", "writerStats"].forEach(job => { scheduleIdleRefresh(job); }); },
-          selectionMoved,
-          plainVisual,
-          newCommentId: () => randomIds.id("c"),
-          openComment: at => { actions.invoke("comment-on-selection", "button", at); }
-        })
+        refreshSplit: rowId => {
+          const doc = documentReader.current();
+          if (rowId && doc) {
+            sceneView().reveal(doc, rowId);
+            shotHiding().reveal(rowId);
+          }
+          currentRowsRender()?.render();
+        },
+        create: (root, selectionMoved, undoStep) => {
+          undoOwner().flush();
+          const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, () => { undoOwner().settleAfterApply(); }));
+          if (initialized.kind === "failed") throw initialized.error;
+          return createFlowWriter({
+            lifetime: documentLifetime,
+            root,
+            doc: () => documentReader.current() as unknown as FlowDoc,
+            flow: flowPorts,
+            decode: flowCell,
+            storedHtml: text.storedHtmlFromDom,
+            run: edits.run,
+            shown: edit => paintGuard().whileShown(edit),
+            text: edits.text,
+            undo: {
+              step: undoStep,
+              flush: () => { undoOwner().flush(); },
+              breakCoalescing: () => { undoOwner().breakCoalescing(); },
+              last: () => undoOwner().last(),
+              nextRedo: () => undoOwner().nextRedo()
+            },
+            caretAfterStep: step => caretAfterStep(html => flowCell(html as string | null | undefined), step),
+            notice: (message, tone) => { notices.show(message, tone); },
+            changed: () => { ["production", "broll", "writerStats"].forEach(job => { scheduleIdleRefresh(job); }); },
+            selectionMoved,
+            plainVisual,
+            newCommentId: () => randomIds.id("c"),
+            openComment: at => { actions.invoke("comment-on-selection", "button", at); }
+          });
+        }
       },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,
       rows: { splitField: splitRowFieldCore },

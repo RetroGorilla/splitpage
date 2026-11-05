@@ -1,10 +1,10 @@
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { flowCommand } from "../../application/commands/flow.ts";
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
-import type { Command, CommandOutcome } from "../../application/session/document-session.ts";
+import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
 import { beatPos, caretAt, isCollapsed, logicalText, orderedRange, withinOneBeat } from "../../core/flow/flow.ts";
-import type { FlowDoc, FlowEdit, FlowPorts, FlowRange, FlowRow } from "../../core/flow/flow.ts";
+import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange, FlowRow, FlowSelectionPair } from "../../core/flow/flow.ts";
 import { addComment } from "../../core/text/edits.ts";
 import type { MarkName, Run } from "../../core/text/runs.ts";
 import { createSurface } from "./flow-surface.ts";
@@ -13,11 +13,12 @@ export interface FlowUndoPorts {
   readonly step: (dir: UndoDirection) => void;
   readonly flush: () => void;
   readonly breakCoalescing: () => void;
-  readonly last: () => { readonly n: number } | null | undefined;
-  readonly nextRedo: () => { readonly n: number } | null | undefined;
+  readonly last: () => { readonly selection?: FlowSelectionPair } | null | undefined;
+  readonly nextRedo: () => { readonly selection?: FlowSelectionPair } | null | undefined;
 }
 
 export interface FlowWriterPorts {
+  readonly lifetime: Pick<DocumentSession, "epoch">;
   readonly root: HTMLElement;
   readonly doc: () => FlowDoc;
   readonly flow: FlowPorts;
@@ -37,6 +38,8 @@ export interface FlowWriterPorts {
 }
 
 export interface FlowWriter {
+  readonly isCurrent: () => boolean;
+  readonly finish: () => FlowRange | null;
   readonly repaint: () => void;
   readonly caret: (rowId: string, offset: number | "end") => void;
   readonly format: (command: string) => void;
@@ -64,8 +67,9 @@ interface RowStep {
 
 export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const root = ports.root;
-  const selections = new Map<number, { before: FlowRange | null; after: FlowRange }>();
-  let replaying: { before: FlowRange | null; after: FlowRange } | null = null;
+  const epoch = ports.lifetime.epoch();
+  const isCurrent = () => ports.lifetime.epoch() === epoch;
+  let replaying: FlowSelectionPair | null = null;
   let replayDir: UndoDirection = "undo";
 
   function took(outcome: CommandOutcome): boolean {
@@ -76,14 +80,20 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
 
   // why: the surface paints its own edits, and the rows behind the writer are redrawn when it closes
   function syncBeat(rowId: string, runs: readonly Run[]): void {
+    if (!isCurrent()) return;
     ports.shown(() => { took(ports.run(cellTextCommand(rowId, "audioText", cellRuns(runs), ports.text))); });
   }
 
-  function commit(name: string, edit: FlowEdit, before: FlowRange | null): void {
-    ports.shown(() => { took(ports.run(flowCommand(name, () => edit, ports.text))); });
-    ports.undo.flush();
-    const top = ports.undo.last();
-    if (top) selections.set(top.n, { before, after: edit.selection });
+  function commit(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
+    if (!isCurrent()) return null;
+    ports.undo.breakCoalescing();
+    let result: FlowOutcome = null;
+    const outcome = ports.shown(() => ports.run(flowCommand(name, doc => {
+      result = operation(doc);
+      return result;
+    }, ports.text, before)));
+    const applied = took(outcome);
+    return applied || outcome.kind === "noop" ? result : null;
   }
 
   const surface = createSurface({
@@ -94,7 +104,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     storedHtml: ports.storedHtml,
     syncBeat,
     commit,
-    undo: dir => { ports.undo.step(dir); },
+    undo: dir => { if (isCurrent()) ports.undo.step(dir); },
     breakCoalescing: ports.undo.breakCoalescing,
     notice: text => { ports.notice(text, "ok"); },
     changed: ports.changed,
@@ -136,7 +146,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
 
   function beforeReplay(dir: UndoDirection): void {
     const entry = dir === "undo" ? ports.undo.last() : ports.undo.nextRedo();
-    replaying = entry ? selections.get(entry.n) ?? null : null;
+    replaying = entry?.selection ?? null;
     replayDir = dir;
   }
 
@@ -154,6 +164,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   }
 
   function comment(): void {
+    if (!isCurrent()) return;
     const range = surface.selection();
     if (!range || isCollapsed(range) || !withinOneBeat(range) || range.head.kind !== "beat") {
       ports.notice("Select some text inside one beat, then add a comment.", "warn");
@@ -175,12 +186,14 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   // why: a comment box takes the keyboard while it is open, so the caret goes back to where it was when it closes
   const dialog = root.ownerDocument.getElementById("comment-modal");
   const observer = new MutationObserver(() => {
-    if (dialog && dialog.hidden && root.isConnected) surface.focusBack();
+    if (dialog && dialog.hidden && root.isConnected && isCurrent()) surface.focusBack();
   });
   if (dialog) observer.observe(dialog, { attributes: true, attributeFilter: ["hidden"] });
 
   return {
-    repaint: surface.repaint,
+    isCurrent,
+    finish: () => isCurrent() ? surface.finish() : null,
+    repaint: () => { if (isCurrent()) surface.repaint(); },
     caret,
     format,
     marks,

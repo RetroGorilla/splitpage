@@ -606,7 +606,7 @@ async function run() {
   await t("find: replacing across the gap keeps both beats", async () => {
     await fresh(midSentence());
     const match = (await ev(`__lab.find("store and")`))[0];
-    await ev(`__lab.surface.apply("replace", __lab.replaceMatch(${JSON.stringify(match.range)}, "shop and"), null)`);
+    await ev(`__lab.surface.apply("replace", () => __lab.replaceMatch(${JSON.stringify(match.range)}, "shop and"), null)`);
     await settle();
     same(await textOf("wa"), "We went to the shop and", "first beat takes the words");
     same(await textOf("wb"), " bought some milk", "second keeps the rest");

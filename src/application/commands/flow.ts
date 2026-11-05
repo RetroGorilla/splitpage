@@ -1,12 +1,33 @@
 import { writeScenes } from "../../core/document/scenes.ts";
 import type { DocumentScene } from "../../core/document/scenes.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import type { FlowDoc, FlowOutcome, FlowRow } from "../../core/flow/flow.ts";
+import type { FlowDoc, FlowOutcome, FlowRange, FlowRow } from "../../core/flow/flow.ts";
+import { sentenceParagraphs } from "../../core/flow/flow.ts";
+import type { FlowPorts } from "../../core/flow/flow.ts";
 import { changeSet } from "../session/change-set.ts";
-import type { Command, DocumentView } from "../session/document-session.ts";
+import type { Command, DocumentView, Replay } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 
-export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutcome, ports: Pick<CellTextPorts, "clock" | "editor">): Command {
+export function initializeFlowParagraphs(ports: FlowPorts, allowed: () => boolean, settled: () => void): Replay {
+  return {
+    name: "initialize-flow-paragraphs",
+    plan: doc => {
+      if (doc.paragraphsDecided || !allowed()) return null;
+      const rows = sentenceParagraphs(doc, ports);
+      const starts = rows.filter((row, index) => row.paragraphStart === true && !doc.rows[index]?.paragraphStart).map(row => row.id);
+      return {
+        changes: changeSet({ cells: starts.map(rowId => ({ rowId, field: "paragraphStart" })), docFields: ["paragraphsDecided"] }),
+        apply: live => {
+          for (const row of live.rows) if (starts.includes(row.id)) row.paragraphStart = true;
+          live.paragraphsDecided = true;
+        },
+        settle: settled
+      };
+    }
+  };
+}
+
+export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutcome, ports: Pick<CellTextPorts, "clock" | "editor">, before?: FlowRange | null): Command {
   return {
     name,
     needs: "edit",
@@ -39,6 +60,7 @@ export function flowCommand(name: string, operation: (doc: FlowDoc) => FlowOutco
       }
       if (!cells.length && !inserted.length && !removed.length && !rowsMoved && !sectionsChanged && !result.removedComments.length) return null;
       return {
+        ...(before ? { selection: { before, after: result.selection } } : {}),
         changes: changeSet({ cells, rowsInserted: inserted, rowsRemoved: removed, rowsMoved, runsMoved: true, docFields, derive: ["production", "broll"] }),
         apply: function (live: ValidatedDocument) {
           const nowIso = ports.clock.nowIso();

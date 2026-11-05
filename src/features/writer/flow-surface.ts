@@ -20,7 +20,7 @@ export interface SurfacePorts {
   readonly decode: (html: string) => Run[];
   readonly storedHtml: (html: string) => string;
   readonly syncBeat: (rowId: string, runs: readonly Run[]) => void;
-  readonly commit: (name: string, edit: FlowEdit, before: FlowRange | null) => void;
+  readonly commit: (name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null) => FlowOutcome;
   readonly undo: (dir: "undo" | "redo") => void;
   readonly breakCoalescing: () => void;
   readonly notice: (text: string) => void;
@@ -39,6 +39,7 @@ export interface SurfaceSettings {
 }
 
 export interface Surface {
+  readonly finish: () => FlowRange | null;
   readonly paint: () => void;
   readonly repaint: () => void;
   readonly focusBack: () => void;
@@ -46,7 +47,7 @@ export interface Surface {
   readonly place: (range: FlowRange, scroll?: boolean) => void;
   readonly format: (mark: MarkName) => void;
   readonly pendingMarks: () => Marks | null;
-  readonly apply: (name: string, outcome: FlowOutcome, before: FlowRange | null) => void;
+  readonly apply: (name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null) => FlowOutcome;
   readonly toOwnBeat: (range: FlowRange) => string | null;
   readonly domRange: (range: FlowRange) => Range | null;
   readonly domCheck: () => string[];
@@ -90,6 +91,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   let painting = false;
   let held: FlowRange | null = null;
   let repaintOwed = false;
+  let compositionTimer: number | null = null;
 
   function cellOf(row: FlowRow): readonly Run[] { return ports.flow.cells(row.audioText); }
 
@@ -149,8 +151,11 @@ export function createSurface(ports: SurfacePorts): Surface {
     el.classList.toggle("is-blank", !text && !visual);
     el.classList.toggle("is-filmed", row.status === "shot");
     el.classList.toggle("no-gap", noGap);
-    el.setAttribute("data-num", label);
-    if (!text && visual) el.setAttribute("data-visual", ports.plainVisual(row));
+    if (el.getAttribute("data-num") !== label) el.setAttribute("data-num", label);
+    if (!text && visual) {
+      const note = ports.plainVisual(row);
+      if (el.getAttribute("data-visual") !== note) el.setAttribute("data-visual", note);
+    }
     else el.removeAttribute("data-visual");
     syncSpots(el, !noGap && !!text, !text);
   }
@@ -185,7 +190,7 @@ export function createSurface(ports: SurfacePorts): Surface {
         sceneLetter++;
         beatNumber = 0;
         sceneTag = String.fromCharCode(65 + (sceneLetter % 26));
-        el.setAttribute("data-letter", sceneTag);
+        if (el.getAttribute("data-letter") !== sceneTag) el.setAttribute("data-letter", sceneTag);
         cursor = place(root, el, cursor);
         return;
       }
@@ -312,6 +317,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     const a = domPoint(range.anchor), h = domPoint(range.head);
     const sel = window.getSelection();
     if (!a || !h || !sel) return;
+    held = range;
     root.focus({ preventScroll: true });
     sel.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
     if (scroll) {
@@ -339,16 +345,17 @@ export function createSurface(ports: SurfacePorts): Surface {
     else root.focus({ preventScroll: true });
   }
 
-  function apply(name: string, outcome: FlowOutcome, before: FlowRange | null): void {
-    if (!outcome) return;
-    if ("refused" in outcome) { ports.notice(outcome.refused); return; }
-    if ("move" in outcome) { place(caretAt(outcome.move), true); return; }
-    ports.commit(name, outcome, before);
+  function apply(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
+    const outcome = ports.commit(name, operation, before ?? selection());
+    if (!outcome) return null;
+    if ("refused" in outcome) { ports.notice(outcome.refused); return outcome; }
+    if ("move" in outcome) { place(caretAt(outcome.move), true); return outcome; }
     paint();
     place(outcome.selection, true);
     if (outcome.notice) ports.notice(outcome.notice);
     ports.changed();
     noteSelection();
+    return outcome;
   }
 
   function repairOrphans(): boolean {
@@ -431,10 +438,14 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (!row) return;
     const made = inlineMarkdown(ports.flow.cells(row.audioText), range.head.offset);
     if (!made) return;
-    const doc = ports.doc();
-    const rows = doc.rows.map(item => item.id === row.id ? { ...item, audioText: toHtml(made.cell) } : item);
     ports.breakCoalescing();
-    apply("inline-markdown", { rows, sections: doc.sections as FlowEdit["sections"], removedComments: [], selection: caretAt(beatPos(row.id, made.caret)) }, range);
+    apply("inline-markdown", doc => {
+      const live = doc.rows.find(item => item.id === row.id);
+      const converted = live && inlineMarkdown(ports.flow.cells(live.audioText), range.head.offset);
+      if (!converted) return null;
+      const rows = doc.rows.map(item => item.id === row.id ? { ...item, audioText: toHtml(converted.cell) } : item);
+      return { rows, sections: doc.sections as FlowEdit["sections"], removedComments: [], selection: caretAt(beatPos(row.id, converted.caret)) };
+    }, range);
     pending = { pos: beatPos(row.id, made.caret), marks: withMark(typingMarks(made.cell, made.caret), made.mark, false) };
   }
 
@@ -454,9 +465,9 @@ export function createSurface(ports: SurfacePorts): Surface {
       const name = (heading.textContent || "").replace(ZWSP_ALL, "");
       const pos = selection()?.head ?? headingPos(id, name.length);
       if (name) {
-        apply("rename-scene", renameHeading(ports.doc(), id, name, pos.offset), null);
+        apply("rename-scene", doc => renameHeading(doc, id, name, pos.offset), null);
       } else {
-        apply("remove-scene", replaceRange(ports.doc(), { anchor: headingPos(id, 0), head: headingPos(id, 0) }, [], ports.flow), null);
+        apply("remove-scene", doc => replaceRange(doc, { anchor: headingPos(id, 0), head: headingPos(id, 0) }, [], ports.flow), null);
       }
     }
     if (repaired) paint();
@@ -490,6 +501,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   }
 
   function onBeforeInput(event: Event): void {
+    if (event.defaultPrevented) return;
     const input = event as InputEvent;
     if (composing) return;
     const type = input.inputType;
@@ -512,7 +524,8 @@ export function createSurface(ports: SurfacePorts): Surface {
       const data = input.data ?? input.dataTransfer?.getData("text/plain") ?? "";
       if (pending && isCollapsed(range) && comparePos(ports.doc(), pending.pos, range.head) === 0 && input.data) {
         event.preventDefault();
-        apply("type", typeWithMarks(ports.doc(), range.head, input.data, pending.marks, ports.flow), range);
+        const marks = pending.marks;
+        apply("type", doc => typeWithMarks(doc, range.head, input.data ?? "", marks, ports.flow), range);
         pending = null;
         return;
       }
@@ -520,15 +533,17 @@ export function createSurface(ports: SurfacePorts): Surface {
       if (!isCollapsed(target) && !withinOneBeat(target)) {
         event.preventDefault();
         ports.breakCoalescing();
-        apply("replace-selection", replaceRange(ports.doc(), target, data ? [{ text: data, marks: typingMarksFor(target) }] : [], ports.flow), range);
+        apply("replace-selection", doc => replaceRange(doc, target, data ? [{ text: data, marks: typingMarksFor(target, doc) }] : [], ports.flow), range);
         return;
       }
       if (ports.settings().gapTyping === "before" && isCollapsed(range) && range.head.kind === "beat" && range.head.offset === 0 && beatLength(range.head.rowId)) {
         const redirect = caretBeforeTick(range.head.rowId);
         if (redirect) {
           event.preventDefault();
-          const row = ports.doc().rows.find(item => item.id === redirect.rowId) as FlowRow;
-          apply("type", typeWithMarks(ports.doc(), beatPos(redirect.rowId, redirect.offset), input.data ?? "", typingMarks(cellOf(row), redirect.offset), ports.flow), null);
+          apply("type", doc => {
+            const row = doc.rows.find(item => item.id === redirect.rowId);
+            return row ? typeWithMarks(doc, beatPos(redirect.rowId, redirect.offset), input.data ?? "", typingMarks(cellOf(row), redirect.offset), ports.flow) : null;
+          }, null);
           return;
         }
       }
@@ -539,7 +554,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (isCollapsed(range) && type === "deleteContentBackward" && range.head.offset === 0) {
       event.preventDefault();
       ports.breakCoalescing();
-      apply("backspace", backspaceAt(ports.doc(), range.head, ports.flow, { tick: ports.settings().tick }), range);
+      apply("backspace", doc => backspaceAt(doc, range.head, ports.flow, { tick: ports.settings().tick }), range);
       return;
     }
     if (isCollapsed(range) && type === "deleteContentForward") {
@@ -548,7 +563,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       if (atEnd) {
         event.preventDefault();
         ports.breakCoalescing();
-        apply("delete", deleteForwardAt(ports.doc(), pos, ports.flow), range);
+        apply("delete", doc => deleteForwardAt(doc, pos, ports.flow), range);
         return;
       }
     }
@@ -558,7 +573,7 @@ export function createSurface(ports: SurfacePorts): Surface {
       if (backward && effective.head.offset === 0) {
         event.preventDefault();
         ports.breakCoalescing();
-        apply("backspace", backspaceAt(ports.doc(), effective.head, ports.flow, { tick: ports.settings().tick }), range);
+        apply("backspace", doc => backspaceAt(doc, effective.head, ports.flow, { tick: ports.settings().tick }), range);
       }
       return;
     }
@@ -572,16 +587,16 @@ export function createSurface(ports: SurfacePorts): Surface {
       if (whole) {
         event.preventDefault();
         ports.breakCoalescing();
-        apply("remove-scene", replaceRange(ports.doc(), resolved, [], ports.flow), range);
+        apply("remove-scene", doc => replaceRange(doc, resolved, [], ports.flow), range);
       }
       return;
     }
     if (isCollapsed(resolved)) {
       event.preventDefault();
       ports.breakCoalescing();
-      apply(backward ? "backspace" : "delete", backward
-        ? backspaceAt(ports.doc(), range.head, ports.flow, { tick: ports.settings().tick })
-        : deleteForwardAt(ports.doc(), range.head, ports.flow), range);
+      apply(backward ? "backspace" : "delete", doc => backward
+        ? backspaceAt(doc, range.head, ports.flow, { tick: ports.settings().tick })
+        : deleteForwardAt(doc, range.head, ports.flow), range);
       return;
     }
     // why: native edits stay in the caret's beat; Chromium can aim a word delete at the next or previous beat
@@ -589,14 +604,14 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (!withinOneBeat(resolved) || coversWholeBeat(resolved) || elsewhere) {
       event.preventDefault();
       ports.breakCoalescing();
-      apply("delete-selection", replaceRange(ports.doc(), resolved, [], ports.flow), range);
+      apply("delete-selection", doc => replaceRange(doc, resolved, [], ports.flow), range);
     }
   }
 
-  function typingMarksFor(range: FlowRange): Marks {
-    const { from } = orderedRange(ports.doc(), range);
+  function typingMarksFor(range: FlowRange, doc: FlowDoc): Marks {
+    const { from } = orderedRange(doc, range);
     if (from.kind !== "beat") return {};
-    const row = ports.doc().rows.find(item => item.id === from.rowId);
+    const row = doc.rows.find(item => item.id === from.rowId);
     return row ? typingMarks(cellOf(row), from.offset) : {};
   }
 
@@ -613,42 +628,40 @@ export function createSurface(ports: SurfacePorts): Surface {
   function onEnter(event: KeyboardEvent, range: FlowRange): void {
     event.preventDefault();
     ports.breakCoalescing();
-    const doc = ports.doc();
     if (event.shiftKey) {
-      apply("line-break", lineBreakAt(doc, range, ports.flow), range);
+      apply("line-break", doc => lineBreakAt(doc, range, ports.flow), range);
       return;
     }
     if (!isCollapsed(range) && !event.altKey && ports.settings().enter === "double") {
-      apply("enter", enterAt(doc, range, ports.flow), range);
+      apply("enter", doc => enterAt(doc, range, ports.flow), range);
       return;
     }
     let caret = range;
     if (!isCollapsed(range)) {
-      const cleared = replaceRange(doc, range, [], ports.flow);
-      apply("delete-selection", cleared, range);
+      const cleared = apply("delete-selection", doc => replaceRange(doc, range, [], ports.flow), range);
       if (!cleared || !("selection" in cleared)) return;
       caret = cleared.selection;
     }
     const pos = caret.head;
     if (event.altKey) {
-      apply("start-beat", startBeat(ports.doc(), pos, ports.flow), caret);
+      apply("start-beat", doc => startBeat(doc, pos, ports.flow), caret);
       return;
     }
     if (pos.kind === "heading") {
-      apply("enter-heading", enterInHeading(ports.doc(), pos, ports.flow), caret);
+      apply("enter-heading", doc => enterInHeading(doc, pos, ports.flow), caret);
       return;
     }
     if (pendingHeading && pendingHeading === pos.rowId) {
       const row = pos.rowId;
       pendingHeading = null;
-      apply("make-heading", finalizeHeading(ports.doc(), row, pos.offset, null, ports.flow), caret);
+      apply("make-heading", doc => finalizeHeading(doc, row, pos.offset, null, ports.flow), caret);
       return;
     }
     if (ports.settings().enter === "double") {
-      apply("enter", enterAt(ports.doc(), caret, ports.flow), caret);
+      apply("enter", doc => enterAt(doc, caret, ports.flow), caret);
       return;
     }
-    apply("start-paragraph", startParagraph(ports.doc(), pos, ports.flow), caret);
+    apply("start-paragraph", doc => startParagraph(doc, pos, ports.flow), caret);
   }
 
   function format(mark: MarkName): void {
@@ -664,10 +677,11 @@ export function createSurface(ports: SurfacePorts): Surface {
       return;
     }
     ports.breakCoalescing();
-    apply("format", setMarkAcross(ports.doc(), range, mark, ports.flow), range);
+    apply("format", doc => setMarkAcross(doc, range, mark, ports.flow), range);
   }
 
   function onKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented) return;
     if (composing) return;
     const key = event.key;
     const range = selection();
@@ -704,12 +718,13 @@ export function createSurface(ports: SurfacePorts): Surface {
       ports.breakCoalescing();
       const offset = range.head.offset;
       const id = range.head.rowId;
-      const doc = ports.doc();
-      const index = doc.rows.findIndex(row => row.id === id);
-      const row = doc.rows[index];
-      const next = doc.rows[index + 1];
-      const target = offset === 0 || !next ? id : next.id;
-      if (row) apply("join", joinWithPrevious(doc, target, ports.flow), range);
+      apply("join", doc => {
+        const index = doc.rows.findIndex(row => row.id === id);
+        const row = doc.rows[index];
+        const next = doc.rows[index + 1];
+        const target = offset === 0 || !next ? id : next.id;
+        return row ? joinWithPrevious(doc, target, ports.flow) : null;
+      }, range);
       return;
     }
     if (ctrl && !event.altKey && !event.shiftKey) {
@@ -734,7 +749,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (!range || isCollapsed(range)) return;
     event.preventDefault();
     ports.breakCoalescing();
-    apply("cut", replaceRange(ports.doc(), range, [], ports.flow), range);
+    apply("cut", doc => replaceRange(doc, range, [], ports.flow), range);
   }
 
   function onPaste(event: ClipboardEvent): void {
@@ -744,7 +759,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (!range || !text) return;
     const paragraphs = text.replace(/\r\n?/g, "\n").split(/\n+/);
     ports.breakCoalescing();
-    apply("paste", pasteText(ports.doc(), range, paragraphs, ports.flow), range);
+    apply("paste", doc => pasteText(doc, range, paragraphs, ports.flow), range);
   }
 
   function noteSelection(): void {
@@ -770,7 +785,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     const row = pendingHeading;
     pendingHeading = null;
     ports.breakCoalescing();
-    apply("make-heading", finalizeHeading(ports.doc(), row, null, range, ports.flow), null);
+    apply("make-heading", doc => finalizeHeading(doc, row, null, range, ports.flow), null);
   }
 
   function onSelectionChange(): void {
@@ -783,17 +798,31 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function onCompositionEnd(): void {
     composing = false;
-    window.setTimeout(function () {
-      repairOrphans();
-      root.querySelectorAll<HTMLElement>(".wr-beat").forEach(function (el) {
-        const row = ports.doc().rows.find(item => item.id === el.getAttribute("data-id"));
-        if (!row) return;
-        const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
-        if (toHtml(ports.decode(stored)) !== toHtml(cellOf(row))) syncBeatEl(el);
-      });
+    compositionTimer = window.setTimeout(function () {
+      compositionTimer = null;
+      syncTouchedBeats();
       ports.changed();
       if (repaintOwed) { repaintOwed = false; repaint(); }
     }, 0);
+  }
+
+  function syncTouchedBeats(): void {
+    repairOrphans();
+    root.querySelectorAll<HTMLElement>(".wr-beat").forEach(function (el) {
+      const row = ports.doc().rows.find(item => item.id === el.getAttribute("data-id"));
+      if (!row) return;
+      const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
+      if (toHtml(ports.decode(stored)) !== toHtml(cellOf(row))) syncBeatEl(el);
+    });
+  }
+
+  function finish(): FlowRange | null {
+    const at = selection() ?? held;
+    if (compositionTimer !== null) window.clearTimeout(compositionTimer);
+    compositionTimer = null;
+    composing = false;
+    syncTouchedBeats();
+    return at;
   }
 
   function onMouseDown(event: Event): void {
@@ -825,8 +854,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (isCollapsed(range)) return range.head.kind === "beat" ? range.head.rowId : null;
     if (!withinOneBeat(range) || range.head.kind !== "beat") return null;
     ports.breakCoalescing();
-    const outcome = selectionToOwnBeat(ports.doc(), range, ports.flow);
-    apply("own-beat", outcome, range);
+    const outcome = apply("own-beat", doc => selectionToOwnBeat(doc, range, ports.flow), range);
     return outcome && "selection" in outcome && outcome.selection.head.kind === "beat" ? outcome.selection.head.rowId : range.head.rowId;
   }
 
@@ -874,6 +902,7 @@ export function createSurface(ports: SurfacePorts): Surface {
   listeners.forEach(([target, name, handler]) => target.addEventListener(name, handler));
 
   return {
+    finish,
     paint,
     repaint,
     focusBack,
@@ -885,6 +914,9 @@ export function createSurface(ports: SurfacePorts): Surface {
     toOwnBeat,
     domRange,
     domCheck,
-    dispose: () => listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler))
+    dispose: () => {
+      if (compositionTimer !== null) window.clearTimeout(compositionTimer);
+      listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
+    }
   };
 }

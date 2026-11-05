@@ -6,6 +6,7 @@ import type { UndoPorts } from "../../../../src/application/editing/undo/undo.ts
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { cellRuns } from "../../../../src/test/_cell-runs.mjs";
+import { beatPos, caretAt } from "../../../../src/core/flow/flow.ts";
 
 function setup() {
   const doc: ValidatedDocument = migrateRows({ title: "Owner", rows: [{ id: "r1", visualText: "", audioText: "a" }] });
@@ -28,6 +29,27 @@ function setup() {
 function typeInto(doc: ValidatedDocument, text: string): void {
   Object.assign((doc.rows as unknown as { audioText: string }[])[0] as object, { audioText: text });
 }
+
+test("flow selections belong to their undo entry, survive replay and do not coalesce with native typing", () => {
+  const u = setup();
+  const selection = { before: { anchor: beatPos("r1", 1), head: beatPos("r1", 0) }, after: caretAt(beatPos("r1", 2)) };
+  typeInto(u.doc(), "ab");
+  u.owner.noteEdit(selection);
+  u.owner.flush();
+  assert.deepEqual(u.owner.last()?.selection, selection);
+  typeInto(u.doc(), "abc");
+  u.owner.noteEdit();
+  u.owner.flush();
+  assert.deepEqual(u.owner.sizes(), { undo: 2, redo: 0 });
+  assert.equal(u.owner.last()?.selection, undefined);
+  u.owner.undo();
+  u.owner.undo();
+  assert.deepEqual(u.owner.nextRedo()?.selection, selection);
+  u.owner.redo();
+  assert.deepEqual(u.owner.last()?.selection, selection);
+  u.owner.reset();
+  assert.equal(u.owner.last(), null);
+});
 
 test("undo owner: a reported edit is recorded on flush, and undo replays it through the unrouted runner", () => {
   const u = setup();

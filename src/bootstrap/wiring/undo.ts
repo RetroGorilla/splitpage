@@ -52,7 +52,7 @@ export function routeUndoReplays(run: ReplayRunner, stamps: StampPorts | null, a
 export function undoSessionPort(): UndoPort {
   return {
     adopt: function (doc) { undoOwner().adopt(doc); },
-    record: function () { undoOwner().noteEdit(); },
+    record: function (_changes, selection) { undoOwner().noteEdit(selection); },
     absorbDisk: function (doc) { undoOwner().noteRemote(doc); },
     absorbReload: function () { undoOwner().absorbRemote(); }
   };

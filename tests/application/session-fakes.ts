@@ -5,6 +5,7 @@ import type { ChangeSet, SessionChange } from "../../src/application/session/cha
 import type { Capability, RecordsPlan, TimerPort } from "../../src/application/session/ports.ts";
 import type { RefreshTiming } from "../../src/application/session/effects.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
+import type { FlowSelectionPair } from "../../src/core/flow/flow.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 
@@ -60,7 +61,7 @@ export interface HarnessHooks {
   records?: (doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null;
   entry?: (raw: unknown) => ValidatedDocument;
   attribute?: (doc: DocumentView) => Plan | null;
-  record?: () => void;
+  record?: (selection?: FlowSelectionPair) => void;
   effect?: (name: "dirty" | "draft" | "save") => void;
   after?: SessionCounters;
 }
@@ -84,7 +85,7 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
     entry: function (raw) { log.push("entry"); return hooks.entry ? hooks.entry(raw) : migrateRows(raw, migration.ports); },
     undo: {
       adopt: function (doc) { nested(); log.push("undo.adopt:" + (doc ? doc.title : "none")); },
-      record: function () { log.push("undo.record"); if (hooks.record) hooks.record(); },
+      record: function (_changes, selection) { log.push("undo.record"); if (hooks.record) hooks.record(selection); },
       absorbDisk: function (doc) { nested(); log.push("undo.disk:" + (doc ? doc.title : "none")); },
       absorbReload: function () { log.push("undo.reload"); }
     },

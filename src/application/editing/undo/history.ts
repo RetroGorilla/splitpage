@@ -9,6 +9,7 @@ import { FIELD_LIST_MERGERS } from "../../../core/merge/state-fields.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import { commentIds, normalizeCell } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
+import type { FlowSelectionPair } from "../../../core/flow/flow.ts";
 import { invertSteps } from "../../../core/text/steps.ts";
 import type { DocFieldStep, RowFieldStep, Step, StepRow } from "../../../core/text/steps.ts";
 
@@ -36,6 +37,7 @@ interface Watched {
 }
 
 export interface UndoEntry {
+  readonly selection?: FlowSelectionPair;
   n: number;
   steps: Step[];
   at: number;
@@ -120,7 +122,7 @@ export interface Standing {
 }
 
 export interface UndoHistory {
-  readonly record: (steps: Step[], now: number) => void;
+  readonly record: (steps: Step[], now: number, selection?: FlowSelectionPair) => void;
   readonly undo: (state: UndoState) => StepResult;
   readonly redo: (state: UndoState) => StepResult;
   readonly prepare: (dir: "undo" | "redo", state: UndoState) => PreparedReplay | null;
@@ -583,7 +585,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     parked = null;
   }
 
-  function record(steps: Step[], now: number): void {
+  function record(steps: Step[], now: number, selection?: FlowSelectionPair): void {
     if (!steps.length) return;
     const cell = onlyCell(steps);
     const last = done[done.length - 1];
@@ -591,7 +593,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     const first = steps[0] as RowFieldStep;
     const from = cell ? projectionOf(runs, first.before) : "", to = cell ? projectionOf(runs, first.after) : "";
     const ins = cell ? insertedText(from, to) : "";
-    if (cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
+    if (!selection && !last?.selection && cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
       const startsWord = /\S/.test(ins) && last.endsInSpace;
       if (!startsWord) {
         const lastStep = last.steps[0] as RowFieldStep;
@@ -608,7 +610,8 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
         return;
       }
     }
-    push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null });
+    push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null,
+      ...(selection ? { selection: JSON.parse(JSON.stringify(selection)) as FlowSelectionPair } : {}) });
   }
 
   function push(entry: UndoEntry): void {

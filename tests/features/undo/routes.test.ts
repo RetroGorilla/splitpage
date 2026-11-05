@@ -92,6 +92,26 @@ test("the gesture reads Ctrl or Meta with Z, Shift+Z and Y, and nothing with Alt
   assert.equal(gesture("x", { ctrlKey: true }), null);
 });
 
+test("a document-owned editing host routes keys and history input, while nested comment drafts keep their undo", () => {
+  const p = page();
+  const root = p.byId("writer-doc");
+  root.setAttribute("contenteditable", "true");
+  root.setAttribute("data-undo-owner", "document");
+  Object.defineProperty(root, "isContentEditable", { value: true });
+  const h = harness(p);
+  const routes = h.mount();
+  root.focus();
+  const key = new p.win.KeyboardEvent("keydown", { key: "z", ctrlKey: true, cancelable: true });
+  assert.equal(routes.key(key), true);
+  assert.equal(key.defaultPrevented, true);
+  assert.equal(beforeinput(p, root, "historyRedo").defaultPrevented, true);
+  p.byId("writer-note").focus();
+  assert.equal(routes.key(new p.win.KeyboardEvent("keydown", { key: "z", ctrlKey: true, cancelable: true })), false);
+  assert.equal(beforeinput(p, p.byId("writer-note"), "historyUndo").defaultPrevented, false);
+  assert.deepEqual(h.replays, ["undo", "redo"]);
+  routes.dispose();
+});
+
 test("each shortcut on the page replays once in its direction and is taken from the browser", () => {
   const p = page();
   const h = harness(p);

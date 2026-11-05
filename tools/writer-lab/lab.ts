@@ -21,7 +21,7 @@ import { toHtml } from "../../src/core/text/html.ts";
 import { projection } from "../../src/core/text/runs.ts";
 import type { Run } from "../../src/core/text/runs.ts";
 import { findInFlow, flowOf, isCollapsed, replaceAll, replaceMatch, withinOneBeat } from "../../src/core/flow/flow.ts";
-import type { FlowDoc, FlowEdit, FlowPorts, FlowRange, FlowRow } from "../../src/core/flow/flow.ts";
+import type { FlowDoc, FlowEdit, FlowOutcome, FlowPorts, FlowRange, FlowRow } from "../../src/core/flow/flow.ts";
 import { caretAfterStep } from "../../src/features/undo/caret.ts";
 import { LONG_DEMO } from "../../src/starters/index.ts";
 import { flowCommand as sharedFlowCommand } from "../../src/application/commands/flow.ts";
@@ -124,10 +124,6 @@ function currentDoc(): FlowDoc {
   return session.read(doc => doc as unknown as FlowDoc);
 }
 
-function flowCommand(name: string, result: FlowEdit): Command {
-  return sharedFlowCommand(name, () => result, stamps);
-}
-
 let surface: Surface;
 let noticeTimer = 0;
 
@@ -145,11 +141,14 @@ function runOrThrow(command: Command): void {
   if (outcome.kind === "rejected") notice(outcome.reason);
 }
 
-function commit(name: string, edit: FlowEdit, before: FlowRange | null): void {
-  runOrThrow(flowCommand(name, edit));
+function commit(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null): FlowOutcome {
+  let edit: FlowOutcome = null;
+  runOrThrow(sharedFlowCommand(name, doc => { edit = operation(doc); return edit; }, stamps, before));
   undo.flush();
   const top = undo.last();
-  if (top) selections.set(top.n, { before, after: edit.selection });
+  const result = edit as FlowOutcome;
+  if (top && result && "selection" in result) selections.set(top.n, { before, after: result.selection });
+  return result;
 }
 
 function syncBeat(rowId: string, runs: readonly Run[]): void {
@@ -432,13 +431,13 @@ function bindFind(): void {
     const found = matches()[at];
     if (!found) { show(1); return; }
     undo.breakCoalescing();
-    surface.apply("replace", replaceMatch(currentDoc(), found.range, replacement.value, flowPorts), found.range);
+    surface.apply("replace", doc => replaceMatch(doc, found.range, replacement.value, flowPorts), found.range);
     at -= 1;
     show(1, replacement);
   });
   $("find-all").addEventListener("click", function () {
     undo.breakCoalescing();
-    surface.apply("replace-all", replaceAll(currentDoc(), input.value, replacement.value, false, flowPorts), null);
+    surface.apply("replace-all", doc => replaceAll(doc, input.value, replacement.value, false, flowPorts), null);
     at = -1;
     show(1, replacement);
   });
@@ -489,7 +488,7 @@ function bindVisualBox(): void {
     if (!id) return;
     const doc = currentDoc();
     const rows = doc.rows.map(row => row.id === id ? { ...row, visualText: toHtml(area.value ? [{ text: area.value, marks: {} }] : []) } : row);
-    runOrThrow(flowCommand("set-visual", { rows, sections: doc.sections as FlowEdit["sections"], removedComments: [], selection: { anchor: { kind: "beat", rowId: id, offset: 0 }, head: { kind: "beat", rowId: id, offset: 0 } } }));
+    runOrThrow(sharedFlowCommand("set-visual", () => ({ rows, sections: doc.sections as FlowEdit["sections"], removedComments: [], selection: { anchor: { kind: "beat", rowId: id, offset: 0 }, head: { kind: "beat", rowId: id, offset: 0 } } }), stamps));
     surface.paint();
     changed();
   });
