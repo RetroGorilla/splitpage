@@ -104,6 +104,7 @@ function updateSaveStatus() {
     const label = flow.text === "Saved" ? savedStatusText(savedAt, Date.now()) : flow.text;
     setText(btn, label);
     btn.setAttribute("data-status", label);
+    btn.setAttribute("data-dirty", String(input.dirty));
     btn.setAttribute("data-actionable", String(flow.actionable));
     btn.setAttribute("data-state", flow.problem ? "warn" : flow.actionable ? "pending" : input.busy ? "busy" : "ok");
     btn.disabled = !flow.actionable;

@@ -199,3 +199,19 @@ test("disposing an earlier mount after a new one leaves the new one painting and
     second.mount.dispose();
   }
 });
+
+test("the shared Save control distinguishes unsaved edits from an actionable untitled document", () => {
+  const { mount, save } = mounted({ home: { kind: "none" }, target: null });
+  try {
+    mount.refresh();
+    assert.equal(byId("btn-save").textContent, "Not saved yet");
+    assert.equal(byId("btn-save").dataset.dirty, "false");
+    save.state.unsaved = true;
+    mount.refresh();
+    assert.equal(byId("btn-save").textContent, "Not saved yet");
+    assert.equal(byId("btn-save").dataset.dirty, "true");
+    save.state.unsaved = false;
+    mount.refresh();
+    assert.equal(byId("btn-save").dataset.dirty, "false");
+  } finally { mount.dispose(); }
+});

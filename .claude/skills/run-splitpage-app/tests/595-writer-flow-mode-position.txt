@@ -1,0 +1,14 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;F.openFile(new File([JSON.stringify({schema:2,title:'Mode position',paragraphsDecided:true,rows:Array.from({length:100},function(_,i){return {id:'r'+i,audioText:'Narration for beat '+i+'. More narration to make every beat visible.',paragraphStart:true}}),comments:[]})],'mode-position.splitpage'))
+wait F.state().title === 'Mode position'
+eval window.visible=function(el,host){var r=el.getBoundingClientRect(),h=host?host.getBoundingClientRect():{top:document.querySelector('.topbar').getBoundingClientRect().bottom,bottom:innerHeight};return r.top>=h.top-1&&r.bottom<=h.bottom+1};var cell=document.querySelector('#rows .row[data-id="r90"] .audio-cell .cell-editable');cell.focus();window.getSelection().setBaseAndExtent(cell.firstChild,5,cell.firstChild,5);cell.scrollIntoView({block:'center'});true
+click #btn-write
+wait W.on()
+expect W.selection().head.rowId === 'r90' && W.selection().head.offset === 5
+expect visible(document.querySelector('.wr-beat[data-id="r90"]'),document.getElementById('writer-scroll'))
+eval W.place({anchor:{kind:'beat',rowId:'r70',offset:7},head:{kind:'beat',rowId:'r70',offset:7}});document.querySelector('.wr-beat[data-id="r70"]').scrollIntoView({block:'center'});true
+click #wr-close
+wait !W.on()
+expect window.getSelection().focusNode.parentElement.closest('.cell-editable').dataset.id === 'r70' && window.getSelection().focusOffset === 7
+expect visible(document.querySelector('#rows .row[data-id="r70"] .audio-cell .cell-editable'))

@@ -195,7 +195,7 @@ export function openWriter(keepMark?: number | null) {
   for (let i = 0; i < rows.length; i++) {
     if (!(htmlToPlainText as WriterFeaturePorts["text"]["htmlToPlainText"])((rows[i] as WriterRow).audioText)) { blank = rows[i]; break; }
   }
-  if (flowWriter && at) flowWriter.place(at);
+  if (flowWriter && at) flowWriter.place(at, true);
   else if (blank) flowWriter?.caret(blank.id, 0);
   else if (rows.length) flowWriter?.caret((rows[rows.length - 1] as WriterRow).id, "end");
   updateWriterFormatState();
@@ -265,7 +265,7 @@ export function closeWriter() {
         const point = posToDom(cell, at.offset);
         window.getSelection()?.setBaseAndExtent(point.node, point.offset, point.node, point.offset);
         rememberCellSelection((editorSelection as WriterFeaturePorts["editing"]["selection"])(), cell);
-        cell.scrollIntoView({ block: "nearest" });
+        cell.scrollIntoView({ block: "center" });
       }
     }
   }

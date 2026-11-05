@@ -80,7 +80,7 @@ export interface FlowWriter {
   readonly jumpComment: (id: string, rowId?: string | null, field?: string | null) => void;
   readonly selection: () => FlowRange | null;
   readonly selectedText: () => string | null;
-  readonly place: (range: FlowRange) => void;
+  readonly place: (range: FlowRange, scroll?: boolean) => void;
   readonly check: () => string[];
   readonly dispose: () => void;
 }
@@ -398,7 +398,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       const range = surface.selection();
       return range && !isCollapsed(range) ? logicalText(ports.doc(), range, ports.flow) : null;
     },
-    place: range => { surface.place(range); },
+    place: (range, scroll) => { surface.place(range, scroll); },
     check: surface.domCheck,
     dispose: () => {
       ports.closeFind?.();

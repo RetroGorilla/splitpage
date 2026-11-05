@@ -28,6 +28,12 @@ expect W.check().length === 0
 eval W.place({anchor:{kind:'beat',rowId:'b',offset:16},head:{kind:'beat',rowId:'b',offset:16}})
 press  [Cam
 expect document.getElementById('tag-ghost').classList.contains('is-visible')
+key Escape
+eval document.dispatchEvent(new Event('selectionchange')); true
+expect W.on() && !document.getElementById('tag-ghost').classList.contains('is-visible')
+press e
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+
 eval W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:0}})
 expect !document.getElementById('tag-ghost').classList.contains('is-visible')
 expect W.check().length === 0

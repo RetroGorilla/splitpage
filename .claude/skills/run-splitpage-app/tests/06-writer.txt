@@ -121,5 +121,6 @@ eval window.last=F.state().rows[F.state().rows.length-1];window.previous=F.state
 key alt Backspace
 expect row(previous.id).status === 'shot' && !row(last.id)
 click #wr-close
+expect !document.getElementById('progress-chip').hidden
 expect document.getElementById('progress-text').textContent.indexOf('1/') === 0
 quit

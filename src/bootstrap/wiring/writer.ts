@@ -11,6 +11,7 @@ import { notices } from "./ports/effects.ts";
 import { actions } from "./ports/actions.ts";
 import { screen } from "./ports/screen.ts";
 import { shotHiding } from "./shot-hiding.ts";
+import { releaseScriptPlace } from "./side-panels.ts";
 import { currentRowsRender } from "./render.ts";
 import { acceptTagGhost, hideTagGhost, maybeAutoTagShortcut, scheduleIdleRefresh, tagGhost, updateTagGhost } from "../../features/tags/production-tags.ts";
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
@@ -83,6 +84,7 @@ export function mountWriterRuntimeFeature() {
       flow: {
         splitReady: () => !screenIsStale(),
         prepareSplit: rowId => {
+          releaseScriptPlace();
           const doc = documentReader.current();
           if (rowId && doc) {
             sceneView().reveal(doc, rowId);
@@ -93,6 +95,7 @@ export function mountWriterRuntimeFeature() {
           undoOwner().flush();
           const initialized = liveSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
           if (initialized.kind === "failed") throw initialized.error;
+          let dismissedGhost: typeof tagGhost = null;
           return createFlowWriter({
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
@@ -166,6 +169,7 @@ export function mountWriterRuntimeFeature() {
             typeAtBeatEdge: (beat, words) => !!typeAtDirectionEdge(beat, words),
             beatKeydown: (event, beat) => {
               if (event.key === "Escape" && tagGhost?.cellEl === beat) {
+                dismissedGhost = tagGhost;
                 event.preventDefault();
                 event.stopPropagation();
                 hideTagGhost();
@@ -178,7 +182,15 @@ export function mountWriterRuntimeFeature() {
               if (["Escape", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) hideTagGhost();
               return false;
             },
-            beatSelection: beat => { if (beat) updateTagGhost(beat); else hideTagGhost(); },
+            beatSelection: beat => {
+              if (!beat) { dismissedGhost = null; hideTagGhost(); return; }
+              updateTagGhost(beat);
+              if (tagGhost && dismissedGhost &&
+                  tagGhost.cellEl.getAttribute("data-id") === dismissedGhost.cellEl.getAttribute("data-id") &&
+                  tagGhost.openAt === dismissedGhost.openAt && tagGhost.offset === dismissedGhost.offset &&
+                  tagGhost.phrase === dismissedGhost.phrase) hideTagGhost();
+              else dismissedGhost = null;
+            },
             leaveBeat: beat => {
               if (paintGuard().painting() || undoGuard().applying() || screenIsStale()) return;
               const clean = text.sanitizeHtml(beat.innerHTML);
