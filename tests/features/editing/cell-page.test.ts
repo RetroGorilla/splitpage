@@ -54,6 +54,25 @@ test("focusing a cell puts the selection back where it was asked, or leaves it w
   assert.deepEqual(cells.selection(cell), { from: 2, to: 5 });
 });
 
+test("a temporary decoration is captured before replacement and restored after the model selection", () => {
+  const { cell } = page();
+  let restored = 0;
+  const cells = createCellPage({ storedHtml: html => html, caretSpot: () => {}, beforeWrite: target => {
+    assert.equal(target, cell);
+    assert.equal(target.textContent, "Hello​ there");
+    return () => {
+      assert.equal(target.innerHTML, "New <strong>text</strong>");
+      assert.deepEqual(cells.selection(target), { from: 4, to: 8 });
+      restored++;
+    };
+  } });
+  cells.write(cell, "New <strong>text</strong>");
+  assert.equal(restored, 0);
+  cells.focus(cell, { from: 4, to: 8 });
+  cells.focus(cell, { from: 0, to: 0 });
+  assert.equal(restored, 1);
+});
+
 test("script cells are the grid's and the writer's fields; draft boxes are editable cells anywhere else", () => {
   const { cell, para, draft } = page();
   assert.equal(isScriptCell(cell), true);

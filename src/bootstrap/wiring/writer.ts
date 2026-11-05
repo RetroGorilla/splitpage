@@ -100,6 +100,7 @@ export function mountWriterRuntimeFeature() {
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
             pictures,
+            visualBeforeWrite: cell => currentPlainTags()?.beforeWrite(cell) ?? null,
             visualInput: (event, cell) => {
               maybeAutoTagShortcut(event, cell);
               maybeCaptureBroll(event, cell);

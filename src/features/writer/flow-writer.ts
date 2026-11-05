@@ -35,6 +35,7 @@ export interface FlowWriterPorts {
   readonly closeFind?: () => void;
   readonly pictures?: Pick<PictureStore, "imgHtml">;
   readonly visualInput?: (event: InputEvent, cell: HTMLElement) => void;
+  readonly visualBeforeWrite?: (cell: Element) => (() => void) | null;
   readonly visualLeave?: (cell: HTMLElement) => void;
   readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
@@ -225,10 +226,12 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       const old = ports.decode(ports.storedHtml(cell.innerHTML));
       const line = !html && data.getData("text/plain") === "\n" ? breakLine(old, selection.from, selection.to) : null;
       const next = line ?? insertCell(deleteRange(old, selection.from, selection.to), selection.from, pasted);
+      const restore = ports.visualBeforeWrite?.(cell);
       cell.innerHTML = toHtml(next.cell);
       ensureTrailingCaretSpot(cell);
       const at = line?.pos ?? selection.from + cellLength(pasted);
       setCellSelection(cell, at, at);
+      restore?.();
     }
   });
 

@@ -244,8 +244,7 @@ export function plainTagOpen(cellEl?: Element | null) {
 }
 
 function stillThere(o: OpenPlainTag) {
-  return o.cellEl.isConnected && o.span.isConnected && o.cellEl.contains(o.span) &&
-    o.tail.isConnected && o.tail.previousSibling === o.span;
+  return o.cellEl.isConnected && o.span.isConnected && o.cellEl.contains(o.span);
 }
 
 function caretInOpen(o: OpenPlainTag) {
@@ -253,7 +252,7 @@ function caretInOpen(o: OpenPlainTag) {
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount || !sel.isCollapsed) return null;
   const r = sel.getRangeAt(0);
-  const start = domToPos(o.cellEl, o.tail, 0);
+  const start = domToPos(o.cellEl, o.span, o.span.childNodes.length);
   const end = domToPos(o.cellEl, r.startContainer, r.startOffset);
   if (start === null || end === null || end < start) return null;
   return end - start + 1;
@@ -312,7 +311,7 @@ function paint(o: OpenPlainTag) {
   if (highlightApiOk()) {
     try {
       const range = document.createRange();
-      range.setStart(o.tail, 0);
+      range.setStartAfter(o.span);
       const end = window.getSelection()?.getRangeAt(0);
       if (!end) return;
       range.setEnd(end.startContainer, end.startOffset);
@@ -331,7 +330,7 @@ function paint(o: OpenPlainTag) {
   el.classList.add("is-visible");
   const w = el.offsetWidth, h = el.offsetHeight;
   const at = document.createRange();
-  at.setStart(o.tail, 0);
+  at.setStartAfter(o.span);
   at.collapse(true);
   const rect = at.getClientRects()[0] || o.cellEl.getBoundingClientRect();
   const cellRect = o.cellEl.getBoundingClientRect();
@@ -474,7 +473,7 @@ export function closePlainTag() {
   const o = open;
   if (!o || !stillThere(o)) { open = null; clearPaint(); return false; }
   const at = caretInOpen(o);
-  const start = domToPos(o.cellEl, o.tail, 0);
+  const start = domToPos(o.cellEl, o.span, o.span.childNodes.length);
   let to = at === null || start === null ? null : start + at - 1;
   const html = tagPorts().text.storedHtmlFromDom(o.cellEl.innerHTML.replace(ZWSP_RE, ""));
   const current = tagPorts().text.fromHtml(html, { media: true });
