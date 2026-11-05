@@ -1,0 +1,41 @@
+open
+viewport 1280 720
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Combined writer',paragraphsDecided:true,sections:[{id:'s',name:'Harbour',firstSceneId:'a'}],rows:[{id:'a',audioText:'Alpha bravo',visualText:'Harbour view',status:'shot'},{id:'b',audioText:'Charlie delta',visualText:'Desk',paragraphStart:true}],comments:[]})],'combined.splitpage'))
+wait F.state().title === 'Combined writer'
+click #btn-comments
+click #btn-write
+wait W.on()
+expect !document.getElementById('comments-panel').hidden && !!document.querySelector('#wr-visual')
+expect document.getElementById('writer').getBoundingClientRect().right <= document.getElementById('comments-panel').getBoundingClientRect().left + 1
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:5}})
+click .writer-bar [data-cmd="strikeThrough"]
+expect F.state().rows[0].audioText.includes('<s>Alpha</s>')
+key ctrl KeyF
+eval var input=document.getElementById('find-input');input.value='Alpha';input.dispatchEvent(new Event('input',{bubbles:true}))
+expect document.getElementById('find-count').textContent === '1 of 1'
+key Escape
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:8},head:{kind:'beat',rowId:'b',offset:13}})
+click .writer-bar [data-cmd="tag"]
+wait !document.getElementById('tag-modal').hidden
+click #tag-cats [data-tag-cat="prop"]
+click #tag-apply
+wait !!document.querySelector('#writer-doc .tag-anchor[data-tag-name="delta"]')
+expect document.querySelector('#writer-doc .tag-anchor').getBoundingClientRect().width > 0 && document.querySelector('.wr-beat[data-id="a"]').classList.contains('is-filmed')
+eval W.place({anchor:{kind:'beat',rowId:'a',offset:0},head:{kind:'beat',rowId:'a',offset:0}})
+click #wr-visual
+wait !!document.querySelector('.wr-flow-visual-box:not([hidden])')
+expect document.activeElement.textContent === 'Harbour view'
+key ctrl KeyA
+type Wide harbour
+expect F.state().rows[0].visualText === 'Wide harbour'
+click .wr-flow-visual-close
+eval W.place({anchor:{kind:'beat',rowId:'b',offset:0},head:{kind:'beat',rowId:'b',offset:7}})
+click .writer-bar [data-cmd="comment"]
+wait !document.getElementById('comment-modal').hidden
+click #comment-body-editable
+type Combined comment
+click #comment-post
+wait F.state().comments.length === 1 && !!document.querySelector('.comment-card')
+expect F.state().sections[0].name === 'Harbour' && F.state().rows[0].status === 'shot'
+expect document.querySelector('#writer-doc .wr-heading').textContent === 'Harbour' && W.check().length === 0

@@ -28,6 +28,14 @@ export const DIRECTION_BUTTON_TITLE = "Stage direction — shown in the teleprom
 const DIRECTION_BUTTON_HTML = '<button type="button" data-cmd="direction" title="' + DIRECTION_BUTTON_TITLE +
   '" aria-label="Stage direction"><span class="tb-letter tb-dir">( )</span></button>';
 
+export function writerToolbarButtonsHtml(): string {
+  return SCRIPT_TOOLBAR_BUTTONS + DIRECTION_BUTTON_HTML;
+}
+
+export function cellLinkPopoverHtml(): string {
+  return LINK_POPOVER_HTML;
+}
+
 const CELL_TOOLBARS: Record<string, { label: string; buttons: string } | undefined> = {
   script: { label: "Text formatting", buttons: SCRIPT_TOOLBAR_BUTTONS },
   scriptAudio: { label: "Text formatting", buttons: SCRIPT_TOOLBAR_BUTTONS + DIRECTION_BUTTON_HTML },

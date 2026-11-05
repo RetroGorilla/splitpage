@@ -1,0 +1,16 @@
+open
+viewport 800 700
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1')
+goto /index.html
+wait document.body.classList.contains('writer-flow-bar')
+eval window.hit=e=>{var r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}; window.textStatus=()=>getComputedStyle(document.getElementById('btn-save'),'::before').content.includes(document.getElementById('btn-save').getAttribute('data-status'))
+expect textStatus()
+expect ['btn-file','btn-write','btn-save','length-status'].every(id=>hit(document.getElementById(id)))
+click #btn-write
+wait window.__writerFlowTest.on()
+wait hit(document.getElementById('comments-panel'))
+expect textStatus()
+expect ['btn-file','wr-close','btn-save','length-status','wr-size','wr-words'].every(id=>hit(document.getElementById(id)))
+expect document.querySelector('.writer-bar').getBoundingClientRect().bottom < 250
+shot phase-7-comments-800

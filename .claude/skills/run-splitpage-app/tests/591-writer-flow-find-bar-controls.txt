@@ -1,0 +1,19 @@
+open
+viewport 1440 900
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-writer-flow','1'); window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'Find beside shared bar',paragraphsDecided:true,rows:[{id:'a',audioText:'Red fox',visualText:'Red sky'},{id:'b',audioText:'Red tail',visualText:'Red view'}],comments:[]})],'find-bar.splitpage'))
+wait F.state().title === 'Find beside shared bar'
+click #btn-write
+wait W.on()
+key ctrl KeyF
+eval window.reachable=id=>{var el=document.getElementById(id),r=el.getBoundingClientRect();return r.width>0&&r.height>0&&el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}; window.query=s=>{var el=document.getElementById('find-input');el.value=s;el.dispatchEvent(new Event('input',{bubbles:true}))}; query('Red')
+expect ['find-next','find-prev','find-visuals','find-replace','find-replace-all','wr-close'].every(reachable)
+click #find-next
+expect document.getElementById('find-count').textContent === '2 of 2'
+click #find-visuals
+expect document.getElementById('find-visuals').getAttribute('aria-pressed') === 'true' && document.getElementById('find-count').textContent.includes('of 4')
+eval document.getElementById('replace-input').value='Blue'
+click #find-replace-all
+expect F.state().rows.every(row=>row.audioText.startsWith('Blue') && row.visualText.startsWith('Blue'))
+click #wr-close
+expect document.getElementById('writer').hidden && document.getElementById('findbar').hidden

@@ -71,9 +71,20 @@ function captureViewDocument(): () => boolean {
   return function () { return stillOwns(context); };
 }
 
+let topbar: ReturnType<typeof mountTopbar> | null = null;
+
+export function refreshWriterChrome(): void {
+  topbar?.refreshWriterChrome();
+}
+
 export function mountTopbarFeature(): Disposable {
   return replaceViewMount("mountTopbar", function () {
-    return mountTopbar({ window: window });
+    const mounted = mountTopbar({ window: window });
+    topbar = mounted;
+    return { dispose: () => {
+      if (topbar === mounted) topbar = null;
+      mounted.dispose();
+    } };
   });
 }
 

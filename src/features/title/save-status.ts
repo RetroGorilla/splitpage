@@ -1,8 +1,9 @@
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../../shared/clock.ts";
-import { saveButtonView, saveStatus } from "../../application/save/status.ts";
+import { flowSaveStatus, saveButtonView, saveStatus } from "../../application/save/status.ts";
+import { writerFlowEnabled } from "../common/writer-flow-enabled.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import type { SaveStatusPorts, SaveStatusListeners, SaveStatusMount } from "./ports.ts";
-import type { SaveStatusLine } from "../../application/save/status.ts";
+import type { SaveStatusInput, SaveStatusLine } from "../../application/save/status.ts";
 import type { LocalFileHandle } from "../../application/files/local-file-access.ts";
 
 type MutableSaveStatusLine = { -readonly [K in keyof SaveStatusLine]: SaveStatusLine[K] };
@@ -43,6 +44,7 @@ function saveStatusListeners(): SaveStatusListeners {
         if (!(ports as SaveStatusPorts).saves.busy()) setSaveButtons();
       } else if (change === "clean") {
         savedAt = 0;
+        flowProblem = "";
         setSaveButtons();
       } else if (change === "running") {
         setSaveButtons();
@@ -54,7 +56,8 @@ function saveStatusListeners(): SaveStatusListeners {
       if (change !== "writtenOut") updateSaveStatus();
     },
     preference: function (change) {
-      if ((ports as SaveStatusPorts).preferences.nameOf(change.key) === "clock") updateSaveStatus();
+      const name = (ports as SaveStatusPorts).preferences.nameOf(change.key);
+      if (name === "clock" || (name === "autosave" && writerFlowEnabled(window))) updateSaveStatus();
     }
   };
 }
@@ -65,7 +68,7 @@ function savedTitle(where: SaveStatusLine["where"]) {
   return where ? "Up to date with " + where + "." : "Everything is saved.";
 }
 
-function saveStatusView() {
+function saveStatusInput(): SaveStatusInput {
   const target = (ports as SaveStatusPorts).autoSave.target();
   const place = (ports as SaveStatusPorts).place;
   const where = place.home().kind === "file" ? ((place.home().handle && (place.home().handle as Pick<LocalFileHandle, "name">).name) as string | null | undefined) || ""
@@ -73,7 +76,7 @@ function saveStatusView() {
     : "";
 
   const autosave = (ports as SaveStatusPorts).autoSave.policy();
-  const line = saveStatus({
+  return {
     busy: (ports as SaveStatusPorts).saves.busy(),
     dirty: (ports as SaveStatusPorts).saves.unsaved(),
     halted: autosave.halted(),
@@ -81,16 +84,18 @@ function saveStatusView() {
     target: target,
     where: where,
     homeKind: place.home().kind
-  }).line;
-  return line ? Object.assign({}, line) : null;
+  };
 }
 
 let savedAt = 0;
 let lastViewText = "";
+let flowProblem = "";
 let justNowTimer: ReturnType<typeof setTimeout> | null = null;
 
 function updateSaveStatus() {
-  const view = saveStatusView();
+  const input = saveStatusInput();
+  const line = saveStatus(input).line;
+  const view = line ? Object.assign({}, line) : null;
   const text = view ? view.text : "";
   if (text === "Saved" && lastViewText === "Saving…") savedAt = Date.now();
   else if (text !== "Saved") savedAt = 0;
@@ -105,13 +110,27 @@ function updateSaveStatus() {
     el.title = view.title;
     el.className = "save-status is-" + view.cls;
   });
-  const btn = document.getElementById("btn-save");
+  const btn = document.getElementById("btn-save") as HTMLButtonElement | null;
   if (btn) {
     const shown = !view ? "Save" : text === "Saved" ? savedStatusText(savedAt, Date.now()) : view.text;
     btn.setAttribute("data-status", shown);
     btn.setAttribute("data-state", view ? view.cls : "none");
     btn.setAttribute("aria-label", view ? shown + ". Save now" : "Save");
     btn.title = view ? view.title + " Click to save now." : "Save this script";
+    if (writerFlowEnabled(window)) {
+      if (!input.busy && !input.dirty) flowProblem = "";
+      if (input.halted) flowProblem = input.halted;
+      const flow = flowSaveStatus({ ...input, halted: input.halted || flowProblem });
+      const label = flow.text === "Saved" ? savedStatusText(savedAt, Date.now()) : flow.text;
+      setText(btn, label);
+      btn.setAttribute("data-status", label);
+      btn.setAttribute("data-actionable", String(flow.actionable));
+      btn.setAttribute("data-state", flow.problem ? "warn" : flow.actionable ? "pending" : input.busy ? "busy" : "ok");
+      btn.disabled = !flow.actionable;
+      btn.setAttribute("aria-label", label + (flow.actionable ? ". Save now" : ""));
+      btn.title = (flow.problem ? flowProblem : view?.title || (input.target ? "Everything is saved." : "Save to choose where this script is kept."))
+        + (flow.actionable ? " Click to save now." : "");
+    }
   }
   if (savedAt && !justNowTimer) {
     const left = savedAt + SAVED_JUST_NOW_MS - Date.now();
@@ -152,6 +171,7 @@ export function mountSaveStatus(nextPorts: SaveStatusPorts) {
       justNowTimer = null;
       savedAt = 0;
       lastViewText = "";
+      flowProblem = "";
       ports = null;
     }
   };

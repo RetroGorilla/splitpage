@@ -7,6 +7,7 @@ import { saveStatusListeners } from "./save-status.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { refreshOpenFileMenu } from "./file-menu-controls.ts";
 import { desktopDocumentListeners } from "./desktop-owners.ts";
+import { refreshWriterChrome } from "./views.ts";
 
 let stopChrome: (() => void) | null = null;
 
@@ -37,6 +38,7 @@ export function mountDocumentChromeFeature(): void {
     documentLocation().onChange(desktop.location),
     onSaveChange(desktop.save),
     viewFlags().onChange((change) => {
+      if (change.flag === "writerOpen") refreshWriterChrome();
       if (change.flag === "writerOpen" && change.value) localFileMenuControls().mirrorFileChipToWriter();
     })
   );

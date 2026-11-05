@@ -77,13 +77,14 @@ export interface FlowWriter {
   readonly comment: () => void;
   readonly jumpComment: (id: string, rowId?: string | null, field?: string | null) => void;
   readonly selection: () => FlowRange | null;
+  readonly selectedText: () => string | null;
   readonly place: (range: FlowRange) => void;
   readonly check: () => string[];
   readonly dispose: () => void;
 }
 
-const MARK_OF: Readonly<Record<string, MarkName>> = { bold: "b", italic: "i", underline: "u", highlight: "hl", direction: "dir" };
-const SHOWN_TAGS: Readonly<Record<string, string>> = { bold: "strong", italic: "em", underline: "u", highlight: "mark", direction: ".stage-dir" };
+const MARK_OF: Readonly<Record<string, MarkName>> = { bold: "b", italic: "i", underline: "u", strikeThrough: "s", highlight: "hl", direction: "dir" };
+const SHOWN_TAGS: Readonly<Record<string, string>> = { bold: "strong", italic: "em", underline: "u", strikeThrough: "s", highlight: "mark", direction: ".stage-dir" };
 const SETTINGS = { enter: "double", tick: "delete", gapTyping: "here", markdown: true } as const;
 
 interface RowStep {
@@ -294,11 +295,11 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   }
 
   // why: a comment box takes the keyboard while it is open, so the caret goes back to where it was when it closes
-  const dialog = root.ownerDocument.getElementById("comment-modal");
+  const dialogs = ["comment-modal", "tag-modal"].map(id => root.ownerDocument.getElementById(id)).filter((element): element is HTMLElement => !!element);
   const observer = new MutationObserver(() => {
-    if (dialog && dialog.hidden && root.isConnected && isCurrent()) surface.focusBack();
+    if (dialogs.every(dialog => dialog.hidden) && root.isConnected && isCurrent()) surface.focusBack();
   });
-  if (dialog) observer.observe(dialog, { attributes: true, attributeFilter: ["hidden"] });
+  dialogs.forEach(dialog => observer.observe(dialog, { attributes: true, attributeFilter: ["hidden"] }));
 
   const writer: FlowWriter = {
     openVisual: (rowId, highlight) => {
@@ -363,6 +364,10 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     comment,
     jumpComment,
     selection: surface.selection,
+    selectedText: () => {
+      const range = surface.selection();
+      return range && !isCollapsed(range) ? logicalText(ports.doc(), range, ports.flow) : null;
+    },
     place: range => { surface.place(range); },
     check: surface.domCheck,
     dispose: () => {
