@@ -1,6 +1,6 @@
 # Writer flow: plan
 
-Status: revised after outside review (section 8). Phases 0a, 0b and 1 are done (sections 9 to 11). Adam has picked every setting, apart from the two heading questions in section 7. The saved flag and the pure engine are on `main` with no shipping caller, and the in-app slice sits behind a switch on `feat/writer-flow`. Phase 2 is next. Issues: #264, #1167, and the writer side of #1166 and #1168.
+Status: revised after outside review (section 8). Phases 0a, 0b, 1 and 2 are done (sections 9 to 12). Adam has picked every setting, apart from the two heading questions in section 7. The saved flag and the pure engine are on `main` with no shipping caller, and the writer sits behind a switch on `feat/writer-flow`. Phase 3 is next. Issues: #264, #1167, and the writer side of #1166 and #1168.
 
 Words: a **beat** is a row. A **scene** is a group of beats under a header (saved as `sections`, anchored by `firstSceneId`). `audioText` is a beat's narration.
 
@@ -367,5 +367,39 @@ The full Electron smoke and `tools/perf-ab.mjs` were outstanding here too. Both 
 - `perf-ab` on #1217, one run with other work on the PC, so read it as a direction, median p50: short typing 4.4 to 2.7 ms, long typing 6.6 to 3.4, long new scene 57.2 to 38.5, long undo 56.8 to 34.2. Every median in the table improved. The only worse p95 was short typing, up 5.2%.
 
 **The branch after merging `main`:** in-app slice 25 of 25 in Electron and 19 of 19 in Edge, test page 88 of 88 in Edge. 166 focused flow, render-guard and CSS tests pass. The full unit and browser sets didn't run on this merge.
+
+**Test browsers and your account:** `accept.mjs` and `slice.mjs` started Edge without `msImplicitSignin`, so a fresh temp profile signed in to Adam's Microsoft account and synced into `%TEMP%`. Both now pass it, and #1221 fixes the printed-layout checks and adds a test for any browser script in the repo. 81 signed-in temp profiles were deleted. Whether anything went from those test browsers to the account isn't known.
+
+## 12. Phase 2 results
+
+**On the branch:** #1222 (2a) and #1223 (2b), both behind the switch, with the switch-off suites unedited.
+
+- **2a:** the host owns document undo, undo entries carry a selection pair, operations plan against the live document, edits and full renders patch beats instead of repainting them, opening and closing are clean, and the sentence rule runs on first open.
+- **2b:** tag and direction shortcuts, the tag ghost, pending marks on model positions, the "left this beat" transition, and a minimal comment jump.
+
+**Decided along the way:**
+
+- The sentence rule on first open stays out of the undo stack. Earlier edits stay undoable, because it updates their recorded paragraph flags too. Undo can't remove the marker or run the rule again.
+- A composition's touched beats come from the input events that hit them, not from comparing text, and composition end flushes straight away.
+- Moving focus from the host to the page body doesn't run the departure work. It waits for the next departure or close, because that blur can't be told apart from a window blur.
+- Bracket tags, Tab completion, `((direction))` and line-start `SFX:` and `Music:` keep the split view's syntax. Plain keyword tags and b-roll anchoring stay visual-only.
+
+**Left on purpose:**
+
+- The never-do list (#1144) has a reload that lands during a cancelled composition, which is overwritten on close. Composing a heading then a beat can also move the caret back to the heading, with both texts kept; that one is IME-only too and wasn't logged separately.
+- #1224: leaving a beat can mark an untouched script as changed when a comment mark sits inside a tag. The old writer does the same.
+
+**Speed, one run each with other apps open.** The new writer on the 900-beat script, in ms:
+
+| | Edge typing p50 / p95 / max | Edge Enter / Undo | Electron typing p50 / p95 / max | Electron Enter / Undo |
+| --- | --- | --- | --- | --- |
+| Section 10's "Flow, now" | 10.8 / 24.8 / 46.4 | 77 / 269 | Not tabulated | 109 / 208 |
+| End of phase 2 | 5.4 / 19.5 / 22.0 | 49.4 / 119.6 | 61.9 / 67.1 / 69.9 | 106.5 / 201.1 |
+
+These two rows aren't a controlled before and after. Electron's typing figure is still the 62 ms measuring floor from section 10, on the small script too, and its cause is still unknown.
+
+`perf-ab` against `main`, three rounds, measures the shipping paths with the switch off, not the new writer. Median p50: short typing 2.5 to 2.6, long typing 2.8 to 2.7, long undo 28.3 to 30.8 (up 8.8%). The review found no switch-off undo path in 2b's diff that explains the undo figure. Noise is more likely, but that's unproven, so phase 8's comparison has to look at it again. Long HTML export also went from 2.2 to 3.5.
+
+**Still unproven:** a real IME, the real clipboard, right-click spellcheck, a physical Ctrl+Z against the menu, the one-second gap on a single key from section 10, the comments panel beside the writer, and a real script in Adam's hands. The full browser set hasn't run locally on the branch since 0b; CI's shards ran it on each phase PR.
 
 The first `tests/core/flow/` file covers the rules Adam picked. Fuzz, merge and differential tests are phase 1.
