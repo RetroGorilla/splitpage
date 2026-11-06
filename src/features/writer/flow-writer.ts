@@ -203,6 +203,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         if (!result || !("selection" in result)) return null;
         after = result.selection;
       } else {
+        if (ports.editingBlocked()) return null;
         const outcome = ports.shown(() => ports.run(cellTextCommand(range.head.kind === "beat" ? range.head.rowId : "", "visualText", cellRuns(ports.decode(clean)), ports.text)));
         if (!took(outcome) && outcome.kind !== "noop") return null;
       }

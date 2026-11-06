@@ -69,7 +69,8 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     saving = true;
     try { next = ports.save(target, cell.innerHTML, first); }
     finally { saving = false; }
-    if (!next || next.head.kind !== "beat") return;
+    if (!next) { dirty = true; return; }
+    if (next.head.kind !== "beat") return;
     target = next;
     first = false;
     cell.dataset.id = next.head.rowId;

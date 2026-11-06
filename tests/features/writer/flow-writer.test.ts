@@ -18,6 +18,7 @@ function harness(changeBeforePlan = false, refusePaste = false) {
   let doc = migrateRows({ rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" }] }, fakeMigration().ports);
   let epoch = 1;
   let breaks = 0;
+  let blocked = false;
   const left: string[] = [];
   let recorded: FlowSelectionPair | undefined;
   const writer = createFlowWriter({
@@ -42,7 +43,7 @@ function harness(changeBeforePlan = false, refusePaste = false) {
       return { kind: "applied", generation: 1, changes: plan.changes };
     },
     shown: edit => edit(),
-    editingBlocked: () => false,
+    editingBlocked: () => blocked,
     text: { cells: fromHtml, clock: { nowIso: () => "2026-11-04T12:00:00.000Z" }, editor: { name: () => "Editor" } },
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => { breaks++; }, last: () => null, nextRedo: () => null },
     caretAfterStep: () => 0, notice: () => {}, changed: () => {}, selectionMoved: () => {},
@@ -50,7 +51,7 @@ function harness(changeBeforePlan = false, refusePaste = false) {
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: beat => { left.push(beat.dataset.id ?? ""); },
     newCommentId: () => "c", openComment: () => {}
   });
-  return { writer, root, left, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
+  return { writer, root, left, block: (value: boolean) => { blocked = value; }, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
     epoch++;
     doc = migrateRows({ rows: [{ id: "a", audioText: "Replacement" }] }, fakeMigration().ports);
   } };
@@ -104,6 +105,42 @@ test("a visual comment jumps to its beat without changing the narration", () => 
     assert.deepEqual(h.writer.selection(), { anchor: beatPos("b", 0), head: beatPos("b", 0) });
     assert.equal(h.doc().rows[1]?.audioText, "Bravo");
     assert.equal(h.recorded(), undefined);
+  } finally { h.writer.dispose(); }
+});
+
+function typeVisual(html: string): HTMLElement {
+  const cell = document.querySelector<HTMLElement>(".wr-flow-visual-text");
+  assert.ok(cell);
+  cell.innerHTML = html;
+  cell.dispatchEvent(new window.Event("input", { bubbles: true }));
+  return cell;
+}
+
+test("the Visual box does not save while editing is blocked, and saves the typed text once it is not", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.openVisual("a");
+    h.block(true);
+    typeVisual("Seen");
+    assert.equal(h.doc().rows[0]?.visualText ?? "", "");
+    h.block(false);
+    typeVisual("Seen more");
+    assert.equal(h.doc().rows[0]?.visualText, "Seen more");
+  } finally { h.writer.dispose(); }
+});
+
+test("closing the Visual box after a blocked save keeps the text for the next save", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.openVisual("a");
+    h.block(true);
+    typeVisual("Seen");
+    h.block(false);
+    const cell = document.querySelector<HTMLElement>(".wr-flow-visual-text");
+    cell?.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    assert.equal(h.doc().rows[0]?.visualText, "Seen");
   } finally { h.writer.dispose(); }
 });
 
