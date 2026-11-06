@@ -465,7 +465,7 @@ function shellStateAsV2() {
 function persistShellState() {
   if (sessionWritesAreFrozen() || isRestoringSession()) return Promise.resolve(false);
   if (!windowsById.size) return Promise.resolve(false);
-  return desktopState.write(() => shellStateAsV2());
+  return desktopState.write((current) => ({ ...current, ...shellStateAsV2() }));
 }
 
 const HISTORY_DESKTOP_CAP_BYTES = 500 * 1024 * 1024;
@@ -1784,7 +1784,7 @@ function launchIntentFor(tab: DesktopMainTab) {
 }
 
 const { registerFileIpc } = createFileIpc({
-  dialog, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
+  dialog, documentsPath: () => app.getPath("documents"), fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
   consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, testMode: TEST_MODE
 });
 

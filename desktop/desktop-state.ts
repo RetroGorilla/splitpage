@@ -116,12 +116,12 @@ function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string
     });
   }
   const recents = normalizeRecentsList(raw && (raw as DesktopStateRaw).recents, pathKey);
-  if (!windows.length) {
-    const fresh = freshDesktopState();
-    fresh.recents = recents;
-    return fresh;
+  const state = { version: DESKTOP_STATE_VERSION, windows: windows.length ? windows : freshDesktopState().windows, recents };
+  const lastSavedFolder = raw && (raw as DesktopStateRaw).lastSavedFolder;
+  if (typeof lastSavedFolder === "string" && path.isAbsolute(lastSavedFolder)) {
+    return { ...state, lastSavedFolder };
   }
-  return { version: DESKTOP_STATE_VERSION, windows, recents };
+  return state;
 }
 
 function createDesktopStateStore({ filePath, pathKey, onWriteError }: {
@@ -216,6 +216,7 @@ export interface DesktopStoredWindow {
 }
 export interface DesktopStoredState {
   version: number;
+  lastSavedFolder?: string;
   windows: DesktopStoredWindow[];
   recents: { absPath: string; title: string; at: number }[];
 }
