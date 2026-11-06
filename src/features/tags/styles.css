@@ -237,6 +237,29 @@
   ::highlight(splitpage-open-tag-vfx)      { background-color: color-mix(in srgb, var(--tag-vfx-tint) 70%, transparent);      text-decoration: underline dashed var(--tag-vfx) 1.5px;      text-underline-offset: 3px; }
   ::highlight(splitpage-open-tag-sound)    { background-color: color-mix(in srgb, var(--tag-sound-tint) 70%, transparent);    text-decoration: underline dashed var(--tag-sound) 1.5px;    text-underline-offset: 3px; }
   ::highlight(splitpage-open-tag-gear)     { background-color: color-mix(in srgb, var(--tag-gear-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-gear) 1.5px;     text-underline-offset: 3px; }
+  .who-anchor {
+    padding: 0 var(--space-4);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text) 9%, transparent);
+    color: var(--text-dim);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .who-list {
+    position: fixed; z-index: 146;
+    min-width: 140px; max-width: min(280px, calc(100vw - 16px));
+    margin: 0; padding: var(--space-4); list-style: none;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    font-family: var(--font-body); font-size: 14px; line-height: 20px; color: var(--text);
+  }
+  .who-list[hidden] { display: none; }
+  .who-option {
+    padding: var(--space-6) var(--space-10); border-radius: var(--radius-sm);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  }
+  .who-option:hover, .who-option[aria-selected="true"] { background: var(--hover); }
   .tag-open-hint { gap: 7px; }
   .tag-open-hint .tag-cat-dot { width: 8px; height: 8px; }
 

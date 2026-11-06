@@ -13,7 +13,7 @@ const MOUNT_ORDER = [
   "mountSessionMergeOwner", "mountHistoryOwner", "mountScriptPlaceFeature", "mountRowsRenderFeature", "mountDraftEditFeature",
   "mountGalleryOverlayFeature", "mountRundownFeature", "mountCopyPasteFeature", "mountReadTimeFeature", "mountScriptZoomFeature",
   "mountTargetFeature", "mountGalleryVideoFeature", "mountGalleryFeature", "mountVideoFilesFeature", "mountBeatsFeature",
-  "mountBeatMediaFeature", "mountProductionTagsFeature", "mountPlainTagsFeature", "mountTagPanelsFeature", "mountBrollFeature",
+  "mountBeatMediaFeature", "mountProductionTagsFeature", "mountPlainTagsFeature", "mountWhoListFeature", "mountTagPanelsFeature", "mountBrollFeature",
   "mountBrollPanelStateFeature", "mountFindFeature", "mountCommentsLogicFeature", "mountImportDialogFeature", "mountSaveStatusFeature",
   "mountFileSavingFeature", "mountLocalFilesFeature", "mountMergeReviewFeature", "mountFileMenuDropdownFeature",
   "mountFileMenuExportFeature", "mountCommandMenuFeature", "mountWriterRuntimeFeature", "mountPrompterRuntimeFeature",

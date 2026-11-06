@@ -113,6 +113,7 @@ import {
   updateUntaggedPrompt
 } from "../../features/tags/production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
+import { currentWhoList } from "./who-list.ts";
 import { renderProduction } from "../../features/tags/panels.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll, scheduleBrollRefresh } from "./broll.ts";
 import {
@@ -523,6 +524,7 @@ export function onRootInput(e: RootInput): void {
   maybeCaptureBroll(e, cellEl);
   currentPlainTags()?.maybeOpen(e as InputEvent, cellEl);
   cellEditing().sync(cellEl);
+  currentWhoList()?.maybeOpen(e as InputEvent, cellEl);
   settleEndedComposition(e);
   afterScriptCellChange(cellEl);
 }
@@ -607,6 +609,7 @@ const editorFocusPorts: EditorFocusPorts = {
   leftEditable: function () {
     hideTagGhost();
     currentPlainTags()?.cancel();
+    currentWhoList()?.cancel();
     hideUntaggedPrompt();
     focusMemory().unmutePrompt();
   },
@@ -630,6 +633,7 @@ const editorFocusPorts: EditorFocusPorts = {
       updateToolbarState(active);
     }
     currentPlainTags()?.refresh();
+    currentWhoList()?.refresh();
     updateUntaggedPrompt();
   }
 };
@@ -752,6 +756,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   const undoOwner = undoRoutes.owner();
   if (undoOwner && undoOwner.key(e)) return;
+  if (currentWhoList()?.keydown(e, cellEl)) { hideTagGhost(); return; }
   const plainTag = currentPlainTags();
   if (plainTag && plainTag.isOpen(cellEl)) {
     if (e.key === "Tab") { e.preventDefault(); plainTag.close(); return; }

@@ -1097,6 +1097,133 @@
       "markdownOfInput": "mug ((both)) B-roll: [card](https://e.x/v)",
       "storedFromDom": "<span class=\"cmt-anchor tag-anchor\" data-cmt=\"c1\" data-tag-cat=\"prop\" data-tag-name=\"Mug\">mug</span> <span class=\"stage-dir audio-cue\">both</span> <span class=\"broll-key cmt-anchor\" data-cmt=\"c2\" data-broll-id=\"k1\">B-roll:</span> <a class=\"video-embed-card other\" href=\"https://e.x/v\">card</a>"
     },
+    "name chip": {
+      "input": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> for <span class=\"who-anchor\" data-who=\"Sam\" contenteditable=\"false\">@Sam</span>. Next <b>line</b>",
+      "sanitized": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> for <span class=\"who-anchor\" data-who=\"Sam\" contenteditable=\"false\">@Sam</span>. Next <strong>line</strong>",
+      "fromHtml": [
+        {
+          "text": "kettle",
+          "marks": {
+            "tag": "t:prop:Kettle"
+          }
+        },
+        {
+          "text": " for ",
+          "marks": {}
+        },
+        {
+          "atom": "who",
+          "name": "Sam",
+          "text": "@Sam",
+          "marks": {}
+        },
+        {
+          "text": ". Next ",
+          "marks": {}
+        },
+        {
+          "text": "line",
+          "marks": {
+            "b": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> for <span class=\"who-anchor\" data-who=\"Sam\" contenteditable=\"false\">@Sam</span>. Next <strong>line</strong>",
+      "markdown": "kettle for. Next **line**",
+      "markdownOfInput": "kettle for. Next **line**",
+      "storedFromDom": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> for <span class=\"who-anchor\" data-who=\"Sam\" contenteditable=\"false\">@Sam</span>. Next <b>line</b>"
+    },
+    "name chip: dirty, blank and nested": {
+      "input": "<span class=\"who-anchor\" data-who=\"  @@Ann   Lee \">@x</span> <span class=\"who-anchor\" data-who=\"\">kept text</span> <span class=\"who-anchor\">no name</span> <strong><span class=\"who-anchor\" data-who=\"Bo&lt;b&gt;\"><em>@Bo</em></span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\">@Cy</span></span>",
+      "sanitized": "<span class=\"who-anchor\" data-who=\"Ann Lee\" contenteditable=\"false\">@Ann Lee</span> kept text no name <strong><span class=\"who-anchor\" data-who=\"Bo<b>\" contenteditable=\"false\">@Bo&lt;b&gt;</span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\" contenteditable=\"false\">@Cy</span></span>",
+      "fromHtml": [
+        {
+          "atom": "who",
+          "name": "Ann Lee",
+          "text": "@Ann Lee",
+          "marks": {}
+        },
+        {
+          "text": " kept text no name ",
+          "marks": {}
+        },
+        {
+          "atom": "who",
+          "name": "Bo<b>",
+          "text": "@Bo<b>",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "atom": "who",
+          "name": "Cy",
+          "text": "@Cy",
+          "marks": {
+            "cmt": [
+              "c1"
+            ]
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"who-anchor\" data-who=\"Ann Lee\" contenteditable=\"false\">@Ann Lee</span> kept text no name <strong><span class=\"who-anchor\" data-who=\"Bo<b>\" contenteditable=\"false\">@Bo&lt;b&gt;</span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\" contenteditable=\"false\">@Cy</span></span>",
+      "markdown": "kept text no name",
+      "markdownOfInput": "kept text no name",
+      "storedFromDom": "<span class=\"who-anchor\" data-who=\"  @@Ann   Lee \">@x</span> <span class=\"who-anchor\" data-who=\"\">kept text</span> <span class=\"who-anchor\">no name</span> <strong><span class=\"who-anchor\" data-who=\"Bo&lt;b&gt;\"><em>@Bo</em></span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\">@Cy</span></span>"
+    },
+    "name chip: start of a line and before punctuation": {
+      "input": "<span class=\"who-anchor\" data-who=\"Sam\">@Sam</span> opens.<br>Ask <span class=\"who-anchor\" data-who=\"Ann\">@Ann</span>, then <span class=\"who-anchor\" data-who=\"Lee\">@Lee</span><br><span class=\"who-anchor\" data-who=\"Bo\">@Bo</span>",
+      "sanitized": "<span class=\"who-anchor\" data-who=\"Sam\" contenteditable=\"false\">@Sam</span> opens.<br>Ask <span class=\"who-anchor\" data-who=\"Ann\" contenteditable=\"false\">@Ann</span>, then <span class=\"who-anchor\" data-who=\"Lee\" contenteditable=\"false\">@Lee</span><br><span class=\"who-anchor\" data-who=\"Bo\" contenteditable=\"false\">@Bo</span>",
+      "fromHtml": [
+        {
+          "atom": "who",
+          "name": "Sam",
+          "text": "@Sam",
+          "marks": {}
+        },
+        {
+          "text": " opens.\nAsk ",
+          "marks": {}
+        },
+        {
+          "atom": "who",
+          "name": "Ann",
+          "text": "@Ann",
+          "marks": {}
+        },
+        {
+          "text": ", then ",
+          "marks": {}
+        },
+        {
+          "atom": "who",
+          "name": "Lee",
+          "text": "@Lee",
+          "marks": {}
+        },
+        {
+          "text": "\n",
+          "marks": {}
+        },
+        {
+          "atom": "who",
+          "name": "Bo",
+          "text": "@Bo",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"who-anchor\" data-who=\"Sam\" contenteditable=\"false\">@Sam</span> opens.<br>Ask <span class=\"who-anchor\" data-who=\"Ann\" contenteditable=\"false\">@Ann</span>, then <span class=\"who-anchor\" data-who=\"Lee\" contenteditable=\"false\">@Lee</span><br><span class=\"who-anchor\" data-who=\"Bo\" contenteditable=\"false\">@Bo</span>",
+      "markdown": "opens.\nAsk, then",
+      "markdownOfInput": "opens.\nAsk, then",
+      "storedFromDom": "<span class=\"who-anchor\" data-who=\"Sam\">@Sam</span> opens.<br>Ask <span class=\"who-anchor\" data-who=\"Ann\">@Ann</span>, then <span class=\"who-anchor\" data-who=\"Lee\">@Lee</span><br><span class=\"who-anchor\" data-who=\"Bo\">@Bo</span>"
+    },
     "comment anchor": {
       "input": "before <span class=\"cmt-anchor\" data-cmt=\"c1\">quoted</span> after",
       "sanitized": "before <span class=\"cmt-anchor\" data-cmt=\"c1\">quoted</span> after",

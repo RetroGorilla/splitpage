@@ -3,6 +3,8 @@ import type { FlowDoc, FlowRange, FlowRow } from "../../core/flow/flow.ts";
 import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { posToDom } from "../common/cell-dom.ts";
+import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
+import { ensureTrailingCaretSpot } from "../common/dom.ts";
 
 export interface FlowVisualBoxPorts {
   readonly root: HTMLElement;
@@ -159,7 +161,12 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
       const row = rowOf(target.head.rowId);
       if (row && (row.visualText ?? "") !== shownHtml) {
         shownHtml = row.visualText ?? "";
+        const kept = doc.activeElement === cell ? cellSelection(cell) : null;
         cell.innerHTML = shownHtml;
+        if (kept) {
+          ensureTrailingCaretSpot(cell);
+          setCellSelection(cell, kept.from, kept.to);
+        }
         pictures.innerHTML = ports.thumbnails(row);
       }
     }

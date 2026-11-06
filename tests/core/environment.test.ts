@@ -49,6 +49,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "production/broll.ts": await import("../../src/core/production/broll.ts"),
   "production/index.ts": await import("../../src/core/production/index.ts"),
   "production/looks.ts": await import("../../src/core/production/looks.ts"),
+  "production/owners.ts": await import("../../src/core/production/owners.ts"),
   "production/ports.ts": await import("../../src/core/production/ports.ts"),
   "production/readers.ts": await import("../../src/core/production/readers.ts"),
   "production/records.ts": await import("../../src/core/production/records.ts"),
@@ -66,7 +67,8 @@ const modules: Record<string, Record<string, unknown>> = {
   "text/sentences.ts": await import("../../src/core/text/sentences.ts"),
   "text/selection.ts": await import("../../src/core/text/selection.ts"),
   "text/steps.ts": await import("../../src/core/text/steps.ts"),
-  "text/tree.ts": await import("../../src/core/text/tree.ts")
+  "text/tree.ts": await import("../../src/core/text/tree.ts"),
+  "text/who.ts": await import("../../src/core/text/who.ts")
 };
 
 const globalsAfter = new Set(Reflect.ownKeys(globalThis));

@@ -1,6 +1,7 @@
-import { isDirRun, normalizeCell } from "./runs.ts";
+import { isDirRun } from "./runs.ts";
 import type { CellInput } from "./runs.ts";
 import { withoutCues } from "./cues.ts";
+import { withoutWho } from "./who.ts";
 import { buildTree } from "./tree.ts";
 import type { TreeOptions, TreeParent } from "./tree.ts";
 import type { TagName } from "../document/tags.ts";
@@ -41,7 +42,7 @@ export const OMIT_CLOSES = /^[.,;:!?)\]}"'\u2019\u201d]/;
 
 export function toPlainText(cell: CellInput, opts?: PlainTextOptions | null): string {
   const omit = !!(opts && opts.directions === "omit");
-  const runs = opts && opts.cues === "omit" ? withoutCues(cell) : normalizeCell(cell);
+  const runs = withoutWho(opts && opts.cues === "omit" ? withoutCues(cell) : cell);
   let out = "", gap = false;
   runs.forEach(function (r, i) {
     let t = r.text;
@@ -95,7 +96,7 @@ const MD_PUNCT = /[\p{P}\p{S}]/u;
 
 function mdChars(cell: CellInput): MdChar[] {
   const chars: MdChar[] = [];
-  const runs = normalizeCell(cell);
+  const runs = withoutWho(cell);
   runs.forEach(function (r, ri) {
     const m: MdMarks = {};
     MD_MARKS.forEach(function (k) { if (r.marks[k]) m[k] = r.marks[k]; });
@@ -275,7 +276,7 @@ export function toMarkdown(cell: CellInput): string {
 }
 
 export function toDocxRuns(cell: CellInput, opts?: DocxOptions | null): DocxRun[] {
-  const t = buildTree(cell, opts);
+  const t = buildTree(withoutWho(cell), opts);
   const annotate = !!(opts && opts.annotate);
   const runs: DocxRun[] = [];
   (function walk(node: TreeParent, fmt: DocxFormat): void {
