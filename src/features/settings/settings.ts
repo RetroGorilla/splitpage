@@ -6,6 +6,8 @@ import { cleanAuthorName } from "../../core/document/people.ts";
 import { formatClock } from "../../../shared/clock.ts";
 import { applyTagIcons, applyTheme } from "./appearance.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
+import { microphoneChoices } from "../../application/microphones.ts";
+import type { MicrophoneList } from "../../application/microphones.ts";
 
 let ports: SettingsPorts | null = null;
 const listeners: (() => void)[] = [];
@@ -67,6 +69,40 @@ function importAvailable() {
   return !!view && view.visible;
 }
 
+const MIC_NOTE_DESKTOP = "In the desktop app, Follow My Voice listens on the Windows default microphone. Change it in Windows Settings › System › Sound.";
+const MIC_NOTE_BROWSER = "This browser listens on your system's default microphone for Follow My Voice. Chrome and Edge can use a different one.";
+const MIC_HINT_NAMED = "Used by Follow My Voice. The teleprompter has the same choice.";
+const MIC_HINT_UNNAMED = "Microphone names appear once Follow My Voice has been allowed to use the microphone.";
+let microphoneList: MicrophoneList = { options: [], named: false };
+
+function microphoneHtml() {
+  const given = ports as SettingsPorts;
+  const support = given.microphones.support();
+  if (support !== "yes") {
+    return '<p class="settings-hint" id="settings-microphone-note">' + escapeHtml(support === "desktop" ? MIC_NOTE_DESKTOP : MIC_NOTE_BROWSER) + '</p>';
+  }
+  const saved = given.preferences.microphone();
+  return '<div class="settings-field settings-inline">' +
+      '<label class="settings-label" for="settings-microphone">Microphone for Follow My Voice</label>' +
+      '<span class="settings-inline-control"><select id="settings-microphone">' +
+        microphoneChoices(saved, microphoneList).map(function (choice) {
+          return '<option value="' + escapeHtml(choice.value) + '"' + (choice.value === saved ? " selected" : "") + '>' + escapeHtml(choice.label) + '</option>';
+        }).join("") +
+      '</select></span>' +
+    '</div>' +
+    '<p class="settings-hint" id="settings-microphone-hint">' + escapeHtml(microphoneList.named ? MIC_HINT_NAMED : MIC_HINT_UNNAMED) + '</p>';
+}
+
+function loadMicrophones() {
+  const owner = ports;
+  if (!owner || owner.microphones.support() !== "yes") return;
+  owner.microphones.list().then(function (list) {
+    if (ports !== owner || JSON.stringify(list) === JSON.stringify(microphoneList)) return;
+    microphoneList = list;
+    if (settingsOpen()) renderSettings("microphone");
+  });
+}
+
 function bodyHtml() {
   const clock = (ports as SettingsPorts).preferences.clock();
   const scale = (ports as SettingsPorts).preferences.scriptScale();
@@ -106,7 +142,8 @@ function bodyHtml() {
     section("Present",
       switchHtml("settings-prompter-mirror", "Mirror", "Flip the teleprompter left to right, for a beam-splitter glass.", (ports as SettingsPorts).preferences.prompterFlag("prompterMirror")) +
       switchHtml("settings-prompter-flip", "Flip", "Turn it upside down, for a monitor mounted that way.", (ports as SettingsPorts).preferences.prompterFlag("prompterFlip")) +
-      switchHtml("settings-prompter-scene", "One beat at a time", "Pause at the end of each beat.", (ports as SettingsPorts).preferences.prompterFlag("prompterSceneMode"))) +
+      switchHtml("settings-prompter-scene", "One beat at a time", "Pause at the end of each beat.", (ports as SettingsPorts).preferences.prompterFlag("prompterSceneMode")) +
+      microphoneHtml()) +
     section("You",
       '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-name">Your name</label>' +
@@ -194,6 +231,7 @@ export function openSettings(opts?: unknown) {
   const active = document.activeElement;
   settingsReturnFocus = active && active !== document.body ? active : document.getElementById("btn-file");
   renderSettings();
+  loadMicrophones();
   m.hidden = false;
   const wanted = (opts as { focus?: string }).focus ? document.getElementById((opts as { focus: string }).focus) : null;
   const first = wanted || m.querySelector<HTMLElement>('input[name="settings-theme"]:checked') || m.querySelector<HTMLElement>("input, button");
@@ -229,6 +267,7 @@ function applyChange(target: HTMLInputElement) {
   if (id === "settings-prompter-mirror") { (ports as SettingsPorts).prompter.mirror(target.checked); return; }
   if (id === "settings-prompter-flip") { (ports as SettingsPorts).prompter.flip(target.checked); return; }
   if (id === "settings-prompter-scene") { (ports as SettingsPorts).prompter.beatMode(target.checked); return; }
+  if (id === "settings-microphone") { (ports as SettingsPorts).preferences.setMicrophone(target.value); return; }
   if (id === "settings-default-wpm") {
     const n = Math.round(Number(target.value));
     if (isFinite(n) && n >= 60 && n <= 400) (ports as SettingsPorts).preferences.setDefaultWpm(n);
@@ -323,6 +362,7 @@ export function startSettings(given: SettingsPorts) {
   const unsubscribe = (ports as SettingsPorts).changes.onChange(function (change) {
     onPrefChanged(change.name);
   }, { elsewhere: false });
+  const unwatchDevices = (ports as SettingsPorts).microphones.onChange(loadMicrophones);
   let withdrawHook: (() => void) | null = null;
   exposeTestHook("__settingsTest", function () {
     return {
@@ -336,12 +376,14 @@ export function startSettings(given: SettingsPorts) {
     dispose: function () {
       unsubscribe();
       unhear();
+      unwatchDevices();
       closeSettings();
       while (listeners.length) (listeners.pop() as () => void)();
       const m = modal();
       if (m) m.remove();
       if (withdrawHook) withdrawHook();
       settingsReturnFocus = null;
+      microphoneList = { options: [], named: false };
       ports = null;
     }
   };

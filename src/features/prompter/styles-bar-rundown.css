@@ -200,6 +200,22 @@
   .pp-btn:hover .pp-icon, .pp-btn.is-active .pp-icon { color: var(--text); }
   .prompter-bar .pp-btn.is-active { background: var(--surface-2); border-color: var(--border-strong); }
   .prompter-bar .pp-btn:disabled { opacity: 0.4; cursor: default; }
+  .prompter-bar .pp-select {
+    height: 40px;
+    max-width: 14em;
+    box-sizing: border-box;
+    padding: 0 var(--space-8);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .prompter-bar .pp-select:hover { background: var(--hover); }
+  .prompter-bar .pp-select[hidden] { display: none; }
+  .prompter-bar .pp-select option { background: var(--surface); color: var(--text); }
   #pp-voice .pp-lamp, #pp-voice.is-active .pp-icon { display: none; }
   #pp-voice.is-active .pp-lamp { display: block; }
   #pp-voice.is-active { gap: 9px; padding-left: var(--space-14); }

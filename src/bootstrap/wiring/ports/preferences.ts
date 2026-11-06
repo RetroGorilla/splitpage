@@ -96,7 +96,9 @@ export const updatePreferences: Pick<Preferences, "desktopNoticeDismissed" | "di
   dismissDesktopNotice: () => preferences().dismissDesktopNotice()
 };
 
-export const prompterPreferences: Pick<Preferences, "prompterFlag" | "setPrompterFlag" | "skipOnboardingForPrompter"> = {
+export const prompterPreferences: Pick<Preferences, "prompterFlag" | "setPrompterFlag" | "skipOnboardingForPrompter" | "microphone" | "setMicrophone"> = {
+  microphone: () => preferences().microphone(),
+  setMicrophone: (id) => preferences().setMicrophone(id),
   prompterFlag: (name) => preferences().prompterFlag(name),
   setPrompterFlag: (name, value) => preferences().setPrompterFlag(name, value),
   skipOnboardingForPrompter: () => preferences().skipOnboardingForPrompter()

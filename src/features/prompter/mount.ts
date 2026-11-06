@@ -33,6 +33,7 @@ export interface PrompterPorts {
   readonly closeFind: () => boolean;
   readonly stopVoiceFollow: () => void;
   readonly startVoiceFollow: () => void;
+  readonly chooseMicrophone: (id: string) => void;
   readonly setPrompterPlaying: (value: boolean) => void;
   readonly setPrompterSpeed: (value: number) => void;
   readonly applyPrompterSize: () => void;
@@ -67,6 +68,7 @@ export function mountPrompter(mount: { window: Window; ports: PrompterPorts }): 
   life.listen(element("pp-voice"), "click", function () {
     if (ports.voiceActive()) ports.stopVoiceFollow(); else ports.startVoiceFollow();
   });
+  life.listen(element("pp-mic"), "change", function (e) { ports.chooseMicrophone(e.target.value); });
   life.listen(element("pp-play"), "click", function () { ports.setPrompterPlaying(!ports.playing()); });
   life.listen(element("pp-speed"), "input", function (e) { ports.setPrompterSpeed(Number(e.target.value)); });
   life.listen(element("pp-size"), "input", ports.applyPrompterSize);

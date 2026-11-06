@@ -1117,6 +1117,16 @@ stores the value and then fires `document`'s
 `"splitpage:pref"` CustomEvent (`{detail: {key, value}}`); whatever draws a
 setting listens for its key, so a change made anywhere shows everywhere.
 File ▸ Export app data carries them (`settingsAppData()`).
+`splitpage-microphone` (#1162: the `deviceId` Follow My Voice listens on,
+absent = the system default) is the exception: device ids belong to one
+browser on one machine, so it is neither exported nor imported. Both the
+teleprompter's `#pp-mic` and Settings' `#settings-microphone` read and write it
+through `preferences().microphone()`. The browser recognizer has no device
+setting, so a chosen device is opened with `getUserMedia({audio: {deviceId:
+{exact}}})` and its track is passed to `recognition.start(track)`, which needs
+Chromium 133 or later (`recognitionTakesTrack`); elsewhere, in the desktop
+app and under the desktop relay, the choice is not offered and the system's
+default microphone is used.
 
 ---
 

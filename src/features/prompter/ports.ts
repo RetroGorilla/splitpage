@@ -3,7 +3,8 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { TextServices } from "../../application/text/services.ts";
 import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
-import type { Preferences } from "../../application/preferences/preferences.ts";
+import type { PreferenceChanges, Preferences } from "../../application/preferences/preferences.ts";
+import type { MicrophoneDevices } from "../../application/microphones.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
@@ -30,7 +31,9 @@ export interface PrompterFeaturePorts {
   readonly desktop: PrompterDesktop;
   readonly voice: PrompterVoice;
   readonly panels: Pick<SidePanels, "close" | "closeAll">;
-  readonly preferences: Pick<Preferences, "prompterFlag" | "setPrompterFlag" | "skipOnboardingForPrompter">;
+  readonly microphones: MicrophoneDevices;
+  readonly changes: PreferenceChanges;
+  readonly preferences: Pick<Preferences, "prompterFlag" | "setPrompterFlag" | "skipOnboardingForPrompter" | "microphone" | "setMicrophone">;
   readonly viewFlags: Pick<ViewFlags, "hideShot">;
   readonly notices: Pick<NoticePort, "show">;
   readonly focus: Pick<FocusMemory<HTMLElement>, "lastRow">;
