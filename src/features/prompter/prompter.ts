@@ -26,7 +26,7 @@ type VoiceRecognition = PrompterRecognition & {
   onerror: ((event: { readonly error: string }) => void) | null;
   onend: (() => void) | null;
   onwarning: ((event: { readonly warning?: string } | null) => void) | null;
-  ondevice: ((event: { readonly name?: unknown } | null) => void) | null;
+  ondevice: ((event: { readonly name?: unknown; readonly fellBack?: unknown } | null) => void) | null;
 };
 
 type TimerHandle = ReturnType<typeof setTimeout>;
@@ -664,7 +664,7 @@ function setVoiceLabel(btn: HTMLElement, text: string): void {
 }
 
 function listeningStatus(fallback: string): string {
-  if (!state.voiceMicName) return fallback;
+  if (!state.voiceMicName) return state.voiceMicFellBack ? fallback + MIC_FELL_BACK_NOTE : fallback;
   return "Listening — " + state.voiceMicName + (state.voiceMicFellBack ? MIC_FELL_BACK_NOTE : "");
 }
 
@@ -937,12 +937,12 @@ export async function startVoiceFollow(): Promise<void> {
   state.voiceMicName = "";
   state.voiceMicFellBack = false;
   clearSpokenHighlights();
+  const wanted = ports.microphones.support() === "yes" ? ports.preferences.microphone() : "";
+  state.voiceWanted = wanted;
 
   if (!desktop && !relayed && typeof navigator.mediaDevices?.getUserMedia === "function") {
     setVoiceStatus("Asking for the microphone…", "");
     let opened: { stream: MediaStream; fellBack: boolean };
-    const wanted = ports.microphones.support() === "yes" ? ports.preferences.microphone() : "";
-    state.voiceWanted = wanted;
     try {
       opened = await openMicrophone(wanted, function () { return ports === owner && mySession === voiceSession; });
     } catch (err) {
@@ -978,7 +978,7 @@ export async function startVoiceFollow(): Promise<void> {
   }
 
   try {
-    state.recognition = (desktop ? ports.voice.createDesktop()
+    state.recognition = (desktop ? ports.voice.createDesktop(wanted)
       : relayed ? ports.voice.createRelay()
       : new (ports.voice.browserRecognition() as new () => PrompterRecognition)()) as VoiceRecognition;
   } catch (e) {
@@ -1012,6 +1012,7 @@ export async function startVoiceFollow(): Promise<void> {
     };
     state.recognition.ondevice = function (e) {
       if (ports !== owner || mySession !== voiceSession) return;
+      if (e && e.fellBack) { state.voiceMicFellBack = true; return; }
       state.voiceMicName = (e && typeof e.name === "string") ? e.name : "";
     };
   }
@@ -1058,6 +1059,9 @@ export async function startVoiceFollow(): Promise<void> {
       ports.state.setVoiceFollowing(false);
     } else if (e.error === "audio-capture") {
       setVoiceStatus("No microphone was found.", "error");
+      ports.state.setVoiceFollowing(false);
+    } else if (e.error === "device-lost") {
+      setVoiceStatus(MIC_ENDED_MESSAGE, "error");
       ports.state.setVoiceFollowing(false);
     } else if (e.error === "network") {
       setVoiceStatus("Speech recognition needs an internet connection.", "error");

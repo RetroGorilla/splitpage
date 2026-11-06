@@ -174,8 +174,29 @@ test("settings offers the microphone list where it works: names after permission
   assert.equal(changed.size, 0);
 });
 
+test("settings turns its note into the list once the desktop app says it can listen, even with no microphones", async () => {
+  let support: "desktop" | "yes" = "desktop";
+  const changed = new Set<() => void>();
+  const h = setup({
+    support: () => support,
+    list: async () => ({ options: [], named: false }),
+    onChange: (listener) => { changed.add(listener); return () => { changed.delete(listener); }; }
+  });
+  try {
+    h.mounted.openSettings();
+    assert.ok(win.document.getElementById("settings-microphone-note"));
+    support = "yes";
+    for (const listener of changed) listener();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(win.document.getElementById("settings-microphone-note"), null);
+    assert.deepEqual(Array.from(select("settings-microphone").options, (o) => [o.value, o.textContent]), [["", "System default"]]);
+  } finally {
+    h.mounted.dispose();
+  }
+});
+
 test("settings shows a note, not a list, where recognition cannot be aimed at a microphone", () => {
-  for (const [support, note] of [["desktop", /Windows default microphone/], ["browser", /system's default microphone/]] as const) {
+  for (const [support, note] of [["desktop", /Windows default microphone/], ["relay", /^Follow My Voice in this window listens through the Splitpage desktop app, on the Windows default microphone/], ["browser", /system's default microphone/]] as const) {
     const h = setup({ support: () => support, list: async () => ({ options: [], named: false }), onChange: () => () => {} });
     try {
       h.mounted.openSettings();

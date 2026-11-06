@@ -157,16 +157,47 @@ expect document.getElementById('settings-microphone-note').textContent === 'This
 key Escape
 eval delete navigator.userAgentData
 
-# --- the desktop app: Windows' default microphone, so a note and no list -----
-eval (function(){ window.fakeV = D.makeFakeBackend({ voice: true }); D.setBackend(window.fakeV); return true; })()
+# --- the desktop app: the microphones Windows' listener can open, the same choice
+eval (function(){ window.fakeV = D.makeFakeBackend({ voice: true }); window.fakeV._voiceMicrophones = [{ id: '{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}', name: 'Microphone (Desk One)' }, { id: '{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}', name: 'Microphone (Desk Two)' }]; D.setBackend(window.fakeV); localStorage.removeItem('splitpage-microphone'); window.__gumAt = window.__gum.length; return true; })()
 jsclick #btn-present
 wait !document.getElementById('prompter').hidden
 wait document.getElementById('pp-voice').disabled === false
-expect document.getElementById('pp-mic').hidden
+wait !document.getElementById('pp-mic').hidden
+wait opts('pp-mic') === '=System default|{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}=Microphone (Desk One)|{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}=Microphone (Desk Two)'
+expect document.getElementById('pp-mic').value === ''
+eval pick('pp-mic', '{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}')
+expect localStorage.getItem('splitpage-microphone') === '{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}'
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 1
+expect JSON.stringify(fakeV._voiceStartArgs) === JSON.stringify([['{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}']])
+eval (function(){ fakeV._voiceEmit({ type: 'device', name: 'Microphone (Desk Two)' }); fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait st() === 'Listening — Microphone (Desk Two)'
+eval pick('pp-mic', '{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}')
+wait fakeV._voiceCalls.start === 2
+expect fakeV._voiceCalls.stop === 1
+expect JSON.stringify(fakeV._voiceStartArgs[1]) === JSON.stringify(['{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}'])
+expect window.__gum.length === window.__gumAt
 jsclick #pp-close
 wait document.getElementById('prompter').hidden
 eval T.open()
 wait T.isOpen()
+wait opts('settings-microphone') === '=System default|{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}=Microphone (Desk One)|{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}=Microphone (Desk Two)'
+expect document.getElementById('settings-microphone').value === '{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}'
+expect document.getElementById('settings-microphone-hint').textContent === 'Used by Follow My Voice. The teleprompter has the same choice.'
+# a saved microphone Windows no longer lists is kept and marked
+eval (function(){ fakeV._voiceMicrophones = fakeV._voiceMicrophones.slice(1); return true; })()
+key Escape
+eval T.open()
+wait T.isOpen()
+wait opts('settings-microphone') === '=System default|{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}=Microphone (Desk Two)|{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}=Saved microphone (not connected)'
+key Escape
+eval (function(){ D.restoreBackend(); return !window.splitpageDesktop; })()
+
+# --- a desktop app that cannot listen itself keeps the note -----------------
+eval (function(){ window.fakeN = D.makeFakeBackend({ voice: true }); window.fakeN._voiceAvailable = false; D.setBackend(window.fakeN); return true; })()
+eval T.open()
+wait T.isOpen()
+wait document.getElementById('settings-microphone-note') !== null
 expect document.getElementById('settings-microphone') === null
 expect document.getElementById('settings-microphone-note').textContent === 'In the desktop app, Follow My Voice listens on the Windows default microphone. Change it in Windows Settings › System › Sound.'
 key Escape

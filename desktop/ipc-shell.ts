@@ -116,15 +116,18 @@ function createShellIpc({
     ipcHandle("splitpage:voice-status", async () => {
       return { available: voiceHelperInstance().available() };
     });
-    ipcHandle("splitpage:voice-start", async (event) => {
+    ipcHandle("splitpage:voice-start", async (event, microphone) => {
       const tab = tabOf(event);
       if (!tab) return { ok: false, code: "NO_TAB" };
-      return voiceHelperInstance().start(tab.id);
+      return voiceHelperInstance().start(tab.id, microphone);
     });
-    ipcHandle("splitpage:voice-stop", async (event) => {
+    ipcHandle("splitpage:voice-microphones", async () => {
+      return voiceHelperInstance().microphones();
+    });
+    ipcHandle("splitpage:voice-stop", async (event, session) => {
       const tab = tabOf(event);
       if (!tab) return { ok: true };
-      return voiceHelperInstance().stop(tab.id);
+      return voiceHelperInstance().stop(tab.id, session);
     });
   }
 

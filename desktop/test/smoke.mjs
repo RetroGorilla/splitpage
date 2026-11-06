@@ -5593,6 +5593,10 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
   const tag = target.name + " teleprompter: Follow My Voice on desktop";
   const fixturePath = writeFixture(fixturesDir, "prompter-voice.splitpage", "Prompter — voice",
     [["Wide shot", "The first line the reader says out loud."], ["Close up", "A second line comes after it."]]);
+  const micOne = "{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}";
+  const micTwo = "{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}";
+  const argsLog = path.join(fixturesDir, "prompter-voice-args.log");
+  rmrf(argsLog);
   let app = null;
   try {
     app = await launchApp(target, {
@@ -5601,7 +5605,9 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
       env: {
         SPLITPAGE_TEST_VOICE_HELPER: path.join(__dirname, "fake-voice-helper.mjs"),
         FAKE_VOICE_TEXT: "the first line the reader says",
-        FAKE_VOICE_DEVICE: "Microphone (Smoke Test)"
+        FAKE_VOICE_DEVICE: "Microphone (Smoke Test)",
+        FAKE_VOICE_MICROPHONES: JSON.stringify([{ id: micOne, name: "Microphone (Smoke One)" }, { id: micTwo, name: "Microphone (Smoke Two)" }]),
+        FAKE_VOICE_ARGS_LOG: argsLog
       }
     });
     const cdp = app.cdp;
@@ -5609,8 +5615,8 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — voice"), 20000);
     const dialogsBefore = await dialogsSeen(cdp);
 
-    const arity = await evalPage(cdp, "(function(){ var d = window.splitpageDesktop; return [d.voiceStatus.length, d.voiceStart.length, d.voiceStop.length].join(','); })()");
-    record(tag + ": voiceStatus/voiceStart/voiceStop take no argument", arity === "0,0,0", String(arity));
+    const arity = await evalPage(cdp, "(function(){ var d = window.splitpageDesktop; return [d.voiceStatus.length, d.voiceStart.length, d.voiceStop.length, d.voiceMicrophones.length].join(','); })()");
+    record(tag + ": voiceStatus/voiceStart/voiceStop/voiceMicrophones declare no argument to the page", arity === "0,0,0,0", String(arity));
 
     await evalPage(cdp, "document.getElementById('btn-present').click(); true", { awaitPromise: false });
     await poll(cdp, "!document.getElementById('prompter').hidden", 10000);
@@ -5656,6 +5662,23 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
     const gone = await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
     record(tag + ": closing the listening tab stops its listener", !!gone, JSON.stringify(gone));
     try { tab2.close(); } catch { }
+
+    const listed = await poll(cdp, "(function(){ var s = document.getElementById('pp-mic'); return s && !s.hidden && s.options.length === 3 ? Array.prototype.map.call(s.options, function (o) { return o.textContent; }).join('|') : null; })()", 15000).catch(() => null);
+    record(tag + ": the teleprompter lists the microphones the desktop listener reports (#1162)",
+      listed === "System default|Microphone (Smoke One)|Microphone (Smoke Two)", String(listed));
+    await evalPage(cdp, "(function(){ var s = document.getElementById('pp-mic'); s.value = " + JSON.stringify(micTwo) + "; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()");
+    await evalPage(cdp, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
+    const chosen = await poll(cdp, "(function(){ var t = document.getElementById('pp-voice-status').textContent; return t === 'Listening — Microphone (Smoke Two)' ? t : null; })()", 15000).catch(() => null);
+    record(tag + ": following on the chosen microphone names it (#1162)", !!chosen,
+      String(await evalPage(cdp, "document.getElementById('pp-voice-status').textContent")));
+    let argsSeen = [];
+    try { argsSeen = fs.readFileSync(argsLog, "utf8").trim().split("\n").map((line) => JSON.parse(line)); } catch { }
+    record(tag + ": main lists with -List and starts the chosen microphone with -Device and its id, nothing else (#1162)",
+      argsSeen.some((a) => a.length === 1 && a[0] === "-List") &&
+      argsSeen.filter((a) => a.length > 0 && a[0] !== "-List").every((a) => a.length === 2 && a[0] === "-Device" && a[1] === micTwo) &&
+      argsSeen.some((a) => a[0] === "-Device"), JSON.stringify(argsSeen));
+    await evalPage(cdp, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
+    await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
     record(tag + ": no native dialog was raised by any of it", (await dialogsSeen(cdp)) === dialogsBefore);
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }

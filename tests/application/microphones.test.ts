@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   MISSING_MICROPHONE, SYSTEM_DEFAULT_MICROPHONE, UNNAMED_MICROPHONE,
-  microphoneChoices, microphoneList, recognitionTakesTrack
+  isDesktopMicrophoneId, microphoneChoices, microphoneList, recognitionTakesTrack
 } from "../../src/application/microphones.ts";
 
 test("only a desktop Chromium that takes a track in start() (135 or later) gets a microphone picker", () => {
@@ -48,4 +48,13 @@ test("the choices are the system default, each microphone, and a saved one that 
     { value: "gone", label: MISSING_MICROPHONE }
   ]);
   assert.equal(microphoneChoices("gone", microphoneList([])).at(-1)?.label, UNNAMED_MICROPHONE);
+});
+
+test("a desktop microphone id is a Windows capture endpoint id and nothing else", () => {
+  assert.equal(isDesktopMicrophoneId("{0.0.1.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0}"), true);
+  assert.equal(isDesktopMicrophoneId("{0.0.1.00000000}.{411C2754-D926-4A65-A6A6-702E8DEB86E0}"), true);
+  for (const id of ["", "default", "dev-1", "a".repeat(64), "{0.0.0.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0}",
+    "{0.0.1.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0} -List", "-Device {0.0.1.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0}"]) {
+    assert.equal(isDesktopMicrophoneId(id), false, id);
+  }
 });

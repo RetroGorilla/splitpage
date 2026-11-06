@@ -79,6 +79,7 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly openPrompterInChromium: DesktopCall<"splitpage:prompter-open-in-chromium">;
   readonly voiceStatus: DesktopCall<"splitpage:voice-status">;
   readonly voiceStart: DesktopCall<"splitpage:voice-start">;
+  readonly voiceMicrophones: DesktopCall<"splitpage:voice-microphones">;
   readonly voiceStop: DesktopCall<"splitpage:voice-stop">;
   readonly onVoiceEvent: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:voice-event">[0]>) => void;
 }
@@ -107,7 +108,7 @@ export const DESKTOP_PORT_MEMBERS = [
   "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",
   "openPrompterInBrowser", "openPrompterInChromium",
-  "voiceStatus", "voiceStart", "voiceStop", "onVoiceEvent"
+  "voiceStatus", "voiceStart", "voiceMicrophones", "voiceStop", "onVoiceEvent"
 ] as const satisfies readonly DesktopMember[];
 
 export const UNUSED_DESKTOP_MEMBERS = [
