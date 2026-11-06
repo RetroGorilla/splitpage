@@ -83,7 +83,7 @@ test("records reconciler: a chip added in an edit adds the person and owns the t
   const row = held.rows[0];
   assert.ok(row);
   row.visualText = WHO_CELL;
-  const out = plan(held, changeSet({}));
+  const out = plan(held, changeSet({ cells: [{ rowId: "r1", field: "visualText" }] }));
   assert.ok(out);
   assert.deepEqual(out.fields, ["people", "productionTags"]);
   out.apply(held);
@@ -99,6 +99,35 @@ test("records reconciler: without a resync the first edit only takes its snapsho
   const { plan } = reconciler(held);
   assert.equal(plan(held, changeSet({})), null);
   assert.equal(held.productionTags[0]?.owner, "");
+});
+
+test("owner resync reads only the changed Visual cells in a 1,000-beat document", () => {
+  const held = whoDoc("");
+  held.rows = Array.from({ length: 1000 }, (_, i) => ({ id: "r" + i, visualText: "", audioText: "" }));
+  const { plan } = reconciler(held);
+  plan.resync?.(held);
+  let reads = 0;
+  for (const row of held.rows) {
+    let html = row.visualText;
+    Object.defineProperty(row, "visualText", { configurable: true, get: () => { reads++; return html; }, set: (value: string) => { html = value; } });
+  }
+  const changed = held.rows[500];
+  assert.ok(changed);
+  changed.visualText = WHO_CELL;
+  plan.resync?.(held, changeSet({ cells: [{ rowId: "r500", field: "visualText" }] }));
+  assert.ok(reads <= 2, "one changed Visual cell, got " + reads + " reads");
+  reads = 0;
+  plan.resync?.(held, changeSet({}));
+  assert.equal(reads, 0, "an unchanged document reads no Visual fields");
+  changed.visualText = "";
+  plan.resync?.(held, changeSet({ cells: [{ rowId: "r500", field: "visualText" }] }));
+  assert.equal(held.productionTags[0]?.owner, "", "replay updates the snapshot without assigning");
+  changed.visualText = WHO_CELL;
+  const edit = plan(held, changeSet({ cells: [{ rowId: "r500", field: "visualText" }] }));
+  assert.ok(edit);
+  edit.apply(held);
+  edit.commit?.();
+  assert.equal(held.productionTags[0]?.owner, held.people[0]?.id, "an edit after replay compares against the replayed cell");
 });
 
 test("pasted b-roll: a pasted marker with a minted id gets a record seeded from its scene; known ids are left", () => {

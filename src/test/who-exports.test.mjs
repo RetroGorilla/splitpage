@@ -18,6 +18,12 @@ const { captureExportDocument } = await import("../bootstrap/wiring/export-captu
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
 const { buildMarkdownProject, buildSplitpageFile, parseMarkdownProject, applyMarkdownProject } = await import("../adapters/formats/project-file.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.ts");
+const { buildScriptXlsx, buildBreakdownXlsx, buildBrollXlsx } = await import("../adapters/formats/xlsx.ts");
+const { buildScriptPrintPage } = await import("../adapters/formats/script-print.ts");
+const { buildScriptWithListsPrintPage, buildPackingListPrintPage, buildShotListPrintPage } = await import("../adapters/formats/list-print.ts");
+const { exportServices } = await import("../application/export/services.ts");
+const { videoCardHtml } = await import("../bootstrap/richtext.ts");
 
 const CAPTURED_AT = Date.UTC(2026, 10, 6, 12, 0);
 const tag = (cat, name, text) =>
@@ -53,7 +59,9 @@ function load(raw) {
 
 function outputs(doc) {
   const { title, ...facts } = exportFacts(doc);
+  const input = { doc, services: exportServices(), assets: { picture: () => null } };
   return {
+    standalone: standaloneHtmlFor(doc),
     markdown: toMarkdownDoc(doc),
     table: toMarkdownTableDoc(doc, { export: true }),
     plain: htmlToPlainScript(doc),
@@ -61,6 +69,13 @@ function outputs(doc) {
     breakdown: buildBreakdownCsv(doc),
     narration: buildNarrationText(doc),
     docx: Buffer.from(buildDocx(doc)).toString("base64"),
+    scriptXlsx: Buffer.from(buildScriptXlsx(doc)).toString("base64"),
+    breakdownXlsx: Buffer.from(buildBreakdownXlsx(doc)).toString("base64"),
+    brollXlsx: Buffer.from(buildBrollXlsx(doc)).toString("base64"),
+    scriptPrint: buildScriptPrintPage(input),
+    scriptListsPrint: buildScriptWithListsPrintPage(input),
+    packingPrint: buildPackingListPrintPage(input, "prop"),
+    shotsPrint: buildShotListPrintPage(input),
     facts: { title, ...facts }
   };
 }
@@ -72,6 +87,20 @@ test("every export of a script with name chips matches the same script without t
   assert.match(currentDocument().rows[0].visualText, /who-anchor/, "the chips are in the loaded document");
   for (const key of Object.keys(plain)) assert.deepEqual(chipped[key], plain[key], key);
   assert.doesNotMatch(JSON.stringify(chipped), /@Sam|@Ann/);
+});
+
+test("standalone HTML removes chips from both columns and preserves video media comments", () => {
+  const video = videoCardHtml("https://www.youtube.com/watch?v=abcdefghijk");
+  const raw = script(true);
+  raw.rows[0].visualText += video;
+  const doc = load(raw);
+  const html = standaloneHtmlFor(doc);
+  const state = JSON.parse(html.match(/<script id="state-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  assert.doesNotMatch(JSON.stringify(state.rows), /who-anchor|@Sam|@Ann/);
+  assert.match(JSON.stringify(state.comments), /video-embed-card/);
+  assert.match(JSON.stringify(state.comments), /abcdefghijk/);
+  assert.deepEqual(state.comments, doc.comments);
+  assert.match(doc.beats[0].visualText, /who-anchor/);
 });
 
 test("the .splitpage and .md project files keep the chips and read them back unchanged", async () => {

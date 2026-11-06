@@ -39,6 +39,7 @@ function owner(d: Doc, name: string): string {
 function step(was: OwnerSnapshot, d: Doc, ids = countingIds()): OwnerSnapshot {
   const plan = planOwnerSync(was, d, readers);
   applyOwnerSync(plan, d, ids);
+  plan.commit();
   return plan.snapshot;
 }
 
@@ -174,4 +175,89 @@ test("owner sync: an unchanged document reuses the snapshot's cells and decodes 
   const plan = planOwnerSync(snap, d, readers);
   assert.deepEqual(cells.decoded, []);
   assert.equal(plan.snapshot.pairs, snap.pairs);
+});
+
+test("owner sync: a chip pasted into Audio is kept without assigning or adding people", () => {
+  const d = doc([row("r1", [KETTLE])]);
+  const snap = snapshotOwners(d, readers);
+  const audio = cells.html([KETTLE, T(" "), who("Robin")]);
+  const first = d.rows[0];
+  assert.ok(first);
+  first.audioText = audio;
+  const plan = planOwnerSync(snap, d, readers);
+  applyOwnerSync(plan, d, countingIds());
+  assert.deepEqual(plan.fields, []);
+  assert.equal(owner(d, "Kettle"), "");
+  assert.deepEqual(d.people.map((p) => p.name), ["Sam"]);
+  assert.equal(first.audioText, audio);
+});
+
+test("owner sync: a new occurrence assigns again even when another sentence already has the pair", () => {
+  for (const sameRow of [false, true]) {
+    const first = [KETTLE, T(" "), who("Sam"), T(". ")];
+    const d = doc(sameRow ? [row("r1", [...first, KETTLE])] : [row("r1", first), row("r2", [KETTLE])],
+      [{ id: "pSam", name: "Sam" }, { id: "pAnn", name: "Ann" }]);
+    const snap = snapshotOwners(d, readers);
+    const kettle = d.productionTags[0];
+    assert.ok(kettle);
+    kettle.owner = "pAnn";
+    d.rows[sameRow ? 0 : 1] = row(sameRow ? "r1" : "r2", [...(sameRow ? first : []), KETTLE, T(" "), who("Sam")]);
+    step(snap, d);
+    assert.equal(owner(d, "Kettle"), "pSam");
+  }
+});
+
+test("owner sync: inserting an earlier name cannot override the sentence's last name", () => {
+  const d = doc([row("r1", [KETTLE, T(" "), who("Ann")])], [{ id: "pSam", name: "Sam" }, { id: "pAnn", name: "Ann" }]);
+  const kettle = d.productionTags[0];
+  assert.ok(kettle);
+  kettle.owner = "pAnn";
+  let snap = snapshotOwners(d, readers);
+  d.rows[0] = row("r1", [KETTLE, T(" "), who("Sam"), T(" "), who("Ann")]);
+  snap = step(snap, d);
+  assert.equal(owner(d, "Kettle"), "pAnn");
+  d.rows[0] = row("r1", [KETTLE, T(" "), who("Sam"), T(" "), who("Ann"), T(" "), who("Sam")]);
+  snap = step(snap, d);
+  assert.equal(owner(d, "Kettle"), "pSam");
+  d.rows[0] = row("r1", [KETTLE, T(" "), who("Sam"), T(" "), who("Ann")]);
+  step(snap, d);
+  assert.equal(owner(d, "Kettle"), "pAnn");
+});
+
+test("owner sync: new sentence assignments are detected when document-wide pair counts stay equal", () => {
+  for (const sameRow of [false, true]) {
+    const sam = [KETTLE, T(" "), who("Sam")], ann = [KETTLE, T(" "), who("Ann")];
+    const d = doc(sameRow ? [row("r1", [...sam, T(". "), ...ann])] : [row("r1", [...sam, T(" first")]), row("r2", [...ann, T(" second")])],
+      [{ id: "pSam", name: "Sam" }, { id: "pAnn", name: "Ann" }]);
+    const kettle = d.productionTags[0];
+    assert.ok(kettle);
+    kettle.owner = "pAnn";
+    const snap = snapshotOwners(d, readers);
+    d.rows = sameRow ? [row("r1", [...ann, T(". "), ...sam])] : [row("r1", [...ann, T(" first")]), row("r2", [...sam, T(" second")])];
+    step(snap, d);
+    assert.equal(owner(d, "Kettle"), "pSam");
+  }
+});
+
+test("owner sync: planning one changed cell reads one Visual field, with no document scan or snapshot copy", () => {
+  const d = doc(Array.from({ length: 1000 }, (_, i) => row("r" + i, [KETTLE])));
+  const snap = snapshotOwners(d, readers);
+  let reads = 0;
+  for (const row of d.rows) {
+    let html = row.visualText;
+    Object.defineProperty(row, "visualText", { get: () => { reads++; return html; }, set: (value: string) => { html = value; } });
+  }
+  const changed = d.rows[500];
+  assert.ok(changed);
+  changed.visualText = cells.html([KETTLE, T(" "), who("Sam")]);
+  const plan = planOwnerSync(snap, d, readers, { rows: [changed], removed: [] });
+  assert.equal(reads, 1);
+  assert.equal(plan.snapshot.cells, snap.cells);
+  assert.equal(plan.snapshot.pairs, snap.pairs);
+  plan.commit();
+  reads = 0;
+  const quiet = planOwnerSync(plan.snapshot, d, readers, { rows: [], removed: [] });
+  quiet.commit();
+  assert.equal(reads, 0);
+  assert.equal(quiet.snapshot, plan.snapshot);
 });

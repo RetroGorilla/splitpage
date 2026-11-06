@@ -7,7 +7,7 @@ export type FieldTag = { catId: string; name: string; text: string };
 
 export type BrollItem = { id: string; name: string; desc: string };
 
-export type WhoPair = { cat: string; name: string; who: string };
+export type WhoPair = { cat: string; name: string; who: string; sentence?: number };
 
 export type FieldWho = { names: string[]; pairs: WhoPair[] };
 

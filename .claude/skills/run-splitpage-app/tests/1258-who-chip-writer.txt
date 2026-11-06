@@ -7,6 +7,7 @@ wait W.on()
 eval window.c=function(){return document.querySelector('.wr-flow-visual-text');}; window.opts=function(){var l=document.getElementById('who-list'); return l.hidden?'':Array.from(l.querySelectorAll('.who-option')).map(function(o){return (o.getAttribute('aria-selected')==='true'?'*':'')+o.textContent;}).join('|');}; window.owner=function(){return F.state().productionTags[0].owner;}; window.v=function(i){return F.state().rows[i].visualText;}; W.openVisual('a')
 press  @
 wait opts() === '*Sam|Sandy'
+expect (function(){var o=document.querySelector('#who-list .who-option');var r=o.getBoundingClientRect();return r.width>0 && r.height>0 && o.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})()
 press sa
 wait opts() === '*Sam|Sandy|sa'
 key ArrowDown

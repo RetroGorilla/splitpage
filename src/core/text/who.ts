@@ -57,7 +57,7 @@ export function whoSentences(cell: CellInput): WhoSentence[] {
     cur = { tags: [], names: [] };
   }
   runs.forEach(function (r, ri) {
-    if (isWhoRun(r)) { if (cur.names.indexOf(r.name) === -1) cur.names.push(r.name); return; }
+    if (isWhoRun(r)) { cur.names.push(r.name); return; }
     if (r.atom) return;
     if (r.marks.tag) { if (cur.tags.indexOf(r.marks.tag) === -1) cur.tags.push(r.marks.tag); return; }
     const text = r.text;

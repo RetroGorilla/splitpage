@@ -246,7 +246,7 @@
     white-space: nowrap;
   }
   .who-list {
-    position: fixed; z-index: 61;
+    position: fixed; z-index: 146;
     min-width: 140px; max-width: min(280px, calc(100vw - 16px));
     margin: 0; padding: var(--space-4); list-style: none;
     background: var(--surface-2);
