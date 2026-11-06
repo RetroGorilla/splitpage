@@ -155,3 +155,53 @@ test("a grant from this session opens by its token before the stored path, and t
   assert.match(browser.notices.shown[0]?.message || "", /video file on the computer it was added from/);
   browser.owner.dispose();
 });
+
+function locatedHarness(t: { mock: { method: typeof test.mock.method } }) {
+  const tokens: string[] = [];
+  const paths: string[] = [];
+  let next = 0;
+  t.mock.method(URL, "createObjectURL", () => "blob:file-" + ++next);
+  t.mock.method(URL, "revokeObjectURL", () => {});
+  const h = setup({ desktop: { grant: async () => "tok-" + next, opens: () => true,
+    open: async (token) => { tokens.push(token); return { ok: true }; },
+    openPath: async (path) => { paths.push(path); return { ok: true }; } } });
+  return { h, tokens, paths };
+}
+
+function at(path: string) {
+  return { name: "take.mp4", size: 5, location: { kind: "path" as const, path } };
+}
+
+test("a file dropped from one folder never opens or plays for another script's link to a same-named file elsewhere", async (t) => {
+  const { h, tokens, paths } = locatedHarness(t);
+  h.owner.grant({ size: 5 }, at("C:\\Project A\\take.mp4"));
+  await new Promise((resolve) => setImmediate(resolve));
+  h.document.replace(h.doc);
+  const other = at("D:\\Project B\\take.mp4");
+  h.owner.openFile(other);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual({ tokens, paths }, { tokens: [], paths: ["D:\\Project B\\take.mp4"] });
+  assert.equal(h.owner.has(other), false);
+  assert.equal(h.owner.url(other), null);
+  h.owner.openFile(at("C:\\Project A\\take.mp4"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(tokens, ["tok-0"]);
+  assert.equal(h.owner.has(at("C:\\Project A\\take.mp4")), true);
+  h.owner.dispose();
+});
+
+test("undoing a re-drop that moved a link's path opens the old path, not the file dropped since", async (t) => {
+  const { h, tokens, paths } = locatedHarness(t);
+  const before = at("C:\\Old\\take.mp4");
+  const after = at("C:\\New\\take.mp4");
+  h.owner.grant({ size: 5 }, after);
+  await new Promise((resolve) => setImmediate(resolve));
+  h.owner.openFile(after);
+  await new Promise((resolve) => setImmediate(resolve));
+  h.owner.openFile(before);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual({ tokens, paths }, { tokens: ["tok-0"], paths: ["C:\\Old\\take.mp4"] });
+  assert.equal(h.owner.has(before), false);
+  assert.equal(h.owner.has(after), true);
+  h.owner.dispose();
+});

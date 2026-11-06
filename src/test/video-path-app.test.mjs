@@ -26,6 +26,7 @@ const { rowSlots, videoLinkKey } = await import("../core/document/gallery.ts");
 const MARKER = "PathMarker259";
 const CLIP = "C:\\" + MARKER + "\\Clips\\take one.mp4";
 const MOVED = "D:\\" + MARKER + "\\Archive\\take one.mp4";
+const NEVER_DROPPED = "E:\\" + MARKER + "\\Old\\take one.mp4";
 const at = (path) => ({ kind: "path", path });
 
 const flush = () => undoOwner().flush();
@@ -66,14 +67,14 @@ async function reopenSaved() {
   return text;
 }
 
-function dropVideo(rowId, file, paths) {
+function dropVideo(rowId, file, paths, token) {
   const target = document.querySelector('#rows .row[data-id="' + rowId + '"] .visual-cell');
   assert.ok(target, "setup: the beat has an image section to drop on");
   const event = new window.Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "dataTransfer", { value: { files: [file], types: ["Files"], getData: () => "" } });
   useDesktopForTest(paths ? {
     videoFilePath: (f) => paths[f.name] || null,
-    grantVideoFile: () => Promise.resolve(null)
+    grantVideoFile: () => Promise.resolve(token || null)
   } : null);
   try { target.dispatchEvent(event); } finally { restoreDesktop(); }
 }
@@ -85,7 +86,7 @@ function clip(name, size) {
 async function openOnDesktop(rowId, link) {
   const asked = [];
   useDesktopForTest({
-    openVideoFile: () => Promise.resolve({ ok: false, code: "UNKNOWN" }),
+    openVideoFile: (token) => { asked.push("token:" + token); return Promise.resolve({ ok: true }); },
     openVideoPath: (path) => { asked.push(path); return Promise.resolve({ ok: true }); }
   });
   try {
@@ -125,6 +126,31 @@ test("dropping a file again on a link from an older script records its path with
   assert.deepEqual(links("r1"), [{ name: "take one.mp4", size: 9, poster: true }], "undo removes the path the drop added");
   undoOwner().redo();
   assert.deepEqual(links("r1"), [{ name: "take one.mp4", size: 9, location: at(MOVED), poster: true }], "redo brings it back");
+});
+
+test("a file dropped this session opens by its grant only for links to where it was dropped from", async () => {
+  await open(script());
+  dropVideo("r1", clip("take one.mp4", 9), { "take one.mp4": CLIP }, "tok-clip");
+  await until(() => links("r1").length === 1, "the dropped video's link");
+  await settle();
+  assert.deepEqual(await openOnDesktop("r1", links("r1")[0]), ["token:tok-clip"], "the dropped file opens by its grant");
+  await open(script([{ id: "r1", visualText: "Wide", audioText: "One.", status: "todo",
+    imageLinks: [{ name: "take one.mp4", size: 9, location: at(MOVED), poster: true }] }]));
+  assert.deepEqual(await openOnDesktop("r1", links("r1")[0]), [MOVED],
+    "another script's same-named file elsewhere opens from its own path, not the file dropped earlier");
+});
+
+test("undoing a drop that moved a link to a new path opens the old path, not the file just dropped", async () => {
+  await open(script([{ id: "r1", visualText: "Wide", audioText: "One.", status: "todo",
+    imageLinks: [{ name: "take one.mp4", size: 9, location: at(NEVER_DROPPED), poster: true }] }]));
+  dropVideo("r1", clip("take one.mp4", 9), { "take one.mp4": MOVED }, "tok-moved");
+  await until(() => links("r1")[0].location.path === MOVED, "the new path");
+  await settle();
+  assert.deepEqual(await openOnDesktop("r1", links("r1")[0]), ["token:tok-moved"]);
+  flush();
+  undoOwner().undo();
+  assert.deepEqual(links("r1")[0].location, at(NEVER_DROPPED), "setup: undo puts the old path back");
+  assert.deepEqual(await openOnDesktop("r1", links("r1")[0]), [NEVER_DROPPED]);
 });
 
 test("a merge with a copy saved by an older build, which drops the path, keeps the path", () => {

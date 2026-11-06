@@ -1,6 +1,6 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
-import { normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
+import { locatedVideoKey, normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
 import type { DesktopVideoResult } from "../../application/media/desktop-video.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { VideoLink } from "../../core/document/gallery.ts";
@@ -14,29 +14,33 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
 
   function grantVideoFile(file: unknown, link: VideoLink): void {
     if (disposed) return;
-    const key = videoLinkKey(normalizeVideoLink(link) || link);
+    const l = normalizeVideoLink(link) || link;
+    // why: a link that names where its file is may use only a grant from that place; one without keeps name-and-size
+    const keys = l.location ? [videoLinkKey(l), locatedVideoKey(l)] : [videoLinkKey(l)];
     if (file && typeof (file as { size?: unknown }).size === "number") {
-      if (sessionVideoUrls[key] && sessionVideoFiles[key] !== file) {
-        try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { }
-        Reflect.deleteProperty(sessionVideoUrls, key);
-      }
-      sessionVideoFiles[key] = file;
+      keys.forEach(function (key) {
+        if (sessionVideoUrls[key] && sessionVideoFiles[key] !== file) {
+          try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { }
+          Reflect.deleteProperty(sessionVideoUrls, key);
+        }
+        sessionVideoFiles[key] = file;
+      });
     }
     const granting = ports.desktop.grant(file);
     if (granting === null) return;
     Promise.resolve(granting).then(function (token: string | null) {
       if (disposed) return;
-      if (typeof token === "string" && token) videoFileTokens[key] = token;
+      if (typeof token === "string" && token) keys.forEach(function (key) { videoFileTokens[key] = token; });
     }, function () {});
   }
 
   function hasSessionVideo(link: VideoLink | null | undefined): boolean {
-    return !!(!disposed && link && !link.href && sessionVideoFiles[videoLinkKey(link)]);
+    return !!(!disposed && link && !link.href && sessionVideoFiles[locatedVideoKey(link)]);
   }
 
   function sessionVideoUrl(link: VideoLink): string | null {
     if (!hasSessionVideo(link)) return null;
-    const key = videoLinkKey(link);
+    const key = locatedVideoKey(link);
     if (!sessionVideoUrls[key]) {
       try { sessionVideoUrls[key] = URL.createObjectURL(sessionVideoFiles[key] as Blob); } catch (e) { return null; }
     }
@@ -58,7 +62,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
         "Open it from there, or in the Splitpage desktop app.", "warn", true);
       return;
     }
-    const token = videoFileTokens[videoLinkKey(link)];
+    const token = videoFileTokens[locatedVideoKey(link)];
     const stored = link.location && link.location.kind === "path" ? link.location.path : "";
     if (!token && !stored) {
       ports.notices.show("Splitpage only opens a video file you dropped or pasted in since it started — " +

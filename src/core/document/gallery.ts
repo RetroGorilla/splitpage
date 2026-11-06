@@ -205,6 +205,10 @@ function locationKey(l: VideoLink | null | undefined): string {
   return l && l.location ? "@" + l.location.kind + ":" + l.location.path : "";
 }
 
+export function locatedVideoKey(l: VideoLink | null | undefined): string {
+  return videoLinkKey(l) + locationKey(l);
+}
+
 export function withoutVideoLocations(rows: readonly unknown[]): void {
   function strip(links: unknown): void {
     (Array.isArray(links) ? links as unknown[] : []).forEach(function (l) {
