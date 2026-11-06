@@ -28,6 +28,8 @@ for (const kind of ["memory", "idb", "filesystem"]) {
     let backend, inspect;
     const buckets = index(snapshots);
     Object.assign(buckets[DOC], options.fields);
+    if ("bucket" in options) buckets[DOC] = options.bucket;
+    if (options.extra) Object.assign(buckets, options.extra);
     if (options.older === false) delete buckets._older;
     if (options.olderOnly) delete buckets[DOC];
     const bodies = { [sha]: text, ...options.bodies };
@@ -203,6 +205,29 @@ for (const kind of ["memory", "idb", "filesystem"]) {
     assert.equal(JSON.stringify(rec.snapshots.find((entry) => entry?.damagedSnapshots)?.damagedSnapshots), JSON.stringify(second));
     assert.equal((await store.list(DOC)).damaged, 2);
     assert.equal((await store.get(DOC, "backup"))?.stateJson, text);
+  });
+
+  if (kind !== "idb") test(`[${kind}] a bucket that is not a record keeps its value and the bodies it names (#1119)`, async (t) => {
+    const otherText = JSON.stringify({ rows: [], title: "Named only by a damaged bucket" });
+    const otherSha = crypto.createHash("sha256").update(otherText).digest("hex");
+    const named = { ...good, id: "named", atMs: 500, sha: otherSha, sizeBytes: otherText.length };
+    for (const bucket of [[named], 7]) {
+      const { store, hasBody } = await fixture(t, [], {
+        older: false, bucket, bodies: { [otherSha]: otherText },
+        extra: { [COPY]: { title: "", lastOpenedAt: 1, snapshots: [named, good] } }
+      });
+      assert.equal((await store.list(DOC)).damaged, 1);
+      await store.evict(0);
+      if (Array.isArray(bucket)) assert.equal(await hasBody(otherSha), true);
+      await store.touch(DOC, "Opened");
+      assert.equal((await store.put(DOC, { id: "backup", atMs: 2000 }, text)).stored, true);
+      await store.evict(0);
+      const rec = (await store.rawIndex())[DOC];
+      assert.equal(JSON.stringify(rec.damagedSnapshots), JSON.stringify(bucket));
+      assert.equal((await store.list(DOC)).damaged, 1);
+      assert.equal((await store.get(DOC, "backup"))?.stateJson, text);
+      if (Array.isArray(bucket)) assert.equal(await hasBody(otherSha), true);
+    }
   });
 
   test(`[${kind}] missing-body repair only removes readable entries`, async (t) => {
