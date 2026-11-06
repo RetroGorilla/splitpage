@@ -8,7 +8,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { TextServices } from "../../application/text/services.ts";
 
 export interface RundownPorts {
-  readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
+  readonly document: Pick<DocumentReader, "current" | "read" | "numbering" | "onReplaced">;
   readonly text: Pick<TextServices, "cellOf" | "productionReaders" | "cacheSeal">;
   readonly rowDrag: Pick<RowDrag, "dragging" | "end">;
   readonly cells: Pick<CellEditing<Element>, "moveRow">;

@@ -1211,6 +1211,7 @@ export function startRundown(given: RundownPorts): RundownOwner {
   const rowsEl = document.getElementById("rows");
   ports = given;
   const offs: (() => void)[] = [];
+  offs.push(ports.document.onReplaced(function () { cancelClickScroll(); }));
   let disposed = false;
   const owner: RundownOwner = { mounted: function () { return !disposed; }, minimized: isRundownMinimized, toggleMinimized: toggleRundownMinimized, goToBeat: goToBeat, dispose: function () {
     if (disposed) return;
