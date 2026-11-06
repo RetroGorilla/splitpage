@@ -206,9 +206,17 @@ Otherwise they use the default compiled into `update.mjs` and
 `desktop/update-release.ts`, and nothing else. Release page links must use
 `https://github.com/RetroGorilla/splitpage/releases/tag/<tag>`; asset and checksum
 URLs must use `https://github.com/RetroGorilla/splitpage/releases/download/<tag>/<asset>`.
-Feed URLs pointing directly at GitHub's asset host are refused. After validating
-the repository download URL, the desktop app follows GitHub's redirect to its
-asset host normally. Test feeds may use their own HTTP or HTTPS origin only
+Each URL must already be in its canonical form, with no query, fragment, user
+name or password, and the tag and asset name may hold only letters, digits and
+`.`, `_`, `+` and `-`, starting with a letter or digit.
+Feed URLs pointing directly at GitHub's asset host are refused. The desktop app
+downloads assets and checksums through a session that checks every redirect hop
+before it is requested: only the repository download URL and
+`https://release-assets.githubusercontent.com/github-production-release-asset/1349872068/<id>`
+(GitHub's asset host, under this repository's numeric id, with GitHub's signed
+query) may serve them. Any other hop cancels the download. If the repository is
+ever recreated under a new id, change that id in `desktop/update-release.ts`
+before the release that needs it. Test feeds may use their own HTTP or HTTPS origin only
 under the test switch. Malformed or untrusted release fields fail the update check.
 `release.json`
 used to be copied into each release's `.splitpage-release.json` as an

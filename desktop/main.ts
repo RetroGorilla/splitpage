@@ -88,8 +88,8 @@ const {
   normalizeBounds, normalizeTabSource, createDesktopStateStore
 }: { DESKTOP_STATE_VERSION: typeof DesktopState.DESKTOP_STATE_VERSION; normalizeBounds: typeof DesktopState.normalizeBounds; normalizeTabSource: typeof DesktopState.normalizeTabSource; createDesktopStateStore: typeof DesktopState.createDesktopStateStore } = require("./desktop-state.ts");
 const {
-  DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, isAllowedReleaseUrl, pickUpdateAsset, findChecksumsAsset, checksumFor
-}: { DEFAULT_UPDATE_API: typeof UpdateRelease.DEFAULT_UPDATE_API; hasReleaseAssets: typeof UpdateRelease.hasReleaseAssets; compareVersions: typeof UpdateRelease.compareVersions; isAllowedDownloadHost: typeof UpdateRelease.isAllowedDownloadHost; isAllowedReleaseUrl: typeof UpdateRelease.isAllowedReleaseUrl; pickUpdateAsset: typeof UpdateRelease.pickUpdateAsset; findChecksumsAsset: typeof UpdateRelease.findChecksumsAsset; checksumFor: typeof UpdateRelease.checksumFor } = require("./update-release.ts");
+  DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, isAllowedDownloadHop, isAllowedReleaseUrl, pickUpdateAsset, findChecksumsAsset, checksumFor
+}: { DEFAULT_UPDATE_API: typeof UpdateRelease.DEFAULT_UPDATE_API; hasReleaseAssets: typeof UpdateRelease.hasReleaseAssets; compareVersions: typeof UpdateRelease.compareVersions; isAllowedDownloadHost: typeof UpdateRelease.isAllowedDownloadHost; isAllowedDownloadHop: typeof UpdateRelease.isAllowedDownloadHop; isAllowedReleaseUrl: typeof UpdateRelease.isAllowedReleaseUrl; pickUpdateAsset: typeof UpdateRelease.pickUpdateAsset; findChecksumsAsset: typeof UpdateRelease.findChecksumsAsset; checksumFor: typeof UpdateRelease.checksumFor } = require("./update-release.ts");
 const { createIpcSetup }: { createIpcSetup: typeof IpcSetup.createIpcSetup } = require("./ipc-setup.ts");
 const { createFileIpc }: { createFileIpc: typeof IpcFiles.createFileIpc } = require("./ipc-files.ts");
 const { createShellIpc }: { createShellIpc: typeof IpcShell.createShellIpc } = require("./ipc-shell.ts");
@@ -596,13 +596,27 @@ function updateApiUrl() {
   return (TEST_MODE && process.env.SPLITPAGE_UPDATE_API) || DEFAULT_UPDATE_API;
 }
 
+let updateDownloadSession: Electron.Session | null = null;
+
+function fetchUpdateFile(url: string) {
+  if (!updateDownloadSession) {
+    const apiUrl = updateApiUrl();
+    updateDownloadSession = session.fromPartition("splitpage-update-download", { cache: false });
+    // why: net.fetch follows redirects without reporting them, so each hop is checked before it is requested
+    updateDownloadSession.webRequest.onBeforeRequest((details, callback) => {
+      callback({ cancel: !isAllowedDownloadHop(details.url, apiUrl, TEST_MODE) });
+    });
+  }
+  return updateDownloadSession.fetch(url, { headers: { "User-Agent": "splitpage-desktop" } });
+}
+
 async function fetchPublishedChecksum(assets: Parameters<typeof findChecksumsAsset>[0], assetName: Parameters<typeof checksumFor>[1]) {
   const entry = findChecksumsAsset(assets, updateApiUrl(), TEST_MODE);
   if (!entry) return null;
   const url = (entry as Record<string, unknown>).browser_download_url;
   if (typeof url !== "string") return null;
   try {
-    const res = await net.fetch(url, { headers: { "User-Agent": "splitpage-desktop" } });
+    const res = await fetchUpdateFile(url);
     if (!res.ok) return null;
     return checksumFor(await res.text(), assetName);
   } catch { }
@@ -709,7 +723,7 @@ function downloadUpdate(): Promise<DesktopIpcResult<"splitpage:update-download">
     updateFile = null;
     setDownloadState({ state: "downloading", received: 0, total: asset.size || 0, error: null });
 
-    const res = await net.fetch(asset.url, { headers: { "User-Agent": "splitpage-desktop" } });
+    const res = await fetchUpdateFile(asset.url);
     if (!res.ok) throw new Error(`download failed: ${res.status} ${res.statusText}`);
     const declared = Number(res.headers.get("content-length")) || asset.size || 0;
     setDownloadState({ total: declared });

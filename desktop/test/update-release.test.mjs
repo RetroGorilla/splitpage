@@ -12,7 +12,8 @@ import { compileFixtures } from "../../tools/ts-fixtures.mjs";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const {
-  DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, isAllowedReleaseUrl, pickUpdateAsset, findChecksumsAsset, checksumFor
+  DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, isAllowedDownloadHop, isAllowedReleaseUrl, pickUpdateAsset,
+  findChecksumsAsset, checksumFor
 } = require(path.join(here, "..", "update-release.ts"));
 
 const cases = [];
@@ -23,35 +24,51 @@ const LOCAL_API = "http://127.0.0.1:4567/releases/latest";
 const gh = (name) => "https://github.com/RetroGorilla/splitpage/releases/download/v9.9.9/" + name;
 const asset = (name, url, size) => ({ name, browser_download_url: url === undefined ? gh(name) : url, size });
 const HASH = "ab".repeat(32);
+const ASSET_HOST = "https://release-assets.githubusercontent.com/github-production-release-asset/1349872068/";
+const signed = (id) => ASSET_HOST + id
+  + "?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-11-06T19%3A23%3A10Z&rscd=attachment%3B+filename%3DSHA256SUMS.txt&sig=a%2Fb%3D";
 
-function updateFlow(body, platform = "win32") {
+function updateFlow(body, platform = "win32", redirects = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-update-test-"));
   const main = fs.readFileSync(path.join(here, "..", "main.ts"), "utf8");
   const source = stripTypeScriptTypes(main.slice(main.indexOf("function readAppVersion()"), main.indexOf("async function pickChromiumBrowser()")));
-  const requests = [], launches = [];
+  const requests = [], launches = [], served = [];
   const payload = Buffer.from("test installer");
   const digest = crypto.createHash("sha256").update(payload).digest("hex");
-  let finishQuit;
+  let finishQuit, guard = null;
+  const follow = async (start, check) => {
+    requests.push(start);
+    for (let url = start, hops = 0; hops < 5; hops++) {
+      let cancel = false;
+      if (check) check({ url }, (r) => { cancel = !!r.cancel; });
+      if (cancel) throw new Error("net::ERR_BLOCKED_BY_CLIENT");
+      served.push(url);
+      if (redirects[url]) { url = redirects[url]; continue; }
+      if (url === API) return Response.json(body);
+      if (url.endsWith("setup-x64.exe") || url.startsWith(ASSET_HOST + "installer")) return new Response(payload);
+      if (url.endsWith("SHA256SUMS.txt") || url.startsWith(ASSET_HOST + "sums")) return new Response(digest + "  setup-x64.exe\n");
+      throw new Error("unexpected fetch " + JSON.stringify(url));
+    }
+    throw new Error("too many redirects");
+  };
   const context = {
     ...require(path.join(here, "..", "update-release.ts")),
     fs, fsp: fs.promises, path, crypto, Buffer, URL, Date,
     APP_ROOT: dir, TEST_MODE: false, SKIP_UPDATE_CHECK: false,
     process: { platform, arch: "x64", env: { SPLITPAGE_UPDATE_API: LOCAL_API } },
     app: { getVersion: () => "0", getPath: () => dir }, tabs: new Map(),
-    net: { fetch: async (url) => {
-      requests.push(url);
-      if (url === API) return Response.json(body);
-      if (url === gh("setup-x64.exe")) return new Response(payload);
-      if (url === gh("SHA256SUMS.txt")) return new Response(digest + "  setup-x64.exe\n");
-      throw new Error("unexpected fetch " + JSON.stringify(url));
-    } },
+    net: { fetch: (url) => follow(url, null) },
+    session: { fromPartition: () => ({
+      webRequest: { onBeforeRequest: (fn) => { guard = fn; } },
+      fetch: (url) => follow(url, guard)
+    }) },
     spawn: (...args) => { launches.push(args); return { unref() {} }; },
     shell: { openPath: (...args) => { launches.push(args); } },
     quitToInstall: () => new Promise((resolve) => { finishQuit = () => resolve(context.startInstallerNow()); })
   };
   vm.createContext(context);
   vm.runInContext(source + "\nfunction status() { return updateStatus; }", context);
-  return { context, requests, launches, finishQuit: () => finishQuit(),
+  return { context, requests, launches, served, finishQuit: () => finishQuit(),
     cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
@@ -112,6 +129,72 @@ test("feed downloads must name this repository's HTTPS release assets", () => {
     "https://github.com/RetroGorilla/splitpage/releases/download/tag/",
     "not a url", [gh("setup.exe")], null, 123
   ]) assert.equal(isAllowedDownloadHost(url, API), false, JSON.stringify(url));
+});
+
+test("feed URLs in another spelling, with encoded or dropped characters, or with path tricks are rejected", () => {
+  const download = "https://github.com/RetroGorilla/splitpage/releases/download/";
+  for (const url of [
+    download + "v1%2F..%2F..%2F..%2F..%2Fother%2Frepo%2Freleases%2Fdownload%2Fv1/setup.exe",
+    download + "v1/..%2F..%2F..%2Fsetup.exe",
+    download + "v1/setup%5C..%5C..%5Csetup.exe",
+    download + "v1/setup%2Eexe",
+    download + "v1/setup.exe%00",
+    download + "v1/setup.exe;x",
+    download + "v1/x/../setup.exe",
+    download + "v1/./setup.exe",
+    download + "v1/set\nup.exe",
+    download + "v1/set\tup.exe",
+    download + "v1/setup.exe?",
+    download + "v1/setup.exe#",
+    download + "v1/setup.exe ",
+    download + "v1/.setup.exe",
+    "HTTPS://github.com/RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https://GITHUB.COM/RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https://github.com:443/RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https://@github.com/RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https://:@github.com/RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https:github.com/RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https:/github.com/RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https://github%2Ecom/RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https://github.com./RetroGorilla/splitpage/releases/download/v1/setup.exe",
+    "https://xn--gthub-n4a.com/RetroGorilla/splitpage/releases/download/v1/setup.exe"
+  ]) assert.equal(isAllowedDownloadHost(url, API), false, JSON.stringify(url));
+  const tag = "https://github.com/RetroGorilla/splitpage/releases/tag/";
+  for (const url of [tag + "v1%2F..%2F..%2F..%2Fother", tag + "v1?", tag + "v1#", tag + "v1/../v2", tag + "v1%3Fx",
+    "https://GitHub.com/RetroGorilla/splitpage/releases/tag/v1", "https://github.com:443/RetroGorilla/splitpage/releases/tag/v1"
+  ]) assert.equal(isAllowedReleaseUrl(url, API), false, JSON.stringify(url));
+  assert.equal(isAllowedDownloadHost("http://127.0.0.1:4567/files/../a.exe", LOCAL_API, true), false);
+  assert.equal(isAllowedDownloadHost("http://127.0.0.1:4567/a.exe?", LOCAL_API, true), false);
+});
+
+test("a download may only pass through this repository's release URL and GitHub's asset host for this repository", () => {
+  assert.equal(isAllowedDownloadHop(gh("setup.exe"), API), true);
+  assert.equal(isAllowedDownloadHop(ASSET_HOST + "e3b64ee7-31cb-4259-b09f-4961b822767d", API), true);
+  assert.equal(isAllowedDownloadHop(signed("e3b64ee7-31cb-4259-b09f-4961b822767d"), API), true);
+  for (const url of [
+    "https://evil.test/setup.exe",
+    "https://github.com/login?return_to=x",
+    "https://github.com/another/repo/releases/download/v1/setup.exe",
+    "https://objects.githubusercontent.com/github-production-release-asset-2e65be/1349872068/x",
+    "https://release-assets.githubusercontent.com/github-production-release-asset/1/x",
+    "https://release-assets.githubusercontent.com/github-production-release-asset/13498720689/x",
+    "https://release-assets.githubusercontent.com/github-production-release-asset/1349872068/",
+    "https://release-assets.githubusercontent.com/github-production-release-asset/1349872068/a/b",
+    "https://release-assets.githubusercontent.com/github-production-release-asset/1349872068/a%2F..%2F..%2F1%2Fb",
+    "https://release-assets.githubusercontent.com/github-production-release-asset/1349872068/x/../../1/y",
+    "https://release-assets.githubusercontent.com/other/1349872068/x",
+    "https://release-assets.githubusercontent.com.evil.test/github-production-release-asset/1349872068/x",
+    "https://evil-release-assets.githubusercontent.com/github-production-release-asset/1349872068/x",
+    "https://release-assets.githubusercontent.co/github-production-release-asset/1349872068/x",
+    "http://release-assets.githubusercontent.com/github-production-release-asset/1349872068/x",
+    "https://user:pass@release-assets.githubusercontent.com/github-production-release-asset/1349872068/x",
+    "https://release-assets.githubusercontent.com:8443/github-production-release-asset/1349872068/x",
+    ASSET_HOST + "x#fragment",
+    "http://127.0.0.1:4567/payload",
+    [ASSET_HOST + "x"], { url: ASSET_HOST + "x" }, null, undefined, 1
+  ]) assert.equal(isAllowedDownloadHop(url, API), false, JSON.stringify(url));
+  assert.equal(isAllowedDownloadHop("http://127.0.0.1:4567/payload", LOCAL_API, true), true);
+  assert.equal(isAllowedDownloadHop("http://127.0.0.1:4568/payload", LOCAL_API, true), false);
 });
 
 test("local feed URLs require the explicit test switch and the feed's own origin", () => {
@@ -292,6 +375,44 @@ test("a valid repository release downloads and launches its verified installer a
     assert.equal(flow.launches.length, 1);
     assert.equal(path.basename(flow.launches[0][0]), "setup-x64.exe");
     assert.deepEqual(flow.requests, [API, gh("setup-x64.exe"), gh("SHA256SUMS.txt")]);
+  } finally { flow.cleanup(); }
+});
+
+test("an installer or checksum redirected away from GitHub's asset host for this repository is never fetched or launched", async () => {
+  for (const [from, to] of [
+    [gh("setup-x64.exe"), "https://evil.test/setup-x64.exe"],
+    [gh("setup-x64.exe"), "https://release-assets.githubusercontent.com/github-production-release-asset/1/installer"],
+    [gh("SHA256SUMS.txt"), "https://evil.test/SHA256SUMS.txt"]
+  ]) {
+    const flow = updateFlow(releaseBody(), "win32", { [from]: to });
+    try {
+      await flow.context.checkForUpdate();
+      assert.equal(flow.context.status().canInstall, true);
+      const result = await flow.context.downloadUpdate();
+      assert.equal(result.ok, false, to);
+      assert.equal(result.error, "download-failed");
+      assert.equal(flow.context.status().download.state, "failed");
+      assert.ok(!flow.served.includes(to), JSON.stringify(flow.served));
+      assert.equal((await flow.context.runUpdateInstaller()).error, "not-downloaded");
+      assert.deepEqual(flow.launches, []);
+    } finally { flow.cleanup(); }
+  }
+});
+
+test("an installer and checksum served through GitHub's asset host for this repository are verified and launched", async () => {
+  const flow = updateFlow(releaseBody(), "win32", {
+    [gh("setup-x64.exe")]: signed("installer-1"),
+    [gh("SHA256SUMS.txt")]: signed("sums-1")
+  });
+  try {
+    await flow.context.checkForUpdate();
+    assert.equal((await flow.context.downloadUpdate()).ok, true);
+    assert.equal(flow.context.status().download.verified, true);
+    assert.deepEqual(flow.served, [API, gh("setup-x64.exe"), signed("installer-1"), gh("SHA256SUMS.txt"), signed("sums-1")]);
+    const installing = flow.context.runUpdateInstaller();
+    flow.finishQuit();
+    assert.equal((await installing).ok, true);
+    assert.equal(flow.launches.length, 1);
   } finally { flow.cleanup(); }
 });
 
