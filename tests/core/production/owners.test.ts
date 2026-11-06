@@ -261,3 +261,16 @@ test("owner sync: planning one changed cell reads one Visual field, with no docu
   assert.equal(reads, 0);
   assert.equal(quiet.snapshot, plan.snapshot);
 });
+
+test("owner sync: inserting an earlier sentence does not make unchanged later pairs new", () => {
+  for (const tags of [[], [KETTLE]]) {
+    const d = doc([row("r1", [KETTLE, T(" "), who("Ann")])], [{ id: "pSam", name: "Sam" }, { id: "pAnn", name: "Ann" }]);
+    const kettle = d.productionTags[0];
+    assert.ok(kettle);
+    kettle.owner = tags.length ? "pAnn" : "pSam";
+    const snap = snapshotOwners(d, readers);
+    d.rows[0] = row("r1", [...tags, T(" "), who("Sam"), T(". "), KETTLE, T(" "), who("Ann")]);
+    step(snap, d);
+    assert.equal(owner(d, "Kettle"), "pSam");
+  }
+});

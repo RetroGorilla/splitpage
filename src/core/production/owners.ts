@@ -34,6 +34,26 @@ function pairKey(p: WhoPair): string {
   return registryKey(p.cat, p.name) + "\u0000" + normalizeTagName(p.who);
 }
 
+function newOccurrences(before: readonly WhoPair[], now: readonly WhoPair[]): WhoPair[] {
+  const positions = new Map<string, { indices: number[]; next: number }>();
+  before.forEach(function (p, i) {
+    const key = pairKey(p), held = positions.get(key);
+    if (held) held.indices.push(i);
+    else positions.set(key, { indices: [i], next: 0 });
+  });
+  let matched = -1;
+  return now.filter(function (p) {
+    const held = positions.get(pairKey(p));
+    if (!held) return true;
+    while (held.next < held.indices.length && (held.indices[held.next] as number) <= matched) held.next++;
+    const at = held.indices[held.next];
+    if (at === undefined) return true;
+    matched = at;
+    held.next++;
+    return false;
+  });
+}
+
 function bump(into: Map<string, number>, key: string, by: number): void {
   const n = (into.get(key) || 0) + by;
   if (n) into.set(key, n); else into.delete(key);
@@ -105,10 +125,8 @@ export function planOwnerSync(was: OwnerSnapshot | null, state: OwnerState, read
   const people: string[] = [], gone: WhoPair[] = [], added: WhoPair[] = [], fields: string[] = [];
   cells.forEach(function (html, id) {
     if (html && movedCells.get(html)) { bump(movedCells, html, -1); return; }
-    const before = new Set(readers.whoInField(was.cells.get(id)).pairs.map(function (p) { return p.sentence + "\u0000" + pairKey(p); }));
-    readers.whoInField(html).pairs.forEach(function (p) {
-      if (!before.has(p.sentence + "\u0000" + pairKey(p))) added.push(p);
-    });
+    const before = readers.whoInField(was.cells.get(id)).pairs, now = readers.whoInField(html).pairs;
+    added.push(...newOccurrences(before, now));
   });
   pairs.forEach(function (p, key) {
     const before = was.pairs.get(key) || 0, by = delta.pairs.get(key) || 0;

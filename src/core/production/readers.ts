@@ -47,14 +47,14 @@ function countWords(cellOf: CellDecoder, html: string): number {
 
 function readWho(cellOf: CellDecoder, html: string): FieldWho {
   const names: string[] = [], pairs: WhoPair[] = [];
-  whoSentences(cellOf(html)).forEach(function (s, sentence) {
+  whoSentences(cellOf(html)).forEach(function (s) {
     s.names.forEach(function (who) { if (names.indexOf(who) === -1) names.push(who); });
     s.tags.forEach(function (id) {
       const t = tagNameOf(id);
       const name = t ? t.name.trim() : "";
       if (!name) return;
       const who = s.names[s.names.length - 1];
-      if (who) pairs.push({ cat: (t as TagName).cat, name: name, who: who, sentence: sentence });
+      if (who) pairs.push({ cat: (t as TagName).cat, name: name, who: who });
     });
   });
   return { names: names, pairs: pairs };
