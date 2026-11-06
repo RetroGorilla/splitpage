@@ -981,6 +981,10 @@ async function caseIncompleteLink(target, fixturesDir) {
     await waitForRows(cdp, 20000);
     await poll(cdp, "document.title === 'Incomplete link — Splitpage'", 15000);
     await evalPage(cdp, "document.getAnimations().forEach(function(a){a.finish();}); true");
+    // why: Opening the file leaves its "Opened" toast in #toast-host for ~2.8 s; it would hide the warning's exact text.
+    await evalPage(cdp, "document.querySelectorAll('#toast-host .toast-dismiss').forEach(function(b){b.click();}); true");
+    const hostClear = await poll(cdp, "document.getElementById('toast-host').children.length === 0", 3000).catch(() => false);
+    record(tag + ": the file-opened toast is gone before the click", hostClear === true);
     const before = (await externalOpens(cdp)).length;
     const point = await evalPage(cdp,
       "(function(){ var c = document.querySelector('#rows .audio-cell .cell-editable'); " +
