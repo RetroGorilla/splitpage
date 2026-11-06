@@ -129,6 +129,16 @@ wait blk(13).getBoundingClientRect().width >= 80
 key ArrowRight
 wait document.activeElement === blk(14)
 wait blk(14).getBoundingClientRect().width >= 60
+sleep 400
+eval (function(){ var r = blk(16).getBoundingClientRect(); window.__keyboardX = r.left + r.width / 2; return under(__keyboardX); })()
+expect under(__keyboardX) === 16
+eval move(__keyboardX)
+sleep 400
+expect under(__keyboardX) === 16
+eval window.__keyboardClick = { x: __keyboardX, y: track().getBoundingClientRect().top + 18 }
+mouse click window.__keyboardClick
+wait document.activeElement && document.activeElement.closest('#rows .row') && document.activeElement.closest('#rows .row').getAttribute('data-id') === 'r16'
+eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
 eval document.activeElement.blur()
 wait RT.lens().Z === null
 

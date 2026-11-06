@@ -657,6 +657,7 @@ export function renderRundown(): void {
   for (let j = 0; j < rows.length; j++) if ((rows[j] as BeatRow).id === current) at = j;
 
   const countChanged = rows.length !== state.base.n;
+  const widthChanged = width !== state.base.W;
   state.base.blocks = blocks;
   state.base.n = rows.length;
   state.base.W = width;
@@ -680,7 +681,7 @@ export function renderRundown(): void {
   }
 
   if (state.minimized) lensReset();
-  else if (state.lens.Z) lensRepainted(countChanged);
+  else if (state.lens.Z) lensRepainted(countChanged, widthChanged);
 
   const knotsKey = state.base.X.join(",");
   const moved = s !== state.lastLayout.pxPerSecond || width !== state.lastLayout.width || knotsKey !== state.lastKnotsKey;
@@ -881,7 +882,7 @@ function lensReset(): void {
   lensSettle();
 }
 
-function lensRepainted(countChanged: boolean): void {
+function lensRepainted(countChanged: boolean, widthChanged: boolean): void {
   if (!lensAllowed()) { lensReset(); return; }
   if (countChanged || (state.lens.Z as number[]).length !== (state.base.X as number[]).length) {
     holdClear();
@@ -890,14 +891,20 @@ function lensRepainted(countChanged: boolean): void {
       state.lens.ref = null;
       lensAt(state.lens.x, state.lens.src ?? "pointer", state.lens.t);
     } else if (state.lens.src === "focus") lensOff();
-  } else if (state.lens.on && state.lens.x !== null) indexFocus(state.lens.x);
+  } else if (state.lens.on && state.lens.x !== null) {
+    if (widthChanged) {
+      state.lens.x = clamp(state.lens.x, 0, state.base.W);
+      state.lens.ref = { x: state.lens.x, q: state.lens.p };
+    }
+    indexFocus(state.lens.x);
+  }
   applyKnots(state.lens.Z as number[]);
   lensKick();
 }
 
 function indexFocus(x: number): void {
   const lens = state.lens;
-  if (!lens.ref) lens.ref = { x: x, q: lensIndexAt(slots(), x) };
+  if (!lens.ref) lens.ref = { x: x, q: lensIndexAt(lens.Z ?? slots(), x) };
   const proposed = lensIndexMap(lens.ref, x, state.base.W, state.base.n);
   lens.p = lensIndexFit(proposed, x, (index, anchor) => rundownLensIndex(slots(), index, anchor), state.base.n);
   lens.a = x;

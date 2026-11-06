@@ -234,6 +234,41 @@ test("Index recomputes a stationary pointer's mapping when the strip is resized"
   assert.deepEqual(boxes(blocks()), resized, "an identical pointer event must not change the resized lens");
 });
 
+test("Index keeps the pointed beat and every remaining beat reachable after shrinking past the entry point", (t) => {
+  const { resize, move, draw } = lensFixture(t);
+  document.querySelector(".rundown-track")?.dispatchEvent(new window.Event("pointerleave"));
+  draw();
+  resize(1300);
+  move(1000);
+  move(300);
+  const beatAt = (x: number): number => blocks().findIndex((b) => x >= px(b, "left") && x < px(b, "left") + px(b, "width"));
+  const pointed = beatAt(300);
+  assert.ok(pointed >= 0);
+  resize(800);
+  assert.equal(beatAt(300), pointed, "resize leaves the drawn beat under the pointer");
+  draw();
+  assert.equal(beatAt(300), pointed, "settling preserves the pointed beat");
+  const reached = new Set<number>();
+  for (let x = 300; x < 800; x++) { move(x); reached.add(beatAt(x)); }
+  for (let i = pointed; i < 30; i++) assert.ok(reached.has(i), "beat " + i + " stays reachable before the right edge");
+});
+
+test("Index pointer entry keeps the beat drawn by a keyboard-expanded lens", (t) => {
+  const { move, draw } = lensFixture(t);
+  document.querySelector(".rundown-track")?.dispatchEvent(new window.Event("pointerleave"));
+  draw();
+  const focused = blocks()[14] as HTMLElement;
+  t.mock.method(focused, "matches", (selector: string) => selector === ":focus-visible");
+  focused.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+  draw();
+  const target = blocks()[16] as HTMLElement;
+  const x = px(target, "left") + px(target, "width") / 2;
+  assert.ok(x > 0 && x < 800, "the keyboard lens draws the target inside the strip");
+  move(x);
+  assert.ok(x >= px(target, "left") && x < px(target, "left") + px(target, "width"),
+    "beat 16 stays under the pointer after the entry animation settles");
+});
+
 test("Index restarts hold-to-open after a beat-count repaint under a stationary pointer", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const { source, make, draw } = lensFixture(t);
