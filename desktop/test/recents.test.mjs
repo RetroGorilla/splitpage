@@ -105,6 +105,29 @@ test("persisting writes a copy of the list into the stored state", async () => {
   assert.equal(h.state().recents[0].absPath, "/a");
 });
 
+test("the saved folder is independent of recents and survives reloading and clearing them", async () => {
+  const h = harness();
+  h.recents.load();
+  const saved = path.resolve("saved scripts", "video.md");
+  assert.equal(await h.recents.noteSaved(saved), true);
+  h.recents.note(path.resolve("opened", "other.splitpage"), "Other");
+  await h.recents.persist();
+  h.recents.load();
+  assert.equal(h.recents.lastSavedFolder(), path.dirname(saved));
+  assert.equal(h.recents.clear(), true);
+  await h.recents.persist();
+  assert.equal(h.recents.lastSavedFolder(), path.dirname(saved));
+});
+
+test("noting a saved folder refuses missing and relative paths", async () => {
+  const h = harness();
+  for (const candidate of [undefined, null, 42, "", "relative.splitpage"]) {
+    assert.equal(await h.recents.noteSaved(candidate), false);
+  }
+  assert.equal(h.recents.lastSavedFolder(), undefined);
+  assert.equal(h.writes.length, 0);
+});
+
 let failed = 0;
 for (const c of cases) {
   try { await c.fn(); console.log("ok   " + c.name); } catch (e) { failed++; console.log("FAIL " + c.name + "\n     " + (e && e.stack || e)); }

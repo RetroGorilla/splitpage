@@ -12,11 +12,25 @@ const fsp: DesktopNativeFsPromises = require("node:fs/promises");
 const { pathKey, readFileEntry, toBuffer, writeFileEntry }: DesktopFileService = require("./file-service.ts");
 
 function createFileIpc({
-  dialog, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
+  dialog, documentsPath, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
   consumeTestDialogAnswer, testDialogsSeen, testMode: TEST_MODE
 }: DesktopFileIpcDependencies) {
+  async function openDefaultPath() {
+    const recent = recents.list()[0];
+    const folders = [recents.lastSavedFolder(), recent ? path.dirname(recent.absPath) : undefined];
+    for (const folder of folders) {
+      if (!folder) continue;
+      try {
+        if ((await fsp.stat(folder)).isDirectory()) return folder;
+      } catch { }
+    }
+    return documentsPath();
+  }
+
   function registerFileIpc({ ipcHandle }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcHandle("splitpage:open-file-dialog", async (event) => {
+      const defaultPath = await openDefaultPath();
+      if (TEST_MODE) process.stdout.write(`[splitpage-test] open-dialog ${JSON.stringify({ defaultPath })}\n`);
       const answer = consumeTestDialogAnswer();
       let chosen;
       if (answer !== undefined) {
@@ -24,6 +38,7 @@ function createFileIpc({
       } else {
         const win = dialogParentFor(event);
         const result = await dialog.showOpenDialog(win, {
+          defaultPath,
           properties: ["openFile"],
           filters: [
             { name: "Scripts and documents", extensions: ["splitpage", "md", "html", "htm", "docx", "txt", "csv"] }
@@ -83,7 +98,9 @@ function createFileIpc({
       const absPath = fileIds.pathOf(id);
       if (!absPath) throw new Error("ENOENT: unknown file id");
       const buffer = toBuffer(data);
-      return await writeFileEntry(absPath, buffer);
+      const written = await writeFileEntry(absPath, buffer);
+      if (/\.(splitpage|md|html|htm|docx|txt|csv)$/i.test(path.basename(absPath))) await recents.noteSaved(absPath);
+      return written;
     });
 
     ipcHandle("splitpage:stat-file", async (event, id) => {

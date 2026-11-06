@@ -89,7 +89,14 @@ function createRecents({ store, pathKey, fileIds }: {
 
   function list() { return recentDocuments; }
 
-  return { load, persist, note, removeByFileId, clear, forRenderer, list };
+  function lastSavedFolder() { return store.read().lastSavedFolder; }
+
+  function noteSaved(absPath: unknown) {
+    if (typeof absPath !== "string" || !path.isAbsolute(absPath)) return Promise.resolve(false);
+    return store.write((current) => { current.lastSavedFolder = path.dirname(absPath); return current; });
+  }
+
+  return { load, persist, note, removeByFileId, clear, forRenderer, list, lastSavedFolder, noteSaved };
 }
 
 export type { createRecents };
