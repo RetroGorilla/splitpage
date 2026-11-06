@@ -30,9 +30,10 @@ let desktopVoiceAsking: Promise<{ available: boolean }> | null = null;
 let activeDesktopRecognition: DesktopRecognition | null = null;
 let voiceEventBridge: DesktopPort | null = null;
 let voiceOperations: Promise<void> = Promise.resolve();
+const VOICE_START_TIMEOUT_MS = 15000;
 
 function queueVoiceOperation(operation: () => Promise<unknown>) {
-  // why: Stops are tab-wide, so an obsolete start must finish cleanup before a newer listener can start.
+  // why: Cancellation is tab-wide, so an obsolete start must finish cleanup before a newer listener can start.
   voiceOperations = voiceOperations.then(operation).then(function () {}, function () {});
 }
 
@@ -159,10 +160,29 @@ export function createDesktopRecognition(microphone: string) {
       if (unusable) rec._fire("ondevice", { fellBack: true });
       queueVoiceOperation(function () {
         if (!rec._running || activeDesktopRecognition !== rec || version !== startVersion) return Promise.resolve();
-        return Promise.resolve()
+        let timedOut = false;
+        let timer: ReturnType<typeof setTimeout>;
+        const timeout = new Promise<null>((resolve) => {
+          timer = setTimeout(() => { timedOut = true; resolve(null); }, VOICE_START_TIMEOUT_MS);
+        });
+        const reply = Promise.resolve()
           .then(function () { return wanted ? (bridge as DesktopPort).voiceStart(wanted) : (bridge as DesktopPort).voiceStart(); })
-          .catch(function (): Awaited<ReturnType<DesktopPort["voiceStart"]>> { return { ok: false, code: "SPAWN_FAILED" }; })
+          .catch(function (): Awaited<ReturnType<DesktopPort["voiceStart"]>> { return { ok: false, code: "SPAWN_FAILED" }; });
+        void reply.then(function (answer) {
+          // why: The queue has moved on after a timeout, so late cleanup must never stop a newer listener.
+          if (timedOut && answer.ok && typeof answer.session === "number") return (bridge as DesktopPort).voiceStop(answer.session);
+          return;
+        }).catch(function () {});
+        return Promise.race([reply, timeout])
           .then(function (answer) {
+            clearTimeout(timer);
+            if (timedOut) {
+              if (rec._running && activeDesktopRecognition === rec && version === startVersion) {
+                rec._fire("onerror", { error: "helper-failed" });
+                rec._finish();
+              }
+              return (bridge as DesktopPort).voiceStop();
+            }
             if (!rec._running || activeDesktopRecognition !== rec || version !== startVersion) {
               if (answer && answer.ok) return (bridge as DesktopPort).voiceStop();
               return;

@@ -328,8 +328,8 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:voice-microphones");
     },
 
-    voiceStop() {
-      return invoke("splitpage:voice-stop");
+    voiceStop(session) {
+      return session === undefined ? invoke("splitpage:voice-stop") : invoke("splitpage:voice-stop", session);
     },
 
     onVoiceEvent(cb) {

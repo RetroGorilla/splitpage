@@ -217,8 +217,8 @@ function createVoiceHelper(opts: DesktopVoiceHelperOptions) {
     return listing;
   }
 
-  function stop(tabId: string): DesktopIpcResult<"splitpage:voice-stop"> {
-    if (current && current.tabId === tabId) end(current, "stopped");
+  function stop(tabId: string, session?: number): DesktopIpcResult<"splitpage:voice-stop"> {
+    if (current && current.tabId === tabId && (session === undefined || current.session === session)) end(current, "stopped");
     return { ok: true };
   }
 

@@ -296,9 +296,9 @@ function addFakeDesktopVoice(backend: FakeVoiceBackend) {
     backend._voiceRunning = true;
     return Promise.resolve({ ok: true, session: backend._voiceSession as number });
   };
-  backend.voiceStop = function () {
+  backend.voiceStop = function (session?: number) {
     (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).stop++;
-    backend._voiceRunning = false;
+    if (session === undefined || session === backend._voiceSession) backend._voiceRunning = false;
     return Promise.resolve({ ok: true });
   };
   backend.onVoiceEvent = function (cb: Parameters<NonNullable<FakeVoiceBackend["onVoiceEvent"]>>[0]) { handler = cb; };

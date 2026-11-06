@@ -124,10 +124,10 @@ function createShellIpc({
     ipcHandle("splitpage:voice-microphones", async () => {
       return voiceHelperInstance().microphones();
     });
-    ipcHandle("splitpage:voice-stop", async (event) => {
+    ipcHandle("splitpage:voice-stop", async (event, session) => {
       const tab = tabOf(event);
       if (!tab) return { ok: true };
-      return voiceHelperInstance().stop(tab.id);
+      return voiceHelperInstance().stop(tab.id, session);
     });
   }
 

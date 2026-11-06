@@ -972,8 +972,9 @@ function delayedDesktopMicrophoneHarness() {
   let nextSession = 0;
   let current: number | null = null;
   const live = new Map<number, string>();
-  const pending: (() => void)[] = [];
+  const pending: ((answer?: Awaited<ReturnType<DesktopPort["voiceStart"]>>) => void)[] = [];
   const stopped: number[] = [];
+  const stopRequests: (number | undefined)[] = [];
   useDesktopForTest({
     onVoiceEvent: (listener) => { emit = listener; },
     voiceStart: (microphone) => {
@@ -986,10 +987,11 @@ function delayedDesktopMicrophoneHarness() {
       live.set(session, microphone ?? "");
       emit({ type: "device", session, name: microphone === DESKTOP_MIC_TWO ? "Mic Two" : "Mic One" });
       emit({ type: "start", session });
-      return new Promise((resolve) => { pending.push(() => { resolve({ ok: true, session }); }); });
+      return new Promise((resolve) => { pending.push((answer) => { resolve(answer ?? { ok: true, session }); }); });
     },
-    voiceStop: async () => {
-      if (current !== null) {
+    voiceStop: async (session?: number) => {
+      stopRequests.push(session);
+      if (current !== null && (session === undefined || session === current)) {
         stopped.push(current);
         live.delete(current);
         emit({ type: "end", session: current, reason: "stopped" });
@@ -1015,7 +1017,7 @@ function delayedDesktopMicrophoneHarness() {
     }
     assert.fail("desktop starts did not settle");
   };
-  return { ...made, runtime, live, pending, stopped, pick, replies, tick,
+  return { ...made, runtime, live, pending, stopped, stopRequests, pick, replies, tick,
     dispose: async () => {
       runtime.stopVoiceFollow();
       mounted.dispose();
@@ -1078,6 +1080,94 @@ test("closing Present before a desktop start reply shuts down the obsolete helpe
     assert.deepEqual(h.stopped, [1]);
   } finally { await h.dispose(); }
 });
+
+test("a desktop start that never replies fails after 15 seconds and releases its helper", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = delayedDesktopMicrophoneHarness();
+  try {
+    h.runtime.openPrompter();
+    await h.tick();
+    await h.runtime.startVoiceFollow();
+    await h.tick();
+    t.mock.timers.tick(14999);
+    await h.tick();
+    assert.match(document.getElementById("pp-voice-status")?.textContent ?? "", /Starting Windows speech recognition/);
+    assert.equal(h.live.size, 1);
+    t.mock.timers.tick(1);
+    await h.tick();
+    assert.equal(document.getElementById("pp-voice-status")?.textContent,
+      "Windows speech recognition couldn't start. Present in Browser still works.");
+    assert.equal(h.h.state.voice, false);
+    assert.equal(h.live.size, 0);
+    assert.deepEqual(h.stopped, [1]);
+  } finally { await h.dispose(); }
+});
+
+for (const scenario of ["close", "new pick", "reopen Present"] as const) {
+  test("a desktop start that never replies recovers after " + scenario, async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const h = delayedDesktopMicrophoneHarness();
+    try {
+      h.runtime.openPrompter();
+      await h.tick();
+      await h.runtime.startVoiceFollow();
+      await h.tick();
+      assert.equal(h.pending.length, 1);
+      h.pending.shift();
+      if (scenario === "new pick") await h.pick(DESKTOP_MIC_TWO);
+      else h.runtime.closePrompter();
+      if (scenario === "reopen Present") {
+        h.runtime.openPrompter();
+        await h.runtime.startVoiceFollow();
+      }
+      t.mock.timers.tick(15000);
+      await h.tick();
+      assert.ok(h.stopped.includes(1), "the helper is stopped without its start reply");
+      assert.equal(h.live.has(1), false);
+      if (scenario === "close") {
+        assert.equal(h.live.size, 0);
+        assert.equal(h.h.state.voice, false);
+      } else {
+        await h.replies();
+        assert.deepEqual([...h.live.values()], [scenario === "new pick" ? DESKTOP_MIC_TWO : DESKTOP_MIC_ONE]);
+        assert.equal(h.h.state.voice, true, "the queue accepts starts without the first reply");
+        assert.equal(document.getElementById("pp-voice-status")?.textContent,
+          scenario === "new pick" ? "Listening — Mic Two" : "Listening — Mic One");
+      }
+    } finally { await h.dispose(); }
+  });
+}
+
+for (const successful of [true, false]) {
+  test("a late " + (successful ? "successful" : "failed") + " desktop reply after timeout leaves the newer listener running", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const h = delayedDesktopMicrophoneHarness();
+    try {
+      h.runtime.openPrompter();
+      await h.tick();
+      await h.runtime.startVoiceFollow();
+      await h.tick();
+      const reply = h.pending.shift();
+      assert.ok(reply);
+      t.mock.timers.tick(15000);
+      await h.tick();
+      await h.pick(DESKTOP_MIC_TWO);
+      await h.runtime.startVoiceFollow();
+      await h.replies();
+      assert.deepEqual([...h.live.values()], [DESKTOP_MIC_TWO]);
+      reply(successful ? { ok: true, session: 1 } : { ok: false, code: "SPAWN_FAILED" });
+      await h.tick();
+      assert.deepEqual(h.stopRequests, successful ? [undefined, 1] : [undefined],
+        "late cleanup targets only the expired session, never the whole tab");
+      assert.deepEqual([...h.live.values()], [DESKTOP_MIC_TWO]);
+      assert.equal(h.h.state.voice, true);
+      assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+      t.mock.timers.tick(15000);
+      await h.tick();
+      assert.deepEqual([...h.live.values()], [DESKTOP_MIC_TWO], "settled starts cancel their deadlines");
+    } finally { await h.dispose(); }
+  });
+}
 
 test("in the desktop app the saved microphone goes to Windows' listener, and the status names it", async () => {
   const { ports } = desktopMicrophoneHarness(DESKTOP_MIC_TWO);

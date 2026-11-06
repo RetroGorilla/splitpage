@@ -75,7 +75,7 @@ const CHANNELS = [
   { name: "splitpage:voice-status", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:voice-start", direction: "invoke", argsSchema: ["microphoneId?"], allowedOrigins: APP },
   { name: "splitpage:voice-microphones", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
-  { name: "splitpage:voice-stop", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:voice-stop", direction: "invoke", argsSchema: ["integer?"], allowedOrigins: APP },
 
   { name: "splitpage:set-document-state", direction: "send", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:renderer-ready", direction: "send", argsSchema: NONE, allowedOrigins: APP },

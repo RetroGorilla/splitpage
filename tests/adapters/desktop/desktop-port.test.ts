@@ -185,6 +185,15 @@ test("videoFilePath reads a dropped file's path in the preload and sends nothing
   assert.deepEqual(wires.filter((w) => w.name !== "splitpage:renderer-ready"), []);
 });
 
+test("voiceStop forwards a session for late cleanup and preserves the tab-wide no-argument call", async () => {
+  const { bridge, wires } = loadPreload(false);
+  const port = bridge as unknown as DesktopPort;
+  await port.voiceStop(42);
+  await port.voiceStop();
+  assert.deepEqual(wires.filter((w) => w.name === "splitpage:voice-stop")
+    .map((w) => structuredClone(w.args)), [[42], []]);
+});
+
 for (const [name, call] of Object.entries(CALLS) as [DesktopMember, Call][]) {
   test("port call " + name + " crosses on " + call.channel + " (" + call.direction + ")", async () => {
     const { bridge, wires } = loadPreload(false);

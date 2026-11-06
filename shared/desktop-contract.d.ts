@@ -253,7 +253,7 @@ export interface DesktopIpcContract {
   "splitpage:voice-status": DesktopChannelCall<[], { available: boolean }>;
   "splitpage:voice-start": DesktopChannelCall<[microphone?: string], DesktopWireVoiceStart>;
   "splitpage:voice-microphones": DesktopChannelCall<[], DesktopWireMicrophones>;
-  "splitpage:voice-stop": DesktopChannelCall<[], { ok: true }>;
+  "splitpage:voice-stop": DesktopChannelCall<[session?: number], { ok: true }>;
   "splitpage:set-document-state": DesktopChannelCall<[{ title?: string; dirty?: boolean; pristine?: boolean; docId?: string | null; fileId?: string | null }], void>;
   "splitpage:renderer-ready": DesktopChannelCall<[], void>;
   "splitpage:route-open": DesktopChannelCall<[{ kind: "file"; fileId: string }], { where: DesktopRouteWhere }>;

@@ -143,6 +143,24 @@ test("only the owning tab can stop a session", async () => {
   assert.equal(helper.status().running, false);
 });
 
+test("a scoped stop cleans up its listener without stopping a newer session or another tab", async () => {
+  const { helper, events } = makeHelper("listen");
+  try {
+    const first = helper.start("t1");
+    helper.stop("t1", first.session);
+    assert.equal(helper.status().running, false);
+    const newer = helper.start("t1");
+    await until(() => events.some((e) => e.session === newer.session && e.type === "start"));
+    helper.stop("t1", first.session);
+    assert.equal(helper.status().running, true);
+    assert.equal(helper.status().session, newer.session);
+    helper.stop("t2", newer.session);
+    assert.equal(helper.status().running, true);
+    helper.stop("t1", newer.session);
+    assert.equal(helper.status().running, false);
+  } finally { helper.stopAll(); }
+});
+
 test("a second tab takes the microphone over; the first is told", async () => {
   const { helper, events } = makeHelper("listen");
   const a = helper.start("t1");

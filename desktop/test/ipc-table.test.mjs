@@ -477,12 +477,12 @@ test("Use Chromium Speech Recognition takes no argument, from the app page only"
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
 });
 
-test("Follow My Voice takes no argument but an optional capture microphone id to start on, from the app page only", () => {
+test("Follow My Voice accepts only an optional capture id to start or session to stop, from the app page only", () => {
   const MIC = "{0.0.1.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0}";
   for (const name of ["splitpage:voice-status", "splitpage:voice-start", "splitpage:voice-microphones", "splitpage:voice-stop"]) {
     const row = channelFor(name, "invoke");
     assert.ok(row, name + " declared");
-    assert.deepEqual([...row.argsSchema], name === "splitpage:voice-start" ? ["microphoneId?"] : [], name);
+    assert.deepEqual([...row.argsSchema], name === "splitpage:voice-start" ? ["microphoneId?"] : name === "splitpage:voice-stop" ? ["integer?"] : [], name);
     assert.deepEqual([...row.allowedOrigins], [APP_ORIGIN], name);
     assert.equal(checkArgs(row.argsSchema, []), null, name);
     assert.ok(checkArgs(row.argsSchema, ["powershell.exe"]), name + ": an executable");
@@ -496,9 +496,30 @@ test("Follow My Voice takes no argument but an optional capture microphone id to
   }
   assert.equal(checkArgs(channelFor("splitpage:voice-start", "invoke").argsSchema, [MIC]), null, "voice-start takes one capture endpoint id");
   assert.ok(checkArgs(channelFor("splitpage:voice-stop", "invoke").argsSchema, [MIC]), "nothing else takes one");
+  const stopSchema = channelFor("splitpage:voice-stop", "invoke").argsSchema;
+  assert.equal(checkArgs(stopSchema, [42]), null, "a scoped stop takes a session number");
+  for (const args of [["42"], [1.5], [NaN], [Infinity], [42, 43], [null]]) {
+    assert.ok(checkArgs(stopSchema, args), "invalid stop session: " + JSON.stringify(args));
+  }
   const events = channelFor("splitpage:voice-event", "receive");
   assert.ok(events, "voice-event declared");
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
+});
+
+test("voice-stop scopes cleanup to the sender's tab and forwards the optional session", async () => {
+  const { createShellIpc } = require(path.join(desktop, "ipc-shell.ts"));
+  const handlers = new Map();
+  const stops = [];
+  const { registerShellIpc } = createShellIpc({
+    tabOf: (event) => event.tab,
+    voiceHelperInstance: () => ({ stop: (tab, session) => { stops.push([tab, session]); return { ok: true }; } })
+  });
+  registerShellIpc({ ipcHandle: (name, fn) => handlers.set(name, fn), ipcOn: () => {}, ipcOnSync: () => {} });
+  const stop = handlers.get("splitpage:voice-stop");
+  assert.deepEqual(await stop({ tab: { id: "sender" } }, 42), { ok: true });
+  assert.deepEqual(await stop({ tab: { id: "sender" } }), { ok: true });
+  assert.deepEqual(await stop({}), { ok: true });
+  assert.deepEqual(stops, [["sender", 42], ["sender", undefined]]);
 });
 
 test("packaging: every ./module main.ts requires, directly or through another module, is in electron-builder.yml's files", () => {
