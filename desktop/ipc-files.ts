@@ -11,18 +11,31 @@ const path: DesktopNativePath = require("node:path");
 const fsp: DesktopNativeFsPromises = require("node:fs/promises");
 const { pathKey, readFileEntry, toBuffer, writeFileEntry }: DesktopFileService = require("./file-service.ts");
 
+const OPEN_FOLDER_PROBE_TIMEOUT_MS = 1000;
+
 function createFileIpc({
   dialog, documentsPath, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
   consumeTestDialogAnswer, testDialogsSeen, testMode: TEST_MODE
 }: DesktopFileIpcDependencies) {
+  const pendingScriptSaves = new Set<string>();
+
   async function openDefaultPath() {
     const recent = recents.list()[0];
     const folders = [recents.lastSavedFolder(), recent ? path.dirname(recent.absPath) : undefined];
     for (const folder of folders) {
       if (!folder) continue;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        if ((await fsp.stat(folder)).isDirectory()) return folder;
-      } catch { }
+        const stat = await Promise.race([
+          fsp.stat(folder),
+          new Promise<null>((resolve) => {
+            timeout = setTimeout(() => resolve(null), OPEN_FOLDER_PROBE_TIMEOUT_MS);
+          })
+        ]);
+        if (stat?.isDirectory()) return folder;
+      } catch { } finally {
+        clearTimeout(timeout);
+      }
     }
     return documentsPath();
   }
@@ -85,6 +98,7 @@ function createFileIpc({
         return null;
       }
       const id = fileIds.register(chosen);
+      if (/\.splitpage$/i.test(path.basename(chosen))) pendingScriptSaves.add(id);
       return { id, name: path.basename(chosen) };
     });
 
@@ -99,7 +113,7 @@ function createFileIpc({
       if (!absPath) throw new Error("ENOENT: unknown file id");
       const buffer = toBuffer(data);
       const written = await writeFileEntry(absPath, buffer);
-      if (/\.(splitpage|md|html|htm|docx|txt|csv)$/i.test(path.basename(absPath))) await recents.noteSaved(absPath);
+      if (pendingScriptSaves.delete(id)) await recents.noteSaved(absPath);
       return written;
     });
 

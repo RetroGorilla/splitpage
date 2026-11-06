@@ -82,8 +82,9 @@ test("Open prefers the last successful Save or Save As folder, even after anothe
   assert.equal(h.opened[0].defaultPath, savedFolder);
   const otherFolder = path.join(h.root, "other scripts");
   fs.mkdirSync(otherFolder);
-  const otherId = h.fileIds.register(path.join(otherFolder, "other.md"));
-  await h.invoke("write-file", otherId, "in-place save");
+  h.answers.push(path.join(otherFolder, "other.SPLITPAGE"));
+  const other = await h.invoke("save-file-dialog", { suggestedName: "other.splitpage" });
+  await h.invoke("write-file", other.id, "Save As");
   await h.invoke("open-file-dialog");
   assert.equal(h.opened[1].defaultPath, otherFolder);
 });
@@ -110,6 +111,36 @@ test("a file at the remembered folder path is not used as a directory", async (t
   assert.equal(h.opened[0].defaultPath, h.documents);
 });
 
+for (const recentAvailable of [true, false]) {
+  test(`Open bounds each unavailable folder probe and falls back to ${recentAvailable ? "recents" : "Documents"}`, async (t) => {
+    const h = harness(t, { lastSavedFolder: "\\\\offline\\scripts" });
+    const recentFolder = path.join(h.root, "recent");
+    h.recents.note(path.join(recentFolder, "script.splitpage"), "Recent");
+    t.mock.method(fs.promises, "stat", (folder) => {
+      if (recentAvailable && folder === recentFolder) return Promise.resolve({ isDirectory: () => true });
+      return new Promise(() => {});
+    });
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const opening = h.invoke("open-file-dialog");
+    t.mock.timers.tick(999);
+    await new Promise(setImmediate);
+    assert.equal(h.opened.length, 0);
+    t.mock.timers.tick(1);
+    await new Promise(setImmediate);
+    if (!recentAvailable) {
+      assert.equal(h.opened.length, 0);
+      t.mock.timers.tick(999);
+      await new Promise(setImmediate);
+      assert.equal(h.opened.length, 0);
+      t.mock.timers.tick(1);
+      await new Promise(setImmediate);
+    }
+    assert.equal(h.opened.length, 1);
+    assert.equal(h.opened[0].defaultPath, recentAvailable ? recentFolder : h.documents);
+    assert.equal(await opening, null);
+  });
+}
+
 test("cancelled, unwritten and failed saves leave the saved folder unchanged and preserve Save dialog options", async (t) => {
   const h = harness(t, { lastSavedFolder: os.tmpdir() });
   const options = { suggestedName: "script.splitpage", filters: [{ name: "Script", extensions: ["splitpage"] }] };
@@ -117,16 +148,42 @@ test("cancelled, unwritten and failed saves leave the saved folder unchanged and
   assert.deepEqual(h.savedDialogs[0], { defaultPath: options.suggestedName, filters: options.filters });
   h.answers.push(path.join(h.root, "unwritten.splitpage"));
   await h.invoke("save-file-dialog", options);
-  const id = h.fileIds.register(path.join(h.root, "missing", "failed.splitpage"));
-  await assert.rejects(h.invoke("write-file", id, "failed"), { code: "ENOENT" });
+  h.answers.push(path.join(h.root, "missing", "failed.splitpage"));
+  const failed = await h.invoke("save-file-dialog", options);
+  await assert.rejects(h.invoke("write-file", failed.id, "failed"), { code: "ENOENT" });
   await h.invoke("open-file-dialog");
   assert.equal(h.opened[0].defaultPath, os.tmpdir());
 });
 
-test("writing a non-script export does not replace the last saved script folder", async (t) => {
+for (const extension of ["csv", "docx", "txt", "html", "htm", "md", "pdf"]) {
+  test(`exporting ${extension} through a Save dialog does not replace the saved script folder`, async (t) => {
+    const h = harness(t, { lastSavedFolder: os.tmpdir() });
+    h.answers.push(path.join(h.root, "export." + extension));
+    const picked = await h.invoke("save-file-dialog", { suggestedName: "export." + extension });
+    await h.invoke("write-file", picked.id, "export");
+    await h.invoke("open-file-dialog");
+    assert.equal(h.opened[0].defaultPath, os.tmpdir());
+  });
+}
+
+test("autosaving an opened script does not replace the saved script folder", async (t) => {
   const h = harness(t, { lastSavedFolder: os.tmpdir() });
-  const id = h.fileIds.register(path.join(h.root, "export.pdf"));
-  await h.invoke("write-file", id, "%PDF");
+  const id = h.fileIds.register(path.join(h.root, "opened.splitpage"));
+  await h.invoke("write-file", id, "autosave");
   await h.invoke("open-file-dialog");
   assert.equal(h.opened[0].defaultPath, os.tmpdir());
+});
+
+test("autosaving an earlier Save dialog's file does not replace a later Save As folder", async (t) => {
+  const h = harness(t);
+  const laterFolder = path.join(h.root, "later");
+  fs.mkdirSync(laterFolder);
+  h.answers.push(path.join(h.root, "first.splitpage"), path.join(laterFolder, "later.splitpage"));
+  const first = await h.invoke("save-file-dialog", { suggestedName: "first.splitpage" });
+  await h.invoke("write-file", first.id, "first save");
+  const later = await h.invoke("save-file-dialog", { suggestedName: "later.splitpage" });
+  await h.invoke("write-file", later.id, "Save As");
+  await h.invoke("write-file", first.id, "autosave of the first script");
+  await h.invoke("open-file-dialog");
+  assert.equal(h.opened[0].defaultPath, laterFolder);
 });
