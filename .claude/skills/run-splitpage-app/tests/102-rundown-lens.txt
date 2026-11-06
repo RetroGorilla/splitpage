@@ -92,7 +92,7 @@ expect blk(13).getBoundingClientRect().width >= 80
 eval (function(){ var r = blk(13).getBoundingClientRect(); return [r.left, r.width, __x + 20]; })()
 click #rundown .rd-block[data-i="13"]
 wait document.activeElement && document.activeElement.closest && document.activeElement.closest('#rows .row') && document.activeElement.closest('#rows .row').getAttribute('data-id') === 'r13'
-expect (function(){ var r = document.querySelector('#rows .row[data-id="r13"]').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()
+wait (function(){ var r = document.querySelector('#rows .row[data-id="r13"]').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()
 # the playhead is on that scene's block, lensed
 wait !document.querySelector('#rundown .rundown-playhead').hidden
 sleep 300

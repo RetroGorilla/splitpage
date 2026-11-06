@@ -1,0 +1,22 @@
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; var rows = []; for (var i = 0; i < 50; i++) rows.push({ id: 'scroll' + i, visualText: 'Visual ' + i, audioText: 'Beat ' + i + ' with enough words to give it height.', lengthSeconds: 30, status: 'todo' }); F.openFile(new File([JSON.stringify({ schema: 2, title: 'Click scroll', rows: rows })], 'click-scroll.splitpage')); window.row = function(i){ return document.querySelector('#rows .row[data-id="scroll' + i + '"]'); }; window.beat = function(i){ return document.querySelector('#rundown .rd-block[data-row="scroll' + i + '"]'); }; window.pointerClick = function(i){ beat(i).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 })); }; window.nap = function(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }; return true; })()
+wait F.state().title === 'Click scroll' && document.querySelectorAll('#rundown .rd-block').length === 50
+eval (async function(){ window.scrollTo({ top: 0, behavior: 'instant' }); await nap(150); window.__start = scrollY; row(30).scrollIntoView({ block: 'center', behavior: 'instant' }); window.__jump = scrollY; window.scrollTo({ top: __start, behavior: 'instant' }); await nap(150); pointerClick(30); window.__immediate = scrollY; await nap(80); window.__middle = scrollY; await nap(220); window.__final = scrollY; return [__start, __immediate, __middle, __final, __jump]; })()
+expect __jump > 1000 && __immediate === __start
+expect __middle > __start && __middle < __jump
+expect __final === __jump
+expect document.activeElement === row(30).querySelector('.audio-cell .cell-editable')
+eval (async function(){ window.__matchMedia = window.matchMedia; window.matchMedia = function(q){ return /prefers-reduced-motion/.test(q) ? { matches: true } : __matchMedia.call(window, q); }; window.scrollTo({ top: 0, behavior: 'instant' }); await nap(150); row(30).scrollIntoView({ block: 'center', behavior: 'instant' }); window.__reducedJump = scrollY; window.scrollTo({ top: 0, behavior: 'instant' }); await nap(150); pointerClick(30); window.__reduced = scrollY; window.matchMedia = __matchMedia; return [__reduced, __reducedJump]; })()
+expect __reduced === __reducedJump
+eval (async function(){ window.scrollTo({ top: 0, behavior: 'instant' }); await nap(150); pointerClick(30); await nap(70); window.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 })); window.scrollTo({ top: 500, behavior: 'instant' }); await nap(250); window.__wheelStopped = scrollY; return __wheelStopped; })()
+expect __wheelStopped === 500
+eval (async function(){ window.scrollTo({ top: 0, behavior: 'instant' }); await nap(150); pointerClick(30); await nap(70); document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true })); window.__typedAt = scrollY; await nap(250); window.__afterTyping = scrollY; return [__typedAt, __afterTyping]; })()
+expect __typedAt > 0 && __typedAt < __jump && __afterTyping === __typedAt
+eval (async function(){ window.scrollTo({ top: 500, behavior: 'instant' }); await nap(300); row(40).scrollIntoView({ block: 'center', behavior: 'instant' }); window.__secondJump = scrollY; window.scrollTo({ top: 500, behavior: 'instant' }); pointerClick(10); await nap(50); pointerClick(40); await nap(300); window.__secondFinal = scrollY; return [__secondFinal, __secondJump]; })()
+expect __secondFinal === __secondJump && document.activeElement === row(40).querySelector('.audio-cell .cell-editable')
+eval (async function(){ window.scrollTo({ top: 500, behavior: 'instant' }); await nap(300); row(40).scrollIntoView({ block: 'center', behavior: 'instant' }); window.__keyboardJump = scrollY; window.scrollTo({ top: 500, behavior: 'instant' }); beat(40).click(); window.__keyboard = scrollY; return [__keyboard, __keyboardJump]; })()
+expect __keyboard === __keyboardJump
+quit

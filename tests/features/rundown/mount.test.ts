@@ -69,6 +69,23 @@ test("rundown: going to a scene reveals it through the reveal-row action and foc
   owner.dispose();
 });
 
+test("rundown: keyboard activation keeps the existing jump and focuses the beat", () => {
+  const { actions, owner } = setup();
+  const button = document.createElement("button");
+  button.className = "rd-block";
+  button.dataset.row = "r1";
+  document.querySelector(".rundown-blocks")?.append(button);
+  const scrolled: unknown[] = [];
+  const row = document.querySelector<HTMLElement>("#rows .row");
+  assert.ok(row);
+  row.scrollIntoView = (options?: boolean | ScrollIntoViewOptions) => { scrolled.push(options); };
+  button.click();
+  assert.deepEqual(scrolled, [{ block: "center" }]);
+  assert.deepEqual(actions.calls, [{ id: "reveal-row", source: "button", input: "r1" }]);
+  assert.equal(document.activeElement, row.querySelector(".cell-editable"));
+  owner.dispose();
+});
+
 test("rundown: dispose removes its listeners and preference subscription and reports it is no longer mounted", () => {
   const { actions, changes, owner } = setup();
   const toggle = document.querySelector<HTMLButtonElement>(".rundown-toggle");

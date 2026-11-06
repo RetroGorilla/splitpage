@@ -10,6 +10,7 @@ import { exposeTestHook } from "../common/test-hooks.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { RundownControls } from "./actions.ts";
 import type { RundownPorts } from "./ports.ts";
+import { animateRundownClick } from "./click-scroll.ts";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type BeatRow = DocumentView["rows"][number];
@@ -102,6 +103,7 @@ type RundownOwner = RundownControls & {
 };
 
 let ports: RundownPorts;
+let cancelClickScroll: () => void = () => {};
 
 export const RUNDOWN_TAIL_SECONDS = 10;
 const BLOCK_GAP_PX = 2;
@@ -1159,11 +1161,13 @@ function onStripDrop(e: DragEvent): void {
   followMovedBeat(id);
 }
 
-export function goToBeat(rowId: string | null): void {
+export function goToBeat(rowId: string | null, animate = false): void {
+  cancelClickScroll();
   ports.actions.invoke("reveal-row", "button", rowId);
   const rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;
-  rowEl.scrollIntoView({ block: "center" });
+  if (animate) cancelClickScroll = animateRundownClick(rowEl, window);
+  else rowEl.scrollIntoView({ block: "center" });
   const cell = rowEl.querySelector<HTMLElement>(".audio-cell .cell-editable");
   if (cell) cell.focus({ preventScroll: true });
 }
@@ -1208,6 +1212,7 @@ export function startRundown(given: RundownPorts): RundownOwner {
     if (disposed) return;
     disposed = true;
     while (offs.length) (offs.pop() as () => void)();
+    cancelClickScroll();
     holdClear();
     if (state.lens.raf) { cancelAnimationFrame(state.lens.raf); state.lens.raf = 0; }
     (ports as unknown) = null;
@@ -1233,7 +1238,7 @@ export function startRundown(given: RundownPorts): RundownOwner {
   listen(document, "selectionchange", function () { noteCurrentRow(document.activeElement); });
   listen(strip, "click", function (e) {
     const b = (e.target as Element).closest ? (e.target as Element).closest(".rd-block") : null;
-    if (b) goToBeat(b.getAttribute("data-row"));
+    if (b) goToBeat(b.getAttribute("data-row"), e.detail > 0);
   });
   listen(strip, "keydown", function (e) {
     const b = (e.target as Element).closest ? (e.target as Element).closest<HTMLElement>(".rd-block") : null;
