@@ -8,7 +8,7 @@ export interface MicrophoneList {
   readonly named: boolean;
 }
 
-export type MicrophoneSupport = "yes" | "desktop" | "browser";
+export type MicrophoneSupport = "yes" | "desktop" | "relay" | "browser";
 
 export interface MicrophoneDevices {
   readonly support: () => MicrophoneSupport;
@@ -33,6 +33,10 @@ export const UNNAMED_MICROPHONE = "Saved microphone";
 const FIRST_CHROMIUM_WITH_TRACK_RECOGNITION = 135;
 const DESKTOP_PLATFORMS: readonly string[] = Object.freeze(["Windows", "macOS", "Linux"]);
 const VIRTUAL_ENTRIES: readonly string[] = Object.freeze(["default", "communications"]);
+
+export function isDesktopMicrophoneId(id: string): boolean {
+  return /^\{0\.0\.1\.00000000\}\.\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}$/i.test(id);
+}
 
 export function recognitionTakesTrack(brands: readonly BrowserBrand[] | undefined, platform: string | undefined): boolean {
   const chromium = (brands ?? []).find((entry) => entry.brand === "Chromium");

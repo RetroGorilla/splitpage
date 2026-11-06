@@ -108,6 +108,37 @@ wait document.getElementById('pp-voice').classList.contains('is-active')
 jsclick #pp-close
 wait document.getElementById('prompter').hidden
 wait fakeV._voiceCalls.stop === 2
+# with the system default, main is never told a microphone
+expect fakeV._voiceStartArgs.length === 6 && fakeV._voiceStartArgs.every(function (a) { return a.length === 0; })
+
+# --- a chosen microphone goes to main; not connected, or lost, is said (#1162)
+eval (function(){ localStorage.setItem('splitpage-microphone', '{0.0.1.00000000}.{33333333-3333-4333-8333-333333333333}'); return true; })()
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 7
+expect JSON.stringify(fakeV._voiceStartArgs[6]) === JSON.stringify(['{0.0.1.00000000}.{33333333-3333-4333-8333-333333333333}'])
+eval (function(){ fakeV._voiceEmit({ type: 'fallback' }); fakeV._voiceEmit({ type: 'device', name: 'Microphone (Desk Default)' }); fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect document.getElementById('pp-voice-status').textContent === "Listening — Microphone (Desk Default) (your chosen microphone isn't connected)"
+eval (function(){ fakeV._voiceEmit({ type: 'error', code: 'device-lost' }); fakeV._voiceEmit({ type: 'end', reason: 'exited' }); return true; })()
+wait !document.getElementById('pp-voice').classList.contains('is-active')
+expect document.getElementById('pp-voice-status').textContent === 'Your chosen microphone stopped working — pick it again or choose another.'
+sleep 2500
+expect fakeV._voiceCalls.start === 7
+expect localStorage.getItem('splitpage-microphone') === '{0.0.1.00000000}.{33333333-3333-4333-8333-333333333333}'
+# an id that is not a Windows microphone is never sent; the default is used, and said
+eval (function(){ localStorage.setItem('splitpage-microphone', 'dev-from-a-browser'); return true; })()
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 8
+expect fakeV._voiceStartArgs[7].length === 0
+eval (function(){ fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait document.getElementById('pp-voice-status').textContent.indexOf("(your chosen microphone isn't connected)") !== -1
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+wait fakeV._voiceCalls.stop === 3
+eval (function(){ localStorage.removeItem('splitpage-microphone'); return true; })()
 
 # --- a desktop that cannot listen keeps Present in Browser ------------------
 eval (function(){ window.fakeN = D.makeFakeBackend({ voice: true }); window.fakeN._voiceAvailable = false; D.setBackend(window.fakeN); return true; })()

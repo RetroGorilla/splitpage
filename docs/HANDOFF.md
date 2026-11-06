@@ -1136,9 +1136,16 @@ through `preferences().microphone()`. The browser recognizer has no device
 setting, so a chosen device is opened with `getUserMedia({audio: {deviceId:
 {exact}}})` and its track is passed to `recognition.start(track)`, which needs
 Chromium 135 or later on Windows, macOS or Linux (`recognitionTakesTrack`;
-133 ships it switched off); elsewhere, in the desktop
-app and under the desktop relay, the choice is not offered and the system's
-default microphone is used.
+133 ships it switched off); elsewhere, and under the desktop relay, the choice
+is not offered and the system's default microphone is used. In the desktop
+app the value is instead a Windows capture endpoint id (`isDesktopMicrophoneId`,
+`{0.0.1.00000000}.{guid}`): the list comes from `desktop/voice/listen.ps1 -List`
+over `splitpage:voice-microphones`, and `splitpage:voice-start` passes the id
+on as `-Device`, which opens that endpoint through the wave API and feeds the
+recogniser a stream. A chosen endpoint that is not active falls back to the
+default with a `fallback` line; one that goes away mid-session sends
+`device-lost` and the helper exits. An id that is not an endpoint id (one
+saved by a browser) is never sent, and the default is used and said.
 
 ---
 

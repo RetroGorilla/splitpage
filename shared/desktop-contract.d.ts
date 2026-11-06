@@ -174,6 +174,11 @@ export type DesktopWireDownload = { ok: true; state: "ready" } | { ok: false; er
 export type DesktopWireInstall = { ok: true; testMode?: true; quitting?: true } | { ok: false; error: string; message?: string };
 export type DesktopWirePrompter = { ok: true; kind: "file"; voice: "relay" | "browser"; browser?: string } | DesktopWireFailure;
 export type DesktopWireVoiceStart = { ok: true; session: number } | DesktopWireFailure;
+export interface DesktopWireMicrophone {
+  id: string;
+  name: string;
+}
+export type DesktopWireMicrophones = { ok: true; microphones: DesktopWireMicrophone[] } | DesktopWireFailure;
 export interface DesktopWireVoiceEvent {
   type: string;
   session: number;
@@ -246,7 +251,8 @@ export interface DesktopIpcContract {
   "splitpage:prompter-open-in-browser": DesktopChannelCall<[], DesktopWirePrompter>;
   "splitpage:prompter-open-in-chromium": DesktopChannelCall<[], DesktopWirePrompter>;
   "splitpage:voice-status": DesktopChannelCall<[], { available: boolean }>;
-  "splitpage:voice-start": DesktopChannelCall<[], DesktopWireVoiceStart>;
+  "splitpage:voice-start": DesktopChannelCall<[microphone?: string], DesktopWireVoiceStart>;
+  "splitpage:voice-microphones": DesktopChannelCall<[], DesktopWireMicrophones>;
   "splitpage:voice-stop": DesktopChannelCall<[], { ok: true }>;
   "splitpage:set-document-state": DesktopChannelCall<[{ title?: string; dirty?: boolean; pristine?: boolean; docId?: string | null; fileId?: string | null }], void>;
   "splitpage:renderer-ready": DesktopChannelCall<[], void>;

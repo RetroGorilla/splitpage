@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createVoiceHelper, parseHelperLine } = require(path.join(here, "..", "voice-helper.ts"));
+const { createVoiceHelper, parseHelperLine, parseMicrophonesLine } = require(path.join(here, "..", "voice-helper.ts"));
 const FAKE = path.join(here, "fake-voice-helper.mjs");
 
 const cases = [];
@@ -191,6 +192,127 @@ test("a helper that cannot be spawned says so and ends", async () => {
   await until(() => events.some((e) => e.type === "end"));
   assert.deepEqual(events.map((e) => e.type), ["error", "end"]);
   assert.equal(events[0].code, "helper-failed");
+});
+
+const MIC_ONE = "{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}";
+const MIC_TWO = "{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}";
+const FAKE_MICS = JSON.stringify([{ id: MIC_ONE, name: "Microphone (One)" }, { id: MIC_TWO, name: "Microphone (Two)" }]);
+
+async function withMicrophones(fn) {
+  process.env.FAKE_VOICE_MICROPHONES = FAKE_MICS;
+  try { return await fn(); } finally { delete process.env.FAKE_VOICE_MICROPHONES; }
+}
+
+test("parseHelperLine keeps a fallback with nothing else on it, and a lost microphone as an error code", () => {
+  assert.deepEqual(parseHelperLine('{"type":"fallback"}'), { type: "fallback" });
+  assert.deepEqual(parseHelperLine('{"type":"fallback","name":"x","code":"y"}'), { type: "fallback" });
+  assert.deepEqual(parseHelperLine('{"type":"error","code":"device-lost"}'), { type: "error", code: "device-lost" });
+});
+
+test("parseMicrophonesLine keeps only capture endpoint ids with a name, capped and de-duplicated", () => {
+  assert.deepEqual(parseMicrophonesLine(JSON.stringify({ type: "microphones", list: [{ id: MIC_ONE, name: " Microphone (One)\u0000 " }] })),
+    [{ id: MIC_ONE, name: "Microphone (One)" }]);
+  assert.deepEqual(parseMicrophonesLine(JSON.stringify({ type: "microphones", list: [] })), []);
+  const junk = [{ id: "x; calc.exe", name: "Bad" }, { id: "{0.0.0.00000000}.{11111111-1111-4111-8111-111111111111}", name: "Speakers" },
+    { id: MIC_ONE, name: 7 }, { id: MIC_ONE, name: "  " }, null, "x", { id: MIC_TWO, name: "Two" }, { id: MIC_TWO.toUpperCase(), name: "Two again" }];
+  assert.deepEqual(parseMicrophonesLine(JSON.stringify({ type: "microphones", list: junk })), [{ id: MIC_TWO, name: "Two" }]);
+  assert.equal(parseMicrophonesLine(JSON.stringify({ type: "microphones", list: [{ id: MIC_ONE, name: "m".repeat(500) }] }))[0].name.length, 120);
+  const many = Array.from({ length: 100 }, (_, i) => ({ id: "{0.0.1.00000000}.{" + String(i).padStart(8, "0") + "-1111-4111-8111-111111111111}", name: "Mic " + i }));
+  assert.equal(parseMicrophonesLine(JSON.stringify({ type: "microphones", list: many })).length, 64);
+  for (const line of ["", "nope", "[]", '{"type":"microphones"}', '{"type":"microphones","list":{}}', '{"type":"device","list":[]}']) {
+    assert.equal(parseMicrophonesLine(line), null, line);
+  }
+});
+
+test("microphones() asks the helper with -List and returns what it lists", async () => {
+  await withMicrophones(async () => {
+    const { helper } = makeHelper("listen");
+    assert.deepEqual(await helper.microphones(), { ok: true, microphones: [{ id: MIC_ONE, name: "Microphone (One)" }, { id: MIC_TWO, name: "Microphone (Two)" }] });
+    assert.equal(helper.status().running, false, "listing starts no listening session");
+  });
+});
+
+test("microphones() drops junk entries, and asks only once while a list is under way", async () => {
+  await withMicrophones(async () => {
+    let spawns = 0;
+    const { helper } = makeHelper("list-junk", { spawn: (...args) => { spawns++; return spawn(...args); } });
+    const [a, b] = await Promise.all([helper.microphones(), helper.microphones()]);
+    assert.equal(spawns, 1);
+    assert.deepEqual(a, b);
+    assert.deepEqual(a.microphones.map((m) => m.id), [MIC_ONE, MIC_TWO]);
+    await helper.microphones();
+    assert.equal(spawns, 2, "a later call asks again, so a plugged-in microphone shows");
+  });
+});
+
+test("microphones() gives up on a helper that never answers, and kills it", async () => {
+  let child = null;
+  const { helper } = makeHelper("list-silent", { listTimeoutMs: 300, spawn: (...args) => (child = spawn(...args)) });
+  assert.deepEqual(await helper.microphones(), { ok: false, code: "LIST_FAILED" });
+  const alive = () => { try { process.kill(child.pid, 0); return true; } catch { return false; } };
+  await until(() => !alive(), 5000);
+});
+
+test("microphones() without a helper is unavailable", async () => {
+  const helper = createVoiceHelper({ command: () => null, onEvent: () => {} });
+  assert.deepEqual(await helper.microphones(), { ok: false, code: "UNAVAILABLE" });
+});
+
+test("start passes the chosen microphone to the helper as -Device, and the helper's name for it reaches the tab", async () => {
+  await withMicrophones(async () => {
+    const { helper, events } = makeHelper("listen");
+    const answer = helper.start("t1", MIC_TWO);
+    assert.equal(answer.ok, true);
+    await until(() => events.some((e) => e.type === "final"));
+    assert.deepEqual(events.map((e) => e.type), ["device", "start", "interim", "final"]);
+    assert.equal(events[0].name, "Microphone (Two)");
+    helper.stopAll();
+  });
+});
+
+test("start without a microphone passes no -Device, as before", async () => {
+  let args = null;
+  const { helper, events } = makeHelper("listen", { spawn: (file, given, opts) => { args = given; return spawn(file, given, opts); } });
+  helper.start("t1");
+  await until(() => events.some((e) => e.type === "final"));
+  assert.deepEqual(args, [FAKE]);
+  helper.stopAll();
+});
+
+test("a chosen microphone the helper cannot find comes back as a fallback before start", async () => {
+  await withMicrophones(async () => {
+    process.env.FAKE_VOICE_DEVICE = "Microphone (Default)";
+    try {
+      const { helper, events } = makeHelper("listen");
+      helper.start("t1", "{0.0.1.00000000}.{33333333-3333-4333-8333-333333333333}");
+      await until(() => events.some((e) => e.type === "final"));
+      assert.deepEqual(events.map((e) => e.type), ["fallback", "device", "start", "interim", "final"]);
+      assert.equal(events[1].name, "Microphone (Default)");
+      helper.stopAll();
+    } finally {
+      delete process.env.FAKE_VOICE_DEVICE;
+    }
+  });
+});
+
+test("start refuses anything that is not a capture endpoint id, and spawns nothing", async () => {
+  let spawns = 0;
+  const { helper } = makeHelper("listen", { spawn: (...args) => { spawns++; return spawn(...args); } });
+  for (const bad of ["", "-List", "x; calc.exe", MIC_ONE + " -List", "{0.0.0.00000000}.{11111111-1111-4111-8111-111111111111}", 7]) {
+    assert.deepEqual(helper.start("t1", bad), { ok: false, code: "BAD_MICROPHONE" }, String(bad));
+  }
+  assert.equal(spawns, 0);
+});
+
+test("a chosen microphone that goes away ends the session after a device-lost error", async () => {
+  await withMicrophones(async () => {
+    const { helper, events } = makeHelper("lost");
+    helper.start("t1", MIC_ONE);
+    await until(() => events.some((e) => e.type === "end"));
+    assert.deepEqual(events.map((e) => e.type), ["device", "start", "error", "end"]);
+    assert.equal(events[2].code, "device-lost");
+    assert.equal(events[3].reason, "exited");
+  });
 });
 
 const failures = [];

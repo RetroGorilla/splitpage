@@ -923,6 +923,131 @@ test("a track that ends after its session was stopped changes nothing", async ()
   } finally { runtime.dispose(); restore(); }
 });
 
+const DESKTOP_MIC_ONE = "{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}";
+const DESKTOP_MIC_TWO = "{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}";
+
+class DesktopListener {
+  static made: { microphone: string; listener: DesktopListener }[] = [];
+  onstart: (() => void) | null = null;
+  onend: (() => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+  ondevice: ((event: { name?: string; fellBack?: boolean }) => void) | null = null;
+  starts = 0;
+  stops = 0;
+  start() { this.starts++; }
+  stop() { this.stops++; }
+}
+
+function desktopMicrophoneHarness(saved: string) {
+  const made = microphoneHarness(saved);
+  DesktopListener.made = [];
+  const ports: PrompterFeaturePorts = {
+    ...made.ports,
+    desktop: { ...made.ports.desktop, running: () => true },
+    voice: {
+      ...made.ports.voice, known: () => true, available: () => true,
+      createDesktop: (microphone: string) => {
+        const listener = new DesktopListener();
+        DesktopListener.made.push({ microphone, listener });
+        return listener;
+      }
+    },
+    microphones: { ...made.ports.microphones, list: async () => ({ options: [{ id: DESKTOP_MIC_ONE, label: "Mic One" }, { id: DESKTOP_MIC_TWO, label: "Mic Two" }], named: true }) }
+  };
+  return { ...made, ports };
+}
+
+function lastDesktopListener(): DesktopListener {
+  const last = DesktopListener.made.at(-1);
+  assert.ok(last, "a desktop listener was made");
+  return last.listener;
+}
+
+test("in the desktop app the saved microphone goes to Windows' listener, and the status names it", async () => {
+  const { ports } = desktopMicrophoneHarness(DESKTOP_MIC_TWO);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.deepEqual(DesktopListener.made.map((m) => m.microphone), [DESKTOP_MIC_TWO]);
+    const listener = lastDesktopListener();
+    assert.equal(listener.starts, 1);
+    listener.ondevice?.({ name: "Mic Two" });
+    listener.onstart?.();
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); }
+});
+
+test("in the desktop app the system default sends no microphone, as before", async () => {
+  const { ports } = desktopMicrophoneHarness("");
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.deepEqual(DesktopListener.made.map((m) => m.microphone), [""]);
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); }
+});
+
+test("in the desktop app a chosen microphone that is not connected says the default is used, with or without its name", async () => {
+  for (const name of ["Built-in Mic", ""]) {
+    const { ports, choice } = desktopMicrophoneHarness(DESKTOP_MIC_ONE);
+    const runtime = startPrompter(ports);
+    try {
+      runtime.buildPrompterContent();
+      await runtime.startVoiceFollow();
+      const listener = lastDesktopListener();
+      listener.ondevice?.({ fellBack: true });
+      if (name) listener.ondevice?.({ name });
+      listener.onstart?.();
+      assert.equal(document.getElementById("pp-voice-status")?.textContent,
+        (name ? "Listening — " + name : "Listening…") + " (your chosen microphone isn't connected)");
+      assert.equal(choice.saved, DESKTOP_MIC_ONE, "the choice is kept for when it comes back");
+    } finally { runtime.stopVoiceFollow(); runtime.dispose(); }
+  }
+});
+
+test("in the desktop app a chosen microphone that goes away ends Follow My Voice with a message and no restart", async () => {
+  const { ports, h } = desktopMicrophoneHarness(DESKTOP_MIC_ONE);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    const listener = lastDesktopListener();
+    listener.onstart?.();
+    assert.equal(h.state.voice, true);
+    listener.onerror?.({ error: "device-lost" });
+    listener.onend?.();
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.equal(h.state.voice, false);
+    assert.equal(listener.starts, 1, "no restart onto another microphone");
+    assert.equal(DesktopListener.made.length, 1);
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Your chosen microphone stopped working — pick it again or choose another.");
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); }
+});
+
+test("in the desktop app the list shows Windows' microphones, and a pick while following restarts the listener on it", async () => {
+  const { ports, choice } = desktopMicrophoneHarness(DESKTOP_MIC_ONE);
+  const runtime = startPrompter(ports);
+  const mounted = mountPrompter({ window: win as unknown as Window, ports: runtime });
+  const select = () => document.getElementById("pp-mic") as HTMLSelectElement;
+  try {
+    runtime.openPrompter();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(select().hidden, false);
+    assert.deepEqual(Array.from(select().options, o => [o.value, o.textContent]), [["", "System default"], [DESKTOP_MIC_ONE, "Mic One"], [DESKTOP_MIC_TWO, "Mic Two"]]);
+    assert.equal(select().value, DESKTOP_MIC_ONE);
+    await runtime.startVoiceFollow();
+    const first = lastDesktopListener();
+    first.onstart?.();
+    select().value = DESKTOP_MIC_TWO;
+    select().dispatchEvent(new ((select().ownerDocument.defaultView) as Window & typeof globalThis).Event("change", { bubbles: true }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(choice.saved, DESKTOP_MIC_TWO);
+    assert.equal(first.stops, 1, "the old listener is stopped");
+    assert.deepEqual(DesktopListener.made.map((m) => m.microphone), [DESKTOP_MIC_ONE, DESKTOP_MIC_TWO]);
+  } finally { runtime.stopVoiceFollow(); mounted.dispose(); runtime.dispose(); }
+});
+
 test("a microphone chosen in another tab restarts a running Follow My Voice, and the same choice again does not", async () => {
   const { ports, heard, choice } = microphoneHarness("dev-1");
   const requests: MicRequest[] = [];

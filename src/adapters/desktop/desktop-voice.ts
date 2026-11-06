@@ -22,6 +22,8 @@ type DesktopRecognition = PrompterRecognition & {
 };
 
 import { desktopPort } from "./desktop-port.ts";
+import { isDesktopMicrophoneId, microphoneList } from "../../application/microphones.ts";
+import type { MicrophoneList } from "../../application/microphones.ts";
 
 let desktopVoice: { available: boolean } | null = null;
 let desktopVoiceAsking: Promise<{ available: boolean }> | null = null;
@@ -77,8 +79,23 @@ function wireVoiceEvents(bridge: DesktopPort | null) {
 
 const VOICE_START_ERRORS: Record<string, string> = { UNAVAILABLE: "unavailable", SPAWN_FAILED: "helper-failed", NO_TAB: "helper-failed" };
 
-export function createDesktopRecognition() {
+export async function listDesktopMicrophones(): Promise<MicrophoneList> {
   const bridge = desktopPort();
+  if (!bridge || typeof bridge.voiceMicrophones !== "function") return microphoneList([]);
+  try {
+    const answer = await bridge.voiceMicrophones();
+    if (!answer || !answer.ok || !Array.isArray(answer.microphones)) return microphoneList([]);
+    return microphoneList(answer.microphones.filter((entry) => isDesktopMicrophoneId(entry.id))
+      .map((entry) => ({ deviceId: entry.id, label: entry.name })));
+  } catch (e) {
+    return microphoneList([]);
+  }
+}
+
+export function createDesktopRecognition(microphone: string) {
+  const bridge = desktopPort();
+  const wanted = isDesktopMicrophoneId(microphone) ? microphone : undefined;
+  const unusable = !!microphone && !wanted;
   wireVoiceEvents(bridge);
   const rec: DesktopRecognition = {
     continuous: true,
@@ -110,6 +127,8 @@ export function createDesktopRecognition() {
         rec._fire("onstart");
       } else if (event.type === "device") {
         if (typeof event.name === "string") rec._fire("ondevice", { name: event.name });
+      } else if (event.type === "fallback") {
+        rec._fire("ondevice", { fellBack: true });
       } else if (event.type === "interim" || event.type === "final") {
         if (typeof event.text !== "string") return;
         const result = { isFinal: event.type === "final", length: 1, 0: { transcript: event.text } };
@@ -129,8 +148,9 @@ export function createDesktopRecognition() {
       rec._session = null;
       rec._early = [];
       activeDesktopRecognition = rec;
+      if (unusable) rec._fire("ondevice", { fellBack: true });
       Promise.resolve()
-        .then(function () { return (bridge as DesktopPort).voiceStart(); })
+        .then(function () { return wanted ? (bridge as DesktopPort).voiceStart(wanted) : (bridge as DesktopPort).voiceStart(); })
         .catch(function (): Awaited<ReturnType<DesktopPort["voiceStart"]>> { return { ok: false, code: "SPAWN_FAILED" }; })
         .then(function (answer) {
           if (!rec._running || activeDesktopRecognition !== rec) {

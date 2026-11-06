@@ -70,6 +70,7 @@ function importAvailable() {
 }
 
 const MIC_NOTE_DESKTOP = "In the desktop app, Follow My Voice listens on the Windows default microphone. Change it in Windows Settings › System › Sound.";
+const MIC_NOTE_RELAY = "Follow My Voice in this window listens through the Splitpage desktop app, on the Windows default microphone. Change it in Windows Settings › System › Sound.";
 const MIC_NOTE_BROWSER = "This browser listens on your system's default microphone for Follow My Voice. Chrome and Edge can use a different one.";
 const MIC_HINT_NAMED = "Used by Follow My Voice. The teleprompter has the same choice.";
 const MIC_HINT_UNNAMED = "Microphone names appear once Follow My Voice has been allowed to use the microphone.";
@@ -79,7 +80,7 @@ function microphoneHtml() {
   const given = ports as SettingsPorts;
   const support = given.microphones.support();
   if (support !== "yes") {
-    return '<p class="settings-hint" id="settings-microphone-note">' + escapeHtml(support === "desktop" ? MIC_NOTE_DESKTOP : MIC_NOTE_BROWSER) + '</p>';
+    return '<p class="settings-hint" id="settings-microphone-note">' + escapeHtml(support === "desktop" ? MIC_NOTE_DESKTOP : support === "relay" ? MIC_NOTE_RELAY : MIC_NOTE_BROWSER) + '</p>';
   }
   const saved = given.preferences.microphone();
   return '<div class="settings-field settings-inline">' +
@@ -97,7 +98,8 @@ function loadMicrophones() {
   const owner = ports;
   if (!owner || owner.microphones.support() !== "yes") return;
   owner.microphones.list().then(function (list) {
-    if (ports !== owner || JSON.stringify(list) === JSON.stringify(microphoneList)) return;
+    if (ports !== owner) return;
+    if (JSON.stringify(list) === JSON.stringify(microphoneList) && !document.getElementById("settings-microphone-note")) return;
     microphoneList = list;
     if (settingsOpen()) renderSettings("microphone");
   });

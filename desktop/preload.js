@@ -320,8 +320,12 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:voice-status");
     },
 
-    voiceStart() {
-      return invoke("splitpage:voice-start");
+    voiceStart(microphone) {
+      return microphone === undefined ? invoke("splitpage:voice-start") : invoke("splitpage:voice-start", microphone);
+    },
+
+    voiceMicrophones() {
+      return invoke("splitpage:voice-microphones");
     },
 
     voiceStop() {
