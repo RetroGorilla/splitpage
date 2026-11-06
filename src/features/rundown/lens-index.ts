@@ -1,7 +1,3 @@
-export const LOCK_MARGIN_PX = 8;
-export const LOCK_EDGE_PX = 24;
-const LOCK_HIDDEN_PX = 6;
-
 export interface IndexRef {
   readonly x: number;
   readonly q: number;
@@ -64,27 +60,4 @@ export function lensIndexFit(index: number, x: number, layout: LayoutAt, beats: 
     q = lo;
   }
   return q;
-}
-
-export function lensLockAnchor(knots: readonly number[], beat: number, trackWidth: number, minWidth: number): number {
-  const shown = (knots[beat + 1] as number) - (knots[beat] as number);
-  const half = Math.max(shown, minWidth) / 2;
-  const centre = ((knots[beat] as number) + (knots[beat + 1] as number)) / 2;
-  return half * 2 >= trackWidth ? trackWidth / 2 : clamp(centre, half, trackWidth - half);
-}
-
-export function lensLockStep(knots: readonly number[], lock: number, x: number, trackWidth: number): number {
-  const n = knots.length - 2;
-  if (n < 1) return -1;
-  let held = lock >= 0 && lock < n ? lock : -1;
-  if (held >= 0) {
-    const before = held > 0 ? ((knots[held] as number) - (knots[held - 1] as number)) / 2 : 0;
-    const after = ((knots[held + 2] as number) - (knots[held + 1] as number)) / 2;
-    const inside = x >= (knots[held] as number) - Math.min(LOCK_MARGIN_PX, before) && x < (knots[held + 1] as number) + Math.min(LOCK_MARGIN_PX, after);
-    if (!inside) held = -1;
-  }
-  if (held < 0) held = Math.min(n - 1, Math.floor(lensIndexAt(knots, x)));
-  if (x >= trackWidth - LOCK_EDGE_PX && held < n - 1 && (knots[held + 1] as number) >= trackWidth - LOCK_HIDDEN_PX) held++;
-  else if (x <= LOCK_EDGE_PX && held > 0 && (knots[held] as number) <= LOCK_HIDDEN_PX) held--;
-  return held;
 }

@@ -1,6 +1,6 @@
 import type { SettingsPorts } from "./ports.ts";
 import { getSavedAuthorName } from "../../application/comment-author.ts";
-import { RUNDOWN_LENS_MODES, SCRIPT_SCALE_MAX, SCRIPT_SCALE_MIN, WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
+import { SCRIPT_SCALE_MAX, SCRIPT_SCALE_MIN, WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
 import { formatClock } from "../../../shared/clock.ts";
@@ -115,8 +115,6 @@ function bodyHtml() {
       segHtml("clock", "Clock", [["system", "System"], ["12", "12-hour"], ["24", "24-hour"]], clock) +
       '<p class="settings-hint settings-clock-example" id="settings-clock-example">' + escapeHtml(clockExample(clock)) + '</p>' +
       switchHtml("settings-rundown-min", "Minimise the rundown strip", "Keep the strip of beats under the header small.", (ports as SettingsPorts).preferences.rundownMin()) +
-      segHtml("rundown-lens", "Rundown lens (test)", [["current", "Current"], ["index", "Index"], ["lock", "Lock-on"]], (ports as SettingsPorts).preferences.rundownLens()) +
-      '<p class="settings-hint">Temporary: two ways to try picking short beats on the rundown. Current is how it works today.</p>' +
       switchHtml("settings-tag-icons", "Show icons on tags",
         "Put a small icon for its category before each tag, as well as its colour.", (ports as SettingsPorts).preferences.tagIcons())) +
     section("Editor",
@@ -262,11 +260,6 @@ function applyChange(target: HTMLInputElement) {
   const id = target.id, name = target.name;
   if (name === "settings-theme") { (ports as SettingsPorts).preferences.setTheme(target.value); return; }
   if (name === "settings-clock") { (ports as SettingsPorts).preferences.setClock(target.value); return; }
-  if (name === "settings-rundown-lens") {
-    const mode = RUNDOWN_LENS_MODES.find(function (m) { return m === target.value; });
-    if (mode) (ports as SettingsPorts).preferences.setRundownLens(mode);
-    return;
-  }
   if (name === "settings-person-color") { (ports as SettingsPorts).preferences.setMyColor(target.value); return; }
   if (id === "settings-rundown-min") { (ports as SettingsPorts).preferences.setRundownMin(target.checked); return; }
   if (id === "settings-tag-icons") { (ports as SettingsPorts).preferences.setTagIcons(target.checked); return; }

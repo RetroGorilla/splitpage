@@ -8,8 +8,6 @@ export const SCRIPT_SCALE_MIN = 0.7;
 export const SCRIPT_SCALE_MAX = 2;
 export const CLOCK_MODES: readonly string[] = Object.freeze(["system", "12", "24"]);
 export const THEME_MODES: readonly string[] = Object.freeze(["system", "light", "dark"]);
-export const RUNDOWN_LENS_MODES = Object.freeze(["current", "index", "lock"] as const);
-export type RundownLensMode = (typeof RUNDOWN_LENS_MODES)[number];
 const MICROPHONE_ID_MAX = 512;
 
 const KEYS = Object.freeze({
@@ -28,7 +26,6 @@ const KEYS = Object.freeze({
   prompterFlip: "splitpage-prompter-flip",
   prompterMirror: "splitpage-prompter-mirror",
   prompterSceneMode: "splitpage-prompter-scene-mode",
-  rundownLens: "splitpage-rundown-lens",
   rundownMin: "splitpage-rundown-min",
   scriptScale: "splitpage-script-scale",
   tagIcons: "splitpage-tag-icons",
@@ -115,8 +112,6 @@ export interface Preferences {
   readonly setMyColor: (color: string | null) => void;
   readonly defaultWpm: () => number;
   readonly setDefaultWpm: (wpm: number) => void;
-  readonly rundownLens: () => RundownLensMode;
-  readonly setRundownLens: (mode: RundownLensMode) => void;
   readonly rundownMin: () => boolean;
   readonly setRundownMin: (on: boolean) => void;
   readonly tagIcons: () => boolean;
@@ -333,11 +328,6 @@ export function createPreferences(ports: PreferencePorts): Preferences {
       return isFinite(n) && n >= 60 && n <= 400 ? n : 150;
     },
     setDefaultWpm: function (wpm: number): void { announce(KEYS.defaultWpm, wpm === 150 ? null : String(wpm)); },
-    rundownLens: function (): RundownLensMode {
-      const v = read(KEYS.rundownLens);
-      return v === "index" || v === "lock" ? v : "current";
-    },
-    setRundownLens: function (mode: RundownLensMode): void { announce(KEYS.rundownLens, mode === "current" ? null : mode); },
     rundownMin: function (): boolean { return read(KEYS.rundownMin) === "1"; },
     setRundownMin: function (on: boolean): void { announce(KEYS.rundownMin, on ? "1" : "0"); },
     tagIcons: function (): boolean { return read(KEYS.tagIcons) === "1"; },

@@ -1,17 +1,13 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LENS_MIN_PX, rundownLens, rundownLensIndex, rundownRestLayout } from "../features/rundown/rundown.ts";
+import { rundownLensIndex, rundownRestLayout } from "../features/rundown/rundown.ts";
 import {
-  LOCK_EDGE_PX,
-  LOCK_MARGIN_PX,
   lensIndexAt,
   lensIndexFit,
   lensIndexMap,
-  lensLockAnchor,
-  lensLockStep,
   lensPointAt
-} from "../features/rundown/lens-trial.ts";
+} from "../features/rundown/lens-index.ts";
 
 function script(n, secondsOf) {
   return Array.from({ length: n }, (_, i) => ({ seconds: secondsOf(i), status: "todo" }));
@@ -29,23 +25,11 @@ function rest(beats, width) {
   return { U: lay.knots, n: beats.length, W: width };
 }
 
-const widthOf = (K, i) => K[i + 1] - K[i];
 
 function ordered(K) {
   for (let i = 1; i < K.length; i++) if (K[i] < K[i - 1] - 1e-9) return false;
   return true;
 }
-
-test("the index lens is the same lens: a focus given as a rest position or as its index draws the same strip", () => {
-  const { U, W } = rest(SCRIPTS.mixed, 1360);
-  for (const p of [0, 3, 211.5, 680, 1100, W - 8]) {
-    for (const a of [p, p - 60, p + 90, 0, W]) {
-      const byPosition = rundownLens(U, p, a);
-      const byIndex = rundownLensIndex(U, lensIndexAt(U, p), a);
-      byPosition.forEach((k, i) => assert.ok(Math.abs(k - byIndex[i]) < 1e-9, "knot " + i + " at " + p + "/" + a));
-    }
-  }
-});
 
 test("index and position read each other back on a lensed strip, and clamp at its two ends", () => {
   const { U, n } = rest(SCRIPTS.alternating, 1300);
@@ -146,103 +130,4 @@ test("index lens: the first and the last beat can be reached at the two ends of 
     assert.equal(Math.floor(first), 0, name);
     assert.ok(Math.floor(last) >= base.n - 1, name + ": the pointer at the right end is over beat " + Math.floor(last));
   }
-});
-
-test("lock: the locked beat holds while the pointer stays inside it, with a margin", () => {
-  const { U, n, W } = rest(SCRIPTS.alternating, 1300);
-  const T = rundownLensIndex(U, 14.5, 650);
-  const k = 14;
-  assert.equal(lensLockStep(T, k, (T[k] + T[k + 1]) / 2, W), k);
-  assert.equal(lensLockStep(T, k, T[k] - LOCK_MARGIN_PX + 0.5, W), k, "just outside on the left, inside the margin");
-  assert.equal(lensLockStep(T, k, T[k + 1] + LOCK_MARGIN_PX - 0.5, W), k, "just outside on the right, inside the margin");
-  assert.equal(lensLockStep(T, k, T[k + 1] + LOCK_MARGIN_PX + 0.5, W), k + 1, "past the margin, the beat under the pointer");
-  assert.equal(lensLockStep(T, k, T[k] - LOCK_MARGIN_PX - 0.5, W), k - 1);
-  assert.equal(lensLockStep(T, -1, (T[3] + T[4]) / 2, W), 3, "no lock yet: the beat under the pointer");
-  assert.equal(lensLockStep(T, 2 * n, 600, W), Math.floor(lensIndexAt(T, 600)), "a stale lock is dropped");
-});
-
-test("lock: the margin never swallows a narrow neighbour", () => {
-  const { U, W } = rest(SCRIPTS.alternating, 1300);
-  const T = rundownLensIndex(U, 14.5, 650);
-  const wide = 5, narrow = 4;
-  assert.ok(widthOf(T, narrow) < 2 * LOCK_MARGIN_PX, "the test's neighbour is narrow: " + widthOf(T, narrow));
-  assert.ok(widthOf(T, wide) > 2 * LOCK_MARGIN_PX);
-  const inNeighbour = T[wide] - widthOf(T, narrow) / 2 - 0.5;
-  assert.equal(lensLockStep(T, wide, inNeighbour, W), narrow, "past the middle of the narrow neighbour, the lock moves to it");
-  assert.equal(lensLockStep(T, wide, T[wide] - widthOf(T, narrow) / 2 + 0.5, W), wide, "short of its middle it holds");
-});
-
-test("lock: a pointer jittering across a boundary does not flip the lock back and forth", () => {
-  const { U, W } = rest(SCRIPTS.mixed, 1360);
-  let lock = -1;
-  let T = U;
-  let moves = 0;
-  const start = 700;
-  for (let k = 0; k < 400; k++) {
-    const x = start + Math.sin(k / 3) * 4;
-    const next = lensLockStep(T, lock, x, W);
-    if (next !== lock) {
-      moves++;
-      lock = next;
-      T = rundownLensIndex(U, lock + 0.5, lensLockAnchor(T, lock, W, LENS_MIN_PX));
-    }
-  }
-  assert.ok(moves <= 1, "the lock moved " + moves + " times");
-  assert.equal(lock, Math.floor(lensIndexAt(U, start)));
-});
-
-test("lock: the pointer stays inside the beat it just locked, however narrow that beat was", () => {
-  for (const name of ["alternating", "mixed"]) {
-    const { U, n, W } = rest(SCRIPTS[name], 1360);
-    let lock = -1;
-    let T = U;
-    for (let x = 0; x <= W; x += 1.5) {
-      const next = lensLockStep(T, lock, x, W);
-      if (next !== lock) {
-        const anchor = lensLockAnchor(T, next, W, LENS_MIN_PX);
-        lock = next;
-        T = rundownLensIndex(U, lock + 0.5, anchor);
-      }
-      assert.ok(ordered(T));
-      assert.ok(x >= T[lock] - LOCK_MARGIN_PX - 1e-9 && x < T[lock + 1] + LOCK_MARGIN_PX + 1e-9, name + ": beat " + lock + " is [" + T[lock].toFixed(1) + ", " + T[lock + 1].toFixed(1) + "] and the pointer " + x);
-    }
-    assert.equal(n, U.length - 2);
-  }
-});
-
-test("lock: at the track's right end the lock walks on to the last beat, which ends up on the track", () => {
-  const { U, n, W } = rest(SCRIPTS.alternating, 1300);
-  let lock = 22;
-  let T = rundownLensIndex(U, lock + 0.5, lensLockAnchor(U, lock, W, LENS_MIN_PX));
-  const x = W - 2;
-  for (let frame = 0; frame < 3 * n; frame++) {
-    const next = lensLockStep(T, lock, x, W);
-    if (next === lock) break;
-    const anchor = lensLockAnchor(T, next, W, LENS_MIN_PX);
-    lock = next;
-    T = rundownLensIndex(U, lock + 0.5, anchor);
-  }
-  assert.equal(lock, n - 1);
-  assert.ok(T[n - 1] < W - 40 && T[n] <= W + 1, "the last beat is on the track: " + T[n - 1].toFixed(1) + " to " + T[n].toFixed(1));
-  assert.ok(x >= T[n - 1] && x < T[n + 1] + 1);
-  let back = n - 1;
-  let L = T;
-  for (let frame = 0; frame < 3 * n; frame++) {
-    const next = lensLockStep(L, back, 2, W);
-    if (next === back) break;
-    const anchor = lensLockAnchor(L, next, W, LENS_MIN_PX);
-    back = next;
-    L = rundownLensIndex(U, back + 0.5, anchor);
-  }
-  assert.equal(back, 0);
-  assert.ok(LOCK_EDGE_PX > 0);
-});
-
-test("lock: the anchor keeps the whole locked beat on the track", () => {
-  const { U, n, W } = rest(SCRIPTS.alternating, 1300);
-  for (let i = 0; i < n; i++) {
-    const a = lensLockAnchor(U, i, W, LENS_MIN_PX);
-    assert.ok(a >= LENS_MIN_PX / 2 - 1e-9 && a <= W - LENS_MIN_PX / 2 + 1e-9, "beat " + i + " anchored at " + a);
-  }
-  assert.equal(lensLockAnchor([0, 100, 200, 300], 0, 80, 96), 40, "a track narrower than the lens centres it");
 });

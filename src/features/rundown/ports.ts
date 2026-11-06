@@ -14,7 +14,6 @@ export interface RundownPorts {
   readonly cells: Pick<CellEditing<Element>, "moveRow">;
   readonly actions: Pick<ActionRegistry, "invoke">;
   readonly minimized: Pick<Preferences, "rundownMin" | "setRundownMin">;
-  readonly lensTrial: Pick<Preferences, "rundownLens">;
   readonly changes: PreferenceChanges;
 }
 

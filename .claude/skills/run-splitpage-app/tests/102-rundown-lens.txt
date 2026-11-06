@@ -75,29 +75,24 @@ expect (function(){ var b = blk(15).getBoundingClientRect(); return Array.protot
 expect window.__muts === 0
 expect Array.prototype.every.call(document.querySelectorAll('#rundown .rd-block'), function(b, i){ return b === window.__nodes[i]; })
 
-# --- a slow move keeps the scene under the pointer ----------------------------
 eval (async function(){ for (var k = 1; k <= 20; k++) { move(__x + k); await new Promise(function(r){ setTimeout(r, 18); }); } return under(__x + 20); })()
 sleep 300
-expect under(__x + 20) === 13
+expect under(__x + 20) === 14
 expect window.__muts === 0
-# #199: stopped, the lens comes to rest centred on the pointer — not left
-# off to one side of it — with the sliver still under it (LENS_RECENTER_MS is
-# 400ms: three of them)
 sleep 1200
 expect Math.abs(RT.lens().a - (__x + 20 - track().getBoundingClientRect().left)) < 8
-expect under(__x + 20) === 13
-expect blk(13).getBoundingClientRect().width >= 80
+expect under(__x + 20) === 14
+expect blk(14).getBoundingClientRect().width >= 80
 
-# --- a real click lands on what is under the pointer and goes to the scene ----
-eval (function(){ var r = blk(13).getBoundingClientRect(); return [r.left, r.width, __x + 20]; })()
-click #rundown .rd-block[data-i="13"]
-wait document.activeElement && document.activeElement.closest && document.activeElement.closest('#rows .row') && document.activeElement.closest('#rows .row').getAttribute('data-id') === 'r13'
-expect (function(){ var r = document.querySelector('#rows .row[data-id="r13"]').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()
-# the playhead is on that scene's block, lensed
+eval (function(){ var r = blk(14).getBoundingClientRect(); return [r.left, r.width, __x + 20]; })()
+eval window.__clickPoint = { x: __x + 20, y: track().getBoundingClientRect().top + 18 }
+mouse click window.__clickPoint
+wait document.activeElement && document.activeElement.closest && document.activeElement.closest('#rows .row') && document.activeElement.closest('#rows .row').getAttribute('data-id') === 'r14'
+expect (function(){ var r = document.querySelector('#rows .row[data-id="r14"]').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()
 wait !document.querySelector('#rundown .rundown-playhead').hidden
 sleep 300
-expect Math.abs(parseFloat(document.querySelector('#rundown .rundown-playhead').style.left) - (parseFloat(blk(13).style.left) - 1)) < 0.6
-expect blk(13).classList.contains('is-current')
+expect Math.abs(parseFloat(document.querySelector('#rundown .rundown-playhead').style.left) - (parseFloat(blk(14).style.left) - 1)) < 0.6
+expect blk(14).classList.contains('is-current')
 
 # --- leaving the strip puts every block back exactly --------------------------
 eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))

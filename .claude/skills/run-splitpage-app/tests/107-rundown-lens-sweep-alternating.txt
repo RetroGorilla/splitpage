@@ -1,48 +1,20 @@
-# Rundown lens sweep (issue #262), script (a): 30 beats alternating 2s and 180s.
-# How much pointer travel each beat gets while a pointer crosses the whole bar at a constant speed,
-# for the three settings of the temporary Settings row "Rundown lens (test)": current, index,
-# lock. The pointer is moved with one PointerEvent per animation frame (pointerType "mouse",
-# as in suite 102), and the beat under it is read from the painted knots after the lens has
-# drawn that move.
-#
-# Per script and setting: a slow sweep (150 px/s) and a medium one (480 px/s) left to right,
-# each followed by 1.5s at the right end; then four stops, each approached at 120 or 480
-# px/s from the left or the right and held, comparing the beat drawn under the pointer
-# 200ms after the stop with the one drawn 1.6s later. The numbers per beat: the pointer
-# travel (px) while that beat was the one drawn under the pointer; shortMed is the median
-# over the beats under 24px at rest. A full sweep is one bar wide (about 1300px), so n beats
-# cannot average more than 1300/n px: 43 for 30 beats, 8.7 for 150. The "current" lines are
-# printed and not gated: they are the baseline #262 is about. Suites 107, 108 and 109 share
-# these helpers and differ in the script.
 open
 viewport 1400 900
 goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ window.F = window.__splitpageFormats; window.RT = window.__rundownTest; window.T = window.__settingsTest; window.__raf0 = window.requestAnimationFrame.bind(window); window.track = function(){ return document.querySelector('#rundown .rundown-track'); }; window.move = function(x){ var r = track().getBoundingClientRect(); track().dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.left + x, clientY: r.top + 18, pointerType: 'mouse' })); }; window.leave = function(){ track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' })); }; window.nap = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }; window.frame = function(){ return new Promise(function(r){ __raf0(function(){ __raf0(r); }); }); }; window.drawn = function(x){ var r = track().getBoundingClientRect(); var el = document.elementFromPoint(r.left + x, r.top + 18); var b = el && el.closest && el.closest('.rd-block'); return b ? Number(b.getAttribute('data-i')) : -1; }; window.drawnNear = function(x){ var d = drawn(x); return d >= 0 ? d : drawn(x - 1) >= 0 ? drawn(x - 1) : drawn(x + 1); }; window.beatOf = function(x){ var L = RT.lens(), K = L.Z || L.X, n = K.length - 2; for (var i = 0; i < n; i++) if (x >= K[i] && x < K[i + 1]) return i; return -1; }; window.untilRest = async function(){ for (var i = 0; i < 40 && RT.lens().Z !== null; i++) await nap(50); return RT.lens().Z === null; }; window.inOrder = function(r){ return r.end === r.last && r.back === 0 && r.skipped === 0; }; window.setLens = function(v){ T.open(); var r = document.querySelector('#settings-modal input[name="settings-rundown-lens"][value="' + v + '"]'); r.click(); var ok = r.checked; T.close(); leave(); return ok; }; return true; })()
+eval (function(){ window.F = window.__splitpageFormats; window.RT = window.__rundownTest; window.__raf0 = window.requestAnimationFrame.bind(window); window.track = function(){ return document.querySelector('#rundown .rundown-track'); }; window.move = function(x){ var r = track().getBoundingClientRect(); track().dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.left + x, clientY: r.top + 18, pointerType: 'mouse' })); }; window.leave = function(){ track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' })); }; window.nap = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }; window.frame = function(){ return new Promise(function(r){ __raf0(function(){ __raf0(r); }); }); }; window.drawn = function(x){ var r = track().getBoundingClientRect(); var el = document.elementFromPoint(r.left + x, r.top + 18); var b = el && el.closest && el.closest('.rd-block'); return b ? Number(b.getAttribute('data-i')) : -1; }; window.drawnNear = function(x){ var d = drawn(x); return d >= 0 ? d : drawn(x - 1) >= 0 ? drawn(x - 1) : drawn(x + 1); }; window.beatOf = function(x){ var L = RT.lens(), K = L.Z || L.X, n = K.length - 2; for (var i = 0; i < n; i++) if (x >= K[i] && x < K[i + 1]) return i; return -1; }; window.untilRest = async function(){ for (var i = 0; i < 40 && RT.lens().Z !== null; i++) await nap(50); return RT.lens().Z === null; }; window.inOrder = function(r){ return r.end === r.last && r.back === 0 && r.skipped === 0; }; return true; })()
 eval (function(){ window.sweep = async function(speed, dir){ leave(); await untilRest(); return new Promise(function(resolve){ var L = RT.lens(), W = L.W, n = L.X.length - 2, x0 = dir > 0 ? 1 : W - 2, x1 = dir > 0 ? W - 2 : 1, xs = [], beats = [], t0 = null, tEnd = null, moveMs = 0, appMs = 0, appCalls = 0; window.requestAnimationFrame = function(cb){ return __raf0(function(t){ var s = performance.now(); cb(t); appMs += performance.now() - s; appCalls++; }); }; function step(t){ if (t0 === null) t0 = t; if (xs.length) beats.push(beatOf(xs[xs.length - 1])); if (tEnd !== null) { if (t - tEnd >= 1500) { var end = beatOf(x1); window.requestAnimationFrame = __raf0; leave(); finish(end); return; } __raf0(step); return; } var x = x0 + dir * speed * (t - t0) / 1000; if (dir > 0 ? x >= x1 : x <= x1) { x = x1; tEnd = t; } var s = performance.now(); move(x); moveMs += performance.now() - s; xs.push(x); __raf0(step); } function finish(end){ var travel = []; for (var i = 0; i < n; i++) travel.push(0); for (var k = 1; k < xs.length; k++) if (beats[k] >= 0) travel[beats[k]] += Math.abs(xs[k] - xs[k - 1]); var seq = [], skipped = 0, back = 0; beats.forEach(function(b){ if (b >= 0 && (!seq.length || seq[seq.length - 1] !== b)) seq.push(b); }); for (var j = 1; j < seq.length; j++) { var d = (seq[j] - seq[j - 1]) * dir; if (d > 1) skipped += d - 1; if (d < 0) back++; } var r1 = function(v){ return Math.round(v * 10) / 10; }, med = function(a){ var s = a.slice().sort(function(p, q){ return p - q; }); return s.length ? s[s.length >> 1] : 0; }; var shortT = travel.filter(function(v, i){ return L.X[i + 1] - L.X[i] < 24; }); resolve({ n: n, speed: speed, min: r1(Math.min.apply(null, travel)), median: r1(med(travel)), shortN: shortT.length, shortMin: r1(shortT.length ? Math.min.apply(null, shortT) : 0), shortMed: r1(med(shortT)), below24: travel.filter(function(v){ return v < 24; }).length, missed: travel.filter(function(v){ return v === 0; }).length, skipped: skipped, back: back, end: end, last: n - 1, moveUs: Math.round(moveMs / xs.length * 1000), frameUs: Math.round(appMs / Math.max(1, appCalls) * 1000) }); } __raf0(step); }); }; return true; })()
 eval (function(){ window.stops = async function(){ leave(); await untilRest(); var W = RT.lens().W, slid = 0, bad = 0, rows = []; var plan = [[0.12, 2, 1], [0.31, 2, -1], [0.58, 8, 1], [0.9, 8, -1]]; for (var f = 0; f < plan.length; f++) { var x = Math.round(plan[f][0] * W), s = plan[f][1], d = plan[f][2]; for (var k = 100; k >= 0; k -= s) { move(x - d * k); await frame(); } await nap(200); var first = drawnNear(x); await nap(1400); var settled = drawnNear(x); if (first !== settled) slid++; if (settled < 0 || settled !== drawnNear(x)) bad++; rows.push(first + '>' + settled); leave(); await untilRest(); } return { slid: slid, bad: bad, rows: rows.join(' ') }; }; window.slim = function(r){ return JSON.stringify(r); }; window.__R = {}; return true; })()
 
-# --- (a) 30 beats alternating 2s and 180s -------------------------------------------------
 eval (function(){ var rows = []; for (var i = 0; i < 30; i++) rows.push({ id: 'a' + i, visualText: 'Visual ' + i, audioText: 'Beat ' + i, status: 'todo', lengthSeconds: i % 2 === 0 ? 2 : 180 }); F.openFile(new File([JSON.stringify({ schema: 2, title: 'Sweep alternating', rows: rows })], 'sweep-alt.splitpage')); return true; })()
 wait F.state().title === 'Sweep alternating' && document.querySelectorAll('#rundown .rd-block').length === 30
 sleep 400
 expect RT.lens().Z === null
-expect setLens('current') === true
-eval (async function(){ window.__R.a_current_slow = await sweep(150, 1); return 'a current slow ' + slim(__R.a_current_slow); })()
-eval (async function(){ window.__R.a_current_med = await sweep(480, 1); return 'a current medium ' + slim(__R.a_current_med); })()
-eval (async function(){ window.__R.a_current_stops = await stops(); return 'a current stops ' + slim(__R.a_current_stops); })()
-expect setLens('index') === true
 eval (async function(){ window.__R.a_index_slow = await sweep(150, 1); return 'a index slow ' + slim(__R.a_index_slow); })()
 eval (async function(){ window.__R.a_index_med = await sweep(480, 1); return 'a index medium ' + slim(__R.a_index_med); })()
 eval (async function(){ window.__R.a_index_stops = await stops(); return 'a index stops ' + slim(__R.a_index_stops); })()
-expect setLens('lock') === true
-eval (async function(){ window.__R.a_lock_slow = await sweep(150, 1); return 'a lock slow ' + slim(__R.a_lock_slow); })()
-eval (async function(){ window.__R.a_lock_med = await sweep(480, 1); return 'a lock medium ' + slim(__R.a_lock_med); })()
-eval (async function(){ window.__R.a_lock_stops = await stops(); return 'a lock stops ' + slim(__R.a_lock_stops); })()
 expect inOrder(__R.a_index_slow) && __R.a_index_slow.missed === 0 && __R.a_index_slow.shortMin >= 24
 expect inOrder(__R.a_index_med)
-expect inOrder(__R.a_lock_slow) && __R.a_lock_slow.missed === 0 && __R.a_lock_slow.shortMed >= 24
-expect __R.a_lock_med.end === __R.a_lock_med.last
-expect __R.a_index_stops.slid === 0 && __R.a_index_stops.bad === 0 && __R.a_lock_stops.slid === 0 && __R.a_lock_stops.bad === 0
+expect __R.a_index_stops.slid === 0 && __R.a_index_stops.bad === 0
 
 quit
