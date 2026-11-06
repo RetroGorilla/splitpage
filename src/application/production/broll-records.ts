@@ -65,7 +65,7 @@ export function createRecordsReconciler(ports: RecordsReconcilerPorts): RecordsR
       if (cell.rowId && (!cell.field || cell.field === "visualText")) ids.add(cell.rowId);
     });
     const rows: ProductionRow[] = [];
-    ids.forEach(function (id) {
+    Array.from(ids).sort(function (a, b) { return (index.get(a) ?? -1) - (index.get(b) ?? -1); }).forEach(function (id) {
       const at = index.get(id), row = at === undefined ? undefined : doc.rows[at];
       if (row && row.id === id) rows.push(row);
     });

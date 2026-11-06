@@ -34,38 +34,19 @@ function pairKey(p: WhoPair): string {
   return registryKey(p.cat, p.name) + "\u0000" + normalizeTagName(p.who);
 }
 
-function newOccurrences(before: readonly WhoPair[], now: readonly WhoPair[]): WhoPair[] {
-  const positions = new Map<string, { indices: number[]; next: number }>();
-  before.forEach(function (p, i) {
-    const key = pairKey(p), held = positions.get(key);
-    if (held) held.indices.push(i);
-    else positions.set(key, { indices: [i], next: 0 });
-  });
-  let matched = -1;
-  return now.filter(function (p) {
-    const held = positions.get(pairKey(p));
-    if (!held) return true;
-    while (held.next < held.indices.length && (held.indices[held.next] as number) <= matched) held.next++;
-    const at = held.indices[held.next];
-    if (at === undefined) return true;
-    matched = at;
-    held.next++;
-    return false;
-  });
-}
-
 function bump(into: Map<string, number>, key: string, by: number): void {
   const n = (into.get(key) || 0) + by;
   if (n) into.set(key, n); else into.delete(key);
 }
 
-function tally(cells: readonly FieldHtml[], by: number, readers: WhoReader, into: Tally, pairs: Map<string, WhoPair>, names: Map<string, string>): void {
+function tally(cells: readonly FieldHtml[], by: number, readers: WhoReader, into: Tally, pairs: Map<string, WhoPair>, names: Map<string, string>, occurrences?: WhoPair[]): void {
   cells.forEach(function (html) {
     const who = readers.whoInField(html);
     who.pairs.forEach(function (p) {
       const key = pairKey(p);
       if (!pairs.has(key)) pairs.set(key, p);
       bump(into.pairs, key, by);
+      occurrences?.push(p);
     });
     who.names.forEach(function (n) {
       const key = normalizeTagName(n);
@@ -95,21 +76,19 @@ export function planOwnerSync(was: OwnerSnapshot | null, state: OwnerState, read
   const cells = new Map<string, FieldHtml>();
   const pairs = new Map<string, WhoPair>(), names = new Map<string, string>();
   const delta: Tally = { pairs: new Map(), names: new Map() };
+  const occurrences: WhoPair[] = [];
   const rows = edits ? edits.rows : state.rows;
   const ids = edits ? null : new Set(state.rows.map(function (row) { return row.id; }));
   const removed = edits ? edits.removed : Array.from(was.cells.keys()).filter(function (id) { return !ids?.has(id); });
-  const movedCells = new Map<string, number>();
   rows.forEach(function (row) {
     const old = was.cells.get(row.id), now = row.visualText;
     if (was.cells.has(row.id) && old === now) return;
     cells.set(row.id, now);
-    if (old) bump(movedCells, old, 1);
     tally([old], -1, readers, delta, pairs, names);
-    tally([now], 1, readers, delta, pairs, names);
+    tally([now], 1, readers, delta, pairs, names, occurrences);
   });
   removed.forEach(function (id) {
     const old = was.cells.get(id);
-    if (old) bump(movedCells, old, 1);
     tally([old], -1, readers, delta, pairs, names);
   });
   if (!cells.size && !removed.length) return quiet(was);
@@ -123,10 +102,8 @@ export function planOwnerSync(was: OwnerSnapshot | null, state: OwnerState, read
     }
   };
   const people: string[] = [], gone: WhoPair[] = [], added: WhoPair[] = [], fields: string[] = [];
-  cells.forEach(function (html, id) {
-    if (html && movedCells.get(html)) { bump(movedCells, html, -1); return; }
-    const before = readers.whoInField(was.cells.get(id)).pairs, now = readers.whoInField(html).pairs;
-    added.push(...newOccurrences(before, now));
+  occurrences.forEach(function (p) {
+    if ((delta.pairs.get(pairKey(p)) || 0) > 0) added.push(p);
   });
   pairs.forEach(function (p, key) {
     const before = was.pairs.get(key) || 0, by = delta.pairs.get(key) || 0;

@@ -224,7 +224,7 @@ test("owner sync: inserting an earlier name cannot override the sentence's last 
   assert.equal(owner(d, "Kettle"), "pAnn");
 });
 
-test("owner sync: new sentence assignments are detected when document-wide pair counts stay equal", () => {
+test("owner sync: swapping sentence assignments leaves a manual owner when pair counts stay equal", () => {
   for (const sameRow of [false, true]) {
     const sam = [KETTLE, T(" "), who("Sam")], ann = [KETTLE, T(" "), who("Ann")];
     const d = doc(sameRow ? [row("r1", [...sam, T(". "), ...ann])] : [row("r1", [...sam, T(" first")]), row("r2", [...ann, T(" second")])],
@@ -235,8 +235,58 @@ test("owner sync: new sentence assignments are detected when document-wide pair 
     const snap = snapshotOwners(d, readers);
     d.rows = sameRow ? [row("r1", [...ann, T(". "), ...sam])] : [row("r1", [...ann, T(" first")]), row("r2", [...sam, T(" second")])];
     step(snap, d);
-    assert.equal(owner(d, "Kettle"), "pSam");
+    assert.equal(owner(d, "Kettle"), "pAnn");
   }
+});
+
+test("owner sync: splitting before a tagged sentence preserves its manual owner", () => {
+  const sentence = [KETTLE, T(" "), who("Sam")];
+  const d = doc([row("r1", [T("Intro. "), ...sentence])], [{ id: "pSam", name: "Sam" }, { id: "pAnn", name: "Ann" }]);
+  const snap = snapshotOwners(d, readers);
+  (d.productionTags[0] as { owner: string }).owner = "pAnn";
+  d.rows = [row("r1", [T("Intro. ")]), row("r2", sentence)];
+  const plan = planOwnerSync(snap, d, readers, { rows: d.rows, removed: [] });
+  applyOwnerSync(plan, d, countingIds());
+  plan.commit();
+  assert.equal(owner(d, "Kettle"), "pAnn");
+  assert.deepEqual(plan.fields, []);
+  assert.deepEqual(snap.pairs, snapshotOwners(d, readers).pairs);
+});
+
+test("owner sync: joining a tagged sentence into the preceding beat preserves its manual owner", () => {
+  const sentence = [KETTLE, T(" "), who("Sam")];
+  const d = doc([row("r1", [T("Intro.")]), row("r2", sentence)], [{ id: "pSam", name: "Sam" }, { id: "pAnn", name: "Ann" }]);
+  const snap = snapshotOwners(d, readers);
+  (d.productionTags[0] as { owner: string }).owner = "pAnn";
+  d.rows = [row("r1", [T("Intro. "), ...sentence])];
+  const plan = planOwnerSync(snap, d, readers, { rows: d.rows, removed: ["r2"] });
+  applyOwnerSync(plan, d, countingIds());
+  plan.commit();
+  assert.equal(owner(d, "Kettle"), "pAnn");
+  assert.deepEqual(plan.fields, []);
+  assert.deepEqual(snap.pairs, snapshotOwners(d, readers).pairs);
+});
+
+test("owner sync: reordering tags in one sentence preserves both manual owners", () => {
+  const d = doc([row("r1", [KETTLE, T(" and "), MUG, T(" "), who("Sam")])], [{ id: "pSam", name: "Sam" }, { id: "pAnn", name: "Ann" }]);
+  const snap = snapshotOwners(d, readers);
+  d.productionTags.forEach((entry) => { if (entry) entry.owner = "pAnn"; });
+  d.rows[0] = row("r1", [MUG, T(" and "), KETTLE, T(" "), who("Sam")]);
+  const plan = planOwnerSync(snap, d, readers, { rows: d.rows, removed: [] });
+  applyOwnerSync(plan, d, countingIds());
+  plan.commit();
+  assert.equal(owner(d, "Kettle"), "pAnn");
+  assert.equal(owner(d, "Mug"), "pAnn");
+  assert.deepEqual(plan.fields, []);
+  assert.deepEqual(snap.pairs, snapshotOwners(d, readers).pairs);
+});
+
+test("owner sync: increased pairs for one tag apply in sentence order, including a repeated pair", () => {
+  const d = doc([row("r1", [KETTLE])], [{ id: "pSam", name: "Sam" }, { id: "pAnn", name: "Ann" }]);
+  const snap = snapshotOwners(d, readers);
+  d.rows[0] = row("r1", [KETTLE, T(" "), who("Sam"), T(". "), KETTLE, T(" "), who("Ann"), T(". "), KETTLE, T(" "), who("Sam")]);
+  step(snap, d);
+  assert.equal(owner(d, "Kettle"), "pSam");
 });
 
 test("owner sync: planning one changed cell reads one Visual field, with no document scan or snapshot copy", () => {

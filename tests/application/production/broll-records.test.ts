@@ -130,6 +130,23 @@ test("owner resync reads only the changed Visual cells in a 1,000-beat document"
   assert.equal(held.productionTags[0]?.owner, held.people[0]?.id, "an edit after replay compares against the replayed cell");
 });
 
+test("owner sync applies increased pairs in document order even when the change set lists cells backwards", () => {
+  const held = whoDoc("");
+  held.rows.push({ id: "r2", visualText: "", audioText: "" });
+  const { plan } = reconciler(held);
+  plan.resync?.(held);
+  const first = held.rows[0], last = held.rows[1];
+  assert.ok(first && last);
+  first.visualText = WHO_CELL;
+  last.visualText = WHO_CELL.replaceAll("Sam", "Ann");
+  const out = plan(held, changeSet({ cells: [{ rowId: "r2", field: "visualText" }, { rowId: "r1", field: "visualText" }] }));
+  assert.ok(out);
+  out.apply(held);
+  out.commit?.();
+  assert.equal(held.productionTags[0]?.owner, held.people.find((person) => person.name === "Ann")?.id);
+  assert.equal(plan(held, changeSet({})), null);
+});
+
 test("pasted b-roll: a pasted marker with a minted id gets a record seeded from its scene; known ids are left", () => {
   const target = doc("", [{ id: "bsKnown", name: "Known" }]);
   const cell = cellOf('<span class="broll-key" data-broll-id="bsNew" contenteditable="false">B-roll:</span> gulls<br><span class="broll-key" data-broll-id="bsKnown" contenteditable="false">B-roll:</span> known');
