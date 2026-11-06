@@ -660,7 +660,7 @@ function installMicrophones(getUserMedia: (request: MicRequest) => Promise<unkno
 }
 
 function microphoneStream(label: string, stopped: { count: number } = { count: 0 }) {
-  const track = { kind: "audio", label, stop: () => { stopped.count++; } };
+  const track = { kind: "audio", label, onended: null as (() => void) | null, stop: () => { stopped.count++; } };
   return { track, stream: { getAudioTracks: () => [track], getTracks: () => [track] } };
 }
 
@@ -839,5 +839,113 @@ test("a chosen microphone that stops mid-session ends Follow My Voice with a mes
     await new Promise(resolve => setTimeout(resolve, 400));
     assert.equal(h.state.voice, false);
     assert.equal(document.getElementById("pp-voice-status")?.textContent, "Your chosen microphone stopped working — pick it again or choose another.");
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+test("closing Present before a missing saved microphone is refused does not open the default microphone", async () => {
+  const { ports } = microphoneHarness("unplugged");
+  const requests: MicRequest[] = [];
+  let refuse: (error: Error) => void = () => {};
+  const refused = new Promise<never>((_, reject) => { refuse = reject; });
+  const stopped = { count: 0 };
+  const restore = installMicrophones((request) => {
+    requests.push(request);
+    return request.audio === true ? Promise.resolve(microphoneStream("Built-in Mic", stopped).stream) : refused;
+  });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    const starting = runtime.startVoiceFollow();
+    assert.equal(requests.length, 1);
+    runtime.stopVoiceFollow();
+    refuse(Object.assign(new Error("no such device"), { name: "OverconstrainedError" }));
+    await starting;
+    assert.deepEqual(requests, [{ audio: { deviceId: { exact: "unplugged" } } }], "no second request once the session is over");
+    assert.deepEqual(StartRecorder.starts, []);
+  } finally { runtime.dispose(); restore(); }
+});
+
+test("a microphone that arrives after its session ended is stopped, whichever request it answers", async () => {
+  const { ports } = microphoneHarness("unplugged");
+  let refuse: (error: Error) => void = () => {};
+  const first = new Promise<never>((_, reject) => { refuse = reject; });
+  let deliver: (stream: unknown) => void = () => {};
+  const second = new Promise((resolve) => { deliver = resolve; });
+  const stopped = { count: 0 };
+  const restore = installMicrophones((request) => request.audio === true ? second : first);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    const starting = runtime.startVoiceFollow();
+    refuse(Object.assign(new Error("no such device"), { name: "OverconstrainedError" }));
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.stopVoiceFollow();
+    deliver(microphoneStream("Built-in Mic", stopped).stream);
+    await starting;
+    assert.equal(stopped.count, 1);
+    assert.deepEqual(StartRecorder.starts, []);
+  } finally { runtime.dispose(); restore(); }
+});
+
+test("a chosen microphone whose track ends on its own stops Follow My Voice with a message", async () => {
+  const { ports, h } = microphoneHarness("dev-1");
+  const stopped = { count: 0 };
+  const mic = microphoneStream("Mic One", stopped);
+  const restore = installMicrophones(async () => mic.stream);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.equal(h.state.voice, true);
+    assert.equal(typeof mic.track.onended, "function");
+    mic.track.onended?.();
+    assert.equal(h.state.voice, false);
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Your chosen microphone stopped working — pick it again or choose another.");
+    assert.equal(stopped.count, 1, "the stream is released");
+    mic.track.onended?.();
+    assert.equal(h.state.voice, false);
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+
+test("a track that ends after its session was stopped changes nothing", async () => {
+  const { ports, h } = microphoneHarness("dev-1");
+  const mic = microphoneStream("Mic One");
+  const restore = installMicrophones(async () => mic.stream);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    runtime.stopVoiceFollow();
+    const status = document.getElementById("pp-voice-status")?.textContent;
+    mic.track.onended?.();
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, status);
+    assert.equal(h.state.voice, false);
+  } finally { runtime.dispose(); restore(); }
+});
+
+test("a microphone chosen in another tab restarts a running Follow My Voice, and the same choice again does not", async () => {
+  const { ports, heard, choice } = microphoneHarness("dev-1");
+  const requests: MicRequest[] = [];
+  const restore = installMicrophones(async (request) => {
+    requests.push(request);
+    return microphoneStream(request.audio !== true && request.audio.deviceId.exact === "dev-2" ? "Mic Two" : "Mic One").stream;
+  });
+  const runtime = startPrompter(ports);
+  const fromAnotherTab = (value: string | null): void => {
+    choice.saved = value ?? "";
+    for (const listener of heard) listener({ name: "microphone", value, elsewhere: true });
+  };
+  try {
+    runtime.openPrompter();
+    await runtime.startVoiceFollow();
+    fromAnotherTab("dev-1");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requests.length, 1, "the microphone already in use is not reopened");
+    fromAnotherTab("dev-2");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(requests.at(-1), { audio: { deviceId: { exact: "dev-2" } } });
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+    assert.equal(requests.length, 2);
+    assert.equal(choice.saved, "dev-2", "the restart writes nothing back, so two tabs cannot echo each other");
   } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
 });

@@ -5,15 +5,21 @@ import {
   microphoneChoices, microphoneList, recognitionTakesTrack
 } from "../../src/application/microphones.ts";
 
-test("only a Chromium that takes a track in start() gets a microphone picker", () => {
-  assert.equal(recognitionTakesTrack(undefined), false, "no brand list (Safari, Firefox, old Chrome)");
-  assert.equal(recognitionTakesTrack([]), false);
-  assert.equal(recognitionTakesTrack([{ brand: "Chromium", version: "132" }, { brand: "Google Chrome", version: "132" }]), false);
-  assert.equal(recognitionTakesTrack([{ brand: "Chromium", version: "133" }]), true);
-  assert.equal(recognitionTakesTrack([{ brand: "Not A;Brand", version: "99" }, { brand: "Chromium", version: "156" }, { brand: "Microsoft Edge", version: "156" }]), true);
-  assert.equal(recognitionTakesTrack([{ brand: "Chromium", version: "x" }]), false);
+test("only a desktop Chromium that takes a track in start() (135 or later) gets a microphone picker", () => {
+  const chromium = (version: string) => [{ brand: "Not A;Brand", version: "99" }, { brand: "Chromium", version }, { brand: "Microsoft Edge", version }];
+  assert.equal(recognitionTakesTrack(undefined, "Windows"), false, "no brand list (Safari, Firefox, old Chrome)");
+  assert.equal(recognitionTakesTrack([], "Windows"), false);
+  assert.equal(recognitionTakesTrack(chromium("133"), "Windows"), false, "133 ships start(track) switched off");
+  assert.equal(recognitionTakesTrack(chromium("134"), "Linux"), false);
+  assert.equal(recognitionTakesTrack(chromium("135"), "Windows"), true);
+  assert.equal(recognitionTakesTrack(chromium("156"), "macOS"), true);
+  assert.equal(recognitionTakesTrack(chromium("156"), "Linux"), true);
+  assert.equal(recognitionTakesTrack(chromium("156"), "Android"), false, "enabled only on desktop operating systems");
+  assert.equal(recognitionTakesTrack(chromium("156"), "Chrome OS"), false);
+  assert.equal(recognitionTakesTrack(chromium("156"), ""), false);
+  assert.equal(recognitionTakesTrack(chromium("156"), undefined), false);
+  assert.equal(recognitionTakesTrack([{ brand: "Chromium", version: "x" }], "Windows"), false);
 });
-
 test("the device list drops the virtual default entries and entries without an id", () => {
   const list = microphoneList([
     { deviceId: "default", label: "Default - Mic A" },

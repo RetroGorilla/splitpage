@@ -1124,7 +1124,8 @@ teleprompter's `#pp-mic` and Settings' `#settings-microphone` read and write it
 through `preferences().microphone()`. The browser recognizer has no device
 setting, so a chosen device is opened with `getUserMedia({audio: {deviceId:
 {exact}}})` and its track is passed to `recognition.start(track)`, which needs
-Chromium 133 or later (`recognitionTakesTrack`); elsewhere, in the desktop
+Chromium 135 or later on Windows, macOS or Linux (`recognitionTakesTrack`;
+133 ships it switched off); elsewhere, in the desktop
 app and under the desktop relay, the choice is not offered and the system's
 default microphone is used.
 

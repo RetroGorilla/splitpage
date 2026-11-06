@@ -6,8 +6,7 @@
 # splitpage-microphone: Follow My Voice asks getUserMedia for that device
 # (exact) and hands the track to the recognizer. Here enumerateDevices,
 # getUserMedia and the recognizer's start/stop are replaced, as in
-# tests/83-voice-mic-name.txt, so no microphone or speech service is touched;
-# the real start(track) was checked by hand against a live Edge.
+# tests/83-voice-mic-name.txt, so no microphone or speech service is touched.
 #
 # Every `eval` is one physical line (the driver splits on newlines).
 
@@ -17,7 +16,7 @@ eval (function(){ window.D = window.__desktopTest; window.T = window.__settingsT
 eval (function(){ window.__gumReal = navigator.mediaDevices.getUserMedia; window.__enumReal = navigator.mediaDevices.enumerateDevices; window.__Rec = window.SpeechRecognition || window.webkitSpeechRecognition; var P = window.__Rec.prototype; window.__recReal = { start: P.start, stop: P.stop, abort: P.abort }; return !!window.__Rec; })()
 expect !!window.__Rec
 eval (function(){ var P = window.__Rec.prototype; window.__starts = []; P.start = function (t) { var self = this; window.__starts.push(t === undefined ? 'default' : t.label); setTimeout(function () { if (self.onstart) self.onstart(); }, 0); }; P.stop = function () {}; P.abort = function () {}; return true; })()
-eval (function(){ window.__devs = [{ kind: 'audioinput', deviceId: 'default', label: 'Default - Mic One' }, { kind: 'audioinput', deviceId: 'dev-1', label: 'Mic One' }, { kind: 'audioinput', deviceId: 'dev-2', label: 'Mic Two' }]; navigator.mediaDevices.enumerateDevices = function () { return Promise.resolve(window.__devs); }; window.__gum = []; window.__stopped = 0; navigator.mediaDevices.getUserMedia = function (c) { window.__gum.push(JSON.stringify(c)); var want = c.audio && c.audio.deviceId && c.audio.deviceId.exact; if (want === 'gone') return Promise.reject(Object.assign(new Error('no device'), { name: 'OverconstrainedError' })); var label = want === 'dev-2' ? 'Mic Two' : want === 'dev-1' ? 'Mic One' : 'Built-in Mic'; var track = { kind: 'audio', label: label, stop: function () { window.__stopped++; } }; return Promise.resolve({ getAudioTracks: function () { return [track]; }, getTracks: function () { return [track]; } }); }; return true; })()
+eval (function(){ window.__devs = [{ kind: 'audioinput', deviceId: 'default', label: 'Default - Mic One' }, { kind: 'audioinput', deviceId: 'dev-1', label: 'Mic One' }, { kind: 'audioinput', deviceId: 'dev-2', label: 'Mic Two' }]; navigator.mediaDevices.enumerateDevices = function () { return Promise.resolve(window.__devs); }; window.__gum = []; window.__stopped = 0; navigator.mediaDevices.getUserMedia = function (c) { window.__gum.push(JSON.stringify(c)); var want = c.audio && c.audio.deviceId && c.audio.deviceId.exact; if (want === 'gone') return Promise.reject(Object.assign(new Error('no device'), { name: 'OverconstrainedError' })); var label = want === 'dev-2' ? 'Mic Two' : want === 'dev-1' ? 'Mic One' : 'Built-in Mic'; var track = { kind: 'audio', label: label, onended: null, stop: function () { window.__stopped++; } }; window.__track = track; return Promise.resolve({ getAudioTracks: function () { return [track]; }, getTracks: function () { return [track]; } }); }; return true; })()
 
 # --- the teleprompter lists the microphones; nothing chosen = system default --
 jsclick #btn-present
@@ -55,8 +54,21 @@ wait window.__starts.length === 1 && st() === 'Listening — Mic One'
 expect window.__gum.join('|') === '{"audio":{"deviceId":{"exact":"dev-1"}}}'
 expect window.__stopped === 1
 expect localStorage.getItem('splitpage-microphone') === 'dev-1'
-jsclick #pp-voice
+
+# --- a pick made in another tab restarts it too, and the same pick again does not
+eval (function(){ window.__gum = []; window.__starts = []; window.__stopped = 0; window.dispatchEvent(new StorageEvent('storage', { key: 'splitpage-microphone', newValue: 'dev-1', storageArea: localStorage })); return true; })()
+sleep 200
+expect window.__gum.length === 0
+eval (function(){ localStorage.setItem('splitpage-microphone', 'dev-2'); window.dispatchEvent(new StorageEvent('storage', { key: 'splitpage-microphone', newValue: 'dev-2', storageArea: localStorage })); return true; })()
+wait window.__starts.length === 1 && st() === 'Listening — Mic Two'
+expect window.__gum.join('|') === '{"audio":{"deviceId":{"exact":"dev-2"}}}'
+expect document.getElementById('pp-mic').value === 'dev-2'
+
+# --- the chosen microphone ending by itself stops it, with a message ---------
+eval window.__track.onended()
 wait !document.getElementById('pp-voice').classList.contains('is-active')
+expect st() === 'Your chosen microphone stopped working — pick it again or choose another.'
+expect document.getElementById('pp-voice-status').classList.contains('error')
 eval pick('pp-mic', 'dev-2')
 jsclick #pp-close
 wait document.getElementById('prompter').hidden
@@ -122,6 +134,20 @@ wait document.getElementById('pp-voice').classList.contains('is-active')
 expect window.__gum.join('|') === '{"audio":true}'
 jsclick #pp-voice
 wait !document.getElementById('pp-voice').classList.contains('is-active')
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { platform: 'Android', brands: [{ brand: 'Chromium', version: '156' }] } })
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-mic').hidden
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { platform: 'Windows', brands: [{ brand: 'Chromium', version: '134' }] } })
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-mic').hidden
 jsclick #pp-close
 wait document.getElementById('prompter').hidden
 eval T.open()

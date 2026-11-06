@@ -60,6 +60,7 @@ interface PrompterState {
   voiceStream: MediaStream | null;
   voiceTrack: MediaStreamTrack | null;
   voiceMicFellBack: boolean;
+  voiceWanted: string;
   finalTranscript: string;
   interimTranscript: string;
   beatSeconds: number[];
@@ -98,6 +99,7 @@ function freshState(): PrompterState {
     voiceStream: null,
     voiceTrack: null,
     voiceMicFellBack: false,
+    voiceWanted: "",
     finalTranscript: "",
     interimTranscript: "",
     beatSeconds: [],
@@ -705,7 +707,8 @@ function hearMicrophones(): void {
   const stopPreferences = ports.changes.onChange(function (change) {
     if (ports !== owner || change.name !== "microphone") return;
     refreshMicrophoneChoices();
-    if (!change.elsewhere && (ports.state.voiceFollowing() || state.voiceStarting)) {
+    const running = ports.state.voiceFollowing() || state.voiceStarting;
+    if (running && ports.microphones.support() === "yes" && ports.preferences.microphone() !== state.voiceWanted) {
       stopVoiceFollow();
       startVoiceFollow();
     }
@@ -719,14 +722,14 @@ function stopHearingMicrophones(): void {
   hearingMicrophones = null;
 }
 
-async function openMicrophone(wanted: string): Promise<{ stream: MediaStream; fellBack: boolean }> {
+async function openMicrophone(wanted: string, current: () => boolean): Promise<{ stream: MediaStream; fellBack: boolean }> {
   const media = navigator.mediaDevices;
   if (!wanted) return { stream: await media.getUserMedia({ audio: true }), fellBack: false };
   try {
     return { stream: await media.getUserMedia({ audio: { deviceId: { exact: wanted } } }), fellBack: false };
   } catch (err) {
     const name = err && (err as { name?: unknown }).name;
-    if (name !== "OverconstrainedError" && name !== "NotFoundError") throw err;
+    if ((name !== "OverconstrainedError" && name !== "NotFoundError") || !current()) throw err;
     return { stream: await media.getUserMedia({ audio: true }), fellBack: true };
   }
 }
@@ -938,8 +941,9 @@ export async function startVoiceFollow(): Promise<void> {
     setVoiceStatus("Asking for the microphone…", "");
     let opened: { stream: MediaStream; fellBack: boolean };
     const wanted = ports.microphones.support() === "yes" ? ports.preferences.microphone() : "";
+    state.voiceWanted = wanted;
     try {
-      opened = await openMicrophone(wanted);
+      opened = await openMicrophone(wanted, function () { return ports === owner && mySession === voiceSession; });
     } catch (err) {
       if (ports !== owner || mySession !== voiceSession) return;
       state.voiceStarting = false;
@@ -960,7 +964,14 @@ export async function startVoiceFollow(): Promise<void> {
     try {
       const track = state.voiceStream.getAudioTracks()[0];
       state.voiceMicName = (track && track.label) || "";
-      if (wanted && !opened.fellBack && track) state.voiceTrack = track;
+      if (wanted && !opened.fellBack && track) {
+        state.voiceTrack = track;
+        track.onended = function () {
+          if (ports !== owner || mySession !== voiceSession) return;
+          stopVoiceFollow();
+          setVoiceStatus(MIC_ENDED_MESSAGE, "error");
+        };
+      }
     } catch (e) {}
     refreshMicrophoneChoices();
   }

@@ -30,12 +30,14 @@ export const SYSTEM_DEFAULT_MICROPHONE = "System default";
 export const MISSING_MICROPHONE = "Saved microphone (not connected)";
 export const UNNAMED_MICROPHONE = "Saved microphone";
 
-const FIRST_CHROMIUM_WITH_TRACK_RECOGNITION = 133;
+const FIRST_CHROMIUM_WITH_TRACK_RECOGNITION = 135;
+const DESKTOP_PLATFORMS: readonly string[] = Object.freeze(["Windows", "macOS", "Linux"]);
 const VIRTUAL_ENTRIES: readonly string[] = Object.freeze(["default", "communications"]);
 
-export function recognitionTakesTrack(brands: readonly BrowserBrand[] | undefined): boolean {
+export function recognitionTakesTrack(brands: readonly BrowserBrand[] | undefined, platform: string | undefined): boolean {
   const chromium = (brands ?? []).find((entry) => entry.brand === "Chromium");
-  return !!chromium && parseInt(chromium.version, 10) >= FIRST_CHROMIUM_WITH_TRACK_RECOGNITION;
+  return !!chromium && parseInt(chromium.version, 10) >= FIRST_CHROMIUM_WITH_TRACK_RECOGNITION &&
+    DESKTOP_PLATFORMS.indexOf(platform ?? "") !== -1;
 }
 
 export function microphoneList(found: readonly { readonly deviceId: string; readonly label: string }[]): MicrophoneList {

@@ -3,15 +3,15 @@ import type { BrowserBrand, MicrophoneDevices } from "../../application/micropho
 import { hasVoiceRelay } from "../desktop/voice-relay.ts";
 import { SpeechRecognitionCtor } from "./speech-recognition.ts";
 
-type BrandedNavigator = Navigator & { readonly userAgentData?: { readonly brands?: readonly BrowserBrand[] } };
+type BrandedNavigator = Navigator & { readonly userAgentData?: { readonly brands?: readonly BrowserBrand[]; readonly platform?: string } };
 
 export function createMicrophoneDevices(given: { readonly desktop: () => boolean }): MicrophoneDevices {
   return {
     support: function () {
       if (given.desktop() || hasVoiceRelay()) return "desktop";
       const media = navigator.mediaDevices;
-      const brands = (navigator as BrandedNavigator).userAgentData?.brands;
-      if (!SpeechRecognitionCtor || !media || typeof media.enumerateDevices !== "function" || !recognitionTakesTrack(brands)) return "browser";
+      const agent = (navigator as BrandedNavigator).userAgentData;
+      if (!SpeechRecognitionCtor || !media || typeof media.enumerateDevices !== "function" || !recognitionTakesTrack(agent?.brands, agent?.platform)) return "browser";
       return "yes";
     },
     list: async function () {
