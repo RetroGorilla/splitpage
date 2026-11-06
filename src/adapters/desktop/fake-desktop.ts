@@ -14,6 +14,9 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _externalOpens?: unknown[];
   _videoGrants?: Record<string, unknown>;
   _videoOpens?: unknown[];
+  _videoPaths?: Record<string, string>;
+  _videoPathOpens?: string[];
+  _videoPathAnswer?: Awaited<ReturnType<DesktopPort["openVideoPath"]>>;
   _printed?: string[];
   _printAnswer?: Awaited<ReturnType<DesktopPort["printToPdf"]>>;
   _thumbCalls?: [string, string][];
@@ -172,6 +175,15 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
       if (!name) return Promise.resolve({ ok: false, code: "UNKNOWN" });
       (this._videoOpens = this._videoOpens || []).push(name);
       return Promise.resolve({ ok: true });
+    },
+    videoFilePath: function (file: unknown) {
+      const name = file && (file as Partial<Record<keyof Pick<DesktopFileEntry, "name">, unknown>>).name;
+      const found = this._videoPaths && typeof name === "string" ? this._videoPaths[name] : undefined;
+      return typeof found === "string" ? found : null;
+    },
+    openVideoPath: function (storedPath: string) {
+      (this._videoPathOpens = this._videoPathOpens || []).push(storedPath);
+      return Promise.resolve(this._videoPathAnswer || { ok: true });
     },
     printToPdf: function (html: string) {
       (this._printed = this._printed || []).push(html);

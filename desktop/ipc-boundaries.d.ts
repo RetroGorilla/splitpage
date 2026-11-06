@@ -10,6 +10,7 @@ import type {
 import type { createDraftStore } from "./drafts.ts";
 import type { createHistoryStore } from "../shared/history-store.ts";
 import type * as importHistoryPolicy from "../shared/history-policy.ts";
+import type { openableVideoPath } from "../shared/video-embed.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { createVoiceComposition } from "./voice-composition.ts";
 import type { createPdfPrinter } from "./print-pdf.ts";
@@ -87,6 +88,7 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   themeChoice: Pick<ReturnType<typeof createThemeChoice>, "write">;
   videoFileGrants: Map<string, string>;
   VIDEO_FILE_EXT: RegExp;
+  openableVideoPath: typeof openableVideoPath;
   testVideoOpens: string[];
   videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopIpcResult<"splitpage:video-thumbnail">>;
   updateStatus: () => DesktopWireUpdateStatus;

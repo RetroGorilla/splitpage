@@ -16,7 +16,7 @@ const crypto: typeof NodeCrypto = require("node:crypto");
 
 function createShellIpc({
   tabOf, launchIntentFor, draftStore, draftsIsHeld, hadPriorSession, shell, nativeTheme, themeChoice,
-  videoFileGrants, VIDEO_FILE_EXT, testVideoOpens, testMode: TEST_MODE, videoThumbnail,
+  videoFileGrants, VIDEO_FILE_EXT, openableVideoPath, testVideoOpens, testMode: TEST_MODE, videoThumbnail,
   updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus, checkForUpdate, downloadUpdate,
   runUpdateInstaller, openPrompterInBrowser, voiceHelperInstance
 }: DesktopShellIpcDependencies) {
@@ -74,6 +74,14 @@ function createShellIpc({
       } catch { return { ok: false, code: "GONE" }; }
       if (TEST_MODE) { testVideoOpens.push(filePath); return { ok: true }; }
       const failed = await shell.openPath(filePath);
+      return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
+    });
+
+    ipcHandle("splitpage:video-path-open", async (event, storedPath) => {
+      const found = await openableVideoPath(storedPath, process.platform === "win32" ? "win32" : "posix", fsp);
+      if (!found.ok) return found;
+      if (TEST_MODE) { testVideoOpens.push(found.path); return { ok: true }; }
+      const failed = await shell.openPath(found.path);
       return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
     });
 

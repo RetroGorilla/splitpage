@@ -64,7 +64,7 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:recents-list invoke", "splitpage:recents-remove invoke", "splitpage:recents-clear invoke",
   "splitpage:get-session-info invoke", "splitpage:get-app-version-sync sendSync", "splitpage:tab-boot-sync sendSync",
   "splitpage:open-external send", "splitpage:set-theme send", "splitpage:video-file-grant invoke",
-  "splitpage:video-file-open invoke", "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
+  "splitpage:video-file-open invoke", "splitpage:video-path-open invoke", "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
   "splitpage:update-check invoke", "splitpage:update-download invoke", "splitpage:update-install invoke",
   "splitpage:prompter-open-in-browser invoke", "splitpage:prompter-open-in-chromium invoke",
   "splitpage:voice-status invoke", "splitpage:voice-start invoke", "splitpage:voice-stop invoke",
@@ -316,7 +316,7 @@ test("in test mode, main.ts's real groups register the 59 pairs in the order the
 test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
   const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
-  assert.equal(expected.length, 53);
+  assert.equal(expected.length, 54);
   assert.deepEqual(seen, expected);
   for (const pair of seen) {
     const [name, direction] = pair.split(" ");
@@ -563,6 +563,19 @@ test("the video thumbnail channel: a typed host and video ref, app page only", (
   ]) {
     assert.ok(checkArgs(c.argsSchema, bad), "refuses " + JSON.stringify(bad));
   }
+});
+
+test("the stored-video-path channel takes one string from the app page only, and main checks the path itself", () => {
+  const c = channelFor("splitpage:video-path-open", "invoke");
+  assert.ok(c, "the channel exists");
+  assert.deepEqual([...c.argsSchema], ["string"]);
+  assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN]);
+  assert.ok(!c.testOnly);
+  assert.equal(checkArgs(c.argsSchema, ["C:\\Videos\\take.mp4"]), null);
+  for (const bad of [[], [null], [{ path: "C:\\Videos\\take.mp4" }], [["C:\\a.mp4"]], ["C:\\a.mp4", "C:\\Windows\\System32\\calc.exe"]]) {
+    assert.ok(checkArgs(c.argsSchema, bad), "refuses " + JSON.stringify(bad));
+  }
+  assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((row) => row.name === c.name), "never the tab strip's");
 });
 
 test("the PDF print channel takes one HTML string, from the app page only", () => {

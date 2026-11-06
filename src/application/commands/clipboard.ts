@@ -38,6 +38,7 @@ export interface VideoFileAttachment {
   readonly kind: "videoFile";
   readonly name: string;
   readonly size: number;
+  readonly path?: string | undefined;
   readonly duration?: number | undefined;
   readonly poster?: ImageRef | null | undefined;
 }
@@ -107,7 +108,8 @@ export function attachToGallery(row: GalleryRow, attach: readonly Attachment[]):
       out.pictures++;
       return;
     }
-    const link = item.kind === "video" ? { href: item.href } : { name: item.name, size: item.size, duration: item.duration };
+    const link = item.kind === "video" ? { href: item.href }
+      : { name: item.name, size: item.size, duration: item.duration, location: item.path ? { kind: "path", path: item.path } : undefined };
     if (addGalleryVideo(row, link, item.kind === "videoFile" ? item.poster || null : null) !== -1) {
       out.videos++;
       if (item.kind === "video") out.links.push(item.href);

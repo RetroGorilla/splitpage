@@ -2,6 +2,8 @@
 /* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */
 
 import * as blobPolicy from "./blob-policy.ts";
+import { VIDEO_FILE_EXT, hasControlCharacter, videoPathProblem } from "./video-path.ts";
+import type { VideoPathStyle } from "./video-path.ts";
 
 type VideoEmbedReference = { host: "youtube" | "vimeo"; id: string; hash?: string; start?: number };
 type VideoEmbedFields = Partial<Record<keyof VideoEmbedReference, unknown>>;
@@ -249,6 +251,30 @@ function embeddableVideo(link: unknown) {
   return link && (link as Record<string, unknown>).href ? parseVideoLink((link as Record<string, unknown>).href) : null;
 }
 
+interface VideoPathFileSystem {
+  readonly realpath: (path: string) => Promise<string>;
+  readonly stat: (path: string) => Promise<{ isFile: () => boolean }>;
+}
+
+type VideoPathVerdict = { ok: true; path: string } | { ok: false; code: "REFUSED" | "GONE" };
+
+function missingFile(e: unknown): boolean {
+  const code = e && typeof e === "object" ? (e as { code?: unknown }).code : null;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
+async function openableVideoPath(p: unknown, style: VideoPathStyle, fs: VideoPathFileSystem): Promise<VideoPathVerdict> {
+  if (videoPathProblem(p, style) !== null) return { ok: false, code: "REFUSED" };
+  let real: string;
+  try { real = await fs.realpath(p as string); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+  if (typeof real !== "string" || hasControlCharacter(real) || !VIDEO_FILE_EXT.test(real)) return { ok: false, code: "REFUSED" };
+  let isFile: boolean;
+  try { isFile = (await fs.stat(real)).isFile(); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+  return isFile ? { ok: true, path: real } : { ok: false, code: "REFUSED" };
+}
+
+export type { VideoPathFileSystem, VideoPathVerdict };
+
 export {
   FETCH_TIMEOUT_MS,
   PLAYER_ORIGINS,
@@ -259,6 +285,7 @@ export {
   embeddableVideo,
   fetchVideoThumbnail,
   oembedThumbnailUrl,
+  openableVideoPath,
   parseStart,
   parseVideoLink,
   parseVideoRef,

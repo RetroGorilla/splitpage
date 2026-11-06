@@ -3856,8 +3856,9 @@ async function caseGalleryVideoFile(target) {
     app = await launchApp(target, { label: "gallery-video-file" });
     await waitForRows(app.cdp, 20000);
     const cdp = app.cdp;
-    const bridgeHas = await evalPage(cdp, "typeof window.splitpageDesktop.grantVideoFile === 'function' && typeof window.splitpageDesktop.openVideoFile === 'function'");
-    record(tag + ": the bridge exposes grantVideoFile and openVideoFile", bridgeHas === true, String(bridgeHas));
+    const bridgeHas = await evalPage(cdp, "typeof window.splitpageDesktop.grantVideoFile === 'function' && typeof window.splitpageDesktop.openVideoFile === 'function' && " +
+      "typeof window.splitpageDesktop.videoFilePath === 'function' && typeof window.splitpageDesktop.openVideoPath === 'function'");
+    record(tag + ": the bridge exposes grantVideoFile, openVideoFile, videoFilePath and openVideoPath", bridgeHas === true, String(bridgeHas));
 
     async function fileInput(id, filePath) {
       const made = await cdp.send("Runtime.evaluate", {
@@ -3889,8 +3890,10 @@ async function caseGalleryVideoFile(target) {
       "var media = document.querySelectorAll('#rows .visual-media'); media[media.length - 1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()", { awaitPromise: false });
     const link = await poll(cdp, "(function(){ var l = document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'); return l.length ? l[l.length - 1].textContent : null; })()", 10000).catch(() => null);
     record(tag + ": the drop names the file in the scene's caption", link === "take one.mp4", String(link));
-    const statePath = await evalPage(cdp, "JSON.stringify(window.__splitpageFormats.state()).indexOf(" + JSON.stringify(dir.replace(/\\/g, "\\\\")) + ") !== -1 || JSON.stringify(window.__splitpageFormats.state()).indexOf(" + JSON.stringify(dir) + ") !== -1");
-    record(tag + ": the document names the file, never where it is", statePath === false, String(statePath));
+    const stored = await evalPage(cdp, "(function(){ var out = null; (window.__splitpageFormats.state().rows || []).forEach(function (r) { " +
+      "var all = (r.imageLinks || []).slice(); (r.moreImages || []).forEach(function (it) { all = all.concat(it.links || []); }); " +
+      "all.forEach(function (l) { if (l && l.name === 'take one.mp4' && l.location) out = l.location; }); }); return out; })()");
+    record(tag + ": the document keeps where the file is (#259)", !!stored && stored.kind === "path" && stored.path === clip, JSON.stringify(stored));
     await evalPage(cdp, "(function(){ var l = document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'); l[l.length - 1].click(); return true; })()");
     opens = await pollNode(async () => {
       const list = await shell(cdp, "videoFileOpens", {});
@@ -3898,9 +3901,37 @@ async function caseGalleryVideoFile(target) {
     }, 10000).catch(() => null);
     record(tag + ": its caption link opens it through main", !!opens && opens[1] === clip, JSON.stringify(opens));
 
+    const pathOf = await evalPage(cdp, "window.splitpageDesktop.videoFilePath(document.getElementById('__vf').files[0])");
+    record(tag + ": the bridge reads a dropped file's path (#259)", pathOf === clip, JSON.stringify(pathOf));
+    const madePath = await evalPage(cdp, "window.splitpageDesktop.videoFilePath(new File([new Uint8Array(8)], 'forged.mp4', { type: 'video/mp4' }))");
+    record(tag + ": a File the page made itself has no path", madePath === null, JSON.stringify(madePath));
+    const byPath = await evalPage(cdp, "window.splitpageDesktop.openVideoPath(" + JSON.stringify(clip) + ")");
+    record(tag + ": a stored path opens the file through main (#259)", !!byPath && byPath.ok === true, JSON.stringify(byPath));
+    opens = await shell(cdp, "videoFileOpens", {});
+    record(tag + ": main opened the file's real path", !!opens && opens.length === 3 && opens[2] === fs.realpathSync.native(clip), JSON.stringify(opens));
+    const tool = path.join(dir, "tool.exe");
+    const shortcut = path.join(dir, "take one.lnk");
+    fs.writeFileSync(tool, "MZ");
+    fs.writeFileSync(shortcut, "L");
+    fs.mkdirSync(path.join(dir, "folder.mp4"));
+    const refused = {
+      "an executable": tool, "a shortcut": shortcut, "a directory": path.join(dir, "folder.mp4"),
+      "a relative path": "take one.mp4", "a path with ..": [dir, "..", path.basename(dir), "take one.mp4"].join(path.sep),
+      "a network share": process.platform === "win32" ? "\\\\localhost\\c$\\take one.mp4" : "//localhost/take one.mp4",
+      "a missing file": path.join(dir, "missing.mp4")
+    };
+    for (const [why, p] of Object.entries(refused)) {
+      const got = await evalPage(cdp, "window.splitpageDesktop.openVideoPath(" + JSON.stringify(p) + ")");
+      record(tag + ": a stored path to " + why + " opens nothing", !!got && got.ok === false && (got.code === "REFUSED" || got.code === "GONE"), JSON.stringify(got));
+    }
+    opens = await shell(cdp, "videoFileOpens", {});
+    record(tag + ": main opened nothing for the refused paths", !!opens && opens.length === 3, JSON.stringify(opens));
+
     fs.rmSync(clip);
     const gone = await evalPage(cdp, "window.splitpageDesktop.openVideoFile(" + JSON.stringify(token) + ")");
     record(tag + ": a file since deleted answers GONE", !!gone && gone.ok === false && gone.code === "GONE", JSON.stringify(gone));
+    const goneByPath = await evalPage(cdp, "window.splitpageDesktop.openVideoPath(" + JSON.stringify(clip) + ")");
+    record(tag + ": a stored path to a file since deleted answers GONE", !!goneByPath && goneByPath.ok === false && goneByPath.code === "GONE", JSON.stringify(goneByPath));
   } finally {
     if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(dir);

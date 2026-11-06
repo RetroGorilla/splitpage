@@ -59,12 +59,13 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
       return;
     }
     const token = videoFileTokens[videoLinkKey(link)];
-    if (!token) {
+    const stored = link.location && link.location.kind === "path" ? link.location.path : "";
+    if (!token && !stored) {
       ports.notices.show("Splitpage only opens a video file you dropped or pasted in since it started — " +
         "drop “" + name + "” onto this beat again to open it from here.", "warn", true);
       return;
     }
-    Promise.resolve(ports.desktop.open(token)).then(function (res: DesktopVideoResult | null) {
+    Promise.resolve(token ? ports.desktop.open(token) : ports.desktop.openPath(stored)).then(function (res: DesktopVideoResult | null) {
       if (disposed) return;
       if (res && res.ok) return;
       ports.notices.show("Could not open “" + name + "”" + (res && res.code === "GONE" ? " — it is no longer where it was." : "."), "error");

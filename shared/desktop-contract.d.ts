@@ -237,6 +237,7 @@ export interface DesktopIpcContract {
   "splitpage:set-theme": DesktopChannelCall<[string], void>;
   "splitpage:video-file-grant": DesktopChannelCall<[string], string | null>;
   "splitpage:video-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
+  "splitpage:video-path-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-thumbnail": DesktopChannelCall<[string, string], { ok: true; bytes: Uint8Array; mime: string } | DesktopWireFailure>;
   "splitpage:update-status": DesktopChannelCall<[], DesktopWireUpdateStatus> & { receive: [DesktopWireUpdateStatus] };
   "splitpage:update-check": DesktopChannelCall<[], DesktopWireUpdateStatus>;

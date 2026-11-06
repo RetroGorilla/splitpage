@@ -310,8 +310,9 @@ is special. **It is the only atom.**
   (by its blob ref) is added after the ones there, and so is each video,
   as an item of its own: its link marked `poster`, with a thumbnail (a
   video file's first frame) or none (a placeholder). A link on a video host, a `<video>` and a
-  video file count (a file by its name only: its bytes and its path are not
-  the document's). #124 made a comment of each instead; comments it made
+  video file count (a file by its name and size; its bytes are not the
+  document's, and since #259 a file dropped in the desktop app keeps its
+  path as the link's `location`, which SplitShare leaves out). #124 made a comment of each instead; comments it made
   stay as they are. The gallery's shape is `imageRef` (the first picture,
   unchanged), `imageLinks` (its caption) and `moreImages`
   (`[{imageRef, links}]`), `src/core/document/gallery.ts`; the merge takes both sides'
