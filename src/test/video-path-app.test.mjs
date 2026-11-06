@@ -22,6 +22,7 @@ const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts")
 const { exportServices } = await import("../application/export/services.ts");
 const { buildPackingListPrintPage, buildScriptWithListsPrintPage, buildShotListPrintPage } = await import("../adapters/formats/list-print.ts");
 const { rowSlots, videoLinkKey } = await import("../core/document/gallery.ts");
+const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.ts");
 
 const MARKER = "PathMarker259";
 const CLIP = "C:\\" + MARKER + "\\Clips\\take one.mp4";
@@ -151,6 +152,38 @@ test("undoing a drop that moved a link to a new path opens the old path, not the
   undoOwner().undo();
   assert.deepEqual(links("r1")[0].location, at(NEVER_DROPPED), "setup: undo puts the old path back");
   assert.deepEqual(await openOnDesktop("r1", links("r1")[0]), [NEVER_DROPPED]);
+});
+
+test("a video playing in the gallery stops when undo puts its link back on another file's path", async () => {
+  const fromClip = clip("take one.mp4", 9);
+  const fromMoved = clip("take one.mp4", 9);
+  const made = URL.createObjectURL, revoked = URL.revokeObjectURL;
+  try {
+    await open(script());
+    dropVideo("r1", fromClip, { "take one.mp4": CLIP });
+    await until(() => links("r1").length === 1, "the first drop");
+    flush();
+    dropVideo("r1", fromMoved, { "take one.mp4": MOVED });
+    await until(() => links("r1")[0].location.path === MOVED, "the second drop's path");
+    flush();
+    URL.createObjectURL = (f) => f === fromClip ? "blob:clip" : f === fromMoved ? "blob:moved" : "blob:other";
+    URL.revokeObjectURL = () => {};
+    openGalleryOverlay("r1", 0);
+    const play = document.querySelector('#gallery-body [data-gact="play"]');
+    assert.ok(play, "setup: the dropped file can play here");
+    play.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    assert.equal(document.querySelector("#gallery-body .scene-gallery-player")?.getAttribute("src"), "blob:moved");
+    undoOwner().undo();
+    await settle();
+    assert.deepEqual(links("r1")[0].location, at(CLIP), "setup: undo puts the first path back");
+    assert.equal(videoFiles.url(links("r1")[0]), "blob:clip", "setup: the link now names the first file");
+    const player = document.querySelector("#gallery-body .scene-gallery-player");
+    assert.notEqual(player && player.getAttribute("src"), "blob:moved", "the second file is no longer shown for the first file's link");
+  } finally {
+    closeGalleryOverlay();
+    URL.createObjectURL = made;
+    URL.revokeObjectURL = revoked;
+  }
 });
 
 test("a merge with a copy saved by an older build, which drops the path, keeps the path", () => {

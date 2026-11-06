@@ -418,8 +418,10 @@ export function addGalleryVideo(row: GalleryRow, link: unknown, poster?: ImageRe
     const had = s.links.filter(function (x) { return videoLinkKey(x) === key; })[0];
     if (!had) continue;
     if (l.location && locationKey(had) !== locationKey(l)) {
-      const location = l.location;
-      s.links = s.links.map(function (x) { return x === had ? Object.assign({}, x, { location: location }) : x; });
+      const moved: VideoLink = Object.assign({}, had, { location: l.location });
+      if (l.duration !== undefined) moved.duration = l.duration;
+      s.links = s.links.map(function (x) { return x === had ? moved : x; });
+      if (had.poster && poster) s.ref = poster;
       setRowSlots(row, slots);
     }
     return i;

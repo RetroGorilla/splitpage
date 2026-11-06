@@ -1,4 +1,4 @@
-import { annotateGallerySlot, moveGallerySlot, removeGallerySlot, rowSlots, setVideoThumbnail, videoLinkKey, videoLinkLabel } from "../../core/document/gallery.ts";
+import { annotateGallerySlot, locatedVideoKey, moveGallerySlot, removeGallerySlot, rowSlots, setVideoThumbnail, videoLinkKey, videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { cssAttr } from "../common/dom.ts";
@@ -136,7 +136,7 @@ function paint() {
   const length = poster ? formatVideoLength(poster.duration) : "";
   const openLink = poster || slot.links[0] || null;
   const play = playState(poster);
-  const playKey = play && play.can ? videoLinkKey(poster) : null;
+  const playKey = play && play.can ? locatedVideoKey(poster) : null;
   if ((view as GalleryView).playing && (view as GalleryView).playing !== playKey) (view as GalleryView).playing = null;
   const playing = !!(playKey && (view as GalleryView).playing === playKey);
   const stillKind = poster && poster.href ? "thumbnail" : "first frame";
@@ -307,7 +307,7 @@ function startPlaying() {
   const poster = slot && slotPoster(slot as Slot);
   const play = playState(poster);
   if (!play || !play.can) return;
-  (view as GalleryView).playing = videoLinkKey(poster);
+  (view as GalleryView).playing = locatedVideoKey(poster);
   paint();
   const player = modal().querySelector<HTMLElement>(".scene-gallery-player");
   if (player) { try { player.focus({ preventScroll: true }); } catch (e) { } }

@@ -65,6 +65,21 @@ test("dropping a file again records its path on the link it already has, and nev
   assert.equal(rowSlots(row).length, 1);
 });
 
+test("a file dropped again from another path brings its own first frame and length with the path", () => {
+  const frame = (c: string) => ({ sha256: c.repeat(64), width: 16, height: 9, mime: "image/jpeg" });
+  const row: GalleryRow = { id: "r1", imageRef: null };
+  assert.equal(addGalleryVideo(row, { name: "take one.mp4", size: 9, location: AT(WIN), duration: 10 }, frame("a")), 0);
+  assert.equal(addGalleryVideo(row, { name: "take one.mp4", size: 9, location: AT(MOVED), duration: 20 }, frame("b")), 0);
+  const slot = rowSlots(row)[0];
+  assert.deepEqual(slot?.links, [{ name: "take one.mp4", size: 9, location: AT(MOVED), duration: 20, poster: true }]);
+  assert.equal(slot?.ref?.sha256, "b".repeat(64));
+  assert.equal(addGalleryVideo(row, { name: "take one.mp4", size: 9, location: AT(WIN) }, null), 0);
+  assert.deepEqual(rowSlots(row)[0]?.links, [{ name: "take one.mp4", size: 9, location: AT(WIN), duration: 20, poster: true }],
+    "a drop whose frame and length could not be read keeps the ones it has");
+  assert.equal(rowSlots(row)[0]?.ref?.sha256, "b".repeat(64));
+  assert.equal(rowSlots(row).length, 1);
+});
+
 test("a change of location alone is a change of the gallery field, for merging and for equality", () => {
   const plain: VideoLink = { name: "a.mp4", size: 3, poster: true };
   const located: VideoLink = { ...plain, location: AT(WIN) };
