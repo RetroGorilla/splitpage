@@ -12,13 +12,21 @@ import { createEditorSelection } from "../../../src/application/editing/selectio
 import { createCellEditing } from "../../../src/application/editing/cell-editing.ts";
 import { createPaintGuard } from "../../../src/application/editing/paint-guard.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
+import { createProductionIndex } from "../../../src/application/production/production-index.ts";
+import { deepFreeze } from "../../../src/core/document/freeze.ts";
+import { acceptTagGhost, maybeAutoTagShortcut, startProductionTags, tagGhost, updateTagGhost } from "../../../src/features/tags/production-tags.ts";
+import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
 
-function harness(changeBeforePlan = false, refusePaste = false) {
+function harness(changeBeforePlan = false, refusePaste = false, tagged = false) {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
   window.HTMLElement.prototype.scrollIntoView = () => {};
-  document.body.innerHTML = '<div id="writer-doc" contenteditable="true"></div>';
+  document.body.innerHTML = '<div id="writer-doc" contenteditable="true"></div>' + (tagged ? '<div id="tag-ghost"></div>' : "");
   const root = document.getElementById("writer-doc") as HTMLElement;
-  let doc = migrateRows({ rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" }] }, fakeMigration().ports);
+  const migration = fakeMigration();
+  let doc = migrateRows({
+    rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" }],
+    ...(tagged ? { productionTags: [{ id: "t_kettle", cat: "prop", name: "Kettle" }] } : {})
+  }, migration.ports);
   let epoch = 1;
   let breaks = 0;
   const left: string[] = [];
@@ -40,9 +48,9 @@ function harness(changeBeforePlan = false, refusePaste = false) {
     plan.apply(doc);
     return { kind: "applied", generation: 1, changes: plan.changes };
   };
-  const cells = createCellEditing<HTMLElement>({
+  const cells = createCellEditing<Element>({
     page: {
-      address: cell => ({ rowId: cell.dataset.id ?? null, field: cell.dataset.field ?? null }),
+      address: cell => ({ rowId: cell.getAttribute("data-id"), field: cell.getAttribute("data-field") }),
       attached: cell => cell.isConnected, html: cell => cell.innerHTML, selection: () => null,
       write: (cell, html) => { cell.innerHTML = html; }, focus: () => {}
     },
@@ -50,6 +58,15 @@ function harness(changeBeforePlan = false, refusePaste = false) {
     undo: { applying: () => false, breakCoalescing: () => {}, flush: () => {}, latest: () => null },
     stale: () => false, painted: () => {}, shown: edit => edit(), announce: () => {}
   });
+  const tags = tagged ? startProductionTags({
+    document: fakeDocument(doc).document, edits: fakeEdits().edits,
+    refresh: { request: () => {}, cancel: () => {} }, stamping: { stamp: () => { throw new Error("No stamp expected"); } },
+    text: { cellOf: () => [], productionReaders: migration.ports.readers, inertBody: () => document.body, sanitizeHtml: html => String(html ?? "") },
+    production: () => createProductionIndex(migration.ports.readers, deepFreeze),
+    editing: { cells: () => cells, focus: () => ({ promptMutedFor: () => null }) },
+    undo: { breakCoalescing: () => {} }, view: () => ({ writerOpen: () => true }),
+    notices: fakeNotices().notices, ids: migration.ids
+  }) : null;
   const writer = createFlowWriter({
     root, doc: () => doc,
     ...(refusePaste ? { clipboard: { mount: () => () => {}, copy: () => {}, paste: () => ({ refused: "Paste refused" }) } } : {}),
@@ -62,7 +79,13 @@ function harness(changeBeforePlan = false, refusePaste = false) {
     shown: edit => edit(),
     editingBlocked: () => guard.painting(),
     text,
-    visualInput: (_event, cell) => { inputs.push(cell.innerHTML); cells.sync(cell); },
+    visualInput: tagged
+      ? (event, cell) => { maybeAutoTagShortcut(event, cell); updateTagGhost(cell); }
+      : (_event, cell) => { inputs.push(cell.innerHTML); cells.sync(cell); },
+    visualKeydown: (event, cell) => {
+      if (event.key === "Tab" && tagGhost?.cellEl === cell && acceptTagGhost()) { event.preventDefault(); return true; }
+      return false;
+    },
     visualLeave: cell => { leaves.push(cell.innerHTML); cells.sync(cell); },
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => { breaks++; }, last: () => null, nextRedo: () => null },
     caretAfterStep: () => 0, notice: () => {}, changed: () => {}, selectionMoved: () => {},
@@ -70,7 +93,7 @@ function harness(changeBeforePlan = false, refusePaste = false) {
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: beat => { left.push(beat.dataset.id ?? ""); },
     newCommentId: () => "c", openComment: () => {}
   });
-  return { writer, root, left, leaves, inputs, painting: guard.whilePainting, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
+  return { writer, root, tags, left, leaves, inputs, painting: guard.whilePainting, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
     epoch++;
     doc = migrateRows({ rows: [{ id: "a", audioText: "Replacement" }] }, fakeMigration().ports);
   } };
@@ -136,7 +159,16 @@ function visualCell(): HTMLElement {
 function typeVisual(html: string): void {
   const cell = visualCell();
   cell.innerHTML = html;
-  cell.dispatchEvent(new window.Event("input", { bubbles: true }));
+  const last = cell.lastChild;
+  if (last && last.nodeType === 3) window.getSelection()?.setBaseAndExtent(last, (last as Text).length, last, (last as Text).length);
+  cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: html.slice(-1) }));
+}
+
+function withCaretRects<T>(run: () => T): T {
+  const proto = window.Range.prototype as unknown as { getClientRects: () => unknown[] };
+  const original = proto.getClientRects;
+  proto.getClientRects = () => [{ right: 0, top: 0 }];
+  try { return run(); } finally { proto.getClientRects = original; }
 }
 
 function pressVisual(key: string): void {
@@ -164,15 +196,35 @@ test("typing in the Visual box while editing is blocked changes neither the docu
   } finally { h.writer.dispose(); }
 });
 
-test("typing a tag shortcut in the Visual box while editing is blocked writes nothing to the document", () => {
-  const h = harness();
+test("typing a tag shortcut in the Visual box while editing is blocked creates no tag", () => {
+  const h = harness(false, false, true);
   try {
-    openWithOld(h);
-    h.painting(() => { typeVisual("Old [kettle]"); });
-    assert.deepEqual(h.inputs, []);
-    assert.equal(h.doc().rows[0]?.visualText, "Old");
-    assert.equal(visualCell().innerHTML, "Old");
-  } finally { h.writer.dispose(); }
+    h.writer.repaint();
+    h.writer.openVisual("a");
+    h.painting(() => { typeVisual("[kettle]"); });
+    assert.equal(h.doc().rows[0]?.visualText ?? "", "");
+    assert.equal(visualCell().innerHTML, "");
+    typeVisual("[kettle]");
+    assert.match(h.doc().rows[0]?.visualText ?? "", /tag-anchor/);
+  } finally { h.tags?.dispose(); h.writer.dispose(); }
+});
+
+test("Tab in the Visual box while editing is blocked does not accept the tag completion", () => {
+  const h = harness(false, false, true);
+  try {
+    withCaretRects(() => {
+      h.writer.repaint();
+      h.writer.openVisual("a");
+      typeVisual("[ke");
+      assert.equal(document.getElementById("tag-ghost")?.classList.contains("is-visible"), true);
+      h.painting(() => { pressVisual("Tab"); });
+      assert.equal(h.doc().rows[0]?.visualText, "[ke");
+      assert.equal(visualCell().innerHTML, "[ke");
+      assert.equal(document.querySelector<HTMLElement>(".wr-flow-visual-box")?.hidden, false);
+      pressVisual("Tab");
+      assert.match(h.doc().rows[0]?.visualText ?? "", /tag-anchor/);
+    });
+  } finally { h.tags?.dispose(); h.writer.dispose(); }
 });
 
 test("closing a clean Visual box while editing is blocked does not write its stale text over the document", () => {

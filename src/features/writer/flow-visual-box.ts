@@ -209,7 +209,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
       ports.undo(redo ? "redo" : "undo");
       return;
     }
-    if (ports.keydown(event, cell)) return;
+    if (!ports.blocked() && ports.keydown(event, cell)) return;
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
     if (event.key === "Enter") {
       event.preventDefault();
