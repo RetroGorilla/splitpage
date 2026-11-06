@@ -250,7 +250,7 @@ assert.ok(ts.flattenDiagnosticMessageText(tabIdError.messageText, " ").includes(
 const tabstripPagePath = "desktop/tabstrip/tabstrip.ts";
 const tabstripPageSource = readFileSync(new URL("../tabstrip/tabstrip.ts", import.meta.url), "utf8");
 for (const name of ["reorderTab", "moveTabHere"]) {
-  const original = `.${name}((payload as Record<string, unknown>).tabId as string, dropIndex)`;
+  const original = `.${name}(tabId, dropIndex)`;
   const broken = tabstripPageSource.replace(original, `.${name}(123, dropIndex)`);
   assert.notEqual(broken, tabstripPageSource);
   const errors = ts.getPreEmitDiagnostics(compileFixtures({ [tabstripPagePath]: broken }, { config: "tsconfig.desktop.json" }).program);
