@@ -149,7 +149,8 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   openPrompterInBrowser: { args: [], direction: "invoke", channel: "splitpage:prompter-open-in-browser" },
   openPrompterInChromium: { args: [], direction: "invoke", channel: "splitpage:prompter-open-in-chromium" },
   voiceStatus: { args: [], direction: "invoke", channel: "splitpage:voice-status" },
-  voiceStart: { args: [], direction: "invoke", channel: "splitpage:voice-start" },
+  voiceStart: { args: ["{0.0.1.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0}"], direction: "invoke", channel: "splitpage:voice-start" },
+  voiceMicrophones: { args: [], direction: "invoke", channel: "splitpage:voice-microphones" },
   voiceStop: { args: [], direction: "invoke", channel: "splitpage:voice-stop" }
 };
 

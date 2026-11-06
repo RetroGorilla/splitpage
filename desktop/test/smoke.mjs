@@ -5616,7 +5616,7 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
     const dialogsBefore = await dialogsSeen(cdp);
 
     const arity = await evalPage(cdp, "(function(){ var d = window.splitpageDesktop; return [d.voiceStatus.length, d.voiceStart.length, d.voiceStop.length, d.voiceMicrophones.length].join(','); })()");
-    record(tag + ": voiceStatus/voiceStop/voiceMicrophones take no argument, voiceStart only a microphone (#1162)", arity === "0,1,0,0", String(arity));
+    record(tag + ": voiceStatus/voiceStart/voiceStop/voiceMicrophones declare no argument to the page", arity === "0,0,0,0", String(arity));
 
     await evalPage(cdp, "document.getElementById('btn-present').click(); true", { awaitPromise: false });
     await poll(cdp, "!document.getElementById('prompter').hidden", 10000);
