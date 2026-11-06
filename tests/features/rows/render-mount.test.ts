@@ -22,7 +22,7 @@ function fixture(withBeat = false) {
     edits: { allowed: () => true },
     text: {
       ...fakeTextServices(document).text,
-      productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0 }
+      productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) }
     },
     video: { card: () => document.createElement("a"), hostLabel: () => "File" },
     editing: {

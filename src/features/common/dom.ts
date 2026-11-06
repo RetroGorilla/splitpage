@@ -3,7 +3,7 @@ export function cssAttr(value: unknown): string {
 }
 
 export function isInsideTagOrLink(el: Element | null | undefined): boolean {
-  return !!(el && el.closest && el.closest(".tag-anchor, a"));
+  return !!(el && el.closest && el.closest(".tag-anchor, .who-anchor, a"));
 }
 
 export function ensureTrailingCaretSpot(container: Node | null | undefined): void {

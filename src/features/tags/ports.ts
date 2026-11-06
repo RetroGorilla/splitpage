@@ -56,6 +56,25 @@ export interface PlainTagMount extends PlainTagControl {
   readonly dispose: () => void;
 }
 
+export interface WhoListPorts {
+  readonly document: Pick<DocumentReader, "current">;
+  readonly cells: Pick<CellEditing<Element>, "edit">;
+  readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
+}
+
+export interface WhoListControl {
+  readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
+  readonly refresh: () => void;
+  readonly keydown: (e: KeyboardEvent, cellEl: Element) => boolean;
+  readonly cancel: () => void;
+  readonly isOpen: (cellEl?: Element | null) => boolean;
+  readonly onPicked: (listener: () => void) => () => void;
+}
+
+export interface WhoListMount extends WhoListControl {
+  readonly dispose: () => void;
+}
+
 export interface TagPanelPorts {
   readonly view: Pick<TagPanelState, "prep" | "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
   readonly focus: Pick<FocusMemory<HTMLElement>, "lastRow">;

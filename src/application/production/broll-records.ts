@@ -5,6 +5,8 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { applyBrollRecords, brollInCell, brollSeedLocation, brollSeedRef, hasBrollRecordWork, planBrollRecords } from "../../core/production/broll.ts";
 import type { UnkeyedScope } from "../../core/production/broll.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
+import { applyOwnerSync, planOwnerSync } from "../../core/production/owners.ts";
+import type { OwnerSnapshot } from "../../core/production/owners.ts";
 import type { ProductionRow } from "../../core/production/ports.ts";
 import { addBrollRecord, brollRecord } from "../../core/production/records.ts";
 import type { Run } from "../../core/text/runs.ts";
@@ -39,7 +41,10 @@ export interface RecordsReconcilerPorts {
   readonly ids: IdSource;
 }
 
-export type RecordsReconciler = (doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null;
+export type RecordsReconciler = {
+  (doc: ValidatedDocument, changes: ChangeSet): RecordsPlan | null;
+  readonly resync?: ((doc: ValidatedDocument | null) => void) | undefined;
+};
 
 function unkeyedScope(changes: ChangeSet): UnkeyedScope {
   if (changes.whole) return null;
@@ -49,21 +54,33 @@ function unkeyedScope(changes: ChangeSet): UnkeyedScope {
 }
 
 export function createRecordsReconciler(ports: RecordsReconcilerPorts): RecordsReconciler {
-  return function (doc, changes) {
+  let owners: OwnerSnapshot | null = null;
+  function reconcile(doc: ValidatedDocument, changes: ChangeSet): RecordsPlan | null {
     if (!doc || doc !== ports.held()) return null;
     const tags = ports.production.recordsPlan(doc, ports.viewed());
     const shots = planBrollRecords(doc, ports.text.productionReaders, ports.ids, ports.text.htmlToPlainText, unkeyedScope(changes));
+    const who = planOwnerSync(owners, doc, ports.text.productionReaders);
     const fields: string[] = [];
     if (tags && tags.apply) fields.push("productionTags");
     if (hasBrollRecordWork(shots)) fields.push("brollShots");
+    who.fields.forEach(function (f) { if (fields.indexOf(f) === -1) fields.push(f); });
     if (!fields.length && !tags) return null;
     return {
       fields: fields,
       apply: function (into) {
         if (tags && tags.apply) tags.apply(into);
         applyBrollRecords(into.brollShots, shots);
+        applyOwnerSync(who, into, ports.ids);
       },
-      commit: tags ? tags.commit : undefined
+      commit: function () {
+        if (tags) tags.commit();
+        owners = who.snapshot;
+      }
     };
-  };
+  }
+  return Object.assign(reconcile, {
+    resync: function (doc: ValidatedDocument | null) {
+      owners = doc ? planOwnerSync(owners, doc, ports.text.productionReaders).snapshot : null;
+    }
+  });
 }

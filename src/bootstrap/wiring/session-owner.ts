@@ -97,7 +97,10 @@ function createSession(ports: SessionBridgePorts, after: SessionCounters, number
     timers: ports.timers,
     after: after
   });
-  made.subscribe(change => { numbering.changed(change.changes); });
+  made.subscribe(change => {
+    numbering.changed(change.changes);
+    if (ports.records.resync) ports.records.resync(made.held());
+  });
   changeListeners.forEach(function (entry) { made.subscribe(hearing(entry)); });
   return made;
 }

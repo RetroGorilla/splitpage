@@ -7,7 +7,12 @@ export type FieldTag = { catId: string; name: string; text: string };
 
 export type BrollItem = { id: string; name: string; desc: string };
 
+export type WhoPair = { cat: string; name: string; who: string };
+
+export type FieldWho = { names: string[]; pairs: WhoPair[] };
+
 export type ProductionReaders = {
+  whoInField: (html: FieldHtml) => Frozen<FieldWho>;
   cellOf: CellDecoder;
   tagsInField: (html: FieldHtml) => Frozen<FieldTag[]>;
   cueNamesInField: (html: FieldHtml) => Frozen<string[]>;

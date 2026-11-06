@@ -331,7 +331,9 @@ export function legacySessionPorts(deps: SessionPortDeps): SessionBridgePorts {
     }),
     capability: Object.freeze({ edit: function () { return effects.edit(); } }),
     editor: Object.freeze({ name: function () { return deps.editorName(); } }),
-    records: function (doc: ValidatedDocument, changes: ChangeSet) { return deps.records(doc, changes); },
+    records: Object.assign(function (doc: ValidatedDocument, changes: ChangeSet) { return deps.records(doc, changes); }, {
+      resync: function (doc: ValidatedDocument | null) { if (deps.records.resync) deps.records.resync(doc); }
+    }),
     attribution: Object.freeze({ attribute: function (doc: DocumentView) { return effects.attribute(doc); } }),
     report: deps.report ?? reportError,
     timers: deps.timers ?? SYSTEM_TIMERS
