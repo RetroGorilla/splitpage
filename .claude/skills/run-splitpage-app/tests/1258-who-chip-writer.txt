@@ -1,0 +1,62 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:5,title:'Writer chips',paragraphsDecided:true,people:[{id:'pSam',name:'Sam'},{id:'pSandy',name:'Sandy'}],productionTags:[{id:'t1',cat:'prop',name:'Kettle',owner:'',notes:'',status:'needed'}],rows:[{id:'a',audioText:'Alpha',visualText:'Fill the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Kettle" contenteditable="false">kettle</span> for'},{id:'b',audioText:'Bravo',visualText:'Mail adam'}],comments:[]})],'writer-chips.splitpage'))
+wait F.state().title === 'Writer chips'
+click #btn-write
+wait W.on()
+eval window.c=function(){return document.querySelector('.wr-flow-visual-text');}; window.opts=function(){var l=document.getElementById('who-list'); return l.hidden?'':Array.from(l.querySelectorAll('.who-option')).map(function(o){return (o.getAttribute('aria-selected')==='true'?'*':'')+o.textContent;}).join('|');}; window.owner=function(){return F.state().productionTags[0].owner;}; window.v=function(i){return F.state().rows[i].visualText;}; W.openVisual('a')
+press  @
+wait opts() === '*Sam|Sandy'
+expect (function(){var o=document.querySelector('#who-list .who-option');var r=o.getBoundingClientRect();return r.width>0 && r.height>0 && o.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})()
+press sa
+wait opts() === '*Sam|Sandy|sa'
+key ArrowDown
+wait opts() === 'Sam|*Sandy|sa'
+eval document.documentElement.removeAttribute('data-theme')
+shot 1258-writer-who-list-light
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+key Enter
+wait c().querySelectorAll('.who-anchor').length === 1
+expect opts() === ''
+expect c().querySelector('.who-anchor').textContent === '@Sandy'
+expect /for <span class="who-anchor" data-who="Sandy" contenteditable="false">@Sandy<\/span>$/.test(v(0))
+expect owner() === 'pSandy'
+expect U.sizes().undo === window.__n + 1
+expect document.activeElement === c()
+key ctrl KeyZ
+wait v(0).indexOf('who-anchor') === -1
+expect /for @sa$/.test(v(0))
+expect owner() === ''
+key ctrl+shift KeyZ
+wait v(0).indexOf('who-anchor') !== -1
+expect owner() === 'pSandy'
+expect W.check().length === 0
+eval W.openVisual('a')
+press  now.
+wait /@Sandy<\/span> now\.$/.test(v(0))
+eval document.documentElement.setAttribute('data-theme','dark')
+eval new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); })
+shot 1258-writer-who-chip-dark
+eval document.documentElement.removeAttribute('data-theme')
+eval document.querySelector('.wr-flow-visual-close').click()
+expect W.check().length === 0
+eval W.openVisual('b')
+press @x.com
+wait /adam@x\.com$/.test(v(1))
+sleep 200
+expect opts() === ''
+press  @Robin
+wait opts() === '*Robin'
+key Tab
+wait c().querySelectorAll('.who-anchor').length === 1
+expect F.state().people.some(function(p){return p.name==='Robin';})
+expect /data-who="Robin"/.test(v(1))
+press  @Sa
+wait opts() === '*Sam|Sandy|Sa'
+key Escape
+wait opts() === ''
+expect !document.querySelector('.wr-flow-visual-box').hidden
+expect /@Robin<\/span> @Sa$/.test(v(1).replace(/&nbsp;/g, ' '))
+eval document.querySelector('.wr-flow-visual-close').click()
+expect W.check().length === 0
+quit

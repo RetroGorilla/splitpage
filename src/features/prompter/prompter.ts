@@ -3,6 +3,7 @@ import { flowOf } from "../../core/flow/flow.ts";
 import { numberHtml } from "../common/number-html.ts";
 import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { withoutCues } from "../../core/text/cues.ts";
+import { withoutWho } from "../../core/text/who.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { toPlainText } from "../../core/text/projections.ts";
@@ -176,7 +177,7 @@ export function buildPrompterContent(): void {
     ? doc.rows.filter(function (row) { return row.status !== "shot"; })
     : doc.rows;
   const beatEntries = source.map(function (row): BeatEntry {
-    const cell = trimPrompterCell(withoutCues(ports.text.cellOf(row.audioText)));
+    const cell = trimPrompterCell(withoutWho(withoutCues(ports.text.cellOf(row.audioText))));
     return { id: row.id, cell: cell, view: cell.length ? prompterBeatHtml(cell) : null };
   });
   const lines = beatEntries.filter(function (e) { return e.view; }) as BeatLine[];

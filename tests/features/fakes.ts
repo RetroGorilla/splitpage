@@ -79,7 +79,7 @@ export function fakeWriterPorts(initial: DocumentView) {
     text: {
       ...fakeTextServices(document).text,
       htmlToPlainText: (html) => String(html ?? ""),
-      productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0 }
+      productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) }
     },
     editing: {
       selection: () => selection, paint: () => paint

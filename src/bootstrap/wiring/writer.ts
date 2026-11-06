@@ -33,6 +33,7 @@ import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from ".
 import { anchorBrollInLeftCell, maybeCaptureBroll } from "./broll.ts";
 import { pictures } from "./ports/pictures.ts";
 import { currentPlainTags } from "./plain-tags.ts";
+import { currentWhoList } from "./who-list.ts";
 import { mountFlowClipboardRoutes } from "../../features/clipboard/routes.ts";
 import { copyFlowClipboard, pasteFlowClipboard } from "../../features/clipboard/flow-clip.ts";
 import { randomHexBytes } from "../../adapters/identity/ids.ts";
@@ -106,9 +107,11 @@ export function mountWriterRuntimeFeature() {
               maybeCaptureBroll(event, cell);
               currentPlainTags()?.maybeOpen(event, cell);
               currentPlainTags()?.refresh();
+              currentWhoList()?.maybeOpen(event, cell);
               updateTagGhost(cell);
             },
             visualLeave: cell => {
+              currentWhoList()?.cancel();
               if (currentPlainTags()?.isOpen(cell)) currentPlainTags()?.close();
               cell.innerHTML = text.sanitizeHtml(cell.innerHTML);
               writerEditing.cells().sync(cell);
@@ -116,6 +119,7 @@ export function mountWriterRuntimeFeature() {
               hideTagGhost();
             },
             visualKeydown: (event, cell) => {
+              if (currentWhoList()?.keydown(event, cell)) return true;
               const plain = currentPlainTags();
               if (plain?.isOpen(cell)) {
                 if (event.key === "Tab") { event.preventDefault(); plain.close(); return true; }

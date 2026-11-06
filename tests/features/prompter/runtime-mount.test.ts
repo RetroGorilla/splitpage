@@ -12,6 +12,7 @@ import type { PreferenceNotice } from "../../../src/application/preferences/pref
 import { createDesktopRecognition, forgetDesktopVoice } from "../../../src/adapters/desktop/desktop-voice.ts";
 import { restoreDesktop, useDesktopForTest } from "../../../src/adapters/desktop/desktop-port.ts";
 import type { DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
+import type { Run } from "../../../src/core/text/runs.ts";
 
 const realm = globalThis as unknown as Record<string, unknown>;
 const win = dom.window;
@@ -48,6 +49,20 @@ test("Present keeps saved and implicit paragraphs through skipped and empty firs
     runtime.buildPrompterContent();
     assert.deepEqual(Array.from(document.querySelectorAll(".prompter-line"), line => line.textContent),
       ["First", "Second", "Third.", "Fourth", "Fifth continues"]);
+  } finally { runtime.dispose(); }
+});
+
+test("Present reads past a name chip as if it were not there", () => {
+  harness();
+  const doc = migrateRows({ rows: [{ id: "a", audioText: "chip" }] }, fakeMigration().ports);
+  const h = fakePrompterPorts(doc);
+  const sam = { atom: "who" as const, name: "Sam", text: "@Sam", marks: {} };
+  const cells: Record<string, Run[]> = { chip: [sam, { text: " Ask them, ", marks: {} }, sam, { text: " now.", marks: {} }] };
+  const runtime = startPrompter({ ...h.ports, text: { ...h.ports.text, cellOf: (html: unknown) => cells[String(html)] ?? [] } });
+  try {
+    runtime.buildPrompterContent();
+    assert.deepEqual(Array.from(document.querySelectorAll(".prompter-line"), line => line.textContent), ["Ask them, now."]);
+    assert.equal(document.querySelector("#prompter-content")?.textContent?.includes("@"), false);
   } finally { runtime.dispose(); }
 });
 
