@@ -165,11 +165,12 @@
     } catch (err) {
       return;
     }
-    if (!payload || !(payload                           ).tabId) return;
+    const tabId = payload ? (payload                           ).tabId : null;
+    if (typeof tabId !== "string" || !tabId) return;
     if ((payload                           ).sourceWindowId === windowId()) {
-      (bridge                         ).reorderTab((payload                           ).tabId          , dropIndex);
+      (bridge                         ).reorderTab(tabId, dropIndex);
     } else {
-      (bridge                         ).moveTabHere((payload                           ).tabId          , dropIndex);
+      (bridge                         ).moveTabHere(tabId, dropIndex);
     }
   }
 

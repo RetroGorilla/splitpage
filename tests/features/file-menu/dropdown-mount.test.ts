@@ -218,6 +218,31 @@ test("a recent file whose read finishes after disposal is not opened", async () 
   assert.equal(h.calls.some((call) => call[0] === "openDocument"), false);
 });
 
+test("a recent file deleted since it was listed says so and opens nothing", async () => {
+  page();
+  const h = harness();
+  h.state.desktop = true;
+  h.state.recent = [{ fileId: "f1", name: "Recent.splitpage", title: "Recent" }];
+  const mounted = startFileMenu({ ...h.ports, recentHandle: () => ({ getFile: () => Promise.reject(new Error("ENOENT")) }) });
+  const failures: unknown[] = [];
+  const onFailure = (reason: unknown): void => { failures.push(reason); };
+  process.on("unhandledRejection", onFailure);
+  try {
+    mounted.toggleFileMenu(true);
+    mounted.toggleSubmenu("recent", true);
+    await settled();
+    win.document.querySelector('[data-recent-id="f1"]')?.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true }));
+    await settled();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } finally {
+    process.off("unhandledRejection", onFailure);
+    mounted.dispose();
+  }
+  assert.deepEqual(failures, []);
+  assert.equal(h.calls.some((call) => call[0] === "openDocument"), false);
+  assert.deepEqual(h.notices.shown.map((n) => [n.message, n.kind]), [["That file isn't there any more — it may have been moved or deleted.", "warn"]]);
+});
+
 test("disposal removes the menu's listeners and test probe and stops the controls", () => {
   page();
   const h = harness();

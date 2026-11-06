@@ -76,10 +76,8 @@ function drag(window, target, type, data, fields = {}) {
     drop(JSON.stringify({ tabId: 42, sourceWindowId: state.windowId }));
     drop(JSON.stringify({ tabId: { unexpected: true }, sourceWindowId: "window-b" }));
     for (const value of ["null", "42", "[]", "not JSON", '{"tabId":0}']) drop(value);
-    assert.equal(calls[3][1].constructor, dom.window.Object);
     assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
-      ["reorderTab", state.tabs[0].tabId, 2], ["moveTabHere", state.tabs[1].tabId, 2],
-      ["reorderTab", 42, 2], ["moveTabHere", { unexpected: true }, 2]
+      ["reorderTab", state.tabs[0].tabId, 2], ["moveTabHere", state.tabs[1].tabId, 2]
     ]);
     const data = { effectAllowed: null, setData: (type, value) => { data.type = type; data.value = value; }, dropEffect: "none" };
     const tab = dom.window.document.querySelector(".tab");
@@ -107,4 +105,4 @@ function drag(window, target, type, data, fields = {}) {
   } finally { dom.window.close(); }
 }
 
-console.log("ALL PASS (tab strip rendering, controls, raw drop forwarding, tear-off and titlebar geometry)");
+console.log("ALL PASS (tab strip rendering, controls, drop forwarding, tear-off and titlebar geometry)");
