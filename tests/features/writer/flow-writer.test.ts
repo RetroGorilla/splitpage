@@ -20,6 +20,7 @@ function harness(changeBeforePlan = false, refusePaste = false) {
   let breaks = 0;
   let blocked = false;
   const left: string[] = [];
+  const visualLeaves: string[] = [];
   let recorded: FlowSelectionPair | undefined;
   const writer = createFlowWriter({
     root, doc: () => doc,
@@ -49,9 +50,10 @@ function harness(changeBeforePlan = false, refusePaste = false) {
     caretAfterStep: () => 0, notice: () => {}, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: beat => { left.push(beat.dataset.id ?? ""); },
+    visualLeave: cell => { visualLeaves.push(cell.innerHTML); },
     newCommentId: () => "c", openComment: () => {}
   });
-  return { writer, root, left, block: (value: boolean) => { blocked = value; }, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
+  return { writer, root, left, visualLeaves, block: (value: boolean) => { blocked = value; }, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
     epoch++;
     doc = migrateRows({ rows: [{ id: "a", audioText: "Replacement" }] }, fakeMigration().ports);
   } };
@@ -141,6 +143,72 @@ test("closing the Visual box after a blocked save keeps the text for the next sa
     const cell = document.querySelector<HTMLElement>(".wr-flow-visual-text");
     cell?.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     assert.equal(h.doc().rows[0]?.visualText, "Seen");
+  } finally { h.writer.dispose(); }
+});
+
+function escapeVisual(): void {
+  const cell = document.querySelector<HTMLElement>(".wr-flow-visual-text");
+  cell?.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+}
+
+test("text typed in the Visual box and closed while blocked is saved once editing is allowed again", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.openVisual("a");
+    h.block(true);
+    typeVisual("Seen");
+    escapeVisual();
+    assert.equal(h.doc().rows[0]?.visualText ?? "", "");
+    h.block(false);
+    h.writer.repaint();
+    assert.equal(h.doc().rows[0]?.visualText, "Seen");
+  } finally { h.writer.dispose(); }
+});
+
+test("reopening the Visual box after a blocked close saves the pending text first", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.openVisual("a");
+    h.block(true);
+    typeVisual("Seen");
+    escapeVisual();
+    h.block(false);
+    h.writer.openVisual("a");
+    assert.equal(h.doc().rows[0]?.visualText, "Seen");
+    assert.equal(document.querySelector(".wr-flow-visual-text")?.innerHTML, "Seen");
+  } finally { h.writer.dispose(); }
+});
+
+test("opening another beat's Visual box while the save is still blocked keeps the pending text", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.openVisual("a");
+    h.block(true);
+    typeVisual("Seen");
+    escapeVisual();
+    h.writer.openVisual("b");
+    h.block(false);
+    h.writer.repaint();
+    assert.equal(h.doc().rows[0]?.visualText, "Seen");
+    assert.equal(h.doc().rows[1]?.visualText ?? "", "");
+  } finally { h.writer.dispose(); }
+});
+
+test("closing the Visual box while editing is blocked does not run the leave callback", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    h.writer.openVisual("a");
+    h.block(true);
+    typeVisual("Seen");
+    escapeVisual();
+    assert.deepEqual(h.visualLeaves, []);
+    h.block(false);
+    h.writer.repaint();
+    assert.deepEqual(h.visualLeaves, ["Seen"]);
   } finally { h.writer.dispose(); }
 });
 

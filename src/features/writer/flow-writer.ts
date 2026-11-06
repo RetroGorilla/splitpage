@@ -189,6 +189,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   visual = createFlowVisualBox({
     root, doc: ports.doc, selection: surface.selection, prepare: surface.prepareVisual, place: range => { surface.place(range); }, current: isCurrent,
     plainVisual: ports.plainVisual,
+    blocked: ports.editingBlocked,
     thumbnails: row => rowSlots(row).map(slot => {
       if (slot.ref && ports.pictures) return ports.pictures.imgHtml(slot.ref, "wr-flow-visual-thumb");
       const url = safeImageSrc(slot.dataUrl);
@@ -203,7 +204,6 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         if (!result || !("selection" in result)) return null;
         after = result.selection;
       } else {
-        if (ports.editingBlocked()) return null;
         const outcome = ports.shown(() => ports.run(cellTextCommand(range.head.kind === "beat" ? range.head.rowId : "", "visualText", cellRuns(ports.decode(clean)), ports.text)));
         if (!took(outcome) && outcome.kind !== "noop") return null;
       }

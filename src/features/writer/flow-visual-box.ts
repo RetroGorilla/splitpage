@@ -11,6 +11,7 @@ export interface FlowVisualBoxPorts {
   readonly prepare: (range: FlowRange) => FlowRange | null;
   readonly place: (range: FlowRange) => void;
   readonly current: () => boolean;
+  readonly blocked: () => boolean;
   readonly plainVisual: (row: FlowRow) => string;
   readonly thumbnails: (row: FlowRow) => string;
   readonly save: (range: FlowRange, html: string, first: boolean) => FlowRange | null;
@@ -63,14 +64,13 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   function rowOf(id: string): FlowRow | undefined { return ports.doc().rows.find(row => row.id === id); }
 
   function save(): void {
-    if (!target || !dirty || !ports.current() || composing) return;
+    if (!target || !dirty || !ports.current() || composing || ports.blocked()) return;
     dirty = false;
     let next: FlowRange | null;
     saving = true;
     try { next = ports.save(target, cell.innerHTML, first); }
     finally { saving = false; }
-    if (!next) { dirty = true; return; }
-    if (next.head.kind !== "beat") return;
+    if (!next || next.head.kind !== "beat") return;
     target = next;
     first = false;
     cell.dataset.id = next.head.rowId;
@@ -78,9 +78,11 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   }
 
   function close(restore = true): void {
-    if (box.hidden) return;
+    if (!target) return;
     composing = false;
     save();
+    // why: a refused save keeps the target and the typed text, hidden, until refresh() or open() can save it
+    if (dirty && ports.current()) { box.hidden = true; return; }
     if (!first && ports.current()) ports.leave(cell);
     const range = target;
     target = null;
@@ -102,7 +104,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
 
   function open(range: FlowRange | null, highlight?: { from: number; to: number }): void {
     close(false);
-    if (!ports.current() || !range) return;
+    if (target || !ports.current() || !range) return;
     if (!withinOneBeat(range)) { ports.notice("Visuals must stay within one beat."); return; }
     if (range.head.kind !== "beat") { ports.notice("Put the caret in a beat to edit its visual."); return; }
     range = ports.prepare(range);
@@ -145,6 +147,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
 
   function refresh(): void {
     if (!ports.current()) { close(false); note.hidden = true; return; }
+    if (box.hidden && target) close(false);
     if (target?.head.kind === "beat" && !rowOf(target.head.rowId)) close(false);
     if (target?.head.kind === "beat" && !first && !composing && !dirty && !saving) {
       const row = rowOf(target.head.rowId);
