@@ -888,9 +888,9 @@ function lensRepainted(countChanged: boolean): void {
     state.lens.Z = (state.base.X as number[]).slice();
     if (state.lens.x !== null) {
       state.lens.ref = null;
-      indexFocus(state.lens.x);
+      lensAt(state.lens.x, state.lens.src ?? "pointer", state.lens.t);
     } else if (state.lens.src === "focus") lensOff();
-  }
+  } else if (state.lens.on && state.lens.x !== null) indexFocus(state.lens.x);
   applyKnots(state.lens.Z as number[]);
   lensKick();
 }

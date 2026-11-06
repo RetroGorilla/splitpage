@@ -200,3 +200,47 @@ test("rundown resize: a target label first built while the strip is hidden is me
   assert.ok(parseFloat(label.style.left) < LABEL_PX + 4, "the target sits closer to the start than the label is wide " + label.style.left + " " + label.className + " hatch=" + String(!!document.querySelector(".rd-target-hatch")) + " total=" + rundownLayout().totalSeconds);
   assert.equal(label.classList.contains("is-right"), true);
 });
+
+function lensFixture(t: TestContext) {
+  const make = (count: number): ValidatedDocument => migrateRows({ rows: Array.from({ length: count }, (_, i) => ({
+    id: "lens" + i, audioText: "Beat " + i, lengthSeconds: i % 2 ? 180 : 2
+  })) }, fakeMigration().ports);
+  const frames: FrameRequestCallback[] = [];
+  t.mock.method(globalThis, "requestAnimationFrame", (callback: FrameRequestCallback) => { frames.push(callback); return 1; });
+  const previous = Object.getOwnPropertyDescriptor(window, "matchMedia");
+  Object.defineProperty(window, "matchMedia", { configurable: true, value: (query: string) => ({ matches: query.includes("reduced-motion") }) });
+  t.after(() => { if (previous) Object.defineProperty(window, "matchMedia", previous); else Reflect.deleteProperty(window, "matchMedia"); });
+  const env = setup(t, make(30));
+  const draw = (): void => {
+    for (let i = 0; frames.length && i < 20; i++) frames.shift()?.(1000 + i * 16);
+    assert.equal(frames.length, 0);
+  };
+  const move = (x: number): void => {
+    document.querySelector(".rundown-track")?.dispatchEvent(new window.MouseEvent("pointermove", { bubbles: true, clientX: x }));
+    draw();
+  };
+  env.resize(800);
+  move(50);
+  move(300);
+  return { ...env, make, move, draw };
+}
+
+test("Index recomputes a stationary pointer's mapping when the strip is resized", (t) => {
+  const { resize, move, draw } = lensFixture(t);
+  resize(400);
+  draw();
+  const resized = boxes(blocks());
+  move(300);
+  assert.deepEqual(boxes(blocks()), resized, "an identical pointer event must not change the resized lens");
+});
+
+test("Index restarts hold-to-open after a beat-count repaint under a stationary pointer", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { source, make, draw } = lensFixture(t);
+  source.replace(make(31));
+  renderRundown();
+  draw();
+  t.mock.timers.tick(950);
+  draw();
+  assert.equal(document.getElementById("rundown")?.classList.contains("is-held"), true);
+});
