@@ -108,7 +108,6 @@ wait document.getElementById('pp-voice').classList.contains('is-active')
 jsclick #pp-close
 wait document.getElementById('prompter').hidden
 wait fakeV._voiceCalls.stop === 2
-# with the system default, main is never told a microphone
 expect fakeV._voiceStartArgs.length === 6 && fakeV._voiceStartArgs.every(function (a) { return a.length === 0; })
 
 # --- a chosen microphone goes to main; not connected, or lost, is said (#1162)

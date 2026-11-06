@@ -9,6 +9,9 @@ import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakePrompterPorts } from "../fakes.ts";
 import type { PrompterFeaturePorts } from "../../../src/features/prompter/ports.ts";
 import type { PreferenceNotice } from "../../../src/application/preferences/preferences.ts";
+import { createDesktopRecognition, forgetDesktopVoice } from "../../../src/adapters/desktop/desktop-voice.ts";
+import { restoreDesktop, useDesktopForTest } from "../../../src/adapters/desktop/desktop-port.ts";
+import type { DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
 
 const realm = globalThis as unknown as Record<string, unknown>;
 const win = dom.window;
@@ -962,6 +965,119 @@ function lastDesktopListener(): DesktopListener {
   assert.ok(last, "a desktop listener was made");
   return last.listener;
 }
+
+function delayedDesktopMicrophoneHarness() {
+  const made = desktopMicrophoneHarness(DESKTOP_MIC_ONE);
+  let emit: Parameters<DesktopPort["onVoiceEvent"]>[0] = () => {};
+  let nextSession = 0;
+  let current: number | null = null;
+  const live = new Map<number, string>();
+  const pending: (() => void)[] = [];
+  const stopped: number[] = [];
+  useDesktopForTest({
+    onVoiceEvent: (listener) => { emit = listener; },
+    voiceStart: (microphone) => {
+      const session = ++nextSession;
+      if (current !== null) {
+        live.delete(current);
+        emit({ type: "end", session: current, reason: "taken" });
+      }
+      current = session;
+      live.set(session, microphone ?? "");
+      emit({ type: "device", session, name: microphone === DESKTOP_MIC_TWO ? "Mic Two" : "Mic One" });
+      emit({ type: "start", session });
+      return new Promise((resolve) => { pending.push(() => { resolve({ ok: true, session }); }); });
+    },
+    voiceStop: async () => {
+      if (current !== null) {
+        stopped.push(current);
+        live.delete(current);
+        emit({ type: "end", session: current, reason: "stopped" });
+        current = null;
+      }
+      return { ok: true };
+    }
+  });
+  const runtime = startPrompter({ ...made.ports, voice: { ...made.ports.voice, createDesktop: createDesktopRecognition } });
+  const mounted = mountPrompter({ window: win as unknown as Window, ports: runtime });
+  const tick = () => new Promise<void>((resolve) => { setImmediate(resolve); });
+  const pick = async (id: string) => {
+    const select = document.getElementById("pp-mic") as HTMLSelectElement;
+    select.value = id;
+    select.dispatchEvent(new (win as unknown as Window & typeof globalThis).Event("change", { bubbles: true }));
+    await tick();
+  };
+  const replies = async () => {
+    for (let turn = 0; turn < 20; turn++) {
+      await tick();
+      if (!pending.length) return;
+      pending.splice(0).reverse().forEach((reply) => { reply(); });
+    }
+    assert.fail("desktop starts did not settle");
+  };
+  return { ...made, runtime, live, pending, stopped, pick, replies, tick,
+    dispose: async () => {
+      runtime.stopVoiceFollow();
+      mounted.dispose();
+      runtime.dispose();
+      await replies();
+      assert.equal(live.size, 0, "disposing leaves no helper running");
+      forgetDesktopVoice();
+      restoreDesktop();
+    }
+  };
+}
+
+test("a delayed desktop start reply after a microphone pick keeps the newly chosen listener running", async () => {
+  const h = delayedDesktopMicrophoneHarness();
+  try {
+    h.runtime.openPrompter();
+    await h.tick();
+    await h.runtime.startVoiceFollow();
+    await h.tick();
+    assert.equal(h.pending.length, 1);
+    await h.pick(DESKTOP_MIC_TWO);
+    await h.replies();
+    assert.equal(h.h.state.voice, true, "the stale reply must not stop the new session");
+    assert.deepEqual([...h.live.values()], [DESKTOP_MIC_TWO]);
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+    assert.ok(h.stopped.includes(1), "the obsolete helper was shut down");
+  } finally { await h.dispose(); }
+});
+
+test("rapid repeated microphone picks with delayed desktop replies leave only the final choice listening", async () => {
+  const h = delayedDesktopMicrophoneHarness();
+  try {
+    h.runtime.openPrompter();
+    await h.tick();
+    await h.runtime.startVoiceFollow();
+    await h.tick();
+    for (const id of [DESKTOP_MIC_TWO, DESKTOP_MIC_ONE, DESKTOP_MIC_TWO, DESKTOP_MIC_ONE, DESKTOP_MIC_TWO]) {
+      await h.pick(id);
+    }
+    await h.replies();
+    assert.equal(h.h.state.voice, true, "late replies cannot turn the final choice off");
+    assert.equal(h.choice.saved, DESKTOP_MIC_TWO);
+    assert.deepEqual([...h.live.values()], [DESKTOP_MIC_TWO]);
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+  } finally { await h.dispose(); }
+});
+
+test("closing Present before a desktop start reply shuts down the obsolete helper", async () => {
+  const h = delayedDesktopMicrophoneHarness();
+  try {
+    h.runtime.openPrompter();
+    await h.tick();
+    await h.runtime.startVoiceFollow();
+    await h.tick();
+    assert.equal(h.live.size, 1);
+    h.runtime.closePrompter();
+    await h.replies();
+    assert.equal(h.h.state.voice, false);
+    assert.equal(h.live.size, 0);
+    assert.deepEqual(h.stopped, [1]);
+  } finally { await h.dispose(); }
+});
 
 test("in the desktop app the saved microphone goes to Windows' listener, and the status names it", async () => {
   const { ports } = desktopMicrophoneHarness(DESKTOP_MIC_TWO);
