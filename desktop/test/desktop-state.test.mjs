@@ -55,6 +55,23 @@ test("no file reads as a fresh state with one blank tab", () => {
   assertFresh(store().s.read());
 });
 
+test("the last saved script folder survives store writes and a new store instance", async () => {
+  const { s, file } = store();
+  const folder = abs("saved scripts");
+  await s.write((current) => { current.lastSavedFolder = folder; return current; });
+  await s.write((current) => { current.recents = [{ absPath: abs("opened.splitpage"), title: "Opened", at: 1 }]; return current; });
+  const restarted = createDesktopStateStore({ filePath: () => file, pathKey });
+  assert.equal(restarted.read().lastSavedFolder, folder);
+});
+
+test("invalid saved folders are dropped when desktop state is loaded", () => {
+  for (const lastSavedFolder of [null, 42, "", "relative/folder"]) {
+    const { s, file } = store();
+    put(file, { version: 2, windows: [], recents: [], lastSavedFolder });
+    assert.equal(s.read().lastSavedFolder, undefined);
+  }
+});
+
 test("unreadable JSON, an array and an unknown version each read as a fresh state", () => {
   for (const text of ["{ this is not valid JSON", "[]", JSON.stringify({ version: 3, windows: [] }), "null"]) {
     const { s, file } = store();
