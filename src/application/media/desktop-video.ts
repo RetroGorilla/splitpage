@@ -8,5 +8,7 @@ export interface DesktopVideo {
   readonly grant: (file: unknown) => Promise<string | null> | null;
   readonly opens: () => boolean;
   readonly open: (token: string) => Promise<DesktopVideoResult | null>;
+  readonly pathOf: (file: unknown) => string | null;
+  readonly openPath: (path: string) => Promise<DesktopVideoResult | null>;
   readonly thumbnail: (host: string, ref: string) => Promise<DesktopVideoThumbnail | null> | null;
 }

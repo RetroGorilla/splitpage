@@ -13,6 +13,7 @@ export interface ClipboardMediaInput {
 export interface ClipboardMediaReader {
   frame?: ((file: File) => Promise<VideoPosterFrame | null>) | undefined;
   grant?: VideoFiles["grant"] | undefined;
+  path?: ((file: File) => string | null) | undefined;
 }
 interface CellPasteResult {
   done: boolean;
@@ -367,8 +368,10 @@ export function readClipboardFiles(files: FileList | readonly File[] | null | un
     const type = String(file && file.type || "");
     if (type.indexOf("video/") === 0) {
       const item: { -readonly [K in keyof VideoFileAttachment]: VideoFileAttachment[K] } = { kind: "videoFile", name: String(file.name || ""), size: file.size || 0, poster: null };
+      const at = video.path ? video.path(file) : null;
+      if (at) item.path = at;
       attach.push(item);
-      if (video.grant) video.grant(file, { name: item.name, size: item.size });
+      if (video.grant) video.grant(file, { name: item.name, size: item.size, ...(at ? { location: { kind: "path", path: at } } : {}) });
       if (!video.frame) return Promise.resolve();
       return Promise.resolve(video.frame(file)).then(function (got) {
         if (got && got.duration) item.duration = got.duration;

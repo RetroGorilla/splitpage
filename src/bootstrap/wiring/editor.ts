@@ -96,6 +96,7 @@ import {
 import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.ts";
 import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-media.ts";
 import { videoFiles } from "./video-files.ts";
+import { desktopVideo } from "./desktop-video.ts";
 import { externalLinks } from "./ports/desktop.ts";
 import { IS_MAC } from "../../features/common/key-chips.ts";
 import {
@@ -656,7 +657,7 @@ const clipboardRoutePorts = {
   pasteDraft: pasteIntoDraft,
   hasMedia: hasMediaFiles,
   readMedia: function (files: FileList | readonly File[], html: string) {
-    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant }, html);
+    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant, path: desktopVideo.pathOf }, html);
   },
   capture: captureOperation,
   stillOwns: stillOwns,

@@ -586,6 +586,13 @@ tabs**.
   `caseGalleryVideoThumbnail` in smoke.mjs uses it. Not run on this
   machine (no Electron binary for x64 here) — first run is CI's
   desktop-smoke job.
+- **A dropped video file's stored path** (#259,
+  [rows-video-files.md](architecture/rows-video-files.md#stored-paths-259)).
+  `splitpage:video-path-open(path)` takes the path a script stores on a
+  video link and opens it with `shell.openPath` only after main's own
+  check (`videoPathProblem`, then `openableVideoPath` against the disk);
+  the one bridge method that takes a path (INV-34). `caseGalleryVideoFile`
+  in smoke.mjs drives it with a real file, refused paths and a deleted file.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
@@ -796,6 +803,8 @@ Names are plain text, limited to 200 code points. See
     // the scene's gallery (#135, 02d-gallery.ts), each key absent when empty:
     "imageName": "wide.png",
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
+    // a file link dropped in the desktop app (#259) also has
+    // "location": { "kind": "path", "path": "C:\\Videos\\clip.mp4" }; an older build drops it
     // a poster link's item's imageRef is its still: a file's first frame, or
     // a YouTube/Vimeo link's fetched thumbnail (#141) — an ordinary blob
     "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],
@@ -855,7 +864,9 @@ pick.
 
 `ROW_FIELDS = ["visualText","imageRef","audioText","imageLinks","moreImages"]`
 merges as content (an `imageRef` compared by its sha; the gallery's two
-lists as sets, both sides' additions kept, never a conflict, #135); `rows[].status` and
+lists as sets, both sides' additions kept, never a conflict, #135; a link
+both sides keep takes the `location` the side that changed it gave, and a
+side without one never removes it, #259); `rows[].status` and
 `productionTags[].status` merge by rank (further-along wins);
 `owner`/`notes` merge "filled beats empty".
 

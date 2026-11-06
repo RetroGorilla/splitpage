@@ -273,6 +273,14 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:video-file-open", String(token || ""));
     },
 
+    videoFilePath(file) {
+      try { return webUtils.getPathForFile(file) || null; } catch { return null; }
+    },
+
+    openVideoPath(storedPath) {
+      return invoke("splitpage:video-path-open", String(storedPath || ""));
+    },
+
     videoThumbnail(host, ref) {
       return invoke("splitpage:video-thumbnail", host, ref).then((got)                                                     => {
         if (got && got.ok && got.bytes && !(got.bytes instanceof Uint8Array)) got = { ...got, bytes: new Uint8Array(got.bytes) };
