@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, statSync, mkdtempSync, rmSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, mkdtempSync, rmSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
@@ -123,4 +123,31 @@ export async function verifyInstallerPayload(setupExe, unpackedDir, arch) {
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
+}
+
+const SHARED_REQUIRE = /\brequire\(\s*path\.join\(\s*SHARED_ROOT,\s*["'`]([^"'`]+)["'`]\s*\)\s*\)/g;
+const SHARED_VALUE_IMPORT = /^import\s+(?!type\b)[^;]*?from\s+["']\.\/([^"']+)["']/gm;
+
+export function requiredSharedFiles(desktopDir, sharedDir) {
+  const needed = new Set(["package.json"]);
+  const queue = [];
+  const want = (name) => {
+    if (needed.has(name)) return;
+    needed.add(name);
+    queue.push(name);
+  };
+  for (const name of readdirSync(desktopDir)) {
+    if (!name.endsWith(".ts") || name.endsWith(".d.ts")) continue;
+    const source = readFileSync(join(desktopDir, name), "utf8");
+    for (const match of source.matchAll(SHARED_REQUIRE)) want(match[1]);
+  }
+  while (queue.length) {
+    const source = readFileSync(join(sharedDir, queue.shift()), "utf8");
+    for (const match of source.matchAll(SHARED_VALUE_IMPORT)) want(match[1]);
+  }
+  return [...needed].sort();
+}
+
+export function missingSharedFiles(packagedSharedDir, required) {
+  return required.filter((name) => !existsSyncSafe(join(packagedSharedDir, name)));
 }
