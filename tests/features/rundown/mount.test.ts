@@ -156,9 +156,11 @@ test("rundown: replacing the document cancels a click even when the connected ta
     assert.deepEqual(source.document.current()?.rows.map((beat) => beat.id), original.rows.map((beat) => beat.id));
     assert.equal(document.querySelector('#rows .row[data-id="r1"]'), row);
     assert.equal(row.isConnected, true);
-    assert.equal(frames.size, 0);
     scrollY = 2378;
     const writeCount = writes.length;
+    frame(1120);
+    assert.equal(writes.length, writeCount);
+    assert.equal(frames.size, 0);
     stale(1200);
     for (const now of [1120, 1160, 1200, 1300]) frame(now);
     assert.equal(writes.length, writeCount);
@@ -172,15 +174,13 @@ test("rundown: replacing the document cancels a click even when the connected ta
   }
 });
 
-test("rundown: dispose removes its listeners and subscriptions and reports it is no longer mounted", () => {
-  const { actions, changes, source, owner } = setup();
+test("rundown: dispose removes its listeners and preference subscription and reports it is no longer mounted", () => {
+  const { actions, changes, owner } = setup();
   const toggle = document.querySelector<HTMLButtonElement>(".rundown-toggle");
   assert.equal(changes.listenerCount(), 1);
-  assert.equal(source.replacedListenerCount(), 1);
   owner.dispose();
   assert.equal(owner.mounted(), false);
   assert.equal(changes.listenerCount(), 0);
-  assert.equal(source.replacedListenerCount(), 0);
   toggle?.click();
   assert.deepEqual(actions.calls, []);
 });

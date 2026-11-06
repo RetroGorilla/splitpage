@@ -1,6 +1,9 @@
+import type { DocumentReader } from "../../application/session/document-reader.ts";
+
 export const RUNDOWN_CLICK_SCROLL_MS = 200;
 
-export function animateRundownClick(row: Element, view: Window): () => void {
+export function animateRundownClick(row: Element, view: Window, document: Pick<DocumentReader, "current">): () => void {
+  const identity = document.current();
   if (view.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     row.scrollIntoView({ block: "center" });
     return () => {};
@@ -22,7 +25,7 @@ export function animateRundownClick(row: Element, view: Window): () => void {
   }
   function tick(now: number): void {
     if (!active) return;
-    if (!row.isConnected) { cancel(); return; }
+    if (document.current() !== identity || !row.isConnected) { cancel(); return; }
     const progress = Math.min(1, Math.max(0, (now - started) / RUNDOWN_CLICK_SCROLL_MS));
     const eased = 1 - (1 - progress) ** 3;
     if (progress === 1) {

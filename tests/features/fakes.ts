@@ -367,7 +367,6 @@ export function fakeDocument<Current extends DocumentView = DocumentView>(initia
   return {
     document,
     lifetime: { epoch: () => epoch },
-    replacedListenerCount: (): number => replaced.listeners.size,
     replace: (doc: Current | null): void => {
       held = doc;
       epoch++;

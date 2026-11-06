@@ -19,12 +19,7 @@ const rundown = owned<ReturnType<typeof mountRundown>>();
 export function mountRundownFeature(): ReturnType<typeof mountRundown> {
   return rundown.replace(function () {
     const ports: RundownPorts = {
-      document: {
-        current: portDocument.current,
-        read: portDocument.read,
-        numbering: portDocument.numbering,
-        onReplaced: portDocument.onReplaced
-      },
+      document: portDocument,
       text: portText,
       rowDrag: { dragging: () => rowDrag().dragging(), end: () => { rowDrag().end(); } },
       cells: { moveRow: (rowId, targetId, after) => { cellEditing().moveRow(rowId, targetId, after); } },
