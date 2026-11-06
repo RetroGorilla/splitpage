@@ -86,6 +86,28 @@ test("rundown: keyboard activation keeps the existing jump and focuses the beat"
   owner.dispose();
 });
 
+test("rundown: a pointer navigation focuses the beat before measuring its scroll destination", () => {
+  const { owner } = setup();
+  const row = document.querySelector<HTMLElement>("#rows .row");
+  assert.ok(row);
+  const cell = row.querySelector(".cell-editable");
+  const button = document.createElement("button");
+  button.className = "rd-block";
+  button.dataset.row = "r1";
+  document.querySelector(".rundown-blocks")?.append(button);
+  const originalMatchMedia = window.matchMedia;
+  window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia;
+  const focusedAtMeasurement: boolean[] = [];
+  row.scrollIntoView = () => { focusedAtMeasurement.push(document.activeElement === cell); };
+  try {
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
+    assert.deepEqual(focusedAtMeasurement, [true]);
+  } finally {
+    window.matchMedia = originalMatchMedia;
+    owner.dispose();
+  }
+});
+
 test("rundown: dispose removes its listeners and preference subscription and reports it is no longer mounted", () => {
   const { actions, changes, owner } = setup();
   const toggle = document.querySelector<HTMLButtonElement>(".rundown-toggle");

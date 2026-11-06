@@ -1166,10 +1166,14 @@ export function goToBeat(rowId: string | null, animate = false): void {
   ports.actions.invoke("reveal-row", "button", rowId);
   const rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;
-  if (animate) cancelClickScroll = animateRundownClick(rowEl, window);
-  else rowEl.scrollIntoView({ block: "center" });
   const cell = rowEl.querySelector<HTMLElement>(".audio-cell .cell-editable");
-  if (cell) cell.focus({ preventScroll: true });
+  if (animate) {
+    if (cell) cell.focus({ preventScroll: true });
+    cancelClickScroll = animateRundownClick(rowEl, window);
+  } else {
+    rowEl.scrollIntoView({ block: "center" });
+    if (cell) cell.focus({ preventScroll: true });
+  }
 }
 
 function noteCurrentRow(el: Element | null): void {

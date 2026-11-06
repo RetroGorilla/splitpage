@@ -58,6 +58,33 @@ test("reduced motion uses the existing jump immediately without scheduling frame
   assert.equal(env.frames.size, 0);
 });
 
+test("turning on reduced motion takes effect on the next navigation", () => {
+  const env = setup();
+  animateRundownClick(env.row, env.view);
+  env.frame(200);
+  env.reduce();
+  env.scroll(4000);
+  animateRundownClick(env.row, env.view);
+  assert.deepEqual(env.position(), [50, 1100]);
+  assert.equal(env.frames.size, 0);
+});
+
+test("an upward click survives scroll anchoring and remeasures the native destination after layout changes", () => {
+  const env = setup();
+  env.scroll(4000);
+  env.row.scrollIntoView = () => { env.scroll(0); };
+  animateRundownClick(env.row, env.view);
+  env.scroll(4003);
+  env.events.dispatchEvent(new Event("scroll"));
+  env.frame(100);
+  assert.deepEqual(env.position(), [10, 500]);
+  assert.equal(env.frames.size, 1);
+  env.row.scrollIntoView = () => { env.scroll(25); };
+  env.frame(200);
+  assert.deepEqual(env.position(), [10, 25]);
+  assert.equal(env.frames.size, 0);
+});
+
 for (const event of ["wheel", "touchstart", "touchmove", "pointerdown", "keydown", "beforeinput"]) {
   test("user " + event + " cancels a Rundown click without moving again", () => {
     const env = setup();
@@ -74,18 +101,20 @@ test("a user scroll cancels even when the next animation frame precedes its scro
   const env = setup();
   animateRundownClick(env.row, env.view);
   env.frame(100);
+  env.events.dispatchEvent(new Event("wheel"));
   env.scroll(700);
   env.frame(200);
   assert.deepEqual(env.position(), [45, 700]);
   assert.equal(env.frames.size, 0);
 });
 
-test("animation scroll events do not cancel but a different scroll position does", () => {
+test("animation scroll events do not cancel but user scroll input does", () => {
   const env = setup();
   animateRundownClick(env.row, env.view);
   env.frame(100);
   env.events.dispatchEvent(new Event("scroll"));
   assert.equal(env.frames.size, 1);
+  env.events.dispatchEvent(new Event("wheel"));
   env.scroll(700);
   env.events.dispatchEvent(new Event("scroll"));
   assert.equal(env.frames.size, 0);

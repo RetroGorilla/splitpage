@@ -14,33 +14,27 @@ export function animateRundownClick(row: Element, view: Window): () => void {
   const interrupts = ["wheel", "touchstart", "touchmove", "pointerdown", "keydown", "beforeinput"];
   let frame = 0;
   let active = true;
-  let expectedX = view.scrollX, expectedY = view.scrollY;
   function cancel(): void {
     if (!active) return;
     active = false;
     view.cancelAnimationFrame(frame);
     for (const event of interrupts) view.removeEventListener(event, cancel, true);
-    view.removeEventListener("scroll", scrolled, true);
-  }
-  function moved(): boolean {
-    return view.scrollX !== expectedX || view.scrollY !== expectedY;
-  }
-  function scrolled(): void {
-    if (moved()) cancel();
   }
   function tick(now: number): void {
     if (!active) return;
-    if (!row.isConnected || moved()) { cancel(); return; }
+    if (!row.isConnected) { cancel(); return; }
     const progress = Math.min(1, Math.max(0, (now - started) / RUNDOWN_CLICK_SCROLL_MS));
     const eased = 1 - (1 - progress) ** 3;
-    view.scrollTo({ left: fromX + (toX - fromX) * eased, top: fromY + (toY - fromY) * eased, behavior: "instant" });
-    expectedX = view.scrollX;
-    expectedY = view.scrollY;
-    if (progress === 1) cancel();
-    else frame = view.requestAnimationFrame(tick);
+    if (progress === 1) {
+      // why: Focus and layout can shift the target during the animation; finish at the browser's current jump destination.
+      row.scrollIntoView({ block: "center", behavior: "instant" });
+      cancel();
+    } else {
+      view.scrollTo({ left: fromX + (toX - fromX) * eased, top: fromY + (toY - fromY) * eased, behavior: "instant" });
+      frame = view.requestAnimationFrame(tick);
+    }
   }
   for (const event of interrupts) view.addEventListener(event, cancel, { capture: true, passive: true });
-  view.addEventListener("scroll", scrolled, { capture: true, passive: true });
   frame = view.requestAnimationFrame(tick);
   return cancel;
 }
