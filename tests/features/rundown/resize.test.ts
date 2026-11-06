@@ -251,6 +251,12 @@ test("Index keeps the pointed beat and every remaining beat reachable after shri
   const reached = new Set<number>();
   for (let x = 300; x < 800; x++) { move(x); reached.add(beatAt(x)); }
   for (let i = pointed; i < 30; i++) assert.ok(reached.has(i), "beat " + i + " stays reachable before the right edge");
+  move(300);
+  resize(200);
+  draw();
+  reached.clear();
+  for (let x = 0; x < 200; x++) { move(x); reached.add(beatAt(x)); }
+  for (let i = 0; i < 30; i++) assert.ok(reached.has(i), "beat " + i + " stays reachable when resize clips the pointer");
 });
 
 test("Index pointer entry keeps the beat drawn by a keyboard-expanded lens", (t) => {

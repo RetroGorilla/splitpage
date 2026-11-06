@@ -894,7 +894,9 @@ function lensRepainted(countChanged: boolean, widthChanged: boolean): void {
   } else if (state.lens.on && state.lens.x !== null) {
     if (widthChanged) {
       state.lens.x = clamp(state.lens.x, 0, state.base.W);
-      state.lens.ref = { x: state.lens.x, q: state.lens.p };
+      const x = state.lens.x;
+      const q = x <= 0 ? 0 : x >= state.base.W ? state.base.n : state.lens.p;
+      state.lens.ref = { x, q };
     }
     indexFocus(state.lens.x);
   }
