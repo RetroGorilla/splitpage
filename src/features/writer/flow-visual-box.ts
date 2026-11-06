@@ -11,6 +11,7 @@ export interface FlowVisualBoxPorts {
   readonly prepare: (range: FlowRange) => FlowRange | null;
   readonly place: (range: FlowRange) => void;
   readonly current: () => boolean;
+  readonly blocked: () => boolean;
   readonly plainVisual: (row: FlowRow) => string;
   readonly thumbnails: (row: FlowRow) => string;
   readonly save: (range: FlowRange, html: string, first: boolean) => FlowRange | null;
@@ -63,7 +64,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   function rowOf(id: string): FlowRow | undefined { return ports.doc().rows.find(row => row.id === id); }
 
   function save(): void {
-    if (!target || !dirty || !ports.current() || composing) return;
+    if (!target || !dirty || !ports.current() || composing || ports.blocked()) return;
     dirty = false;
     let next: FlowRange | null;
     saving = true;
@@ -76,11 +77,20 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     shownHtml = rowOf(next.head.rowId)?.visualText ?? "";
   }
 
+  function rejected(): boolean {
+    if (!ports.blocked()) return false;
+    dirty = false;
+    cell.innerHTML = first ? "" : shownHtml;
+    const at = posToDom(cell, Number.MAX_SAFE_INTEGER);
+    window.getSelection()?.setBaseAndExtent(at.node, at.offset, at.node, at.offset);
+    return true;
+  }
+
   function close(restore = true): void {
     if (box.hidden) return;
     composing = false;
     save();
-    if (!first && ports.current()) ports.leave(cell);
+    if (!first && ports.current() && !ports.blocked()) ports.leave(cell);
     const range = target;
     target = null;
     box.hidden = true;
@@ -176,6 +186,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   }
 
   function onInput(event: Event): void {
+    if (rejected()) return;
     dirty = true;
     if (composing || (event as InputEvent).isComposing) return;
     save();
@@ -198,10 +209,11 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
       ports.undo(redo ? "redo" : "undo");
       return;
     }
-    if (ports.keydown(event, cell)) return;
+    if (!ports.blocked() && ports.keydown(event, cell)) return;
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
     if (event.key === "Enter") {
       event.preventDefault();
+      if (rejected()) return;
       ports.paste(cell, { getData: type => type === "text/plain" ? "\n" : "" });
       dirty = true;
       save();
@@ -218,6 +230,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     }
     if (input.inputType === "insertParagraph" || input.inputType === "insertLineBreak") {
       event.preventDefault();
+      if (rejected()) return;
       ports.paste(cell, { getData: type => type === "text/plain" ? "\n" : "" });
       dirty = true;
       save();
@@ -229,6 +242,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   function onPaste(event: ClipboardEvent): void {
     event.preventDefault();
     event.stopPropagation();
+    if (rejected()) return;
     if (event.clipboardData) ports.paste(cell, event.clipboardData);
     dirty = true;
     save();
