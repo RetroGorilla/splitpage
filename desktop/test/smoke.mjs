@@ -1057,6 +1057,45 @@ async function caseFirstSaveTitle(target, fixturesDir) {
   }
 }
 
+async function caseOpenDialogFolder(target, fixturesDir) {
+  const tag = target.name + " file dialogs: saved script folder survives restart";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-open-folder-"));
+  const savedFolder = path.join(fixturesDir, "saved scripts");
+  fs.mkdirSync(savedFolder);
+  const original = writeFixture(fixturesDir, "folder-original.splitpage", "Folder original", [["Visual", "Audio"]]);
+  const later = writeFixture(fixturesDir, "folder-later.splitpage", "Folder later", [["Later", "Audio"]]);
+  const saved = path.join(savedFolder, "saved.splitpage");
+  const defaultPathSeen = (running) => {
+    const lines = [...running.getStdout().matchAll(/\[splitpage-test\] open-dialog (.+)/g)];
+    return lines.length ? JSON.parse(lines[lines.length - 1][1]).defaultPath : null;
+  };
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "open-folder-save", userDataDir, fixtures: [original], dialogs: [saved, null] });
+    await waitForRows(app.cdp, 20000);
+    await poll(app.cdp, "window.__splitpageFormats.state().title === 'Folder original'", 20000);
+    await evalPage(app.cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
+    await pollNode(() => fs.existsSync(saved), 10000);
+    const written = await poll(app.cdp, "window.__splitpageFormats.writtenOut() && window.__splitpageFormats.docFile().name === 'saved.splitpage'", 10000);
+    record(tag + ": Save As writes the script", !!written && fs.existsSync(saved));
+    await evalPage(app.cdp, "window.splitpageDesktop.openFileDialog()");
+    record(tag + ": answered Open receives the saved folder as defaultPath", defaultPathSeen(app) === savedFolder, String(defaultPathSeen(app)));
+    await teardown(app, tag + " before restart");
+    app = null;
+
+    app = await launchApp(target, { label: "open-folder-restart", userDataDir, fixtures: [later], dialogs: [null, null] });
+    await waitForRows(app.cdp, 20000);
+    await poll(app.cdp, "window.__splitpageFormats.state().title === 'Folder later'", 20000);
+    await evalPage(app.cdp, "window.splitpageDesktop.clearRecents()");
+    record(tag + ": shell and recents writes retain the saved folder on disk", readDesktopStateFile(userDataDir)?.lastSavedFolder === savedFolder);
+    await evalPage(app.cdp, "window.splitpageDesktop.openFileDialog()");
+    record(tag + ": saved folder still wins after restart and opening another script", defaultPathSeen(app) === savedFolder, String(defaultPathSeen(app)));
+  } finally {
+    if (app) await teardown(app, tag);
+    rmrf(userDataDir);
+  }
+}
+
 async function caseOpenSaveConflictExport(target, fixturesDir) {
   const tag = target.name + " open/save/conflict/save-as/export";
   const openTitle = "Opened — 🎬 Fixture";
@@ -5883,6 +5922,7 @@ async function runTargetSuite(target, groupFilter) {
     ["open/boot/security", () => caseBootAndSecurity(target), hookFree],
     ["incomplete link warning", () => caseIncompleteLink(target, fixturesDir), hookFree],
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
+    ["file dialogs: saved script folder survives restart", () => caseOpenDialogFolder(target, fixturesDir)],
     ["first-save title and version", () => caseFirstSaveTitle(target, fixturesDir)],
     ["desktop PDF export: script, packing lists, shot list", () => caseDesktopPdfExport(target, fixturesDir)],
     ["second instance", () => caseSecondInstance(target, fixturesDir)],

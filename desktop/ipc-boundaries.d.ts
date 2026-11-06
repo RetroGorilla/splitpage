@@ -50,6 +50,7 @@ export interface DesktopMainCommon {
 }
 
 export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "tabs" | "fileIds" | "recents" | "testMode"> {
+  documentsPath: () => string;
   dialog: {
     showOpenDialog: (parent: BrowserWindow | undefined, options: Parameters<Dialog["showOpenDialog"]>[0]) => ReturnType<Dialog["showOpenDialog"]>;
     showMessageBoxSync: (parent: BrowserWindow | undefined, options: Parameters<Dialog["showMessageBoxSync"]>[0]) => ReturnType<Dialog["showMessageBoxSync"]>;
