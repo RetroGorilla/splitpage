@@ -201,23 +201,24 @@ test("rundown resize: a target label first built while the strip is hidden is me
   assert.equal(label.classList.contains("is-right"), true);
 });
 
-function lensFixture(t: TestContext) {
+function lensFixture(t: TestContext, doc?: ValidatedDocument, reducedMotion = true) {
   const make = (count: number): ValidatedDocument => migrateRows({ rows: Array.from({ length: count }, (_, i) => ({
     id: "lens" + i, audioText: "Beat " + i, lengthSeconds: i % 2 ? 180 : 2
   })) }, fakeMigration().ports);
   const frames: FrameRequestCallback[] = [];
   t.mock.method(globalThis, "requestAnimationFrame", (callback: FrameRequestCallback) => { frames.push(callback); return 1; });
   const previous = Object.getOwnPropertyDescriptor(window, "matchMedia");
-  Object.defineProperty(window, "matchMedia", { configurable: true, value: (query: string) => ({ matches: query.includes("reduced-motion") }) });
+  Object.defineProperty(window, "matchMedia", { configurable: true, value: (query: string) => ({ matches: reducedMotion && query.includes("reduced-motion") }) });
   t.after(() => { if (previous) Object.defineProperty(window, "matchMedia", previous); else Reflect.deleteProperty(window, "matchMedia"); });
-  const env = setup(t, make(30));
-  const draw = (): void => {
-    for (let i = 0; frames.length && i < 20; i++) frames.shift()?.(1000 + i * 16);
+  const env = setup(t, doc ?? make(30));
+  let now = 1000;
+  const draw = (check?: () => void): void => {
+    for (let i = 0; frames.length && i < (reducedMotion ? 20 : 200); i++) { now += 16; frames.shift()?.(now); check?.(); }
     assert.equal(frames.length, 0);
   };
-  const move = (x: number): void => {
+  const move = (x: number, check?: () => void): void => {
     document.querySelector(".rundown-track")?.dispatchEvent(new window.MouseEvent("pointermove", { bubbles: true, clientX: x }));
-    draw();
+    draw(check);
   };
   env.resize(800);
   move(50);
@@ -284,4 +285,69 @@ test("Index restarts hold-to-open after a beat-count repaint under a stationary 
   t.mock.timers.tick(950);
   draw();
   assert.equal(document.getElementById("rundown")?.classList.contains("is-held"), true);
+});
+
+test("Index keeps suite 102's beat 16 under a stationary pointer throughout the keyboard handoff", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const words = (n: number): string => Array.from({ length: n }, (_, i) => "word" + i % 7).join(" ");
+  const doc = migrateRows({ rows: Array.from({ length: 80 }, (_, i) => ({
+    id: "r" + i,
+    visualText: i % 5 === 0 ? "B-roll: shot " + i + "<br>B-roll: another " + i : "Visual " + i,
+    audioText: i === 40 ? "" : "Scene " + i + " opens " + words(i % 9 === 4 ? 4 : 10 + (i * 7) % 28),
+    status: i % 4 === 0 ? "shot" : i % 4 === 1 ? "ready" : "todo"
+  })) }, fakeMigration().ports);
+  const { resize, draw, move } = lensFixture(t, doc, false);
+  document.querySelector(".rundown-track")?.dispatchEvent(new window.Event("pointerleave"));
+  draw();
+  resize(1300);
+  const preceding = blocks()[13] as HTMLElement;
+  t.mock.method(preceding, "matches", (selector: string) => selector === ":focus-visible");
+  preceding.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+  draw();
+  const focused = blocks()[14] as HTMLElement;
+  t.mock.method(focused, "matches", (selector: string) => selector === ":focus-visible");
+  focused.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+  draw();
+  const target = blocks()[16] as HTMLElement;
+  const x = px(target, "left") + px(target, "width") / 2;
+  assert.ok(x > 0 && x < 1300);
+  const check = (): void => assert.ok(x >= px(target, "left") && x < px(target, "left") + px(target, "width"),
+    "the stationary pointer must still click beat 16 on every frame");
+  move(x, check);
+  move(x);
+  t.mock.timers.tick(950);
+  draw(check);
+});
+
+test("Index keeps beat 6 under a stationary pointer after entering at 1297 and shrinking to 800", (t) => {
+  const { resize, move, draw } = lensFixture(t, undefined, false);
+  document.querySelector(".rundown-track")?.dispatchEvent(new window.Event("pointerleave"));
+  draw();
+  resize(1300);
+  move(1297);
+  move(300);
+  const beatAt = (x: number): number => blocks().findIndex((b) => x >= px(b, "left") && x < px(b, "left") + px(b, "width"));
+  assert.equal(beatAt(300), 6);
+  resize(800);
+  assert.equal(beatAt(300), 6, "the beat is unchanged before the resize animation");
+  draw(() => assert.equal(beatAt(300), 6, "every settling frame must preserve the beat under the stationary pointer"));
+  move(300);
+  assert.equal(beatAt(300), 6, "a repeated pointer event must preserve the anchor");
+});
+
+test("Index keeps a held beat open while the pointer moves inside its expanded block", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { move, draw } = lensFixture(t);
+  document.querySelector(".rundown-track")?.dispatchEvent(new window.Event("pointerleave"));
+  draw();
+  const target = blocks()[18] as HTMLElement;
+  const x = px(target, "left") + px(target, "width") / 2;
+  move(x);
+  t.mock.timers.tick(950);
+  draw();
+  assert.equal(document.getElementById("rundown")?.classList.contains("is-held"), true);
+  assert.ok(x + 20 < px(target, "left") + px(target, "width"));
+  move(x + 20);
+  assert.equal(document.getElementById("rundown")?.classList.contains("is-held"), true);
+  assert.ok(x + 20 >= px(target, "left") && x + 20 < px(target, "left") + px(target, "width"));
 });

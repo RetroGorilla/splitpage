@@ -36,28 +36,14 @@ export function lensIndexMap(ref: IndexRef, x: number, trackWidth: number, beats
 
 type LayoutAt = (index: number, anchor: number) => readonly number[];
 
-const STOP_PX = 1e6;
-const FIT_STEPS = 24;
-const FIT_EPS = 0.002;
-
-export function lensIndexFit(index: number, x: number, layout: LayoutAt, beats: number): number {
-  const atLeftStop = (q: number): number => lensPointAt(layout(q, STOP_PX), q);
-  const atRightStop = (q: number): number => lensPointAt(layout(q, -STOP_PX), q);
-  let q = clamp(index, 0, beats);
-  if (atLeftStop(q) < x) {
-    let lo = q, hi = beats;
-    for (let i = 0; i < FIT_STEPS && hi - lo > FIT_EPS; i++) {
-      const mid = (lo + hi) / 2;
-      if (atLeftStop(mid) < x) lo = mid; else hi = mid;
-    }
-    q = hi;
-  } else if (atRightStop(q) > x) {
-    let lo = 0, hi = q;
-    for (let i = 0; i < FIT_STEPS && hi - lo > FIT_EPS; i++) {
-      const mid = (lo + hi) / 2;
-      if (atRightStop(mid) > x) hi = mid; else lo = mid;
-    }
-    q = lo;
-  }
-  return q;
+export function lensIndexFit(index: number, x: number, layout: LayoutAt, beats: number, width: number): number[] {
+  const q = clamp(index, 0, beats);
+  const knots = layout(q, x);
+  const point = lensPointAt(knots, q);
+  const left = point - (knots[0] as number);
+  const right = (knots[beats + 1] as number) - point;
+  // why: Moving the index to satisfy a layout stop changes the click target under a stationary pointer.
+  // Grow only when translating the fixed (x, index) anchor would uncover an end of the track.
+  const scale = Math.max(1, left > 0 ? x / left : 1, right > 0 ? (width - x) / right : 1);
+  return knots.map((knot) => x + (knot - point) * scale);
 }

@@ -745,7 +745,10 @@ function slots(): number[] {
 }
 
 function lensTarget(): number[] {
-  return state.lens.on ? rundownLensIndex(slots(), state.lens.p, state.lens.a, lensOpts()) : slots();
+  if (!state.lens.on) return slots();
+  const layout = (index: number, anchor: number): number[] => rundownLensIndex(slots(), index, anchor, lensOpts());
+  return state.lens.src === "focus" ? layout(state.lens.p, state.lens.a) :
+    lensIndexFit(state.lens.p, state.lens.a, layout, state.base.n, state.base.W);
 }
 
 function applyKnots(Z: readonly number[]): void {
@@ -806,13 +809,13 @@ function lensFrame(now: number): void {
     if (u >= 1) state.lens.easeAt = -1;
     else alpha *= Math.max(LENS_EASE_FLOOR, u * u * (3 - 2 * u));
   }
-  let moving = false;
+  const Z = state.lens.Z;
+  const moving = T.some((target, i) => Math.abs(target - (Z[i] as number)) > 0.05);
+  // why: A shared interpolation weight preserves the fixed pointer anchor until the whole layout settles.
   for (let i = 0; i < T.length; i++) {
-    const d = (T[i] as number) - (state.lens.Z[i] as number);
-    if (Math.abs(d) > 0.05) { (state.lens.Z[i] as number) += d * alpha; moving = true; }
-    else state.lens.Z[i] = T[i] as number;
+    Z[i] = moving ? (Z[i] as number) + ((T[i] as number) - (Z[i] as number)) * alpha : T[i] as number;
   }
-  applyKnots(state.lens.Z);
+  applyKnots(Z);
   if (!moving) {
     state.lens.last = 0;
     if (!state.lens.on) lensSettle();
@@ -895,7 +898,7 @@ function lensRepainted(countChanged: boolean, widthChanged: boolean): void {
     if (widthChanged) {
       state.lens.x = clamp(state.lens.x, 0, state.base.W);
       const x = state.lens.x;
-      const q = x <= 0 ? 0 : x >= state.base.W ? state.base.n : state.lens.p;
+      const q = x <= 0 ? 0 : x >= state.base.W ? state.base.n : lensIndexAt(state.lens.Z as number[], x);
       state.lens.ref = { x, q };
     }
     indexFocus(state.lens.x);
@@ -908,8 +911,9 @@ function indexFocus(x: number): void {
   const lens = state.lens;
   if (!lens.ref) lens.ref = { x: x, q: lensIndexAt(lens.Z ?? slots(), x) };
   const proposed = lensIndexMap(lens.ref, x, state.base.W, state.base.n);
-  lens.p = lensIndexFit(proposed, x, (index, anchor) => rundownLensIndex(slots(), index, anchor), state.base.n);
+  lens.p = proposed;
   lens.a = x;
+  if (lens.Z) lens.Z = lensIndexFit(proposed, x, () => lens.Z as number[], state.base.n, state.base.W);
 }
 
 function lensAt(x: number, src: LensSource, t: number): void {
@@ -917,6 +921,9 @@ function lensAt(x: number, src: LensSource, t: number): void {
   x = clamp(x, 0, state.base.W);
   lensStart();
   if (!state.lens.on || state.lens.src !== src) state.lens.ref = null;
+  if (src === "pointer" && state.lens.hold && beatAt(state.lens.Z as number[], x) === state.lens.holdAt) {
+    state.lens.ref = { x, q: lensIndexAt(state.lens.Z as number[], x) };
+  }
   indexFocus(x);
   state.lens.on = true;
   state.lens.src = src;
