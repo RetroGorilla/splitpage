@@ -3,9 +3,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { startPrompter } from "../../../src/features/prompter/prompter.ts";
+import { mountPrompter } from "../../../src/features/prompter/mount.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakePrompterPorts } from "../fakes.ts";
+import type { PrompterFeaturePorts } from "../../../src/features/prompter/ports.ts";
+import type { PreferenceNotice } from "../../../src/application/preferences/preferences.ts";
 
 const realm = globalThis as unknown as Record<string, unknown>;
 const win = dom.window;
@@ -643,4 +646,306 @@ test("a browser hand-off reply cannot update the voice status after its session 
     finish({ ok: true, message: "done" });
     runtime.dispose();
   }
+});
+
+type MicRequest = { audio: true | { deviceId: { exact: string } } };
+
+function installMicrophones(getUserMedia: (request: MicRequest) => Promise<unknown>) {
+  const prior = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+  return () => {
+    if (prior) Object.defineProperty(navigator, "mediaDevices", prior);
+    else Reflect.deleteProperty(navigator, "mediaDevices");
+  };
+}
+
+function microphoneStream(label: string, stopped: { count: number } = { count: 0 }) {
+  const track = { kind: "audio", label, onended: null as (() => void) | null, stop: () => { stopped.count++; } };
+  return { track, stream: { getAudioTracks: () => [track], getTracks: () => [track] } };
+}
+
+class StartRecorder {
+  static starts: unknown[][] = [];
+  onstart: (() => void) | null = null;
+  start(...args: unknown[]) { StartRecorder.starts.push(args); this.onstart?.(); }
+  stop() {}
+}
+
+function microphoneHarness(saved: string, support: "yes" | "desktop" | "browser" = "yes") {
+  const h = harness();
+  StartRecorder.starts = [];
+  const choice = { saved };
+  const heard = new Set<(change: PreferenceNotice) => void>();
+  const ports: PrompterFeaturePorts = {
+    ...h.ports,
+    voice: { ...h.ports.voice, browserRecognition: () => StartRecorder },
+    microphones: {
+      support: () => support,
+      list: async () => ({ options: [{ id: "dev-1", label: "Mic One" }, { id: "dev-2", label: "Mic Two" }], named: true }),
+      onChange: () => () => {}
+    },
+    changes: { onChange: (listener) => { heard.add(listener); return () => { heard.delete(listener); }; } },
+    preferences: {
+      ...h.ports.preferences,
+      microphone: () => choice.saved,
+      setMicrophone: (id: string) => {
+        choice.saved = id;
+        h.calls.push(["microphone", id]);
+        for (const listener of heard) listener({ name: "microphone", value: id || null, elsewhere: false });
+      }
+    }
+  };
+  return { h, ports, choice, heard };
+}
+
+test("Follow My Voice listens on the saved microphone: the stream asks for that device and recognition takes its track", async () => {
+  const { ports } = microphoneHarness("dev-2");
+  const requests: MicRequest[] = [];
+  const mic = microphoneStream("Mic Two");
+  const restore = installMicrophones(async (request) => { requests.push(request); return mic.stream; });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.deepEqual(requests, [{ audio: { deviceId: { exact: "dev-2" } } }]);
+    assert.deepEqual(StartRecorder.starts, [[mic.track]]);
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+
+test("the system default asks for no device and starts recognition as before", async () => {
+  const { ports } = microphoneHarness("");
+  const requests: MicRequest[] = [];
+  const restore = installMicrophones(async (request) => { requests.push(request); return microphoneStream("Default Mic").stream; });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.deepEqual(requests, [{ audio: true }]);
+    assert.deepEqual(StartRecorder.starts, [[]]);
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+
+test("a saved microphone that is not connected falls back to the default, says so, and is kept for next time", async () => {
+  const { ports, choice } = microphoneHarness("unplugged");
+  const requests: MicRequest[] = [];
+  const restore = installMicrophones(async (request) => {
+    requests.push(request);
+    if (request.audio !== true) throw Object.assign(new Error("no such device"), { name: "OverconstrainedError" });
+    return microphoneStream("Built-in Mic").stream;
+  });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.deepEqual(requests, [{ audio: { deviceId: { exact: "unplugged" } } }, { audio: true }]);
+    assert.deepEqual(StartRecorder.starts, [[]], "recognition uses the default microphone, not a dead track");
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Built-in Mic (your chosen microphone isn't connected)");
+    assert.equal(choice.saved, "unplugged");
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+
+test("a blocked microphone is not mistaken for a missing one: no fallback, the blocked message stays", async () => {
+  const { ports } = microphoneHarness("dev-1");
+  const requests: MicRequest[] = [];
+  const restore = installMicrophones(async (request) => { requests.push(request); throw Object.assign(new Error("refused"), { name: "NotAllowedError" }); });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.equal(requests.length, 1);
+    assert.match(document.getElementById("pp-voice-status")?.textContent ?? "", /Microphone blocked/);
+  } finally { runtime.dispose(); restore(); }
+});
+
+test("where the browser cannot aim recognition at a microphone, the saved choice is ignored", async () => {
+  const { ports } = microphoneHarness("dev-2", "browser");
+  const requests: MicRequest[] = [];
+  const restore = installMicrophones(async (request) => { requests.push(request); return microphoneStream("Default Mic").stream; });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.deepEqual(requests, [{ audio: true }]);
+    assert.deepEqual(StartRecorder.starts, [[]]);
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+
+test("the teleprompter's microphone list shows only where it works, marks the saved one, and saves a pick", async () => {
+  const { h, ports, choice } = microphoneHarness("dev-2");
+  const runtime = startPrompter(ports);
+  const mounted = mountPrompter({ window: win as unknown as Window, ports: runtime });
+  const select = () => document.getElementById("pp-mic") as HTMLSelectElement;
+  try {
+    runtime.updateVoiceAvailability();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(select().hidden, false);
+    assert.deepEqual(Array.from(select().options, o => [o.value, o.textContent]), [["", "System default"], ["dev-1", "Mic One"], ["dev-2", "Mic Two"]]);
+    assert.equal(select().value, "dev-2");
+    select().value = "dev-1";
+    select().dispatchEvent(new ((select().ownerDocument.defaultView) as Window & typeof globalThis).Event("change", { bubbles: true }));
+    assert.equal(choice.saved, "dev-1");
+    assert.deepEqual(h.calls.at(-1), ["microphone", "dev-1"]);
+  } finally { mounted.dispose(); runtime.dispose(); }
+  for (const support of ["desktop", "browser"] as const) {
+    const other = microphoneHarness("dev-2", support);
+    const again = startPrompter(other.ports);
+    try {
+      again.updateVoiceAvailability();
+      assert.equal(select().hidden, true, support);
+    } finally { again.dispose(); }
+  }
+});
+
+test("choosing another microphone while following restarts on it, and the prompter stops listening for changes once closed", async () => {
+  const { ports, heard } = microphoneHarness("dev-1");
+  const requests: MicRequest[] = [];
+  const stopped = { count: 0 };
+  const restore = installMicrophones(async (request) => {
+    requests.push(request);
+    return microphoneStream(request.audio !== true && request.audio.deviceId.exact === "dev-2" ? "Mic Two" : "Mic One", stopped).stream;
+  });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.openPrompter();
+    assert.equal(heard.size, 1);
+    await runtime.startVoiceFollow();
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic One");
+    runtime.chooseMicrophone("dev-2");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(requests, [{ audio: { deviceId: { exact: "dev-1" } } }, { audio: { deviceId: { exact: "dev-2" } } }]);
+    assert.equal(stopped.count, 1, "the first microphone is released");
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+    runtime.closePrompter();
+    assert.equal(heard.size, 0);
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+
+test("a chosen microphone that stops mid-session ends Follow My Voice with a message instead of failing silently", async () => {
+  const { ports, h } = microphoneHarness("dev-1");
+  class Dropping extends StartRecorder {
+    onend: (() => void) | null = null;
+    override start(...args: unknown[]) {
+      StartRecorder.starts.push(args);
+      if (StartRecorder.starts.length === 1) { this.onstart?.(); setTimeout(() => this.onend?.(), 0); return; }
+      throw Object.assign(new Error("track ended"), { name: "InvalidStateError" });
+    }
+  }
+  const restore = installMicrophones(async () => microphoneStream("Mic One").stream);
+  const runtime = startPrompter({ ...ports, voice: { ...ports.voice, browserRecognition: () => Dropping } });
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    await new Promise(resolve => setTimeout(resolve, 400));
+    assert.equal(h.state.voice, false);
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Your chosen microphone stopped working — pick it again or choose another.");
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+test("closing Present before a missing saved microphone is refused does not open the default microphone", async () => {
+  const { ports } = microphoneHarness("unplugged");
+  const requests: MicRequest[] = [];
+  let refuse: (error: Error) => void = () => {};
+  const refused = new Promise<never>((_, reject) => { refuse = reject; });
+  const stopped = { count: 0 };
+  const restore = installMicrophones((request) => {
+    requests.push(request);
+    return request.audio === true ? Promise.resolve(microphoneStream("Built-in Mic", stopped).stream) : refused;
+  });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    const starting = runtime.startVoiceFollow();
+    assert.equal(requests.length, 1);
+    runtime.stopVoiceFollow();
+    refuse(Object.assign(new Error("no such device"), { name: "OverconstrainedError" }));
+    await starting;
+    assert.deepEqual(requests, [{ audio: { deviceId: { exact: "unplugged" } } }], "no second request once the session is over");
+    assert.deepEqual(StartRecorder.starts, []);
+  } finally { runtime.dispose(); restore(); }
+});
+
+test("a microphone that arrives after its session ended is stopped, whichever request it answers", async () => {
+  const { ports } = microphoneHarness("unplugged");
+  let refuse: (error: Error) => void = () => {};
+  const first = new Promise<never>((_, reject) => { refuse = reject; });
+  let deliver: (stream: unknown) => void = () => {};
+  const second = new Promise((resolve) => { deliver = resolve; });
+  const stopped = { count: 0 };
+  const restore = installMicrophones((request) => request.audio === true ? second : first);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    const starting = runtime.startVoiceFollow();
+    refuse(Object.assign(new Error("no such device"), { name: "OverconstrainedError" }));
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.stopVoiceFollow();
+    deliver(microphoneStream("Built-in Mic", stopped).stream);
+    await starting;
+    assert.equal(stopped.count, 1);
+    assert.deepEqual(StartRecorder.starts, []);
+  } finally { runtime.dispose(); restore(); }
+});
+
+test("a chosen microphone whose track ends on its own stops Follow My Voice with a message", async () => {
+  const { ports, h } = microphoneHarness("dev-1");
+  const stopped = { count: 0 };
+  const mic = microphoneStream("Mic One", stopped);
+  const restore = installMicrophones(async () => mic.stream);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.equal(h.state.voice, true);
+    assert.equal(typeof mic.track.onended, "function");
+    mic.track.onended?.();
+    assert.equal(h.state.voice, false);
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Your chosen microphone stopped working — pick it again or choose another.");
+    assert.equal(stopped.count, 1, "the stream is released");
+    mic.track.onended?.();
+    assert.equal(h.state.voice, false);
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+
+test("a track that ends after its session was stopped changes nothing", async () => {
+  const { ports, h } = microphoneHarness("dev-1");
+  const mic = microphoneStream("Mic One");
+  const restore = installMicrophones(async () => mic.stream);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    runtime.stopVoiceFollow();
+    const status = document.getElementById("pp-voice-status")?.textContent;
+    mic.track.onended?.();
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, status);
+    assert.equal(h.state.voice, false);
+  } finally { runtime.dispose(); restore(); }
+});
+
+test("a microphone chosen in another tab restarts a running Follow My Voice, and the same choice again does not", async () => {
+  const { ports, heard, choice } = microphoneHarness("dev-1");
+  const requests: MicRequest[] = [];
+  const restore = installMicrophones(async (request) => {
+    requests.push(request);
+    return microphoneStream(request.audio !== true && request.audio.deviceId.exact === "dev-2" ? "Mic Two" : "Mic One").stream;
+  });
+  const runtime = startPrompter(ports);
+  const fromAnotherTab = (value: string | null): void => {
+    choice.saved = value ?? "";
+    for (const listener of heard) listener({ name: "microphone", value, elsewhere: true });
+  };
+  try {
+    runtime.openPrompter();
+    await runtime.startVoiceFollow();
+    fromAnotherTab("dev-1");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requests.length, 1, "the microphone already in use is not reopened");
+    fromAnotherTab("dev-2");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(requests.at(-1), { audio: { deviceId: { exact: "dev-2" } } });
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+    assert.equal(requests.length, 2);
+    assert.equal(choice.saved, "dev-2", "the restart writes nothing back, so two tabs cannot echo each other");
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
 });

@@ -3,6 +3,8 @@ import { openPrompterInBrowser } from "../desktop-owners.ts";
 import { createDesktopRecognition, desktopVoiceAvailable, desktopVoiceKnown, loadDesktopVoice } from "../../../adapters/desktop/desktop-voice.ts";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../../../adapters/desktop/voice-relay.ts";
 import { SpeechRecognitionCtor } from "../../../adapters/page/speech-recognition.ts";
+import { createMicrophoneDevices } from "../../../adapters/page/microphones.ts";
+import type { MicrophoneDevices } from "../../../application/microphones.ts";
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
 import type { ExternalLinks, LaunchFacts } from "../../../application/desktop-presence.ts";
@@ -61,5 +63,7 @@ export const prompterVoice: PrompterVoice = {
     return constructor;
   }
 };
+
+export const microphones: MicrophoneDevices = createMicrophoneDevices({ desktop: presence.running });
 
 export const historyDesktop = { history: desktopPort, running: presence.running };

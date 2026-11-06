@@ -1,5 +1,5 @@
 export interface PrompterRecognition {
-  readonly start: () => void;
+  readonly start: (track?: unknown) => void;
   readonly stop: () => void;
 }
 

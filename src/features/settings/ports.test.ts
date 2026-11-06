@@ -11,7 +11,7 @@ const win = jsdomWindow() as unknown as Window & typeof globalThis;
 Object.assign(globalThis, { window: win, document: win.document, Event: win.Event });
 win.Element.prototype.scrollIntoView = () => {};
 
-function setup() {
+function setup(microphones: SettingsPorts["microphones"] = { support: () => "browser", list: async () => ({ options: [], named: false }), onChange: () => () => {} }) {
   win.document.body.innerHTML = '<button id="btn-file">File</button>';
   const storage = new Map<string, string>();
   const hearing = new Set<(change: PreferenceNotice) => void>();
@@ -29,6 +29,7 @@ function setup() {
     preferences,
     changes: { onChange: (listener) => { hearing.add(listener); return () => { hearing.delete(listener); }; } },
     elsewhere: (listener) => { stored.add(listener); return () => { stored.delete(listener); }; },
+    microphones,
     actions: createActionRegistry(),
     notices: { show: (message, kind) => {
       calls.push(["notice", message, kind]);
@@ -132,5 +133,56 @@ test("settings repaints when another tab changes stored app state, a preference 
     assert.equal(h.stored.size, 0);
   } finally {
     h.mounted.dispose();
+  }
+});
+
+function select(id: string): HTMLSelectElement {
+  const element = win.document.getElementById(id);
+  assert.ok(element instanceof win.HTMLSelectElement);
+  return element;
+}
+
+test("settings offers the microphone list where it works: names after permission, the saved one chosen, a pick saved", async () => {
+  let named = false;
+  const changed = new Set<() => void>();
+  const h = setup({
+    support: () => "yes",
+    list: async () => named
+      ? { options: [{ id: "dev-1", label: "Mic One" }, { id: "dev-2", label: "Mic Two" }], named: true }
+      : { options: [], named: false },
+    onChange: (listener) => { changed.add(listener); return () => { changed.delete(listener); }; }
+  });
+  try {
+    h.preferences.setMicrophone("dev-2");
+    h.mounted.openSettings();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(Array.from(select("settings-microphone").options, (o) => [o.value, o.textContent]), [["", "System default"], ["dev-2", "Saved microphone"]]);
+    assert.match(win.document.getElementById("settings-microphone-hint")?.textContent ?? "", /names appear once Follow My Voice has been allowed/i);
+    named = true;
+    for (const listener of changed) listener();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(Array.from(select("settings-microphone").options, (o) => [o.value, o.textContent]), [["", "System default"], ["dev-1", "Mic One"], ["dev-2", "Mic Two"]]);
+    assert.equal(select("settings-microphone").value, "dev-2");
+    select("settings-microphone").value = "dev-1";
+    select("settings-microphone").dispatchEvent(new win.Event("change", { bubbles: true }));
+    assert.equal(h.preferences.microphone(), "dev-1");
+    h.preferences.setMicrophone("");
+    assert.equal(select("settings-microphone").value, "", "a pick made in Present shows here");
+  } finally {
+    h.mounted.dispose();
+  }
+  assert.equal(changed.size, 0);
+});
+
+test("settings shows a note, not a list, where recognition cannot be aimed at a microphone", () => {
+  for (const [support, note] of [["desktop", /Windows default microphone/], ["browser", /system's default microphone/]] as const) {
+    const h = setup({ support: () => support, list: async () => ({ options: [], named: false }), onChange: () => () => {} });
+    try {
+      h.mounted.openSettings();
+      assert.equal(win.document.getElementById("settings-microphone"), null, support);
+      assert.match(win.document.getElementById("settings-microphone-note")?.textContent ?? "", note);
+    } finally {
+      h.mounted.dispose();
+    }
   }
 });
