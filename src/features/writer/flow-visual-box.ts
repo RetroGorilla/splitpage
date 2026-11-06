@@ -77,13 +77,20 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     shownHtml = rowOf(next.head.rowId)?.visualText ?? "";
   }
 
+  function rejected(): boolean {
+    if (!ports.blocked()) return false;
+    dirty = false;
+    cell.innerHTML = first ? "" : shownHtml;
+    const at = posToDom(cell, Number.MAX_SAFE_INTEGER);
+    window.getSelection()?.setBaseAndExtent(at.node, at.offset, at.node, at.offset);
+    return true;
+  }
+
   function close(restore = true): void {
-    if (!target) return;
+    if (box.hidden) return;
     composing = false;
     save();
-    // why: a refused save keeps the target and the typed text, hidden, until refresh() or open() can save it
-    if (dirty && ports.current()) { box.hidden = true; return; }
-    if (!first && ports.current()) ports.leave(cell);
+    if (!first && ports.current() && !ports.blocked()) ports.leave(cell);
     const range = target;
     target = null;
     box.hidden = true;
@@ -104,7 +111,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
 
   function open(range: FlowRange | null, highlight?: { from: number; to: number }): void {
     close(false);
-    if (target || !ports.current() || !range) return;
+    if (!ports.current() || !range) return;
     if (!withinOneBeat(range)) { ports.notice("Visuals must stay within one beat."); return; }
     if (range.head.kind !== "beat") { ports.notice("Put the caret in a beat to edit its visual."); return; }
     range = ports.prepare(range);
@@ -147,7 +154,6 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
 
   function refresh(): void {
     if (!ports.current()) { close(false); note.hidden = true; return; }
-    if (box.hidden && target) close(false);
     if (target?.head.kind === "beat" && !rowOf(target.head.rowId)) close(false);
     if (target?.head.kind === "beat" && !first && !composing && !dirty && !saving) {
       const row = rowOf(target.head.rowId);
@@ -180,6 +186,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   }
 
   function onInput(event: Event): void {
+    if (rejected()) return;
     dirty = true;
     if (composing || (event as InputEvent).isComposing) return;
     save();
@@ -206,6 +213,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
     if (event.key === "Enter") {
       event.preventDefault();
+      if (rejected()) return;
       ports.paste(cell, { getData: type => type === "text/plain" ? "\n" : "" });
       dirty = true;
       save();
@@ -222,6 +230,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     }
     if (input.inputType === "insertParagraph" || input.inputType === "insertLineBreak") {
       event.preventDefault();
+      if (rejected()) return;
       ports.paste(cell, { getData: type => type === "text/plain" ? "\n" : "" });
       dirty = true;
       save();
@@ -233,6 +242,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   function onPaste(event: ClipboardEvent): void {
     event.preventDefault();
     event.stopPropagation();
+    if (rejected()) return;
     if (event.clipboardData) ports.paste(cell, event.clipboardData);
     dirty = true;
     save();
