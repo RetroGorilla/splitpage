@@ -25,6 +25,7 @@ export function mountRundownFeature(): ReturnType<typeof mountRundown> {
       cells: { moveRow: (rowId, targetId, after) => { cellEditing().moveRow(rowId, targetId, after); } },
       actions: portActions,
       minimized: { rundownMin: () => preferences().rundownMin(), setRundownMin: (on) => { preferences().setRundownMin(on); } },
+      lensTrial: { rundownLens: () => preferences().rundownLens() },
       changes: portChanges
     };
     return mountRundown(ports);

@@ -25,6 +25,7 @@ function setup() {
     cells: { moveRow: (rowId, targetId, after) => { drag.push(`move ${rowId} ${targetId} ${String(after)}`); } },
     actions: actions.actions,
     minimized: { rundownMin: () => false, setRundownMin: (on) => { stored.push(on); } },
+    lensTrial: { rundownLens: () => "current" },
     changes: changes.changes
   };
   return { stored, drag, changes, actions, owner: mountRundown(ports) };

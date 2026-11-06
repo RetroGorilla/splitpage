@@ -75,6 +75,26 @@ test("the clock and the theme read as system unless a known mode is stored, and 
   ]);
 });
 
+test("the temporary rundown lens setting reads current unless index or lock is stored, and choosing current removes the key", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.nameOf("splitpage-rundown-lens"), "rundownLens");
+  assert.equal(prefs.rundownLens(), "current");
+  storage.items.set("splitpage-rundown-lens", "squeeze");
+  assert.equal(prefs.rundownLens(), "current");
+  prefs.setRundownLens("lock");
+  assert.equal(prefs.rundownLens(), "lock");
+  prefs.setRundownLens("index");
+  assert.equal(storage.items.get("splitpage-rundown-lens"), "index");
+  prefs.setRundownLens("current");
+  assert.equal(storage.items.has("splitpage-rundown-lens"), false);
+  assert.deepEqual(announced, [
+    { key: "splitpage-rundown-lens", value: "lock" },
+    { key: "splitpage-rundown-lens", value: "index" },
+    { key: "splitpage-rundown-lens", value: null }
+  ]);
+  assert.equal(settingsAppData().some((spec) => spec.key === "splitpage-rundown-lens"), false, "a test switch is not part of the app data");
+});
+
 test("my colour reads only a palette colour, upper-cased, and setting none removes it", () => {
   const { prefs, storage, announced } = setup();
   assert.equal(prefs.myColor(), "");

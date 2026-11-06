@@ -22,7 +22,7 @@ export interface SettingsPorts {
   readonly elsewhere: (listener: (name: PreferenceName | null) => void) => () => void;
   readonly preferences: Pick<Preferences,
     "theme" | "setTheme" | "clock" | "setClock" | "scriptScale" | "setScriptScale" |
-    "rundownMin" | "setRundownMin" | "tagIcons" | "setTagIcons" | "hideShot" |
+    "rundownMin" | "setRundownMin" | "rundownLens" | "setRundownLens" | "tagIcons" | "setTagIcons" | "hideShot" |
     "autosave" | "videoThumbs" | "setVideoThumbs" | "defaultWpm" | "setDefaultWpm" |
     "prompterFlag" | "setMyColor" | "commentAuthor" | "setCommentAuthor" |
     "announceTaggingHelp" | "resetTour" | "resetDesktopNotice">;

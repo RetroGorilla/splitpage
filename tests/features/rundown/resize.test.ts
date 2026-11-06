@@ -53,6 +53,7 @@ function setup(t: TestContext, doc: ValidatedDocument, labelShown = true) {
     cells: { moveRow: () => {} },
     actions: fakeActions().actions,
     minimized: { rundownMin: () => false, setRundownMin: () => {} },
+    lensTrial: { rundownLens: () => "current" },
     changes: fakePreferenceChanges().changes
   };
   const owner = startRundown(ports);

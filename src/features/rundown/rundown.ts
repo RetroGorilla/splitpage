@@ -8,7 +8,10 @@ import { brollCountIn } from "../../core/production/broll.ts";
 import { cssAttr } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
+import type { RundownLensMode } from "../../application/preferences/preferences.ts";
 import type { RundownControls } from "./actions.ts";
+import { lensIndexAt, lensIndexFit, lensIndexMap, lensLockAnchor, lensLockStep } from "./lens-trial.ts";
+import type { IndexRef } from "./lens-trial.ts";
 import type { RundownPorts } from "./ports.ts";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
@@ -58,9 +61,13 @@ type StripBase = {
   current: number;
 };
 type LengthAt = { left: number | null; width: number; fit: number; pinned?: boolean };
+type LensSpace = "rest" | "index" | "lock";
 type LensState = {
   on: boolean;
   src: LensSource | null;
+  space: LensSpace;
+  ref: IndexRef | null;
+  lock: number;
   p: number;
   a: number;
   x: number | null;
@@ -79,6 +86,8 @@ type DropEls = { marker: HTMLElement; label: HTMLElement };
 type LensDebug = {
   on: boolean;
   src: LensSource | null;
+  space: LensSpace;
+  lock: number;
   p: number;
   a: number;
   hold: boolean;
@@ -278,9 +287,6 @@ const LENS_EASE_FLOOR = 0.08;
 function clamp(v: number, lo: number, hi: number): number { return v < lo ? lo : v > hi ? hi : v; }
 
 export function rundownLens(slots: readonly number[], focus: number, anchor: number | null | undefined, opts?: LensOpts | null): number[] {
-  opts = opts || {};
-  const minW = (opts.minWidth as number) > 0 ? opts.minWidth as number : LENS_MIN_PX;
-  const R = (opts.reach as number) >= 0 ? opts.reach as number : LENS_REACH_BEATS;
   const m = slots.length - 1;
   const W = slots[m] as number;
   if (!(W > 0) || m < 2) return slots.slice();
@@ -289,6 +295,23 @@ export function rundownLens(slots: readonly number[], focus: number, anchor: num
   while (jp < m - 1 && (slots[jp + 1] as number) <= p) jp++;
   const wf = (slots[jp + 1] as number) - (slots[jp] as number);
   const phi = wf > 0 ? (p - (slots[jp] as number)) / wf : 0.5;
+  return lensAround(slots, jp, phi, anchor, p, opts);
+}
+
+export function rundownLensIndex(slots: readonly number[], index: number, anchor: number | null | undefined, opts?: LensOpts | null): number[] {
+  const m = slots.length - 1;
+  if (!((slots[m] as number) > 0) || m < 2) return slots.slice();
+  const q = clamp(Number(index) || 0, 0, m - 1);
+  const jp = Math.min(m - 2, Math.floor(q));
+  return lensAround(slots, jp, q - jp, anchor, slots[jp] as number, opts);
+}
+
+function lensAround(slots: readonly number[], jp: number, phi: number, anchor: number | null | undefined, fallback: number, opts?: LensOpts | null): number[] {
+  opts = opts || {};
+  const minW = (opts.minWidth as number) > 0 ? opts.minWidth as number : LENS_MIN_PX;
+  const R = (opts.reach as number) >= 0 ? opts.reach as number : LENS_REACH_BEATS;
+  const m = slots.length - 1;
+  const W = slots[m] as number;
   const q = jp + phi;
   const L = [0];
   const nw: number[] = [];
@@ -302,8 +325,8 @@ export function rundownLens(slots: readonly number[], focus: number, anchor: num
     L.push((L[j] as number) + w);
   }
   let a = Number(anchor);
-  if (!isFinite(a)) a = p;
-  const o = clamp(a - ((L[jp] as number) + phi * (nw[jp] as number)), W - (L[m] as number), 0);
+  if (!isFinite(a)) a = fallback;
+  const o =clamp(a - ((L[jp] as number) + phi * (nw[jp] as number)), W - (L[m] as number), 0);
   return L.map(function (v) { return v + o; });
 }
 
@@ -438,6 +461,7 @@ interface RundownState {
   lengthAt: LengthAt;
   readonly lens: LensState;
   noHover: boolean;
+  lensMode: RundownLensMode;
   readonly drop: DropState;
 }
 
@@ -461,6 +485,9 @@ function freshState(): RundownState {
     lens: {
       on: false,
       src: null,
+      space: "rest",
+      ref: null,
+      lock: -1,
       p: 0,
       a: 0,
       x: null,
@@ -475,6 +502,7 @@ function freshState(): RundownState {
       easeNext: false
     },
     noHover: false,
+    lensMode: "current",
     drop: { x: null, gap: -1 }
   };
 }
@@ -802,7 +830,20 @@ function slots(): number[] {
 }
 
 function lensTarget(): number[] {
-  return state.lens.on ? rundownLens(slots(), state.lens.p, state.lens.a, lensOpts()) : state.base.X as number[];
+  const lens = state.lens;
+  if (!lens.on) return state.base.X as number[];
+  if (lens.space === "index") return rundownLensIndex(slots(), lens.p, lens.a, lensOpts());
+  if (lens.space === "lock") {
+    const half = (lens.hold ? LENS_HOLD_PX : LENS_MIN_PX) / 2;
+    return rundownLensIndex(slots(), lens.p, clamp(lens.a, half, Math.max(half, state.base.W - half)), lensOpts());
+  }
+  return rundownLens(slots(), lens.p, lens.a, lensOpts());
+}
+
+function lockTo(beat: number, knots: readonly number[]): void {
+  state.lens.lock = beat;
+  state.lens.p = beat + 0.5;
+  state.lens.a = lensLockAnchor(knots, beat, state.base.W, state.lens.hold ? LENS_HOLD_PX : LENS_MIN_PX);
 }
 
 function applyKnots(Z: readonly number[]): void {
@@ -855,7 +896,15 @@ function lensFrame(now: number): void {
   const dt = state.lens.last ? Math.min(64, Math.max(1, now - state.lens.last)) : 16;
   state.lens.last = now;
   let recentring = false;
-  if (state.lens.on && state.lens.x !== null && (state.lens.src === "pointer" || state.lens.src === "drag")) {
+  if (state.lens.on && state.lens.space === "lock" && state.lens.src === "pointer" && state.lens.x !== null) {
+    const knots = lensTarget();
+    const next = lensLockStep(knots, state.lens.lock, state.lens.x, state.base.W);
+    if (next !== state.lens.lock) { lockTo(next, knots); recentring = true; }
+  } else if (state.lens.on && state.lens.space === "index" && state.lens.src === "pointer" && state.lens.x !== null) {
+    const before = state.lens.p;
+    indexFocus(state.lens.x);
+    recentring = Math.abs(state.lens.p - before) > 1e-4;
+  } else if (state.lens.on && state.lens.space === "rest" && state.lens.x !== null && (state.lens.src === "pointer" || state.lens.src === "drag")) {
     const next = rundownLensRecenter(slots(), state.lens.Z, state.lens.p, state.lens.a, state.lens.x, dt, lensOpts());
     recentring = Math.abs(next.focus - state.lens.p) > 0.002 || Math.abs(next.anchor - state.lens.a) > 0.02;
     state.lens.p = next.focus;
@@ -942,6 +991,8 @@ function lensReset(): void {
   state.lens.on = false;
   state.lens.src = null;
   state.lens.x = null;
+  state.lens.ref = null;
+  state.lens.lock = -1;
   lensSettle();
 }
 
@@ -950,10 +1001,42 @@ function lensRepainted(countChanged: boolean): void {
   if (countChanged || (state.lens.Z as number[]).length !== (state.base.X as number[]).length) {
     holdClear();
     state.lens.Z = (state.base.X as number[]).slice();
-    if (state.lens.x !== null) { state.lens.p = knotMap(state.lens.Z, slots(), state.lens.x); state.lens.a = state.lens.x; }
+    if (state.lens.x !== null && state.lens.space !== "rest") {
+      state.lens.ref = null;
+      state.lens.lock = -1;
+      lensAtTrial(state.lens.x, state.lens.t, state.lens.space);
+    } else if (state.lens.x !== null) { state.lens.p = knotMap(state.lens.Z, slots(), state.lens.x); state.lens.a = state.lens.x; }
     else if (state.lens.src === "focus") lensOff();
   }
   applyKnots(state.lens.Z as number[]);
+  lensKick();
+}
+
+function indexFocus(x: number): void {
+  const lens = state.lens;
+  if (!lens.ref) lens.ref = { x: x, q: lensIndexAt(slots(), x) };
+  const proposed = lensIndexMap(lens.ref, x, state.base.W, state.base.n);
+  lens.p = lensIndexFit(proposed, x, (index, anchor) => rundownLensIndex(slots(), index, anchor), state.base.n);
+  lens.a = x;
+}
+
+function lensAtTrial(x: number, t: number, space: "index" | "lock"): void {
+  const lens = state.lens;
+  const shown = lens.Z as number[];
+  if (!lens.on || lens.src !== "pointer" || lens.space !== space) { lens.ref = null; lens.lock = -1; }
+  lens.space = space;
+  if (space === "index") {
+    indexFocus(x);
+  } else {
+    const knots = lens.lock >= 0 ? lensTarget() : shown;
+    const next = lensLockStep(knots, lens.lock, x, state.base.W);
+    if (next !== lens.lock) lockTo(next, knots);
+  }
+  lens.on = true;
+  lens.src = "pointer";
+  lens.x = x;
+  lens.t = t;
+  holdTrack(beatAt(shown, x));
   lensKick();
 }
 
@@ -961,8 +1044,10 @@ function lensAt(x: number, src: LensSource, t: number): void {
   if (!lensAllowed()) return;
   x = clamp(x, 0, state.base.W);
   lensStart();
+  if (src === "pointer" && state.lensMode !== "current") { lensAtTrial(x, t, state.lensMode); return; }
   const U = slots();
-  if (!state.lens.on || state.lens.x === null || (state.lens.src !== src && state.lens.src !== "focus")) {
+  if (!state.lens.on || state.lens.x === null || state.lens.space !== "rest" || (state.lens.src !== src && state.lens.src !== "focus")) {
+    state.lens.space = "rest";
     state.lens.p = knotMap(state.lens.Z as number[], U, x);
     state.lens.a = x;
   } else if (x !== state.lens.x) {
@@ -985,6 +1070,7 @@ function lensFocus(i: number): void {
   const U = slots();
   state.lens.on = true;
   state.lens.src = "focus";
+  state.lens.space = "rest";
   state.lens.x = null;
   state.lens.p = ((U[i] as number) + (U[i + 1] as number)) / 2;
   state.lens.a = clamp((((state.lens.Z as number[])[i] as number) + ((state.lens.Z as number[])[i + 1] as number)) / 2, 0, state.base.W);
@@ -997,6 +1083,8 @@ function lensOff(src?: LensSource): void {
   state.lens.on = false;
   state.lens.src = null;
   state.lens.x = null;
+  state.lens.ref = null;
+  state.lens.lock = -1;
   if (state.lens.Z) { state.lens.easeNext = true; lensKick(); }
 }
 
@@ -1190,7 +1278,7 @@ function ensureToggle(strip: HTMLElement): HTMLButtonElement {
 
 function lensDebug(): LensDebug {
   return {
-    on: state.lens.on, src: state.lens.src, p: state.lens.p, a: state.lens.a, hold: state.lens.hold, holdAt: state.lens.holdAt,
+    on: state.lens.on, src: state.lens.src, space: state.lens.space, lock: state.lens.lock, p: state.lens.p, a: state.lens.a, hold: state.lens.hold, holdAt: state.lens.holdAt,
     Z: state.lens.Z ? state.lens.Z.slice() : null, X: state.base.X ? state.base.X.slice() : null,
     starts: state.base.blocks.map(function (b) { return b.start; }),
     dropGap: state.drop.gap, minimized: state.minimized,
@@ -1219,10 +1307,12 @@ export function startRundown(given: RundownPorts): RundownOwner {
   }
   try { state.noHover = !!(window.matchMedia && window.matchMedia("(hover: none)").matches); } catch (e) {}
   state.minimized = ports.minimized.rundownMin();
+  state.lensMode = ports.lensTrial.rundownLens();
   const toggle = ensureToggle(strip);
   updateRundownMinControls();
   listen(toggle, "click", function () { ports.actions.invoke("toggle-rundown-min", "button"); });
   offs.push(ports.changes.onChange(function (change) {
+    if (change.name === "rundownLens") { state.lensMode = ports.lensTrial.rundownLens(); lensOff("pointer"); return; }
     if (change.name !== "rundownMin") return;
     const v: unknown = change.value;
     const on = v === true || v === "1" || v === 1 ? true : v === false || v === "0" || v === 0 ? false : ports.minimized.rundownMin();
