@@ -16,7 +16,7 @@ const crypto: typeof NodeCrypto = require("node:crypto");
 
 function createShellIpc({
   tabOf, launchIntentFor, draftStore, draftsIsHeld, hadPriorSession, shell, nativeTheme, themeChoice,
-  videoFileGrants, VIDEO_FILE_EXT, testVideoOpens, testMode: TEST_MODE, videoThumbnail,
+  videoFileGrants, VIDEO_FILE_EXT, openableVideoPath, testVideoOpens, testMode: TEST_MODE, videoThumbnail,
   updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus, checkForUpdate, downloadUpdate,
   runUpdateInstaller, openPrompterInBrowser, voiceHelperInstance
 }: DesktopShellIpcDependencies) {
@@ -77,6 +77,14 @@ function createShellIpc({
       return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
     });
 
+    ipcHandle("splitpage:video-path-open", async (event, storedPath) => {
+      const found = await openableVideoPath(storedPath, process.platform === "win32" ? "win32" : "posix", fsp);
+      if (!found.ok) return found;
+      if (TEST_MODE) { testVideoOpens.push(found.path); return { ok: true }; }
+      const failed = await shell.openPath(found.path);
+      return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
+    });
+
     ipcHandle("splitpage:video-thumbnail", async (event, host, ref) => videoThumbnail(host, ref));
 
     ipcHandle("splitpage:update-status", async () => {
@@ -108,15 +116,18 @@ function createShellIpc({
     ipcHandle("splitpage:voice-status", async () => {
       return { available: voiceHelperInstance().available() };
     });
-    ipcHandle("splitpage:voice-start", async (event) => {
+    ipcHandle("splitpage:voice-start", async (event, microphone) => {
       const tab = tabOf(event);
       if (!tab) return { ok: false, code: "NO_TAB" };
-      return voiceHelperInstance().start(tab.id);
+      return voiceHelperInstance().start(tab.id, microphone);
     });
-    ipcHandle("splitpage:voice-stop", async (event) => {
+    ipcHandle("splitpage:voice-microphones", async () => {
+      return voiceHelperInstance().microphones();
+    });
+    ipcHandle("splitpage:voice-stop", async (event, session) => {
       const tab = tabOf(event);
       if (!tab) return { ok: true };
-      return voiceHelperInstance().stop(tab.id);
+      return voiceHelperInstance().stop(tab.id, session);
     });
   }
 

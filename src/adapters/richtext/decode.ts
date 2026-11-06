@@ -61,6 +61,10 @@ export function decodeBody(body: Node, opts?: DecodeOptions | null): Run[] {
         runs.push({ atom: "broll", id: el.getAttribute("data-broll-id"), text: el.textContent, marks: marks });
         return;
       }
+      if (tag === "SPAN" && cls && cls.contains("who-anchor")) {
+        runs.push({ atom: "who", name: el.getAttribute("data-who"), marks: marks });
+        return;
+      }
       const next: DecodedMarks = Object.assign({}, marks);
       if (tag === "STRONG") next.b = true;
       else if (tag === "EM") next.i = true;

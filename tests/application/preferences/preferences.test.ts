@@ -26,6 +26,7 @@ test("the stored keys keep the 3.x names, and each key maps back to its preferen
   assert.equal(prefs.nameOf("splitpage-autosave"), "autosave");
   assert.equal(prefs.nameOf("splitpage-comment-author"), "commentAuthor");
   assert.equal(prefs.nameOf("splitpage-hide-shot"), "hideShot");
+  assert.equal(prefs.nameOf("splitpage-microphone"), "microphone");
   assert.equal(prefs.nameOf("splitpage-onboarding"), "onboarding");
   assert.equal(prefs.nameOf("splitpage-tagging-help-dismissed"), "taggingHelp");
   assert.equal(prefs.nameOf("splitpage-tour-done"), "tourDone");
@@ -204,6 +205,34 @@ test("the desktop notice is shown again by removing its key", () => {
     { key: "splitpage-desktop-notice-dismissed", value: "1" },
     { key: "splitpage-desktop-notice-dismissed", value: null }
   ]);
+});
+
+test("the chosen microphone is one stored id, system default when empty, announced on every change", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.microphone(), "");
+  prefs.setMicrophone("abc123");
+  assert.equal(prefs.microphone(), "abc123");
+  assert.equal(storage.items.get("splitpage-microphone"), "abc123");
+  prefs.setMicrophone("");
+  assert.equal(prefs.microphone(), "");
+  assert.equal(storage.items.has("splitpage-microphone"), false);
+  storage.items.set("splitpage-microphone", "x".repeat(513));
+  assert.equal(prefs.microphone(), "", "a stored id longer than any device id is read as the system default");
+  prefs.setMicrophone("y".repeat(513));
+  assert.equal(storage.items.has("splitpage-microphone"), false);
+  assert.deepEqual(announced.slice(0, 2), [
+    { key: "splitpage-microphone", value: "abc123" },
+    { key: "splitpage-microphone", value: null }
+  ]);
+});
+
+test("the chosen microphone stays on this device: Export app data neither carries nor restores it", () => {
+  const source = setup();
+  source.prefs.setMicrophone("abc123");
+  assert.equal("microphone" in source.prefs.appDataExport(settingsAppData()), false);
+  const target = setup();
+  target.prefs.appDataImport({ microphone: "abc123" }, settingsAppData());
+  assert.equal(target.prefs.microphone(), "");
 });
 
 test("the settings carried by Export app data keep their names, keys, order and checks", () => {

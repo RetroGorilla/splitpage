@@ -22,6 +22,7 @@ import { mountVideoFilesFeature } from "./wiring/video-files.ts";
 import { mountBeatsFeature, mountBeatMediaFeature } from "./wiring/rows.ts";
 import { mountProductionTagsFeature } from "./wiring/production-tags.ts";
 import { mountPlainTagsFeature } from "./wiring/plain-tags.ts";
+import { mountWhoListFeature } from "./wiring/who-list.ts";
 import { mountTagPanelsFeature } from "./wiring/production.ts";
 import { derivedRecordsPlan, mountBrollFeature, mountBrollPanelStateFeature } from "./wiring/broll.ts";
 import { mountFindFeature } from "./wiring/find.ts";
@@ -96,6 +97,7 @@ function mountAndStart(wiring: ReturnType<typeof wireLegacyApp>): void {
   mountBeatMediaFeature();
   mountProductionTagsFeature();
   mountPlainTagsFeature();
+  mountWhoListFeature();
   mountTagPanelsFeature();
   mountBrollFeature();
   mountBrollPanelStateFeature();

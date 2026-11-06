@@ -66,6 +66,8 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly setTheme: (...args: DesktopIpcArgs<"splitpage:set-theme">) => void;
   readonly grantVideoFile: (file: unknown) => Promise<DesktopVideoGrant>;
   readonly openVideoFile: DesktopCall<"splitpage:video-file-open">;
+  readonly videoFilePath: (file: unknown) => string | null;
+  readonly openVideoPath: DesktopCall<"splitpage:video-path-open">;
   readonly videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopThumbnailResult>;
 
   readonly getUpdateStatus: DesktopCall<"splitpage:update-status">;
@@ -77,6 +79,7 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly openPrompterInChromium: DesktopCall<"splitpage:prompter-open-in-chromium">;
   readonly voiceStatus: DesktopCall<"splitpage:voice-status">;
   readonly voiceStart: DesktopCall<"splitpage:voice-start">;
+  readonly voiceMicrophones: DesktopCall<"splitpage:voice-microphones">;
   readonly voiceStop: DesktopCall<"splitpage:voice-stop">;
   readonly onVoiceEvent: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:voice-event">[0]>) => void;
 }
@@ -102,10 +105,10 @@ export const DESKTOP_PORT_MEMBERS = [
   "historyPut", "historyList", "historyGet", "historyCopy", "historyTouch", "historyListDocs",
   "blobPut", "blobGet", "blobMissing", "printToPdf",
   "getSessionInfo", "openExternal", "setTheme",
-  "grantVideoFile", "openVideoFile", "videoThumbnail",
+  "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",
   "openPrompterInBrowser", "openPrompterInChromium",
-  "voiceStatus", "voiceStart", "voiceStop", "onVoiceEvent"
+  "voiceStatus", "voiceStart", "voiceMicrophones", "voiceStop", "onVoiceEvent"
 ] as const satisfies readonly DesktopMember[];
 
 export const UNUSED_DESKTOP_MEMBERS = [

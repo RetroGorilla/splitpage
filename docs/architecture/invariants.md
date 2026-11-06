@@ -249,7 +249,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-28 — Native entry points take the least they need
 
-- **Behaviour:** No HTTP endpoint spawns a process or installs files, and `server/server.ts` does not load `node:child_process`. Under `/api/launcher/` there is only `info`, behind the launch-token gate; a request without the token gets 404. Desktop channels take no argument or only typed ids and shas. These cover updates, opening the prompter in a browser, Google Drive, blobs, history, voice and video thumbnails. Main builds every URL, path and command itself, and no answer carries a path or a token.
+- **Behaviour:** No HTTP endpoint spawns a process or installs files, and `server/server.ts` does not load `node:child_process`. Under `/api/launcher/` there is only `info`, behind the launch-token gate; a request without the token gets 404. Desktop channels take no argument or only typed ids and shas. These cover updates, opening the prompter in a browser, Google Drive, blobs, history, voice and video thumbnails. Main builds every URL, path and command itself, and no answer carries a path or a token. The video file channels are the exception: a grant takes the path the preload read from a dropped file, and `splitpage:video-path-open` takes a script's stored path, which main checks as INV-34 says before it opens it.
 - **Tests:** partial.
   - `tools/test-server.mjs`: "launcher/info without the launch header is 404"; the staging and register routes answer 404.
   - `desktop/test/ipc-table.test.mjs`: "checkArgs refuses the shapes…", plus one argument test per channel.
@@ -310,7 +310,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 ### INV-34 — The renderer never sends a file path
 
-- **Behaviour:** Desktop file operations address files by opaque ids from main's registry. Any bridge method that works on a file takes an id, never a path.
+- **Behaviour:** Desktop file operations address files by opaque ids from main's registry. Any bridge method that works on a file takes an id, never a path. One exception, decided by Adam for #259: `openVideoPath` (`splitpage:video-path-open`) takes the video path stored in a script. It only opens, never reads, writes or registers, and main refuses it unless `videoPathProblem` (`shared/video-path.ts`) and `openableVideoPath` (`shared/video-embed.ts`) pass: a local absolute path with no UNC, device, `.` or `..` part, a video extension before and after links are resolved, and a regular file. Tests: `desktop/test/video-path-open.test.mjs`, `tests/shared/video-path.test.ts`.
 - **Tests:** `desktop/test/smoke.mjs` ("main writes filePath:null for the unregistered fileId (invariant #34)", "draft: forged fileId with no registered path opens as an untitled copy"); `desktop/test/ipc-table.test.mjs`; browser `21-desktop-shim.txt`.
 - **Owner:** `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** — (plan §8 keeps opaque file ids).

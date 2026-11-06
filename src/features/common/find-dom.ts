@@ -35,6 +35,10 @@ export function domProjection(root: Node) {
         push(OBJ, at(parent, i));
         continue;
       }
+      if (tag === "SPAN" && cls && cls.contains("who-anchor")) {
+        push(OBJ, at(parent, i));
+        continue;
+      }
       if (tag === "DIV" || tag === "P") {
         const blank = child.childNodes.length === 1 && (child.firstChild as ChildNode).nodeType === 1 && (child.firstChild as Element).tagName === "BR";
         if (!blank) walk(child);

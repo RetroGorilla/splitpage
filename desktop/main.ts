@@ -1790,7 +1790,8 @@ const { registerFileIpc } = createFileIpc({
 
 const { registerShellIpc } = createShellIpc({
   tabOf, launchIntentFor, draftStore: () => draftStore, draftsIsHeld, hadPriorSession,
-  shell, nativeTheme, themeChoice, videoFileGrants, VIDEO_FILE_EXT, testVideoOpens, testMode: TEST_MODE,
+  shell, nativeTheme, themeChoice, videoFileGrants, VIDEO_FILE_EXT,
+  openableVideoPath: videoEmbed.openableVideoPath, testVideoOpens, testMode: TEST_MODE,
   videoThumbnail, updateStatus: () => updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus,
   checkForUpdate, downloadUpdate, runUpdateInstaller, openPrompterInBrowser,
   voiceHelperInstance: voice.voiceHelperInstance

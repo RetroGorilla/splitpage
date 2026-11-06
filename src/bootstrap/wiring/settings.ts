@@ -8,7 +8,7 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.ts";
 import { appDataPreferences, commentSorting } from "./ports/preferences.ts";
 import { fileDelivery } from "./ports/files.ts";
-import { launch } from "./ports/desktop.ts";
+import { launch, microphones } from "./ports/desktop.ts";
 import { screen } from "./ports/screen.ts";
 import { installSettingsControls, openSettings } from "../../application/settings-actions.ts";
 import { actions as portActions } from "./ports/actions.ts";
@@ -54,6 +54,8 @@ export function mountSettingsFeature(): SettingsMount {
         commentAuthor: () => preferences().commentAuthor(),
         defaultWpm: () => preferences().defaultWpm(),
         hideShot: () => preferences().hideShot(),
+        microphone: () => preferences().microphone(),
+        setMicrophone: (value) => preferences().setMicrophone(value),
         prompterFlag: (value) => preferences().prompterFlag(value),
         resetDesktopNotice: () => preferences().resetDesktopNotice(),
         resetTour: () => preferences().resetTour(),
@@ -74,6 +76,7 @@ export function mountSettingsFeature(): SettingsMount {
         theme: () => preferences().theme(),
         videoThumbs: () => preferences().videoThumbs(),
       },
+      microphones,
       editor,
       identity: { name: () => getSavedAuthorName(preferences()), swatchesHtml: personSwatchesHtml },
       prompter: { mirror: (value) => { prompterControls()?.setPrompterMirror(value); }, flip: (value) => { prompterControls()?.setPrompterFlip(value); }, beatMode: (value) => { prompterControls()?.setPrompterBeatMode(value); } },

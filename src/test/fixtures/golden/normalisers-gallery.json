@@ -487,6 +487,291 @@
     }
   },
   {
+    "case": "a Windows path",
+    "input": "C:\\Videos\\take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4",
+        "location": {
+          "kind": "path",
+          "path": "C:\\Videos\\take.mp4"
+        }
+      }
+    }
+  },
+  {
+    "case": "a POSIX path",
+    "input": "/Users/me/take.mov",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4",
+        "location": {
+          "kind": "path",
+          "path": "/Users/me/take.mov"
+        }
+      }
+    }
+  },
+  {
+    "case": "4096 characters, the limit",
+    "input": {
+      "length": 4096,
+      "runs": [
+        [
+          "/",
+          1
+        ],
+        [
+          "x",
+          4091
+        ],
+        [
+          ".",
+          1
+        ],
+        [
+          "m",
+          1
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "4",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "videoLink": {
+        "name": "take.mp4",
+        "location": {
+          "kind": "path",
+          "path": {
+            "length": 4096,
+            "runs": [
+              [
+                "/",
+                1
+              ],
+              [
+                "x",
+                4091
+              ],
+              [
+                ".",
+                1
+              ],
+              [
+                "m",
+                1
+              ],
+              [
+                "p",
+                1
+              ],
+              [
+                "4",
+                1
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "case": "4097 characters",
+    "input": {
+      "length": 4097,
+      "runs": [
+        [
+          "/",
+          1
+        ],
+        [
+          "x",
+          4092
+        ],
+        [
+          ".",
+          1
+        ],
+        [
+          "m",
+          1
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "4",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "UNC",
+    "input": "\\\\server\\share\\take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "a device path",
+    "input": "\\\\?\\C:\\take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "relative",
+    "input": "Videos\\take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "drive-relative",
+    "input": "C:take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "traversal",
+    "input": "C:\\Videos\\..\\take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "POSIX traversal",
+    "input": "/a/./take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "an executable",
+    "input": "C:\\Videos\\take.exe",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "a shortcut",
+    "input": "C:\\Videos\\take.lnk",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "a stream",
+    "input": "C:\\Videos\\take.exe:x.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "a device name",
+    "input": "C:\\Videos\\con.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "a control character",
+    "input": "/a/b\u0001.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "double slash",
+    "input": "//server/take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "an unknown kind",
+    "input": {
+      "kind": "bundle",
+      "path": "take.mp4"
+    },
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "no kind",
+    "input": {
+      "path": "/a/take.mp4"
+    },
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "not an object",
+    "input": "/a/take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "on a web link",
+    "input": {
+      "kind": "path",
+      "path": "/a/take.mp4",
+      "on": "href"
+    },
+    "output": {
+      "videoLink": {
+        "href": "https://e.x/"
+      }
+    }
+  },
+  {
     "case": "20 links, the limit",
     "input": 20,
     "output": {

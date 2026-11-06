@@ -64,10 +64,10 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:recents-list invoke", "splitpage:recents-remove invoke", "splitpage:recents-clear invoke",
   "splitpage:get-session-info invoke", "splitpage:get-app-version-sync sendSync", "splitpage:tab-boot-sync sendSync",
   "splitpage:open-external send", "splitpage:set-theme send", "splitpage:video-file-grant invoke",
-  "splitpage:video-file-open invoke", "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
+  "splitpage:video-file-open invoke", "splitpage:video-path-open invoke", "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
   "splitpage:update-check invoke", "splitpage:update-download invoke", "splitpage:update-install invoke",
   "splitpage:prompter-open-in-browser invoke", "splitpage:prompter-open-in-chromium invoke",
-  "splitpage:voice-status invoke", "splitpage:voice-start invoke", "splitpage:voice-stop invoke",
+  "splitpage:voice-status invoke", "splitpage:voice-start invoke", "splitpage:voice-microphones invoke", "splitpage:voice-stop invoke",
   "splitpage:set-document-state send", "splitpage:renderer-ready send", "splitpage:route-open invoke",
   "splitpage:draft-write invoke", "splitpage:draft-discard invoke", "splitpage:draft-take invoke",
   "splitpage:draft-restore-done send", "splitpage:draft-flushed send", "splitpage:history-put invoke",
@@ -309,14 +309,14 @@ test("main.ts passes registerIpc every handler group, and each group's module is
   }
 });
 
-test("in test mode, main.ts's real groups register the 59 pairs in the order they had before the split, then the print channel", () => {
+test("in test mode, main.ts's real groups register the 60 pairs in the order they had before the split, then the print channel", () => {
   assert.deepEqual(registerThroughMain({ testMode: true }), [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT]);
 });
 
 test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
   const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
-  assert.equal(expected.length, 53);
+  assert.equal(expected.length, 55);
   assert.deepEqual(seen, expected);
   for (const pair of seen) {
     const [name, direction] = pair.split(" ");
@@ -477,21 +477,49 @@ test("Use Chromium Speech Recognition takes no argument, from the app page only"
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
 });
 
-test("Follow My Voice takes no argument, from the app page only", () => {
-  for (const name of ["splitpage:voice-status", "splitpage:voice-start", "splitpage:voice-stop"]) {
+test("Follow My Voice accepts only an optional capture id to start or session to stop, from the app page only", () => {
+  const MIC = "{0.0.1.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0}";
+  for (const name of ["splitpage:voice-status", "splitpage:voice-start", "splitpage:voice-microphones", "splitpage:voice-stop"]) {
     const row = channelFor(name, "invoke");
     assert.ok(row, name + " declared");
-    assert.deepEqual([...row.argsSchema], [], name);
+    assert.deepEqual([...row.argsSchema], name === "splitpage:voice-start" ? ["microphoneId?"] : name === "splitpage:voice-stop" ? ["integer?"] : [], name);
     assert.deepEqual([...row.allowedOrigins], [APP_ORIGIN], name);
     assert.equal(checkArgs(row.argsSchema, []), null, name);
     assert.ok(checkArgs(row.argsSchema, ["powershell.exe"]), name + ": an executable");
     assert.ok(checkArgs(row.argsSchema, ["C:\\evil.ps1"]), name + ": a script path");
     assert.ok(checkArgs(row.argsSchema, [{ lang: "en-US" }]), name + ": options");
+    assert.ok(checkArgs(row.argsSchema, ["-List"]), name + ": a helper switch");
+    assert.ok(checkArgs(row.argsSchema, [MIC + " -List"]), name + ": an id with more after it");
+    assert.ok(checkArgs(row.argsSchema, ["{0.0.0.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0}"]), name + ": a playback endpoint");
+    assert.ok(checkArgs(row.argsSchema, [MIC, MIC]), name + ": two microphones");
     assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === name), name + ": never the tab strip's");
+  }
+  assert.equal(checkArgs(channelFor("splitpage:voice-start", "invoke").argsSchema, [MIC]), null, "voice-start takes one capture endpoint id");
+  assert.ok(checkArgs(channelFor("splitpage:voice-stop", "invoke").argsSchema, [MIC]), "nothing else takes one");
+  const stopSchema = channelFor("splitpage:voice-stop", "invoke").argsSchema;
+  assert.equal(checkArgs(stopSchema, [42]), null, "a scoped stop takes a session number");
+  for (const args of [["42"], [1.5], [NaN], [Infinity], [42, 43], [null]]) {
+    assert.ok(checkArgs(stopSchema, args), "invalid stop session: " + JSON.stringify(args));
   }
   const events = channelFor("splitpage:voice-event", "receive");
   assert.ok(events, "voice-event declared");
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
+});
+
+test("voice-stop scopes cleanup to the sender's tab and forwards the optional session", async () => {
+  const { createShellIpc } = require(path.join(desktop, "ipc-shell.ts"));
+  const handlers = new Map();
+  const stops = [];
+  const { registerShellIpc } = createShellIpc({
+    tabOf: (event) => event.tab,
+    voiceHelperInstance: () => ({ stop: (tab, session) => { stops.push([tab, session]); return { ok: true }; } })
+  });
+  registerShellIpc({ ipcHandle: (name, fn) => handlers.set(name, fn), ipcOn: () => {}, ipcOnSync: () => {} });
+  const stop = handlers.get("splitpage:voice-stop");
+  assert.deepEqual(await stop({ tab: { id: "sender" } }, 42), { ok: true });
+  assert.deepEqual(await stop({ tab: { id: "sender" } }), { ok: true });
+  assert.deepEqual(await stop({}), { ok: true });
+  assert.deepEqual(stops, [["sender", 42], ["sender", undefined]]);
 });
 
 test("packaging: every ./module main.ts requires, directly or through another module, is in electron-builder.yml's files", () => {
@@ -563,6 +591,19 @@ test("the video thumbnail channel: a typed host and video ref, app page only", (
   ]) {
     assert.ok(checkArgs(c.argsSchema, bad), "refuses " + JSON.stringify(bad));
   }
+});
+
+test("the stored-video-path channel takes one string from the app page only, and main checks the path itself", () => {
+  const c = channelFor("splitpage:video-path-open", "invoke");
+  assert.ok(c, "the channel exists");
+  assert.deepEqual([...c.argsSchema], ["string"]);
+  assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN]);
+  assert.ok(!c.testOnly);
+  assert.equal(checkArgs(c.argsSchema, ["C:\\Videos\\take.mp4"]), null);
+  for (const bad of [[], [null], [{ path: "C:\\Videos\\take.mp4" }], [["C:\\a.mp4"]], ["C:\\a.mp4", "C:\\Windows\\System32\\calc.exe"]]) {
+    assert.ok(checkArgs(c.argsSchema, bad), "refuses " + JSON.stringify(bad));
+  }
+  assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((row) => row.name === c.name), "never the tab strip's");
 });
 
 test("the PDF print channel takes one HTML string, from the app page only", () => {

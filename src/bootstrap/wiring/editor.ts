@@ -96,6 +96,7 @@ import {
 import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.ts";
 import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-media.ts";
 import { videoFiles } from "./video-files.ts";
+import { desktopVideo } from "./desktop-video.ts";
 import { externalLinks } from "./ports/desktop.ts";
 import { IS_MAC } from "../../features/common/key-chips.ts";
 import {
@@ -112,6 +113,7 @@ import {
   updateUntaggedPrompt
 } from "../../features/tags/production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
+import { currentWhoList } from "./who-list.ts";
 import { renderProduction } from "../../features/tags/panels.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll, scheduleBrollRefresh } from "./broll.ts";
 import {
@@ -522,6 +524,7 @@ export function onRootInput(e: RootInput): void {
   maybeCaptureBroll(e, cellEl);
   currentPlainTags()?.maybeOpen(e as InputEvent, cellEl);
   cellEditing().sync(cellEl);
+  currentWhoList()?.maybeOpen(e as InputEvent, cellEl);
   settleEndedComposition(e);
   afterScriptCellChange(cellEl);
 }
@@ -606,6 +609,7 @@ const editorFocusPorts: EditorFocusPorts = {
   leftEditable: function () {
     hideTagGhost();
     currentPlainTags()?.cancel();
+    currentWhoList()?.cancel();
     hideUntaggedPrompt();
     focusMemory().unmutePrompt();
   },
@@ -629,6 +633,7 @@ const editorFocusPorts: EditorFocusPorts = {
       updateToolbarState(active);
     }
     currentPlainTags()?.refresh();
+    currentWhoList()?.refresh();
     updateUntaggedPrompt();
   }
 };
@@ -656,7 +661,7 @@ const clipboardRoutePorts = {
   pasteDraft: pasteIntoDraft,
   hasMedia: hasMediaFiles,
   readMedia: function (files: FileList | readonly File[], html: string) {
-    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant }, html);
+    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant, path: desktopVideo.pathOf }, html);
   },
   capture: captureOperation,
   stillOwns: stillOwns,
@@ -751,6 +756,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   const undoOwner = undoRoutes.owner();
   if (undoOwner && undoOwner.key(e)) return;
+  if (currentWhoList()?.keydown(e, cellEl)) { hideTagGhost(); return; }
   const plainTag = currentPlainTags();
   if (plainTag && plainTag.isOpen(cellEl)) {
     if (e.key === "Tab") { e.preventDefault(); plainTag.close(); return; }

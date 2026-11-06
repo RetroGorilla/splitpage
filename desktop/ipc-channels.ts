@@ -14,6 +14,7 @@ const DOC_ID_RE = /^d[0-9a-f]{32}$/;
 const HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const VIDEO_REF_RE = /^(?:[A-Za-z0-9_-]{11}|[0-9]{1,12}(?::[0-9a-f]{6,32})?)$/;
+const MICROPHONE_ID_RE = /^\{0\.0\.1\.00000000\}\.\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}$/i;
 
 const TYPES: Record<string, ((value: unknown) => boolean) | undefined> = {
   any: () => true,
@@ -30,7 +31,8 @@ const TYPES: Record<string, ((value: unknown) => boolean) | undefined> = {
   snapshotId: (v) => typeof v === "string" && HISTORY_SNAP_ID_RE.test(v),
   sha256: (v) => typeof v === "string" && SHA256_RE.test(v),
   videoHost: (v) => v === "youtube" || v === "vimeo",
-  videoRef: (v) => typeof v === "string" && VIDEO_REF_RE.test(v)
+  videoRef: (v) => typeof v === "string" && VIDEO_REF_RE.test(v),
+  microphoneId: (v) => typeof v === "string" && MICROPHONE_ID_RE.test(v)
 };
 
 const NONE: string[] = [];
@@ -59,6 +61,7 @@ const CHANNELS = [
 
   { name: "splitpage:video-file-grant", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:video-file-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  { name: "splitpage:video-path-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:video-thumbnail", direction: "invoke", argsSchema: ["videoHost", "videoRef"], allowedOrigins: APP },
 
   { name: "splitpage:update-status", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
@@ -70,8 +73,9 @@ const CHANNELS = [
   { name: "splitpage:prompter-open-in-chromium", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
   { name: "splitpage:voice-status", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
-  { name: "splitpage:voice-start", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
-  { name: "splitpage:voice-stop", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:voice-start", direction: "invoke", argsSchema: ["microphoneId?"], allowedOrigins: APP },
+  { name: "splitpage:voice-microphones", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:voice-stop", direction: "invoke", argsSchema: ["integer?"], allowedOrigins: APP },
 
   { name: "splitpage:set-document-state", direction: "send", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:renderer-ready", direction: "send", argsSchema: NONE, allowedOrigins: APP },

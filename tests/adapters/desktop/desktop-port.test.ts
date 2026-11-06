@@ -140,6 +140,7 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   setTheme: { args: ["dark"], direction: "send", channel: "splitpage:set-theme" },
   grantVideoFile: { args: [{ path: "/videos/a.mp4" }], direction: "invoke", channel: "splitpage:video-file-grant", wire: ["/videos/a.mp4"] },
   openVideoFile: { args: ["tok"], direction: "invoke", channel: "splitpage:video-file-open" },
+  openVideoPath: { args: ["C:\\Videos\\a.mp4"], direction: "invoke", channel: "splitpage:video-path-open" },
   videoThumbnail: { args: ["youtube", "abc"], direction: "invoke", channel: "splitpage:video-thumbnail" },
   getUpdateStatus: { args: [], direction: "invoke", channel: "splitpage:update-status" },
   checkForUpdate: { args: [], direction: "invoke", channel: "splitpage:update-check" },
@@ -148,7 +149,8 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   openPrompterInBrowser: { args: [], direction: "invoke", channel: "splitpage:prompter-open-in-browser" },
   openPrompterInChromium: { args: [], direction: "invoke", channel: "splitpage:prompter-open-in-chromium" },
   voiceStatus: { args: [], direction: "invoke", channel: "splitpage:voice-status" },
-  voiceStart: { args: [], direction: "invoke", channel: "splitpage:voice-start" },
+  voiceStart: { args: ["{0.0.1.00000000}.{411c2754-d926-4a65-a6a6-702e8deb86e0}"], direction: "invoke", channel: "splitpage:voice-start" },
+  voiceMicrophones: { args: [], direction: "invoke", channel: "splitpage:voice-microphones" },
   voiceStop: { args: [], direction: "invoke", channel: "splitpage:voice-stop" }
 };
 
@@ -167,9 +169,29 @@ const VALUES: readonly DesktopMember[] = [
   "hadPriorSession", "firstTabOfLaunch", "hasDraftToRestore"
 ];
 
-test("every port member is a value, a call or a listener, and the tables name only port members", () => {
-  const covered = [...VALUES, ...Object.keys(CALLS), ...Object.keys(LISTENERS)];
+const LOCAL: readonly DesktopMember[] = ["videoFilePath"];
+
+test("every port member is a value, a call, a listener or a local read, and the tables name only port members", () => {
+  const covered = [...VALUES, ...Object.keys(CALLS), ...Object.keys(LISTENERS), ...LOCAL];
   assert.deepEqual(sorted(covered), sorted(DESKTOP_PORT_MEMBERS));
+});
+
+test("videoFilePath reads a dropped file's path in the preload and sends nothing to main", () => {
+  const { bridge, wires } = loadPreload(false);
+  const pathOf = (bridge as unknown as DesktopPort).videoFilePath;
+  assert.equal(pathOf({ path: "C:\\Videos\\a.mp4" }), "C:\\Videos\\a.mp4");
+  assert.equal(pathOf({}), null, "a File the page made itself has no path");
+  assert.equal(pathOf(null), null);
+  assert.deepEqual(wires.filter((w) => w.name !== "splitpage:renderer-ready"), []);
+});
+
+test("voiceStop forwards a session for late cleanup and preserves the tab-wide no-argument call", async () => {
+  const { bridge, wires } = loadPreload(false);
+  const port = bridge as unknown as DesktopPort;
+  await port.voiceStop(42);
+  await port.voiceStop();
+  assert.deepEqual(wires.filter((w) => w.name === "splitpage:voice-stop")
+    .map((w) => structuredClone(w.args)), [[42], []]);
 });
 
 for (const [name, call] of Object.entries(CALLS) as [DesktopMember, Call][]) {
