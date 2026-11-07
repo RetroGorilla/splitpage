@@ -29,6 +29,7 @@ function createBundleCopier(options: {
   progressEveryMs?: number;
   link?: typeof fsp.link;
   rename?: typeof fsp.rename;
+  lstat?: typeof fsp.lstat;
 }) {
   const {
     bundleFolderOf, bundleableName, missingFile, numberedName, realBundleFolder, resolveBundledFile, samePath
@@ -38,7 +39,28 @@ function createBundleCopier(options: {
 
   const linkFile = options.link || fsp.link;
   const renameFile = options.rename || fsp.rename;
+  const lstatTarget = options.lstat || fsp.lstat;
   const writing = new Set<string>();
+  const publishing = new Map<string, Promise<void>>();
+
+  async function underFolderLock<T>(folder: string, signal: AbortSignal, step: () => Promise<T>): Promise<T | "cancelled"> {
+    const key = foldCase ? folder.toLowerCase() : folder;
+    const before = publishing.get(key) || Promise.resolve();
+    let release = () => {};
+    const mine = new Promise<void>((resolve) => { release = resolve; });
+    const tail = before.then(() => mine);
+    publishing.set(key, tail);
+    const settle = () => { release(); if (publishing.get(key) === tail) publishing.delete(key); };
+    const turn = await Promise.race([before.then(() => true), new Promise<boolean>((resolve) => {
+      if (signal.aborted) resolve(false);
+      else signal.addEventListener("abort", () => resolve(false), { once: true });
+    })]);
+    if (!turn) { void before.then(settle); return "cancelled"; }
+    try {
+      if (signal.aborted) return "cancelled";
+      return await step();
+    } finally { settle(); }
+  }
 
   async function sweep(folder: string, since: number): Promise<void> {
     let entries: string[];
@@ -50,7 +72,8 @@ function createBundleCopier(options: {
     }
   }
 
-  async function publish(part: string, target: string): Promise<"copied" | "taken" | "failed"> {
+  async function publish(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+    if (signal.aborted) return "cancelled";
     try {
       await linkFile(part, target);
       try { await fsp.unlink(part); } catch { }
@@ -58,8 +81,10 @@ function createBundleCopier(options: {
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "EEXIST") return "taken";
     }
-    // why: exFAT and SMB shares may lack hard links; jobs are serial, so only another program can race this rename
-    try { await fsp.lstat(target); return "taken"; } catch (e) { if (!missingFile(e)) return "failed"; }
+    if (signal.aborted) return "cancelled";
+    // why: exFAT and SMB shares may lack hard links; the folder lock leaves only another program to race this rename
+    try { await lstatTarget(target); return "taken"; } catch (e) { if (!missingFile(e)) return "failed"; }
+    if (signal.aborted) return "cancelled";
     try { await renameFile(part, target); return "copied"; } catch { return "failed"; }
   }
 
@@ -75,7 +100,7 @@ function createBundleCopier(options: {
         transform(chunk: Buffer, _encoding, done) { counted(chunk.length); done(null, chunk); }
       });
       await pipeline(fs.createReadStream(source), counter, handle.createWriteStream(), { signal });
-      const published = signal.aborted ? "cancelled" : await publish(part, target);
+      const published = signal.aborted ? "cancelled" : await underFolderLock(path.dirname(target), signal, () => publish(part, target, signal));
       if (published !== "copied") { try { await fsp.unlink(part); } catch { } }
       return published;
     } catch {
@@ -166,7 +191,8 @@ function createBundleCopier(options: {
     return { ok: false, code: "FAILED" };
   }
 
-  async function carry(fromScript: string | null, toScript: string, names: readonly unknown[], allow: RegExp, onProgress: BundleProgress, signal: AbortSignal): Promise<BundleCarryResult> {
+  async function carry(fromScript: string | null, toScript: string, names: readonly unknown[], allow: RegExp, onProgress: BundleProgress, signal: AbortSignal,
+    onCommitted: (copied: number) => void = () => {}): Promise<BundleCarryResult> {
     const since = Date.now();
     const wanted = [...new Set(names)];
     if (!fromScript || !wanted.length || samePath(bundleFolderOf(fromScript, path), bundleFolderOf(toScript, path), foldCase)) {
@@ -212,6 +238,7 @@ function createBundleCopier(options: {
       if (got === "taken") return { ok: false, code: "CLASH", name: s.name, copied };
       if (got === "failed") return { ok: false, code: "FAILED", name: s.name, copied };
       copied++;
+      onCommitted(copied);
     }
     progress.finish();
     return { ok: true, copied, kept, missing };

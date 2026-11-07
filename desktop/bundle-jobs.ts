@@ -129,6 +129,7 @@ function createBundleJobs(options: {
       (result.ok ? null : { reason: REFUSALS[result.code] as BundleSaveRefusal["reason"], folder: copier.folderName(to), name: result.name, copied: result.copied });
     return new Promise((finish) => {
       let settled = false;
+      let committed = 0;
       const done = (result: BundleCarryResult) => {
         if (settled) return;
         settled = true;
@@ -137,8 +138,10 @@ function createBundleJobs(options: {
       };
       enqueue({
         key: keyOf(sender, job), sender, job, ctl: new AbortController(),
-        stop: (code) => done({ ok: false, code, name: "", copied: 0 }),
-        run: async (_progress, signal) => { done(await copier.carry(from, to, names, allow, (d, t) => note(d, t), signal)); }
+        stop: (code) => done({ ok: false, code, name: "", copied: committed }),
+        run: async (_progress, signal) => {
+          done(await copier.carry(from, to, names, allow, (d, t) => note(d, t), signal, (n) => { committed = n; }));
+        }
       });
     });
   }

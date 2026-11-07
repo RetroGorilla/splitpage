@@ -298,6 +298,70 @@ test("a copy stalled on a lost drive is let go when cancelled, and a later Save 
   } finally { s.done(); }
 });
 
+test("a cancelled copy stalled inside its publish never renames over a file a later carry published into that folder", async () => {
+  const s = scratch();
+  try {
+    const stale = path.join(path.dirname(s.clip), "take.mp4");
+    fs.writeFileSync(stale, "stale bytes");
+    const other = path.join(s.dir, "Other.splitpage");
+    fs.writeFileSync(other, "{}");
+    fs.mkdirSync(path.join(s.dir, "Other files"));
+    fs.writeFileSync(path.join(s.dir, "Other files", "take.mp4"), "right");
+    const reached = gate();
+    const released = gate();
+    let stall = true;
+    const ipc = harness({
+      source: s.script, grants: [["tok", stale]],
+      copierOptions: {
+        link: async () => { throw Object.assign(new Error("no hard links here"), { code: "EPERM" }); },
+        lstat: async (p) => {
+          if (stall && path.basename(p) === "take.mp4") { stall = false; reached.open(); await released.shut; }
+          return fs.promises.lstat(p);
+        }
+      }
+    });
+    const copying = ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    await reached.shut;
+    ipc.send("splitpage:bundle-cancel", "bundle1");
+    assert.deepEqual(await copying, { ok: false, code: "CANCELLED" });
+    ipc.tab.source = { kind: "file", absPath: other };
+    const saving = ipc.saveAs(path.join(s.dir, "Episode 12.md"), { script: true }, markdownProject("take.mp4"));
+    await new Promise((r) => setTimeout(r, 30));
+    released.open();
+    const saved = await saving;
+    assert.equal(saved.written.bundleRefused, undefined, JSON.stringify(saved.written));
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(fs.readFileSync(path.join(s.folder, "take.mp4"), "utf8"), "right", "the saved script's video is the one the carry published");
+    assert.deepEqual(fs.readdirSync(s.folder), ["take.mp4"], "the stale job removed its temporary and published nothing");
+  } finally { s.done(); }
+});
+
+test("a carry cancelled during its second file reports the one it already copied", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "a.mp4"), "aaaa");
+    fs.writeFileSync(path.join(s.folder, "big.mp4"), Buffer.alloc(32 * 1024 * 1024, 4));
+    let ipc = null;
+    let links = 0;
+    ipc = harness({
+      source: s.script,
+      copierOptions: {
+        link: async (from, to) => {
+          await fs.promises.link(from, to);
+          if (++links === 1) setTimeout(() => ipc.send("splitpage:bundle-cancel", "carry1"), 0);
+        }
+      }
+    });
+    const refused = await ipc.saveAs(s.copyScript, { script: true }, project("a.mp4", "big.mp4"));
+    assert.equal(refused.written.bundleRefused && refused.written.bundleRefused.reason, "cancelled");
+    assert.equal(refused.written.bundleRefused.copied, 1, "the first file was published before the cancel");
+    assert.equal(fs.existsSync(s.copyScript), false);
+    assert.ok(await until(() => fs.readdirSync(s.copyFolder).length === 1), "the stopped copy removes its temporary: " + fs.readdirSync(s.copyFolder));
+    assert.deepEqual(fs.readdirSync(s.copyFolder), ["a.mp4"]);
+  } finally { s.done(); }
+});
+
 test("back-to-back Save As, A to B then B to C before B's carry lands, checks C for clashes and writes no C", async () => {
   const s = scratch();
   try {
