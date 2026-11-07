@@ -28,6 +28,7 @@ export default [
       "node_modules/",
       "**/node_modules/",
       "dist/",
+      "desktop/dist/",
       ".update/",
       ".cache/",
       "desktop/.stage/",

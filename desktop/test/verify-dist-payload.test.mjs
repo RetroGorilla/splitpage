@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { comparePayloadPeFiles, topLevelPeFiles } = await import(
+const { comparePayloadPeFiles, topLevelPeFiles, requiredSharedFiles, missingSharedFiles } = await import(
   pathToFileURL(path.join(here, "..", "verify-dist-payload.mjs"))
 );
 
@@ -123,6 +124,65 @@ test("topLevelPeFiles: only top-level .exe/.dll, case-insensitive, non-PE and su
   assert.deepEqual([...files.keys()].sort(), ["ffmpeg.dll", "splitpage.exe"]);
   assert.equal(files.get("splitpage.exe").name, "Splitpage.EXE", "original casing kept for reporting");
   assert.equal(files.get("ffmpeg.dll").size, 20);
+});
+
+test("requiredSharedFiles: what the main process requires from shared/, what that imports as a value, and package.json", () => {
+  const desktop = freshDir();
+  const shared = freshDir();
+  fs.writeFileSync(path.join(desktop, "main.ts"), 'const a = require(path.join(SHARED_ROOT, "a.ts"));\nconst b = require(path.join(SHARED_ROOT, "b.ts"));\n');
+  fs.writeFileSync(path.join(desktop, "other.ts"), 'import type * as T from "../shared/typed-only.ts";\n');
+  fs.writeFileSync(path.join(desktop, "contract.d.ts"), 'const c = require(path.join(SHARED_ROOT, "ignored.ts"));\n');
+  fs.writeFileSync(path.join(shared, "a.ts"), 'import * as c from "./c.ts";\nimport type { T } from "./types-only.ts";\nimport { d } from "./d.ts";\n');
+  fs.writeFileSync(path.join(shared, "b.ts"), "export const b = 1;\n");
+  fs.writeFileSync(path.join(shared, "c.ts"), 'import { d } from "./d.ts";\n');
+  fs.writeFileSync(path.join(shared, "d.ts"), "export const d = 1;\n");
+  assert.deepEqual(requiredSharedFiles(desktop, shared), ["a.ts", "b.ts", "c.ts", "d.ts", "package.json"]);
+});
+
+test("missingSharedFiles names every file the package lacks", () => {
+  const packaged = freshDir();
+  put(packaged, "package.json", 1);
+  put(packaged, "history-store.ts", 1);
+  assert.deepEqual(missingSharedFiles(packaged, ["history-policy.ts", "history-store.ts", "package.json", "video-embed.ts"]), ["history-policy.ts", "video-embed.ts"]);
+});
+
+test("the shared files stage.mjs stages cover everything the main process loads", () => {
+  const needed = requiredSharedFiles(path.join(here, ".."), path.join(here, "..", "..", "shared"));
+  const stage = fs.readFileSync(path.join(here, "..", "stage.mjs"), "utf8");
+  const staged = /for \(const filename of \[([^\]]*)\]\) \{\s*const data = await fs\.readFile\(resolve\(REPO_ROOT, "shared"/.exec(stage);
+  assert.ok(staged, "stage.mjs no longer lists its shared files in the form this test reads");
+  const names = [...staged[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(needed.filter((name) => !names.includes(name)), []);
+});
+
+function peHeader(machine) {
+  const head = Buffer.alloc(0x46);
+  head.writeUInt16LE(0x5a4d, 0);
+  head.writeUInt32LE(0x40, 0x3c);
+  head.writeUInt32LE(0x00004550, 0x40);
+  head.writeUInt16LE(machine, 0x44);
+  return head;
+}
+
+function verifyDist(dist) {
+  const run = spawnSync(process.execPath, [path.join(here, "..", "verify-dist.mjs"), "--dist", dist, "--arch", "x64", "--version", "0.0.0"], { encoding: "utf8" });
+  return run.stdout;
+}
+
+test("verify-dist fails a package whose shared/ files are missing, and passes one that has them", () => {
+  const dist = freshDir();
+  const app = path.join(dist, "win-unpacked");
+  fs.mkdirSync(path.join(app, "resources", "splitpage"), { recursive: true });
+  fs.writeFileSync(path.join(app, "Splitpage.exe"), peHeader(0x8664));
+  const label = "x64: every shared/ file the main process loads is packaged";
+  assert.match(verifyDist(dist), new RegExp("FAIL  " + label + "  \\(missing: .*history-store\\.ts"));
+  const sharedOut = path.join(app, "resources", "splitpage", "shared");
+  fs.mkdirSync(sharedOut, { recursive: true });
+  const needed = requiredSharedFiles(path.join(here, ".."), path.join(here, "..", "..", "shared"));
+  for (const name of needed) fs.copyFileSync(path.join(here, "..", "..", "shared", name), path.join(sharedOut, name));
+  assert.match(verifyDist(dist), new RegExp("ok    " + label));
+  fs.rmSync(path.join(sharedOut, needed[0]));
+  assert.match(verifyDist(dist), new RegExp("FAIL  " + label + "  \\(missing: " + needed[0].replace(".", "\\.")));
 });
 
 const failures = [];

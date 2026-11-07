@@ -10,7 +10,7 @@
 # only the sheets the file will have. The export dialog and command menu live
 # under src/features/.
 #
-# Files are caught at deliverFile's URL.createObjectURL, named from the
+# Files are caught at the delivery adapter's URL.createObjectURL (src/adapters/files/deliver.ts), named from the
 # <a download> (as 98 does); a workbook is unzipped in the page from its
 # central directory (stored or deflated) and xl/workbook.xml's sheet names
 # read. Every `eval` is one physical line (the driver splits on newlines).

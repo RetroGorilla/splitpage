@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { join, dirname, relative, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifyInstallerPayload } from "./verify-dist-payload.mjs";
+import { verifyInstallerPayload, requiredSharedFiles, missingSharedFiles } from "./verify-dist-payload.mjs";
 import { leakedHooks } from "../tools/release-hooks.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -19,6 +19,8 @@ if (!["x64", "arm64", "both"].includes(ARCH_ARG)) {
   process.exit(1);
 }
 const ARCHS = ARCH_ARG === "both" ? ["x64", "arm64"] : [ARCH_ARG];
+
+const REQUIRED_SHARED = requiredSharedFiles(HERE, join(HERE, "..", "shared"));
 
 const PE_MACHINE = { 0x014c: "x86", 0x8664: "x64", 0xaa64: "arm64" };
 
@@ -89,6 +91,10 @@ for (const arch of ARCHS) {
     const voiceScript = join(unpacked, "resources", "splitpage", "voice", "listen.ps1");
     check(existsSync(voiceScript), `${arch}: the Follow My Voice listener ships outside the asar`,
       existsSync(voiceScript) ? "" : "resources/splitpage/voice/listen.ps1 missing — stage.mjs");
+
+    const missingShared = missingSharedFiles(join(unpacked, "resources", "splitpage", "shared"), REQUIRED_SHARED);
+    check(missingShared.length === 0, `${arch}: every shared/ file the main process loads is packaged`,
+      missingShared.length ? `missing: ${missingShared.join(", ")} — stage.mjs` : `${REQUIRED_SHARED.length} checked`);
 
     const appIndex = join(unpacked, "resources", "splitpage", "index.html");
     const leaked = existsSync(appIndex) ? leakedHooks(readFileSync(appIndex, "utf8")) : null;

@@ -371,8 +371,8 @@ function runClipboardCommand(cut: boolean) {
       })])
     : navigator.clipboard.writeText(out.text);
   write.then(function () {
-    if (cut) afterCut({ ids: ids, nonce: nonce, out: out });
-    else announceLeftOut(count(ids.length) + " copied", out.leftOut);
+    if (!cut) announceLeftOut(count(ids.length) + " copied", out.leftOut);
+    else if ((ports as BeatSelectPorts).document.current()) afterCut({ ids: ids, nonce: nonce, out: out });
   }, function () { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); });
 }
 

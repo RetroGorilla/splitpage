@@ -165,11 +165,12 @@ import type { DesktopTabStripBridge, DesktopWireShellState } from "../../shared/
     } catch (err) {
       return;
     }
-    if (!payload || !(payload as Record<string, unknown>).tabId) return;
+    const tabId = payload ? (payload as Record<string, unknown>).tabId : null;
+    if (typeof tabId !== "string" || !tabId) return;
     if ((payload as Record<string, unknown>).sourceWindowId === windowId()) {
-      (bridge as DesktopTabStripBridge).reorderTab((payload as Record<string, unknown>).tabId as string, dropIndex);
+      (bridge as DesktopTabStripBridge).reorderTab(tabId, dropIndex);
     } else {
-      (bridge as DesktopTabStripBridge).moveTabHere((payload as Record<string, unknown>).tabId as string, dropIndex);
+      (bridge as DesktopTabStripBridge).moveTabHere(tabId, dropIndex);
     }
   }
 
