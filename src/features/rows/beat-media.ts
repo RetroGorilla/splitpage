@@ -1,5 +1,5 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { addGalleryPicture, removeGalleryLink, removeGallerySlot, replaceGalleryPicture } from "../../core/document/gallery.ts";
+import { addGalleryPicture, isOtherFileLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
 
 import type { PastePlace, BeatMedia, BeatMediaPorts } from "./ports.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
@@ -79,7 +79,11 @@ function removePicture(rowId: string, slot?: number) {
 }
 
 function removeLink(rowId: string, slot: number, key: string) {
-  (ports as BeatMediaPortUse).cells.editGallery(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
+  const file = (ports as BeatMediaPortUse).document.read(function (doc) {
+    const s = doc ? rowSlots(doc.rows[rowIndexOf(doc, rowId)])[slot] : undefined;
+    return !!s && s.links.some(function (l) { return videoLinkKey(l) === key && isOtherFileLink(l); });
+  });
+  (ports as BeatMediaPortUse).cells.editGallery(rowId, (file ? "File" : "Video") + " link removed", function (row) { return removeGalleryLink(row, slot, key); });
 }
 
 export function videoFirstFrame(file: Blob): Promise<VideoPosterFrame | null> {

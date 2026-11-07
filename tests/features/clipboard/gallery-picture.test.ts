@@ -131,3 +131,27 @@ test("inline bytes elsewhere in the same paste are resolved before checking a sh
     owner.dispose();
   }
 });
+
+test("a dropped or pasted file that is not a picture or video is attached with its path and grant; programs and extensionless files are refused (#256)", async () => {
+  const { owner } = clipboard();
+  try {
+    const grants: unknown[] = [];
+    const files = [
+      new File(["%PDF"], "brief.pdf", { type: "application/pdf" }),
+      new File(["x"], "vo.wav", { type: "" }),
+      new File(["MZ"], "setup.exe", { type: "application/x-msdownload" }),
+      new File(["x"], "README", { type: "" })
+    ];
+    const got = await readClipboardFiles(files, async () => "", {
+      path: (f) => f.name === "brief.pdf" ? "C:\\Docs\\brief.pdf" : null,
+      grant: (_file, link) => { grants.push(link); }
+    });
+    assert.deepEqual(got.attach, [{ kind: "file", name: "brief.pdf", size: 4, path: "C:\\Docs\\brief.pdf" }, { kind: "file", name: "vo.wav", size: 1 }]);
+    assert.deepEqual(got.refused, ["setup.exe", "README"]);
+    assert.deepEqual(grants, [{ name: "brief.pdf", size: 4, location: { kind: "path", path: "C:\\Docs\\brief.pdf" } }, { name: "vo.wav", size: 1 }]);
+    assert.equal(hasMediaFiles([files[0] as File]), true);
+    assert.equal(hasMediaFiles([files[2] as File, files[3] as File]), false, "only refused files: nothing to attach");
+  } finally {
+    owner.dispose();
+  }
+});

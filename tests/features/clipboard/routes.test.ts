@@ -55,6 +55,7 @@ function harness(p: ReturnType<typeof page>) {
       capture: () => { calls.push("capture"); return { n: ++state.owner }; },
       stillOwns: (owner) => { calls.push("owns:" + owner.n); return state.owns; },
       notAdded: () => { calls.push("notAdded"); },
+      refused: (files) => { calls.push("refused:" + Array.prototype.map.call(files, (f: File) => f.name).join(",")); },
       placeOf: (cell) => { calls.push("place:" + cell.id); return "place-" + cell.id; },
       restorePlace: (cell, place) => { calls.push("restore:" + cell.id + ":" + place); },
       findCell: (rowId, field) => { calls.push("find:" + rowId + "." + field); return state.found; },
@@ -145,6 +146,19 @@ test("a paste into a script cell tries scenes first, then inserts the text; a dr
   const bare = clip(p, "paste", p.byId("rows-bare"), { text: "x" });
   assert.equal(bare.defaultPrevented, false, "outside an editable the browser keeps the paste");
   assert.deepEqual(h.calls, []);
+  routes.dispose();
+});
+
+test("a paste whose files are all refused says so and still pastes its text", () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  const exe = new p.win.File(["MZ"], "setup.exe", { type: "application/x-msdownload" });
+  clip(p, "paste", p.byId("rows-script"), { text: "t", files: [exe] });
+  assert.deepEqual(h.calls, ["scenes:rows-script", "refused:setup.exe", "insert:rows-script::t:none"]);
+  h.calls.length = 0;
+  clip(p, "paste", p.byId("rows-script"), { text: "plain" });
+  assert.deepEqual(h.calls, ["scenes:rows-script", "insert:rows-script::plain:none"], "no files, no notice");
   routes.dispose();
 });
 

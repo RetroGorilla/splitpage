@@ -2,7 +2,7 @@
 /* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */
 
 import * as blobPolicy from "./blob-policy.ts";
-import { VIDEO_FILE_EXT, bundleFolderName, bundledNameProblem, hasControlCharacter, videoPathProblem } from "./video-path.ts";
+import { ATTACHABLE_FILE, VIDEO_FILE_EXT, bundleFolderName, bundledNameProblem, hasControlCharacter, videoPathProblem } from "./video-path.ts";
 import type { VideoPathStyle } from "./video-path.ts";
 
 type VideoEmbedReference = { host: "youtube" | "vimeo"; id: string; hash?: string; start?: number };
@@ -263,11 +263,11 @@ function missingFile(e: unknown): boolean {
   return code === "ENOENT" || code === "ENOTDIR";
 }
 
-async function openableVideoPath(p: unknown, style: VideoPathStyle, fs: VideoPathFileSystem): Promise<VideoPathVerdict> {
-  if (videoPathProblem(p, style) !== null) return { ok: false, code: "REFUSED" };
+async function openableVideoPath(p: unknown, style: VideoPathStyle, fs: VideoPathFileSystem, allow: RegExp = VIDEO_FILE_EXT): Promise<VideoPathVerdict> {
+  if (videoPathProblem(p, style, allow) !== null) return { ok: false, code: "REFUSED" };
   let real: string;
   try { real = await fs.realpath(p as string); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
-  if (typeof real !== "string" || hasControlCharacter(real) || !VIDEO_FILE_EXT.test(real)) return { ok: false, code: "REFUSED" };
+  if (typeof real !== "string" || hasControlCharacter(real) || !allow.test(real)) return { ok: false, code: "REFUSED" };
   let isFile: boolean;
   try { isFile = (await fs.stat(real)).isFile(); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
   return isFile ? { ok: true, path: real } : { ok: false, code: "REFUSED" };
@@ -357,6 +357,7 @@ function bundledNamesInProject(text: string): string[] {
 export type { BundleFileSystem, BundlePaths, VideoPathFileSystem, VideoPathVerdict };
 
 export {
+  ATTACHABLE_FILE,
   bundleFolderOf,
   bundledNamesInProject,
   bundleableName,

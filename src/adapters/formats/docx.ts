@@ -9,7 +9,7 @@ import type { ExportRun } from "./export-kit.ts";
 import type { BreakdownRow, CommentBody, BeatFacts } from "./export-projections.ts";
 import { internDataUrl, queuePersist } from "../storage/02c-blobs.ts";
 import { rowImage } from "../../core/document/media.ts";
-import { morePictureRefs, rowVideoLinks } from "../../core/document/gallery.ts";
+import { isOtherFileLink, morePictureRefs, rowVideoLinks } from "../../core/document/gallery.ts";
 import { imageDims, sniffImageMime } from "../../../shared/blob-policy.ts";
 import {
   PRINT_COLORS,
@@ -292,7 +292,7 @@ function docxVideoLinksXml(links: readonly VideoLink[], rels: Relationships): st
       out += '<w:hyperlink r:id="' + rels.addLink(l.href) + '"><w:r><w:rPr><w:color w:val="1155CC"/><w:sz w:val="18"/><w:u w:val="single"/></w:rPr>' +
         '<w:t xml:space="preserve">' + xmlEscape(shortHref(l.href)) + '</w:t></w:r></w:hyperlink>';
     } else {
-      out += '<w:r>' + rPr + '<w:t xml:space="preserve">' + xmlEscape(l.name + " (video file)") + '</w:t></w:r>';
+      out += '<w:r>' + rPr + '<w:t xml:space="preserve">' + xmlEscape(l.name + (isOtherFileLink(l) ? " (file)" : " (video file)")) + '</w:t></w:r>';
     }
   });
   return out + '</w:p>';

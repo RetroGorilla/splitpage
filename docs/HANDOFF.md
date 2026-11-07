@@ -608,6 +608,16 @@ tabs**.
   run asks Wait or Quit anyway (`close-quit.ts`). `desktop/test/bundle-ipc.test.mjs` holds the refusals and
   `caseGalleryVideoBundle` in smoke.mjs runs drop, copy, restart, open and
   Save As.
+- **Any attached file** (#256,
+  [rows-video-files.md](architecture/rows-video-files.md#attached-files-256)).
+  The same channels take any file type except the ones `ATTACHABLE_FILE`
+  (`shared/video-path.ts`) refuses: programs, scripts, shortcuts,
+  installers and files without an extension. Main checks the rule itself,
+  on the path it is given and again on the real path, for a grant, a token
+  open, a stored path, a copy, a carry and a bundled open.
+  `desktop/test/attach-ipc.test.mjs` holds the refusals and
+  `caseGalleryAttachFile` in smoke.mjs runs a PDF through drop, copy,
+  restart and open.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —

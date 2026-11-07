@@ -39,6 +39,7 @@ function harness(p: ReturnType<typeof page>) {
     ports: {
       choose: () => { state.chosen++; },
       addPicture: (rowId, file, slot) => { calls.push("add " + rowId + " " + file.name + " " + String(slot)); },
+      attachFile: (rowId, file) => { calls.push("attach " + rowId + " " + file.name); },
       removePicture: (rowId, slot) => { calls.push("remove " + rowId + " " + String(slot)); },
       removeLink: (rowId, slot, key) => { calls.push("unlink " + rowId + " " + String(slot) + " " + key); },
       openLink: (rowId, slot, key) => { calls.push("open " + rowId + " " + String(slot) + " " + key); }
@@ -66,8 +67,8 @@ function routeClick(p: ReturnType<typeof page>, routes: MediaRoutes, target: Ele
   return { picker, link, e };
 }
 
-function pick(p: ReturnType<typeof page>, name: string | null): void {
-  const files = name ? [new p.win.File(["x"], name, { type: "image/png" })] : [];
+function pick(p: ReturnType<typeof page>, name: string | null, type = "image/png"): void {
+  const files = name ? [new p.win.File(["x"], name, { type })] : [];
   Object.defineProperty(p.input, "files", { value: files, configurable: true });
   p.input.dispatchEvent(new p.win.Event("change", { bubbles: true }));
 }
@@ -93,6 +94,26 @@ test("Replace remembers its slot for the next file; Add more does not", () => {
   routeClick(p, routes, p.at('[data-action="image-add-more"]'));
   pick(p, "m.png");
   assert.deepEqual(h.calls, ["add r2 r.png 2", "add r2 m.png undefined"]);
+});
+
+test("Attach and Add take any file: a picture is added, any other file is attached; Replace asks for a picture only", () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  routeClick(p, routes, p.byId("inner"));
+  assert.equal(p.input.accept, "", "the Attach chooser shows every file");
+  pick(p, "brief.pdf", "application/pdf");
+  routeClick(p, routes, p.at('[data-action="image-add-more"]'));
+  pick(p, "take.mov", "video/quicktime");
+  routeClick(p, routes, p.at('[data-action="image-add-more"]'));
+  pick(p, "photo.jpg", "image/jpeg");
+  routeClick(p, routes, p.at('[data-action="image-replace"]'));
+  assert.equal(p.input.accept, "image/*", "Replace swaps a picture for a picture");
+  pick(p, "brief.pdf", "application/pdf");
+  routes.pick("r7");
+  assert.equal(p.input.accept, "");
+  pick(p, "notes.txt", "text/plain");
+  assert.deepEqual(h.calls, ["attach r1 brief.pdf", "attach r2 take.mov", "add r2 photo.jpg undefined", "add r2 brief.pdf 2", "attach r7 notes.txt"]);
 });
 
 test("a change with no file clears the pending scene and slot and adds nothing", () => {

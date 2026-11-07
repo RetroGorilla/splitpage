@@ -1,6 +1,6 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
-import { locatedVideoKey, normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
+import { isOtherFileLink, locatedVideoKey, normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
 import type { BundleProgressListener, DesktopBundleCopy, DesktopVideoResult } from "../../application/media/desktop-video.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { VideoLink } from "../../core/document/gallery.ts";
@@ -75,9 +75,10 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
 
   function openVideoFile(link: VideoLink): void {
     if (disposed) return;
-    const name = link.name || "that video";
+    const other = isOtherFileLink(link);
+    const name = link.name || (other ? "that file" : "that video");
     if (!ports.desktop.opens()) {
-      ports.notices.show("“" + name + "” is a video file on the computer it was added from — only its name is kept here. " +
+      ports.notices.show("“" + name + "” is a" + (other ? " file" : " video file") + " on the computer it was added from — only its name is kept here. " +
         "Open it from there, or in the Splitpage desktop app.", "warn", true);
       return;
     }
@@ -85,7 +86,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     const stored = link.location && link.location.kind === "path" ? link.location.path : "";
     const bundled = link.location && link.location.kind === "bundled" ? link.location.name : "";
     if (!token && !stored && !bundled) {
-      ports.notices.show("Splitpage only opens a video file you dropped or pasted in since it started — " +
+      ports.notices.show("Splitpage only opens a" + (other ? " file" : " video file") + " you dropped or pasted in since it started — " +
         "drop “" + name + "” onto this beat again to open it from here.", "warn", true);
       return;
     }

@@ -314,7 +314,12 @@ is special. **It is the only atom.**
   document's, and since #259 a file dropped in the desktop app keeps its
   path as the link's `location`, `{ kind: "path", path }`, or, when it was
   copied into the script's `<name> files` folder, `{ kind: "bundled", name }`
-  with the copy's file name in that folder; SplitShare leaves either out). #124 made a comment of each instead; comments it made
+  with the copy's file name in that folder; SplitShare leaves either out).
+  Since #256 any other file that is not a picture (a PDF, a document, audio)
+  is attached the same way: a link `{ name, size, location? }` with no
+  `poster`, on the beat's first gallery item (or an item of its own with no
+  picture), never a program, script, shortcut or extensionless file
+  (`ATTACHABLE_FILE` in `shared/video-path.ts`). #124 made a comment of each instead; comments it made
   stay as they are. The gallery's shape is `imageRef` (the first picture,
   unchanged), `imageLinks` (its caption) and `moreImages`
   (`[{imageRef, links}]`), `src/core/document/gallery.ts`; the merge takes both sides'

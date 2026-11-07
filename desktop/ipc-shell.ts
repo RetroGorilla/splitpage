@@ -20,7 +20,7 @@ const hasControlCharacter = (s: string) => [...s].some((c) => c.charCodeAt(0) < 
 
 function createShellIpc({
   tabOf, launchIntentFor, draftStore, draftsIsHeld, hadPriorSession, shell, nativeTheme, themeChoice,
-  videoFileGrants, VIDEO_FILE_EXT, openableVideoPath, resolveBundledFile, bundleJobs,
+  videoFileGrants, ATTACHABLE_FILE, openableVideoPath, resolveBundledFile, bundleJobs,
   testVideoOpens, testMode: TEST_MODE, videoThumbnail,
   updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus, checkForUpdate, downloadUpdate,
   runUpdateInstaller, openPrompterInBrowser, voiceHelperInstance
@@ -72,10 +72,11 @@ function createShellIpc({
     });
 
     ipcHandle("splitpage:video-file-grant", async (event, filePath) => {
-      if (!path.isAbsolute(filePath) || !VIDEO_FILE_EXT.test(filePath)) return null;
-      let st;
-      try { st = await fsp.stat(filePath); } catch { return null; }
-      if (!st.isFile()) return null;
+      if (!path.isAbsolute(filePath) || !ATTACHABLE_FILE.test(filePath)) return null;
+      if (process.platform === "win32" && filePath.indexOf(":", 2) !== -1) return null;
+      let st, real;
+      try { real = await fsp.realpath(filePath); st = await fsp.stat(real); } catch { return null; }
+      if (!st.isFile() || !ATTACHABLE_FILE.test(real)) return null;
       for (const [token, granted] of videoFileGrants) if (granted === filePath) return token;
       if (videoFileGrants.size >= 1000) videoFileGrants.delete(videoFileGrants.keys().next().value as string);
       const token = crypto.randomBytes(16).toString("hex");
@@ -88,7 +89,7 @@ function createShellIpc({
       if (!filePath) return { ok: false, code: "UNKNOWN" };
       let real: string;
       try { real = await fsp.realpath(filePath); } catch { return { ok: false, code: "GONE" }; }
-      if (hasControlCharacter(real) || !VIDEO_FILE_EXT.test(real)) return { ok: false, code: "REFUSED" };
+      if (hasControlCharacter(real) || !ATTACHABLE_FILE.test(filePath) || !ATTACHABLE_FILE.test(real)) return { ok: false, code: "REFUSED" };
       try {
         if (!(await fsp.stat(real)).isFile()) return { ok: false, code: "REFUSED" };
       } catch { return { ok: false, code: "GONE" }; }
@@ -96,7 +97,7 @@ function createShellIpc({
     });
 
     ipcHandle("splitpage:video-path-open", async (event, storedPath) => {
-      return openFound(await openableVideoPath(storedPath, PATH_STYLE, fsp));
+      return openFound(await openableVideoPath(storedPath, PATH_STYLE, fsp, ATTACHABLE_FILE));
     });
 
     ipcHandle("splitpage:bundle-file", async (event, token, job) => {
@@ -116,7 +117,7 @@ function createShellIpc({
     ipcHandle("splitpage:bundled-file-open", async (event, name) => {
       const script = scriptOf(event);
       if (!script) return { ok: false, code: "REFUSED" };
-      return openFound(await resolveBundledFile(script, name, VIDEO_FILE_EXT, fsp, path, process.platform === "win32"));
+      return openFound(await resolveBundledFile(script, name, ATTACHABLE_FILE, fsp, path, process.platform === "win32"));
     });
 
     ipcHandle("splitpage:video-thumbnail", async (event, host, ref) => videoThumbnail(host, ref));
