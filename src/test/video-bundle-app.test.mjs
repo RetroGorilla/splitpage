@@ -106,6 +106,62 @@ test("Save As waits for a running copy, and the bytes it writes link the copy, w
   }
 });
 
+test("Cancel on the wait for a copy that never answers ends the Save As at once, with nothing written and the document unchanged", async () => {
+  setAutoSaveEnabled(false);
+  const { fake, finishes } = heldBundle();
+  const written = [];
+  const write = fake.writeFile;
+  fake.writeFile = function (id, data) { written.push(id); return write.call(this, id, data); };
+  try {
+    const before = await openFromDesktop(fake, script("Episode 12", ID("7")), "Episode 12.splitpage");
+    const writesBefore = written.length;
+    await dropAndAccept();
+    assert.ok(await until(() => finishes.length === 1), "the copy reached main");
+    const saving = saveDoc({ saveAs: true });
+    assert.ok(await until(() => !document.getElementById("bundle-progress").hidden), "the wait shows the panel");
+    document.getElementById("bundle-cancel").click();
+    await saving;
+    assert.equal(written.length, writesBefore, "nothing was written");
+    assert.equal(homeModule.currentHome().handle, before, "the document stays with its script");
+    assert.deepEqual(linkIn(currentDocument()), LINK.location, "the drop keeps its path");
+    assert.equal(document.getElementById("bundle-progress").hidden, true);
+  } finally {
+    window.__desktopTest.restoreBackend();
+    document.getElementById("toast-host").replaceChildren();
+  }
+});
+
+test("a drop that lands while a Save As writes gets no prompt and keeps its path when the write fails", async () => {
+  setAutoSaveEnabled(false);
+  const fake = window.__desktopTest.makeFakeBackend();
+  const bundles = [];
+  let fail = null;
+  const backend = Object.assign({}, fake, {
+    writeFile: () => new Promise((_resolve, reject) => { fail = reject; }),
+    bundleVideoFile: (token, job) => { bundles.push(job); return Promise.resolve({ ok: true, name: "take one.mp4" }); }
+  });
+  window.__desktopTest.setBackend(backend);
+  try {
+    const before = await openFromDesktop(fake, script("Episode 12", ID("8")), "Episode 12.splitpage");
+    const saving = saveDoc({ saveAs: true });
+    assert.ok(await until(() => fail !== null), "the save is writing");
+    videoFiles.grant(new File([new Uint8Array(DROP.size)], DROP.name, { type: "video/mp4" }), LINK);
+    offerBundleAfterDrop("r1", [DROP], null);
+    assert.equal(document.getElementById("bundle-modal").hidden, true, "no copy prompt during the save");
+    fail(new Error("disk full"));
+    await saving;
+    assert.equal(homeModule.currentHome().handle, before, "the failed save leaves the document with its script");
+    assert.deepEqual(linkIn(currentDocument()), LINK.location, "the drop is linked by its path");
+    assert.deepEqual(bundles, [], "nothing was copied");
+    offerBundleAfterDrop("r1", [DROP], null);
+    assert.equal(document.getElementById("bundle-modal").hidden, false, "once the save is over, dropping again asks");
+    document.getElementById("bundle-decline").click();
+  } finally {
+    window.__desktopTest.restoreBackend();
+    document.getElementById("toast-host").replaceChildren();
+  }
+});
+
 test("a copy that finishes after the tab opened an unrelated script changes neither script", async () => {
   setAutoSaveEnabled(false);
   const { fake, finishes } = heldBundle();

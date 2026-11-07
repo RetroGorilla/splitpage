@@ -114,8 +114,9 @@ export function offerBundleAfterDrop(...args: Parameters<GalleryVideoMount["offe
   video.owner()?.offerAfterDrop(...args);
 }
 
-export function drainBundlesForSave(): ReturnType<GalleryVideoMount["drain"]> {
-  return video.owner()?.drain() ?? null;
+export function beginBundleSave(): ReturnType<GalleryVideoMount["beginSave"]> {
+  const owner = video.owner();
+  return owner ? owner.beginSave() : { drained: null, end: () => {} };
 }
 
 export const stopGalleryVideoFeature = video.stop;

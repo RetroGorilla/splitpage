@@ -4,6 +4,7 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 import type { DesktopBundleCarry, DesktopBundleCopy } from "../../application/media/desktop-video.ts";
+import type { BundleSaveWindow } from "../../application/save/file-saving-ports.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
 import type { VideoLink } from "../../core/document/gallery.ts";
 import type { StepRow, Step } from "../../core/text/steps.ts";
@@ -32,6 +33,7 @@ interface Copy {
   readonly offer: Offer;
   readonly video: DroppedVideo;
   readonly from: VideoLink;
+  cancelled: boolean;
 }
 
 function quoted(name: string): string { return "“" + name + "”"; }
@@ -56,9 +58,12 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   const el = (id: string): HTMLElement | null => page.getElementById(id);
   let asking: Offer[] = [];
   const pending: Copy[] = [];
-  const drainWaiters: (() => void)[] = [];
+  const drainWaiters: ((drained: boolean) => void)[] = [];
   let carrying: string | null = null;
   let jobs = 0;
+  let saving = 0;
+
+  function waitingOn(): Copy[] { return pending.filter(function (c) { return !c.cancelled; }); }
 
   function modal(): HTMLElement | null { return el("bundle-modal"); }
 
@@ -76,7 +81,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   }
 
   function offer(rowId: string, dropped: readonly DroppedVideo[], entry: UndoEntry | null): void {
-    if (!life.active()) return;
+    if (!life.active() || saving) return;
     const script = ports.script();
     const list = dropped.filter(function (v) { return !!(v && v.name && v.path); });
     if (!script || !list.length) return;
@@ -98,7 +103,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   function copyText(c: Copy): string { return quoted(c.video.name) + " to " + quoted(c.offer.folder); }
 
   function showNext(): void {
-    const next = pending[0];
+    const next = waitingOn()[0];
     if (next) { showProgress(copyText(next), 0, next.video.size); return; }
     if (carrying) return;
     const box = el("bundle-progress");
@@ -118,6 +123,8 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   function copied(c: Copy, res: DesktopBundleCopy): void {
     if (res.ok) {
+      // why: a Save As stopped waiting for this copy, so its bytes may already be captured without the link
+      if (c.cancelled && saving) return;
       if (!ports.ownership.stillOwns(c.offer.ctx)) return;
       relink(c.offer, c.from, res.name);
       ports.notices.show("Copied " + quoted(c.video.name) + " to " + quoted(c.offer.folder) + ".", "ok");
@@ -153,8 +160,8 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   }
 
   function drained(): void {
-    if (pending.length) return;
-    drainWaiters.splice(0).forEach(function (resolve) { resolve(); });
+    if (waitingOn().length) return;
+    drainWaiters.splice(0).forEach(function (resolve) { resolve(true); });
   }
 
   function settle(c: Copy, res: DesktopBundleCopy): void {
@@ -167,10 +174,10 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   }
 
   function submit(o: Offer, video: DroppedVideo): void {
-    const c: Copy = { job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } } };
+    const c: Copy = { job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } }, cancelled: false };
     pending.push(c);
     ports.files.bundle(c.from, c.job, function (p) {
-      if (life.active() && !carrying) showProgress(copyText(c), p.done, p.total);
+      if (life.active() && !carrying && !c.cancelled) showProgress(copyText(c), p.done, p.total);
     }).then(function (res) { settle(c, res); }, function () { settle(c, { ok: false, code: "FAILED" }); });
   }
 
@@ -186,14 +193,21 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   }
 
   function cancel(): void {
-    pending.forEach(function (c) { ports.files.cancelBundle(c.job); });
+    pending.forEach(function (c) { c.cancelled = true; ports.files.cancelBundle(c.job); });
     if (carrying) ports.files.cancelBundle(carrying);
+    drainWaiters.splice(0).forEach(function (resolve) { resolve(false); });
+    showNext();
   }
 
-  function drain(): Promise<void> | null {
-    if (!life.active() || !pending.length) return null;
+  function beginSave(): BundleSaveWindow {
+    if (!life.active()) return { drained: null, end: function () { } };
+    saving++;
+    answer(false);
+    let open = true;
+    const end = function (): void { if (open) { open = false; saving--; } };
+    if (!waitingOn().length) return { drained: null, end };
     showNext();
-    return new Promise(function (resolve) { drainWaiters.push(resolve); });
+    return { drained: new Promise(function (resolve) { drainWaiters.push(resolve); }), end };
   }
 
   ports.carries(onCarry);
@@ -207,7 +221,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   return {
     offerAfterDrop: offer,
-    drain,
+    beginSave,
     dispose: function (): void {
       if (!life.active()) return;
       pending.forEach(function (c) { ports.files.cancelBundle(c.job); });

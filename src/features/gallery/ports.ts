@@ -10,6 +10,7 @@ import type { VideoFiles } from "../../application/media/video-files.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { Operations } from "../../application/session/operation.ts";
+import type { BundleSaveWindow } from "../../application/save/file-saving-ports.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
@@ -93,7 +94,7 @@ export interface VideoBundlePorts {
 
 export interface VideoBundleMount {
   readonly offerAfterDrop: (rowId: string, videos: readonly DroppedVideo[], entry: UndoEntry | null) => void;
-  readonly drain: () => Promise<void> | null;
+  readonly beginSave: () => BundleSaveWindow;
   readonly dispose: () => void;
 }
 

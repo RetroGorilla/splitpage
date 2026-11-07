@@ -71,10 +71,14 @@ function createBundleJobs(options: {
     }
     running = job;
     try {
-      if (job.ctl.signal.aborted) job.stop("CANCELLED");
-      else await job.run((done, total) => tell(job.sender, (to) => to.send("splitpage:bundle-progress", { job: job.job, done, total })), job.ctl.signal);
-    } catch {
-      job.stop("FAILED");
+      const signal = job.ctl.signal;
+      if (!signal.aborted) {
+        const ran = job.run((done, total) => tell(job.sender, (to) => to.send("splitpage:bundle-progress", { job: job.job, done, total })), signal)
+          .catch(() => job.stop("FAILED"));
+        // why: a read stalled on a lost drive never answers its abort; the job is let go, and it cannot publish once aborted
+        await Promise.race([ran, new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }))]);
+      }
+      if (signal.aborted) job.stop("CANCELLED");
     } finally {
       if (byKey.get(job.key) === job) byKey.delete(job.key);
       running = null;

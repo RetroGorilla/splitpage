@@ -201,11 +201,19 @@ test("a copy main dropped, because the tab opened another script, says nothing a
   h.owner.dispose();
 });
 
-test("nothing pending means nothing to wait for before a Save As", () => {
+test("nothing pending means nothing to wait for before a Save As, and an open prompt closes keeping the path", async () => {
   const h = setup();
-  assert.equal(h.owner.drain(), null);
+  const idle = h.owner.beginSave();
+  assert.equal(idle.drained, null);
+  idle.end();
   h.owner.offerAfterDrop("r1", [DROP], ENTRY);
-  assert.equal(h.owner.drain(), null, "a prompt not yet answered has started no copy");
+  const asked = h.owner.beginSave();
+  assert.equal(asked.drained, null, "a prompt not yet answered has started no copy");
+  assert.equal(h.el("bundle-modal").hidden, true, "the save closes the prompt, as Link to where it is");
+  asked.end();
+  await settle();
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
   h.owner.dispose();
 });
 
@@ -214,40 +222,89 @@ test("a Save As waits for a running copy, which links the drop before the wait e
   const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
   h.owner.offerAfterDrop("r1", [DROP], ENTRY);
   h.el("bundle-accept").click();
-  const draining = h.owner.drain();
+  const save = h.owner.beginSave();
+  const draining = save.drained;
   assert.ok(draining && finish);
   let done = false;
-  void draining.then(() => { done = true; assert.deepEqual(h.location(), { kind: "bundled", name: "take one (2).mp4" }); });
+  void draining.then((ok) => { done = ok; assert.deepEqual(h.location(), { kind: "bundled", name: "take one (2).mp4" }); });
   await settle();
   assert.equal(done, false, "the wait lasts as long as the copy");
   assert.equal(h.el("bundle-progress").hidden, false, "the wait shows the progress panel with Cancel");
   finish({ ok: true, name: "take one (2).mp4" });
-  await draining;
+  assert.equal(await draining, true);
   assert.equal(done, true);
   assert.equal(h.notices.shown[0]?.message, "Copied “take one.mp4” to “Episode 12 files”.");
+  save.end();
   h.owner.dispose();
 });
 
-test("Cancel during the wait ends it, and the cancelled drop keeps its stored path", async () => {
+test("Cancel ends the wait at once though the copy never answers, and later saves do not wait on it", async () => {
   let finish: ((r: DesktopBundleCopy) => void) | undefined;
   const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
   h.owner.offerAfterDrop("r1", [DROP], ENTRY);
   h.el("bundle-accept").click();
-  const draining = h.owner.drain();
-  assert.ok(draining && finish);
+  const save = h.owner.beginSave();
+  assert.ok(save.drained && finish);
   h.el("bundle-cancel").click();
   assert.deepEqual(h.cancels, ["bundle1"]);
-  finish({ ok: false, code: "CANCELLED" });
-  await draining;
-  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
-  assert.equal(h.notices.shown[0]?.message, "Stopped copying “take one.mp4”. It links to where it is.");
+  assert.equal(await save.drained, false, "the wait ends without the stalled copy answering");
+  assert.equal(h.el("bundle-progress").hidden, true);
+  save.end();
+  const again = h.owner.beginSave();
+  assert.equal(again.drained, null, "a copy already cancelled is not waited for again");
+  finish({ ok: true, name: "take one (2).mp4" });
+  await settle();
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path }, "a late answer during a save leaves the path");
+  again.end();
   const left = setup({ answer: () => new Promise(() => {}) });
   left.owner.offerAfterDrop("r1", [DROP], ENTRY);
   left.el("bundle-accept").click();
-  const closing = left.owner.drain();
+  const closing = left.owner.beginSave().drained;
   assert.ok(closing);
   left.owner.dispose();
   await closing;
+  h.owner.dispose();
+});
+
+test("a late answer for a cancelled copy relinks only while the document still has the same script and no save is running", async () => {
+  let finish: ((r: DesktopBundleCopy) => void) | undefined;
+  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  h.el("bundle-accept").click();
+  const save = h.owner.beginSave();
+  h.el("bundle-cancel").click();
+  await save.drained;
+  save.end();
+  assert.ok(finish);
+  finish({ ok: true, name: "take one (2).mp4" });
+  await settle();
+  assert.deepEqual(h.location(), { kind: "bundled", name: "take one (2).mp4" }, "the abandoned save left the script as it was, so the copy is valid");
+  h.owner.dispose();
+  let later: ((r: DesktopBundleCopy) => void) | undefined;
+  const moved = setup({ answer: () => new Promise((resolve) => { later = resolve; }) });
+  moved.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  moved.el("bundle-accept").click();
+  moved.el("bundle-cancel").click();
+  moved.ownership.replace();
+  assert.ok(later);
+  later({ ok: true, name: "take one (2).mp4" });
+  await settle();
+  assert.deepEqual(moved.location(), { kind: "path", path: DROP.path }, "once the document left that script, the link stays a path");
+  moved.owner.dispose();
+});
+
+test("a drop during a Save As is linked by path with no prompt, even when that save then fails", async () => {
+  const h = setup();
+  const save = h.owner.beginSave();
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  assert.equal(h.el("bundle-modal").hidden, true, "no copy prompt while the save runs");
+  save.end();
+  await settle();
+  assert.deepEqual(h.calls, [], "nothing was copied");
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  save.end();
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  assert.equal(h.el("bundle-modal").hidden, false, "after the save, dropping again asks; a second end changes nothing");
   h.owner.dispose();
 });
 
