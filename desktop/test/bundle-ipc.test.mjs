@@ -15,8 +15,7 @@ const { createBundleCopier } = require(path.join(here, "..", "bundle-copy.ts"));
 const { createBundleJobs } = require(path.join(here, "..", "bundle-jobs.ts"));
 const { createCloseQuit } = require(path.join(here, "..", "close-quit.ts"));
 const bundleFiles = require(path.join(here, "..", "..", "shared", "video-embed.ts"));
-const { VIDEO_FILE_EXT } = require(path.join(here, "..", "..", "shared", "video-path.ts"));
-const { openableVideoPath } = bundleFiles;
+const { ATTACHABLE_FILE, openableVideoPath } = bundleFiles;
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -90,7 +89,7 @@ function harness({ source = null, grants = [], testMode = false, holdCopy = null
     carry: async (...args) => { if (holdCarry) await holdCarry; return real.carry(...args); }
   };
   const bundleJobs = createBundleJobs({
-    copier, allow: VIDEO_FILE_EXT,
+    copier, allow: ATTACHABLE_FILE,
     scriptOfTab: (tabId) => {
       const t = tabs.get(tabId);
       return t && t.source.kind === "file" ? t.source.absPath : null;
@@ -102,7 +101,7 @@ function harness({ source = null, grants = [], testMode = false, holdCopy = null
   const { registerShellIpc } = createShellIpc({
     tabOf,
     shell: { openPath: async (p) => { openedPaths.push(p); return ""; }, openExternal: async () => {} },
-    testMode, testVideoOpens, videoFileGrants, VIDEO_FILE_EXT, openableVideoPath,
+    testMode, testVideoOpens, videoFileGrants, ATTACHABLE_FILE, openableVideoPath,
     resolveBundledFile: bundleFiles.resolveBundledFile, bundleJobs
   });
   const { registerFileIpc } = createFileIpc({
@@ -450,14 +449,15 @@ test("main carries what the written bytes link, by itself, even once the tab and
     fs.mkdirSync(s.folder);
     fs.writeFileSync(path.join(s.folder, "a.mp4"), "aaaa");
     fs.writeFileSync(path.join(s.folder, "b.mp4"), "bbbb");
-    fs.writeFileSync(path.join(s.folder, "notes.txt"), "not a video");
+    fs.writeFileSync(path.join(s.folder, "notes.txt"), "a document");
+    fs.writeFileSync(path.join(s.folder, "planted.exe"), "MZ");
     const ipc = harness({ source: s.script });
-    const answered = ipc.saveAs(s.copyScript, { script: true }, project("a.mp4", "notes.txt", "..\\b.mp4"));
+    const answered = ipc.saveAs(s.copyScript, { script: true }, project("a.mp4", "notes.txt", "planted.exe", "..\\b.mp4"));
     ipc.main.sender.destroyed = true;
     ipc.tabs.clear();
     await answered;
     await ipc.bundleJobs.idle();
-    assert.deepEqual(fs.readdirSync(s.copyFolder), ["a.mp4"], "only the linked video is carried, and no name outside the folder resolves");
+    assert.deepEqual(fs.readdirSync(s.copyFolder).sort(), ["a.mp4", "notes.txt"], "a linked video and a linked document are carried (#256), never a program, and no name outside the folder resolves");
     assert.equal(fs.readFileSync(path.join(s.copyFolder, "a.mp4"), "utf8"), "aaaa");
     assert.deepEqual(ipc.notes("splitpage:bundle-carry"), [], "nothing is sent to a renderer that is gone");
   } finally { s.done(); }
@@ -662,7 +662,7 @@ test("quitting while copies run asks first: Wait finishes them and then quits, Q
     assert.deepEqual(waiting.asked.map((o) => [o.title, o.message, o.buttons, o.defaultId, o.cancelId]),
       [["Splitpage", "Splitpage is still copying files.", ["Wait", "Quit anyway"], 0, 0]]);
     assert.equal(waiting.asked[0].detail, "Wait lets the copies finish, then quits. Quit anyway stops them: nothing half-copied is left behind, " +
-      "and a video not copied yet still links to where it is.");
+      "and a file not copied yet still links to where it is.");
     assert.equal(waiting.quit().prevented, true, "a second quit while waiting is held, not asked again");
     assert.equal(waiting.asked.length, 1);
     assert.deepEqual(await copying, { ok: true, name: "big.mp4" }, "Wait lets the copy finish");

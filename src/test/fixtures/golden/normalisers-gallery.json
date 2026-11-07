@@ -1012,6 +1012,260 @@
     }
   },
   {
+    "case": "attached PDF path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "path",
+          "path": "C:\\Docs\\brief.pdf"
+        }
+      }
+    }
+  },
+  {
+    "case": "attached document on a mapped drive",
+    "input": {
+      "kind": "path",
+      "path": "Z:\\NAS\\notes.docx"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "path",
+          "path": "Z:\\NAS\\notes.docx"
+        }
+      }
+    }
+  },
+  {
+    "case": "attached POSIX audio path",
+    "input": {
+      "kind": "path",
+      "path": "/Users/me/vo.wav"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "path",
+          "path": "/Users/me/vo.wav"
+        }
+      }
+    }
+  },
+  {
+    "case": "attached UNC document",
+    "input": {
+      "kind": "path",
+      "path": "\\\\server\\share\\brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached program path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\setup.exe"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached script path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\run.ps1"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached batch path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\run.bat"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached shortcut path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\brief.url"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached extensionless path",
+    "input": {
+      "kind": "path",
+      "path": "/Users/me/README"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached program after a document part",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\brief.pdf.exe"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached traversal",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\..\\brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled PDF",
+    "input": {
+      "kind": "bundled",
+      "name": "brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "bundled",
+          "name": "brief.pdf"
+        }
+      }
+    }
+  },
+  {
+    "case": "bundled numbered document",
+    "input": {
+      "kind": "bundled",
+      "name": "notes (2).DOCX"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "bundled",
+          "name": "notes (2).DOCX"
+        }
+      }
+    }
+  },
+  {
+    "case": "bundled program",
+    "input": {
+      "kind": "bundled",
+      "name": "setup.EXE"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled installer",
+    "input": {
+      "kind": "bundled",
+      "name": "setup.msi"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled extensionless",
+    "input": {
+      "kind": "bundled",
+      "name": "README"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled document traversal",
+    "input": {
+      "kind": "bundled",
+      "name": "..\\brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled jar",
+    "input": {
+      "kind": "bundled",
+      "name": "tool.jar"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
     "case": "20 links, the limit",
     "input": 20,
     "output": {

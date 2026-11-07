@@ -90,7 +90,7 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   nativeTheme: Pick<NativeTheme, "themeSource">;
   themeChoice: Pick<ReturnType<typeof createThemeChoice>, "write">;
   videoFileGrants: Map<string, string>;
-  VIDEO_FILE_EXT: RegExp;
+  ATTACHABLE_FILE: RegExp;
   openableVideoPath: typeof openableVideoPath;
   resolveBundledFile: typeof resolveBundledFile;
   bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "copy" | "cancel">;

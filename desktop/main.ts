@@ -148,7 +148,6 @@ const testExternalOpens: string[] = [];
 const testChromiumLaunches: { browser: string; url: string }[] = [];
 const testVideoOpens: string[] = [];
 const videoFileGrants = new Map<string, string>();
-const VIDEO_FILE_EXT = /\.(mp4|m4v|mov|webm|mkv|avi|ogv|wmv|mpg|mpeg|3gp)$/i;
 if (TEST_MODE) {
 
   const cancelIndex = (opts: Electron.MessageBoxSyncOptions | Electron.MessageBoxOptions | undefined) => (opts && typeof opts.cancelId === "number")
@@ -866,7 +865,7 @@ async function openPrompterInBrowser(tab: DesktopMainTab | null, opts?: { chromi
 const videoEmbed: typeof VideoEmbed = require(path.join(SHARED_ROOT, "video-embed.ts"));
 const bundleJobs = createBundleJobs({
   copier: createBundleCopier({ bundleFiles: videoEmbed }),
-  allow: VIDEO_FILE_EXT,
+  allow: videoEmbed.ATTACHABLE_FILE,
   scriptOfTab: (tabId: string) => {
     const tab = tabs.get(tabId);
     return tab && tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null;
@@ -1808,7 +1807,7 @@ const { registerFileIpc } = createFileIpc({
 
 const { registerShellIpc } = createShellIpc({
   tabOf, launchIntentFor, draftStore: () => draftStore, draftsIsHeld, hadPriorSession,
-  shell, nativeTheme, themeChoice, videoFileGrants, VIDEO_FILE_EXT,
+  shell, nativeTheme, themeChoice, videoFileGrants, ATTACHABLE_FILE: videoEmbed.ATTACHABLE_FILE,
   openableVideoPath: videoEmbed.openableVideoPath, resolveBundledFile: videoEmbed.resolveBundledFile, bundleJobs,
   testVideoOpens, testMode: TEST_MODE,
   videoThumbnail, updateStatus: () => updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus,

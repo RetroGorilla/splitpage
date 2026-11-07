@@ -154,6 +154,7 @@ type ScriptClipboardExtra = Awaited<ReturnType<typeof readClipboardFiles>>;
 interface PasteAttached {
   readonly pictures: number;
   readonly videos: number;
+  readonly files?: number | undefined;
   readonly links?: readonly unknown[];
 }
 
@@ -385,6 +386,11 @@ const mediaRoutes = owned<ReturnType<typeof mountMediaRoutes>>();
 const mediaRoutePorts: MediaRoutePorts = {
   choose: function () { (document.getElementById("file-input") as HTMLElement).click(); },
   addPicture: handleImageFile,
+  attachFile: function (rowId, file) {
+    if (!hasMediaFiles([file])) { showToast(notAttachableText([String(file.name || "")]), "warn"); return; }
+    const cell = document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="visualText"]');
+    if (cell) insertIntoScriptCell(cell, "", "", [file]);
+  },
   removePicture: removeImage,
   removeLink: removeImageLink,
   openLink: videoFiles.openGallery
@@ -479,8 +485,17 @@ const rowsEditorPorts: RowsEditorPorts = {
   scriptCell: isScriptCell,
   hasMedia: hasMediaFiles,
   insert: insertIntoScriptCell,
-  notMedia: function () { showToast("Only pictures and video files go in a beat's Image section.", "warn"); }
+  notMedia: showNotAttached
 };
+
+function showNotAttached(files: FileList | readonly File[] | null | undefined): void {
+  showToast(notAttachableText(Array.prototype.map.call(files || [], function (f: File) { return String(f.name || ""); }) as string[]), "warn");
+}
+
+function notAttachableText(names: readonly string[]): string {
+  const what = names.length > 1 ? names.length + " files weren't attached." : names[0] ? "“" + names[0] + "” wasn't attached." : "That file wasn't attached.";
+  return what + " Splitpage doesn't attach programs, scripts, shortcuts or files without an extension.";
+}
 
 export function mountRowsEditingFeature(): ReturnType<typeof mountRowsEditor> {
   return rowsEditor.replace(function () {
@@ -666,6 +681,7 @@ const clipboardRoutePorts = {
   capture: captureOperation,
   stillOwns: stillOwns,
   notAdded: showPictureNotAdded,
+  refused: showNotAttached,
   placeOf: capturePastePlace,
   restorePlace: restorePastePlace,
   findCell: function (rowId: string, field: string) {
@@ -697,6 +713,8 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
   if (!res.done) return;
   const lost = res.lost + (extra ? extra.lost : 0);
   if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
+  const refused = extra ? extra.refused : [];
+  if (refused.length) showToast(notAttachableText(refused), "warn");
   if (res.attached) {
     const attachedRowId = cellEl.getAttribute("data-id");
     announceAttached(res.attached, res.rowIndex, before);
@@ -705,9 +723,9 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
       thumbnailsAfterPaste(attachedRowId, res.attached.links, entry === before ? null : entry);
     }
     const located = (extra ? extra.attach : []).flatMap(function (item) {
-      return item.kind === "videoFile" && item.path ? [{ name: item.name, size: item.size, path: item.path }] : [];
+      return (item.kind === "videoFile" || item.kind === "file") && item.path ? [{ name: item.name, size: item.size, path: item.path }] : [];
     });
-    if (attachedRowId && res.attached.videos && located.length) {
+    if (attachedRowId && (res.attached.videos || res.attached.files) && located.length) {
       const entry = undoOwner().last();
       offerBundleAfterDrop(attachedRowId, located, entry === before ? null : entry);
     }
@@ -721,10 +739,10 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
 }
 
 function announceAttached(attached: PasteAttached, rowIndex: number, before: unknown): void {
-  const pics = attached.pictures, vids = attached.videos;
   function n(count: number, one: string): string { return count === 1 ? one : count + " " + one + "s"; }
-  const what = pics && vids ? n(pics, "picture") + " and " + n(vids, "video")
-    : pics ? n(pics, "picture") : n(vids, "video");
+  const parts = ([[attached.pictures, "picture"], [attached.videos, "video"], [attached.files || 0, "file"]] as const)
+    .filter(function (p) { return p[0] > 0; }).map(function (p) { return n(p[0], p[1]); });
+  const what = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0] || n(0, "video");
   const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to beat " + (numberedDocument.numbering().beats[currentDocument()?.rows[rowIndex]?.id ?? ""]?.full ?? "");
   const entry = undoOwner().last();
   if (!entry || entry === before) { showToast(msg, "ok"); return; }

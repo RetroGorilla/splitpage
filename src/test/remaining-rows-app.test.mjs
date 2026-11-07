@@ -251,16 +251,26 @@ test("a text drop on a script cell inserts through the session as one edit", asy
   assert.equal(row("r3").audioText, "Last words more");
 });
 
-test("a file that is not a picture or video dropped on a scene's Image section is refused with a word and writes nothing", async () => {
+test("a program dropped on a scene's Image section is refused with a word and writes nothing", async () => {
   await open();
   const media = rowEl("r1").querySelector(".visual-media");
   assert.ok(media);
   let e;
   await nothingWritten(() => {
-    e = drop(media, { types: ["Files"], files: [new File(["x"], "notes.txt", { type: "text/plain" })] });
+    e = drop(media, { types: ["Files"], files: [new File(["MZ"], "setup.exe", { type: "application/x-msdownload" })] });
   });
   assert.ok(e.defaultPrevented);
-  assert.deepEqual(toasts(), ["Only pictures and video files go in a beat's Image section."]);
+  assert.deepEqual(toasts(), ["“setup.exe” wasn't attached. Splitpage doesn't attach programs, scripts, shortcuts or files without an extension."]);
+});
+
+test("a document dropped on a scene's Image section is attached to the beat as a file link", async () => {
+  await open();
+  const media = rowEl("r1").querySelector(".visual-media");
+  assert.ok(media);
+  await throughSession(() => { drop(media, { types: ["Files"], files: [new File(["x"], "notes.txt", { type: "text/plain" })] }); });
+  await new Promise((r) => setTimeout(r, 0));
+  const links = (row("r1").imageLinks || []).concat(...(row("r1").moreImages || []).map((it) => it.links || []));
+  assert.deepEqual(links.filter((l) => l.name === "notes.txt"), [{ name: "notes.txt", size: 1 }]);
 });
 
 test("the add-scene bar adds a scene through the session", async () => {

@@ -1,4 +1,4 @@
-import { bundleFolderName } from "../../../shared/video-path.ts";
+import { VIDEO_FILE_EXT, bundleFolderName } from "../../../shared/video-path.ts";
 import { bundleVideoLinks } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
@@ -38,15 +38,20 @@ interface Copy {
 
 function quoted(name: string): string { return "“" + name + "”"; }
 
-function videos(n: number): string { return n === 1 ? "1 video" : n + " videos"; }
+function nounFor(names: readonly string[]): string {
+  return names.every(function (n) { return VIDEO_FILE_EXT.test(n); }) ? "video" : "file";
+}
+
+function videos(n: number, noun = "video"): string { return n === 1 ? "1 " + noun : n + " " + noun + "s"; }
 
 export function bundlePromptText(names: readonly string[], folder: string): { title: string; detail: string } {
   const one = names.length === 1;
+  const noun = nounFor(names);
   return {
-    title: one ? "Copy this video into the script's folder?" : "Copy these videos into the script's folder?",
-    detail: (one ? "Splitpage can copy " + quoted(names[0] as string) : "Splitpage can copy these " + names.length + " videos") +
+    title: one ? "Copy this " + noun + " into the script's folder?" : "Copy these " + noun + "s into the script's folder?",
+    detail: (one ? "Splitpage can copy " + quoted(names[0] as string) : "Splitpage can copy these " + names.length + " " + noun + "s") +
       " into " + quoted(folder) + ", a folder next to this script, and link to the copy. Keep that folder with the script, " +
-      "and " + (one ? "the video opens" : "the videos open") + " wherever the script goes. Otherwise the script links to " +
+      "and " + (one ? "the " + noun + " opens" : "the " + noun + "s open") + " wherever the script goes. Otherwise the script links to " +
       (one ? "the file" : "the files") + " where " + (one ? "it is" : "they are") + " now."
   };
 }
@@ -140,10 +145,10 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   function carried(note: DesktopBundleCarry, res: NonNullable<DesktopBundleCarry["result"]>): void {
     if (!res.ok) return;
-    if (res.copied) ports.notices.show("Copied " + videos(res.copied) + " to " + quoted(note.to) + ".", "ok");
+    if (res.copied) ports.notices.show("Copied " + videos(res.copied, "file") + " to " + quoted(note.to) + ".", "ok");
     const missing = res.missing;
     if (!missing) return;
-    ports.notices.show(videos(missing) + " could not be copied to " + quoted(note.to) + ", so " + (missing === 1 ? "it does" : "they do") +
+    ports.notices.show(videos(missing, "file") + " could not be copied to " + quoted(note.to) + ", so " + (missing === 1 ? "it does" : "they do") +
       " not open from this copy of the script. Look for " + (missing === 1 ? "it" : "them") + " in " + quoted(note.from) + ".", "error", true);
   }
 
@@ -156,7 +161,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
       return;
     }
     carrying = note.job;
-    showProgress("videos to " + quoted(note.to), note.done, note.total);
+    showProgress("files to " + quoted(note.to), note.done, note.total);
   }
 
   function drained(): void {

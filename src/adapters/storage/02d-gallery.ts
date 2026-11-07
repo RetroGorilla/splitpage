@@ -1,5 +1,5 @@
 import { bytesForSync, registryImages } from "./02c-blobs.ts";
-import { migrateGallery as migrateGalleryWith } from "../../core/document/gallery.ts";
+import { isOtherFileLink, migrateGallery as migrateGalleryWith } from "../../core/document/gallery.ts";
 
 import type { GalleryRow, VideoLink } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
@@ -14,7 +14,7 @@ export function pictureBytes(ref: ImageRef | null | undefined) {
 }
 
 export function videoLinkText(l: VideoLink) {
-  return l.href ? l.href : l.name + " (video file)";
+  return l.href ? l.href : l.name + (isOtherFileLink(l) ? " (file)" : " (video file)");
 }
 
 export function startGalleryStore() {}

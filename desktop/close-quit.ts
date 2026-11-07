@@ -143,7 +143,7 @@ function createCloseQuit({
       title: "Splitpage",
       message: "Splitpage is still copying files.",
       detail: "Wait lets the copies finish, then quits. Quit anyway stops them: nothing half-copied is left behind, " +
-        "and a video not copied yet still links to where it is."
+        "and a file not copied yet still links to where it is."
     });
     return picked === 1 ? "quit-anyway" : "wait";
   }

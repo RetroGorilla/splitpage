@@ -11,7 +11,7 @@ export interface RowsEditorPorts {
   readonly scriptCell: (cell: Element) => boolean;
   readonly hasMedia: (files: Files) => boolean;
   readonly insert: (cell: Element, html: string, text: string, files: Files) => void;
-  readonly notMedia: () => void;
+  readonly notMedia: (files: Files) => void;
 }
 
 interface RowsEditorMount {
@@ -137,7 +137,7 @@ export function mountRowsEditor(mount: RowsEditorMount): RowsEditor {
     const cell = target ? target.closest(".cell-editable") : null;
     if (drop && !mediaDrop) {
       e.preventDefault();
-      if (files && files.length) ports.notMedia();
+      if (files && files.length) ports.notMedia(files);
       return;
     }
     if (mediaDrop && !cell) {

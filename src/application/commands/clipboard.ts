@@ -1,5 +1,5 @@
 import { newBrollShot } from "../../core/document/broll.ts";
-import { addGalleryPicture, addGalleryVideo } from "../../core/document/gallery.ts";
+import { addGalleryFile, addGalleryPicture, addGalleryVideo } from "../../core/document/gallery.ts";
 import type { GalleryRow } from "../../core/document/gallery.ts";
 import type { IdSource, ImageRef } from "../../core/document/ports.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
@@ -43,11 +43,19 @@ export interface VideoFileAttachment {
   readonly poster?: ImageRef | null | undefined;
 }
 
-export type Attachment = ImageAttachment | VideoLinkAttachment | VideoFileAttachment;
+export interface OtherFileAttachment {
+  readonly kind: "file";
+  readonly name: string;
+  readonly size: number;
+  readonly path?: string | undefined;
+}
+
+export type Attachment = ImageAttachment | VideoLinkAttachment | VideoFileAttachment | OtherFileAttachment;
 
 export interface AttachedCount {
   pictures: number;
   videos: number;
+  files?: number;
   links: string[];
 }
 
@@ -106,6 +114,11 @@ export function attachToGallery(row: GalleryRow, attach: readonly Attachment[]):
     if (item.kind === "image") {
       addGalleryPicture(row, item.ref, item.name);
       out.pictures++;
+      return;
+    }
+    if (item.kind === "file") {
+      const at = item.path ? { kind: "path", path: item.path } : undefined;
+      if (addGalleryFile(row, { name: item.name, size: item.size, location: at }) !== -1) out.files = (out.files || 0) + 1;
       return;
     }
     const link = item.kind === "video" ? { href: item.href }
@@ -251,7 +264,7 @@ export function pasteCommand(request: PasteRequest, ports: ClipboardPorts): Repo
       let counts: AttachedCount | null = null;
       if (request.attach.length) {
         const probe = attachToGallery(galleryProbe(row), request.attach);
-        if (probe.pictures || probe.videos) counts = probe;
+        if (probe.pictures || probe.videos || probe.files) counts = probe;
       }
       if (!textChanged && !counts && !shots.length) return null;
       const seed = shots.length ? ports.brollSeed(row) : null;

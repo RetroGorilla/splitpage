@@ -22,7 +22,7 @@ export interface DesktopFileHandle {
 function bundleRefusalReason(refused: { readonly reason: string; readonly folder: string; readonly name: string }): string {
   const folder = "“" + refused.folder + "”";
   if (refused.reason === "clash") return folder + " already has a different “" + refused.name + "”. Rename or move that file, then save again";
-  if (refused.reason === "cancelled") return "copying the videos to " + folder + " was stopped, so the script was not saved there";
+  if (refused.reason === "cancelled") return "copying the files to " + folder + " was stopped, so the script was not saved there";
   return "“" + refused.name + "” could not be copied to " + folder + ", so the script was not saved there";
 }
 

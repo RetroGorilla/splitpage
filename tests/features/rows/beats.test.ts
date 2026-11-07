@@ -149,3 +149,22 @@ test("scene media: a gallery change goes through the gallery edit, and a paste p
   assert.equal(notices.shown[0]?.kind, "warn");
   owner.dispose();
 });
+
+test("scene media: taking an attached file's link off is undone as a file link, a video's as a video link", () => {
+  const edited: string[] = [];
+  const doc = migrateRows({ schema: 5, rows: [{ id: "r1", imageLinks: [{ name: "brief.pdf", size: 9 }, { name: "take.mov", size: 3, poster: true }] }] }, fakeMigration({}).ports);
+  const ports: BeatMediaPorts = {
+    document: fakeDocument(doc).document,
+    notices: fakeNotices().notices,
+    ownership: fakeOwnership().ownership,
+    pictures: fakePictures().pictures,
+    cells: { editGallery: (rowId, message) => { edited.push(rowId + ": " + message); return true; } },
+    text: { storedHtmlFromDom },
+    selection: { of: () => ({ from: 1, to: 3 }), set: () => {} }
+  };
+  const owner = mountBeatMedia(ports);
+  owner.removeLink("r1", 0, "f:brief.pdf:9");
+  owner.removeLink("r1", 0, "f:take.mov:3");
+  assert.deepEqual(edited, ["r1: File link removed", "r1: Video link removed"]);
+  owner.dispose();
+});

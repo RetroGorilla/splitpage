@@ -266,6 +266,28 @@ test("Cancel ends the wait at once though the copy never answers, and later save
   h.owner.dispose();
 });
 
+test("an attached file follows the same save window: no prompt during a save, the save waits for its copy, and Cancel ends the wait (#256)", async () => {
+  const PDF = { name: "brief.pdf", size: 4, path: "C:\\Drops\\brief.pdf" };
+  let finish: ((r: DesktopBundleCopy) => void) | undefined;
+  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+  const open = h.owner.beginSave();
+  h.owner.offerAfterDrop("r1", [PDF], ENTRY);
+  assert.equal(h.el("bundle-modal").hidden, true, "a file dropped during a save is linked by its path with no prompt");
+  open.end();
+  h.owner.offerAfterDrop("r1", [PDF], ENTRY);
+  assert.equal(h.el("bundle-title").textContent, "Copy this file into the script's folder?");
+  h.el("bundle-accept").click();
+  assert.deepEqual(h.calls.map((c) => c.link.name), ["brief.pdf"]);
+  const save = h.owner.beginSave();
+  assert.ok(save.drained && finish, "the save waits for the file's copy");
+  assert.equal(h.el("bundle-progress-text").textContent, "Copying “brief.pdf” to “Episode 12 files” — 0%");
+  h.el("bundle-cancel").click();
+  assert.deepEqual(h.cancels, ["bundle1"]);
+  assert.equal(await save.drained, false, "Cancel ends the wait for a file as for a video");
+  save.end();
+  h.owner.dispose();
+});
+
 test("a late answer for a cancelled copy relinks only while the document still has the same script and no save is running", async () => {
   let finish: ((r: DesktopBundleCopy) => void) | undefined;
   const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
@@ -312,14 +334,14 @@ test("main's carry during Save As shows progress, can be cancelled, and reports 
   const h = setup();
   h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 4, total: 8 });
   assert.equal(h.el("bundle-progress").hidden, false);
-  assert.equal(h.el("bundle-progress-text").textContent, "Copying videos to “Episode 12 v2 files” — 50%");
+  assert.equal(h.el("bundle-progress-text").textContent, "Copying files to “Episode 12 v2 files” — 50%");
   h.el("bundle-cancel").click();
   assert.deepEqual(h.cancels, ["carry1"]);
   h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 2, total: 2, result: { ok: true, copied: 2, kept: 0, missing: 0 } });
-  assert.equal(h.notices.shown[0]?.message, "Copied 2 videos to “Episode 12 v2 files”.");
+  assert.equal(h.notices.shown[0]?.message, "Copied 2 files to “Episode 12 v2 files”.");
   assert.equal(h.el("bundle-progress").hidden, true);
   h.carry({ job: "carry2", from: "Episode 12 files", to: "Episode 12 v2 files", done: 2, total: 2, result: { ok: true, copied: 0, kept: 1, missing: 1 } });
-  assert.equal(h.notices.shown[1]?.message, "1 video could not be copied to “Episode 12 v2 files”, so it does not open from this copy of the script. " +
+  assert.equal(h.notices.shown[1]?.message, "1 file could not be copied to “Episode 12 v2 files”, so it does not open from this copy of the script. " +
     "Look for it in “Episode 12 files”.");
   h.carry({ job: "carry3", from: "Episode 12 files", to: "Episode 12 v2 files", done: 1, total: 1, result: { ok: false, code: "CANCELLED", copied: 0 } });
   assert.equal(h.notices.shown.length, 2, "a carry that failed the save is reported by the save, not here");

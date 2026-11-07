@@ -3892,8 +3892,10 @@ async function caseGalleryVideoFile(target) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-video-"));
   const clip = path.join(dir, "take one.mp4");
   const notes = path.join(dir, "notes.txt");
+  const program = path.join(dir, "setup.exe");
   fs.writeFileSync(clip, Buffer.alloc(4096, 1));
   fs.writeFileSync(notes, "not a video");
+  fs.writeFileSync(program, "MZ");
   let app = null;
   try {
     app = await launchApp(target, { label: "gallery-video-file" });
@@ -3912,6 +3914,7 @@ async function caseGalleryVideoFile(target) {
     }
     await fileInput("__vf", clip);
     await fileInput("__tf", notes);
+    await fileInput("__xf", program);
 
     const token = await evalPage(cdp, "window.splitpageDesktop.grantVideoFile(document.getElementById('__vf').files[0])");
     record(tag + ": a video file with a path is granted an opaque token", typeof token === "string" && /^[0-9a-f]{32}$/.test(token), String(token));
@@ -3920,7 +3923,9 @@ async function caseGalleryVideoFile(target) {
     const made = await evalPage(cdp, "window.splitpageDesktop.grantVideoFile(new File([new Uint8Array(8)], 'forged.mp4', { type: 'video/mp4' }))");
     record(tag + ": a File the page made itself (no path) is refused", made === null, JSON.stringify(made));
     const text = await evalPage(cdp, "window.splitpageDesktop.grantVideoFile(document.getElementById('__tf').files[0])");
-    record(tag + ": a file that is not a video is refused", text === null, JSON.stringify(text));
+    record(tag + ": a document is granted too, since any file can be attached (#256)", typeof text === "string" && /^[0-9a-f]{32}$/.test(text), JSON.stringify(text));
+    const exe = await evalPage(cdp, "window.splitpageDesktop.grantVideoFile(document.getElementById('__xf').files[0])");
+    record(tag + ": a program is refused", exe === null, JSON.stringify(exe));
 
     const bogus = await evalPage(cdp, "window.splitpageDesktop.openVideoFile('" + "0".repeat(32) + "')");
     record(tag + ": a token main never gave opens nothing", !!bogus && bogus.ok === false && bogus.code === "UNKNOWN", JSON.stringify(bogus));
@@ -4078,6 +4083,106 @@ async function caseGalleryVideoBundle(target) {
     record(tag + ": Save As copies the videos the script links beside the new script, and nothing it does not link", !!landed &&
       JSON.stringify(there) === JSON.stringify(["take one.mp4"]), JSON.stringify(there));
     record(tag + ": the original copy stays where it was", fs.existsSync(copied), "");
+  } finally {
+    if (app) await teardown(app, tag, { expectForceKill: ENDS_DIRTY });
+    rmrf(userDataDir);
+    rmrf(dir);
+  }
+}
+
+async function caseGalleryAttachFile(target) {
+  const tag = target.name + " gallery: an attached PDF is copied beside the script and opens after a restart; a program is refused (#256)";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-attach-"));
+  const drops = path.join(dir, "drops");
+  fs.mkdirSync(drops);
+  const brief = path.join(drops, "brief.pdf");
+  const tool = path.join(drops, "setup.exe");
+  const bare = path.join(drops, "README");
+  fs.writeFileSync(brief, Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(4096, 1)]));
+  fs.writeFileSync(tool, "MZ");
+  fs.writeFileSync(bare, "no extension");
+  const scriptPath = writeFixture(dir, "Episode 12.splitpage", "Attach Smoke", [["Wide", "One."], ["Close", "Two."]]);
+  const folder = path.join(dir, "Episode 12 files");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const linksNamed = (name) => "(function(){ var out = []; (window.__splitpageFormats.state().rows || []).forEach(function (r) { " +
+    "var all = (r.imageLinks || []).slice(); (r.moreImages || []).forEach(function (it) { all = all.concat(it.links || []); }); " +
+    "all.forEach(function (l) { if (l && l.name === " + JSON.stringify(name) + ") out.push(l); }); }); return out; })()";
+  const modalOpen = "(function(){ var m = document.getElementById('bundle-modal'); return !!m && !m.hidden; })()";
+  async function drop(cdp, id, filePath) {
+    const made = await cdp.send("Runtime.evaluate", {
+      expression: "(function(){ var i = document.createElement('input'); i.type = 'file'; i.id = " + JSON.stringify(id) + "; i.hidden = true; document.body.appendChild(i); return i; })()",
+      returnByValue: false
+    });
+    await cdp.send("DOM.setFileInputFiles", { files: [filePath], objectId: made.result.objectId });
+    await evalPage(cdp, "(function(){ var dt = new DataTransfer(); dt.items.add(document.getElementById(" + JSON.stringify(id) + ").files[0]); " +
+      "var media = document.querySelectorAll('#rows .visual-media'); media[0].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()", { awaitPromise: false });
+  }
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "gallery-attach-file", userDataDir, fixtures: [scriptPath] });
+    await waitForRows(app.cdp, 20000);
+    let cdp = app.cdp;
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Attach Smoke'", 20000).catch(() => false);
+    const button = await evalPage(cdp, "(function(){ var b = document.querySelector('#rows [data-action=\"image-add\"]'); return b ? b.textContent : null; })()");
+    record(tag + ": an empty beat's button says Attach", button === "Attach", String(button));
+
+    await drop(cdp, "__a1", brief);
+    const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
+    const title = await evalPage(cdp, "document.getElementById('bundle-title').textContent");
+    const focused = await evalPage(cdp, "document.activeElement && document.activeElement.id");
+    record(tag + ": the drop asks whether to copy the file, with Copy it as the default", !!asked && title === "Copy this file into the script's folder?" && focused === "bundle-accept",
+      JSON.stringify({ asked, title, focused }));
+    await evalPage(cdp, "document.getElementById('bundle-accept').click()");
+    const bundled = await poll(cdp, "(function(){ var l = " + linksNamed("brief.pdf") + "[0]; return l && l.location && l.location.kind === 'bundled' ? l.location : null; })()", 20000).catch(() => null);
+    record(tag + ": the PDF's link names the copy, not a path", !!bundled && bundled.name === "brief.pdf" && !("path" in bundled), JSON.stringify(bundled));
+    const copied = path.join(folder, "brief.pdf");
+    record(tag + ": the copy is in “Episode 12 files”, byte for byte",
+      fs.existsSync(copied) && fs.statSync(copied).size === fs.statSync(brief).size, JSON.stringify(fs.existsSync(folder) ? fs.readdirSync(folder) : null));
+    const chip = await evalPage(cdp, "(function(){ var l = Array.prototype.filter.call(document.querySelectorAll('#rows .scene-gallery-line'), function (x) { " +
+      "return x.querySelector('.scene-gallery-link') && x.querySelector('.scene-gallery-link').textContent === 'brief.pdf'; })[0]; " +
+      "return l ? { host: l.querySelector('.scene-gallery-host').textContent, icon: !!l.querySelector('.scene-gallery-file-icon'), tiles: document.querySelectorAll('#rows .row')[0].querySelectorAll('.scene-gallery-tile').length } : null; })()");
+    record(tag + ": the beat shows the file as a line with its type and an icon, not as a picture", !!chip && chip.host === "PDF" && chip.icon && chip.tiles === 0, JSON.stringify(chip));
+
+    await drop(cdp, "__a2", tool);
+    const toast = await toastContaining(cdp, "“setup.exe” wasn't attached.", 5000).catch(() => false);
+    await sleep(300);
+    const toolLinks = await evalPage(cdp, linksNamed("setup.exe"));
+    record(tag + ": a dropped program is refused with a word and attaches nothing", !!toast && Array.isArray(toolLinks) && toolLinks.length === 0 &&
+      !(await evalPage(cdp, modalOpen)), JSON.stringify({ toast: !!toast, toolLinks }));
+    const forgedGrant = await evalPage(cdp, "window.splitpageDesktop.openVideoFile(" + JSON.stringify("0".repeat(32)) + ")");
+    record(tag + ": a token main never gave opens nothing", !!forgedGrant && forgedGrant.ok === false && forgedGrant.code === "UNKNOWN", JSON.stringify(forgedGrant));
+
+    await evalPage(cdp, "window.__splitpageFormats.save()");
+    const saved = await pollNode(async () => fs.readFileSync(scriptPath, "utf8").includes("brief.pdf") || null, 10000).catch(() => false);
+    record(tag + ": the saved script holds the copy's name and no path for it", !!saved && !fs.readFileSync(scriptPath, "utf8").includes(JSON.stringify(brief).slice(1, -1)), "");
+    await teardown(app, tag + " (first launch)");
+    app = null;
+
+    app = await launchApp(target, { label: "gallery-attach-file-relaunch", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    cdp = app.cdp;
+    const back = await poll(cdp, "(function(){ var l = " + linksNamed("brief.pdf") + "[0]; return l && l.location && l.location.kind === 'bundled' ? l.location.name : null; })()", 20000).catch(() => null);
+    record(tag + ": after a restart the script still links to the copied PDF", back === "brief.pdf", String(back));
+    await evalPage(cdp, "(function(){ var l = Array.prototype.filter.call(document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'), " +
+      "function (a) { return a.textContent === 'brief.pdf'; }); l[0].click(); return l.length; })()");
+    let opens = await pollNode(async () => { const list = await shell(cdp, "videoFileOpens", {}); return list && list.length ? list : null; }, 10000).catch(() => null);
+    record(tag + ": clicking the PDF opens the copy through main", !!opens && opens[0] === fs.realpathSync.native(copied), JSON.stringify(opens));
+
+    fs.writeFileSync(path.join(folder, "setup.exe"), "MZ");
+    fs.writeFileSync(path.join(folder, "README"), "x");
+    const refused = [
+      ["openBundledFile", "a program in the folder", "setup.exe"], ["openBundledFile", "an extensionless file in the folder", "README"],
+      ["openBundledFile", "a name with ..", "..\\drops\\brief.pdf"], ["openVideoPath", "a stored path to a program", tool],
+      ["openVideoPath", "a stored path to an extensionless file", bare], ["openVideoPath", "a network share", "\\\\localhost\\c$\\brief.pdf"]
+    ];
+    for (const [method, why, arg] of refused) {
+      const got = await evalPage(cdp, "window.splitpageDesktop." + method + "(" + JSON.stringify(arg) + ")");
+      record(tag + ": " + why + " opens nothing", !!got && got.ok === false && (got.code === "REFUSED" || got.code === "GONE"), JSON.stringify(got));
+    }
+    const pathOpen = await evalPage(cdp, "window.splitpageDesktop.openVideoPath(" + JSON.stringify(brief) + ")");
+    opens = await shell(cdp, "videoFileOpens", {});
+    record(tag + ": a stored path to the PDF opens, and main opened nothing refused", !!pathOpen && pathOpen.ok === true && !!opens && opens.length === 2 &&
+      opens.every((p) => /brief\.pdf$/i.test(p)), JSON.stringify({ pathOpen, opens }));
   } finally {
     if (app) await teardown(app, tag, { expectForceKill: ENDS_DIRTY });
     rmrf(userDataDir);
@@ -6075,6 +6180,7 @@ async function runTargetSuite(target, groupFilter) {
     ["draft: crash-recovery brings a picture back from the blob folder (#82)", () => caseDraftCrashWithImage(target)],
     ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
     ["gallery: a dropped video is copied beside the script and opens from there after a restart (#259)", () => caseGalleryVideoBundle(target)],
+    ["gallery: an attached PDF is copied beside the script and opens after a restart; a program is refused (#256)", () => caseGalleryAttachFile(target)],
     ["gallery: a pasted video link's thumbnail comes through main, by host and id (#141)", () => caseGalleryVideoThumbnail(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
     ["draft: file changed on disk while down (merge)", () => caseDraftFileChangedOnDisk(target, fixturesDir)],
