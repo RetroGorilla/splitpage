@@ -9,7 +9,7 @@ export interface DesktopWireFile {
 export interface DesktopWireStamp {
   lastModified?: number;
   size: number;
-  bundleClash?: { folder: string; name: string };
+  bundleRefused?: { reason: "clash" | "failed" | "cancelled"; folder: string; name: string };
 }
 
 export interface DesktopWireRecent {
@@ -43,7 +43,7 @@ export interface DesktopWireBundleProgress {
   total: number;
 }
 export type DesktopWireBundleCopy = { ok: true; name: string } | DesktopWireFailure;
-export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; failed: number } | (DesktopWireFailure & { copied?: number });
+export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; missing: number } | (DesktopWireFailure & { name?: string; copied?: number });
 export interface DesktopWireBundleCarryNote extends DesktopWireBundleProgress {
   from: string;
   to: string;
@@ -259,9 +259,7 @@ export interface DesktopIpcContract {
   "splitpage:video-path-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:bundle-file": DesktopChannelCall<[string, string], DesktopWireBundleCopy>;
   "splitpage:bundle-carry": DesktopChannelCall<[DesktopWireBundleCarryNote], void>;
-  "splitpage:bundle-cancel": DesktopChannelCall<[string], void>;
-  "splitpage:bundle-follow": DesktopChannelCall<[string], DesktopWireBundleCopy>;
-  "splitpage:bundle-progress": DesktopChannelCall<[DesktopWireBundleProgress], void>;
+  "splitpage:bundle-cancel": DesktopChannelCall<[string], void>;  "splitpage:bundle-progress": DesktopChannelCall<[DesktopWireBundleProgress], void>;
   "splitpage:bundled-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-thumbnail": DesktopChannelCall<[string, string], { ok: true; bytes: Uint8Array; mime: string } | DesktopWireFailure>;
   "splitpage:update-status": DesktopChannelCall<[], DesktopWireUpdateStatus> & { receive: [DesktopWireUpdateStatus] };

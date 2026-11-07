@@ -6,7 +6,6 @@ import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { DesktopPresence } from "../../application/desktop-presence.ts";
 import type { DesktopVideo } from "../../application/media/desktop-video.ts";
-import type { BundleHandover } from "../../application/save/file-saving-ports.ts";
 import type { VideoFiles } from "../../application/media/video-files.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChanges } from "../../application/preferences/preferences.ts";
@@ -82,7 +81,7 @@ export interface DroppedVideo {
 export interface VideoBundlePorts {
   readonly window: Window;
   readonly script: () => string | null;
-  readonly files: Pick<VideoFiles, "bundle" | "follow" | "cancelBundle">;
+  readonly files: Pick<VideoFiles, "bundle" | "cancelBundle">;
   readonly carries: DesktopVideo["onCarry"];
   readonly notices: Pick<NoticePort, "show">;
   readonly ownership: Operations;
@@ -94,7 +93,7 @@ export interface VideoBundlePorts {
 
 export interface VideoBundleMount {
   readonly offerAfterDrop: (rowId: string, videos: readonly DroppedVideo[], entry: UndoEntry | null) => void;
-  readonly beginMove: () => BundleHandover | null;
+  readonly drain: () => Promise<void> | null;
   readonly dispose: () => void;
 }
 

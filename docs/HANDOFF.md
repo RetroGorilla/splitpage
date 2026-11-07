@@ -597,12 +597,12 @@ tabs**.
   [rows-video-files.md](architecture/rows-video-files.md#copies-beside-the-script-259)).
   `splitpage:bundle-file(token, job)` copies a drop's granted file into the
   `<name> files` folder of the script the tab had when the copy was accepted
-  (`desktop/bundle-jobs.ts` binds it then); when a script save dialog's
-  write lands, main carries the names the written bytes link to the new
-  script's folder by itself, after failing the save before the write if one
-  of them is there with different bytes, and reports on
-  `splitpage:bundle-carry`; `splitpage:bundle-follow(job)` copies one finished
-  copy on to a script the tab reached by saving; `splitpage:bundled-file-open(name)`
+  (`desktop/bundle-jobs.ts` binds it then). Save As first waits for the
+  page's copies to finish (`drain`); then, before a script save dialog's
+  file is written, main carries the names the written bytes link to the new
+  script's folder as one job in the same queue, failing the save before the
+  script is written on a clash, a failed copy or Cancel, and reports on
+  `splitpage:bundle-carry`; `splitpage:bundled-file-open(name)`
   opens one name from that folder after `resolveBundledFile`. None takes a path
   (INV-34). Copies publish through a temporary name, and quitting while they
   run asks Wait or Quit anyway (`close-quit.ts`). `desktop/test/bundle-ipc.test.mjs` holds the refusals and

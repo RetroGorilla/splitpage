@@ -113,13 +113,6 @@ function createShellIpc({
       if (typeof job === "string") bundleJobs.cancel(event.sender, job);
     });
 
-    ipcHandle("splitpage:bundle-follow", async (event, job) => {
-      const tab = tabOf(event);
-      if (!tab) return { ok: false, code: "NO_FOLDER" };
-      if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
-      return bundleJobs.follow(event.sender, tab.id, job);
-    });
-
     ipcHandle("splitpage:bundled-file-open", async (event, name) => {
       const script = scriptOf(event);
       if (!script) return { ok: false, code: "REFUSED" };

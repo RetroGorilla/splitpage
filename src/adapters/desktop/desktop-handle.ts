@@ -19,6 +19,13 @@ export interface DesktopFileHandle {
   readonly isSameEntry: (other: unknown) => boolean;
 }
 
+function bundleRefusalText(refused: { readonly reason: string; readonly folder: string; readonly name: string }): string {
+  const folder = "“" + refused.folder + "”";
+  if (refused.reason === "clash") return folder + " already has a different “" + refused.name + "”. Rename or move that file, then save again";
+  if (refused.reason === "cancelled") return "copying the videos to " + folder + " was stopped, so the script was not saved there";
+  return "“" + refused.name + "” could not be copied to " + folder + ", so the script was not saved there";
+}
+
 function bridge(): DesktopPort {
   const port = desktopPort();
   if (!port) throw new Error("The desktop bridge is not available");
@@ -61,8 +68,8 @@ export function makeDesktopHandle(entry: Pick<DesktopFileEntry, "id" | "name"> |
         },
         close: function () {
           return bridge().writeFile(id, concatBytes(chunks)).then(function (written) {
-            const clash = written && written.bundleClash;
-            if (clash) throw new Error("“" + clash.folder + "” already has a different “" + clash.name + "”. Rename or move that file, then save again");
+            const refused = written && written.bundleRefused;
+            if (refused) throw new Error(bundleRefusalText(refused));
             const stamp = written && written.lastModified;
             return typeof stamp === "number" && isFinite(stamp) ? { lastModified: stamp } : undefined;
           });

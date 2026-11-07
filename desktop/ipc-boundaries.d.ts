@@ -63,7 +63,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
   pathToTabId: Map<string, string>;
   consumeTestDialogAnswer: () => unknown;
   testDialogsSeen: () => number;
-  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "noteSaveTarget" | "planSave" | "saveLanded">;
+  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "noteSaveTarget" | "carryForSave" | "saveLanded">;
 }
 
 export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "fileIds" | "recents" | "windowsById" | "testMode" | "draftStore" | "draftsPreviousSession"> {
@@ -93,7 +93,7 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   VIDEO_FILE_EXT: RegExp;
   openableVideoPath: typeof openableVideoPath;
   resolveBundledFile: typeof resolveBundledFile;
-  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "copy" | "cancel" | "follow">;
+  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "copy" | "cancel">;
   testVideoOpens: string[];
   videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopIpcResult<"splitpage:video-thumbnail">>;
   updateStatus: () => DesktopWireUpdateStatus;

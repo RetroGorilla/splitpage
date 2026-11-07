@@ -1,11 +1,10 @@
 import { bundleFolderName } from "../../../shared/video-path.ts";
-import { bundleVideoLinks, locatedVideoKey, rowSlots } from "../../core/document/gallery.ts";
+import { bundleVideoLinks } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 import type { DesktopBundleCarry, DesktopBundleCopy } from "../../application/media/desktop-video.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
-import type { BundleHandover } from "../../application/save/file-saving-ports.ts";
 import type { VideoLink } from "../../core/document/gallery.ts";
 import type { StepRow, Step } from "../../core/text/steps.ts";
 import type { DroppedVideo, VideoBundleMount, VideoBundlePorts } from "./ports.ts";
@@ -24,9 +23,8 @@ interface Offer {
   readonly rowId: string;
   readonly videos: readonly DroppedVideo[];
   readonly entry: UndoEntry | null;
-  ctx: ReturnType<VideoBundlePorts["ownership"]["capture"]>;
-  folder: string;
-  moves: number;
+  readonly ctx: ReturnType<VideoBundlePorts["ownership"]["capture"]>;
+  readonly folder: string;
 }
 
 interface Copy {
@@ -34,11 +32,6 @@ interface Copy {
   readonly offer: Offer;
   readonly video: DroppedVideo;
   readonly from: VideoLink;
-}
-
-interface Move {
-  readonly offers: ReadonlySet<Offer>;
-  readonly held: (() => void)[];
 }
 
 function quoted(name: string): string { return "“" + name + "”"; }
@@ -63,7 +56,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   const el = (id: string): HTMLElement | null => page.getElementById(id);
   let asking: Offer[] = [];
   const pending: Copy[] = [];
-  const moves = new Set<Move>();
+  const drainWaiters: (() => void)[] = [];
   let carrying: string | null = null;
   let jobs = 0;
 
@@ -87,7 +80,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     const script = ports.script();
     const list = dropped.filter(function (v) { return !!(v && v.name && v.path); });
     if (!script || !list.length) return;
-    asking.push({ rowId, videos: list, entry, ctx: ports.ownership.capture(), folder: bundleFolderName(script), moves: 0 });
+    asking.push({ rowId, videos: list, entry, ctx: ports.ownership.capture(), folder: bundleFolderName(script) });
     showPrompt();
   }
 
@@ -123,30 +116,9 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     ports.viewer.refresh();
   }
 
-  function stillLinked(c: Copy): boolean {
-    const key = locatedVideoKey(c.from);
-    return ports.document.read(function (doc) {
-      const i = rowIndexOf(doc, c.offer.rowId);
-      return i !== -1 && rowSlots((doc as { readonly rows: readonly unknown[] }).rows[i]).some(function (slot) {
-        return slot.links.some(function (l) { return !l.href && locatedVideoKey(l) === key; });
-      });
-    });
-  }
-
-  function movingWith(o: Offer): Move | null {
-    for (const m of moves) if (m.offers.has(o)) return m;
-    return null;
-  }
-
-  function copied(c: Copy, res: DesktopBundleCopy, placedAt: number): void {
+  function copied(c: Copy, res: DesktopBundleCopy): void {
     if (res.ok) {
-      const m = movingWith(c.offer);
-      if (m) { m.held.push(function () { copied(c, res, placedAt); }); return; }
       if (!ports.ownership.stillOwns(c.offer.ctx)) return;
-      if (placedAt !== c.offer.moves) {
-        if (stillLinked(c)) follow(c);
-        return;
-      }
       relink(c.offer, c.from, res.name);
       ports.notices.show("Copied " + quoted(c.video.name) + " to " + quoted(c.offer.folder) + ".", "ok");
       return;
@@ -160,15 +132,10 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   }
 
   function carried(note: DesktopBundleCarry, res: NonNullable<DesktopBundleCarry["result"]>): void {
-    if (res.ok && !res.failed) {
-      if (res.copied) ports.notices.show("Copied " + videos(res.copied) + " to " + quoted(note.to) + ".", "ok");
-      return;
-    }
-    if (!res.ok && res.code === "CANCELLED") {
-      ports.notices.show("Stopped copying videos to " + quoted(note.to) + ". The ones not copied are still in " + quoted(note.from) + ".", "warn", true);
-      return;
-    }
-    const missing = res.ok ? res.failed : Math.max(1, note.total - (res.copied || 0));
+    if (!res.ok) return;
+    if (res.copied) ports.notices.show("Copied " + videos(res.copied) + " to " + quoted(note.to) + ".", "ok");
+    const missing = res.missing;
+    if (!missing) return;
     ports.notices.show(videos(missing) + " could not be copied to " + quoted(note.to) + ", so " + (missing === 1 ? "it does" : "they do") +
       " not open from this copy of the script. Look for " + (missing === 1 ? "it" : "them") + " in " + quoted(note.from) + ".", "error", true);
   }
@@ -185,29 +152,26 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     showProgress("videos to " + quoted(note.to), note.done, note.total);
   }
 
-  function settle(c: Copy, res: DesktopBundleCopy, placedAt: number): void {
+  function drained(): void {
+    if (pending.length) return;
+    drainWaiters.splice(0).forEach(function (resolve) { resolve(); });
+  }
+
+  function settle(c: Copy, res: DesktopBundleCopy): void {
     if (!life.active()) return;
     const at = pending.indexOf(c);
     if (at !== -1) pending.splice(at, 1);
-    copied(c, res, placedAt);
+    copied(c, res);
     showNext();
-  }
-
-  function run(c: Copy, start: typeof ports.files.bundle): void {
-    const placedAt = c.offer.moves;
-    pending.push(c);
-    start(c.from, c.job, function (p) {
-      if (life.active() && !carrying) showProgress(copyText(c), p.done, p.total);
-    }).then(function (res) { settle(c, res, placedAt); }, function () { settle(c, { ok: false, code: "FAILED" }, placedAt); });
-  }
-
-  function follow(c: Copy): void {
-    run(c, ports.files.follow);
-    showNext();
+    drained();
   }
 
   function submit(o: Offer, video: DroppedVideo): void {
-    run({ job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } } }, ports.files.bundle);
+    const c: Copy = { job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } } };
+    pending.push(c);
+    ports.files.bundle(c.from, c.job, function (p) {
+      if (life.active() && !carrying) showProgress(copyText(c), p.done, p.total);
+    }).then(function (res) { settle(c, res); }, function () { settle(c, { ok: false, code: "FAILED" }); });
   }
 
   function answer(copy: boolean): void {
@@ -226,27 +190,10 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     if (carrying) ports.files.cancelBundle(carrying);
   }
 
-  function beginMove(): BundleHandover | null {
-    if (!life.active()) return null;
-    const offers = new Set<Offer>();
-    pending.forEach(function (c) { if (ports.ownership.stillOwns(c.offer.ctx)) offers.add(c.offer); });
-    if (!offers.size) return null;
-    offers.forEach(function (o) { o.moves++; });
-    const m: Move = { offers, held: [] };
-    moves.add(m);
-    function close(landed: boolean): void {
-      if (!moves.delete(m)) return;
-      if (landed && life.active()) {
-        const ctx = ports.ownership.capture();
-        const script = ports.script();
-        offers.forEach(function (o) {
-          o.ctx = ctx;
-          if (script) o.folder = bundleFolderName(script);
-        });
-      }
-      m.held.splice(0).forEach(function (apply) { apply(); });
-    }
-    return { landed: function () { close(true); }, abandoned: function () { close(false); } };
+  function drain(): Promise<void> | null {
+    if (!life.active() || !pending.length) return null;
+    showNext();
+    return new Promise(function (resolve) { drainWaiters.push(resolve); });
   }
 
   ports.carries(onCarry);
@@ -260,12 +207,12 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   return {
     offerAfterDrop: offer,
-    beginMove,
+    drain,
     dispose: function (): void {
       if (!life.active()) return;
       pending.forEach(function (c) { ports.files.cancelBundle(c.job); });
       pending.length = 0;
-      moves.clear();
+      drained();
       carrying = null;
       asking = [];
       const m = modal();

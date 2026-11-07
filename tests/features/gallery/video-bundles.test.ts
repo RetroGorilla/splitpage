@@ -21,7 +21,6 @@ interface Setup {
   script?: string | null;
   fold?: boolean;
   answer?: (link: VideoLink, job: string, onProgress: (p: { done: number; total: number }) => void) => Promise<DesktopBundleCopy>;
-  follow?: (job: string) => Promise<DesktopBundleCopy>;
 }
 
 function setup(opts: Setup = {}) {
@@ -33,7 +32,6 @@ function setup(opts: Setup = {}) {
   const ownership = fakeOwnership();
   const calls: { link: VideoLink; job: string }[] = [];
   const cancels: string[] = [];
-  const follows: { link: VideoLink; job: string }[] = [];
   const folds: (UndoEntry | null | undefined)[] = [];
   const edits: string[] = [];
   const ports: VideoBundlePorts = {
@@ -43,10 +41,6 @@ function setup(opts: Setup = {}) {
       bundle: (link, job, onProgress) => {
         calls.push({ link, job });
         return opts.answer ? opts.answer(link, job, onProgress) : Promise.resolve({ ok: true, name: "take one (2).mp4" });
-      },
-      follow: (link, job) => {
-        follows.push({ link, job });
-        return opts.follow ? opts.follow(job) : Promise.resolve({ ok: true, name: "take one (3).mp4" });
       },
       cancelBundle: (job) => { cancels.push(job); }
     },
@@ -64,7 +58,7 @@ function setup(opts: Setup = {}) {
     assert.ok(heard, "the feature listens for carries from main");
     heard(note);
   };
-  return { at, doc, notices, ownership, calls, cancels, follows, carry, folds, edits, owner, el, location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
+  return { at, doc, notices, ownership, calls, cancels, carry, folds, edits, owner, el, location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -207,118 +201,75 @@ test("a copy main dropped, because the tab opened another script, says nothing a
   h.owner.dispose();
 });
 
-test("a copy that finishes during Save As is held, then copied on by its own job and linked once the handover lands", async () => {
-  let finish: ((r: DesktopBundleCopy) => void) | undefined;
-  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+test("nothing pending means nothing to wait for before a Save As", () => {
+  const h = setup();
+  assert.equal(h.owner.drain(), null);
   h.owner.offerAfterDrop("r1", [DROP], ENTRY);
-  h.el("bundle-accept").click();
-  const move = h.owner.beginMove();
-  assert.ok(move && finish, "a running copy is handed over");
-  h.ownership.replace();
-  h.at.script = "Episode 12 v2.splitpage";
-  finish({ ok: true, name: "take one (2).mp4" });
-  await settle();
-  assert.deepEqual(h.location(), { kind: "path", path: DROP.path }, "nothing is linked while the save is still moving the document");
-  assert.equal(h.follows.length, 0);
-  move.landed();
-  await settle();
-  assert.deepEqual(h.follows.map((f) => f.job), ["bundle1"], "main is asked to copy that one job on to the new folder");
-  assert.deepEqual(h.location(), { kind: "bundled", name: "take one (3).mp4" }, "the link names the copy main placed in the new folder");
-  assert.equal(h.notices.shown[0]?.message, "Copied “take one.mp4” to “Episode 12 v2 files”.");
-  move.landed();
-  await settle();
-  assert.equal(h.notices.shown.length, 1, "a handover settles once");
-  assert.equal(h.follows.length, 1);
+  assert.equal(h.owner.drain(), null, "a prompt not yet answered has started no copy");
   h.owner.dispose();
 });
 
-test("an abandoned handover, or an unrelated replacement, never relinks; nothing running means nothing to hand over", async () => {
+test("a Save As waits for a running copy, which links the drop before the wait ends", async () => {
   let finish: ((r: DesktopBundleCopy) => void) | undefined;
   const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
-  assert.equal(h.owner.beginMove(), null);
   h.owner.offerAfterDrop("r1", [DROP], ENTRY);
   h.el("bundle-accept").click();
-  const move = h.owner.beginMove();
-  assert.ok(move && finish);
-  h.ownership.replace();
+  const draining = h.owner.drain();
+  assert.ok(draining && finish);
+  let done = false;
+  void draining.then(() => { done = true; assert.deepEqual(h.location(), { kind: "bundled", name: "take one (2).mp4" }); });
+  await settle();
+  assert.equal(done, false, "the wait lasts as long as the copy");
+  assert.equal(h.el("bundle-progress").hidden, false, "the wait shows the progress panel with Cancel");
   finish({ ok: true, name: "take one (2).mp4" });
-  await settle();
-  move.abandoned();
-  await settle();
+  await draining;
+  assert.equal(done, true);
+  assert.equal(h.notices.shown[0]?.message, "Copied “take one.mp4” to “Episode 12 files”.");
+  h.owner.dispose();
+});
+
+test("Cancel during the wait ends it, and the cancelled drop keeps its stored path", async () => {
+  let finish: ((r: DesktopBundleCopy) => void) | undefined;
+  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  h.el("bundle-accept").click();
+  const draining = h.owner.drain();
+  assert.ok(draining && finish);
+  h.el("bundle-cancel").click();
+  assert.deepEqual(h.cancels, ["bundle1"]);
+  finish({ ok: false, code: "CANCELLED" });
+  await draining;
   assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
-  assert.deepEqual(h.folds, []);
-  assert.deepEqual(h.follows, []);
-  h.owner.dispose();
-  let later: ((r: DesktopBundleCopy) => void) | undefined;
-  const kept = setup({ answer: () => new Promise((resolve) => { later = resolve; }), follow: async () => ({ ok: true, name: "take one (2).mp4" }) });
-  kept.owner.offerAfterDrop("r1", [DROP], ENTRY);
-  kept.el("bundle-accept").click();
-  const restored = kept.owner.beginMove();
-  assert.ok(restored && later);
-  later({ ok: true, name: "take one (2).mp4" });
-  await settle();
-  assert.deepEqual(kept.location(), { kind: "path", path: DROP.path }, "a copy that finished after the bytes were captured waits for the save");
-  restored.abandoned();
-  await settle();
-  assert.equal(kept.follows.length, 1, "main confirms where the copy is before the link changes");
-  assert.deepEqual(kept.location(), { kind: "bundled", name: "take one (2).mp4" });
-  kept.owner.dispose();
-});
-
-test("a held copy whose drop was undone is not copied on to the new folder", async () => {
-  let finish: ((r: DesktopBundleCopy) => void) | undefined;
-  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
-  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
-  h.el("bundle-accept").click();
-  const move = h.owner.beginMove();
-  assert.ok(move && finish);
-  (h.doc.rows[0] as unknown as { imageLinks: unknown[] }).imageLinks = [];
-  finish({ ok: true, name: "take one (2).mp4" });
-  await settle();
-  move.landed();
-  await settle();
-  assert.deepEqual(h.follows, [], "only a link the script still has is followed");
-  assert.deepEqual(h.notices.shown, []);
+  assert.equal(h.notices.shown[0]?.message, "Stopped copying “take one.mp4”. It links to where it is.");
+  const left = setup({ answer: () => new Promise(() => {}) });
+  left.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  left.el("bundle-accept").click();
+  const closing = left.owner.drain();
+  assert.ok(closing);
+  left.owner.dispose();
+  await closing;
   h.owner.dispose();
 });
 
-test("when main cannot copy a held copy on, the drop keeps its stored path and says so", async () => {
-  let finish: ((r: DesktopBundleCopy) => void) | undefined;
-  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }), follow: async () => ({ ok: false, code: "REFUSED" }) });
-  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
-  h.el("bundle-accept").click();
-  const move = h.owner.beginMove();
-  assert.ok(move && finish);
-  h.ownership.replace();
-  h.at.script = "Episode 12 v2.splitpage";
-  finish({ ok: true, name: "take one (2).mp4" });
-  await settle();
-  move.landed();
-  await settle();
-  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
-  assert.equal(h.notices.shown[0]?.message, "Could not copy “take one.mp4” to “Episode 12 v2 files”, so it links to where it is.");
-  assert.equal(h.el("bundle-progress").hidden, true);
-  h.owner.dispose();
-});
-
-test("main's carry after Save As shows progress, can be cancelled, and reports what it could not copy", () => {
+test("main's carry during Save As shows progress, can be cancelled, and reports what it could not copy", () => {
   const h = setup();
   h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 4, total: 8 });
   assert.equal(h.el("bundle-progress").hidden, false);
   assert.equal(h.el("bundle-progress-text").textContent, "Copying videos to “Episode 12 v2 files” — 50%");
   h.el("bundle-cancel").click();
   assert.deepEqual(h.cancels, ["carry1"]);
-  h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 2, total: 2, result: { ok: true, copied: 2, kept: 0, failed: 0 } });
+  h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 2, total: 2, result: { ok: true, copied: 2, kept: 0, missing: 0 } });
   assert.equal(h.notices.shown[0]?.message, "Copied 2 videos to “Episode 12 v2 files”.");
   assert.equal(h.el("bundle-progress").hidden, true);
-  h.carry({ job: "carry2", from: "Episode 12 files", to: "Episode 12 v2 files", done: 2, total: 2, result: { ok: true, copied: 1, kept: 0, failed: 1 } });
+  h.carry({ job: "carry2", from: "Episode 12 files", to: "Episode 12 v2 files", done: 2, total: 2, result: { ok: true, copied: 0, kept: 1, missing: 1 } });
   assert.equal(h.notices.shown[1]?.message, "1 video could not be copied to “Episode 12 v2 files”, so it does not open from this copy of the script. " +
     "Look for it in “Episode 12 files”.");
   h.carry({ job: "carry3", from: "Episode 12 files", to: "Episode 12 v2 files", done: 1, total: 1, result: { ok: false, code: "CANCELLED", copied: 0 } });
-  assert.equal(h.notices.shown[2]?.message, "Stopped copying videos to “Episode 12 v2 files”. The ones not copied are still in “Episode 12 files”.");
-  h.carry({ job: "carry4", from: "a files", to: "b files", done: 1, total: 1, result: { ok: true, copied: 0, kept: 1, failed: 0 } });
-  assert.equal(h.notices.shown.length, 3, "a carry that only found copies already there says nothing");
+  assert.equal(h.notices.shown.length, 2, "a carry that failed the save is reported by the save, not here");
+  assert.equal(h.el("bundle-progress").hidden, true);
+  h.carry({ job: "carry4", from: "a files", to: "b files", done: 1, total: 1, result: { ok: true, copied: 0, kept: 1, missing: 0 } });
+  assert.equal(h.notices.shown.length, 2, "a carry that only found copies already there says nothing");
   h.owner.dispose();
-  h.carry({ job: "carry5", from: "a files", to: "b files", done: 1, total: 1, result: { ok: true, copied: 1, kept: 0, failed: 0 } });
-  assert.equal(h.notices.shown.length, 3, "a disposed feature ignores late notes");
+  h.carry({ job: "carry5", from: "a files", to: "b files", done: 1, total: 1, result: { ok: true, copied: 1, kept: 0, missing: 0 } });
+  assert.equal(h.notices.shown.length, 2, "a disposed feature ignores late notes");
 });

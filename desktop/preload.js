@@ -299,11 +299,6 @@ if (location.origin === "splitpage://app") {
       return bundleJob(id, onProgress, () => invoke("splitpage:bundle-file", String(token || ""), id));
     },
 
-    followBundle(job, onProgress) {
-      const id = String(job || "");
-      return bundleJob(id, onProgress, () => invoke("splitpage:bundle-follow", id));
-    },
-
     onBundleCarry(cb) {
       bundleCarryCallback = typeof cb === "function" ? cb : null;
     },

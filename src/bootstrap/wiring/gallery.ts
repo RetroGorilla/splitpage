@@ -89,7 +89,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
       bundles: {
         window: window,
         script: scriptOnDisk,
-        files: { bundle: videoFiles.bundle, follow: videoFiles.follow, cancelBundle: videoFiles.cancelBundle },
+        files: { bundle: videoFiles.bundle, cancelBundle: videoFiles.cancelBundle },
         carries: desktopVideo.onCarry,
         notices: portNotices,
         ownership: portOwnership,
@@ -114,8 +114,8 @@ export function offerBundleAfterDrop(...args: Parameters<GalleryVideoMount["offe
   video.owner()?.offerAfterDrop(...args);
 }
 
-export function bundleHandoverForSave(): ReturnType<GalleryVideoMount["beginMove"]> {
-  return video.owner()?.beginMove() ?? null;
+export function drainBundlesForSave(): ReturnType<GalleryVideoMount["drain"]> {
+  return video.owner()?.drain() ?? null;
 }
 
 export const stopGalleryVideoFeature = video.stop;

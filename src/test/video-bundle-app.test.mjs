@@ -74,19 +74,32 @@ const until = async (check) => {
   return check();
 };
 
-test("a copy that finishes after Save As links the new script's document, with the real ownership in play", async () => {
+test("Save As waits for a running copy, and the bytes it writes link the copy, with the real ownership in play", async () => {
   setAutoSaveEnabled(false);
   const { fake, finishes } = heldBundle();
+  const written = [];
+  const write = fake.writeFile;
+  fake.writeFile = function (id, data) {
+    written.push(new TextDecoder().decode(data));
+    return write.call(this, id, data);
+  };
   try {
     const before = await openFromDesktop(fake, script("Episode 12", ID("1")), "Episode 12.splitpage");
     await dropAndAccept();
     assert.ok(await until(() => finishes.length === 1), "the copy reached main");
-    await saveDoc({ saveAs: true });
-    assert.notEqual(homeModule.currentHome().handle, before, "the document now lives in the new file");
+    const writesBefore = written.length;
+    let saved = false;
+    const saving = saveDoc({ saveAs: true }).then(() => { saved = true; });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(saved, false, "the save waits while the copy runs");
+    assert.equal(written.length, writesBefore, "nothing is written before the copy finishes");
+    assert.equal(document.getElementById("bundle-progress").hidden, false, "the wait shows the progress panel with Cancel");
     finishes[0]({ ok: true, name: "take one.mp4" });
-    assert.ok(await until(() => linkIn(currentDocument())?.kind === "bundled"), "the late copy relinks the document Save As moved");
+    await saving;
+    assert.notEqual(homeModule.currentHome().handle, before, "the document now lives in the new file");
     assert.deepEqual(linkIn(currentDocument()), { kind: "bundled", name: "take one.mp4" });
-    assert.deepEqual(fake._bundleFollows, [fake._bundleCalls[0].job], "main was asked to copy that job on beside the new script before the link changed");
+    assert.equal(written.length, writesBefore + 1);
+    assert.deepEqual(bundledNamesInProject(written[written.length - 1]), ["take one.mp4"], "the written script links the copy, so main carries it");
   } finally {
     window.__desktopTest.restoreBackend();
     document.getElementById("toast-host").replaceChildren();
@@ -122,7 +135,7 @@ test("a Save As whose folder already holds a different copy of a linked video fa
   let clash = true;
   const backend = Object.assign({}, fake, {
     writeFile: (id, data) => {
-      if (clash) { clash = false; return Promise.resolve({ size: 0, bundleClash: { folder: "Episode 12 v2 files", name: "take.mp4" } }); }
+      if (clash) { clash = false; return Promise.resolve({ size: 0, bundleRefused: { reason: "clash", folder: "Episode 12 v2 files", name: "take.mp4" } }); }
       writes.push(id);
       return fake.writeFile(id, data);
     }

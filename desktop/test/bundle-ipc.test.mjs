@@ -67,7 +67,7 @@ function makeSender(id) {
   return { sender, sent };
 }
 
-function harness({ source = null, grants = [], testMode = false, holdCopy = null } = {}) {
+function harness({ source = null, grants = [], testMode = false, holdCopy = null, holdCarry = null, copierOptions = {} } = {}) {
   const handlers = new Map();
   const listeners = new Map();
   const openedPaths = [];
@@ -83,8 +83,12 @@ function harness({ source = null, grants = [], testMode = false, holdCopy = null
     pathKey, fileIds
   });
   recents.load();
-  const real = createBundleCopier({ bundleFiles, progressEveryMs: 0 });
-  const copier = holdCopy ? { ...real, copyIn: async (...args) => { await holdCopy; return real.copyIn(...args); } } : real;
+  const real = createBundleCopier({ bundleFiles, progressEveryMs: 0, ...copierOptions });
+  const copier = {
+    ...real,
+    copyIn: async (...args) => { if (holdCopy) await holdCopy; return real.copyIn(...args); },
+    carry: async (...args) => { if (holdCarry) await holdCarry; return real.carry(...args); }
+  };
   const bundleJobs = createBundleJobs({
     copier, allow: VIDEO_FILE_EXT,
     scriptOfTab: (tabId) => {
@@ -228,70 +232,87 @@ test("a copy queued in script A is dropped once the tab has opened an unrelated 
   } finally { s.done(); }
 });
 
-test("a copy running when Save As lands finishes where it was bound; one queued behind it goes straight beside the new script", async () => {
-  const s = scratch();
-  try {
-    const other = path.join(path.dirname(s.clip), "other take.mp4");
-    fs.writeFileSync(other, Buffer.alloc(1024, 7));
-    const held = gate();
-    const ipc = harness({ source: s.script, grants: [["tok", s.clip], ["other", other]], holdCopy: held.shut });
-    const running = ipc.call("splitpage:bundle-file", "tok", "bundle1");
-    const queued = ipc.call("splitpage:bundle-file", "other", "bundle2");
-    await ipc.saveAs(s.copyScript);
-    ipc.tab.source = { kind: "file", absPath: s.copyScript };
-    held.open();
-    assert.deepEqual(await running, { ok: true, name: "take one.mp4" });
-    assert.deepEqual(await queued, { ok: true, name: "other take.mp4" });
-    assert.deepEqual(fs.readdirSync(s.folder), ["take one.mp4"]);
-    assert.deepEqual(fs.readdirSync(s.copyFolder), ["other take.mp4"], "the queued copy never lands in the script the document left");
-    assert.deepEqual(ipc.notes("splitpage:bundle-carry"), [], "the written bytes linked nothing bundled, so nothing is carried");
-    assert.deepEqual(await ipc.call("splitpage:bundle-follow", "bundle1"), { ok: true, name: "take one.mp4" });
-    assert.deepEqual(await ipc.call("splitpage:bundle-follow", "bundle2"), { ok: true, name: "other take.mp4" });
-    assert.deepEqual(fs.readdirSync(s.copyFolder).sort(), ["other take.mp4", "take one.mp4"], "following copies the first on, and the second stays put");
-  } finally { s.done(); }
-});
-
-test("a copy queued while the Save As dialog is open lands where it was bound; following it after the save copies it on", async () => {
+test("a copy queued in A writes only into A's folder, and the Save As script is written only after its carry", async () => {
   const s = scratch();
   try {
     const held = gate();
     const ipc = harness({ source: s.script, grants: [["tok", s.clip]], holdCopy: held.shut });
-    const first = ipc.call("splitpage:bundle-file", "tok", "bundle1");
-    const second = ipc.call("splitpage:bundle-file", "tok", "bundle2");
-    ipc.answers.push(s.copyScript);
-    const picked = await ipc.call("splitpage:save-file-dialog", { suggestedName: "Episode 12 v2.splitpage", script: true });
-    ipc.tab.source = { kind: "file", absPath: s.copyScript };
+    const copying = ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    const saving = ipc.saveAs(s.copyScript, { script: true }, project("take one.mp4"));
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(fs.existsSync(s.copyScript), false, "the script waits behind the copy and its own carry");
+    assert.equal(fs.existsSync(s.copyFolder), false);
     held.open();
-    assert.equal((await first).ok, true);
-    assert.equal((await second).ok, true, "a save in flight from the bound script is not an unrelated script");
-    assert.equal(fs.existsSync(s.copyFolder), false, "nothing reaches the new folder before its file is written");
-    assert.deepEqual(await ipc.call("splitpage:bundle-follow", "bundle1"), { ok: false, code: "REFUSED" }, "no save has landed there yet");
-    await ipc.call("splitpage:write-file", picked.id, new TextEncoder().encode(project()));
-    const followed = await ipc.call("splitpage:bundle-follow", "bundle1");
-    assert.deepEqual(followed, { ok: true, name: "take one.mp4" });
-    assert.deepEqual(fs.readdirSync(s.copyFolder), ["take one.mp4"]);
-    assert.deepEqual(fs.readFileSync(path.join(s.copyFolder, "take one.mp4")), fs.readFileSync(s.clip));
+    assert.deepEqual(await copying, { ok: true, name: "take one.mp4" });
+    const saved = await saving;
+    assert.equal(saved.written.bundleRefused, undefined);
+    assert.deepEqual(fs.readdirSync(s.folder), ["take one.mp4"], "the copy landed where it was accepted");
+    assert.deepEqual(fs.readdirSync(s.copyFolder), ["take one.mp4"], "the carry put it beside the new script before the script was written");
+    assert.equal(fs.existsSync(s.copyScript), true);
     const progress = ipc.notes("splitpage:bundle-progress").filter((p) => p.job === "bundle1");
     assert.ok(progress.every((p) => Object.keys(p).sort().join() === "done,job,total"), "progress names no path");
   } finally { s.done(); }
 });
 
-test("follow is refused for another sender, another tab, an unknown or malformed job, and a script the tab reached without a save", async () => {
+test("an undone drop still queued in A never reaches the Save As folder", async () => {
   const s = scratch();
   try {
-    const other = path.join(s.dir, "Other.splitpage");
-    fs.writeFileSync(other, "{}");
-    const ipc = harness({ source: s.script, grants: [["tok", s.clip]] });
-    assert.deepEqual(await ipc.call("splitpage:bundle-file", "tok", "bundle1"), { ok: true, name: "take one.mp4" });
-    assert.deepEqual(await ipc.as(makeSender(8), "splitpage:bundle-follow", "bundle1"), { ok: false, code: "UNKNOWN" }, "another sender's job id is not this job");
-    assert.deepEqual(await ipc.callAs({ id: "tab-b", source: { kind: "file", absPath: s.script } }, "splitpage:bundle-follow", "bundle1"), { ok: false, code: "UNKNOWN" });
-    assert.deepEqual(await ipc.callAs(null, "splitpage:bundle-follow", "bundle1"), { ok: false, code: "NO_FOLDER" });
-    assert.deepEqual(await ipc.call("splitpage:bundle-follow", "bundle2"), { ok: false, code: "UNKNOWN" });
-    assert.deepEqual(await ipc.call("splitpage:bundle-follow", "../x"), { ok: false, code: "REFUSED" });
-    assert.deepEqual(await ipc.call("splitpage:bundle-follow", 5), { ok: false, code: "REFUSED" });
-    ipc.tab.source = { kind: "file", absPath: other };
-    assert.deepEqual(await ipc.call("splitpage:bundle-follow", "bundle1"), { ok: false, code: "REFUSED" }, "opening a script is not saving to it");
-    assert.equal(fs.existsSync(path.join(s.dir, "Other files")), false, "nothing was copied for any refusal");
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "kept.mp4"), "kkkk");
+    const held = gate();
+    const ipc = harness({ source: s.script, grants: [["tok", s.clip]], holdCopy: held.shut });
+    const copying = ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    const saving = ipc.saveAs(s.copyScript, { script: true }, project("kept.mp4"));
+    held.open();
+    assert.deepEqual(await copying, { ok: true, name: "take one.mp4" });
+    await saving;
+    assert.deepEqual(fs.readdirSync(s.folder).sort(), ["kept.mp4", "take one.mp4"]);
+    assert.deepEqual(fs.readdirSync(s.copyFolder), ["kept.mp4"], "only what the saved bytes link is carried");
+  } finally { s.done(); }
+});
+
+test("back-to-back Save As, A to B then B to C before B's carry lands, checks C for clashes and writes no C", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "take.mp4"), "mine");
+    const b = s.copyScript;
+    const c = path.join(s.dir, "elsewhere", "C.splitpage");
+    fs.mkdirSync(path.join(s.dir, "elsewhere", "C files"), { recursive: true });
+    fs.writeFileSync(path.join(s.dir, "elsewhere", "C files", "take.mp4"), "theirs");
+    const held = gate();
+    const ipc = harness({ source: s.script, holdCarry: held.shut });
+    ipc.answers.push(b);
+    const toB = await ipc.call("splitpage:save-file-dialog", { suggestedName: "Episode 12 v2.splitpage", script: true });
+    const wroteB = ipc.call("splitpage:write-file", toB.id, new TextEncoder().encode(project("take.mp4")));
+    ipc.tab.source = { kind: "file", absPath: b };
+    ipc.answers.push(c);
+    const toC = await ipc.call("splitpage:save-file-dialog", { suggestedName: "C.splitpage", script: true });
+    const wroteC = ipc.call("splitpage:write-file", toC.id, new TextEncoder().encode(project("take.mp4")));
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(fs.existsSync(b), false, "B is written only after its carry");
+    held.open();
+    assert.equal((await wroteB).bundleRefused, undefined);
+    assert.deepEqual(await wroteC, { size: 0, bundleRefused: { reason: "clash", folder: "C files", name: "take.mp4" } });
+    assert.equal(fs.readFileSync(path.join(s.copyFolder, "take.mp4"), "utf8"), "mine");
+    assert.equal(fs.existsSync(c), false, "C's script is not written, so nothing links C's unrelated file");
+    assert.equal(fs.readFileSync(path.join(s.dir, "elsewhere", "C files", "take.mp4"), "utf8"), "theirs");
+  } finally { s.done(); }
+});
+
+test("a carry that cannot copy a file fails the save before the script is written, and what it copied stays", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "a.mp4"), "aaaa");
+    fs.writeFileSync(path.join(s.folder, "b.mp4"), "bbbb");
+    let links = 0;
+    const no = Object.assign(new Error("no"), { code: "EIO" });
+    const ipc = harness({ source: s.script, copierOptions: { link: async (from, to) => { if (++links > 1) throw no; return fs.promises.link(from, to); }, rename: async () => { throw no; } } });
+    const refused = await ipc.saveAs(s.copyScript, { script: true }, project("a.mp4", "b.mp4"));
+    assert.deepEqual(refused.written, { size: 0, bundleRefused: { reason: "failed", folder: "Episode 12 v2 files", name: "b.mp4" } });
+    assert.equal(fs.existsSync(s.copyScript), false);
+    assert.deepEqual(fs.readdirSync(s.copyFolder), ["a.mp4"], "nothing is deleted, and no temporary is left");
   } finally { s.done(); }
 });
 
@@ -345,18 +366,18 @@ test("a linked name already taken by different bytes in the new folder fails the
     fs.writeFileSync(path.join(s.folder, "same.mp4"), "same");
     const ipc = harness({ source: s.script });
     const refused = await ipc.saveAs(s.copyScript, { script: true }, project("same.mp4", "take.mp4"));
-    assert.deepEqual(refused.written, { size: 0, bundleClash: { folder: "Episode 12 v2 files", name: "take.mp4" } });
+    assert.deepEqual(refused.written, { size: 0, bundleRefused: { reason: "clash", folder: "Episode 12 v2 files", name: "take.mp4" } });
     assert.equal(fs.existsSync(s.copyScript), false, "the script was not written");
     assert.equal(fs.readFileSync(path.join(s.copyFolder, "take.mp4"), "utf8"), "theirs", "the other file is untouched");
     await ipc.bundleJobs.idle();
-    assert.deepEqual(ipc.notes("splitpage:bundle-carry"), [], "a refused save carries nothing");
+    assert.deepEqual(fs.readdirSync(s.copyFolder).sort(), ["same.mp4", "take.mp4"], "a refused save copies nothing");
     fs.renameSync(path.join(s.copyFolder, "take.mp4"), path.join(s.copyFolder, "their take.mp4"));
     const saved = await ipc.saveAs(s.copyScript, { script: true }, project("same.mp4", "take.mp4"));
-    assert.equal(saved.written.bundleClash, undefined);
+    assert.equal(saved.written.bundleRefused, undefined);
     assert.equal(fs.existsSync(s.copyScript), true);
     await ipc.bundleJobs.idle();
     const last = ipc.notes("splitpage:bundle-carry").pop();
-    assert.deepEqual(last && last.result, { ok: true, copied: 1, kept: 1, failed: 0 }, "identical bytes are no conflict, and are kept");
+    assert.deepEqual(last && last.result, { ok: true, copied: 1, kept: 1, missing: 0 }, "identical bytes are no conflict, and are kept");
     const testing = harness({ source: s.copyScript, testMode: true });
     assert.deepEqual(await testing.call("splitpage:bundled-file-open", "take.mp4"), { ok: true });
     assert.equal(fs.readFileSync(testing.testVideoOpens[0], "utf8"), "mine", "the saved link reopens this script's own video");

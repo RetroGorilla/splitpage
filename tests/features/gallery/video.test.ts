@@ -50,7 +50,7 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
     bundles: {
       window: window,
       script: () => null,
-      files: { bundle: async () => ({ ok: false, code: "UNAVAILABLE" }), follow: async () => ({ ok: false, code: "UNAVAILABLE" }), cancelBundle: () => {} },
+      files: { bundle: async () => ({ ok: false, code: "UNAVAILABLE" }), cancelBundle: () => {} },
       carries: () => {},
       notices: fakeNotices().notices,
       ownership: ownership.ownership,

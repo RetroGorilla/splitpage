@@ -173,7 +173,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
     thumbnailsAfterPaste: thumbnailsAfterPaste,
     thumbnailsOnBeatClick: thumbnailsOnBeatClick,
     offerAfterDrop: bundles.offerAfterDrop,
-    beginMove: bundles.beginMove,
+    drain: bundles.drain,
     dispose: function () {
       bundles.dispose();
       if (withdrawHook) withdrawHook();

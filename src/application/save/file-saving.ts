@@ -18,7 +18,7 @@ import type { AutoSaveChange } from "./autosave.ts";
 import type { DestinationKey, SaveJob, SaveLanding, WriterResult } from "./coordinator.ts";
 import type { SaveDestination } from "./destinations.ts";
 import type { LandedWrite, SaveCompletion } from "./save-completion.ts";
-import type { BundleHandover, FileSaveDialogs, FileSaveHandle, FileSavePorts, FileSaveRequest, FileSaveTarget, FileSavingMount, FileSavingPorts } from "./file-saving-ports.ts";
+import type { FileSaveDialogs, FileSaveHandle, FileSavePorts, FileSaveRequest, FileSaveTarget, FileSavingMount, FileSavingPorts } from "./file-saving-ports.ts";
 import type { AutoSaveTarget } from "./status.ts";
 
 interface WriteOptions {
@@ -100,11 +100,13 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
     showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
   }
 
+  // why: no copy into the old folder may still be running once the bytes that carry the folder along are captured
+  const draining = saveAs && job.owns() ? mountedPorts().bundles.drain() : null;
+  if (draining) await draining;
+
   const forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   const docIdAtSave = (currentDocument() as { readonly docId: string }).docId;
   const homeAtSave = currentHome();
-  // why: a copy that finishes after the bytes are captured is held, so it can be copied on to the new folder
-  let move: BundleHandover | null = saveAs && job.owns() ? mountedPorts().bundles.beginMove() : null;
   let captured = captureExportDocument({
     docId: forkDocId,
     stamp: { rev: ((currentDocument() as { readonly rev: number }).rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
@@ -185,13 +187,6 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
         return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
       }, naming));
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
-      const handover = move as BundleHandover | null;
-      if (handover) {
-        const landedHome = fileHome();
-        move = null;
-        if (job.owns() && landedHome && landedHome.handle === handle) handover.landed();
-        else handover.abandoned();
-      }
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);
       written = SAVED;
@@ -214,8 +209,6 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
     }
   } finally {
     undoRetarget();
-    const unsettled = move as BundleHandover | null;
-    if (unsettled) unsettled.abandoned();
   }
   return written;
 }

@@ -4015,9 +4015,9 @@ async function caseGalleryVideoBundle(target) {
     await waitForRows(app.cdp, 20000);
     let cdp = app.cdp;
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Bundle Smoke'", 20000).catch(() => false);
-    const bridgeHas = await evalPage(cdp, "['bundleVideoFile','followBundle','onBundleCarry','cancelBundle','openBundledFile'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; }) && " +
-      "!('carryBundle' in window.splitpageDesktop)");
-    record(tag + ": the bridge exposes bundleVideoFile, followBundle, onBundleCarry, cancelBundle and openBundledFile, and no way to ask for a carry", bridgeHas === true, String(bridgeHas));
+    const bridgeHas = await evalPage(cdp, "['bundleVideoFile','onBundleCarry','cancelBundle','openBundledFile'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; }) && " +
+      "!('carryBundle' in window.splitpageDesktop) && !('followBundle' in window.splitpageDesktop)");
+    record(tag + ": the bridge exposes bundleVideoFile, onBundleCarry, cancelBundle and openBundledFile, and no way to ask for a carry or a follow", bridgeHas === true, String(bridgeHas));
 
     await drop(cdp, "__b1", clip);
     const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
@@ -4067,8 +4067,6 @@ async function caseGalleryVideoBundle(target) {
     }
     const forged = await evalPage(cdp, "window.splitpageDesktop.bundleVideoFile(" + JSON.stringify("0".repeat(32)) + ", 'bundle1')");
     record(tag + ": a token main never gave copies nothing", !!forged && forged.ok === false && forged.code === "UNKNOWN", JSON.stringify(forged));
-    const followed = await evalPage(cdp, "window.splitpageDesktop.followBundle('bundle1')");
-    record(tag + ": following a job this tab never ran copies nothing", !!followed && followed.ok === false && followed.code === "UNKNOWN", JSON.stringify(followed));
     opens = await shell(cdp, "videoFileOpens", {});
     record(tag + ": main opened nothing for the refused names", !!opens && opens.length === 1, JSON.stringify(opens));
 
