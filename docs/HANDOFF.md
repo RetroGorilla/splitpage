@@ -609,8 +609,9 @@ tabs**.
   `splitpage:bundle-carry`; until a file lands, the tab's bundled open of a
   name the job lists falls back to the old folder, and that fallback dies
   with the job. For Don't copy, the choice answer gives the old files' paths
-  for the planned names; the save writes them and the document adopts them
-  as part of the save (`bundledPathsCommand`), so main remembers nothing.
+  for the planned names; the save writes them, and the document and every
+  undo and redo entry adopt them as part of the save (`rebaseRows` on the
+  undo owner), so main remembers nothing and Undo never restores a bundled name.
   `splitpage:bundled-file-open(name)` opens one name after
   `resolveBundledFile`. None takes a path (INV-34). Copies publish through a temporary name, and quitting while they
   run asks Wait or Quit anyway (`close-quit.ts`). `desktop/test/bundle-ipc.test.mjs` holds the refusals and

@@ -56,6 +56,14 @@ function harness(setup: Setup = {}) {
       state.changes++;
       return true;
     } },
+    history: { rebaseRows: (fix) => {
+      const before = JSON.stringify(doc.rows);
+      fix(doc.rows as unknown as Parameters<typeof fix>[0]);
+      log.push("rebaseRows");
+      if (JSON.stringify(doc.rows) === before) return "unchanged";
+      state.changes++;
+      return "applied";
+    } },
     deferred: {
       copyHistory: (fromId, toId) => { log.push("copyHistory:" + fromId + ">" + toId); },
       syncIdentity: () => { log.push("syncIdentity"); },

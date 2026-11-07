@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { confirmSavedNow, saveDoc, setAutoSaveEnabled, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import * as homeModule from "../bootstrap/wiring/location-owner.ts";
-import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { currentDocument, liveSession } from "../bootstrap/wiring/session-owner.ts";
 
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
@@ -361,6 +361,57 @@ test("Don't copy: the document adopts main's links with the save, so in-place sa
     videoFiles.openFile(rowSlots(currentDocument().rows[0])[0].links[0]);
     assert.ok(await until(() => (b.fake._videoPathOpens || []).length === 1));
     assert.deepEqual(b.fake._videoPathOpens, [TAKE_PATH], "and opens the original file");
+  } finally {
+    window.__desktopTest.restoreBackend();
+    document.getElementById("toast-host").replaceChildren();
+  }
+});
+
+test("after Don't copy, Undo and Redo never bring a bundled name back, so a later save and a reopen still open the original file", async () => {
+  setAutoSaveEnabled(false);
+  const b = askingBackend();
+  const modal = () => document.getElementById("bundle-save-modal");
+  const edit = (change) => { change(currentDocument().rows[0]); liveSession().noteEdit(); undoOwner().flush(); undoOwner().breakCoalescing(); };
+  const bundledNow = () => bundledNamesInProject(buildSplitpageFile(exportDocumentOf(currentDocument())));
+  const PATH_LINK = { kind: "path", path: TAKE_PATH };
+  try {
+    await openFromDesktop(b.fake, bundledScript(ID("b")), "Episode 12.splitpage");
+    edit((row) => { row.imageLinks = [{ ...row.imageLinks[0], size: 5 }]; });
+    edit((row) => { row.imageLinks = [{ ...row.imageLinks[0], size: 6 }]; });
+    assert.equal(undoOwner().undo().ok, true, "setup: one gallery edit waits on redo");
+    assert.deepEqual(undoOwner().sizes(), { undo: 1, redo: 1 });
+    b.names.push("Episode 12 v2.splitpage");
+    const saving = saveDoc({ saveAs: true });
+    assert.ok(await until(() => !modal().hidden), "the Save As asks");
+    document.getElementById("bundle-save-link").click();
+    await saving;
+    assert.deepEqual(linkIn(currentDocument()), PATH_LINK);
+    assert.deepEqual(undoOwner().sizes(), { undo: 1, redo: 1 }, "adopting the paths is no undo step, and the redo stays");
+
+    assert.equal(undoOwner().redo().ok, true);
+    assert.deepEqual(linkIn(currentDocument()), PATH_LINK, "redo gives the path");
+    assert.equal(currentDocument().rows[0].imageLinks[0].size, 6);
+    assert.equal(undoOwner().undo().ok, true);
+    assert.equal(undoOwner().undo().ok, true);
+    assert.deepEqual(linkIn(currentDocument()), PATH_LINK, "undo back past the save gives the path");
+    assert.equal(currentDocument().rows[0].imageLinks[0].size, 4);
+    assert.deepEqual(bundledNow(), []);
+
+    await saveDoc({});
+    const body = b.bodies[b.bodies.length - 1];
+    assert.deepEqual(bundledNamesInProject(body), [], "the save after Undo writes no bundled name for main to find beside the new script");
+    assert.deepEqual(pathLinksIn(body), [TAKE_PATH]);
+    assert.equal(unsavedChanges(), false);
+
+    b.fake.openBundledFile = function (name) { (this._bundledOpens = this._bundledOpens || []).push(name); return Promise.resolve({ ok: true }); };
+    const reopened = await b.fake.saveFileDialog({ suggestedName: "Episode 12 v2.splitpage" });
+    await b.fake.writeFile(reopened.id, new TextEncoder().encode(body));
+    const handle = makeDesktopHandle(reopened);
+    await openDocument({ kind: "file", file: await handle.getFile(), handle, options: { skipSnapshot: true, silent: true } });
+    videoFiles.openFile(rowSlots(currentDocument().rows[0])[0].links[0]);
+    assert.ok(await until(() => (b.fake._videoPathOpens || []).length === 1));
+    assert.deepEqual(b.fake._videoPathOpens, [TAKE_PATH], "the reopened script opens the original file");
+    assert.equal((b.fake._bundledOpens || []).length, 0, "and never the unrelated take.mp4 in the new script's folder");
   } finally {
     window.__desktopTest.restoreBackend();
     document.getElementById("toast-host").replaceChildren();

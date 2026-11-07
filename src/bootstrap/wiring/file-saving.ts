@@ -18,6 +18,7 @@ import { fileDelivery } from "./ports/files.ts";
 import { clock, ids } from "./ports/identity.ts";
 import { pictures } from "./ports/pictures.ts";
 import { beginBundleSave } from "./gallery.ts";
+import { undoOwner } from "./undo.ts";
 
 let started: FileSavingMount | null = null;
 
@@ -25,6 +26,7 @@ function fileSavingPorts(deferred: FileSavingDeferredPorts): FileSavingPorts {
   return {
     deferred,
     edits: { edit: runDocumentEdit },
+    history: { rebaseRows: (fix, stale) => undoOwner().rebaseRows(fix, stale) },
     ids,
     clock,
     document: { current: documentReader.current, stamp: (stamp) => stampDocument(stamp) },

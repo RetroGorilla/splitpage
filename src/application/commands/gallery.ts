@@ -1,6 +1,4 @@
 import type { DocumentRow } from "../../core/document/validated.ts";
-import { pathVideoLinks } from "../../core/document/gallery.ts";
-import type { BundledPathLink } from "../../core/document/gallery.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DeepReadonly } from "../session/document-session.ts";
@@ -29,33 +27,6 @@ function galleryChanges(rowId: string, fields: readonly string[]): ChangeSet {
   return changeSet({
     cells: fields.concat(STAMPS).map(function (field) { return { rowId: rowId, field: field }; })
   });
-}
-
-export function bundledPathsCommand(links: readonly BundledPathLink[]): Command {
-  return {
-    name: "gallery-bundled-paths",
-    needs: "edit",
-    plan: function (doc) {
-      const edits: { rowId: string; fields: string[]; draft: DocumentRow }[] = [];
-      doc.rows.forEach(function (row) {
-        const draft = copyOf(row) as DocumentRow;
-        if (!pathVideoLinks([draft], links)) return;
-        const fields = changedFields(row, draft);
-        if (fields.length) edits.push({ rowId: row.id, fields, draft });
-      });
-      if (!edits.length) return null;
-      return {
-        changes: changeSet({ cells: edits.flatMap(function (e) { return e.fields.map(function (field) { return { rowId: e.rowId, field: field }; }); }) }),
-        apply: function (live) {
-          edits.forEach(function (e) {
-            const target = live.rows.find(function (r) { return r.id === e.rowId; });
-            if (!target) throw new Error("scene " + e.rowId + " left the document before its links changed");
-            e.fields.forEach(function (field) { target[field] = copyOf(e.draft[field]); });
-          });
-        }
-      };
-    }
-  };
 }
 
 export function galleryCommand(rowId: string, edit: GalleryEdit, stamps: StampPorts): Command {

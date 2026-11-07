@@ -29,6 +29,7 @@ function harness(changes = 4, editsDuringNaming = 0, throwDuringNaming = false) 
       if (throwDuringNaming) throw new Error("paint failed");
       return true;
     } },
+    history: { rebaseRows: () => { throw new Error("unexpected link change"); } },
     document: { stamp: (stamp) => { log.push("stamp:" + stamp.name); return null; } },
     location: {
       amendHome: (record, fields) => { log.push("amendHome:" + Object.keys(fields).join(",")); amended.push({ ...fields }); return record; },

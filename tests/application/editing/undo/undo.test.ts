@@ -8,6 +8,7 @@ import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { cellRuns } from "../../../../src/test/_cell-runs.mjs";
 import { beatPos, caretAt } from "../../../../src/core/flow/flow.ts";
 import { initializeFlowParagraphs } from "../../../../src/application/commands/flow.ts";
+import { bundledVideoNames, pathVideoLinks } from "../../../../src/core/document/gallery.ts";
 
 function setup() {
   const doc: ValidatedDocument = migrateRows({ title: "Owner", rows: [{ id: "r1", visualText: "", audioText: "a" }] });
@@ -217,4 +218,35 @@ test("undo owner: configure installs hooks and its release puts the previous one
   release();
   u.owner.redo();
   assert.deepEqual(heard, ["undo"]);
+});
+
+test("rebasing rows moves every undo and redo entry to the path links, and drops entries that hold any other bundled name", () => {
+  const u = setup();
+  const row = (u.doc().rows as unknown as { imageLinks?: unknown }[])[0] as { imageLinks?: unknown };
+  const bundled = (name: string, duration: number) => ({ name, duration, location: { kind: "bundled", name } });
+  const edit = (links: unknown[]) => { row.imageLinks = links; u.owner.noteEdit(); u.owner.flush(); u.owner.breakCoalescing(); };
+  edit([bundled("a.mp4", 5)]);
+  edit([bundled("a.mp4", 5), bundled("c.mp4", 1)]);
+  edit([bundled("a.mp4", 5)]);
+  edit([bundled("a.mp4", 6)]);
+  assert.equal(u.owner.undo().ok, true);
+  assert.deepEqual(u.owner.sizes(), { undo: 3, redo: 1 });
+  const fix = (rows: unknown[]) => pathVideoLinks(rows, [{ name: "a.mp4", path: "C:\\Shows\\Episode 12 files\\a.mp4" }]);
+  const stale = (rows: unknown[]) => bundledVideoNames(rows).length > 0;
+  assert.equal(u.owner.rebaseRows(fix, stale), "applied");
+  const at = () => JSON.stringify(row.imageLinks);
+  const path = (duration: number) => JSON.stringify([{ name: "a.mp4", duration, location: { kind: "path", path: "C:\\Shows\\Episode 12 files\\a.mp4" } }]);
+  assert.equal(at(), path(5), "the live document links the path");
+  u.owner.noteEdit();
+  u.owner.flush();
+  assert.deepEqual(u.owner.sizes(), { undo: 1, redo: 1 }, "the change itself is no step, and the two edits about c.mp4 are gone");
+  assert.equal(u.owner.redo().ok, true);
+  assert.equal(at(), path(6), "redo gives the path");
+  assert.equal(u.owner.undo().ok, true);
+  assert.equal(at(), path(5), "undo gives the path");
+  assert.equal(u.owner.undo().ok, true);
+  assert.equal(row.imageLinks, undefined, "undoing the drop removes the link");
+  assert.equal(u.owner.redo().ok, true);
+  assert.equal(at(), path(5), "redoing the drop gives the path, not the bundled name");
+  assert.equal(u.owner.rebaseRows(fix, stale), "unchanged");
 });

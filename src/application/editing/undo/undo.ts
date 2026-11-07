@@ -5,7 +5,7 @@ import type { Step } from "../../../core/text/steps.ts";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import type { FlowSelectionPair } from "../../../core/flow/flow.ts";
 import { changedBetween, cosmetic as cosmeticFor, createUndoHistory, diffStates, planSteps, replayChanges, writePlanned } from "./history.ts";
-import type { CellMark, HtmlRunDecoder, PreparedReplay, ReplayResult, StepResult, UndoEntry, UndoState } from "./history.ts";
+import type { CellMark, HtmlRunDecoder, PreparedReplay, ReplayResult, RowsCheck, RowsFix, StepResult, UndoEntry, UndoState } from "./history.ts";
 
 export type UndoDirection = "undo" | "redo";
 
@@ -21,7 +21,9 @@ export interface UndoHooks {
   readonly onRefused?: (reason: string, dir: UndoDirection) => void;
 }
 
-export type UndoResult = StepResult | { ok: false; reason: string };
+export type RebaseOutcome = "applied" | "unchanged" | "refused";
+
+export type UndoResult =StepResult | { ok: false; reason: string };
 
 export interface UndoPorts {
   readonly held: () => ValidatedDocument | null;
@@ -44,6 +46,7 @@ export interface Undo {
   readonly redo: () => UndoResult;
   readonly settleAfterApply: (paragraphStarts?: readonly string[]) => void;
   readonly foldIntoEdit: (entry: UndoEntry | null | undefined, touches: (step: Step) => boolean, change: (draft: UndoState) => boolean) => boolean;
+  readonly rebaseRows: (fix: RowsFix, stale: RowsCheck) => RebaseOutcome;
   readonly breakCoalescing: () => void;
   readonly sizes: () => { undo: number; redo: number };
   readonly last: () => UndoEntry | null;
@@ -288,6 +291,44 @@ export function createUndo(ports: UndoPorts): Undo {
     return outcome.kind === "applied" || outcome.kind === "committed";
   }
 
+  function rebaseTask(fix: RowsFix): Replay {
+    return {
+      name: "rebase",
+      plan: function (doc): ReplayPlan | CommandRefusal | null {
+        const state = asState(doc);
+        const draft = clone(state);
+        fix(draft.rows);
+        const steps = diffStates(state, draft);
+        if (!steps.length) return null;
+        const planned = planSteps(runs, state, steps);
+        if (!planned.ok) return { refused: planned.reason };
+        return {
+          changes: replayChanges(runs, steps, planned),
+          apply: function (live) { writePlanned(asState(live), planned); },
+          settle: function () { }
+        };
+      }
+    };
+  }
+
+  function rebaseRows(fix: RowsFix, stale: RowsCheck): RebaseOutcome {
+    flush();
+    const live = held();
+    if (!live || live !== tracked || !base) return "refused";
+    history.rebaseRows(fix, stale);
+    fix(base.rows);
+    let outcome: ReplayOutcome;
+    applying = true;
+    try {
+      outcome = replays.amend(rebaseTask(fix));
+    } finally {
+      applying = false;
+    }
+    if (outcome.kind === "failed" || outcome.kind === "rejected") base = clone(held());
+    if (outcome.kind === "failed") throw outcome.error;
+    return outcome.kind === "rejected" ? "refused" : outcome.kind === "noop" ? "unchanged" : "applied";
+  }
+
   return {
     configure: configure,
     routeReplays: routeReplays,
@@ -302,6 +343,7 @@ export function createUndo(ports: UndoPorts): Undo {
     redo: function () { return run("redo"); },
     settleAfterApply: settleAfterApply,
     foldIntoEdit: foldIntoEdit,
+    rebaseRows: rebaseRows,
     breakCoalescing: function () {
       flush();
       history.breakCoalescing();

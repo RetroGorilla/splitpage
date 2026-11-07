@@ -160,8 +160,12 @@ function harness({ source = null, grants = [], testMode = false, holdCopy = null
     return { ...picked, plan, chosen, written };
   }
   const notes = (channel) => main.sent.filter(([c]) => c === channel).map(([, p]) => p);
+  const moveTab = (to) => {
+    tab.source = { kind: "file", absPath: to };
+    bundleJobs.noteScript(tab.id, to);
+  };
   return {
-    tab, tabs, main, call, send, sendAs, callAs, as, saveAs, notes, bundleJobs, fileIds, openedPaths, testVideoOpens, answers, videoFileGrants,
+    tab, tabs, main, call, send, sendAs, callAs, as, saveAs, notes, moveTab, bundleJobs, fileIds, openedPaths, testVideoOpens, answers, videoFileGrants,
     carriesEnded: () => carriesEnded
   };
 }
@@ -928,7 +932,7 @@ test("a cancel during the preflight, before the script is handed back, registers
   } finally { s.done(); }
 });
 
-test("the fallback goes when its tab closes or opens another script", async () => {
+test("the fallback goes when its tab closes or opens another script, even when it comes back to the copy without opening a file", async () => {
   const s = scratch();
   try {
     fs.mkdirSync(s.folder);
@@ -939,14 +943,11 @@ test("the fallback goes when its tab closes or opens another script", async () =
       const { held, link } = heldLink();
       const ipc = harness({ source: s.script, testMode: true, copierOptions: { link } });
       await ipc.saveAs(s.copyScript, { script: true }, project("take.mp4"), "copy");
-      ipc.tab.source = { kind: "file", absPath: s.copyScript };
+      ipc.moveTab(s.copyScript);
       assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), { ok: true }, leave + ": setup: the fallback works");
       if (leave === "close") ipc.bundleJobs.forgetTab(ipc.tab.id);
-      else {
-        ipc.tab.source = { kind: "file", absPath: other };
-        assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), { ok: false, code: "GONE" });
-      }
-      ipc.tab.source = { kind: "file", absPath: s.copyScript };
+      else ipc.moveTab(other);
+      ipc.moveTab(s.copyScript);
       assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), { ok: false, code: "GONE" }, leave + ": the record is gone, not just unused");
       held.open();
       await ipc.bundleJobs.idle();

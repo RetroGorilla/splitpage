@@ -121,12 +121,17 @@ export interface Standing {
   readonly later: boolean;
 }
 
+export type RowsFix = (rows: StepRow[]) => unknown;
+
+export type RowsCheck = (rows: StepRow[]) => boolean;
+
 export interface UndoHistory {
   readonly record: (steps: Step[], now: number, selection?: FlowSelectionPair) => void;
   readonly undo: (state: UndoState) => StepResult;
   readonly redo: (state: UndoState) => StepResult;
   readonly prepare: (dir: "undo" | "redo", state: UndoState) => PreparedReplay | null;
   readonly forget: (touched: Touched) => void;
+  readonly rebaseRows: (fix: RowsFix, stale: RowsCheck) => void;
   readonly standing: (entry: UndoEntry | null | undefined, hits: (entry: UndoEntry) => boolean) => Standing;
   readonly amend: (entry: UndoEntry, steps: Step[]) => void;
   readonly initializeParagraphs: (starts: readonly string[]) => void;
@@ -805,6 +810,40 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     done.forEach(function (e) { if (e.evicted && hits(e.evicted)) e.evicted = null; });
   }
 
+  function rebaseRows(fix: RowsFix, stale: RowsCheck): void {
+    function rebased(entry: UndoEntry): boolean {
+      let kept = true;
+      entry.steps = entry.steps.filter(function (s) {
+        if (s.op === "rowField") {
+          const before: StepRow = { [s.key]: s.before }, after: StepRow = { [s.key]: s.after };
+          fix([before, after]);
+          s.before = before[s.key];
+          s.after = after[s.key];
+          if (stale([before, after])) kept = false;
+          return !same(s.before, s.after);
+        }
+        if (s.op === "insertRow" || s.op === "deleteRow") {
+          fix([s.row]);
+          if (stale([s.row])) kept = false;
+        }
+        return true;
+      });
+      return kept && entry.steps.length > 0;
+    }
+    function keep(list: UndoEntry[]): void {
+      const kept = list.filter(rebased);
+      list.length = 0;
+      kept.forEach(function (e) { list.push(e); });
+    }
+    const had = done.length + undone.length;
+    keep(done);
+    keep(undone);
+    if (current) keep(current.redo);
+    if (done.length + undone.length !== had) parked = null;
+    if (parked) keep(parked.redo);
+    done.forEach(function (e) { if (e.evicted && !rebased(e.evicted)) e.evicted = null; });
+  }
+
   function standing(entry: UndoEntry | null | undefined, hits: (entry: UndoEntry) => boolean): Standing {
     const at = entry ? done.indexOf(entry) : -1;
     return {
@@ -873,6 +912,7 @@ export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
     redo: function (state) { return step("redo", state); },
     prepare: prepare,
     forget: forget,
+    rebaseRows: rebaseRows,
     standing: standing,
     amend: amend,
     initializeParagraphs,

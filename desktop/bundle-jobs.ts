@@ -312,6 +312,10 @@ function createBundleJobs(options: {
     return found;
   }
 
+  function noteScript(tabId: string, script: string | null): void {
+    for (const open of [...opens]) if (open.tabId === tabId && open.landed && !(script && same(script, open.to))) opens.delete(open);
+  }
+
   function forgetTab(tabId: string): void {
     for (const open of [...opens]) if (open.tabId === tabId) opens.delete(open);
     for (const [fileId, noted] of [...saveTargets]) if (noted.tabId === tabId) saveTargets.delete(fileId);
@@ -331,7 +335,7 @@ function createBundleJobs(options: {
     return idle();
   }
 
-  return { abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteSaveTarget, openBundled, planSave, prepareWrite };
+  return { abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteSaveTarget, noteScript, openBundled, planSave, prepareWrite };
 }
 
 export type { BundleJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };

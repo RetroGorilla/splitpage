@@ -229,7 +229,10 @@ const TABSTRIP_ALLOWLIST: typeof STATIC_ALLOWLIST = {
 const {
   tabs, windowsById, webContentsIdToTabId, pathToTabId,
   mintUniqueTabId, mintUniqueWindowId, firstWindowRecord, claimRoutingKey, indexTabSource, unindexTabSource
-} = createTabRegistry({ pathKey });
+} = createTabRegistry({
+  pathKey,
+  sourceChanged: (tab) => bundleJobs.noteScript(tab.id, tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null)
+});
 
 let lastFocusedWindowId: string | null = null;
 let firstTabCreated = false;

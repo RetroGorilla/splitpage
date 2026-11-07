@@ -2,7 +2,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
 import { fileTitleCommand } from "../commands/title.ts";
-import { bundledPathsCommand } from "../commands/gallery.ts";
+import { bundledVideoNames, pathVideoLinks } from "../../core/document/gallery.ts";
 import type { BundledPathLink } from "../../core/document/gallery.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
@@ -29,6 +29,7 @@ export interface CompletedWrite<B = ValidatedDocument, P extends B = B> {
 
 export interface SaveCompletionPorts<B = ValidatedDocument, P extends B = B> {
   readonly edits: FileSavingPorts["edits"];
+  readonly history: FileSavingPorts["history"];
   readonly document: Pick<FileSavingPorts["document"], "stamp">;
   readonly location: Pick<DocumentLocation<B>, "markWrittenOut" | "amendHome">;
   readonly deferred: FileSavingDeferredPorts<P>;
@@ -38,6 +39,10 @@ export interface SaveCompletionPorts<B = ValidatedDocument, P extends B = B> {
 export interface SaveCompletion<B = ValidatedDocument, P extends B = B> {
   readonly confirmWrite: (write: CompletedWrite<B, P>) => void;
   readonly adoptSavedCopyDocId: (forkDocId: string | null, docIdAtSave: string, owned: boolean) => void;
+}
+
+function staleRows(rows: readonly unknown[]): boolean {
+  return bundledVideoNames(rows).length > 0;
 }
 
 export function createSaveCompletion<B, P extends B = B>(ports: SaveCompletionPorts<B, P>): SaveCompletion<B, P> {
@@ -59,10 +64,10 @@ export function createSaveCompletion<B, P extends B = B>(ports: SaveCompletionPo
     }
     adoptSavedCopyDocId(write.forkDocId, write.docIdAtSave, true);
     const named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
-    const relinking = !!write.links && write.links.length > 0;
-    const linked = !relinking || ports.edits.edit(bundledPathsCommand(write.links as readonly BundledPathLink[]));
-    const savedChanges = write.seqAtSave + (write.naming ? 1 : 0) + (relinking ? 1 : 0);
-    if (named && linked && ports.saves.changes() === savedChanges) ports.saves.confirmSavedNow();
+    const links = write.links && write.links.length ? write.links : null;
+    const relinked = links ? ports.history.rebaseRows(function (rows) { return pathVideoLinks(rows, links); }, staleRows) : "unchanged";
+    const savedChanges = write.seqAtSave + (write.naming ? 1 : 0) + (relinked === "applied" ? 1 : 0);
+    if (named && relinked !== "refused" && ports.saves.changes() === savedChanges) ports.saves.confirmSavedNow();
   }
 
   return Object.freeze({ confirmWrite, adoptSavedCopyDocId });

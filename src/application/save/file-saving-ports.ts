@@ -9,6 +9,7 @@ import type { DocumentLocation } from "../location/document-location.ts";
 import type { PictureStore } from "../media/picture-store.ts";
 import type { DocumentReader } from "../session/document-reader.ts";
 import type { DocumentEdits } from "../session/document-edits.ts";
+import type { Undo } from "../editing/undo/undo.ts";
 import type { Stamp } from "../session/document-session.ts";
 import type { Operations } from "../session/operation.ts";
 import type { AutoSaveChange, AutoSavePolicy } from "./autosave.ts";
@@ -55,6 +56,7 @@ export interface AutoSaveMenuItem {
 
 export interface FileSavingPorts {
   readonly edits: Pick<DocumentEdits, "edit">;
+  readonly history: Pick<Undo, "rebaseRows">;
   readonly deferred: FileSavingDeferredPorts;
   readonly ids: Pick<IdSource, "docId">;
   readonly clock: Clock;
