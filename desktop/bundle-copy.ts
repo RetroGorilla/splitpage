@@ -18,6 +18,7 @@ type BundleCopyResult = { ok: true; name: string } | { ok: false; code: "REFUSED
 type BundleCarryResult = { ok: true; copied: number; kept: number; failed: number } | { ok: false; code: "CANCELLED"; copied: number };
 
 const NUMBERED_TRIES = 999;
+const COMPARE_CHUNK = 1024 * 1024;
 
 function createBundleCopier(options: {
   bundleFiles: Pick<typeof VideoEmbed, "bundleFolderOf" | "bundleableName" | "missingFile" | "numberedName" | "realBundleFolder" | "resolveBundledFile" | "samePath">;
@@ -69,6 +70,25 @@ function createBundleCopier(options: {
     } catch (e) { return missingFile(e) ? null : -1; }
   }
 
+  async function sameBytes(a: string, b: string, signal: AbortSignal): Promise<boolean | "cancelled"> {
+    let fa: NodeFsPromises.FileHandle | null = null, fb: NodeFsPromises.FileHandle | null = null;
+    try {
+      fa = await fsp.open(a, "r");
+      fb = await fsp.open(b, "r");
+      const ba = Buffer.alloc(COMPARE_CHUNK), bb = Buffer.alloc(COMPARE_CHUNK);
+      for (;;) {
+        if (signal.aborted) return "cancelled";
+        const [ra, rb] = await Promise.all([fa.read(ba, 0, COMPARE_CHUNK, null), fb.read(bb, 0, COMPARE_CHUNK, null)]);
+        if (ra.bytesRead !== rb.bytesRead) return false;
+        if (ra.bytesRead === 0) return true;
+        if (!ba.subarray(0, ra.bytesRead).equals(bb.subarray(0, rb.bytesRead))) return false;
+      }
+    } catch { return false; } finally {
+      if (fa) { try { await fa.close(); } catch { } }
+      if (fb) { try { await fb.close(); } catch { } }
+    }
+  }
+
   async function copyIn(source: string, scriptPath: string, allow: RegExp, onProgress: BundleProgress, signal: AbortSignal): Promise<BundleCopyResult> {
     const base = path.basename(source);
     if (!bundleableName(base, allow)) return { ok: false, code: "REFUSED" };
@@ -90,7 +110,11 @@ function createBundleCopier(options: {
       if (!bundleableName(name, allow)) return { ok: false, code: "REFUSED" };
       const target = path.join(folder.path, name);
       const size = await sizeOfFile(target);
-      if (size === total) return { ok: true, name };
+      if (size === total) {
+        const same = await sameBytes(source, target, signal);
+        if (same === "cancelled") return { ok: false, code: "CANCELLED" };
+        if (same) return { ok: true, name };
+      }
       if (size !== null) continue;
       const got = await writeCopy(source, target, signal, progress.add);
       if (got === "taken") continue;
@@ -124,7 +148,11 @@ function createBundleCopier(options: {
     for (const s of sources) {
       const target = path.join(folder.path, s.name);
       const size = await sizeOfFile(target);
-      if (size === s.size) { kept++; progress.add(s.size); continue; }
+      if (size === s.size) {
+        const same = await sameBytes(s.from, target, signal);
+        if (same === "cancelled") return { ok: false, code: "CANCELLED", copied };
+        if (same) { kept++; progress.add(s.size); continue; }
+      }
       if (size !== null) { failed++; continue; }
       const got = await writeCopy(s.from, target, signal, progress.add);
       if (got === "cancelled") return { ok: false, code: "CANCELLED", copied };

@@ -71,6 +71,25 @@ test("the same file dropped again, or a file already in the folder, links to the
   } finally { s.done(); }
 });
 
+test("a different video of the same name and size is never taken for the dropped one", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    const lookalike = Buffer.alloc(4096, 7);
+    lookalike[4095] = 8;
+    fs.writeFileSync(path.join(s.folder, "take one.mp4"), lookalike);
+    assert.deepEqual(await copier.copyIn(s.clip, s.script, VIDEO_FILE_EXT, () => {}, live()), { ok: true, name: "take one (2).mp4" });
+    assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), lookalike, "the other video is untouched");
+    assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one (2).mp4")), fs.readFileSync(s.clip));
+    const to = path.join(s.dir, "copy", "Episode 12 v2.splitpage");
+    fs.mkdirSync(path.join(s.dir, "copy", "Episode 12 v2 files"), { recursive: true });
+    fs.writeFileSync(path.join(s.dir, "copy", "Episode 12 v2 files", "take one (2).mp4"), lookalike);
+    assert.deepEqual(await copier.carry(s.script, to, ["take one (2).mp4"], VIDEO_FILE_EXT, () => {}, live()), { ok: true, copied: 0, kept: 0, failed: 1 },
+      "a carry keeps a different file of the same size and counts the name as not copied");
+    assert.deepEqual(fs.readFileSync(path.join(s.dir, "copy", "Episode 12 v2 files", "take one (2).mp4")), lookalike);
+  } finally { s.done(); }
+});
+
 test("a file that is not on the allowlist, gone, or a directory is refused before anything is written", async () => {
   const s = scratch();
   try {

@@ -300,6 +300,7 @@ test("Save As of a written-out script forks its id, retargets to the picked file
     "syncIdentity",
     "confirmSavedNow",
     "remember:copy.splitpage",
+    "carry:pilot.md>copy.splitpage:",
     "imagesLeftOut:0:copy.splitpage"
   ]);
   assert.deepEqual(saveAs.moves, ["moved", "moved"]);
@@ -425,9 +426,28 @@ test("Save As from a script on disk carries the script's bundled videos to the n
   assert.deepEqual(carries(plain), [], "saving in place carries nothing");
   const none = harness({ home: FILE_HOME, writtenOut: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
   assert.deepEqual(await write(none, "saveAs"), { kind: "saved" });
-  assert.deepEqual(carries(none), [], "no bundled videos, nothing to carry");
+  assert.deepEqual(carries(none), ["carry:pilot.md>copy.splitpage:"], "with no bundled videos yet, a copy still running can still be carried");
   const first = harness({ pick: { kind: "handle", handle: fileHandle("first.splitpage"), picked: true } });
   first.doc.rows.push(...(migrateRows({ rows: withVideos }, fakeMigration().ports).rows));
   assert.deepEqual(await write(first, "save"), { kind: "saved" });
   assert.deepEqual(carries(first), [], "a script never saved has no folder to carry from");
+});
+
+test("a copy that lands while the Save As dialog is open is carried too, though the write captured its old path", async () => {
+  const h = harness({ home: FILE_HOME, writtenOut: true });
+  h.doc.rows.push(...(migrateRows({ rows: [{ id: "r1", imageLinks: [{ name: "take.mp4", size: 3, location: { kind: "path", path: "C:\\v\\take.mp4" }, poster: true }] }] }, fakeMigration().ports).rows));
+  h.mounted.dispose();
+  const ports: FileSavingPorts = { ...h.ports, files: { ...h.ports.files, pick: () => {
+    const link = h.doc.rows.find((r) => r.id === "r1")?.imageLinks?.[0];
+    assert.ok(link, "setup: the dropped link");
+    link.location = { kind: "bundled", name: "take.mp4" };
+    return Promise.resolve({ kind: "handle", handle: fileHandle("copy.splitpage"), picked: true });
+  } } };
+  const mounted = mountFileSaving(ports) as FileSavingMount;
+  try {
+    assert.deepEqual(await mounted.destination().write(job("saveAs").value), { kind: "saved" });
+    const written = h.log.find((line) => line.startsWith("write:copy.splitpage"));
+    assert.ok(written, "setup: the new file was written");
+    assert.deepEqual(h.log.filter((line) => line.startsWith("carry:")), ["carry:pilot.md>copy.splitpage:take.mp4"]);
+  } finally { mounted.dispose(); }
 });

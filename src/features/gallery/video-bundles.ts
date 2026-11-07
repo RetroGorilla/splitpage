@@ -29,7 +29,7 @@ interface Offer {
 
 type Work =
   | { readonly kind: "copy"; readonly offer: Offer; readonly video: DroppedVideo }
-  | { readonly kind: "carry"; readonly toFileId: string; readonly names: readonly string[]; readonly from: string; readonly to: string };
+  | { readonly kind: "carry"; readonly toFileId: string; readonly names: string[]; readonly from: string; readonly to: string };
 
 function quoted(name: string): string { return "“" + name + "”"; }
 
@@ -127,6 +127,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     if (res.ok) {
       if (!ports.ownership.stillOwns(work.offer.ctx)) return;
       relink(work.offer, from, res.name);
+      queue.forEach(function (w) { if (w.kind === "carry" && w.names.indexOf(res.name) === -1) w.names.push(res.name); });
       ports.notices.show("Copied " + quoted(work.video.name) + " to " + quoted(work.offer.folder) + ".", "ok");
       return;
     }
@@ -155,6 +156,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     if (current || !life.active()) return;
     const work = queue.shift();
     if (!work) { hideProgress(); return; }
+    if (work.kind === "carry" && !work.names.length) { pump(); return; }
     const job = "bundle" + (++jobs);
     current = { job, work };
     const progress = function (p: { done: number; total: number }): void {
@@ -191,12 +193,16 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   function cancel(): void {
     if (!current) return;
-    queue.length = 0;
+    for (let i = queue.length - 1; i >= 0; i--) if ((queue[i] as Work).kind === "copy") queue.splice(i, 1);
     ports.files.cancelBundle(current.job);
   }
 
+  function copying(): boolean {
+    return (!!current && current.work.kind === "copy") || queue.some(function (w) { return w.kind === "copy"; });
+  }
+
   function carry(toFileId: string, names: readonly string[], fromScript: string, toScript: string): void {
-    if (!life.active() || !toFileId || !names.length) return;
+    if (!life.active() || !toFileId || (!names.length && !copying())) return;
     queue.push({ kind: "carry", toFileId, names: names.slice(), from: bundleFolderName(fromScript), to: bundleFolderName(toScript) });
     pump();
   }

@@ -188,6 +188,43 @@ test("Cancel stops the copy in main and the ones waiting behind it", async () =>
   h.owner.dispose();
 });
 
+test("Cancel during a copy keeps a Save As carry waiting behind it", async () => {
+  let finish: ((r: DesktopBundleCopy) => void) | undefined;
+  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+  h.owner.offerAfterDrop("r1", [DROP, { ...DROP, name: "b.mov", path: "C:\\Drops\\b.mov" }], ENTRY);
+  h.el("bundle-accept").click();
+  h.owner.carryAfterSaveAs("fid", ["a.mp4"], "Episode 12.splitpage", "Episode 12 v2.splitpage");
+  h.el("bundle-cancel").click();
+  assert.ok(finish);
+  finish({ ok: false, code: "CANCELLED" });
+  await settle();
+  await settle();
+  assert.equal(h.calls.length, 1, "the second video is not copied");
+  assert.deepEqual(h.carries.map((c) => [c.toFileId, c.names]), [["fid", ["a.mp4"]]], "the carry still runs");
+  assert.deepEqual(h.notices.shown.map((n) => n.message), ["Stopped copying “take one.mp4”. It links to where it is.", "Copied 1 video to “Episode 12 v2 files”."]);
+  h.owner.dispose();
+});
+
+test("a copy that lands after Save As is carried to the new script's folder", async () => {
+  let finish: ((r: DesktopBundleCopy) => void) | undefined;
+  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  h.el("bundle-accept").click();
+  h.owner.carryAfterSaveAs("fid", [], "Episode 12.splitpage", "Episode 12 v2.splitpage");
+  assert.ok(finish);
+  finish({ ok: true, name: "take one (2).mp4" });
+  await settle();
+  await settle();
+  assert.deepEqual(h.location(), { kind: "bundled", name: "take one (2).mp4" });
+  assert.deepEqual(h.carries.map((c) => [c.toFileId, c.names]), [["fid", ["take one (2).mp4"]]]);
+  h.owner.dispose();
+  const idle = setup();
+  idle.owner.carryAfterSaveAs("fid", [], "Episode 12.splitpage", "Episode 12 v2.splitpage");
+  await settle();
+  assert.deepEqual(idle.carries, [], "nothing to carry and no copy running");
+  idle.owner.dispose();
+});
+
 test("Save As carries the bundled videos, and says when some could not be copied", async () => {
   const ok = setup();
   ok.owner.carryAfterSaveAs("fid", ["a.mp4", "b.mov"], "Episode 12.splitpage", "Episode 12 v2.splitpage");

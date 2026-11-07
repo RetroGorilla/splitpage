@@ -119,9 +119,11 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
   let retarget: Home | null = null;
   let pickedFor: Home | null = null;
   let wrote = false;
+  let liveBundled: readonly string[] = [];
 
   function retargetTo(handle: FileSaveHandle, k: string): void {
     if (!job.owns()) return;
+    liveBundled = bundledVideoNames((currentDocument() as DocumentView).rows);
     prevHome = currentHome();
     retarget = setHome("file", { handle: handle, format: k, name: handle.name });
     pickedFor = retarget;
@@ -185,8 +187,8 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
       }, naming));
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
       if (target.picked && homeAtSave.kind === "file" && homeAtSave.handle) {
-        const names = bundledVideoNames(published.rows);
-        if (names.length) mountedPorts().bundles.carry(homeAtSave.handle as FileSaveHandle, handle, names);
+        const names = [...new Set(bundledVideoNames(published.rows).concat(liveBundled))];
+        mountedPorts().bundles.carry(homeAtSave.handle as FileSaveHandle, handle, names);
       }
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);
