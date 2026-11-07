@@ -438,7 +438,8 @@ test("a copy that lands while the Save As dialog is open is carried too, though 
   h.doc.rows.push(...(migrateRows({ rows: [{ id: "r1", imageLinks: [{ name: "take.mp4", size: 3, location: { kind: "path", path: "C:\\v\\take.mp4" }, poster: true }] }] }, fakeMigration().ports).rows));
   h.mounted.dispose();
   const ports: FileSavingPorts = { ...h.ports, files: { ...h.ports.files, pick: () => {
-    const link = h.doc.rows.find((r) => r.id === "r1")?.imageLinks?.[0];
+    const row = h.doc.rows.find((r) => r.id === "r1") as { imageLinks?: { location?: unknown }[] } | undefined;
+    const link = row?.imageLinks?.[0];
     assert.ok(link, "setup: the dropped link");
     link.location = { kind: "bundled", name: "take.mp4" };
     return Promise.resolve({ kind: "handle", handle: fileHandle("copy.splitpage"), picked: true });
