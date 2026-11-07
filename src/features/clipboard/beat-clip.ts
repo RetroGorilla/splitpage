@@ -16,6 +16,8 @@ interface ParsedBeatClipboard extends BeatWireData {
   source: BeatWirePayload["source"];
   carried: string[];
   refs: string[];
+  preserveBrollDetails?: boolean;
+  headers?: readonly { index: number; scene: { name: string } }[];
 }
 type BeatPayloadInput = { [K in keyof BeatWirePayload]?: unknown };
 interface BeatInsertOptions {
@@ -44,6 +46,7 @@ import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./cell-clipboard.
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { cappedLongText } from "../../core/document/text-policy.ts";
 import { isBlankBeat } from "../../application/commands/rows.ts";
+import { scenesInOrder } from "../../core/document/scenes.ts";
 
 export const BEATS_MIME = "application/x-splitpage-scenes";
 export const BEATS_ATTR = "data-splitpage-scenes";
@@ -191,10 +194,42 @@ export function beatsOnClipboard(getData: (type: string) => string) {
     const clip = parseBeatPayload(json);
     if (clip) return clip;
   }
+  const flow = readType(getData, "application/x-splitpage-flow");
+  if (flow) {
+    const clip = parseFlowBeats(flow);
+    if (clip) return clip;
+  }
   const html = readType(getData, "text/html");
-  if (html.indexOf(BEATS_ATTR) === -1) return null;
-  const el = (ports as BeatClipPorts).text.inertBody(html).querySelector("[" + BEATS_ATTR + "]");
-  return el ? parseBeatPayload(el.getAttribute(BEATS_ATTR)) : null;
+  if (html.indexOf(BEATS_ATTR) !== -1) {
+    const el = (ports as BeatClipPorts).text.inertBody(html).querySelector("[" + BEATS_ATTR + "]");
+    const clip = el ? parseBeatPayload(el.getAttribute(BEATS_ATTR)) : null;
+    if (clip) return clip;
+  }
+  if (html.indexOf("data-splitpage-flow") === -1) return null;
+  const el = (ports as BeatClipPorts).text.inertBody(html).querySelector("[data-splitpage-flow]");
+  return el ? parseFlowBeats(el.getAttribute("data-splitpage-flow")) : null;
+}
+
+function parseFlowBeats(json: string | null): ParsedBeatClipboard | null {
+  let wire: { format?: unknown; version?: unknown; text?: unknown; beats?: BeatPayloadInput; wholeIds?: unknown; headers?: unknown };
+  try { wire = JSON.parse(json || "null") as typeof wire; } catch { return null; }
+  if (!wire || wire.format !== "splitpage-flow" || wire.version !== 1 || typeof wire.text !== "string" ||
+    !Array.isArray(wire.wholeIds) || !Array.isArray(wire.headers) || (!wire.wholeIds.length && !wire.headers.length)) return null;
+  const rawRows = wire.beats && Array.isArray(wire.beats.rows) ? wire.beats.rows as { id?: unknown }[] : [];
+  if (wire.wholeIds.some(id => typeof id !== "string" || !rawRows.some(row => row && row.id === id)) ||
+    new Set(wire.wholeIds).size !== wire.wholeIds.length || (wire.beats !== null && !rawRows.length)) return null;
+  const headers: NonNullable<ParsedBeatClipboard["headers"]>[number][] = [];
+  for (const raw of wire.headers as unknown[]) {
+    if (!raw || typeof raw !== "object") return null;
+    const header = raw as { index?: unknown; scene?: { name?: unknown } };
+    if (!Number.isInteger(header.index) || (header.index as number) < 0 || (header.index as number) > rawRows.length ||
+      !header.scene || typeof header.scene.name !== "string" || !header.scene.name.trim() ||
+      Array.from(header.scene.name).length > 200 || headers.some(previous => previous.index >= (header.index as number))) return null;
+    headers.push({ index: header.index as number, scene: { name: header.scene.name } });
+  }
+  const clip = wire.beats ? parseBeatPayload(wire.beats) : { rows: [], comments: [], people: [], productionTags: [], brollShots: [],
+    cut: null, source: { docId: null, title: "" }, carried: [], refs: [] };
+  return clip && clip.rows.length === rawRows.length ? { ...clip, headers, preserveBrollDetails: true } : null;
 }
 
 export function parseBeatPayload(json: unknown): ParsedBeatClipboard | null {
@@ -261,17 +296,31 @@ type BeatClip = NonNullable<ReturnType<typeof parseBeatPayload>>;
 export function beatPaste(clip: BeatClip, opts?: BeatPasteOptions) {
   opts = opts || {};
   const mint = opts.mint || (ports as BeatClipPorts).ids.id;
-  let planned: { move: boolean; rowMap: Record<string, string>; replaceRowId: string | null } | null = null;
+  let planned: { move: boolean; rowMap: Record<string, string>; replaceRowId: string | null; clip: BeatClip } | null = null;
   let result: ReturnType<typeof insertBeats> | null = null;
   return {
     plan: function (doc: Parameters<BeatPaste["plan"]>[0]): BeatPastePlan | null {
-      if (!clip || !clip.rows || !clip.rows.length) return null;
+      if (!clip || (!clip.rows.length && !clip.headers?.length)) return null;
       const row = doc.rows.filter(function (r) { return r.id === opts.afterRowId; })[0];
       const move = isMove(clip, doc);
-      const rowMap = beatRowIds(clip, doc, move, mint);
-      planned = { move: move, rowMap: rowMap, replaceRowId: row && isBlankBeat(doc, row, (ports as BeatClipPorts).text) ? row.id : null };
+      const replaceRowId = row && isBlankBeat(doc, row, (ports as BeatClipPorts).text) ? row.id : null;
+      const prefix = !!replaceRowId && clip.headers?.[0]?.index === 0 && !!scenesInOrder(doc)?.some(scene => scene.firstSceneId === replaceRowId);
+      const rows = clip.rows.slice();
+      const taken = Object.create(null) as Record<string, boolean>;
+      doc.rows.concat(clip.rows).forEach(r => { taken[r.id] = true; });
+      const blank = (): DocumentRow => ({ id: mintFree("r", taken, mint), audioText: "", visualText: "", status: "todo" });
+      if (prefix) rows.unshift(blank());
+      if (clip.headers?.some(header => header.index === clip.rows.length)) rows.push(blank());
+      const expanded = { ...clip, rows };
+      const rowMap = beatRowIds(expanded, doc, move, mint);
+      const sceneTaken = Object.create(null) as Record<string, boolean>;
+      scenesInOrder(doc)?.forEach(scene => { sceneTaken[scene.id] = true; });
+      const sections = clip.headers?.map(header => ({ id: mintFree("s", sceneTaken, mint), name: header.scene.name,
+        firstSceneId: rowMap[(rows[header.index + (prefix ? 1 : 0)] as DocumentRow).id] as string }));
+      planned = { move, rowMap, replaceRowId, clip: expanded };
       return {
-        inserted: clip.rows.map(function (r) { return rowMap[r.id] as string; }),
+        inserted: rows.map(function (r) { return rowMap[r.id] as string; }),
+        sections,
         replaced: (planned as NonNullable<typeof planned>).replaceRowId,
         title: !!opts.title,
         afterRowId: opts.afterRowId,
@@ -279,12 +328,13 @@ export function beatPaste(clip: BeatClip, opts?: BeatPasteOptions) {
       };
     },
     apply: function (live: Parameters<BeatPaste["apply"]>[0]) {
-      result = insertBeats(clip, {
+      result = insertBeats((planned as NonNullable<typeof planned>).clip, {
         state: live,
         rowMap: (planned as NonNullable<typeof planned>).rowMap,
         afterRowId: opts.afterRowId,
         replaceRowId: (planned as NonNullable<typeof planned>).replaceRowId,
         move: (planned as NonNullable<typeof planned>).move,
+        preserveBrollDetails: clip.preserveBrollDetails,
         mint: mint,
         stamp: opts.stamp
       });
