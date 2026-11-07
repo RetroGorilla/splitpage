@@ -60,7 +60,7 @@ touches. CI then runs every fast gate on every pull request: lint, types, the
 dependency and comment gates, the build, every discovered unit, desktop and
 tool test, and, for app-affecting changes, the smoke, CSP and persistence browser suites. CI never
 narrows to the test files a change touched; `--only` is a local tool. CI
-distributes the full discovered test set across three required shards, while
+distributes the full discovered test set across four required shards, while
 lint, types and the other checks run in a separate job.
 
 The shard allocator sorts discovered files by the measured milliseconds in
