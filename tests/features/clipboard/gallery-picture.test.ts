@@ -155,3 +155,17 @@ test("a dropped or pasted file that is not a picture or video is attached with i
     owner.dispose();
   }
 });
+
+test("a file named like a video that arrives with no video type takes the video route by its extension (#256)", async () => {
+  const { owner } = clipboard();
+  try {
+    const files = [new File(["x"], "take.MKV", { type: "" }), new File(["x"], "clip.mp4", { type: "application/octet-stream" })];
+    const got = await readClipboardFiles(files, async () => "", { path: (f) => "C:\\Media\\" + f.name });
+    assert.deepEqual(got.attach, [
+      { kind: "videoFile", name: "take.MKV", size: 1, poster: null, path: "C:\\Media\\take.MKV" },
+      { kind: "videoFile", name: "clip.mp4", size: 1, poster: null, path: "C:\\Media\\clip.mp4" }
+    ]);
+  } finally {
+    owner.dispose();
+  }
+});

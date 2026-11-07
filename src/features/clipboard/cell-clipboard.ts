@@ -1,6 +1,6 @@
 import type { CellClipboardPorts } from "./ports.ts";
 import type { Attachment, AttachedCount, BrollScope, ClipboardPorts, OtherFileAttachment, PasteRequest, Pasted, TextRange, VideoFileAttachment } from "../../application/commands/clipboard.ts";
-import { ATTACHABLE_FILE } from "../../../shared/video-path.ts";
+import { ATTACHABLE_FILE, VIDEO_FILE_EXT } from "../../../shared/video-path.ts";
 import type { CellInput, NormalizeOptions, Run } from "../../core/text/runs.ts";
 import type { VideoFiles, VideoPosterFrame } from "../../application/media/video-files.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
@@ -367,7 +367,8 @@ export function readClipboardFiles(files: FileList | readonly File[] | null | un
   const refused: string[] = [];
   let skipImages = false;
   const jobs = list.map(function (file) {
-    const type = String(file && file.type || "");
+    const given = String(file && file.type || "");
+    const type = given.indexOf("image/") !== 0 && given.indexOf("video/") !== 0 && VIDEO_FILE_EXT.test(String(file && file.name || "")) ? "video/" : given;
     if (type.indexOf("image/") !== 0 && type.indexOf("video/") !== 0) {
       const name = String(file && file.name || "");
       if (!ATTACHABLE_FILE.test(name)) { refused.push(name); return Promise.resolve(); }

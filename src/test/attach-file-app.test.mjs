@@ -17,7 +17,7 @@ const { restoreDesktop, useDesktopForTest } = await import("../adapters/desktop/
 const { videoFiles } = await import("../bootstrap/wiring/video-files.ts");
 const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const { zipRead } = await import("../adapters/formats/zip.ts");
-const { rowSlots, videoLinkKey } = await import("../core/document/gallery.ts");
+const { removeGallerySlot, rowSlots, videoLinkKey } = await import("../core/document/gallery.ts");
 
 const MARKER = "AttachMarker256";
 const PDF = "C:\\" + MARKER + "\\Docs\\brief.pdf";
@@ -129,6 +129,17 @@ test("taking a video's link off keeps the file attached beside it, through a sav
   assert.deepEqual(links("r1"), [{ name: "brief.pdf", size: 12, location: at(PDF) }], "the file is still on the beat");
   await reopenSaved();
   assert.deepEqual(links("r1"), [{ name: "brief.pdf", size: 12, location: at(PDF) }], "and in the reopened script");
+});
+
+test("a dropped file named like a video but with no video type becomes a video of its own, so removing the picture keeps it", async () => {
+  await open([{ id: "r1", visualText: "Wide", audioText: "One.", status: "todo", visualImage: PIC }]);
+  drop("r1", new window.File([new Uint8Array(5)], "take.mkv", { type: "" }), null);
+  await until(() => links("r1").length === 1, "the dropped file's link");
+  assert.deepEqual(links("r1"), [{ name: "take.mkv", size: 5, poster: true }], "it is a video, not an attached file");
+  assert.equal(rowSlots(row("r1")).length, 2, "an item of its own beside the picture");
+  const copy = JSON.parse(JSON.stringify(row("r1")));
+  removeGallerySlot(copy, 0);
+  assert.deepEqual(rowSlots(copy).flatMap((s) => s.links), [{ name: "take.mkv", size: 5, poster: true }], "removing the picture keeps it");
 });
 
 test("past three links the caption counts the rest as links when a file is among them", async () => {
