@@ -1223,7 +1223,7 @@ export function handleToolbarCmd(btn: Element, cellOverride?: HTMLElement, wrapO
   }
   if (cmd === "tag") {
     const tsel = window.getSelection() as Selection;
-    if (tsel.rangeCount && tsel.isCollapsed && rangeInside(tsel.getRangeAt(0), cellEl)) {
+    if (tsel.rangeCount && (tsel.isCollapsed || cellEl.getAttribute("data-field") === "visualText") && rangeInside(tsel.getRangeAt(0), cellEl)) {
       const selection = cellSelection(cellEl);
       const cell = ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML));
       ports.actions.invoke("tag-selection", "button", {

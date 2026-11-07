@@ -6,7 +6,7 @@ import type { PlainTagPorts } from "../../../src/features/tags/ports.ts";
 import type { CellEditResult, CellEdit } from "../../../src/application/editing/cell-editing.ts";
 import { namedTagId, projection } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
-import { fakeDocument, fakeTagCategories, fakeTextServices } from "../fakes.ts";
+import { fakeDocument, fakeTextServices } from "../fakes.ts";
 import { createRichText } from "../../../src/adapters/richtext/richtext.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
@@ -23,7 +23,6 @@ function fixture(html: string, model: string | Run[]) {
   const text = fakeTextServices(win.document);
   const changes: CellEditResult[] = [];
   const ports: PlainTagPorts = {
-    renderCategories: fakeTagCategories().renderCategories,
     document: fakeDocument(null).document,
     undo: { breakCoalescing: () => {} },
     cells: {

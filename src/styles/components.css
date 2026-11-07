@@ -476,6 +476,7 @@
 .hidden-shot-strip .hidden-shot-hint { color: var(--text-faint); font-weight: 400; }
 .field-wrap { position: relative; }
 .mini-toolbar {
+  position: relative;
   display: none;
   align-items: center;
   gap: var(--space-2);
