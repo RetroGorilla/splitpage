@@ -109,11 +109,23 @@ function validShard(shard) {
     && shard.index >= 1 && shard.total >= shard.index;
 }
 
-export function selectShard(files, shard) {
-  return shard ? files.filter((file, index) => {
-    const assigned = shard.total === 3 && file === "desktop/test/ipc-contract.test.mjs" ? 3 : index % shard.total + 1;
-    return assigned === shard.index;
-  }) : files;
+const WEIGHTS = JSON.parse(readFileSync(join(REPO, "tools", "test-weights.json"), "utf8"));
+const DEFAULT_WEIGHT = 1000;
+
+export function assignShards(entries, total, weights = WEIGHTS) {
+  const shards = Array.from({ length: total }, () => ({ groups: new Map(), files: [] }));
+  const files = entries.flatMap(({ group, files: paths }) => paths.map((file) => ({ group, file, weight: weights[file] > 0 ? weights[file] : DEFAULT_WEIGHT })));
+  files.sort((a, b) => b.weight - a.weight || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  const cost = (shard) => [...shard.groups.values()].reduce((sum, group) => sum + (group.parallel ? Math.max(group.max, group.sum / 2) : group.sum), 0);
+  for (const { group, file, weight } of files) {
+    const target = shards.reduce((best, candidate) => cost(candidate) < cost(best) ? candidate : best);
+    const load = target.groups.get(group.name) ?? { sum: 0, max: 0, parallel: group.runner === "node-test" };
+    load.sum += weight;
+    load.max = Math.max(load.max, weight);
+    target.groups.set(group.name, load);
+    target.files.push(file);
+  }
+  return shards.map((s) => s.files.sort());
 }
 
 function runGroup(entry, { repo, node, print, spawn }) {
@@ -121,7 +133,7 @@ function runGroup(entry, { repo, node, print, spawn }) {
   const files = entry.selected;
   if (group.runner === "node-test") {
     print(`\n[${group.name}] node --test ${files.length} files`);
-    const r = spawn(node, ["--test", "--test-reporter=spec", "--test-reporter=./tools/timing-reporter.mjs", ...files], { cwd: repo, stdio: "inherit" });
+    const r = spawn(node, ["--test", "--test-reporter=spec", "--test-reporter-destination=stdout", `--test-reporter=${new URL("./timing-reporter.mjs", import.meta.url).href}`, "--test-reporter-destination=stdout", ...files], { cwd: repo, stdio: "inherit" });
     return { executed: files.length, ok: r.status === 0, status: r.status ?? r.signal ?? r.error?.message };
   }
   let executed = 0;
@@ -163,7 +175,8 @@ export function runTests({
   }
   const { groups: found, overlaps, orphans, untested } = discover(files, groups);
   const focused = only.length > 0;
-  const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectShard(selectFiles(e.files, only), shard) }));
+  const assigned = shard ? new Set(assignShards(found, shard.total)[shard.index - 1]) : null;
+  const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectFiles(e.files, only).filter((file) => !assigned || assigned.has(file)) }));
   let failed = false;
 
   for (const e of chosen) {
