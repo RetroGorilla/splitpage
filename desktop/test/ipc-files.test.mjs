@@ -49,8 +49,9 @@ function harness(t, saved = {}) {
     testDialogsSeen: () => 0, testMode: false,
     bundleJobs: {
       noteSaveTarget: (id, tab) => { noted.push({ id, tab }); },
-      carryForSave: async () => null,
-      saveLanded: (id) => { landed.push(id); }
+      prepareWrite: async (id) => ({ refused: null, text: null, landed: (ok) => { if (ok) landed.push(id); } }),
+      planSave: async () => ({ ok: true, plan: null }),
+      chooseSave: () => ({ ok: true })
     }
   });
   registerFileIpc({ ipcHandle: (name, handler) => handlers.set(name, handler) });

@@ -21,3 +21,19 @@
 .bundle-progress[hidden] { display: none; }
 .bundle-progress-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .bundle-progress-bar { flex: 0 0 96px; accent-color: var(--accent); }
+.bundle-indicator {
+  position: fixed;
+  right: var(--space-24);
+  bottom: calc(var(--space-24) + env(safe-area-inset-bottom));
+  z-index: 140;
+  padding: 6px var(--space-10);
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.bundle-indicator[hidden] { display: none; }

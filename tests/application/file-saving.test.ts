@@ -22,6 +22,7 @@ interface Setup {
   readonly autosave?: boolean;
   readonly onDesktop?: boolean;
   readonly handover?: boolean;
+  readonly ask?: boolean;
 }
 
 const NO_MODELS: ExportReadModels = { production: [], commentNumbers: {}, broll: [] };
@@ -113,10 +114,15 @@ function harness(setup: Setup = {}) {
     page: { getElementById: (id) => (id === "menu-autosave" ? menu : null) },
     bundles: {
       beginSave: () => {
-        if (!setup.handover) return { drained: null, end: () => {} };
+        const ask = (handle: FileSaveHandle, body: string) => {
+          if (setup.ask === undefined) return Promise.resolve(true);
+          log.push("ask:" + handle.name + ":" + (body.length > 0));
+          return Promise.resolve(setup.ask);
+        };
+        if (!setup.handover) return { drained: null, ask, end: () => {} };
         log.push("drain:" + state.home.kind);
         const drained = new Promise<boolean>((resolve) => { drains.push((ok) => { log.push(ok ? "drained" : "stopped"); resolve(ok); }); });
-        return { drained, end: () => { log.push("end"); } };
+        return { drained, ask, end: () => { log.push("end"); } };
       }
     }
   };
@@ -456,4 +462,20 @@ test("Cancel on the wait abandons the Save As before capture, the dialog or the 
   assert.equal((await failed).kind, "failed");
   assert.deepEqual(drainLines(failing), ["drain:file", "drained", "capture", "pick", "setHome:file", "write", "restoreHome:file", "end"],
     "the window stays open through the rollback");
+});
+const askLines = (h: ReturnType<typeof harness>) => h.log.filter((line) => /^(ask|capture|pick|setHome|restoreHome|write)\b/.test(line))
+  .map((line) => line.replace(/^(capture|write):.*/, "$1"));
+
+test("Save As asks about the script's files after the pick and before the write; Cancel there writes nothing and keeps the old file", async () => {
+  const copying = harness({ home: FILE_HOME, writtenOut: true, ask: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  assert.deepEqual(await write(copying, "saveAs"), { kind: "saved" });
+  assert.deepEqual(askLines(copying), ["capture", "pick", "setHome:file", "ask:copy.splitpage:true", "write"], "the prompt sees the bytes about to be written");
+  const cancelled = harness({ home: FILE_HOME, writtenOut: true, ask: false, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  assert.deepEqual(await write(cancelled, "saveAs"), { kind: "cancelled" });
+  assert.deepEqual(askLines(cancelled), ["capture", "pick", "setHome:file", "ask:copy.splitpage:true", "restoreHome:file"], "nothing is written");
+  assert.equal(cancelled.state.home, FILE_HOME, "the document stays with its old file");
+  assert.deepEqual(cancelled.toasts, []);
+  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true, ask: false });
+  assert.deepEqual(await write(plain, "save"), { kind: "saved" }, "a plain save never asks");
+  assert.equal(plain.log.some((line) => line.startsWith("ask:")), false);
 });

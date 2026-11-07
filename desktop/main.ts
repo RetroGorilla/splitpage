@@ -874,7 +874,8 @@ const bundleJobs = createBundleJobs({
     const found = fileIds.pathOf(fileId);
     return typeof found === "string" && found ? found : null;
   },
-  namesInProject: videoEmbed.bundledNamesInProject
+  namesInProject: videoEmbed.bundledNamesInProject,
+  linkInProject: videoEmbed.linkBundledInProject
 });
 
 const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
@@ -1808,7 +1809,7 @@ const { registerFileIpc } = createFileIpc({
 const { registerShellIpc } = createShellIpc({
   tabOf, launchIntentFor, draftStore: () => draftStore, draftsIsHeld, hadPriorSession,
   shell, nativeTheme, themeChoice, videoFileGrants, ATTACHABLE_FILE: videoEmbed.ATTACHABLE_FILE,
-  openableVideoPath: videoEmbed.openableVideoPath, resolveBundledFile: videoEmbed.resolveBundledFile, bundleJobs,
+  openableVideoPath: videoEmbed.openableVideoPath, bundleJobs,
   testVideoOpens, testMode: TEST_MODE,
   videoThumbnail, updateStatus: () => updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus,
   checkForUpdate, downloadUpdate, runUpdateInstaller, openPrompterInBrowser,

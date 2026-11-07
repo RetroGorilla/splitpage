@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { bundleFolderOf, numberedName, resolveBundledFile } from "../../shared/video-embed.ts";
+import { bundleFolderOf, bundledNamesInProject, linkBundledInProject, numberedName, resolveBundledFile } from "../../shared/video-embed.ts";
 import { BUNDLED_NAME_MAX, VIDEO_FILE_EXT, bundleFolderName, bundledNameProblem } from "../../shared/video-path.ts";
 
 const FOLD_CASE = process.platform === "win32";
@@ -149,4 +149,32 @@ test("the rules take any allowlist, so other kinds of file can be bundled the sa
   writeFileSync(path.join(s.folder, "brief.pdf"), "%PDF");
   assert.deepEqual(await resolveBundledFile(s.script, "brief.pdf", VIDEO_FILE_EXT, fsp, path, FOLD_CASE), { ok: false, code: "REFUSED" });
   assert.equal((await resolveBundledFile(s.script, "brief.pdf", /\.pdf$/i, fsp, path, FOLD_CASE)).ok, true);
+});
+
+test("linking bundled names to paths rewrites only those locations, in the same layout the writers use", () => {
+  const record = { title: "T", rows: [{ id: "r1", imageLinks: [
+    { name: "a.mp4", size: 4, location: { kind: "bundled", name: "a.mp4" } },
+    { name: "b.mp4", size: 4, location: { kind: "bundled", name: "b.mp4" } },
+    { name: "c.mp4", size: 4, location: { kind: "path", path: "C:\\c.mp4" } }
+  ] }] };
+  const json = JSON.stringify(record, null, 2);
+  const paths = new Map([["a.mp4", "D:\\Episode 12 files\\a.mp4"]]);
+  const out = linkBundledInProject(json, paths);
+  const expected = { ...record, rows: [{ ...record.rows[0], imageLinks: [
+    { name: "a.mp4", size: 4, location: { kind: "path", path: "D:\\Episode 12 files\\a.mp4" } },
+    ...(record.rows[0] as { imageLinks: unknown[] }).imageLinks.slice(1)
+  ] }] };
+  assert.equal(out, JSON.stringify(expected, null, 2), "a .splitpage file changes only in the rewritten location");
+  assert.deepEqual(bundledNamesInProject(out as string), ["b.mp4"]);
+  assert.equal(linkBundledInProject(json, new Map()), null, "nothing to link changes nothing");
+  assert.equal(linkBundledInProject(json, new Map([["gone.mp4", "D:\\gone.mp4"]])), null);
+  const table = "| Visual | Audio |\n| --- | --- |\n| a | ~~~~splitpage |\n";
+  const md = table + "\n<!-- note -->\n~~~~splitpage\n" + json + "\n~~~~\n";
+  const linked = linkBundledInProject(md, paths) as string;
+  assert.ok(linked.startsWith(table + "\n<!-- note -->\n~~~~splitpage\n"), "the table and note above the block are kept");
+  assert.ok(linked.endsWith("\n~~~~\n"));
+  assert.deepEqual(bundledNamesInProject(linked), ["b.mp4"], "the reader finds the rewritten block");
+  const tilde = linkBundledInProject(md, new Map([["a.mp4", "D:\\odd~~~~~~folder\\a.mp4"]])) as string;
+  assert.ok(tilde.includes("\n~~~~~~~splitpage\n") && tilde.endsWith("\n~~~~~~~\n"), "the fence grows past a run of tildes in a path");
+  assert.equal(linkBundledInProject("not a project", paths), null);
 });

@@ -84,6 +84,7 @@ export interface FileSavingPorts {
 
 export interface BundleSaveWindow {
   readonly drained: Promise<boolean> | null;
+  readonly ask: (handle: FileSaveHandle, body: string) => Promise<boolean>;
   readonly end: () => void;
 }
 
