@@ -1,0 +1,57 @@
+open
+wait document.querySelectorAll('#rows .row').length > 1
+eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.tc=function(i){return document.querySelectorAll('#rows .visual-cell .cell-editable')[i];}; window.tt=function(i){return tc(i).closest('.field-wrap').querySelector('.tb-tag');}; window.tp=function(){return document.querySelector('#rows [data-tags-open="true"] .tag-toolbar-picker');}; window.tr=function(el){var r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}; window.hit=function(el){var r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}; window.finish=function(){return Promise.allSettled(tp().getAnimations().map(function(a){return a.finished;}));}; var s=JSON.parse(F.buildSplitpage());s.title='Tag toolbar';s.rows=Array.from({length:25},function(_,i){return {id:'r'+(i+1),visualText:'Cable tray and power strip.',audioText:'Keep the desk clear.',status:'todo'};});s.sections=[];s.comments=[];s.brollShots=[];F.openFile(new File([JSON.stringify(s)],'toolbar.splitpage'));return true;})()
+wait F.state().title === 'Tag toolbar'
+caret #rows .row:nth-of-type(3) .visual-cell .cell-editable
+eval window.buttonBefore=tr(tt(2))
+click #rows .row:nth-of-type(3) .visual-cell .tb-tag
+expect tt(2).getAttribute('aria-expanded') === 'true'
+expect document.getElementById('tag-modal').hidden
+expect tp().querySelectorAll('.tag-toolbar-choice').length === 6
+expect tp().querySelector('[data-tag-cat="prop"] code').textContent === '[]'
+expect tp().querySelector('[data-tag-cat="location"] code').textContent === '{}'
+eval finish()
+expect tr(tt(2)).x === window.buttonBefore.x && tr(tt(2)).y === window.buttonBefore.y
+expect tr(tp().querySelector('.tag-toolbar-hint')).y < tr(tp().querySelector('.tag-toolbar-choices')).y
+expect tr(tp()).y + tr(tp()).h <= tr(tt(2)).y + 2
+expect Array.from(tp().querySelectorAll('button')).every(hit)
+shot 324-toolbar-desktop
+click #rows .row:nth-of-type(3) .visual-cell .tb-tag
+expect tt(2).getAttribute('aria-expanded') === 'false'
+expect tr(tt(2)).x === window.buttonBefore.x && tr(tt(2)).y === window.buttonBefore.y
+click #rows .row:nth-of-type(3) .visual-cell .tb-tag
+eval finish()
+click #rows .row:nth-of-type(3) .visual-cell .cell-editable
+expect tt(2).getAttribute('aria-expanded') === 'false'
+key ArrowLeft
+expect document.activeElement === tc(2)
+eval (function(){var c=tc(2),r=document.createRange();c.focus();r.setStart(c.firstChild,0);r.setEnd(c.firstChild,10);var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.steps=U.sizes().undo;return true;})()
+click #rows .row:nth-of-type(3) .visual-cell .tb-tag
+click #rows .row:nth-of-type(3) .visual-cell [data-cmd="bold"]
+expect tt(2).getAttribute('aria-expanded') === 'false'
+click #rows .row:nth-of-type(3) .visual-cell .tb-tag
+click #rows [data-tags-open="true"] [data-tag-cat="prop"]
+expect tc(2).querySelector('.tag-anchor strong').textContent === 'Cable tray'
+expect tc(2).textContent === 'Cable tray and power strip.'
+expect U.sizes().undo === window.steps + 2
+key ctrl KeyZ
+expect tc(2).querySelector('.tag-anchor') === null
+expect tc(2).querySelector('strong').textContent === 'Cable tray'
+caret #rows .row:nth-of-type(20) .visual-cell .cell-editable
+click #rows .row:nth-of-type(20) .visual-cell .tb-tag
+eval finish()
+expect Array.from(tp().querySelectorAll('button')).every(hit)
+key Escape
+expect tt(19).getAttribute('aria-expanded') === 'false'
+viewport 390 844
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
+click #rows .row:nth-of-type(1) .visual-cell .tb-tag
+eval finish()
+expect tr(tp()).x >= 0 && tr(tp()).x + tr(tp()).w <= innerWidth
+expect Array.from(tp().querySelectorAll('button')).every(hit)
+shot 324-toolbar-phone
+click #rows [data-tags-open="true"] [data-tag-cat="prop"]
+expect document.activeElement === tc(0)
+press Lamp
+key Tab
+expect tc(0).querySelector('.tag-anchor').textContent === 'Lamp'

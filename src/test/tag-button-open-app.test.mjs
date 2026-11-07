@@ -60,15 +60,20 @@ function key(target, value) {
   target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: value }));
 }
 
+function picker(cell) { return cell.closest(".field-wrap").querySelector(".tag-toolbar-picker"); }
+
+function pickCategory(cell, category) { picker(cell).querySelector(`[data-tag-cat="${category}"]`).click(); }
+
 test("Tag at a Visual caret chooses a category and inserts one undoable open keyword at the saved position", () => {
   const { cell, button, modal } = fixture();
   caret(cell, cell.firstChild, 7);
   const before = undoOwner().sizes().undo;
   button.click();
-  assert.equal(modal.hidden, false);
-  assert.equal(modal.classList.contains("is-category-only"), true);
-  assert.equal(document.activeElement, modal.querySelector(".tag-cat-btn"));
-  modal.querySelector('[data-tag-cat="prop"]').click();
+  assert.equal(modal.hidden, true);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  assert.equal(document.activeElement, picker(cell).querySelector(".tag-toolbar-choice"));
+  pickCategory(cell, "prop");
+  assert.equal(button.getAttribute("aria-expanded"), "false");
   assert.equal(modal.hidden, true);
   assert.equal(currentDocument().rows[0].visualText, "Before prop: after");
   assert.equal(currentPlainTags().isOpen(cell), true);
@@ -84,31 +89,35 @@ test("Tag at a Visual caret chooses a category and inserts one undoable open key
 });
 
 test("a repaint while choosing a category never inserts at a relocated caret", () => {
-  const { cell, button, modal } = fixture();
+  const { cell, button } = fixture();
   caret(cell, cell.firstChild, 7);
   button.click();
   const html = cell.innerHTML;
   cell.innerHTML = html;
-  modal.querySelector('[data-tag-cat="prop"]').click();
+  pickCategory(cell, "prop");
   assert.equal(currentDocument().rows[0].visualText, "Before  after");
   assert.equal(currentPlainTags().isOpen(), false);
 });
 
-for (const dismiss of ["Escape", "backdrop", "close"]) {
-  test(`category-only ${dismiss} dismisses without an edit and restores the saved caret`, () => {
+for (const dismiss of ["Escape", "outside", "toggle"]) {
+  test(`toolbar picker ${dismiss} dismisses without an edit and preserves focus intent`, () => {
     const { cell, button, modal } = fixture();
     caret(cell, cell.firstChild, 7);
     const before = JSON.stringify(currentDocument());
     const steps = undoOwner().sizes().undo;
     button.click();
     if (dismiss === "Escape") key(document.activeElement, "Escape");
-    else if (dismiss === "backdrop") modal.click();
-    else document.getElementById("tag-close").click();
+    else if (dismiss === "outside") document.getElementById("doc-title").focus();
+    else button.click();
     assert.equal(modal.hidden, true);
-    assert.equal(modal.classList.contains("is-category-only"), false);
-    assert.equal(document.activeElement, cell);
-    assert.equal(window.getSelection().anchorNode, cell.firstChild);
-    assert.equal(window.getSelection().anchorOffset, 7);
+    assert.equal(button.getAttribute("aria-expanded"), "false");
+    assert.equal(picker(cell).inert, true);
+    if (dismiss === "outside") assert.equal(document.activeElement, document.getElementById("doc-title"));
+    else {
+      assert.equal(document.activeElement, cell);
+      assert.equal(window.getSelection().anchorNode, cell.firstChild);
+      assert.equal(window.getSelection().anchorOffset, 7);
+    }
     assert.equal(JSON.stringify(currentDocument()), before);
     assert.equal(undoOwner().sizes().undo, steps);
   });
@@ -116,10 +125,10 @@ for (const dismiss of ["Escape", "backdrop", "close"]) {
 
 for (const [category, keyword] of [["prop", "prop"], ["location", "location"], ["cast", "cast"], ["vfx", "vfx"], ["sound", "sfx"], ["gear", "gear"]]) {
   test(`the ${category} category opens at an empty cell's element caret`, () => {
-    const { cell, button, modal } = fixture("");
+    const { cell, button } = fixture("");
     caret(cell, cell, 0);
     button.click();
-    modal.querySelector(`[data-tag-cat="${category}"]`).click();
+    pickCategory(cell, category);
     assert.equal(currentDocument().rows[0].visualText, `${keyword}:`);
     assert.equal(currentPlainTags().isOpen(cell), true);
     assert.equal(currentPlainTags().emptyAtCaret(), true);
@@ -132,11 +141,11 @@ for (const [category, keyword] of [["prop", "prop"], ["location", "location"], [
 for (const end of ["Enter", "Escape", "blur", "Tab"]) {
   test(`button and typed keyword have identical ${end} behavior`, () => {
     const run = (buttonRoute) => {
-      const { cell, button, modal } = fixture("Before ");
+      const { cell, button } = fixture("Before ");
       caret(cell, cell.firstChild, 7);
       if (buttonRoute) {
         button.click();
-        modal.querySelector('[data-tag-cat="prop"]').click();
+        pickCategory(cell, "prop");
       } else type(cell, "prop:");
       type(cell, "Lamp");
       if (end === "blur") cell.blur();
@@ -161,9 +170,9 @@ function snapshot(cell) {
   return { html: cell.innerHTML, doc: currentDocument().rows[0].visualText, steps: undoOwner().sizes(), node: sel.anchorNode, offset: sel.anchorOffset };
 }
 
-function pickProp({ button, modal }) {
+function pickProp({ button, cell }) {
   button.click();
-  modal.querySelector('[data-tag-cat="prop"]').click();
+  pickCategory(cell, "prop");
 }
 
 const STUCK = [
@@ -179,9 +188,10 @@ for (const [label, html, node, offset, tail] of STUCK) {
     const plain = h.cell.textContent;
     const before = snapshot(h.cell);
     h.button.click();
-    assert.equal(h.modal.hidden, false);
-    assert.equal(h.modal.classList.contains("is-category-only"), true);
-    h.modal.querySelector('[data-tag-cat="prop"]').click();
+    assert.equal(h.modal.hidden, true);
+    assert.equal(h.button.getAttribute("aria-expanded"), "true");
+    pickCategory(h.cell, "prop");
+    assert.equal(h.button.getAttribute("aria-expanded"), "false");
     assert.equal(h.modal.hidden, true);
     assert.equal(currentPlainTags().isOpen(h.cell), true);
     assert.equal(h.cell.querySelector(".plain-tag-keyword").textContent, "");
@@ -276,10 +286,10 @@ test("Tag inside a word: the name goes between the halves and nothing is lost or
   assert.match(currentDocument().rows[0].visualText, /^Wo<span[^>]*data-tag-name="Lamp"[^>]*>Lamp<\/span>rds$/);
 });
 test("Tag inside a word: Tab with no name typed tags the rest of the line, as an open keyword before text does", () => {
-  const { cell, button, modal } = fixture("Words more<br>next line");
+  const { cell, button } = fixture("Words more<br>next line");
   caret(cell, cell.firstChild, 2);
   button.click();
-  modal.querySelector('[data-tag-cat="prop"]').click();
+  pickCategory(cell, "prop");
   key(cell, "Tab");
   assert.match(currentDocument().rows[0].visualText, /^Wo<span[^>]*data-tag-name="rds more"[^>]*>[^<]*<\/span><br>next line$/);
 });
@@ -593,36 +603,76 @@ test("Tag says an open tag is in progress when one is already open", () => {
   const { cell, button, modal } = fixture("Before ");
   caret(cell, cell.firstChild, 7);
   button.click();
-  modal.querySelector('[data-tag-cat="prop"]').click();
+  pickCategory(cell, "prop");
   button.click();
   assert.equal(modal.hidden, true);
   assert.match(notice(), /already open/);
 });
 
-test("a selection still opens the full composer and adds its chosen label", () => {
+test("a Visual selection is tagged directly from the toolbar in one undoable edit", () => {
   const { cell, button, modal } = fixture("Lamp");
   caret(cell, cell.firstChild, 0);
   window.getSelection().getRangeAt(0).setEnd(cell.firstChild, 4);
   button.click();
-  assert.equal(modal.hidden, false);
-  assert.equal(modal.classList.contains("is-category-only"), false);
-  assert.equal(document.getElementById("tag-name").value, "Lamp");
-  modal.querySelector('[data-tag-cat="gear"]').click();
-  assert.equal(modal.hidden, false);
-  document.getElementById("tag-apply").click();
+  assert.equal(modal.hidden, true);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  const before = undoOwner().sizes().undo;
+  pickCategory(cell, "gear");
+  assert.equal(button.getAttribute("aria-expanded"), "false");
   assert.match(currentDocument().rows[0].visualText, /data-tag-cat="gear" data-tag-name="Lamp"/);
+  assert.equal(undoOwner().sizes().undo, before + 1);
+  undoOwner().undo();
+  assert.equal(currentDocument().rows[0].visualText, "Lamp");
+});
+
+test("the toolbar tags only the selected occurrence and preserves its formatting", () => {
+  const { cell, button } = fixture("Lamp <strong>Lamp</strong> Lamp");
+  const text = cell.querySelector("strong").firstChild;
+  caret(cell, text, 0);
+  window.getSelection().getRangeAt(0).setEnd(text, 4);
+  button.click();
+  pickCategory(cell, "prop");
+  assert.equal(cell.querySelectorAll(".tag-anchor").length, 1);
+  assert.equal(cell.querySelector(".tag-anchor strong").textContent, "Lamp");
+  assert.equal(cell.textContent, "Lamp Lamp Lamp");
+  assert.match(currentDocument().rows[0].visualText, /^Lamp <span[^>]+><strong>Lamp<\/strong><\/span> Lamp$/);
+});
+
+test("clicking back in the editor dismisses the picker and releases its arrow keys", () => {
+  const { cell, button } = fixture("Before after");
+  caret(cell, cell.firstChild, 3);
+  button.click();
+  cell.click();
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+  cell.focus();
+  const event = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+  cell.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(document.activeElement, cell);
+  assert.equal(currentDocument().rows[0].visualText, "Before after");
+});
+
+test("formatting dismisses the category picker before changing the selected words", () => {
+  const { cell, button } = fixture("Lamp");
+  caret(cell, cell.firstChild, 0);
+  window.getSelection().getRangeAt(0).setEnd(cell.firstChild, 4);
+  button.click();
+  cell.closest(".field-wrap").querySelector('[data-cmd="bold"]').click();
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+  assert.equal(picker(cell).inert, true);
+  assert.equal(currentDocument().rows[0].visualText, "<strong>Lamp</strong>");
 });
 
 for (const [command, html] of [["bold", "Before "], ["italic", "Before "], ["bold", "<strong>Before </strong>"], ["italic", "<em>Before </em>"]]) {
   test(`button keyword keeps pending ${command} formatting for ${html}`, () => {
     const run = (buttonRoute) => {
-      const { cell, button, modal } = fixture(html);
+      const { cell, button } = fixture(html);
       const node = cell.querySelector("strong, em")?.firstChild || cell.firstChild;
       caret(cell, node, node.length);
       cell.closest(".field-wrap").querySelector(`[data-cmd="${command}"]`).click();
       if (buttonRoute) {
         button.click();
-        modal.querySelector('[data-tag-cat="prop"]').click();
+        pickCategory(cell, "prop");
       } else type(cell, "prop:");
       assert.equal(currentPlainTags().isOpen(cell), true);
       type(cell, "Lamp");

@@ -34,9 +34,8 @@ key Escape
 expect document.getElementById('findbar').hidden
 eval (function(){var c=cell(3);c.focus();var r=document.createRange();r.setStart(c.firstChild,0);r.setEnd(c.firstChild,4);var s=getSelection();s.removeAllRanges();s.addRange(r);return s.toString();})()
 click #rows .row:nth-of-type(4) .visual-cell button.tb-tag
-wait !document.getElementById('tag-modal').hidden
-jsclick #tag-cats [data-tag-cat="sound"]
-jsclick #tag-apply
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="sound"]
 expect cell(3).querySelectorAll('.tag-anchor').length === 2
 expect cell(3).querySelector('[data-tag-cat="sound"]').textContent === 'rain'
 expect cell(3).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'

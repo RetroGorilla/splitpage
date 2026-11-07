@@ -12,6 +12,7 @@ import { registryEntryOf } from "../../core/production/records.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import type { TagCategoryId } from "../../core/document/tags.ts";
 import type { PlainTagMount, PlainTagPorts, TagCaretRefusal } from "./ports.ts";
+import { showToolbarTagPicker } from "./toolbar-picker.ts";
 
 export const PLAIN_TAG_KEYWORDS: Record<string, TagCategoryId> = {
   prop: "prop",
@@ -107,32 +108,36 @@ interface TagCaretSnapshot {
 }
 
 let categoryCaret: TagCaretSnapshot | null = null;
+let closeCategoryPicker: (() => void) | null = null;
 
 function tagCaret(cellEl: Element): Range | TagCaretRefusal {
   if (cellEl.getAttribute("data-field") === "audioText") return "audio";
   if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows")) return "elsewhere";
   if (plainTagOpen()) return "open";
   const sel = window.getSelection();
-  if (!sel?.rangeCount || !sel.isCollapsed) return "elsewhere";
+  if (!sel?.rangeCount) return "elsewhere";
   const range = sel.getRangeAt(0);
   const node = range.startContainer;
-  if (!cellEl.contains(node)) return "elsewhere";
+  if (!cellEl.contains(node) || !cellEl.contains(range.endContainer)) return "elsewhere";
   const element = node.nodeType === 1 ? node as Element : node.parentElement;
   if (element?.closest(".tag-anchor")) return "tag";
   if (element?.closest("a")) return "link";
+  if (!range.collapsed) {
+    if (Array.from(cellEl.querySelectorAll(".tag-anchor")).some(tag => range.intersectsNode(tag))) return "tag-selection";
+    if (Array.from(cellEl.querySelectorAll("a")).some(link => range.intersectsNode(link))) return "link";
+  }
   return domToPos(cellEl, node, range.startOffset) === null ? "elsewhere" : range;
 }
 
 function openCategoryAtCaret(cellEl: HTMLElement, marks: Marks): TagCaretRefusal | null {
+  if (categoryCaret?.cellEl === cellEl) { cancelCategory(); return null; }
+  cancelCategory(false);
   const range = tagCaret(cellEl);
   if (typeof range === "string") return range;
-  const modal = document.getElementById("tag-modal");
-  if (!modal || !modal.hidden || !ports) return "elsewhere";
+  if (!ports) return "elsewhere";
   categoryCaret = { cellEl, range: range.cloneRange(), node: range.startContainer, offset: range.startOffset, html: cellEl.innerHTML, marks };
-  ports.renderCategories(null);
-  modal.classList.add("is-category-only");
-  modal.hidden = false;
-  modal.querySelector<HTMLElement>(".tag-cat-btn")?.focus();
+  closeCategoryPicker = showToolbarTagPicker(cellEl, chooseCategory, cancelCategory);
+  if (!closeCategoryPicker) { categoryCaret = null; return "elsewhere"; }
   return null;
 }
 
@@ -141,16 +146,13 @@ function categoryCaretStillThere(saved: TagCaretSnapshot): boolean {
     saved.range.startContainer === saved.node && saved.range.startOffset === saved.offset;
 }
 
-function cancelCategory(): boolean {
+function cancelCategory(restore = true): boolean {
   const saved = categoryCaret;
   if (!saved) return false;
   categoryCaret = null;
-  const modal = document.getElementById("tag-modal");
-  if (modal) {
-    modal.hidden = true;
-    modal.classList.remove("is-category-only");
-  }
-  if (categoryCaretStillThere(saved)) {
+  closeCategoryPicker?.();
+  closeCategoryPicker = null;
+  if (restore && categoryCaretStillThere(saved)) {
     saved.cellEl.focus();
     const sel = window.getSelection();
     sel?.removeAllRanges();
@@ -221,6 +223,22 @@ function chooseCategory(cat: string | null): boolean {
   const look = tagCategory(cat);
   if (!categoryCaretStillThere(saved) || !look) return true;
   if (typeof tagCaret(saved.cellEl) === "string" || !ports) return true;
+  if (!saved.range.collapsed) {
+    tagPorts().undo.breakCoalescing();
+    const done = tagPorts().cells.edit(saved.cellEl, function (cell, selection) {
+      if (!selection || selection.from === selection.to) return null;
+      const phrase = plainTagPhrase(projection(cell).slice(selection.from, selection.to));
+      if (!phrase) return null;
+      const name = registryEntryOf(tagPorts().document.current(), look.id, phrase.name)?.name || phrase.name;
+      return {
+        cell: setMark(cell, selection.from + phrase.lead, selection.to - phrase.trail, "tag", namedTagId(look.id, name)),
+        sel: { from: selection.to, to: selection.to }, records: { tags: [{ cat: look.id, name }] }
+      };
+    });
+    tagPorts().undo.breakCoalescing();
+    if (done) plainTaggedListeners.slice().forEach(listener => { listener(); });
+    return true;
+  }
   const keyword = (cat === "sound" ? "sfx" : cat) + ":";
   if (afterOrInsideWord(saved)) {
     openSilentTag(saved, look.id, keyword);
