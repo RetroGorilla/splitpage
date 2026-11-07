@@ -4077,6 +4077,15 @@ async function caseGalleryVideoBundle(target) {
 
     fs.writeFileSync(path.join(folder, "not linked.mp4"), Buffer.alloc(1024, 9));
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
+    const saveAsked = await poll(cdp, "(function(){ var m = document.getElementById('bundle-save-modal'); return !!m && !m.hidden; })()", 10000).catch(() => false);
+    const saveTitle = await evalPage(cdp, "document.getElementById('bundle-save-title').textContent");
+    const saveCopy = await evalPage(cdp, "document.getElementById('bundle-save-copy').textContent");
+    const saveFocused = await evalPage(cdp, "document.activeElement && document.activeElement.id");
+    record(tag + ": Save As asks whether to copy the files, with Copy files and its size as the default", !!saveAsked &&
+      saveTitle === "Save the files with this script?" && saveCopy === "Copy files (3 MB)" && saveFocused === "bundle-save-copy",
+      JSON.stringify({ saveAsked, saveTitle, saveCopy, saveFocused }));
+    record(tag + ": the prompt is asked before the new script is written", !fs.existsSync(copyPath), "");
+    await evalPage(cdp, "document.getElementById('bundle-save-copy').click()");
     const carried = path.join(copyDir, "Episode 12 v2 files", "take one.mp4");
     const landed = await pollNode(async () => (fs.existsSync(carried) && fs.statSync(carried).size === fs.statSync(clip).size) || null, 20000).catch(() => false);
     const there = fs.existsSync(path.dirname(carried)) ? fs.readdirSync(path.dirname(carried)) : null;

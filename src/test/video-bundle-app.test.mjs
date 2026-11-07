@@ -278,3 +278,63 @@ test("main reads the bundled names from the bytes of both project formats as the
   assert.deepEqual(bundledNamesInProject(buildMarkdownProject(captured)), ["a.mov", "b.mp4"], "a fence typed into the script is not the project block");
   assert.deepEqual(bundledNamesInProject("not a project"), []);
 });
+
+test("Save As of a script with bundled files asks first: Copy files and Don't copy tell main and write, Cancel writes nothing, a plain save never asks", async () => {
+  setAutoSaveEnabled(false);
+  const fake = window.__desktopTest.makeFakeBackend();
+  const plans = [];
+  const choices = [];
+  const written = [];
+  const write = fake.writeFile;
+  fake.writeFile = function (id, data) { written.push(id); return write.call(this, id, data); };
+  fake.planBundleSave = (id, names) => {
+    plans.push({ id, names });
+    return Promise.resolve({ ok: true, plan: { from: "Episode 12 files", to: "Episode 12 v2 files", files: 1, bytes: 300 * 1024 * 1024, copyBytes: 300 * 1024 * 1024, missing: 0, linkable: true } });
+  };
+  fake.chooseBundleSave = (id, choice) => { choices.push({ id, choice }); return Promise.resolve({ ok: true }); };
+  window.__desktopTest.setBackend(fake);
+  const bundled = () => migrateRows({
+    schema: 5, title: "Episode 12", docId: ID("9"),
+    rows: [{ id: "r1", visualText: "Wide", audioText: "One.", status: "todo", imageLinks: [{ name: "take.mp4", size: 4, location: { kind: "bundled", name: "take.mp4" } }] }]
+  });
+  const modal = () => document.getElementById("bundle-save-modal");
+  try {
+    const before = await openFromDesktop(fake, bundled(), "Episode 12.splitpage");
+    const writesBefore = written.length;
+    await saveDoc({});
+    assert.equal(plans.length, 0, "a plain save asks nothing");
+    assert.equal(written.length, writesBefore + 1);
+
+    let saving = saveDoc({ saveAs: true });
+    assert.ok(await until(() => !modal().hidden), "the Save As asks");
+    assert.equal(plans[0].names.join(), "take.mp4", "main is asked with the bundled names of the bytes about to be written");
+    assert.equal(document.getElementById("bundle-save-warning").hidden, false, "300 MB is over the warning line");
+    assert.equal(written.length, writesBefore + 1, "nothing is written while the prompt is open");
+    document.getElementById("bundle-save-cancel").click();
+    await saving;
+    assert.equal(written.length, writesBefore + 1, "Cancel writes nothing");
+    assert.equal(homeModule.currentHome().handle, before, "the document stays with its script");
+    assert.deepEqual(choices, []);
+
+    saving = saveDoc({ saveAs: true });
+    assert.ok(await until(() => !modal().hidden));
+    document.getElementById("bundle-save-link").click();
+    await saving;
+    assert.deepEqual(choices.map((c) => c.choice), ["link"]);
+    assert.equal(choices[0].id, plans[1].id, "the choice is for the file the dialog chose");
+    assert.equal(written.length, writesBefore + 2);
+    assert.equal(written[written.length - 1], plans[1].id);
+    assert.notEqual(homeModule.currentHome().handle, before);
+
+    saving = saveDoc({ saveAs: true });
+    assert.ok(await until(() => !modal().hidden));
+    assert.equal(document.activeElement, document.getElementById("bundle-save-copy"));
+    document.getElementById("bundle-save-copy").click();
+    await saving;
+    assert.deepEqual(choices.map((c) => c.choice), ["link", "copy"]);
+    assert.equal(written.length, writesBefore + 3);
+  } finally {
+    window.__desktopTest.restoreBackend();
+    document.getElementById("toast-host").replaceChildren();
+  }
+});

@@ -54,7 +54,8 @@ function shellIpc({ source = null, grants = [] } = {}) {
     copier: createBundleCopier({ bundleFiles, progressEveryMs: 0 }), allow: ATTACHABLE_FILE,
     scriptOfTab: (tabId) => (tabId === tab.id && tab.source.kind === "file" ? tab.source.absPath : null),
     pathOf: (fileId) => targets.get(fileId) || null,
-    namesInProject: bundleFiles.bundledNamesInProject
+    namesInProject: bundleFiles.bundledNamesInProject,
+    linkInProject: bundleFiles.linkBundledInProject
   });
   const { registerShellIpc } = createShellIpc({
     tabOf: () => tab,
@@ -71,9 +72,11 @@ function shellIpc({ source = null, grants = [] } = {}) {
     bundleJobs.noteSaveTarget(fileId, tab);
     const project = { rows: [{ id: "r1", imageLinks: names.map((name) => ({ name, location: { kind: "bundled", name } })) }] };
     const before = sent.length;
-    const refused = await bundleJobs.carryForSave(fileId, () => JSON.stringify(project), sender);
+    const prepared = await bundleJobs.prepareWrite(fileId, () => JSON.stringify(project), sender);
+    const refused = prepared.refused;
+    if (!refused) prepared.landed(true);
+    await bundleJobs.idle();
     tab.source = { kind: "file", absPath: to };
-    bundleJobs.saveLanded(fileId);
     const done = sent.slice(before).filter((s) => s.channel === "splitpage:bundle-carry" && s.payload.result);
     return { refused, result: done.length ? done[done.length - 1].payload.result : null };
   }

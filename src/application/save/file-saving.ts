@@ -18,7 +18,7 @@ import type { AutoSaveChange } from "./autosave.ts";
 import type { DestinationKey, SaveJob, SaveLanding, WriterResult } from "./coordinator.ts";
 import type { SaveDestination } from "./destinations.ts";
 import type { LandedWrite, SaveCompletion } from "./save-completion.ts";
-import type { FileSaveDialogs, FileSaveHandle, FileSavePorts, FileSaveRequest, FileSaveTarget, FileSavingMount, FileSavingPorts } from "./file-saving-ports.ts";
+import type { BundleSaveWindow, FileSaveDialogs, FileSaveHandle, FileSavePorts, FileSaveRequest, FileSaveTarget, FileSavingMount, FileSavingPorts } from "./file-saving-ports.ts";
 import type { AutoSaveTarget } from "./status.ts";
 
 interface WriteOptions {
@@ -100,18 +100,18 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
     showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
   }
 
-  if (!saveAs || !job.owns()) return writeCaptured(opts, job, saveAs, auto);
+  if (!saveAs || !job.owns()) return writeCaptured(opts, job, saveAs, auto, null);
   const bundles = mountedPorts().bundles.beginSave();
   try {
     // why: no copy into the old folder may still be running once the bytes that carry the folder along are captured
     if (bundles.drained && !(await bundles.drained)) return CANCELLED;
-    return await writeCaptured(opts, job, saveAs, auto);
+    return await writeCaptured(opts, job, saveAs, auto, bundles);
   } finally {
     bundles.end();
   }
 }
 
-async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, saveAs: boolean, auto: boolean): Promise<WriterResult> {
+async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, saveAs: boolean, auto: boolean, bundles: BundleSaveWindow | null): Promise<WriterResult> {
   const forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   const docIdAtSave = (currentDocument() as { readonly docId: string }).docId;
   const homeAtSave = currentHome();
@@ -188,6 +188,7 @@ async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, 
 
     if (target.kind === "handle") {
       const handle = target.handle;
+      if (bundles && !(await bundles.ask(handle, body))) return CANCELLED;
       const landedOn = await writeToHandle(handle, body);
       wrote = true;
       job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () {

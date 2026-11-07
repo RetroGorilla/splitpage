@@ -1,6 +1,12 @@
 import type { DesktopVideo } from "../../application/media/desktop-video.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { bundleRefusalText } from "../../adapters/desktop/desktop-handle.ts";
+
+function desktopIdOf(handle: unknown): string | null {
+  const id = handle && typeof handle === "object" ? (handle as { readonly _desktopId?: unknown })._desktopId : null;
+  return typeof id === "string" && id ? id : null;
+}
 
 export const desktopVideo: DesktopVideo = {
   present: presence.running,
@@ -46,6 +52,21 @@ export const desktopVideo: DesktopVideo = {
   cancelBundle: (job) => {
     const port = desktopPort();
     if (port && typeof port.cancelBundle === "function") port.cancelBundle(job);
+  },
+  planSave: async (handle, names) => {
+    const port = desktopPort();
+    const id = desktopIdOf(handle);
+    if (!presence.running() || !port || typeof port.planBundleSave !== "function" || !id) return null;
+    const answer = await port.planBundleSave(id, [...names]);
+    if (answer && !answer.ok && "refused" in answer) throw new Error(bundleRefusalText(answer.refused));
+    return answer && answer.ok ? answer.plan : null;
+  },
+  chooseSave: async (handle, choice) => {
+    const port = desktopPort();
+    const id = desktopIdOf(handle);
+    if (!port || typeof port.chooseBundleSave !== "function" || !id) return false;
+    const answer = await port.chooseBundleSave(id, choice);
+    return !!answer && answer.ok;
   },
   thumbnail: (host, ref) => {
     const port = desktopPort();

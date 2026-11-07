@@ -73,6 +73,8 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly onBundleCarry: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:bundle-carry">[0]>) => void;
   readonly cancelBundle: (...args: DesktopIpcArgs<"splitpage:bundle-cancel">) => void;
   readonly openBundledFile: DesktopCall<"splitpage:bundled-file-open">;
+  readonly planBundleSave: DesktopCall<"splitpage:bundle-save-plan">;
+  readonly chooseBundleSave: DesktopCall<"splitpage:bundle-save-choice">;
   readonly videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopThumbnailResult>;
 
   readonly getUpdateStatus: DesktopCall<"splitpage:update-status">;
@@ -111,7 +113,7 @@ export const DESKTOP_PORT_MEMBERS = [
   "blobPut", "blobGet", "blobMissing", "printToPdf",
   "getSessionInfo", "openExternal", "setTheme",
   "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath",
-  "bundleVideoFile", "onBundleCarry", "cancelBundle", "openBundledFile", "videoThumbnail",
+  "bundleVideoFile", "onBundleCarry", "cancelBundle", "openBundledFile", "planBundleSave", "chooseBundleSave", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",
   "openPrompterInBrowser", "openPrompterInChromium",
   "voiceStatus", "voiceStart", "voiceMicrophones", "voiceStop", "onVoiceEvent"

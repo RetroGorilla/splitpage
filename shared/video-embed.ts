@@ -354,6 +354,50 @@ function bundledNamesInProject(text: string): string[] {
   return [...names].sort();
 }
 
+function linkBundledIn(value: unknown, paths: ReadonlyMap<string, string>): number {
+  let swapped = 0;
+  const pending: unknown[] = [value];
+  while (pending.length) {
+    const item = pending.pop();
+    if (!item || typeof item !== "object") continue;
+    const at = (item as { location?: unknown }).location;
+    if (at && typeof at === "object" && (at as { kind?: unknown }).kind === "bundled") {
+      const to = paths.get((at as { name?: unknown }).name as string);
+      if (typeof to === "string") { (item as { location: unknown }).location = { kind: "path", path: to }; swapped++; }
+    }
+    for (const child of Object.values(item)) if (child && typeof child === "object") pending.push(child);
+  }
+  return swapped;
+}
+
+function linkBundledInProject(text: string, paths: ReadonlyMap<string, string>): string | null {
+  if (!paths.size) return null;
+  try {
+    const whole: unknown = JSON.parse(text);
+    return linkBundledIn(whole, paths) ? JSON.stringify(whole, null, 2) : null;
+  } catch { }
+  const lines = text.split("\n");
+  let openAt = -1, fence = 0;
+  lines.forEach(function (line, i) {
+    const m = /^(~{3,})\s*splitpage\s*$/.exec(line);
+    if (m) { openAt = i; fence = (m[1] as string).length; }
+  });
+  if (openAt === -1) return null;
+  let closeAt = -1;
+  for (let i = openAt + 1; i < lines.length; i++) {
+    if (new RegExp("^~{" + fence + ",}\\s*$").test(lines[i] as string)) { closeAt = i; break; }
+  }
+  const end = closeAt === -1 ? lines.length : closeAt;
+  let record: unknown;
+  try { record = JSON.parse(lines.slice(openAt + 1, end).join("\n")); } catch { return null; }
+  if (!linkBundledIn(record, paths)) return null;
+  const json = JSON.stringify(record, null, 2);
+  const longest = Math.max(fence, ...(json.match(/~+/g) || []).map(function (run) { return run.length + 1; }));
+  const tildes = "~".repeat(longest);
+  const block = [tildes + "splitpage", ...json.split("\n"), ...(closeAt === -1 ? [] : [tildes])];
+  return [...lines.slice(0, openAt), ...block, ...lines.slice(end + (closeAt === -1 ? 0 : 1))].join("\n");
+}
+
 export type { BundleFileSystem, BundlePaths, VideoPathFileSystem, VideoPathVerdict };
 
 export {
@@ -361,6 +405,7 @@ export {
   bundleFolderOf,
   bundledNamesInProject,
   bundleableName,
+  linkBundledInProject,
   missingFile,
   numberedName,
   realBundleFolder,
