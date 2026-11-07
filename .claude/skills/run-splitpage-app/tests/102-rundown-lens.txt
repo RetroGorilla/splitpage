@@ -88,7 +88,7 @@ eval (function(){ var r = blk(14).getBoundingClientRect(); return [r.left, r.wid
 eval window.__clickPoint = { x: __x + 20, y: track().getBoundingClientRect().top + 18 }
 mouse click window.__clickPoint
 wait document.activeElement && document.activeElement.closest && document.activeElement.closest('#rows .row') && document.activeElement.closest('#rows .row').getAttribute('data-id') === 'r14'
-expect (function(){ var r = document.querySelector('#rows .row[data-id="r14"]').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()
+wait (function(){ var r = document.querySelector('#rows .row[data-id="r14"]').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()
 wait !document.querySelector('#rundown .rundown-playhead').hidden
 sleep 300
 expect Math.abs(parseFloat(document.querySelector('#rundown .rundown-playhead').style.left) - (parseFloat(blk(14).style.left) - 1)) < 0.6
