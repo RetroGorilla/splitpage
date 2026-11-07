@@ -29,6 +29,25 @@ export const desktopVideo: DesktopVideo = {
     if (!port || typeof port.openVideoPath !== "function") return Promise.resolve(null);
     return Promise.resolve(port.openVideoPath(path));
   },
+  openBundled: (name) => {
+    const port = desktopPort();
+    if (!port || typeof port.openBundledFile !== "function") return Promise.resolve(null);
+    return Promise.resolve(port.openBundledFile(name));
+  },
+  bundle: (token, job, onProgress) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.bundleVideoFile !== "function") return Promise.resolve(null);
+    return Promise.resolve(port.bundleVideoFile(token, job, onProgress));
+  },
+  carry: (toFileId, names, job, onProgress) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.carryBundle !== "function") return Promise.resolve(null);
+    return Promise.resolve(port.carryBundle(toFileId, names, job, onProgress));
+  },
+  cancelBundle: (job) => {
+    const port = desktopPort();
+    if (port && typeof port.cancelBundle === "function") port.cancelBundle(job);
+  },
   thumbnail: (host, ref) => {
     const port = desktopPort();
     if (!port || typeof port.videoThumbnail !== "function") return null;

@@ -15,7 +15,7 @@ const OPEN_FOLDER_PROBE_TIMEOUT_MS = 1000;
 
 function createFileIpc({
   dialog, documentsPath, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
-  consumeTestDialogAnswer, testDialogsSeen, testMode: TEST_MODE
+  consumeTestDialogAnswer, testDialogsSeen, noteSaveTarget, testMode: TEST_MODE
 }: DesktopFileIpcDependencies) {
   const pendingScriptSaves = new Set<string>();
 
@@ -98,6 +98,7 @@ function createFileIpc({
         return null;
       }
       const id = fileIds.register(chosen);
+      noteSaveTarget(id, me);
       if (/\.splitpage$/i.test(path.basename(chosen))) pendingScriptSaves.add(id);
       return { id, name: path.basename(chosen) };
     });

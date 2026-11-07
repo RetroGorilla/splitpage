@@ -64,7 +64,9 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:recents-list invoke", "splitpage:recents-remove invoke", "splitpage:recents-clear invoke",
   "splitpage:get-session-info invoke", "splitpage:get-app-version-sync sendSync", "splitpage:tab-boot-sync sendSync",
   "splitpage:open-external send", "splitpage:set-theme send", "splitpage:video-file-grant invoke",
-  "splitpage:video-file-open invoke", "splitpage:video-path-open invoke", "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
+  "splitpage:video-file-open invoke", "splitpage:video-path-open invoke",
+  "splitpage:bundle-file invoke", "splitpage:bundle-carry invoke", "splitpage:bundle-cancel send", "splitpage:bundled-file-open invoke",
+  "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
   "splitpage:update-check invoke", "splitpage:update-download invoke", "splitpage:update-install invoke",
   "splitpage:prompter-open-in-browser invoke", "splitpage:prompter-open-in-chromium invoke",
   "splitpage:voice-status invoke", "splitpage:voice-start invoke", "splitpage:voice-microphones invoke", "splitpage:voice-stop invoke",
@@ -309,14 +311,14 @@ test("main.ts passes registerIpc every handler group, and each group's module is
   }
 });
 
-test("in test mode, main.ts's real groups register the 60 pairs in the order they had before the split, then the print channel", () => {
+test("in test mode, main.ts's real groups register the 64 pairs in the order they had before the split, then the print channel", () => {
   assert.deepEqual(registerThroughMain({ testMode: true }), [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT]);
 });
 
 test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
   const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
-  assert.equal(expected.length, 55);
+  assert.equal(expected.length, 59);
   assert.deepEqual(seen, expected);
   for (const pair of seen) {
     const [name, direction] = pair.split(" ");
@@ -604,6 +606,31 @@ test("the stored-video-path channel takes one string from the app page only, and
     assert.ok(checkArgs(c.argsSchema, bad), "refuses " + JSON.stringify(bad));
   }
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((row) => row.name === c.name), "never the tab strip's");
+});
+
+test("the bundle channels take a token, a save id, names or a job id, never a path to copy from or to, from the app page only", () => {
+  const shapes = {
+    "splitpage:bundle-file invoke": [["string", "string"], [["0".repeat(32), "bundle1"]],
+      [[], ["0".repeat(32)], [null, "bundle1"], [{ path: "C:\\a.mp4" }, "bundle1"], ["0".repeat(32), "bundle1", "C:\\Windows"]]],
+    "splitpage:bundle-carry invoke": [["string", "array", "string"], [["f".repeat(32), ["a.mp4"], "bundle2"]],
+      [[], ["f".repeat(32), "a.mp4", "bundle2"], ["f".repeat(32), ["a.mp4"]], ["f".repeat(32), ["a.mp4"], "bundle2", "C:\\Windows"]]],
+    "splitpage:bundle-cancel send": [["string"], [["bundle1"]], [[], [1], ["bundle1", "more"]]],
+    "splitpage:bundled-file-open invoke": [["string"], [["take one.mp4"]], [[], [null], [{ name: "a.mp4" }], ["a.mp4", "C:\\x.exe"]]]
+  };
+  for (const [pair, [schema, good, bads]] of Object.entries(shapes)) {
+    const [name, direction] = pair.split(" ");
+    const c = channelFor(name, direction);
+    assert.ok(c, pair + " exists");
+    assert.deepEqual([...c.argsSchema], schema, pair);
+    assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN], pair);
+    assert.ok(!c.testOnly, pair);
+    for (const args of good) assert.equal(checkArgs(c.argsSchema, args), null, pair + " takes " + JSON.stringify(args));
+    for (const bad of bads) assert.ok(checkArgs(c.argsSchema, bad), pair + " refuses " + JSON.stringify(bad));
+    assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((row) => row.name === name), pair + " is never the tab strip's");
+  }
+  const progress = channelFor("splitpage:bundle-progress", "receive");
+  assert.ok(progress, "main reports progress on its own channel");
+  assert.deepEqual([...progress.allowedOrigins], [APP_ORIGIN]);
 });
 
 test("the PDF print channel takes one HTML string, from the app page only", () => {

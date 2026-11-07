@@ -179,7 +179,8 @@ function world(): World {
       imagesLeftOut: () => {}
     },
     preferences: { editorName: () => "Adam", autosave: () => false },
-    page: { getElementById: () => null }
+    page: { getElementById: () => null },
+    bundles: { carry: () => {} }
   };
   const mounted = mountFileSaving(ports);
   const savePorts = mounted.savePorts(ownership);

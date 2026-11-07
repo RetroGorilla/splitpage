@@ -36,6 +36,14 @@ export interface DesktopWireFailure {
   code: string;
 }
 
+export interface DesktopWireBundleProgress {
+  job: string;
+  done: number;
+  total: number;
+}
+export type DesktopWireBundleCopy = { ok: true; name: string } | DesktopWireFailure;
+export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; failed: number } | (DesktopWireFailure & { copied?: number });
+
 export type DesktopWireDraftWrite = { ok: true; seq: number; bytes: number; obsolete?: undefined } | DesktopWireFailure;
 export type DesktopWireDraftDiscard = { ok: true } | DesktopWireFailure;
 
@@ -243,6 +251,11 @@ export interface DesktopIpcContract {
   "splitpage:video-file-grant": DesktopChannelCall<[string], string | null>;
   "splitpage:video-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-path-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
+  "splitpage:bundle-file": DesktopChannelCall<[string, string], DesktopWireBundleCopy>;
+  "splitpage:bundle-carry": DesktopChannelCall<[string, readonly string[], string], DesktopWireBundleCarry>;
+  "splitpage:bundle-cancel": DesktopChannelCall<[string], void>;
+  "splitpage:bundle-progress": DesktopChannelCall<[DesktopWireBundleProgress], void>;
+  "splitpage:bundled-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-thumbnail": DesktopChannelCall<[string, string], { ok: true; bytes: Uint8Array; mime: string } | DesktopWireFailure>;
   "splitpage:update-status": DesktopChannelCall<[], DesktopWireUpdateStatus> & { receive: [DesktopWireUpdateStatus] };
   "splitpage:update-check": DesktopChannelCall<[], DesktopWireUpdateStatus>;

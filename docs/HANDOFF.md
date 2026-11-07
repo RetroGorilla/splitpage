@@ -593,6 +593,16 @@ tabs**.
   check (`videoPathProblem`, then `openableVideoPath` against the disk);
   the one bridge method that takes a path (INV-34). `caseGalleryVideoFile`
   in smoke.mjs drives it with a real file, refused paths and a deleted file.
+- **A dropped video copied beside the script** (#259,
+  [rows-video-files.md](architecture/rows-video-files.md#copies-beside-the-script-259)).
+  `splitpage:bundle-file(token, job)` copies a drop's granted file into the
+  tab's own script's `<name> files` folder; `splitpage:bundle-carry(fileId,
+  names, job)` copies those names to the folder of the file a Save As dialog
+  just chose for that tab; `splitpage:bundled-file-open(name)` opens one
+  name from that folder after `resolveBundledFile`. None takes a path
+  (INV-34). `desktop/test/bundle-ipc.test.mjs` holds the refusals and
+  `caseGalleryVideoBundle` in smoke.mjs runs drop, copy, restart, open and
+  Save As.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
@@ -805,6 +815,8 @@ Names are plain text, limited to 200 code points. See
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
     // a file link dropped in the desktop app (#259) also has
     // "location": { "kind": "path", "path": "C:\\Videos\\clip.mp4" }; an older build drops it
+    // or, for a copy in the "<script name> files" folder beside the script,
+    // "location": { "kind": "bundled", "name": "clip (2).mp4" }
     // a poster link's item's imageRef is its still: a file's first frame, or
     // a YouTube/Vimeo link's fetched thumbnail (#141) — an ordinary blob
     "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],

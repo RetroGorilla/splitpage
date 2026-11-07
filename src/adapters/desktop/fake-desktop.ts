@@ -17,6 +17,11 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _videoPaths?: Record<string, string>;
   _videoPathOpens?: string[];
   _videoPathAnswer?: Awaited<ReturnType<DesktopPort["openVideoPath"]>>;
+  _bundleCalls?: { token: string; job: string }[];
+  _bundleAnswer?: Awaited<ReturnType<DesktopPort["bundleVideoFile"]>>;
+  _carryCalls?: { toFileId: string; names: string[]; job: string }[];
+  _bundleCancels?: string[];
+  _bundledOpens?: string[];
   _printed?: string[];
   _printAnswer?: Awaited<ReturnType<DesktopPort["printToPdf"]>>;
   _thumbCalls?: [string, string][];
@@ -187,6 +192,22 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
     openVideoPath: function (storedPath: string) {
       (this._videoPathOpens = this._videoPathOpens || []).push(storedPath);
       return Promise.resolve(this._videoPathAnswer || { ok: true });
+    },
+    bundleVideoFile: function (token: string, job: string, onProgress?: Parameters<DesktopPort["bundleVideoFile"]>[2]) {
+      (this._bundleCalls = this._bundleCalls || []).push({ token, job });
+      const name = this._videoGrants && this._videoGrants[token];
+      if (typeof name !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
+      if (onProgress) onProgress({ done: 1, total: 1 });
+      return Promise.resolve(this._bundleAnswer || { ok: true, name: name });
+    },
+    carryBundle: function (toFileId: string, names: readonly string[], job: string) {
+      (this._carryCalls = this._carryCalls || []).push({ toFileId, names: names.slice(), job });
+      return Promise.resolve({ ok: true, copied: names.length, kept: 0, failed: 0 });
+    },
+    cancelBundle: function (job: string) { (this._bundleCancels = this._bundleCancels || []).push(job); },
+    openBundledFile: function (name: string) {
+      (this._bundledOpens = this._bundledOpens || []).push(name);
+      return Promise.resolve({ ok: true });
     },
     printToPdf: function (html: string) {
       (this._printed = this._printed || []).push(html);

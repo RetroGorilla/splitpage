@@ -22,6 +22,7 @@ export type DesktopTakenDraft = DesktopDraftFields<NonNullable<DesktopIpcResult<
 export type DesktopThumbnailResult = DesktopByteFields<DesktopIpcResult<"splitpage:video-thumbnail">>;
 export type DesktopPdfBytes = DesktopByteFields<{ bytes: DesktopIpcResult<"splitpage:print-to-pdf"> }>["bytes"];
 export type DesktopVideoGrant = Extract<DesktopIpcResult<"splitpage:video-file-grant">, string> | null;
+export type DesktopBundleProgress = Pick<DesktopIpcArgs<"splitpage:bundle-progress">[0], "done" | "total">;
 
 export interface DesktopPort extends HistoryDesktopPort {
   readonly isDesktop: true;
@@ -68,6 +69,10 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly openVideoFile: DesktopCall<"splitpage:video-file-open">;
   readonly videoFilePath: (file: unknown) => string | null;
   readonly openVideoPath: DesktopCall<"splitpage:video-path-open">;
+  readonly bundleVideoFile: (token: string, job: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-file">>;
+  readonly carryBundle: (toFileId: string, names: readonly string[], job: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-carry">>;
+  readonly cancelBundle: (...args: DesktopIpcArgs<"splitpage:bundle-cancel">) => void;
+  readonly openBundledFile: DesktopCall<"splitpage:bundled-file-open">;
   readonly videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopThumbnailResult>;
 
   readonly getUpdateStatus: DesktopCall<"splitpage:update-status">;
@@ -105,7 +110,8 @@ export const DESKTOP_PORT_MEMBERS = [
   "historyPut", "historyList", "historyGet", "historyCopy", "historyTouch", "historyListDocs",
   "blobPut", "blobGet", "blobMissing", "printToPdf",
   "getSessionInfo", "openExternal", "setTheme",
-  "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath", "videoThumbnail",
+  "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath",
+  "bundleVideoFile", "carryBundle", "cancelBundle", "openBundledFile", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",
   "openPrompterInBrowser", "openPrompterInChromium",
   "voiceStatus", "voiceStart", "voiceMicrophones", "voiceStop", "onVoiceEvent"

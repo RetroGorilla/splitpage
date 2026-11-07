@@ -73,6 +73,15 @@ if (location.origin === "splitpage://app") {
   receive("splitpage:voice-event", (_event, payload) => {
     if (voiceEventCallback) voiceEventCallback(payload);
   });
+  const bundleProgress = new Map<string, Parameters<DesktopPort["bundleVideoFile"]>[2]>();
+  receive("splitpage:bundle-progress", (_event, payload) => {
+    const cb = payload && bundleProgress.get(payload.job);
+    if (cb) cb({ done: payload.done, total: payload.total });
+  });
+  function bundleJob<T>(job: string, onProgress: Parameters<DesktopPort["bundleVideoFile"]>[2], run: () => Promise<T>): Promise<T> {
+    if (typeof onProgress === "function") bundleProgress.set(job, onProgress);
+    return run().finally(() => { bundleProgress.delete(job); });
+  }
   receive("splitpage:reassign-doc-id", (_event, payload) => {
     if (reassignDocIdCallback) reassignDocIdCallback(payload);
   });
@@ -279,6 +288,25 @@ if (location.origin === "splitpage://app") {
 
     openVideoPath(storedPath) {
       return invoke("splitpage:video-path-open", String(storedPath || ""));
+    },
+
+    bundleVideoFile(token, job, onProgress) {
+      const id = String(job || "");
+      return bundleJob(id, onProgress, () => invoke("splitpage:bundle-file", String(token || ""), id));
+    },
+
+    carryBundle(toFileId, names, job, onProgress) {
+      const id = String(job || "");
+      const list = Array.isArray(names) ? names.map((n) => String(n)) : [];
+      return bundleJob(id, onProgress, () => invoke("splitpage:bundle-carry", String(toFileId || ""), list, id));
+    },
+
+    cancelBundle(job) {
+      send("splitpage:bundle-cancel", String(job || ""));
+    },
+
+    openBundledFile(name) {
+      return invoke("splitpage:bundled-file-open", String(name || ""));
     },
 
     videoThumbnail(host, ref) {

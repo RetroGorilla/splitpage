@@ -9,6 +9,8 @@ import type { VideoFilePorts } from "../../../src/features/gallery/video-files-p
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeNotices } from "../fakes.ts";
 
+const NO_BUNDLES = { openBundled: async () => null, bundle: async () => null, cancelBundle: () => {} };
+
 function setup(overrides: Partial<VideoFilePorts> = {}) {
   const doc = migrateRows({ rows: [{ id: "r1", imageLinks: [{ href: "https://example.com/clip" }, { name: "local.mp4", size: 5 }] }] }, fakeMigration().ports);
   const document = fakeDocument(doc);
@@ -17,7 +19,7 @@ function setup(overrides: Partial<VideoFilePorts> = {}) {
   const ports: VideoFilePorts = {
     document: document.document,
     notices: notices.notices,
-    desktop: { grant: () => null, opens: () => false, open: async () => null, openPath: async () => null },
+    desktop: { ...NO_BUNDLES, grant: () => null, opens: () => false, open: async () => null, openPath: async () => null },
     externalLinks: { available: () => false, open: (href) => { external.push(href); } },
     ...overrides
   };
@@ -87,7 +89,7 @@ test("a disposed owner ignores pending grants and native open failures without c
   const pendingGrant = new Promise<string | null>((resolve) => { finishGrant = resolve; });
   const pendingOpen = new Promise<DesktopVideoResult | null>((resolve) => { finishOpen = resolve; });
   let granting = Promise.resolve("first-token") as Promise<string | null>;
-  const h = setup({ desktop: { grant: () => granting, opens: () => true, open: () => pendingOpen, openPath: async () => null } });
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: () => granting, opens: () => true, open: () => pendingOpen, openPath: async () => null } });
   const link = { name: "pending.mp4", size: 2 };
   h.owner.grant({ size: 2 }, link);
   await Promise.resolve();
@@ -114,7 +116,7 @@ test("a disposed owner ignores pending grants and native open failures without c
 test("with no grant this session, a link's stored path is sent to the desktop app to check and open", async () => {
   const opened: string[] = [];
   let answer: DesktopVideoResult | null = { ok: true };
-  const h = setup({ desktop: { grant: () => null, opens: () => true, open: async () => null,
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: () => null, opens: () => true, open: async () => null,
     openPath: async (path) => { opened.push(path); return answer; } } });
   const located = { name: "take.mp4", size: 5, location: { kind: "path" as const, path: "C:\\Videos\\take.mp4" } };
   h.owner.openFile(located);
@@ -139,7 +141,7 @@ test("a grant from this session opens by its token before the stored path, and t
   const tokens: string[] = [];
   const paths: string[] = [];
   const located = { name: "take.mp4", size: 5, location: { kind: "path" as const, path: "/videos/take.mp4" } };
-  const h = setup({ desktop: { grant: async () => "tok", opens: () => true,
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: async () => "tok", opens: () => true,
     open: async (token) => { tokens.push(token); return { ok: true }; },
     openPath: async (path) => { paths.push(path); return { ok: true }; } } });
   h.owner.grant({ size: 5 }, located);
@@ -148,7 +150,7 @@ test("a grant from this session opens by its token before the stored path, and t
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual({ tokens, paths }, { tokens: ["tok"], paths: [] });
   h.owner.dispose();
-  const browser = setup({ desktop: { grant: () => null, opens: () => false, open: async () => null,
+  const browser = setup({ desktop: { ...NO_BUNDLES, grant: () => null, opens: () => false, open: async () => null,
     openPath: async (path) => { paths.push(path); return { ok: true }; } } });
   browser.owner.openFile(located);
   assert.deepEqual(paths, []);
@@ -162,7 +164,7 @@ function locatedHarness(t: { mock: { method: typeof test.mock.method } }) {
   let next = 0;
   t.mock.method(URL, "createObjectURL", () => "blob:file-" + ++next);
   t.mock.method(URL, "revokeObjectURL", () => {});
-  const h = setup({ desktop: { grant: async () => "tok-" + next, opens: () => true,
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: async () => "tok-" + next, opens: () => true,
     open: async (token) => { tokens.push(token); return { ok: true }; },
     openPath: async (path) => { paths.push(path); return { ok: true }; } } });
   return { h, tokens, paths };
@@ -204,4 +206,50 @@ test("undoing a re-drop that moved a link's path opens the old path, not the fil
   assert.equal(h.owner.has(before), false);
   assert.equal(h.owner.has(after), true);
   h.owner.dispose();
+});
+
+test("a bundled link opens by its name in the script's folder, which main resolves, and never by a path", async () => {
+  const names: string[] = [];
+  const paths: string[] = [];
+  let answer: DesktopVideoResult | null = { ok: true };
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: () => null, opens: () => true, open: async () => null,
+    openPath: async (path) => { paths.push(path); return { ok: true }; },
+    openBundled: async (name) => { names.push(name); return answer; } } });
+  const bundled = { name: "take.mp4", size: 5, location: { kind: "bundled" as const, name: "take (2).mp4" } };
+  h.owner.openFile(bundled);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual({ names, paths }, { names: ["take (2).mp4"], paths: [] });
+  answer = { ok: false, code: "GONE" };
+  h.owner.openFile(bundled);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.notices.shown[0]?.message, "Could not open “take.mp4” — it is no longer where it was.");
+  h.owner.dispose();
+});
+
+test("bundling sends main this session's grant for the dropped file, waiting for it, and keeps the preview for the copy", async (t) => {
+  t.mock.method(URL, "createObjectURL", () => "blob:copy");
+  let finishGrant: ((value: string | null) => void) | undefined;
+  const granted = new Promise<string | null>((resolve) => { finishGrant = resolve; });
+  const calls: [string, string][] = [];
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: () => granted, opens: () => true, open: async () => null, openPath: async () => null,
+    bundle: async (token, job, onProgress) => { calls.push([token, job]); onProgress({ done: 5, total: 5 }); return { ok: true, name: "take (2).mp4" }; } } });
+  const dropped = at("C:\\Drops\\take.mp4");
+  const file = { size: 5 };
+  h.owner.grant(file, dropped);
+  const seen: unknown[] = [];
+  const pending = h.owner.bundle(dropped, "bundle1", (p) => { seen.push(p); });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, [], "it waits for the grant");
+  assert.ok(finishGrant);
+  finishGrant("tok");
+  assert.deepEqual(await pending, { ok: true, name: "take (2).mp4" });
+  assert.deepEqual(calls, [["tok", "bundle1"]]);
+  assert.deepEqual(seen, [{ done: 5, total: 5 }]);
+  const copy = { name: "take.mp4", size: 5, location: { kind: "bundled" as const, name: "take (2).mp4" } };
+  assert.equal(h.owner.has(copy), true, "the in-app player keeps playing the copy this session");
+  assert.deepEqual(await h.owner.bundle(at("C:\\Elsewhere\\take.mp4"), "bundle2", () => {}), { ok: false, code: "UNKNOWN" },
+    "a file never dropped this session is never sent");
+  assert.equal(calls.length, 1);
+  h.owner.dispose();
+  assert.deepEqual(await h.owner.bundle(dropped, "bundle3", () => {}), { ok: false, code: "UNAVAILABLE" });
 });

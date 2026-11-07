@@ -2,7 +2,7 @@
 /* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */
 
 import * as blobPolicy from "./blob-policy.ts";
-import { VIDEO_FILE_EXT, hasControlCharacter, videoPathProblem } from "./video-path.ts";
+import { VIDEO_FILE_EXT, bundleFolderName, bundledNameProblem, hasControlCharacter, videoPathProblem } from "./video-path.ts";
 import type { VideoPathStyle } from "./video-path.ts";
 
 type VideoEmbedReference = { host: "youtube" | "vimeo"; id: string; hash?: string; start?: number };
@@ -273,9 +273,66 @@ async function openableVideoPath(p: unknown, style: VideoPathStyle, fs: VideoPat
   return isFile ? { ok: true, path: real } : { ok: false, code: "REFUSED" };
 }
 
-export type { VideoPathFileSystem, VideoPathVerdict };
+interface BundlePaths {
+  readonly join: (...parts: string[]) => string;
+  readonly dirname: (p: string) => string;
+  readonly basename: (p: string) => string;
+}
+
+interface BundleFileSystem extends VideoPathFileSystem {
+  readonly lstat: (p: string) => Promise<{ isDirectory: () => boolean; isSymbolicLink: () => boolean }>;
+}
+
+function bundleableName(name: unknown, allow: RegExp): name is string {
+  return bundledNameProblem(name) === null && allow.test(name as string);
+}
+
+function bundleFolderOf(scriptPath: string, paths: BundlePaths): string {
+  return paths.join(paths.dirname(scriptPath), bundleFolderName(paths.basename(scriptPath)));
+}
+
+function numberedName(name: string, n: number): string {
+  if (n <= 1) return name;
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) + " (" + n + ")" + name.slice(dot) : name + " (" + n + ")";
+}
+
+function samePath(a: string, b: string, foldCase: boolean): boolean {
+  return foldCase ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+async function realBundleFolder(scriptPath: string, fs: BundleFileSystem, paths: BundlePaths): Promise<VideoPathVerdict> {
+  const folder = bundleFolderOf(scriptPath, paths);
+  try {
+    const st = await fs.lstat(folder);
+    if (st.isSymbolicLink() || !st.isDirectory()) return { ok: false, code: "REFUSED" };
+    return { ok: true, path: await fs.realpath(folder) };
+  } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+}
+
+async function resolveBundledFile(scriptPath: string, name: unknown, allow: RegExp, fs: BundleFileSystem, paths: BundlePaths, foldCase: boolean): Promise<VideoPathVerdict> {
+  if (!bundleableName(name, allow)) return { ok: false, code: "REFUSED" };
+  const folder = await realBundleFolder(scriptPath, fs, paths);
+  if (!folder.ok) return folder;
+  let real: string;
+  try { real = await fs.realpath(paths.join(folder.path, name)); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+  if (typeof real !== "string" || hasControlCharacter(real) || !allow.test(real)) return { ok: false, code: "REFUSED" };
+  if (!samePath(paths.dirname(real), folder.path, foldCase)) return { ok: false, code: "REFUSED" };
+  let isFile: boolean;
+  try { isFile = (await fs.stat(real)).isFile(); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+  return isFile ? { ok: true, path: real } : { ok: false, code: "REFUSED" };
+}
+
+export type { BundleFileSystem, BundlePaths, VideoPathFileSystem, VideoPathVerdict };
 
 export {
+  bundleFolderOf,
+  bundleableName,
+  missingFile,
+  numberedName,
+  realBundleFolder,
+  resolveBundledFile,
+  samePath,
   FETCH_TIMEOUT_MS,
   PLAYER_ORIGINS,
   THUMB_MAX_BYTES,

@@ -7,7 +7,7 @@ import type { GalleryVideoPorts } from "../../../src/features/gallery/ports.ts";
 import type { Step } from "../../../src/core/text/steps.ts";
 import { startGalleryVideo as mountVideo } from "../../../src/features/gallery/video.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeOwnership, fakePictures } from "../fakes.ts";
+import { fakeDocument, fakeNotices, fakeOwnership, fakePictures } from "../fakes.ts";
 
 const VIMEO = "https://vimeo.com/123456789";
 
@@ -46,6 +46,18 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
         asked.push(host + ":" + ref);
         return Promise.resolve({ ok: true, bytes: new Uint8Array([1, 2, 3]), mime: "image/jpeg" });
       })
+    },
+    bundles: {
+      window: window,
+      script: () => null,
+      files: { bundle: async () => ({ ok: false, code: "UNAVAILABLE" }), cancelBundle: () => {} },
+      carry: async () => null,
+      notices: fakeNotices().notices,
+      ownership: ownership.ownership,
+      undo: { fold: () => false },
+      document: fakeDocument(doc).document,
+      cells: { editGallery: () => false },
+      viewer: { refresh: () => {} }
     }
   };
   return { doc, pictures, ownership, asked, folds, edits, refreshed, owner: mountVideo(ports) };

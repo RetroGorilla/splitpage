@@ -8,6 +8,7 @@ import { slugify } from "../../../shared/text.ts";
 import { fileTitleChange } from "../../core/document/file-title.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
 import { deepFreeze } from "../../core/document/freeze.ts";
+import { bundledVideoNames } from "../../core/document/gallery.ts";
 import type { ExportCaptureOptions, ExportDocument } from "../../core/document/export-document.ts";
 import type { NoticeKind } from "../effects/ports.ts";
 import type { DeliverOptions } from "../files/file-delivery.ts";
@@ -183,6 +184,10 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
         return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
       }, naming));
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
+      if (target.picked && homeAtSave.kind === "file" && homeAtSave.handle) {
+        const names = bundledVideoNames(published.rows);
+        if (names.length) mountedPorts().bundles.carry(homeAtSave.handle as FileSaveHandle, handle, names);
+      }
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);
       written = SAVED;

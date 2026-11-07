@@ -696,6 +696,28 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="bundle-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="bundle-title" aria-describedby="bundle-detail">
+    <div class="modal-header">
+      <h2 id="bundle-title">Copy this video into the script's folder?</h2>
+    </div>
+    <p class="modal-hint" id="bundle-detail"></p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="bundle-decline">Link to where it is</button>
+        <button type="button" class="btn btn-accent" id="bundle-accept">Copy it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bundle-progress" id="bundle-progress" role="status" aria-live="polite" hidden>
+  <span class="bundle-progress-text" id="bundle-progress-text"></span>
+  <progress class="bundle-progress-bar" id="bundle-progress-bar" max="1" value="0"></progress>
+  <button type="button" class="btn" id="bundle-cancel">Cancel</button>
+</div>
+
 <div class="modal-backdrop" id="md-rows-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="md-rows-title">
     <div class="modal-header">

@@ -20,6 +20,7 @@ files:
   - ipc-tabstrip.ts
   - ipc-test-mode.ts
   - ipc-print.ts
+  - bundle-copy.ts
   - print-pdf.ts
   - prompter-share.ts
   - close-quit.ts

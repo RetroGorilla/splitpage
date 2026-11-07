@@ -108,7 +108,8 @@ function harness(setup: Setup = {}) {
       imagesLeftOut: (count, name) => { log.push("imagesLeftOut:" + count + ":" + name); }
     },
     preferences: { editorName: () => "Adam", autosave: () => setup.autosave ?? true },
-    page: { getElementById: (id) => (id === "menu-autosave" ? menu : null) }
+    page: { getElementById: (id) => (id === "menu-autosave" ? menu : null) },
+    bundles: { carry: (from, to, names) => { log.push("carry:" + from.name + ">" + to.name + ":" + names.join("|")); } }
   };
   const mounted = mountFileSaving(ports) as FileSavingMount;
   return { log, toasts, state, menu, mounted, ports, doc, built };
@@ -406,4 +407,27 @@ test("disposing the mount releases its ports only while it is the live one", () 
   assert.equal(second.menu.attributes["aria-checked"], "true");
   second.mounted.dispose();
   assert.throws(() => second.mounted.updateAutoSaveMenu());
+});
+
+test("Save As from a script on disk carries the script's bundled videos to the new file; other saves do not", async () => {
+  const withVideos = [{ id: "r1", imageLinks: [
+    { name: "a.mp4", size: 3, location: { kind: "bundled", name: "a.mp4" }, poster: true },
+    { name: "p.mp4", size: 3, location: { kind: "path", path: "C:\\v\\p.mp4" } }],
+  moreImages: [{ links: [{ name: "b.mov", location: { kind: "bundled", name: "b (2).mov" }, poster: true }] }] }];
+  const carries = (h: ReturnType<typeof harness>) => h.log.filter((line) => line.startsWith("carry:"));
+  const saveAs = harness({ home: FILE_HOME, writtenOut: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  saveAs.doc.rows.push(...(migrateRows({ rows: withVideos }, fakeMigration().ports).rows));
+  assert.deepEqual(await write(saveAs, "saveAs"), { kind: "saved" });
+  assert.deepEqual(carries(saveAs), ["carry:pilot.md>copy.splitpage:a.mp4|b (2).mov"]);
+  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true });
+  plain.doc.rows.push(...(migrateRows({ rows: withVideos }, fakeMigration().ports).rows));
+  assert.deepEqual(await write(plain, "save"), { kind: "saved" });
+  assert.deepEqual(carries(plain), [], "saving in place carries nothing");
+  const none = harness({ home: FILE_HOME, writtenOut: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  assert.deepEqual(await write(none, "saveAs"), { kind: "saved" });
+  assert.deepEqual(carries(none), [], "no bundled videos, nothing to carry");
+  const first = harness({ pick: { kind: "handle", handle: fileHandle("first.splitpage"), picked: true } });
+  first.doc.rows.push(...(migrateRows({ rows: withVideos }, fakeMigration().ports).rows));
+  assert.deepEqual(await write(first, "save"), { kind: "saved" });
+  assert.deepEqual(carries(first), [], "a script never saved has no folder to carry from");
 });

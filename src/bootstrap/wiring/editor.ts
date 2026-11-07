@@ -67,7 +67,7 @@ import {
 } from "../../features/rows/render.ts";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.ts";
 import { pasteBeatsAt } from "../../features/clipboard/beat-select.ts";
-import { thumbnailsAfterPaste } from "./gallery.ts";
+import { offerBundleAfterDrop, thumbnailsAfterPaste } from "./gallery.ts";
 import {
   draftRedo,
   draftUndo,
@@ -703,6 +703,13 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
     if (res.attached.links && res.attached.links.length) {
       const entry = undoOwner().last();
       thumbnailsAfterPaste(attachedRowId, res.attached.links, entry === before ? null : entry);
+    }
+    const located = (extra ? extra.attach : []).flatMap(function (item) {
+      return item.kind === "videoFile" && item.path ? [{ name: item.name, size: item.size, path: item.path }] : [];
+    });
+    if (attachedRowId && res.attached.videos && located.length) {
+      const entry = undoOwner().last();
+      offerBundleAfterDrop(attachedRowId, located, entry === before ? null : entry);
     }
   }
   if (res.movedComments) {

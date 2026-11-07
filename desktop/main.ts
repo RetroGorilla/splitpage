@@ -39,6 +39,7 @@ import type * as HistoryPolicy from "../shared/history-policy.ts";
 import type * as HistoryStore from "../shared/history-store.ts";
 import type * as DocIdPolicy from "../shared/doc-id-policy.ts";
 import type * as VideoEmbed from "../shared/video-embed.ts";
+import type * as BundleCopy from "./bundle-copy.ts";
 
 type NativeMainOptions<T> = { [K in keyof T]: T[K] | undefined };
 type NativeMainDialog = Omit<Electron.Dialog, keyof DesktopFileIpcDependencies["dialog"] | "showSaveDialogSync">
@@ -99,6 +100,7 @@ const { createTabStripIpc }: { createTabStripIpc: typeof IpcTabstrip.createTabSt
 const { createTestModeIpc }: { createTestModeIpc: typeof IpcTestMode.createTestModeIpc } = require("./ipc-test-mode.ts");
 const { createPrintIpc }: { createPrintIpc: typeof IpcPrint.createPrintIpc } = require("./ipc-print.ts");
 const { createPdfPrinter }: { createPdfPrinter: typeof PrintPdf.createPdfPrinter } = require("./print-pdf.ts");
+const { createBundleCopier }: { createBundleCopier: typeof BundleCopy.createBundleCopier } = require("./bundle-copy.ts");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -859,6 +861,23 @@ async function openPrompterInBrowser(tab: DesktopMainTab | null, opts?: { chromi
 }
 
 const videoEmbed: typeof VideoEmbed = require(path.join(SHARED_ROOT, "video-embed.ts"));
+const bundleCopier = createBundleCopier({ bundleFiles: videoEmbed });
+const SAVE_TARGETS_MAX = 50;
+const saveTargets = new Map<string, { tabId: string; from: string | null }>();
+
+function noteSaveTarget(fileId: string, tab: DesktopMainTab | null) {
+  if (!tab) return;
+  if (saveTargets.size >= SAVE_TARGETS_MAX) saveTargets.delete(saveTargets.keys().next().value as string);
+  saveTargets.set(fileId, { tabId: tab.id, from: tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null });
+}
+
+function takeSaveTarget(fileId: string, tabId: string) {
+  const noted = saveTargets.get(fileId);
+  const to = fileIds.pathOf(fileId);
+  if (!noted || noted.tabId !== tabId || typeof to !== "string") return null;
+  saveTargets.delete(fileId);
+  return { from: noted.from, to };
+}
 
 const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
   ? (() => {
@@ -1785,13 +1804,14 @@ function launchIntentFor(tab: DesktopMainTab) {
 
 const { registerFileIpc } = createFileIpc({
   dialog, documentsPath: () => app.getPath("documents"), fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
-  consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, testMode: TEST_MODE
+  consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, noteSaveTarget, testMode: TEST_MODE
 });
 
 const { registerShellIpc } = createShellIpc({
   tabOf, launchIntentFor, draftStore: () => draftStore, draftsIsHeld, hadPriorSession,
   shell, nativeTheme, themeChoice, videoFileGrants, VIDEO_FILE_EXT,
-  openableVideoPath: videoEmbed.openableVideoPath, testVideoOpens, testMode: TEST_MODE,
+  openableVideoPath: videoEmbed.openableVideoPath, resolveBundledFile: videoEmbed.resolveBundledFile, bundleCopier, takeSaveTarget,
+  testVideoOpens, testMode: TEST_MODE,
   videoThumbnail, updateStatus: () => updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus,
   checkForUpdate, downloadUpdate, runUpdateInstaller, openPrompterInBrowser,
   voiceHelperInstance: voice.voiceHelperInstance
