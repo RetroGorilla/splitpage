@@ -9,7 +9,7 @@ export interface DesktopWireFile {
 export interface DesktopWireStamp {
   lastModified?: number;
   size: number;
-  bundleRefused?: { reason: "clash" | "failed" | "cancelled"; folder: string; name: string; copied: number };
+  bundleRefused?: DesktopWireBundleRefusal;
 }
 
 export interface DesktopWireRecent {
@@ -43,7 +43,30 @@ export interface DesktopWireBundleProgress {
   total: number;
 }
 export type DesktopWireBundleCopy = { ok: true; name: string } | DesktopWireFailure;
-export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; missing: number } | (DesktopWireFailure & { name?: string; copied?: number });
+export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; missing: number } | (DesktopWireFailure & { name?: string; copied?: number; left?: number });
+export interface DesktopWireBundleRefusal {
+  reason: "clash" | "failed" | "cancelled" | "unlinkable" | "missing";
+  folder: string;
+  name: string;
+  copied: number;
+  count?: number;
+}
+export interface DesktopWireBundleSavePlan {
+  from: string;
+  to: string;
+  files: number;
+  bytes: number;
+  copyBytes: number;
+  linkable: boolean;
+}
+export interface DesktopWireBundlePathLink {
+  name: string;
+  path: string;
+}
+export type DesktopWireBundlePlanAnswer = { ok: true; plan: DesktopWireBundleSavePlan | null } | DesktopWireFailure |
+  { ok: false; code: "CLASH" | "MISSING"; refused: DesktopWireBundleRefusal };
+export type DesktopWireBundleChoiceAnswer = { ok: true; links: DesktopWireBundlePathLink[] } | DesktopWireFailure |
+  { ok: false; code: "MISSING" | "UNLINKABLE"; refused: DesktopWireBundleRefusal };
 export interface DesktopWireBundleCarryNote extends DesktopWireBundleProgress {
   from: string;
   to: string;
@@ -244,6 +267,8 @@ export interface DesktopIpcContract {
   "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[]; script?: boolean }], { id: string; name: string } | null>;
   "splitpage:read-file": DesktopChannelCall<[string], DesktopWireFile>;
   "splitpage:write-file": DesktopChannelCall<[string, string | ArrayBuffer | Uint8Array], DesktopWireStamp>;
+  "splitpage:bundle-save-plan": DesktopChannelCall<[string, string[]], DesktopWireBundlePlanAnswer>;
+  "splitpage:bundle-save-choice": DesktopChannelCall<[string, string], DesktopWireBundleChoiceAnswer>;
   "splitpage:stat-file": DesktopChannelCall<[string], { lastModified: number; size: number } | null>;
   "splitpage:recents-list": DesktopChannelCall<[], DesktopWireRecent[]>;
   "splitpage:recents-remove": DesktopChannelCall<[string], DesktopWireRecent[]>;

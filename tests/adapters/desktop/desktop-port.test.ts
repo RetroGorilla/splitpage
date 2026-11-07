@@ -144,6 +144,8 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   bundleVideoFile: { args: ["tok", "bundle1"], direction: "invoke", channel: "splitpage:bundle-file" },
   cancelBundle: { args: ["bundle1"], direction: "send", channel: "splitpage:bundle-cancel" },
   openBundledFile: { args: ["a (2).mp4"], direction: "invoke", channel: "splitpage:bundled-file-open" },
+  planBundleSave: { args: ["fid1", ["a.mp4"]], direction: "invoke", channel: "splitpage:bundle-save-plan" },
+  chooseBundleSave: { args: ["fid1", "copy"], direction: "invoke", channel: "splitpage:bundle-save-choice" },
   videoThumbnail: { args: ["youtube", "abc"], direction: "invoke", channel: "splitpage:video-thumbnail" },
   getUpdateStatus: { args: [], direction: "invoke", channel: "splitpage:update-status" },
   checkForUpdate: { args: [], direction: "invoke", channel: "splitpage:update-check" },

@@ -6,6 +6,7 @@ import type { FileSaveHandle, FileSaveTarget, FileSavingMount, FileSavingPorts }
 import type { Home } from "../../src/application/location/document-location.ts";
 import { buildExportDocument } from "../../src/core/document/export-document.ts";
 import type { ExportDocument, ExportReadModels } from "../../src/core/document/export-document.ts";
+import type { BundledPathLink } from "../../src/core/document/gallery.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
@@ -22,6 +23,8 @@ interface Setup {
   readonly autosave?: boolean;
   readonly onDesktop?: boolean;
   readonly handover?: boolean;
+  readonly ask?: readonly BundledPathLink[] | null;
+  readonly rows?: readonly unknown[];
 }
 
 const NO_MODELS: ExportReadModels = { production: [], commentNumbers: {}, broll: [] };
@@ -37,8 +40,10 @@ function harness(setup: Setup = {}) {
   const toasts: string[] = [];
   const built: ExportDocument[] = [];
   const drains: ((ok: boolean) => void)[] = [];
-  const state = { home: setup.home ?? ({ kind: "none" } as Home), writtenOut: setup.writtenOut ?? false, changes: 4, menuOn: true };
-  const doc = migrateRows({ title: "Pilot Script", docId: OLD_ID, rev: 2, rows: [] }, fakeMigration().ports);
+  const state = { home: setup.home ?? ({ kind: "none" } as Home), writtenOut: setup.writtenOut ?? false, changes: 4, menuOn: true, holding: 0 };
+  const heldAt: string[] = [];
+  const resets: string[] = [];
+  const doc = migrateRows({ title: "Pilot Script", docId: OLD_ID, rev: 2, rows: setup.rows ?? [] }, fakeMigration().ports);
   const menu = {
     attributes: {} as Record<string, string>,
     classes: new Set<string>(),
@@ -53,6 +58,18 @@ function harness(setup: Setup = {}) {
       state.changes++;
       return true;
     } },
+    history: {
+      amendRows: (fix) => {
+        const before = JSON.stringify(doc.rows);
+        fix(doc.rows as unknown as Parameters<typeof fix>[0]);
+        log.push("amendRows");
+        if (JSON.stringify(doc.rows) === before) return "unchanged";
+        state.changes++;
+        return "applied";
+      },
+      hold: () => { state.holding++; return () => { state.holding--; }; },
+      reset: () => { resets.push(state.holding ? "held" : "free"); }
+    },
     deferred: {
       copyHistory: (fromId, toId) => { log.push("copyHistory:" + fromId + ">" + toId); },
       syncIdentity: () => { log.push("syncIdentity"); },
@@ -93,6 +110,7 @@ function harness(setup: Setup = {}) {
       checkConflict: (handle, lastModified) => { log.push("checkConflict:" + handle.name + ":" + String(lastModified)); return Promise.resolve(setup.check ?? { ok: true }); },
       write: (handle, body) => {
         log.push("write:" + handle.name + ":" + body);
+        if (state.holding) heldAt.push("write");
         return setup.writeFails ? Promise.reject(setup.writeFails) : Promise.resolve({ lastModified: 77 });
       },
       isAbort: (error) => !!error && (error as { name?: string }).name === "AbortError"
@@ -100,7 +118,7 @@ function harness(setup: Setup = {}) {
     delivery: { deliver: (filename, _data, options) => { log.push("deliver:" + filename + ":" + String(options && options.savedMsg)); return Promise.resolve(setup.delivered ?? true); } },
     saves: {
       policy: () => ({ enabled: () => state.menuOn }),
-      confirmSavedNow: () => { log.push("confirmSavedNow"); },
+      confirmSavedNow: () => { log.push("confirmSavedNow"); if (state.holding) heldAt.push("confirm"); },
       halt: (reason) => { log.push("halt:" + reason); },
       resume: () => { log.push("resume"); },
       changes: () => state.changes
@@ -113,15 +131,20 @@ function harness(setup: Setup = {}) {
     page: { getElementById: (id) => (id === "menu-autosave" ? menu : null) },
     bundles: {
       beginSave: () => {
-        if (!setup.handover) return { drained: null, end: () => {} };
+        const ask = (handle: FileSaveHandle, body: string) => {
+          if (setup.ask === undefined) return Promise.resolve([]);
+          log.push("ask:" + handle.name + ":" + (body.length > 0));
+          return Promise.resolve(setup.ask);
+        };
+        if (!setup.handover) return { drained: null, ask, end: () => {} };
         log.push("drain:" + state.home.kind);
         const drained = new Promise<boolean>((resolve) => { drains.push((ok) => { log.push(ok ? "drained" : "stopped"); resolve(ok); }); });
-        return { drained, end: () => { log.push("end"); } };
+        return { drained, ask, end: () => { log.push("end"); } };
       }
     }
   };
   const mounted = mountFileSaving(ports) as FileSavingMount;
-  return { log, toasts, state, menu, mounted, ports, doc, built, drains };
+  return { log, toasts, state, menu, mounted, ports, doc, built, drains, heldAt, resets };
 }
 
 function job(kind: string, owns = true) {
@@ -456,4 +479,73 @@ test("Cancel on the wait abandons the Save As before capture, the dialog or the 
   assert.equal((await failed).kind, "failed");
   assert.deepEqual(drainLines(failing), ["drain:file", "drained", "capture", "pick", "setHome:file", "write", "restoreHome:file", "end"],
     "the window stays open through the rollback");
+});
+const askLines = (h: ReturnType<typeof harness>) => h.log.filter((line) => /^(ask|capture|pick|setHome|restoreHome|write)\b/.test(line))
+  .map((line) => line.replace(/^(capture|write):.*/, "$1"));
+
+test("Save As asks about the script's files after the pick and before the write; Cancel there writes nothing and keeps the old file", async () => {
+  const copying = harness({ home: FILE_HOME, writtenOut: true, ask: [], pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  assert.deepEqual(await write(copying, "saveAs"), { kind: "saved" });
+  assert.deepEqual(askLines(copying), ["capture", "pick", "setHome:file", "ask:copy.splitpage:true", "write"], "the prompt sees the bytes about to be written");
+  const cancelled = harness({ home: FILE_HOME, writtenOut: true, ask: null, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  assert.deepEqual(await write(cancelled, "saveAs"), { kind: "cancelled" });
+  assert.deepEqual(askLines(cancelled), ["capture", "pick", "setHome:file", "ask:copy.splitpage:true", "restoreHome:file"], "nothing is written");
+  assert.equal(cancelled.state.home, FILE_HOME, "the document stays with its old file");
+  assert.deepEqual(cancelled.toasts, []);
+  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true, ask: null });
+  assert.deepEqual(await write(plain, "save"), { kind: "saved" }, "a plain save never asks");
+  assert.equal(plain.log.some((line) => line.startsWith("ask:")), false);
+});
+
+const bundledRow = () => ({ id: "r1", visualText: "Wide", audioText: "One.", status: "todo",
+  imageLinks: [{ name: "take.mp4", size: 4, location: { kind: "bundled", name: "take.mp4" } }] });
+const TAKE_PATH = "D:\\Episode 12 files\\take.mp4";
+const locationIn = (rows: readonly unknown[]) => ((rows[0] as { imageLinks: { location: unknown }[] }).imageLinks[0] as { location: unknown }).location;
+
+test("Don't copy writes the links main gave and the document adopts them with the save, so later saves write the same", async () => {
+  const links = [{ name: "take.mp4", path: TAKE_PATH }];
+  const h = harness({ home: FILE_HOME, writtenOut: true, ask: links, rows: [bundledRow()], pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true } });
+  assert.deepEqual(await write(h, "saveAs"), { kind: "saved" });
+  assert.equal(h.built.length, 2, "the bytes are built again with the links before the write");
+  assert.deepEqual(locationIn(h.built[0]?.document.rows ?? []), { kind: "bundled", name: "take.mp4" }, "the prompt saw the bundled names");
+  assert.deepEqual(locationIn(h.built[1]?.document.rows ?? []), { kind: "path", path: TAKE_PATH }, "the written bytes link the original file");
+  assert.deepEqual(locationIn(h.doc.rows), { kind: "path", path: TAKE_PATH }, "the live document links it too");
+  assert.ok(h.log.includes("confirmSavedNow"), "the link change is part of the save, so the document is saved, not dirty");
+  assert.ok(h.log.findIndex((l) => l.startsWith("write:")) < h.log.indexOf("confirmSavedNow"));
+});
+
+test("a failed Don't copy write leaves the document's bundled links as they were", async () => {
+  const links = [{ name: "take.mp4", path: TAKE_PATH }];
+  const h = harness({ home: FILE_HOME, writtenOut: true, ask: links, rows: [bundledRow()], writeFails: new Error("disk full"),
+    pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true } });
+  assert.equal((await write(h, "saveAs")).kind, "failed");
+  assert.deepEqual(locationIn(h.doc.rows), { kind: "bundled", name: "take.mp4" });
+  assert.equal(h.state.home, FILE_HOME);
+  assert.deepEqual(h.resets, [], "a failed write keeps the undo history");
+  assert.equal(h.state.holding, 0, "and gives undo back");
+});
+
+test("undo is held from the capture until a Save As commits, and every Save As that retargets clears the history there", async () => {
+  for (const rows of [[bundledRow()], []]) {
+    const moving = harness({ home: FILE_HOME, writtenOut: true, ask: [], rows, pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true } });
+    assert.deepEqual(await write(moving, "saveAs"), { kind: "saved" });
+    assert.deepEqual(moving.heldAt, ["write", "confirm"], "undo waits through the write and the commit");
+    assert.deepEqual(moving.resets, ["held"], "the history is cleared once, at the commit, bundled links or not");
+    assert.equal(moving.state.holding, 0, "and undo is given back once the save settles");
+    assert.equal(moving.toasts.some((t) => /[Uu]ndo/.test(t)), false, "nothing is said about it");
+  }
+  const cancelled = harness({ home: FILE_HOME, writtenOut: true, ask: null, pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true } });
+  assert.deepEqual(await write(cancelled, "saveAs"), { kind: "cancelled" });
+  assert.deepEqual(cancelled.resets, [], "a cancelled Save As keeps the history");
+  assert.equal(cancelled.state.holding, 0);
+  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true, rows: [bundledRow()] });
+  await write(plain, "save");
+  assert.deepEqual(plain.resets, [], "a plain save keeps the history");
+  assert.deepEqual(plain.heldAt, [], "and never holds undo");
+  const first = harness({ pick: { kind: "handle", handle: fileHandle("pilot.md"), picked: true } });
+  assert.deepEqual(await write(first, "save"), { kind: "saved" });
+  assert.deepEqual(first.resets, [], "the first Save of a new script picks a file but keeps its history");
+  const download = harness({ home: FILE_HOME, writtenOut: true });
+  assert.deepEqual(await write(download, "saveAs"), { kind: "saved" });
+  assert.deepEqual(download.resets, [], "a Save As that only downloads a file does not retarget, so it keeps the history");
 });

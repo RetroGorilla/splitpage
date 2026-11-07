@@ -113,12 +113,26 @@ function createFileIpc({
       const absPath = fileIds.pathOf(id);
       if (!absPath) throw new Error("ENOENT: unknown file id");
       const buffer = toBuffer(data);
-      const refused = await bundleJobs.carryForSave(id, () => buffer.toString("utf8"), event.sender);
-      if (refused) return { size: 0, bundleRefused: refused };
-      const written = await writeFileEntry(absPath, buffer);
+      const prepared = await bundleJobs.prepareWrite(id, () => buffer.toString("utf8"), event.sender);
+      if (prepared.refused) return { size: 0, bundleRefused: prepared.refused };
+      let written;
+      try {
+        written = await writeFileEntry(absPath, buffer);
+      } catch (e) {
+        prepared.landed(false);
+        throw e;
+      }
+      prepared.landed(true);
       if (pendingScriptSaves.delete(id)) await recents.noteSaved(absPath);
-      bundleJobs.saveLanded(id);
       return written;
+    });
+
+    ipcHandle("splitpage:bundle-save-plan", async (event, id, names) => {
+      return bundleJobs.planSave(id, names, tabOf(event));
+    });
+
+    ipcHandle("splitpage:bundle-save-choice", async (event, id, choice) => {
+      return bundleJobs.chooseSave(id, choice, tabOf(event));
     });
 
     ipcHandle("splitpage:stat-file", async (event, id) => {

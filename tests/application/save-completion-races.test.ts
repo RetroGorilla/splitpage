@@ -107,6 +107,11 @@ function world(): World {
   let minted = 0;
   const ports: FileSavingPorts = {
     edits: { edit: () => { throw new Error("unexpected title change"); } },
+    history: {
+      amendRows: () => { throw new Error("unexpected link change"); },
+      hold: () => () => {},
+      reset: () => {}
+    },
     deferred: {
       copyHistory: (fromId, toId) => {
         w.history.push(fromId + ">" + toId);
@@ -180,7 +185,7 @@ function world(): World {
     },
     preferences: { editorName: () => "Adam", autosave: () => false },
     page: { getElementById: () => null },
-    bundles: { beginSave: () => ({ drained: null, end: () => {} }) }
+    bundles: { beginSave: () => ({ drained: null, ask: () => Promise.resolve([]), end: () => {} }) }
   };
   const mounted = mountFileSaving(ports);
   const savePorts = mounted.savePorts(ownership);

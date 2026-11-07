@@ -311,6 +311,14 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:bundled-file-open", String(name || ""));
     },
 
+    planBundleSave(fileId, names) {
+      return invoke("splitpage:bundle-save-plan", String(fileId || ""), Array.isArray(names) ? names.map((n) => String(n)) : []);
+    },
+
+    chooseBundleSave(fileId, choice) {
+      return invoke("splitpage:bundle-save-choice", String(fileId || ""), String(choice || ""));
+    },
+
     videoThumbnail(host, ref) {
       return invoke("splitpage:video-thumbnail", host, ref).then((got)                                                     => {
         if (got && got.ok && got.bytes && !(got.bytes instanceof Uint8Array)) got = { ...got, bytes: new Uint8Array(got.bytes) };
