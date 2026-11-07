@@ -27,6 +27,7 @@ function harness(t, saved = {}) {
   const opened = [];
   const savedDialogs = [];
   const answers = [];
+  const noted = [];
   const handlers = new Map();
   const documents = path.join(root, "Documents");
   const { registerFileIpc } = createFileIpc({
@@ -44,11 +45,12 @@ function harness(t, saved = {}) {
     fileIds, recents, pathToTabId: new Map(), tabs: new Map(),
     tabOf: () => null, dialogParentFor: () => undefined,
     consumeTestDialogAnswer: () => answers.shift(),
-    testDialogsSeen: () => 0, testMode: false
+    testDialogsSeen: () => 0, testMode: false,
+    noteSaveTarget: (id, tab) => { noted.push({ id, tab }); }
   });
   registerFileIpc({ ipcHandle: (name, handler) => handlers.set(name, handler) });
   return {
-    root, documents, store, recents, fileIds, opened, savedDialogs, answers,
+    root, documents, store, recents, fileIds, opened, savedDialogs, answers, noted,
     invoke: (name, ...args) => handlers.get("splitpage:" + name)({}, ...args)
   };
 }
@@ -76,6 +78,7 @@ test("Open prefers the last successful Save or Save As folder, even after anothe
   const file = path.join(savedFolder, "script.splitpage");
   h.answers.push(file);
   const picked = await h.invoke("save-file-dialog", { suggestedName: "script.splitpage" });
+  assert.deepEqual(h.noted.map((n) => n.id), [picked.id], "the chosen file is noted as this save's target, for carrying its videos");
   await h.invoke("write-file", picked.id, "first save");
   h.recents.note(path.join(h.root, "opened-later.md"), "Later");
   await h.invoke("open-file-dialog");
