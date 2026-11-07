@@ -939,7 +939,7 @@ test("the fallback goes when its tab closes or opens another script, even when i
     fs.writeFileSync(path.join(s.folder, "take.mp4"), "mine");
     const other = path.join(s.dir, "Other.splitpage");
     fs.writeFileSync(other, "{}");
-    for (const leave of ["close", "replace"]) {
+    for (const leave of ["close", "replace", "return"]) {
       const { held, link } = heldLink();
       const ipc = harness({ source: s.script, testMode: true, copierOptions: { link } });
       await ipc.saveAs(s.copyScript, { script: true }, project("take.mp4"), "copy");
@@ -947,6 +947,7 @@ test("the fallback goes when its tab closes or opens another script, even when i
       assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), { ok: true }, leave + ": setup: the fallback works");
       if (leave === "close") ipc.bundleJobs.forgetTab(ipc.tab.id);
       else ipc.moveTab(other);
+      if (leave === "replace") assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), { ok: false, code: "GONE" });
       ipc.moveTab(s.copyScript);
       assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), { ok: false, code: "GONE" }, leave + ": the record is gone, not just unused");
       held.open();
