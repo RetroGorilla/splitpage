@@ -958,6 +958,37 @@ test("the fallback goes when its tab closes or opens another script, even when i
   } finally { s.done(); }
 });
 
+test("the fallback also goes when its tab opens another script while the Save As is still writing, so landing later revives nothing", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "take.mp4"), "mine");
+    const other = path.join(s.dir, "Other.splitpage");
+    fs.writeFileSync(other, "{}");
+    for (const detour of [false, true]) {
+      const { held, link } = heldLink();
+      const ipc = harness({ source: s.script, testMode: true, copierOptions: { link } });
+      ipc.answers.push(s.copyScript);
+      const picked = await ipc.call("splitpage:save-file-dialog", { suggestedName: path.basename(s.copyScript), script: true });
+      await ipc.call("splitpage:bundle-save-plan", picked.id, ["take.mp4"]);
+      await ipc.call("splitpage:bundle-save-choice", picked.id, "copy");
+      const body = project("take.mp4");
+      const prepared = await ipc.bundleJobs.prepareWrite(picked.id, () => body, ipc.main.sender);
+      assert.equal(prepared.refused, null, "setup: the write may go ahead");
+      if (detour) { ipc.moveTab(other); ipc.moveTab(s.script); }
+      fs.writeFileSync(s.copyScript, body);
+      prepared.landed(true);
+      ipc.moveTab(s.copyScript);
+      assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), detour ? { ok: false, code: "GONE" } : { ok: true },
+        detour ? "a tab that left before the landing has no fallback" : "setup: without the detour the fallback works");
+      held.open();
+      await ipc.bundleJobs.idle();
+      fs.rmSync(s.copyFolder, { recursive: true, force: true });
+      fs.rmSync(s.copyScript, { force: true });
+    }
+  } finally { s.done(); }
+});
+
 test("the plan and choice channels refuse forged ids, other tabs, a dialog that was not a script save, and a choice that is not copy or link", async () => {
   const s = scratch();
   try {

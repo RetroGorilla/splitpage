@@ -367,54 +367,68 @@ test("Don't copy: the document adopts main's links with the save, so in-place sa
   }
 });
 
-test("after Don't copy, Undo and Redo never bring a bundled name back, so a later save and a reopen still open the original file", async () => {
+test("every Save As to a new file clears undo history without a word, so no undo or redo brings back a name the new folder lacks", async () => {
   setAutoSaveEnabled(false);
-  const b = askingBackend();
-  const modal = () => document.getElementById("bundle-save-modal");
+  const OLD = { name: "old.mp4", size: 3, location: { kind: "bundled", name: "old.mp4" } };
   const edit = (change) => { change(currentDocument().rows[0]); liveSession().noteEdit(); undoOwner().flush(); undoOwner().breakCoalescing(); };
   const bundledNow = () => bundledNamesInProject(buildSplitpageFile(exportDocumentOf(currentDocument())));
-  const PATH_LINK = { kind: "path", path: TAKE_PATH };
-  try {
-    await openFromDesktop(b.fake, bundledScript(ID("b")), "Episode 12.splitpage");
-    edit((row) => { row.imageLinks = [{ ...row.imageLinks[0], size: 5 }]; });
-    edit((row) => { row.imageLinks = [{ ...row.imageLinks[0], size: 6 }]; });
-    assert.equal(undoOwner().undo().ok, true, "setup: one gallery edit waits on redo");
-    assert.deepEqual(undoOwner().sizes(), { undo: 1, redo: 1 });
-    b.names.push("Episode 12 v2.splitpage");
-    const saving = saveDoc({ saveAs: true });
-    assert.ok(await until(() => !modal().hidden), "the Save As asks");
-    document.getElementById("bundle-save-link").click();
-    await saving;
-    assert.deepEqual(linkIn(currentDocument()), PATH_LINK);
-    assert.deepEqual(undoOwner().sizes(), { undo: 1, redo: 1 }, "adopting the paths is no undo step, and the redo stays");
-
-    assert.equal(undoOwner().redo().ok, true);
-    assert.deepEqual(linkIn(currentDocument()), PATH_LINK, "redo gives the path");
-    assert.equal(currentDocument().rows[0].imageLinks[0].size, 6);
-    assert.equal(undoOwner().undo().ok, true);
-    assert.equal(undoOwner().undo().ok, true);
-    assert.deepEqual(linkIn(currentDocument()), PATH_LINK, "undo back past the save gives the path");
-    assert.equal(currentDocument().rows[0].imageLinks[0].size, 4);
-    assert.deepEqual(bundledNow(), []);
-
-    await saveDoc({});
-    const body = b.bodies[b.bodies.length - 1];
-    assert.deepEqual(bundledNamesInProject(body), [], "the save after Undo writes no bundled name for main to find beside the new script");
-    assert.deepEqual(pathLinksIn(body), [TAKE_PATH]);
-    assert.equal(unsavedChanges(), false);
-
+  const host = document.getElementById("toast-host");
+  for (const way of ["link", "copy", "none", "same", "unlinked"]) {
+    const b = askingBackend();
+    const modal = () => document.getElementById("bundle-save-modal");
+    b.fake.planBundleSave = (id, listed) => {
+      b.plans.push({ id, names: listed });
+      if (way === "same") return Promise.resolve({ ok: true, plan: null });
+      return Promise.resolve({ ok: true, plan: { from: "Episode 12 files", to: "Episode 12 v2 files", files: 1, bytes: 4, copyBytes: 4, linkable: true } });
+    };
     b.fake.openBundledFile = function (name) { (this._bundledOpens = this._bundledOpens || []).push(name); return Promise.resolve({ ok: true }); };
-    const reopened = await b.fake.saveFileDialog({ suggestedName: "Episode 12 v2.splitpage" });
-    await b.fake.writeFile(reopened.id, new TextEncoder().encode(body));
-    const handle = makeDesktopHandle(reopened);
-    await openDocument({ kind: "file", file: await handle.getFile(), handle, options: { skipSnapshot: true, silent: true } });
-    videoFiles.openFile(rowSlots(currentDocument().rows[0])[0].links[0]);
-    assert.ok(await until(() => (b.fake._videoPathOpens || []).length === 1));
-    assert.deepEqual(b.fake._videoPathOpens, [TAKE_PATH], "the reopened script opens the original file");
-    assert.equal((b.fake._bundledOpens || []).length, 0, "and never the unrelated take.mp4 in the new script's folder");
-  } finally {
-    window.__desktopTest.restoreBackend();
-    document.getElementById("toast-host").replaceChildren();
+    try {
+      const start = way === "unlinked" ? script("Episode 12", ID("g")) : bundledScript(ID({ link: "b", copy: "c", none: "e", same: "f" }[way]));
+      if (way !== "unlinked") start.rows[0].imageLinks.push(OLD);
+      await openFromDesktop(b.fake, start, "Episode 12.splitpage");
+      host.replaceChildren();
+      if (way === "unlinked") edit((row) => { row.audioText = "One, first."; });
+      else edit((row) => { row.imageLinks = way === "none" ? [] : [row.imageLinks[0]]; });
+      edit((row) => { row.audioText = "One, again."; });
+      assert.equal(undoOwner().undo().ok, true, way + ": setup: one edit waits on redo");
+      assert.deepEqual(undoOwner().sizes(), { undo: 1, redo: 1 }, way + ": setup: the history holds an edit on each side");
+      b.names.push(way === "same" ? "Episode 12.md" : "Episode 12 v2.splitpage");
+      const text = currentDocument().rows[0].audioText;
+      const saving = saveDoc({ saveAs: true });
+      if (way === "link" || way === "copy") {
+        assert.ok(await until(() => !modal().hidden), way + ": the Save As asks");
+        assert.deepEqual(undoOwner().undo(), { ok: false, empty: true }, way + ": undo waits while the Save As is under way");
+        assert.deepEqual(undoOwner().redo(), { ok: false, empty: true });
+        assert.equal(currentDocument().rows[0].audioText, text);
+        assert.deepEqual(undoOwner().sizes(), { undo: 1, redo: 1 }, way + ": and a held undo spends nothing");
+        document.getElementById(way === "link" ? "bundle-save-link" : "bundle-save-copy").click();
+      }
+      await saving;
+      assert.deepEqual(undoOwner().sizes(), { undo: 0, redo: 0 }, way + ": the history from before the Save As is gone");
+      assert.equal(/[Uu]ndo/.test(host.textContent), false, way + ": nothing is said about it");
+      assert.deepEqual(undoOwner().undo(), { ok: false, empty: true });
+      assert.deepEqual(undoOwner().redo(), { ok: false, empty: true });
+      assert.equal(currentDocument().rows[0].audioText, text, way + ": and the text stays as saved");
+      assert.deepEqual(bundledNow(), way === "copy" || way === "same" ? ["take.mp4"] : [], way + ": only names the new folder has are linked");
+      await saveDoc({});
+      const body = b.bodies[b.bodies.length - 1];
+      assert.equal(body.includes("old.mp4"), false, way + ": the next save never writes the removed name");
+      assert.equal(unsavedChanges(), false);
+      for (const slot of rowSlots(currentDocument().rows[0])) for (const link of slot.links) videoFiles.openFile(link);
+      if (way === "link") {
+        assert.ok(await until(() => (b.fake._videoPathOpens || []).length === 1));
+        assert.deepEqual(b.fake._videoPathOpens, [TAKE_PATH], "link: the original file opens");
+      }
+      if (way === "copy") {
+        assert.ok(await until(() => (b.fake._bundledOpens || []).length === 1));
+        assert.deepEqual(b.fake._bundledOpens, ["take.mp4"], "copy: the copied file opens from the new folder");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal((b.fake._bundledOpens || []).includes("old.mp4"), false, way + ": the unrelated old.mp4 in the new folder is never opened");
+    } finally {
+      window.__desktopTest.restoreBackend();
+      host.replaceChildren();
+    }
   }
 });
 

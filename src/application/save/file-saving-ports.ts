@@ -56,7 +56,7 @@ export interface AutoSaveMenuItem {
 
 export interface FileSavingPorts {
   readonly edits: Pick<DocumentEdits, "edit">;
-  readonly history: Pick<Undo, "rebaseRows">;
+  readonly history: Pick<Undo, "amendRows" | "hold" | "reset">;
   readonly deferred: FileSavingDeferredPorts;
   readonly ids: Pick<IdSource, "docId">;
   readonly clock: Clock;

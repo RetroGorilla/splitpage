@@ -2,7 +2,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
 import { fileTitleCommand } from "../commands/title.ts";
-import { bundledVideoNames, pathVideoLinks } from "../../core/document/gallery.ts";
+import { pathVideoLinks } from "../../core/document/gallery.ts";
 import type { BundledPathLink } from "../../core/document/gallery.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
@@ -19,6 +19,7 @@ export interface LandedWrite<B = ValidatedDocument> {
 export interface CompletedWrite<B = ValidatedDocument, P extends B = B> {
   readonly naming?: FileTitleChange | null;
   readonly links?: readonly BundledPathLink[] | null;
+  readonly retargeted?: boolean;
   readonly captured: ExportDocument;
   readonly published: P;
   readonly forkDocId: string | null;
@@ -41,9 +42,6 @@ export interface SaveCompletion<B = ValidatedDocument, P extends B = B> {
   readonly adoptSavedCopyDocId: (forkDocId: string | null, docIdAtSave: string, owned: boolean) => void;
 }
 
-function staleRows(rows: readonly unknown[]): boolean {
-  return bundledVideoNames(rows).length > 0;
-}
 
 export function createSaveCompletion<B, P extends B = B>(ports: SaveCompletionPorts<B, P>): SaveCompletion<B, P> {
   function adoptSavedCopyDocId(forkDocId: string | null, docIdAtSave: string, owned: boolean): void {
@@ -63,9 +61,14 @@ export function createSaveCompletion<B, P extends B = B>(ports: SaveCompletionPo
       ports.location.amendHome(write.landed.home, { diskBase: write.published, lastModified: write.landed.lastModified });
     }
     adoptSavedCopyDocId(write.forkDocId, write.docIdAtSave, true);
-    const named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
     const links = write.links && write.links.length ? write.links : null;
-    const relinked = links ? ports.history.rebaseRows(function (rows) { return pathVideoLinks(rows, links); }, staleRows) : "unchanged";
+    const relinked = links ? ports.history.amendRows(function (rows) { return pathVideoLinks(rows, links); }) : "unchanged";
+    let named: boolean;
+    try {
+      named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
+    } finally {
+      if (write.retargeted) ports.history.reset();
+    }
     const savedChanges = write.seqAtSave + (write.naming ? 1 : 0) + (relinked === "applied" ? 1 : 0);
     if (named && relinked !== "refused" && ports.saves.changes() === savedChanges) ports.saves.confirmSavedNow();
   }

@@ -81,10 +81,10 @@ const FILE_CHANGED = "The file changed on disk since it was opened";
 const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 
 function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: ValidatedDocument, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite<FileSavingBaseline> | null, naming: FileTitleChange | null,
-  links: readonly BundledPathLink[] | null = null): SaveLanding {
+  links: readonly BundledPathLink[] | null = null, retargeted = false): SaveLanding {
   return {
     current: function () {
-      mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed(), naming, links });
+      mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed(), naming, links, retargeted });
       if (forkDocId) job.moved();
     },
     obsolete: function () { adoptSavedCopyDocId(forkDocId, docIdAtSave, false); }
@@ -108,7 +108,13 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
   try {
     // why: no copy into the old folder may still be running once the bytes that carry the folder along are captured
     if (bundles.drained && !(await bundles.drained)) return CANCELLED;
-    return await writeCaptured(opts, job, saveAs, auto, bundles);
+    // why: the save clears undo history at its commit, so an undo before then would land in a history about to go
+    const release = mountedPorts().history.hold();
+    try {
+      return await writeCaptured(opts, job, saveAs, auto, bundles);
+    } finally {
+      release();
+    }
   } finally {
     bundles.end();
   }
@@ -205,7 +211,7 @@ async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, 
       job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () {
         const landedHome = fileHome() && (fileHome() as Home).handle === handle ? currentHome() : null;
         return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
-      }, naming, links.length ? links : null));
+      }, naming, links.length ? links : null, saveAs && retarget !== null));
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);

@@ -26,7 +26,11 @@ function fileSavingPorts(deferred: FileSavingDeferredPorts): FileSavingPorts {
   return {
     deferred,
     edits: { edit: runDocumentEdit },
-    history: { rebaseRows: (fix, stale) => undoOwner().rebaseRows(fix, stale) },
+    history: {
+      amendRows: (fix) => undoOwner().amendRows(fix),
+      hold: () => undoOwner().hold(),
+      reset: () => { undoOwner().reset(); }
+    },
     ids,
     clock,
     document: { current: documentReader.current, stamp: (stamp) => stampDocument(stamp) },

@@ -29,7 +29,11 @@ function harness(changes = 4, editsDuringNaming = 0, throwDuringNaming = false) 
       if (throwDuringNaming) throw new Error("paint failed");
       return true;
     } },
-    history: { rebaseRows: () => { throw new Error("unexpected link change"); } },
+    history: {
+      amendRows: () => { log.push("amendRows"); changes++; return "applied"; },
+      hold: () => () => {},
+      reset: () => { log.push("resetHistory"); }
+    },
     document: { stamp: (stamp) => { log.push("stamp:" + stamp.name); return null; } },
     location: {
       amendHome: (record, fields) => { log.push("amendHome:" + Object.keys(fields).join(",")); amended.push({ ...fields }); return record; },
@@ -64,6 +68,29 @@ test("landed metadata and copy identity are recorded before naming, even when it
       "naming", ...(!throws ? ["confirmSavedNow"] : [])
     ]);
     assert.deepEqual(h.amended, [{ diskBase: { rev: 3 }, lastModified: 77 }]);
+  }
+});
+
+test("a write that retargets the document clears undo history after its links and its name change, and a throwing name change still clears it", () => {
+  for (const c of [
+    { retargeted: true, links: false, naming: false, throws: false },
+    { retargeted: true, links: true, naming: true, throws: false },
+    { retargeted: true, links: false, naming: true, throws: true },
+    { retargeted: false, links: true, naming: true, throws: false }
+  ]) {
+    const h = harness(4, c.naming ? 1 : 0, c.throws);
+    const links = c.links ? [{ name: "a.mp4", path: "D:\\Episode 12 files\\a.mp4" }] : null;
+    const naming = c.naming ? fileTitleChange({ title: "Untitled Script" }, "Pilot v3.md", true) : null;
+    const complete = () => h.completion.confirmWrite({ naming, captured: captured(), published: { rev: 3 }, forkDocId: null, docIdAtSave: OLD_ID, seqAtSave: 4,
+      landed: { home: HOME, lastModified: 77 }, links, retargeted: c.retargeted });
+    if (c.throws) assert.throws(complete, /paint failed/);
+    else complete();
+    assert.deepEqual(h.log.slice(h.log.indexOf("syncIdentity") + 1), [
+      ...(c.links ? ["amendRows"] : []),
+      ...(c.naming ? ["naming"] : []),
+      ...(c.retargeted ? ["resetHistory"] : []),
+      ...(c.throws ? [] : ["confirmSavedNow"])
+    ], JSON.stringify(c));
   }
 });
 

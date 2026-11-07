@@ -1,11 +1,11 @@
 import type { CommandRefusal, Replay, ReplayPlan } from "../../session/document-session.ts";
 import type { StampPorts } from "../../session/ports.ts";
 import { applySteps } from "../../../core/text/steps.ts";
-import type { Step } from "../../../core/text/steps.ts";
+import type { Step, StepRow } from "../../../core/text/steps.ts";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import type { FlowSelectionPair } from "../../../core/flow/flow.ts";
 import { changedBetween, cosmetic as cosmeticFor, createUndoHistory, diffStates, planSteps, replayChanges, writePlanned } from "./history.ts";
-import type { CellMark, HtmlRunDecoder, PreparedReplay, ReplayResult, RowsCheck, RowsFix, StepResult, UndoEntry, UndoState } from "./history.ts";
+import type { CellMark, HtmlRunDecoder, PreparedReplay, ReplayResult, StepResult, UndoEntry, UndoState } from "./history.ts";
 
 export type UndoDirection = "undo" | "redo";
 
@@ -21,9 +21,13 @@ export interface UndoHooks {
   readonly onRefused?: (reason: string, dir: UndoDirection) => void;
 }
 
-export type RebaseOutcome = "applied" | "unchanged" | "refused";
+export type AmendOutcome = "applied" | "unchanged" | "refused";
 
-export type UndoResult =StepResult | { ok: false; reason: string };
+export type RowsFix = (rows: StepRow[]) => unknown;
+
+export type UndoResult = StepResult | { ok: false; reason: string };
+
+const HELD: UndoResult = Object.freeze({ ok: false, empty: true });
 
 export interface UndoPorts {
   readonly held: () => ValidatedDocument | null;
@@ -46,7 +50,8 @@ export interface Undo {
   readonly redo: () => UndoResult;
   readonly settleAfterApply: (paragraphStarts?: readonly string[]) => void;
   readonly foldIntoEdit: (entry: UndoEntry | null | undefined, touches: (step: Step) => boolean, change: (draft: UndoState) => boolean) => boolean;
-  readonly rebaseRows: (fix: RowsFix, stale: RowsCheck) => RebaseOutcome;
+  readonly amendRows: (fix: RowsFix) => AmendOutcome;
+  readonly hold: () => () => void;
   readonly breakCoalescing: () => void;
   readonly sizes: () => { undo: number; redo: number };
   readonly last: () => UndoEntry | null;
@@ -77,6 +82,7 @@ export function createUndo(ports: UndoPorts): Undo {
   let flushQueued = false;
   let queuedSelection: FlowSelectionPair | undefined;
   let applying = false;
+  let holds = 0;
   const hooks: { afterApply: UndoHooks["afterApply"] | null; onRefused: UndoHooks["onRefused"] | null } = { afterApply: null, onRefused: null };
   const UNROUTED: Replays = Object.freeze({ run: replayUnwired, amend: replayUnwired, stamps: null });
   let replays: Replays = UNROUTED;
@@ -291,9 +297,9 @@ export function createUndo(ports: UndoPorts): Undo {
     return outcome.kind === "applied" || outcome.kind === "committed";
   }
 
-  function rebaseTask(fix: RowsFix): Replay {
+  function amendTask(fix: RowsFix): Replay {
     return {
-      name: "rebase",
+      name: "amend-rows",
       plan: function (doc): ReplayPlan | CommandRefusal | null {
         const state = asState(doc);
         const draft = clone(state);
@@ -305,28 +311,31 @@ export function createUndo(ports: UndoPorts): Undo {
         return {
           changes: replayChanges(runs, steps, planned),
           apply: function (live) { writePlanned(asState(live), planned); },
-          settle: function () { }
+          settle: function () { base = clone(state); }
         };
       }
     };
   }
 
-  function rebaseRows(fix: RowsFix, stale: RowsCheck): RebaseOutcome {
+  function amendRows(fix: RowsFix): AmendOutcome {
     flush();
     const live = held();
     if (!live || live !== tracked || !base) return "refused";
-    history.rebaseRows(fix, stale);
-    fix(base.rows);
     let outcome: ReplayOutcome;
     applying = true;
     try {
-      outcome = replays.amend(rebaseTask(fix));
+      outcome = replays.amend(amendTask(fix));
     } finally {
       applying = false;
     }
-    if (outcome.kind === "failed" || outcome.kind === "rejected") base = clone(held());
     if (outcome.kind === "failed") throw outcome.error;
     return outcome.kind === "rejected" ? "refused" : outcome.kind === "noop" ? "unchanged" : "applied";
+  }
+
+  function hold(): () => void {
+    holds++;
+    let open = true;
+    return function () { if (open) { open = false; holds--; } };
   }
 
   return {
@@ -339,11 +348,12 @@ export function createUndo(ports: UndoPorts): Undo {
     noteRemote: noteRemote,
     absorbRemote: absorbRemote,
     reset: function () { restart(held()); },
-    undo: function () { return run("undo"); },
-    redo: function () { return run("redo"); },
+    undo: function () { return holds ? HELD : run("undo"); },
+    redo: function () { return holds ? HELD : run("redo"); },
     settleAfterApply: settleAfterApply,
     foldIntoEdit: foldIntoEdit,
-    rebaseRows: rebaseRows,
+    amendRows: amendRows,
+    hold: hold,
     breakCoalescing: function () {
       flush();
       history.breakCoalescing();

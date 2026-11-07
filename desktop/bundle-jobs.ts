@@ -313,7 +313,10 @@ function createBundleJobs(options: {
   }
 
   function noteScript(tabId: string, script: string | null): void {
-    for (const open of [...opens]) if (open.tabId === tabId && open.landed && !(script && same(script, open.to))) opens.delete(open);
+    for (const open of [...opens]) {
+      const kept = !!script && (same(script, open.to) || (!open.landed && same(script, open.from)));
+      if (open.tabId === tabId && !kept) opens.delete(open);
+    }
   }
 
   function forgetTab(tabId: string): void {
