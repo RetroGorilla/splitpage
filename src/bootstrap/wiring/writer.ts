@@ -1,3 +1,4 @@
+import { acceptGhostOnTab, dismissesTagGhost, plainTagKeydown } from "../../features/common/tag-completion-keys.ts";
 import { startWriter } from "../../features/writer/writer.ts";
 import { writerActions as definitions } from "../../features/writer/actions.ts";
 import type { WriterFeaturePorts } from "../../features/writer/ports.ts";
@@ -121,12 +122,8 @@ export function mountWriterRuntimeFeature() {
             visualKeydown: (event, cell) => {
               if (currentWhoList()?.keydown(event, cell)) return true;
               const plain = currentPlainTags();
-              if (plain?.isOpen(cell)) {
-                if (event.key === "Tab") { event.preventDefault(); plain.close(); return true; }
-                if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); plain.cancel(); return true; }
-                if (event.key === "Backspace" && plain.emptyAtCaret() && plain.cancelOnBackspace()) { event.preventDefault(); return true; }
-              }
-              if (event.key === "Tab" && tagGhost?.cellEl === cell && acceptTagGhost()) { event.preventDefault(); return true; }
+              if (plain?.isOpen(cell) && plainTagKeydown(event, plain, () => {})) return true;
+              if (acceptGhostOnTab(event, tagGhost?.cellEl === cell, acceptTagGhost)) return true;
               return false;
             },
             clipboard: {
@@ -180,11 +177,8 @@ export function mountWriterRuntimeFeature() {
                 hideTagGhost();
                 return true;
               }
-              if (event.key === "Tab" && tagGhost?.cellEl === beat && acceptTagGhost()) {
-                event.preventDefault();
-                return true;
-              }
-              if (["Escape", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) hideTagGhost();
+              if (acceptGhostOnTab(event, tagGhost?.cellEl === beat, acceptTagGhost)) return true;
+              if (dismissesTagGhost(event.key)) hideTagGhost();
               return false;
             },
             beatSelection: beat => {

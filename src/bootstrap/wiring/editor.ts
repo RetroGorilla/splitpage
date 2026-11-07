@@ -1,3 +1,4 @@
+import { acceptGhostOnTab, dismissesTagGhost, plainTagKeydown } from "../../features/common/tag-completion-keys.ts";
 import { documentReader as numberedDocument } from "./ports/document.ts";
 import type { UndoRoutePorts } from "../../features/undo/routes.ts";
 import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
@@ -758,21 +759,14 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (undoOwner && undoOwner.key(e)) return;
   if (currentWhoList()?.keydown(e, cellEl)) { hideTagGhost(); return; }
   const plainTag = currentPlainTags();
-  if (plainTag && plainTag.isOpen(cellEl)) {
-    if (e.key === "Tab") { e.preventDefault(); plainTag.close(); return; }
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); plainTag.cancel(); return; }
-    if (e.key === "Backspace" && plainTag.emptyAtCaret() && plainTag.cancelOnBackspace()) { e.preventDefault(); return; }
-  }
+  if (plainTag && plainTag.isOpen(cellEl) && plainTagKeydown(e, plainTag, hideTagGhost)) return;
   const ghost = shownTagGhost();
-  if (e.key === "Tab" && ghost && ghost.cellEl === cellEl) {
-    if (acceptTagGhost()) { e.preventDefault(); return; }
-  }
+  if (acceptGhostOnTab(e, !!ghost && ghost.cellEl === cellEl, acceptTagGhost)) return;
   const suggestion = shownUntaggedSuggestion();
   if (e.key === "Tab" && !shownTagGhost() && suggestion && suggestion.cellEl === cellEl) {
     if (acceptUntaggedMention()) { e.preventDefault(); return; }
   }
-  if (e.key === "Escape" || e.key === "ArrowLeft" || e.key === "ArrowRight" ||
-      e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Home" || e.key === "End") {
+  if (dismissesTagGhost(e.key)) {
     hideTagGhost();
   }
   if (e.key === "Escape" && shownUntaggedSuggestion()) {
