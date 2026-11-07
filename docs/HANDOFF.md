@@ -1062,8 +1062,9 @@ evicted.
 Damaged entries are opaque: writes preserve their values and body references,
 and exclude them from sorting, counts and sizes. A first write to a malformed
 `snapshots` value keeps it in `damagedSnapshots` and creates a normal array for
-new backups. An existing quarantine is never replaced; a later malformed
-payload is retained as an opaque array element. Reads alone do not quarantine.
+new backups; a bucket that is not a record is kept there whole. An existing
+quarantine is never replaced; a later malformed payload is retained as an
+opaque array element. Reads alone do not quarantine.
 Storage versions stay unchanged. Older builds can read the ordinary array,
 but an older build's write may discard the quarantined payload.
 
