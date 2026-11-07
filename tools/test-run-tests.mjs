@@ -233,11 +233,16 @@ check("shards cannot hide partial coverage behind --only", Boolean(parseArgs(["-
     for (const group of found.groups) {
       const chunks = Array.from({ length: total }, (_, index) => selectShard(group.files, { index: index + 1, total }));
       covered.push(...chunks.flat());
-      check(`${group.group.name} is balanced across ${total} shards`, Math.max(...chunks.map((s) => s.length)) - Math.min(...chunks.map((s) => s.length)) <= 1);
+      const allowance = total === 3 && group.group.name === "desktop" ? 2 : 1;
+      check(`${group.group.name} is balanced across ${total} shards`, Math.max(...chunks.map((s) => s.length)) - Math.min(...chunks.map((s) => s.length)) <= allowance);
     }
     eq(`${total} shards cover the real discovered tree exactly once`, covered.sort(), all);
     eq(`${total} shards are independent of filesystem enumeration order`, discover([...tree].reverse()).groups.map((g) => selectShard(g.files, { index: 1, total })), found.groups.map((g) => selectShard(g.files, { index: 1, total })));
   }
+
+  const ipc = "desktop/test/ipc-contract.test.mjs";
+  const desktop = found.groups.find((entry) => entry.group.name === "desktop").files;
+  check("the slow desktop IPC test runs on shard 3", selectShard(desktop, { index: 3, total: 3 }).includes(ipc));
 
   const repo = repoWith({
     "src/test/a.test.mjs": passingFrontend,

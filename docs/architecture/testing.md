@@ -426,7 +426,8 @@ full gate. A filter that matches nothing exits 2. It is for local feedback
 only; CI runs the whole set through all three required shards.
 
 `--shard <index/total>` distributes each group's sorted files round-robin by
-index. For example, `npm run test:all -- --shard 1/3`, `--shard 2/3` and `--shard 3/3`
+index. With three shards, the slow desktop IPC test is assigned to shard 3 to
+balance CI. For example, `npm run test:all -- --shard 1/3`, `--shard 2/3` and `--shard 3/3`
 together run every discovered file exactly once. Full discovery, area coverage,
 orphan, overlap, required-group and golden-update guards still run in each
 shard. A group can have no files assigned to one shard, but a shard with no

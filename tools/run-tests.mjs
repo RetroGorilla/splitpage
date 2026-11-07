@@ -110,7 +110,10 @@ function validShard(shard) {
 }
 
 export function selectShard(files, shard) {
-  return shard ? files.filter((_, index) => index % shard.total === shard.index - 1) : files;
+  return shard ? files.filter((file, index) => {
+    const assigned = shard.total === 3 && file === "desktop/test/ipc-contract.test.mjs" ? 3 : index % shard.total + 1;
+    return assigned === shard.index;
+  }) : files;
 }
 
 function runGroup(entry, { repo, node, print, spawn }) {
