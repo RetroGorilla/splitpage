@@ -9,6 +9,7 @@ export interface DesktopWireFile {
 export interface DesktopWireStamp {
   lastModified?: number;
   size: number;
+  bundleRefused?: { reason: "clash" | "failed" | "cancelled"; folder: string; name: string; copied: number };
 }
 
 export interface DesktopWireRecent {
@@ -34,6 +35,19 @@ export interface DesktopWireBoot {
 export interface DesktopWireFailure {
   ok: false;
   code: string;
+}
+
+export interface DesktopWireBundleProgress {
+  job: string;
+  done: number;
+  total: number;
+}
+export type DesktopWireBundleCopy = { ok: true; name: string } | DesktopWireFailure;
+export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; missing: number } | (DesktopWireFailure & { name?: string; copied?: number });
+export interface DesktopWireBundleCarryNote extends DesktopWireBundleProgress {
+  from: string;
+  to: string;
+  result?: DesktopWireBundleCarry;
 }
 
 export type DesktopWireDraftWrite = { ok: true; seq: number; bytes: number; obsolete?: undefined } | DesktopWireFailure;
@@ -227,7 +241,7 @@ type DesktopChannelCall<A extends readonly unknown[], R> = { args: A; result: R 
 export interface DesktopIpcContract {
   "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;
   "splitpage:open-file-dialog": DesktopChannelCall<[], DesktopWireFile | null>;
-  "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[] }], { id: string; name: string } | null>;
+  "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[]; script?: boolean }], { id: string; name: string } | null>;
   "splitpage:read-file": DesktopChannelCall<[string], DesktopWireFile>;
   "splitpage:write-file": DesktopChannelCall<[string, string | ArrayBuffer | Uint8Array], DesktopWireStamp>;
   "splitpage:stat-file": DesktopChannelCall<[string], { lastModified: number; size: number } | null>;
@@ -243,6 +257,10 @@ export interface DesktopIpcContract {
   "splitpage:video-file-grant": DesktopChannelCall<[string], string | null>;
   "splitpage:video-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-path-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
+  "splitpage:bundle-file": DesktopChannelCall<[string, string], DesktopWireBundleCopy>;
+  "splitpage:bundle-carry": DesktopChannelCall<[DesktopWireBundleCarryNote], void>;
+  "splitpage:bundle-cancel": DesktopChannelCall<[string], void>;  "splitpage:bundle-progress": DesktopChannelCall<[DesktopWireBundleProgress], void>;
+  "splitpage:bundled-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-thumbnail": DesktopChannelCall<[string, string], { ok: true; bytes: Uint8Array; mime: string } | DesktopWireFailure>;
   "splitpage:update-status": DesktopChannelCall<[], DesktopWireUpdateStatus> & { receive: [DesktopWireUpdateStatus] };
   "splitpage:update-check": DesktopChannelCall<[], DesktopWireUpdateStatus>;

@@ -1,14 +1,11 @@
 import { normalizeImageRef } from "../../../shared/blob-policy.ts";
-import { isStoredVideoPath } from "../../../shared/video-path.ts";
+import { VIDEO_FILE_EXT, bundledNameProblem, isStoredVideoPath } from "../../../shared/video-path.ts";
 import { rowImage } from "./media.ts";
 import type { StoredImageRef } from "./text-policy.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
 import { cappedLongText, codePointPrefix, plainText, safeHref, safeImageSrc, settledNames, unitSafePrefix } from "./text-policy.ts";
 
-export interface VideoLocation {
-  kind: "path";
-  path: string;
-}
+export type VideoLocation = { kind: "path"; path: string } | { kind: "bundled"; name: string };
 
 export interface VideoLink {
   href?: string;
@@ -196,13 +193,56 @@ export function normalizeVideoLink(input: unknown): VideoLink | null {
 
 export function normalizeVideoLocation(input: unknown): VideoLocation | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
-  const x = input as { kind?: unknown; path?: unknown };
-  if (x.kind !== "path" || !isStoredVideoPath(x.path)) return null;
-  return { kind: "path", path: x.path as string };
+  const x = input as { kind?: unknown; path?: unknown; name?: unknown };
+  if (x.kind === "path") return isStoredVideoPath(x.path) ? { kind: "path", path: x.path as string } : null;
+  if (x.kind === "bundled") return bundledNameProblem(x.name) === null && VIDEO_FILE_EXT.test(x.name as string) ? { kind: "bundled", name: x.name as string } : null;
+  return null;
 }
 
 function locationKey(l: VideoLink | null | undefined): string {
-  return l && l.location ? "@" + l.location.kind + ":" + l.location.path : "";
+  if (!l || !l.location) return "";
+  return "@" + l.location.kind + ":" + (l.location.kind === "path" ? l.location.path : l.location.name);
+}
+
+export function bundledVideoNames(rows: readonly unknown[]): string[] {
+  const out = new Set<string>();
+  function collect(links: unknown): void {
+    (Array.isArray(links) ? links as unknown[] : []).forEach(function (l) {
+      const at = l && typeof l === "object" ? normalizeVideoLocation((l as VideoLinkInput).location) : null;
+      if (at && at.kind === "bundled") out.add(at.name);
+    });
+  }
+  rows.forEach(function (row) {
+    if (!row || typeof row !== "object") return;
+    const r = row as GalleryRow;
+    collect(r.imageLinks);
+    (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (it) {
+      if (it && typeof it === "object") collect((it as GalleryItemInput).links);
+    });
+  });
+  return Array.from(out);
+}
+
+export function bundleVideoLinks(rows: readonly unknown[], from: VideoLink, name: string): boolean {
+  const key = locatedVideoKey(from);
+  if (!normalizeVideoLocation({ kind: "bundled", name: name })) return false;
+  let changed = false;
+  function relink(links: unknown): void {
+    (Array.isArray(links) ? links as VideoLink[] : []).forEach(function (l) {
+      if (!l || typeof l !== "object" || l.href || locatedVideoKey(l) !== key) return;
+      l.location = { kind: "bundled", name: name };
+      changed = true;
+    });
+  }
+  rows.forEach(function (row) {
+    if (!row || typeof row !== "object") return;
+    const r = row as GalleryRow;
+    relink(r.imageLinks);
+    (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (it) {
+      if (it && typeof it === "object") relink((it as GalleryItemInput).links);
+    });
+  });
+  return changed;
 }
 
 export function locatedVideoKey(l: VideoLink | null | undefined): string {

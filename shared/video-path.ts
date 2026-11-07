@@ -40,11 +40,34 @@ function isStoredVideoPath(p: unknown): boolean {
   return videoPathProblem(p, "win32") === null || videoPathProblem(p, "posix") === null;
 }
 
+const BUNDLED_NAME_MAX = 255;
+const BUNDLE_FOLDER_SUFFIX = " files";
+const NAME_FORBIDDEN = /[\\/:<>"|?*]/;
+
+function bundledNameProblem(name: unknown): string | null {
+  if (typeof name !== "string" || !name) return "not a name";
+  if (name.length > BUNDLED_NAME_MAX) return "too long";
+  if (hasControlCharacter(name)) return "a control character";
+  if (NAME_FORBIDDEN.test(name)) return "a separator or a character a Windows file name can't hold";
+  if (/[. ]$/.test(name) || WINDOWS_DEVICE_NAME.test(name)) return "a name Windows reserves";
+  return null;
+}
+
+function bundleFolderName(scriptName: string): string {
+  const dot = scriptName.lastIndexOf(".");
+  const stem = (dot > 0 ? scriptName.slice(0, dot) : scriptName).replace(/[. ]+$/, "");
+  return (stem || "Script") + BUNDLE_FOLDER_SUFFIX;
+}
+
 export type { VideoPathStyle };
 
 export {
+  BUNDLED_NAME_MAX,
+  BUNDLE_FOLDER_SUFFIX,
   VIDEO_FILE_EXT,
   VIDEO_PATH_MAX,
+  bundleFolderName,
+  bundledNameProblem,
   hasControlCharacter,
   isStoredVideoPath,
   videoPathProblem

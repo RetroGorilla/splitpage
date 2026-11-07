@@ -21,6 +21,7 @@ interface Setup {
   readonly delivered?: boolean;
   readonly autosave?: boolean;
   readonly onDesktop?: boolean;
+  readonly handover?: boolean;
 }
 
 const NO_MODELS: ExportReadModels = { production: [], commentNumbers: {}, broll: [] };
@@ -35,6 +36,7 @@ function harness(setup: Setup = {}) {
   const log: string[] = [];
   const toasts: string[] = [];
   const built: ExportDocument[] = [];
+  const drains: ((ok: boolean) => void)[] = [];
   const state = { home: setup.home ?? ({ kind: "none" } as Home), writtenOut: setup.writtenOut ?? false, changes: 4, menuOn: true };
   const doc = migrateRows({ title: "Pilot Script", docId: OLD_ID, rev: 2, rows: [] }, fakeMigration().ports);
   const menu = {
@@ -108,10 +110,18 @@ function harness(setup: Setup = {}) {
       imagesLeftOut: (count, name) => { log.push("imagesLeftOut:" + count + ":" + name); }
     },
     preferences: { editorName: () => "Adam", autosave: () => setup.autosave ?? true },
-    page: { getElementById: (id) => (id === "menu-autosave" ? menu : null) }
+    page: { getElementById: (id) => (id === "menu-autosave" ? menu : null) },
+    bundles: {
+      beginSave: () => {
+        if (!setup.handover) return { drained: null, end: () => {} };
+        log.push("drain:" + state.home.kind);
+        const drained = new Promise<boolean>((resolve) => { drains.push((ok) => { log.push(ok ? "drained" : "stopped"); resolve(ok); }); });
+        return { drained, end: () => { log.push("end"); } };
+      }
+    }
   };
   const mounted = mountFileSaving(ports) as FileSavingMount;
-  return { log, toasts, state, menu, mounted, ports, doc, built };
+  return { log, toasts, state, menu, mounted, ports, doc, built, drains };
 }
 
 function job(kind: string, owns = true) {
@@ -406,4 +416,44 @@ test("disposing the mount releases its ports only while it is the live one", () 
   assert.equal(second.menu.attributes["aria-checked"], "true");
   second.mounted.dispose();
   assert.throws(() => second.mounted.updateAutoSaveMenu());
+});
+
+const drainLines = (h: ReturnType<typeof harness>) => h.log.filter((line) => /^(drain|drained|stopped|end|capture|pick|setHome|restoreHome|write)\b/.test(line))
+  .map((line) => line.replace(/^(capture|write):.*/, "$1"));
+
+test("Save As waits for the running bundle copies to finish before it captures the bytes, asks where, or writes", async () => {
+  const saveAs = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  const saving = write(saveAs, "saveAs");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(drainLines(saveAs), ["drain:file"], "nothing is captured, asked or written while copies run");
+  assert.equal(saveAs.drains.length, 1);
+  saveAs.drains[0]?.(true);
+  assert.deepEqual(await saving, { kind: "saved" });
+  assert.deepEqual(drainLines(saveAs), ["drain:file", "drained", "capture", "pick", "setHome:file", "write", "end"], "the save window closes once the save is decided");
+  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true, handover: true });
+  assert.deepEqual(await write(plain, "save"), { kind: "saved" });
+  assert.equal(plain.drains.length, 0, "saving in place does not wait");
+  const lost = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  assert.deepEqual(await write(lost, "saveAs", false), { kind: "saved" });
+  assert.equal(lost.drains.length, 0, "a job that no longer owns the document does not wait on its copies");
+  const idle = harness({ home: FILE_HOME, writtenOut: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  assert.deepEqual(await write(idle, "saveAs"), { kind: "saved" }, "with nothing copying, Save As goes straight on");
+});
+
+test("Cancel on the wait abandons the Save As before capture, the dialog or the retarget, and a failed write still closes the save window", async () => {
+  const stopped = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  const saving = write(stopped, "saveAs");
+  await new Promise((resolve) => setImmediate(resolve));
+  stopped.drains[0]?.(false);
+  assert.deepEqual(await saving, { kind: "cancelled" });
+  assert.deepEqual(drainLines(stopped), ["drain:file", "stopped", "end"], "nothing is captured, asked, retargeted or written");
+  assert.equal(stopped.state.home, FILE_HOME, "the document stays with its file");
+  assert.deepEqual(stopped.toasts, []);
+  const failing = harness({ home: FILE_HOME, writtenOut: true, handover: true, writeFails: new Error("disk full"), pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  const failed = write(failing, "saveAs");
+  await new Promise((resolve) => setImmediate(resolve));
+  failing.drains[0]?.(true);
+  assert.equal((await failed).kind, "failed");
+  assert.deepEqual(drainLines(failing), ["drain:file", "drained", "capture", "pick", "setHome:file", "write", "restoreHome:file", "end"],
+    "the window stays open through the rollback");
 });

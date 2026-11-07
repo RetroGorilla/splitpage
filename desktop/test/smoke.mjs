@@ -3927,7 +3927,7 @@ async function caseGalleryVideoFile(target) {
     const opened = await evalPage(cdp, "window.splitpageDesktop.openVideoFile(" + JSON.stringify(token) + ")");
     record(tag + ": its token opens it", !!opened && opened.ok === true, JSON.stringify(opened));
     let opens = await shell(cdp, "videoFileOpens", {});
-    record(tag + ": main opened exactly that path", JSON.stringify(opens) === JSON.stringify([clip]), JSON.stringify(opens));
+    record(tag + ": main opened that file's real path", JSON.stringify(opens) === JSON.stringify([fs.realpathSync.native(clip)]), JSON.stringify(opens));
 
     await evalPage(cdp, "(function(){ var dt = new DataTransfer(); dt.items.add(document.getElementById('__vf').files[0]); " +
       "var media = document.querySelectorAll('#rows .visual-media'); media[media.length - 1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()", { awaitPromise: false });
@@ -3942,7 +3942,7 @@ async function caseGalleryVideoFile(target) {
       const list = await shell(cdp, "videoFileOpens", {});
       return list && list.length >= 2 ? list : null;
     }, 10000).catch(() => null);
-    record(tag + ": its caption link opens it through main", !!opens && opens[1] === clip, JSON.stringify(opens));
+    record(tag + ": its caption link opens it through main", !!opens && opens[1] === fs.realpathSync.native(clip), JSON.stringify(opens));
 
     const pathOf = await evalPage(cdp, "window.splitpageDesktop.videoFilePath(document.getElementById('__vf').files[0])");
     record(tag + ": the bridge reads a dropped file's path (#259)", pathOf === clip, JSON.stringify(pathOf));
@@ -3977,6 +3977,110 @@ async function caseGalleryVideoFile(target) {
     record(tag + ": a stored path to a file since deleted answers GONE", !!goneByPath && goneByPath.ok === false && goneByPath.code === "GONE", JSON.stringify(goneByPath));
   } finally {
     if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
+    rmrf(dir);
+  }
+}
+
+async function caseGalleryVideoBundle(target) {
+  const tag = target.name + " gallery: a dropped video is copied beside the script and opens from there after a restart (#259)";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-bundle-"));
+  const drops = path.join(dir, "drops");
+  fs.mkdirSync(drops);
+  const clip = path.join(drops, "take one.mp4");
+  const second = path.join(drops, "take two.mp4");
+  fs.writeFileSync(clip, Buffer.alloc(3 * 1024 * 1024, 7));
+  fs.writeFileSync(second, Buffer.alloc(2048, 3));
+  const scriptPath = writeFixture(dir, "Episode 12.splitpage", "Bundle Smoke", [["Wide", "One."], ["Close", "Two."]]);
+  const folder = path.join(dir, "Episode 12 files");
+  const copyDir = path.join(dir, "copy");
+  fs.mkdirSync(copyDir);
+  const copyPath = path.join(copyDir, "Episode 12 v2.splitpage");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const locationOf = (name) => "(function(){ var out = null; (window.__splitpageFormats.state().rows || []).forEach(function (r) { " +
+    "var all = (r.imageLinks || []).slice(); (r.moreImages || []).forEach(function (it) { all = all.concat(it.links || []); }); " +
+    "all.forEach(function (l) { if (l && l.name === " + JSON.stringify(name) + " && l.location) out = l.location; }); }); return out; })()";
+  const modalOpen = "(function(){ var m = document.getElementById('bundle-modal'); return !!m && !m.hidden; })()";
+  async function drop(cdp, id, filePath) {
+    const made = await cdp.send("Runtime.evaluate", {
+      expression: "(function(){ var i = document.createElement('input'); i.type = 'file'; i.id = " + JSON.stringify(id) + "; i.hidden = true; document.body.appendChild(i); return i; })()",
+      returnByValue: false
+    });
+    await cdp.send("DOM.setFileInputFiles", { files: [filePath], objectId: made.result.objectId });
+    await evalPage(cdp, "(function(){ var dt = new DataTransfer(); dt.items.add(document.getElementById(" + JSON.stringify(id) + ").files[0]); " +
+      "var media = document.querySelectorAll('#rows .visual-media'); media[0].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()", { awaitPromise: false });
+  }
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "gallery-video-bundle", userDataDir, fixtures: [scriptPath] });
+    await waitForRows(app.cdp, 20000);
+    let cdp = app.cdp;
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Bundle Smoke'", 20000).catch(() => false);
+    const bridgeHas = await evalPage(cdp, "['bundleVideoFile','onBundleCarry','cancelBundle','openBundledFile'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; }) && " +
+      "!('carryBundle' in window.splitpageDesktop) && !('followBundle' in window.splitpageDesktop)");
+    record(tag + ": the bridge exposes bundleVideoFile, onBundleCarry, cancelBundle and openBundledFile, and no way to ask for a carry or a follow", bridgeHas === true, String(bridgeHas));
+
+    await drop(cdp, "__b1", clip);
+    const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
+    const title = await evalPage(cdp, "document.getElementById('bundle-title').textContent");
+    const focused = await evalPage(cdp, "document.activeElement && document.activeElement.id");
+    record(tag + ": the drop asks whether to copy the video, with Copy it as the default", !!asked && title === "Copy this video into the script's folder?" && focused === "bundle-accept",
+      JSON.stringify({ asked, title, focused }));
+    await evalPage(cdp, "document.getElementById('bundle-accept').click()");
+    const bundled = await poll(cdp, "(function(){ var l = " + locationOf("take one.mp4") + "; return l && l.kind === 'bundled' ? l : null; })()", 20000).catch(() => null);
+    record(tag + ": the link now names the copy, not a path", !!bundled && bundled.name === "take one.mp4" && !("path" in bundled), JSON.stringify(bundled));
+    const copied = path.join(folder, "take one.mp4");
+    record(tag + ": the copy is in “Episode 12 files” beside the script, byte for byte",
+      fs.existsSync(copied) && fs.statSync(copied).size === fs.statSync(clip).size, JSON.stringify(fs.existsSync(folder) ? fs.readdirSync(folder) : null));
+
+    await drop(cdp, "__b2", second);
+    const askedAgain = await poll(cdp, modalOpen, 10000).catch(() => false);
+    await evalPage(cdp, "document.getElementById('bundle-decline').click()");
+    await sleep(300);
+    const declined = await evalPage(cdp, locationOf("take two.mp4"));
+    record(tag + ": declining keeps the dropped file's path and copies nothing", !!askedAgain && !!declined && declined.kind === "path" && declined.path === second &&
+      !fs.existsSync(path.join(folder, "take two.mp4")), JSON.stringify({ askedAgain, declined }));
+
+    await evalPage(cdp, "window.__splitpageFormats.save()");
+    const saved = await pollNode(async () => fs.readFileSync(scriptPath, "utf8").includes("\"bundled\"") || null, 10000).catch(() => false);
+    record(tag + ": the saved script holds the copy's name and no path for it", !!saved && !fs.readFileSync(scriptPath, "utf8").includes(JSON.stringify(clip).slice(1, -1)), "");
+    await teardown(app, tag + " (first launch)");
+    app = null;
+
+    app = await launchApp(target, { label: "gallery-video-bundle-relaunch", userDataDir, dialogs: [copyPath] });
+    await waitForRows(app.cdp, 20000);
+    cdp = app.cdp;
+    const back = await poll(cdp, "(function(){ var l = " + locationOf("take one.mp4") + "; return l && l.kind === 'bundled' ? l.name : null; })()", 20000).catch(() => null);
+    record(tag + ": after a restart the script still links to the copy", back === "take one.mp4", String(back));
+    await evalPage(cdp, "(function(){ var l = Array.prototype.filter.call(document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'), " +
+      "function (a) { return a.textContent === 'take one.mp4'; }); l[0].click(); return l.length; })()");
+    let opens = await pollNode(async () => { const list = await shell(cdp, "videoFileOpens", {}); return list && list.length ? list : null; }, 10000).catch(() => null);
+    record(tag + ": its caption link opens the copy through main", !!opens && opens[0] === fs.realpathSync.native(copied), JSON.stringify(opens));
+
+    fs.writeFileSync(path.join(folder, "tool.exe"), "MZ");
+    const refused = {
+      "a name with ..": "..\\drops\\take one.mp4", "an absolute path": clip, "a network share": "\\\\localhost\\c$\\take one.mp4",
+      "an executable": "tool.exe", "a missing file": "missing.mp4"
+    };
+    for (const [why, name] of Object.entries(refused)) {
+      const got = await evalPage(cdp, "window.splitpageDesktop.openBundledFile(" + JSON.stringify(name) + ")");
+      record(tag + ": a bundled name that is " + why + " opens nothing", !!got && got.ok === false && (got.code === "REFUSED" || got.code === "GONE"), JSON.stringify(got));
+    }
+    const forged = await evalPage(cdp, "window.splitpageDesktop.bundleVideoFile(" + JSON.stringify("0".repeat(32)) + ", 'bundle1')");
+    record(tag + ": a token main never gave copies nothing", !!forged && forged.ok === false && forged.code === "UNKNOWN", JSON.stringify(forged));
+    opens = await shell(cdp, "videoFileOpens", {});
+    record(tag + ": main opened nothing for the refused names", !!opens && opens.length === 1, JSON.stringify(opens));
+
+    fs.writeFileSync(path.join(folder, "not linked.mp4"), Buffer.alloc(1024, 9));
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
+    const carried = path.join(copyDir, "Episode 12 v2 files", "take one.mp4");
+    const landed = await pollNode(async () => (fs.existsSync(carried) && fs.statSync(carried).size === fs.statSync(clip).size) || null, 20000).catch(() => false);
+    const there = fs.existsSync(path.dirname(carried)) ? fs.readdirSync(path.dirname(carried)) : null;
+    record(tag + ": Save As copies the videos the script links beside the new script, and nothing it does not link", !!landed &&
+      JSON.stringify(there) === JSON.stringify(["take one.mp4"]), JSON.stringify(there));
+    record(tag + ": the original copy stays where it was", fs.existsSync(copied), "");
+  } finally {
+    if (app) await teardown(app, tag, { expectForceKill: ENDS_DIRTY });
+    rmrf(userDataDir);
     rmrf(dir);
   }
 }
@@ -5970,6 +6074,7 @@ async function runTargetSuite(target, groupFilter) {
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
     ["draft: crash-recovery brings a picture back from the blob folder (#82)", () => caseDraftCrashWithImage(target)],
     ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
+    ["gallery: a dropped video is copied beside the script and opens from there after a restart (#259)", () => caseGalleryVideoBundle(target)],
     ["gallery: a pasted video link's thumbnail comes through main, by host and id (#141)", () => caseGalleryVideoThumbnail(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
     ["draft: file changed on disk while down (merge)", () => caseDraftFileChangedOnDisk(target, fixturesDir)],

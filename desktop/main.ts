@@ -39,6 +39,8 @@ import type * as HistoryPolicy from "../shared/history-policy.ts";
 import type * as HistoryStore from "../shared/history-store.ts";
 import type * as DocIdPolicy from "../shared/doc-id-policy.ts";
 import type * as VideoEmbed from "../shared/video-embed.ts";
+import type * as BundleCopy from "./bundle-copy.ts";
+import type * as BundleJobs from "./bundle-jobs.ts";
 
 type NativeMainOptions<T> = { [K in keyof T]: T[K] | undefined };
 type NativeMainDialog = Omit<Electron.Dialog, keyof DesktopFileIpcDependencies["dialog"] | "showSaveDialogSync">
@@ -99,6 +101,8 @@ const { createTabStripIpc }: { createTabStripIpc: typeof IpcTabstrip.createTabSt
 const { createTestModeIpc }: { createTestModeIpc: typeof IpcTestMode.createTestModeIpc } = require("./ipc-test-mode.ts");
 const { createPrintIpc }: { createPrintIpc: typeof IpcPrint.createPrintIpc } = require("./ipc-print.ts");
 const { createPdfPrinter }: { createPdfPrinter: typeof PrintPdf.createPdfPrinter } = require("./print-pdf.ts");
+const { createBundleCopier }: { createBundleCopier: typeof BundleCopy.createBundleCopier } = require("./bundle-copy.ts");
+const { createBundleJobs }: { createBundleJobs: typeof BundleJobs.createBundleJobs } = require("./bundle-jobs.ts");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -253,7 +257,8 @@ const {
   app, dialog, testMode: TEST_MODE, tabs, windowsById, liveWindows, tabHasFile, tabIsUnsaved, draftsHasDraft,
   requestDraftFlush, draftFlushBudgetMs: DRAFT_FLUSH_BUDGET_MS, draftStore: () => draftStore, draftsList,
   draftsDiscardForUserDecision, draftsDiscardClean, consumeTestDialogAnswer, activateTab, focusWindow,
-  destroyTabView, startInstallerNow, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper
+  destroyTabView, startInstallerNow, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper,
+  bundleCopies: () => bundleJobs
 });
 
 function homeKeyForClaim(tab: DesktopMainTab) {
@@ -859,6 +864,19 @@ async function openPrompterInBrowser(tab: DesktopMainTab | null, opts?: { chromi
 }
 
 const videoEmbed: typeof VideoEmbed = require(path.join(SHARED_ROOT, "video-embed.ts"));
+const bundleJobs = createBundleJobs({
+  copier: createBundleCopier({ bundleFiles: videoEmbed }),
+  allow: VIDEO_FILE_EXT,
+  scriptOfTab: (tabId: string) => {
+    const tab = tabs.get(tabId);
+    return tab && tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null;
+  },
+  pathOf: (fileId: string) => {
+    const found = fileIds.pathOf(fileId);
+    return typeof found === "string" && found ? found : null;
+  },
+  namesInProject: videoEmbed.bundledNamesInProject
+});
 
 const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
   ? (() => {
@@ -1785,13 +1803,14 @@ function launchIntentFor(tab: DesktopMainTab) {
 
 const { registerFileIpc } = createFileIpc({
   dialog, documentsPath: () => app.getPath("documents"), fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
-  consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, testMode: TEST_MODE
+  consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, bundleJobs, testMode: TEST_MODE
 });
 
 const { registerShellIpc } = createShellIpc({
   tabOf, launchIntentFor, draftStore: () => draftStore, draftsIsHeld, hadPriorSession,
   shell, nativeTheme, themeChoice, videoFileGrants, VIDEO_FILE_EXT,
-  openableVideoPath: videoEmbed.openableVideoPath, testVideoOpens, testMode: TEST_MODE,
+  openableVideoPath: videoEmbed.openableVideoPath, resolveBundledFile: videoEmbed.resolveBundledFile, bundleJobs,
+  testVideoOpens, testMode: TEST_MODE,
   videoThumbnail, updateStatus: () => updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus,
   checkForUpdate, downloadUpdate, runUpdateInstaller, openPrompterInBrowser,
   voiceHelperInstance: voice.voiceHelperInstance

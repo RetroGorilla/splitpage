@@ -10,7 +10,8 @@ import type {
 import type { createDraftStore } from "./drafts.ts";
 import type { createHistoryStore } from "../shared/history-store.ts";
 import type * as importHistoryPolicy from "../shared/history-policy.ts";
-import type { openableVideoPath } from "../shared/video-embed.ts";
+import type { openableVideoPath, resolveBundledFile } from "../shared/video-embed.ts";
+import type { createBundleJobs } from "./bundle-jobs.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { createVoiceComposition } from "./voice-composition.ts";
 import type { createPdfPrinter } from "./print-pdf.ts";
@@ -62,6 +63,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
   pathToTabId: Map<string, string>;
   consumeTestDialogAnswer: () => unknown;
   testDialogsSeen: () => number;
+  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "noteSaveTarget" | "carryForSave" | "saveLanded">;
 }
 
 export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "fileIds" | "recents" | "windowsById" | "testMode" | "draftStore" | "draftsPreviousSession"> {
@@ -90,6 +92,8 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   videoFileGrants: Map<string, string>;
   VIDEO_FILE_EXT: RegExp;
   openableVideoPath: typeof openableVideoPath;
+  resolveBundledFile: typeof resolveBundledFile;
+  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "copy" | "cancel">;
   testVideoOpens: string[];
   videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopIpcResult<"splitpage:video-thumbnail">>;
   updateStatus: () => DesktopWireUpdateStatus;
@@ -156,6 +160,7 @@ export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "t
   startInstallerNow: () => DesktopIpcResult<"splitpage:update-install">;
   prompterShare: DesktopTestModeIpcDependencies["prompterShare"];
   voiceHelper: () => Pick<ReturnType<DesktopTestModeIpcDependencies["voiceHelperInstance"]>, "stopAll"> | null;
+  bundleCopies: () => Pick<ReturnType<typeof createBundleJobs>, "abortAll" | "busy" | "idle"> | null;
 }
 
 export interface DesktopSessionRestoreDependencies extends Pick<DesktopMainCommon, "tabs" | "windowsById" | "draftStore" | "createTab" | "activateTab">, Pick<ReturnType<typeof createTabRegistry>, "pathToTabId" | "claimRoutingKey" | "firstWindowRecord"> {

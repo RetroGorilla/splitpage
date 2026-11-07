@@ -15,7 +15,7 @@ const OPEN_FOLDER_PROBE_TIMEOUT_MS = 1000;
 
 function createFileIpc({
   dialog, documentsPath, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
-  consumeTestDialogAnswer, testDialogsSeen, testMode: TEST_MODE
+  consumeTestDialogAnswer, testDialogsSeen, bundleJobs, testMode: TEST_MODE
 }: DesktopFileIpcDependencies) {
   const pendingScriptSaves = new Set<string>();
 
@@ -98,6 +98,7 @@ function createFileIpc({
         return null;
       }
       const id = fileIds.register(chosen);
+      if (opts.script === true) bundleJobs.noteSaveTarget(id, me);
       if (/\.splitpage$/i.test(path.basename(chosen))) pendingScriptSaves.add(id);
       return { id, name: path.basename(chosen) };
     });
@@ -112,8 +113,11 @@ function createFileIpc({
       const absPath = fileIds.pathOf(id);
       if (!absPath) throw new Error("ENOENT: unknown file id");
       const buffer = toBuffer(data);
+      const refused = await bundleJobs.carryForSave(id, () => buffer.toString("utf8"), event.sender);
+      if (refused) return { size: 0, bundleRefused: refused };
       const written = await writeFileEntry(absPath, buffer);
       if (pendingScriptSaves.delete(id)) await recents.noteSaved(absPath);
+      bundleJobs.saveLanded(id);
       return written;
     });
 

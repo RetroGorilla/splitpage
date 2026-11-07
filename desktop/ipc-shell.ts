@@ -8,18 +8,35 @@ import type * as NodeFsPromises from "node:fs/promises";
 
 import type * as NodePath from "node:path";
 
-import type { DesktopShellIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopIpcEvent, DesktopShellIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
 
 const path: typeof NodePath = require("node:path");
 const fsp: typeof NodeFsPromises = require("node:fs/promises");
 const crypto: typeof NodeCrypto = require("node:crypto");
 
+const BUNDLE_JOB_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const PATH_STYLE = process.platform === "win32" ? "win32" : "posix";
+const hasControlCharacter = (s: string) => [...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
+
 function createShellIpc({
   tabOf, launchIntentFor, draftStore, draftsIsHeld, hadPriorSession, shell, nativeTheme, themeChoice,
-  videoFileGrants, VIDEO_FILE_EXT, openableVideoPath, testVideoOpens, testMode: TEST_MODE, videoThumbnail,
+  videoFileGrants, VIDEO_FILE_EXT, openableVideoPath, resolveBundledFile, bundleJobs,
+  testVideoOpens, testMode: TEST_MODE, videoThumbnail,
   updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus, checkForUpdate, downloadUpdate,
   runUpdateInstaller, openPrompterInBrowser, voiceHelperInstance
 }: DesktopShellIpcDependencies) {
+  function scriptOf(event: DesktopIpcEvent): string | null {
+    const tab = tabOf(event);
+    return tab && tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null;
+  }
+
+  async function openFound(found: { ok: true; path: string } | { ok: false; code: string }) {
+    if (!found.ok) return found;
+    if (TEST_MODE) { testVideoOpens.push(found.path); return { ok: true as const }; }
+    const failed = await shell.openPath(found.path);
+    return failed ? { ok: false as const, code: "OPEN_FAILED" } : { ok: true as const };
+  }
+
   function registerShellIpc({ ipcHandle, ipcOn, ipcOnSync }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcOnSync("splitpage:tab-boot-sync", (event) => {
       const tab = tabOf(event);
@@ -69,20 +86,37 @@ function createShellIpc({
     ipcHandle("splitpage:video-file-open", async (event, token) => {
       const filePath = videoFileGrants.get(token);
       if (!filePath) return { ok: false, code: "UNKNOWN" };
+      let real: string;
+      try { real = await fsp.realpath(filePath); } catch { return { ok: false, code: "GONE" }; }
+      if (hasControlCharacter(real) || !VIDEO_FILE_EXT.test(real)) return { ok: false, code: "REFUSED" };
       try {
-        if (!(await fsp.stat(filePath)).isFile()) return { ok: false, code: "GONE" };
+        if (!(await fsp.stat(real)).isFile()) return { ok: false, code: "REFUSED" };
       } catch { return { ok: false, code: "GONE" }; }
-      if (TEST_MODE) { testVideoOpens.push(filePath); return { ok: true }; }
-      const failed = await shell.openPath(filePath);
-      return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
+      return openFound({ ok: true, path: real });
     });
 
     ipcHandle("splitpage:video-path-open", async (event, storedPath) => {
-      const found = await openableVideoPath(storedPath, process.platform === "win32" ? "win32" : "posix", fsp);
-      if (!found.ok) return found;
-      if (TEST_MODE) { testVideoOpens.push(found.path); return { ok: true }; }
-      const failed = await shell.openPath(found.path);
-      return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
+      return openFound(await openableVideoPath(storedPath, PATH_STYLE, fsp));
+    });
+
+    ipcHandle("splitpage:bundle-file", async (event, token, job) => {
+      const tab = tabOf(event);
+      const script = scriptOf(event);
+      if (!tab || !script) return { ok: false, code: "NO_FOLDER" };
+      const source = videoFileGrants.get(token);
+      if (!source) return { ok: false, code: "UNKNOWN" };
+      if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
+      return bundleJobs.copy(event.sender, tab.id, job, source, script);
+    });
+
+    ipcOn("splitpage:bundle-cancel", (event, job) => {
+      if (typeof job === "string") bundleJobs.cancel(event.sender, job);
+    });
+
+    ipcHandle("splitpage:bundled-file-open", async (event, name) => {
+      const script = scriptOf(event);
+      if (!script) return { ok: false, code: "REFUSED" };
+      return openFound(await resolveBundledFile(script, name, VIDEO_FILE_EXT, fsp, path, process.platform === "win32"));
     });
 
     ipcHandle("splitpage:video-thumbnail", async (event, host, ref) => videoThumbnail(host, ref));

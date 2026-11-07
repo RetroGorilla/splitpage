@@ -17,6 +17,7 @@ import { notices } from "./ports/effects.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { clock, ids } from "./ports/identity.ts";
 import { pictures } from "./ports/pictures.ts";
+import { beginBundleSave } from "./gallery.ts";
 
 let started: FileSavingMount | null = null;
 
@@ -62,7 +63,8 @@ function fileSavingPorts(deferred: FileSavingDeferredPorts): FileSavingPorts {
     },
     notices: { show: notices.show, imagesLeftOut: (count, name) => { warnImagesLeftOut(count, name); } },
     preferences: { editorName: () => getEditorName(), autosave: () => preferences().autosave() },
-    page: document
+    page: document,
+    bundles: { beginSave: beginBundleSave }
   };
 }
 
