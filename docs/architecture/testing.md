@@ -73,8 +73,9 @@ scripts contribute their full duration because they run sequentially. Groups
 still execute in their normal order, with each group's selected files together.
 
 To refresh weights, run CI on a GitHub-hosted runner with all shards enabled,
-then run `gh run view <run-id> --log | node tools/update-test-weights.mjs > tools/test-weights.json`
-in a shell with UTF-8 output. The reporter records each Node test file's elapsed
+then run `gh run view <run-id> --log | node tools/update-test-weights.mjs > test-weights.new.json`
+in a shell with UTF-8 output. Replace `tools/test-weights.json` with the new
+file after the command succeeds. The reporter records each Node test file's elapsed
 time and the runner records each script's elapsed time. The generator refuses
 an incomplete run, averages repeated samples, and discards stale entries.
 Review the generated table and benchmark the resulting shard balance before
