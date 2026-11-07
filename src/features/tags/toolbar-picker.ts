@@ -60,7 +60,8 @@ export function showToolbarTagPicker(cell: HTMLElement, choose: (cat: string) =>
   life.listen(doc, "pointerdown", outside, true);
   life.listen(doc, "click", outside, true);
   life.listen(doc, "focusin", outside);
-  life.listen(win, "scroll", () => { cancel(false); }, true);
+  life.listen(win, "wheel", () => { cancel(false); }, { capture: true, passive: true });
+  life.listen(win, "touchmove", () => { cancel(false); }, { capture: true, passive: true });
   life.listen(win, "resize", () => { cancel(false); });
   life.listen(doc, "keydown", event => {
     if (event.target === cell && event.key !== "Escape") { cancel(false); return; }

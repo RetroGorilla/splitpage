@@ -3,6 +3,8 @@ wait document.querySelectorAll('#rows .row').length > 1
 eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest; window.tc=function(i){return document.querySelectorAll('#rows .visual-cell .cell-editable')[i];}; window.tt=function(i){return tc(i).closest('.field-wrap').querySelector('.tb-tag');}; window.tp=function(){return document.querySelector('#rows [data-tags-open="true"] .tag-toolbar-picker');}; window.tr=function(el){var r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}; window.hit=function(el){var r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}; window.finish=function(){return Promise.allSettled(tp().getAnimations().map(function(a){return a.finished;}));}; var s=JSON.parse(F.buildSplitpage());s.title='Tag toolbar';s.rows=Array.from({length:25},function(_,i){return {id:'r'+(i+1),visualText:'Cable tray and power strip.',audioText:'Keep the desk clear.',status:'todo'};});s.sections=[];s.comments=[];s.brollShots=[];F.openFile(new File([JSON.stringify(s)],'toolbar.splitpage'));return true;})()
 wait F.state().title === 'Tag toolbar'
 caret #rows .row:nth-of-type(3) .visual-cell .cell-editable
+wait !document.querySelector('.topbar').classList.contains('is-condensing')
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve);});})
 eval window.buttonBefore=tr(tt(2))
 click #rows .row:nth-of-type(3) .visual-cell .tb-tag
 expect tt(2).getAttribute('aria-expanded') === 'true'
@@ -38,6 +40,7 @@ key ctrl KeyZ
 expect tc(2).querySelector('.tag-anchor') === null
 expect tc(2).querySelector('strong').textContent === 'Cable tray'
 caret #rows .row:nth-of-type(20) .visual-cell .cell-editable
+wait !document.querySelector('.topbar').classList.contains('is-condensing')
 click #rows .row:nth-of-type(20) .visual-cell .tb-tag
 eval finish()
 expect Array.from(tp().querySelectorAll('button')).every(hit)
@@ -45,6 +48,8 @@ key Escape
 expect tt(19).getAttribute('aria-expanded') === 'false'
 viewport 390 844
 caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
+wait !document.querySelector('.topbar').classList.contains('is-condensing')
+eval new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve);});})
 click #rows .row:nth-of-type(1) .visual-cell .tb-tag
 eval finish()
 expect tr(tp()).x >= 0 && tr(tp()).x + tr(tp()).w <= innerWidth
