@@ -23,6 +23,7 @@ export const videoFiles: VideoFiles = {
   openFile: (link) => running().openFile(link),
   openGallery: (rowId, slot, key) => running().openGallery(rowId, slot, key),
   bundle: (link, job, onProgress) => running().bundle(link, job, onProgress),
+  follow: (link, job, onProgress) => running().follow(link, job, onProgress),
   cancelBundle: (job) => running().cancelBundle(job)
 };
 

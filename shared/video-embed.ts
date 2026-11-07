@@ -323,10 +323,42 @@ async function resolveBundledFile(scriptPath: string, name: unknown, allow: RegE
   return isFile ? { ok: true, path: real } : { ok: false, code: "REFUSED" };
 }
 
+function projectRecord(text: string): unknown {
+  try { return JSON.parse(text); } catch { }
+  const lines = text.replace(/\r\n|\r/g, "\n").split("\n");
+  let openAt = -1, fence = 0;
+  lines.forEach(function (line, i) {
+    const m = /^(~{3,})\s*splitpage\s*$/.exec(line);
+    if (m) { openAt = i; fence = (m[1] as string).length; }
+  });
+  if (openAt === -1) return null;
+  let closeAt = lines.length;
+  for (let i = openAt + 1; i < lines.length; i++) {
+    if (new RegExp("^~{" + fence + ",}\\s*$").test(lines[i] as string)) { closeAt = i; break; }
+  }
+  try { return JSON.parse(lines.slice(openAt + 1, closeAt).join("\n")); } catch { return null; }
+}
+
+function bundledNamesInProject(text: string): string[] {
+  const names = new Set<string>();
+  const pending: unknown[] = [projectRecord(text)];
+  while (pending.length) {
+    const value = pending.pop();
+    if (!value || typeof value !== "object") continue;
+    const at = (value as { location?: unknown }).location;
+    if (at && typeof at === "object" && (at as { kind?: unknown }).kind === "bundled" && typeof (at as { name?: unknown }).name === "string") {
+      names.add((at as { name: string }).name);
+    }
+    for (const child of Object.values(value)) if (child && typeof child === "object") pending.push(child);
+  }
+  return [...names].sort();
+}
+
 export type { BundleFileSystem, BundlePaths, VideoPathFileSystem, VideoPathVerdict };
 
 export {
   bundleFolderOf,
+  bundledNamesInProject,
   bundleableName,
   missingFile,
   numberedName,

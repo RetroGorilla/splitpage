@@ -43,14 +43,23 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     const waiting = videoFileTokens[key] ? Promise.resolve(videoFileTokens[key] as string) : (pendingGrants[key] || Promise.resolve(null));
     return waiting.then(function (token): Promise<DesktopBundleCopy> | DesktopBundleCopy {
       if (disposed || !token) return { ok: false, code: "UNKNOWN" };
-      return Promise.resolve(ports.desktop.bundle(token, job, onProgress)).then(function (res): DesktopBundleCopy {
-        if (!res) return { ok: false, code: "UNAVAILABLE" };
-        if (res.ok && !disposed && sessionVideoFiles[key]) {
-          sessionVideoFiles[locatedVideoKey(Object.assign({}, link, { location: { kind: "bundled", name: res.name } }))] = sessionVideoFiles[key];
-        }
-        return res;
-      });
+      return Promise.resolve(ports.desktop.bundle(token, job, onProgress)).then(function (res) { return previewAs(link, res); });
     }).then(null, function (): DesktopBundleCopy { return { ok: false, code: "FAILED" }; });
+  }
+
+  function previewAs(link: VideoLink, res: DesktopBundleCopy | null): DesktopBundleCopy {
+    if (!res) return { ok: false, code: "UNAVAILABLE" };
+    const key = locatedVideoKey(link);
+    if (res.ok && !disposed && sessionVideoFiles[key]) {
+      sessionVideoFiles[locatedVideoKey(Object.assign({}, link, { location: { kind: "bundled", name: res.name } }))] = sessionVideoFiles[key];
+    }
+    return res;
+  }
+
+  function followBundle(link: VideoLink, job: string, onProgress: BundleProgressListener): Promise<DesktopBundleCopy> {
+    if (disposed) return Promise.resolve({ ok: false, code: "UNAVAILABLE" });
+    return Promise.resolve(ports.desktop.follow(job, onProgress)).then(function (res) { return previewAs(link, res); },
+      function (): DesktopBundleCopy { return { ok: false, code: "FAILED" }; });
   }
 
   function hasSessionVideo(link: VideoLink | null | undefined): boolean {
@@ -120,6 +129,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl,
     releaseUrls: releaseSessionVideoUrls, openFile: openVideoFile, openGallery: openGalleryLink,
     bundle: bundleVideoFile,
+    follow: followBundle,
     cancelBundle: function (job: string): void { if (!disposed) ports.desktop.cancelBundle(job); },
     dispose: function (): void {
       if (disposed) return;

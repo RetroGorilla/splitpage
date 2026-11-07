@@ -103,6 +103,8 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
   const forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   const docIdAtSave = (currentDocument() as { readonly docId: string }).docId;
   const homeAtSave = currentHome();
+  // why: a copy that finishes after the bytes are captured is held, so it can be copied on to the new folder
+  let move: BundleHandover | null = saveAs && job.owns() ? mountedPorts().bundles.beginMove() : null;
   let captured = captureExportDocument({
     docId: forkDocId,
     stamp: { rev: ((currentDocument() as { readonly rev: number }).rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
@@ -118,11 +120,9 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
   let retarget: Home | null = null;
   let pickedFor: Home | null = null;
   let wrote = false;
-  let move: BundleHandover | null = null;
 
   function retargetTo(handle: FileSaveHandle, k: string): void {
     if (!job.owns()) return;
-    move = mountedPorts().bundles.beginMove();
     prevHome = currentHome();
     retarget = setHome("file", { handle: handle, format: k, name: handle.name });
     pickedFor = retarget;

@@ -1,5 +1,5 @@
 import { bundleFolderName } from "../../../shared/video-path.ts";
-import { bundleVideoLinks } from "../../core/document/gallery.ts";
+import { bundleVideoLinks, locatedVideoKey, rowSlots } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
@@ -26,6 +26,7 @@ interface Offer {
   readonly entry: UndoEntry | null;
   ctx: ReturnType<VideoBundlePorts["ownership"]["capture"]>;
   folder: string;
+  moves: number;
 }
 
 interface Copy {
@@ -86,7 +87,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     const script = ports.script();
     const list = dropped.filter(function (v) { return !!(v && v.name && v.path); });
     if (!script || !list.length) return;
-    asking.push({ rowId, videos: list, entry, ctx: ports.ownership.capture(), folder: bundleFolderName(script) });
+    asking.push({ rowId, videos: list, entry, ctx: ports.ownership.capture(), folder: bundleFolderName(script), moves: 0 });
     showPrompt();
   }
 
@@ -122,16 +123,28 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     ports.viewer.refresh();
   }
 
+  function stillLinked(c: Copy): boolean {
+    const key = locatedVideoKey(c.from);
+    return ports.document.read(function (doc) {
+      const i = rowIndexOf(doc, c.offer.rowId);
+      return i !== -1 && rowSlots((doc as { readonly rows: readonly unknown[] }).rows[i]).some(function (slot) {
+        return slot.links.some(function (l) { return !l.href && locatedVideoKey(l) === key; });
+      });
+    });
+  }
+
   function movingWith(o: Offer): Move | null {
     for (const m of moves) if (m.offers.has(o)) return m;
     return null;
   }
 
-  function copied(c: Copy, res: DesktopBundleCopy): void {
+  function copied(c: Copy, res: DesktopBundleCopy, placedAt: number): void {
     if (res.ok) {
-      if (!ports.ownership.stillOwns(c.offer.ctx)) {
-        const m = movingWith(c.offer);
-        if (m) m.held.push(function () { copied(c, res); });
+      const m = movingWith(c.offer);
+      if (m) { m.held.push(function () { copied(c, res, placedAt); }); return; }
+      if (!ports.ownership.stillOwns(c.offer.ctx)) return;
+      if (placedAt !== c.offer.moves) {
+        if (stillLinked(c)) follow(c);
         return;
       }
       relink(c.offer, c.from, res.name);
@@ -172,20 +185,29 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     showProgress("videos to " + quoted(note.to), note.done, note.total);
   }
 
-  function settle(c: Copy, res: DesktopBundleCopy): void {
+  function settle(c: Copy, res: DesktopBundleCopy, placedAt: number): void {
     if (!life.active()) return;
     const at = pending.indexOf(c);
     if (at !== -1) pending.splice(at, 1);
-    copied(c, res);
+    copied(c, res, placedAt);
+    showNext();
+  }
+
+  function run(c: Copy, start: typeof ports.files.bundle): void {
+    const placedAt = c.offer.moves;
+    pending.push(c);
+    start(c.from, c.job, function (p) {
+      if (life.active() && !carrying) showProgress(copyText(c), p.done, p.total);
+    }).then(function (res) { settle(c, res, placedAt); }, function () { settle(c, { ok: false, code: "FAILED" }, placedAt); });
+  }
+
+  function follow(c: Copy): void {
+    run(c, ports.files.follow);
     showNext();
   }
 
   function submit(o: Offer, video: DroppedVideo): void {
-    const c: Copy = { job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } } };
-    pending.push(c);
-    ports.files.bundle(c.from, c.job, function (p) {
-      if (life.active() && !carrying) showProgress(copyText(c), p.done, p.total);
-    }).then(function (res) { settle(c, res); }, function () { settle(c, { ok: false, code: "FAILED" }); });
+    run({ job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } } }, ports.files.bundle);
   }
 
   function answer(copy: boolean): void {
@@ -209,6 +231,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     const offers = new Set<Offer>();
     pending.forEach(function (c) { if (ports.ownership.stillOwns(c.offer.ctx)) offers.add(c.offer); });
     if (!offers.size) return null;
+    offers.forEach(function (o) { o.moves++; });
     const m: Move = { offers, held: [] };
     moves.add(m);
     function close(landed: boolean): void {

@@ -9,6 +9,7 @@ export interface DesktopWireFile {
 export interface DesktopWireStamp {
   lastModified?: number;
   size: number;
+  bundleClash?: { folder: string; name: string };
 }
 
 export interface DesktopWireRecent {
@@ -259,6 +260,7 @@ export interface DesktopIpcContract {
   "splitpage:bundle-file": DesktopChannelCall<[string, string], DesktopWireBundleCopy>;
   "splitpage:bundle-carry": DesktopChannelCall<[DesktopWireBundleCarryNote], void>;
   "splitpage:bundle-cancel": DesktopChannelCall<[string], void>;
+  "splitpage:bundle-follow": DesktopChannelCall<[string], DesktopWireBundleCopy>;
   "splitpage:bundle-progress": DesktopChannelCall<[DesktopWireBundleProgress], void>;
   "splitpage:bundled-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-thumbnail": DesktopChannelCall<[string, string], { ok: true; bytes: Uint8Array; mime: string } | DesktopWireFailure>;

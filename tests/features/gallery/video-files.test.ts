@@ -9,7 +9,7 @@ import type { VideoFilePorts } from "../../../src/features/gallery/video-files-p
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeNotices } from "../fakes.ts";
 
-const NO_BUNDLES = { openBundled: async () => null, bundle: async () => null, cancelBundle: () => {} };
+const NO_BUNDLES = { openBundled: async () => null, bundle: async () => null, follow: async () => null, cancelBundle: () => {} };
 
 function setup(overrides: Partial<VideoFilePorts> = {}) {
   const doc = migrateRows({ rows: [{ id: "r1", imageLinks: [{ href: "https://example.com/clip" }, { name: "local.mp4", size: 5 }] }] }, fakeMigration().ports);
@@ -252,4 +252,21 @@ test("bundling sends main this session's grant for the dropped file, waiting for
   assert.equal(calls.length, 1);
   h.owner.dispose();
   assert.deepEqual(await h.owner.bundle(dropped, "bundle3", () => {}), { ok: false, code: "UNAVAILABLE" });
+});
+
+test("following a copy asks main for that job only and keeps the preview for the copy in the new folder", async (t) => {
+  t.mock.method(URL, "createObjectURL", () => "blob:copy");
+  const follows: string[] = [];
+  const h = setup({ desktop: { ...NO_BUNDLES, grant: async () => "tok", opens: () => true, open: async () => null, openPath: async () => null,
+    follow: async (job, onProgress) => { follows.push(job); onProgress({ done: 5, total: 5 }); return { ok: true, name: "take (3).mp4" }; } } });
+  const dropped = at("C:\\Drops\\take.mp4");
+  h.owner.grant({ size: 5 }, dropped);
+  const seen: unknown[] = [];
+  assert.deepEqual(await h.owner.follow(dropped, "bundle1", (p) => { seen.push(p); }), { ok: true, name: "take (3).mp4" });
+  assert.deepEqual(follows, ["bundle1"]);
+  assert.deepEqual(seen, [{ done: 5, total: 5 }]);
+  assert.equal(h.owner.has({ name: "take.mp4", size: 5, location: { kind: "bundled", name: "take (3).mp4" } }), true);
+  h.owner.dispose();
+  assert.deepEqual(await h.owner.follow(dropped, "bundle1", () => {}), { ok: false, code: "UNAVAILABLE" });
+  assert.equal(follows.length, 1);
 });

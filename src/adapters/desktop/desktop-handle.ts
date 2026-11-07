@@ -61,6 +61,8 @@ export function makeDesktopHandle(entry: Pick<DesktopFileEntry, "id" | "name"> |
         },
         close: function () {
           return bridge().writeFile(id, concatBytes(chunks)).then(function (written) {
+            const clash = written && written.bundleClash;
+            if (clash) throw new Error("“" + clash.folder + "” already has a different “" + clash.name + "”. Rename or move that file, then save again");
             const stamp = written && written.lastModified;
             return typeof stamp === "number" && isFinite(stamp) ? { lastModified: stamp } : undefined;
           });

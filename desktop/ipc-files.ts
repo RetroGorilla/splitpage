@@ -113,6 +113,8 @@ function createFileIpc({
       const absPath = fileIds.pathOf(id);
       if (!absPath) throw new Error("ENOENT: unknown file id");
       const buffer = toBuffer(data);
+      const plan = await bundleJobs.planSave(id, buffer.toString("utf8"));
+      if (!plan.ok) return { size: 0, bundleClash: { folder: plan.folder, name: plan.name } };
       const written = await writeFileEntry(absPath, buffer);
       if (pendingScriptSaves.delete(id)) await recents.noteSaved(absPath);
       bundleJobs.saveLanded(id, event.sender);

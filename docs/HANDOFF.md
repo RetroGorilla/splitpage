@@ -598,10 +598,14 @@ tabs**.
   `splitpage:bundle-file(token, job)` copies a drop's granted file into the
   `<name> files` folder of the script the tab had when the copy was accepted
   (`desktop/bundle-jobs.ts` binds it then); when a script save dialog's
-  write lands, main carries that folder to the new script's by itself and
-  reports on `splitpage:bundle-carry`; `splitpage:bundled-file-open(name)` opens one
-  name from that folder after `resolveBundledFile`. None takes a path
-  (INV-34). `desktop/test/bundle-ipc.test.mjs` holds the refusals and
+  write lands, main carries the names the written bytes link to the new
+  script's folder by itself, after failing the save before the write if one
+  of them is there with different bytes, and reports on
+  `splitpage:bundle-carry`; `splitpage:bundle-follow(job)` copies one finished
+  copy on to a script the tab reached by saving; `splitpage:bundled-file-open(name)`
+  opens one name from that folder after `resolveBundledFile`. None takes a path
+  (INV-34). Copies publish through a temporary name, and quitting while they
+  run asks Wait or Quit anyway (`close-quit.ts`). `desktop/test/bundle-ipc.test.mjs` holds the refusals and
   `caseGalleryVideoBundle` in smoke.mjs runs drop, copy, restart, open and
   Save As.
 - Duplicate document-id claims reassign in memory only (§4, #36).

@@ -19,6 +19,8 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _videoPathAnswer?: Awaited<ReturnType<DesktopPort["openVideoPath"]>>;
   _bundleCalls?: { token: string; job: string }[];
   _bundleAnswer?: Awaited<ReturnType<DesktopPort["bundleVideoFile"]>>;
+  _bundleFollows?: string[];
+  _followAnswer?: Awaited<ReturnType<DesktopPort["followBundle"]>>;
   _bundleCarry?: Parameters<DesktopPort["onBundleCarry"]>[0];
   _bundleCancels?: string[];
   _bundledOpens?: string[];
@@ -199,6 +201,14 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
       if (typeof name !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
       if (onProgress) onProgress({ done: 1, total: 1 });
       return Promise.resolve(this._bundleAnswer || { ok: true, name: name });
+    },
+    followBundle: function (job: string, onProgress?: Parameters<DesktopPort["followBundle"]>[1]) {
+      (this._bundleFollows = this._bundleFollows || []).push(job);
+      const call = (this._bundleCalls || []).find(function (c) { return c.job === job; });
+      const name = call && this._videoGrants && this._videoGrants[call.token];
+      if (typeof name !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
+      if (onProgress) onProgress({ done: 1, total: 1 });
+      return Promise.resolve(this._followAnswer || { ok: true, name: name });
     },
     onBundleCarry: function (cb: Parameters<DesktopPort["onBundleCarry"]>[0]) { this._bundleCarry = cb; },
     cancelBundle: function (job: string) { (this._bundleCancels = this._bundleCancels || []).push(job); },

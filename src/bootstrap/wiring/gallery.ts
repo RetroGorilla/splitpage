@@ -89,7 +89,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
       bundles: {
         window: window,
         script: scriptOnDisk,
-        files: { bundle: videoFiles.bundle, cancelBundle: videoFiles.cancelBundle },
+        files: { bundle: videoFiles.bundle, follow: videoFiles.follow, cancelBundle: videoFiles.cancelBundle },
         carries: desktopVideo.onCarry,
         notices: portNotices,
         ownership: portOwnership,

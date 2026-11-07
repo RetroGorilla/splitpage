@@ -39,6 +39,11 @@ export const desktopVideo: DesktopVideo = {
     if (!presence.running() || !port || typeof port.bundleVideoFile !== "function") return Promise.resolve(null);
     return Promise.resolve(port.bundleVideoFile(token, job, onProgress));
   },
+  follow: (job, onProgress) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.followBundle !== "function") return Promise.resolve(null);
+    return Promise.resolve(port.followBundle(job, onProgress));
+  },
   onCarry: (listener) => {
     const port = desktopPort();
     if (port && typeof port.onBundleCarry === "function") port.onBundleCarry(listener);

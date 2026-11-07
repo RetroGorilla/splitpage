@@ -15,6 +15,7 @@ export interface DesktopVideo {
   readonly openPath: (path: string) => Promise<DesktopVideoResult | null>;
   readonly openBundled: (name: string) => Promise<DesktopVideoResult | null>;
   readonly bundle: (token: string, job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleCopy | null>;
+  readonly follow: (job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleCopy | null>;
   readonly onCarry: (listener: (note: DesktopBundleCarry) => void) => void;
   readonly cancelBundle: (job: string) => void;
   readonly thumbnail: (host: string, ref: string) => Promise<DesktopVideoThumbnail | null> | null;

@@ -82,7 +82,7 @@ export interface DroppedVideo {
 export interface VideoBundlePorts {
   readonly window: Window;
   readonly script: () => string | null;
-  readonly files: Pick<VideoFiles, "bundle" | "cancelBundle">;
+  readonly files: Pick<VideoFiles, "bundle" | "follow" | "cancelBundle">;
   readonly carries: DesktopVideo["onCarry"];
   readonly notices: Pick<NoticePort, "show">;
   readonly ownership: Operations;

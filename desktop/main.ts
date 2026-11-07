@@ -257,7 +257,8 @@ const {
   app, dialog, testMode: TEST_MODE, tabs, windowsById, liveWindows, tabHasFile, tabIsUnsaved, draftsHasDraft,
   requestDraftFlush, draftFlushBudgetMs: DRAFT_FLUSH_BUDGET_MS, draftStore: () => draftStore, draftsList,
   draftsDiscardForUserDecision, draftsDiscardClean, consumeTestDialogAnswer, activateTab, focusWindow,
-  destroyTabView, startInstallerNow, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper
+  destroyTabView, startInstallerNow, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper,
+  bundleCopies: () => bundleJobs
 });
 
 function homeKeyForClaim(tab: DesktopMainTab) {
@@ -873,7 +874,8 @@ const bundleJobs = createBundleJobs({
   pathOf: (fileId: string) => {
     const found = fileIds.pathOf(fileId);
     return typeof found === "string" && found ? found : null;
-  }
+  },
+  namesInProject: videoEmbed.bundledNamesInProject
 });
 
 const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE

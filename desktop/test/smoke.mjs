@@ -4015,9 +4015,9 @@ async function caseGalleryVideoBundle(target) {
     await waitForRows(app.cdp, 20000);
     let cdp = app.cdp;
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Bundle Smoke'", 20000).catch(() => false);
-    const bridgeHas = await evalPage(cdp, "['bundleVideoFile','onBundleCarry','cancelBundle','openBundledFile'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; }) && " +
+    const bridgeHas = await evalPage(cdp, "['bundleVideoFile','followBundle','onBundleCarry','cancelBundle','openBundledFile'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; }) && " +
       "!('carryBundle' in window.splitpageDesktop)");
-    record(tag + ": the bridge exposes bundleVideoFile, onBundleCarry, cancelBundle and openBundledFile, and no way to ask for a carry", bridgeHas === true, String(bridgeHas));
+    record(tag + ": the bridge exposes bundleVideoFile, followBundle, onBundleCarry, cancelBundle and openBundledFile, and no way to ask for a carry", bridgeHas === true, String(bridgeHas));
 
     await drop(cdp, "__b1", clip);
     const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
@@ -4067,13 +4067,18 @@ async function caseGalleryVideoBundle(target) {
     }
     const forged = await evalPage(cdp, "window.splitpageDesktop.bundleVideoFile(" + JSON.stringify("0".repeat(32)) + ", 'bundle1')");
     record(tag + ": a token main never gave copies nothing", !!forged && forged.ok === false && forged.code === "UNKNOWN", JSON.stringify(forged));
+    const followed = await evalPage(cdp, "window.splitpageDesktop.followBundle('bundle1')");
+    record(tag + ": following a job this tab never ran copies nothing", !!followed && followed.ok === false && followed.code === "UNKNOWN", JSON.stringify(followed));
     opens = await shell(cdp, "videoFileOpens", {});
     record(tag + ": main opened nothing for the refused names", !!opens && opens.length === 1, JSON.stringify(opens));
 
+    fs.writeFileSync(path.join(folder, "not linked.mp4"), Buffer.alloc(1024, 9));
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     const carried = path.join(copyDir, "Episode 12 v2 files", "take one.mp4");
     const landed = await pollNode(async () => (fs.existsSync(carried) && fs.statSync(carried).size === fs.statSync(clip).size) || null, 20000).catch(() => false);
-    record(tag + ": Save As copies the folder's videos beside the new script", !!landed, JSON.stringify(fs.existsSync(path.dirname(carried)) ? fs.readdirSync(path.dirname(carried)) : null));
+    const there = fs.existsSync(path.dirname(carried)) ? fs.readdirSync(path.dirname(carried)) : null;
+    record(tag + ": Save As copies the videos the script links beside the new script, and nothing it does not link", !!landed &&
+      JSON.stringify(there) === JSON.stringify(["take one.mp4"]), JSON.stringify(there));
     record(tag + ": the original copy stays where it was", fs.existsSync(copied), "");
   } finally {
     if (app) await teardown(app, tag, { expectForceKill: ENDS_DIRTY });

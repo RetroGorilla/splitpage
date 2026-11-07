@@ -49,6 +49,7 @@ function harness(t, saved = {}) {
     testDialogsSeen: () => 0, testMode: false,
     bundleJobs: {
       noteSaveTarget: (id, tab) => { noted.push({ id, tab }); },
+      planSave: async () => ({ ok: true }),
       saveLanded: (id) => { landed.push(id); }
     }
   });

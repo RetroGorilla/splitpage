@@ -65,7 +65,7 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:get-session-info invoke", "splitpage:get-app-version-sync sendSync", "splitpage:tab-boot-sync sendSync",
   "splitpage:open-external send", "splitpage:set-theme send", "splitpage:video-file-grant invoke",
   "splitpage:video-file-open invoke", "splitpage:video-path-open invoke",
-  "splitpage:bundle-file invoke", "splitpage:bundle-cancel send", "splitpage:bundled-file-open invoke",
+  "splitpage:bundle-file invoke", "splitpage:bundle-cancel send", "splitpage:bundle-follow invoke", "splitpage:bundled-file-open invoke",
   "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
   "splitpage:update-check invoke", "splitpage:update-download invoke", "splitpage:update-install invoke",
   "splitpage:prompter-open-in-browser invoke", "splitpage:prompter-open-in-chromium invoke",
@@ -311,14 +311,14 @@ test("main.ts passes registerIpc every handler group, and each group's module is
   }
 });
 
-test("in test mode, main.ts's real groups register the 63 pairs in the order they had before the split, then the print channel", () => {
+test("in test mode, main.ts's real groups register the 64 pairs in the order they had before the split, then the print channel", () => {
   assert.deepEqual(registerThroughMain({ testMode: true }), [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT]);
 });
 
 test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
   const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
-  assert.equal(expected.length, 58);
+  assert.equal(expected.length, 59);
   assert.deepEqual(seen, expected);
   for (const pair of seen) {
     const [name, direction] = pair.split(" ");
@@ -613,6 +613,7 @@ test("the bundle channels take a token, a name or a job id, never a path to copy
     "splitpage:bundle-file invoke": [["string", "string"], [["0".repeat(32), "bundle1"]],
       [[], ["0".repeat(32)], [null, "bundle1"], [{ path: "C:\\a.mp4" }, "bundle1"], ["0".repeat(32), "bundle1", "C:\\Windows"]]],
     "splitpage:bundle-cancel send": [["string"], [["bundle1"]], [[], [1], ["bundle1", "more"]]],
+    "splitpage:bundle-follow invoke": [["string"], [["bundle1"]], [[], [1], [{ path: "C:\\a.mp4" }], ["bundle1", "C:\\Users\\b files"]]],
     "splitpage:bundled-file-open invoke": [["string"], [["take one.mp4"]], [[], [null], [{ name: "a.mp4" }], ["a.mp4", "C:\\x.exe"]]]
   };
   for (const [pair, [schema, good, bads]] of Object.entries(shapes)) {

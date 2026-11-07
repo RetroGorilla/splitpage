@@ -14,5 +14,6 @@ export interface VideoFiles {
   readonly openFile: (link: VideoLink) => void;
   readonly openGallery: (rowId: string, slot: number, key: unknown) => void;
   readonly bundle: (link: VideoLink, job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleCopy>;
+  readonly follow: (link: VideoLink, job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleCopy>;
   readonly cancelBundle: (job: string) => void;
 }

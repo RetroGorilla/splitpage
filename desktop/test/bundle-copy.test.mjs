@@ -211,6 +211,83 @@ test("cancelling a carry stops it", async () => {
   } finally { s.done(); }
 });
 
+test("a copy is written under a temporary name and appears under its own name only once it is whole", async () => {
+  const s = scratch();
+  try {
+    const big = path.join(s.drops, "big.mp4");
+    fs.writeFileSync(big, Buffer.alloc(8 * 1024 * 1024, 6));
+    const during = [];
+    const got = await copier.copyIn(big, s.script, VIDEO_FILE_EXT, (done, total) => {
+      if (done < total) during.push(fs.readdirSync(s.folder));
+    }, live());
+    assert.deepEqual(got, { ok: true, name: "big.mp4" });
+    assert.ok(during.length >= 1, "progress was seen while the copy ran");
+    assert.ok(during.every((names) => !names.includes("big.mp4") && names.length === 1 && /^~splitpage-[0-9a-f]{16}\.part$/.test(names[0])),
+      "while copying, only the temporary exists: " + JSON.stringify(during[0]));
+    assert.deepEqual(fs.readdirSync(s.folder), ["big.mp4"], "the temporary is gone once the copy is published");
+    assert.deepEqual(fs.readFileSync(path.join(s.folder, "big.mp4")), fs.readFileSync(big));
+  } finally { s.done(); }
+});
+
+test("a temporary left by a copy that never finished is swept by the next copy into that folder, and nothing else is", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "~splitpage-0123456789abcdef.part"), "half");
+    fs.writeFileSync(path.join(s.folder, "~splitpage-notes.part"), "someone's own file");
+    fs.writeFileSync(path.join(s.folder, "kept.mp4"), "kept");
+    assert.deepEqual(await copier.copyIn(s.clip, s.script, VIDEO_FILE_EXT, () => {}, live()), { ok: true, name: "take one.mp4" });
+    assert.deepEqual(fs.readdirSync(s.folder).sort(), ["kept.mp4", "take one.mp4", "~splitpage-notes.part"]);
+    fs.writeFileSync(path.join(s.folder, "~splitpage-fedcba9876543210.part"), "half");
+    const to = path.join(s.dir, "New.splitpage");
+    fs.mkdirSync(path.join(s.dir, "New files"));
+    fs.writeFileSync(path.join(s.dir, "New files", "~splitpage-00000000ffffffff.part"), "half");
+    assert.deepEqual(await copier.carry(s.script, to, ["kept.mp4"], VIDEO_FILE_EXT, () => {}, live()), { ok: true, copied: 1, kept: 0, failed: 0 });
+    assert.deepEqual(fs.readdirSync(path.join(s.dir, "New files")), ["kept.mp4"], "a carry sweeps the folder it writes into");
+    assert.ok(fs.existsSync(path.join(s.folder, "~splitpage-fedcba9876543210.part")), "the folder it only reads from is left alone");
+  } finally { s.done(); }
+});
+
+test("a cancelled carry leaves no temporary and nothing under the final name", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "big.mp4"), Buffer.alloc(32 * 1024 * 1024, 4));
+    const ctl = new AbortController();
+    let seen = null;
+    const to = path.join(s.dir, "New.splitpage");
+    const got = await copier.carry(s.script, to, ["big.mp4"], VIDEO_FILE_EXT, (done) => {
+      if (done > 0 && !seen) { seen = fs.readdirSync(path.join(s.dir, "New files")); ctl.abort(); }
+    }, ctl.signal);
+    assert.deepEqual(got, { ok: false, code: "CANCELLED", copied: 0 });
+    assert.ok(seen && seen.length === 1 && seen[0] !== "big.mp4", "mid-copy the final name did not exist");
+    assert.deepEqual(fs.readdirSync(path.join(s.dir, "New files")), []);
+  } finally { s.done(); }
+});
+
+test("a clash is a linked name the new folder holds with different bytes; same bytes, absent names and unresolvable names are not", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "take.mp4"), "mine");
+    fs.writeFileSync(path.join(s.folder, "same.mp4"), "same");
+    fs.writeFileSync(path.join(s.folder, "size.mp4"), "four");
+    const to = path.join(s.dir, "copy", "Episode 12 v2.splitpage");
+    const toFolder = path.join(s.dir, "copy", "Episode 12 v2 files");
+    assert.equal(await copier.clashIn(s.script, to, ["take.mp4"], VIDEO_FILE_EXT), null, "no folder there yet");
+    fs.mkdirSync(toFolder, { recursive: true });
+    fs.writeFileSync(path.join(toFolder, "same.mp4"), "same");
+    fs.writeFileSync(path.join(toFolder, "size.mp4"), "five!");
+    fs.writeFileSync(path.join(toFolder, "take.mp4"), "eirs");
+    fs.writeFileSync(path.join(toFolder, "gone.mp4"), "x");
+    assert.equal(await copier.clashIn(s.script, to, ["same.mp4", "new.mp4", "gone.mp4", "..\\x.mp4"], VIDEO_FILE_EXT), null);
+    assert.equal(await copier.clashIn(s.script, to, ["same.mp4", "size.mp4"], VIDEO_FILE_EXT), "size.mp4");
+    assert.equal(await copier.clashIn(s.script, to, ["same.mp4", "take.mp4"], VIDEO_FILE_EXT), "take.mp4", "same size, different bytes");
+    assert.equal(await copier.clashIn(s.script, s.script, ["take.mp4"], VIDEO_FILE_EXT), null, "the same folder never clashes with itself");
+    assert.equal(fs.readFileSync(path.join(toFolder, "take.mp4"), "utf8"), "eirs", "checking writes nothing");
+  } finally { s.done(); }
+});
+
 const failures = [];
 for (const c of cases) {
   try {

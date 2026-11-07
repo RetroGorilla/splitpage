@@ -419,29 +419,31 @@ test("disposing the mount releases its ports only while it is the live one", () 
   assert.throws(() => second.mounted.updateAutoSaveMenu());
 });
 
-const moveLines = (h: ReturnType<typeof harness>) => h.log.filter((line) => /^(beginMove|landed|abandoned|setHome|restoreHome|write):/.test(line));
+const moveLines = (h: ReturnType<typeof harness>) => h.log.filter((line) => /^(beginMove|landed|abandoned|setHome|restoreHome|write|capture):/.test(line));
 
-test("Save As hands the running bundle copies over before it retargets and settles them once the new file is home", async () => {
+test("Save As holds the running bundle copies before it captures the bytes and settles them once the new file is home", async () => {
   const saveAs = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
   assert.deepEqual(await write(saveAs, "saveAs"), { kind: "saved" });
-  assert.deepEqual(moveLines(saveAs), ["beginMove:file", "setHome:file", "write:copy.splitpage:{}", "landed:copy.splitpage"]);
+  assert.deepEqual(moveLines(saveAs).map((line) => line.replace(/^capture:.*/, "capture")),
+    ["beginMove:file", "capture", "setHome:file", "write:copy.splitpage:{}", "landed:copy.splitpage"]);
   const confirmed = saveAs.log.indexOf("confirmSavedNow");
   assert.ok(confirmed !== -1 && confirmed < saveAs.log.indexOf("landed:copy.splitpage"), "the handover lands after the write is confirmed, so the new owner is current");
   const plain = harness({ home: { ...FILE_HOME }, writtenOut: true, handover: true });
   assert.deepEqual(await write(plain, "save"), { kind: "saved" });
-  assert.deepEqual(moveLines(plain).filter((line) => !line.startsWith("write:")), [], "saving in place hands nothing over");
+  assert.deepEqual(moveLines(plain).filter((line) => !/^(write|capture):/.test(line)), [], "saving in place hands nothing over");
   const cancelled = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "cancelled" } });
   assert.deepEqual(await write(cancelled, "saveAs"), { kind: "cancelled" });
-  assert.deepEqual(moveLines(cancelled), [], "a cancelled dialog hands nothing over");
+  assert.deepEqual(moveLines(cancelled).filter((line) => !line.startsWith("capture:")), ["beginMove:file", "abandoned:pilot.md"],
+    "a cancelled dialog gives the held copies back to the script they were bound to");
   const lost = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
   assert.deepEqual(await write(lost, "saveAs", false), { kind: "saved" });
-  assert.deepEqual(moveLines(lost).filter((line) => !line.startsWith("write:")), [], "a job that no longer owns the document never retargets, so it hands nothing over");
+  assert.deepEqual(moveLines(lost).filter((line) => !/^(write|capture):/.test(line)), [], "a job that no longer owns the document never retargets, so it hands nothing over");
 });
 
 test("a Save As that fails, or loses the document while it writes, abandons the handover after the old home is back", async () => {
   const failed = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true }, writeFails: new Error("disk full") });
   assert.equal((await write(failed, "saveAs")).kind, "failed");
-  assert.deepEqual(moveLines(failed), ["beginMove:file", "setHome:file", "write:copy.md:# Pilot", "restoreHome:file", "abandoned:pilot.md"]);
+  assert.deepEqual(moveLines(failed).filter((line) => !line.startsWith("capture:")), ["beginMove:file", "setHome:file", "write:copy.md:# Pilot", "restoreHome:file", "abandoned:pilot.md"]);
   const h = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true } });
   let owning = true;
   h.mounted.dispose();

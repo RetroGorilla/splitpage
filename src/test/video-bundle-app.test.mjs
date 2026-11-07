@@ -10,7 +10,8 @@ await bootApp();
 
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
+const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
+const { bundledNamesInProject } = await import("../../shared/video-embed.ts");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
@@ -85,6 +86,7 @@ test("a copy that finishes after Save As links the new script's document, with t
     finishes[0]({ ok: true, name: "take one.mp4" });
     assert.ok(await until(() => linkIn(currentDocument())?.kind === "bundled"), "the late copy relinks the document Save As moved");
     assert.deepEqual(linkIn(currentDocument()), { kind: "bundled", name: "take one.mp4" });
+    assert.deepEqual(fake._bundleFollows, [fake._bundleCalls[0].job], "main was asked to copy that job on beside the new script before the link changed");
   } finally {
     window.__desktopTest.restoreBackend();
     document.getElementById("toast-host").replaceChildren();
@@ -110,4 +112,62 @@ test("a copy that finishes after the tab opened an unrelated script changes neit
     window.__desktopTest.restoreBackend();
     document.getElementById("toast-host").replaceChildren();
   }
+});
+
+test("a Save As whose folder already holds a different copy of a linked video fails before writing, and the saved link reopens the right copy", async () => {
+  setAutoSaveEnabled(false);
+  const fake = window.__desktopTest.makeFakeBackend();
+  const bundled = { name: "take.mp4", size: 9, location: { kind: "bundled", name: "take.mp4" } };
+  const writes = [];
+  let clash = true;
+  const backend = Object.assign({}, fake, {
+    writeFile: (id, data) => {
+      if (clash) { clash = false; return Promise.resolve({ size: 0, bundleClash: { folder: "Episode 12 v2 files", name: "take.mp4" } }); }
+      writes.push(id);
+      return fake.writeFile(id, data);
+    }
+  });
+  window.__desktopTest.setBackend(backend);
+  try {
+    const doc = script("Episode 12", ID("4"));
+    doc.rows[0].imageLinks = [bundled];
+    const before = await openFromDesktop(fake, doc, "Episode 12.splitpage");
+    await saveDoc({ saveAs: true });
+    assert.equal(homeModule.currentHome().handle, before, "the document stays with the script it came from");
+    assert.deepEqual(writes, [], "nothing was written");
+    assert.ok(document.getElementById("toast-host").textContent.includes(
+      "Could not save — “Episode 12 v2 files” already has a different “take.mp4”. Rename or move that file, then save again."),
+      document.getElementById("toast-host").textContent);
+    await saveDoc({ saveAs: true });
+    assert.equal(writes.length, 1, "once the file is moved, saving again works");
+    const saved = homeModule.currentHome().handle;
+    assert.notEqual(saved, before);
+    const reopened = makeDesktopHandle({ id: writes[0], name: saved.name });
+    loadTestDocument(script("Placeholder", ID("0")));
+    undoOwner().flush();
+    confirmSavedNow();
+    await openDocument({ kind: "file", file: await reopened.getFile(), handle: reopened, options: { skipSnapshot: true, silent: true } });
+    assert.deepEqual(linkIn(currentDocument()), bundled.location, "the saved script links the bundled name");
+    videoFiles.openFile(rowSlots(currentDocument().rows[0])[0].links[0]);
+    assert.ok(await until(() => (backend._bundledOpens || []).length === 1));
+    assert.deepEqual(backend._bundledOpens, ["take.mp4"], "the link reopens by its bundled name, which main resolves beside the saved script");
+  } finally {
+    window.__desktopTest.restoreBackend();
+    document.getElementById("toast-host").replaceChildren();
+  }
+});
+
+test("main reads the bundled names from the bytes of both project formats as the app writes them, and nothing else", () => {
+  const doc = script("Episode 12", ID("5"));
+  doc.rows[0].imageLinks = [
+    { name: "b.mp4", size: 9, location: { kind: "bundled", name: "b.mp4" } },
+    { name: "a.mov", size: 9, location: { kind: "bundled", name: "a.mov" } },
+    LINK,
+    { href: "https://example.com/clip" }
+  ];
+  doc.rows[0].audioText = "~~~splitpage\n{\"location\":{\"kind\":\"bundled\",\"name\":\"typed.mp4\"}}\n~~~";
+  const captured = exportDocumentOf(doc);
+  assert.deepEqual(bundledNamesInProject(buildSplitpageFile(captured)), ["a.mov", "b.mp4"]);
+  assert.deepEqual(bundledNamesInProject(buildMarkdownProject(captured)), ["a.mov", "b.mp4"], "a fence typed into the script is not the project block");
+  assert.deepEqual(bundledNamesInProject("not a project"), []);
 });
