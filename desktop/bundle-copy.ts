@@ -30,6 +30,7 @@ function createBundleCopier(options: {
   link?: typeof fsp.link;
   rename?: typeof fsp.rename;
   lstat?: typeof fsp.lstat;
+  unlink?: typeof fsp.unlink;
 }) {
   const {
     bundleFolderOf, bundleableName, missingFile, numberedName, realBundleFolder, resolveBundledFile, samePath
@@ -40,6 +41,7 @@ function createBundleCopier(options: {
   const linkFile = options.link || fsp.link;
   const renameFile = options.rename || fsp.rename;
   const lstatTarget = options.lstat || fsp.lstat;
+  const unlinkFile = options.unlink || fsp.unlink;
   const writing = new Set<string>();
   const publishing = new Map<string, Promise<void>>();
 
@@ -72,23 +74,31 @@ function createBundleCopier(options: {
     }
   }
 
-  async function publish(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+  async function publish(part: string, target: string, signal: AbortSignal, published: () => void): Promise<"copied" | "taken" | "cancelled" | "failed"> {
     if (signal.aborted) return "cancelled";
+    let linked = false;
     try {
       await linkFile(part, target);
-      try { await fsp.unlink(part); } catch { }
-      return "copied";
+      linked = true;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "EEXIST") return "taken";
+    }
+    if (linked) {
+      published();
+      try { await unlinkFile(part); } catch { }
+      return "copied";
     }
     if (signal.aborted) return "cancelled";
     // why: exFAT and SMB shares may lack hard links; the folder lock leaves only another program to race this rename
     try { await lstatTarget(target); return "taken"; } catch (e) { if (!missingFile(e)) return "failed"; }
     if (signal.aborted) return "cancelled";
-    try { await renameFile(part, target); return "copied"; } catch { return "failed"; }
+    try { await renameFile(part, target); } catch { return "failed"; }
+    published();
+    return "copied";
   }
 
-  async function writeCopy(source: string, target: string, signal: AbortSignal, counted: (bytes: number) => void): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+  async function writeCopy(source: string, target: string, signal: AbortSignal, counted: (bytes: number) => void,
+    onPublished: () => void = () => {}): Promise<"copied" | "taken" | "cancelled" | "failed"> {
     if (signal.aborted) return "cancelled";
     try { await fsp.lstat(target); return "taken"; } catch (e) { if (!missingFile(e)) return "failed"; }
     const part = path.join(path.dirname(target), "~splitpage-" + crypto.randomBytes(8).toString("hex") + ".part");
@@ -100,7 +110,7 @@ function createBundleCopier(options: {
         transform(chunk: Buffer, _encoding, done) { counted(chunk.length); done(null, chunk); }
       });
       await pipeline(fs.createReadStream(source), counter, handle.createWriteStream(), { signal });
-      const published = signal.aborted ? "cancelled" : await underFolderLock(path.dirname(target), signal, () => publish(part, target, signal));
+      const published = signal.aborted ? "cancelled" : await underFolderLock(path.dirname(target), signal, () => publish(part, target, signal, onPublished));
       if (published !== "copied") { try { await fsp.unlink(part); } catch { } }
       return published;
     } catch {
@@ -233,12 +243,10 @@ function createBundleCopier(options: {
         folderPath = made.path;
       }
       if (!copied) await sweep(folderPath, since);
-      const got = await writeCopy(s.from, path.join(folderPath, s.name), signal, progress.add);
+      const got = await writeCopy(s.from, path.join(folderPath, s.name), signal, progress.add, () => { copied++; onCommitted(copied); });
       if (got === "cancelled") return { ok: false, code: "CANCELLED", name: s.name, copied };
       if (got === "taken") return { ok: false, code: "CLASH", name: s.name, copied };
       if (got === "failed") return { ok: false, code: "FAILED", name: s.name, copied };
-      copied++;
-      onCommitted(copied);
     }
     progress.finish();
     return { ok: true, copied, kept, missing };

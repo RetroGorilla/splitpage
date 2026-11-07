@@ -315,8 +315,15 @@ test("a cancelled copy stalled inside its publish never renames over a file a la
       copierOptions: {
         link: async () => { throw Object.assign(new Error("no hard links here"), { code: "EPERM" }); },
         lstat: async (p) => {
-          if (stall && path.basename(p) === "take.mp4") { stall = false; reached.open(); await released.shut; }
-          return fs.promises.lstat(p);
+          const seen = await fs.promises.lstat(p).then((st) => ({ st }), (error) => ({ error }));
+          if (stall && path.basename(p) === "take.mp4") {
+            assert.equal(seen.error && seen.error.code, "ENOENT", "setup: the stale job's check finds the name free");
+            stall = false;
+            reached.open();
+            await released.shut;
+          }
+          if (seen.error) throw seen.error;
+          return seen.st;
         }
       }
     });
@@ -358,6 +365,35 @@ test("a carry cancelled during its second file reports the one it already copied
     assert.equal(refused.written.bundleRefused.copied, 1, "the first file was published before the cancel");
     assert.equal(fs.existsSync(s.copyScript), false);
     assert.ok(await until(() => fs.readdirSync(s.copyFolder).length === 1), "the stopped copy removes its temporary: " + fs.readdirSync(s.copyFolder));
+    assert.deepEqual(fs.readdirSync(s.copyFolder), ["a.mp4"]);
+  } finally { s.done(); }
+});
+
+test("a carry cancelled while it removes the temporary of a file it just published counts that file", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "a.mp4"), "aaaa");
+    let ipc = null;
+    let first = true;
+    ipc = harness({
+      source: s.script,
+      copierOptions: {
+        unlink: async (p) => {
+          if (first && /\.part$/.test(p)) {
+            first = false;
+            ipc.send("splitpage:bundle-cancel", "carry1");
+            await new Promise((r) => setTimeout(r, 30));
+          }
+          return fs.promises.unlink(p);
+        }
+      }
+    });
+    const refused = await ipc.saveAs(s.copyScript, { script: true }, project("a.mp4"));
+    assert.equal(refused.written.bundleRefused && refused.written.bundleRefused.reason, "cancelled", JSON.stringify(refused.written));
+    assert.equal(refused.written.bundleRefused.copied, 1, "the file was published before the cancel");
+    assert.equal(fs.existsSync(s.copyScript), false);
+    assert.ok(await until(() => fs.readdirSync(s.copyFolder).length === 1));
     assert.deepEqual(fs.readdirSync(s.copyFolder), ["a.mp4"]);
   } finally { s.done(); }
 });
