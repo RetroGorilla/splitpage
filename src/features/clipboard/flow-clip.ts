@@ -27,7 +27,8 @@ export function copyFlowClipboard(doc: DocumentView, range: FlowRange, data: Pic
   const clip = copyFlowRange(doc, range, ports);
   const whole = new Set(clip.wholeIds);
   const rows = clip.rows.map(row => whole.has(row.id) ? row : { ...row, id: ports.newId() });
-  const beats = rows.length ? buildBeatPayload(migrate({ ...doc, rows }), rows.map(row => row.id), nonce ? { cut: nonce } : undefined) : null;
+  const copied = rows.length ? migrate(JSON.parse(JSON.stringify({ ...doc, rows })) as unknown) : null;
+  const beats = copied ? buildBeatPayload(copied, rows.map(row => row.id), nonce ? { cut: nonce } : undefined) : null;
   const wire: FlowWirePayload = { format: "splitpage-flow", version: 1, text: clip.text, beats: beats?.payload ?? null,
     wholeIds: clip.wholeIds, headers: clip.headers };
   data.setData("text/plain", clip.text);

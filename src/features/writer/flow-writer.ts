@@ -1,6 +1,6 @@
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { flowCommand } from "../../application/commands/flow.ts";
-import type { UndoDirection } from "../../application/editing/undo/undo.ts";
+import type { Undo, UndoDirection } from "../../application/editing/undo/undo.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { Command, CommandOutcome, DocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
@@ -23,12 +23,8 @@ import { createFlowVisualBox } from "./flow-visual-box.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
 import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
 
-export interface FlowUndoPorts {
+export interface FlowUndoPorts extends Pick<Undo, "flush" | "breakCoalescing" | "last" | "nextRedo"> {
   readonly step: (dir: UndoDirection) => void;
-  readonly flush: () => void;
-  readonly breakCoalescing: () => void;
-  readonly last: () => { readonly selection?: FlowSelectionPair } | null | undefined;
-  readonly nextRedo: () => { readonly selection?: FlowSelectionPair } | null | undefined;
 }
 
 export interface FlowWriterPorts {

@@ -306,3 +306,36 @@ test("a scene paste that fails part way is thrown and leaves the document, the e
   assert.deepEqual(undoSizes(), was.sizes);
   assert.deepEqual(w.seen, []);
 });
+
+test("Writer headers paste through focused and selected Split routes as one undoable edit", async () => {
+  for (const selected of [false, true]) {
+    await open(true);
+    const beats = buildBeatPayload(currentDocument(), ["r1", "r2"]).payload;
+    const wire = { format: "splitpage-flow", version: 1, text: "Every morning.\nScene\nMara mends nets.", beats,
+      wholeIds: ["r1", "r2"], headers: [{ index: 1, scene: { id: "source", name: "Scene", firstSceneId: "r2" } }] };
+    const cd = clipboardWith({ "application/x-splitpage-flow": JSON.stringify(wire) });
+    const before = JSON.stringify(currentDocument());
+    const w = watch();
+    if (selected) {
+      document.activeElement?.blur();
+      window.__sceneSelectTest.select("r3", "r3");
+      const event = new window.Event("paste", { bubbles: true, cancelable: true });
+      event.clipboardData = cd;
+      document.dispatchEvent(event);
+      assert.equal(event.defaultPrevented, true);
+    } else assert.equal(pasteBeatsAt(cd, cellOf("r3", "audioText")), true);
+    w.stop();
+    assert.equal(w.seen.length, 1);
+    assert.ok(w.seen[0].changes.docFields.includes("sections"));
+    assert.deepEqual(w.seen[0].changes.rowsRemoved, ["r3"]);
+    const pasted = currentDocument();
+    assert.equal(pasted.rows.length, 4);
+    assert.equal(pasted.sections[0].name, "Scene");
+    assert.equal(pasted.sections[0].firstSceneId, pasted.rows[3].id);
+    const after = JSON.stringify(pasted);
+    undo();
+    assert.equal(JSON.stringify(currentDocument()), before);
+    undoOwner().redo();
+    assert.equal(JSON.stringify(currentDocument()), after);
+  }
+});
