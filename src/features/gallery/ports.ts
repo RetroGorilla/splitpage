@@ -84,6 +84,7 @@ export interface VideoBundlePorts {
   readonly script: () => string | null;
   readonly files: Pick<VideoFiles, "bundle" | "cancelBundle">;
   readonly carries: DesktopVideo["onCarry"];
+  readonly saves: { readonly plan: DesktopVideo["planSave"]; readonly choose: DesktopVideo["chooseSave"] };
   readonly notices: Pick<NoticePort, "show">;
   readonly ownership: Operations;
   readonly undo: UndoFold;

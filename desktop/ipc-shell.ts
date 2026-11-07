@@ -20,7 +20,7 @@ const hasControlCharacter = (s: string) => [...s].some((c) => c.charCodeAt(0) < 
 
 function createShellIpc({
   tabOf, launchIntentFor, draftStore, draftsIsHeld, hadPriorSession, shell, nativeTheme, themeChoice,
-  videoFileGrants, ATTACHABLE_FILE, openableVideoPath, resolveBundledFile, bundleJobs,
+  videoFileGrants, ATTACHABLE_FILE, openableVideoPath, bundleJobs,
   testVideoOpens, testMode: TEST_MODE, videoThumbnail,
   updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus, checkForUpdate, downloadUpdate,
   runUpdateInstaller, openPrompterInBrowser, voiceHelperInstance
@@ -115,9 +115,10 @@ function createShellIpc({
     });
 
     ipcHandle("splitpage:bundled-file-open", async (event, name) => {
+      const tab = tabOf(event);
       const script = scriptOf(event);
-      if (!script) return { ok: false, code: "REFUSED" };
-      return openFound(await resolveBundledFile(script, name, ATTACHABLE_FILE, fsp, path, process.platform === "win32"));
+      if (!tab || !script) return { ok: false, code: "REFUSED" };
+      return openFound(await bundleJobs.openBundled(tab.id, script, name));
     });
 
     ipcHandle("splitpage:video-thumbnail", async (event, host, ref) => videoThumbnail(host, ref));

@@ -712,11 +712,32 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="bundle-save-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="bundle-save-title" aria-describedby="bundle-save-detail">
+    <div class="modal-header">
+      <h2 id="bundle-save-title">Save the files with this script?</h2>
+    </div>
+    <p class="modal-hint" id="bundle-save-detail"></p>
+    <p class="modal-hint" id="bundle-save-warning" hidden></p>
+    <p class="modal-hint" id="bundle-save-share" hidden></p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="bundle-save-cancel">Cancel</button>
+        <button type="button" class="btn" id="bundle-save-link">Don't copy the files</button>
+        <button type="button" class="btn btn-accent" id="bundle-save-copy">Copy files</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="bundle-progress" id="bundle-progress" role="status" aria-live="polite" hidden>
   <span class="bundle-progress-text" id="bundle-progress-text"></span>
   <progress class="bundle-progress-bar" id="bundle-progress-bar" max="1" value="0"></progress>
+  <button type="button" class="btn" id="bundle-hide">Hide</button>
   <button type="button" class="btn" id="bundle-cancel">Cancel</button>
 </div>
+<button type="button" class="bundle-indicator" id="bundle-indicator" title="Show the copy's progress" hidden></button>
 
 <div class="modal-backdrop" id="md-rows-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="md-rows-title">

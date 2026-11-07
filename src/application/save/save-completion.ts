@@ -2,6 +2,8 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
 import { fileTitleCommand } from "../commands/title.ts";
+import { pathVideoLinks } from "../../core/document/gallery.ts";
+import type { BundledPathLink } from "../../core/document/gallery.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { LocalFileData } from "../files/local-file-access.ts";
@@ -16,6 +18,8 @@ export interface LandedWrite<B = ValidatedDocument> {
 
 export interface CompletedWrite<B = ValidatedDocument, P extends B = B> {
   readonly naming?: FileTitleChange | null;
+  readonly links?: readonly BundledPathLink[] | null;
+  readonly retargeted?: boolean;
   readonly captured: ExportDocument;
   readonly published: P;
   readonly forkDocId: string | null;
@@ -26,6 +30,7 @@ export interface CompletedWrite<B = ValidatedDocument, P extends B = B> {
 
 export interface SaveCompletionPorts<B = ValidatedDocument, P extends B = B> {
   readonly edits: FileSavingPorts["edits"];
+  readonly history: FileSavingPorts["history"];
   readonly document: Pick<FileSavingPorts["document"], "stamp">;
   readonly location: Pick<DocumentLocation<B>, "markWrittenOut" | "amendHome">;
   readonly deferred: FileSavingDeferredPorts<P>;
@@ -36,6 +41,7 @@ export interface SaveCompletion<B = ValidatedDocument, P extends B = B> {
   readonly confirmWrite: (write: CompletedWrite<B, P>) => void;
   readonly adoptSavedCopyDocId: (forkDocId: string | null, docIdAtSave: string, owned: boolean) => void;
 }
+
 
 export function createSaveCompletion<B, P extends B = B>(ports: SaveCompletionPorts<B, P>): SaveCompletion<B, P> {
   function adoptSavedCopyDocId(forkDocId: string | null, docIdAtSave: string, owned: boolean): void {
@@ -55,9 +61,16 @@ export function createSaveCompletion<B, P extends B = B>(ports: SaveCompletionPo
       ports.location.amendHome(write.landed.home, { diskBase: write.published, lastModified: write.landed.lastModified });
     }
     adoptSavedCopyDocId(write.forkDocId, write.docIdAtSave, true);
-    const named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
-    const savedChanges = write.seqAtSave + (write.naming ? 1 : 0);
-    if (named && ports.saves.changes() === savedChanges) ports.saves.confirmSavedNow();
+    const links = write.links && write.links.length ? write.links : null;
+    const relinked = links ? ports.history.amendRows(function (rows) { return pathVideoLinks(rows, links); }) : "unchanged";
+    let named: boolean;
+    try {
+      named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
+    } finally {
+      if (write.retargeted) ports.history.reset();
+    }
+    const savedChanges = write.seqAtSave + (write.naming ? 1 : 0) + (relinked === "applied" ? 1 : 0);
+    if (named && relinked !== "refused" && ports.saves.changes() === savedChanges) ports.saves.confirmSavedNow();
   }
 
   return Object.freeze({ confirmWrite, adoptSavedCopyDocId });

@@ -17,15 +17,24 @@ const { pipeline }: typeof NodeStreamPromises = require("node:stream/promises");
 
 type BundleProgress = (done: number, total: number) => void;
 type BundleCopyResult = { ok: true; name: string } | { ok: false; code: "REFUSED" | "GONE" | "CANCELLED" | "FAILED" };
-type BundleCarryResult = { ok: true; copied: number; kept: number; missing: number } | { ok: false; code: "CLASH" | "FAILED" | "CANCELLED"; name: string; copied: number };
+type BundleCarryResult = { ok: true; copied: number; kept: number; missing: number } |
+  { ok: false; code: "CLASH" | "FAILED" | "CANCELLED"; name: string; copied: number } |
+  { ok: false; code: "MISSING"; name: string; copied: 0; missing: number };
+interface BundleCarryHooks {
+  readonly source?: (name: string) => Promise<VideoEmbed.VideoPathVerdict>;
+  readonly strict?: boolean;
+  readonly ready?: (pending: readonly string[]) => Promise<boolean>;
+}
 
 const NUMBERED_TRIES = 999;
 const PART_NAME = /^~splitpage-[0-9a-f]{16}\.part$/;
 const COMPARE_CHUNK = 1024 * 1024;
 
 function createBundleCopier(options: {
-  bundleFiles: Pick<typeof VideoEmbed, "bundleFolderOf" | "bundleableName" | "missingFile" | "numberedName" | "realBundleFolder" | "resolveBundledFile" | "samePath">;
+  bundleFiles: Pick<typeof VideoEmbed, "bundleFolderOf" | "bundleableName" | "missingFile" | "numberedName" | "openableVideoPath" | "realBundleFolder" |
+    "resolveBundledFile" | "samePath">;
   foldCase?: boolean;
+  pathStyle?: "win32" | "posix";
   progressEveryMs?: number;
   link?: typeof fsp.link;
   rename?: typeof fsp.rename;
@@ -33,8 +42,9 @@ function createBundleCopier(options: {
   unlink?: typeof fsp.unlink;
 }) {
   const {
-    bundleFolderOf, bundleableName, missingFile, numberedName, realBundleFolder, resolveBundledFile, samePath
+    bundleFolderOf, bundleableName, missingFile, numberedName, openableVideoPath, realBundleFolder, resolveBundledFile, samePath
   } = options.bundleFiles;
+  const pathStyle = options.pathStyle || (process.platform === "win32" ? "win32" : "posix");
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const every = typeof options.progressEveryMs === "number" ? options.progressEveryMs : 100;
 
@@ -202,20 +212,25 @@ function createBundleCopier(options: {
   }
 
   async function carry(fromScript: string | null, toScript: string, names: readonly unknown[], allow: RegExp, onProgress: BundleProgress, signal: AbortSignal,
-    onCommitted: (copied: number) => void = () => {}): Promise<BundleCarryResult> {
+    onCommitted: (copied: number) => void = () => {}, hooks: BundleCarryHooks = {}): Promise<BundleCarryResult> {
     const since = Date.now();
     const wanted = [...new Set(names)];
     if (!fromScript || !wanted.length || samePath(bundleFolderOf(fromScript, path), bundleFolderOf(toScript, path), foldCase)) {
       return { ok: true, copied: 0, kept: 0, missing: 0 };
     }
     let missing = 0;
+    let firstMissing = "";
     const sources: { name: string; from: string; size: number; there: boolean }[] = [];
     for (const name of wanted) {
-      const found = await resolveBundledFile(fromScript, name, allow, fsp, path, foldCase);
+      const found = hooks.source && bundleableName(name, allow) ? await hooks.source(name) : await resolveBundledFile(fromScript, name, allow, fsp, path, foldCase);
       const size = found.ok ? await sizeOfFile(found.path) : null;
-      if (!found.ok || size === null || size < 0) { missing++; continue; }
+      if (!found.ok || size === null || size < 0) {
+        if (!missing++) firstMissing = typeof name === "string" ? name : "";
+        continue;
+      }
       sources.push({ name: name as string, from: found.path, size, there: false });
     }
+    if (missing && hooks.strict) return { ok: false, code: "MISSING", name: firstMissing, copied: 0, missing };
     if (!sources.length) return { ok: true, copied: 0, kept: 0, missing };
     let folderPath: string | null = null;
     const existing = await realBundleFolder(toScript, fsp, path);
@@ -231,6 +246,10 @@ function createBundleCopier(options: {
       }
     } else if (existing.code !== "GONE") {
       return { ok: false, code: "FAILED", name: (sources[0] as { name: string }).name, copied: 0 };
+    }
+    if (signal.aborted) return { ok: false, code: "CANCELLED", name: "", copied: 0 };
+    if (hooks.ready && (!(await hooks.ready(sources.filter((s) => !s.there).map((s) => s.name))) || signal.aborted)) {
+      return { ok: false, code: "CANCELLED", name: "", copied: 0 };
     }
     const progress = reporter(sources.reduce((sum, s) => sum + s.size, 0), onProgress);
     let copied = 0, kept = 0;
@@ -256,7 +275,19 @@ function createBundleCopier(options: {
     return path.basename(bundleFolderOf(script, path));
   }
 
-  return { copyIn, carry, folderName };
+  function resolveIn(script: string, name: unknown, allow: RegExp): Promise<VideoEmbed.VideoPathVerdict> {
+    return resolveBundledFile(script, name, allow, fsp, path, foldCase);
+  }
+
+  function storedPath(script: string, name: string): string {
+    return path.join(bundleFolderOf(script, path), name);
+  }
+
+  function openStored(p: string, allow: RegExp): Promise<VideoEmbed.VideoPathVerdict> {
+    return openableVideoPath(p, pathStyle, fsp, allow);
+  }
+
+  return { copyIn, carry, folderName, openStored, resolveIn, sizeOfFile, storedPath };
 }
 
 export type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier };

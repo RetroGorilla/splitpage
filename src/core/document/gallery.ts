@@ -249,6 +249,37 @@ export function bundleVideoLinks(rows: readonly unknown[], from: VideoLink, name
   return changed;
 }
 
+export interface BundledPathLink {
+  readonly name: string;
+  readonly path: string;
+}
+
+export function pathVideoLinks(rows: readonly unknown[], links: readonly BundledPathLink[]): boolean {
+  const to = new Map<string, string>();
+  links.forEach(function (l) {
+    if (l && typeof l.name === "string" && normalizeVideoLocation({ kind: "path", path: l.path })) to.set(l.name, l.path);
+  });
+  let changed = false;
+  function relink(list: unknown): void {
+    (Array.isArray(list) ? list as VideoLink[] : []).forEach(function (l) {
+      const at = l && typeof l === "object" && !l.href ? l.location : undefined;
+      const path = at && at.kind === "bundled" ? to.get(at.name) : undefined;
+      if (path === undefined) return;
+      l.location = { kind: "path", path: path };
+      changed = true;
+    });
+  }
+  rows.forEach(function (row) {
+    if (!row || typeof row !== "object") return;
+    const r = row as GalleryRow;
+    relink(r.imageLinks);
+    (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (it) {
+      if (it && typeof it === "object") relink((it as GalleryItemInput).links);
+    });
+  });
+  return changed;
+}
+
 export function locatedVideoKey(l: VideoLink | null | undefined): string {
   return videoLinkKey(l) + locationKey(l);
 }

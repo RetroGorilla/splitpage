@@ -218,3 +218,35 @@ test("undo owner: configure installs hooks and its release puts the previous one
   u.owner.redo();
   assert.deepEqual(heard, ["undo"]);
 });
+
+test("hold stops undo and redo until released, and reset leaves nothing to bring back, not even entries the limit pushed out behind a redo", () => {
+  const u = setup();
+  const row = (u.doc().rows as unknown as { imageLinks?: unknown }[])[0] as { imageLinks?: unknown };
+  const step = () => { u.owner.noteEdit(); u.owner.flush(); u.owner.breakCoalescing(); };
+  row.imageLinks = [{ name: "a.mp4", location: { kind: "bundled", name: "a.mp4" } }];
+  step();
+  row.imageLinks = [];
+  step();
+  for (let i = 0; i < 200; i++) { typeInto(u.doc(), "take " + i); step(); }
+  assert.deepEqual(u.owner.sizes(), { undo: 200, redo: 0 });
+  assert.equal(u.owner.undo().ok, true);
+  assert.equal(u.owner.undo().ok, true);
+  assert.deepEqual(u.owner.sizes(), { undo: 198, redo: 2 }, "the two link edits now sit only behind the two redo entries");
+  const text = u.doc().rows[0]?.audioText;
+  const release = u.owner.hold();
+  const other = u.owner.hold();
+  assert.deepEqual(u.owner.undo(), { ok: false, empty: true });
+  assert.deepEqual(u.owner.redo(), { ok: false, empty: true });
+  assert.equal(u.doc().rows[0]?.audioText, text, "a held undo changes nothing");
+  release();
+  release();
+  assert.deepEqual(u.owner.undo(), { ok: false, empty: true }, "a second release of one hold leaves the other in place");
+  other();
+  assert.deepEqual(u.owner.sizes(), { undo: 198, redo: 2 });
+  assert.equal(u.owner.redo().ok, true, "released, undo and redo work again");
+  u.owner.reset();
+  assert.deepEqual(u.owner.sizes(), { undo: 0, redo: 0 });
+  for (let i = 0; i < 4; i++) { u.owner.redo(); u.owner.undo(); }
+  assert.deepEqual(row.imageLinks, [], "no redo or undo brings the bundled link back after reset");
+});
+

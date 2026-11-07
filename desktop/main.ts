@@ -229,7 +229,10 @@ const TABSTRIP_ALLOWLIST: typeof STATIC_ALLOWLIST = {
 const {
   tabs, windowsById, webContentsIdToTabId, pathToTabId,
   mintUniqueTabId, mintUniqueWindowId, firstWindowRecord, claimRoutingKey, indexTabSource, unindexTabSource
-} = createTabRegistry({ pathKey });
+} = createTabRegistry({
+  pathKey,
+  sourceChanged: (tab) => bundleJobs.noteScript(tab.id, tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null)
+});
 
 let lastFocusedWindowId: string | null = null;
 let firstTabCreated = false;
@@ -1111,6 +1114,7 @@ function forgetTab(tabId: string | undefined) {
   webContentsIdToTabId.delete(tab.webContentsId);
   tabs.delete(tabId);
   voice.forgetTab(tabId);
+  bundleJobs.forgetTab(tabId as string);
   const w = windowsById.get(tab.windowId);
   if (w) {
     const i = (w.tabIds as readonly (string | undefined)[]).indexOf(tabId);
@@ -1808,7 +1812,7 @@ const { registerFileIpc } = createFileIpc({
 const { registerShellIpc } = createShellIpc({
   tabOf, launchIntentFor, draftStore: () => draftStore, draftsIsHeld, hadPriorSession,
   shell, nativeTheme, themeChoice, videoFileGrants, ATTACHABLE_FILE: videoEmbed.ATTACHABLE_FILE,
-  openableVideoPath: videoEmbed.openableVideoPath, resolveBundledFile: videoEmbed.resolveBundledFile, bundleJobs,
+  openableVideoPath: videoEmbed.openableVideoPath, bundleJobs,
   testVideoOpens, testMode: TEST_MODE,
   videoThumbnail, updateStatus: () => updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus,
   checkForUpdate, downloadUpdate, runUpdateInstaller, openPrompterInBrowser,
