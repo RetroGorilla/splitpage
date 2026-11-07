@@ -79,6 +79,12 @@ export interface FileSavingPorts {
   readonly notices: Pick<NoticePort, "show"> & { readonly imagesLeftOut: (count: number, name: string) => void };
   readonly preferences: { readonly editorName: () => string; readonly autosave: () => boolean };
   readonly page: { readonly getElementById: (id: string) => AutoSaveMenuItem | null };
+  readonly bundles: { readonly beginSave: () => BundleSaveWindow };
+}
+
+export interface BundleSaveWindow {
+  readonly drained: Promise<boolean> | null;
+  readonly end: () => void;
 }
 
 export interface FileSavePorts {

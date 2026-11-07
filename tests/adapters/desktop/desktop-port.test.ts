@@ -141,6 +141,9 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   grantVideoFile: { args: [{ path: "/videos/a.mp4" }], direction: "invoke", channel: "splitpage:video-file-grant", wire: ["/videos/a.mp4"] },
   openVideoFile: { args: ["tok"], direction: "invoke", channel: "splitpage:video-file-open" },
   openVideoPath: { args: ["C:\\Videos\\a.mp4"], direction: "invoke", channel: "splitpage:video-path-open" },
+  bundleVideoFile: { args: ["tok", "bundle1"], direction: "invoke", channel: "splitpage:bundle-file" },
+  cancelBundle: { args: ["bundle1"], direction: "send", channel: "splitpage:bundle-cancel" },
+  openBundledFile: { args: ["a (2).mp4"], direction: "invoke", channel: "splitpage:bundled-file-open" },
   videoThumbnail: { args: ["youtube", "abc"], direction: "invoke", channel: "splitpage:video-thumbnail" },
   getUpdateStatus: { args: [], direction: "invoke", channel: "splitpage:update-status" },
   checkForUpdate: { args: [], direction: "invoke", channel: "splitpage:update-check" },
@@ -158,6 +161,11 @@ const LISTENERS: Partial<Record<DesktopMember, { readonly channel: string; reado
   onRestoreNotice: { channel: "splitpage:restore-notice", payload: [{ skipped: [] }], heard: { skipped: [] } },
   onReassignDocId: { channel: "splitpage:reassign-doc-id", payload: [{ toId: "d2" }], heard: { toId: "d2" } },
   onOpenFile: { channel: "splitpage:open-file", payload: [{ id: "f1", name: "a.splitpage" }], heard: { id: "f1", name: "a.splitpage" } },
+  onBundleCarry: {
+    channel: "splitpage:bundle-carry",
+    payload: [{ job: "carry1", from: "A files", to: "B files", done: 1, total: 2 }],
+    heard: { job: "carry1", from: "A files", to: "B files", done: 1, total: 2 }
+  },
   onMenuCommand: { channel: "splitpage:menu-command", payload: ["save"], heard: "save" },
   onUpdateStatus: { channel: "splitpage:update-status", payload: [{ checking: true }], heard: { checking: true } },
   onVoiceEvent: { channel: "splitpage:voice-event", payload: [{ type: "start" }], heard: { type: "start" } },
@@ -183,6 +191,20 @@ test("videoFilePath reads a dropped file's path in the preload and sends nothing
   assert.equal(pathOf({}), null, "a File the page made itself has no path");
   assert.equal(pathOf(null), null);
   assert.deepEqual(wires.filter((w) => w.name !== "splitpage:renderer-ready"), []);
+});
+
+test("a bundle job's progress reaches only that job's listener, and only while it runs", async () => {
+  let release: (value: unknown) => void = () => {};
+  const { bridge, deliver } = loadPreload(false, { "splitpage:bundle-file": new Promise((resolve) => { release = resolve; }) });
+  const port = bridge as unknown as DesktopPort;
+  const heard: unknown[] = [];
+  const running = port.bundleVideoFile("tok", "bundle1", (p) => { heard.push(p); });
+  deliver("splitpage:bundle-progress", { job: "bundle1", done: 3, total: 9 });
+  deliver("splitpage:bundle-progress", { job: "bundle2", done: 5, total: 9 });
+  release({ ok: true, name: "a.mp4" });
+  await running;
+  deliver("splitpage:bundle-progress", { job: "bundle1", done: 9, total: 9 });
+  assert.deepEqual(structuredClone(heard), [{ done: 3, total: 9 }]);
 });
 
 test("voiceStop forwards a session for late cleanup and preserves the tab-wide no-argument call", async () => {

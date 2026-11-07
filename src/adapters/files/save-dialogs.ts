@@ -20,7 +20,8 @@ export function saveDialogs(slug: string): SaveDialogs<FileHandle> {
         filters: [
           { name: "Markdown script", extensions: ["md"] },
           { name: "Splitpage script", extensions: ["splitpage"] }
-        ]
+        ],
+        script: true
       }).then(function (picked) { return picked ? makeDesktopHandle(picked) : null; });
     } : null,
     browser: (window as unknown as Partial<SavePickerWindow>).showSaveFilePicker ? function () {

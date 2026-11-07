@@ -20,6 +20,7 @@ import { cellEditing, pickPictureFor } from "./editor-owners.ts";
 import { preferences } from "./preferences-owner.ts";
 import { desktopVideo } from "./desktop-video.ts";
 import { presence } from "./ports/desktop-presence.ts";
+import { currentHome } from "./location-owner.ts";
 
 const gallery = owned<GalleryMount>();
 
@@ -84,10 +85,38 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
       thumbnailsAllowed: () => preferences().videoThumbs(),
       desktop: desktopVideo,
       cells: { editGallery: (...a) => cellEditing().editGallery(...a) },
-      viewer: { refresh: refreshGalleryOverlay }
+      viewer: { refresh: refreshGalleryOverlay },
+      bundles: {
+        window: window,
+        script: scriptOnDisk,
+        files: { bundle: videoFiles.bundle, cancelBundle: videoFiles.cancelBundle },
+        carries: desktopVideo.onCarry,
+        notices: portNotices,
+        ownership: portOwnership,
+        undo: { fold: (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change) },
+        document: portDocument,
+        cells: { editGallery: (...a) => cellEditing().editGallery(...a) },
+        viewer: { refresh: refreshGalleryOverlay }
+      }
     };
     return mountVideo(ports);
   });
+}
+
+function scriptOnDisk(): string | null {
+  if (!presence.running()) return null;
+  const home = currentHome();
+  const handle = home.handle as { readonly _desktopId?: unknown; readonly name?: unknown } | null | undefined;
+  return home.kind === "file" && handle && handle._desktopId && typeof handle.name === "string" && handle.name ? handle.name : null;
+}
+
+export function offerBundleAfterDrop(...args: Parameters<GalleryVideoMount["offerAfterDrop"]>): void {
+  video.owner()?.offerAfterDrop(...args);
+}
+
+export function beginBundleSave(): ReturnType<GalleryVideoMount["beginSave"]> {
+  const owner = video.owner();
+  return owner ? owner.beginSave() : { drained: null, end: () => {} };
 }
 
 export const stopGalleryVideoFeature = video.stop;

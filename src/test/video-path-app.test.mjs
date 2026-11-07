@@ -199,6 +199,24 @@ test("a merge with a copy saved by an older build, which drops the path, keeps t
   assert.equal(out.comments.length, 0);
 });
 
+test("a link to a copy beside the script survives a save and a reopen, and opens by its name in the script's folder", async () => {
+  const bundled = { name: "take one.mp4", size: 9, location: { kind: "bundled", name: "take one (2).mp4" }, poster: true };
+  await open(script([{ id: "r1", visualText: "Wide", audioText: "One.", status: "todo", imageLinks: [bundled] }]));
+  await reopenSaved();
+  assert.deepEqual(links("r1"), [bundled]);
+  const asked = [];
+  useDesktopForTest({
+    openVideoFile: (token) => { asked.push("token:" + token); return Promise.resolve({ ok: true }); },
+    openBundledFile: (name) => { asked.push("bundled:" + name); return Promise.resolve({ ok: true }); },
+    openVideoPath: (path) => { asked.push(path); return Promise.resolve({ ok: true }); }
+  });
+  try {
+    videoFiles.openGallery("r1", 0, videoLinkKey(bundled));
+    await settle();
+  } finally { restoreDesktop(); }
+  assert.deepEqual(asked, ["bundled:take one (2).mp4"], "main is sent the copy's name only, never a path");
+});
+
 const KINDS = [
   "docx", "csv", "breakdown", "b-roll csv", "xlsx", "breakdown xlsx", "b-roll xlsx", "txt",
   "narration-docx", "narration-txt", "md-table", "html", "md"
@@ -218,9 +236,11 @@ test("no export names where a video file is, and the saved formats keep it", asy
     { id: "r1", visualText: "Wide B-roll: steam", audioText: "One.", status: "todo",
       imageLinks: [{ name: "take one.mp4", size: 9, location: at(CLIP), poster: true }],
       moreImages: [{ links: [{ name: "take two.mov", size: 4, location: at(MOVED), poster: true }] }] },
-    { id: "r2", visualText: "Close", audioText: "Two.", status: "todo" }
+    { id: "r2", visualText: "Close", audioText: "Two.", status: "todo",
+      imageLinks: [{ name: "take three.mp4", size: 5, location: { kind: "bundled", name: MARKER + " (2).mp4" }, poster: true }] }
   ]));
   assert.equal(links("r1").filter((l) => l.location).length, 2, "setup: both links are located");
+  assert.equal(links("r2")[0].location.kind, "bundled", "setup: the copy's link is kept");
   const leaked = [], named = [];
   for (const kind of KINDS) {
     const built = await localFileMenuControls().buildFileData(kind, "export", { allowImageBundle: true });

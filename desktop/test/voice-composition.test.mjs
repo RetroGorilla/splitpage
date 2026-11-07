@@ -218,7 +218,7 @@ test("quitting, through close-quit's will-quit, closes the share and then stops 
   const { voice } = compose();
   const app = fakeApp();
   const { registerQuitHandlers } = createCloseQuit({
-    app, testMode: true, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper, draftStore: () => null
+    app, testMode: true, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper, draftStore: () => null, bundleCopies: () => null
   });
   registerQuitHandlers();
   const share = voice.prompterShareInstance();
@@ -242,7 +242,7 @@ test("quitting before voice was ever used creates neither the helper nor the sha
   const { voice } = compose();
   const app = fakeApp();
   createCloseQuit({
-    app, testMode: true, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper, draftStore: () => null
+    app, testMode: true, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper, draftStore: () => null, bundleCopies: () => null
   }).registerQuitHandlers();
   app.emit("will-quit");
   assert.equal(voice.voiceHelper(), null);

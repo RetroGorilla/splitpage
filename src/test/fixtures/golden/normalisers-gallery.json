@@ -772,6 +772,500 @@
     }
   },
   {
+    "case": "bundled",
+    "input": "take one.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4",
+        "location": {
+          "kind": "bundled",
+          "name": "take one.mp4"
+        }
+      }
+    }
+  },
+  {
+    "case": "bundled numbered",
+    "input": "take one (2).MOV",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4",
+        "location": {
+          "kind": "bundled",
+          "name": "take one (2).MOV"
+        }
+      }
+    }
+  },
+  {
+    "case": "bundled 255 characters, the limit",
+    "input": {
+      "length": 255,
+      "runs": [
+        [
+          "x",
+          251
+        ],
+        [
+          ".",
+          1
+        ],
+        [
+          "m",
+          1
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "4",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "videoLink": {
+        "name": "take.mp4",
+        "location": {
+          "kind": "bundled",
+          "name": {
+            "length": 255,
+            "runs": [
+              [
+                "x",
+                251
+              ],
+              [
+                ".",
+                1
+              ],
+              [
+                "m",
+                1
+              ],
+              [
+                "p",
+                1
+              ],
+              [
+                "4",
+                1
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "case": "bundled 256 characters",
+    "input": {
+      "length": 256,
+      "runs": [
+        [
+          "x",
+          252
+        ],
+        [
+          ".",
+          1
+        ],
+        [
+          "m",
+          1
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "4",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled traversal",
+    "input": "..\\take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled POSIX traversal",
+    "input": "../take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled sub-folder",
+    "input": "a/take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled absolute",
+    "input": "C:\\Videos\\take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled UNC",
+    "input": "\\\\server\\share\\take.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled stream",
+    "input": "take.exe:x.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled executable",
+    "input": "take.exe",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled device name",
+    "input": "CON.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled trailing dot",
+    "input": "take.mp4.",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled control character",
+    "input": "take\u0001.mp4",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled empty",
+    "input": "",
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled not a string",
+    "input": 5,
+    "output": {
+      "videoLink": {
+        "name": "take.mp4"
+      }
+    }
+  },
+  {
+    "case": "bundled on a web link",
+    "input": {
+      "on": "href",
+      "name": "take.mp4"
+    },
+    "output": {
+      "videoLink": {
+        "href": "https://e.x/"
+      }
+    }
+  },
+  {
+    "case": "attached PDF path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "path",
+          "path": "C:\\Docs\\brief.pdf"
+        }
+      }
+    }
+  },
+  {
+    "case": "attached document on a mapped drive",
+    "input": {
+      "kind": "path",
+      "path": "Z:\\NAS\\notes.docx"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "path",
+          "path": "Z:\\NAS\\notes.docx"
+        }
+      }
+    }
+  },
+  {
+    "case": "attached POSIX audio path",
+    "input": {
+      "kind": "path",
+      "path": "/Users/me/vo.wav"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "path",
+          "path": "/Users/me/vo.wav"
+        }
+      }
+    }
+  },
+  {
+    "case": "attached UNC document",
+    "input": {
+      "kind": "path",
+      "path": "\\\\server\\share\\brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached program path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\setup.exe"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached script path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\run.ps1"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached batch path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\run.bat"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached shortcut path",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\brief.url"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached extensionless path",
+    "input": {
+      "kind": "path",
+      "path": "/Users/me/README"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached program after a document part",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\brief.pdf.exe"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "attached traversal",
+    "input": {
+      "kind": "path",
+      "path": "C:\\Docs\\..\\brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled PDF",
+    "input": {
+      "kind": "bundled",
+      "name": "brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "bundled",
+          "name": "brief.pdf"
+        }
+      }
+    }
+  },
+  {
+    "case": "bundled numbered document",
+    "input": {
+      "kind": "bundled",
+      "name": "notes (2).DOCX"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9,
+        "location": {
+          "kind": "bundled",
+          "name": "notes (2).DOCX"
+        }
+      }
+    }
+  },
+  {
+    "case": "bundled program",
+    "input": {
+      "kind": "bundled",
+      "name": "setup.EXE"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled installer",
+    "input": {
+      "kind": "bundled",
+      "name": "setup.msi"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled extensionless",
+    "input": {
+      "kind": "bundled",
+      "name": "README"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled document traversal",
+    "input": {
+      "kind": "bundled",
+      "name": "..\\brief.pdf"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
+    "case": "bundled jar",
+    "input": {
+      "kind": "bundled",
+      "name": "tool.jar"
+    },
+    "output": {
+      "videoLink": {
+        "name": "brief.pdf",
+        "size": 9
+      }
+    }
+  },
+  {
     "case": "20 links, the limit",
     "input": 20,
     "output": {

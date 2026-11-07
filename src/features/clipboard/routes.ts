@@ -9,6 +9,7 @@ interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly capture: () => Owner;
   readonly stillOwns: (owner: Owner) => boolean;
   readonly notAdded: () => void;
+  readonly refused: (files: FileList | readonly File[]) => void;
   readonly placeOf: (cell: Element) => Place;
   readonly restorePlace: (cell: Element, place: Place) => void;
   readonly findCell: (rowId: string, field: string) => Element | null;
@@ -68,6 +69,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
   function insert(cell: Element, html: string, text: string, files: FileList | readonly File[] | null | undefined, fromPaste = false): void {
     if (!open) return;
     if (!ports.hasMedia(files, html)) {
+      if (files && files.length) ports.refused(files);
       ports.insertNow(cell, html, text, null, fromPaste);
       return;
     }

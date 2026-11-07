@@ -8,8 +8,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { createShellIpc } = require(path.join(here, "..", "ipc-shell.ts"));
-const { VIDEO_FILE_EXT } = require(path.join(here, "..", "..", "shared", "video-path.ts"));
-const { openableVideoPath } = require(path.join(here, "..", "..", "shared", "video-embed.ts"));
+const { ATTACHABLE_FILE, openableVideoPath } = require(path.join(here, "..", "..", "shared", "video-embed.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -20,7 +19,7 @@ function shellIpc(testMode) {
   const testVideoOpens = [];
   const { registerShellIpc } = createShellIpc({
     shell: { openPath: async (p) => { openedPaths.push(p); return ""; }, openExternal: async () => {} },
-    testMode, testVideoOpens, videoFileGrants: new Map(), VIDEO_FILE_EXT, openableVideoPath
+    testMode, testVideoOpens, videoFileGrants: new Map(), ATTACHABLE_FILE, openableVideoPath
   });
   registerShellIpc({ ipcHandle: (name, fn) => { handlers.set(name, fn); }, ipcOn: () => {}, ipcOnSync: () => {} });
   const open = handlers.get("splitpage:video-path-open");

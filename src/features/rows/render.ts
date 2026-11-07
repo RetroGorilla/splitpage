@@ -6,7 +6,7 @@ import type { ShotRowEntry, ShotStrip } from "../../application/shot-hiding.ts";
 import type { ViewFlagChange } from "../../application/preferences/view-flags.ts";
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
-import { rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
+import { isOtherFileLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
 import { editableCellHtml } from "../common/editable-cell.ts";
 import { disarmDeleteButton } from "./delete-button.ts";
 import { hasSetLength } from "../../core/document/timing.ts";
@@ -315,7 +315,8 @@ function galleryLinkHtml(row: Row, slotIdx: number, l: VideoLink): string {
   const link = href
     ? '<a class="scene-gallery-link" href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer"' + attrs + '>' + label + '</a>'
     : '<button type="button" class="scene-gallery-link is-file"' + attrs + '>' + label + '</button>';
-  return '<div class="scene-gallery-line"><span class="scene-gallery-host">' + escapeHtml(ports.video.hostLabel(l)) + '</span>' + link +
+  const icon = isOtherFileLink(l) ? '<svg class="scene-gallery-file-icon" aria-hidden="true"><use href="#i-file"/></svg>' : '';
+  return '<div class="scene-gallery-line"><span class="scene-gallery-host">' + icon + escapeHtml(ports.video.hostLabel(l)) + '</span>' + link +
     '<button type="button" class="scene-gallery-link-remove" data-action="gallery-link-remove" data-id="' + row.id +
       '" data-slot="' + slotIdx + '" data-key="' + key + '" title="Take this link off" aria-label="Take ' + label + ' off">×</button>' +
     '</div>';
@@ -327,44 +328,52 @@ export function galleryVideoLinks(slots: readonly Slot[]): { slot: number; link:
   return out;
 }
 
+function galleryCaptionHtml(row: Row, slots: readonly Slot[]): string {
+  const videos = galleryVideoLinks(slots);
+  let caption = videos.slice(0, GALLERY_CAPTION_MAX).map(function (v) { return galleryLinkHtml(row, v.slot, v.link); }).join("");
+  if (videos.length > GALLERY_CAPTION_MAX) {
+    const rest = videos.slice(GALLERY_CAPTION_MAX);
+    const noun = rest.some(function (v) { return isOtherFileLink(v.link); }) ? ' more link' : ' more video';
+    caption += '<button type="button" class="scene-gallery-more-videos" data-action="gallery-open-videos" data-id="' + row.id + '">+' +
+      rest.length + noun + (rest.length === 1 ? '' : 's') + '</button>';
+  }
+  return caption ? '<div class="scene-gallery-caption">' + caption + '</div>' : '';
+}
+
 function rowGalleryHtml(row: Row, slots: readonly Slot[]): string {
   const n = slots.length;
   let tiles = galleryTileHtml(row, slots, 0, "cover");
   for (let i = 1; i < Math.min(n, GALLERY_CELL_MAX); i++) {
     tiles += galleryTileHtml(row, slots, i, n > GALLERY_CELL_MAX && i === GALLERY_CELL_MAX - 1 ? "more" : "small");
   }
-  const videos = galleryVideoLinks(slots);
-  let caption = videos.slice(0, GALLERY_CAPTION_MAX).map(function (v) { return galleryLinkHtml(row, v.slot, v.link); }).join("");
-  if (videos.length > GALLERY_CAPTION_MAX) {
-    const more = videos.length - GALLERY_CAPTION_MAX;
-    caption += '<button type="button" class="scene-gallery-more-videos" data-action="gallery-open-videos" data-id="' + row.id + '">+' +
-      more + ' more video' + (more === 1 ? '' : 's') + '</button>';
-  }
   const single = n === 1;
   return '<div class="image-thumb-wrap scene-gallery ' + (single ? 'is-single' : 'is-mosaic') + '" data-id="' + row.id + '" data-count="' + n + '">' +
       tiles +
       '<div class="image-thumb-actions">' +
-        '<button type="button" data-action="image-add-more" data-id="' + row.id + '" title="Add another picture to this beat">Add</button>' +
+        '<button type="button" data-action="image-add-more" data-id="' + row.id + '" title="Attach another picture or file to this beat">Add</button>' +
         (single
           ? '<button type="button" data-action="image-replace" data-id="' + row.id + '" data-slot="0">Replace</button>' +
             '<button type="button" data-action="image-remove" data-id="' + row.id + '" data-slot="0">Remove</button>'
           : '') +
       '</div>' +
     '</div>' +
-    (caption ? '<div class="scene-gallery-caption">' + caption + '</div>' : '');
+    galleryCaptionHtml(row, slots);
 }
 
 function rowMediaHtml(row: Row): string {
   let imageBlock: string;
-  const slots = rowSlots(row);
+  const all = rowSlots(row);
+  const linksOnly = all.length === 1 && !(all[0] as Slot).ref && !slotPoster(all[0] as Slot);
+  const slots = linksOnly ? [] : all;
   const img = slots.length ? slots[0] : null;
   if (img) {
     imageBlock = rowGalleryHtml(row, slots);
   } else {
     imageBlock =
       '<button type="button" class="image-clip" data-action="image-add" data-id="' + row.id +
-        '" title="Add a picture — or drag one anywhere onto this beat’s visual column">' +
-        '<svg class="clip-icon" aria-hidden="true"><use href="#i-image"/></svg>Add picture</button>';
+        '" title="Attach a picture or file — or drag one anywhere onto this beat’s visual column">' +
+        '<svg class="clip-icon" aria-hidden="true"><use href="#i-file-plus"/></svg>Attach</button>' +
+      (linksOnly ? galleryCaptionHtml(row, all) : '');
   }
   return '<div class="visual-media' + (img ? '' : ' is-empty') + '" data-id="' +
     row.id + '">' + imageBlock + '</div>';

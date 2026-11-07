@@ -27,6 +27,8 @@ function harness(t, saved = {}) {
   const opened = [];
   const savedDialogs = [];
   const answers = [];
+  const noted = [];
+  const landed = [];
   const handlers = new Map();
   const documents = path.join(root, "Documents");
   const { registerFileIpc } = createFileIpc({
@@ -44,11 +46,16 @@ function harness(t, saved = {}) {
     fileIds, recents, pathToTabId: new Map(), tabs: new Map(),
     tabOf: () => null, dialogParentFor: () => undefined,
     consumeTestDialogAnswer: () => answers.shift(),
-    testDialogsSeen: () => 0, testMode: false
+    testDialogsSeen: () => 0, testMode: false,
+    bundleJobs: {
+      noteSaveTarget: (id, tab) => { noted.push({ id, tab }); },
+      carryForSave: async () => null,
+      saveLanded: (id) => { landed.push(id); }
+    }
   });
   registerFileIpc({ ipcHandle: (name, handler) => handlers.set(name, handler) });
   return {
-    root, documents, store, recents, fileIds, opened, savedDialogs, answers,
+    root, documents, store, recents, fileIds, opened, savedDialogs, answers, noted, landed,
     invoke: (name, ...args) => handlers.get("splitpage:" + name)({}, ...args)
   };
 }
@@ -75,8 +82,10 @@ test("Open prefers the last successful Save or Save As folder, even after anothe
   fs.mkdirSync(savedFolder);
   const file = path.join(savedFolder, "script.splitpage");
   h.answers.push(file);
-  const picked = await h.invoke("save-file-dialog", { suggestedName: "script.splitpage" });
+  const picked = await h.invoke("save-file-dialog", { suggestedName: "script.splitpage", script: true });
+  assert.deepEqual(h.noted.map((n) => n.id), [picked.id], "a script save dialog notes the chosen file, for carrying its videos");
   await h.invoke("write-file", picked.id, "first save");
+  assert.deepEqual(h.landed, [picked.id], "the landed write is reported so main can carry the videos itself");
   h.recents.note(path.join(h.root, "opened-later.md"), "Later");
   await h.invoke("open-file-dialog");
   assert.equal(h.opened[0].defaultPath, savedFolder);
@@ -84,6 +93,7 @@ test("Open prefers the last successful Save or Save As folder, even after anothe
   fs.mkdirSync(otherFolder);
   h.answers.push(path.join(otherFolder, "other.SPLITPAGE"));
   const other = await h.invoke("save-file-dialog", { suggestedName: "other.splitpage" });
+  assert.equal(h.noted.length, 1, "a dialog not marked as a script save notes nothing");
   await h.invoke("write-file", other.id, "Save As");
   await h.invoke("open-file-dialog");
   assert.equal(h.opened[1].defaultPath, otherFolder);

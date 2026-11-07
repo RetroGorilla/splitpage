@@ -593,6 +593,31 @@ tabs**.
   check (`videoPathProblem`, then `openableVideoPath` against the disk);
   the one bridge method that takes a path (INV-34). `caseGalleryVideoFile`
   in smoke.mjs drives it with a real file, refused paths and a deleted file.
+- **A dropped video copied beside the script** (#259,
+  [rows-video-files.md](architecture/rows-video-files.md#copies-beside-the-script-259)).
+  `splitpage:bundle-file(token, job)` copies a drop's granted file into the
+  `<name> files` folder of the script the tab had when the copy was accepted
+  (`desktop/bundle-jobs.ts` binds it then). Save As first waits for the
+  page's copies to finish (`drain`); then, before a script save dialog's
+  file is written, main carries the names the written bytes link to the new
+  script's folder as one job in the same queue, failing the save before the
+  script is written on a clash, a failed copy or Cancel, and reports on
+  `splitpage:bundle-carry`; `splitpage:bundled-file-open(name)`
+  opens one name from that folder after `resolveBundledFile`. None takes a path
+  (INV-34). Copies publish through a temporary name, and quitting while they
+  run asks Wait or Quit anyway (`close-quit.ts`). `desktop/test/bundle-ipc.test.mjs` holds the refusals and
+  `caseGalleryVideoBundle` in smoke.mjs runs drop, copy, restart, open and
+  Save As.
+- **Any attached file** (#256,
+  [rows-video-files.md](architecture/rows-video-files.md#attached-files-256)).
+  The same channels take any file type except the ones `ATTACHABLE_FILE`
+  (`shared/video-path.ts`) refuses: programs, scripts, shortcuts,
+  installers and files without an extension. Main checks the rule itself,
+  on the path it is given and again on the real path, for a grant, a token
+  open, a stored path, a copy, a carry and a bundled open.
+  `desktop/test/attach-ipc.test.mjs` holds the refusals and
+  `caseGalleryAttachFile` in smoke.mjs runs a PDF through drop, copy,
+  restart and open.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
@@ -805,6 +830,8 @@ Names are plain text, limited to 200 code points. See
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
     // a file link dropped in the desktop app (#259) also has
     // "location": { "kind": "path", "path": "C:\\Videos\\clip.mp4" }; an older build drops it
+    // or, for a copy in the "<script name> files" folder beside the script,
+    // "location": { "kind": "bundled", "name": "clip (2).mp4" }
     // a poster link's item's imageRef is its still: a file's first frame, or
     // a YouTube/Vimeo link's fetched thumbnail (#141) — an ordinary blob
     "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],

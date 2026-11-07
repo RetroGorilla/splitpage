@@ -100,6 +100,18 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
     showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
   }
 
+  if (!saveAs || !job.owns()) return writeCaptured(opts, job, saveAs, auto);
+  const bundles = mountedPorts().bundles.beginSave();
+  try {
+    // why: no copy into the old folder may still be running once the bytes that carry the folder along are captured
+    if (bundles.drained && !(await bundles.drained)) return CANCELLED;
+    return await writeCaptured(opts, job, saveAs, auto);
+  } finally {
+    bundles.end();
+  }
+}
+
+async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, saveAs: boolean, auto: boolean): Promise<WriterResult> {
   const forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   const docIdAtSave = (currentDocument() as { readonly docId: string }).docId;
   const homeAtSave = currentHome();
