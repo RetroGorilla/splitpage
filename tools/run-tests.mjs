@@ -121,14 +121,16 @@ function runGroup(entry, { repo, node, print, spawn }) {
   const files = entry.selected;
   if (group.runner === "node-test") {
     print(`\n[${group.name}] node --test ${files.length} files`);
-    const r = spawn(node, ["--test", ...files], { cwd: repo, stdio: "inherit" });
+    const r = spawn(node, ["--test", "--test-reporter=spec", "--test-reporter=./tools/timing-reporter.mjs", ...files], { cwd: repo, stdio: "inherit" });
     return { executed: files.length, ok: r.status === 0, status: r.status ?? r.signal ?? r.error?.message };
   }
   let executed = 0;
   let ok = true;
   for (const file of files) {
     print(`\n[${group.name}] node ${file}`);
+    const started = Date.now();
     const r = spawn(node, [file], { cwd: repo, stdio: "inherit" });
+    print(`FILE_TIMING ${JSON.stringify([file, Date.now() - started])}`);
     executed++;
     if (r.status !== 0) { ok = false; print(`[${group.name}] ${file} exited ${r.status ?? r.signal ?? r.error?.message}`); }
   }
