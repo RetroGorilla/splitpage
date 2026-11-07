@@ -19,11 +19,19 @@ export interface DesktopFileHandle {
   readonly isSameEntry: (other: unknown) => boolean;
 }
 
-function bundleRefusalText(refused: { readonly reason: string; readonly folder: string; readonly name: string }): string {
+function bundleRefusalReason(refused: { readonly reason: string; readonly folder: string; readonly name: string }): string {
   const folder = "“" + refused.folder + "”";
   if (refused.reason === "clash") return folder + " already has a different “" + refused.name + "”. Rename or move that file, then save again";
   if (refused.reason === "cancelled") return "copying the videos to " + folder + " was stopped, so the script was not saved there";
   return "“" + refused.name + "” could not be copied to " + folder + ", so the script was not saved there";
+}
+
+function bundleRefusalText(refused: { readonly reason: string; readonly folder: string; readonly name: string; readonly copied: number }): string {
+  const reason = bundleRefusalReason(refused);
+  const copied = refused.copied;
+  if (!(copied > 0)) return reason;
+  return reason + ". " + (copied === 1 ? "1 file was" : copied + " files were") + " already copied to “" + refused.folder + "” and " +
+    (copied === 1 ? "is" : "are") + " still there";
 }
 
 function bridge(): DesktopPort {

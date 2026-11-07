@@ -135,7 +135,7 @@ test("a Save As whose folder already holds a different copy of a linked video fa
   let clash = true;
   const backend = Object.assign({}, fake, {
     writeFile: (id, data) => {
-      if (clash) { clash = false; return Promise.resolve({ size: 0, bundleRefused: { reason: "clash", folder: "Episode 12 v2 files", name: "take.mp4" } }); }
+      if (clash) { clash = false; return Promise.resolve({ size: 0, bundleRefused: { reason: "clash", folder: "Episode 12 v2 files", name: "take.mp4", copied: 0 } }); }
       writes.push(id);
       return fake.writeFile(id, data);
     }
@@ -167,6 +167,44 @@ test("a Save As whose folder already holds a different copy of a linked video fa
   } finally {
     window.__desktopTest.restoreBackend();
     document.getElementById("toast-host").replaceChildren();
+  }
+});
+
+test("a Save As refused after files were copied says how many are already in the new folder, and a refusal before any says nothing more", async () => {
+  setAutoSaveEnabled(false);
+  const fake = window.__desktopTest.makeFakeBackend();
+  const F = "Episode 12 v2 files";
+  const refusals = [
+    { reason: "failed", folder: F, name: "b.mp4", copied: 1 },
+    { reason: "cancelled", folder: F, name: "b.mp4", copied: 2 },
+    { reason: "clash", folder: F, name: "take.mp4", copied: 1 },
+    { reason: "failed", folder: F, name: "a.mp4", copied: 0 }
+  ];
+  const backend = Object.assign({}, fake, {
+    writeFile: (id, data) => (refusals.length ? Promise.resolve({ size: 0, bundleRefused: refusals.shift() }) : fake.writeFile(id, data))
+  });
+  window.__desktopTest.setBackend(backend);
+  const host = document.getElementById("toast-host");
+  try {
+    const doc = script("Episode 12", ID("6"));
+    doc.rows[0].imageLinks = [{ name: "a.mp4", size: 9, location: { kind: "bundled", name: "a.mp4" } }];
+    const before = await openFromDesktop(fake, doc, "Episode 12.splitpage");
+    const expected = [
+      "Could not save — “b.mp4” could not be copied to “" + F + "”, so the script was not saved there. 1 file was already copied to “" + F + "” and is still there.",
+      "Could not save — copying the videos to “" + F + "” was stopped, so the script was not saved there. 2 files were already copied to “" + F + "” and are still there.",
+      "Could not save — “" + F + "” already has a different “take.mp4”. Rename or move that file, then save again. 1 file was already copied to “" + F + "” and is still there.",
+      "Could not save — “a.mp4” could not be copied to “" + F + "”, so the script was not saved there."
+    ];
+    for (const message of expected) {
+      host.replaceChildren();
+      await saveDoc({ saveAs: true });
+      assert.ok(host.textContent.includes(message), host.textContent);
+      assert.equal(homeModule.currentHome().handle, before, "the document stays with the script it came from");
+    }
+    assert.ok(!host.textContent.includes("already copied"), "a refusal before any copy names none");
+  } finally {
+    window.__desktopTest.restoreBackend();
+    host.replaceChildren();
   }
 });
 

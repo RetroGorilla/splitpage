@@ -9,7 +9,7 @@ export interface DesktopWireFile {
 export interface DesktopWireStamp {
   lastModified?: number;
   size: number;
-  bundleRefused?: { reason: "clash" | "failed" | "cancelled"; folder: string; name: string };
+  bundleRefused?: { reason: "clash" | "failed" | "cancelled"; folder: string; name: string; copied: number };
 }
 
 export interface DesktopWireRecent {

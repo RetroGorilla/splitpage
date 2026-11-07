@@ -9,7 +9,7 @@ type BundleSender = {
 };
 
 type BundleJobResult = BundleCopyResult | { ok: false; code: "DROPPED" | "UNKNOWN" | "NO_FOLDER" };
-type BundleSaveRefusal = { reason: "clash" | "failed" | "cancelled"; folder: string; name: string };
+type BundleSaveRefusal = { reason: "clash" | "failed" | "cancelled"; folder: string; name: string; copied: number };
 
 interface BundleJob {
   readonly key: string;
@@ -122,7 +122,7 @@ function createBundleJobs(options: {
       job, from: copier.folderName(from), to: copier.folderName(to), done, total, ...(result ? { result } : {})
     }));
     const refusal = (result: BundleCarryResult): BundleSaveRefusal | null =>
-      (result.ok ? null : { reason: REFUSALS[result.code] as BundleSaveRefusal["reason"], folder: copier.folderName(to), name: result.name });
+      (result.ok ? null : { reason: REFUSALS[result.code] as BundleSaveRefusal["reason"], folder: copier.folderName(to), name: result.name, copied: result.copied });
     return new Promise((finish) => {
       let settled = false;
       const done = (result: BundleCarryResult) => {

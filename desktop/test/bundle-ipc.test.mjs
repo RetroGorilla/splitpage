@@ -293,7 +293,7 @@ test("back-to-back Save As, A to B then B to C before B's carry lands, checks C 
     assert.equal(fs.existsSync(b), false, "B is written only after its carry");
     held.open();
     assert.equal((await wroteB).bundleRefused, undefined);
-    assert.deepEqual(await wroteC, { size: 0, bundleRefused: { reason: "clash", folder: "C files", name: "take.mp4" } });
+    assert.deepEqual(await wroteC, { size: 0, bundleRefused: { reason: "clash", folder: "C files", name: "take.mp4", copied: 0 } });
     assert.equal(fs.readFileSync(path.join(s.copyFolder, "take.mp4"), "utf8"), "mine");
     assert.equal(fs.existsSync(c), false, "C's script is not written, so nothing links C's unrelated file");
     assert.equal(fs.readFileSync(path.join(s.dir, "elsewhere", "C files", "take.mp4"), "utf8"), "theirs");
@@ -310,7 +310,8 @@ test("a carry that cannot copy a file fails the save before the script is writte
     const no = Object.assign(new Error("no"), { code: "EIO" });
     const ipc = harness({ source: s.script, copierOptions: { link: async (from, to) => { if (++links > 1) throw no; return fs.promises.link(from, to); }, rename: async () => { throw no; } } });
     const refused = await ipc.saveAs(s.copyScript, { script: true }, project("a.mp4", "b.mp4"));
-    assert.deepEqual(refused.written, { size: 0, bundleRefused: { reason: "failed", folder: "Episode 12 v2 files", name: "b.mp4" } });
+    assert.deepEqual(refused.written, { size: 0, bundleRefused: { reason: "failed", folder: "Episode 12 v2 files", name: "b.mp4", copied: 1 } },
+      "the refusal says how many files it already copied");
     assert.equal(fs.existsSync(s.copyScript), false);
     assert.deepEqual(fs.readdirSync(s.copyFolder), ["a.mp4"], "nothing is deleted, and no temporary is left");
   } finally { s.done(); }
@@ -366,7 +367,7 @@ test("a linked name already taken by different bytes in the new folder fails the
     fs.writeFileSync(path.join(s.folder, "same.mp4"), "same");
     const ipc = harness({ source: s.script });
     const refused = await ipc.saveAs(s.copyScript, { script: true }, project("same.mp4", "take.mp4"));
-    assert.deepEqual(refused.written, { size: 0, bundleRefused: { reason: "clash", folder: "Episode 12 v2 files", name: "take.mp4" } });
+    assert.deepEqual(refused.written, { size: 0, bundleRefused: { reason: "clash", folder: "Episode 12 v2 files", name: "take.mp4", copied: 0 } });
     assert.equal(fs.existsSync(s.copyScript), false, "the script was not written");
     assert.equal(fs.readFileSync(path.join(s.copyFolder, "take.mp4"), "utf8"), "theirs", "the other file is untouched");
     await ipc.bundleJobs.idle();
