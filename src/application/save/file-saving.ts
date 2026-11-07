@@ -8,6 +8,8 @@ import { slugify } from "../../../shared/text.ts";
 import { fileTitleChange } from "../../core/document/file-title.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
 import { deepFreeze } from "../../core/document/freeze.ts";
+import { pathVideoLinks } from "../../core/document/gallery.ts";
+import type { BundledPathLink } from "../../core/document/gallery.ts";
 import type { ExportCaptureOptions, ExportDocument } from "../../core/document/export-document.ts";
 import type { NoticeKind } from "../effects/ports.ts";
 import type { DeliverOptions } from "../files/file-delivery.ts";
@@ -78,10 +80,11 @@ const FAILED: WriterResult = Object.freeze({ kind: "failed" });
 const FILE_CHANGED = "The file changed on disk since it was opened";
 const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 
-function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: ValidatedDocument, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite<FileSavingBaseline> | null, naming: FileTitleChange | null): SaveLanding {
+function landedSave(job: SaveJob<FileSaveRequest>, captured: ExportDocument, published: ValidatedDocument, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: () => LandedWrite<FileSavingBaseline> | null, naming: FileTitleChange | null,
+  links: readonly BundledPathLink[] | null = null): SaveLanding {
   return {
     current: function () {
-      mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed(), naming });
+      mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed: landed(), naming, links });
       if (forkDocId) job.moved();
     },
     obsolete: function () { adoptSavedCopyDocId(forkDocId, docIdAtSave, false); }
@@ -188,13 +191,21 @@ async function writeCaptured(opts: WriteOptions, job: SaveJob<FileSaveRequest>, 
 
     if (target.kind === "handle") {
       const handle = target.handle;
-      if (bundles && !(await bundles.ask(handle, body))) return CANCELLED;
+      const links = bundles ? await bundles.ask(handle, body) : [];
+      if (!links) return CANCELLED;
+      if (links.length) {
+        const linked = cloneState(captured.document);
+        pathVideoLinks(linked.rows, links);
+        captured = deepFreeze({ ...captured, document: linked });
+        published = cloneState(captured.document);
+        body = kind === "splitpage" ? buildSplitpageFile(captured) : buildMarkdownProject(captured);
+      }
       const landedOn = await writeToHandle(handle, body);
       wrote = true;
       job.landed(landedSave(job, captured, published, forkDocId, docIdAtSave, seqAtSave, function () {
         const landedHome = fileHome() && (fileHome() as Home).handle === handle ? currentHome() : null;
         return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
-      }, naming));
+      }, naming, links.length ? links : null));
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);

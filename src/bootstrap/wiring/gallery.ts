@@ -117,7 +117,7 @@ export function offerBundleAfterDrop(...args: Parameters<GalleryVideoMount["offe
 
 export function beginBundleSave(): ReturnType<GalleryVideoMount["beginSave"]> {
   const owner = video.owner();
-  return owner ? owner.beginSave() : { drained: null, ask: () => Promise.resolve(true), end: () => {} };
+  return owner ? owner.beginSave() : { drained: null, ask: () => Promise.resolve([]), end: () => {} };
 }
 
 export const stopGalleryVideoFeature = video.stop;

@@ -6,7 +6,7 @@ import type { DesktopBundleCarry, DesktopBundleCopy, DesktopBundleSavePlan } fro
 import type { UndoEntry, UndoState } from "../../../src/application/editing/undo/history.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { rowSlots } from "../../../src/core/document/gallery.ts";
-import type { VideoLink } from "../../../src/core/document/gallery.ts";
+import type { BundledPathLink, VideoLink } from "../../../src/core/document/gallery.ts";
 import type { VideoBundlePorts } from "../../../src/features/gallery/ports.ts";
 import { BUNDLE_WARN_BYTES, bundlePromptText, saveCopyPromptText, startVideoBundles } from "../../../src/features/gallery/video-bundles.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -22,7 +22,7 @@ interface Setup {
   fold?: boolean;
   answer?: (link: VideoLink, job: string, onProgress: (p: { done: number; total: number }) => void) => Promise<DesktopBundleCopy>;
   plan?: DesktopBundleSavePlan | null;
-  chosen?: boolean;
+  chosen?: readonly BundledPathLink[] | null | Error;
 }
 
 function setup(opts: Setup = {}) {
@@ -51,7 +51,11 @@ function setup(opts: Setup = {}) {
     carries: (listener) => { heard = listener; },
     saves: {
       plan: async (handle, names) => { plans.push({ handle, names: [...names] }); return opts.plan === undefined ? null : opts.plan; },
-      choose: async (handle, choice) => { choices.push({ handle, choice }); return opts.chosen ?? true; }
+      choose: async (handle, choice) => {
+        choices.push({ handle, choice });
+        if (opts.chosen instanceof Error) throw opts.chosen;
+        return opts.chosen === undefined ? [] : opts.chosen;
+      }
     },
     notices: notices.notices,
     ownership: ownership.ownership,
@@ -364,7 +368,7 @@ test("main's carry during Save As shows progress, can be cancelled, and reports 
 const HANDLE = { name: "Episode 12 v2.splitpage", _desktopId: "fid1" };
 const BODY = JSON.stringify({ rows: [{ id: "r1", imageLinks: [{ name: "take.mp4", size: 4, location: { kind: "bundled", name: "take.mp4" } }] }] }, null, 2);
 const GB = 1024 * 1024 * 1024;
-const PLAN: DesktopBundleSavePlan = { from: "Episode 12 files", to: "Episode 12 v2 files", files: 3, bytes: Math.round(1.8 * GB), copyBytes: Math.round(1.8 * GB), missing: 0, linkable: true };
+const PLAN: DesktopBundleSavePlan = { from: "Episode 12 files", to: "Episode 12 v2 files", files: 3, bytes: Math.round(1.8 * GB), copyBytes: Math.round(1.8 * GB), linkable: true };
 
 test("Save As of a script with bundled files asks once, with Copy files and its size as the focused default", async () => {
   const h = setup({ plan: PLAN });
@@ -384,35 +388,80 @@ test("Save As of a script with bundled files asks once, with Copy files and its 
   assert.equal(h.el("bundle-save-warning").textContent, "That is a lot to copy, and it may take a while and use disk space. You can keep working while it copies.");
   assert.equal(h.el("bundle-save-share").hidden, true);
   h.el("bundle-save-copy").click();
-  assert.equal(await asked, true);
+  assert.deepEqual(await asked, [], "Copy files changes no link in the document");
   assert.deepEqual(h.choices, [{ handle: HANDLE, choice: "copy" }]);
   assert.equal(h.el("bundle-save-modal").hidden, true);
   save.end();
   h.owner.dispose();
 });
 
-test("Don't copy the files tells main to link where they are; Cancel and Escape abandon the save and tell main nothing", async () => {
-  const h = setup({ plan: { ...PLAN, files: 1, bytes: 2048, copyBytes: 2048 } });
+test("closing the save prompt gives focus back to where it was", async () => {
+  const h = setup({ plan: PLAN });
+  const before = document.createElement("button");
+  document.body.appendChild(before);
+  before.focus();
+  const save = h.owner.beginSave();
+  const asked = save.ask(HANDLE, BODY);
+  await settle();
+  assert.equal(document.activeElement, h.el("bundle-save-copy"));
+  h.el("bundle-save-cancel").click();
+  assert.equal(await asked, null);
+  assert.equal(document.activeElement, before, "Cancel returns focus");
+  const again = save.ask(HANDLE, BODY);
+  await settle();
+  h.el("bundle-save-copy").click();
+  await again;
+  assert.equal(document.activeElement, before, "a choice returns focus too");
+  save.end();
+  h.owner.dispose();
+});
+
+test("Don't copy the files hands the save main's links to adopt; Cancel and Escape abandon the save and tell main nothing", async () => {
+  const links = [{ name: "take.mp4", path: "D:\\Episode 12 files\\take.mp4" }];
+  const h = setup({ plan: { ...PLAN, files: 1, bytes: 2048, copyBytes: 2048 }, chosen: links });
   const save = h.owner.beginSave();
   const linking = save.ask(HANDLE, BODY);
   await settle();
   assert.equal(h.el("bundle-save-detail").textContent, "This script links 1 file in “Episode 12 files” (2 KB). Copy files adds it to “Episode 12 v2 files”, " +
     "next to the new script. Otherwise the new script links to the file where it is now.");
   h.el("bundle-save-link").click();
-  assert.equal(await linking, true);
+  assert.deepEqual(await linking, links, "the save gets the links main resolved, to apply with the write");
   assert.deepEqual(h.choices.map((c) => c.choice), ["link"]);
   const cancelling = save.ask(HANDLE, BODY);
   await settle();
   h.el("bundle-save-cancel").click();
-  assert.equal(await cancelling, false);
+  assert.equal(await cancelling, null);
   const escaping = save.ask(HANDLE, BODY);
   await settle();
   window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
-  assert.equal(await escaping, false);
+  assert.equal(await escaping, null);
   assert.equal(h.el("bundle-save-modal").hidden, true);
   assert.deepEqual(h.choices.map((c) => c.choice), ["link"], "a cancelled prompt chooses nothing");
   save.end();
   h.owner.dispose();
+});
+
+test("a Don't copy refused by main fails the save with main's reason, and an unknown answer writes nothing", async () => {
+  const refused = setup({ plan: PLAN, chosen: new Error("1 linked file is missing from “Episode 12 files”") });
+  const save = refused.owner.beginSave();
+  const asked = save.ask(HANDLE, BODY);
+  await settle();
+  refused.el("bundle-save-link").click();
+  await assert.rejects(asked, /missing from “Episode 12 files”/);
+  save.end();
+  refused.owner.dispose();
+  const unknown = setup({ plan: PLAN, chosen: null });
+  const again = unknown.owner.beginSave();
+  const linking = again.ask(HANDLE, BODY);
+  await settle();
+  unknown.el("bundle-save-link").click();
+  assert.equal(await linking, null, "a link answer main did not give abandons the save");
+  const copying = again.ask(HANDLE, BODY);
+  await settle();
+  unknown.el("bundle-save-copy").click();
+  assert.deepEqual(await copying, [], "Copy files goes on, and main's carry decides");
+  again.end();
+  unknown.owner.dispose();
 });
 
 test("the over-250 MB warning appears only above the threshold, counting only what is still to copy", () => {
@@ -427,13 +476,13 @@ test("the over-250 MB warning appears only above the threshold, counting only wh
 test("no prompt when main has nothing to copy, or the bytes link no bundled file", async () => {
   const none = setup({ plan: null });
   const save = none.owner.beginSave();
-  assert.equal(await save.ask(HANDLE, BODY), true);
+  assert.deepEqual(await save.ask(HANDLE, BODY), []);
   assert.equal(none.el("bundle-save-modal").hidden, true);
   save.end();
   none.owner.dispose();
   const plain = setup({ plan: PLAN });
   const again = plain.owner.beginSave();
-  assert.equal(await again.ask(HANDLE, JSON.stringify({ rows: [{ id: "r1", imageLinks: [{ name: "a.mp4", location: { kind: "path", path: "C:\\a.mp4" } }] }] })), true);
+  assert.deepEqual(await again.ask(HANDLE, JSON.stringify({ rows: [{ id: "r1", imageLinks: [{ name: "a.mp4", location: { kind: "path", path: "C:\\a.mp4" } }] }] })), []);
   assert.deepEqual(plain.plans, [], "a script with no bundled file does not even ask main");
   assert.equal(plain.el("bundle-save-modal").hidden, true);
   again.end();
@@ -449,7 +498,7 @@ test("when the files are on a network share, Don't copy is unavailable and the p
   assert.equal(h.el("bundle-save-share").hidden, false);
   assert.equal(h.el("bundle-save-share").textContent, "“Don't copy the files” is not available: the files are on a network share, which a script cannot link to.");
   h.el("bundle-save-copy").click();
-  assert.equal(await asked, true);
+  assert.deepEqual(await asked, []);
   save.end();
   h.owner.dispose();
 });
@@ -502,12 +551,14 @@ test("Hide tucks the progress panel into a small indicator, which shows the pane
   assert.equal(h.el("bundle-progress").hidden, true);
   assert.equal(h.el("bundle-indicator").hidden, false);
   assert.equal(h.el("bundle-indicator").textContent, "Copying files — 40%");
+  assert.equal(document.activeElement, h.el("bundle-indicator"), "focus moves to the indicator, not lost with the hidden panel");
   h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 3, total: 5 });
   assert.equal(h.el("bundle-progress").hidden, true, "progress keeps the panel hidden");
   assert.equal(h.el("bundle-indicator").textContent, "Copying files — 60%");
   h.el("bundle-indicator").click();
   assert.equal(h.el("bundle-progress").hidden, false);
   assert.equal(h.el("bundle-indicator").hidden, true);
+  assert.equal(document.activeElement, h.el("bundle-hide"), "showing the panel again focuses it");
   h.el("bundle-hide").click();
   h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 1, total: 1, result: { ok: true, copied: 2, kept: 0, missing: 0 } });
   assert.equal(h.el("bundle-indicator").hidden, true, "the indicator goes when the copy is done");

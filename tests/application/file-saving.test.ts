@@ -6,6 +6,7 @@ import type { FileSaveHandle, FileSaveTarget, FileSavingMount, FileSavingPorts }
 import type { Home } from "../../src/application/location/document-location.ts";
 import { buildExportDocument } from "../../src/core/document/export-document.ts";
 import type { ExportDocument, ExportReadModels } from "../../src/core/document/export-document.ts";
+import type { BundledPathLink } from "../../src/core/document/gallery.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
@@ -22,7 +23,8 @@ interface Setup {
   readonly autosave?: boolean;
   readonly onDesktop?: boolean;
   readonly handover?: boolean;
-  readonly ask?: boolean;
+  readonly ask?: readonly BundledPathLink[] | null;
+  readonly rows?: readonly unknown[];
 }
 
 const NO_MODELS: ExportReadModels = { production: [], commentNumbers: {}, broll: [] };
@@ -39,7 +41,7 @@ function harness(setup: Setup = {}) {
   const built: ExportDocument[] = [];
   const drains: ((ok: boolean) => void)[] = [];
   const state = { home: setup.home ?? ({ kind: "none" } as Home), writtenOut: setup.writtenOut ?? false, changes: 4, menuOn: true };
-  const doc = migrateRows({ title: "Pilot Script", docId: OLD_ID, rev: 2, rows: [] }, fakeMigration().ports);
+  const doc = migrateRows({ title: "Pilot Script", docId: OLD_ID, rev: 2, rows: setup.rows ?? [] }, fakeMigration().ports);
   const menu = {
     attributes: {} as Record<string, string>,
     classes: new Set<string>(),
@@ -115,7 +117,7 @@ function harness(setup: Setup = {}) {
     bundles: {
       beginSave: () => {
         const ask = (handle: FileSaveHandle, body: string) => {
-          if (setup.ask === undefined) return Promise.resolve(true);
+          if (setup.ask === undefined) return Promise.resolve([]);
           log.push("ask:" + handle.name + ":" + (body.length > 0));
           return Promise.resolve(setup.ask);
         };
@@ -467,15 +469,41 @@ const askLines = (h: ReturnType<typeof harness>) => h.log.filter((line) => /^(as
   .map((line) => line.replace(/^(capture|write):.*/, "$1"));
 
 test("Save As asks about the script's files after the pick and before the write; Cancel there writes nothing and keeps the old file", async () => {
-  const copying = harness({ home: FILE_HOME, writtenOut: true, ask: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  const copying = harness({ home: FILE_HOME, writtenOut: true, ask: [], pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
   assert.deepEqual(await write(copying, "saveAs"), { kind: "saved" });
   assert.deepEqual(askLines(copying), ["capture", "pick", "setHome:file", "ask:copy.splitpage:true", "write"], "the prompt sees the bytes about to be written");
-  const cancelled = harness({ home: FILE_HOME, writtenOut: true, ask: false, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  const cancelled = harness({ home: FILE_HOME, writtenOut: true, ask: null, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
   assert.deepEqual(await write(cancelled, "saveAs"), { kind: "cancelled" });
   assert.deepEqual(askLines(cancelled), ["capture", "pick", "setHome:file", "ask:copy.splitpage:true", "restoreHome:file"], "nothing is written");
   assert.equal(cancelled.state.home, FILE_HOME, "the document stays with its old file");
   assert.deepEqual(cancelled.toasts, []);
-  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true, ask: false });
+  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true, ask: null });
   assert.deepEqual(await write(plain, "save"), { kind: "saved" }, "a plain save never asks");
   assert.equal(plain.log.some((line) => line.startsWith("ask:")), false);
+});
+
+const bundledRow = () => ({ id: "r1", visualText: "Wide", audioText: "One.", status: "todo",
+  imageLinks: [{ name: "take.mp4", size: 4, location: { kind: "bundled", name: "take.mp4" } }] });
+const TAKE_PATH = "D:\\Episode 12 files\\take.mp4";
+const locationIn = (rows: readonly unknown[]) => ((rows[0] as { imageLinks: { location: unknown }[] }).imageLinks[0] as { location: unknown }).location;
+
+test("Don't copy writes the links main gave and the document adopts them with the save, so later saves write the same", async () => {
+  const links = [{ name: "take.mp4", path: TAKE_PATH }];
+  const h = harness({ home: FILE_HOME, writtenOut: true, ask: links, rows: [bundledRow()], pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true } });
+  assert.deepEqual(await write(h, "saveAs"), { kind: "saved" });
+  assert.equal(h.built.length, 2, "the bytes are built again with the links before the write");
+  assert.deepEqual(locationIn(h.built[0]?.document.rows ?? []), { kind: "bundled", name: "take.mp4" }, "the prompt saw the bundled names");
+  assert.deepEqual(locationIn(h.built[1]?.document.rows ?? []), { kind: "path", path: TAKE_PATH }, "the written bytes link the original file");
+  assert.deepEqual(locationIn(h.doc.rows), { kind: "path", path: TAKE_PATH }, "the live document links it too");
+  assert.ok(h.log.includes("confirmSavedNow"), "the link change is part of the save, so the document is saved, not dirty");
+  assert.ok(h.log.findIndex((l) => l.startsWith("write:")) < h.log.indexOf("confirmSavedNow"));
+});
+
+test("a failed Don't copy write leaves the document's bundled links as they were", async () => {
+  const links = [{ name: "take.mp4", path: TAKE_PATH }];
+  const h = harness({ home: FILE_HOME, writtenOut: true, ask: links, rows: [bundledRow()], writeFails: new Error("disk full"),
+    pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true } });
+  assert.equal((await write(h, "saveAs")).kind, "failed");
+  assert.deepEqual(locationIn(h.doc.rows), { kind: "bundled", name: "take.mp4" });
+  assert.equal(h.state.home, FILE_HOME);
 });

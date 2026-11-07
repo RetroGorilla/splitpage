@@ -2,6 +2,8 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { normalizeDocId } from "../../../shared/doc-id-policy.ts";
 import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
 import { fileTitleCommand } from "../commands/title.ts";
+import { bundledPathsCommand } from "../commands/gallery.ts";
+import type { BundledPathLink } from "../../core/document/gallery.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
 import type { LocalFileData } from "../files/local-file-access.ts";
@@ -16,6 +18,7 @@ export interface LandedWrite<B = ValidatedDocument> {
 
 export interface CompletedWrite<B = ValidatedDocument, P extends B = B> {
   readonly naming?: FileTitleChange | null;
+  readonly links?: readonly BundledPathLink[] | null;
   readonly captured: ExportDocument;
   readonly published: P;
   readonly forkDocId: string | null;
@@ -56,8 +59,10 @@ export function createSaveCompletion<B, P extends B = B>(ports: SaveCompletionPo
     }
     adoptSavedCopyDocId(write.forkDocId, write.docIdAtSave, true);
     const named = !write.naming || ports.edits.edit(fileTitleCommand(write.naming));
-    const savedChanges = write.seqAtSave + (write.naming ? 1 : 0);
-    if (named && ports.saves.changes() === savedChanges) ports.saves.confirmSavedNow();
+    const relinking = !!write.links && write.links.length > 0;
+    const linked = !relinking || ports.edits.edit(bundledPathsCommand(write.links as readonly BundledPathLink[]));
+    const savedChanges = write.seqAtSave + (write.naming ? 1 : 0) + (relinking ? 1 : 0);
+    if (named && linked && ports.saves.changes() === savedChanges) ports.saves.confirmSavedNow();
   }
 
   return Object.freeze({ confirmWrite, adoptSavedCopyDocId });

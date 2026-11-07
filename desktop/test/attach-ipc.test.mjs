@@ -54,8 +54,7 @@ function shellIpc({ source = null, grants = [] } = {}) {
     copier: createBundleCopier({ bundleFiles, progressEveryMs: 0 }), allow: ATTACHABLE_FILE,
     scriptOfTab: (tabId) => (tabId === tab.id && tab.source.kind === "file" ? tab.source.absPath : null),
     pathOf: (fileId) => targets.get(fileId) || null,
-    namesInProject: bundleFiles.bundledNamesInProject,
-    linkInProject: bundleFiles.linkBundledInProject
+    namesInProject: bundleFiles.bundledNamesInProject
   });
   const { registerShellIpc } = createShellIpc({
     tabOf: () => tab,
@@ -76,7 +75,7 @@ function shellIpc({ source = null, grants = [] } = {}) {
     const refused = prepared.refused;
     if (!refused) prepared.landed(true);
     await bundleJobs.idle();
-    tab.source = { kind: "file", absPath: to };
+    if (!refused) tab.source = { kind: "file", absPath: to };
     const done = sent.slice(before).filter((s) => s.channel === "splitpage:bundle-carry" && s.payload.result);
     return { refused, result: done.length ? done[done.length - 1].payload.result : null };
   }
@@ -197,7 +196,12 @@ test("Save As carries documents along and never a program or an extensionless fi
     const to = path.join(s.dir, "v2", "Episode 12 v2.splitpage");
     fs.mkdirSync(path.dirname(to));
     const ipc = shellIpc({ source: s.script });
-    assert.deepEqual(await ipc.saveAs(to, ["brief.pdf", "planted.exe", "README"]), { refused: null, result: { ok: true, copied: 1, kept: 0, missing: 2 } });
+    assert.deepEqual(await ipc.saveAs(to, ["brief.pdf", "planted.exe", "README"]), {
+      refused: { reason: "missing", folder: "Episode 12 files", name: "README", copied: 0, count: 2 },
+      result: { ok: false, code: "MISSING", name: "README", copied: 0, missing: 2 }
+    }, "a program or an extensionless file never resolves, so the save stops before anything is written");
+    assert.equal(fs.existsSync(path.join(s.dir, "v2", "Episode 12 v2 files")), false);
+    assert.deepEqual(await ipc.saveAs(to, ["brief.pdf"]), { refused: null, result: { ok: true, copied: 1, kept: 0, missing: 0 } });
     assert.deepEqual(fs.readdirSync(path.join(s.dir, "v2", "Episode 12 v2 files")), ["brief.pdf"]);
   } finally { s.done(); }
 });
@@ -245,7 +249,10 @@ test("scripts an installed interpreter runs and macro-enabled Office files are n
     }
     const to = path.join(s.dir, "v2", "Episode 12 v2.splitpage");
     fs.mkdirSync(path.dirname(to));
-    assert.deepEqual(await ipc.saveAs(to, names), { refused: null, result: { ok: true, copied: 0, kept: 0, missing: names.length } }, "a Save As carries none of them");
+    assert.deepEqual(await ipc.saveAs(to, names), {
+      refused: { reason: "missing", folder: "Episode 12 files", name: [...names].sort()[0], copied: 0, count: names.length },
+      result: { ok: false, code: "MISSING", name: [...names].sort()[0], copied: 0, missing: names.length }
+    }, "a Save As carries none of them, and stops before writing");
     assert.equal(fs.existsSync(path.join(s.dir, "v2", "Episode 12 v2 files")), false, "and makes no folder");
     assert.deepEqual(ipc.openedPaths, [], "nothing reached the system");
   } finally { s.done(); }

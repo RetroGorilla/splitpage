@@ -17,10 +17,12 @@ const { pipeline }: typeof NodeStreamPromises = require("node:stream/promises");
 
 type BundleProgress = (done: number, total: number) => void;
 type BundleCopyResult = { ok: true; name: string } | { ok: false; code: "REFUSED" | "GONE" | "CANCELLED" | "FAILED" };
-type BundleCarryResult = { ok: true; copied: number; kept: number; missing: number } | { ok: false; code: "CLASH" | "FAILED" | "CANCELLED"; name: string; copied: number };
-type BundleSource = (name: string) => Promise<VideoEmbed.VideoPathVerdict>;
+type BundleCarryResult = { ok: true; copied: number; kept: number; missing: number } |
+  { ok: false; code: "CLASH" | "FAILED" | "CANCELLED"; name: string; copied: number } |
+  { ok: false; code: "MISSING"; name: string; copied: 0; missing: number };
 interface BundleCarryHooks {
-  readonly source?: BundleSource;
+  readonly source?: (name: string) => Promise<VideoEmbed.VideoPathVerdict>;
+  readonly strict?: boolean;
   readonly ready?: (pending: readonly string[]) => Promise<boolean>;
 }
 
@@ -169,8 +171,7 @@ function createBundleCopier(options: {
     }
   }
 
-  async function copyIn(source: string, scriptPath: string, allow: RegExp, onProgress: BundleProgress, signal: AbortSignal,
-    taken: (name: string) => boolean = () => false): Promise<BundleCopyResult> {
+  async function copyIn(source: string, scriptPath: string, allow: RegExp, onProgress: BundleProgress, signal: AbortSignal): Promise<BundleCopyResult> {
     const since = Date.now();
     const base = path.basename(source);
     if (!bundleableName(base, allow)) return { ok: false, code: "REFUSED" };
@@ -186,13 +187,12 @@ function createBundleCopier(options: {
     try { await fsp.mkdir(bundleFolderOf(scriptPath, path), { recursive: true }); } catch { return { ok: false, code: "FAILED" }; }
     const folder = await realBundleFolder(scriptPath, fsp, path);
     if (!folder.ok) return { ok: false, code: "REFUSED" };
-    if (samePath(path.dirname(real), folder.path, foldCase) && !taken(path.basename(real))) return { ok: true, name: path.basename(real) };
+    if (samePath(path.dirname(real), folder.path, foldCase)) return { ok: true, name: path.basename(real) };
     await sweep(folder.path, since);
     const progress = reporter(total, onProgress);
     for (let n = 1; n <= NUMBERED_TRIES; n++) {
       const name = numberedName(base, n);
       if (!bundleableName(name, allow)) return { ok: false, code: "REFUSED" };
-      if (taken(name)) continue;
       const target = path.join(folder.path, name);
       const size = await sizeOfFile(target);
       if (size === total) {
@@ -219,13 +219,18 @@ function createBundleCopier(options: {
       return { ok: true, copied: 0, kept: 0, missing: 0 };
     }
     let missing = 0;
+    let firstMissing = "";
     const sources: { name: string; from: string; size: number; there: boolean }[] = [];
     for (const name of wanted) {
       const found = hooks.source && bundleableName(name, allow) ? await hooks.source(name) : await resolveBundledFile(fromScript, name, allow, fsp, path, foldCase);
       const size = found.ok ? await sizeOfFile(found.path) : null;
-      if (!found.ok || size === null || size < 0) { missing++; continue; }
+      if (!found.ok || size === null || size < 0) {
+        if (!missing++) firstMissing = typeof name === "string" ? name : "";
+        continue;
+      }
       sources.push({ name: name as string, from: found.path, size, there: false });
     }
+    if (missing && hooks.strict) return { ok: false, code: "MISSING", name: firstMissing, copied: 0, missing };
     if (!sources.length) return { ok: true, copied: 0, kept: 0, missing };
     let folderPath: string | null = null;
     const existing = await realBundleFolder(toScript, fsp, path);
@@ -242,7 +247,8 @@ function createBundleCopier(options: {
     } else if (existing.code !== "GONE") {
       return { ok: false, code: "FAILED", name: (sources[0] as { name: string }).name, copied: 0 };
     }
-    if (hooks.ready && !(await hooks.ready(sources.filter((s) => !s.there).map((s) => s.name)))) {
+    if (signal.aborted) return { ok: false, code: "CANCELLED", name: "", copied: 0 };
+    if (hooks.ready && (!(await hooks.ready(sources.filter((s) => !s.there).map((s) => s.name))) || signal.aborted)) {
       return { ok: false, code: "CANCELLED", name: "", copied: 0 };
     }
     const progress = reporter(sources.reduce((sum, s) => sum + s.size, 0), onProgress);
@@ -284,6 +290,6 @@ function createBundleCopier(options: {
   return { copyIn, carry, folderName, openStored, resolveIn, sizeOfFile, storedPath };
 }
 
-export type { BundleCarryResult, BundleCopyResult, BundleProgress, BundleSource, createBundleCopier };
+export type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier };
 
 module.exports = { createBundleCopier };

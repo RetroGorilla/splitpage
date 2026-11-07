@@ -874,8 +874,7 @@ const bundleJobs = createBundleJobs({
     const found = fileIds.pathOf(fileId);
     return typeof found === "string" && found ? found : null;
   },
-  namesInProject: videoEmbed.bundledNamesInProject,
-  linkInProject: videoEmbed.linkBundledInProject
+  namesInProject: videoEmbed.bundledNamesInProject
 });
 
 const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
@@ -1112,6 +1111,7 @@ function forgetTab(tabId: string | undefined) {
   webContentsIdToTabId.delete(tab.webContentsId);
   tabs.delete(tabId);
   voice.forgetTab(tabId);
+  bundleJobs.forgetTab(tabId as string);
   const w = windowsById.get(tab.windowId);
   if (w) {
     const i = (w.tabIds as readonly (string | undefined)[]).indexOf(tabId);

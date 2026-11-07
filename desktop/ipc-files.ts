@@ -117,7 +117,7 @@ function createFileIpc({
       if (prepared.refused) return { size: 0, bundleRefused: prepared.refused };
       let written;
       try {
-        written = await writeFileEntry(absPath, prepared.text === null ? buffer : Buffer.from(prepared.text, "utf8"));
+        written = await writeFileEntry(absPath, buffer);
       } catch (e) {
         prepared.landed(false);
         throw e;

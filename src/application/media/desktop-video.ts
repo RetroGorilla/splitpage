@@ -1,4 +1,5 @@
 import type { DesktopIpcArgs, DesktopIpcResult, DesktopWireBundleCarryNote, DesktopWireBundleSavePlan } from "../../../shared/desktop-contract.d.ts";
+import type { BundledPathLink } from "../../core/document/gallery.ts";
 
 export type DesktopVideoResult = DesktopIpcResult<"splitpage:video-file-open">;
 export type DesktopVideoThumbnail = DesktopIpcResult<"splitpage:video-thumbnail">;
@@ -20,6 +21,6 @@ export interface DesktopVideo {
   readonly onCarry: (listener: (note: DesktopBundleCarry) => void) => void;
   readonly cancelBundle: (job: string) => void;
   readonly planSave: (handle: unknown, names: readonly string[]) => Promise<DesktopBundleSavePlan | null>;
-  readonly chooseSave: (handle: unknown, choice: BundleSaveChoice) => Promise<boolean>;
+  readonly chooseSave: (handle: unknown, choice: BundleSaveChoice) => Promise<readonly BundledPathLink[] | null>;
   readonly thumbnail: (host: string, ref: string) => Promise<DesktopVideoThumbnail | null> | null;
 }

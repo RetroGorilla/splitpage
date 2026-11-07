@@ -601,15 +601,18 @@ tabs**.
   page's copies, and a running Save As copy, to finish (`beginSave`); then
   it asks "Save the files with this script?" (`splitpage:bundle-save-plan(fileId, names)`
   for the counts, `splitpage:bundle-save-choice(fileId, "copy" | "link")` for
-  the answer). For Copy files, main checks the names the written bytes link
-  against the new folder as one job in the same queue, failing the save on a
-  clash, then writes the script and copies the files in the background in
-  that same job, reporting on `splitpage:bundle-carry`; until a file lands,
-  the tab's bundled open of a name the job lists falls back to the old folder.
-  For Don't copy, main writes those links as stored paths to the old files
-  and keeps rewriting that file's later saves. `splitpage:bundled-file-open(name)`
-  opens one name after `resolveBundledFile`. None takes a path
-  (INV-34). Copies publish through a temporary name, and quitting while they
+  the answer). A linked file missing from the old folder stops the save
+  before anything is written, for either answer. For Copy files, main checks
+  the names the written bytes link against the new folder as one job in the
+  same queue, failing the save on a clash, then writes the script and copies
+  the files in the background in that same job, reporting on
+  `splitpage:bundle-carry`; until a file lands, the tab's bundled open of a
+  name the job lists falls back to the old folder, and that fallback dies
+  with the job. For Don't copy, the choice answer gives the old files' paths
+  for the planned names; the save writes them and the document adopts them
+  as part of the save (`bundledPathsCommand`), so main remembers nothing.
+  `splitpage:bundled-file-open(name)` opens one name after
+  `resolveBundledFile`. None takes a path (INV-34). Copies publish through a temporary name, and quitting while they
   run asks Wait or Quit anyway (`close-quit.ts`). `desktop/test/bundle-ipc.test.mjs` holds the refusals and
   `caseGalleryVideoBundle` in smoke.mjs runs drop, copy, restart, open and
   Save As.

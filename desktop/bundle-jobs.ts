@@ -1,7 +1,7 @@
 "use strict";
 
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
-import type { BundleCarryResult, BundleCopyResult, BundleProgress, BundleSource, createBundleCopier } from "./bundle-copy.ts";
+import type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
 
 type BundleSender = {
   readonly id: number;
@@ -10,7 +10,7 @@ type BundleSender = {
 };
 
 type BundleJobResult = BundleCopyResult | { ok: false; code: "DROPPED" | "UNKNOWN" | "NO_FOLDER" };
-type BundleSaveRefusal = { reason: "clash" | "failed" | "cancelled" | "unlinkable"; folder: string; name: string; copied: number };
+type BundleSaveRefusal = { reason: "clash" | "failed" | "cancelled" | "unlinkable" | "missing"; folder: string; name: string; copied: number; count?: number };
 type BundleSaveChoice = "copy" | "link";
 interface BundleSavePlan {
   readonly from: string;
@@ -18,12 +18,17 @@ interface BundleSavePlan {
   readonly files: number;
   readonly bytes: number;
   readonly copyBytes: number;
-  readonly missing: number;
   readonly linkable: boolean;
 }
-type BundlePlanAnswer = { ok: true; plan: BundleSavePlan | null } | { ok: false; code: "UNKNOWN" } | { ok: false; code: "CLASH"; refused: BundleSaveRefusal };
-type BundleChoiceAnswer = { ok: true } | { ok: false; code: "UNKNOWN" | "REFUSED" };
-type BundleWrite = { refused: BundleSaveRefusal } | { refused: null; text: string | null; landed: (ok: boolean) => void };
+interface BundlePathLink {
+  readonly name: string;
+  readonly path: string;
+}
+type BundlePlanAnswer = { ok: true; plan: BundleSavePlan | null } | { ok: false; code: "UNKNOWN" } |
+  { ok: false; code: "CLASH" | "MISSING"; refused: BundleSaveRefusal };
+type BundleChoiceAnswer = { ok: true; links: BundlePathLink[] } | { ok: false; code: "UNKNOWN" | "REFUSED" } |
+  { ok: false; code: "MISSING" | "UNLINKABLE"; refused: BundleSaveRefusal };
+type BundleWrite = { refused: BundleSaveRefusal } | { refused: null; landed: (ok: boolean) => void };
 
 interface BundleJob {
   readonly key: string;
@@ -38,17 +43,18 @@ interface SaveTarget {
   readonly tabId: string;
   readonly from: string | null;
   choice: BundleSaveChoice | null;
+  names: readonly string[] | null;
 }
 
 interface PendingOpen {
   readonly tabId: string;
+  readonly from: string;
   readonly to: string;
   readonly names: readonly string[];
-  readonly source: BundleSource;
+  landed: boolean;
 }
 
 const SAVE_TARGETS_MAX = 50;
-const LINKED_MAX = 50;
 const PLAN_NAMES_MAX = 2000;
 const REFUSALS: Record<string, BundleSaveRefusal["reason"]> = { CLASH: "clash", FAILED: "failed", CANCELLED: "cancelled" };
 
@@ -58,15 +64,13 @@ function createBundleJobs(options: {
   scriptOfTab: (tabId: string) => string | null;
   pathOf: (fileId: string) => string | null;
   namesInProject: (text: string) => string[];
-  linkInProject: (text: string, paths: ReadonlyMap<string, string>) => string | null;
   foldCase?: boolean;
 }) {
-  const { copier, allow, scriptOfTab, pathOf, namesInProject, linkInProject } = options;
+  const { copier, allow, scriptOfTab, pathOf, namesInProject } = options;
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const queue: BundleJob[] = [];
   const byKey = new Map<string, BundleJob>();
   const saveTargets = new Map<string, SaveTarget>();
-  const linked = new Map<string, Map<string, string>>();
   const opens = new Set<PendingOpen>();
   let running: BundleJob | null = null;
   let carries = 0;
@@ -74,7 +78,6 @@ function createBundleJobs(options: {
 
   const same = (a: string, b: string) => (foldCase ? a.toLowerCase() === b.toLowerCase() : a === b);
   const keyOf = (sender: BundleSender, job: string) => String(sender.id) + ":" + job;
-  const pathKey = (p: string) => (foldCase ? p.toLowerCase() : p);
 
   function tell(sender: BundleSender, push: (to: BundleSender) => void): void {
     try { if (!sender.isDestroyed()) push(sender); } catch { }
@@ -114,31 +117,6 @@ function createBundleJobs(options: {
     }
   }
 
-  function linkedName(script: string, name: unknown): string | null {
-    const map = linked.get(pathKey(script));
-    if (!map || typeof name !== "string") return null;
-    for (const [n, stored] of map) if (same(n, name)) return stored;
-    return null;
-  }
-
-  function sourceIn(script: string): BundleSource {
-    return (name) => {
-      const stored = linkedName(script, name);
-      return stored ? copier.openStored(stored, allow) : copier.resolveIn(script, name, allow);
-    };
-  }
-
-  function storedFor(script: string, name: string): string {
-    return linkedName(script, name) || copier.storedPath(script, name);
-  }
-
-  function rememberLinks(script: string, paths: Map<string, string>): void {
-    linked.delete(pathKey(script));
-    if (!paths.size) return;
-    if (linked.size >= LINKED_MAX) linked.delete(linked.keys().next().value as string);
-    linked.set(pathKey(script), paths);
-  }
-
   function copy(sender: BundleSender, tabId: string, job: string, source: string, script: string): Promise<BundleJobResult> {
     return new Promise((finish) => {
       let settled = false;
@@ -149,7 +127,7 @@ function createBundleJobs(options: {
         run: async (progress, signal) => {
           const now = scriptOfTab(tabId);
           if (!now || !same(script, now)) { done({ ok: false, code: "DROPPED" }); return; }
-          done(await copier.copyIn(source, script, allow, progress, signal, (name) => !!linkedName(script, name)));
+          done(await copier.copyIn(source, script, allow, progress, signal));
         }
       });
     });
@@ -164,7 +142,7 @@ function createBundleJobs(options: {
     if (!tab) return;
     if (saveTargets.size >= SAVE_TARGETS_MAX) saveTargets.delete(saveTargets.keys().next().value as string);
     const from = tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null;
-    saveTargets.set(fileId, { tabId: tab.id, from, choice: null });
+    saveTargets.set(fileId, { tabId: tab.id, from, choice: null, names: null });
   }
 
   function targetOf(fileId: unknown, tab: { id: string } | null): SaveTarget | null {
@@ -176,6 +154,16 @@ function createBundleJobs(options: {
     return !!from && !!to && !same(from, to) && !same(copier.storedPath(from, "x"), copier.storedPath(to, "x"));
   }
 
+  function missingRefusal(from: string, name: string, count: number): BundleSaveRefusal {
+    return { reason: "missing", folder: copier.folderName(from), name, copied: 0, count };
+  }
+
+  async function sizeIn(from: string, name: string): Promise<number | null> {
+    const found = await copier.resolveIn(from, name, allow);
+    const size = found.ok ? await copier.sizeOfFile(found.path) : null;
+    return size === null || size < 0 ? null : size;
+  }
+
   async function planSave(fileId: unknown, names: unknown, tab: { id: string } | null): Promise<BundlePlanAnswer> {
     const noted = targetOf(fileId, tab);
     if (!noted) return { ok: false, code: "UNKNOWN" };
@@ -183,61 +171,65 @@ function createBundleJobs(options: {
     const from = noted.from;
     if (!carrying(from, to) || !to) return { ok: true, plan: null };
     const wanted = Array.isArray(names) ? [...new Set(names.filter((n): n is string => typeof n === "string"))].slice(0, PLAN_NAMES_MAX) : [];
-    const source = sourceIn(from);
+    noted.names = wanted;
     const toFolder = copier.folderName(to);
-    let files = 0, bytes = 0, copyBytes = 0, missing = 0, linkable = true;
+    let files = 0, bytes = 0, copyBytes = 0, missing = 0, firstMissing = "", linkable = true;
     for (const name of wanted) {
-      const found = await source(name);
-      const size = found.ok ? await copier.sizeOfFile(found.path) : null;
-      if (!found.ok || size === null || size < 0) { missing++; continue; }
+      const size = await sizeIn(from, name);
+      if (size === null) { if (!missing++) firstMissing = name; continue; }
       files++;
       bytes += size;
       const there = await copier.sizeOfFile(copier.storedPath(to, name));
       if (there === null) copyBytes += size;
       else if (there !== size) return { ok: false, code: "CLASH", refused: { reason: "clash", folder: toFolder, name, copied: 0 } };
-      if (linkable && !(await copier.openStored(storedFor(from, name), allow)).ok) linkable = false;
+      if (linkable && !(await copier.openStored(copier.storedPath(from, name), allow)).ok) linkable = false;
     }
+    if (missing) return { ok: false, code: "MISSING", refused: missingRefusal(from, firstMissing, missing) };
     if (!files) return { ok: true, plan: null };
-    return { ok: true, plan: { from: copier.folderName(from), to: toFolder, files, bytes, copyBytes, missing, linkable } };
+    return { ok: true, plan: { from: copier.folderName(from), to: toFolder, files, bytes, copyBytes, linkable } };
   }
 
-  function chooseSave(fileId: unknown, choice: unknown, tab: { id: string } | null): BundleChoiceAnswer {
+  async function linksFor(from: string, names: readonly string[]): Promise<BundleChoiceAnswer> {
+    const links: BundlePathLink[] = [];
+    let missing = 0, firstMissing = "";
+    for (const name of names) {
+      if ((await sizeIn(from, name)) === null) { if (!missing++) firstMissing = name; continue; }
+      const stored = copier.storedPath(from, name);
+      if (!(await copier.openStored(stored, allow)).ok) {
+        return { ok: false, code: "UNLINKABLE", refused: { reason: "unlinkable", folder: copier.folderName(from), name, copied: 0 } };
+      }
+      links.push({ name, path: stored });
+    }
+    if (missing) return { ok: false, code: "MISSING", refused: missingRefusal(from, firstMissing, missing) };
+    return { ok: true, links };
+  }
+
+  async function chooseSave(fileId: unknown, choice: unknown, tab: { id: string } | null): Promise<BundleChoiceAnswer> {
     const noted = targetOf(fileId, tab);
     if (!noted) return { ok: false, code: "UNKNOWN" };
     if (choice !== "copy" && choice !== "link") return { ok: false, code: "REFUSED" };
-    noted.choice = choice;
-    return { ok: true };
+    if (choice === "copy") { noted.choice = choice; return { ok: true, links: [] }; }
+    const to = pathOf(fileId as string);
+    if (!noted.names || !carrying(noted.from, to)) return { ok: false, code: "REFUSED" };
+    const answer = await linksFor(noted.from, noted.names);
+    if (answer.ok) noted.choice = choice;
+    return answer;
   }
 
-  function plainWrite(fileId: string, to: string | null, text: () => string): BundleWrite {
-    const map = to ? linked.get(pathKey(to)) : undefined;
-    return { refused: null, text: map ? linkInProject(text(), map) : null, landed: (ok) => { if (ok) saveTargets.delete(fileId); } };
-  }
-
-  async function linkForSave(fileId: string, from: string, to: string, names: readonly string[], text: () => string): Promise<BundleWrite> {
-    const source = sourceIn(from);
-    const paths = new Map<string, string>();
-    for (const name of names) {
-      if (!(await source(name)).ok) continue;
-      const stored = storedFor(from, name);
-      if (!(await copier.openStored(stored, allow)).ok) return { refused: { reason: "unlinkable", folder: copier.folderName(from), name, copied: 0 } };
-      paths.set(name, stored);
-    }
-    return {
-      refused: null,
-      text: linkInProject(text(), paths),
-      landed: (ok) => { if (!ok) return; saveTargets.delete(fileId); rememberLinks(to, paths); }
-    };
+  function plainWrite(fileId: string): BundleWrite {
+    return { refused: null, landed: (ok) => { if (ok) saveTargets.delete(fileId); } };
   }
 
   function carryForSave(fileId: string, noted: SaveTarget, from: string, to: string, names: readonly string[], sender: BundleSender): Promise<BundleWrite> {
     const job = "carry" + (++carries);
-    const source = sourceIn(from);
     const note = (done: number, total: number, result?: BundleCarryResult & { left?: number }) => tell(sender, (s) => s.send("splitpage:bundle-carry", {
       job, from: copier.folderName(from), to: copier.folderName(to), done, total, ...(result ? { result } : {})
     }));
-    const refusal = (result: BundleCarryResult): BundleSaveRefusal | null =>
-      (result.ok ? null : { reason: REFUSALS[result.code] as BundleSaveRefusal["reason"], folder: copier.folderName(to), name: result.name, copied: result.copied });
+    const refusal = (result: BundleCarryResult): BundleSaveRefusal | null => {
+      if (result.ok) return null;
+      if (result.code === "MISSING") return missingRefusal(from, result.name, result.missing);
+      return { reason: REFUSALS[result.code] as BundleSaveRefusal["reason"], folder: copier.folderName(to), name: result.name, copied: result.copied };
+    };
     return new Promise((answer) => {
       let answered = false;
       let settled = false;
@@ -245,14 +237,18 @@ function createBundleJobs(options: {
       let pending: readonly string[] | null = null;
       let wrote: "waiting" | "yes" | "no" = "waiting";
       let open: PendingOpen | null = null;
+      let release: ((go: boolean) => void) | null = null;
       const reply = (w: BundleWrite) => { if (!answered) { answered = true; answer(w); } };
       const done = (result: BundleCarryResult) => {
         if (settled) return;
         settled = true;
-        if (open) opens.delete(open);
+        if (open) { opens.delete(open); open = null; }
+        const waiting = release;
+        release = null;
+        if (waiting) waiting(false);
         if (!answered) {
           const refused = refusal(result);
-          reply(refused ? { refused } : plainWrite(fileId, null, () => ""));
+          reply(refused ? { refused } : plainWrite(fileId));
         }
         const background = pending !== null && wrote !== "no";
         note(1, 1, background && !result.ok ? { ...result, left: Math.max(0, (pending as readonly string[]).length - result.copied) } : result);
@@ -261,19 +257,23 @@ function createBundleJobs(options: {
         key: keyOf(sender, job), sender, job, ctl: new AbortController(),
         stop: (code) => done({ ok: false, code, name: "", copied: committed }),
         run: async (_progress, signal) => {
-          done(await copier.carry(from, to, names, allow, (d, t) => note(d, t), signal, (n) => { committed = n; }, {
-            source,
-            ready: (names) => {
-              pending = names;
-              open = { tabId: noted.tabId, to, names, source };
+          done(await copier.carry(from, to, names, allow, (d, t) => { if (!settled && !signal.aborted) note(d, t); }, signal, (n) => { committed = n; }, {
+            strict: true,
+            source: (name) => copier.resolveIn(from, name, allow),
+            ready: (listed) => {
+              if (settled || signal.aborted) return Promise.resolve(false);
+              pending = listed;
+              open = { tabId: noted.tabId, from, to, names: listed, landed: false };
               opens.add(open);
               note(0, 1);
-              return new Promise<boolean>((landed) => {
+              return new Promise<boolean>((go) => {
+                release = go;
                 reply({
-                  refused: null, text: null, landed: (ok) => {
+                  refused: null, landed: (ok) => {
                     wrote = ok ? "yes" : "no";
-                    if (ok) { saveTargets.delete(fileId); linked.delete(pathKey(to)); }
-                    landed(ok);
+                    if (ok) saveTargets.delete(fileId);
+                    if (ok && open) open.landed = true;
+                    if (release === go) { release = null; go(ok && !settled); }
                   }
                 });
               });
@@ -287,22 +287,34 @@ function createBundleJobs(options: {
   function prepareWrite(fileId: string, text: () => string, sender: BundleSender): Promise<BundleWrite> {
     const noted = saveTargets.get(fileId);
     const to = pathOf(fileId);
-    if (!noted || !to || !carrying(noted.from, to)) return Promise.resolve(plainWrite(fileId, to, text));
+    if (!noted || !to || !carrying(noted.from, to)) return Promise.resolve(plainWrite(fileId));
     const names = namesInProject(text());
-    if (!names.length) return Promise.resolve(plainWrite(fileId, to, text));
-    if (noted.choice === "link") return linkForSave(fileId, noted.from, to, names, text);
+    // why: Don't copy changed every listed name to a path, so a name still bundled would link the new folder
+    if (noted.choice === "link" && names.length) return Promise.resolve({ refused: missingRefusal(noted.from, names[0] as string, names.length) });
+    if (!names.length) return Promise.resolve(plainWrite(fileId));
     return carryForSave(fileId, noted, noted.from, to, names, sender);
   }
 
+  function stillOpen(open: PendingOpen): boolean {
+    const now = scriptOfTab(open.tabId);
+    if (now && !(open.landed && !same(now, open.to))) return true;
+    opens.delete(open);
+    return false;
+  }
+
   async function openBundled(tabId: string, script: string, name: unknown): Promise<VideoPathVerdict> {
-    const stored = linkedName(script, name);
-    if (stored) return copier.openStored(stored, allow);
     const found = await copier.resolveIn(script, name, allow);
     if (found.ok || found.code !== "GONE" || typeof name !== "string") return found;
-    for (const open of opens) {
-      if (open.tabId === tabId && same(open.to, script) && open.names.some((n) => same(n, name))) return open.source(name);
+    for (const open of [...opens]) {
+      if (!stillOpen(open)) continue;
+      if (open.tabId === tabId && same(open.to, script) && open.names.some((n) => same(n, name))) return copier.resolveIn(open.from, name, allow);
     }
     return found;
+  }
+
+  function forgetTab(tabId: string): void {
+    for (const open of [...opens]) if (open.tabId === tabId) opens.delete(open);
+    for (const [fileId, noted] of [...saveTargets]) if (noted.tabId === tabId) saveTargets.delete(fileId);
   }
 
   function busy(): boolean {
@@ -319,7 +331,7 @@ function createBundleJobs(options: {
     return idle();
   }
 
-  return { abortAll, busy, cancel, chooseSave, copy, idle, noteSaveTarget, openBundled, planSave, prepareWrite };
+  return { abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteSaveTarget, openBundled, planSave, prepareWrite };
 }
 
 export type { BundleJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };

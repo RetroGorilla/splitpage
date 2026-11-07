@@ -180,7 +180,7 @@ function world(): World {
     },
     preferences: { editorName: () => "Adam", autosave: () => false },
     page: { getElementById: () => null },
-    bundles: { beginSave: () => ({ drained: null, ask: () => Promise.resolve(true), end: () => {} }) }
+    bundles: { beginSave: () => ({ drained: null, ask: () => Promise.resolve([]), end: () => {} }) }
   };
   const mounted = mountFileSaving(ports);
   const savePorts = mounted.savePorts(ownership);

@@ -1,6 +1,7 @@
 import type { FileSaveCheck } from "../files/local-file-access.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
+import type { BundledPathLink } from "../../core/document/gallery.ts";
 import type { Clock, IdSource } from "../../core/document/ports.ts";
 import type { NoticePort } from "../effects/ports.ts";
 import type { FileDelivery } from "../files/file-delivery.ts";
@@ -84,7 +85,7 @@ export interface FileSavingPorts {
 
 export interface BundleSaveWindow {
   readonly drained: Promise<boolean> | null;
-  readonly ask: (handle: FileSaveHandle, body: string) => Promise<boolean>;
+  readonly ask: (handle: FileSaveHandle, body: string) => Promise<readonly BundledPathLink[] | null>;
   readonly end: () => void;
 }
 

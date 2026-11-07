@@ -7,7 +7,7 @@ import { createViewLifetime } from "../common/view-lifetime.ts";
 import type { BundleSaveChoice, DesktopBundleCarry, DesktopBundleCopy, DesktopBundleSavePlan } from "../../application/media/desktop-video.ts";
 import type { BundleSaveWindow } from "../../application/save/file-saving-ports.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
-import type { VideoLink } from "../../core/document/gallery.ts";
+import type { BundledPathLink, VideoLink } from "../../core/document/gallery.ts";
 import type { StepRow, Step } from "../../core/text/steps.ts";
 import type { DroppedVideo, VideoBundleMount, VideoBundlePorts } from "./ports.ts";
 
@@ -35,6 +35,13 @@ interface Copy {
   readonly video: DroppedVideo;
   readonly from: VideoLink;
   cancelled: boolean;
+}
+
+interface SaveAsk {
+  readonly handle: unknown;
+  readonly resolve: (links: readonly BundledPathLink[] | null) => void;
+  readonly reject: (error: unknown) => void;
+  readonly focused: Element | null;
 }
 
 function quoted(name: string): string { return "“" + name + "”"; }
@@ -93,7 +100,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   let jobs = 0;
   let saving = 0;
   let tucked = false;
-  let saveAsk: { readonly handle: unknown; readonly resolve: (go: boolean) => void } | null = null;
+  let saveAsk: SaveAsk | null = null;
 
   function waitingOn(): Copy[] { return pending.filter(function (c) { return !c.cancelled; }); }
 
@@ -137,12 +144,13 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     box.hidden = tucked;
   }
 
-  function tuck(hide: boolean): void {
+  function tuck(hide: boolean, moveFocus = false): void {
     const box = el("bundle-progress"), chip = el("bundle-indicator");
     if (!box || (box.hidden && !tucked)) return;
     tucked = hide;
     box.hidden = hide;
     if (chip) chip.hidden = !hide;
+    if (moveFocus) focusOn(hide ? chip : el("bundle-hide"));
   }
 
   function copyText(c: Copy): string { return quoted(c.video.name) + " to " + quoted(c.offer.folder); }
@@ -257,21 +265,33 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   function saveModal(): HTMLElement | null { return el("bundle-save-modal"); }
 
-  function closeSaveAsk(go: boolean): void {
+  function focusOn(node: Element | null): void {
+    if (node && typeof (node as HTMLElement).focus === "function" && node.isConnected) {
+      try { (node as HTMLElement).focus({ preventScroll: true }); } catch (e) { }
+    }
+  }
+
+  function takeSaveAsk(): SaveAsk | null {
+    const was = saveAsk;
+    if (!was) return null;
+    saveAsk = null;
     const m = saveModal();
     if (m) m.hidden = true;
-    const was = saveAsk;
-    saveAsk = null;
-    if (was) was.resolve(go);
+    focusOn(was.focused);
+    return was;
+  }
+
+  function closeSaveAsk(): void {
+    const was = takeSaveAsk();
+    if (was) was.resolve(null);
   }
 
   function chose(choice: BundleSaveChoice): void {
-    const was = saveAsk;
+    const was = takeSaveAsk();
     if (!was) return;
-    const m = saveModal();
-    if (m) m.hidden = true;
-    saveAsk = null;
-    ports.saves.choose(was.handle, choice).then(function (ok) { was.resolve(ok || choice === "copy"); }, function () { was.resolve(choice === "copy"); });
+    ports.saves.choose(was.handle, choice).then(function (links) {
+      was.resolve(links ? links : choice === "copy" ? [] : null);
+    }, was.reject);
   }
 
   function showSaveAsk(plan: DesktopBundleSavePlan): void {
@@ -295,22 +315,22 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     if (copy) { try { copy.focus({ preventScroll: true }); } catch (e) { } }
   }
 
-  function ask(handle: unknown, body: string): Promise<boolean> {
-    if (!life.active()) return Promise.resolve(true);
+  function ask(handle: unknown, body: string): Promise<readonly BundledPathLink[] | null> {
+    if (!life.active()) return Promise.resolve([]);
     const names = bundledNamesInProject(body);
-    if (!names.length) return Promise.resolve(true);
+    if (!names.length) return Promise.resolve([]);
     return ports.saves.plan(handle, names).then(function (plan) {
-      if (!plan || !life.active()) return true;
-      closeSaveAsk(false);
-      return new Promise<boolean>(function (resolve) {
-        saveAsk = { handle, resolve };
+      if (!plan || !life.active()) return [];
+      closeSaveAsk();
+      return new Promise<readonly BundledPathLink[] | null>(function (resolve, reject) {
+        saveAsk = { handle, resolve, reject, focused: page.activeElement };
         showSaveAsk(plan);
       });
     });
   }
 
   function beginSave(): BundleSaveWindow {
-    if (!life.active()) return { drained: null, ask: function () { return Promise.resolve(true); }, end: function () { } };
+    if (!life.active()) return { drained: null, ask: function () { return Promise.resolve([]); }, end: function () { } };
     saving++;
     answer(false);
     let open = true;
@@ -325,15 +345,15 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   life.listen(el("bundle-accept"), "click", function () { answer(true); });
   life.listen(el("bundle-decline"), "click", function () { answer(false); });
   life.listen(el("bundle-cancel"), "click", cancel);
-  life.listen(el("bundle-hide"), "click", function () { tuck(true); });
-  life.listen(el("bundle-indicator"), "click", function () { tuck(false); });
+  life.listen(el("bundle-hide"), "click", function () { tuck(true, true); });
+  life.listen(el("bundle-indicator"), "click", function () { tuck(false, true); });
   life.listen(el("bundle-save-copy"), "click", function () { chose("copy"); });
   life.listen(el("bundle-save-link"), "click", function () { chose("link"); });
-  life.listen(el("bundle-save-cancel"), "click", function () { closeSaveAsk(false); });
+  life.listen(el("bundle-save-cancel"), "click", function () { closeSaveAsk(); });
   life.listen(win, "keydown", function (e) {
     if (e.key !== "Escape") return;
     const m = modal(), s = saveModal();
-    if (s && !s.hidden) { e.preventDefault(); closeSaveAsk(false); return; }
+    if (s && !s.hidden) { e.preventDefault(); closeSaveAsk(); return; }
     if (m && !m.hidden) { e.preventDefault(); answer(false); }
   });
 
@@ -346,7 +366,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
       pending.length = 0;
       carrying = null;
       drained();
-      closeSaveAsk(false);
+      closeSaveAsk();
       asking = [];
       const m = modal();
       if (m) m.hidden = true;

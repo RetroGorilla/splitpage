@@ -19,15 +19,20 @@ export interface DesktopFileHandle {
   readonly isSameEntry: (other: unknown) => boolean;
 }
 
-function bundleRefusalReason(refused: { readonly reason: string; readonly folder: string; readonly name: string }): string {
+function bundleRefusalReason(refused: { readonly reason: string; readonly folder: string; readonly name: string; readonly count?: number }): string {
   const folder = "“" + refused.folder + "”";
+  if (refused.reason === "missing") {
+    const n = typeof refused.count === "number" && refused.count > 1 ? refused.count : 1;
+    return (n === 1 ? "1 linked file is" : n + " linked files are") + " missing from " + folder + ". Restore " + (n === 1 ? "it" : "them") +
+      ", or remove " + (n === 1 ? "its link" : "their links") + ", then save again";
+  }
   if (refused.reason === "unlinkable") return "“" + refused.name + "” in " + folder + " is on a network share, so the new script cannot link to it there. Save again and copy the files";
   if (refused.reason === "clash") return folder + " already has a different “" + refused.name + "”. Rename or move that file, then save again";
   if (refused.reason === "cancelled") return "copying the files to " + folder + " was stopped, so the script was not saved there";
   return "“" + refused.name + "” could not be copied to " + folder + ", so the script was not saved there";
 }
 
-export function bundleRefusalText(refused: { readonly reason: string; readonly folder: string; readonly name: string; readonly copied: number }): string {
+export function bundleRefusalText(refused: { readonly reason: string; readonly folder: string; readonly name: string; readonly copied: number; readonly count?: number }): string {
   const reason = bundleRefusalReason(refused);
   const copied = refused.copied;
   if (!(copied > 0)) return reason;

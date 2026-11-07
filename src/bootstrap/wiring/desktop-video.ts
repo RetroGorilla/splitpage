@@ -64,9 +64,10 @@ export const desktopVideo: DesktopVideo = {
   chooseSave: async (handle, choice) => {
     const port = desktopPort();
     const id = desktopIdOf(handle);
-    if (!port || typeof port.chooseBundleSave !== "function" || !id) return false;
+    if (!port || typeof port.chooseBundleSave !== "function" || !id) return null;
     const answer = await port.chooseBundleSave(id, choice);
-    return !!answer && answer.ok;
+    if (answer && !answer.ok && "refused" in answer) throw new Error(bundleRefusalText(answer.refused));
+    return answer && answer.ok && Array.isArray(answer.links) ? answer.links : null;
   },
   thumbnail: (host, ref) => {
     const port = desktopPort();
