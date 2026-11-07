@@ -236,6 +236,8 @@ check("shards cannot hide partial coverage behind --only", Boolean(parseArgs(["-
   const group = { name: "scripts", runner: "script" };
   const sample = [{ group, files: ["a", "b", "c", "d"] }];
   eq("largest weights go to the lightest shard; missing weights use a default and stale entries are ignored", assignShards(sample, 2, { a: 8000, b: 7000, c: 3000, stale: 999999 }), [["a", "d"], ["b", "c"]]);
+  const grouped = [{ group: { name: "parallel", runner: "node-test" }, files: ["a", "c"] }, { group, files: ["b", "d"] }];
+  eq("parallel files share a group load and scripts add sequential time", assignShards(grouped, 2, { a: 10000, b: 9000, c: 8000, d: 7000 }), [["a", "d"], ["b", "c"]]);
 
   const repo = repoWith({
     "src/test/a.test.mjs": passingFrontend,

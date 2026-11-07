@@ -63,6 +63,23 @@ narrows to the test files a change touched; `--only` is a local tool. CI
 distributes the full discovered test set across three required shards, while
 lint, types and the other checks run in a separate job.
 
+The shard allocator sorts discovered files by the measured milliseconds in
+`tools/test-weights.json`, heaviest first, and puts each on the currently
+lightest shard. Ties use file path and shard number. Missing files use a one
+second estimate; stale table entries are ignored. It estimates each `node --test`
+group separately as the larger of its longest file and half its total weight,
+as a heuristic for concurrent files. Desktop and tool
+scripts contribute their full duration because they run sequentially. Groups
+still execute in their normal order, with each group's selected files together.
+
+To refresh weights, run CI on a GitHub-hosted runner with all shards enabled,
+then run `gh run view <run-id> --log | node tools/update-test-weights.mjs > tools/test-weights.json`
+in a shell with UTF-8 output. The reporter records each Node test file's elapsed
+time and the runner records each script's elapsed time. The generator refuses
+an incomplete run, averages repeated samples, and discards stale entries.
+Review the generated table and benchmark the resulting shard balance before
+committing it; timings vary with runner load.
+
 | Change | Run while working |
 | --- | --- |
 | A pure rule in one feature or core policy | Its unit tests (`npm test -- --only <folder>`), `npm run typecheck`, `npm run lint`, `npm run check:deps`, `npm run check:comments` |

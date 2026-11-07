@@ -3,10 +3,14 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse } from "yaml";
-import { REPO } from "./source-scan.mjs";
+import { REPO, listRepoFiles } from "./source-scan.mjs";
+import { assignShards, discover } from "./run-tests.mjs";
 
 const workflow = parse(readFileSync(join(REPO, ".github/workflows/ci.yml"), "utf8"));
 const { changes, checks, tests, gate } = workflow.jobs;
+const found = discover(listRepoFiles(REPO)).groups;
+const discovered = found.flatMap((entry) => entry.files).sort();
+for (const count of [3, 4]) assert.deepEqual(assignShards(found, count).flat().sort(), discovered);
 const smoke = workflow.jobs["desktop-smoke"];
 assert.equal(smoke.needs, "changes");
 assert.equal(smoke["runs-on"], "ubuntu-latest");
