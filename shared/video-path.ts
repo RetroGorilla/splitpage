@@ -18,7 +18,8 @@ const BLOCKED_FILE_TYPES: readonly string[] = Object.freeze([
   "action", "appimage", "bash", "bin", "command", "deb", "desktop", "dmg", "fileloc", "inetloc", "mpkg", "pkg", "rpm", "run", "sh",
   "terminal", "tool", "webloc", "workflow", "zsh",
   "a3x", "ahk", "air", "applescript", "au3", "btm", "cjs", "fish", "kix", "lua", "mht", "mhtml", "mjs", "phar", "php", "rdp", "rex", "rexx",
-  "scpt", "scptd", "tcl", "tcsh", "vsix"
+  "scpt", "scptd", "tcl", "tcsh", "vsix",
+  "docm", "dotm", "xlsm", "xltm", "xlam", "xlsb", "pptm", "potm", "ppam", "ppsm", "sldm", "wll"
 ]);
 
 const ATTACHABLE_FILE = new RegExp("^(?![\\s\\S]*\\.(?:" + BLOCKED_FILE_TYPES.join("|") + ")[. ]*$)[\\s\\S]*\\.[^.\\\\/:]*[^.\\\\/:\\s]$", "i");

@@ -220,10 +220,11 @@ test("a PDF copied beside the script survives Save As, and a second Save As carr
 
 const INTERPRETED = [
   "ahk", "au3", "a3x", "pyw", "pyz", "pyc", "pyo", "rb", "rbw", "pl", "php", "tcl", "lua", "bash", "zsh", "fish", "command",
-  "applescript", "scpt", "ws", "wsc", "sct", "xll", "mht", "mhtml", "btm", "air", "PHP", "Ahk", "BTM"
+  "applescript", "scpt", "ws", "wsc", "sct", "xll", "mht", "mhtml", "btm", "air", "PHP", "Ahk", "BTM",
+  "docm", "dotm", "xlsm", "xltm", "xlam", "xlsb", "pptm", "potm", "ppam", "ppsm", "sldm", "wll", "DOCM", "Xlsm"
 ];
 
-test("scripts an installed interpreter runs are never granted, opened, copied or carried", async () => {
+test("scripts an installed interpreter runs and macro-enabled Office files are never granted, opened, copied or carried", async () => {
   const s = scratch();
   try {
     fs.mkdirSync(s.folder);
