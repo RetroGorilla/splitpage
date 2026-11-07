@@ -247,7 +247,7 @@ test("a Save As refused after files were copied says how many are already in the
     const before = await openFromDesktop(fake, doc, "Episode 12.splitpage");
     const expected = [
       "Could not save — “b.mp4” could not be copied to “" + F + "”, so the script was not saved there. 1 file was already copied to “" + F + "” and is still there.",
-      "Could not save — copying the videos to “" + F + "” was stopped, so the script was not saved there. 2 files were already copied to “" + F + "” and are still there.",
+      "Could not save — copying the files to “" + F + "” was stopped, so the script was not saved there. 2 files were already copied to “" + F + "” and are still there.",
       "Could not save — “" + F + "” already has a different “take.mp4”. Rename or move that file, then save again. 1 file was already copied to “" + F + "” and is still there.",
       "Could not save — “a.mp4” could not be copied to “" + F + "”, so the script was not saved there."
     ];
