@@ -4,6 +4,7 @@ import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { applyParagraphFlags, paragraphCells, paragraphFlagsAfterOrder } from "./paragraphs.ts";
+import type { DocumentScene } from "../../core/document/scenes.ts";
 
 export const BEAT_PASTE_FIELDS: readonly string[] = Object.freeze(["comments", "people", "productionTags", "brollShots"]);
 
@@ -13,6 +14,7 @@ export interface BeatPastePlan {
   readonly title: boolean;
   readonly saveNow: boolean;
   readonly afterRowId?: string | null | undefined;
+  readonly sections?: readonly DocumentScene[] | undefined;
 }
 
 export interface BeatPaste {
@@ -48,19 +50,24 @@ export function pasteBeatsCommand(paste: BeatPaste): Command {
           cells: paragraphCells(flags),
           rowsInserted: planned.inserted,
           rowsRemoved: replaced,
-          docFields: BEAT_PASTE_FIELDS.concat(planned.title ? ["title"] : [], scenes ? ["sections"] : []),
+          docFields: BEAT_PASTE_FIELDS.concat(planned.title ? ["title"] : [], scenes || planned.sections?.length ? ["sections"] : []),
           derive: CELL_TEXT_DERIVES,
           saveNow: planned.saveNow
         }),
         apply: function (live) {
           paste.apply(live);
-          if (scenes) writeScenes(live, nextScenes);
+          const combined = [...(nextScenes ?? []), ...(planned.sections ?? [])];
+          if (scenes || planned.sections?.length) {
+            const positions = new Map(live.rows.map((row, index) => [row.id, index]));
+            combined.sort((a, b) => (positions.get(a.firstSceneId) ?? 0) - (positions.get(b.firstSceneId) ?? 0));
+            writeScenes(live, combined);
+          }
           planned.inserted.forEach(function (id) {
             if (!live.rows.some(function (r) { return r.id === id; })) throw new Error("pasted scene " + id + " is not in the document");
           });
           const first = planned.inserted[0] as string;
           applyParagraphFlags(live.rows, [{ rowId: first, start: boundary &&
-            live.rows[0]?.id !== first && !nextScenes?.some(scene => sceneFirstBeatId(scene) === first) }, ...flags]);
+            live.rows[0]?.id !== first && !combined.some(scene => sceneFirstBeatId(scene) === first) }, ...flags]);
         }
       };
     }

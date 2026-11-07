@@ -1,0 +1,39 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;window.U=window.__undoTest;window.bp=function(id,n){return {kind:'beat',rowId:id,offset:n}};window.clip=function(type,data,target){var e=new ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:data});target.dispatchEvent(e);return e.defaultPrevented};F.openFile(new File([JSON.stringify({schema:2,title:'Writer to Split',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha'},{id:'b',audioText:'<span class="cmt-anchor" data-cmt="c1">Bravo</span>',visualText:'Visual',status:'shot',imageRef:{sha256:'a'.repeat(64),mime:'image/png',width:10,height:20}},{id:'c',audioText:'Charlie'}],comments:[{id:'c1',anchorId:'c1',rowId:'b',field:'audioText',body:'Note',author:'Tester'}]})],'source.splitpage'))
+wait F.state().title === 'Writer to Split'
+click #btn-write
+wait W.on()
+eval W.place({anchor:bp('a',2),head:bp('c',3)});window.data=new DataTransfer();clip('copy',data,document.getElementById('writer-doc'))
+click #wr-close
+wait !W.on()
+eval window.cell=document.querySelector('.cell-editable[data-id="c"][data-field="audioText"]');cell.focus();U.flush();window.depth=U.sizes().undo;clip('paste',data,cell)
+expect F.state().rows.length === 6 && F.state().rows[4].visualText === 'Visual' && F.state().rows[4].status === 'shot' && F.state().rows[4].imageRef.sha256 === 'a'.repeat(64)
+expect F.state().comments.length === 2 && F.state().comments.some(function(c){return c.rowId===F.state().rows[4].id && c.body==='Note' && c.id!=='c1'})
+eval U.flush()
+expect U.sizes().undo === depth+1
+key ctrl KeyZ
+expect F.state().rows.length === 3 && F.state().comments.length === 1
+key ctrl+shift KeyZ
+expect F.state().rows.length === 6 && F.state().comments.length === 2 && F.state().comments.some(function(c){return c.rowId===F.state().rows[4].id && c.body==='Note'})
+eval document.activeElement.blur();window.T=window.__sceneSelectTest;T.select('c');window.htmlOnly=new DataTransfer();htmlOnly.setData('text/html',data.getData('text/html'));htmlOnly.setData('text/plain',data.getData('text/plain'));clip('paste',htmlOnly,document)
+expect F.state().rows.length === 9 && F.state().rows.filter(function(r){return r.visualText==='Visual'}).length === 3
+expect F.state().comments.length === 3 && F.state().comments.filter(function(c){return c.body==='Note'}).length === 3
+
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Writer headers to Split',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha'},{id:'b',audioText:'Bravo',visualText:'Header visual',status:'shot'},{id:'c',audioText:'Target'}],sections:[{id:'scene',name:'Copied scene',firstSceneId:'b'}]})],'headers.splitpage'))
+wait F.state().title === 'Writer headers to Split'
+click #btn-write
+wait W.on()
+eval W.place({anchor:{kind:'heading',sceneId:'scene',offset:0},head:bp('c',0)});window.headerData=new DataTransfer();clip('copy',headerData,document.getElementById('writer-doc'))
+click #wr-close
+wait !W.on()
+eval window.headerBefore=JSON.stringify(F.state());window.cell=document.querySelector('#rows .cell-editable[data-id="c"][data-field="audioText"]');cell.focus();clip('paste',headerData,cell);U.flush()
+expect F.state().rows.length === 4 && F.state().rows[3].visualText === 'Header visual' && F.state().rows[3].status === 'shot'
+expect F.state().sections.length === 2 && F.state().sections[1].name === 'Copied scene' && F.state().sections[1].firstSceneId === F.state().rows[3].id
+key ctrl KeyZ
+expect JSON.stringify(F.state()) === headerBefore
+key ctrl+shift KeyZ
+expect F.state().sections.length === 2 && F.state().sections[1].firstSceneId === F.state().rows[3].id
+eval document.activeElement.blur();T.select('c');window.headerHtml=new DataTransfer();headerHtml.setData('text/html',headerData.getData('text/html'));headerHtml.setData('text/plain',headerData.getData('text/plain'));clip('paste',headerHtml,document);U.flush()
+expect F.state().rows.length === 5 && F.state().sections.length === 3 && new Set(F.state().sections.map(function(s){return s.id})).size === 3
+expect F.state().sections[1].firstSceneId === F.state().rows[3].id && F.state().sections[2].firstSceneId === F.state().rows[4].id
