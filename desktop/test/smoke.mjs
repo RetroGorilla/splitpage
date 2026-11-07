@@ -3927,7 +3927,7 @@ async function caseGalleryVideoFile(target) {
     const opened = await evalPage(cdp, "window.splitpageDesktop.openVideoFile(" + JSON.stringify(token) + ")");
     record(tag + ": its token opens it", !!opened && opened.ok === true, JSON.stringify(opened));
     let opens = await shell(cdp, "videoFileOpens", {});
-    record(tag + ": main opened exactly that path", JSON.stringify(opens) === JSON.stringify([clip]), JSON.stringify(opens));
+    record(tag + ": main opened that file's real path", JSON.stringify(opens) === JSON.stringify([fs.realpathSync.native(clip)]), JSON.stringify(opens));
 
     await evalPage(cdp, "(function(){ var dt = new DataTransfer(); dt.items.add(document.getElementById('__vf').files[0]); " +
       "var media = document.querySelectorAll('#rows .visual-media'); media[media.length - 1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()", { awaitPromise: false });
@@ -3942,7 +3942,7 @@ async function caseGalleryVideoFile(target) {
       const list = await shell(cdp, "videoFileOpens", {});
       return list && list.length >= 2 ? list : null;
     }, 10000).catch(() => null);
-    record(tag + ": its caption link opens it through main", !!opens && opens[1] === clip, JSON.stringify(opens));
+    record(tag + ": its caption link opens it through main", !!opens && opens[1] === fs.realpathSync.native(clip), JSON.stringify(opens));
 
     const pathOf = await evalPage(cdp, "window.splitpageDesktop.videoFilePath(document.getElementById('__vf').files[0])");
     record(tag + ": the bridge reads a dropped file's path (#259)", pathOf === clip, JSON.stringify(pathOf));
@@ -4015,8 +4015,9 @@ async function caseGalleryVideoBundle(target) {
     await waitForRows(app.cdp, 20000);
     let cdp = app.cdp;
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Bundle Smoke'", 20000).catch(() => false);
-    const bridgeHas = await evalPage(cdp, "['bundleVideoFile','carryBundle','cancelBundle','openBundledFile'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; })");
-    record(tag + ": the bridge exposes bundleVideoFile, carryBundle, cancelBundle and openBundledFile", bridgeHas === true, String(bridgeHas));
+    const bridgeHas = await evalPage(cdp, "['bundleVideoFile','onBundleCarry','cancelBundle','openBundledFile'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; }) && " +
+      "!('carryBundle' in window.splitpageDesktop)");
+    record(tag + ": the bridge exposes bundleVideoFile, onBundleCarry, cancelBundle and openBundledFile, and no way to ask for a carry", bridgeHas === true, String(bridgeHas));
 
     await drop(cdp, "__b1", clip);
     const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
@@ -4066,8 +4067,6 @@ async function caseGalleryVideoBundle(target) {
     }
     const forged = await evalPage(cdp, "window.splitpageDesktop.bundleVideoFile(" + JSON.stringify("0".repeat(32)) + ", 'bundle1')");
     record(tag + ": a token main never gave copies nothing", !!forged && forged.ok === false && forged.code === "UNKNOWN", JSON.stringify(forged));
-    const carryForged = await evalPage(cdp, "window.splitpageDesktop.carryBundle('not-a-save', ['take one.mp4'], 'bundle1')");
-    record(tag + ": a carry to a file no save dialog chose copies nothing", !!carryForged && carryForged.ok === false && carryForged.code === "UNKNOWN", JSON.stringify(carryForged));
     opens = await shell(cdp, "videoFileOpens", {});
     record(tag + ": main opened nothing for the refused names", !!opens && opens.length === 1, JSON.stringify(opens));
 

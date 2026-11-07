@@ -82,6 +82,10 @@ if (location.origin === "splitpage://app") {
     if (typeof onProgress === "function") bundleProgress.set(job, onProgress);
     return run().finally(() => { bundleProgress.delete(job); });
   }
+  let bundleCarryCallback: Parameters<DesktopPort["onBundleCarry"]>[0] | null = null;
+  receive("splitpage:bundle-carry", (_event, payload) => {
+    if (bundleCarryCallback && payload) bundleCarryCallback(payload);
+  });
   receive("splitpage:reassign-doc-id", (_event, payload) => {
     if (reassignDocIdCallback) reassignDocIdCallback(payload);
   });
@@ -295,10 +299,8 @@ if (location.origin === "splitpage://app") {
       return bundleJob(id, onProgress, () => invoke("splitpage:bundle-file", String(token || ""), id));
     },
 
-    carryBundle(toFileId, names, job, onProgress) {
-      const id = String(job || "");
-      const list = Array.isArray(names) ? names.map((n) => String(n)) : [];
-      return bundleJob(id, onProgress, () => invoke("splitpage:bundle-carry", String(toFileId || ""), list, id));
+    onBundleCarry(cb) {
+      bundleCarryCallback = typeof cb === "function" ? cb : null;
     },
 
     cancelBundle(job) {

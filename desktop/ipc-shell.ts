@@ -9,43 +9,25 @@ import type * as NodeFsPromises from "node:fs/promises";
 import type * as NodePath from "node:path";
 
 import type { DesktopIpcEvent, DesktopShellIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
-import type { BundleProgress } from "./bundle-copy.ts";
 
 const path: typeof NodePath = require("node:path");
 const fsp: typeof NodeFsPromises = require("node:fs/promises");
 const crypto: typeof NodeCrypto = require("node:crypto");
 
 const BUNDLE_JOB_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const BUNDLE_NAMES_MAX = 1000;
+const PATH_STYLE = process.platform === "win32" ? "win32" : "posix";
+const hasControlCharacter = (s: string) => [...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 
 function createShellIpc({
   tabOf, launchIntentFor, draftStore, draftsIsHeld, hadPriorSession, shell, nativeTheme, themeChoice,
-  videoFileGrants, VIDEO_FILE_EXT, openableVideoPath, resolveBundledFile, bundleCopier, takeSaveTarget,
+  videoFileGrants, VIDEO_FILE_EXT, openableVideoPath, resolveBundledFile, bundleJobs,
   testVideoOpens, testMode: TEST_MODE, videoThumbnail,
   updateStatus, skipUpdateCheck: SKIP_UPDATE_CHECK, setUpdateStatus, checkForUpdate, downloadUpdate,
   runUpdateInstaller, openPrompterInBrowser, voiceHelperInstance
 }: DesktopShellIpcDependencies) {
-  const bundleJobs = new Map<string, AbortController>();
-
   function scriptOf(event: DesktopIpcEvent): string | null {
     const tab = tabOf(event);
     return tab && tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null;
-  }
-
-  function bundleJobKey(event: DesktopIpcEvent, job: string): string {
-    return String(event.sender && event.sender.id) + ":" + job;
-  }
-
-  async function runBundleJob<T>(event: DesktopIpcEvent, job: string, work: (progress: BundleProgress, signal: AbortSignal) => Promise<T>): Promise<T> {
-    const key = bundleJobKey(event, job);
-    const ctl = new AbortController();
-    const earlier = bundleJobs.get(key);
-    if (earlier) earlier.abort();
-    bundleJobs.set(key, ctl);
-    const progress: BundleProgress = (done, total) => {
-      try { if (!event.sender.isDestroyed()) event.sender.send("splitpage:bundle-progress", { job, done, total }); } catch { }
-    };
-    try { return await work(progress, ctl.signal); } finally { if (bundleJobs.get(key) === ctl) bundleJobs.delete(key); }
   }
 
   async function openFound(found: { ok: true; path: string } | { ok: false; code: string }) {
@@ -104,38 +86,31 @@ function createShellIpc({
     ipcHandle("splitpage:video-file-open", async (event, token) => {
       const filePath = videoFileGrants.get(token);
       if (!filePath) return { ok: false, code: "UNKNOWN" };
+      let real: string;
+      try { real = await fsp.realpath(filePath); } catch { return { ok: false, code: "GONE" }; }
+      if (hasControlCharacter(real) || !VIDEO_FILE_EXT.test(real)) return { ok: false, code: "REFUSED" };
       try {
-        if (!(await fsp.stat(filePath)).isFile()) return { ok: false, code: "GONE" };
+        if (!(await fsp.stat(real)).isFile()) return { ok: false, code: "REFUSED" };
       } catch { return { ok: false, code: "GONE" }; }
-      if (TEST_MODE) { testVideoOpens.push(filePath); return { ok: true }; }
-      const failed = await shell.openPath(filePath);
-      return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
+      return openFound({ ok: true, path: real });
     });
 
     ipcHandle("splitpage:video-path-open", async (event, storedPath) => {
-      return openFound(await openableVideoPath(storedPath, process.platform === "win32" ? "win32" : "posix", fsp));
+      return openFound(await openableVideoPath(storedPath, PATH_STYLE, fsp));
     });
 
     ipcHandle("splitpage:bundle-file", async (event, token, job) => {
+      const tab = tabOf(event);
       const script = scriptOf(event);
-      if (!script) return { ok: false, code: "NO_FOLDER" };
+      if (!tab || !script) return { ok: false, code: "NO_FOLDER" };
       const source = videoFileGrants.get(token);
       if (!source) return { ok: false, code: "UNKNOWN" };
-      if (!BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
-      return runBundleJob(event, job, (progress, signal) => bundleCopier.copyIn(source, script, VIDEO_FILE_EXT, progress, signal));
-    });
-
-    ipcHandle("splitpage:bundle-carry", async (event, toFileId, names, job) => {
-      const tab = tabOf(event);
-      const target = tab ? takeSaveTarget(toFileId, tab.id) : null;
-      if (!target) return { ok: false, code: "UNKNOWN" };
-      if (!BUNDLE_JOB_RE.test(job) || names.length > BUNDLE_NAMES_MAX || names.some((n) => typeof n !== "string")) return { ok: false, code: "REFUSED" };
-      return runBundleJob(event, job, (progress, signal) => bundleCopier.carry(target.from, target.to, names, VIDEO_FILE_EXT, progress, signal));
+      if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
+      return bundleJobs.copy(event.sender, tab.id, job, source, script);
     });
 
     ipcOn("splitpage:bundle-cancel", (event, job) => {
-      const ctl = bundleJobs.get(bundleJobKey(event, job));
-      if (ctl) ctl.abort();
+      if (typeof job === "string") bundleJobs.cancel(event.sender, job);
     });
 
     ipcHandle("splitpage:bundled-file-open", async (event, name) => {

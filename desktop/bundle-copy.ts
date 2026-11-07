@@ -92,18 +92,19 @@ function createBundleCopier(options: {
   async function copyIn(source: string, scriptPath: string, allow: RegExp, onProgress: BundleProgress, signal: AbortSignal): Promise<BundleCopyResult> {
     const base = path.basename(source);
     if (!bundleableName(base, allow)) return { ok: false, code: "REFUSED" };
+    let real: string;
     let total: number;
     try {
-      const st = await fsp.stat(source);
+      real = await fsp.realpath(source);
+      if (!bundleableName(path.basename(real), allow)) return { ok: false, code: "REFUSED" };
+      const st = await fsp.stat(real);
       if (!st.isFile()) return { ok: false, code: "REFUSED" };
       total = st.size;
     } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
     try { await fsp.mkdir(bundleFolderOf(scriptPath, path), { recursive: true }); } catch { return { ok: false, code: "FAILED" }; }
     const folder = await realBundleFolder(scriptPath, fsp, path);
     if (!folder.ok) return { ok: false, code: "REFUSED" };
-    try {
-      if (samePath(await fsp.realpath(path.dirname(source)), folder.path, foldCase)) return { ok: true, name: base };
-    } catch { return { ok: false, code: "FAILED" }; }
+    if (samePath(path.dirname(real), folder.path, foldCase)) return { ok: true, name: path.basename(real) };
     const progress = reporter(total, onProgress);
     for (let n = 1; n <= NUMBERED_TRIES; n++) {
       const name = numberedName(base, n);
@@ -111,12 +112,12 @@ function createBundleCopier(options: {
       const target = path.join(folder.path, name);
       const size = await sizeOfFile(target);
       if (size === total) {
-        const same = await sameBytes(source, target, signal);
+        const same = await sameBytes(real, target, signal);
         if (same === "cancelled") return { ok: false, code: "CANCELLED" };
         if (same) return { ok: true, name };
       }
       if (size !== null) continue;
-      const got = await writeCopy(source, target, signal, progress.add);
+      const got = await writeCopy(real, target, signal, progress.add);
       if (got === "taken") continue;
       if (got === "cancelled") return { ok: false, code: "CANCELLED" };
       if (got === "failed") return { ok: false, code: "FAILED" };
@@ -162,7 +163,25 @@ function createBundleCopier(options: {
     return { ok: true, copied, kept, failed };
   }
 
-  return { copyIn, carry };
+  async function copyOn(fromScript: string, name: string, toScript: string, allow: RegExp, onProgress: BundleProgress, signal: AbortSignal): Promise<BundleCopyResult> {
+    const found = await resolveBundledFile(fromScript, name, allow, fsp, path, foldCase);
+    if (!found.ok) return found;
+    return copyIn(found.path, toScript, allow, onProgress, signal);
+  }
+
+  async function namesIn(script: string, allow: RegExp): Promise<string[]> {
+    const folder = await realBundleFolder(script, fsp, path);
+    if (!folder.ok) return [];
+    let entries: string[];
+    try { entries = await fsp.readdir(folder.path); } catch { return []; }
+    return entries.filter((name) => bundleableName(name, allow)).sort();
+  }
+
+  function folderName(script: string): string {
+    return path.basename(bundleFolderOf(script, path));
+  }
+
+  return { copyIn, copyOn, carry, folderName, namesIn };
 }
 
 export type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier };

@@ -21,6 +21,7 @@ files:
   - ipc-test-mode.ts
   - ipc-print.ts
   - bundle-copy.ts
+  - bundle-jobs.ts
   - print-pdf.ts
   - prompter-share.ts
   - close-quit.ts

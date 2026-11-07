@@ -104,6 +104,27 @@ test("a file that is not on the allowlist, gone, or a directory is refused befor
   } finally { s.done(); }
 });
 
+test("a video name that is a link to a file off the allowlist is refused, and one to a video copies the real file", async () => {
+  const s = scratch();
+  try {
+    const tool = path.join(s.drops, "tool.exe");
+    fs.writeFileSync(tool, "MZ");
+    const alias = path.join(s.drops, "alias.mp4");
+    if (!tryLink(tool, alias, "file")) {
+      console.log("  (file symlinks need a privilege this account lacks; the link case runs where they don't)");
+      return;
+    }
+    assert.deepEqual(await copier.copyIn(alias, s.script, VIDEO_FILE_EXT, () => {}, live()), { ok: false, code: "REFUSED" });
+    assert.equal(fs.existsSync(s.folder), false, "nothing was written");
+    const toVideo = path.join(s.drops, "shortcut.mp4");
+    assert.ok(tryLink(s.clip, toVideo, "file"));
+    assert.deepEqual(await copier.copyIn(toVideo, s.script, VIDEO_FILE_EXT, () => {}, live()), { ok: true, name: "shortcut.mp4" });
+    const copied = path.join(s.folder, "shortcut.mp4");
+    assert.equal(fs.lstatSync(copied).isSymbolicLink(), false, "the copy is the video's bytes, not another link");
+    assert.deepEqual(fs.readFileSync(copied), fs.readFileSync(s.clip));
+  } finally { s.done(); }
+});
+
 test("a bundle folder that is a link or junction is never written through", async () => {
   const s = scratch();
   try {

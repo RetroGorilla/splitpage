@@ -43,6 +43,11 @@ export interface DesktopWireBundleProgress {
 }
 export type DesktopWireBundleCopy = { ok: true; name: string } | DesktopWireFailure;
 export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; failed: number } | (DesktopWireFailure & { copied?: number });
+export interface DesktopWireBundleCarryNote extends DesktopWireBundleProgress {
+  from: string;
+  to: string;
+  result?: DesktopWireBundleCarry;
+}
 
 export type DesktopWireDraftWrite = { ok: true; seq: number; bytes: number; obsolete?: undefined } | DesktopWireFailure;
 export type DesktopWireDraftDiscard = { ok: true } | DesktopWireFailure;
@@ -235,7 +240,7 @@ type DesktopChannelCall<A extends readonly unknown[], R> = { args: A; result: R 
 export interface DesktopIpcContract {
   "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;
   "splitpage:open-file-dialog": DesktopChannelCall<[], DesktopWireFile | null>;
-  "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[] }], { id: string; name: string } | null>;
+  "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[]; script?: boolean }], { id: string; name: string } | null>;
   "splitpage:read-file": DesktopChannelCall<[string], DesktopWireFile>;
   "splitpage:write-file": DesktopChannelCall<[string, string | ArrayBuffer | Uint8Array], DesktopWireStamp>;
   "splitpage:stat-file": DesktopChannelCall<[string], { lastModified: number; size: number } | null>;
@@ -252,7 +257,7 @@ export interface DesktopIpcContract {
   "splitpage:video-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-path-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:bundle-file": DesktopChannelCall<[string, string], DesktopWireBundleCopy>;
-  "splitpage:bundle-carry": DesktopChannelCall<[string, readonly string[], string], DesktopWireBundleCarry>;
+  "splitpage:bundle-carry": DesktopChannelCall<[DesktopWireBundleCarryNote], void>;
   "splitpage:bundle-cancel": DesktopChannelCall<[string], void>;
   "splitpage:bundle-progress": DesktopChannelCall<[DesktopWireBundleProgress], void>;
   "splitpage:bundled-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;

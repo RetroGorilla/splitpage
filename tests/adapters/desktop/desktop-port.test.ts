@@ -142,7 +142,6 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   openVideoFile: { args: ["tok"], direction: "invoke", channel: "splitpage:video-file-open" },
   openVideoPath: { args: ["C:\\Videos\\a.mp4"], direction: "invoke", channel: "splitpage:video-path-open" },
   bundleVideoFile: { args: ["tok", "bundle1"], direction: "invoke", channel: "splitpage:bundle-file" },
-  carryBundle: { args: ["f1", ["a.mp4"], "bundle2"], direction: "invoke", channel: "splitpage:bundle-carry" },
   cancelBundle: { args: ["bundle1"], direction: "send", channel: "splitpage:bundle-cancel" },
   openBundledFile: { args: ["a (2).mp4"], direction: "invoke", channel: "splitpage:bundled-file-open" },
   videoThumbnail: { args: ["youtube", "abc"], direction: "invoke", channel: "splitpage:video-thumbnail" },
@@ -162,6 +161,11 @@ const LISTENERS: Partial<Record<DesktopMember, { readonly channel: string; reado
   onRestoreNotice: { channel: "splitpage:restore-notice", payload: [{ skipped: [] }], heard: { skipped: [] } },
   onReassignDocId: { channel: "splitpage:reassign-doc-id", payload: [{ toId: "d2" }], heard: { toId: "d2" } },
   onOpenFile: { channel: "splitpage:open-file", payload: [{ id: "f1", name: "a.splitpage" }], heard: { id: "f1", name: "a.splitpage" } },
+  onBundleCarry: {
+    channel: "splitpage:bundle-carry",
+    payload: [{ job: "carry1", from: "A files", to: "B files", done: 1, total: 2 }],
+    heard: { job: "carry1", from: "A files", to: "B files", done: 1, total: 2 }
+  },
   onMenuCommand: { channel: "splitpage:menu-command", payload: ["save"], heard: "save" },
   onUpdateStatus: { channel: "splitpage:update-status", payload: [{ checking: true }], heard: { checking: true } },
   onVoiceEvent: { channel: "splitpage:voice-event", payload: [{ type: "start" }], heard: { type: "start" } },

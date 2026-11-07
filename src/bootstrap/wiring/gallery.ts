@@ -90,7 +90,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
         window: window,
         script: scriptOnDisk,
         files: { bundle: videoFiles.bundle, cancelBundle: videoFiles.cancelBundle },
-        carry: desktopVideo.carry,
+        carries: desktopVideo.onCarry,
         notices: portNotices,
         ownership: portOwnership,
         undo: { fold: (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change) },
@@ -114,8 +114,8 @@ export function offerBundleAfterDrop(...args: Parameters<GalleryVideoMount["offe
   video.owner()?.offerAfterDrop(...args);
 }
 
-export function carryBundleAfterSaveAs(...args: Parameters<GalleryVideoMount["carryAfterSaveAs"]>): void {
-  video.owner()?.carryAfterSaveAs(...args);
+export function bundleHandoverForSave(): ReturnType<GalleryVideoMount["beginMove"]> {
+  return video.owner()?.beginMove() ?? null;
 }
 
 export const stopGalleryVideoFeature = video.stop;

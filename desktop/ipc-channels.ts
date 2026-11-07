@@ -63,7 +63,6 @@ const CHANNELS = [
   { name: "splitpage:video-file-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:video-path-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:bundle-file", direction: "invoke", argsSchema: ["string", "string"], allowedOrigins: APP },
-  { name: "splitpage:bundle-carry", direction: "invoke", argsSchema: ["string", "array", "string"], allowedOrigins: APP },
   { name: "splitpage:bundle-cancel", direction: "send", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:bundled-file-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:video-thumbnail", direction: "invoke", argsSchema: ["videoHost", "videoRef"], allowedOrigins: APP },
@@ -112,6 +111,7 @@ const CHANNELS = [
   { name: "splitpage:draft-flush", direction: "receive", argsSchema: ["number", "boolean?"], allowedOrigins: APP },
   { name: "splitpage:voice-event", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:bundle-progress", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
+  { name: "splitpage:bundle-carry", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
 
   { name: "splitpage:tabstrip-window-id-sync", direction: "sendSync", argsSchema: NONE, allowedOrigins: STRIP, refusal: null },
   { name: "splitpage:tabstrip-get-state", direction: "invoke", argsSchema: NONE, allowedOrigins: STRIP },

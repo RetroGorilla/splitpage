@@ -5,6 +5,7 @@ import { createViewLifetime } from "../common/view-lifetime.ts";
 
 import type { DesktopBundleCarry, DesktopBundleCopy } from "../../application/media/desktop-video.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
+import type { BundleHandover } from "../../application/save/file-saving-ports.ts";
 import type { VideoLink } from "../../core/document/gallery.ts";
 import type { StepRow, Step } from "../../core/text/steps.ts";
 import type { DroppedVideo, VideoBundleMount, VideoBundlePorts } from "./ports.ts";
@@ -23,13 +24,21 @@ interface Offer {
   readonly rowId: string;
   readonly videos: readonly DroppedVideo[];
   readonly entry: UndoEntry | null;
-  readonly ctx: ReturnType<VideoBundlePorts["ownership"]["capture"]>;
-  readonly folder: string;
+  ctx: ReturnType<VideoBundlePorts["ownership"]["capture"]>;
+  folder: string;
 }
 
-type Work =
-  | { readonly kind: "copy"; readonly offer: Offer; readonly video: DroppedVideo }
-  | { readonly kind: "carry"; readonly toFileId: string; readonly names: string[]; readonly from: string; readonly to: string };
+interface Copy {
+  readonly job: string;
+  readonly offer: Offer;
+  readonly video: DroppedVideo;
+  readonly from: VideoLink;
+}
+
+interface Move {
+  readonly offers: ReadonlySet<Offer>;
+  readonly held: (() => void)[];
+}
 
 function quoted(name: string): string { return "“" + name + "”"; }
 
@@ -52,8 +61,9 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   const life = createViewLifetime(win);
   const el = (id: string): HTMLElement | null => page.getElementById(id);
   let asking: Offer[] = [];
-  const queue: Work[] = [];
-  let current: { readonly job: string; readonly work: Work } | null = null;
+  const pending: Copy[] = [];
+  const moves = new Set<Move>();
+  let carrying: string | null = null;
   let jobs = 0;
 
   function modal(): HTMLElement | null { return el("bundle-modal"); }
@@ -80,34 +90,23 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     showPrompt();
   }
 
-  function answer(copy: boolean): void {
-    const m = modal();
-    if (!m || m.hidden) return;
-    m.hidden = true;
-    const offers = asking;
-    asking = [];
-    if (!copy) return;
-    offers.forEach(function (o) { o.videos.forEach(function (v) { queue.push({ kind: "copy", offer: o, video: v }); }); });
-    pump();
-  }
-
-  function progressText(work: Work, done: number, total: number): string {
-    const pct = total > 0 ? Math.min(100, Math.floor(done * 100 / total)) : 0;
-    const what = work.kind === "copy" ? quoted(work.video.name) + " to " + quoted(work.offer.folder) : videos(work.names.length) + " to " + quoted(work.to);
-    return "Copying " + what + " — " + pct + "%";
-  }
-
-  function showProgress(work: Work, done: number, total: number): void {
+  function showProgress(what: string, done: number, total: number): void {
     const box = el("bundle-progress");
     if (!box) return;
+    const pct = total > 0 ? Math.min(100, Math.floor(done * 100 / total)) : 0;
     const text = el("bundle-progress-text");
-    if (text) text.textContent = progressText(work, done, total);
+    if (text) text.textContent = "Copying " + what + " — " + pct + "%";
     const bar = el("bundle-progress-bar") as HTMLProgressElement | null;
     if (bar) { bar.max = total > 0 ? total : 1; bar.value = total > 0 ? Math.min(done, total) : 0; }
     box.hidden = false;
   }
 
-  function hideProgress(): void {
+  function copyText(c: Copy): string { return quoted(c.video.name) + " to " + quoted(c.offer.folder); }
+
+  function showNext(): void {
+    const next = pending[0];
+    if (next) { showProgress(copyText(next), 0, next.video.size); return; }
+    if (carrying) return;
     const box = el("bundle-progress");
     if (box) box.hidden = true;
   }
@@ -123,90 +122,111 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     ports.viewer.refresh();
   }
 
-  function copied(work: Extract<Work, { kind: "copy" }>, from: VideoLink, res: DesktopBundleCopy): void {
+  function movingWith(o: Offer): Move | null {
+    for (const m of moves) if (m.offers.has(o)) return m;
+    return null;
+  }
+
+  function copied(c: Copy, res: DesktopBundleCopy): void {
     if (res.ok) {
-      if (!ports.ownership.stillOwns(work.offer.ctx)) return;
-      relink(work.offer, from, res.name);
-      queue.forEach(function (w) { if (w.kind === "carry" && w.names.indexOf(res.name) === -1) w.names.push(res.name); });
-      ports.notices.show("Copied " + quoted(work.video.name) + " to " + quoted(work.offer.folder) + ".", "ok");
+      if (!ports.ownership.stillOwns(c.offer.ctx)) {
+        const m = movingWith(c.offer);
+        if (m) m.held.push(function () { copied(c, res); });
+        return;
+      }
+      relink(c.offer, c.from, res.name);
+      ports.notices.show("Copied " + quoted(c.video.name) + " to " + quoted(c.offer.folder) + ".", "ok");
       return;
     }
+    if (res.code === "DROPPED") return;
     if (res.code === "CANCELLED") {
-      ports.notices.show("Stopped copying " + quoted(work.video.name) + ". It links to where it is.", "warn");
+      ports.notices.show("Stopped copying " + quoted(c.video.name) + ". It links to where it is.", "warn");
       return;
     }
-    ports.notices.show("Could not copy " + quoted(work.video.name) + " to " + quoted(work.offer.folder) + ", so it links to where it is.", "error");
+    ports.notices.show("Could not copy " + quoted(c.video.name) + " to " + quoted(c.offer.folder) + ", so it links to where it is.", "error");
   }
 
-  function carried(work: Extract<Work, { kind: "carry" }>, res: DesktopBundleCarry | null): void {
-    if (res && res.ok && !res.failed) {
-      if (res.copied) ports.notices.show("Copied " + videos(res.copied) + " to " + quoted(work.to) + ".", "ok");
+  function carried(note: DesktopBundleCarry, res: NonNullable<DesktopBundleCarry["result"]>): void {
+    if (res.ok && !res.failed) {
+      if (res.copied) ports.notices.show("Copied " + videos(res.copied) + " to " + quoted(note.to) + ".", "ok");
       return;
     }
-    if (res && !res.ok && res.code === "CANCELLED") {
-      ports.notices.show("Stopped copying videos to " + quoted(work.to) + ". The ones not copied are still in " + quoted(work.from) + ".", "warn", true);
+    if (!res.ok && res.code === "CANCELLED") {
+      ports.notices.show("Stopped copying videos to " + quoted(note.to) + ". The ones not copied are still in " + quoted(note.from) + ".", "warn", true);
       return;
     }
-    const missing = res && res.ok ? res.failed : work.names.length;
-    ports.notices.show(videos(missing) + " could not be copied to " + quoted(work.to) + ", so " + (missing === 1 ? "it does" : "they do") +
-      " not open from this copy of the script. Look for " + (missing === 1 ? "it" : "them") + " in " + quoted(work.from) + ".", "error", true);
+    const missing = res.ok ? res.failed : Math.max(1, note.total - (res.copied || 0));
+    ports.notices.show(videos(missing) + " could not be copied to " + quoted(note.to) + ", so " + (missing === 1 ? "it does" : "they do") +
+      " not open from this copy of the script. Look for " + (missing === 1 ? "it" : "them") + " in " + quoted(note.from) + ".", "error", true);
   }
 
-  function pump(): void {
-    if (current || !life.active()) return;
-    const work = queue.shift();
-    if (!work) { hideProgress(); return; }
-    if (work.kind === "carry" && !work.names.length) { pump(); return; }
-    const job = "bundle" + (++jobs);
-    current = { job, work };
-    const progress = function (p: { done: number; total: number }): void {
-      if (current && current.job === job) showProgress(work, p.done, p.total);
-    };
-    function settle(): void {
-      current = null;
-      pump();
-    }
-    showProgress(work, 0, work.kind === "copy" ? work.video.size : 0);
-    if (work.kind === "copy") {
-      const from: VideoLink = { name: work.video.name, size: work.video.size, location: { kind: "path", path: work.video.path } };
-      ports.files.bundle(from, job, progress).then(function (res) {
-        if (!life.active()) return;
-        copied(work, from, res);
-        settle();
-      }, function () {
-        if (!life.active()) return;
-        copied(work, from, { ok: false, code: "FAILED" });
-        settle();
-      });
+  function onCarry(note: DesktopBundleCarry): void {
+    if (!life.active() || !note || typeof note.job !== "string") return;
+    if (note.result) {
+      if (carrying === note.job) carrying = null;
+      carried(note, note.result);
+      showNext();
       return;
     }
-    ports.carry(work.toFileId, work.names, job, progress).then(function (res) {
-      if (!life.active()) return;
-      carried(work, res);
-      settle();
-    }, function () {
-      if (!life.active()) return;
-      carried(work, null);
-      settle();
-    });
+    carrying = note.job;
+    showProgress("videos to " + quoted(note.to), note.done, note.total);
+  }
+
+  function settle(c: Copy, res: DesktopBundleCopy): void {
+    if (!life.active()) return;
+    const at = pending.indexOf(c);
+    if (at !== -1) pending.splice(at, 1);
+    copied(c, res);
+    showNext();
+  }
+
+  function submit(o: Offer, video: DroppedVideo): void {
+    const c: Copy = { job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } } };
+    pending.push(c);
+    ports.files.bundle(c.from, c.job, function (p) {
+      if (life.active() && !carrying) showProgress(copyText(c), p.done, p.total);
+    }).then(function (res) { settle(c, res); }, function () { settle(c, { ok: false, code: "FAILED" }); });
+  }
+
+  function answer(copy: boolean): void {
+    const m = modal();
+    if (!m || m.hidden) return;
+    m.hidden = true;
+    const offers = asking;
+    asking = [];
+    if (!copy) return;
+    offers.forEach(function (o) { o.videos.forEach(function (v) { submit(o, v); }); });
+    showNext();
   }
 
   function cancel(): void {
-    if (!current) return;
-    for (let i = queue.length - 1; i >= 0; i--) if ((queue[i] as Work).kind === "copy") queue.splice(i, 1);
-    ports.files.cancelBundle(current.job);
+    pending.forEach(function (c) { ports.files.cancelBundle(c.job); });
+    if (carrying) ports.files.cancelBundle(carrying);
   }
 
-  function copying(): boolean {
-    return (!!current && current.work.kind === "copy") || queue.some(function (w) { return w.kind === "copy"; });
+  function beginMove(): BundleHandover | null {
+    if (!life.active()) return null;
+    const offers = new Set<Offer>();
+    pending.forEach(function (c) { if (ports.ownership.stillOwns(c.offer.ctx)) offers.add(c.offer); });
+    if (!offers.size) return null;
+    const m: Move = { offers, held: [] };
+    moves.add(m);
+    function close(landed: boolean): void {
+      if (!moves.delete(m)) return;
+      if (landed && life.active()) {
+        const ctx = ports.ownership.capture();
+        const script = ports.script();
+        offers.forEach(function (o) {
+          o.ctx = ctx;
+          if (script) o.folder = bundleFolderName(script);
+        });
+      }
+      m.held.splice(0).forEach(function (apply) { apply(); });
+    }
+    return { landed: function () { close(true); }, abandoned: function () { close(false); } };
   }
 
-  function carry(toFileId: string, names: readonly string[], fromScript: string, toScript: string): void {
-    if (!life.active() || !toFileId || (!names.length && !copying())) return;
-    queue.push({ kind: "carry", toFileId, names: names.slice(), from: bundleFolderName(fromScript), to: bundleFolderName(toScript) });
-    pump();
-  }
-
+  ports.carries(onCarry);
   life.listen(el("bundle-accept"), "click", function () { answer(true); });
   life.listen(el("bundle-decline"), "click", function () { answer(false); });
   life.listen(el("bundle-cancel"), "click", cancel);
@@ -217,15 +237,18 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
 
   return {
     offerAfterDrop: offer,
-    carryAfterSaveAs: carry,
+    beginMove,
     dispose: function (): void {
       if (!life.active()) return;
-      if (current) ports.files.cancelBundle(current.job);
-      queue.length = 0;
+      pending.forEach(function (c) { ports.files.cancelBundle(c.job); });
+      pending.length = 0;
+      moves.clear();
+      carrying = null;
       asking = [];
       const m = modal();
       if (m) m.hidden = true;
-      hideProgress();
+      const box = el("bundle-progress");
+      if (box) box.hidden = true;
       life.dispose();
     }
   };

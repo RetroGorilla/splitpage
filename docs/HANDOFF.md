@@ -596,9 +596,10 @@ tabs**.
 - **A dropped video copied beside the script** (#259,
   [rows-video-files.md](architecture/rows-video-files.md#copies-beside-the-script-259)).
   `splitpage:bundle-file(token, job)` copies a drop's granted file into the
-  tab's own script's `<name> files` folder; `splitpage:bundle-carry(fileId,
-  names, job)` copies those names to the folder of the file a Save As dialog
-  just chose for that tab; `splitpage:bundled-file-open(name)` opens one
+  `<name> files` folder of the script the tab had when the copy was accepted
+  (`desktop/bundle-jobs.ts` binds it then); when a script save dialog's
+  write lands, main carries that folder to the new script's by itself and
+  reports on `splitpage:bundle-carry`; `splitpage:bundled-file-open(name)` opens one
   name from that folder after `resolveBundledFile`. None takes a path
   (INV-34). `desktop/test/bundle-ipc.test.mjs` holds the refusals and
   `caseGalleryVideoBundle` in smoke.mjs runs drop, copy, restart, open and

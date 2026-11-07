@@ -21,6 +21,7 @@ interface Setup {
   readonly delivered?: boolean;
   readonly autosave?: boolean;
   readonly onDesktop?: boolean;
+  readonly handover?: boolean;
 }
 
 const NO_MODELS: ExportReadModels = { production: [], commentNumbers: {}, broll: [] };
@@ -109,7 +110,16 @@ function harness(setup: Setup = {}) {
     },
     preferences: { editorName: () => "Adam", autosave: () => setup.autosave ?? true },
     page: { getElementById: (id) => (id === "menu-autosave" ? menu : null) },
-    bundles: { carry: (from, to, names) => { log.push("carry:" + from.name + ">" + to.name + ":" + names.join("|")); } }
+    bundles: {
+      beginMove: () => {
+        if (!setup.handover) return null;
+        log.push("beginMove:" + state.home.kind);
+        return {
+          landed: () => { log.push("landed:" + String((state.home.handle as FileSaveHandle | undefined)?.name)); },
+          abandoned: () => { log.push("abandoned:" + String((state.home.handle as FileSaveHandle | undefined)?.name)); }
+        };
+      }
+    }
   };
   const mounted = mountFileSaving(ports) as FileSavingMount;
   return { log, toasts, state, menu, mounted, ports, doc, built };
@@ -300,7 +310,6 @@ test("Save As of a written-out script forks its id, retargets to the picked file
     "syncIdentity",
     "confirmSavedNow",
     "remember:copy.splitpage",
-    "carry:pilot.md>copy.splitpage:",
     "imagesLeftOut:0:copy.splitpage"
   ]);
   assert.deepEqual(saveAs.moves, ["moved", "moved"]);
@@ -410,45 +419,37 @@ test("disposing the mount releases its ports only while it is the live one", () 
   assert.throws(() => second.mounted.updateAutoSaveMenu());
 });
 
-test("Save As from a script on disk carries the script's bundled videos to the new file; other saves do not", async () => {
-  const withVideos = [{ id: "r1", imageLinks: [
-    { name: "a.mp4", size: 3, location: { kind: "bundled", name: "a.mp4" }, poster: true },
-    { name: "p.mp4", size: 3, location: { kind: "path", path: "C:\\v\\p.mp4" } }],
-  moreImages: [{ links: [{ name: "b.mov", location: { kind: "bundled", name: "b (2).mov" }, poster: true }] }] }];
-  const carries = (h: ReturnType<typeof harness>) => h.log.filter((line) => line.startsWith("carry:"));
-  const saveAs = harness({ home: FILE_HOME, writtenOut: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
-  saveAs.doc.rows.push(...(migrateRows({ rows: withVideos }, fakeMigration().ports).rows));
+const moveLines = (h: ReturnType<typeof harness>) => h.log.filter((line) => /^(beginMove|landed|abandoned|setHome|restoreHome|write):/.test(line));
+
+test("Save As hands the running bundle copies over before it retargets and settles them once the new file is home", async () => {
+  const saveAs = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
   assert.deepEqual(await write(saveAs, "saveAs"), { kind: "saved" });
-  assert.deepEqual(carries(saveAs), ["carry:pilot.md>copy.splitpage:a.mp4|b (2).mov"]);
-  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true });
-  plain.doc.rows.push(...(migrateRows({ rows: withVideos }, fakeMigration().ports).rows));
+  assert.deepEqual(moveLines(saveAs), ["beginMove:file", "setHome:file", "write:copy.splitpage:{}", "landed:copy.splitpage"]);
+  const confirmed = saveAs.log.indexOf("confirmSavedNow");
+  assert.ok(confirmed !== -1 && confirmed < saveAs.log.indexOf("landed:copy.splitpage"), "the handover lands after the write is confirmed, so the new owner is current");
+  const plain = harness({ home: { ...FILE_HOME }, writtenOut: true, handover: true });
   assert.deepEqual(await write(plain, "save"), { kind: "saved" });
-  assert.deepEqual(carries(plain), [], "saving in place carries nothing");
-  const none = harness({ home: FILE_HOME, writtenOut: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
-  assert.deepEqual(await write(none, "saveAs"), { kind: "saved" });
-  assert.deepEqual(carries(none), ["carry:pilot.md>copy.splitpage:"], "with no bundled videos yet, a copy still running can still be carried");
-  const first = harness({ pick: { kind: "handle", handle: fileHandle("first.splitpage"), picked: true } });
-  first.doc.rows.push(...(migrateRows({ rows: withVideos }, fakeMigration().ports).rows));
-  assert.deepEqual(await write(first, "save"), { kind: "saved" });
-  assert.deepEqual(carries(first), [], "a script never saved has no folder to carry from");
+  assert.deepEqual(moveLines(plain).filter((line) => !line.startsWith("write:")), [], "saving in place hands nothing over");
+  const cancelled = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "cancelled" } });
+  assert.deepEqual(await write(cancelled, "saveAs"), { kind: "cancelled" });
+  assert.deepEqual(moveLines(cancelled), [], "a cancelled dialog hands nothing over");
+  const lost = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.splitpage"), picked: true } });
+  assert.deepEqual(await write(lost, "saveAs", false), { kind: "saved" });
+  assert.deepEqual(moveLines(lost).filter((line) => !line.startsWith("write:")), [], "a job that no longer owns the document never retargets, so it hands nothing over");
 });
 
-test("a copy that lands while the Save As dialog is open is carried too, though the write captured its old path", async () => {
-  const h = harness({ home: FILE_HOME, writtenOut: true });
-  h.doc.rows.push(...(migrateRows({ rows: [{ id: "r1", imageLinks: [{ name: "take.mp4", size: 3, location: { kind: "path", path: "C:\\v\\take.mp4" }, poster: true }] }] }, fakeMigration().ports).rows));
+test("a Save As that fails, or loses the document while it writes, abandons the handover after the old home is back", async () => {
+  const failed = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true }, writeFails: new Error("disk full") });
+  assert.equal((await write(failed, "saveAs")).kind, "failed");
+  assert.deepEqual(moveLines(failed), ["beginMove:file", "setHome:file", "write:copy.md:# Pilot", "restoreHome:file", "abandoned:pilot.md"]);
+  const h = harness({ home: FILE_HOME, writtenOut: true, handover: true, pick: { kind: "handle", handle: fileHandle("copy.md"), picked: true } });
+  let owning = true;
   h.mounted.dispose();
-  const ports: FileSavingPorts = { ...h.ports, files: { ...h.ports.files, pick: () => {
-    const row = h.doc.rows.find((r) => r.id === "r1") as { imageLinks?: { location?: unknown }[] } | undefined;
-    const link = row?.imageLinks?.[0];
-    assert.ok(link, "setup: the dropped link");
-    link.location = { kind: "bundled", name: "take.mp4" };
-    return Promise.resolve({ kind: "handle", handle: fileHandle("copy.splitpage"), picked: true });
-  } } };
+  const ports: FileSavingPorts = { ...h.ports, files: { ...h.ports.files, write: (handle, body) => { owning = false; return h.ports.files.write(handle, body); } } };
   const mounted = mountFileSaving(ports) as FileSavingMount;
   try {
-    assert.deepEqual(await mounted.destination().write(job("saveAs").value), { kind: "saved" });
-    const written = h.log.find((line) => line.startsWith("write:copy.splitpage"));
-    assert.ok(written, "setup: the new file was written");
-    assert.deepEqual(h.log.filter((line) => line.startsWith("carry:")), ["carry:pilot.md>copy.splitpage:take.mp4"]);
+    const replaced: SaveJob<FileSaveRequest> = { ...job("saveAs").value, owns: () => owning, landed: (steps) => { if (owning) steps.current(); else steps.obsolete(); } };
+    assert.deepEqual(await mounted.destination().write(replaced), { kind: "saved" });
+    assert.deepEqual(moveLines(h).filter((line) => /^(landed|abandoned):/.test(line)), ["abandoned:copy.md"], "an unrelated replacement never takes the handover");
   } finally { mounted.dispose(); }
 });

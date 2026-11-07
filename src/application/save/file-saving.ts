@@ -8,7 +8,6 @@ import { slugify } from "../../../shared/text.ts";
 import { fileTitleChange } from "../../core/document/file-title.ts";
 import type { FileTitleChange } from "../../core/document/file-title.ts";
 import { deepFreeze } from "../../core/document/freeze.ts";
-import { bundledVideoNames } from "../../core/document/gallery.ts";
 import type { ExportCaptureOptions, ExportDocument } from "../../core/document/export-document.ts";
 import type { NoticeKind } from "../effects/ports.ts";
 import type { DeliverOptions } from "../files/file-delivery.ts";
@@ -19,7 +18,7 @@ import type { AutoSaveChange } from "./autosave.ts";
 import type { DestinationKey, SaveJob, SaveLanding, WriterResult } from "./coordinator.ts";
 import type { SaveDestination } from "./destinations.ts";
 import type { LandedWrite, SaveCompletion } from "./save-completion.ts";
-import type { FileSaveDialogs, FileSaveHandle, FileSavePorts, FileSaveRequest, FileSaveTarget, FileSavingMount, FileSavingPorts } from "./file-saving-ports.ts";
+import type { BundleHandover, FileSaveDialogs, FileSaveHandle, FileSavePorts, FileSaveRequest, FileSaveTarget, FileSavingMount, FileSavingPorts } from "./file-saving-ports.ts";
 import type { AutoSaveTarget } from "./status.ts";
 
 interface WriteOptions {
@@ -119,11 +118,11 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
   let retarget: Home | null = null;
   let pickedFor: Home | null = null;
   let wrote = false;
-  let liveBundled: readonly string[] = [];
+  let move: BundleHandover | null = null;
 
   function retargetTo(handle: FileSaveHandle, k: string): void {
     if (!job.owns()) return;
-    liveBundled = bundledVideoNames((currentDocument() as DocumentView).rows);
+    move = mountedPorts().bundles.beginMove();
     prevHome = currentHome();
     retarget = setHome("file", { handle: handle, format: k, name: handle.name });
     pickedFor = retarget;
@@ -186,9 +185,12 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
         return landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null;
       }, naming));
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
-      if (target.picked && homeAtSave.kind === "file" && homeAtSave.handle) {
-        const names = [...new Set(bundledVideoNames(published.rows).concat(liveBundled))];
-        mountedPorts().bundles.carry(homeAtSave.handle as FileSaveHandle, handle, names);
+      const handover = move as BundleHandover | null;
+      if (handover) {
+        const landedHome = fileHome();
+        move = null;
+        if (job.owns() && landedHome && landedHome.handle === handle) handover.landed();
+        else handover.abandoned();
       }
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);
@@ -212,6 +214,8 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
     }
   } finally {
     undoRetarget();
+    const unsettled = move as BundleHandover | null;
+    if (unsettled) unsettled.abandoned();
   }
   return written;
 }

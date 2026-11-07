@@ -21,22 +21,22 @@ interface Setup {
   script?: string | null;
   fold?: boolean;
   answer?: (link: VideoLink, job: string, onProgress: (p: { done: number; total: number }) => void) => Promise<DesktopBundleCopy>;
-  carry?: DesktopBundleCarry | null;
 }
 
 function setup(opts: Setup = {}) {
+  const at = { script: opts.script === undefined ? "Episode 12.splitpage" : opts.script };
+  let heard: ((note: DesktopBundleCarry) => void) | null = null;
   document.body.innerHTML = '<div id="toast-host"></div>' + MARKUP;
   const doc = migrateRows({ rows: [{ id: "r1", imageLinks: [{ name: DROP.name, size: DROP.size, location: { kind: "path", path: DROP.path }, poster: true }] }] }, fakeMigration().ports);
   const notices = fakeNotices();
   const ownership = fakeOwnership();
   const calls: { link: VideoLink; job: string }[] = [];
   const cancels: string[] = [];
-  const carries: { toFileId: string; names: readonly string[]; job: string }[] = [];
   const folds: (UndoEntry | null | undefined)[] = [];
   const edits: string[] = [];
   const ports: VideoBundlePorts = {
     window: window,
-    script: () => opts.script === undefined ? "Episode 12.splitpage" : opts.script,
+    script: () => at.script,
     files: {
       bundle: (link, job, onProgress) => {
         calls.push({ link, job });
@@ -44,7 +44,7 @@ function setup(opts: Setup = {}) {
       },
       cancelBundle: (job) => { cancels.push(job); }
     },
-    carry: async (toFileId, names, job) => { carries.push({ toFileId, names, job }); return opts.carry === undefined ? { ok: true, copied: names.length, kept: 0, failed: 0 } : opts.carry; },
+    carries: (listener) => { heard = listener; },
     notices: notices.notices,
     ownership: ownership.ownership,
     undo: { fold: (entry, _touches, change) => { folds.push(entry); return opts.fold === false ? false : change(doc as unknown as UndoState); } },
@@ -54,7 +54,11 @@ function setup(opts: Setup = {}) {
   };
   const owner = startVideoBundles(ports);
   const el = (id: string) => document.getElementById(id) as HTMLElement;
-  return { doc, notices, ownership, calls, cancels, carries, folds, edits, owner, el, location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
+  const carry = (note: DesktopBundleCarry): void => {
+    assert.ok(heard, "the feature listens for carries from main");
+    heard(note);
+  };
+  return { at, doc, notices, ownership, calls, cancels, carry, folds, edits, owner, el, location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -170,82 +174,99 @@ test("a failed copy keeps the stored path and says so; another document is never
   moved.owner.dispose();
 });
 
-test("Cancel stops the copy in main and the ones waiting behind it", async () => {
-  let finish: ((r: DesktopBundleCopy) => void) | undefined;
-  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+test("accepting sends every copy to main at once, where the script is bound; Cancel stops all of them", async () => {
+  const finishes: ((r: DesktopBundleCopy) => void)[] = [];
+  const h = setup({ answer: () => new Promise((resolve) => { finishes.push(resolve); }) });
   h.owner.offerAfterDrop("r1", [DROP, { ...DROP, name: "b.mov", path: "C:\\Drops\\b.mov" }], ENTRY);
   h.el("bundle-accept").click();
-  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls.length, 2, "main gets both copies when the user accepts, not one at a time later");
   h.el("bundle-cancel").click();
-  assert.deepEqual(h.cancels, [h.calls[0]?.job]);
-  assert.ok(finish);
-  finish({ ok: false, code: "CANCELLED" });
+  assert.deepEqual(h.cancels, h.calls.map((c) => c.job));
+  finishes.forEach((finish) => finish({ ok: false, code: "CANCELLED" }));
   await settle();
-  assert.equal(h.calls.length, 1, "the second video is not copied");
-  assert.equal(h.notices.shown[0]?.message, "Stopped copying “take one.mp4”. It links to where it is.");
+  assert.deepEqual(h.notices.shown.map((n) => n.message), ["Stopped copying “take one.mp4”. It links to where it is.", "Stopped copying “b.mov”. It links to where it is."]);
   assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
   assert.equal(h.el("bundle-progress").hidden, true);
   h.owner.dispose();
 });
 
-test("Cancel during a copy keeps a Save As carry waiting behind it", async () => {
-  let finish: ((r: DesktopBundleCopy) => void) | undefined;
-  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
-  h.owner.offerAfterDrop("r1", [DROP, { ...DROP, name: "b.mov", path: "C:\\Drops\\b.mov" }], ENTRY);
+test("a copy main dropped, because the tab opened another script, says nothing and changes nothing", async () => {
+  const h = setup({ answer: async () => ({ ok: false, code: "DROPPED" }) });
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
   h.el("bundle-accept").click();
-  h.owner.carryAfterSaveAs("fid", ["a.mp4"], "Episode 12.splitpage", "Episode 12 v2.splitpage");
-  h.el("bundle-cancel").click();
-  assert.ok(finish);
-  finish({ ok: false, code: "CANCELLED" });
   await settle();
-  await settle();
-  assert.equal(h.calls.length, 1, "the second video is not copied");
-  assert.deepEqual(h.carries.map((c) => [c.toFileId, c.names]), [["fid", ["a.mp4"]]], "the carry still runs");
-  assert.deepEqual(h.notices.shown.map((n) => n.message), ["Stopped copying “take one.mp4”. It links to where it is.", "Copied 1 video to “Episode 12 v2 files”."]);
+  assert.deepEqual(h.notices.shown, []);
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  assert.equal(h.el("bundle-progress").hidden, true);
   h.owner.dispose();
 });
 
-test("a copy that lands after Save As is carried to the new script's folder", async () => {
+test("a copy that finishes after Save As links the new script once the handover lands", async () => {
   let finish: ((r: DesktopBundleCopy) => void) | undefined;
   const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
   h.owner.offerAfterDrop("r1", [DROP], ENTRY);
   h.el("bundle-accept").click();
-  h.owner.carryAfterSaveAs("fid", [], "Episode 12.splitpage", "Episode 12 v2.splitpage");
-  assert.ok(finish);
+  const move = h.owner.beginMove();
+  assert.ok(move && finish, "a running copy is handed over");
+  h.ownership.replace();
+  h.at.script = "Episode 12 v2.splitpage";
   finish({ ok: true, name: "take one (2).mp4" });
   await settle();
-  await settle();
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path }, "nothing is linked while the save is still moving the document");
+  move.landed();
   assert.deepEqual(h.location(), { kind: "bundled", name: "take one (2).mp4" });
-  assert.deepEqual(h.carries.map((c) => [c.toFileId, c.names]), [["fid", ["take one (2).mp4"]]]);
+  assert.equal(h.notices.shown[0]?.message, "Copied “take one.mp4” to “Episode 12 v2 files”.");
+  move.landed();
+  assert.equal(h.notices.shown.length, 1, "a handover settles once");
   h.owner.dispose();
-  const idle = setup();
-  idle.owner.carryAfterSaveAs("fid", [], "Episode 12.splitpage", "Episode 12 v2.splitpage");
-  await settle();
-  assert.deepEqual(idle.carries, [], "nothing to carry and no copy running");
-  idle.owner.dispose();
 });
 
-test("Save As carries the bundled videos, and says when some could not be copied", async () => {
-  const ok = setup();
-  ok.owner.carryAfterSaveAs("fid", ["a.mp4", "b.mov"], "Episode 12.splitpage", "Episode 12 v2.splitpage");
+test("an abandoned handover, or an unrelated replacement, never relinks; nothing running means nothing to hand over", async () => {
+  let finish: ((r: DesktopBundleCopy) => void) | undefined;
+  const h = setup({ answer: () => new Promise((resolve) => { finish = resolve; }) });
+  assert.equal(h.owner.beginMove(), null);
+  h.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  h.el("bundle-accept").click();
+  const move = h.owner.beginMove();
+  assert.ok(move && finish);
+  h.ownership.replace();
+  finish({ ok: true, name: "take one (2).mp4" });
   await settle();
-  assert.deepEqual(ok.carries.map((c) => [c.toFileId, c.names]), [["fid", ["a.mp4", "b.mov"]]]);
-  assert.equal(ok.notices.shown[0]?.message, "Copied 2 videos to “Episode 12 v2 files”.");
-  ok.owner.dispose();
-  const partial = setup({ carry: { ok: true, copied: 1, kept: 0, failed: 1 } });
-  partial.owner.carryAfterSaveAs("fid", ["a.mp4", "b.mov"], "Episode 12.splitpage", "Episode 12 v2.splitpage");
+  move.abandoned();
+  assert.deepEqual(h.location(), { kind: "path", path: DROP.path });
+  assert.deepEqual(h.folds, []);
+  h.owner.dispose();
+  let later: ((r: DesktopBundleCopy) => void) | undefined;
+  const kept = setup({ answer: () => new Promise((resolve) => { later = resolve; }) });
+  kept.owner.offerAfterDrop("r1", [DROP], ENTRY);
+  kept.el("bundle-accept").click();
+  const restored = kept.owner.beginMove();
+  assert.ok(restored && later);
+  later({ ok: true, name: "take one (2).mp4" });
   await settle();
-  assert.equal(partial.notices.shown[0]?.message, "1 video could not be copied to “Episode 12 v2 files”, so it does not open from this copy of the script. " +
+  assert.deepEqual(kept.location(), { kind: "bundled", name: "take one (2).mp4" }, "while the document is still owned the copy links at once");
+  restored.abandoned();
+  kept.owner.dispose();
+});
+
+test("main's carry after Save As shows progress, can be cancelled, and reports what it could not copy", () => {
+  const h = setup();
+  h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 4, total: 8 });
+  assert.equal(h.el("bundle-progress").hidden, false);
+  assert.equal(h.el("bundle-progress-text").textContent, "Copying videos to “Episode 12 v2 files” — 50%");
+  h.el("bundle-cancel").click();
+  assert.deepEqual(h.cancels, ["carry1"]);
+  h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 2, total: 2, result: { ok: true, copied: 2, kept: 0, failed: 0 } });
+  assert.equal(h.notices.shown[0]?.message, "Copied 2 videos to “Episode 12 v2 files”.");
+  assert.equal(h.el("bundle-progress").hidden, true);
+  h.carry({ job: "carry2", from: "Episode 12 files", to: "Episode 12 v2 files", done: 2, total: 2, result: { ok: true, copied: 1, kept: 0, failed: 1 } });
+  assert.equal(h.notices.shown[1]?.message, "1 video could not be copied to “Episode 12 v2 files”, so it does not open from this copy of the script. " +
     "Look for it in “Episode 12 files”.");
-  partial.owner.dispose();
-  const stopped = setup({ carry: { ok: false, code: "CANCELLED", copied: 0 } });
-  stopped.owner.carryAfterSaveAs("fid", ["a.mp4"], "Episode 12.splitpage", "Episode 12 v2.splitpage");
-  await settle();
-  assert.equal(stopped.notices.shown[0]?.message, "Stopped copying videos to “Episode 12 v2 files”. The ones not copied are still in “Episode 12 files”.");
-  stopped.owner.dispose();
-  const none = setup();
-  none.owner.carryAfterSaveAs("fid", [], "a.splitpage", "b.splitpage");
-  await settle();
-  assert.deepEqual(none.carries, []);
-  none.owner.dispose();
+  h.carry({ job: "carry3", from: "Episode 12 files", to: "Episode 12 v2 files", done: 1, total: 1, result: { ok: false, code: "CANCELLED", copied: 0 } });
+  assert.equal(h.notices.shown[2]?.message, "Stopped copying videos to “Episode 12 v2 files”. The ones not copied are still in “Episode 12 files”.");
+  h.carry({ job: "carry4", from: "a files", to: "b files", done: 1, total: 1, result: { ok: true, copied: 0, kept: 1, failed: 0 } });
+  assert.equal(h.notices.shown.length, 3, "a carry that only found copies already there says nothing");
+  h.owner.dispose();
+  h.carry({ job: "carry5", from: "a files", to: "b files", done: 1, total: 1, result: { ok: true, copied: 1, kept: 0, failed: 0 } });
+  assert.equal(h.notices.shown.length, 3, "a disposed feature ignores late notes");
 });

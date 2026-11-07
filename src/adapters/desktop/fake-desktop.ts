@@ -19,7 +19,7 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _videoPathAnswer?: Awaited<ReturnType<DesktopPort["openVideoPath"]>>;
   _bundleCalls?: { token: string; job: string }[];
   _bundleAnswer?: Awaited<ReturnType<DesktopPort["bundleVideoFile"]>>;
-  _carryCalls?: { toFileId: string; names: string[]; job: string }[];
+  _bundleCarry?: Parameters<DesktopPort["onBundleCarry"]>[0];
   _bundleCancels?: string[];
   _bundledOpens?: string[];
   _printed?: string[];
@@ -200,10 +200,7 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
       if (onProgress) onProgress({ done: 1, total: 1 });
       return Promise.resolve(this._bundleAnswer || { ok: true, name: name });
     },
-    carryBundle: function (toFileId: string, names: readonly string[], job: string) {
-      (this._carryCalls = this._carryCalls || []).push({ toFileId, names: names.slice(), job });
-      return Promise.resolve({ ok: true, copied: names.length, kept: 0, failed: 0 });
-    },
+    onBundleCarry: function (cb: Parameters<DesktopPort["onBundleCarry"]>[0]) { this._bundleCarry = cb; },
     cancelBundle: function (job: string) { (this._bundleCancels = this._bundleCancels || []).push(job); },
     openBundledFile: function (name: string) {
       (this._bundledOpens = this._bundledOpens || []).push(name);
