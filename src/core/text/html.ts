@@ -38,6 +38,10 @@ export function toHtml(cell: CellInput, opts?: HtmlOptions | null): string {
           '<span class="vec-play">\u25B6</span><span>Watch video</span><span class="vec-host">\u00B7 ' + escText(n.atom.host) + "</span></a>";
         return;
       }
+      if (n.atom && n.atom.atom === "who") {
+        out += '<span class="who-anchor" data-who="' + escAttr(n.atom.name) + '" contenteditable="false">' + textHtml(n.atom.text, where) + "</span>";
+        return;
+      }
       if (n.atom) {
         out += '<span class="broll-key" data-broll-id="' + escAttr(n.atom.id) + '" contenteditable="false">' + textHtml(n.atom.text, where) + "</span>";
         return;

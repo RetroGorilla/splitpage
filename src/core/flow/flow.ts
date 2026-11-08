@@ -505,7 +505,10 @@ function joinedPictures(prev: FlowRow, row: FlowRow): ReturnType<typeof rowSlots
       const key = videoLinkKey(link);
       const kept = byKey.get(key);
       if (!kept) byKey.set(key, { ...link });
-      else if (link.poster && !kept.poster) byKey.set(key, { ...kept, poster: true });
+      else {
+        if (link.poster && !kept.poster) kept.poster = true;
+        if (link.location && !kept.location) kept.location = link.location;
+      }
     }
     const links = [...byKey.values()];
     slots[at] = { ...first, name: first.name || slot.name, annotation: first.annotation || slot.annotation, links };

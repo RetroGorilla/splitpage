@@ -112,6 +112,7 @@ const RESOURCE_ROWS = {
   ],
   cellReach: ["#rows mousedown/B"],
   prompterFocus: ["document focusin/B"],
+  prompterMicrophone: ["#pp-mic change/B"],
   sceneControls: ["document click/B", "document dragstart/C", "document dragover/C", "document drop/C", "document dragend/C", "document keydown/B"],
   phoneBar: ["#phone-bar click/B"],
   writerZoom: ["#writer wheel/B"],

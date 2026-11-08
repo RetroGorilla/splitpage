@@ -88,6 +88,14 @@ const CORPUS = [
     '<span class="cmt-anchor tag-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Mug">mug</span> ' +
     '<span class="stage-dir audio-cue">both</span> <span class="broll-key cmt-anchor" data-cmt="c2" data-broll-id="k1">B-roll:</span> ' +
     '<a class="video-embed-card other" href="https://e.x/v">card</a>'],
+  ["name chip", tag("prop", "Kettle", "kettle") + ' for <span class="who-anchor" data-who="Sam" contenteditable="false">@Sam</span>. Next <b>line</b>'],
+  ["name chip: dirty, blank and nested",
+    '<span class="who-anchor" data-who="  @@Ann   Lee ">@x</span> <span class="who-anchor" data-who="">kept text</span> ' +
+    '<span class="who-anchor">no name</span> <strong><span class="who-anchor" data-who="Bo&lt;b&gt;"><em>@Bo</em></span></strong> ' +
+    '<span class="cmt-anchor" data-cmt="c1"><span class="who-anchor" data-who="Cy">@Cy</span></span>'],
+  ["name chip: start of a line and before punctuation",
+    '<span class="who-anchor" data-who="Sam">@Sam</span> opens.<br>Ask <span class="who-anchor" data-who="Ann">@Ann</span>, then ' +
+    '<span class="who-anchor" data-who="Lee">@Lee</span><br><span class="who-anchor" data-who="Bo">@Bo</span>'],
   ["comment anchor", 'before <span class="cmt-anchor" data-cmt="c1">quoted</span> after'],
   ["comment anchor: no id", '<span class="cmt-anchor">no id</span> and <span class="cmt-anchor" data-cmt="">empty id</span>'],
   ["comment anchor: dirty and prototype ids",

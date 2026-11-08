@@ -7,9 +7,9 @@ import { documentReader } from "./ports/document.ts";
 import { text } from "./ports/text.ts";
 import { opening } from "./ports/transitions.ts";
 import { startup } from "./ports/startup.ts";
-import { prompterDesktop, prompterVoice } from "./ports/desktop.ts";
+import { microphones, prompterDesktop, prompterVoice } from "./ports/desktop.ts";
 import { panelControl } from "./ports/panels.ts";
-import { prompterPreferences, prompterState, prompterView } from "./ports/preferences.ts";
+import { changes, prompterPreferences, prompterState, prompterView } from "./ports/preferences.ts";
 import { notices } from "./ports/effects.ts";
 import { focus } from "./ports/editing.ts";
 import { screen } from "./ports/screen.ts";
@@ -22,7 +22,7 @@ export function mountPrompterRuntimeFeature(): PrompterRuntime {
   return prompter.replace(() => {
     const ports: PrompterFeaturePorts = {
       document: documentReader, text, opening, startup,
-      desktop: prompterDesktop, voice: prompterVoice,
+      desktop: prompterDesktop, voice: prompterVoice, microphones, changes,
       panels: panelControl, preferences: prompterPreferences, viewFlags: prompterView,
       notices, focus, files: { parse: parseProjectFileState },
       state: prompterState,

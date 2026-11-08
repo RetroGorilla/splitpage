@@ -4,6 +4,10 @@ import type { migrateRows as migrateRowsCore } from "../../core/migrate.ts";
 import { withPageHead } from "../../core/document/ids.ts";
 import { base64Encode } from "../../core/document/media.ts";
 import { cloneState } from "../../core/document/clone.ts";
+import { withoutVideoLocations } from "../../core/document/gallery.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { withoutWho } from "../../core/text/who.ts";
+import { exportServices } from "../../application/export/services.ts";
 import { buildPublishHtml } from "./page-shell.ts";
 import { inlineStateImages } from "../storage/02c-blobs.ts";
 
@@ -26,6 +30,13 @@ export function standaloneHtmlFor(doc: ExportDocument, head?: Parameters<typeof 
     return held && held.mime ? "data:" + held.mime + ";base64," + base64Encode(held.bytes) : null;
   } : null);
   delete (copy as Partial<Pick<typeof copy, "docId">>).docId;
+  withoutVideoLocations(copy.rows);
+  copy.rows.forEach(function (row) {
+    for (const field of ["visualText", "audioText"] as const) {
+      const html = row[field];
+      if (html && html.indexOf("who-anchor") !== -1) row[field] = toHtml(withoutWho(exportServices().fromHtml(html, { media: true })));
+    }
+  });
   const html = buildPublishHtml(JSON.stringify(copy));
   return head ? withPageHead(html, head) : html;
 }

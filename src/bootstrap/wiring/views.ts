@@ -279,6 +279,7 @@ export function mountPrompterFeature(): ReturnType<typeof mountPrompter> {
       closeFind: () => prompterControls()?.closeFind() ?? false,
       stopVoiceFollow: () => { prompterControls()?.stopVoiceFollow(); },
       startVoiceFollow: () => { prompterControls()?.startVoiceFollow(); },
+      chooseMicrophone: (id) => { prompterControls()?.chooseMicrophone(id); },
       applyPrompterSize: () => { prompterControls()?.applyPrompterSize(); },
       updatePrompterStatus: () => { prompterControls()?.updatePrompterStatus(); },
       buildPrompterContent: () => { prompterControls()?.buildPrompterContent(); },

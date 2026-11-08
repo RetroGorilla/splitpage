@@ -1,7 +1,7 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
-import { normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
-import type { DesktopVideoResult } from "../../application/media/desktop-video.ts";
+import { isOtherFileLink, locatedVideoKey, normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
+import type { BundleProgressListener, DesktopBundleCopy, DesktopVideoResult } from "../../application/media/desktop-video.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { VideoLink } from "../../core/document/gallery.ts";
 import type { VideoFileMount, VideoFilePorts } from "./video-files-ports.ts";
@@ -10,33 +10,56 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
   let disposed = false;
   let videoFileTokens: Record<string, string> = {};
   let sessionVideoFiles: Record<string, unknown> = {};
+  let pendingGrants: Record<string, Promise<string | null>> = {};
   const sessionVideoUrls: Record<string, string> = {};
 
   function grantVideoFile(file: unknown, link: VideoLink): void {
     if (disposed) return;
-    const key = videoLinkKey(normalizeVideoLink(link) || link);
+    const l = normalizeVideoLink(link) || link;
+    // why: a link that names where its file is may use only a grant from that place; one without keeps name-and-size
+    const keys = l.location ? [videoLinkKey(l), locatedVideoKey(l)] : [videoLinkKey(l)];
     if (file && typeof (file as { size?: unknown }).size === "number") {
-      if (sessionVideoUrls[key] && sessionVideoFiles[key] !== file) {
-        try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { }
-        Reflect.deleteProperty(sessionVideoUrls, key);
-      }
-      sessionVideoFiles[key] = file;
+      keys.forEach(function (key) {
+        if (sessionVideoUrls[key] && sessionVideoFiles[key] !== file) {
+          try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { }
+          Reflect.deleteProperty(sessionVideoUrls, key);
+        }
+        sessionVideoFiles[key] = file;
+      });
     }
     const granting = ports.desktop.grant(file);
     if (granting === null) return;
-    Promise.resolve(granting).then(function (token: string | null) {
-      if (disposed) return;
-      if (typeof token === "string" && token) videoFileTokens[key] = token;
-    }, function () {});
+    const settled = Promise.resolve(granting).then(function (token: string | null) {
+      if (disposed) return null;
+      if (typeof token === "string" && token) keys.forEach(function (key) { videoFileTokens[key] = token; });
+      return typeof token === "string" && token ? token : null;
+    }, function () { return null; });
+    keys.forEach(function (key) { pendingGrants[key] = settled; });
+  }
+
+  function bundleVideoFile(link: VideoLink, job: string, onProgress: BundleProgressListener): Promise<DesktopBundleCopy> {
+    if (disposed) return Promise.resolve({ ok: false, code: "UNAVAILABLE" });
+    const key = locatedVideoKey(link);
+    const waiting = videoFileTokens[key] ? Promise.resolve(videoFileTokens[key] as string) : (pendingGrants[key] || Promise.resolve(null));
+    return waiting.then(function (token): Promise<DesktopBundleCopy> | DesktopBundleCopy {
+      if (disposed || !token) return { ok: false, code: "UNKNOWN" };
+      return Promise.resolve(ports.desktop.bundle(token, job, onProgress)).then(function (res): DesktopBundleCopy {
+        if (!res) return { ok: false, code: "UNAVAILABLE" };
+        if (res.ok && !disposed && sessionVideoFiles[key]) {
+          sessionVideoFiles[locatedVideoKey(Object.assign({}, link, { location: { kind: "bundled", name: res.name } }))] = sessionVideoFiles[key];
+        }
+        return res;
+      });
+    }).then(null, function (): DesktopBundleCopy { return { ok: false, code: "FAILED" }; });
   }
 
   function hasSessionVideo(link: VideoLink | null | undefined): boolean {
-    return !!(!disposed && link && !link.href && sessionVideoFiles[videoLinkKey(link)]);
+    return !!(!disposed && link && !link.href && sessionVideoFiles[locatedVideoKey(link)]);
   }
 
   function sessionVideoUrl(link: VideoLink): string | null {
     if (!hasSessionVideo(link)) return null;
-    const key = videoLinkKey(link);
+    const key = locatedVideoKey(link);
     if (!sessionVideoUrls[key]) {
       try { sessionVideoUrls[key] = URL.createObjectURL(sessionVideoFiles[key] as Blob); } catch (e) { return null; }
     }
@@ -52,19 +75,23 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
 
   function openVideoFile(link: VideoLink): void {
     if (disposed) return;
-    const name = link.name || "that video";
+    const other = isOtherFileLink(link);
+    const name = link.name || (other ? "that file" : "that video");
     if (!ports.desktop.opens()) {
-      ports.notices.show("“" + name + "” is a video file on the computer it was added from — only its name is kept here. " +
+      ports.notices.show("“" + name + "” is a" + (other ? " file" : " video file") + " on the computer it was added from — only its name is kept here. " +
         "Open it from there, or in the Splitpage desktop app.", "warn", true);
       return;
     }
-    const token = videoFileTokens[videoLinkKey(link)];
-    if (!token) {
-      ports.notices.show("Splitpage only opens a video file you dropped or pasted in since it started — " +
+    const token = videoFileTokens[locatedVideoKey(link)];
+    const stored = link.location && link.location.kind === "path" ? link.location.path : "";
+    const bundled = link.location && link.location.kind === "bundled" ? link.location.name : "";
+    if (!token && !stored && !bundled) {
+      ports.notices.show("Splitpage only opens a" + (other ? " file" : " video file") + " you dropped or pasted in since it started — " +
         "drop “" + name + "” onto this beat again to open it from here.", "warn", true);
       return;
     }
-    Promise.resolve(ports.desktop.open(token)).then(function (res: DesktopVideoResult | null) {
+    const opening = token ? ports.desktop.open(token) : bundled ? ports.desktop.openBundled(bundled) : ports.desktop.openPath(stored);
+    Promise.resolve(opening).then(function (res: DesktopVideoResult | null) {
       if (disposed) return;
       if (res && res.ok) return;
       ports.notices.show("Could not open “" + name + "”" + (res && res.code === "GONE" ? " — it is no longer where it was." : "."), "error");
@@ -93,6 +120,8 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
   return {
     grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl,
     releaseUrls: releaseSessionVideoUrls, openFile: openVideoFile, openGallery: openGalleryLink,
+    bundle: bundleVideoFile,
+    cancelBundle: function (job: string): void { if (!disposed) ports.desktop.cancelBundle(job); },
     dispose: function (): void {
       if (disposed) return;
       disposed = true;
@@ -100,6 +129,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
       releaseSessionVideoUrls();
       sessionVideoFiles = {};
       videoFileTokens = {};
+      pendingGrants = {};
     }
   };
 }

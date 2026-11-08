@@ -10,7 +10,9 @@ const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId }: {
   mintTabOrWindowId: typeof MintDesktopStateId;
 } = require("./desktop-state.ts");
 
-function createTabRegistry({ pathKey }: Pick<DesktopFileService, "pathKey">) {
+function createTabRegistry({ pathKey, sourceChanged }: Pick<DesktopFileService, "pathKey"> & {
+  sourceChanged?: (tab: Pick<DesktopMainTab, "id" | "source">) => void;
+}) {
   const tabs: DesktopLookupMap<string, DesktopMainTab> = new Map();
   const windowsById: DesktopLookupMap<string, DesktopMainWindow> = new Map();
   const webContentsIdToTabId = new Map<number, string>();
@@ -44,6 +46,7 @@ function createTabRegistry({ pathKey }: Pick<DesktopFileService, "pathKey">) {
 
   function indexTabSource(tab: Pick<DesktopMainTab, "id" | "source">) {
     if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
+    if (sourceChanged) sourceChanged(tab);
   }
 
   function unindexTabSource(tab: Pick<DesktopMainTab, "id">) {

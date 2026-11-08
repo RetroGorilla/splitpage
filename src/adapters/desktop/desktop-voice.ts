@@ -22,11 +22,20 @@ type DesktopRecognition = PrompterRecognition & {
 };
 
 import { desktopPort } from "./desktop-port.ts";
+import { isDesktopMicrophoneId, microphoneList } from "../../application/microphones.ts";
+import type { MicrophoneList } from "../../application/microphones.ts";
 
 let desktopVoice: { available: boolean } | null = null;
 let desktopVoiceAsking: Promise<{ available: boolean }> | null = null;
 let activeDesktopRecognition: DesktopRecognition | null = null;
 let voiceEventBridge: DesktopPort | null = null;
+let voiceOperations: Promise<void> = Promise.resolve();
+const VOICE_START_TIMEOUT_MS = 15000;
+
+function queueVoiceOperation(operation: () => Promise<unknown>) {
+  // why: Cancellation is tab-wide, so an obsolete start must finish cleanup before a newer listener can start.
+  voiceOperations = voiceOperations.then(operation).then(function () {}, function () {});
+}
 
 export function desktopVoiceKnown() {
   return desktopVoice !== null;
@@ -77,9 +86,25 @@ function wireVoiceEvents(bridge: DesktopPort | null) {
 
 const VOICE_START_ERRORS: Record<string, string> = { UNAVAILABLE: "unavailable", SPAWN_FAILED: "helper-failed", NO_TAB: "helper-failed" };
 
-export function createDesktopRecognition() {
+export async function listDesktopMicrophones(): Promise<MicrophoneList> {
   const bridge = desktopPort();
+  if (!bridge || typeof bridge.voiceMicrophones !== "function") return microphoneList([]);
+  try {
+    const answer = await bridge.voiceMicrophones();
+    if (!answer || !answer.ok || !Array.isArray(answer.microphones)) return microphoneList([]);
+    return microphoneList(answer.microphones.filter((entry) => isDesktopMicrophoneId(entry.id))
+      .map((entry) => ({ deviceId: entry.id, label: entry.name })));
+  } catch (e) {
+    return microphoneList([]);
+  }
+}
+
+export function createDesktopRecognition(microphone: string) {
+  const bridge = desktopPort();
+  const wanted = isDesktopMicrophoneId(microphone) ? microphone : undefined;
+  const unusable = !!microphone && !wanted;
   wireVoiceEvents(bridge);
+  let startVersion = 0;
   const rec: DesktopRecognition = {
     continuous: true,
     interimResults: true,
@@ -110,6 +135,8 @@ export function createDesktopRecognition() {
         rec._fire("onstart");
       } else if (event.type === "device") {
         if (typeof event.name === "string") rec._fire("ondevice", { name: event.name });
+      } else if (event.type === "fallback") {
+        rec._fire("ondevice", { fellBack: true });
       } else if (event.type === "interim" || event.type === "final") {
         if (typeof event.text !== "string") return;
         const result = { isFinal: event.type === "final", length: 1, 0: { transcript: event.text } };
@@ -125,32 +152,57 @@ export function createDesktopRecognition() {
     },
     start: function () {
       if (rec._running) throw new Error("recognition has already started");
+      const version = ++startVersion;
       rec._running = true;
       rec._session = null;
       rec._early = [];
       activeDesktopRecognition = rec;
-      Promise.resolve()
-        .then(function () { return (bridge as DesktopPort).voiceStart(); })
-        .catch(function (): Awaited<ReturnType<DesktopPort["voiceStart"]>> { return { ok: false, code: "SPAWN_FAILED" }; })
-        .then(function (answer) {
-          if (!rec._running || activeDesktopRecognition !== rec) {
-            if (answer && answer.ok) (bridge as DesktopPort).voiceStop();
-            return;
-          }
-          if (!answer || !answer.ok || typeof answer.session !== "number") {
-            rec._fire("onerror", { error: VOICE_START_ERRORS[(answer && answer.code) as string] || "helper-failed" });
-            rec._finish();
-            return;
-          }
-          rec._session = answer.session;
-          const early = rec._early;
-          rec._early = [];
-          early.forEach(function (event) { if (event.session === answer.session) rec._handle(event); });
+      if (unusable) rec._fire("ondevice", { fellBack: true });
+      queueVoiceOperation(function () {
+        if (!rec._running || activeDesktopRecognition !== rec || version !== startVersion) return Promise.resolve();
+        let timedOut = false;
+        let timer: ReturnType<typeof setTimeout>;
+        const timeout = new Promise<null>((resolve) => {
+          timer = setTimeout(() => { timedOut = true; resolve(null); }, VOICE_START_TIMEOUT_MS);
         });
+        const reply = Promise.resolve()
+          .then(function () { return wanted ? (bridge as DesktopPort).voiceStart(wanted) : (bridge as DesktopPort).voiceStart(); })
+          .catch(function (): Awaited<ReturnType<DesktopPort["voiceStart"]>> { return { ok: false, code: "SPAWN_FAILED" }; });
+        void reply.then(function (answer) {
+          // why: The queue has moved on after a timeout, so late cleanup must never stop a newer listener.
+          if (timedOut && answer.ok && typeof answer.session === "number") return (bridge as DesktopPort).voiceStop(answer.session);
+          return;
+        }).catch(function () {});
+        return Promise.race([reply, timeout])
+          .then(function (answer) {
+            clearTimeout(timer);
+            if (timedOut) {
+              if (rec._running && activeDesktopRecognition === rec && version === startVersion) {
+                rec._fire("onerror", { error: "helper-failed" });
+                rec._finish();
+              }
+              return (bridge as DesktopPort).voiceStop();
+            }
+            if (!rec._running || activeDesktopRecognition !== rec || version !== startVersion) {
+              if (answer && answer.ok) return (bridge as DesktopPort).voiceStop();
+              return;
+            }
+            if (!answer || !answer.ok || typeof answer.session !== "number") {
+              rec._fire("onerror", { error: VOICE_START_ERRORS[(answer && answer.code) as string] || "helper-failed" });
+              rec._finish();
+              return;
+            }
+            rec._session = answer.session;
+            const early = rec._early;
+            rec._early = [];
+            early.forEach(function (event) { if (event.session === answer.session) rec._handle(event); });
+          });
+      });
     },
     stop: function () {
       if (!rec._running) return;
-      Promise.resolve().then(function () { return (bridge as DesktopPort).voiceStop(); }).catch(function () {});
+      startVersion++;
+      if (rec._session !== null) queueVoiceOperation(function () { return (bridge as DesktopPort).voiceStop(); });
       rec._finish();
     }
   };

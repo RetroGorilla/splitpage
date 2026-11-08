@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, unlin
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
-import { discover, runTests, parseArgs, selectShard, nodeVersionWarning, unsupportedNodeError, SETS } from "./run-tests.mjs";
+import { discover, runTests, parseArgs, assignShards, nodeVersionWarning, unsupportedNodeError, SETS } from "./run-tests.mjs";
 import { typecheck, CONFIGS } from "./typecheck.mjs";
 
 let passed = 0;
@@ -176,7 +176,7 @@ check("an unknown flag is a usage error", Boolean(parseArgs(["--changed"]).error
   };
 
   const one = focusedRun(["src/test/b"]);
-  eq("only the matching file runs", one.calls, [["--test", "src/test/b.test.mjs"]]);
+  eq("only the matching file runs", one.calls, [["--test", "--test-reporter=spec", "--test-reporter-destination=stdout", `--test-reporter=${new URL("./timing-reporter.mjs", import.meta.url).href}`, "--test-reporter-destination=stdout", "src/test/b.test.mjs"]]);
   eq("and the run passes", one.code, 0);
   check("the whole discovery is still printed", one.out.includes("discovered frontend: 2 files") && one.out.includes("  tools/test-y.mjs"), one.out);
   check("the selected scope is printed", one.out.includes("focused run: --only src/test/b selects 1 of 5 discovered test files in unit, desktop, tools"), one.out);
@@ -187,7 +187,7 @@ check("an unknown flag is a usage error", Boolean(parseArgs(["--changed"]).error
   eq("a Windows path selects the same files", windows.calls, [["tools/test-x.mjs"], ["tools/test-y.mjs"]]);
 
   const several = focusedRun(["a.test", "d.test"]);
-  eq("several --only values select their union", several.calls, [["--test", "src/test/a.test.mjs"], ["desktop/test/d.test.mjs"]]);
+  eq("several --only values select their union", several.calls, [["--test", "--test-reporter=spec", "--test-reporter-destination=stdout", `--test-reporter=${new URL("./timing-reporter.mjs", import.meta.url).href}`, "--test-reporter-destination=stdout", "src/test/a.test.mjs"], ["desktop/test/d.test.mjs"]]);
 
   const none = focusedRun(["no-such-test"]);
   eq("a filter that matches nothing is an error, not a pass", none.code, 2);
@@ -228,16 +228,16 @@ check("shards cannot hide partial coverage behind --only", Boolean(parseArgs(["-
   const tree = listRepoFiles(REPO);
   const found = discover(tree);
   const all = found.groups.flatMap((g) => g.files).sort();
-  for (const total of [1, 2, 3]) {
-    const covered = [];
-    for (const group of found.groups) {
-      const chunks = Array.from({ length: total }, (_, index) => selectShard(group.files, { index: index + 1, total }));
-      covered.push(...chunks.flat());
-      check(`${group.group.name} is balanced across ${total} shards`, Math.max(...chunks.map((s) => s.length)) - Math.min(...chunks.map((s) => s.length)) <= 1);
-    }
-    eq(`${total} shards cover the real discovered tree exactly once`, covered.sort(), all);
-    eq(`${total} shards are independent of filesystem enumeration order`, discover([...tree].reverse()).groups.map((g) => selectShard(g.files, { index: 1, total })), found.groups.map((g) => selectShard(g.files, { index: 1, total })));
+  for (const total of [1, 2, 3, 4]) {
+    const chunks = assignShards(found.groups, total);
+    eq(`${total} shards cover the real discovered tree exactly once`, chunks.flat().sort(), all);
+    eq(`${total} shards are independent of filesystem enumeration order`, assignShards(discover([...tree].reverse()).groups, total), chunks);
   }
+  const group = { name: "scripts", runner: "script" };
+  const sample = [{ group, files: ["a", "b", "c", "d"] }];
+  eq("largest weights go to the lightest shard; missing weights use a default and stale entries are ignored", assignShards(sample, 2, { a: 8000, b: 7000, c: 3000, stale: 999999 }), [["a", "d"], ["b", "c"]]);
+  const grouped = [{ group: { name: "parallel", runner: "node-test" }, files: ["a", "c"] }, { group, files: ["b", "d"] }];
+  eq("parallel files share a group load and scripts add sequential time", assignShards(grouped, 2, { a: 10000, b: 9000, c: 8000, d: 7000 }), [["a", "d"], ["b", "c"]]);
 
   const repo = repoWith({
     "src/test/a.test.mjs": passingFrontend,

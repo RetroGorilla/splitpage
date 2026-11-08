@@ -1,4 +1,5 @@
 import type { VideoLink } from "../../core/document/gallery.ts";
+import type { BundleProgressListener, DesktopBundleCopy } from "./desktop-video.ts";
 
 export interface VideoPosterFrame {
   readonly dataUrl: string;
@@ -12,4 +13,6 @@ export interface VideoFiles {
   readonly releaseUrls: () => void;
   readonly openFile: (link: VideoLink) => void;
   readonly openGallery: (rowId: string, slot: number, key: unknown) => void;
+  readonly bundle: (link: VideoLink, job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleCopy>;
+  readonly cancelBundle: (job: string) => void;
 }

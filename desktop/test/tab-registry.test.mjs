@@ -69,6 +69,15 @@ test("a file tab is indexed by its path key, and a blank tab is not", () => {
   assert.deepEqual([...r.pathToTabId], [["/docs/one.splitpage", ID_A]]);
 });
 
+test("every source a tab takes, file or blank, is reported once as it is indexed", () => {
+  const seen = [];
+  const r = createTabRegistry({ pathKey, sourceChanged: (tab) => seen.push([tab.id, tab.source.kind === "file" ? tab.source.absPath : null]) });
+  r.indexTabSource(fileTab(ID_A, "/one"));
+  r.indexTabSource({ id: ID_A, source: { kind: "blank" } });
+  r.unindexTabSource({ id: ID_A });
+  assert.deepEqual(seen, [[ID_A, "/one"], [ID_A, null]]);
+});
+
 test("a second live tab on the same path does not take the path over", () => {
   const r = createTabRegistry({ pathKey });
   const a = fileTab(ID_A, "/one"), b = fileTab(ID_B, "/ONE");

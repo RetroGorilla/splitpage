@@ -3,12 +3,13 @@ import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../
 import { normalizeVideoLink, rowSlots, setVideoThumbnail, videoLinkKey } from "../../core/document/gallery.ts";
 import { slotPoster } from "../common/gallery.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
+import { startVideoBundles, touchesGallery } from "./video-bundles.ts";
 
 import type { GalleryVideoMount, GalleryVideoPorts } from "./ports.ts";
 import type { VideoLink } from "../../core/document/gallery.ts";
 import type { DesktopVideoThumbnail } from "../../application/media/desktop-video.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
-import type { Step, StepRow } from "../../core/text/steps.ts";
+import type { StepRow } from "../../core/text/steps.ts";
 
 interface VideoTestSettings {
   fetch: typeof fetch | null;
@@ -59,18 +60,9 @@ function allDark(px: Uint8ClampedArray) {
   return light <= (px.length / 4) * 0.01;
 }
 
-const GALLERY_KEYS: Record<string, boolean> = { imageRef: true, imageLinks: true, moreImages: true, imageName: true, imageAnnotation: true };
-
-function touchesGallery(rowId: string | null) {
-  return function (s: Step) {
-    if (s.op === "rowField") return s.rowId === rowId && !!GALLERY_KEYS[s.key];
-    if (s.op === "insertRow" || s.op === "deleteRow") return !!(s.row && s.row.id === rowId);
-    return false;
-  };
-}
-
 export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
   const testHooks: VideoTestSettings = { fetch: null, bases: null, protocol: null };
+  const bundles = startVideoBundles(ports.bundles);
 
   function embedRefusal(v: unknown) {
     if (!v) return "";
@@ -180,7 +172,10 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
     fetchThumbnail: fetchThumbnailRecord,
     thumbnailsAfterPaste: thumbnailsAfterPaste,
     thumbnailsOnBeatClick: thumbnailsOnBeatClick,
+    offerAfterDrop: bundles.offerAfterDrop,
+    beginSave: bundles.beginSave,
     dispose: function () {
+      bundles.dispose();
       if (withdrawHook) withdrawHook();
     }
   };

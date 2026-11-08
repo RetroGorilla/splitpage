@@ -214,11 +214,14 @@ expect drop(media('r4'), null, [ new File([new Uint8Array(10)], 'broll.mov', { t
 wait items('r4') === 'V:https://www.youtube.com/watch?v=dQw4w9WgXcQ|V:https://www.loom.com/share/abc|P|P|V:broll.mov'
 wait media('r4').querySelector('.scene-gallery-tile.is-more') && media('r4').querySelector('.scene-gallery-tile.is-more').textContent === '+2'
 expect caption('r4').length === 3
-# any other file: refused, with a toast
+eval mark()
+expect drop(media('r4'), null, [ new File(['hi'], 'notes.txt', { type: 'text/plain' }) ]) === true
+wait (row('r4').imageLinks || []).some(function(l){ return l.name === 'notes.txt' && !l.poster; })
+expect items('r4') === 'V:https://www.youtube.com/watch?v=dQw4w9WgXcQ|V:https://www.loom.com/share/abc|P|P|V:broll.mov'
 eval clearToasts()
 eval (function(){ window.__before = JSON.stringify(row('r4')); return true; })()
-expect drop(media('r4'), null, [ new File(['hi'], 'notes.txt', { type: 'text/plain' }) ]) === true
-wait toasts().some(function(t){ return t.indexOf('Only pictures and video files go in') === 0; })
+expect drop(media('r4'), null, [ new File(['MZ'], 'setup.exe', { type: 'application/x-msdownload' }) ]) === true
+wait toasts().some(function(t){ return t.indexOf('“setup.exe” wasn\'t attached.') === 0; })
 expect JSON.stringify(row('r4')) === __before
 
 # ---- 8. the toast's Undo after something else: it refuses, Ctrl+Z still works -----

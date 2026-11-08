@@ -8,6 +8,7 @@ export const SCRIPT_SCALE_MIN = 0.7;
 export const SCRIPT_SCALE_MAX = 2;
 export const CLOCK_MODES: readonly string[] = Object.freeze(["system", "12", "24"]);
 export const THEME_MODES: readonly string[] = Object.freeze(["system", "light", "dark"]);
+const MICROPHONE_ID_MAX = 512;
 
 const KEYS = Object.freeze({
   autosave: "splitpage-autosave",
@@ -19,6 +20,7 @@ const KEYS = Object.freeze({
   desktopNotice: "splitpage-desktop-notice-dismissed",
   exportDirections: "splitpage-export-directions",
   hideShot: "splitpage-hide-shot",
+  microphone: "splitpage-microphone",
   onboarding: "splitpage-onboarding",
   personColor: "splitpage-person-color",
   prompterFlip: "splitpage-prompter-flip",
@@ -90,6 +92,8 @@ export interface Preferences {
   readonly setCommentFilter: (filter: CommentFilter) => void;
   readonly hideShot: () => boolean;
   readonly setHideShot: (on: boolean) => void;
+  readonly microphone: () => string;
+  readonly setMicrophone: (id: string) => void;
   readonly taggingHelpShown: () => void;
   readonly taggingHelpDismissed: () => void;
   readonly announceTaggingHelp: () => void;
@@ -280,6 +284,11 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     setCommentFilter: function (filter: CommentFilter): void { announce(KEYS.commentFilter, JSON.stringify(filter)); },
     hideShot: function (): boolean { return read(KEYS.hideShot) === "1"; },
     setHideShot: function (on: boolean): void { announce(KEYS.hideShot, on ? "1" : "0"); },
+    microphone: function (): string {
+      const id = read(KEYS.microphone) ?? "";
+      return id.length <= MICROPHONE_ID_MAX ? id : "";
+    },
+    setMicrophone: function (id: string): void { announce(KEYS.microphone, id && id.length <= MICROPHONE_ID_MAX ? id : null); },
     taggingHelpShown: function (): void { put(KEYS.taggingHelp, "0"); },
     taggingHelpDismissed: function (): void { put(KEYS.taggingHelp, "1"); },
     announceTaggingHelp: function (): void { announce(KEYS.taggingHelp, read(KEYS.taggingHelp)); },

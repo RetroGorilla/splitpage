@@ -7,8 +7,8 @@ on:
     branches: [main, 'hotfix/**']
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -51,6 +51,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+  npm-cache:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Download every locked package into the npm cache
+        run: npm ci --ignore-scripts && npm ci --ignore-scripts --prefix desktop
+
   checks:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'
@@ -64,6 +82,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
 
       - name: Install tooling
         run: npm ci && npm ci --prefix desktop
@@ -156,7 +178,7 @@ jobs:
           retention-days: 30
 
   tests:
-    name: Tests (${{ matrix.shard }}/2)
+    name: Tests (${{ matrix.shard }}/4)
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
@@ -166,13 +188,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
 
       - name: Install tooling
         run: npm ci && npm ci --prefix desktop
@@ -199,7 +225,7 @@ jobs:
           echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
 
       - name: Unit, desktop and tool test shard
-        run: npm run test:all -- --shard "${{ matrix.shard }}/2"
+        run: npm run test:all -- --shard "${{ matrix.shard }}/4"
 
   gate:
     needs: [changes, checks, tests, desktop-smoke]
@@ -253,6 +279,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
 
       - name: Install build dependencies
         run: npm ci

@@ -1,6 +1,7 @@
 export interface MediaRoutePorts {
   readonly choose: () => void;
   readonly addPicture: (rowId: string, file: File, slot: number | undefined) => void;
+  readonly attachFile: (rowId: string, file: File) => void;
   readonly removePicture: (rowId: string, slot: number) => void;
   readonly removeLink: (rowId: string, slot: number, key: string) => void;
   readonly openLink: (rowId: string, slot: number, key: string) => void;
@@ -48,7 +49,10 @@ export function mountMediaRoutes(mount: MediaRoutesMount): MediaRoutes {
     const files = input.files;
     const file = files && files[0];
     const rowId = pendingRow;
-    if (file && rowId) ports.addPicture(rowId, file, pendingSlot);
+    if (file && rowId) {
+      if (pendingSlot !== undefined || String(file.type || "").indexOf("image/") === 0) ports.addPicture(rowId, file, pendingSlot);
+      else ports.attachFile(rowId, file);
+    }
     input.value = "";
     pendingRow = null;
     pendingSlot = undefined;
@@ -63,6 +67,7 @@ export function mountMediaRoutes(mount: MediaRoutesMount): MediaRoutes {
       if (add) {
         pendingRow = idOf(add);
         pendingSlot = add.getAttribute("data-action") === "image-replace" ? slotOf(add) : undefined;
+        input.accept = pendingSlot === undefined ? "" : "image/*";
         ports.choose();
         return true;
       }
@@ -85,6 +90,8 @@ export function mountMediaRoutes(mount: MediaRoutesMount): MediaRoutes {
     pick(rowId: string): void {
       if (!open) return;
       pendingRow = rowId;
+      pendingSlot = undefined;
+      input.accept = "";
       ports.choose();
     },
     dispose(): void {
