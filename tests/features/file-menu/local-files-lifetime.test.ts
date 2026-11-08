@@ -32,8 +32,9 @@ function harness(label: string) {
   formats.defineCard({ id: "script", name: "Script", ext: "txt", icon: "", purpose: "", group: "whole", toggle: { id: "directions", label: "Directions", on: () => true, set: () => {} } });
   formats.register({ id: "txt", action: "export-txt", name: "Text", menuLabel: "Text", card: "script", fileName: (base) => label + ":" + base + ".txt", build: async (request) => { builds.push(request); return { data: label, diagnostics: { imagesLeftOut: 1 } }; } });
   const notices = fakeNotices();
+  const place = createDocumentLocation();
   const ports: LocalFileMenuPorts = {
-    document: fakeDocument(doc).document, preferences: { clock: () => "24h" }, place: createDocumentLocation(),
+    document: fakeDocument(doc).document, preferences: { clock: () => "24h" }, place,
     exports: { captureExportDocument: () => captured, loadExportAssets: async () => assets }, formats,
     assets: { request: () => ({ shas: [] }) }, standaloneHtml: () => "",
     imagesLeftOut: (...args) => { warnings.push(args); }, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
@@ -44,7 +45,7 @@ function harness(label: string) {
     merge: { offer: async () => {}, reset: () => {} },
     exportControls: { isExportAction: () => false, rememberExport: () => {} }, actions: createActionRegistry()
   };
-  return { ports, formats, builds, deliveries, warnings, notices, zips };
+  return { ports, place, formats, builds, deliveries, warnings, notices, zips };
 }
 
 test("retired controls and repeated disposal cannot affect a replacement menu", () => {
@@ -152,11 +153,32 @@ test("an export built with the script's files goes to the files export, never to
   const mounted: LocalFileMenuControls = startLocalFileMenu({ ...h.ports, formats });
   try {
     await mounted.exportAs("splitpage");
-    assert.deepEqual(h.zips, [["live (with files).zip", "script.splitpage", "{\"rows\":[]}"]]);
+    assert.deepEqual(h.zips, [["live (with files).zip", "script.splitpage", "{\"rows\":[]}", null]], "an unsaved script names no script to read files from");
     assert.deepEqual(h.deliveries, []);
     await mounted.exportAs("plain");
     assert.equal(h.deliveries.length, 1, "without the files it is an ordinary export");
     assert.equal(h.zips.length, 1);
+  } finally { mounted.dispose(); }
+});
+
+test("the files export names the script its bytes were captured from, even when another script opens while they are built", async () => {
+  const h = harness("live");
+  const handle = { kind: "file" as const, name: "script.splitpage" };
+  h.place.setHome("file", { handle, format: "splitpage", name: "script.splitpage" });
+  const entered = deferred<undefined>();
+  const gate = deferred<undefined>();
+  const formats = createExportRegistry();
+  formats.register({ id: "splitpage", fileName: (base) => base + " (with files).zip",
+    build: async () => { entered.resolve(undefined); await gate.promise; return { data: "{}", withFiles: { scriptName: "script.splitpage" } }; } });
+  const mounted: LocalFileMenuControls = startLocalFileMenu({ ...h.ports, formats });
+  try {
+    const exporting = mounted.exportAs("splitpage");
+    await entered.promise;
+    h.place.setHome("file", { handle: { kind: "file" as const, name: "other.splitpage" }, format: "splitpage", name: "other.splitpage" });
+    gate.resolve(undefined);
+    await exporting;
+    assert.equal(h.zips.length, 1);
+    assert.equal((h.zips[0] as unknown[])[3], handle);
   } finally { mounted.dispose(); }
 });
 

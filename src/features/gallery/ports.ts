@@ -97,8 +97,8 @@ export interface VideoBundlePorts {
 export interface VideoBundleMount {
   readonly offerAfterDrop: (rowId: string, videos: readonly DroppedVideo[], entry: UndoEntry | null) => void;
   readonly beginSave: () => BundleSaveWindow;
-  readonly exportPlan: (body: string) => ReturnType<DesktopVideo["planExport"]>;
-  readonly exportWithFiles: (zipName: string, scriptName: string, body: string) => Promise<boolean>;
+  readonly exportPlan: (body: string, script: unknown) => ReturnType<DesktopVideo["planExport"]>;
+  readonly exportWithFiles: (zipName: string, scriptName: string, body: string, script: unknown) => Promise<boolean>;
   readonly dispose: () => void;
 }
 

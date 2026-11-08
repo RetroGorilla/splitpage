@@ -29,6 +29,7 @@ import { exportFilesText } from "../../features/gallery/video-bundles.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { captureExportDocument } from "./export-capture.ts";
 import { exportFilesPlan } from "./gallery.ts";
+import { fileHome } from "./location-owner.ts";
 
 export interface ExportBuild extends ExportPrintRequest {
   readonly ports: { readonly standaloneHtml: (doc: ExportDocument, meta: { title: string; description: string }, assets: ExportAssets) => string };
@@ -84,7 +85,9 @@ function withScriptFiles(): boolean {
 }
 
 async function scriptFilesDetail(): Promise<string> {
-  const plan = await exportFilesPlan(JSON.stringify(captureExportDocument().document));
+  const body = JSON.stringify(captureExportDocument().document);
+  const home = fileHome();
+  const plan = await exportFilesPlan(body, home ? home.handle || null : null);
   return plan ? exportFilesText(plan) : "";
 }
 

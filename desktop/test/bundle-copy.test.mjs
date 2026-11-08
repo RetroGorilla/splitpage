@@ -286,24 +286,37 @@ test("a cancelled carry leaves no temporary and nothing under the final name", a
   } finally { s.done(); }
 });
 
-test("where hard links fail, the temporary is renamed into place, and no file ever stands under the final name before that", async () => {
+test("where hard links fail, the final name is created exclusively and the whole temporary copied in, so no file there is ever replaced", async () => {
   const s = scratch();
   try {
     const eperm = async () => { throw Object.assign(new Error("no links here"), { code: "EPERM" }); };
     const before = [];
-    const renaming = createBundleCopier({
+    const creating = createBundleCopier({
       bundleFiles, progressEveryMs: 0, link: eperm,
-      rename: async (from, to) => { before.push({ names: fs.readdirSync(path.dirname(to)), final: fs.existsSync(to) }); return fs.promises.rename(from, to); }
+      openTarget: async (to) => { before.push({ names: fs.readdirSync(path.dirname(to)), final: fs.existsSync(to) }); return fs.promises.open(to, "wx"); }
     });
-    assert.deepEqual(await renaming.copyIn(s.clip, s.script, VIDEO_FILE_EXT, () => {}, live()), { ok: true, name: "take one.mp4" });
+    assert.deepEqual(await creating.copyIn(s.clip, s.script, VIDEO_FILE_EXT, () => {}, live()), { ok: true, name: "take one.mp4" });
     assert.equal(before.length, 1);
-    assert.equal(before[0].final, false, "the final name is absent until the rename");
+    assert.equal(before[0].final, false, "the final name is absent until it is created");
     assert.ok(before[0].names.length === 1 && /^~splitpage-[0-9a-f]{16}\.part$/.test(before[0].names[0]), "only the whole temporary exists");
     assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), fs.readFileSync(s.clip));
-    const crashing = createBundleCopier({ bundleFiles, progressEveryMs: 0, link: eperm, rename: async () => { throw new Error("gone mid-rename"); } });
+    assert.deepEqual(fs.readdirSync(s.folder), ["take one.mp4"], "the temporary is gone");
+    const crashing = createBundleCopier({
+      bundleFiles, progressEveryMs: 0, link: eperm,
+      openTarget: async (to) => { const h = await fs.promises.open(to, "wx"); return { close: () => h.close(), createWriteStream: () => { throw new Error("gone mid-copy"); } }; }
+    });
     const to = path.join(s.dir, "New.splitpage");
     assert.deepEqual(await crashing.carry(s.script, to, ["take one.mp4"], VIDEO_FILE_EXT, () => {}, live()), { ok: false, code: "FAILED", name: "take one.mp4", copied: 0 });
-    assert.deepEqual(fs.readdirSync(path.join(s.dir, "New files")), [], "a failed rename leaves no empty file under the final name");
+    assert.deepEqual(fs.readdirSync(path.join(s.dir, "New files")), [], "a failed copy removes the file it created and leaves no temporary");
+    fs.mkdirSync(path.join(s.dir, "Their files"));
+    const appearing = createBundleCopier({
+      bundleFiles, progressEveryMs: 0,
+      link: async (_from, at) => { fs.writeFileSync(at, "another program's"); throw Object.assign(new Error("no links here"), { code: "EPERM" }); }
+    });
+    assert.deepEqual(await appearing.carry(s.script, path.join(s.dir, "Their.splitpage"), ["take one.mp4"], VIDEO_FILE_EXT, () => {}, live()),
+      { ok: false, code: "CLASH", name: "take one.mp4", copied: 0 });
+    assert.deepEqual(fs.readdirSync(path.join(s.dir, "Their files")), ["take one.mp4"]);
+    assert.equal(fs.readFileSync(path.join(s.dir, "Their files", "take one.mp4"), "utf8"), "another program's", "a file that appeared before the create is untouched");
     fs.mkdirSync(path.join(s.dir, "Late files"));
     const racing = createBundleCopier({
       bundleFiles, progressEveryMs: 0,

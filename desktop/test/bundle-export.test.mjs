@@ -4,6 +4,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
+import { Readable } from "node:stream";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -25,6 +26,7 @@ const test = (name, fn) => cases.push({ name, fn });
 const FOLD = process.platform === "win32";
 const NO_SYMLINKS = "  (file symlinks need a privilege this account lacks; the link case runs where they don't)";
 const PICTURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function scratch() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-bundle-export-"));
@@ -46,8 +48,10 @@ function link(location, name) {
   return { name: name || (location.kind === "bundled" ? location.name : path.basename(location.path)), size: 4, location };
 }
 
+const bundled = (name, label) => link({ kind: "bundled", name }, label);
+
 function project(links, extra = {}) {
-  return JSON.stringify({ title: "Episode 12", rows: [{ id: "r1", visualImage: PICTURE, imageLinks: links, ...extra }] }, null, 2);
+  return JSON.stringify({ title: "Episode 12", lastEditedAt: "2026-11-01T10:20:30.000Z", rows: [{ id: "r1", visualImage: PICTURE, imageLinks: links, ...extra }] }, null, 2);
 }
 
 function junction(target, at) {
@@ -102,10 +106,13 @@ function harness({ source, copierOptions = {}, exporterOptions = {}, onSend } = 
   registerShellIpc(register);
   registerFileIpc(register);
   const main = makeSender(7, onSend);
+  const idOf = (p) => fileIds.register(p);
+  const scriptId = source ? idOf(source) : "";
   const call = (name, ...args) => handlers.get(name)({ sender: main.sender }, ...args);
   const callFrom = (from, other, name, ...args) => handlers.get(name)({ sender: from.sender, ...(other === undefined ? {} : { tab: other }) }, ...args);
   const send = (name, ...args) => listeners.get(name)({ sender: main.sender }, ...args);
-  const plan = (body, job = "export1", scriptName = "Episode 12.splitpage") => call("splitpage:bundle-export-plan", job, scriptName, new TextEncoder().encode(body));
+  const plan = (body, job = "export1", scriptName = "Episode 12.splitpage", script = scriptId) =>
+    call("splitpage:bundle-export-plan", job, scriptName, new TextEncoder().encode(body), script);
   const pick = (to, options = { bundleExport: true }) => { answers.push(to); return call("splitpage:save-file-dialog", { suggestedName: path.basename(to), ...options }); };
   async function exportTo(to, body, job = "export1") {
     const planned = await plan(body, job);
@@ -114,7 +121,7 @@ function harness({ source, copierOptions = {}, exporterOptions = {}, onSend } = 
     return { planned, picked, result };
   }
   const notes = (channel) => main.sent.filter(([c]) => c === channel).map(([, p]) => p);
-  return { tab, tabs, main, call, callFrom, send, plan, pick, exportTo, notes, bundleJobs, makeSender };
+  return { tab, tabs, main, call, callFrom, send, plan, pick, exportTo, notes, bundleJobs, makeSender, idOf, scriptId };
 }
 
 function readZip(file) {
@@ -161,6 +168,7 @@ function readZip(file) {
     assert.ok(flags & 0x0800, name + " is flagged as a UTF-8 name");
     assert.equal(buf.readUInt32LE(offset), 0x04034b50, name + " has a local header");
     const localName = buf.readUInt16LE(offset + 26), localExtra = buf.readUInt16LE(offset + 28);
+    assert.equal(buf.readUInt32LE(offset + 14), crc, name + ": the local header's CRC matches the directory");
     assert.equal(buf.subarray(offset + 30, offset + 30 + localName).toString("utf8"), name);
     const data = buf.subarray(offset + 30 + localName + localExtra, offset + 30 + localName + localExtra + packed);
     const bytes = method === 8 ? zlib.inflateRawSync(data) : Buffer.from(data);
@@ -196,24 +204,31 @@ async function linksOpen(scriptPath) {
   const record = JSON.parse(fs.readFileSync(scriptPath, "utf8"));
   const out = {};
   for (const holder of bundleFiles.fileLinksIn(record)) {
-    if (holder.location.kind !== "bundled") { out[holder.name] = { kind: holder.location.kind }; continue; }
+    if (holder.location.kind !== "bundled") { out[holder.name] = { ...holder.location }; continue; }
     const found = await bundleFiles.resolveBundledFile(scriptPath, holder.location.name, ATTACHABLE_FILE, fsp, path, FOLD);
     out[holder.name] = found.ok ? { kind: "bundled", name: holder.location.name, bytes: fs.readFileSync(found.path, "utf8") } : { kind: "bundled", name: holder.location.name, gone: found.code };
   }
   return { record, links: out };
 }
 
-function leftovers(folder) {
-  return fs.readdirSync(folder).filter((n) => /\.part$/.test(n));
+const leftovers = (folder) => fs.readdirSync(folder).filter((n) => /\.part$/.test(n));
+
+function resolverWith(map) {
+  return {
+    ...bundleFiles,
+    resolveBundledFile: async (script, name, ...rest) => (name in map
+      ? (map[name] === null ? { ok: false, code: "GONE" } : { ok: true, path: map[name] })
+      : bundleFiles.resolveBundledFile(script, name, ...rest))
+  };
 }
 
-test("a zip round trip: unzipped anywhere, the script opens beside its files folder and every link reaches the right bytes", async () => {
+test("a zip round trip: unzipped anywhere, the script opens beside its files folder and every bundled link reaches the right bytes", async () => {
   const s = scratch();
   try {
     s.put(path.join(s.folder, "take one.mp4"), "take");
+    s.put(path.join(s.folder, "brief.pdf"), "brief");
     s.put(path.join(s.folder, "unlinked.mp4"), "nope");
-    const brief = s.put(path.join(s.drops, "brief.pdf"), "brief");
-    const body = project([link({ kind: "bundled", name: "take one.mp4" }), link({ kind: "path", path: brief })]);
+    const body = project([bundled("take one.mp4"), bundled("brief.pdf")]);
     fs.writeFileSync(s.script, body);
     const ipc = harness({ source: s.script });
     const zip = path.join(s.out, "Episode 12 (with files).zip");
@@ -232,9 +247,8 @@ test("a zip round trip: unzipped anywhere, the script opens beside its files fol
       assert.deepEqual(opened.links, {
         "take one.mp4": { kind: "bundled", name: "take one.mp4", bytes: "take" },
         "brief.pdf": { kind: "bundled", name: "brief.pdf", bytes: "brief" }
-      }, label + ": the path link became a bundled name, and both open from the unzipped folder");
+      }, label + ": both links open from the unzipped folder");
       assert.equal(opened.record.rows[0].visualImage, PICTURE, label + ": an embedded picture stays embedded");
-      assert.ok(!JSON.stringify(opened.record).includes(s.drops), label + ": the zipped script names no path from this computer");
     }
     assert.equal(fs.readFileSync(s.script, "utf8"), body, "the script on disk is not changed");
     assert.deepEqual(fs.readdirSync(s.out), ["Episode 12 (with files).zip"], "nothing else is left beside the zip");
@@ -243,29 +257,65 @@ test("a zip round trip: unzipped anywhere, the script opens beside its files fol
   } finally { s.done(); }
 });
 
-test("different files with the same name get numbered names, and one file linked twice goes in once", async () => {
+test("a script's path links never authorize a read: they are left out and counted, stay paths, and no byte of them is in the zip", async () => {
   const s = scratch();
   try {
-    s.put(path.join(s.folder, "take.mp4"), "in-folder");
-    const a = s.put(path.join(s.drops, "a", "take.mp4"), "from-a");
-    const b = s.put(path.join(s.drops, "b", "Take.MP4"), "from-b");
-    const body = project([
-      link({ kind: "bundled", name: "take.mp4" }, "one"), link({ kind: "path", path: a }, "two"),
-      link({ kind: "path", path: b }, "three"), link({ kind: "path", path: a }, "four")
-    ]);
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    const secret = s.put(path.join(s.drops, "private.json"), "PRIVATE-TOKEN-1");
+    const linkedDir = path.join(s.dir, "linked");
+    const behind = s.put(path.join(s.dir, "elsewhere", "notes.txt"), "PRIVATE-TOKEN-2");
+    const viaJunction = junction(path.dirname(behind), linkedDir) ? path.join(linkedDir, "notes.txt") : behind;
+    const links = [bundled("take.mp4"), link({ kind: "path", path: secret }), link({ kind: "path", path: viaJunction })];
     const ipc = harness({ source: s.script });
     const zip = path.join(s.out, "Share.zip");
+    const { planned, result } = await ipc.exportTo(zip, project(links));
+    assert.deepEqual(planned, { ok: true, plan: { files: 1, bytes: 4, left: 2 } });
+    assert.deepEqual(result, { ok: true, files: 1, left: 2 });
+    const { entries } = readZip(zip);
+    assert.deepEqual([...entries.keys()], ["Episode 12.splitpage", "Episode 12 files/", "Episode 12 files/take.mp4"]);
+    const raw = fs.readFileSync(zip);
+    for (const token of ["PRIVATE-TOKEN-1", "PRIVATE-TOKEN-2"]) assert.equal(raw.includes(Buffer.from(token)), false, token + " is not in the zip");
+    const zipped = JSON.parse(entries.get("Episode 12.splitpage").bytes.toString("utf8"));
+    assert.deepEqual(zipped.rows[0].imageLinks.map((l) => l.location), [{ kind: "bundled", name: "take.mp4" }, links[1].location, links[2].location],
+      "a path link is written as it was");
+  } finally { s.done(); }
+});
+
+test("distinct files whose names differ only in case get numbered names, and one file linked twice goes in once", async () => {
+  const s = scratch();
+  try {
+    const a = s.put(path.join(s.drops, "a", "take.mp4"), "from-a");
+    const b = s.put(path.join(s.drops, "b", "TAKE.mp4"), "from-b");
+    const body = project([bundled("take.mp4", "one"), bundled("TAKE.mp4", "two"), bundled("take.mp4", "three")]);
+    const ipc = harness({ source: s.script, exporterOptions: { bundleFiles: resolverWith({ "take.mp4": a, "TAKE.mp4": b }) } });
+    const zip = path.join(s.out, "Share.zip");
     const { result } = await ipc.exportTo(zip, body);
-    assert.deepEqual(result, { ok: true, files: 3, left: 0 });
-    assert.deepEqual([...readZip(zip).entries.keys()].slice(2), ["Episode 12 files/take.mp4", "Episode 12 files/take (2).mp4", "Episode 12 files/Take (3).MP4"],
-      "names that differ only in case are a clash too, since the zip may be unzipped on Windows");
+    assert.deepEqual(result, { ok: true, files: 2, left: 0 });
+    const { entries } = readZip(zip);
+    assert.deepEqual([...entries.keys()].slice(2), ["Episode 12 files/take.mp4", "Episode 12 files/TAKE (2).mp4"], "the zip may be unzipped on Windows");
+    const zipped = JSON.parse(entries.get("Episode 12.splitpage").bytes.toString("utf8"));
+    assert.deepEqual(zipped.rows[0].imageLinks.map((l) => l.location.name), ["take.mp4", "TAKE (2).mp4", "take.mp4"]);
+    assert.equal(entries.get("Episode 12 files/TAKE (2).mp4").bytes.toString(), "from-b");
+  } finally { s.done(); }
+});
+
+test("a bundled name that is left out keeps its name reserved, so no included file can take it and answer its link", async () => {
+  const s = scratch();
+  try {
+    const real = s.put(path.join(s.drops, "MISSING.pdf"), "the other file");
+    const body = project([bundled("missing.pdf", "gone"), bundled("MISSING.pdf", "here")]);
+    const ipc = harness({ source: s.script, exporterOptions: { bundleFiles: resolverWith({ "missing.pdf": null, "MISSING.pdf": real }) } });
+    const zip = path.join(s.out, "Share.zip");
+    const { result } = await ipc.exportTo(zip, body);
+    assert.deepEqual(result, { ok: true, files: 1, left: 1 });
+    const { entries } = readZip(zip);
+    assert.deepEqual([...entries.keys()].slice(2), ["Episode 12 files/MISSING (2).pdf"]);
     const into = path.join(s.dir, "unzipped");
     unzipWithJs(zip, into);
     const { links } = await linksOpen(path.join(into, "Episode 12.splitpage"));
-    assert.equal(links.one.bytes, "in-folder");
-    assert.equal(links.two.bytes, "from-a");
-    assert.equal(links.three.bytes, "from-b");
-    assert.deepEqual(links.four, links.two, "the same file linked twice shares one copy");
+    assert.equal(links.here.bytes, "the other file");
+    assert.equal(links.gone.name, "missing.pdf");
+    if (FOLD) assert.equal(links.gone.gone, "GONE", "the missing link still opens nothing, even where names ignore case");
   } finally { s.done(); }
 });
 
@@ -275,61 +325,146 @@ test("blocked types, missing files and names outside the folder are left out and
     s.put(path.join(s.folder, "take.mp4"), "take");
     s.put(path.join(s.folder, "setup.exe"), "MZ");
     s.put(path.join(s.dir, "secret.mp4"), "secret");
-    const tool = s.put(path.join(s.drops, "tool.exe"), "MZ");
-    const runner = s.put(path.join(s.drops, "run.ps1"), "x");
-    const unc = process.platform === "win32" ? "\\\\nas\\share\\clip.mp4" : "//nas/share/clip.mp4";
-    const links = [
-      link({ kind: "bundled", name: "take.mp4" }), link({ kind: "bundled", name: "setup.exe" }), link({ kind: "bundled", name: "gone.mp4" }),
-      link({ kind: "bundled", name: "..\\secret.mp4" }, "up"), link({ kind: "bundled", name: "../secret.mp4" }, "up2"),
-      link({ kind: "path", path: tool }), link({ kind: "path", path: runner }), link({ kind: "path", path: unc }, "unc"),
-      link({ kind: "path", path: path.join(s.drops, "missing.mov") })
-    ];
-    const body = project(links);
+    const links = [bundled("take.mp4"), bundled("setup.exe"), bundled("gone.mp4"), bundled("..\\secret.mp4", "up"), bundled("../secret.mp4", "up2")];
     const ipc = harness({ source: s.script });
     const zip = path.join(s.out, "Share.zip");
-    const { planned, result } = await ipc.exportTo(zip, body);
-    assert.deepEqual(planned, { ok: true, plan: { files: 1, bytes: 4, left: 8 } });
-    assert.deepEqual(result, { ok: true, files: 1, left: 8 });
+    const { planned, result } = await ipc.exportTo(zip, project(links));
+    assert.deepEqual(planned, { ok: true, plan: { files: 1, bytes: 4, left: 4 } });
+    assert.deepEqual(result, { ok: true, files: 1, left: 4 });
     const { entries } = readZip(zip);
     assert.deepEqual([...entries.keys()], ["Episode 12.splitpage", "Episode 12 files/", "Episode 12 files/take.mp4"]);
     const zipped = JSON.parse(entries.get("Episode 12.splitpage").bytes.toString("utf8"));
-    assert.deepEqual(zipped.rows[0].imageLinks.map((l) => l.location), [{ kind: "bundled", name: "take.mp4" }, ...links.slice(1).map((l) => l.location)],
-      "a link that could not be included is written as it was");
+    assert.deepEqual(zipped.rows[0].imageLinks.map((l) => l.location), links.map((l) => l.location), "a link that could not be included is written as it was");
   } finally { s.done(); }
 });
 
-test("an export with no linked files is a zip of the script alone", async () => {
+test("an unsaved script has no folder, so its export is the script alone", async () => {
   const s = scratch();
   try {
     const ipc = harness({ source: null });
     const zip = path.join(s.out, "Untitled.zip");
-    const body = project([link({ kind: "bundled", name: "take.mp4" })]);
-    const { result } = await ipc.exportTo(zip, body);
-    assert.deepEqual(result, { ok: true, files: 0, left: 1 }, "an unsaved script has no folder, so its bundled names cannot be found");
+    const { result } = await ipc.exportTo(zip, project([bundled("take.mp4")]));
+    assert.deepEqual(result, { ok: true, files: 0, left: 1 });
     assert.deepEqual([...readZip(zip).entries.keys()], ["Episode 12.splitpage"]);
   } finally { s.done(); }
 });
 
-test("a cancelled export leaves nothing under the final name and no temporary", async () => {
+test("the folder is the one of the script the bytes were captured from: a plan for another script, or after the tab moved on, is refused", async () => {
   const s = scratch();
   try {
-    s.put(path.join(s.folder, "big.mp4"), Buffer.alloc(24 * 1024 * 1024, 7));
-    const body = project([link({ kind: "bundled", name: "big.mp4" })]);
+    s.put(path.join(s.folder, "brief.pdf"), "A's brief");
+    const other = path.join(s.dir, "Other.splitpage");
+    fs.writeFileSync(other, "{}");
+    s.put(path.join(s.dir, "Other files", "brief.pdf"), "B's brief");
+    const body = project([bundled("brief.pdf")]);
+    const ipc = harness({ source: s.script });
+    const idA = ipc.scriptId;
+    const idB = ipc.idOf(other);
+    assert.deepEqual(await ipc.plan(body, "export1", "Episode 12.splitpage", idB), { ok: false, code: "REFUSED" }, "another script's id");
+    assert.deepEqual(await ipc.plan(body, "export1", "Episode 12.splitpage", "f".repeat(32)), { ok: false, code: "REFUSED" }, "an id main never gave");
+    ipc.tab.source = { kind: "file", absPath: other };
+    assert.deepEqual(await ipc.plan(body, "export1", "Episode 12.splitpage", idA), { ok: false, code: "REFUSED" },
+      "bytes captured from A while the tab now holds B never read B's folder");
+    ipc.tab.source = { kind: "file", absPath: s.script };
+    assert.equal((await ipc.plan(body, "export1", "Episode 12.splitpage", idA)).ok, true);
+    const picked = await ipc.pick(path.join(s.out, "Share.zip"));
+    ipc.tab.source = { kind: "file", absPath: other };
+    assert.deepEqual(await ipc.call("splitpage:bundle-export", "export1", picked.id), { ok: true, files: 1, left: 0 });
+    assert.equal(readZip(path.join(s.out, "Share.zip")).entries.get("Episode 12 files/brief.pdf").bytes.toString(), "A's brief",
+      "a plan made for A writes A's file, even after the tab opened B");
+  } finally { s.done(); }
+});
+
+test("Cancel during a read that never answers settles the job first: no temporary is left when the result or idle arrives", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "big.mp4"), Buffer.alloc(8 * 1024 * 1024, 7));
+    const body = project([bundled("big.mp4")]);
     let ipc = null;
     let cancelled = false;
     ipc = harness({
       source: s.script,
+      exporterOptions: { readFile: () => { const r = new Readable({ read() {} }); r.push(Buffer.alloc(1024 * 1024, 7)); return r; } },
       onSend: (channel, payload) => {
-        if (channel === "splitpage:bundle-progress" && payload.done > 1024 * 1024 && !cancelled) { cancelled = true; ipc.send("splitpage:bundle-cancel", "export1"); }
+        if (channel === "splitpage:bundle-progress" && payload.done >= 1024 * 1024 && !cancelled) { cancelled = true; setTimeout(() => ipc.send("splitpage:bundle-cancel", "export1"), 0); }
       }
     });
-    const zip = path.join(s.out, "Share.zip");
-    const { result } = await ipc.exportTo(zip, body);
+    const { result } = await ipc.exportTo(path.join(s.out, "Share.zip"), body);
     assert.equal(cancelled, true, "Cancel was pressed part-way");
     assert.deepEqual(result, { ok: false, code: "CANCELLED" });
+    assert.deepEqual(fs.readdirSync(s.out), [], "the temporary is gone before the result is reported");
+    assert.equal(ipc.bundleJobs.busy(), false, "and the queue is idle by then");
+  } finally { s.done(); }
+});
+
+test("Cancel while the publish's hard link is still running never leaves the zip behind", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    let ipc = null;
+    ipc = harness({
+      source: s.script,
+      copierOptions: { link: async (from, to) => { ipc.send("splitpage:bundle-cancel", "export1"); await sleep(50); return fs.promises.link(from, to); } }
+    });
+    const { result } = await ipc.exportTo(path.join(s.out, "Share.zip"), project([bundled("take.mp4")]));
+    assert.deepEqual(result, { ok: false, code: "CANCELLED" });
     await ipc.bundleJobs.idle();
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    assert.deepEqual(fs.readdirSync(s.out), [], "no zip and no temporary");
+    await sleep(100);
+    assert.deepEqual(fs.readdirSync(s.out), [], "the late link is taken back, and no temporary is left");
+  } finally { s.done(); }
+});
+
+test("without hard links, the zip is created exclusively: another program's file under that name is never replaced", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    const body = project([bundled("take.mp4")]);
+    const eperm = async () => { throw Object.assign(new Error("no hard links here"), { code: "EPERM" }); };
+    const plain = harness({ source: s.script, copierOptions: { link: eperm } });
+    const zip = path.join(s.out, "Plain.zip");
+    assert.deepEqual((await plain.exportTo(zip, body)).result, { ok: true, files: 1, left: 0 });
+    assert.equal(readZip(zip).entries.get("Episode 12 files/take.mp4").bytes.toString(), "take", "the copied-in zip is whole");
+    assert.deepEqual(leftovers(s.out), []);
+    const racing = path.join(s.out, "Race.zip");
+    const raced = harness({
+      source: s.script,
+      copierOptions: { link: async (_from, to) => { fs.writeFileSync(to, "another program's"); throw Object.assign(new Error("no hard links"), { code: "EPERM" }); } }
+    });
+    assert.deepEqual((await raced.exportTo(racing, body)).result, { ok: false, code: "TAKEN" });
+    assert.equal(fs.readFileSync(racing, "utf8"), "another program's", "the file that appeared is untouched");
+    assert.deepEqual(leftovers(s.out), []);
+    const broken = harness({
+      source: s.script,
+      copierOptions: { link: eperm, openTarget: async (p) => { const h = await fsp.open(p, "wx"); return { ...h, close: () => h.close(), createWriteStream: () => { throw new Error("disk gone"); } }; } }
+    });
+    const failed = path.join(s.out, "Failed.zip");
+    assert.deepEqual((await broken.exportTo(failed, body)).result, { ok: false, code: "FAILED" });
+    assert.equal(fs.existsSync(failed), false, "a copy that fails removes the file it created, and only that");
+    assert.deepEqual(leftovers(s.out), []);
+  } finally { s.done(); }
+});
+
+test("every byte of a short write is written again until it lands, so the zip and its CRCs are whole", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), Buffer.alloc(3000, 9));
+    let shortWrites = 0;
+    const ipc = harness({
+      source: s.script,
+      exporterOptions: {
+        openPart: async (p) => {
+          const h = await fsp.open(p, "wx");
+          return {
+            write: (buf, off, len, pos) => { if (len > 7) shortWrites++; return h.write(buf, off, Math.min(len, 7), pos); },
+            close: () => h.close()
+          };
+        }
+      }
+    });
+    const zip = path.join(s.out, "Short.zip");
+    assert.deepEqual((await ipc.exportTo(zip, project([bundled("take.mp4")]))).result, { ok: true, files: 1, left: 0 });
+    assert.ok(shortWrites > 0, "setup: the file took fewer bytes than offered");
+    assert.deepEqual(readZip(zip).entries.get("Episode 12 files/take.mp4").bytes, Buffer.alloc(3000, 9));
   } finally { s.done(); }
 });
 
@@ -337,21 +472,15 @@ test("a failed publish, or a name that is taken by now, leaves nothing new and n
   const s = scratch();
   try {
     s.put(path.join(s.folder, "take.mp4"), "take");
-    const body = project([link({ kind: "bundled", name: "take.mp4" })]);
-    const broken = harness({
-      source: s.script,
-      copierOptions: {
-        link: async () => { const e = new Error("no links"); e.code = "EXDEV"; throw e; },
-        rename: async () => { const e = new Error("disk full"); e.code = "ENOSPC"; throw e; }
-      }
-    });
+    const body = project([bundled("take.mp4")]);
+    const no = Object.assign(new Error("no"), { code: "EIO" });
+    const broken = harness({ source: s.script, copierOptions: { link: async () => { throw no; }, openTarget: async () => { throw no; } } });
     assert.deepEqual((await broken.exportTo(path.join(s.out, "Share.zip"), body)).result, { ok: false, code: "FAILED" });
     assert.deepEqual(fs.readdirSync(s.out), [], "a failed export leaves no zip and no temporary");
     const there = s.put(path.join(s.out, "Taken.zip"), "the user's own file");
     const ipc = harness({ source: s.script });
     assert.deepEqual((await ipc.exportTo(there, body)).result, { ok: false, code: "TAKEN" });
     assert.equal(fs.readFileSync(there, "utf8"), "the user's own file", "an existing file is never replaced");
-    assert.deepEqual(leftovers(s.out), []);
     const lateHarness = harness({ source: s.script });
     const late = path.join(s.out, "Late.zip");
     await lateHarness.plan(body);
@@ -363,12 +492,25 @@ test("a failed publish, or a name that is taken by now, leaves nothing new and n
   } finally { s.done(); }
 });
 
+test("the same script and files give the same zip bytes: entry times come from the script's edit time and the files' own times", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    const body = project([bundled("take.mp4")]);
+    const ipc = harness({ source: s.script });
+    await ipc.exportTo(path.join(s.out, "One.zip"), body, "export1");
+    await sleep(2100);
+    await ipc.exportTo(path.join(s.out, "Two.zip"), body, "export2");
+    assert.deepEqual(fs.readFileSync(path.join(s.out, "One.zip")), fs.readFileSync(path.join(s.out, "Two.zip")));
+  } finally { s.done(); }
+});
+
 test("ZIP64: entries, offsets and the directory past the 32-bit limit get their ZIP64 fields, and the system's unzip reads them", async () => {
   const s = scratch();
   try {
     s.put(path.join(s.folder, "a.mp4"), Buffer.alloc(300, 1));
     s.put(path.join(s.folder, "b.pdf"), Buffer.alloc(200, 2));
-    const body = project([link({ kind: "bundled", name: "a.mp4" }), link({ kind: "bundled", name: "b.pdf" })]);
+    const body = project([bundled("a.mp4"), bundled("b.pdf")]);
     const ipc = harness({ source: s.script, exporterOptions: { zip64Above: 64 } });
     const zip = path.join(s.out, "Wide.zip");
     assert.deepEqual((await ipc.exportTo(zip, body)).result, { ok: true, files: 2, left: 0 });
@@ -388,18 +530,20 @@ test("export negatives: a forged or reused job, a script name outside the rules,
   const s = scratch();
   try {
     s.put(path.join(s.folder, "take.mp4"), "take");
-    const body = project([link({ kind: "bundled", name: "take.mp4" })]);
+    const body = project([bundled("take.mp4")]);
     const ipc = harness({ source: s.script });
     const zip = path.join(s.out, "Share.zip");
     const picked = await ipc.pick(zip);
     assert.deepEqual(await ipc.call("splitpage:bundle-export", "never-planned", picked.id), { ok: false, code: "UNKNOWN" }, "a forged job id");
     assert.deepEqual(await ipc.call("splitpage:bundle-export", "../x", picked.id), { ok: false, code: "REFUSED" });
-    assert.deepEqual(await ipc.call("splitpage:bundle-export-plan", "../x", "Episode 12.splitpage", "{}"), { ok: false, code: "REFUSED" });
+    assert.deepEqual(await ipc.call("splitpage:bundle-export-plan", "../x", "Episode 12.splitpage", "{}", ipc.scriptId), { ok: false, code: "REFUSED" });
     for (const name of ["..\\Episode 12.splitpage", "a/b.splitpage", "Episode 12.exe", "Episode 12.zip", "CON.splitpage", "", "x.splitpage."]) {
       assert.deepEqual(await ipc.plan(body, "export1", name), { ok: false, code: "REFUSED" }, "script name " + JSON.stringify(name));
     }
     assert.deepEqual(await ipc.plan("not a script"), { ok: false, code: "REFUSED" }, "bytes that are no script");
-    assert.deepEqual(await ipc.callFrom(ipc.main, null, "splitpage:bundle-export-plan", "export1", "Episode 12.splitpage", body), { ok: false, code: "REFUSED" }, "no tab");
+    assert.deepEqual(await ipc.plan(body, "export1", "Episode 12.splitpage", s.script), { ok: false, code: "REFUSED" }, "a path where an id belongs");
+    assert.deepEqual(await ipc.callFrom(ipc.main, null, "splitpage:bundle-export-plan", "export1", "Episode 12.splitpage", body, ipc.scriptId),
+      { ok: false, code: "REFUSED" }, "no tab");
     assert.equal((await ipc.plan(body)).ok, true);
     const other = ipc.makeSender(8);
     assert.deepEqual(await ipc.callFrom(other, undefined, "splitpage:bundle-export", "export1", picked.id), { ok: false, code: "UNKNOWN" }, "another page's plan");
@@ -414,7 +558,7 @@ test("export negatives: a forged or reused job, a script name outside the rules,
     }
     const otherTab = { id: "tab-b", windowId: "w1", source: { kind: "blank" } };
     ipc.tabs.set(otherTab.id, otherTab);
-    await ipc.callFrom(ipc.main, otherTab, "splitpage:bundle-export-plan", "export2", "Episode 12.splitpage", body);
+    await ipc.callFrom(ipc.main, otherTab, "splitpage:bundle-export-plan", "export2", "Episode 12.splitpage", body, "");
     assert.deepEqual(await ipc.callFrom(ipc.main, otherTab, "splitpage:bundle-export", "export2", picked.id), { ok: false, code: "UNKNOWN" },
       "a destination another tab's dialog chose");
     assert.deepEqual(fs.readdirSync(s.out), [], "nothing was written by any refused call");
@@ -423,13 +567,12 @@ test("export negatives: a forged or reused job, a script name outside the rules,
   } finally { s.done(); }
 });
 
-test("a file added to the folder after the plan, but not linked, never goes in, and the job writes what the plan's bytes link", async () => {
+test("a file added to the folder after the plan, but not linked, never goes in", async () => {
   const s = scratch();
   try {
     s.put(path.join(s.folder, "take.mp4"), "take");
-    const body = project([link({ kind: "bundled", name: "take.mp4" })]);
     const ipc = harness({ source: s.script });
-    await ipc.plan(body);
+    await ipc.plan(project([bundled("take.mp4")]));
     s.put(path.join(s.folder, "added later.mp4"), "late");
     const picked = await ipc.pick(path.join(s.out, "Share.zip"));
     await ipc.call("splitpage:bundle-export", "export1", picked.id);
@@ -444,7 +587,7 @@ test("a bundle folder that is a junction, and a bundled name that links out of t
     fs.mkdirSync(elsewhere);
     s.put(path.join(elsewhere, "take.mp4"), "outside");
     fs.rmSync(s.folder, { recursive: true });
-    const body = project([link({ kind: "bundled", name: "take.mp4" })]);
+    const body = project([bundled("take.mp4")]);
     if (junction(elsewhere, s.folder)) {
       const ipc = harness({ source: s.script });
       const { result } = await ipc.exportTo(path.join(s.out, "Share.zip"), body);

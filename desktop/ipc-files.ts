@@ -138,10 +138,10 @@ function createFileIpc({
       return bundleJobs.chooseSave(id, choice, tabOf(event));
     });
 
-    ipcHandle("splitpage:bundle-export-plan", async (event, job, scriptName, data) => {
+    ipcHandle("splitpage:bundle-export-plan", async (event, job, scriptName, data, scriptId) => {
       const tab = tabOf(event);
       if (!tab || typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
-      return bundleJobs.planExport(event.sender, tab.id, job, scriptName, toBuffer(data).toString("utf8"));
+      return bundleJobs.planExport(event.sender, tab.id, job, scriptName, toBuffer(data).toString("utf8"), scriptId);
     });
 
     ipcHandle("splitpage:bundle-export", async (event, job, id) => {

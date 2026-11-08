@@ -276,7 +276,7 @@ export interface DesktopIpcContract {
   "splitpage:write-file": DesktopChannelCall<[string, string | ArrayBuffer | Uint8Array], DesktopWireStamp>;
   "splitpage:bundle-save-plan": DesktopChannelCall<[string, string[]], DesktopWireBundlePlanAnswer>;
   "splitpage:bundle-save-choice": DesktopChannelCall<[string, string], DesktopWireBundleChoiceAnswer>;
-  "splitpage:bundle-export-plan": DesktopChannelCall<[string, string, string | ArrayBuffer | Uint8Array], DesktopWireBundleExportPlanAnswer>;
+  "splitpage:bundle-export-plan": DesktopChannelCall<[string, string, string | ArrayBuffer | Uint8Array, string], DesktopWireBundleExportPlanAnswer>;
   "splitpage:bundle-export": DesktopChannelCall<[string, string], DesktopWireBundleExport>;
   "splitpage:stat-file": DesktopChannelCall<[string], { lastModified: number; size: number } | null>;
   "splitpage:recents-list": DesktopChannelCall<[], DesktopWireRecent[]>;

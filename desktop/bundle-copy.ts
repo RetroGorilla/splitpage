@@ -37,8 +37,7 @@ function createBundleCopier(options: {
   pathStyle?: "win32" | "posix";
   progressEveryMs?: number;
   link?: typeof fsp.link;
-  rename?: typeof fsp.rename;
-  lstat?: typeof fsp.lstat;
+  openTarget?: (target: string) => Promise<NodeFsPromises.FileHandle>;
   unlink?: typeof fsp.unlink;
 }) {
   const {
@@ -49,8 +48,7 @@ function createBundleCopier(options: {
   const every = typeof options.progressEveryMs === "number" ? options.progressEveryMs : 100;
 
   const linkFile = options.link || fsp.link;
-  const renameFile = options.rename || fsp.rename;
-  const lstatTarget = options.lstat || fsp.lstat;
+  const openTarget = options.openTarget || ((target: string) => fsp.open(target, "wx"));
   const unlinkFile = options.unlink || fsp.unlink;
   const writing = new Set<string>();
   const publishing = new Map<string, Promise<void>>();
@@ -84,6 +82,21 @@ function createBundleCopier(options: {
     }
   }
 
+  async function copyExclusive(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+    let out: NodeFsPromises.FileHandle;
+    try { out = await openTarget(target); } catch (e) { return (e as NodeJS.ErrnoException).code === "EEXIST" ? "taken" : "failed"; }
+    let whole = false;
+    try {
+      await pipeline(fs.createReadStream(part), out.createWriteStream(), { signal });
+      whole = !signal.aborted;
+    } catch { } finally {
+      try { await out.close(); } catch { }
+      if (!whole) { try { await unlinkFile(target); } catch { } }
+    }
+    if (whole) return "copied";
+    return signal.aborted ? "cancelled" : "failed";
+  }
+
   async function publish(part: string, target: string, signal: AbortSignal, published: () => void): Promise<"copied" | "taken" | "cancelled" | "failed"> {
     if (signal.aborted) return "cancelled";
     let linked = false;
@@ -93,17 +106,18 @@ function createBundleCopier(options: {
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "EEXIST") return "taken";
     }
-    if (linked) {
-      published();
-      try { await unlinkFile(part); } catch { }
-      return "copied";
+    if (!linked) {
+      if (signal.aborted) return "cancelled";
+      // why: exFAT and SMB shares may lack hard links; creating the name exclusively never replaces another program's file
+      const copied = await copyExclusive(part, target, signal);
+      if (copied !== "copied") return copied;
     }
-    if (signal.aborted) return "cancelled";
-    // why: exFAT and SMB shares may lack hard links; the folder lock leaves only another program to race this rename
-    try { await lstatTarget(target); return "taken"; } catch (e) { if (!missingFile(e)) return "failed"; }
-    if (signal.aborted) return "cancelled";
-    try { await renameFile(part, target); } catch { return "failed"; }
+    if (signal.aborted) {
+      try { await unlinkFile(target); } catch { }
+      return "cancelled";
+    }
     published();
+    try { await unlinkFile(part); } catch { }
     return "copied";
   }
 

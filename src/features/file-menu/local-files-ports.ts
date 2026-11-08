@@ -40,7 +40,7 @@ export interface LocalFileMenuPorts {
   readonly brollView: Pick<BrollView, "printView">;
   readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "withBar"> };
   readonly delivery: FileDelivery;
-  readonly scriptFiles: { readonly export: (zipName: string, scriptName: string, body: string) => Promise<boolean> };
+  readonly scriptFiles: { readonly export: (zipName: string, scriptName: string, body: string, script: unknown) => Promise<boolean> };
   readonly pdfPrint: { readonly export: (kind: string, options: Readonly<Record<string, unknown>> | undefined, alive: () => boolean) => Promise<void> | null };
   readonly merge: { readonly offer: (file: FileConflict["current"], home: ReturnType<DocumentPlace["fileHome"]> | undefined) => Promise<void>; readonly reset: () => void };
   readonly exportControls: Pick<FileMenuExportMount, "isExportAction" | "rememberExport">;

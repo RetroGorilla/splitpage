@@ -75,7 +75,7 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly openBundledFile: DesktopCall<"splitpage:bundled-file-open">;
   readonly planBundleSave: DesktopCall<"splitpage:bundle-save-plan">;
   readonly chooseBundleSave: DesktopCall<"splitpage:bundle-save-choice">;
-  readonly planBundleExport: (job: string, scriptName: string, bytes: Uint8Array) => ReturnType<DesktopCall<"splitpage:bundle-export-plan">>;
+  readonly planBundleExport: (job: string, scriptName: string, bytes: Uint8Array, scriptId: string) => ReturnType<DesktopCall<"splitpage:bundle-export-plan">>;
   readonly exportBundle: (job: string, fileId: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-export">>;
   readonly videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopThumbnailResult>;
 

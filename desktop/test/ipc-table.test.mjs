@@ -620,9 +620,11 @@ test("the bundle channels take a token, a name or a job id, never a path to copy
       [[], ["fid1"], [null, ["a.mp4"]], ["fid1", "a.mp4"], ["fid1", { names: ["a.mp4"] }], ["fid1", ["a.mp4"], "C:\\Videos"], [{ path: "C:\\a.splitpage" }, []]]],
     "splitpage:bundle-save-choice invoke": [["string", "string"], [["fid1", "copy"], ["fid1", "link"]],
       [[], ["fid1"], ["fid1", null], ["fid1", { choice: "link" }], ["fid1", "link", "C:\\Videos"], [null, "copy"]]],
-    "splitpage:bundle-export-plan invoke": [["string", "string", "bytes"], [["export1", "Episode 12.splitpage", new Uint8Array([123, 125])], ["export1", "Episode 12.splitpage", "{}"]],
-      [[], ["export1"], ["export1", "Episode 12.splitpage"], [null, "Episode 12.splitpage", "{}"], ["export1", { name: "a.splitpage" }, "{}"],
-        ["export1", "Episode 12.splitpage", { rows: [] }], ["export1", "Episode 12.splitpage", "{}", "C:\\Exports\\a.zip"]]],
+    "splitpage:bundle-export-plan invoke": [["string", "string", "bytes", "string"],
+      [["export1", "Episode 12.splitpage", new Uint8Array([123, 125]), "fid1"], ["export1", "Episode 12.splitpage", "{}", ""]],
+      [[], ["export1"], ["export1", "Episode 12.splitpage"], ["export1", "Episode 12.splitpage", "{}"], [null, "Episode 12.splitpage", "{}", "fid1"],
+        ["export1", { name: "a.splitpage" }, "{}", "fid1"], ["export1", "Episode 12.splitpage", { rows: [] }, "fid1"],
+        ["export1", "Episode 12.splitpage", "{}", { path: "C:\\Episode 12.splitpage" }], ["export1", "Episode 12.splitpage", "{}", "fid1", "C:\\Exports\\a.zip"]]],
     "splitpage:bundle-export invoke": [["string", "string"], [["export1", "fid1"]],
       [[], ["export1"], [null, "fid1"], ["export1", { path: "C:\\Exports\\a.zip" }], ["export1", "fid1", "C:\\Exports\\a.zip"]]]
   };

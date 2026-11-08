@@ -335,7 +335,7 @@ test("a copy stalled on a lost drive is let go when cancelled, and a later Save 
   } finally { s.done(); }
 });
 
-test("a cancelled copy stalled inside its publish never renames over a file a later carry published into that folder", async () => {
+test("a cancelled copy stalled inside its publish never replaces a file a later carry published into that folder", async () => {
   const s = scratch();
   try {
     const stale = path.join(path.dirname(s.clip), "take.mp4");
@@ -351,16 +351,14 @@ test("a cancelled copy stalled inside its publish never renames over a file a la
       source: s.script, grants: [["tok", stale]],
       copierOptions: {
         link: async () => { throw Object.assign(new Error("no hard links here"), { code: "EPERM" }); },
-        lstat: async (p) => {
-          const seen = await fs.promises.lstat(p).then((st) => ({ st }), (error) => ({ error }));
+        openTarget: async (p) => {
           if (stall && path.basename(p) === "take.mp4") {
-            assert.equal(seen.error && seen.error.code, "ENOENT", "setup: the stale job's check finds the name free");
+            assert.equal(fs.existsSync(p), false, "setup: the stale job reaches its create while the name is free");
             stall = false;
             reached.open();
             await released.shut;
           }
-          if (seen.error) throw seen.error;
-          return seen.st;
+          return fs.promises.open(p, "wx");
         }
       }
     });
@@ -478,7 +476,7 @@ test("a background copy that cannot copy a file keeps the script and what it cop
     fs.writeFileSync(path.join(s.folder, "b.mp4"), "bbbb");
     let links = 0;
     const no = Object.assign(new Error("no"), { code: "EIO" });
-    const ipc = harness({ source: s.script, copierOptions: { link: async (from, to) => { if (++links > 1) throw no; return fs.promises.link(from, to); }, rename: async () => { throw no; } } });
+    const ipc = harness({ source: s.script, copierOptions: { link: async (from, to) => { if (++links > 1) throw no; return fs.promises.link(from, to); }, openTarget: async () => { throw no; } } });
     const saved = await ipc.saveAs(s.copyScript, { script: true }, project("a.mp4", "b.mp4"));
     assert.equal(saved.written.bundleRefused, undefined);
     assert.equal(fs.existsSync(s.copyScript), true, "the script was written first");

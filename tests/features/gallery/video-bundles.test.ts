@@ -41,7 +41,7 @@ function setup(opts: Setup = {}) {
   const edits: string[] = [];
   const plans: { handle: unknown; names: string[] }[] = [];
   const choices: { handle: unknown; choice: string }[] = [];
-  const exportCalls: string[][] = [];
+  const exportCalls: unknown[][] = [];
   const ports: VideoBundlePorts = {
     window: window,
     script: () => at.script,
@@ -62,8 +62,8 @@ function setup(opts: Setup = {}) {
       }
     },
     exports: {
-      plan: async (job, scriptName, body) => {
-        exportCalls.push(["plan", job, scriptName, body]);
+      plan: async (job, scriptName, body, script) => {
+        exportCalls.push(["plan", job, scriptName, body, script]);
         return opts.exportPlan === undefined ? { files: 2, bytes: 2048, left: 0 } : opts.exportPlan;
       },
       pick: async (name) => { exportCalls.push(["pick", name]); return opts.picked === undefined ? { id: "zip1", name } : opts.picked; },
@@ -585,10 +585,12 @@ test("exporting with the script's files plans in main, asks where, then shows th
   let progress: ((p: { done: number; total: number }) => void) | null = null;
   let finish: (res: DesktopBundleExport | null) => void = () => {};
   const h = setup({ exported: (_job, _id, onProgress) => { progress = onProgress; return new Promise((resolve) => { finish = resolve; }); } });
-  const running = h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{\"rows\":[]}");
+  const handle = { kind: "file", name: "Episode 12.splitpage" };
+  const running = h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{\"rows\":[]}", handle);
   await settle();
   assert.deepEqual(h.exportCalls.map((c) => c[0]), ["plan", "pick", "run"]);
-  assert.deepEqual(h.exportCalls[0]?.slice(2), ["Episode 12.splitpage", "{\"rows\":[]}"], "main gets the script's name and bytes, no path");
+  assert.deepEqual(h.exportCalls[0]?.slice(2), ["Episode 12.splitpage", "{\"rows\":[]}", handle],
+    "main gets the script's name, its bytes and the script they were captured from, no path");
   assert.equal(h.exportCalls[2]?.[1], h.exportCalls[0]?.[1], "the job runs the plan main made");
   assert.equal(h.exportCalls[2]?.[2], "zip1", "and writes only to the file the dialog chose");
   assert.ok(progress, "the job reports progress");
@@ -609,35 +611,35 @@ test("exporting with the script's files plans in main, asks where, then shows th
 
 test("a finished export says how many files went in, and a separate notice that stays counts the files it couldn't include", async () => {
   const h = setup({ exported: async () => ({ ok: true, files: 3, left: 2 }) });
-  assert.equal(await h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{}"), true);
+  assert.equal(await h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{}", null), true);
   assert.equal(h.notices.shown[0]?.message, "Exported “Episode 12 (with files).zip” with 3 files.");
   assert.equal(h.notices.shown[0]?.kind, "ok");
-  assert.equal(h.notices.shown[1]?.message, "2 files couldn't be included in “Episode 12 (with files).zip”. They are missing, or a type Splitpage " +
-    "doesn't attach, so their links don't open from the exported script.");
+  assert.equal(h.notices.shown[1]?.message, "2 files couldn't be included in “Episode 12 (with files).zip”. They are missing, outside the script's folder, " +
+    "or a type Splitpage doesn't attach, so they aren't in the zip.");
   assert.equal(h.notices.shown[1]?.sticky, true);
   h.owner.dispose();
 });
 
 test("an export main refuses, a cancelled save dialog, and a taken name never claim success", async () => {
   const refused = setup({ exportPlan: null });
-  assert.equal(await refused.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}"), false);
+  assert.equal(await refused.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}", null), false);
   assert.deepEqual(refused.exportCalls.map((c) => c[0]), ["plan"], "no dialog when main refuses the plan");
   assert.equal(refused.notices.shown[0]?.message, "Could not export “A (with files).zip”.");
   refused.owner.dispose();
   const dismissed = setup({ picked: null });
-  assert.equal(await dismissed.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}"), false);
+  assert.equal(await dismissed.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}", null), false);
   assert.deepEqual(dismissed.exportCalls.map((c) => c[0]), ["plan", "pick"]);
   assert.deepEqual(dismissed.notices.shown, [], "a dismissed dialog says nothing");
   dismissed.owner.dispose();
   const taken = setup({ exported: async () => ({ ok: false, code: "TAKEN" }) });
-  assert.equal(await taken.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}"), false);
+  assert.equal(await taken.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}", null), false);
   assert.equal(taken.notices.shown[0]?.message, "Could not export — “A (with files).zip” already exists. Export again and choose a new name.");
   taken.owner.dispose();
 });
 
 test("the Export dialog's line about the files gives their count and size, and the Save As warning above 250 MB", () => {
   assert.equal(exportFilesText({ files: 2, bytes: 3 * 1024 * 1024, left: 0 }), "2 files (3 MB) in a folder beside the script");
-  assert.equal(exportFilesText({ files: 0, bytes: 0, left: 1 }), "no linked files to include · 1 file can't be included: missing, or a type Splitpage doesn't attach");
+  assert.equal(exportFilesText({ files: 0, bytes: 0, left: 1 }), "no linked files to include · 1 file can't be included: missing, outside the script's folder, or a type Splitpage doesn't attach");
   assert.equal(exportFilesText({ files: 1, bytes: BUNDLE_WARN_BYTES + 1, left: 0 }), "1 file (250 MB) in a folder beside the script. " +
     "That is a lot to copy, and it may take a while and use disk space. You can keep working while it copies.");
 });

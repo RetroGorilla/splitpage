@@ -46,7 +46,7 @@ const CHANNELS = [
   { name: "splitpage:write-file", direction: "invoke", argsSchema: ["string", "bytes"], allowedOrigins: APP },
   { name: "splitpage:bundle-save-plan", direction: "invoke", argsSchema: ["string", "array"], allowedOrigins: APP },
   { name: "splitpage:bundle-save-choice", direction: "invoke", argsSchema: ["string", "string"], allowedOrigins: APP },
-  { name: "splitpage:bundle-export-plan", direction: "invoke", argsSchema: ["string", "string", "bytes"], allowedOrigins: APP },
+  { name: "splitpage:bundle-export-plan", direction: "invoke", argsSchema: ["string", "string", "bytes", "string"], allowedOrigins: APP },
   { name: "splitpage:bundle-export", direction: "invoke", argsSchema: ["string", "string"], allowedOrigins: APP },
   { name: "splitpage:stat-file", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
 

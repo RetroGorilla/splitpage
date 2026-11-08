@@ -16,6 +16,7 @@ interface BundleExportSource {
   readonly name: string;
   readonly from: string;
   readonly size: number;
+  readonly mtime: Date;
 }
 
 interface BundleExportLayout {
@@ -24,6 +25,7 @@ interface BundleExportLayout {
   readonly body: Buffer;
   readonly sources: readonly BundleExportSource[];
   readonly left: number;
+  readonly edited: Date;
 }
 
 type BundleExportResult = { ok: true; files: number; left: number } | { ok: false; code: "CANCELLED" | "FAILED" | "TAKEN" };
@@ -63,6 +65,8 @@ function crcOf(bytes: Uint8Array, crc: number): number {
   return (c ^ MAX32) >>> 0;
 }
 
+const DOS_EPOCH = new Date(1980, 0, 1);
+
 function dosStamp(at: Date): { time: number; date: number } {
   return {
     time: (at.getHours() << 11) | (at.getMinutes() << 5) | (at.getSeconds() >> 1),
@@ -70,31 +74,45 @@ function dosStamp(at: Date): { time: number; date: number } {
   };
 }
 
+function stampable(at: unknown): Date {
+  const d = typeof at === "string" || at instanceof Date ? new Date(at) : null;
+  return d && !Number.isNaN(d.getTime()) && d.getFullYear() >= 1980 && d.getFullYear() < 2108 ? d : DOS_EPOCH;
+}
+
+async function writeAll(handle: NodeFsPromises.FileHandle, bytes: Uint8Array, at: number): Promise<void> {
+  let done = 0;
+  while (done < bytes.length) {
+    const { bytesWritten } = await handle.write(bytes, done, bytes.length - done, at + done);
+    if (!(bytesWritten > 0)) throw new Error("the export file took no bytes");
+    done += bytesWritten;
+  }
+}
+
 function createBundleExporter(options: {
-  bundleFiles: Pick<typeof VideoEmbed, "bundleableName" | "fileLinksIn" | "numberedName" | "openableVideoPath" | "projectRecord" | "resolveBundledFile">;
+  bundleFiles: Pick<typeof VideoEmbed, "bundleableName" | "fileLinksIn" | "numberedName" | "projectRecord" | "resolveBundledFile">;
   publisher: { readonly folderName: (script: string) => string; readonly partIn: (folder: string) => string;
     readonly publishWhole: (part: string, target: string, signal: AbortSignal) => Promise<"copied" | "taken" | "cancelled" | "failed"> };
   foldCase?: boolean;
-  pathStyle?: "win32" | "posix";
   zip64Above?: number;
-  now?: () => Date;
+  openPart?: (part: string) => Promise<NodeFsPromises.FileHandle>;
+  readFile?: (from: string) => NodeJS.ReadableStream;
 }) {
-  const { bundleableName, fileLinksIn, numberedName, openableVideoPath, projectRecord, resolveBundledFile } = options.bundleFiles;
+  const { bundleableName, fileLinksIn, numberedName, projectRecord, resolveBundledFile } = options.bundleFiles;
   const { folderName, partIn, publishWhole } = options.publisher;
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
-  const pathStyle = options.pathStyle || (process.platform === "win32" ? "win32" : "posix");
   const wide = typeof options.zip64Above === "number" ? options.zip64Above : MAX32;
-  const now = options.now || (() => new Date());
+  const openPart = options.openPart || ((part: string) => fsp.open(part, "wx"));
+  const readFile = options.readFile || ((from: string) => fs.createReadStream(from, { highWaterMark: READ_CHUNK }));
   const key = (s: string) => (foldCase ? s.toLowerCase() : s);
 
   function scriptNameOk(name: unknown): name is string {
     return bundleableName(name, SCRIPT_NAME);
   }
 
-  async function regularSize(p: string): Promise<number | null> {
+  async function regularFile(p: string): Promise<{ size: number; mtime: Date } | null> {
     try {
       const st = await fsp.stat(p);
-      return st.isFile() ? st.size : null;
+      return st.isFile() ? { size: st.size, mtime: stampable(st.mtime) } : null;
     } catch { return null; }
   }
 
@@ -102,36 +120,38 @@ function createBundleExporter(options: {
     if (!scriptNameOk(scriptName)) return null;
     const record = projectRecord(text);
     if (!record || typeof record !== "object" || Array.isArray(record)) return null;
-    const named = new Map<string, string>();
-    const taken = new Set<string>();
     const lost = new Set<string>();
-    const sources: BundleExportSource[] = [];
+    const taken = new Set<string>();
+    const kept: { holder: VideoEmbed.FileLinkHolder; name: string; from: string; size: number; mtime: Date }[] = [];
     for (const holder of fileLinksIn(record)) {
       const at = holder.location;
-      const wanted = at.kind === "bundled" ? "b:" + key(at.name) : "p:" + key(at.path);
-      const found = at.kind === "bundled"
-        ? (scriptPath ? await resolveBundledFile(scriptPath, at.name, allow, fsp, path, foldCase) : { ok: false as const, code: "GONE" as const })
-        : await openableVideoPath(at.path, pathStyle, fsp, allow);
-      const size = found.ok ? await regularSize(found.path) : null;
-      if (!found.ok || size === null) { lost.add(wanted); continue; }
-      let name = named.get(key(found.path));
+      // why: a script is untrusted, so its path links never authorize a read; they stay paths and are counted
+      if (at.kind !== "bundled") { lost.add("p:" + key(at.path)); continue; }
+      const found = scriptPath ? await resolveBundledFile(scriptPath, at.name, allow, fsp, path, foldCase) : null;
+      const file = found && found.ok ? await regularFile(found.path) : null;
+      if (!found || !found.ok || !file) { lost.add("b:" + key(at.name)); taken.add(at.name.toLowerCase()); continue; }
+      kept.push({ holder, name: at.name, from: found.path, ...file });
+    }
+    const named = new Map<string, string>();
+    const sources: BundleExportSource[] = [];
+    for (const k of kept) {
+      let name = named.get(key(k.from));
       if (!name) {
-        const base = at.kind === "bundled" ? at.name : path.basename(at.path);
         for (let n = 1; n <= NUMBERED_TRIES && !name; n++) {
-          const candidate = numberedName(base, n);
+          const candidate = numberedName(k.name, n);
           if (!bundleableName(candidate, allow)) break;
           if (!taken.has(candidate.toLowerCase())) name = candidate;
         }
-        if (!name) { lost.add(wanted); continue; }
+        if (!name) { lost.add("b:" + key(k.name)); continue; }
         taken.add(name.toLowerCase());
-        named.set(key(found.path), name);
-        sources.push({ name, from: found.path, size });
+        named.set(key(k.from), name);
+        sources.push({ name, from: k.from, size: k.size, mtime: k.mtime });
       }
-      holder.location = { kind: "bundled", name };
+      k.holder.location = { kind: "bundled", name };
     }
     return {
       script: scriptName, folder: folderName(scriptName), body: Buffer.from(JSON.stringify(record, null, 2), "utf8"),
-      sources, left: lost.size
+      sources, left: lost.size, edited: stampable((record as { lastEditedAt?: unknown }).lastEditedAt)
     };
   }
 
@@ -212,18 +232,22 @@ function createBundleExporter(options: {
   }
 
   async function writeZip(handle: NodeFsPromises.FileHandle, plan: BundleExportLayout, signal: AbortSignal, onProgress: BundleProgress): Promise<"done" | "cancelled" | "failed"> {
-    const stamp = dosStamp(now());
     const total = plan.body.length + plan.sources.reduce((sum, s) => sum + s.size, 0);
+    const stopped = new Promise<"stopped">((resolve) => {
+      if (signal.aborted) resolve("stopped");
+      else signal.addEventListener("abort", () => resolve("stopped"), { once: true });
+    });
     let done = 0;
     let pos = 0;
-    const records: ZipRecord[] = [];
-    const put = async (bytes: Uint8Array) => { await handle.write(bytes, 0, bytes.length, pos); pos += bytes.length; };
+    const records: (ZipRecord & { stamp: { time: number; date: number } })[] = [];
+    const put = async (bytes: Uint8Array) => { await writeAll(handle, bytes, pos); pos += bytes.length; };
+    const edited = dosStamp(plan.edited);
     const whole = async (name: string, data: Buffer, method: number, size: number, crc: number, folder: boolean) => {
       const r = { name: Buffer.from(name, "utf8"), method, crc, size, packed: data.length, folder };
       const offset = pos;
-      await put(localHeader(r, stamp));
+      await put(localHeader(r, edited));
       await put(data);
-      records.push({ ...r, offset });
+      records.push({ ...r, offset, stamp: edited });
     };
     const packed = zlib.deflateRawSync(plan.body);
     await whole(plan.script, packed, 8, plan.body.length, crcOf(plan.body, 0), false);
@@ -232,15 +256,22 @@ function createBundleExporter(options: {
     if (plan.sources.length) await whole(plan.folder + "/", Buffer.alloc(0), 0, 0, 0, true);
     for (const s of plan.sources) {
       if (signal.aborted) return "cancelled";
+      const stamp = dosStamp(s.mtime);
       const r = { name: Buffer.from(plan.folder + "/" + s.name, "utf8"), method: 0, crc: 0, size: s.size, packed: s.size, folder: false };
       const offset = pos;
       await put(localHeader(r, stamp));
       let crc = 0;
       let read = 0;
-      const stream = fs.createReadStream(s.from, { highWaterMark: READ_CHUNK });
+      const stream = readFile(s.from);
+      const chunks = (stream as AsyncIterable<Buffer>)[Symbol.asyncIterator]();
       try {
-        for await (const chunk of stream as AsyncIterable<Buffer>) {
-          if (signal.aborted) return "cancelled";
+        for (;;) {
+          const next = chunks.next();
+          next.catch(() => {});
+          const step = await Promise.race([next, stopped]);
+          if (step === "stopped") return "cancelled";
+          if (step.done) break;
+          const chunk = Buffer.isBuffer(step.value) ? step.value : Buffer.from(step.value);
           read += chunk.length;
           if (read > s.size) return "failed";
           crc = crcOf(chunk, crc);
@@ -248,16 +279,16 @@ function createBundleExporter(options: {
           done += chunk.length;
           onProgress(done, total);
         }
-      } finally { stream.destroy(); }
+      } finally { (stream as { destroy?: () => void }).destroy?.(); }
       if (read !== s.size) return "failed";
       const at = Buffer.alloc(4);
       at.writeUInt32LE(crc >>> 0, 0);
-      await handle.write(at, 0, 4, offset + 14);
-      records.push({ ...r, crc, offset });
+      await writeAll(handle, at, offset + 14);
+      records.push({ ...r, crc, offset, stamp });
     }
     if (signal.aborted) return "cancelled";
     const cdOffset = pos;
-    for (const r of records) await put(centralHeader(r, stamp));
+    for (const r of records) await put(centralHeader(r, r.stamp));
     await put(endRecords(records.length, cdOffset, pos - cdOffset));
     return "done";
   }
@@ -266,7 +297,7 @@ function createBundleExporter(options: {
     if (signal.aborted) return { ok: false, code: "CANCELLED" };
     const part = partIn(path.dirname(target));
     let handle: NodeFsPromises.FileHandle;
-    try { handle = await fsp.open(part, "wx"); } catch { return { ok: false, code: "FAILED" }; }
+    try { handle = await openPart(part); } catch { return { ok: false, code: "FAILED" }; }
     let wrote: "done" | "cancelled" | "failed";
     let published: "copied" | "taken" | "cancelled" | "failed" = "failed";
     try {

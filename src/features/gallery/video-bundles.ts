@@ -93,7 +93,7 @@ export function saveCopyPromptText(plan: DesktopBundleSavePlan): { title: string
 
 export function exportFilesText(plan: DesktopBundleExportPlan): string {
   const parts = [plan.files ? videos(plan.files, "file") + " (" + sizeText(plan.bytes) + ") in a folder beside the script" : "no linked files to include"];
-  if (plan.left) parts.push(videos(plan.left, "file") + " can't be included: missing, or a type Splitpage doesn't attach");
+  if (plan.left) parts.push(videos(plan.left, "file") + " can't be included: missing, outside the script's folder, or a type Splitpage doesn't attach");
   return parts.join(" · ") + (plan.bytes > BUNDLE_WARN_BYTES ? ". " + BIG_COPY : "");
 }
 
@@ -102,7 +102,7 @@ export function exportDoneText(name: string, res: DesktopBundleExport | null): {
     return {
       text: "Exported " + quoted(name) + (res.files ? " with " + videos(res.files, "file") : "") + ".", kind: "ok",
       left: res.left ? videos(res.left, "file") + " couldn't be included in " + quoted(name) + ". " + (res.left === 1 ? "It is" : "They are") +
-        " missing, or a type Splitpage doesn't attach, so " + (res.left === 1 ? "its link doesn't" : "their links don't") + " open from the exported script." : null
+        " missing, outside the script's folder, or a type Splitpage doesn't attach, so " + (res.left === 1 ? "it isn't" : "they aren't") + " in the zip." : null
     };
   }
   if (res && res.code === "CANCELLED") return { text: "Stopped exporting " + quoted(name) + ". Nothing was saved.", kind: "warn", left: null };
@@ -293,19 +293,19 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     showNext();
   }
 
-  function exportPlan(body: string): Promise<DesktopBundleExportPlan | null> {
+  function exportPlan(body: string, script: unknown): Promise<DesktopBundleExportPlan | null> {
     if (!life.active()) return Promise.resolve(null);
-    return ports.exports.plan("files" + (++exportJobs), "Script.splitpage", body);
+    return ports.exports.plan("files" + (++exportJobs), "Script.splitpage", body, script);
   }
 
-  async function exportWithFiles(zipName: string, scriptName: string, body: string): Promise<boolean> {
+  async function exportWithFiles(zipName: string, scriptName: string, body: string, script: unknown): Promise<boolean> {
     if (!life.active()) return false;
     if (exporting) {
       ports.notices.show("Splitpage is already exporting " + quoted(exporting.name) + ". Wait for it to finish, then export again.", "warn");
       return false;
     }
     const job = "export" + (++exportJobs);
-    const plan = await ports.exports.plan(job, scriptName, body).catch(function () { return null; });
+    const plan = await ports.exports.plan(job, scriptName, body, script).catch(function () { return null; });
     if (!life.active()) return false;
     if (!plan) { ports.notices.show(exportDoneText(zipName, null).text, "error"); return false; }
     const picked = await ports.exports.pick(zipName);

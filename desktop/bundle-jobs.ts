@@ -38,6 +38,7 @@ interface BundleJob {
   readonly run: (progress: BundleProgress, signal: AbortSignal) => Promise<void>;
   readonly ctl: AbortController;
   readonly stop: (code: "CANCELLED" | "FAILED") => void;
+  readonly settles?: boolean;
 }
 
 interface SaveTarget {
@@ -125,8 +126,9 @@ function createBundleJobs(options: {
       if (!signal.aborted) {
         const ran = job.run((done, total) => tell(job.sender, (to) => to.send("splitpage:bundle-progress", { job: job.job, done, total })), signal)
           .catch(() => job.stop("FAILED"));
-        // why: a read stalled on a lost drive never answers its abort; the job is let go, and it cannot publish once aborted
-        await Promise.race([ran, new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }))]);
+        // why: a read stalled on a lost drive never answers its abort; a copy is let go, and it cannot publish once aborted
+        if (job.settles) await ran;
+        else await Promise.race([ran, new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }))]);
       }
       if (signal.aborted) job.stop("CANCELLED");
     } finally {
@@ -314,9 +316,18 @@ function createBundleJobs(options: {
     return carryForSave(fileId, noted, noted.from, to, names, sender);
   }
 
-  async function planExport(sender: BundleSender, tabId: string, job: string, scriptName: unknown, text: string): Promise<BundleExportPlanAnswer> {
+  function scriptOfBytes(tabId: string, scriptId: unknown): { script: string | null } | null {
+    if (scriptId === "") return { script: null };
+    const script = typeof scriptId === "string" ? pathOf(scriptId) : null;
+    const now = scriptOfTab(tabId);
+    return script && now && same(script, now) ? { script } : null;
+  }
+
+  async function planExport(sender: BundleSender, tabId: string, job: string, scriptName: unknown, text: string, scriptId: unknown): Promise<BundleExportPlanAnswer> {
     if (!exporter || !exporter.scriptNameOk(scriptName)) return { ok: false, code: "REFUSED" };
-    const script = scriptOfTab(tabId);
+    const bound = scriptOfBytes(tabId, scriptId);
+    if (!bound) return { ok: false, code: "REFUSED" };
+    const script = bound.script;
     const laid = await exporter.layout(text, scriptName, script, allow);
     if (!laid) return { ok: false, code: "REFUSED" };
     const key = keyOf(sender, job);
@@ -347,7 +358,7 @@ function createBundleJobs(options: {
       let settled = false;
       const done = (result: BundleExportAnswer) => { if (!settled) { settled = true; finish(result); } };
       enqueue({
-        key, sender, job, ctl: new AbortController(),
+        key, sender, job, ctl: new AbortController(), settles: true,
         stop: (code) => done({ ok: false, code }),
         run: async (progress, signal) => {
           const laid = await writer.layout(planned.text, planned.scriptName, planned.script, allow);

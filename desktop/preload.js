@@ -319,8 +319,8 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:bundle-save-choice", String(fileId || ""), String(choice || ""));
     },
 
-    planBundleExport(job, scriptName, data) {
-      return invoke("splitpage:bundle-export-plan", String(job || ""), String(scriptName || ""), data);
+    planBundleExport(job, scriptName, data, scriptId) {
+      return invoke("splitpage:bundle-export-plan", String(job || ""), String(scriptName || ""), data, String(scriptId || ""));
     },
 
     exportBundle(job, fileId, onProgress) {

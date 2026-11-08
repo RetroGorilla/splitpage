@@ -121,14 +121,14 @@ export function beginBundleSave(): ReturnType<GalleryVideoMount["beginSave"]> {
   return owner ? owner.beginSave() : { drained: null, ask: () => Promise.resolve([]), end: () => {} };
 }
 
-export function exportFilesPlan(body: string): ReturnType<GalleryVideoMount["exportPlan"]> {
+export function exportFilesPlan(body: string, script: unknown): ReturnType<GalleryVideoMount["exportPlan"]> {
   const owner = video.owner();
-  return owner ? owner.exportPlan(body) : Promise.resolve(null);
+  return owner ? owner.exportPlan(body, script) : Promise.resolve(null);
 }
 
-export function exportScriptWithFiles(zipName: string, scriptName: string, body: string): Promise<boolean> {
+export function exportScriptWithFiles(zipName: string, scriptName: string, body: string, script: unknown): Promise<boolean> {
   const owner = video.owner();
-  return owner ? owner.exportWithFiles(zipName, scriptName, body) : Promise.resolve(false);
+  return owner ? owner.exportWithFiles(zipName, scriptName, body, script) : Promise.resolve(false);
 }
 
 export const stopGalleryVideoFeature = video.stop;
