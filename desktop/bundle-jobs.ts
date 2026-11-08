@@ -88,7 +88,7 @@ function createBundleJobs(options: {
   const exporter = options.exporter || null;
   const quitGraceMs = typeof options.quitGraceMs === "number" ? options.quitGraceMs : QUIT_GRACE_MS;
   const exportPlans = new Map<string, ExportPlan>();
-  const exportTargets = new Map<string, string>();
+  const exportTargets = new Map<string, { readonly tabId: string; readonly replace: boolean }>();
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const queue: BundleJob[] = [];
   const byKey = new Map<string, BundleJob>();
@@ -356,17 +356,19 @@ function createBundleJobs(options: {
     return { ok: true, plan: { files: laid.sources.length, bytes: laid.sources.reduce((sum, s) => sum + s.size, 0), left: laid.left } };
   }
 
-  function noteExportTarget(fileId: string, tab: { id: string } | null): void {
+  function noteExportTarget(fileId: string, tab: { id: string } | null, replace: boolean): void {
     if (!tab) return;
     if (exportTargets.size >= EXPORT_TARGETS_MAX) exportTargets.delete(exportTargets.keys().next().value as string);
-    exportTargets.set(fileId, tab.id);
+    exportTargets.set(fileId, { tabId: tab.id, replace });
   }
 
   function startExport(sender: BundleSender, tabId: string, job: string, fileId: unknown): Promise<BundleExportAnswer> {
     const key = keyOf(sender, job);
     const planned = exportPlans.get(key);
     if (!exporter || !planned || planned.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
-    if (typeof fileId !== "string" || exportTargets.get(fileId) !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    if (typeof fileId !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    const noted = exportTargets.get(fileId);
+    if (!noted || noted.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
     const target = pathOf(fileId);
     if (!target || !ZIP_NAME.test(target)) return Promise.resolve({ ok: false, code: "REFUSED" });
     exportPlans.delete(key);
@@ -381,7 +383,7 @@ function createBundleJobs(options: {
         run: async (progress, signal) => {
           const laid = await writer.layout(planned.text, planned.scriptName, planned.script, allow);
           if (!laid) { done({ ok: false, code: "FAILED" }); return; }
-          done(await writer.write(laid, target, signal, progress));
+          done(await writer.write(laid, target, noted.replace, signal, progress));
         }
       });
     });
@@ -414,7 +416,7 @@ function createBundleJobs(options: {
   function forgetTab(tabId: string): void {
     for (const open of [...opens]) if (open.tabId === tabId) opens.delete(open);
     for (const [fileId, noted] of [...saveTargets]) if (noted.tabId === tabId) saveTargets.delete(fileId);
-    for (const [fileId, owner] of [...exportTargets]) if (owner === tabId) exportTargets.delete(fileId);
+    for (const [fileId, owner] of [...exportTargets]) if (owner.tabId === tabId) exportTargets.delete(fileId);
     for (const [key, planned] of [...exportPlans]) if (planned.tabId === tabId) exportPlans.delete(key);
   }
 

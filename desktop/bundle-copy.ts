@@ -301,9 +301,14 @@ function createBundleCopier(options: {
     return { ok: true, copied, kept, missing };
   }
 
-  async function publishWhole(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+  async function replaceWith(part: string, target: string, signal: AbortSignal): Promise<"copied" | "cancelled" | "failed"> {
     if (signal.aborted) return "cancelled";
-    return underFolderLock(path.dirname(target), signal, () => publish(part, target, signal, () => {}));
+    try { await renameFile(part, target); return "copied"; } catch { return "failed"; }
+  }
+
+  async function publishWhole(part: string, target: string, signal: AbortSignal, replace = false): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+    if (signal.aborted) return "cancelled";
+    return underFolderLock(path.dirname(target), signal, () => (replace ? replaceWith(part, target, signal) : publish(part, target, signal, () => {})));
   }
 
   function partIn(folder: string): string {

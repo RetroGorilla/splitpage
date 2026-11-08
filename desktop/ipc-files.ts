@@ -42,6 +42,11 @@ function createFileIpc({
     return documentsPath();
   }
 
+  async function regularFileAt(p: unknown): Promise<boolean> {
+    if (typeof p !== "string") return false;
+    try { return (await fsp.lstat(p)).isFile(); } catch { return false; }
+  }
+
   function registerFileIpc({ ipcHandle }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcHandle("splitpage:open-file-dialog", async (event) => {
       const defaultPath = await openDefaultPath();
@@ -76,7 +81,8 @@ function createFileIpc({
         const win = dialogParentFor(event);
         const result = await dialog.showSaveDialog(win, {
           defaultPath: opts.suggestedName,
-          filters: Array.isArray(opts.filters) && opts.filters.length ? opts.filters : undefined
+          filters: Array.isArray(opts.filters) && opts.filters.length ? opts.filters : undefined,
+          properties: opts.bundleExport === true ? ["showOverwriteConfirmation"] : undefined
         });
         chosen = result.canceled || !result.filePath ? null : result.filePath;
       }
@@ -101,7 +107,8 @@ function createFileIpc({
       }
       const id = fileIds.register(chosen);
       if (opts.script === true) bundleJobs.noteSaveTarget(id, me);
-      if (opts.bundleExport === true && ZIP_NAME.test(path.basename(chosen))) bundleJobs.noteExportTarget(id, me);
+      // why: the dialog returns a name that exists only after its Replace prompt, so that answer is the user's consent
+      if (opts.bundleExport === true && ZIP_NAME.test(path.basename(chosen))) bundleJobs.noteExportTarget(id, me, await regularFileAt(chosen));
       if (/\.splitpage$/i.test(path.basename(chosen))) pendingScriptSaves.add(id);
       return { id, name: path.basename(chosen) };
     });
