@@ -109,7 +109,9 @@ function createFileIpc({
       const id = fileIds.register(chosen);
       if (opts.script === true) bundleJobs.noteSaveTarget(id, me);
       // why: the dialog returns a name that exists only after its Replace prompt, so that answer is the user's consent
-      if (opts.bundleExport === true && ZIP_NAME.test(path.basename(chosen))) bundleJobs.noteExportTarget(id, me, await regularFileAt(chosen));
+      if (opts.bundleExport === true && ZIP_NAME.test(path.basename(chosen))) {
+        bundleJobs.noteExportTarget(id, event.sender, me, opts.exportJob, await regularFileAt(chosen));
+      }
       if (/\.splitpage$/i.test(path.basename(chosen))) pendingScriptSaves.add(id);
       return { id, name: path.basename(chosen) };
     });

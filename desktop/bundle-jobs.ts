@@ -88,7 +88,7 @@ function createBundleJobs(options: {
   const exporter = options.exporter || null;
   const quitGraceMs = typeof options.quitGraceMs === "number" ? options.quitGraceMs : QUIT_GRACE_MS;
   const exportPlans = new Map<string, ExportPlan>();
-  const exportTargets = new Map<string, { readonly tabId: string; readonly replace: boolean }>();
+  const exportTargets = new Map<string, { readonly tabId: string; readonly key: string; readonly replace: boolean }>();
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const queue: BundleJob[] = [];
   const byKey = new Map<string, BundleJob>();
@@ -165,6 +165,12 @@ function createBundleJobs(options: {
   function cancel(sender: BundleSender, job: string): void {
     const found = byKey.get(keyOf(sender, job));
     if (found) abortJob(found);
+    dropExport(keyOf(sender, job));
+  }
+
+  function dropExport(key: string): void {
+    exportPlans.delete(key);
+    for (const [fileId, noted] of [...exportTargets]) if (noted.key === key) exportTargets.delete(fileId);
   }
 
   function noteSaveTarget(fileId: string, tab: { id: string; source: { kind: string; absPath?: unknown } } | null): void {
@@ -349,17 +355,20 @@ function createBundleJobs(options: {
     const laid = await exporter.layout(text, scriptName, script, allow);
     if (!laid) return { ok: false, code: "REFUSED" };
     const key = keyOf(sender, job);
-    exportPlans.delete(key);
+    dropExport(key);
     const mine = [...exportPlans].filter(([, p]) => p.sender === sender);
-    while (mine.length >= EXPORT_PLANS_PER_SENDER) exportPlans.delete((mine.shift() as [string, ExportPlan])[0]);
+    while (mine.length >= EXPORT_PLANS_PER_SENDER) dropExport((mine.shift() as [string, ExportPlan])[0]);
     exportPlans.set(key, { sender, tabId, text, scriptName, script });
     return { ok: true, plan: { files: laid.sources.length, bytes: laid.sources.reduce((sum, s) => sum + s.size, 0), left: laid.left } };
   }
 
-  function noteExportTarget(fileId: string, tab: { id: string } | null, replace: boolean): void {
-    if (!tab) return;
+  function noteExportTarget(fileId: string, sender: BundleSender, tab: { id: string } | null, job: unknown, replace: boolean): void {
+    if (!tab || typeof job !== "string") return;
+    const key = keyOf(sender, job);
+    const planned = exportPlans.get(key);
+    if (!planned || planned.tabId !== tab.id) return;
     if (exportTargets.size >= EXPORT_TARGETS_MAX) exportTargets.delete(exportTargets.keys().next().value as string);
-    exportTargets.set(fileId, { tabId: tab.id, replace });
+    exportTargets.set(fileId, { tabId: tab.id, key, replace });
   }
 
   function startExport(sender: BundleSender, tabId: string, job: string, fileId: unknown): Promise<BundleExportAnswer> {
@@ -368,7 +377,7 @@ function createBundleJobs(options: {
     if (!exporter || !planned || planned.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
     if (typeof fileId !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
     const noted = exportTargets.get(fileId);
-    if (!noted || noted.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    if (!noted || noted.tabId !== tabId || noted.key !== key) return Promise.resolve({ ok: false, code: "UNKNOWN" });
     const target = pathOf(fileId);
     if (!target || !ZIP_NAME.test(target)) return Promise.resolve({ ok: false, code: "REFUSED" });
     exportPlans.delete(key);

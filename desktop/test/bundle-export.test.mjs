@@ -119,15 +119,15 @@ function harness({ source, copierOptions = {}, exporterOptions = {}, onSend, res
   const send = (name, ...args) => listeners.get(name)({ sender: main.sender }, ...args);
   const plan = (body, job = "export1", scriptName = "Episode 12.splitpage", script = scriptId) =>
     call("splitpage:bundle-export-plan", job, scriptName, new TextEncoder().encode(body), script);
-  const pick = (to, options = { bundleExport: true }) => { answers.push(to); return call("splitpage:save-file-dialog", { suggestedName: path.basename(to), ...options }); };
+  const pick = (to, options = { bundleExport: true, exportJob: "export1" }) => { answers.push(to); return call("splitpage:save-file-dialog", { suggestedName: path.basename(to), ...options }); };
   async function exportTo(to, body, job = "export1") {
     const planned = await plan(body, job);
-    const picked = await pick(to);
+    const picked = await pick(to, { bundleExport: true, exportJob: job });
     const result = await call("splitpage:bundle-export", job, picked.id);
     return { planned, picked, result };
   }
   const notes = (channel) => main.sent.filter(([c]) => c === channel).map(([, p]) => p);
-  return { tab, tabs, main, call, callFrom, send, plan, pick, exportTo, notes, bundleJobs, makeSender, idOf, scriptId };
+  return { tab, tabs, main, call, callFrom, send, plan, pick, answer: (to) => answers.push(to), exportTo, notes, bundleJobs, makeSender, idOf, scriptId };
 }
 
 function readZip(file) {
@@ -626,6 +626,74 @@ test("a replacing rename is the commit point: Cancel during it keeps the whole n
   } finally { s.done(); }
 });
 
+test("a confirmed zip swapped for a link or a folder while the export runs is never replaced: the swapped-in entry stays as it is", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    const body = project([bundled("take.mp4")]);
+    const elsewhere = s.put(path.join(s.dir, "elsewhere", "someone else's.zip"), "not ours");
+    const swaps = [
+      ["a folder", (at) => { fs.rmSync(at); fs.mkdirSync(at); return true; }, (st) => st.isDirectory()],
+      ["a junction", (at) => { fs.rmSync(at); return junction(path.dirname(elsewhere), at); }, (st) => st.isSymbolicLink() || st.isDirectory()],
+      ["a file symlink", (at) => { fs.rmSync(at); return trySymlink(elsewhere, at); }, (st) => st.isSymbolicLink()]
+    ];
+    for (const [label, swap, still] of swaps) {
+      const zip = s.put(path.join(s.out, "Share " + label + ".zip"), "the old zip");
+      let swapped = null;
+      const ipc = harness({ source: s.script, exporterOptions: { readFile: (from) => { if (swapped === null) swapped = swap(zip); return fs.createReadStream(from); } } });
+      const { result } = await ipc.exportTo(zip, body);
+      if (!swapped) {
+        console.log(label === "a file symlink" ? NO_SYMLINKS : "  (" + label + " is not available here)");
+        try { fs.rmSync(zip, { recursive: true, force: true }); } catch { }
+        continue;
+      }
+      assert.deepEqual(result, { ok: false, code: "TAKEN" }, label);
+      assert.ok(still(fs.lstatSync(zip)), label + " is still there, not replaced by the zip");
+      assert.equal(fs.readFileSync(elsewhere, "utf8"), "not ours", label + ": the file a link leads to is untouched");
+      assert.deepEqual(leftovers(s.out), [], label + ": the temporary is deleted");
+      fs.rmSync(zip, { recursive: true, force: true });
+    }
+  } finally { s.done(); }
+});
+
+test("a confirmed Replace belongs to the job whose dialog asked for it: cancelling that job drops it, and no other job can use it", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    const body = project([bundled("take.mp4")]);
+    const zip = s.put(path.join(s.out, "X.zip"), "the user's zip");
+    const ipc = harness({ source: s.script });
+    assert.equal((await ipc.plan(body, "exportA")).ok, true);
+    const picked = await ipc.pick(zip, { bundleExport: true, exportJob: "exportA" });
+    ipc.send("splitpage:bundle-cancel", "exportA");
+    assert.equal((await ipc.plan(body, "exportB")).ok, true);
+    assert.deepEqual(await ipc.call("splitpage:bundle-export", "exportB", picked.id), { ok: false, code: "UNKNOWN" }, "job B cannot use A's Replace");
+    assert.equal((await ipc.plan(body, "exportA")).ok, true);
+    assert.deepEqual(await ipc.call("splitpage:bundle-export", "exportA", picked.id), { ok: false, code: "UNKNOWN" }, "A's Replace died with its cancel");
+    assert.equal(fs.readFileSync(zip, "utf8"), "the user's zip");
+    assert.equal((await ipc.plan(body, "exportC")).ok, true);
+    const unplanned = await ipc.pick(zip, { bundleExport: true, exportJob: "never-planned" });
+    const noJob = await ipc.pick(zip, { bundleExport: true });
+    for (const [label, id] of [["a dialog asked for a job never planned", unplanned.id], ["a dialog asked for no job", noJob.id]]) {
+      assert.deepEqual(await ipc.call("splitpage:bundle-export", "exportC", id), { ok: false, code: "UNKNOWN" }, label);
+    }
+    assert.equal((await ipc.plan(body, "exportD")).ok, true);
+    ipc.answer(zip);
+    const forOther = await ipc.callFrom(ipc.makeSender(8), undefined, "splitpage:save-file-dialog", { suggestedName: "X.zip", bundleExport: true, exportJob: "exportD" });
+    assert.deepEqual(await ipc.call("splitpage:bundle-export", "exportD", forOther.id), { ok: false, code: "UNKNOWN" },
+      "another page's dialog naming this page's job grants nothing");
+    assert.equal(fs.readFileSync(zip, "utf8"), "the user's zip", "nothing replaced the zip");
+    const failing = harness({ source: s.script, copierOptions: { rename: async () => { throw Object.assign(new Error("in use"), { code: "EBUSY" }); } } });
+    const failed = await failing.exportTo(zip, body, "exportE");
+    assert.deepEqual(failed.result, { ok: false, code: "FAILED" });
+    assert.equal((await failing.plan(body, "exportE")).ok, true);
+    assert.deepEqual(await failing.call("splitpage:bundle-export", "exportE", failed.picked.id), { ok: false, code: "UNKNOWN" }, "a failed job's Replace is gone");
+    assert.equal(fs.readFileSync(zip, "utf8"), "the user's zip");
+    const ok = harness({ source: s.script });
+    assert.deepEqual((await ok.exportTo(zip, body, "exportF")).result, { ok: true, files: 1, left: 0 }, "the job that asked for the dialog replaces it");
+  } finally { s.done(); }
+});
+
 test("only the exact file the export dialog returned, after its Replace, may be replaced: no other id or path grants it", async () => {
   const s = scratch();
   try {
@@ -672,7 +740,7 @@ test("the export save dialog asks to confirm a Replace on every platform, and a 
       }
     });
     assert.equal((await ipc.plan(body)).ok, true);
-    const picked = await ipc.call("splitpage:save-file-dialog", { suggestedName: "Share.zip", filters: [{ name: "ZIP file", extensions: ["zip"] }], bundleExport: true });
+    const picked = await ipc.call("splitpage:save-file-dialog", { suggestedName: "Share.zip", filters: [{ name: "ZIP file", extensions: ["zip"] }], bundleExport: true, exportJob: "export1" });
     assert.deepEqual(asked.map((o) => o.properties), [["showOverwriteConfirmation"]], "Linux shows no Replace prompt unless asked");
     assert.deepEqual(await ipc.call("splitpage:bundle-export", "export1", picked.id), { ok: true, files: 1, left: 0 });
     assert.equal(readZip(zip).entries.get("Episode 12 files/take.mp4").bytes.toString(), "take");
@@ -720,6 +788,7 @@ test("export negatives: a forged or reused job, a script name outside the rules,
     const body = project([bundled("take.mp4")]);
     const ipc = harness({ source: s.script });
     const zip = path.join(s.out, "Share.zip");
+    assert.equal((await ipc.plan(body)).ok, true);
     const picked = await ipc.pick(zip);
     assert.deepEqual(await ipc.call("splitpage:bundle-export", "never-planned", picked.id), { ok: false, code: "UNKNOWN" }, "a forged job id");
     assert.deepEqual(await ipc.call("splitpage:bundle-export", "../x", picked.id), { ok: false, code: "REFUSED" });
@@ -731,7 +800,6 @@ test("export negatives: a forged or reused job, a script name outside the rules,
     assert.deepEqual(await ipc.plan(body, "export1", "Episode 12.splitpage", s.script), { ok: false, code: "REFUSED" }, "a path where an id belongs");
     assert.deepEqual(await ipc.callFrom(ipc.main, null, "splitpage:bundle-export-plan", "export1", "Episode 12.splitpage", body, ipc.scriptId),
       { ok: false, code: "REFUSED" }, "no tab");
-    assert.equal((await ipc.plan(body)).ok, true);
     const other = ipc.makeSender(8);
     assert.deepEqual(await ipc.callFrom(other, undefined, "splitpage:bundle-export", "export1", picked.id), { ok: false, code: "UNKNOWN" }, "another page's plan");
     assert.deepEqual(await ipc.callFrom(ipc.main, { id: "tab-b", source: { kind: "blank" } }, "splitpage:bundle-export", "export1", picked.id),
