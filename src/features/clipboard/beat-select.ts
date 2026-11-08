@@ -364,6 +364,7 @@ function runClipboardCommand(cut: boolean) {
   if (!ids.length || !navigator.clipboard) { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); return; }
   const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
   const out = buildBeatPayload((ports as BeatSelectPorts).document.current(), ids, { cut: nonce });
+  const epoch = (ports as BeatSelectPorts).lifetime.epoch();
   const write = typeof ClipboardItem === "function" && navigator.clipboard.write
     ? navigator.clipboard.write([new ClipboardItem({
         "text/html": new Blob([out.html], { type: "text/html" }),
@@ -372,7 +373,7 @@ function runClipboardCommand(cut: boolean) {
     : navigator.clipboard.writeText(out.text);
   write.then(function () {
     if (!cut) announceLeftOut(count(ids.length) + " copied", out.leftOut);
-    else if ((ports as BeatSelectPorts).document.current()) afterCut({ ids: ids, nonce: nonce, out: out });
+    else if ((ports as BeatSelectPorts).document.current() && (ports as BeatSelectPorts).lifetime.epoch() === epoch) afterCut({ ids: ids, nonce: nonce, out: out });
   }, function () { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); });
 }
 
