@@ -1,8 +1,11 @@
 "use strict";
 
+import type * as NodeCrypto from "node:crypto";
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
 import type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
 import type { BundleExportResult, createBundleExporter } from "./bundle-export.ts";
+
+const crypto: typeof NodeCrypto = require("node:crypto");
 
 type BundleSender = {
   readonly id: number;
@@ -61,6 +64,7 @@ interface ExportPlan {
   readonly text: string;
   readonly scriptName: string;
   readonly script: string | null;
+  readonly token: string;
 }
 
 type BundleExportPlanAnswer = { ok: true; plan: { files: number; bytes: number; left: number } } | { ok: false; code: "REFUSED" };
@@ -88,7 +92,7 @@ function createBundleJobs(options: {
   const exporter = options.exporter || null;
   const quitGraceMs = typeof options.quitGraceMs === "number" ? options.quitGraceMs : QUIT_GRACE_MS;
   const exportPlans = new Map<string, ExportPlan>();
-  const exportTargets = new Map<string, { readonly tabId: string; readonly key: string; readonly replace: boolean }>();
+  const exportTargets = new Map<string, { readonly tabId: string; readonly key: string; readonly token: string; readonly replace: boolean }>();
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const queue: BundleJob[] = [];
   const byKey = new Map<string, BundleJob>();
@@ -358,17 +362,21 @@ function createBundleJobs(options: {
     dropExport(key);
     const mine = [...exportPlans].filter(([, p]) => p.sender === sender);
     while (mine.length >= EXPORT_PLANS_PER_SENDER) dropExport((mine.shift() as [string, ExportPlan])[0]);
-    exportPlans.set(key, { sender, tabId, text, scriptName, script });
+    exportPlans.set(key, { sender, tabId, text, scriptName, script, token: crypto.randomBytes(16).toString("hex") });
     return { ok: true, plan: { files: laid.sources.length, bytes: laid.sources.reduce((sum, s) => sum + s.size, 0), left: laid.left } };
   }
 
-  function noteExportTarget(fileId: string, sender: BundleSender, tab: { id: string } | null, job: unknown, replace: boolean): void {
-    if (!tab || typeof job !== "string") return;
-    const key = keyOf(sender, job);
-    const planned = exportPlans.get(key);
-    if (!planned || planned.tabId !== tab.id) return;
+  function exportPlanToken(sender: BundleSender, tab: { id: string } | null, job: unknown): string | null {
+    const planned = tab && typeof job === "string" ? exportPlans.get(keyOf(sender, job)) : undefined;
+    return planned && tab && planned.tabId === tab.id ? planned.token : null;
+  }
+
+  function noteExportTarget(fileId: string, token: string | null, replace: boolean): void {
+    const current = token ? [...exportPlans].find(([, p]) => p.token === token) : undefined;
+    if (!current) return;
+    const [key, planned] = current;
     if (exportTargets.size >= EXPORT_TARGETS_MAX) exportTargets.delete(exportTargets.keys().next().value as string);
-    exportTargets.set(fileId, { tabId: tab.id, key, replace });
+    exportTargets.set(fileId, { tabId: planned.tabId, key, token: planned.token, replace });
   }
 
   function startExport(sender: BundleSender, tabId: string, job: string, fileId: unknown): Promise<BundleExportAnswer> {
@@ -377,7 +385,7 @@ function createBundleJobs(options: {
     if (!exporter || !planned || planned.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
     if (typeof fileId !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
     const noted = exportTargets.get(fileId);
-    if (!noted || noted.tabId !== tabId || noted.key !== key) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    if (!noted || noted.tabId !== tabId || noted.key !== key || noted.token !== planned.token) return Promise.resolve({ ok: false, code: "UNKNOWN" });
     const target = pathOf(fileId);
     if (!target || !ZIP_NAME.test(target)) return Promise.resolve({ ok: false, code: "REFUSED" });
     exportPlans.delete(key);
@@ -445,7 +453,7 @@ function createBundleJobs(options: {
   }
 
   return {
-    abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteExportTarget, noteSaveTarget, noteScript, openBundled, planExport, planSave,
+    abortAll, busy, cancel, chooseSave, copy, exportPlanToken, forgetTab, idle, noteExportTarget, noteSaveTarget, noteScript, openBundled, planExport, planSave,
     prepareWrite, startExport
   };
 }

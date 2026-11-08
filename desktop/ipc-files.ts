@@ -73,6 +73,7 @@ function createFileIpc({
 
     ipcHandle("splitpage:save-file-dialog", async (event, options) => {
       const opts = options || {};
+      const exportPlan = opts.bundleExport === true ? bundleJobs.exportPlanToken(event.sender, tabOf(event), opts.exportJob) : null;
       const answer = consumeTestDialogAnswer();
       let chosen;
       if (answer !== undefined) {
@@ -109,9 +110,7 @@ function createFileIpc({
       const id = fileIds.register(chosen);
       if (opts.script === true) bundleJobs.noteSaveTarget(id, me);
       // why: the dialog returns a name that exists only after its Replace prompt, so that answer is the user's consent
-      if (opts.bundleExport === true && ZIP_NAME.test(path.basename(chosen))) {
-        bundleJobs.noteExportTarget(id, event.sender, me, opts.exportJob, await regularFileAt(chosen));
-      }
+      if (exportPlan && ZIP_NAME.test(path.basename(chosen))) bundleJobs.noteExportTarget(id, exportPlan, await regularFileAt(chosen));
       if (/\.splitpage$/i.test(path.basename(chosen))) pendingScriptSaves.add(id);
       return { id, name: path.basename(chosen) };
     });

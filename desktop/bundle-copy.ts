@@ -304,7 +304,10 @@ function createBundleCopier(options: {
   async function replaceWith(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
     if (signal.aborted) return "cancelled";
     // why: rename(2) replaces a link itself, so only a regular file, or no entry, may stand where the confirmed zip was
-    try { if (!(await lstatTarget(target)).isFile()) return "taken"; } catch (e) { if (!missingFile(e)) return "failed"; }
+    let regular = true;
+    try { regular = (await lstatTarget(target)).isFile(); } catch (e) { if (!missingFile(e)) return "failed"; }
+    if (signal.aborted) return "cancelled";
+    if (!regular) return "taken";
     try { await renameFile(part, target); return "copied"; } catch { return "failed"; }
   }
 

@@ -694,6 +694,69 @@ test("a confirmed Replace belongs to the job whose dialog asked for it: cancelli
   } finally { s.done(); }
 });
 
+test("a Replace belongs to the plan that was current when its dialog opened: a plan made again under the same job id while the dialog is open gets nothing", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    const body = project([bundled("take.mp4")]);
+    const zip = s.put(path.join(s.out, "X.zip"), "the user's zip");
+    let held = gate();
+    let opened = gate();
+    const ipc = harness({
+      source: s.script,
+      dialog: {
+        showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+        showSaveDialog: async () => { opened.open(); await held.shut; return { canceled: false, filePath: zip }; }
+      }
+    });
+    const ask = (job) => ipc.call("splitpage:save-file-dialog", { suggestedName: "X.zip", bundleExport: true, exportJob: job });
+    for (const [label, between] of [
+      ["cancelled, then planned again", async () => { ipc.send("splitpage:bundle-cancel", "exportA"); assert.equal((await ipc.plan(body, "exportA")).ok, true); }],
+      ["planned again without a cancel", async () => { assert.equal((await ipc.plan(body, "exportA")).ok, true); }]
+    ]) {
+      held = gate();
+      opened = gate();
+      assert.equal((await ipc.plan(body, "exportA")).ok, true);
+      const asking = ask("exportA");
+      await opened.shut;
+      await between();
+      held.open();
+      const picked = await asking;
+      assert.deepEqual(await ipc.call("splitpage:bundle-export", "exportA", picked.id), { ok: false, code: "UNKNOWN" }, label + ": the new plan inherits no Replace");
+      assert.equal(fs.readFileSync(zip, "utf8"), "the user's zip", label);
+      assert.deepEqual(leftovers(s.out), [], label);
+    }
+    held = gate();
+    held.open();
+    assert.equal((await ipc.plan(body, "exportA")).ok, true);
+    const picked = await ask("exportA");
+    assert.deepEqual(await ipc.call("splitpage:bundle-export", "exportA", picked.id), { ok: true, files: 1, left: 0 }, "the plan whose dialog it was replaces the zip");
+  } finally { s.done(); }
+});
+
+test("Cancel while the replace re-checks the target stops it: the old zip stays byte for byte and the export reports cancelled", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    const old = Buffer.from("PK the old zip, byte for byte");
+    const zip = s.put(path.join(s.out, "Share.zip"), old);
+    let ipc = null;
+    let renamed = 0;
+    ipc = harness({
+      source: s.script,
+      copierOptions: {
+        lstat: async (p) => { ipc.send("splitpage:bundle-cancel", "export1"); await sleep(20); return fsp.lstat(p, { bigint: true }); },
+        rename: async (from, to) => { renamed++; return fs.promises.rename(from, to); }
+      }
+    });
+    assert.deepEqual((await ipc.exportTo(zip, project([bundled("take.mp4")]))).result, { ok: false, code: "CANCELLED" });
+    assert.equal(renamed, 0, "no rename was started");
+    assert.deepEqual(fs.readFileSync(zip), old);
+    assert.deepEqual(fs.readdirSync(s.out), ["Share.zip"], "the temporary is deleted");
+    assert.equal(ipc.bundleJobs.busy(), false);
+  } finally { s.done(); }
+});
+
 test("only the exact file the export dialog returned, after its Replace, may be replaced: no other id or path grants it", async () => {
   const s = scratch();
   try {
