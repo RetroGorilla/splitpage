@@ -222,6 +222,8 @@ shot 1162-relay-microphone
 jsclick #pp-voice
 wait window.__sources.length === 1
 expect window.__sources[0].url === 'http://127.0.0.1:8771/prompter-voice/' + 'ab'.repeat(32)
+eval window.__emit({ type: 'start', session: 1 })
+wait document.getElementById('pp-voice').classList.contains('is-active')
 jsclick #pp-voice
 wait window.__sources[0].closed === true
 eval pick('pp-mic', M2)
