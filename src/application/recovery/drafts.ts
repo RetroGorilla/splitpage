@@ -480,7 +480,7 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     if (runningOnDesktop()) {
       try { desktopDrafts().restoreDone(outcome); } catch (e2) {}
     }
-    if (typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+    notifyDesktopDocumentState();
     noteDraftChange();
     return outcome;
   }
