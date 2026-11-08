@@ -200,7 +200,7 @@ function createCloseQuit({
       };
 
       if (!tabIds.some((id) => tabHasFile(tabs.get(id)))) {
-        if (askAboutUnsaved(unsavedTabsOf(tabIds, []), "Close window", win) !== "discard") { event.preventDefault(); return; }
+        if (askAboutUnsaved(unsavedTabsOf(tabIds, []), "Close window", win) !== "discard") { copiesForced = false; event.preventDefault(); return; }
         confirmClose(tabIds);
         return;
       }
@@ -210,6 +210,7 @@ function createCloseQuit({
       const parent = () => (win.isDestroyed() ? undefined : win);
       askBeforeClosing(() => rec.tabIds.slice(), "Close window", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding).then(({ answer, tabIds: closing }) => {
         rec.closeKeepingDrafts = false;
+        if (answer !== "discard") copiesForced = false;
         if (answer !== "discard" || win.isDestroyed()) return;
         confirmClose(closing);
         win.close();
@@ -303,6 +304,7 @@ function createCloseQuit({
         return w && !w.win.isDestroyed() ? w.win : undefined;
       };
       const stayOpen = () => {
+        copiesForced = false;
         quitConfirmed = false;
         sessionWritesFrozen = false;
       };

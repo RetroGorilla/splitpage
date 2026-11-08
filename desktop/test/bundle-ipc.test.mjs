@@ -678,7 +678,7 @@ test("in test mode a bundled open is recorded instead of handed to the system", 
   } finally { s.done(); }
 });
 
-function quitWorld(bundleJobs, picks) {
+function quitWorld(bundleJobs, picks, { unsaved = false } = {}) {
   const answers = picks.filter((p) => typeof p === "string");
   const clicks = picks.filter((p) => typeof p === "number");
   const on = new Map();
@@ -695,9 +695,11 @@ function quitWorld(bundleJobs, picks) {
     return event;
   }
   const app = { on: (ev, fn) => { on.set(ev, fn); }, quit: () => { quits.push(1); fire(on, "before-quit"); } };
+  const tab = { id: "t1", windowId: "w1", title: "Draft", dirty: true, view: { webContents: { isDestroyed: () => false } } };
+  const rec = { id: "w1", win, tabIds: unsaved ? ["t1"] : [] };
   const { registerQuitHandlers, attachWindowClose } = createCloseQuit({
-    app, testMode: false, tabs: new Map(), windowsById: new Map(), liveWindows: () => [{ win }],
-    tabHasFile: () => false, tabIsUnsaved: () => false, draftsHasDraft: () => false,
+    app, testMode: false, tabs: new Map(unsaved ? [["t1", tab]] : []), windowsById: new Map(unsaved ? [["w1", rec]] : []), liveWindows: () => [{ win }],
+    tabHasFile: () => false, tabIsUnsaved: (t) => unsaved && t === tab, draftsHasDraft: () => false,
     requestDraftFlush: async () => ({}), draftFlushBudgetMs: 10, draftStore: () => null, draftsList: () => [],
     draftsDiscardForUserDecision: () => {}, draftsDiscardClean: () => {}, consumeTestDialogAnswer: () => answers.shift(),
     activateTab: () => {}, focusWindow: () => {}, destroyTabView: () => {}, startInstallerNow: () => ({ ok: true }),
@@ -705,7 +707,7 @@ function quitWorld(bundleJobs, picks) {
     dialog: { showMessageBoxSync: (_parent, options) => { asked.push(options); return clicks.length ? clicks.shift() : 0; } }
   });
   registerQuitHandlers();
-  attachWindowClose(win, { id: "w1", tabIds: [] });
+  attachWindowClose(win, rec);
   return { asked, quits, closes, prevented, quit: () => fire(on, "before-quit"), close: () => fire(winOn, "close"), willQuit: () => on.get("will-quit")() };
 }
 
@@ -761,6 +763,30 @@ test("Quit anyway is final: a copy still stalled after the grace does not ask ag
     assert.equal(ipc.bundleJobs.busy(), true, "setup: the stalled copy has still not settled");
     assert.equal(q.asked.length, 1, "Quit anyway is not asked again");
     assert.deepEqual(q.prevented[q.prevented.length - 1], ["before-quit", false], "the resumed quit goes through");
+  } finally { s.done(); }
+});
+
+test("a Quit anyway whose unsaved-changes question is cancelled does not carry over: a later quit asks about new copies again", async () => {
+  const s = scratch();
+  try {
+    let current = gate();
+    const hold = { then: (resolve, reject) => current.shut.then(resolve, reject) };
+    const ipc = harness({ source: s.script, grants: [["tok", s.clip]], holdCopy: hold, quitGraceMs: 30 });
+    const q = quitWorld(ipc.bundleJobs, ["quit-anyway", "cancel"], { unsaved: true });
+    const first = ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    assert.equal(q.quit().prevented, true, "the quit asks about the copy");
+    assert.ok(await until(() => q.quits.length === 1), "Quit anyway resumes the quit");
+    await new Promise((r) => setTimeout(r, 30));
+    assert.deepEqual(q.prevented[q.prevented.length - 1], ["before-quit", true], "setup: the unsaved-changes question was cancelled, so the app stays");
+    current.open();
+    assert.deepEqual(await first, { ok: false, code: "CANCELLED" });
+    await ipc.bundleJobs.idle();
+    current = gate();
+    void ipc.call("splitpage:bundle-file", "tok", "bundle2");
+    assert.equal(ipc.bundleJobs.busy(), true);
+    assert.equal(q.quit().prevented, true, "the later quit is held");
+    assert.deepEqual(q.asked.map((o) => o.message), ["Splitpage is still copying files."], "and asks about the new copy");
+    current.open();
   } finally { s.done(); }
 });
 
