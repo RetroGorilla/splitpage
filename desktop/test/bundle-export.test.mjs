@@ -441,7 +441,7 @@ test("without hard links, the whole zip is renamed onto an empty placeholder: an
     const swapped = path.join(s.out, "Swapped.zip");
     const swapping = harness({
       source: s.script,
-      copierOptions: { link: eperm, lstat: async (p) => { fs.unlinkSync(p); fs.writeFileSync(p, "swapped in"); return fsp.lstat(p, { bigint: true }); } }
+      copierOptions: { link: eperm, lstat: async (p) => { fs.renameSync(p, p + ".moved"); fs.writeFileSync(p, "swapped in"); return fsp.lstat(p, { bigint: true }); } }
     });
     assert.deepEqual((await swapping.exportTo(swapped, body)).result, { ok: false, code: "TAKEN" });
     assert.equal(fs.readFileSync(swapped, "utf8"), "swapped in", "a placeholder swapped for another file is kept as it is");

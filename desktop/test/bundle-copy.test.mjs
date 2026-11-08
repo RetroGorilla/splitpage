@@ -316,11 +316,11 @@ test("where hard links fail, the whole temporary is renamed onto an empty placeh
       const folder = path.join(s.dir, "Swap " + theirs.length + " files");
       const swapping = createBundleCopier({
         bundleFiles, progressEveryMs: 0, link: eperm,
-        lstat: async (p) => { fs.unlinkSync(p); fs.writeFileSync(p, theirs); return fs.promises.lstat(p, { bigint: true }); }
+        lstat: async (p) => { fs.renameSync(p, p + ".moved"); fs.writeFileSync(p, theirs); return fs.promises.lstat(p, { bigint: true }); }
       });
       assert.deepEqual(await swapping.carry(s.script, path.join(s.dir, "Swap " + theirs.length + ".splitpage"), ["take one.mp4"], VIDEO_FILE_EXT, () => {}, live()),
         { ok: false, code: "CLASH", name: "take one.mp4", copied: 0 }, label);
-      assert.deepEqual(fs.readdirSync(folder), ["take one.mp4"], label + ": only our temporary is deleted");
+      assert.deepEqual(fs.readdirSync(folder).sort(), ["take one.mp4", "take one.mp4.moved"], label + ": only our temporary is deleted");
       assert.equal(fs.readFileSync(path.join(folder, "take one.mp4"), "utf8"), theirs, label + ": a placeholder swapped for another file is never overwritten");
     }
     fs.mkdirSync(path.join(s.dir, "Their files"));
