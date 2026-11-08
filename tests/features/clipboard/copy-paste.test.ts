@@ -50,6 +50,7 @@ function beatSelect(rowsHtml = "", screen: ScreenState = CLEAR_SCREEN) {
   const held = fakeDocument(scriptDoc());
   const ports: BeatSelectPorts = {
     document: held.document,
+    lifetime: held.lifetime,
     edits: edits.edits,
     undo: {
       breakCoalescing: () => { calls.push("break"); },
@@ -358,6 +359,61 @@ test("scene clipboard: a fallback cut that finishes after the document has gone 
   }
   assert.deepEqual(failures, []);
   assert.equal(edits.ran.length, 0);
+});
+
+async function fallbackCut(replaceWith: "none" | "same-ids" | "disk-merge" | "save-as") {
+  const { owner, edits, held, calls } = beatSelect();
+  const clip = mountBeatClip({
+    document: held.document,
+    ids: { id: (prefix) => prefix + "1" },
+    pictures: fakePictures().pictures,
+    text: { cellOf: () => [], fromHtml: () => [], inertBody: () => document.createElement("body") },
+    migrate: (doc) => migrateRows(doc, fakeMigration().ports),
+    tagsInRows: () => [],
+    recordPastedBroll: () => {}
+  });
+  let finish: () => void = () => {};
+  const clipboard = { writeText: () => { return new Promise<void>((resolve) => { finish = resolve; }); } };
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
+  try {
+    selectBeats("r1", "r2");
+    window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "x", ctrlKey: true, bubbles: true, cancelable: true }));
+    if (replaceWith === "same-ids") held.replace(scriptDoc());
+    if (replaceWith === "disk-merge") {
+      const epoch = held.lifetime.epoch();
+      held.replace(scriptDoc());
+      held.lifetime.epoch = () => epoch;
+    }
+    if (replaceWith === "save-as") (held.document.current() as { docId: string }).docId = "d" + "9".repeat(32);
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } finally {
+    Reflect.deleteProperty(navigator, "clipboard");
+    owner.dispose();
+    clip.dispose();
+  }
+  return { edits, calls };
+}
+
+test("scene clipboard: a fallback cut that finishes after another script with the same ids opened removes nothing from it", async () => {
+  const { edits } = await fallbackCut("same-ids");
+  assert.equal(edits.ran.length, 0);
+});
+
+test("scene clipboard: a fallback cut that finishes after a disk merge replaced the document object removes nothing", async () => {
+  const { edits } = await fallbackCut("disk-merge");
+  assert.equal(edits.ran.length, 0);
+});
+
+test("scene clipboard: a fallback cut that finishes after Save As gave the same document a new id removes nothing", async () => {
+  const { edits } = await fallbackCut("save-as");
+  assert.equal(edits.ran.length, 0);
+});
+
+test("scene clipboard: a fallback cut in the same script still removes the beats in one undo step", async () => {
+  const { edits, calls } = await fallbackCut("none");
+  assert.equal(edits.ran.length, 1);
+  assert.deepEqual(calls, ["break", "flush", "break"]);
 });
 
 test("scene selection: dispose removes its listeners and its highlight", () => {
