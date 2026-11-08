@@ -125,6 +125,21 @@ test("Scene prep handles 200 beats as six scene groups, reveals the focused beat
   } finally { h.mounted.dispose(); }
 });
 
+test("Scene prep labels an unnamed scene by its scene letter and keeps a given name", () => {
+  const h = prepFixture();
+  try {
+    const migration = fakeMigration();
+    h.document.replace(migrateRows({
+      schema: 2,
+      rows: Array.from({ length: 5 }, (_, i) => ({ id: "r" + i, visualText: migration.cell([]), audioText: "Beat " + i, status: "todo" })),
+      sections: [{ id: "sb", name: "Harbour", firstSceneId: "r3" }]
+    }, migration.ports));
+    h.mounted.renderProduction();
+    const names = [...win.document.querySelectorAll(".prep-scene-name")].map(el => el.textContent);
+    assert.deepEqual(names, ["Scene A", "Harbour"]);
+  } finally { h.mounted.dispose(); }
+});
+
 test("Scene prep renders shared items once per beat and once in the scene summary, with one notes editor and literal Assign", () => {
   const h = prepFixture("r2");
   try {

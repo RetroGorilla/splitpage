@@ -1,0 +1,11 @@
+open
+viewport 1280 960
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){var doc={schema:2,title:"Scene labels",rows:[{id:"a",visualText:"",audioText:"First.",status:"todo"},{id:"b",visualText:"",audioText:"Second.",status:"todo"},{id:"c",visualText:"",audioText:"Third.",status:"todo"}],sections:[{id:"harbour",name:"Harbour",firstSceneId:"c"}]};window.F=window.__splitpageFormats;return F.openFile(new File([JSON.stringify(doc)],"labels.splitpage"));})()
+wait F.state().title === 'Scene labels'
+wait document.querySelectorAll('#rows .row').length === 3
+click #btn-production
+wait document.querySelectorAll('.prep-scene').length === 2
+expect Array.from(document.querySelectorAll('.prep-scene-name'),e=>e.textContent).join('|') === 'Scene A|Harbour'
+expect Array.from(document.querySelectorAll('.prep-letter'),e=>e.textContent).join('|') === 'A|B'
+expect document.querySelector('#rows .section-header[data-section-id=""] .section-name').textContent === 'Add a name'
