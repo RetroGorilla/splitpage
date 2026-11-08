@@ -361,8 +361,17 @@ test("scene clipboard: a fallback cut that finishes after the document has gone 
   assert.equal(edits.ran.length, 0);
 });
 
-async function fallbackCut(replaceWith: "none" | "same-ids") {
+async function fallbackCut(replaceWith: "none" | "same-ids" | "disk-merge") {
   const { owner, edits, held, calls } = beatSelect();
+  const clip = mountBeatClip({
+    document: held.document,
+    ids: { id: (prefix) => prefix + "1" },
+    pictures: fakePictures().pictures,
+    text: { cellOf: () => [], fromHtml: () => [], inertBody: () => document.createElement("body") },
+    migrate: (doc) => migrateRows(doc, fakeMigration().ports),
+    tagsInRows: () => [],
+    recordPastedBroll: () => {}
+  });
   let finish: () => void = () => {};
   const clipboard = { writeText: () => { return new Promise<void>((resolve) => { finish = resolve; }); } };
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
@@ -370,17 +379,28 @@ async function fallbackCut(replaceWith: "none" | "same-ids") {
     selectBeats("r1", "r2");
     window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "x", ctrlKey: true, bubbles: true, cancelable: true }));
     if (replaceWith === "same-ids") held.replace(scriptDoc());
+    if (replaceWith === "disk-merge") {
+      const epoch = held.lifetime.epoch();
+      held.replace(scriptDoc());
+      held.lifetime.epoch = () => epoch;
+    }
     finish();
     await new Promise((resolve) => setTimeout(resolve, 20));
   } finally {
     Reflect.deleteProperty(navigator, "clipboard");
     owner.dispose();
+    clip.dispose();
   }
   return { edits, calls };
 }
 
 test("scene clipboard: a fallback cut that finishes after another script with the same ids opened removes nothing from it", async () => {
   const { edits } = await fallbackCut("same-ids");
+  assert.equal(edits.ran.length, 0);
+});
+
+test("scene clipboard: a fallback cut that finishes after a disk merge replaced the document object removes nothing", async () => {
+  const { edits } = await fallbackCut("disk-merge");
   assert.equal(edits.ran.length, 0);
 });
 
