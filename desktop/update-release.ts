@@ -17,6 +17,18 @@ const CHECKSUMS_ASSET = /^SHA256SUMS(\.txt)?$/i;
 
 const CHECKSUMS_MAX_CHARS = 200000;
 
+const RELEASE_SEGMENT = "[A-Za-z0-9][A-Za-z0-9._+-]*";
+
+const RELEASE_PATHS = {
+  download: new RegExp(`^/RetroGorilla/splitpage/releases/download/${RELEASE_SEGMENT}/${RELEASE_SEGMENT}$`),
+  tag: new RegExp(`^/RetroGorilla/splitpage/releases/tag/${RELEASE_SEGMENT}$`)
+};
+
+const RELEASE_ASSET_HOST = "https://release-assets.githubusercontent.com";
+
+// why: GitHub redirects this repository's release downloads to its asset host under the repository's numeric id
+const RELEASE_ASSET_HOST_PATH = /^\/github-production-release-asset\/1349872068\/[A-Za-z0-9-]+$/;
+
 function hasReleaseAssets(assets: unknown, apiUrl: string = DEFAULT_UPDATE_API, testMode = false) {
   return Array.isArray(assets) && assets.length > 0 && assets.every((a) => isReleaseAsset(a, apiUrl, testMode));
 }
@@ -48,23 +60,32 @@ function compareVersions(a: unknown, b: unknown) {
   return 0;
 }
 
-function isAllowedReleasePath(urlString: unknown, apiUrl: unknown, testMode: boolean, kind: "download" | "tag") {
-  if (typeof urlString !== "string" || urlString !== urlString.trim() || urlString.includes("\\")) return false;
+function parseCanonicalUrl(urlString: unknown, allowQuery: boolean) {
+  if (typeof urlString !== "string") return null;
   let parsed;
-  try { parsed = new URL(urlString); } catch { return false; }
-  if (parsed.username || parsed.password || parsed.search || parsed.hash) return false;
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+  try { parsed = new URL(urlString); } catch { return null; }
+  if (parsed.href !== urlString || parsed.username || parsed.password || urlString.includes("#")) return null;
+  if (!allowQuery && urlString.includes("?")) return null;
+  return parsed;
+}
+
+function isAllowedReleasePath(urlString: unknown, apiUrl: unknown, testMode: boolean, kind: "download" | "tag") {
+  const parsed = parseCanonicalUrl(urlString, false);
+  if (!parsed || (parsed.protocol !== "https:" && parsed.protocol !== "http:")) return false;
   if (testMode && typeof apiUrl === "string" && apiUrl !== DEFAULT_UPDATE_API) {
     try { if (parsed.origin === new URL(apiUrl).origin) return true; } catch { }
   }
-  const pattern = kind === "download"
-    ? /^\/RetroGorilla\/splitpage\/releases\/download\/[^/]+\/[^/]+$/
-    : /^\/RetroGorilla\/splitpage\/releases\/tag\/[^/]+$/;
-  return parsed.origin === "https://github.com" && pattern.test(parsed.pathname);
+  return parsed.origin === "https://github.com" && RELEASE_PATHS[kind].test(parsed.pathname);
 }
 
 function isAllowedDownloadHost(urlString: unknown, apiUrl: unknown, testMode = false) {
   return isAllowedReleasePath(urlString, apiUrl, testMode, "download");
+}
+
+function isAllowedDownloadHop(urlString: unknown, apiUrl: unknown, testMode = false) {
+  if (isAllowedDownloadHost(urlString, apiUrl, testMode)) return true;
+  const parsed = parseCanonicalUrl(urlString, true);
+  return !!parsed && parsed.origin === RELEASE_ASSET_HOST && RELEASE_ASSET_HOST_PATH.test(parsed.pathname);
 }
 
 function isAllowedReleaseUrl(urlString: unknown, apiUrl: unknown, testMode = false) {
@@ -118,13 +139,14 @@ function checksumFor(text: string, assetName: string) {
   return null;
 }
 
-export type { DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, isAllowedReleaseUrl, pickUpdateAsset, findChecksumsAsset, checksumFor };
+export type { DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, isAllowedDownloadHop, isAllowedReleaseUrl, pickUpdateAsset, findChecksumsAsset, checksumFor };
 
 module.exports = {
   DEFAULT_UPDATE_API,
   hasReleaseAssets,
   compareVersions,
   isAllowedDownloadHost,
+  isAllowedDownloadHop,
   isAllowedReleaseUrl,
   pickUpdateAsset,
   findChecksumsAsset,

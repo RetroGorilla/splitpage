@@ -1417,7 +1417,7 @@ async function startTinyReleaseServer(opts) {
   const server = http.createServer((req, res) => {
     if (req.url.startsWith("/asset")) {
       downloads.push(req.url);
-      res.writeHead(302, { location: base + "/payload" });
+      res.writeHead(302, { location: ((opts && opts.payloadBase) || base) + "/payload" });
       res.end();
       return;
     }
@@ -1562,6 +1562,37 @@ async function caseUpdateInvalidFeed(target) {
       if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
       await new Promise((resolve) => mini.server.close(resolve));
     }
+  }
+}
+
+async function caseUpdateRedirectOffOrigin(target) {
+  const tag = target.name + " update redirected off the release host";
+  const elsewhere = [];
+  const other = http.createServer((req, res) => {
+    elsewhere.push(req.url);
+    res.writeHead(200, { "content-type": "application/octet-stream" });
+    res.end(Buffer.alloc(4096, 0x5a));
+  });
+  await new Promise((resolve) => other.listen(0, "127.0.0.1", resolve));
+  const mini = await startTinyReleaseServer({ payloadBase: `http://127.0.0.1:${other.address().port}` });
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "update-redirect", allowUpdateCheck: true, updateApi: mini.url });
+    await waitForRows(app.cdp, 20000);
+    const status = await poll(app.cdp,
+      "window.splitpageDesktop.getUpdateStatus().then(function(s){ return s.checking ? null : s; })", 20000);
+    record(tag + ": the launch check still finds the release", !!status && status.canInstall === true, JSON.stringify(status));
+    const result = await evalPage(app.cdp, "window.splitpageDesktop.downloadUpdate()");
+    record(tag + ": the download fails", !!result && result.ok === false && result.error === "download-failed", JSON.stringify(result));
+    record(tag + ": the release host's redirect was requested", mini.downloads.includes("/asset"), JSON.stringify(mini.downloads));
+    record(tag + ": the other host is never requested", elsewhere.length === 0, JSON.stringify(elsewhere));
+    record(tag + ": no installer is left on disk", !fs.existsSync(path.join(app.userDataDir, "updates", mini.assetName)));
+    const install = await evalPage(app.cdp, "window.splitpageDesktop.installUpdate()");
+    record(tag + ": installing it is refused", !!install && install.ok === false && install.error === "not-downloaded", JSON.stringify(install));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    await new Promise((resolve) => mini.server.close(resolve));
+    await new Promise((resolve) => other.close(resolve));
   }
 }
 
@@ -6150,6 +6181,7 @@ async function runTargetSuite(target, groupFilter) {
     ["update download", () => caseUpdateDownload(target), hookFree],
     ["update invalid feed", () => caseUpdateInvalidFeed(target), hookFree],
     ["update without a checksum", () => caseUpdateNoChecksum(target), hookFree],
+    ["update redirected off the release host", () => caseUpdateRedirectOffOrigin(target), hookFree],
     ["unsaved-changes close", () => caseUnsavedChangesClose(target), hookFree],
     ["close authority (no user gesture)", () => caseCloseAuthorityNoGesture(target)],
     ["page-initiated window.close() (documented)", () => caseCloseFromPageIsUnguarded(target)],
