@@ -41,6 +41,7 @@ import type * as DocIdPolicy from "../shared/doc-id-policy.ts";
 import type * as VideoEmbed from "../shared/video-embed.ts";
 import type * as BundleCopy from "./bundle-copy.ts";
 import type * as BundleJobs from "./bundle-jobs.ts";
+import type * as BundleExport from "./bundle-export.ts";
 
 type NativeMainOptions<T> = { [K in keyof T]: T[K] | undefined };
 type NativeMainDialog = Omit<Electron.Dialog, keyof DesktopFileIpcDependencies["dialog"] | "showSaveDialogSync">
@@ -103,6 +104,7 @@ const { createPrintIpc }: { createPrintIpc: typeof IpcPrint.createPrintIpc } = r
 const { createPdfPrinter }: { createPdfPrinter: typeof PrintPdf.createPdfPrinter } = require("./print-pdf.ts");
 const { createBundleCopier }: { createBundleCopier: typeof BundleCopy.createBundleCopier } = require("./bundle-copy.ts");
 const { createBundleJobs }: { createBundleJobs: typeof BundleJobs.createBundleJobs } = require("./bundle-jobs.ts");
+const { createBundleExporter }: { createBundleExporter: typeof BundleExport.createBundleExporter } = require("./bundle-export.ts");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -880,8 +882,10 @@ async function openPrompterInBrowser(tab: DesktopMainTab | null, opts?: { chromi
 }
 
 const videoEmbed: typeof VideoEmbed = require(path.join(SHARED_ROOT, "video-embed.ts"));
+const bundleCopier = createBundleCopier({ bundleFiles: videoEmbed });
 const bundleJobs = createBundleJobs({
-  copier: createBundleCopier({ bundleFiles: videoEmbed }),
+  copier: bundleCopier,
+  exporter: createBundleExporter({ bundleFiles: videoEmbed, publisher: bundleCopier }),
   allow: videoEmbed.ATTACHABLE_FILE,
   scriptOfTab: (tabId: string) => {
     const tab = tabs.get(tabId);
@@ -1638,6 +1642,7 @@ function buildMenu() {
     { label: "PDF (.pdf)", click: () => sendMenuCommand("export-pdf") },
     { type: "separator" },
     { label: "SplitShare (.html)", click: () => sendMenuCommand("export-html") },
+    { label: "Splitpage script (.splitpage)", click: () => sendMenuCommand("export-splitpage") },
     { type: "separator" },
     { label: "Narration only (.docx)", click: () => sendMenuCommand("export-narration-docx") },
     { label: "Narration only (.txt)", click: () => sendMenuCommand("export-narration-txt") },

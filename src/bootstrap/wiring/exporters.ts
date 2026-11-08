@@ -24,6 +24,12 @@ import {
 import { buildBreakdownCsv, buildBrollCsv, buildCsv } from "../../adapters/formats/csv.ts";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "../../adapters/formats/xlsx.ts";
 import { buildPackingListPrintPage, buildScriptWithListsPrintPage, buildShotListPrintPage } from "../../adapters/formats/list-print.ts";
+import { buildSplitpageCopy, fileImagesMissing } from "../../adapters/formats/project-file.ts";
+import { exportFilesText } from "../../features/gallery/video-bundles.ts";
+import { presence } from "./ports/desktop-presence.ts";
+import { captureExportDocument } from "./export-capture.ts";
+import { exportFilesPlan } from "./gallery.ts";
+import { fileHome } from "./location-owner.ts";
 
 export interface ExportBuild extends ExportPrintRequest {
   readonly ports: { readonly standaloneHtml: (doc: ExportDocument, meta: { title: string; description: string }, assets: ExportAssets) => string };
@@ -68,6 +74,23 @@ function brollReason(doc: ExportDocument): string {
   return exportBrollBeats(doc, exportServices()).length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
 }
 
+let includeScriptFiles = false;
+
+function scriptFilesOffered(): boolean {
+  return presence.running();
+}
+
+function withScriptFiles(): boolean {
+  return includeScriptFiles && scriptFilesOffered();
+}
+
+async function scriptFilesDetail(): Promise<string> {
+  const body = JSON.stringify(captureExportDocument().document);
+  const home = fileHome();
+  const plan = await exportFilesPlan(body, home ? home.handle || null : null);
+  return plan ? exportFilesText(plan) : "";
+}
+
 const CARDS: readonly ExportCardDecl[] = [
   { id: "pdf", group: "whole", name: "PDF", ext: ".pdf", icon: "i-file",
     purpose: "To print, or to send someone to read", pictures: true, extras: true },
@@ -79,6 +102,10 @@ const CARDS: readonly ExportCardDecl[] = [
     purpose: "A row per beat, for Excel, Sheets or Numbers", option: "Format" },
   { id: "html", group: "whole", name: "SplitShare", ext: ".html", icon: "i-globe",
     purpose: "The script and the whole app in one file. Any device, nothing to install", pictures: true },
+  { id: "splitpage", group: "whole", name: "Splitpage script", ext: ".splitpage", icon: "i-file",
+    purpose: "A copy of the script to open in Splitpage, with its files if you like", pictures: true,
+    toggle: { id: "files", label: "Include the script's files, as one .zip", on: () => includeScriptFiles,
+              set: (on) => { includeScriptFiles = on; }, offered: scriptFilesOffered, detail: scriptFilesDetail } },
   { id: "narration", group: "part", name: "Narration only", ext: ".docx / .txt", icon: "i-mic",
     purpose: "The Audio column, for a voice artist", option: "Format",
     toggle: { id: "directions", label: "Include stage directions",
@@ -136,6 +163,14 @@ const EXPORTERS: readonly BuiltInExporter[] = [
         }, ctx.assets),
         diagnostics: { imagesLeftOut: ctx.assets.missing.length }
       };
+    } },
+  { id: "splitpage", action: "export-splitpage", card: "splitpage", name: "Splitpage script", menuLabel: "Splitpage script (.splitpage)",
+    words: "splitpage script project copy share send zip bundle files videos folder",
+    fileName: (base) => withScriptFiles() ? base + " (with files).zip" : base + ".splitpage",
+    build: (ctx, base) => {
+      const body = buildSplitpageCopy(ctx.doc);
+      const diagnostics = { imagesLeftOut: fileImagesMissing(ctx.doc).length };
+      return ctx.options.files ? { data: body, diagnostics, withFiles: { scriptName: base + ".splitpage" } } : { data: body, diagnostics };
     } },
   { id: "narration-docx", action: "export-narration-docx", card: "narration",
     choice: { value: "docx", label: "Word (.docx)" }, name: "Narration (.docx)",

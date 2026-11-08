@@ -34,6 +34,7 @@ function createCloseQuit({
 }: DesktopCloseQuitDependencies) {
   let quitConfirmed = false;
   let holdingForCopies = false;
+  let copiesForced = false;
   let quitKeepingDrafts = false;
   const sessionEndKeep = { holder: "session-end" };
   let sessionWritesFrozen = false;
@@ -150,10 +151,12 @@ function createCloseQuit({
   function holdForCopies(event: { preventDefault: () => void }, parentWin: BrowserWindow | undefined, resume: () => void): boolean {
     if (holdingForCopies) { event.preventDefault(); return true; }
     const copies = bundleCopies();
-    if (!copies || !copies.busy()) return false;
+    if (!copies || !copies.busy()) { copiesForced = false; return false; }
+    if (copiesForced) return false;
     event.preventDefault();
     holdingForCopies = true;
-    const settled = askAboutCopies(parentWin) === "quit-anyway" ? copies.abortAll() : copies.idle();
+    copiesForced = askAboutCopies(parentWin) === "quit-anyway";
+    const settled = copiesForced ? copies.abortAll() : copies.idle();
     settled.then(() => {
       holdingForCopies = false;
       resume();
@@ -197,7 +200,7 @@ function createCloseQuit({
       };
 
       if (!tabIds.some((id) => tabHasFile(tabs.get(id)))) {
-        if (askAboutUnsaved(unsavedTabsOf(tabIds, []), "Close window", win) !== "discard") { event.preventDefault(); return; }
+        if (askAboutUnsaved(unsavedTabsOf(tabIds, []), "Close window", win) !== "discard") { copiesForced = false; event.preventDefault(); return; }
         confirmClose(tabIds);
         return;
       }
@@ -207,6 +210,7 @@ function createCloseQuit({
       const parent = () => (win.isDestroyed() ? undefined : win);
       askBeforeClosing(() => rec.tabIds.slice(), "Close window", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding).then(({ answer, tabIds: closing }) => {
         rec.closeKeepingDrafts = false;
+        if (answer !== "discard") copiesForced = false;
         if (answer !== "discard" || win.isDestroyed()) return;
         confirmClose(closing);
         win.close();
@@ -300,6 +304,7 @@ function createCloseQuit({
         return w && !w.win.isDestroyed() ? w.win : undefined;
       };
       const stayOpen = () => {
+        copiesForced = false;
         quitConfirmed = false;
         sessionWritesFrozen = false;
       };

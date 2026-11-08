@@ -98,6 +98,8 @@ async function buildFileData(kind: string, baseName: string, opts?: Readonly<Rec
   const registered = running().formats.byId(kind);
   const exporter = registered || running().formats.byId("md");
   if (!(exporter as NonNullable<typeof exporter>).build) throw new Error("The " + kind + " export prints a page and builds no file");
+  const home = fileHome();
+  const script = home ? home.handle || null : null;
   const assets = await loadExportAssets(request.assets);
   if (!active) throw new Error("The local file menu is not started yet");
   const made = await ((exporter as NonNullable<typeof exporter>).build as NonNullable<NonNullable<typeof exporter>["build"]>)({
@@ -114,7 +116,7 @@ async function buildFileData(kind: string, baseName: string, opts?: Readonly<Rec
     warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
     if (made.diagnostics.unshownCharacters) showToast(unshownCharactersText(made.diagnostics.unshownCharacters), "warn");
   }
-  return { data: made.data, filename: filename };
+  return { data: made.data, filename: filename, withFiles: made.withFiles ? { scriptName: made.withFiles.scriptName, script } : null };
 }
 
 let pendingResumeHandle: ReturnType<LocalFileMenuControls["pendingHandle"]> = null;
@@ -192,6 +194,10 @@ async function exportAs(kind: string, more?: Readonly<Record<string, unknown>>) 
     return;
   }
   if (!active) return;
+  if (built.withFiles && typeof built.data === "string") {
+    await running().scriptFiles.export(built.filename, built.withFiles.scriptName, built.data, built.withFiles.script);
+    return;
+  }
   await deliverFile(built.filename, built.data, { savedMsg: "Exported " + built.filename });
 }
 

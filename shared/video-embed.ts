@@ -339,30 +339,41 @@ function projectRecord(text: string): unknown {
   try { return JSON.parse(lines.slice(openAt + 1, closeAt).join("\n")); } catch { return null; }
 }
 
-function bundledNamesInProject(text: string): string[] {
-  const names = new Set<string>();
-  const pending: unknown[] = [projectRecord(text)];
-  while (pending.length) {
-    const value = pending.pop();
+type FileLocation = { kind: "bundled"; name: string } | { kind: "path"; path: string };
+interface FileLinkHolder { location: FileLocation }
+
+function fileLinksIn(record: unknown): FileLinkHolder[] {
+  const found: FileLinkHolder[] = [];
+  const pending: unknown[] = [record];
+  for (let i = 0; i < pending.length; i++) {
+    const value = pending[i];
     if (!value || typeof value !== "object") continue;
-    const at = (value as { location?: unknown }).location;
-    if (at && typeof at === "object" && (at as { kind?: unknown }).kind === "bundled" && typeof (at as { name?: unknown }).name === "string") {
-      names.add((at as { name: string }).name);
+    const at = (value as { location?: unknown }).location as { kind?: unknown; name?: unknown; path?: unknown } | null | undefined;
+    if (at && typeof at === "object" && ((at.kind === "bundled" && typeof at.name === "string") || (at.kind === "path" && typeof at.path === "string"))) {
+      found.push(value as FileLinkHolder);
     }
     for (const child of Object.values(value)) if (child && typeof child === "object") pending.push(child);
   }
+  return found;
+}
+
+function bundledNamesInProject(text: string): string[] {
+  const names = new Set<string>();
+  for (const holder of fileLinksIn(projectRecord(text))) if (holder.location.kind === "bundled") names.add(holder.location.name);
   return [...names].sort();
 }
 
-export type { BundleFileSystem, BundlePaths, VideoPathFileSystem, VideoPathVerdict };
+export type { BundleFileSystem, BundlePaths, FileLinkHolder, FileLocation, VideoPathFileSystem, VideoPathVerdict };
 
 export {
   ATTACHABLE_FILE,
   bundleFolderOf,
   bundledNamesInProject,
   bundleableName,
+  fileLinksIn,
   missingFile,
   numberedName,
+  projectRecord,
   realBundleFolder,
   resolveBundledFile,
   samePath,

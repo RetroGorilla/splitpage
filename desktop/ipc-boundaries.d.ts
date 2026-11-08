@@ -63,7 +63,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
   pathToTabId: Map<string, string>;
   consumeTestDialogAnswer: () => unknown;
   testDialogsSeen: () => number;
-  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "noteSaveTarget" | "prepareWrite" | "planSave" | "chooseSave">;
+  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "noteSaveTarget" | "prepareWrite" | "planSave" | "chooseSave" | "noteExportTarget" | "planExport" | "startExport">;
 }
 
 export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "fileIds" | "recents" | "windowsById" | "testMode" | "draftStore" | "draftsPreviousSession"> {

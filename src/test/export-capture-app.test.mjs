@@ -16,7 +16,7 @@ const flushEdits = () => undoOwner().flush();
 const { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument } = await import("../bootstrap/wiring/export-capture.ts");
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
-const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
+const { buildMarkdownProject, buildSplitpageCopy, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const FILE_NAME = "e15-private-plan.md";
@@ -35,6 +35,7 @@ test("E15: a capture taken with a file home holds no file name or handle", () =>
     const outputs = [
       JSON.stringify(doc),
       buildSplitpageFile(doc),
+      buildSplitpageCopy(doc),
       buildMarkdownProject(doc),
       standaloneHtmlFor(doc, { title: doc.title, description: exportMetaLine(exportFacts(doc)) }),
       toMarkdownDoc(doc),
@@ -49,6 +50,17 @@ test("E15: a capture taken with a file home holds no file name or handle", () =>
   } finally {
     setHome("none");
   }
+});
+
+test("an exported Splitpage copy is the saved file without the document's id, so opening it starts a new history", () => {
+  useDemo();
+  const doc = captureExportDocument();
+  const saved = JSON.parse(buildSplitpageFile(doc));
+  const copy = JSON.parse(buildSplitpageCopy(doc));
+  assert.match(saved.docId, /^d[0-9a-f]{32}$/);
+  assert.equal("docId" in copy, false);
+  delete saved.docId;
+  assert.deepEqual(copy, saved);
 });
 
 test("a capture is taken from the live document at once and is frozen; the live document stays writable", () => {

@@ -24,7 +24,7 @@ const { loadTestDocument } = await import("./_document.mjs");
 
 const KINDS = [
   "docx", "csv", "breakdown", "b-roll csv", "xlsx", "breakdown xlsx", "b-roll xlsx", "txt",
-  "narration-docx", "narration-txt", "md-table", "html", "md"
+  "narration-docx", "narration-txt", "md-table", "html", "md", "splitpage"
 ];
 
 const DATED = ["docx", "xlsx", "breakdown xlsx", "b-roll xlsx", "narration-docx"];

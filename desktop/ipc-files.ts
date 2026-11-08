@@ -12,6 +12,8 @@ const fsp: DesktopNativeFsPromises = require("node:fs/promises");
 const { pathKey, readFileEntry, toBuffer, writeFileEntry }: DesktopFileService = require("./file-service.ts");
 
 const OPEN_FOLDER_PROBE_TIMEOUT_MS = 1000;
+const BUNDLE_JOB_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const ZIP_NAME = /\.zip$/i;
 
 function createFileIpc({
   dialog, documentsPath, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
@@ -99,6 +101,7 @@ function createFileIpc({
       }
       const id = fileIds.register(chosen);
       if (opts.script === true) bundleJobs.noteSaveTarget(id, me);
+      if (opts.bundleExport === true && ZIP_NAME.test(path.basename(chosen))) bundleJobs.noteExportTarget(id, me);
       if (/\.splitpage$/i.test(path.basename(chosen))) pendingScriptSaves.add(id);
       return { id, name: path.basename(chosen) };
     });
@@ -133,6 +136,18 @@ function createFileIpc({
 
     ipcHandle("splitpage:bundle-save-choice", async (event, id, choice) => {
       return bundleJobs.chooseSave(id, choice, tabOf(event));
+    });
+
+    ipcHandle("splitpage:bundle-export-plan", async (event, job, scriptName, data, scriptId) => {
+      const tab = tabOf(event);
+      if (!tab || typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
+      return bundleJobs.planExport(event.sender, tab.id, job, scriptName, toBuffer(data).toString("utf8"), scriptId);
+    });
+
+    ipcHandle("splitpage:bundle-export", async (event, job, id) => {
+      const tab = tabOf(event);
+      if (!tab || typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
+      return bundleJobs.startExport(event.sender, tab.id, job, id);
     });
 
     ipcHandle("splitpage:stat-file", async (event, id) => {

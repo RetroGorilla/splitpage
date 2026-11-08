@@ -286,24 +286,71 @@ test("a cancelled carry leaves no temporary and nothing under the final name", a
   } finally { s.done(); }
 });
 
-test("where hard links fail, the temporary is renamed into place, and no file ever stands under the final name before that", async () => {
+test("a publish is the commit point: a Cancel after the link or rename never deletes the published name, even when another file replaced it", async () => {
+  const s = scratch();
+  try {
+    const eperm = async () => { throw Object.assign(new Error("no links here"), { code: "EPERM" }); };
+    for (const [label, opts] of [
+      ["rename", (ctl) => ({ link: eperm, rename: async (from, to) => { await fs.promises.rename(from, to); fs.unlinkSync(to); fs.writeFileSync(to, "replacement"); ctl.abort(); } })],
+      ["hard link", (ctl) => ({ link: async (from, to) => { await fs.promises.link(from, to); fs.unlinkSync(to); fs.writeFileSync(to, "replacement"); ctl.abort(); } })]
+    ]) {
+      const ctl = new AbortController();
+      const script = path.join(s.dir, label + ".splitpage");
+      const copier = createBundleCopier({ bundleFiles, progressEveryMs: 0, ...opts(ctl) });
+      assert.deepEqual(await copier.copyIn(s.clip, script, VIDEO_FILE_EXT, () => {}, ctl.signal), { ok: true, name: "take one.mp4" }, label);
+      const folder = path.join(s.dir, label + " files");
+      assert.deepEqual(fs.readdirSync(folder), ["take one.mp4"], label + ": no temporary is left");
+      assert.equal(fs.readFileSync(path.join(folder, "take one.mp4"), "utf8"), "replacement", label + ": the file under the published name is left alone");
+    }
+  } finally { s.done(); }
+});
+
+test("where hard links fail, the whole temporary is renamed onto an empty placeholder this job created, so no other file is ever replaced", async () => {
   const s = scratch();
   try {
     const eperm = async () => { throw Object.assign(new Error("no links here"), { code: "EPERM" }); };
     const before = [];
+    const created = [];
     const renaming = createBundleCopier({
       bundleFiles, progressEveryMs: 0, link: eperm,
-      rename: async (from, to) => { before.push({ names: fs.readdirSync(path.dirname(to)), final: fs.existsSync(to) }); return fs.promises.rename(from, to); }
+      openTarget: async (to) => { created.push(fs.existsSync(to)); return fs.promises.open(to, "wx"); },
+      rename: async (from, to) => {
+        before.push({ names: fs.readdirSync(path.dirname(to)).sort(), final: fs.statSync(to).size, part: fs.statSync(from).size });
+        return fs.promises.rename(from, to);
+      }
     });
     assert.deepEqual(await renaming.copyIn(s.clip, s.script, VIDEO_FILE_EXT, () => {}, live()), { ok: true, name: "take one.mp4" });
+    assert.deepEqual(created, [false], "the final name is absent until the placeholder is created");
     assert.equal(before.length, 1);
-    assert.equal(before[0].final, false, "the final name is absent until the rename");
-    assert.ok(before[0].names.length === 1 && /^~splitpage-[0-9a-f]{16}\.part$/.test(before[0].names[0]), "only the whole temporary exists");
+    assert.equal(before[0].final, 0, "the final name holds only the empty placeholder, never part of the file");
+    assert.equal(before[0].part, fs.statSync(s.clip).size, "the temporary is whole before the rename");
+    assert.ok(before[0].names.length === 2 && before[0].names.includes("take one.mp4") && before[0].names.some((n) => /^~splitpage-[0-9a-f]{16}\.part$/.test(n)));
     assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), fs.readFileSync(s.clip));
+    assert.deepEqual(fs.readdirSync(s.folder), ["take one.mp4"], "the temporary is gone");
     const crashing = createBundleCopier({ bundleFiles, progressEveryMs: 0, link: eperm, rename: async () => { throw new Error("gone mid-rename"); } });
     const to = path.join(s.dir, "New.splitpage");
     assert.deepEqual(await crashing.carry(s.script, to, ["take one.mp4"], VIDEO_FILE_EXT, () => {}, live()), { ok: false, code: "FAILED", name: "take one.mp4", copied: 0 });
-    assert.deepEqual(fs.readdirSync(path.join(s.dir, "New files")), [], "a failed rename leaves no empty file under the final name");
+    assert.deepEqual(fs.readdirSync(path.join(s.dir, "New files")), [], "a failed rename removes its own placeholder and leaves no temporary");
+    for (const [label, theirs] of [["a file with bytes", "another program's"], ["another empty file", ""]]) {
+      const folder = path.join(s.dir, "Swap " + theirs.length + " files");
+      const swapping = createBundleCopier({
+        bundleFiles, progressEveryMs: 0, link: eperm,
+        lstat: async (p) => { fs.renameSync(p, p + ".moved"); fs.writeFileSync(p, theirs); return fs.promises.lstat(p, { bigint: true }); }
+      });
+      assert.deepEqual(await swapping.carry(s.script, path.join(s.dir, "Swap " + theirs.length + ".splitpage"), ["take one.mp4"], VIDEO_FILE_EXT, () => {}, live()),
+        { ok: false, code: "CLASH", name: "take one.mp4", copied: 0 }, label);
+      assert.deepEqual(fs.readdirSync(folder).sort(), ["take one.mp4", "take one.mp4.moved"], label + ": only our temporary is deleted");
+      assert.equal(fs.readFileSync(path.join(folder, "take one.mp4"), "utf8"), theirs, label + ": a placeholder swapped for another file is never overwritten");
+    }
+    fs.mkdirSync(path.join(s.dir, "Their files"));
+    const appearing = createBundleCopier({
+      bundleFiles, progressEveryMs: 0,
+      link: async (_from, at) => { fs.writeFileSync(at, "another program's"); throw Object.assign(new Error("no links here"), { code: "EPERM" }); }
+    });
+    assert.deepEqual(await appearing.carry(s.script, path.join(s.dir, "Their.splitpage"), ["take one.mp4"], VIDEO_FILE_EXT, () => {}, live()),
+      { ok: false, code: "CLASH", name: "take one.mp4", copied: 0 });
+    assert.deepEqual(fs.readdirSync(path.join(s.dir, "Their files")), ["take one.mp4"]);
+    assert.equal(fs.readFileSync(path.join(s.dir, "Their files", "take one.mp4"), "utf8"), "another program's", "a file that appeared before the create is untouched");
     fs.mkdirSync(path.join(s.dir, "Late files"));
     const racing = createBundleCopier({
       bundleFiles, progressEveryMs: 0,

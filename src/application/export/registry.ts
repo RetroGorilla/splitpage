@@ -7,6 +7,12 @@ export interface ExportToggle {
   readonly label: string;
   readonly on: () => boolean;
   readonly set: (on: boolean) => void;
+  readonly offered?: () => boolean;
+  readonly detail?: () => Promise<string>;
+}
+
+export function toggleOffered(toggle: ExportToggle): boolean {
+  return !toggle.offered || toggle.offered();
 }
 
 export interface ExportCardDecl {
@@ -36,6 +42,7 @@ export interface ExportProduct {
   readonly data: string | Uint8Array;
   readonly diagnostics?: ExportDiagnostics;
   readonly imageBundle?: boolean;
+  readonly withFiles?: { readonly scriptName: string };
 }
 
 export interface FileNameOptions {
@@ -178,7 +185,7 @@ export function exportToggleOptions<Request, Doc>(
   const toggle = exporter?.card ? registry.card(exporter.card)?.toggle : undefined;
   if (toggle) {
     const given = overrides?.[toggle.id];
-    out[toggle.id] = typeof given === "boolean" ? given : toggle.on();
+    out[toggle.id] = toggleOffered(toggle) && (typeof given === "boolean" ? given : toggle.on());
   }
   return out;
 }

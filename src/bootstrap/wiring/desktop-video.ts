@@ -69,6 +69,23 @@ export const desktopVideo: DesktopVideo = {
     if (answer && !answer.ok && "refused" in answer) throw new Error(bundleRefusalText(answer.refused));
     return answer && answer.ok && Array.isArray(answer.links) ? answer.links : null;
   },
+  planExport: async (job, scriptName, body, script) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.planBundleExport !== "function") return null;
+    const answer = await port.planBundleExport(job, scriptName, new TextEncoder().encode(body), desktopIdOf(script) || "");
+    return answer && answer.ok ? answer.plan : null;
+  },
+  pickExport: async (suggestedName) => {
+    const port = desktopPort();
+    if (!presence.running() || !port) return null;
+    const picked = await port.saveFileDialog({ suggestedName, filters: [{ name: "ZIP file", extensions: ["zip"] }], bundleExport: true });
+    return picked ? { id: picked.id, name: picked.name } : null;
+  },
+  exportBundle: (job, fileId, onProgress) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.exportBundle !== "function") return Promise.resolve(null);
+    return Promise.resolve(port.exportBundle(job, fileId, onProgress));
+  },
   thumbnail: (host, ref) => {
     const port = desktopPort();
     if (!port || typeof port.videoThumbnail !== "function") return null;

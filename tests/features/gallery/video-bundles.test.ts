@@ -2,13 +2,13 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { DesktopBundleCarry, DesktopBundleCopy, DesktopBundleSavePlan } from "../../../src/application/media/desktop-video.ts";
+import type { DesktopBundleCarry, DesktopBundleCopy, DesktopBundleExport, DesktopBundleExportPlan, DesktopBundleSavePlan } from "../../../src/application/media/desktop-video.ts";
 import type { UndoEntry, UndoState } from "../../../src/application/editing/undo/history.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { rowSlots } from "../../../src/core/document/gallery.ts";
 import type { BundledPathLink, VideoLink } from "../../../src/core/document/gallery.ts";
 import type { VideoBundlePorts } from "../../../src/features/gallery/ports.ts";
-import { BUNDLE_WARN_BYTES, bundlePromptText, saveCopyPromptText, startVideoBundles } from "../../../src/features/gallery/video-bundles.ts";
+import { BUNDLE_WARN_BYTES, bundlePromptText, exportFilesText, saveCopyPromptText, startVideoBundles } from "../../../src/features/gallery/video-bundles.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeNotices, fakeOwnership } from "../fakes.ts";
 
@@ -23,6 +23,9 @@ interface Setup {
   answer?: (link: VideoLink, job: string, onProgress: (p: { done: number; total: number }) => void) => Promise<DesktopBundleCopy>;
   plan?: DesktopBundleSavePlan | null;
   chosen?: readonly BundledPathLink[] | null | Error;
+  exportPlan?: DesktopBundleExportPlan | null;
+  picked?: { id: string; name: string } | null;
+  exported?: (job: string, fileId: string, onProgress: (p: { done: number; total: number }) => void) => Promise<DesktopBundleExport | null>;
 }
 
 function setup(opts: Setup = {}) {
@@ -38,6 +41,7 @@ function setup(opts: Setup = {}) {
   const edits: string[] = [];
   const plans: { handle: unknown; names: string[] }[] = [];
   const choices: { handle: unknown; choice: string }[] = [];
+  const exportCalls: unknown[][] = [];
   const ports: VideoBundlePorts = {
     window: window,
     script: () => at.script,
@@ -57,6 +61,17 @@ function setup(opts: Setup = {}) {
         return opts.chosen === undefined ? [] : opts.chosen;
       }
     },
+    exports: {
+      plan: async (job, scriptName, body, script) => {
+        exportCalls.push(["plan", job, scriptName, body, script]);
+        return opts.exportPlan === undefined ? { files: 2, bytes: 2048, left: 0 } : opts.exportPlan;
+      },
+      pick: async (name) => { exportCalls.push(["pick", name]); return opts.picked === undefined ? { id: "zip1", name } : opts.picked; },
+      run: (job, fileId, onProgress) => {
+        exportCalls.push(["run", job, fileId]);
+        return opts.exported ? opts.exported(job, fileId, onProgress) : Promise.resolve({ ok: true, files: 2, left: 0 });
+      }
+    },
     notices: notices.notices,
     ownership: ownership.ownership,
     undo: { fold: (entry, _touches, change) => { folds.push(entry); return opts.fold === false ? false : change(doc as unknown as UndoState); } },
@@ -70,7 +85,7 @@ function setup(opts: Setup = {}) {
     assert.ok(heard, "the feature listens for carries from main");
     heard(note);
   };
-  return { at, doc, notices, ownership, calls, cancels, carry, folds, edits, plans, choices, owner, el, location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
+  return { at, doc, notices, ownership, calls, cancels, carry, folds, edits, plans, choices, exportCalls, owner, el, location: () => rowSlots(doc.rows[0])[0]?.links[0]?.location };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -342,6 +357,23 @@ test("a drop during a Save As is linked by path with no prompt, even when that s
   h.owner.dispose();
 });
 
+test("a carry announced while it waits in the queue shows at once with its chip, and Cancel reaches it", () => {
+  const h = setup();
+  h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 0, total: 1, waiting: true });
+  assert.equal(h.el("bundle-progress").hidden, false);
+  assert.equal(h.el("bundle-progress-text").textContent, "Waiting to copy files to “Episode 12 v2 files” — 0%");
+  h.el("bundle-hide").click();
+  assert.equal(h.el("bundle-indicator").hidden, false);
+  assert.equal(h.el("bundle-indicator").textContent, "Waiting to copy files — 0%");
+  h.el("bundle-indicator").click();
+  h.el("bundle-cancel").click();
+  assert.deepEqual(h.cancels, ["carry1"]);
+  h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 1, total: 1, result: { ok: false, code: "CANCELLED", name: "", copied: 0 } });
+  assert.equal(h.el("bundle-progress").hidden, true);
+  assert.equal(h.el("bundle-indicator").hidden, true);
+  h.owner.dispose();
+});
+
 test("main's carry during Save As shows progress, can be cancelled, and reports what it could not copy", () => {
   const h = setup();
   h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 4, total: 8 });
@@ -564,4 +596,67 @@ test("Hide tucks the progress panel into a small indicator, which shows the pane
   assert.equal(h.el("bundle-indicator").hidden, true, "the indicator goes when the copy is done");
   assert.equal(h.el("bundle-progress").hidden, true);
   h.owner.dispose();
+});
+
+test("exporting with the script's files plans in main, asks where, then shows the job on the progress panel, where Cancel stops it", async () => {
+  let progress: ((p: { done: number; total: number }) => void) | null = null;
+  let finish: (res: DesktopBundleExport | null) => void = () => {};
+  const h = setup({ exported: (_job, _id, onProgress) => { progress = onProgress; return new Promise((resolve) => { finish = resolve; }); } });
+  const handle = { kind: "file", name: "Episode 12.splitpage" };
+  const running = h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{\"rows\":[]}", handle);
+  await settle();
+  assert.deepEqual(h.exportCalls.map((c) => c[0]), ["plan", "pick", "run"]);
+  assert.deepEqual(h.exportCalls[0]?.slice(2), ["Episode 12.splitpage", "{\"rows\":[]}", handle],
+    "main gets the script's name, its bytes and the script they were captured from, no path");
+  assert.equal(h.exportCalls[2]?.[1], h.exportCalls[0]?.[1], "the job runs the plan main made");
+  assert.equal(h.exportCalls[2]?.[2], "zip1", "and writes only to the file the dialog chose");
+  assert.ok(progress, "the job reports progress");
+  (progress as unknown as (p: { done: number; total: number }) => void)({ done: 1, total: 4 });
+  assert.equal(h.el("bundle-progress").hidden, false);
+  assert.equal(h.el("bundle-progress-text").textContent, "Exporting “Episode 12 (with files).zip” — 25%");
+  h.el("bundle-hide").click();
+  assert.equal(h.el("bundle-indicator").textContent, "Exporting — 25%");
+  h.el("bundle-indicator").click();
+  h.el("bundle-cancel").click();
+  assert.deepEqual(h.cancels, [h.exportCalls[2]?.[1]], "Cancel stops the export job by its id");
+  finish({ ok: false, code: "CANCELLED" });
+  assert.equal(await running, false);
+  assert.equal(h.notices.shown.at(-1)?.message, "Stopped exporting “Episode 12 (with files).zip”. Nothing was saved.");
+  assert.equal(h.el("bundle-progress").hidden, true, "the panel goes when the export ends");
+  h.owner.dispose();
+});
+
+test("a finished export says how many files went in, and a separate notice that stays counts the files it couldn't include", async () => {
+  const h = setup({ exported: async () => ({ ok: true, files: 3, left: 2 }) });
+  assert.equal(await h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{}", null), true);
+  assert.equal(h.notices.shown[0]?.message, "Exported “Episode 12 (with files).zip” with 3 files.");
+  assert.equal(h.notices.shown[0]?.kind, "ok");
+  assert.equal(h.notices.shown[1]?.message, "2 files couldn't be included in “Episode 12 (with files).zip”. They are missing, outside the script's folder, " +
+    "or a type Splitpage doesn't attach, so they aren't in the zip.");
+  assert.equal(h.notices.shown[1]?.sticky, true);
+  h.owner.dispose();
+});
+
+test("an export main refuses, a cancelled save dialog, and a taken name never claim success", async () => {
+  const refused = setup({ exportPlan: null });
+  assert.equal(await refused.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}", null), false);
+  assert.deepEqual(refused.exportCalls.map((c) => c[0]), ["plan"], "no dialog when main refuses the plan");
+  assert.equal(refused.notices.shown[0]?.message, "Could not export “A (with files).zip”.");
+  refused.owner.dispose();
+  const dismissed = setup({ picked: null });
+  assert.equal(await dismissed.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}", null), false);
+  assert.deepEqual(dismissed.exportCalls.map((c) => c[0]), ["plan", "pick"]);
+  assert.deepEqual(dismissed.notices.shown, [], "a dismissed dialog says nothing");
+  dismissed.owner.dispose();
+  const taken = setup({ exported: async () => ({ ok: false, code: "TAKEN" }) });
+  assert.equal(await taken.owner.exportWithFiles("A (with files).zip", "A.splitpage", "{}", null), false);
+  assert.equal(taken.notices.shown[0]?.message, "Could not export — “A (with files).zip” already exists. Export again and choose a new name.");
+  taken.owner.dispose();
+});
+
+test("the Export dialog's line about the files gives their count and size, and the Save As warning above 250 MB", () => {
+  assert.equal(exportFilesText({ files: 2, bytes: 3 * 1024 * 1024, left: 0 }), "2 files (3 MB) in a folder beside the script");
+  assert.equal(exportFilesText({ files: 0, bytes: 0, left: 1 }), "no linked files to include · 1 file can't be included: missing, outside the script's folder, or a type Splitpage doesn't attach");
+  assert.equal(exportFilesText({ files: 1, bytes: BUNDLE_WARN_BYTES + 1, left: 0 }), "1 file (250 MB) in a folder beside the script. " +
+    "That is a lot to copy, and it may take a while and use disk space. You can keep working while it copies.");
 });

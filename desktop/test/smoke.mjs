@@ -4230,6 +4230,106 @@ async function caseGalleryAttachFile(target) {
   }
 }
 
+function zipEntries(file) {
+  const buf = fs.readFileSync(file);
+  let e = buf.length - 22;
+  while (e >= 0 && buf.readUInt32LE(e) !== 0x06054b50) e--;
+  const out = new Map();
+  if (e < 0) return out;
+  let p = buf.readUInt32LE(e + 16);
+  for (let i = 0; i < buf.readUInt16LE(e + 10); i++) {
+    const method = buf.readUInt16LE(p + 10), packed = buf.readUInt32LE(p + 20);
+    const nameLen = buf.readUInt16LE(p + 28), extraLen = buf.readUInt16LE(p + 30), commentLen = buf.readUInt16LE(p + 32);
+    const at = buf.readUInt32LE(p + 42);
+    const name = buf.subarray(p + 46, p + 46 + nameLen).toString("utf8");
+    const start = at + 30 + buf.readUInt16LE(at + 26) + buf.readUInt16LE(at + 28);
+    const data = buf.subarray(start, start + packed);
+    out.set(name, method === 8 ? zlib.inflateRawSync(data) : Buffer.from(data));
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return out;
+}
+
+async function caseGalleryExportWithFiles(target) {
+  const tag = target.name + " gallery: Export with the script's files writes one zip whose script links its files by bundled name (#260)";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-export-files-"));
+  const folder = path.join(dir, "Episode 12 files");
+  const drops = path.join(dir, "drops");
+  const out = path.join(dir, "out");
+  [folder, drops, out].forEach((d) => fs.mkdirSync(d));
+  const take = Buffer.alloc(64 * 1024, 7);
+  fs.writeFileSync(path.join(folder, "take.mp4"), take);
+  fs.writeFileSync(path.join(folder, "unlinked.mp4"), "not linked");
+  const brief = path.join(drops, "brief.pdf");
+  fs.writeFileSync(brief, "%PDF-1.4 brief");
+  const scriptPath = path.join(dir, "Episode 12.splitpage");
+  const links = [
+    { name: "take.mp4", size: take.length, location: { kind: "bundled", name: "take.mp4" } },
+    { name: "brief.pdf", size: 14, location: { kind: "path", path: brief } },
+    { name: "gone.mov", size: 3, location: { kind: "bundled", name: "gone.mov" } }
+  ];
+  fs.writeFileSync(scriptPath, JSON.stringify({ title: "Export Smoke", rows: [
+    { visualText: "<p>Wide</p>", audioText: "<p>One.</p>", imageLinks: links }, { visualText: "<p>Close</p>", audioText: "<p>Two.</p>" }
+  ] }, null, 2), "utf8");
+  const scriptBefore = fs.readFileSync(scriptPath);
+  const zipPath = path.join(out, "Shared.zip");
+  const takenPath = path.join(out, "Taken.zip");
+  fs.writeFileSync(takenPath, "the user's own file");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  async function exportFromDialog(cdp) {
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('export')", { awaitPromise: false });
+    await poll(cdp, "!document.getElementById('export-modal').hidden", 10000);
+    await evalPage(cdp, "document.querySelector('.export-card[data-format=\"splitpage\"] input').click()");
+    await evalPage(cdp, "(function(){ var b = document.querySelector('#export-options input[data-toggle=\"files\"]'); if (b && !b.checked) b.click(); return !!b; })()");
+    const summary = await poll(cdp, "(function(){ var t = document.getElementById('export-summary').textContent; return t.indexOf('in a folder beside the script') !== -1 ? t : null; })()", 10000).catch(() => null);
+    const fileName = await evalPage(cdp, "document.getElementById('export-filename').textContent");
+    await evalPage(cdp, "document.getElementById('export-go').click()");
+    return { summary, fileName };
+  }
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "gallery-export-files", userDataDir, fixtures: [scriptPath], dialogs: [zipPath, takenPath] });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Export Smoke'", 20000).catch(() => false);
+    const first = await exportFromDialog(cdp);
+    record(tag + ": the option names the bundled file, its size and the two that can't go in, and the name ends “(with files).zip”",
+      !!first.summary && first.summary.indexOf("1 file (") !== -1 &&
+      first.summary.indexOf("2 files can't be included: missing, outside the script's folder, or a type Splitpage doesn't attach") !== -1 &&
+      / \(with files\)\.zip$/.test(first.fileName), JSON.stringify(first));
+    const done = await toastContaining(cdp, "with 1 file.", 20000).catch(() => false);
+    const left = await toastContaining(cdp, "2 files couldn't be included in “Shared.zip”.", 5000).catch(() => false);
+    record(tag + ": it says so when done, and a notice counts the files that couldn't be included", !!done && !!left, JSON.stringify({ done, left }));
+    const entries = fs.existsSync(zipPath) ? zipEntries(zipPath) : new Map();
+    const names = [...entries.keys()];
+    const scriptName = names.find((n) => /\.splitpage$/.test(n)) || "";
+    const files = scriptName.replace(/\.splitpage$/, " files/");
+    record(tag + ": the zip holds the script and only its bundled file, in “<script> files/”; a path link's file is never read",
+      names.length === 3 && names.indexOf(files) === 1 && entries.has(files + "take.mp4") && !entries.has(files + "brief.pdf") &&
+      entries.get(files + "take.mp4").equals(take) && !fs.readFileSync(zipPath).includes(Buffer.from("%PDF-1.4 brief")), JSON.stringify(names));
+    let zipped = null;
+    try { zipped = JSON.parse(entries.get(scriptName).toString("utf8")); } catch { }
+    const locations = zipped ? zipped.rows[0].imageLinks.map((l) => l.location) : null;
+    record(tag + ": the zipped script links its file by bundled name, and keeps the path link and the missing one as they were",
+      JSON.stringify(locations) === JSON.stringify([{ kind: "bundled", name: "take.mp4" }, { kind: "path", path: brief }, { kind: "bundled", name: "gone.mov" }]) &&
+      !("docId" in zipped), JSON.stringify(locations));
+    record(tag + ": the script on disk and the open document are unchanged", fs.readFileSync(scriptPath).equals(scriptBefore) &&
+      (await evalPage(cdp, "window.__splitpageFormats.state().rows[0].imageLinks[1].location.kind")) === "path", "");
+    await evalPage(cdp, "document.querySelectorAll('.toast').forEach(function (t) { t.remove(); }); true");
+    await exportFromDialog(cdp);
+    const taken = await toastContaining(cdp, "Could not export — “Taken.zip” already exists. Export again and choose a new name.", 20000).catch(() => false);
+    record(tag + ": a name that is taken is never replaced, and nothing is left beside it",
+      !!taken && fs.readFileSync(takenPath, "utf8") === "the user's own file" && fs.readdirSync(out).sort().join() === "Shared.zip,Taken.zip",
+      JSON.stringify({ taken: !!taken, out: fs.readdirSync(out) }));
+    const forged = await evalPage(cdp, "window.splitpageDesktop.exportBundle('export9', " + JSON.stringify("0".repeat(32)) + ")");
+    record(tag + ": a file id no export dialog chose writes nothing", !!forged && forged.ok === false && forged.code === "UNKNOWN", JSON.stringify(forged));
+  } finally {
+    if (app) await teardown(app, tag, { expectForceKill: ENDS_DIRTY });
+    rmrf(userDataDir);
+    rmrf(dir);
+  }
+}
+
 async function caseGalleryVideoThumbnail(target) {
   const tag = target.name + " gallery: a pasted video link's thumbnail comes through main, by host and id (#141)";
   const jpeg = Buffer.from([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, 1, 14, 1, 224, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 7, 0xFF, 0xD9]);
@@ -6272,6 +6372,7 @@ async function runTargetSuite(target, groupFilter) {
     ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
     ["gallery: a dropped video is copied beside the script and opens from there after a restart (#259)", () => caseGalleryVideoBundle(target)],
     ["gallery: an attached PDF is copied beside the script and opens after a restart; a program is refused (#256)", () => caseGalleryAttachFile(target)],
+    ["gallery: Export with the script's files writes one zip whose script links its files by bundled name (#260)", () => caseGalleryExportWithFiles(target)],
     ["gallery: a pasted video link's thumbnail comes through main, by host and id (#141)", () => caseGalleryVideoThumbnail(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
     ["draft: file changed on disk while down (merge)", () => caseDraftFileChangedOnDisk(target, fixturesDir)],

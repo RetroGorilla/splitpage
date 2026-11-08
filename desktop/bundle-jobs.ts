@@ -2,6 +2,7 @@
 
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
 import type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
+import type { BundleExportResult, createBundleExporter } from "./bundle-export.ts";
 
 type BundleSender = {
   readonly id: number;
@@ -54,8 +55,23 @@ interface PendingOpen {
   landed: boolean;
 }
 
+interface ExportPlan {
+  readonly sender: BundleSender;
+  readonly tabId: string;
+  readonly text: string;
+  readonly scriptName: string;
+  readonly script: string | null;
+}
+
+type BundleExportPlanAnswer = { ok: true; plan: { files: number; bytes: number; left: number } } | { ok: false; code: "REFUSED" };
+type BundleExportAnswer = BundleExportResult | { ok: false; code: "UNKNOWN" | "REFUSED" };
+
 const SAVE_TARGETS_MAX = 50;
+const EXPORT_PLANS_PER_SENDER = 2;
+const EXPORT_TARGETS_MAX = 50;
+const ZIP_NAME = /\.zip$/i;
 const PLAN_NAMES_MAX = 2000;
+const QUIT_GRACE_MS = 5000;
 const REFUSALS: Record<string, BundleSaveRefusal["reason"]> = { CLASH: "clash", FAILED: "failed", CANCELLED: "cancelled" };
 
 function createBundleJobs(options: {
@@ -64,9 +80,15 @@ function createBundleJobs(options: {
   scriptOfTab: (tabId: string) => string | null;
   pathOf: (fileId: string) => string | null;
   namesInProject: (text: string) => string[];
+  exporter?: ReturnType<typeof createBundleExporter> | null;
   foldCase?: boolean;
+  quitGraceMs?: number;
 }) {
   const { copier, allow, scriptOfTab, pathOf, namesInProject } = options;
+  const exporter = options.exporter || null;
+  const quitGraceMs = typeof options.quitGraceMs === "number" ? options.quitGraceMs : QUIT_GRACE_MS;
+  const exportPlans = new Map<string, ExportPlan>();
+  const exportTargets = new Map<string, string>();
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const queue: BundleJob[] = [];
   const byKey = new Map<string, BundleJob>();
@@ -83,9 +105,18 @@ function createBundleJobs(options: {
     try { if (!sender.isDestroyed()) push(sender); } catch { }
   }
 
+  function abortJob(job: BundleJob): void {
+    job.ctl.abort();
+    const at = queue.indexOf(job);
+    if (at === -1) return;
+    queue.splice(at, 1);
+    if (byKey.get(job.key) === job) byKey.delete(job.key);
+    job.stop("CANCELLED");
+  }
+
   function enqueue(job: BundleJob): void {
     const earlier = byKey.get(job.key);
-    if (earlier) earlier.ctl.abort();
+    if (earlier) abortJob(earlier);
     byKey.set(job.key, job);
     queue.push(job);
     void pump();
@@ -104,10 +135,8 @@ function createBundleJobs(options: {
     try {
       const signal = job.ctl.signal;
       if (!signal.aborted) {
-        const ran = job.run((done, total) => tell(job.sender, (to) => to.send("splitpage:bundle-progress", { job: job.job, done, total })), signal)
+        await job.run((done, total) => tell(job.sender, (to) => to.send("splitpage:bundle-progress", { job: job.job, done, total })), signal)
           .catch(() => job.stop("FAILED"));
-        // why: a read stalled on a lost drive never answers its abort; the job is let go, and it cannot publish once aborted
-        await Promise.race([ran, new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }))]);
       }
       if (signal.aborted) job.stop("CANCELLED");
     } finally {
@@ -135,7 +164,7 @@ function createBundleJobs(options: {
 
   function cancel(sender: BundleSender, job: string): void {
     const found = byKey.get(keyOf(sender, job));
-    if (found) found.ctl.abort();
+    if (found) abortJob(found);
   }
 
   function noteSaveTarget(fileId: string, tab: { id: string; source: { kind: string; absPath?: unknown } } | null): void {
@@ -222,8 +251,8 @@ function createBundleJobs(options: {
 
   function carryForSave(fileId: string, noted: SaveTarget, from: string, to: string, names: readonly string[], sender: BundleSender): Promise<BundleWrite> {
     const job = "carry" + (++carries);
-    const note = (done: number, total: number, result?: BundleCarryResult & { left?: number }) => tell(sender, (s) => s.send("splitpage:bundle-carry", {
-      job, from: copier.folderName(from), to: copier.folderName(to), done, total, ...(result ? { result } : {})
+    const note = (done: number, total: number, result?: BundleCarryResult & { left?: number }, waiting = false) => tell(sender, (s) => s.send("splitpage:bundle-carry", {
+      job, from: copier.folderName(from), to: copier.folderName(to), done, total, ...(waiting ? { waiting } : {}), ...(result ? { result } : {})
     }));
     const refusal = (result: BundleCarryResult): BundleSaveRefusal | null => {
       if (result.ok) return null;
@@ -253,11 +282,20 @@ function createBundleJobs(options: {
         const background = pending !== null && wrote !== "no";
         note(1, 1, background && !result.ok ? { ...result, left: Math.max(0, (pending as readonly string[]).length - result.copied) } : result);
       };
+      const ctl = new AbortController();
+      ctl.signal.addEventListener("abort", () => {
+        const waiting = release;
+        release = null;
+        if (waiting) waiting(false);
+        const refused = refusal({ ok: false, code: "CANCELLED", name: "", copied: committed });
+        if (refused) reply({ refused });
+      }, { once: true });
+      note(0, 1, undefined, true);
       enqueue({
-        key: keyOf(sender, job), sender, job, ctl: new AbortController(),
+        key: keyOf(sender, job), sender, job, ctl,
         stop: (code) => done({ ok: false, code, name: "", copied: committed }),
         run: async (_progress, signal) => {
-          done(await copier.carry(from, to, names, allow, (d, t) => { if (!settled && !signal.aborted) note(d, t); }, signal, (n) => { committed = n; }, {
+          const carried = await copier.carry(from, to, names, allow, (d, t) => { if (!settled && !signal.aborted) note(d, t); }, signal, (n) => { committed = n; }, {
             strict: true,
             source: (name) => copier.resolveIn(from, name, allow),
             ready: (listed) => {
@@ -278,7 +316,8 @@ function createBundleJobs(options: {
                 });
               });
             }
-          }));
+          });
+          done(signal.aborted ? { ok: false, code: "CANCELLED", name: "", copied: committed } : carried);
         }
       });
     });
@@ -293,6 +332,59 @@ function createBundleJobs(options: {
     if (noted.choice === "link" && names.length) return Promise.resolve({ refused: missingRefusal(noted.from, names[0] as string, names.length) });
     if (!names.length) return Promise.resolve(plainWrite(fileId));
     return carryForSave(fileId, noted, noted.from, to, names, sender);
+  }
+
+  function scriptOfBytes(tabId: string, scriptId: unknown): { script: string | null } | null {
+    if (scriptId === "") return { script: null };
+    const script = typeof scriptId === "string" ? pathOf(scriptId) : null;
+    const now = scriptOfTab(tabId);
+    return script && now && same(script, now) ? { script } : null;
+  }
+
+  async function planExport(sender: BundleSender, tabId: string, job: string, scriptName: unknown, text: string, scriptId: unknown): Promise<BundleExportPlanAnswer> {
+    if (!exporter || !exporter.scriptNameOk(scriptName)) return { ok: false, code: "REFUSED" };
+    const bound = scriptOfBytes(tabId, scriptId);
+    if (!bound) return { ok: false, code: "REFUSED" };
+    const script = bound.script;
+    const laid = await exporter.layout(text, scriptName, script, allow);
+    if (!laid) return { ok: false, code: "REFUSED" };
+    const key = keyOf(sender, job);
+    exportPlans.delete(key);
+    const mine = [...exportPlans].filter(([, p]) => p.sender === sender);
+    while (mine.length >= EXPORT_PLANS_PER_SENDER) exportPlans.delete((mine.shift() as [string, ExportPlan])[0]);
+    exportPlans.set(key, { sender, tabId, text, scriptName, script });
+    return { ok: true, plan: { files: laid.sources.length, bytes: laid.sources.reduce((sum, s) => sum + s.size, 0), left: laid.left } };
+  }
+
+  function noteExportTarget(fileId: string, tab: { id: string } | null): void {
+    if (!tab) return;
+    if (exportTargets.size >= EXPORT_TARGETS_MAX) exportTargets.delete(exportTargets.keys().next().value as string);
+    exportTargets.set(fileId, tab.id);
+  }
+
+  function startExport(sender: BundleSender, tabId: string, job: string, fileId: unknown): Promise<BundleExportAnswer> {
+    const key = keyOf(sender, job);
+    const planned = exportPlans.get(key);
+    if (!exporter || !planned || planned.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    if (typeof fileId !== "string" || exportTargets.get(fileId) !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    const target = pathOf(fileId);
+    if (!target || !ZIP_NAME.test(target)) return Promise.resolve({ ok: false, code: "REFUSED" });
+    exportPlans.delete(key);
+    exportTargets.delete(fileId);
+    const writer = exporter;
+    return new Promise((finish) => {
+      let settled = false;
+      const done = (result: BundleExportAnswer) => { if (!settled) { settled = true; finish(result); } };
+      enqueue({
+        key, sender, job, ctl: new AbortController(),
+        stop: (code) => done({ ok: false, code }),
+        run: async (progress, signal) => {
+          const laid = await writer.layout(planned.text, planned.scriptName, planned.script, allow);
+          if (!laid) { done({ ok: false, code: "FAILED" }); return; }
+          done(await writer.write(laid, target, signal, progress));
+        }
+      });
+    });
   }
 
   function stillOpen(open: PendingOpen): boolean {
@@ -322,6 +414,8 @@ function createBundleJobs(options: {
   function forgetTab(tabId: string): void {
     for (const open of [...opens]) if (open.tabId === tabId) opens.delete(open);
     for (const [fileId, noted] of [...saveTargets]) if (noted.tabId === tabId) saveTargets.delete(fileId);
+    for (const [fileId, owner] of [...exportTargets]) if (owner === tabId) exportTargets.delete(fileId);
+    for (const [key, planned] of [...exportPlans]) if (planned.tabId === tabId) exportPlans.delete(key);
   }
 
   function busy(): boolean {
@@ -333,14 +427,18 @@ function createBundleJobs(options: {
     return new Promise((resolve) => { idleWaiters.push(resolve); });
   }
 
-  function abortAll(): Promise<void> {
-    for (const job of [running, ...queue]) if (job) job.ctl.abort();
-    return idle();
+  function abortAll(graceMs = quitGraceMs): Promise<void> {
+    for (const job of [...queue, running]) if (job) abortJob(job);
+    // why: the app is quitting, so a read stalled on a lost drive must not hold the quit open; nothing runs after it
+    return Promise.race([idle(), new Promise<void>((resolve) => { setTimeout(resolve, graceMs); })]);
   }
 
-  return { abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteSaveTarget, noteScript, openBundled, planSave, prepareWrite };
+  return {
+    abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteExportTarget, noteSaveTarget, noteScript, openBundled, planExport, planSave,
+    prepareWrite, startExport
+  };
 }
 
-export type { BundleJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };
+export type { BundleExportAnswer, BundleExportPlanAnswer, BundleJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };
 
 module.exports = { createBundleJobs };

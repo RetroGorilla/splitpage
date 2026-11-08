@@ -75,6 +75,8 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly openBundledFile: DesktopCall<"splitpage:bundled-file-open">;
   readonly planBundleSave: DesktopCall<"splitpage:bundle-save-plan">;
   readonly chooseBundleSave: DesktopCall<"splitpage:bundle-save-choice">;
+  readonly planBundleExport: (job: string, scriptName: string, bytes: Uint8Array, scriptId: string) => ReturnType<DesktopCall<"splitpage:bundle-export-plan">>;
+  readonly exportBundle: (job: string, fileId: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-export">>;
   readonly videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopThumbnailResult>;
 
   readonly getUpdateStatus: DesktopCall<"splitpage:update-status">;
@@ -113,7 +115,8 @@ export const DESKTOP_PORT_MEMBERS = [
   "blobPut", "blobGet", "blobMissing", "printToPdf",
   "getSessionInfo", "openExternal", "setTheme",
   "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath",
-  "bundleVideoFile", "onBundleCarry", "cancelBundle", "openBundledFile", "planBundleSave", "chooseBundleSave", "videoThumbnail",
+  "bundleVideoFile", "onBundleCarry", "cancelBundle", "openBundledFile", "planBundleSave", "chooseBundleSave",
+  "planBundleExport", "exportBundle", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",
   "openPrompterInBrowser", "openPrompterInChromium",
   "voiceStatus", "voiceStart", "voiceMicrophones", "voiceStop", "onVoiceEvent"

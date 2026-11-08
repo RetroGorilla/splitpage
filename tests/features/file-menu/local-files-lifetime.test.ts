@@ -28,21 +28,24 @@ function harness(label: string) {
   const builds: unknown[] = [];
   const deliveries: unknown[] = [];
   const warnings: unknown[] = [];
+  const zips: unknown[] = [];
   formats.defineCard({ id: "script", name: "Script", ext: "txt", icon: "", purpose: "", group: "whole", toggle: { id: "directions", label: "Directions", on: () => true, set: () => {} } });
   formats.register({ id: "txt", action: "export-txt", name: "Text", menuLabel: "Text", card: "script", fileName: (base) => label + ":" + base + ".txt", build: async (request) => { builds.push(request); return { data: label, diagnostics: { imagesLeftOut: 1 } }; } });
   const notices = fakeNotices();
+  const place = createDocumentLocation();
   const ports: LocalFileMenuPorts = {
-    document: fakeDocument(doc).document, preferences: { clock: () => "24h" }, place: createDocumentLocation(),
+    document: fakeDocument(doc).document, preferences: { clock: () => "24h" }, place,
     exports: { captureExportDocument: () => captured, loadExportAssets: async () => assets }, formats,
     assets: { request: () => ({ shas: [] }) }, standaloneHtml: () => "",
     imagesLeftOut: (...args) => { warnings.push(args); }, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
     notices: { ...notices.notices, busy: { withBar: async (_label, work) => work() } },
     delivery: { deliver: async (...args) => { deliveries.push(args); return true; } },
+    scriptFiles: { export: async (...args) => { zips.push(args); return true; } },
     pdfPrint: { export: () => null },
     merge: { offer: async () => {}, reset: () => {} },
     exportControls: { isExportAction: () => false, rememberExport: () => {} }, actions: createActionRegistry()
   };
-  return { ports, formats, builds, deliveries, warnings, notices };
+  return { ports, place, formats, builds, deliveries, warnings, notices, zips };
 }
 
 test("retired controls and repeated disposal cannot affect a replacement menu", () => {
@@ -138,5 +141,56 @@ test("export options read the registry card toggle through the formats port", ()
     assert.equal(request.options.directions, true);
     const overridden = mounted.exportRequest("txt", { directions: false }) as { options: { directions: boolean } };
     assert.equal(overridden.options.directions, false);
+  } finally { mounted.dispose(); }
+});
+
+test("an export built with the script's files goes to the files export, never to a plain download", async () => {
+  const h = harness("live");
+  const formats = createExportRegistry();
+  formats.register({ id: "splitpage", fileName: (base) => base + " (with files).zip",
+    build: async () => ({ data: "{\"rows\":[]}", withFiles: { scriptName: "script.splitpage" } }) });
+  formats.register({ id: "plain", fileName: (base) => base + ".splitpage", build: async () => ({ data: "{}" }) });
+  const mounted: LocalFileMenuControls = startLocalFileMenu({ ...h.ports, formats });
+  try {
+    await mounted.exportAs("splitpage");
+    assert.deepEqual(h.zips, [["live (with files).zip", "script.splitpage", "{\"rows\":[]}", null]], "an unsaved script names no script to read files from");
+    assert.deepEqual(h.deliveries, []);
+    await mounted.exportAs("plain");
+    assert.equal(h.deliveries.length, 1, "without the files it is an ordinary export");
+    assert.equal(h.zips.length, 1);
+  } finally { mounted.dispose(); }
+});
+
+test("the files export names the script its bytes were captured from, even when another script opens while they are built", async () => {
+  const h = harness("live");
+  const handle = { kind: "file" as const, name: "script.splitpage" };
+  h.place.setHome("file", { handle, format: "splitpage", name: "script.splitpage" });
+  const entered = deferred<undefined>();
+  const gate = deferred<undefined>();
+  const formats = createExportRegistry();
+  formats.register({ id: "splitpage", fileName: (base) => base + " (with files).zip",
+    build: async () => { entered.resolve(undefined); await gate.promise; return { data: "{}", withFiles: { scriptName: "script.splitpage" } }; } });
+  const mounted: LocalFileMenuControls = startLocalFileMenu({ ...h.ports, formats });
+  try {
+    const exporting = mounted.exportAs("splitpage");
+    await entered.promise;
+    h.place.setHome("file", { handle: { kind: "file" as const, name: "other.splitpage" }, format: "splitpage", name: "other.splitpage" });
+    gate.resolve(undefined);
+    await exporting;
+    assert.equal(h.zips.length, 1);
+    assert.equal((h.zips[0] as unknown[])[3], handle);
+  } finally { mounted.dispose(); }
+});
+
+test("a card toggle that is not offered here reads as off, whatever it was set to", () => {
+  const h = harness("live");
+  const formats = createExportRegistry();
+  formats.defineCard({ id: "script", name: "Script", ext: "txt", icon: "", purpose: "", group: "whole",
+    toggle: { id: "files", label: "Files", on: () => true, set: () => {}, offered: () => false } });
+  formats.register({ id: "txt", action: "export-txt", name: "Text", menuLabel: "Text", card: "script", fileName: (base) => base + ".txt", build: async () => ({ data: "" }) });
+  const mounted: LocalFileMenuControls = startLocalFileMenu({ ...h.ports, formats });
+  try {
+    assert.equal((mounted.exportRequest("txt") as { options: { files: boolean } }).options.files, false);
+    assert.equal((mounted.exportRequest("txt", { files: true }) as { options: { files: boolean } }).options.files, false);
   } finally { mounted.dispose(); }
 });
