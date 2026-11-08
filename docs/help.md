@@ -789,11 +789,23 @@ format, with a preview and the file name.
 
 - **The whole script**: **PDF**, **Word**, **Markdown**, **Spreadsheet**
   (a row per beat, as Excel or CSV), or **SplitShare** (the script with the
-  whole app built in, for any device).
+  whole app built in, for any device), or **Splitpage script** (a copy of the
+  .splitpage file).
 - **Part of it**: **Narration only**, the **Breakdown** as a spreadsheet, a
   **Packing list** of gear or props, or the **B-roll shot list**: a
   landscape table of every shot with its beat, props, flags and their
   reasons, and lines for notes (or the same as a spreadsheet).
+
+**Sending a script with its files.** In the desktop app, pick **Splitpage
+script** and turn on **Include the script's files, as one .zip**. Splitpage
+shows how many files that is and how big, then writes one .zip with the script
+and its "<script name> files" folder. Whoever unzips it can open the script and
+every file in that folder, wherever they unzip it. Only files in the script's
+folder go in: files that are missing, linked from elsewhere on your computer,
+or of a type Splitpage doesn't attach are left out, and Splitpage tells you how
+many. You can keep working while it exports, hide the progress, or press
+**Cancel**, which leaves no zip behind. In the browser, the card exports the
+script on its own.
 
 **PDF** and **Word** lay the script out the way the app does: the running
 time and target at the top (the PDF shades filmed rows grey), each beat's
