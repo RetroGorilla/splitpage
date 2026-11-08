@@ -1,3 +1,4 @@
 @media (hover: none) {
       .tag-ghost-hint { pointer-events: auto; cursor: pointer; }
+      #tag-open-ghost { pointer-events: none; cursor: auto; }
 }

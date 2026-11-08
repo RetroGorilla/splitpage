@@ -374,7 +374,7 @@ interface KeyedItem {
   links?: unknown;
 }
 
-function itemKey(it: KeyedItem | null | undefined): string {
+export function galleryItemKey(it: KeyedItem | null | undefined): string {
   if (!it) return "";
   const ref = it.imageRef as { sha256?: unknown } | null | undefined;
   if (ref && ref.sha256) return ref.sha256 as string;
@@ -390,14 +390,14 @@ export function migrateGallery(r: GalleryRow, images: ImageSource): void {
   const ann = normalizeAnnotation(r.imageAnnotation, normalizeImageRef(r.imageRef), images);
   if (ann) r.imageAnnotation = ann; else delete r.imageAnnotation;
   const seen: Record<string, boolean> = {};
-  const firstKey = itemKey({ imageRef: r.imageRef, links: r.imageLinks });
+  const firstKey = galleryItemKey({ imageRef: r.imageRef, links: r.imageLinks });
   if (firstKey) seen[firstKey] = true;
   const more: GalleryItem[] = [];
   const files: VideoLink[] = [];
   (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (x) {
     const it = normalizeGalleryItem(x, images, files);
-    if (!it || seen[itemKey(it)] || more.length >= MAX_MORE) return;
-    seen[itemKey(it)] = true;
+    if (!it || seen[galleryItemKey(it)] || more.length >= MAX_MORE) return;
+    seen[galleryItemKey(it)] = true;
     more.push(it);
   });
   if (!r.imageRef && !r.imageLinks && more.length) {
@@ -683,6 +683,11 @@ export interface GallerySide {
 function mergeLink(b: VideoLink | undefined, m: VideoLink, t: VideoLink): VideoLink {
   const out = copy(t);
   if (!m.location) return out;
+  // why: a copy beside the script travels with it, and a path works on one computer only (#1252)
+  if (t.location && (m.location.kind === "bundled") !== (t.location.kind === "bundled")) {
+    if (m.location.kind === "bundled") out.location = copy(m.location);
+    return out;
+  }
   // why: an older build drops a location when it saves, and nothing here removes one, so a missing one never wins
   if (!t.location || (locationKey(t) === locationKey(b) && locationKey(m) !== locationKey(b))) out.location = copy(m.location);
   return out;
@@ -693,7 +698,7 @@ export function mergeGalleryField(f: string, b: GallerySide | null | undefined, 
   if (f === "imageLinks") {
     list = mergeSet(b && b.imageLinks, m.imageLinks, t.imageLinks, videoLinkKey, mergeLink);
   } else {
-    list = mergeSet(b && b.moreImages, m.moreImages, t.moreImages, itemKey, function (bi, mi, ti) {
+    list = mergeSet(b && b.moreImages, m.moreImages, t.moreImages, galleryItemKey, function (bi, mi, ti) {
       const out = copy(ti);
       const links = mergeSet(bi && bi.links, mi.links, ti.links, videoLinkKey, mergeLink);
       if (links.length) out.links = links; else delete out.links;
@@ -708,6 +713,6 @@ export function galleryFieldKey(row: Readonly<Record<string, unknown>> | null | 
   if (!Array.isArray(v) || !v.length) return null;
   if (f === "imageLinks") return (v as VideoLink[]).map(function (l) { return videoLinkKey(l) + (l.poster ? "*" : "") + locationKey(l); }).join("\n");
   return (v as GalleryItem[]).map(function (it) {
-    return itemKey(it) + "[" + (Array.isArray(it.links) ? it.links.map(function (l) { return videoLinkKey(l) + locationKey(l); }).join("\n") : "") + "]";
+    return galleryItemKey(it) + "[" + (Array.isArray(it.links) ? it.links.map(function (l) { return videoLinkKey(l) + locationKey(l); }).join("\n") : "") + "]";
   }).join("\n");
 }

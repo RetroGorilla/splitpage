@@ -8,6 +8,8 @@ import { namedTagId, projection } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
 import { fakeDocument, fakeTextServices } from "../fakes.ts";
 import { createRichText } from "../../../src/adapters/richtext/richtext.ts";
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -219,6 +221,185 @@ test("a keyword at the start of a text node reads the character before it throug
   } finally {
     control.dispose();
   }
+});
+
+function suggesting(model: string, names: readonly string[]) {
+  const h = fixture("prop:", model);
+  win.document.body.insertAdjacentHTML("beforeend",
+    '<button id="tag-open-hint"></button><div class="tag-ghost-hint" id="tag-open-ghost"></div>');
+  const records = (list: readonly string[]) =>
+    migrateRows({ schema: 2, rows: [], productionTags: list.map((name, i) => ({ id: "t_" + i, cat: "prop", name })) }, fakeMigration().ports);
+  const held = fakeDocument(records(names));
+  const control = startPlainTags({ ...h.ports, document: held.document });
+  const setRecords = (list: readonly string[]) => { held.replace(records(list)); };
+  h.cell.focus();
+  caretAt(h.cell.firstChild as Node, 5);
+  control.maybeOpen(typedColon(), h.cell);
+  const tail = h.cell.querySelector(".plain-tag-keyword")?.nextSibling as Text;
+  const type = (words: string) => {
+    tail.appendData(words);
+    caretAt(tail, tail.length);
+    control.refresh();
+  };
+  const ghost = win.document.getElementById("tag-open-ghost") as HTMLElement;
+  const hint = win.document.getElementById("tag-open-hint") as HTMLElement;
+  const shown = () => ghost.classList.contains("is-visible") ? ghost.textContent : null;
+  return { ...h, control, type, shown, hint, setRecords };
+}
+
+function withCaretRects(run: () => void): void {
+  const proto = win.Range.prototype as unknown as Record<string, unknown>;
+  Object.defineProperty(proto, "getClientRects", { configurable: true, value: () => [{ left: 30, right: 40, top: 10, bottom: 24, width: 10, height: 14 }] });
+  realm.getComputedStyle = win.getComputedStyle.bind(win);
+  try { run(); } finally {
+    delete proto.getClientRects;
+    delete realm.getComputedStyle;
+  }
+}
+
+test("an open keyword tag suggests an existing name in its category and Tab completes the tag with it", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: ca", ["cable tray", "spoon"]);
+    try {
+      h.type(" ca");
+      assert.equal(h.shown(), "ble tray");
+      assert.match(h.hint.textContent, /Prop:cable tray/);
+      assert.equal(h.control.close(), true);
+      assert.equal(h.shown(), null);
+      assert.equal(h.changes.length, 1);
+      const result = h.changes[0] as CellEditResult;
+      assert.deepEqual(result.records, { tags: [{ cat: "prop", name: "cable tray" }] });
+      assert.equal(projection(result.cell), "cable tray");
+      assert.equal(result.cell.filter(run => run.marks.tag === namedTagId("prop", "cable tray")).map(run => run.text).join(""), "cable tray");
+      assert.deepEqual(result.sel, { from: 10, to: 10 });
+    } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("an exact existing name offers no longer one, so Tab reuses the exact record", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: cable", ["cable tray", "cable"]);
+    try {
+      h.type(" cab");
+      assert.equal(h.shown(), "le");
+      h.type("le");
+      assert.equal(h.shown(), null);
+      assert.match(h.hint.textContent, /Proptag/);
+      assert.equal(h.control.close(), true);
+      assert.deepEqual((h.changes[0] as CellEditResult).records, { tags: [{ cat: "prop", name: "cable" }] });
+      assert.equal(projection((h.changes[0] as CellEditResult).cell), "cable");
+    } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("Tab takes the record that is shown even after a shorter match is added", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: ca", ["cable tray"]);
+    try {
+      h.type(" ca");
+      assert.equal(h.shown(), "ble tray");
+      h.setRecords(["cable tray", "cab"]);
+      assert.equal(h.control.close(), true);
+      assert.equal(h.changes.length, 1);
+      assert.deepEqual((h.changes[0] as CellEditResult).records, { tags: [{ cat: "prop", name: "cable tray" }] });
+      assert.equal(projection((h.changes[0] as CellEditResult).cell), "cable tray");
+    } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("Tab on a suggestion whose record is gone shows the current state instead of creating a record", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: ca", ["cable tray"]);
+    try {
+      h.type(" ca");
+      assert.equal(h.shown(), "ble tray");
+      h.setRecords(["cab"]);
+      assert.equal(h.control.close(), true);
+      assert.equal(h.changes.length, 0);
+      assert.equal(h.control.isOpen(), true);
+      assert.equal(h.shown(), "b");
+      assert.match(h.hint.textContent, /Prop:cab/);
+      h.setRecords([]);
+      assert.equal(h.control.close(), true);
+      assert.equal(h.changes.length, 0);
+      assert.equal(h.shown(), null);
+      assert.match(h.hint.textContent, /Proptag/);
+      assert.equal(h.control.close(), true);
+      assert.deepEqual((h.changes[0] as CellEditResult).records, { tags: [{ cat: "prop", name: "ca" }] });
+    } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("one repaint reads all layout before it writes any style", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: ca", ["cable tray"]);
+    const log: string[] = [];
+    const proto = win.HTMLElement.prototype as unknown as Record<string, unknown>;
+    const ghost = win.document.getElementById("tag-open-ghost") as HTMLElement;
+    const offsetWidth = Object.getOwnPropertyDescriptor(proto, "offsetWidth");
+    Object.defineProperty(proto, "offsetWidth", { configurable: true, get: () => { log.push("read"); return 0; } });
+    const realStyle = win.getComputedStyle.bind(win);
+    realm.getComputedStyle = (el: Element) => { log.push("read"); return realStyle(el); };
+    const textContent = Object.getOwnPropertyDescriptor(win.Node.prototype, "textContent");
+    Object.defineProperty(ghost, "textContent", { configurable: true, set: (v: string) => { log.push("write"); textContent?.set?.call(ghost, v); }, get: (): string | null => textContent?.get?.call(ghost) as string | null });
+    try {
+      h.type(" ca");
+      assert.equal(h.shown(), "ble tray");
+      const firstWrite = log.indexOf("write");
+      assert.ok(firstWrite > 0);
+      assert.equal(log.lastIndexOf("read") < firstWrite, true, log.join(","));
+    } finally {
+      if (offsetWidth) Object.defineProperty(proto, "offsetWidth", offsetWidth);
+      else delete proto.offsetWidth;
+      h.control.dispose();
+    }
+  });
+});
+
+test("Escape hides the suggestion, keeps the tag open, and Tab then makes the typed name", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: ca", ["cable tray"]);
+    try {
+      h.type(" ca");
+      assert.equal(h.control.dismissSuggestion(), true);
+      assert.equal(h.shown(), null);
+      assert.equal(h.control.isOpen(), true);
+      assert.match(h.hint.textContent, /Proptag/);
+      h.control.refresh();
+      assert.equal(h.shown(), null, "a repaint at the same text keeps it hidden");
+      assert.equal(h.control.dismissSuggestion(), false, "a second Escape is left to cancel the tag");
+      assert.equal(h.control.close(), true);
+      assert.deepEqual((h.changes[0] as CellEditResult).records, { tags: [{ cat: "prop", name: "ca" }] });
+      assert.equal(projection((h.changes[0] as CellEditResult).cell), "ca");
+    } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("a dismissed suggestion comes back once more is typed, and goes when the words stop matching", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: cax", ["cable tray"]);
+    try {
+      h.type(" ca");
+      h.control.dismissSuggestion();
+      h.type("b");
+      assert.equal(h.shown(), "le tray");
+      h.type("x");
+      assert.equal(h.shown(), null);
+      assert.equal(h.control.dismissSuggestion(), false);
+    } finally {
+      h.control.dispose();
+    }
+  });
 });
 
 test("dispose puts an open keyword back and a second mount starts closed", () => {

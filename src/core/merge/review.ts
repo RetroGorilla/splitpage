@@ -1,5 +1,5 @@
-import { videoLinkLabel } from "../document/gallery.ts";
-import type { VideoLink } from "../document/gallery.ts";
+import { galleryFieldKey, galleryItemKey, mergeGalleryField, videoLinkKey, videoLinkLabel, withoutVideoLocations } from "../document/gallery.ts";
+import type { GallerySide, VideoLink } from "../document/gallery.ts";
 import { idMap } from "../document/id-map.ts";
 import { escapeHtml } from "../document/text-policy.ts";
 import { rowContentEqual } from "./rows.ts";
@@ -139,11 +139,73 @@ export function mergeDiffPairHtml(mineText: string, theirText: string): DiffPair
   return { mine: mergeDiffSideHtml(ops, "del"), theirs: mergeDiffSideHtml(ops, "add") };
 }
 
-export function mergeGallerySummary(row: ReviewRow, f: string): string {
+export interface GalleryMoves {
+  keys: ReadonlySet<string>;
+  kept: "theirs" | "mine" | "mixed" | null;
+  bundled: boolean;
+  only: boolean;
+}
+
+function linkPlace(l: VideoLink | null | undefined): string {
+  return JSON.stringify((l && l.location) || null);
+}
+
+function fileLinksOf(row: ReviewRow, f: string): Map<string, VideoLink> {
+  const out = new Map<string, VideoLink>();
+  const v = (row && Array.isArray(row[f]) ? row[f] : []) as readonly (GalleryItem | null | undefined)[];
+  function add(prefix: string, links: readonly (VideoLink | null | undefined)[] | null | undefined): void {
+    const list: readonly (VideoLink | null | undefined)[] = Array.isArray(links) ? links : [];
+    list.forEach(function (l) { if (l && !l.href) out.set(prefix + videoLinkKey(l), l); });
+  }
+  if (f === "imageLinks") add("", v);
+  else v.forEach(function (it) { if (it && typeof it === "object") add(galleryItemKey(it) + "\n", it.links); });
+  return out;
+}
+
+function unlocatedKey(row: Readonly<Record<string, unknown>>, f: string): string | null {
+  const probe = JSON.parse(JSON.stringify({ [f]: row[f] ?? null })) as Record<string, unknown>;
+  withoutVideoLocations([probe]);
+  return galleryFieldKey(probe, f);
+}
+
+export function mergeGalleryMoves(f: string, b: ReviewRow, m: Readonly<Record<string, unknown>>, t: Readonly<Record<string, unknown>>): GalleryMoves {
+  const mine = fileLinksOf(m, f), theirs = fileLinksOf(t, f);
+  const merged = fileLinksOf({ [f]: mergeGalleryField(f, (b || null) as GallerySide | null, m as GallerySide, t as GallerySide) }, f);
+  const keys = new Set<string>(), sides = new Set<"theirs" | "mine">();
+  let bundled = true;
+  mine.forEach(function (ml, k) {
+    const tl = theirs.get(k);
+    if (!tl || linkPlace(ml) === linkPlace(tl)) return;
+    keys.add(k);
+    const kept = merged.get(k);
+    const side = kept && linkPlace(kept) === linkPlace(ml) ? "mine" : "theirs";
+    sides.add(side);
+    const won = side === "mine" ? ml : tl, lost = side === "mine" ? tl : ml;
+    if (!(won.location && won.location.kind === "bundled" && !(lost.location && lost.location.kind === "bundled"))) bundled = false;
+  });
+  const kept = !keys.size ? null : sides.size > 1 ? "mixed" : sides.has("mine") ? "mine" : "theirs";
+  return { keys, kept, bundled: keys.size > 0 && bundled, only: keys.size > 0 && unlocatedKey(m, f) === unlocatedKey(t, f) };
+}
+
+function videoPlaceLabel(l: VideoLink): string {
+  const at = l.location;
+  if (!at) return "";
+  if (at.kind === "bundled") return at.name === l.name ? "beside the script" : "beside the script as " + at.name;
+  const i = Math.max(at.path.lastIndexOf("\\"), at.path.lastIndexOf("/"));
+  if (at.path.slice(i + 1) !== l.name) return at.path;
+  const folder = i <= 0 ? at.path.slice(0, i + 1) : at.path.slice(0, i);
+  return /^[A-Za-z]:$/.test(folder) ? folder + at.path.charAt(i) : folder;
+}
+
+export function mergeGallerySummary(row: ReviewRow, f: string, shown?: ReadonlySet<string>): string {
   const v = (row && Array.isArray(row[f]) ? row[f] : []) as readonly GalleryItem[];
-  if (f === "imageLinks") return v.map(videoLinkLabel).join(", ");
+  function label(prefix: string, l: VideoLink | null | undefined): string {
+    const placed = !!l && !l.href && !!l.location && !!shown && shown.has(prefix + videoLinkKey(l));
+    return videoLinkLabel(l) + (placed ? " (" + videoPlaceLabel(l as VideoLink) + ")" : "");
+  }
+  if (f === "imageLinks") return v.map(function (l) { return label("", l); }).join(", ");
   if (!v.length) return "";
   const links: string[] = [];
-  v.forEach(function (it) { (it.links || []).forEach(function (l) { links.push(videoLinkLabel(l)); }); });
+  v.forEach(function (it) { (it.links || []).forEach(function (l) { links.push(label(galleryItemKey(it) + "\n", l)); }); });
   return v.length + (v.length === 1 ? " picture" : " pictures") + (links.length ? " · " + links.join(", ") : "");
 }

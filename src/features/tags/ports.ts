@@ -48,6 +48,7 @@ export interface PlainTagControl {
   readonly isOpen: (cellEl?: Element | null) => boolean;
   readonly emptyAtCaret: () => boolean;
   readonly cancelOnBackspace: () => boolean;
+  readonly dismissSuggestion: () => boolean;
   readonly onTagged: (listener: () => void) => () => void;
 }
 

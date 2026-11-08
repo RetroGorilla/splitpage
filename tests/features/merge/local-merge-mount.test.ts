@@ -173,6 +173,39 @@ test("merge review gives every text and media entry the whole beat's retained or
   }
 });
 
+test("merge review (#1252): a video only in another folder shows both folders and says which one is kept", async () => {
+  const at = (location: unknown) => {
+    const withLink = { ...row("a", "A"), imageLinks: [{ name: "take.mp4", size: 3, poster: true, location }] };
+    return doc([withLink]);
+  };
+  const path = (p: string) => ({ kind: "path", path: p });
+  const cases = [
+    { base: path("C:\\Old\\take.mp4"), mine: path("C:\\Old\\take.mp4"), theirs: path("D:\\New\\take.mp4"), outcome: "theirs",
+      text: "Same video in a different folder — the file's location is kept", sides: ["take.mp4 (C:\\Old)", "take.mp4 (D:\\New)"] },
+    { base: path("C:\\Old\\take.mp4"), mine: path("D:\\New\\take.mp4"), theirs: path("C:\\Old\\take.mp4"), outcome: "mine",
+      text: "Same video in a different folder — your location is kept", sides: ["take.mp4 (D:\\New)", "take.mp4 (C:\\Old)"] },
+    { base: path("C:\\Old\\take.mp4"), mine: { kind: "bundled", name: "take.mp4" }, theirs: path("D:\\New\\take.mp4"), outcome: "mine",
+      text: "Same video in a different folder — the copy beside the script is kept", sides: ["take.mp4 (beside the script)", "take.mp4 (D:\\New)"] }
+  ];
+  for (const c of cases) {
+    const base = at(c.base);
+    const { ports } = setup({ mine: at(c.mine), parsed: () => Promise.resolve({ state: copy(at(c.theirs)) }) });
+    const merge = startLocalMerge(ports);
+    try {
+      await merge.offer(file(), { kind: "file", diskBase: base } as Home);
+      merge.open();
+      const entries = Array.from(win.document.querySelectorAll(".merge-entry"));
+      assert.equal(entries.length, 1, c.text);
+      assert.equal(entries[0]?.querySelector(".merge-entry-head")?.firstChild?.textContent, "Video links");
+      assert.equal(entries[0]?.getAttribute("data-outcome"), c.outcome);
+      assert.equal(entries[0]?.querySelector(".merge-entry-outcome")?.textContent, c.text);
+      assert.deepEqual(Array.from(entries[0]?.querySelectorAll(".merge-side-body") ?? [], (s) => s.textContent), c.sides);
+    } finally {
+      merge.dispose();
+    }
+  }
+});
+
 test("merge review numbers a locally inserted beat from its actual scene", async () => {
   const base = doc([row("a", "A"), row("c", "C")]);
   const mine = validated({ ...copy(base), rows: [row("a", "A"), row("b", "Inserted"), row("c", "C")],

@@ -20,6 +20,7 @@ type MergeCandidate = { theirs: ValidatedDocument; base: ReturnType<typeof fileM
 import {
   mergeDiffPairHtml,
   mergeFieldOutcome,
+  mergeGalleryMoves,
   mergeGallerySummary,
   mergeItemSummary,
   mergeListEntries,
@@ -100,6 +101,13 @@ const MERGE_OUTCOME_TEXT = {
   both: "Both sides are kept"
 };
 
+const MERGE_MOVE_TEXT = {
+  theirs: "Same video in a different folder — the file's location is kept",
+  mine: "Same video in a different folder — your location is kept",
+  bundled: "Same video in a different folder — the copy beside the script is kept",
+  mixed: "Same videos in different folders — the file's location is kept for some, yours for others"
+};
+
 function mergeFieldText(row: DocumentRow | null, field: string) {
   if (!row) return "";
   return htmlToPlainText(row[field] || "");
@@ -141,11 +149,14 @@ function mergeDiffModel(base: MergeReviewDocument | null | undefined, mine: Merg
     ROW_FIELDS.forEach(function (f) {
       if (GALLERY_FIELDS[f]) {
         if (rowFieldKey(m, f) === rowFieldKey(t, f)) return;
-        const gm = mergeGallerySummary(m, f), gt = mergeGallerySummary(t, f);
+        const moves = m && t ? mergeGalleryMoves(f, bb, m, t) : null;
+        const gm = mergeGallerySummary(m, f, moves?.keys), gt = mergeGallerySummary(t, f, moves?.keys);
         const gPair = mergeDiffPairHtml(gm, gt);
+        const moved = moves && moves.only && moves.kept ? moves : null;
         entries.push({
           label: f === "imageLinks" ? "Video links" : "More pictures",
-          outcome: rowOutcome ?? "both",
+          outcome: rowOutcome ?? (moved && moved.kept !== "mixed" ? moved.kept : "both"),
+          text: moved ? MERGE_MOVE_TEXT[moved.bundled ? "bundled" : moved.kept as keyof typeof MERGE_MOVE_TEXT] : undefined,
           mineHtml: gPair.mine,
           theirsHtml: gPair.theirs
         });

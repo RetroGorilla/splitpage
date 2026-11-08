@@ -8,7 +8,8 @@ import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
 import { deleteRange, insertText, marksAt, replaceText, setMark, typingMarks } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { FORMAT_MARKS, namedTagId, projection } from "../../core/text/runs.ts";
-import { registryEntryOf } from "../../core/production/records.ts";
+import { registryCompletion, registryCompletionOf, registryEntryOf } from "../../core/production/records.ts";
+import type { RegistryCompletion } from "../../core/production/records.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import type { TagCategoryId } from "../../core/document/tags.ts";
 import type { PlainTagMount, PlainTagPorts, TagCaretRefusal } from "./ports.ts";
@@ -81,6 +82,8 @@ interface OpenPlainTag {
   cat: TagCategoryId;
   keyword: string;
   silent: SilentTag | null;
+  suggestion: RegistryCompletion | null;
+  dismissed: string | null;
 }
 
 interface SilentTag {
@@ -212,7 +215,8 @@ function openSilentTag(saved: TagCaretSnapshot, cat: TagCategoryId, keyword: str
   sel.removeAllRanges();
   sel.addRange(caret);
   open = { cellEl: cellEl, span: span, tail: tail, cat: cat, keyword: keyword,
-    silent: { marks: saved.marks, wrappers: wrappers, pending: true, initialHtml: toHtml(current) } };
+    silent: { marks: saved.marks, wrappers: wrappers, pending: true, initialHtml: toHtml(current) },
+    suggestion: null, dismissed: null };
   paint(open);
 }
 
@@ -257,6 +261,37 @@ function highlightApiOk() {
 }
 
 function hintEl() { return document.getElementById("tag-open-hint"); }
+
+function ghostEl() { return document.getElementById("tag-open-ghost"); }
+
+function caretRange(): Range | null {
+  const sel = window.getSelection();
+  return sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+}
+
+function typedInOpen(o: OpenPlainTag, caret: Range): string {
+  const range = document.createRange();
+  range.setStartAfter(o.span);
+  range.setEnd(caret.startContainer, caret.startOffset);
+  return range.toString().replace(ZWSP_RE, "");
+}
+
+function suggestionFor(o: OpenPlainTag, typed: string): RegistryCompletion | null {
+  if (o.dismissed !== null) {
+    if (o.dismissed === typed) return null;
+    o.dismissed = null;
+  }
+  return ports ? registryCompletion(ports.document.current(), o.cat, typed) : null;
+}
+
+function dismissSuggestion(): boolean {
+  const o = open;
+  const caret = caretRange();
+  if (!o || !o.suggestion || !caret || !stillThere(o)) return false;
+  o.dismissed = typedInOpen(o, caret);
+  paint(o);
+  return true;
+}
 
 export function plainTagOpen(cellEl?: Element | null) {
   if (!open || !stillThere(open)) return false;
@@ -325,6 +360,8 @@ function clearPaint() {
   }
   const el = hintEl();
   if (el) el.classList.remove("is-visible");
+  const ghost = ghostEl();
+  if (ghost) ghost.classList.remove("is-visible");
 }
 
 function paint(o: OpenPlainTag) {
@@ -344,16 +381,42 @@ function paint(o: OpenPlainTag) {
       CSS.highlights.set(HL_PREFIX + o.cat, new Highlight(range));
     } catch (e) { }
   }
+  const caret = caretRange();
+  const suggestion = caret ? suggestionFor(o, typedInOpen(o, caret)) : null;
+  o.suggestion = suggestion;
   const el = hintEl();
-  if (!el) return;
-  const cat = tagCategory(o.cat) as TagCategoryLook;
-  if (el.getAttribute("data-cat") !== o.cat) {
-    el.setAttribute("data-cat", o.cat);
+  const ghost = ghostEl();
+  if (el) writeHint(el, o.cat, suggestion ? suggestion.name : "");
+  const caretRect = ghost && suggestion && caret ? caret.getClientRects()[0] : undefined;
+  const cs = caretRect ? getComputedStyle(o.cellEl) : null;
+  const hintAt = el ? hintPlace(o, el) : null;
+  if (el && hintAt) {
+    el.style.left = hintAt.left + "px";
+    el.style.top = hintAt.top + "px";
+  }
+  if (!ghost) return;
+  if (!suggestion || !caretRect || !cs) { ghost.classList.remove("is-visible"); return; }
+  ghost.style.font = cs.font;
+  ghost.style.lineHeight = cs.lineHeight;
+  ghost.style.left = caretRect.right + "px";
+  ghost.style.top = caretRect.top + "px";
+  ghost.textContent = suggestion.rest;
+  ghost.classList.add("is-visible");
+}
+
+function writeHint(el: HTMLElement, catId: TagCategoryId, name: string) {
+  const cat = tagCategory(catId) as TagCategoryLook;
+  if (el.getAttribute("data-cat") !== catId || el.getAttribute("data-name") !== name) {
+    el.setAttribute("data-cat", catId);
+    el.setAttribute("data-name", name);
     el.innerHTML = '<span class="tag-cat-dot" data-tag-cat="' + cat.id + '" style="--dot: ' + cat.color + '"></span>' +
-      '<b>' + escapeHtml(cat.label) + '</b>' +
-      '<span class="tag-suggest-cat">tag</span><kbd>Tab</kbd>';
+      (name ? '<b>' + escapeHtml(cat.label) + ':</b><span>' + escapeHtml(name) + '</span>'
+        : '<b>' + escapeHtml(cat.label) + '</b><span class="tag-suggest-cat">tag</span>') + '<kbd>Tab</kbd>';
   }
   el.classList.add("is-visible");
+}
+
+function hintPlace(o: OpenPlainTag, el: HTMLElement) {
   const w = el.offsetWidth, h = el.offsetHeight;
   const at = document.createRange();
   at.setStartAfter(o.span);
@@ -362,8 +425,7 @@ function paint(o: OpenPlainTag) {
   const cellRect = o.cellEl.getBoundingClientRect();
   let top = cellRect.bottom + 6;
   if (top + h > window.innerHeight - 8) top = Math.max(8, cellRect.top - h - 6);
-  el.style.left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)) + "px";
-  el.style.top = top + "px";
+  return { left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)), top: top };
 }
 
 function dropSilent(o: OpenPlainTag, silent: SilentTag) {
@@ -453,7 +515,7 @@ export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null 
   r.collapse(true);
   sel.removeAllRanges();
   sel.addRange(r);
-  open = { cellEl: cellEl, span: span, tail: rest, cat: kw.cat, keyword: kwNode.data, silent: null };
+  open = { cellEl: cellEl, span: span, tail: rest, cat: kw.cat, keyword: kwNode.data, silent: null, suggestion: null, dismissed: null };
   paint(open);
 }
 
@@ -515,10 +577,14 @@ export function closePlainTag() {
   }
   const phrase = at === null ? null : plainTagPhrase(typed);
   if (!phrase) { cancelPlainTag(); return true; }
+  const shown = o.suggestion;
+  const accepted = shown ? registryCompletionOf(tagPorts().document.current(), o.cat, typed, shown.name) : null;
+  // why: the shown record is gone or no longer matches; show what is there now
+  if (shown && !accepted) { paint(o); return true; }
   open = null;
   clearPaint();
-  const entry = registryEntryOf(tagPorts().document.current(), o.cat, phrase.name);
-  const name = entry ? entry.name : phrase.name;
+  const entry = accepted ? null : registryEntryOf(tagPorts().document.current(), o.cat, phrase.name);
+  const name = accepted || (entry ? entry.name : phrase.name);
   const done = tagPorts().cells.edit(o.cellEl, function (cell) {
     const from = domToPos(o.cellEl, o.silent ? o.span : o.span.firstChild as Node, 0);
     if (from === null || to === null) return null;
@@ -527,7 +593,10 @@ export function closePlainTag() {
     const base = o.silent
       ? insertText(cell, from, o.keyword, written ? typingMarks(cell, from + 1) : o.silent.marks)
       : cell;
-    const res = applyPlainTag(base, from, o.silent ? to + o.keyword.length : to, o.cat, name);
+    const end = o.silent ? to + o.keyword.length : to;
+    const typedFrom = from + o.keyword.length + phrase.lead;
+    const filled = accepted ? replaceText(base, typedFrom, end, accepted) : base;
+    const res = applyPlainTag(filled, from, accepted ? typedFrom + accepted.length : end, o.cat, name);
     if (!res) return null;
     return { cell: res.cell, sel: { from: res.caret, to: res.caret }, records: { tags: [{ cat: o.cat, name: res.name }] } };
   });
@@ -552,6 +621,7 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
     isOpen: plainTagOpen,
     emptyAtCaret: plainTagEmptyAtCaret,
     cancelOnBackspace,
+    dismissSuggestion,
     onTagged: onPlainTagged,
     dispose: function () {
       if (disposed) return;

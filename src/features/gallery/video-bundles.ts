@@ -309,7 +309,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     const plan = await ports.exports.plan(job, scriptName, body, script).catch(function () { return null; });
     if (!life.active()) return false;
     if (!plan) { ports.notices.show(exportDoneText(zipName, null).text, "error"); return false; }
-    const picked = await ports.exports.pick(zipName);
+    const picked = await ports.exports.pick(zipName, job);
     if (!picked || !life.active()) return false;
     const mine = { job, name: picked.name };
     exporting = mine;

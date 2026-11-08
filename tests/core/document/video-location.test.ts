@@ -145,6 +145,23 @@ test("merging: bundling on one side wins over the untouched path on the other", 
   assert.deepEqual(merged(bundled, bundled, { name: "a.mp4", size: 3 }), IN("a.mp4"), "an older build dropped it");
 });
 
+test("merging (#1252): a bundled copy beats a path on the other side, whichever side changed", () => {
+  const byPath = (path: string): VideoLink => ({ name: "a.mp4", size: 3, location: AT(path) });
+  const bundled: VideoLink = { name: "a.mp4", size: 3, location: IN("a.mp4") };
+  const merged = (b: VideoLink | null, m: VideoLink, t: VideoLink) =>
+    (mergeGalleryField("imageLinks", b ? { imageLinks: [b] } : null, { imageLinks: [m] }, { imageLinks: [t] }) as VideoLink[])[0]?.location;
+  assert.deepEqual(merged(bundled, bundled, byPath(WIN)), IN("a.mp4"), "theirs moved it to a path");
+  assert.deepEqual(merged(bundled, byPath(WIN), bundled), IN("a.mp4"), "mine moved it to a path");
+  assert.deepEqual(merged(byPath(MOVED), bundled, byPath(WIN)), IN("a.mp4"), "both changed: mine bundled it");
+  assert.deepEqual(merged(byPath(MOVED), byPath(WIN), bundled), IN("a.mp4"), "both changed: theirs bundled it");
+  assert.deepEqual(merged(null, bundled, byPath(WIN)), IN("a.mp4"), "no base, mine bundled");
+  assert.deepEqual(merged(null, byPath(WIN), bundled), IN("a.mp4"), "no base, theirs bundled");
+  assert.deepEqual(merged(null, bundled, { ...bundled, location: IN("a (2).mp4") }), IN("a (2).mp4"), "two bundled names: theirs, as before");
+  const more = mergeGalleryField("moreImages", null, { moreImages: [{ links: [{ ...bundled, poster: true }] }] },
+    { moreImages: [{ links: [{ ...byPath(WIN), poster: true }] }] });
+  assert.deepEqual(more, [{ links: [{ name: "a.mp4", size: 3, location: IN("a.mp4"), poster: true }] }], "a further picture's link too");
+});
+
 test("bundling relinks every link to that file at that path, wherever it is, and nothing else", () => {
   const from: VideoLink = { name: "a.mp4", size: 3, location: AT(WIN) };
   const rows: GalleryRow[] = [

@@ -1,0 +1,56 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; F.openFile(new File([JSON.stringify({schema:5,title:'Keyword completion',paragraphsDecided:true,productionTags:[{id:'t_cable',cat:'prop',name:'cable tray',owner:'',notes:'Blue one',status:'have'},{id:'t_cafe',cat:'location',name:'Cafe',owner:'',notes:'',status:'needed'}],rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''},{id:'c',audioText:'Charlie',visualText:''},{id:'d',audioText:'Delta',visualText:''},{id:'e',audioText:'Echo',visualText:''},{id:'f',audioText:'Foxtrot',visualText:''}],comments:[]})],'keyword-completion.splitpage'))
+wait F.state().title === 'Keyword completion'
+eval window.c=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.go=function(i){var el=c(i); el.focus(); var r=document.createRange(); r.selectNodeContents(el); r.collapse(true); var s=getSelection(); s.removeAllRanges(); s.addRange(r); return true;}; window.ghost=function(){var g=document.getElementById('tag-open-ghost'); return g.classList.contains('is-visible')?g.textContent:'';}; window.hint=function(){return document.getElementById('tag-open-hint').textContent;}; window.props=function(n){return F.state().productionTags.filter(function(t){return t.cat==='prop'&&t.name.toLowerCase()===n;});}; go(0)
+press prop: ca
+wait ghost() === 'ble tray'
+expect hint() === 'Prop:cable trayTab'
+key Tab
+expect c(0).querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="cable tray"]')?.textContent === 'cable tray'
+expect c(0).textContent.replace(/​/g, '') === 'cable tray'
+expect ghost() === ''
+expect props('cable tray').length === 1
+expect props('cable tray')[0].id === 't_cable' && props('cable tray')[0].notes === 'Blue one' && props('cable tray')[0].status === 'have'
+eval go(1)
+press prop: ca
+wait ghost() === 'ble tray'
+key Escape
+expect ghost() === ''
+expect c(1).querySelector('.plain-tag-keyword') !== null
+expect hint() === 'ProptagTab'
+key Tab
+expect c(1).querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="ca"]')?.textContent === 'ca'
+expect props('ca').length === 1
+expect props('cable tray').length === 1
+eval go(2)
+press prop: cab
+wait ghost() === 'le tray'
+key Escape
+press l
+wait ghost() === 'e tray'
+key Escape
+key Escape
+expect c(2).querySelector('.plain-tag-keyword') === null
+expect c(2).textContent.replace(/​/g, '') === 'prop: cabl'
+eval go(3)
+press loc: c
+wait ghost() === 'afe'
+mouse click (function(){var r=document.getElementById('tag-open-hint').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()
+expect c(3).querySelector('.tag-anchor[data-tag-cat="location"][data-tag-name="Cafe"]')?.textContent === 'Cafe'
+expect F.state().productionTags.filter(function(t){return t.cat==='location';}).length === 1
+eval go(4)
+press vfx: ca
+expect c(4).querySelector('.plain-tag-keyword') !== null
+expect ghost() === ''
+key Tab
+expect c(4).querySelector('.tag-anchor[data-tag-cat="vfx"][data-tag-name="ca"]')?.textContent === 'ca'
+eval window.W=window.__writerFlowTest; true
+click #btn-write
+wait W.on()
+eval window.v=function(){return document.querySelector('.wr-flow-visual-text');}; W.openVisual('f')
+press prop: cable t
+wait ghost() === 'ray'
+key Tab
+expect v().querySelector('.tag-anchor[data-tag-cat="prop"][data-tag-name="cable tray"]')?.textContent === 'cable tray'
+expect props('cable tray').length === 1
