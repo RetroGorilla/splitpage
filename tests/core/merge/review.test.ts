@@ -6,6 +6,7 @@ import {
   mergeDiffPairHtml,
   mergeDiffTokenize,
   mergeFieldOutcome,
+  mergeGalleryMoves,
   mergeGallerySummary,
   mergeItemSummary,
   mergeListEntries,
@@ -79,6 +80,53 @@ test("gallery summary: video links by label, more pictures by count and their li
   assert.equal(mergeGallerySummary({ images: [{ links: null }] }, "images"), "1 picture");
   assert.equal(mergeGallerySummary(null, "imageLinks"), "");
   assert.equal(mergeGallerySummary({ imageLinks: "not a list" }, "imageLinks"), "");
+});
+
+const AT = (path: string) => ({ kind: "path" as const, path });
+const IN = (name: string) => ({ kind: "bundled" as const, name });
+const take = (location?: ReturnType<typeof AT> | ReturnType<typeof IN>) =>
+  location ? { name: "take.mp4", size: 3, location } : { name: "take.mp4", size: 3 };
+
+test("gallery moves (#1252): a video only in another folder names both folders and the one the merge keeps", () => {
+  const here = { imageLinks: [take(AT("C:\\Footage\\Day 2\\take.mp4")), { href: "https://youtu.be/abc" }] };
+  const disk = { imageLinks: [take(AT("D:\\Archive\\take.mp4")), { href: "https://youtu.be/abc" }] };
+  const moves = mergeGalleryMoves("imageLinks", null, here, disk);
+  assert.deepEqual({ ...moves, keys: [...moves.keys] }, { keys: ["f:take.mp4:3"], kept: "theirs", bundled: false, only: true });
+  assert.equal(mergeGallerySummary(here, "imageLinks", moves.keys), "take.mp4 (C:\\Footage\\Day 2), youtu.be/abc");
+  assert.equal(mergeGallerySummary(disk, "imageLinks", moves.keys), "take.mp4 (D:\\Archive), youtu.be/abc");
+  assert.equal(mergeGallerySummary(disk, "imageLinks"), "take.mp4, youtu.be/abc", "without moves the summary is as before");
+  assert.equal(mergeGalleryMoves("imageLinks", disk, here, disk).kept, "mine", "only mine moved it");
+});
+
+test("gallery moves (#1252): a copy beside the script is kept over a path, and every place reads as a folder", () => {
+  const bundled = { imageLinks: [take(IN("take.mp4"))] }, byPath = { imageLinks: [take(AT("/Users/adam/take.mp4"))] };
+  for (const [m, t, kept] of [[bundled, byPath, "mine"], [byPath, bundled, "theirs"]] as const) {
+    const moves = mergeGalleryMoves("imageLinks", null, m, t);
+    assert.deepEqual([moves.kept, moves.bundled, moves.only], [kept, true, true]);
+  }
+  const keys = mergeGalleryMoves("imageLinks", null, bundled, byPath).keys;
+  assert.equal(mergeGallerySummary(bundled, "imageLinks", keys), "take.mp4 (beside the script)");
+  assert.equal(mergeGallerySummary(byPath, "imageLinks", keys), "take.mp4 (/Users/adam)");
+  assert.equal(mergeGallerySummary({ imageLinks: [take(IN("take (2).mp4"))] }, "imageLinks", keys), "take.mp4 (beside the script as take (2).mp4)");
+  assert.equal(mergeGallerySummary({ imageLinks: [take(AT("C:\\take.mp4"))] }, "imageLinks", keys), "take.mp4 (C:\\)");
+  assert.equal(mergeGallerySummary({ imageLinks: [take(AT("/take.mp4"))] }, "imageLinks", keys), "take.mp4 (/)");
+  assert.equal(mergeGallerySummary({ imageLinks: [take(AT("C:\\x\\other.mp4"))] }, "imageLinks", keys), "take.mp4 (C:\\x\\other.mp4)");
+  assert.equal(mergeGallerySummary({ imageLinks: [take()] }, "imageLinks", keys), "take.mp4", "no location: just the name");
+});
+
+test("gallery moves (#1252): a further picture's video, a mixed outcome, and a move beside another change", () => {
+  const item = (location: ReturnType<typeof AT>) => ({ links: [{ ...take(location), poster: true }] });
+  const here = { moreImages: [item(AT("C:\\A\\take.mp4"))] }, disk = { moreImages: [item(AT("C:\\B\\take.mp4"))] };
+  const moves = mergeGalleryMoves("moreImages", null, here, disk);
+  assert.deepEqual([moves.kept, moves.only], ["theirs", true]);
+  assert.equal(mergeGallerySummary(here, "moreImages", moves.keys), "1 picture · take.mp4 (C:\\A)");
+  const two = (a: string, b: string) => ({ imageLinks: [take(AT(a + "\\take.mp4")), { name: "b.mp4", size: 1, location: AT(b + "\\b.mp4") }] });
+  assert.equal(mergeGalleryMoves("imageLinks", two("C:\\A", "C:\\A"), two("C:\\A", "C:\\B"), two("C:\\C", "C:\\A")).kept, "mixed");
+  const more = mergeGalleryMoves("imageLinks", null, { imageLinks: [take(AT("C:\\A\\take.mp4"))] },
+    { imageLinks: [take(AT("C:\\B\\take.mp4")), { href: "https://youtu.be/abc" }] });
+  assert.deepEqual([more.kept, more.only], ["theirs", false], "a link added too: the move is shown, the entry keeps both");
+  assert.deepEqual(mergeGalleryMoves("imageLinks", null, { imageLinks: [take()] }, { imageLinks: [{ href: "https://youtu.be/abc" }] }),
+    { keys: new Set(), kept: null, bundled: false, only: false });
 });
 
 test("list entries: theirs first then mine, one entry per item whose summary differs, odd keys kept as keys", () => {
