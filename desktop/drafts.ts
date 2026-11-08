@@ -86,6 +86,10 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
 }
 
+function isNameOrAbsent(v: unknown): boolean {
+  return v === null || v === undefined || typeof v === "string";
+}
+
 function durableWriteSync(fs: typeof NodeFs, path: typeof NodePath, crypto: typeof NodeCrypto, file: string, text: unknown) {
   const dir = path.dirname(file);
   const tmp = path.join(dir, `.tmp-${crypto.randomBytes(6).toString("hex")}-${path.basename(file)}`);
@@ -240,6 +244,11 @@ function createDraftStore(opts?: DraftStoreOptions | null) {
     if (h.formatVersion > FORMAT_VERSION) return { unsupported: true };
     if (h.formatVersion !== FORMAT_VERSION) return { bad: true };
     if (h.tabId !== tabId) return { bad: true };
+    if (!isNameOrAbsent(h.title)) return { bad: true };
+    const o = h.origin;
+    if (o !== null && o !== undefined) {
+      if (!isPlainObject(o) || !isNameOrAbsent(o.filePath) || !isNameOrAbsent(o.fileName) || !isNameOrAbsent(o.importName)) return { bad: true };
+    }
     const s = h.state;
     if (!isPlainObject(s) || !Number.isInteger(s.bytes) || (s.bytes as number) < 0 || typeof s.sha256 !== "string") return { bad: true };
     if (h.base !== null && h.base !== undefined) {

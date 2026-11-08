@@ -136,6 +136,34 @@ test("a checksum mismatch falls back to previous; both bad -> quarantine, never 
   assert.equal(fs.readdirSync(path.join(dir, "corrupt")).length, 1);
 });
 
+test("a draft whose header holds a malformed name is quarantined once, byte-identical, and not offered again (#1119)", async () => {
+  const names = [
+    ["title", { ...header("t"), title: { toString: null } }],
+    ["fileName", { ...header("t"), origin: { kind: "file", filePath: null, fileName: { toString: null } } }],
+    ["importName", { ...header("t"), origin: { kind: "import", filePath: null, importName: ["x"] } }],
+    ["filePath", { ...header("t"), origin: { kind: "file", filePath: 7, fileName: null } }]
+  ];
+  for (const [what, bad] of names) {
+    const dir = freshDir();
+    const a = makeStore(dir);
+    a.init();
+    assert.equal((await a.write(TAB, bad, stateJ("gen1"), baseJ("b"), 1)).ok, true, what);
+    const curBytes = fs.readFileSync(tabFile(dir, "current.draft"));
+
+    const b = makeStore(dir);
+    assert.equal(b.init().drafts[0].status, "corrupt", `${what}: listed as unreadable`);
+    assert.deepEqual(await b.take(TAB), { corrupt: true }, what);
+    const q = fs.readdirSync(path.join(dir, "corrupt"));
+    assert.equal(q.length, 1, what);
+    assert.deepEqual(fs.readFileSync(path.join(dir, "corrupt", q[0], "current.draft")), curBytes, `${what}: bytes kept`);
+    assert.equal(b.hasDraft(TAB), false, what);
+
+    const c = makeStore(dir);
+    assert.deepEqual(c.init().drafts, [], `${what}: not retried on the next start`);
+    assert.equal(fs.readdirSync(path.join(dir, "corrupt")).length, 1, what);
+  }
+});
+
 test("discardForUserDecision during a delayed write: folder gone, DISCARDED, tombstone persisted first, recreated folder removed by next init", async () => {
   const dir = freshDir();
   const order = [];
