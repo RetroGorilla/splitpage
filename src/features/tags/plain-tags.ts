@@ -335,6 +335,12 @@ function paint(o: OpenPlainTag) {
       const end = window.getSelection()?.getRangeAt(0);
       if (!end) return;
       range.setEnd(end.startContainer, end.startOffset);
+      const leading = (range.toString().match(/^[\s\u200B]*/) || [""])[0].replace(ZWSP_RE, "").length;
+      const start = domToPos(o.cellEl, o.span, o.span.childNodes.length);
+      if (leading && start !== null) {
+        const point = posToDom(o.cellEl, start + leading);
+        range.setStart(point.node, point.offset);
+      }
       CSS.highlights.set(HL_PREFIX + o.cat, new Highlight(range));
     } catch (e) { }
   }
