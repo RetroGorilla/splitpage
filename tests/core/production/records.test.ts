@@ -10,6 +10,7 @@ import {
   peopleOf,
   personById,
   personNamed,
+  registryCompletion,
   registryEntryById,
   removeBrollProp,
   removePerson,
@@ -31,6 +32,24 @@ function shotOf(id: string, extra?: Partial<DocumentShot>): DocumentShot {
 function records(extra?: Partial<LiveRecords>): LiveRecords {
   return Object.assign({ productionTags: [], brollShots: [], people: [] }, extra || {});
 }
+
+test("registry completion offers the shortest longer name in the asked category, from what was typed", () => {
+  const doc = records({ productionTags: [
+    tagged("prop", "cable tray"), tagged("prop", "cable tie"), tagged("gear", "cable"),
+    tagged("prop", "Camera bag"), tagged("location", "cafe")
+  ] });
+  assert.deepEqual(registryCompletion(doc, "prop", " ca"), { name: "cable tie", rest: "ble tie" });
+  assert.deepEqual(registryCompletion(doc, "prop", "CAM"), { name: "Camera bag", rest: "era bag" });
+  assert.deepEqual(registryCompletion(doc, "prop", "cable t"), { name: "cable tie", rest: "ie" });
+  assert.deepEqual(registryCompletion(doc, "prop", "cable tr"), { name: "cable tray", rest: "ay" });
+  assert.deepEqual(registryCompletion(doc, "location", "c"), { name: "cafe", rest: "afe" });
+  assert.equal(registryCompletion(doc, "prop", "cable tray"), null, "a full name needs no completion");
+  assert.equal(registryCompletion(doc, "gear", "cable"), null);
+  assert.equal(registryCompletion(doc, "prop", "  "), null);
+  assert.equal(registryCompletion(doc, "prop", "x"), null);
+  assert.equal(registryCompletion(doc, "vfx", "c"), null, "other categories are not offered");
+  assert.equal(registryCompletion(null, "prop", "c"), null);
+});
 
 test("a registry tag is added once per category and normalised name, and removed with every entry under that key", () => {
   const doc = records();

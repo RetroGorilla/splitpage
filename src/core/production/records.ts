@@ -32,6 +32,25 @@ export function registryEntryOf(doc: RegistryHolder | null, cat: string, name: u
   return doc ? registryEntry(doc.productionTags, cat, name) : null;
 }
 
+export interface RegistryCompletion {
+  readonly name: string;
+  readonly rest: string;
+}
+
+export function registryCompletion(doc: RegistryHolder | null, cat: string, typed: string): RegistryCompletion | null {
+  const needle = typed.replace(/\s+/g, " ").replace(/^ /, "").toLowerCase();
+  if (!doc || !needle.trim()) return null;
+  let best: RegistryCompletion | null = null;
+  for (const t of doc.productionTags) {
+    if (!t || t.cat !== cat) continue;
+    const shown = t.name.replace(/\s+/g, " ");
+    if (shown.length <= needle.length || shown.toLowerCase().indexOf(needle) !== 0) continue;
+    if (best && (best.name.length < t.name.length || (best.name.length === t.name.length && best.name.localeCompare(t.name) <= 0))) continue;
+    best = { name: t.name, rest: shown.slice(needle.length) };
+  }
+  return best;
+}
+
 export function registryEntryById(doc: RegistryHolder | null, id: unknown): RegistryTag | null {
   if (!doc || !id) return null;
   for (const t of doc.productionTags) {
