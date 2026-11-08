@@ -286,6 +286,25 @@ test("a cancelled carry leaves no temporary and nothing under the final name", a
   } finally { s.done(); }
 });
 
+test("a publish is the commit point: a Cancel after the link or rename never deletes the published name, even when another file replaced it", async () => {
+  const s = scratch();
+  try {
+    const eperm = async () => { throw Object.assign(new Error("no links here"), { code: "EPERM" }); };
+    for (const [label, opts] of [
+      ["rename", (ctl) => ({ link: eperm, rename: async (from, to) => { await fs.promises.rename(from, to); fs.unlinkSync(to); fs.writeFileSync(to, "replacement"); ctl.abort(); } })],
+      ["hard link", (ctl) => ({ link: async (from, to) => { await fs.promises.link(from, to); fs.unlinkSync(to); fs.writeFileSync(to, "replacement"); ctl.abort(); } })]
+    ]) {
+      const ctl = new AbortController();
+      const script = path.join(s.dir, label + ".splitpage");
+      const copier = createBundleCopier({ bundleFiles, progressEveryMs: 0, ...opts(ctl) });
+      assert.deepEqual(await copier.copyIn(s.clip, script, VIDEO_FILE_EXT, () => {}, ctl.signal), { ok: true, name: "take one.mp4" }, label);
+      const folder = path.join(s.dir, label + " files");
+      assert.deepEqual(fs.readdirSync(folder), ["take one.mp4"], label + ": no temporary is left");
+      assert.equal(fs.readFileSync(path.join(folder, "take one.mp4"), "utf8"), "replacement", label + ": the file under the published name is left alone");
+    }
+  } finally { s.done(); }
+});
+
 test("where hard links fail, the whole temporary is renamed onto an empty placeholder this job created, so no other file is ever replaced", async () => {
   const s = scratch();
   try {

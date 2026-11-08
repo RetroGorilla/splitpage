@@ -132,10 +132,6 @@ function createBundleCopier(options: {
       const renamed = await renameOntoPlaceholder(part, target, signal);
       if (renamed !== "copied") return renamed;
     }
-    if (signal.aborted) {
-      try { await unlinkFile(target); } catch { }
-      return "cancelled";
-    }
     published();
     if (linked) { try { await unlinkFile(part); } catch { } }
     return "copied";

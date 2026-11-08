@@ -312,19 +312,24 @@ test("an undone drop still queued in A never reaches the Save As folder", async 
   } finally { s.done(); }
 });
 
-test("a copy stalled on a lost drive is let go when cancelled, and a later Save As carry is not held behind it", async () => {
+test("a cancelled copy holds the queue until it settles, so a later Save As carry runs only after it", async () => {
   const s = scratch();
   try {
     fs.mkdirSync(s.folder);
     fs.writeFileSync(path.join(s.folder, "kept.mp4"), "kkkk");
-    const never = new Promise(() => {});
-    const ipc = harness({ source: s.script, grants: [["tok", s.clip]], holdCopy: never });
-    const stalled = ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    const held = gate();
+    const ipc = harness({ source: s.script, grants: [["tok", s.clip]], holdCopy: held.shut });
+    let answered = false;
+    const stalled = ipc.call("splitpage:bundle-file", "tok", "bundle1").then((r) => { answered = true; return r; });
     const saving = ipc.saveAs(s.copyScript, { script: true }, project("kept.mp4"));
     await new Promise((r) => setTimeout(r, 30));
     assert.equal(fs.existsSync(s.copyScript), false, "the save waits while the copy runs");
     ipc.send("splitpage:bundle-cancel", "bundle1");
-    assert.deepEqual(await stalled, { ok: false, code: "CANCELLED" }, "the cancel answers though the copy never does");
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(answered, false, "Cancel signals the copy and waits for it");
+    assert.equal(fs.existsSync(s.copyScript), false, "the later carry has not started");
+    held.open();
+    assert.deepEqual(await stalled, { ok: false, code: "CANCELLED" }, "the copy answers once it has settled");
     const saved = await saving;
     assert.equal(saved.written.bundleRefused, undefined);
     await ipc.bundleJobs.idle();
@@ -335,7 +340,19 @@ test("a copy stalled on a lost drive is let go when cancelled, and a later Save 
   } finally { s.done(); }
 });
 
-test("a cancelled copy stalled inside its publish never replaces a file a later carry published into that folder", async () => {
+test("Quit anyway is not held open by a copy stalled on a lost drive", async () => {
+  const s = scratch();
+  try {
+    const ipc = harness({ source: s.script, grants: [["tok", s.clip]], holdCopy: new Promise(() => {}) });
+    void ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    assert.equal(ipc.bundleJobs.busy(), true);
+    const started = Date.now();
+    await ipc.bundleJobs.abortAll(50);
+    assert.ok(Date.now() - started < 2000, "the quit goes ahead after its grace");
+  } finally { s.done(); }
+});
+
+test("a cancelled copy stalled inside its publish settles before a later carry publishes into that folder, and never replaces its file", async () => {
   const s = scratch();
   try {
     const stale = path.join(path.dirname(s.clip), "take.mp4");
@@ -365,11 +382,11 @@ test("a cancelled copy stalled inside its publish never replaces a file a later 
     const copying = ipc.call("splitpage:bundle-file", "tok", "bundle1");
     await reached.shut;
     ipc.send("splitpage:bundle-cancel", "bundle1");
-    assert.deepEqual(await copying, { ok: false, code: "CANCELLED" });
     ipc.tab.source = { kind: "file", absPath: other };
     const saving = ipc.saveAs(path.join(s.dir, "Episode 12.md"), { script: true }, markdownProject("take.mp4"));
     await new Promise((r) => setTimeout(r, 30));
     released.open();
+    assert.deepEqual(await copying, { ok: false, code: "CANCELLED" });
     const saved = await saving;
     assert.equal(saved.written.bundleRefused, undefined, JSON.stringify(saved.written));
     await ipc.bundleJobs.idle();
@@ -946,11 +963,12 @@ test("a cancel during the preflight, before the script is handed back, registers
     ipc.send("splitpage:bundle-cancel", "carry1");
     const saved = await saving;
     assert.deepEqual(saved.written, { size: 0, bundleRefused: { reason: "cancelled", folder: "Episode 12 v2 files", name: "", copied: 0 } });
-    const notesAtCancel = ipc.notes("splitpage:bundle-carry").length;
     held.open();
-    assert.ok(await until(() => ipc.carriesEnded() === 1), "the let-go carry finishes instead of waiting on a hand-back no one answers");
+    assert.ok(await until(() => ipc.carriesEnded() === 1), "the cancelled carry finishes instead of waiting on a hand-back no one answers");
+    await ipc.bundleJobs.idle();
+    const notesAtEnd = ipc.notes("splitpage:bundle-carry").length;
     await new Promise((r) => setTimeout(r, 20));
-    assert.equal(ipc.notes("splitpage:bundle-carry").length, notesAtCancel, "nothing is sent after the job ended");
+    assert.equal(ipc.notes("splitpage:bundle-carry").length, notesAtEnd, "nothing is sent after the job ended");
     ipc.tab.source = { kind: "file", absPath: s.copyScript };
     assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "a.mp4"), { ok: false, code: "GONE" }, "no fallback was registered");
     assert.equal(fs.existsSync(s.copyScript), false);

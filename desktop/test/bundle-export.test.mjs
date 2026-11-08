@@ -27,6 +27,11 @@ const FOLD = process.platform === "win32";
 const NO_SYMLINKS = "  (file symlinks need a privilege this account lacks; the link case runs where they don't)";
 const PICTURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function gate() {
+  let open = () => {};
+  const shut = new Promise((resolve) => { open = resolve; });
+  return { shut, open };
+}
 
 function scratch() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-bundle-export-"));
@@ -68,7 +73,7 @@ function makeSender(id, onSend = () => {}) {
   return { sender, sent };
 }
 
-function harness({ source, copierOptions = {}, exporterOptions = {}, onSend } = {}) {
+function harness({ source, copierOptions = {}, exporterOptions = {}, onSend, resolving = null, grants = [] } = {}) {
   const handlers = new Map();
   const listeners = new Map();
   const answers = [];
@@ -82,7 +87,8 @@ function harness({ source, copierOptions = {}, exporterOptions = {}, onSend } = 
   });
   recents.load();
   const copier = createBundleCopier({ bundleFiles, progressEveryMs: 0, ...copierOptions });
-  const exporter = createBundleExporter({ bundleFiles, publisher: copier, ...exporterOptions });
+  const publisher = resolving ? { ...copier, resolveIn: resolving(copier.resolveIn) } : copier;
+  const exporter = createBundleExporter({ bundleFiles, publisher, ...exporterOptions });
   const bundleJobs = createBundleJobs({
     copier, exporter, allow: ATTACHABLE_FILE,
     scriptOfTab: (tabId) => {
@@ -95,7 +101,7 @@ function harness({ source, copierOptions = {}, exporterOptions = {}, onSend } = 
   const tabOf = (event) => (event.tab === undefined ? (tabs.get(tab.id) || null) : event.tab);
   const { registerShellIpc } = createShellIpc({
     tabOf, shell: { openPath: async () => "", openExternal: async () => {} },
-    testMode: false, testVideoOpens: [], videoFileGrants: new Map(), ATTACHABLE_FILE, openableVideoPath, bundleJobs
+    testMode: false, testVideoOpens: [], videoFileGrants: new Map(grants), ATTACHABLE_FILE, openableVideoPath, bundleJobs
   });
   const { registerFileIpc } = createFileIpc({
     dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showSaveDialog: async () => ({ canceled: true }) },
@@ -214,12 +220,9 @@ async function linksOpen(scriptPath) {
 const leftovers = (folder) => fs.readdirSync(folder).filter((n) => /\.part$/.test(n));
 
 function resolverWith(map) {
-  return {
-    ...bundleFiles,
-    resolveBundledFile: async (script, name, ...rest) => (name in map
-      ? (map[name] === null ? { ok: false, code: "GONE" } : { ok: true, path: map[name] })
-      : bundleFiles.resolveBundledFile(script, name, ...rest))
-  };
+  return (resolveIn) => async (script, name, allow) => (name in map
+    ? (map[name] === null ? { ok: false, code: "GONE" } : { ok: true, path: map[name] })
+    : resolveIn(script, name, allow));
 }
 
 test("a zip round trip: unzipped anywhere, the script opens beside its files folder and every bundled link reaches the right bytes", async () => {
@@ -287,7 +290,7 @@ test("distinct files whose names differ only in case get numbered names, and one
     const a = s.put(path.join(s.drops, "a", "take.mp4"), "from-a");
     const b = s.put(path.join(s.drops, "b", "TAKE.mp4"), "from-b");
     const body = project([bundled("take.mp4", "one"), bundled("TAKE.mp4", "two"), bundled("take.mp4", "three")]);
-    const ipc = harness({ source: s.script, exporterOptions: { bundleFiles: resolverWith({ "take.mp4": a, "TAKE.mp4": b }) } });
+    const ipc = harness({ source: s.script, resolving: resolverWith({ "take.mp4": a, "TAKE.mp4": b }) });
     const zip = path.join(s.out, "Share.zip");
     const { result } = await ipc.exportTo(zip, body);
     assert.deepEqual(result, { ok: true, files: 2, left: 0 });
@@ -304,7 +307,7 @@ test("a bundled name that is left out keeps its name reserved, so no included fi
   try {
     const real = s.put(path.join(s.drops, "MISSING.pdf"), "the other file");
     const body = project([bundled("missing.pdf", "gone"), bundled("MISSING.pdf", "here")]);
-    const ipc = harness({ source: s.script, exporterOptions: { bundleFiles: resolverWith({ "missing.pdf": null, "MISSING.pdf": real }) } });
+    const ipc = harness({ source: s.script, resolving: resolverWith({ "missing.pdf": null, "MISSING.pdf": real }) });
     const zip = path.join(s.out, "Share.zip");
     const { result } = await ipc.exportTo(zip, body);
     assert.deepEqual(result, { ok: true, files: 1, left: 1 });
@@ -397,7 +400,7 @@ test("Cancel during a read that never answers settles the job first: no temporar
   } finally { s.done(); }
 });
 
-test("Cancel while the publish's hard link is still running never leaves the zip behind", async () => {
+test("a published zip is the commit point: Cancel during the hard link keeps the whole zip, reports it, and leaves no temporary", async () => {
   const s = scratch();
   try {
     s.put(path.join(s.folder, "take.mp4"), "take");
@@ -406,11 +409,58 @@ test("Cancel while the publish's hard link is still running never leaves the zip
       source: s.script,
       copierOptions: { link: async (from, to) => { ipc.send("splitpage:bundle-cancel", "export1"); await sleep(50); return fs.promises.link(from, to); } }
     });
-    const { result } = await ipc.exportTo(path.join(s.out, "Share.zip"), project([bundled("take.mp4")]));
-    assert.deepEqual(result, { ok: false, code: "CANCELLED" });
-    await ipc.bundleJobs.idle();
-    await sleep(100);
-    assert.deepEqual(fs.readdirSync(s.out), [], "the late link is taken back, and no temporary is left");
+    const zip = path.join(s.out, "Share.zip");
+    const { result } = await ipc.exportTo(zip, project([bundled("take.mp4")]));
+    assert.deepEqual(result, { ok: true, files: 1, left: 0 });
+    assert.equal(ipc.bundleJobs.busy(), false);
+    assert.deepEqual(fs.readdirSync(s.out), ["Share.zip"], "the published zip stays, and no temporary is left");
+    assert.equal(readZip(zip).entries.get("Episode 12 files/take.mp4").bytes.toString(), "take");
+  } finally { s.done(); }
+});
+
+test("an export queued behind a cancelled copy waits until it settles, and never zips that copy's empty placeholder", async () => {
+  const s = scratch();
+  try {
+    const dropped = s.put(path.join(s.drops, "take.mp4"), "mine");
+    const reached = gate();
+    const released = gate();
+    const ipc = harness({
+      source: s.script, grants: [["tok", dropped]],
+      copierOptions: {
+        link: async () => { throw Object.assign(new Error("no hard links here"), { code: "EPERM" }); },
+        lstat: async (p) => { reached.open(); await released.shut; return fsp.lstat(p, { bigint: true }); }
+      }
+    });
+    const copying = ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    await reached.shut;
+    assert.equal(fs.statSync(path.join(s.folder, "take.mp4")).size, 0, "setup: the copy's placeholder stands");
+    ipc.send("splitpage:bundle-cancel", "bundle1");
+    const body = project([bundled("take.mp4")]);
+    assert.deepEqual(await ipc.plan(body), { ok: true, plan: { files: 0, bytes: 0, left: 1 } }, "the plan counts the placeholder as not there yet");
+    const zip = path.join(s.out, "Share.zip");
+    const picked = await ipc.pick(zip);
+    let answered = false;
+    const exporting = ipc.call("splitpage:bundle-export", "export1", picked.id).then((r) => { answered = true; return r; });
+    await sleep(50);
+    assert.equal(answered, false, "the export waits while the cancelled copy has not settled");
+    assert.equal(fs.existsSync(zip), false);
+    released.open();
+    assert.deepEqual(await copying, { ok: true, name: "take.mp4" }, "the copy committed with its rename, so it is kept");
+    assert.deepEqual(await exporting, { ok: true, files: 1, left: 0 });
+    assert.equal(readZip(zip).entries.get("Episode 12 files/take.mp4").bytes.toString(), "mine", "the export has the whole file, never the placeholder");
+  } finally { s.done(); }
+});
+
+test("an empty bundled file, as a crashed copy's placeholder leaves, is left out and counted", async () => {
+  const s = scratch();
+  try {
+    s.put(path.join(s.folder, "take.mp4"), "take");
+    s.put(path.join(s.folder, "crashed.mp4"), "");
+    const ipc = harness({ source: s.script });
+    const zip = path.join(s.out, "Share.zip");
+    const { result } = await ipc.exportTo(zip, project([bundled("take.mp4"), bundled("crashed.mp4")]));
+    assert.deepEqual(result, { ok: true, files: 1, left: 1 });
+    assert.deepEqual([...readZip(zip).entries.keys()], ["Episode 12.splitpage", "Episode 12 files/", "Episode 12 files/take.mp4"]);
   } finally { s.done(); }
 });
 

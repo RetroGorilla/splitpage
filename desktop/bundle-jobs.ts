@@ -38,7 +38,6 @@ interface BundleJob {
   readonly run: (progress: BundleProgress, signal: AbortSignal) => Promise<void>;
   readonly ctl: AbortController;
   readonly stop: (code: "CANCELLED" | "FAILED") => void;
-  readonly settles?: boolean;
 }
 
 interface SaveTarget {
@@ -72,6 +71,7 @@ const EXPORT_PLANS_PER_SENDER = 2;
 const EXPORT_TARGETS_MAX = 50;
 const ZIP_NAME = /\.zip$/i;
 const PLAN_NAMES_MAX = 2000;
+const QUIT_GRACE_MS = 5000;
 const REFUSALS: Record<string, BundleSaveRefusal["reason"]> = { CLASH: "clash", FAILED: "failed", CANCELLED: "cancelled" };
 
 function createBundleJobs(options: {
@@ -124,11 +124,8 @@ function createBundleJobs(options: {
     try {
       const signal = job.ctl.signal;
       if (!signal.aborted) {
-        const ran = job.run((done, total) => tell(job.sender, (to) => to.send("splitpage:bundle-progress", { job: job.job, done, total })), signal)
+        await job.run((done, total) => tell(job.sender, (to) => to.send("splitpage:bundle-progress", { job: job.job, done, total })), signal)
           .catch(() => job.stop("FAILED"));
-        // why: a read stalled on a lost drive never answers its abort; a copy is let go, and it cannot publish once aborted
-        if (job.settles) await ran;
-        else await Promise.race([ran, new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }))]);
       }
       if (signal.aborted) job.stop("CANCELLED");
     } finally {
@@ -274,11 +271,19 @@ function createBundleJobs(options: {
         const background = pending !== null && wrote !== "no";
         note(1, 1, background && !result.ok ? { ...result, left: Math.max(0, (pending as readonly string[]).length - result.copied) } : result);
       };
+      const ctl = new AbortController();
+      ctl.signal.addEventListener("abort", () => {
+        const waiting = release;
+        release = null;
+        if (waiting) waiting(false);
+        const refused = refusal({ ok: false, code: "CANCELLED", name: "", copied: committed });
+        if (refused) reply({ refused });
+      }, { once: true });
       enqueue({
-        key: keyOf(sender, job), sender, job, ctl: new AbortController(),
+        key: keyOf(sender, job), sender, job, ctl,
         stop: (code) => done({ ok: false, code, name: "", copied: committed }),
         run: async (_progress, signal) => {
-          done(await copier.carry(from, to, names, allow, (d, t) => { if (!settled && !signal.aborted) note(d, t); }, signal, (n) => { committed = n; }, {
+          const carried = await copier.carry(from, to, names, allow, (d, t) => { if (!settled && !signal.aborted) note(d, t); }, signal, (n) => { committed = n; }, {
             strict: true,
             source: (name) => copier.resolveIn(from, name, allow),
             ready: (listed) => {
@@ -299,7 +304,8 @@ function createBundleJobs(options: {
                 });
               });
             }
-          }));
+          });
+          done(signal.aborted ? { ok: false, code: "CANCELLED", name: "", copied: committed } : carried);
         }
       });
     });
@@ -358,7 +364,7 @@ function createBundleJobs(options: {
       let settled = false;
       const done = (result: BundleExportAnswer) => { if (!settled) { settled = true; finish(result); } };
       enqueue({
-        key, sender, job, ctl: new AbortController(), settles: true,
+        key, sender, job, ctl: new AbortController(),
         stop: (code) => done({ ok: false, code }),
         run: async (progress, signal) => {
           const laid = await writer.layout(planned.text, planned.scriptName, planned.script, allow);
@@ -409,9 +415,10 @@ function createBundleJobs(options: {
     return new Promise((resolve) => { idleWaiters.push(resolve); });
   }
 
-  function abortAll(): Promise<void> {
+  function abortAll(graceMs = QUIT_GRACE_MS): Promise<void> {
     for (const job of [running, ...queue]) if (job) job.ctl.abort();
-    return idle();
+    // why: the app is quitting, so a read stalled on a lost drive must not hold the quit open; nothing runs after it
+    return Promise.race([idle(), new Promise<void>((resolve) => { setTimeout(resolve, graceMs); })]);
   }
 
   return {

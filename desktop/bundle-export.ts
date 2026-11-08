@@ -89,16 +89,17 @@ async function writeAll(handle: NodeFsPromises.FileHandle, bytes: Uint8Array, at
 }
 
 function createBundleExporter(options: {
-  bundleFiles: Pick<typeof VideoEmbed, "bundleableName" | "fileLinksIn" | "numberedName" | "projectRecord" | "resolveBundledFile">;
+  bundleFiles: Pick<typeof VideoEmbed, "bundleableName" | "fileLinksIn" | "numberedName" | "projectRecord">;
   publisher: { readonly folderName: (script: string) => string; readonly partIn: (folder: string) => string;
-    readonly publishWhole: (part: string, target: string, signal: AbortSignal) => Promise<"copied" | "taken" | "cancelled" | "failed"> };
+    readonly publishWhole: (part: string, target: string, signal: AbortSignal) => Promise<"copied" | "taken" | "cancelled" | "failed">;
+    readonly resolveIn: (script: string, name: unknown, allow: RegExp) => Promise<VideoEmbed.VideoPathVerdict> };
   foldCase?: boolean;
   zip64Above?: number;
   openPart?: (part: string) => Promise<NodeFsPromises.FileHandle>;
   readFile?: (from: string) => NodeJS.ReadableStream;
 }) {
-  const { bundleableName, fileLinksIn, numberedName, projectRecord, resolveBundledFile } = options.bundleFiles;
-  const { folderName, partIn, publishWhole } = options.publisher;
+  const { bundleableName, fileLinksIn, numberedName, projectRecord } = options.bundleFiles;
+  const { folderName, partIn, publishWhole, resolveIn } = options.publisher;
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const wide = typeof options.zip64Above === "number" ? options.zip64Above : MAX32;
   const openPart = options.openPart || ((part: string) => fsp.open(part, "wx"));
@@ -127,9 +128,10 @@ function createBundleExporter(options: {
       const at = holder.location;
       // why: a script is untrusted, so its path links never authorize a read; they stay paths and are counted
       if (at.kind !== "bundled") { lost.add("p:" + key(at.path)); continue; }
-      const found = scriptPath ? await resolveBundledFile(scriptPath, at.name, allow, fsp, path, foldCase) : null;
+      const found = scriptPath ? await resolveIn(scriptPath, at.name, allow) : null;
       const file = found && found.ok ? await regularFile(found.path) : null;
-      if (!found || !found.ok || !file) { lost.add("b:" + key(at.name)); taken.add(at.name.toLowerCase()); continue; }
+      // why: an empty file may be a placeholder a crashed copy left, so it is never exported as the linked file
+      if (!found || !found.ok || !file || !file.size) { lost.add("b:" + key(at.name)); taken.add(at.name.toLowerCase()); continue; }
       kept.push({ holder, name: at.name, from: found.path, ...file });
     }
     const named = new Map<string, string>();
