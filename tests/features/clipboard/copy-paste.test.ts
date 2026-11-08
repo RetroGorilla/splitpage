@@ -47,8 +47,9 @@ function beatSelect(rowsHtml = "", screen: ScreenState = CLEAR_SCREEN) {
   const edits = fakeEdits();
   const notices = fakeNotices();
   const calls: string[] = [];
+  const held = fakeDocument(scriptDoc());
   const ports: BeatSelectPorts = {
-    document: fakeDocument(scriptDoc()).document,
+    document: held.document,
     edits: edits.edits,
     undo: {
       breakCoalescing: () => { calls.push("break"); },
@@ -69,7 +70,7 @@ function beatSelect(rowsHtml = "", screen: ScreenState = CLEAR_SCREEN) {
     nonce: () => "n1",
     screen: () => screen
   };
-  return { owner: mountBeatSelect(ports), edits, notices, calls };
+  return { owner: mountBeatSelect(ports), edits, notices, calls, held };
 }
 
 function press(key: string): void {
@@ -324,6 +325,39 @@ test("scene selection: Delete removes the selected scenes through the edits port
   assert.deepEqual(calls, ["break", "flush", "break"]);
   assert.deepEqual(notices.shown.map((n) => n.message), ["2 beats deleted."]);
   owner.dispose();
+});
+
+test("scene clipboard: a fallback cut that finishes after the document has gone removes nothing and throws nothing", async () => {
+  const { owner, edits, held } = beatSelect();
+  const clip = mountBeatClip({
+    document: held.document,
+    ids: { id: (prefix) => prefix + "1" },
+    pictures: fakePictures().pictures,
+    text: { cellOf: () => [], fromHtml: () => [], inertBody: () => document.createElement("body") },
+    migrate: (doc) => migrateRows(doc, fakeMigration().ports),
+    tagsInRows: () => [],
+    recordPastedBroll: () => {}
+  });
+  let finish: () => void = () => {};
+  const clipboard = { writeText: () => { return new Promise<void>((resolve) => { finish = resolve; }); } };
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
+  const failures: unknown[] = [];
+  const onFailure = (reason: unknown): void => { failures.push(reason); };
+  process.on("unhandledRejection", onFailure);
+  try {
+    selectBeats("r1", "r2");
+    window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "x", ctrlKey: true, bubbles: true, cancelable: true }));
+    held.replace(null);
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } finally {
+    process.off("unhandledRejection", onFailure);
+    Reflect.deleteProperty(navigator, "clipboard");
+    owner.dispose();
+    clip.dispose();
+  }
+  assert.deepEqual(failures, []);
+  assert.equal(edits.ran.length, 0);
 });
 
 test("scene selection: dispose removes its listeners and its highlight", () => {

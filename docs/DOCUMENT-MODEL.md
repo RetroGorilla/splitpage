@@ -73,13 +73,18 @@ files. `node tools/code-map.mjs` prints a map of the rest.
 
 ## 1. The problem
 
-Each row's two cells, `visualText` and `audioText`, are HTML strings. The
-editor is `contenteditable`, and `syncFieldFromDom()` (05-render.js:623)
-copies `innerHTML` into state on every input event, unsanitised until the
-cell loses focus. Everything else in the document is built on top of that
-string:
+This section describes the state the design started from. Each beat (a row in
+the saved file) has two cells, `visualText` and `audioText`, which are HTML
+strings, and they still are: §6 keeps canonical HTML as the stored format. The
+editor was `contenteditable`, and `syncFieldFromDom()` (05-render.js:623)
+copied `innerHTML` into state on every input event, unsanitised until the
+cell lost focus. That function is gone. The cell-editing owner's `sync`
+(`src/application/editing/cell-editing.ts`) decodes the cell to runs and
+stores `toHtml(runs)` through the typing command on every keystroke
+([INV-10](architecture/invariants.md)). Everything else in the document is
+built on top of that string:
 
-| Construct | How it is stored today |
+| Construct | How it is stored |
 | --- | --- |
 | Tag | `<span class="tag-anchor" data-tag-cat data-tag-name contenteditable=false>` — the registry is keyed by **category + name**, not an id |
 | Comment anchor | `<span class="cmt-anchor" data-cmt>` **plus** `comment.rowId` / `comment.field` — anchored twice (invariant #18) |
@@ -88,7 +93,7 @@ string:
 | Line break | `<br>` — the only structure a cell has |
 | Pasted picture / video card | `<img data-blob>` / `<a class="video-embed-card">` — reachable in a cell only by pasting HTML |
 
-What that costs, with the current numbers:
+What that costs, with the numbers from when this design began:
 
 - **33 write paths** put cell HTML into state. 19 of them don't sanitise at
   the moment they write (typing, Enter, B/I/U, highlight, link, tag

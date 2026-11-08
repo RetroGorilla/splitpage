@@ -258,20 +258,21 @@ async function refreshRecents(focusFirst?: boolean) {
 async function openRecentFile(fileId: string | null) {
   if (!fileId || !recentsSupported()) return;
   const mounted = activeMount;
-  let entry;
+  let handle;
+  let file;
   try {
     const r = await (ports as FileMenuDropdownPorts).recents.routeOpen({ kind: "file", fileId: fileId });
     if (activeMount !== mounted) return;
     if (!r || r.where !== "this-tab") return;
-    entry = await (ports as FileMenuDropdownPorts).recents.read(fileId);
+    const entry = await (ports as FileMenuDropdownPorts).recents.read(fileId);
+    if (activeMount !== mounted) return;
+    handle = (ports as FileMenuDropdownPorts).recentHandle(entry);
+    file = await handle.getFile();
   } catch (e) {
     if (activeMount !== mounted) return;
     (ports as FileMenuDropdownPorts).notices.show("That file isn't there any more — it may have been moved or deleted.", "warn");
     return;
   }
-  if (activeMount !== mounted) return;
-  const handle = (ports as FileMenuDropdownPorts).recentHandle(entry);
-  const file = await handle.getFile();
   if (activeMount !== mounted) return;
   await (ports as FileMenuDropdownPorts).opening.open({ kind: "file", file: file, handle: handle });
 }

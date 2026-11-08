@@ -75,7 +75,7 @@ type FakeQueryFields = { [K in keyof Parameters<HistoryOwner["getHistorySnapshot
 type FakeDraft = { [K in keyof Pick<DraftPayload, "seq" | "editSeq" | "originKind" | "baseJson" | "stateJson">]?: unknown };
 
 type FakeOptions = { history?: boolean; blobs?: boolean; voice?: boolean; blobHash?: (bytes: Uint8Array) => string };
-type FakeFile = { -readonly [K in keyof Required<Pick<DesktopFileEntry, "name" | "bytes" | "lastModified">>]: Required<Pick<DesktopFileEntry, "name" | "bytes" | "lastModified">>[K] };
+type FakeFile = { -readonly [K in keyof Required<Pick<DesktopFileEntry, "name" | "bytes" | "lastModified">>]: Required<Pick<DesktopFileEntry, "name" | "bytes" | "lastModified">>[K] } & { onDisk: boolean };
 type FakeRecent = { fileId: string; name: string; title: string; at: number };
 
 import { createMemoryHistoryTestBackend } from "../storage/history-backend-testing.ts";
@@ -122,31 +122,38 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
     saveFileDialog: function (opts?: Partial<Parameters<DesktopPort["saveFileDialog"]>[0]> | null) {
       if (this._cancelNextSave) { this._cancelNextSave = false; return Promise.resolve(null); }
       const id = newId();
-      files[id] = { name: (opts && opts.suggestedName) || "untitled", bytes: new Uint8Array(0), lastModified: Date.now() + nextId };
+      files[id] = { name: (opts && opts.suggestedName) || "untitled", bytes: new Uint8Array(0), lastModified: Date.now() + nextId, onDisk: false };
       return Promise.resolve({ id: id, name: (files[id] as FakeFile).name });
     },
     readFile: function (id: string) {
       const f = files[id];
-      if (!f) return Promise.reject(new Error("ENOENT"));
+      if (!f) return Promise.reject(new Error("ENOENT: unknown file id"));
+      if (!f.onDisk) return Promise.reject(new Error("ENOENT: no such file or directory"));
       return Promise.resolve({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
     },
     writeFile: function (id: string, data: unknown) {
       const f = files[id];
-      if (!f) return Promise.reject(new Error("ENOENT"));
-      const bytes = data instanceof Uint8Array ? data
-        : (data instanceof ArrayBuffer ? new Uint8Array(data)
-        : (ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-        : new Uint8Array(0)));
+      if (!f) return Promise.reject(new Error("ENOENT: unknown file id"));
+      const bytes = typeof data === "string" ? strBytes(data)
+        : data instanceof Uint8Array ? data
+        : data instanceof ArrayBuffer ? new Uint8Array(data)
+        : null;
+      if (!bytes) return Promise.reject(new Error("writeFile: unsupported data type"));
       f.bytes = bytes;
+      f.onDisk = true;
       f.lastModified = Date.now() + (nextId++);
       return Promise.resolve({ lastModified: f.lastModified, size: bytes.length });
     },
     statFile: function (id: string) {
       const f = files[id];
-      return Promise.resolve(f ? { lastModified: f.lastModified, size: f.bytes.length } : null);
+      if (!f) return Promise.reject(new Error("ENOENT: unknown file id"));
+      return Promise.resolve(f.onDisk ? { lastModified: f.lastModified, size: f.bytes.length } : null);
     },
     routeOpen: function (p: Partial<Parameters<DesktopPort["routeOpen"]>[0]> | null) {
-      if (p && p.kind === "file" && this._routeMissing) return Promise.reject(new Error("ENOENT: file is not readable"));
+      if (!p || p.kind !== "file") return Promise.reject(new Error("route-open: unknown kind"));
+      const held = files[p.fileId as string];
+      if (!held) return Promise.reject(new Error("ENOENT: unknown file id"));
+      if (this._routeMissing || !held.onDisk) return Promise.reject(new Error("ENOENT: file is not readable"));
       this._lastRoute = p ? JSON.parse(JSON.stringify(p)) : null;
       return Promise.resolve(this._routeAnswer || { where: "this-tab" });
     },
@@ -268,7 +275,7 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
     _fireDraftFlush: function () { return flushHandler ? (flushHandler as () => ReturnType<FlushHandler>)() : null; },
     _addFile: function (name: string, text: string) {
       const id = newId();
-      files[id] = { name: name, bytes: strBytes(text), lastModified: Date.now() + nextId };
+      files[id] = { name: name, bytes: strBytes(text), lastModified: Date.now() + nextId, onDisk: true };
       return id;
     },
     _text: function (id: string) { return new TextDecoder().decode((files[id] as FakeFile).bytes); },

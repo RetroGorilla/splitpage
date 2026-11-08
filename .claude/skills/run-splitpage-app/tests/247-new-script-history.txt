@@ -1,7 +1,7 @@
 # The script a new one replaces is in the NEW one's Version history
-# (file-menu.ts replaceWithNewDocument). New script from these scenes,
-# File ▸ New script and Open the long demo each say "the one before is in
-# Version history"; the snapshot used to be filed under the old script's id
+# (src/features/file-menu/file-menu.ts replaceWithNewDocument). New script from these beats,
+# File ▸ New script and Open the long demo each say the script before is in
+# Version history ("the one before" for the first two, "The script before" for the demo); the snapshot used to be filed under the old script's id
 # only, while the panel lists the document on screen — "No snapshots of this
 # document yet", and a script never saved to a file was gone for good. Now
 # the new document's history lists it and restoring it brings the old script
@@ -15,7 +15,7 @@ wait F.state() !== __loaded && F.state().title === 'Harbour film' && document.qu
 eval (function(){ window.row = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"]'); }; window.cell = function(id, f){ return row(id).querySelector('.' + (f === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.pt = function(el, fx, fy){ var r = el.getBoundingClientRect(); return { x: r.left + r.width * fx, y: r.top + r.height * fy }; }; window.ids = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; window.calm = function(){ document.activeElement && document.activeElement.blur(); getSelection().removeAllRanges(); T.clear(); window.scrollTo(0, 0); return true; }; window.marks = function(){ var out = {}; F.state().rows.forEach(function(r){ ['visualText','audioText'].forEach(function(f){ var re = /data-cmt="([^"]+)"/g, m; while ((m = re.exec(r[f] || ''))) { (out[m[1]] = out[m[1]] || []).push(r.id); } }); }); return out; }; window.shared = function(){ var m = marks(); return Object.keys(m).filter(function(k){ return m[k].length > 1; }); }; window.unbacked = function(){ return Object.keys(marks()).filter(function(id){ return !F.state().comments.some(function(c){ return c.id === id; }); }); }; window.keys = function(){ var out = []; F.state().rows.forEach(function(r){ var re = /data-broll-id="([^"]+)"/g, m; while ((m = re.exec(r.visualText || ''))) out.push(m[1]); }); return out.join(); }; window.shots = function(){ return F.state().brollShots.map(function(b){ return b.id + ':' + b.status + ':' + (b.notes || ''); }).join('|'); }; window.cmts = function(){ return F.state().comments.map(function(c){ return c.id + '@' + c.rowId; }).sort().join(); }; window.scrollTo(0, 0); return true; })()
 eval (function(){ window.toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent; }).join(' | '); }; window.untoast = function(){ document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return true; }; window.restores = function(){ return document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length; }; window.histText = function(){ return document.getElementById('history-list').textContent; }; window.harbour = function(){ return F.state().title === 'Harbour film' && ids() === 'r1,r2,r3,r4,r5,r6' && F.state().comments.length === 3 && F.state().brollShots.length === 1; }; return harbour(); })()
 
-# ---- 1. New script from these scenes ---------------------------------------
+# ---- 1. New script from these beats ---------------------------------------
 eval (function(){ window.__old = F.state().docId; untoast(); T.select('r2', 'r3'); T.openMenu(200, 200); return __old; })()
 jsclick #scene-menu [data-scene-action="new"]
 wait F.state().title.indexOf('2 beats') !== -1
