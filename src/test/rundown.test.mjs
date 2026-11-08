@@ -1,3 +1,4 @@
+import { lensIndexAt } from "../features/rundown/lens-index.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -13,12 +14,9 @@ import {
   rundownBlocks,
   rundownDropGap,
   rundownKeepLabels,
-  rundownLens,
-  rundownLensFollow,
-  LENS_SLOW_PX_MS,
-  rundownLensRecenter,
   rundownLengthPlace,
   rundownRestLayout,
+  rundownLensIndex,
   rundownScale,
   rundownSpan,
   rundownTicks
@@ -332,7 +330,7 @@ const mid = (K, i) => (K[i] + K[i + 1]) / 2;
 
 test("a script whose scenes are all wide already is not changed by the lens", () => {
   const { U, width } = layout(BOARD, 1400);
-  const Y = rundownLens(U, 500, 500);
+  const Y = rundownLensIndex(U, lensIndexAt(U, 500), 500);
   Y.forEach((y, i) => assert.ok(Math.abs(y - U[i]) < 1e-9, "knot " + i));
   assert.equal(Y[Y.length - 1], width);
 });
@@ -343,7 +341,7 @@ test("the scene under the lens grows to LENS_MIN_PX, its number and read time sh
   const i = 13;
   assert.ok(slotW(U, i) < 12, "the test's scene is a sliver");
   const focus = mid(U, i);
-  const Y = rundownLens(U, focus, focus);
+  const Y = rundownLensIndex(U, lensIndexAt(U, focus), focus);
   assert.ok(ordered(Y));
   const blocks = knotBlocks(Y);
   assert.ok(Math.abs(blocks[i].width - (LENS_MIN_PX - 2)) <= 0.1, "the sliver is " + blocks[i].width + "px under the lens");
@@ -356,7 +354,7 @@ test("distant blocks keep their rest width exactly: nothing away from the pointe
   const { U } = layout(longScript(), 1400);
   for (const i of [13, 40, 66]) {
     for (const opts of [undefined, { minWidth: LENS_HOLD_PX }]) {
-      const Y = rundownLens(U, mid(U, i), mid(U, i), opts);
+      const Y = rundownLensIndex(U, lensIndexAt(U, mid(U, i)), mid(U, i), opts);
       for (let j = 0; j < U.length - 1; j++) {
         if (Math.abs(j - i) <= LENS_REACH_BEATS) assert.ok(slotW(Y, j) >= slotW(U, j) - 1e-9, "scene " + j + " shrank");
         else assert.ok(Math.abs(slotW(Y, j) - slotW(U, j)) < 1e-9, "scene " + j + " is " + slotW(Y, j) + ", at rest " + slotW(U, j));
@@ -368,7 +366,7 @@ test("distant blocks keep their rest width exactly: nothing away from the pointe
 test("the strip grows by what the lens adds and slides: the focus lands on the anchor", () => {
   const { U, width } = layout(longScript(), 1400);
   for (const [focus, anchor] of [[333.3, 333.3], [700, 700], [700, 760], [700, 640], [1111, 1111]]) {
-    const Y = rundownLens(U, focus, anchor);
+    const Y = rundownLensIndex(U, lensIndexAt(U, focus), anchor);
     assert.ok(Math.abs(knotMap(U, Y, focus) - anchor) < 1e-9, "focus " + focus + " at " + anchor);
     let grew = 0;
     for (let j = 0; j < U.length - 1; j++) grew += slotW(Y, j) - slotW(U, j);
@@ -383,23 +381,23 @@ test("the ends are clamped: the strip never slides far enough to leave a gap at 
   const m = U.length - 1;
   for (let i = 0; i < 80; i += 3) {
     for (const anchor of [-500, 0, 20, mid(U, i), 1380, 1400, 3000]) {
-      const Y = rundownLens(U, mid(U, i), anchor);
+      const Y = rundownLensIndex(U, lensIndexAt(U, mid(U, i)), anchor);
       assert.ok(Y[0] <= 1e-9, "a gap at the left: scene " + i + ", anchor " + anchor);
       assert.ok(Y[m] >= width - 1e-9, "a gap at the right: scene " + i + ", anchor " + anchor);
       assert.ok(ordered(Y));
     }
   }
-  const Y0 = rundownLens(U, 0, 0);
+  const Y0 = rundownLensIndex(U, lensIndexAt(U, 0), 0);
   assert.equal(Y0[0], 0);
   assert.ok(slotW(Y0, 0) >= 80, "the first scene is " + slotW(Y0, 0));
   const n = m - 1;
-  const Yn = rundownLens(U, U[n], U[n]);
+  const Yn = rundownLensIndex(U, lensIndexAt(U, U[n]), U[n]);
   assert.ok(Math.abs(Yn[n] - U[n]) < 1e-9 && Math.abs(Yn[m] - width) < 1e-9);
   assert.ok(slotW(Yn, n - 1) >= 80, "the last scene is " + slotW(Yn, n - 1));
-  const Yt = rundownLens(U, width - 2, width - 2);
-  assert.ok(Math.abs(Yt[m] - width) < 1e-9);
+  const Yt = rundownLensIndex(U, lensIndexAt(U, width - 2), width - 2);
+  assert.ok(Math.abs(Yt[n] - (width - 2)) < 1e-9, "the Index focus clamps to the last beat, before the tail");
   assert.ok(Math.abs(slotW(Yn, n) - slotW(U, n)) < 1e-9);
-  const Yh = rundownLens(U, mid(U, 0), mid(U, 0));
+  const Yh = rundownLensIndex(U, lensIndexAt(U, mid(U, 0)), mid(U, 0));
   assert.ok(Yh[0] < 0 && Math.abs(knotMap(U, Yh, mid(U, 0)) - mid(U, 0)) < 1e-9);
 });
 
@@ -408,7 +406,7 @@ test("reach is counted in scenes: the focus and LENS_REACH_SCENES either side gr
   const { U } = layout(denseScript(600), 1400, 0);
   const i = 300;
   assert.ok(slotW(U, i + 3) < 4 && slotW(U, i - 3) < 4, "the test's scenes are thin");
-  const Y = rundownLens(U, mid(U, i), mid(U, i));
+  const Y = rundownLensIndex(U, lensIndexAt(U, mid(U, i)), mid(U, i));
   for (let j = i - 6; j <= i + 6; j++) {
     const d = Math.abs(j - i);
     if (d <= LENS_REACH_BEATS) assert.ok(slotW(Y, j) > slotW(U, j) + 0.5, "scene " + j + " (" + d + " away) did not grow");
@@ -416,7 +414,7 @@ test("reach is counted in scenes: the focus and LENS_REACH_SCENES either side gr
   }
   const wide = layout(Array.from({ length: 30 }, () => ({ seconds: 1 })), 1400);
   assert.ok(Math.abs(slotW(wide.U, 15) - 35) < 1e-9);
-  const Yw = rundownLens(wide.U, mid(wide.U, 15), mid(wide.U, 15));
+  const Yw = rundownLensIndex(wide.U, 15.5, mid(wide.U, 15));
   for (let j = 10; j <= 20; j++) {
     const grew = slotW(Yw, j) > slotW(wide.U, j) + 1e-9;
     assert.equal(grew, Math.abs(j - 15) <= 2, "scene " + j);
@@ -428,7 +426,7 @@ test("a scene already wider than the lens keeps its width, and its neighbours st
   for (let i = 0; i < 40; i++) beats.push({ seconds: i === 20 ? 120 : 3 });
   const { U } = layout(beats, 1400);
   assert.ok(slotW(U, 20) > LENS_MIN_PX * 2, "the test's scene is wide");
-  const Y = rundownLens(U, mid(U, 20), mid(U, 20));
+  const Y = rundownLensIndex(U, lensIndexAt(U, mid(U, 20)), mid(U, 20));
   assert.ok(Math.abs(slotW(Y, 20) - slotW(U, 20)) < 1e-9);
   assert.ok(slotW(Y, 19) > slotW(U, 19) + 20 && slotW(Y, 21) > slotW(U, 21) + 20);
 });
@@ -436,7 +434,7 @@ test("a scene already wider than the lens keeps its width, and its neighbours st
 test("the second stage is the same lens, wider", () => {
   const { U } = layout(longScript(), 1400);
   const i = 30;
-  const Y = rundownLens(U, mid(U, i), mid(U, i), { minWidth: LENS_HOLD_PX });
+  const Y = rundownLensIndex(U, lensIndexAt(U, mid(U, i)), mid(U, i), { minWidth: LENS_HOLD_PX });
   assert.ok(Math.abs(slotW(Y, i) - LENS_HOLD_PX) < 1e-9);
   assert.ok(Math.abs(knotMap(U, Y, mid(U, i)) - mid(U, i)) < 1e-9);
 });
@@ -444,184 +442,19 @@ test("the second stage is the same lens, wider", () => {
 test("knots stay ordered wherever the focus and anchor are", () => {
   const { U } = layout(longScript(), 1400);
   for (let f = 0; f <= 1400; f += 7) {
-    for (const a of [f, f - 90, f + 90]) assert.ok(ordered(rundownLens(U, f, a)), f + " at " + a);
+    for (const a of [f, f - 90, f + 90]) assert.ok(ordered(rundownLensIndex(U, lensIndexAt(U, f), a)), f + " at " + a);
   }
-});
-
-function drive(U, X, x0, moves) {
-  let focus = knotMap(X, U, x0);
-  let anchor = x0;
-  let shown = rundownLens(U, focus, anchor);
-  let x = x0;
-  const out = [{ x, shown, focus, anchor: knotMap(U, shown, focus) }];
-  for (const [nx, dt] of moves) {
-    if (nx !== x) {
-      const next = rundownLensFollow(U, X, shown, focus, anchor, nx, nx - x, dt);
-      focus = next.focus;
-      anchor = next.anchor;
-    }
-    x = nx;
-    const settled = rundownLensRecenter(U, shown, focus, anchor, x, dt);
-    focus = settled.focus;
-    anchor = settled.anchor;
-    shown = rundownLens(U, focus, anchor);
-    out.push({ x, shown, focus, anchor: knotMap(U, shown, focus) });
-  }
-  return out;
-}
-
-function beatAt(K, x) {
-  for (let i = 0; i < K.length - 2; i++) if (x >= K[i] && x < K[i + 1]) return i;
-  return -1;
-}
-
-test("hovering a sliver opens the lens on it: under the pointer, its number and read time showing", () => {
-  const { U, X } = layout(longScript(), 1400);
-  const i = 13;
-  const x = (X[i] + X[i + 1]) / 2;
-  const [f] = drive(U, X, x, []);
-  assert.equal(beatAt(f.shown, x), i);
-  assert.ok(f.shown[i + 1] - f.shown[i] - 2 >= 80);
-});
-
-test("aiming (#199): a slow pointer crosses a sliver drawn wide with time to click it, and the lens stays round the pointer", () => {
-  const { U, X } = layout(longScript(), 1400);
-  const i = 31;
-  const x0 = X[i] - 30;
-  const moves = [];
-  for (let k = 1; k <= 400; k++) moves.push([x0 + k, 16]);
-  const frames = drive(U, X, x0, moves);
-  const px = {};
-  frames.slice(1).forEach((f) => { const sc = beatAt(f.shown, f.x); px[sc] = (px[sc] || 0) + 1; });
-  assert.ok(px[i] >= 40, "the sliver was under the pointer for " + px[i] + "px: " + JSON.stringify(px));
-  const seq = frames.map((f) => beatAt(f.shown, f.x));
-  for (let k = 1; k < seq.length; k++) assert.ok(seq[k] - seq[k - 1] >= 0 && seq[k] - seq[k - 1] <= 1, "scene " + seq[k - 1] + " to " + seq[k]);
-  for (const f of frames) {
-    assert.ok(ordered(f.shown));
-    assert.ok(Math.abs(f.x - f.anchor) <= LENS_MIN_PX * 1.5, "the lens is " + (f.x - f.anchor).toFixed(1) + "px off the pointer at " + f.x);
-    const jf = beatAt(U, f.focus);
-    for (let j = 0; j < 80; j++) if (Math.abs(j - jf) > LENS_REACH_BEATS + 1) assert.ok(Math.abs(slotW(f.shown, j) - slotW(U, j)) < 1e-9, "scene " + j + ", the focus in " + jf);
-  }
-});
-
-test("#199: a pointer that stops on a sliver keeps it, and the lens comes to rest centred on the pointer", () => {
-  const { U, X } = layout(longScript(), 1400);
-  const i = 31;
-  const x0 = X[i] - 8;
-  const moves = [];
-  let frames = [];
-  for (let k = 1; k <= 400; k++) {
-    moves.push([x0 + k, 16]);
-    frames = drive(U, X, x0, moves);
-    if (beatAt(frames[frames.length - 1].shown, frames[frames.length - 1].x) === i) break;
-  }
-  const xs = frames[frames.length - 1].x + 4;
-  for (let k = 1; k <= 4; k++) moves.push([xs - 4 + k, 16]);
-  for (let k = 0; k < 150; k++) moves.push([xs, 16]);
-  frames = drive(U, X, x0, moves);
-  const stopped = frames.length - 151;
-  for (let k = stopped; k < frames.length; k++) {
-    assert.equal(beatAt(frames[k].shown, xs), i, "the sliver left the pointer " + (k - stopped) + " frames after it stopped");
-  }
-  const rest = frames[frames.length - 1];
-  assert.ok(rest.shown[i + 1] - rest.shown[i] >= 80, "and it is " + (rest.shown[i + 1] - rest.shown[i]).toFixed(1) + "px wide");
-  assert.ok(Math.abs(rest.anchor - xs) < 8, "the lens's centre is " + (rest.anchor - xs).toFixed(2) + "px off the pointer");
-  assert.ok(Math.abs(knotMap(rest.shown, U, xs) - rest.focus) < 0.5);
-  const again = rundownLensRecenter(U, rest.shown, rest.focus, rest.anchor, xs, 16);
-  assert.ok(Math.abs(again.focus - rest.focus) < 0.1 && Math.abs(again.anchor - rest.anchor) < 1, "still moving " + (again.anchor - rest.anchor).toFixed(2) + "px a frame");
-  const still = rundownLensFollow(U, X, rest.shown, rest.focus, rest.anchor, xs, 0, 16);
-  assert.equal(still.focus, rest.focus);
-  assert.equal(still.anchor, rest.anchor);
-  const noTime = rundownLensRecenter(U, rest.shown, rest.focus, rest.anchor, xs, 0);
-  assert.equal(noTime.focus, rest.focus);
-  assert.equal(noTime.anchor, rest.anchor);
-});
-
-test("travelling: moving fast, the lens goes where the pointer goes, end to end", () => {
-  const { U, X } = layout(longScript(), 1400);
-  const moves = [];
-  for (let x = 20; x <= 1400; x += 20) moves.push([x, 6]);
-  const frames = drive(U, X, 0, moves);
-  for (const f of frames.slice(1)) {
-    assert.ok(Math.abs(f.focus - knotMap(X, U, f.x)) < 8, "focus at " + f.x);
-    assert.ok(ordered(f.shown));
-  }
-  const f1 = frames[20];
-  const moved = rundownLensFollow(U, X, f1.shown, f1.focus, f1.anchor, f1.x + 20, 20, 6);
-  assert.ok(Math.abs(moved.focus - knotMap(X, U, f1.x + 20)) < 1e-6);
-  assert.ok(Math.abs(moved.anchor - (f1.x + 20)) < 1e-6);
-  const end = frames[frames.length - 1];
-  assert.ok(end.shown[end.shown.length - 1] >= 1400 - 1e-9);
-  assert.ok(beatAt(end.shown, 1399) === 79 || beatAt(end.shown, 1399) === -1, "scene " + beatAt(end.shown, 1399) + " at the edge");
-  const nearEnd = drive(U, X, 1370, [])[0];
-  assert.ok(beatAt(nearEnd.shown, 1370) >= 78 || beatAt(nearEnd.shown, 1370) === -1);
-});
-
-test("every scene can be brought under the pointer, the one with no words too", () => {
-  const { U, X } = layout(longScript(), 1400);
-  const seen = new Set();
-  for (let x = 0; x < 1400; x += 1) {
-    const [f] = drive(U, X, x, []);
-    const sc = beatAt(f.shown, x);
-    if (sc !== -1) seen.add(sc);
-  }
-  for (let i = 0; i < 80; i++) if (i !== 40) assert.ok(seen.has(i), "scene " + i);
-  const moves = [];
-  for (let k = 1; k <= 90; k++) moves.push([X[40] - k, 16]);
-  const back = drive(U, X, X[40] + 1, moves);
-  assert.ok(back.some((f) => beatAt(f.shown, f.x) === 40), "scene 40 under the pointer");
-  const f40 = back.find((f) => beatAt(f.shown, f.x) === 40);
-  assert.ok(f40.shown[41] - f40.shown[40] >= 28, "and wide enough for its number");
 });
 
 test("hundreds of scenes: the lens magnifies as much, and the rest keep their width", () => {
   const beats = denseScript(500);
   const { U, width } = layout(beats, 1360);
   const i = 250;
-  const Y = rundownLens(U, mid(U, i), mid(U, i));
+  const Y = rundownLensIndex(U, lensIndexAt(U, mid(U, i)), mid(U, i));
   assert.ok(ordered(Y));
   assert.ok(Y[0] < 0 && Y[Y.length - 1] > width);
   assert.ok(Math.abs(slotW(Y, i) - LENS_MIN_PX) < 1e-9, "the focus is " + slotW(Y, i));
   for (let j = 0; j < 500; j++) if (Math.abs(j - i) > LENS_REACH_BEATS) assert.ok(Math.abs(slotW(Y, j) - slotW(U, j)) < 1e-9);
-});
-
-function sweep(U, X, x0, px, speed) {
-  const moves = [];
-  const step = speed * 16;
-  for (let d = step; d <= px + 1e-9; d += step) moves.push([x0 + d, 16]);
-  return drive(U, X, x0, moves);
-}
-
-test("a slow pointer over a 500-scene script passes at most 3 scenes per 100px (860ada2, with the rest floor and the slide)", () => {
-  const beats = denseScript(500);
-  const { U, X } = layout(beats, 1360);
-  for (const speed of [0.1, 0.2, 0.3]) {
-    for (const x0 of [200, 680, 1100]) {
-      for (const dir of [1, -1]) {
-        const frames = sweep(U, X, x0, 100 * dir, speed * dir);
-        const seen = new Set(frames.map((f) => beatAt(f.shown, f.x)));
-        assert.ok(seen.size - 1 <= 3, "at " + speed + "px/ms from " + x0 + (dir > 0 ? " right" : " left") + ": " + (seen.size - 1) + " scenes");
-      }
-    }
-  }
-});
-
-test("a still pointer moves nothing; a flick over a 500-scene script travels end to end", () => {
-  const beats = denseScript(500);
-  const { U, X } = layout(beats, 1360);
-  const moves = [];
-  for (let k = 0; k < 200; k++) moves.push([680, 16]);
-  const frames = drive(U, X, 680, moves);
-  const last = frames[frames.length - 1], before = frames[frames.length - 2];
-  last.shown.forEach((y, k) => assert.ok(Math.abs(y - before.shown[k]) < 0.05, "knot " + k + " still moving"));
-  const still = rundownLensFollow(U, X, last.shown, last.focus, last.anchor, 680, 0, 16);
-  assert.equal(still.focus, last.focus);
-  assert.equal(still.anchor, last.anchor);
-  const flick = [];
-  for (let x = 30; x <= 1350; x += 30) flick.push([x, 6]);
-  const f = drive(U, X, 0, flick);
-  assert.ok(beatAt(f[0].shown, 0) <= 1);
-  assert.ok(beatAt(f[f.length - 1].shown, 1350) >= 490, "the flick ended over scene " + beatAt(f[f.length - 1].shown, 1350));
 });
 
 test("knotMap is piecewise linear, clamps at the ends and inverts itself", () => {
@@ -632,7 +465,7 @@ test("knotMap is piecewise linear, clamps at the ends and inverts itself", () =>
   assert.equal(knotMap(from, to, 20), 70);
   assert.equal(knotMap(from, to, 200), 100);
   const { U } = layout(longScript(), 1400);
-  const Y = rundownLens(U, 512, 512);
+  const Y = rundownLensIndex(U, lensIndexAt(U, 512), 512);
   for (const u of [3, 99.5, 512, 800.25, 1399]) assert.ok(Math.abs(knotMap(Y, U, knotMap(U, Y, u)) - u) < 1e-6);
 });
 
@@ -682,21 +515,4 @@ test("from scene 100 the number needs room for three digits", () => {
   assert.equal(rundownKeepLabels(rest, 24, false).number, false);
   assert.equal(rundownKeepLabels(rest, 25, false).number, true);
   assert.equal(rundownKeepLabels({ index: 98, showNumber: true }, 18, false).number, true);
-});
-
-test("over dense scenes a moderate speed aims; over wide ones it travels", () => {
-  const dense = [0];
-  for (let i = 0; i < 500; i++) dense.push(dense[dense.length - 1] + 2.7);
-  dense.push(1360);
-  const sparse = [0];
-  for (let i = 0; i < 10; i++) sparse.push(sparse[sparse.length - 1] + 120);
-  sparse.push(1360);
-  const speed = 0.3, dt = 16, dx = speed * dt;
-  const d = rundownLensFollow(dense, dense, dense, 675, 675, 675 + dx, dx, dt);
-  assert.equal(d.focus, 675);
-  const s = rundownLensFollow(sparse, sparse, sparse, 600, 600, 600 + dx, dx, dt);
-  assert.ok(s.focus > 600, "travels a little over wide scenes");
-  const f = rundownLensFollow(dense, dense, dense, 675, 675, 675 + 48, 48, dt);
-  assert.ok(f.focus > 700);
-  assert.ok(LENS_SLOW_PX_MS > 0);
 });

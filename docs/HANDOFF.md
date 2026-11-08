@@ -586,6 +586,49 @@ tabs**.
   `caseGalleryVideoThumbnail` in smoke.mjs uses it. Not run on this
   machine (no Electron binary for x64 here) — first run is CI's
   desktop-smoke job.
+- **A dropped video file's stored path** (#259,
+  [rows-video-files.md](architecture/rows-video-files.md#stored-paths-259)).
+  `splitpage:video-path-open(path)` takes the path a script stores on a
+  video link and opens it with `shell.openPath` only after main's own
+  check (`videoPathProblem`, then `openableVideoPath` against the disk);
+  the one bridge method that takes a path (INV-34). `caseGalleryVideoFile`
+  in smoke.mjs drives it with a real file, refused paths and a deleted file.
+- **A dropped video copied beside the script** (#259,
+  [rows-video-files.md](architecture/rows-video-files.md#copies-beside-the-script-259)).
+  `splitpage:bundle-file(token, job)` copies a drop's granted file into the
+  `<name> files` folder of the script the tab had when the copy was accepted
+  (`desktop/bundle-jobs.ts` binds it then). Save As first waits for the
+  page's copies, and a running Save As copy, to finish (`beginSave`); then
+  it asks "Save the files with this script?" (`splitpage:bundle-save-plan(fileId, names)`
+  for the counts, `splitpage:bundle-save-choice(fileId, "copy" | "link")` for
+  the answer). A linked file missing from the old folder stops the save
+  before anything is written, for either answer. For Copy files, main checks
+  the names the written bytes link against the new folder as one job in the
+  same queue, failing the save on a clash, then writes the script and copies
+  the files in the background in that same job, reporting on
+  `splitpage:bundle-carry`; until a file lands, the tab's bundled open of a
+  name the job lists falls back to the old folder, and that fallback dies
+  with the job. For Don't copy, the choice answer gives the old files' paths
+  for the planned names; the save writes them, and the document adopts them
+  as part of the save with no undo step (`amendRows` on the undo owner), so
+  main remembers nothing. Every Save As that retargets the document clears
+  its undo and redo history at the commit, and Undo and Redo do nothing while
+  that save is under way, so no undo restores a bundled name the new folder lacks.
+  `splitpage:bundled-file-open(name)` opens one name after
+  `resolveBundledFile`. None takes a path (INV-34). Copies publish through a temporary name, and quitting while they
+  run asks Wait or Quit anyway (`close-quit.ts`). `desktop/test/bundle-ipc.test.mjs` holds the refusals and
+  `caseGalleryVideoBundle` in smoke.mjs runs drop, copy, restart, open and
+  Save As.
+- **Any attached file** (#256,
+  [rows-video-files.md](architecture/rows-video-files.md#attached-files-256)).
+  The same channels take any file type except the ones `ATTACHABLE_FILE`
+  (`shared/video-path.ts`) refuses: programs, scripts, shortcuts,
+  installers and files without an extension. Main checks the rule itself,
+  on the path it is given and again on the real path, for a grant, a token
+  open, a stored path, a copy, a carry and a bundled open.
+  `desktop/test/attach-ipc.test.mjs` holds the refusals and
+  `caseGalleryAttachFile` in smoke.mjs runs a PDF through drop, copy,
+  restart and open.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
@@ -796,6 +839,10 @@ Names are plain text, limited to 200 code points. See
     // the scene's gallery (#135, 02d-gallery.ts), each key absent when empty:
     "imageName": "wide.png",
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
+    // a file link dropped in the desktop app (#259) also has
+    // "location": { "kind": "path", "path": "C:\\Videos\\clip.mp4" }; an older build drops it
+    // or, for a copy in the "<script name> files" folder beside the script,
+    // "location": { "kind": "bundled", "name": "clip (2).mp4" }
     // a poster link's item's imageRef is its still: a file's first frame, or
     // a YouTube/Vimeo link's fetched thumbnail (#141) — an ordinary blob
     "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],
@@ -855,7 +902,9 @@ pick.
 
 `ROW_FIELDS = ["visualText","imageRef","audioText","imageLinks","moreImages"]`
 merges as content (an `imageRef` compared by its sha; the gallery's two
-lists as sets, both sides' additions kept, never a conflict, #135); `rows[].status` and
+lists as sets, both sides' additions kept, never a conflict, #135; a link
+both sides keep takes the `location` the side that changed it gave, and a
+side without one never removes it, #259); `rows[].status` and
 `productionTags[].status` merge by rank (further-along wins);
 `owner`/`notes` merge "filled beats empty".
 
@@ -1118,6 +1167,24 @@ stores the value and then fires `document`'s
 `"splitpage:pref"` CustomEvent (`{detail: {key, value}}`); whatever draws a
 setting listens for its key, so a change made anywhere shows everywhere.
 File ▸ Export app data carries them (`settingsAppData()`).
+`splitpage-microphone` (#1162: the `deviceId` Follow My Voice listens on,
+absent = the system default) is the exception: device ids belong to one
+browser on one machine, so it is neither exported nor imported. Both the
+teleprompter's `#pp-mic` and Settings' `#settings-microphone` read and write it
+through `preferences().microphone()`. The browser recognizer has no device
+setting, so a chosen device is opened with `getUserMedia({audio: {deviceId:
+{exact}}})` and its track is passed to `recognition.start(track)`, which needs
+Chromium 135 or later on Windows, macOS or Linux (`recognitionTakesTrack`;
+133 ships it switched off); elsewhere, and under the desktop relay, the choice
+is not offered and the system's default microphone is used. In the desktop
+app the value is instead a Windows capture endpoint id (`isDesktopMicrophoneId`,
+`{0.0.1.00000000}.{guid}`): the list comes from `desktop/voice/listen.ps1 -List`
+over `splitpage:voice-microphones`, and `splitpage:voice-start` passes the id
+on as `-Device`, which opens that endpoint through the wave API and feeds the
+recogniser a stream. A chosen endpoint that is not active falls back to the
+default with a `fallback` line; one that goes away mid-session sends
+`device-lost` and the helper exits. An id that is not an endpoint id (one
+saved by a browser) is never sent, and the default is used and said.
 
 ---
 

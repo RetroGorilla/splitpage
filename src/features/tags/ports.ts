@@ -27,14 +27,13 @@ export interface TagPanelMount extends TagPanelCommands {
 }
 
 export interface PlainTagPorts {
-  readonly renderCategories: (selected: string | null) => void;
   readonly document: Pick<DocumentReader, "current">;
   readonly cells: Pick<CellEditing<Element>, "edit" | "open">;
   readonly undo: Pick<UndoControl, "breakCoalescing">;
   readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
 }
 
-export type TagCaretRefusal = "audio" | "link" | "tag" | "open" | "elsewhere";
+export type TagCaretRefusal = "audio" | "link" | "tag" | "tag-selection" | "open" | "elsewhere";
 
 export interface PlainTagControl {
   readonly openCategoryAtCaret: (cellEl: HTMLElement, marks: Marks) => TagCaretRefusal | null;
@@ -53,6 +52,25 @@ export interface PlainTagControl {
 }
 
 export interface PlainTagMount extends PlainTagControl {
+  readonly dispose: () => void;
+}
+
+export interface WhoListPorts {
+  readonly document: Pick<DocumentReader, "current">;
+  readonly cells: Pick<CellEditing<Element>, "edit">;
+  readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
+}
+
+export interface WhoListControl {
+  readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
+  readonly refresh: () => void;
+  readonly keydown: (e: KeyboardEvent, cellEl: Element) => boolean;
+  readonly cancel: () => void;
+  readonly isOpen: (cellEl?: Element | null) => boolean;
+  readonly onPicked: (listener: () => void) => () => void;
+}
+
+export interface WhoListMount extends WhoListControl {
   readonly dispose: () => void;
 }
 

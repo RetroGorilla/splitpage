@@ -21,7 +21,9 @@ export const videoFiles: VideoFiles = {
   url: (link) => running().url(link),
   releaseUrls: () => running().releaseUrls(),
   openFile: (link) => running().openFile(link),
-  openGallery: (rowId, slot, key) => running().openGallery(rowId, slot, key)
+  openGallery: (rowId, slot, key) => running().openGallery(rowId, slot, key),
+  bundle: (link, job, onProgress) => running().bundle(link, job, onProgress),
+  cancelBundle: (job) => running().cancelBundle(job)
 };
 
 export function mountVideoFilesFeature(): VideoFileMount {

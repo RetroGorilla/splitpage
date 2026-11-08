@@ -1,0 +1,207 @@
+# Choosing the microphone Follow My Voice listens on (issue #1162), in the
+# teleprompter and in Settings, from one stored choice.
+#
+# The browser's recognizer has no device setting; it takes whatever audio track
+# start(track) is given. So the choice is a deviceId stored under
+# splitpage-microphone: Follow My Voice asks getUserMedia for that device
+# (exact) and hands the track to the recognizer. Here enumerateDevices,
+# getUserMedia and the recognizer's start/stop are replaced, as in
+# tests/83-voice-mic-name.txt, so no microphone or speech service is touched.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.D = window.__desktopTest; window.T = window.__settingsTest; localStorage.removeItem('splitpage-microphone'); window.st = function () { return document.getElementById('pp-voice-status').textContent; }; window.opts = function (id) { return Array.prototype.map.call(document.getElementById(id).options, function (o) { return o.value + '=' + o.textContent; }).join('|'); }; window.pick = function (id, v) { var el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); return true; }; return true; })()
+eval (function(){ window.__gumReal = navigator.mediaDevices.getUserMedia; window.__enumReal = navigator.mediaDevices.enumerateDevices; window.__Rec = window.SpeechRecognition || window.webkitSpeechRecognition; var P = window.__Rec.prototype; window.__recReal = { start: P.start, stop: P.stop, abort: P.abort }; return !!window.__Rec; })()
+expect !!window.__Rec
+eval (function(){ var P = window.__Rec.prototype; window.__starts = []; P.start = function (t) { var self = this; window.__starts.push(t === undefined ? 'default' : t.label); setTimeout(function () { if (self.onstart) self.onstart(); }, 0); }; P.stop = function () {}; P.abort = function () {}; return true; })()
+eval (function(){ window.__devs = [{ kind: 'audioinput', deviceId: 'default', label: 'Default - Mic One' }, { kind: 'audioinput', deviceId: 'dev-1', label: 'Mic One' }, { kind: 'audioinput', deviceId: 'dev-2', label: 'Mic Two' }]; navigator.mediaDevices.enumerateDevices = function () { return Promise.resolve(window.__devs); }; window.__gum = []; window.__stopped = 0; navigator.mediaDevices.getUserMedia = function (c) { window.__gum.push(JSON.stringify(c)); var want = c.audio && c.audio.deviceId && c.audio.deviceId.exact; if (want === 'gone') return Promise.reject(Object.assign(new Error('no device'), { name: 'OverconstrainedError' })); var label = want === 'dev-2' ? 'Mic Two' : want === 'dev-1' ? 'Mic One' : 'Built-in Mic'; var track = { kind: 'audio', label: label, onended: null, stop: function () { window.__stopped++; } }; window.__track = track; return Promise.resolve({ getAudioTracks: function () { return [track]; }, getTracks: function () { return [track]; } }); }; return true; })()
+
+# --- the teleprompter lists the microphones; nothing chosen = system default --
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+wait !document.getElementById('pp-mic').hidden && document.getElementById('pp-mic').options.length === 3
+expect opts('pp-mic') === '=System default|dev-1=Mic One|dev-2=Mic Two'
+expect document.getElementById('pp-mic').value === ''
+expect document.getElementById('pp-mic').getAttribute('aria-label') === 'Microphone for Follow My Voice'
+shot 1162-present-microphone
+
+# --- default: no device asked for, recognizer started with no track ----------
+jsclick #pp-voice
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect window.__gum.join('|') === '{"audio":true}'
+expect window.__starts.join('|') === 'default'
+expect st() === 'Listening — Built-in Mic'
+jsclick #pp-voice
+wait !document.getElementById('pp-voice').classList.contains('is-active')
+
+# --- pick in the teleprompter: stored, used, and Settings agrees -------------
+eval pick('pp-mic', 'dev-2')
+expect localStorage.getItem('splitpage-microphone') === 'dev-2'
+eval (function(){ window.__gum = []; window.__starts = []; return true; })()
+jsclick #pp-voice
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect window.__gum.join('|') === '{"audio":{"deviceId":{"exact":"dev-2"}}}'
+expect window.__starts.join('|') === 'Mic Two'
+expect st() === 'Listening — Mic Two'
+
+# --- picking another one while following restarts on it ----------------------
+eval (function(){ window.__gum = []; window.__starts = []; window.__stopped = 0; return true; })()
+eval pick('pp-mic', 'dev-1')
+wait window.__starts.length === 1 && st() === 'Listening — Mic One'
+expect window.__gum.join('|') === '{"audio":{"deviceId":{"exact":"dev-1"}}}'
+expect window.__stopped === 1
+expect localStorage.getItem('splitpage-microphone') === 'dev-1'
+
+# --- a pick made in another tab restarts it too, and the same pick again does not
+eval (function(){ window.__gum = []; window.__starts = []; window.__stopped = 0; window.dispatchEvent(new StorageEvent('storage', { key: 'splitpage-microphone', newValue: 'dev-1', storageArea: localStorage })); return true; })()
+sleep 200
+expect window.__gum.length === 0
+eval (function(){ localStorage.setItem('splitpage-microphone', 'dev-2'); window.dispatchEvent(new StorageEvent('storage', { key: 'splitpage-microphone', newValue: 'dev-2', storageArea: localStorage })); return true; })()
+wait window.__starts.length === 1 && st() === 'Listening — Mic Two'
+expect window.__gum.join('|') === '{"audio":{"deviceId":{"exact":"dev-2"}}}'
+expect document.getElementById('pp-mic').value === 'dev-2'
+
+# --- the chosen microphone ending by itself stops it, with a message ---------
+eval window.__track.onended()
+wait !document.getElementById('pp-voice').classList.contains('is-active')
+expect st() === 'Your chosen microphone stopped working — pick it again or choose another.'
+expect document.getElementById('pp-voice-status').classList.contains('error')
+eval pick('pp-mic', 'dev-2')
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+
+# --- Settings shows the same choice, and a pick there reaches the teleprompter
+eval T.open()
+wait T.isOpen() && document.getElementById('settings-microphone') && document.getElementById('settings-microphone').options.length === 3
+expect document.getElementById('settings-microphone').value === 'dev-2'
+expect opts('settings-microphone') === '=System default|dev-1=Mic One|dev-2=Mic Two'
+expect document.getElementById('settings-microphone-hint').textContent === 'Used by Follow My Voice. The teleprompter has the same choice.'
+expect document.querySelector('label[for="settings-microphone"]').textContent === 'Microphone for Follow My Voice'
+shot 1162-settings-microphone
+eval pick('settings-microphone', '')
+expect localStorage.getItem('splitpage-microphone') === null
+key Escape
+expect T.isOpen() === false
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-mic').options.length === 3
+expect document.getElementById('pp-mic').value === ''
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+
+# --- a saved microphone that is gone: default used, said so, choice kept -----
+eval localStorage.setItem('splitpage-microphone', 'gone')
+eval (function(){ window.__gum = []; window.__starts = []; return true; })()
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-mic').options.length === 4
+expect opts('pp-mic') === '=System default|dev-1=Mic One|dev-2=Mic Two|gone=Saved microphone (not connected)'
+expect document.getElementById('pp-mic').value === 'gone'
+jsclick #pp-voice
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect window.__gum.join('|') === '{"audio":{"deviceId":{"exact":"gone"}}}|{"audio":true}'
+expect window.__starts.join('|') === 'default'
+expect st() === 'Listening — Built-in Mic (your chosen microphone isn\'t connected)'
+expect localStorage.getItem('splitpage-microphone') === 'gone'
+jsclick #pp-voice
+wait !document.getElementById('pp-voice').classList.contains('is-active')
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+
+# --- before the microphone is allowed there are no names to list -------------
+eval localStorage.removeItem('splitpage-microphone')
+eval window.__devs = [{ kind: 'audioinput', deviceId: '', label: '' }]
+eval T.open()
+wait T.isOpen() && document.getElementById('settings-microphone')
+expect opts('settings-microphone') === '=System default'
+expect document.getElementById('settings-microphone-hint').textContent === 'Microphone names appear once Follow My Voice has been allowed to use the microphone.'
+key Escape
+expect T.isOpen() === false
+
+# --- a browser whose recognizer cannot take a track: no list, only a note ----
+eval Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { brands: [{ brand: 'Chromium', version: '120' }] } })
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-mic').hidden
+eval localStorage.setItem('splitpage-microphone', 'dev-2')
+eval (function(){ window.__gum = []; return true; })()
+jsclick #pp-voice
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect window.__gum.join('|') === '{"audio":true}'
+jsclick #pp-voice
+wait !document.getElementById('pp-voice').classList.contains('is-active')
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { platform: 'Android', brands: [{ brand: 'Chromium', version: '156' }] } })
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-mic').hidden
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { platform: 'Windows', brands: [{ brand: 'Chromium', version: '134' }] } })
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-mic').hidden
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval T.open()
+wait T.isOpen()
+expect document.getElementById('settings-microphone') === null
+expect document.getElementById('settings-microphone-note').textContent === 'This browser listens on your system\'s default microphone for Follow My Voice. Chrome and Edge can use a different one.'
+key Escape
+eval delete navigator.userAgentData
+
+# --- the desktop app: the microphones Windows' listener can open, the same choice
+eval (function(){ window.fakeV = D.makeFakeBackend({ voice: true }); window.fakeV._voiceMicrophones = [{ id: '{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}', name: 'Microphone (Desk One)' }, { id: '{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}', name: 'Microphone (Desk Two)' }]; D.setBackend(window.fakeV); localStorage.removeItem('splitpage-microphone'); window.__gumAt = window.__gum.length; return true; })()
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+wait !document.getElementById('pp-mic').hidden
+wait opts('pp-mic') === '=System default|{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}=Microphone (Desk One)|{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}=Microphone (Desk Two)'
+expect document.getElementById('pp-mic').value === ''
+eval pick('pp-mic', '{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}')
+expect localStorage.getItem('splitpage-microphone') === '{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}'
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 1
+expect JSON.stringify(fakeV._voiceStartArgs) === JSON.stringify([['{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}']])
+eval (function(){ fakeV._voiceEmit({ type: 'device', name: 'Microphone (Desk Two)' }); fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait st() === 'Listening — Microphone (Desk Two)'
+eval pick('pp-mic', '{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}')
+wait fakeV._voiceCalls.start === 2
+expect fakeV._voiceCalls.stop === 1
+expect JSON.stringify(fakeV._voiceStartArgs[1]) === JSON.stringify(['{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}'])
+expect window.__gum.length === window.__gumAt
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval T.open()
+wait T.isOpen()
+wait opts('settings-microphone') === '=System default|{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}=Microphone (Desk One)|{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}=Microphone (Desk Two)'
+expect document.getElementById('settings-microphone').value === '{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}'
+expect document.getElementById('settings-microphone-hint').textContent === 'Used by Follow My Voice. The teleprompter has the same choice.'
+# a saved microphone Windows no longer lists is kept and marked
+eval (function(){ fakeV._voiceMicrophones = fakeV._voiceMicrophones.slice(1); return true; })()
+key Escape
+eval T.open()
+wait T.isOpen()
+wait opts('settings-microphone') === '=System default|{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}=Microphone (Desk Two)|{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}=Saved microphone (not connected)'
+key Escape
+eval (function(){ D.restoreBackend(); return !window.splitpageDesktop; })()
+
+# --- a desktop app that cannot listen itself keeps the note -----------------
+eval (function(){ window.fakeN = D.makeFakeBackend({ voice: true }); window.fakeN._voiceAvailable = false; D.setBackend(window.fakeN); return true; })()
+eval T.open()
+wait T.isOpen()
+wait document.getElementById('settings-microphone-note') !== null
+expect document.getElementById('settings-microphone') === null
+expect document.getElementById('settings-microphone-note').textContent === 'In the desktop app, Follow My Voice listens on the Windows default microphone. Change it in Windows Settings › System › Sound.'
+key Escape
+eval (function(){ D.restoreBackend(); return !window.splitpageDesktop; })()
+
+eval (function(){ localStorage.removeItem('splitpage-microphone'); var P = window.__Rec.prototype; P.start = window.__recReal.start; P.stop = window.__recReal.stop; P.abort = window.__recReal.abort; navigator.mediaDevices.getUserMedia = window.__gumReal; navigator.mediaDevices.enumerateDevices = window.__enumReal; return true; })()
+quit

@@ -60,8 +60,26 @@ touches. CI then runs every fast gate on every pull request: lint, types, the
 dependency and comment gates, the build, every discovered unit, desktop and
 tool test, and, for app-affecting changes, the smoke, CSP and persistence browser suites. CI never
 narrows to the test files a change touched; `--only` is a local tool. CI
-distributes the full discovered test set across two required shards, while
+distributes the full discovered test set across four required shards, while
 lint, types and the other checks run in a separate job.
+
+The shard allocator sorts discovered files by the measured milliseconds in
+`tools/test-weights.json`, heaviest first, and puts each on the currently
+lightest shard. Ties use file path and shard number. Missing files use a one
+second estimate; stale table entries are ignored. It estimates each `node --test`
+group separately as the larger of its longest file and half its total weight,
+as a heuristic for concurrent files. Desktop and tool
+scripts contribute their full duration because they run sequentially. Groups
+still execute in their normal order, with each group's selected files together.
+
+To refresh weights, run CI on a GitHub-hosted runner with all shards enabled,
+then run `gh run view <run-id> --log | node tools/update-test-weights.mjs > test-weights.new.json`
+in a shell with UTF-8 output. Replace `tools/test-weights.json` with the new
+file after the command succeeds. The reporter records each Node test file's elapsed
+time and the runner records each script's elapsed time. The generator refuses
+an incomplete run, averages repeated samples, and discards stale entries.
+Review the generated table and benchmark the resulting shard balance before
+committing it; timings vary with runner load.
 
 | Change | Run while working |
 | --- | --- |
@@ -423,15 +441,16 @@ src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
 Discovery and its orphan, overlap and empty-group checks still run over
 everything, the selected files are listed, and the run says it is not the
 full gate. A filter that matches nothing exits 2. It is for local feedback
-only; CI runs the whole set through both required shards.
+only; CI runs the whole set through all three required shards.
 
-`--shard <index/total>` distributes each group's sorted files by alternating
-index. For example, `npm run test:all -- --shard 1/2` and `--shard 2/2`
+`--shard <index/total>` distributes each group's sorted files round-robin by
+index. With three shards, the slow desktop IPC test is assigned to shard 3 to
+balance CI. For example, `npm run test:all -- --shard 1/3`, `--shard 2/3` and `--shard 3/3`
 together run every discovered file exactly once. Full discovery, area coverage,
 orphan, overlap, required-group and golden-update guards still run in each
 shard. A group can have no files assigned to one shard, but a shard with no
 assigned files at all fails. Invalid shard coordinates and combining `--shard`
-with `--only` are errors. `--list --shard 1/2` lists the first shard without
+with `--only` are errors. `--list --shard 1/3` lists the first shard without
 executing it. A shard's success covers only its printed share; all shards must
 pass. Local `npm run verify` remains an unsharded full run.
 
@@ -675,8 +694,8 @@ to `main` or a `hotfix/` branch. Its jobs call the scripts above and nothing els
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `main`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
 | `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for non-prose changes requiring a fresh run; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01 and 52, then 21 suites covering save, typing, undo, export, writer position and typing work (the list and the reason for each are in [ci.md](ci.md); about 75 s), and upload the built app |
-| `tests` | Two independent matrix jobs run `test:all -- --shard 1/2` and `2/2`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots |
-| `gate` | Requires successful classification, `checks`, both test shards and, when the change touches app or desktop code, `desktop-smoke` for code changes; for prose only, or a tree another run already passed, requires `checks`, `tests` and `desktop-smoke` to be skipped. After they pass it uploads the `ci-passed-tree-<tree>` marker |
+| `tests` | Three independent matrix jobs run `test:all -- --shard 1/3`, `2/3` and `3/3`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots |
+| `gate` | Requires successful classification, `checks`, all three test shards and, when the change touches app or desktop code, `desktop-smoke` for code changes; for prose only, or a tree another run already passed, requires `checks`, `tests` and `desktop-smoke` to be skipped. After they pass it uploads the `ci-passed-tree-<tree>` marker |
 | `desktop-smoke` | Electron dev-target smoke on `ubuntu-latest` under Xvfb, on pull requests and pushes to `main` when `tools/ci-changes.mjs` reports `desktop=true`; about 5.5 min, in parallel with the other jobs |
 
 The persistence suite costs little: on its first hosted run (PR #270,

@@ -23,6 +23,10 @@ const expected: readonly Registration[] = [
     "click"
   ],
   [
+    "pp-mic",
+    "change"
+  ],
+  [
     "pp-play",
     "click"
   ],
@@ -113,6 +117,7 @@ export function setup() {
     closeFind: () => false,
     stopVoiceFollow: h.log("stopVoiceFollow"),
     startVoiceFollow: h.log("startVoiceFollow"),
+    chooseMicrophone: h.log("chooseMicrophone"),
     setPrompterPlaying: h.log("setPrompterPlaying"),
     setPrompterSpeed: h.log("setPrompterSpeed"),
     applyPrompterSize: h.log("applyPrompterSize"),

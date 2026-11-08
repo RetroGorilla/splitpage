@@ -98,7 +98,24 @@ fs.writeFileSync(psFile, [
   "  $reader = [Func[string,string]]{ param($key) if ($values.ContainsKey($key)) { $values[$key] } else { $null } }",
   "  $code = [SplitpageVoiceConsent]::Check($reader)",
   "  [Console]::Out.WriteLine('consent:' + $(if ($null -eq $code) { '-' } else { $code }))",
-  "}"
+  "}",
+  "$levels = foreach ($pcm in @(@(0,0,0,0), @(1,0,0,0), @(0,0,255,255), @(0,64,0,0), @(255,127,0,0), @(0,128,0,0))) {",
+  "  [SplitpageVoiceLevel]::Of([byte[]]$pcm, $pcm.Length)",
+  "}",
+  "[Console]::Out.WriteLine('levels:' + ($levels -join ' '))",
+  "$in = New-Object SplitpageVoiceInput",
+  "$in.Push([byte[]](1,2,3)); $in.Push([byte[]](4,5))",
+  "$buf = New-Object byte[] 4",
+  "$first = $in.Read($buf, 0, 4)",
+  "$firstBytes = ($buf[0..3] -join ',')",
+  "$in.Finish()",
+  "$second = $in.Read($buf, 0, 4)",
+  "$third = $in.Read($buf, 0, 4)",
+  "[Console]::Out.WriteLine('input:' + $first + ':' + $firstBytes + ' ' + $second + ':' + $buf[0] + ' ' + $third + ' ' + $in.Length)",
+  "$listed = [SplitpageVoiceDevice]::ActiveCapture()",
+  "$ids = foreach ($m in $listed) { $m[0] }",
+  "[Console]::Out.WriteLine('capture:' + $listed.Length + ':' + ($ids -join '|'))",
+  "[Console]::Out.WriteLine('missing:' + $(if ($null -eq [SplitpageVoiceDevice]::ActiveCaptureName('{0.0.1.00000000}.{00000000-0000-0000-0000-000000000000}')) { 'null' } else { 'found' }))"
 ].join("\r\n"));
 
 const ps = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
@@ -117,6 +134,8 @@ const consentGot = {};
 Object.keys(consentScenarios).forEach((k, i) => {
   consentGot[k] = (lines[Object.keys(scenarios).length + 1 + i] || "").replace(/^consent:/, "");
 });
+
+const tagged = (tag) => (lines.find((line) => line.startsWith(tag + ":")) || "").slice(tag.length + 1);
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -181,6 +200,24 @@ test("this user's own microphone switch off is blocked-all", () => {
 
 test("only \"let desktop apps\" off, with the rest allowed, is blocked-desktop", () => {
   assert.equal(consentGot.hkcuDesktopDenied, "blocked-desktop");
+});
+
+test("a chosen microphone's level: exact silence is no signal, any other sample is, loud is up to 100", () => {
+  assert.deepEqual(tagged("levels").split(" "), ["0", "1", "1", "50", "99", "100"]);
+});
+
+test("the stream the recogniser reads fills each read, and only ends short once the capture is finished", () => {
+  assert.equal(tagged("input"), "4:1,2,3,4 1:5 0 -1");
+});
+
+test("the capture microphones are listed by endpoint id without opening any, and an unknown id is not found", () => {
+  const capture = tagged("capture");
+  const count = capture.slice(0, capture.indexOf(":"));
+  const ids = capture.slice(capture.indexOf(":") + 1);
+  assert.match(count, /^\d+$/);
+  for (const id of ids ? ids.split("|") : []) assert.match(id, /^\{0\.0\.1\.00000000\}\.\{[0-9a-f-]{36}\}$/i);
+  console.log("       capture microphones listed: " + count);
+  assert.equal(tagged("missing"), "null");
 });
 
 const failures = [];

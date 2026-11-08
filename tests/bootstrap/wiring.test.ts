@@ -1026,7 +1026,7 @@ const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
   "document mouseup/B": 1, "document paste/C": 1, "document securitypolicyviolation/B": 1, "document selectionchange/B": 3,
   "document splitpage:pref/B": 4, "document undo-owner-cleared/B": 1, "document visibilitychange/B": 2, "window beforeinput/C": 1,
   "window blur/B": 2, "window click/C": 3, "window compositionstart/C": 1, "window cut/C": 1, "window dragstart/C": 1, "window drop/C": 1,
-  "window focus/C": 2, "window focusin/C": 2, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 6,
+  "window focus/C": 2, "window focusin/C": 2, "window input/C": 1, "window keydown/B": 4, "window keydown/C": 6,
   "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 1,
   "window paste/C": 1, "window pointerdown/C": 1, "window resize/B": 5,
   "window scroll/C": 2, "window storage/B": 2, "window touchmove/B": 1, "window wheel/B": 1

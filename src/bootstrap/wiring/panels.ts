@@ -6,6 +6,7 @@ import { historyOwner } from "./history.ts";
 import { renderHistory } from "./history-panel.ts";
 import { currentProductionTags } from "./production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
+import { currentWhoList } from "./who-list.ts";
 import { onPainted } from "../../features/rows/render.ts";
 import { refreshGalleryOverlay } from "../../features/gallery/overlay.ts";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.ts";
@@ -68,6 +69,7 @@ export function mountPanelListenersFeature(): void {
     }),
     currentProductionTags()?.onTagged(refreshTagViews) ?? (() => {}),
     currentPlainTags()?.onTagged(refreshTagViews) ?? (() => {}),
+    currentWhoList()?.onPicked(refreshTagViews) ?? (() => {}),
     onScriptStats((targetSeconds: number) => {
       setRundownExtraSeconds(targetSeconds);
       renderRundown();

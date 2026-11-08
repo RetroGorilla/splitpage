@@ -1,5 +1,6 @@
 import type { CellClipboardPorts } from "./ports.ts";
-import type { Attachment, AttachedCount, BrollScope, ClipboardPorts, PasteRequest, Pasted, TextRange, VideoFileAttachment } from "../../application/commands/clipboard.ts";
+import type { Attachment, AttachedCount, BrollScope, ClipboardPorts, OtherFileAttachment, PasteRequest, Pasted, TextRange, VideoFileAttachment } from "../../application/commands/clipboard.ts";
+import { ATTACHABLE_FILE, VIDEO_FILE_EXT } from "../../../shared/video-path.ts";
 import type { CellInput, NormalizeOptions, Run } from "../../core/text/runs.ts";
 import type { VideoFiles, VideoPosterFrame } from "../../application/media/video-files.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
@@ -13,6 +14,7 @@ export interface ClipboardMediaInput {
 export interface ClipboardMediaReader {
   frame?: ((file: File) => Promise<VideoPosterFrame | null>) | undefined;
   grant?: VideoFiles["grant"] | undefined;
+  path?: ((file: File) => string | null) | undefined;
 }
 interface CellPasteResult {
   done: boolean;
@@ -362,13 +364,27 @@ export function readClipboardFiles(files: FileList | readonly File[] | null | un
   video = video || {};
   const list: File[] = Array.prototype.slice.call(files || []) as File[];
   const attach: (Attachment | null)[] = [];
+  const refused: string[] = [];
   let skipImages = false;
   const jobs = list.map(function (file) {
-    const type = String(file && file.type || "");
+    const given = String(file && file.type || "");
+    const type = given.indexOf("image/") !== 0 && given.indexOf("video/") !== 0 && VIDEO_FILE_EXT.test(String(file && file.name || "")) ? "video/" : given;
+    if (type.indexOf("image/") !== 0 && type.indexOf("video/") !== 0) {
+      const name = String(file && file.name || "");
+      if (!ATTACHABLE_FILE.test(name)) { refused.push(name); return Promise.resolve(); }
+      const at = video.path ? video.path(file) : null;
+      const item: { -readonly [K in keyof OtherFileAttachment]: OtherFileAttachment[K] } = { kind: "file", name: name, size: file.size || 0 };
+      if (at) item.path = at;
+      attach.push(item);
+      if (video.grant) video.grant(file, { name: name, size: item.size, ...(at ? { location: { kind: "path", path: at } } : {}) });
+      return Promise.resolve();
+    }
     if (type.indexOf("video/") === 0) {
       const item: { -readonly [K in keyof VideoFileAttachment]: VideoFileAttachment[K] } = { kind: "videoFile", name: String(file.name || ""), size: file.size || 0, poster: null };
+      const at = video.path ? video.path(file) : null;
+      if (at) item.path = at;
       attach.push(item);
-      if (video.grant) video.grant(file, { name: item.name, size: item.size });
+      if (video.grant) video.grant(file, { name: item.name, size: item.size, ...(at ? { location: { kind: "path", path: at } } : {}) });
       if (!video.frame) return Promise.resolve();
       return Promise.resolve(video.frame(file)).then(function (got) {
         if (got && got.duration) item.duration = got.duration;
@@ -395,7 +411,7 @@ export function readClipboardFiles(files: FileList | readonly File[] | null | un
   }
   return Promise.all(jobs).then(function () {
     const kept = attach.filter(Boolean) as Attachment[];
-    return { attach: kept, skipImages: skipImages, lost: attach.length - kept.length };
+    return { attach: kept, skipImages: skipImages, lost: attach.length - kept.length, refused: refused };
   });
 }
 
@@ -411,7 +427,7 @@ function clipboardImageHashes(html: string): string[] {
 
 export function hasMediaFiles(files: FileList | readonly File[] | null | undefined, html: string = "") {
   return Array.prototype.some.call(files || [], function (f: File | null | undefined) {
-    return /^(image|video)\//.test(String(f && f.type || ""));
+    return /^(image|video)\//.test(String(f && f.type || "")) || ATTACHABLE_FILE.test(String(f && f.name || ""));
   }) || clipboardImageHashes(html).length > 0;
 }
 

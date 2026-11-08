@@ -30,9 +30,10 @@ function createCloseQuit({
   app, dialog, testMode: TEST_MODE, tabs, windowsById, liveWindows, tabHasFile, tabIsUnsaved, draftsHasDraft,
   requestDraftFlush, draftFlushBudgetMs: DRAFT_FLUSH_BUDGET_MS, draftStore, draftsList,
   draftsDiscardForUserDecision, draftsDiscardClean, consumeTestDialogAnswer, activateTab, focusWindow,
-  destroyTabView, startInstallerNow, prompterShare, voiceHelper
+  destroyTabView, startInstallerNow, prompterShare, voiceHelper, bundleCopies
 }: DesktopCloseQuitDependencies) {
   let quitConfirmed = false;
+  let holdingForCopies = false;
   let quitKeepingDrafts = false;
   const sessionEndKeep = { holder: "session-end" };
   let sessionWritesFrozen = false;
@@ -129,6 +130,37 @@ function createCloseQuit({
     });
   }
 
+  function askAboutCopies(parentWin: BrowserWindow | undefined): "wait" | "quit-anyway" {
+    if (TEST_MODE) process.stderr.write("[splitpage] test question (copies)\n");
+    const answer = consumeTestDialogAnswer();
+    if (answer === "wait" || answer === "quit-anyway") return answer;
+    const picked = dialog.showMessageBoxSync(parentWin, {
+      type: "warning",
+      buttons: ["Wait", "Quit anyway"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: "Splitpage",
+      message: "Splitpage is still copying files.",
+      detail: "Wait finishes the copies, then quits. Quit anyway stops copying. Completed copies stay; some files may not open from the saved script."
+    });
+    return picked === 1 ? "quit-anyway" : "wait";
+  }
+
+  function holdForCopies(event: { preventDefault: () => void }, parentWin: BrowserWindow | undefined, resume: () => void): boolean {
+    if (holdingForCopies) { event.preventDefault(); return true; }
+    const copies = bundleCopies();
+    if (!copies || !copies.busy()) return false;
+    event.preventDefault();
+    holdingForCopies = true;
+    const settled = askAboutCopies(parentWin) === "quit-anyway" ? copies.abortAll() : copies.idle();
+    settled.then(() => {
+      holdingForCopies = false;
+      resume();
+    }, () => { holdingForCopies = false; });
+    return true;
+  }
+
   function settleDraftsForClose(tabIds: (string | undefined)[], discardUnsaved: boolean, reason: string) {
     const unsaved: (string | undefined)[] = [];
     const clean: (string | undefined)[] = [];
@@ -153,6 +185,7 @@ function createCloseQuit({
       }
       if (closeConfirmedWindows.has(win)) return;
       if (rec.closeKeepingDrafts) { event.preventDefault(); return; }
+      if (!liveWindows().some((w) => w.win !== win) && holdForCopies(event, win, () => { if (!win.isDestroyed()) win.close(); })) return;
 
       const tabIds = rec.tabIds.slice();
       const confirmClose = (closing: (string | undefined)[]) => {
@@ -242,7 +275,7 @@ function createCloseQuit({
       installQuitWatcher = done;
       app.quit();
       if (installQuitWatchdog) installQuitWatchdog.stop();
-      installQuitWatchdog = createQuitWatchdog(3000, () => quitKeepingDrafts, () => {
+      installQuitWatchdog = createQuitWatchdog(3000, () => quitKeepingDrafts || holdingForCopies, () => {
         installQuitWatchdog = null;
         if (settled) return;
         installOnQuit = false;
@@ -258,6 +291,8 @@ function createCloseQuit({
       if (sessionEnding) return;
       if (quitConfirmed) return;
       if (quitKeepingDrafts) { event.preventDefault(); return; }
+      const front = liveWindows().find((w) => !w.win.isDestroyed());
+      if (holdForCopies(event, front ? front.win : undefined, () => app.quit())) return;
 
       const tabIds = allTabsInOrder();
       const parentOf = (list: DesktopMainTab[]) => {
@@ -307,6 +342,8 @@ function createCloseQuit({
       }
       if (prompterShare()) (prompterShare() as NonNullable<ReturnType<typeof prompterShare>>).closeAll();
       if (voiceHelper()) (voiceHelper() as NonNullable<ReturnType<typeof voiceHelper>>).stopAll();
+      const copies = bundleCopies();
+      if (copies && copies.busy()) void copies.abortAll();
       if (draftStore()) { try { (draftStore() as NonNullable<ReturnType<typeof draftStore>>).markCleanExit(); } catch { } }
     });
   }

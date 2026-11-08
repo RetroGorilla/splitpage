@@ -68,6 +68,7 @@ const CARET_REFUSAL_NOTICE: Readonly<Record<TagCaretRefusal, string>> = {
   audio: "Tags go in the Visual column. Put the cursor there, or select words to label.",
   link: "A tag can't start inside a link. Move the cursor outside the link first.",
   tag: "A tag can't start inside another tag. Move the cursor outside it first.",
+  "tag-selection": "That selection includes an existing tag. Select only untagged words.",
   open: "A tag is already open. Type its name and press Tab, or Esc to cancel.",
   elsewhere: "Select the words you want to label first."
 };

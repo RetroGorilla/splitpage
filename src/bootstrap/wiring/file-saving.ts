@@ -17,6 +17,8 @@ import { notices } from "./ports/effects.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { clock, ids } from "./ports/identity.ts";
 import { pictures } from "./ports/pictures.ts";
+import { beginBundleSave } from "./gallery.ts";
+import { undoOwner } from "./undo.ts";
 
 let started: FileSavingMount | null = null;
 
@@ -24,6 +26,11 @@ function fileSavingPorts(deferred: FileSavingDeferredPorts): FileSavingPorts {
   return {
     deferred,
     edits: { edit: runDocumentEdit },
+    history: {
+      amendRows: (fix) => undoOwner().amendRows(fix),
+      hold: () => undoOwner().hold(),
+      reset: () => { undoOwner().reset(); }
+    },
     ids,
     clock,
     document: { current: documentReader.current, stamp: (stamp) => stampDocument(stamp) },
@@ -62,7 +69,8 @@ function fileSavingPorts(deferred: FileSavingDeferredPorts): FileSavingPorts {
     },
     notices: { show: notices.show, imagesLeftOut: (count, name) => { warnImagesLeftOut(count, name); } },
     preferences: { editorName: () => getEditorName(), autosave: () => preferences().autosave() },
-    page: document
+    page: document,
+    bundles: { beginSave: beginBundleSave }
   };
 }
 

@@ -133,7 +133,7 @@ test("Save after a desktop import asks for a new project file and never writes t
   assert.equal(currentHome().kind, "none", "the desktop import has no file either");
   edit("Typed after the desktop import.");
   await saveDoc();
-  assert.deepEqual(asked, [{ suggestedName: "notes.md", filters: DESKTOP_SAVE_CHOICES }], "Save asks where, with the usual choices");
+  assert.deepEqual(asked, [{ suggestedName: "notes.md", filters: DESKTOP_SAVE_CHOICES, script: true }], "Save asks where, with the usual choices, as a script save");
   assert.equal(written.length, 1, "Save wrote one file");
   assert.notEqual(written[0], source.id, "and not the imported one");
   assert.equal(new TextDecoder().decode((await fake.readFile(source.id)).bytes), SOURCE, "the imported file is unchanged");

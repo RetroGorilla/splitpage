@@ -14,6 +14,13 @@ type FakeExtras = Pick<DesktopPort, "listRecents"> & {
   _externalOpens?: unknown[];
   _videoGrants?: Record<string, unknown>;
   _videoOpens?: unknown[];
+  _videoPaths?: Record<string, string>;
+  _videoPathOpens?: string[];
+  _videoPathAnswer?: Awaited<ReturnType<DesktopPort["openVideoPath"]>>;
+  _bundleCalls?: { token: string; job: string }[];
+  _bundleAnswer?: Awaited<ReturnType<DesktopPort["bundleVideoFile"]>>;  _bundleCarry?: Parameters<DesktopPort["onBundleCarry"]>[0];
+  _bundleCancels?: string[];
+  _bundledOpens?: string[];
   _printed?: string[];
   _printAnswer?: Awaited<ReturnType<DesktopPort["printToPdf"]>>;
   _thumbCalls?: [string, string][];
@@ -33,10 +40,13 @@ type FakeBlobBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "
   _blobCalls?: Record<string, unknown>[];
   _blobFailNext?: { code: string } | null;
 };
-type FakeVoiceBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "voiceStart" | "voiceStop"> & {
+type FakeVoiceBackend = Pick<DesktopPort, "platform" | "appVersion" | "tabId" | "windowId"> & Pick<DesktopTestPort, "voiceStart" | "voiceStop" | "voiceMicrophones"> & {
   voiceStatus?: DesktopTestPort["voiceStatus"];
   onVoiceEvent?: DesktopPort["onVoiceEvent"];
-  _voiceCalls?: { status: number; start: number; stop: number };
+  _voiceCalls?: { status: number; start: number; stop: number; microphones: number };
+  _voiceStartArgs?: unknown[][];
+  _voiceMicrophones?: { id: string; name: string }[];
+  _voiceMicrophonesAnswer?: Awaited<ReturnType<DesktopPort["voiceMicrophones"]>>;
   _voiceAvailable?: boolean;
   _voiceSession?: number;
   _voiceRunning?: boolean;
@@ -173,6 +183,28 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
       (this._videoOpens = this._videoOpens || []).push(name);
       return Promise.resolve({ ok: true });
     },
+    videoFilePath: function (file: unknown) {
+      const name = file && (file as Partial<Record<keyof Pick<DesktopFileEntry, "name">, unknown>>).name;
+      const found = this._videoPaths && typeof name === "string" ? this._videoPaths[name] : undefined;
+      return typeof found === "string" ? found : null;
+    },
+    openVideoPath: function (storedPath: string) {
+      (this._videoPathOpens = this._videoPathOpens || []).push(storedPath);
+      return Promise.resolve(this._videoPathAnswer || { ok: true });
+    },
+    bundleVideoFile: function (token: string, job: string, onProgress?: Parameters<DesktopPort["bundleVideoFile"]>[2]) {
+      (this._bundleCalls = this._bundleCalls || []).push({ token, job });
+      const name = this._videoGrants && this._videoGrants[token];
+      if (typeof name !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
+      if (onProgress) onProgress({ done: 1, total: 1 });
+      return Promise.resolve(this._bundleAnswer || { ok: true, name: name });
+    },
+    onBundleCarry: function (cb: Parameters<DesktopPort["onBundleCarry"]>[0]) { this._bundleCarry = cb; },
+    cancelBundle: function (job: string) { (this._bundleCancels = this._bundleCancels || []).push(job); },
+    openBundledFile: function (name: string) {
+      (this._bundledOpens = this._bundledOpens || []).push(name);
+      return Promise.resolve({ ok: true });
+    },
     printToPdf: function (html: string) {
       (this._printed = this._printed || []).push(html);
       return Promise.resolve(this._printAnswer || strBytes("%PDF-1.7\n%fake desktop print\n"));
@@ -258,7 +290,9 @@ export function makeFakeDesktopBackend(opts?: FakeOptions) {
 
 function addFakeDesktopVoice(backend: FakeVoiceBackend) {
   let handler: Parameters<NonNullable<FakeVoiceBackend["onVoiceEvent"]>>[0] | null = null;
-  backend._voiceCalls = { status: 0, start: 0, stop: 0 };
+  backend._voiceCalls = { status: 0, start: 0, stop: 0, microphones: 0 };
+  backend._voiceStartArgs = [];
+  backend._voiceMicrophones = [];
   backend._voiceAvailable = true;
   backend._voiceSession = 0;
   backend._voiceRunning = false;
@@ -266,16 +300,22 @@ function addFakeDesktopVoice(backend: FakeVoiceBackend) {
     (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).status++;
     return Promise.resolve({ available: backend._voiceAvailable as boolean });
   };
-  backend.voiceStart = function () {
+  backend.voiceMicrophones = function () {
+    (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).microphones++;
+    if (backend._voiceMicrophonesAnswer) return Promise.resolve(backend._voiceMicrophonesAnswer);
+    return Promise.resolve({ ok: true, microphones: (backend._voiceMicrophones as { id: string; name: string }[]).slice() });
+  };
+  backend.voiceStart = function (...args: unknown[]) {
+    (backend._voiceStartArgs as unknown[][]).push(args);
     (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).start++;
     if (backend._voiceStartAnswer) return Promise.resolve(backend._voiceStartAnswer);
     (backend._voiceSession as number)++;
     backend._voiceRunning = true;
     return Promise.resolve({ ok: true, session: backend._voiceSession as number });
   };
-  backend.voiceStop = function () {
+  backend.voiceStop = function (session?: number) {
     (backend._voiceCalls as NonNullable<FakeVoiceBackend["_voiceCalls"]>).stop++;
-    backend._voiceRunning = false;
+    if (session === undefined || session === backend._voiceSession) backend._voiceRunning = false;
     return Promise.resolve({ ok: true });
   };
   backend.onVoiceEvent = function (cb: Parameters<NonNullable<FakeVoiceBackend["onVoiceEvent"]>>[0]) { handler = cb; };

@@ -1,3 +1,4 @@
+import { acceptGhostOnTab, dismissesTagGhost, plainTagKeydown } from "../../features/common/tag-completion-keys.ts";
 import { documentReader as numberedDocument } from "./ports/document.ts";
 import type { UndoRoutePorts } from "../../features/undo/routes.ts";
 import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.ts";
@@ -67,7 +68,7 @@ import {
 } from "../../features/rows/render.ts";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.ts";
 import { pasteBeatsAt } from "../../features/clipboard/beat-select.ts";
-import { thumbnailsAfterPaste } from "./gallery.ts";
+import { offerBundleAfterDrop, thumbnailsAfterPaste } from "./gallery.ts";
 import {
   draftRedo,
   draftUndo,
@@ -96,6 +97,7 @@ import {
 import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.ts";
 import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-media.ts";
 import { videoFiles } from "./video-files.ts";
+import { desktopVideo } from "./desktop-video.ts";
 import { externalLinks } from "./ports/desktop.ts";
 import { IS_MAC } from "../../features/common/key-chips.ts";
 import {
@@ -112,6 +114,7 @@ import {
   updateUntaggedPrompt
 } from "../../features/tags/production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
+import { currentWhoList } from "./who-list.ts";
 import { renderProduction } from "../../features/tags/panels.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll, scheduleBrollRefresh } from "./broll.ts";
 import {
@@ -152,6 +155,7 @@ type ScriptClipboardExtra = Awaited<ReturnType<typeof readClipboardFiles>>;
 interface PasteAttached {
   readonly pictures: number;
   readonly videos: number;
+  readonly files?: number | undefined;
   readonly links?: readonly unknown[];
 }
 
@@ -383,6 +387,11 @@ const mediaRoutes = owned<ReturnType<typeof mountMediaRoutes>>();
 const mediaRoutePorts: MediaRoutePorts = {
   choose: function () { (document.getElementById("file-input") as HTMLElement).click(); },
   addPicture: handleImageFile,
+  attachFile: function (rowId, file) {
+    if (!hasMediaFiles([file])) { showToast(notAttachableText([String(file.name || "")]), "warn"); return; }
+    const cell = document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="visualText"]');
+    if (cell) insertIntoScriptCell(cell, "", "", [file]);
+  },
   removePicture: removeImage,
   removeLink: removeImageLink,
   openLink: videoFiles.openGallery
@@ -477,8 +486,17 @@ const rowsEditorPorts: RowsEditorPorts = {
   scriptCell: isScriptCell,
   hasMedia: hasMediaFiles,
   insert: insertIntoScriptCell,
-  notMedia: function () { showToast("Only pictures and video files go in a beat's Image section.", "warn"); }
+  notMedia: showNotAttached
 };
+
+function showNotAttached(files: FileList | readonly File[] | null | undefined): void {
+  showToast(notAttachableText(Array.prototype.map.call(files || [], function (f: File) { return String(f.name || ""); }) as string[]), "warn");
+}
+
+function notAttachableText(names: readonly string[]): string {
+  const what = names.length > 1 ? names.length + " files weren't attached." : names[0] ? "“" + names[0] + "” wasn't attached." : "That file wasn't attached.";
+  return what + " Splitpage doesn't attach programs, scripts, shortcuts or files without an extension.";
+}
 
 export function mountRowsEditingFeature(): ReturnType<typeof mountRowsEditor> {
   return rowsEditor.replace(function () {
@@ -522,6 +540,7 @@ export function onRootInput(e: RootInput): void {
   maybeCaptureBroll(e, cellEl);
   currentPlainTags()?.maybeOpen(e as InputEvent, cellEl);
   cellEditing().sync(cellEl);
+  currentWhoList()?.maybeOpen(e as InputEvent, cellEl);
   settleEndedComposition(e);
   afterScriptCellChange(cellEl);
 }
@@ -606,6 +625,7 @@ const editorFocusPorts: EditorFocusPorts = {
   leftEditable: function () {
     hideTagGhost();
     currentPlainTags()?.cancel();
+    currentWhoList()?.cancel();
     hideUntaggedPrompt();
     focusMemory().unmutePrompt();
   },
@@ -629,6 +649,7 @@ const editorFocusPorts: EditorFocusPorts = {
       updateToolbarState(active);
     }
     currentPlainTags()?.refresh();
+    currentWhoList()?.refresh();
     updateUntaggedPrompt();
   }
 };
@@ -656,11 +677,12 @@ const clipboardRoutePorts = {
   pasteDraft: pasteIntoDraft,
   hasMedia: hasMediaFiles,
   readMedia: function (files: FileList | readonly File[], html: string) {
-    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant }, html);
+    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant, path: desktopVideo.pathOf }, html);
   },
   capture: captureOperation,
   stillOwns: stillOwns,
   notAdded: showPictureNotAdded,
+  refused: showNotAttached,
   placeOf: capturePastePlace,
   restorePlace: restorePastePlace,
   findCell: function (rowId: string, field: string) {
@@ -692,12 +714,21 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
   if (!res.done) return;
   const lost = res.lost + (extra ? extra.lost : 0);
   if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
+  const refused = extra ? extra.refused : [];
+  if (refused.length) showToast(notAttachableText(refused), "warn");
   if (res.attached) {
     const attachedRowId = cellEl.getAttribute("data-id");
     announceAttached(res.attached, res.rowIndex, before);
     if (res.attached.links && res.attached.links.length) {
       const entry = undoOwner().last();
       thumbnailsAfterPaste(attachedRowId, res.attached.links, entry === before ? null : entry);
+    }
+    const located = (extra ? extra.attach : []).flatMap(function (item) {
+      return (item.kind === "videoFile" || item.kind === "file") && item.path ? [{ name: item.name, size: item.size, path: item.path }] : [];
+    });
+    if (attachedRowId && (res.attached.videos || res.attached.files) && located.length) {
+      const entry = undoOwner().last();
+      offerBundleAfterDrop(attachedRowId, located, entry === before ? null : entry);
     }
   }
   if (res.movedComments) {
@@ -709,10 +740,10 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
 }
 
 function announceAttached(attached: PasteAttached, rowIndex: number, before: unknown): void {
-  const pics = attached.pictures, vids = attached.videos;
   function n(count: number, one: string): string { return count === 1 ? one : count + " " + one + "s"; }
-  const what = pics && vids ? n(pics, "picture") + " and " + n(vids, "video")
-    : pics ? n(pics, "picture") : n(vids, "video");
+  const parts = ([[attached.pictures, "picture"], [attached.videos, "video"], [attached.files || 0, "file"]] as const)
+    .filter(function (p) { return p[0] > 0; }).map(function (p) { return n(p[0], p[1]); });
+  const what = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0] || n(0, "video");
   const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to beat " + (numberedDocument.numbering().beats[currentDocument()?.rows[rowIndex]?.id ?? ""]?.full ?? "");
   const entry = undoOwner().last();
   if (!entry || entry === before) { showToast(msg, "ok"); return; }
@@ -751,22 +782,16 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   const undoOwner = undoRoutes.owner();
   if (undoOwner && undoOwner.key(e)) return;
+  if (currentWhoList()?.keydown(e, cellEl)) { hideTagGhost(); return; }
   const plainTag = currentPlainTags();
-  if (plainTag && plainTag.isOpen(cellEl)) {
-    if (e.key === "Tab") { e.preventDefault(); plainTag.close(); return; }
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); plainTag.cancel(); return; }
-    if (e.key === "Backspace" && plainTag.emptyAtCaret() && plainTag.cancelOnBackspace()) { e.preventDefault(); return; }
-  }
+  if (plainTag && plainTag.isOpen(cellEl) && plainTagKeydown(e, plainTag, hideTagGhost)) return;
   const ghost = shownTagGhost();
-  if (e.key === "Tab" && ghost && ghost.cellEl === cellEl) {
-    if (acceptTagGhost()) { e.preventDefault(); return; }
-  }
+  if (acceptGhostOnTab(e, !!ghost && ghost.cellEl === cellEl, acceptTagGhost)) return;
   const suggestion = shownUntaggedSuggestion();
   if (e.key === "Tab" && !shownTagGhost() && suggestion && suggestion.cellEl === cellEl) {
     if (acceptUntaggedMention()) { e.preventDefault(); return; }
   }
-  if (e.key === "Escape" || e.key === "ArrowLeft" || e.key === "ArrowRight" ||
-      e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Home" || e.key === "End") {
+  if (dismissesTagGhost(e.key)) {
     hideTagGhost();
   }
   if (e.key === "Escape" && shownUntaggedSuggestion()) {

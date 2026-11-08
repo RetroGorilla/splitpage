@@ -73,6 +73,19 @@ if (location.origin === "splitpage://app") {
   receive("splitpage:voice-event", (_event, payload) => {
     if (voiceEventCallback) voiceEventCallback(payload);
   });
+  const bundleProgress = new Map<string, Parameters<DesktopPort["bundleVideoFile"]>[2]>();
+  receive("splitpage:bundle-progress", (_event, payload) => {
+    const cb = payload && bundleProgress.get(payload.job);
+    if (cb) cb({ done: payload.done, total: payload.total });
+  });
+  function bundleJob<T>(job: string, onProgress: Parameters<DesktopPort["bundleVideoFile"]>[2], run: () => Promise<T>): Promise<T> {
+    if (typeof onProgress === "function") bundleProgress.set(job, onProgress);
+    return run().finally(() => { bundleProgress.delete(job); });
+  }
+  let bundleCarryCallback: Parameters<DesktopPort["onBundleCarry"]>[0] | null = null;
+  receive("splitpage:bundle-carry", (_event, payload) => {
+    if (bundleCarryCallback && payload) bundleCarryCallback(payload);
+  });
   receive("splitpage:reassign-doc-id", (_event, payload) => {
     if (reassignDocIdCallback) reassignDocIdCallback(payload);
   });
@@ -273,6 +286,39 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:video-file-open", String(token || ""));
     },
 
+    videoFilePath(file) {
+      try { return webUtils.getPathForFile(file) || null; } catch { return null; }
+    },
+
+    openVideoPath(storedPath) {
+      return invoke("splitpage:video-path-open", String(storedPath || ""));
+    },
+
+    bundleVideoFile(token, job, onProgress) {
+      const id = String(job || "");
+      return bundleJob(id, onProgress, () => invoke("splitpage:bundle-file", String(token || ""), id));
+    },
+
+    onBundleCarry(cb) {
+      bundleCarryCallback = typeof cb === "function" ? cb : null;
+    },
+
+    cancelBundle(job) {
+      send("splitpage:bundle-cancel", String(job || ""));
+    },
+
+    openBundledFile(name) {
+      return invoke("splitpage:bundled-file-open", String(name || ""));
+    },
+
+    planBundleSave(fileId, names) {
+      return invoke("splitpage:bundle-save-plan", String(fileId || ""), Array.isArray(names) ? names.map((n) => String(n)) : []);
+    },
+
+    chooseBundleSave(fileId, choice) {
+      return invoke("splitpage:bundle-save-choice", String(fileId || ""), String(choice || ""));
+    },
+
     videoThumbnail(host, ref) {
       return invoke("splitpage:video-thumbnail", host, ref).then((got): Awaited<ReturnType<DesktopPort["videoThumbnail"]>> => {
         if (got && got.ok && got.bytes && !(got.bytes instanceof Uint8Array)) got = { ...got, bytes: new Uint8Array(got.bytes) };
@@ -312,12 +358,16 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:voice-status");
     },
 
-    voiceStart() {
-      return invoke("splitpage:voice-start");
+    voiceStart(microphone) {
+      return microphone === undefined ? invoke("splitpage:voice-start") : invoke("splitpage:voice-start", microphone);
     },
 
-    voiceStop() {
-      return invoke("splitpage:voice-stop");
+    voiceMicrophones() {
+      return invoke("splitpage:voice-microphones");
+    },
+
+    voiceStop(session) {
+      return session === undefined ? invoke("splitpage:voice-stop") : invoke("splitpage:voice-stop", session);
     },
 
     onVoiceEvent(cb) {

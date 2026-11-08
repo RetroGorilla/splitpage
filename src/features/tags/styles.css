@@ -43,6 +43,47 @@
   .tag-badge { background: var(--visual); }
 
   .tag-cats { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+  .mini-toolbar-controls { display: flex; align-items: center; gap: 2px; min-width: 0; }
+  #rows .mini-toolbar { overflow: visible; }
+  #rows .mini-toolbar-controls { max-width: 100%; overflow-x: auto; }
+  .tag-toolbar-picker {
+    position: absolute; left: -1px; right: -1px; bottom: calc(100% - 1px); z-index: 1;
+    border: 1px solid var(--border-strong); border-radius: 8px 8px 0 0;
+    background: var(--surface-2); color: var(--text);
+    clip-path: inset(100% 0 0 0); visibility: hidden; pointer-events: none;
+    transition: clip-path 100ms cubic-bezier(.4, 0, 1, 1), visibility 0s linear 100ms;
+  }
+  [data-tags-below] > .tag-toolbar-picker {
+    bottom: auto; top: calc(100% - 1px); border-radius: 0 0 8px 8px; clip-path: inset(0 0 100% 0);
+  }
+  [data-tags-open="true"] > .tag-toolbar-picker {
+    clip-path: inset(0); visibility: visible; pointer-events: auto;
+    transition: clip-path 140ms cubic-bezier(.2, .8, .2, 1), visibility 0s;
+  }
+  [data-tags-open="true"] .tb-tag { background: var(--selection); }
+  [data-tags-open="true"] .tb-chevron { transform: rotate(180deg); }
+  .tag-toolbar-hint {
+    padding: 5px 8px; border-bottom: 1px solid var(--border-strong);
+    border-radius: 7px 7px 0 0; background: var(--surface); color: var(--text-faint);
+    font: 11px/16px var(--font-body); white-space: nowrap;
+  }
+  .tag-toolbar-hint code, .tag-toolbar-hint kbd { color: var(--text); font: 11px/16px var(--font-display); }
+  .tag-toolbar-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 3px; }
+  #rows .mini-toolbar button.tag-toolbar-choice {
+    width: auto; height: auto; min-height: 38px; padding: 4px 6px;
+    flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
+    border: 0; background: transparent; color: var(--text); font: 11px/16px var(--font-body);
+  }
+  #rows .mini-toolbar button.tag-toolbar-choice:hover { background: var(--surface); }
+  .tag-toolbar-label { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .tag-toolbar-label .tag-cat-dot { width: 4px; height: 4px; }
+  .tag-toolbar-choice code { color: var(--text-faint); font: 11px/14px var(--font-display); }
+  @media (pointer: coarse) {
+    #rows .mini-toolbar button.tag-toolbar-choice { min-height: 44px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tag-toolbar-picker, [data-tags-open="true"] > .tag-toolbar-picker { transition: none; }
+  }
   #tag-modal.is-category-only #tag-quote,
   #tag-modal.is-category-only #tag-cats ~ * { display: none; }
   .tag-cat-btn {
@@ -237,6 +278,29 @@
   ::highlight(splitpage-open-tag-vfx)      { background-color: color-mix(in srgb, var(--tag-vfx-tint) 70%, transparent);      text-decoration: underline dashed var(--tag-vfx) 1.5px;      text-underline-offset: 3px; }
   ::highlight(splitpage-open-tag-sound)    { background-color: color-mix(in srgb, var(--tag-sound-tint) 70%, transparent);    text-decoration: underline dashed var(--tag-sound) 1.5px;    text-underline-offset: 3px; }
   ::highlight(splitpage-open-tag-gear)     { background-color: color-mix(in srgb, var(--tag-gear-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-gear) 1.5px;     text-underline-offset: 3px; }
+  .who-anchor {
+    padding: 0 var(--space-4);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text) 9%, transparent);
+    color: var(--text-dim);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .who-list {
+    position: fixed; z-index: 146;
+    min-width: 140px; max-width: min(280px, calc(100vw - 16px));
+    margin: 0; padding: var(--space-4); list-style: none;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    font-family: var(--font-body); font-size: 14px; line-height: 20px; color: var(--text);
+  }
+  .who-list[hidden] { display: none; }
+  .who-option {
+    padding: var(--space-6) var(--space-10); border-radius: var(--radius-sm);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  }
+  .who-option:hover, .who-option[aria-selected="true"] { background: var(--hover); }
   .tag-open-hint { gap: 7px; }
   .tag-open-hint .tag-cat-dot { width: 8px; height: 8px; }
 

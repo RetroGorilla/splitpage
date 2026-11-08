@@ -2,6 +2,7 @@ import { isSha256Hex, normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { BROLL_MARKER_RE } from "../../core/document/broll.ts";
 import type { IdSource, ImageSource } from "../../core/document/ports.ts";
 import { tagCategoryId } from "../../core/document/tags.ts";
+import { whoName } from "../../core/text/runs.ts";
 import { cappedText, safeHref, safeId, safeImageSrc, storedImageAttributes } from "../../core/document/text-policy.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
 
@@ -41,9 +42,9 @@ function hasClass(node: Element, name: string): boolean {
   return !!node.classList && node.classList.contains(name);
 }
 
-const SPAN_MARK_CLASSES: readonly string[] = ["tag-anchor", "broll-key", "stage-dir", "audio-cue"];
+const SPAN_MARK_CLASSES: readonly string[] = ["tag-anchor", "broll-key", "who-anchor", "stage-dir", "audio-cue"];
 
-const CUE_OUTRANKED: readonly string[] = ["tag-anchor", "broll-key", "stage-dir"];
+const CUE_OUTRANKED: readonly string[] = ["tag-anchor", "broll-key", "who-anchor", "stage-dir"];
 
 const splitPoints = new WeakSet<Node>();
 
@@ -369,6 +370,17 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
       tagSpan.setAttribute("contenteditable", "false");
       walkSanitize(el, tagSpan, ctx);
       destParent.appendChild(tagSpan);
+      return;
+    }
+    if (tag === "SPAN" && hasClass(el, "who-anchor")) {
+      const who = whoName(el.getAttribute("data-who"));
+      if (!who) { walkSanitize(el, destParent, ctx); return; }
+      const whoSpan = doc.createElement("span");
+      whoSpan.className = "who-anchor";
+      whoSpan.setAttribute("data-who", who);
+      whoSpan.setAttribute("contenteditable", "false");
+      whoSpan.appendChild(doc.createTextNode("@" + who));
+      destParent.appendChild(whoSpan);
       return;
     }
     if (tag === "SPAN" && hasClass(el, "broll-key")) {
