@@ -160,11 +160,10 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
     e.preventDefault();
     ports.acceptTagGhost();
   });
-  [doc.getElementById("tag-open-hint"), doc.getElementById("tag-open-ghost")].forEach(function (openEl) {
-    if (openEl) listen(openEl, "pointerdown", function (e) {
-      e.preventDefault();
-      if (ports.plainTagOpen()) ports.closePlainTag();
-    });
+  const openHintEl = doc.getElementById("tag-open-hint");
+  if (openHintEl) listen(openHintEl, "pointerdown", function (e) {
+    e.preventDefault();
+    if (ports.plainTagOpen()) ports.closePlainTag();
   });
 
   listen(realm, "scroll", ports.hideTagGhost, true);
