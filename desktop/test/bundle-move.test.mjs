@@ -299,11 +299,13 @@ test("a Cancel after the publish stops the delete: both stay, and the link names
   const s = scratch();
   try {
     const ctl = new AbortController();
+    const deletes = [];
     const copier = crossDrive({
       link: async (part, to) => { await fsp.link(part, to); ctl.abort(); },
-      removeOriginal: async () => { throw new Error("must not delete after a Cancel"); }
+      removeOriginal: async (p) => { deletes.push(p); throw new Error("must not delete after a Cancel"); }
     });
     const got = await move(copier, s.clip, s.script, () => {}, ctl.signal);
+    assert.deepEqual(deletes, [], "the Cancel stops the delete before it is tried");
     assert.deepEqual([got.ok, got.outcome, got.name], [true, "kept", "take one.mp4"]);
     assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
     assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes);
