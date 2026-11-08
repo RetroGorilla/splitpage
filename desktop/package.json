@@ -42,5 +42,22 @@
   "devDependencies": {
     "electron": "^45.2.3",
     "electron-builder": "^26.15.3"
+  },
+  "overrides": {
+    "app-builder-lib": {
+      "minimatch": "^11.0.5",
+      "dir-compare": {
+        "minimatch": "^3.0.5"
+      },
+      "glob": {
+        "minimatch": "^3.1.1"
+      },
+      "@electron/asar": {
+        "minimatch": "^3.0.4"
+      },
+      "filelist": {
+        "minimatch": "^5.0.1"
+      }
+    }
   }
 }
