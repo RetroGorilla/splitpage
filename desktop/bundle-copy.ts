@@ -38,6 +38,8 @@ function createBundleCopier(options: {
   progressEveryMs?: number;
   link?: typeof fsp.link;
   openTarget?: (target: string) => Promise<NodeFsPromises.FileHandle>;
+  lstat?: (target: string) => Promise<NodeFs.BigIntStats>;
+  rename?: typeof fsp.rename;
   unlink?: typeof fsp.unlink;
 }) {
   const {
@@ -49,8 +51,12 @@ function createBundleCopier(options: {
 
   const linkFile = options.link || fsp.link;
   const openTarget = options.openTarget || ((target: string) => fsp.open(target, "wx"));
+  const lstatTarget = options.lstat || ((target: string) => fsp.lstat(target, { bigint: true }));
+  const renameFile = options.rename || fsp.rename;
   const unlinkFile = options.unlink || fsp.unlink;
   const writing = new Set<string>();
+  const placeholders = new Set<string>();
+  const placeKey = (p: string) => (foldCase ? p.toLowerCase() : p);
   const publishing = new Map<string, Promise<void>>();
 
   async function underFolderLock<T>(folder: string, signal: AbortSignal, step: () => Promise<T>): Promise<T | "cancelled"> {
@@ -82,19 +88,33 @@ function createBundleCopier(options: {
     }
   }
 
-  async function copyExclusive(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+  async function stillPlaceholder(target: string, made: NodeFs.BigIntStats): Promise<boolean> {
+    try {
+      const now = await lstatTarget(target);
+      return now.isFile() && now.ino === made.ino && now.dev === made.dev && now.size === 0n;
+    } catch { return false; }
+  }
+
+  async function renameOntoPlaceholder(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
     let out: NodeFsPromises.FileHandle;
     try { out = await openTarget(target); } catch (e) { return (e as NodeJS.ErrnoException).code === "EEXIST" ? "taken" : "failed"; }
-    let whole = false;
+    const key = placeKey(target);
+    placeholders.add(key);
     try {
-      await pipeline(fs.createReadStream(part), out.createWriteStream(), { signal });
-      whole = !signal.aborted;
-    } catch { } finally {
-      try { await out.close(); } catch { }
-      if (!whole) { try { await unlinkFile(target); } catch { } }
-    }
-    if (whole) return "copied";
-    return signal.aborted ? "cancelled" : "failed";
+      let made: NodeFs.BigIntStats | null = null;
+      try { made = await out.stat({ bigint: true }); } catch { } finally { try { await out.close(); } catch { } }
+      if (!made) return "failed";
+      if (signal.aborted) {
+        if (await stillPlaceholder(target, made)) { try { await unlinkFile(target); } catch { } }
+        return "cancelled";
+      }
+      if (!(await stillPlaceholder(target, made))) return "taken";
+      try { await renameFile(part, target); } catch {
+        if (await stillPlaceholder(target, made)) { try { await unlinkFile(target); } catch { } }
+        return "failed";
+      }
+      return "copied";
+    } finally { placeholders.delete(key); }
   }
 
   async function publish(part: string, target: string, signal: AbortSignal, published: () => void): Promise<"copied" | "taken" | "cancelled" | "failed"> {
@@ -108,16 +128,16 @@ function createBundleCopier(options: {
     }
     if (!linked) {
       if (signal.aborted) return "cancelled";
-      // why: exFAT and SMB shares may lack hard links; creating the name exclusively never replaces another program's file
-      const copied = await copyExclusive(part, target, signal);
-      if (copied !== "copied") return copied;
+      // why: exFAT and SMB shares may lack hard links; the whole .part replaces only the empty placeholder this job created
+      const renamed = await renameOntoPlaceholder(part, target, signal);
+      if (renamed !== "copied") return renamed;
     }
     if (signal.aborted) {
       try { await unlinkFile(target); } catch { }
       return "cancelled";
     }
     published();
-    try { await unlinkFile(part); } catch { }
+    if (linked) { try { await unlinkFile(part); } catch { } }
     return "copied";
   }
 
@@ -298,8 +318,9 @@ function createBundleCopier(options: {
     return path.basename(bundleFolderOf(script, path));
   }
 
-  function resolveIn(script: string, name: unknown, allow: RegExp): Promise<VideoEmbed.VideoPathVerdict> {
-    return resolveBundledFile(script, name, allow, fsp, path, foldCase);
+  async function resolveIn(script: string, name: unknown, allow: RegExp): Promise<VideoEmbed.VideoPathVerdict> {
+    const found = await resolveBundledFile(script, name, allow, fsp, path, foldCase);
+    return found.ok && placeholders.has(placeKey(found.path)) ? { ok: false, code: "GONE" } : found;
   }
 
   function storedPath(script: string, name: string): string {

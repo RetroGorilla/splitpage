@@ -829,6 +829,34 @@ test("while the copy runs, the new script's bundled opens fall back to the old f
   } finally { s.done(); }
 });
 
+test("without hard links, an open while the empty placeholder stands reaches the old folder's file, never the placeholder", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "take.mp4"), "mine");
+    const reached = gate();
+    const released = gate();
+    const ipc = harness({
+      source: s.script, testMode: true,
+      copierOptions: {
+        link: async () => { throw Object.assign(new Error("no hard links here"), { code: "EPERM" }); },
+        lstat: async (p) => { reached.open(); await released.shut; return fs.promises.lstat(p, { bigint: true }); }
+      }
+    });
+    await ipc.saveAs(s.copyScript, { script: true }, project("take.mp4"), "copy");
+    ipc.tab.source = { kind: "file", absPath: s.copyScript };
+    await reached.shut;
+    assert.equal(fs.statSync(path.join(s.copyFolder, "take.mp4")).size, 0, "setup: the placeholder stands under the final name");
+    assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), { ok: true });
+    assert.deepEqual(ipc.testVideoOpens, [fs.realpathSync.native(path.join(s.folder, "take.mp4"))], "the open reaches the original");
+    released.open();
+    await ipc.bundleJobs.idle();
+    assert.equal(fs.readFileSync(path.join(s.copyFolder, "take.mp4"), "utf8"), "mine");
+    assert.deepEqual(await ipc.call("splitpage:bundled-file-open", "take.mp4"), { ok: true });
+    assert.equal(ipc.testVideoOpens[1], fs.realpathSync.native(path.join(s.copyFolder, "take.mp4")), "once renamed it opens from the new folder");
+  } finally { s.done(); }
+});
+
 test("a cancelled background copy ends the fallback, keeps what it copied, and leaves the old folder alone", async () => {
   const s = scratch();
   try {

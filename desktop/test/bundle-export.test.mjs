@@ -414,15 +414,20 @@ test("Cancel while the publish's hard link is still running never leaves the zip
   } finally { s.done(); }
 });
 
-test("without hard links, the zip is created exclusively: another program's file under that name is never replaced", async () => {
+test("without hard links, the whole zip is renamed onto an empty placeholder: another program's file under that name is never replaced", async () => {
   const s = scratch();
   try {
     s.put(path.join(s.folder, "take.mp4"), "take");
     const body = project([bundled("take.mp4")]);
     const eperm = async () => { throw Object.assign(new Error("no hard links here"), { code: "EPERM" }); };
-    const plain = harness({ source: s.script, copierOptions: { link: eperm } });
+    const atRename = [];
+    const plain = harness({
+      source: s.script,
+      copierOptions: { link: eperm, rename: async (from, to) => { atRename.push(fs.statSync(to).size); readZip(from); return fs.promises.rename(from, to); } }
+    });
     const zip = path.join(s.out, "Plain.zip");
     assert.deepEqual((await plain.exportTo(zip, body)).result, { ok: true, files: 1, left: 0 });
+    assert.deepEqual(atRename, [0], "the final name held only the empty placeholder, and the temporary was a whole zip");
     assert.equal(readZip(zip).entries.get("Episode 12 files/take.mp4").bytes.toString(), "take", "the copied-in zip is whole");
     assert.deepEqual(leftovers(s.out), []);
     const racing = path.join(s.out, "Race.zip");
@@ -433,13 +438,18 @@ test("without hard links, the zip is created exclusively: another program's file
     assert.deepEqual((await raced.exportTo(racing, body)).result, { ok: false, code: "TAKEN" });
     assert.equal(fs.readFileSync(racing, "utf8"), "another program's", "the file that appeared is untouched");
     assert.deepEqual(leftovers(s.out), []);
-    const broken = harness({
+    const swapped = path.join(s.out, "Swapped.zip");
+    const swapping = harness({
       source: s.script,
-      copierOptions: { link: eperm, openTarget: async (p) => { const h = await fsp.open(p, "wx"); return { ...h, close: () => h.close(), createWriteStream: () => { throw new Error("disk gone"); } }; } }
+      copierOptions: { link: eperm, lstat: async (p) => { fs.unlinkSync(p); fs.writeFileSync(p, "swapped in"); return fsp.lstat(p, { bigint: true }); } }
     });
+    assert.deepEqual((await swapping.exportTo(swapped, body)).result, { ok: false, code: "TAKEN" });
+    assert.equal(fs.readFileSync(swapped, "utf8"), "swapped in", "a placeholder swapped for another file is kept as it is");
+    assert.deepEqual(leftovers(s.out), []);
+    const broken = harness({ source: s.script, copierOptions: { link: eperm, rename: async () => { throw new Error("disk gone"); } } });
     const failed = path.join(s.out, "Failed.zip");
     assert.deepEqual((await broken.exportTo(failed, body)).result, { ok: false, code: "FAILED" });
-    assert.equal(fs.existsSync(failed), false, "a copy that fails removes the file it created, and only that");
+    assert.equal(fs.existsSync(failed), false, "a rename that fails removes its own placeholder, and only that");
     assert.deepEqual(leftovers(s.out), []);
   } finally { s.done(); }
 });
