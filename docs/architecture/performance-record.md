@@ -342,6 +342,27 @@ The other cases (delete every scene, stamp, hide shot scenes, display preference
 
 No case is slower beyond noise, and every p50 is well inside its limit. Long typing's p95 reads +15%, but the base runs alone span 9.6 to 15.1 ms and the head runs 14.8 to 16.5 ms, so five rounds can't tell that apart from noise; its p50 is unchanged. `@Name`'s per-keystroke work (#1259) doesn't show at p50.
 
+## Batch of 2026-11-07 and 2026-11-08, 0c437ce4 to 76f4cc2c
+
+Recorded 2026-11-08 on the Windows PC by `node tools/perf-ab.mjs 0c437ce4 76f4cc2c --only short,long --rounds 5`, with smoke.lock and perf.lock held by this run. It covers #1291 (a late cut no longer deletes beats in another script), #1292 (the desktop microphone relay), #1294 (export with files, bundled into a zip) and #1295 (changelog and help), plus everything else merged in that range. No case times cut, so #1291's cut path is not measured here, and the export cases are the three existing formats only, not the bundle export.
+
+### Input latency, median of 5 rounds (ms)
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 | Limit |
+| --- | --- | --- | --- | --- | --- |
+| short typing | 2.5 | 2.7 | 15.1 | 15.5 | 8 |
+| long typing | 2.9 | 3 | 14.8 | 13.9 | 8 |
+| short new scene | 19 | 19.5 | 27.7 | 26.6 | 65 |
+| long new scene | 32.1 | 32.8 | 34.2 | 36.3 | 65 |
+| short undo the delete | 11.7 | 13 | 11.7 | 13 | 45 |
+| long undo the delete | 31.1 | 34.4 | 31.1 | 34.4 | 70 |
+
+The other cases (delete every scene, stamp, hide shot scenes, display preference, the three exports) moved between -23.5% and +10.0% at p50 on values of 0.5 to 17.3 ms. Limits apply to the p50.
+
+### Reading it
+
+No case is slower beyond the spread of its own runs, and every p50 is well inside its limit. The two undo cases read about 10% higher at p50 (short +1.3 ms, long +3.3 ms), and short typing's p50 is 0.2 ms higher, but each head value sits inside the range the base runs and the head runs cover together: short undo, base 11.2 to 12.5 and head 11.2 to 16.6; long undo, base 30.7 to 42.4 and head 29.1 to 44.5. Five rounds can't separate that from noise, so the undo medians are a watch item for the next comparison, not a finding. Per the rule above, they are not called a slowdown, and the batch was not rerun. Long new scene's p95 reads +6.1% (34.2 to 36.3), again inside both builds' spreads.
+
 ## Comparing two commits
 
 Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs --test` (or a plain build when the old build script lacks `--test`, reported in the output), and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. A standalone `node tools/perf-record.mjs` also builds the test variant before measuring, with the same fallback for older build scripts. Use compatible installed dependencies for the two commits; no install or network access is performed.
