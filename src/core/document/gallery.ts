@@ -1,13 +1,17 @@
 import { normalizeImageRef } from "../../../shared/blob-policy.ts";
+import { ATTACHABLE_FILE, VIDEO_FILE_EXT, bundledNameProblem, isStoredVideoPath } from "../../../shared/video-path.ts";
 import { rowImage } from "./media.ts";
 import type { StoredImageRef } from "./text-policy.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
 import { cappedLongText, codePointPrefix, plainText, safeHref, safeImageSrc, settledNames, unitSafePrefix } from "./text-policy.ts";
 
+export type VideoLocation = { kind: "path"; path: string } | { kind: "bundled"; name: string };
+
 export interface VideoLink {
   href?: string;
   name?: string;
   size?: number;
+  location?: VideoLocation;
   duration?: number;
   poster?: boolean;
 }
@@ -81,6 +85,7 @@ interface VideoLinkInput {
   href?: unknown;
   name?: unknown;
   size?: unknown;
+  location?: unknown;
   duration?: unknown;
   poster?: unknown;
 }
@@ -174,6 +179,8 @@ export function normalizeVideoLink(input: unknown): VideoLink | null {
     if (!name) return null;
     out = { name: name };
     if (typeof x.size === "number" && isFinite(x.size) && x.size >= 0) out.size = Math.floor(x.size);
+    const location = normalizeVideoLocation(x.location);
+    if (location) out.location = location;
   } else {
     return null;
   }
@@ -182,6 +189,115 @@ export function normalizeVideoLink(input: unknown): VideoLink | null {
   }
   if (x.poster === true) out.poster = true;
   return out;
+}
+
+export function normalizeVideoLocation(input: unknown): VideoLocation | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const x = input as { kind?: unknown; path?: unknown; name?: unknown };
+  if (x.kind === "path") return isStoredVideoPath(x.path, ATTACHABLE_FILE) ? { kind: "path", path: x.path as string } : null;
+  if (x.kind === "bundled") return bundledNameProblem(x.name) === null && ATTACHABLE_FILE.test(x.name as string) ? { kind: "bundled", name: x.name as string } : null;
+  return null;
+}
+
+export function isOtherFileLink(l: VideoLink | null | undefined): boolean {
+  return !!l && !l.href && !l.poster && typeof l.name === "string" && /\.[^.]+$/.test(l.name) && !VIDEO_FILE_EXT.test(l.name);
+}
+
+function locationKey(l: VideoLink | null | undefined): string {
+  if (!l || !l.location) return "";
+  return "@" + l.location.kind + ":" + (l.location.kind === "path" ? l.location.path : l.location.name);
+}
+
+export function bundledVideoNames(rows: readonly unknown[]): string[] {
+  const out = new Set<string>();
+  function collect(links: unknown): void {
+    (Array.isArray(links) ? links as unknown[] : []).forEach(function (l) {
+      const at = l && typeof l === "object" ? normalizeVideoLocation((l as VideoLinkInput).location) : null;
+      if (at && at.kind === "bundled") out.add(at.name);
+    });
+  }
+  rows.forEach(function (row) {
+    if (!row || typeof row !== "object") return;
+    const r = row as GalleryRow;
+    collect(r.imageLinks);
+    (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (it) {
+      if (it && typeof it === "object") collect((it as GalleryItemInput).links);
+    });
+  });
+  return Array.from(out);
+}
+
+export function bundleVideoLinks(rows: readonly unknown[], from: VideoLink, name: string): boolean {
+  const key = locatedVideoKey(from);
+  if (!normalizeVideoLocation({ kind: "bundled", name: name })) return false;
+  let changed = false;
+  function relink(links: unknown): void {
+    (Array.isArray(links) ? links as VideoLink[] : []).forEach(function (l) {
+      if (!l || typeof l !== "object" || l.href || locatedVideoKey(l) !== key) return;
+      l.location = { kind: "bundled", name: name };
+      changed = true;
+    });
+  }
+  rows.forEach(function (row) {
+    if (!row || typeof row !== "object") return;
+    const r = row as GalleryRow;
+    relink(r.imageLinks);
+    (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (it) {
+      if (it && typeof it === "object") relink((it as GalleryItemInput).links);
+    });
+  });
+  return changed;
+}
+
+export interface BundledPathLink {
+  readonly name: string;
+  readonly path: string;
+}
+
+export function pathVideoLinks(rows: readonly unknown[], links: readonly BundledPathLink[]): boolean {
+  const to = new Map<string, string>();
+  links.forEach(function (l) {
+    if (l && typeof l.name === "string" && normalizeVideoLocation({ kind: "path", path: l.path })) to.set(l.name, l.path);
+  });
+  let changed = false;
+  function relink(list: unknown): void {
+    (Array.isArray(list) ? list as VideoLink[] : []).forEach(function (l) {
+      const at = l && typeof l === "object" && !l.href ? l.location : undefined;
+      const path = at && at.kind === "bundled" ? to.get(at.name) : undefined;
+      if (path === undefined) return;
+      l.location = { kind: "path", path: path };
+      changed = true;
+    });
+  }
+  rows.forEach(function (row) {
+    if (!row || typeof row !== "object") return;
+    const r = row as GalleryRow;
+    relink(r.imageLinks);
+    (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (it) {
+      if (it && typeof it === "object") relink((it as GalleryItemInput).links);
+    });
+  });
+  return changed;
+}
+
+export function locatedVideoKey(l: VideoLink | null | undefined): string {
+  return videoLinkKey(l) + locationKey(l);
+}
+
+export function withoutVideoLocations(rows: readonly unknown[]): void {
+  function strip(links: unknown): void {
+    (Array.isArray(links) ? links as unknown[] : []).forEach(function (l) {
+      if (l && typeof l === "object") Reflect.deleteProperty(l, "location");
+    });
+  }
+  rows.forEach(function (row) {
+    if (!row || typeof row !== "object") return;
+    const r = row as GalleryRow;
+    strip(r.imageLinks);
+    (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (it) {
+      if (it && typeof it === "object") strip((it as GalleryItemInput).links);
+    });
+  });
 }
 
 export function normalizePictureName(v: unknown): string {
@@ -204,25 +320,44 @@ export function videoLinkLabel(l: VideoLink | null | undefined): string {
 export function normalizeVideoLinks(list: unknown): VideoLink[] {
   const out: VideoLink[] = [], seen: Record<string, boolean> = {};
   let poster = false;
+  let capped = 0;
   (Array.isArray(list) ? list as unknown[] : []).forEach(function (x) {
     const l = normalizeVideoLink(x);
-    if (!l || out.length >= MAX_LINKS) return;
+    if (!l || (!isAttachment(l) && capped >= MAX_LINKS)) return;
     const k = videoLinkKey(l);
     if (seen[k]) return;
     seen[k] = true;
     if (l.poster) { if (poster) delete l.poster; poster = true; }
+    if (!isAttachment(l)) capped++;
     out.push(l);
   });
   return out;
 }
 
-function normalizeGalleryItem(input: unknown, images: ImageSource): GalleryItem | null {
+function isAttachment(l: VideoLink | null | undefined): boolean {
+  return isOtherFileLink(l);
+}
+
+function withFiles(links: readonly VideoLink[], files: readonly VideoLink[]): VideoLink[] {
+  const seen: Record<string, boolean> = {};
+  links.forEach(function (l) { seen[videoLinkKey(l)] = true; });
+  return links.concat(files.filter(function (l) {
+    const k = videoLinkKey(l);
+    if (seen[k]) return false;
+    seen[k] = true;
+    return true;
+  }));
+}
+
+function normalizeGalleryItem(input: unknown, images: ImageSource, files: VideoLink[]): GalleryItem | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const it = input as GalleryItemInput;
   const legacy = safeImageSrc(it.visualImage);
   const rec = legacy ? images.fromDataUrl(legacy) : null;
   const ref: ImageRef | null = rec || normalizeImageRef(it.imageRef);
-  const links = normalizeVideoLinks(it.links);
+  const all = normalizeVideoLinks(it.links);
+  all.forEach(function (l) { if (isAttachment(l)) files.push(l); });
+  const links = all.filter(function (l) { return !isAttachment(l); });
   if (!ref && !links.some(function (l) { return l.poster; })) return null;
   const out: GalleryItem = {};
   if (ref) out.imageRef = ref;
@@ -258,8 +393,9 @@ export function migrateGallery(r: GalleryRow, images: ImageSource): void {
   const firstKey = itemKey({ imageRef: r.imageRef, links: r.imageLinks });
   if (firstKey) seen[firstKey] = true;
   const more: GalleryItem[] = [];
+  const files: VideoLink[] = [];
   (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (x) {
-    const it = normalizeGalleryItem(x, images);
+    const it = normalizeGalleryItem(x, images, files);
     if (!it || seen[itemKey(it)] || more.length >= MAX_MORE) return;
     seen[itemKey(it)] = true;
     more.push(it);
@@ -271,6 +407,7 @@ export function migrateGallery(r: GalleryRow, images: ImageSource): void {
     if (first.links) r.imageLinks = first.links;
     if (first.annotation) r.imageAnnotation = first.annotation;
   }
+  if (files.length) r.imageLinks = withFiles(Array.isArray(r.imageLinks) ? r.imageLinks as VideoLink[] : [], files);
   if (more.length) r.moreImages = more; else delete r.moreImages;
 }
 
@@ -285,15 +422,22 @@ export function rowSlots(row: unknown): Slot[] {
                name: img && typeof r.imageName === "string" ? r.imageName : "",
                annotation: img && img.ref ? readAnnotation(r.imageAnnotation) : null });
   }
+  const files: VideoLink[] = [];
   (Array.isArray(r.moreImages) ? r.moreImages as unknown[] : []).forEach(function (entry) {
     if (!entry || typeof entry !== "object") return;
     const it = entry as GalleryItemInput;
     const ref: ImageRef | null = normalizeImageRef(it.imageRef);
-    const itLinks = Array.isArray(it.links) ? it.links as VideoLink[] : [];
+    const raw = Array.isArray(it.links) ? it.links as VideoLink[] : [];
+    raw.forEach(function (l) { if (isAttachment(l)) files.push(l); });
+    const itLinks = raw.some(isAttachment) ? raw.filter(function (l) { return !isAttachment(l); }) : raw;
     if (!ref && !itLinks.some(function (l) { return l && l.poster; })) return;
     out.push({ ref: ref, dataUrl: null, links: itLinks, name: ref && typeof it.name === "string" ? it.name : "",
                annotation: ref ? readAnnotation(it.annotation) : null });
   });
+  if (!files.length) return out;
+  const head = out[0];
+  if (head) out[0] = Object.assign({}, head, { links: withFiles(head.links, files) });
+  else out.push({ ref: null, dataUrl: null, links: withFiles([], files), name: "", annotation: null });
   return out;
 }
 
@@ -324,20 +468,36 @@ export function rowVideoLinks(row: unknown): VideoLink[] {
 
 function copy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
-export function setRowSlots(row: GalleryRow, slots: readonly (Slot<StoredImageRef> | null | undefined)[]): void {
+function dropSlot(slots: Slot<StoredImageRef>[], i: number): void {
+  const gone = slots.splice(i, 1)[0];
+  if (!gone || (!gone.ref && !isVideoSlot(gone))) return;
+  const files = gone.links.filter(isAttachment);
+  if (files.length) slots.push({ ref: null, links: files, name: "" });
+}
+
+export function setRowSlots(row: GalleryRow, input: readonly (Slot<StoredImageRef> | null | undefined)[]): void {
   delete row.visualImage;
+  let files: VideoLink[] = [];
+  const slots: Slot<StoredImageRef>[] = [];
+  input.forEach(function (s, i) {
+    if (!s) return;
+    const links = s.links || [];
+    files = withFiles(files, links.filter(isAttachment));
+    const own = links.filter(function (l) { return !isAttachment(l); });
+    if (s.ref || isVideoSlot(s) || (i === 0 && own.length)) slots.push(Object.assign({}, s, { links: own }));
+  });
   const first = slots[0] || null;
   row.imageRef = first && first.ref ? copy(first.ref) : null;
   if (first && first.ref && first.name) row.imageName = first.name; else delete row.imageName;
-  if (first && first.links && first.links.length) row.imageLinks = copy(first.links); else delete row.imageLinks;
+  const head = withFiles(first ? first.links : [], files);
+  if (head.length) row.imageLinks = copy(head); else delete row.imageLinks;
   if (first && first.ref && first.annotation) row.imageAnnotation = copy(first.annotation); else delete row.imageAnnotation;
   const more: GalleryItem<StoredImageRef>[] = [];
   slots.slice(1).forEach(function (s) {
-    if (!s || (!s.ref && !isVideoSlot(s))) return;
     const it: GalleryItem<StoredImageRef> = {};
     if (s.ref) it.imageRef = copy(s.ref);
     if (s.ref && s.name) it.name = s.name;
-    if (s.links && s.links.length) it.links = copy(s.links);
+    if (s.links.length) it.links = copy(s.links);
     if (s.ref && s.annotation) it.annotation = copy(s.annotation);
     more.push(it);
   });
@@ -373,7 +533,17 @@ export function addGalleryVideo(row: GalleryRow, link: unknown, poster?: ImageRe
   const key = videoLinkKey(l);
   const slots = slotsOf(row);
   for (let i = 0; i < slots.length; i++) {
-    if ((slots[i] as Slot).links.some(function (x) { return videoLinkKey(x) === key; })) return i;
+    const s = slots[i] as Slot;
+    const had = s.links.filter(function (x) { return videoLinkKey(x) === key; })[0];
+    if (!had) continue;
+    if (l.location && locationKey(had) !== locationKey(l)) {
+      const moved: VideoLink = Object.assign({}, had, { location: l.location });
+      if (l.duration !== undefined) moved.duration = l.duration;
+      s.links = s.links.map(function (x) { return x === had ? moved : x; });
+      if (had.poster && poster) s.ref = poster;
+      setRowSlots(row, slots);
+    }
+    return i;
   }
   const slot: Slot = { ref: poster || null, links: [l], name: "" };
   const head = slots[0] as Slot;
@@ -386,6 +556,31 @@ export function addGalleryVideo(row: GalleryRow, link: unknown, poster?: ImageRe
   slots.push(slot);
   setRowSlots(row, slots);
   return slots.length - 1;
+}
+
+export function addGalleryFile(row: GalleryRow, link: unknown): number {
+  const l = normalizeVideoLink(link);
+  if (!l || l.href) return -1;
+  delete l.poster;
+  const key = videoLinkKey(l);
+  const slots = slotsOf(row);
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i] as Slot;
+    const had = s.links.filter(function (x) { return videoLinkKey(x) === key; })[0];
+    if (!had) continue;
+    if (l.location && locationKey(had) !== locationKey(l)) {
+      const moved: VideoLink = Object.assign({}, had, { location: l.location });
+      s.links = s.links.map(function (x) { return x === had ? moved : x; });
+      setRowSlots(row, slots);
+    }
+    return i;
+  }
+  const head = slots[0];
+  if (!head) slots.push({ ref: null, links: [l], name: "" });
+  else if (head.links.length >= MAX_LINKS) return -1;
+  else head.links = head.links.concat([l]);
+  setRowSlots(row, slots);
+  return 0;
 }
 
 export function setVideoThumbnail(row: GalleryRow, key: string, ref: ImageRef | null | undefined): boolean {
@@ -406,7 +601,7 @@ export function replaceGalleryPicture(row: GalleryRow, i: number, ref: ImageRef,
   const slot = slots[i];
   if (!slot) return false;
   if (slots.some(function (s, k) { return k !== i && s.ref && s.ref.sha256 === ref.sha256; })) {
-    slots.splice(i, 1);
+    dropSlot(slots, i);
   } else {
     slot.ref = ref;
     slot.name = normalizePictureName(name);
@@ -443,7 +638,7 @@ export function moveGallerySlot(row: GalleryRow, from: number, to: number): bool
 export function removeGallerySlot(row: GalleryRow, i: number): boolean {
   const slots = slotsOf(row);
   if (!slots[i]) return false;
-  slots.splice(i, 1);
+  dropSlot(slots, i);
   setRowSlots(row, slots);
   return true;
 }
@@ -485,14 +680,22 @@ export interface GallerySide {
   moreImages?: GalleryItem[] | undefined;
 }
 
+function mergeLink(b: VideoLink | undefined, m: VideoLink, t: VideoLink): VideoLink {
+  const out = copy(t);
+  if (!m.location) return out;
+  // why: an older build drops a location when it saves, and nothing here removes one, so a missing one never wins
+  if (!t.location || (locationKey(t) === locationKey(b) && locationKey(m) !== locationKey(b))) out.location = copy(m.location);
+  return out;
+}
+
 export function mergeGalleryField(f: string, b: GallerySide | null | undefined, m: GallerySide, t: GallerySide): VideoLink[] | GalleryItem[] | undefined {
   let list: VideoLink[] | GalleryItem[];
   if (f === "imageLinks") {
-    list = mergeSet(b && b.imageLinks, m.imageLinks, t.imageLinks, videoLinkKey);
+    list = mergeSet(b && b.imageLinks, m.imageLinks, t.imageLinks, videoLinkKey, mergeLink);
   } else {
     list = mergeSet(b && b.moreImages, m.moreImages, t.moreImages, itemKey, function (bi, mi, ti) {
       const out = copy(ti);
-      const links = mergeSet(bi && bi.links, mi.links, ti.links, videoLinkKey);
+      const links = mergeSet(bi && bi.links, mi.links, ti.links, videoLinkKey, mergeLink);
       if (links.length) out.links = links; else delete out.links;
       return out;
     });
@@ -503,8 +706,8 @@ export function mergeGalleryField(f: string, b: GallerySide | null | undefined, 
 export function galleryFieldKey(row: Readonly<Record<string, unknown>> | null | undefined, f: string): string | null {
   const v = row && row[f];
   if (!Array.isArray(v) || !v.length) return null;
-  if (f === "imageLinks") return (v as VideoLink[]).map(function (l) { return videoLinkKey(l) + (l.poster ? "*" : ""); }).join("\n");
+  if (f === "imageLinks") return (v as VideoLink[]).map(function (l) { return videoLinkKey(l) + (l.poster ? "*" : "") + locationKey(l); }).join("\n");
   return (v as GalleryItem[]).map(function (it) {
-    return itemKey(it) + "[" + (Array.isArray(it.links) ? it.links.map(videoLinkKey).join("\n") : "") + "]";
+    return itemKey(it) + "[" + (Array.isArray(it.links) ? it.links.map(function (l) { return videoLinkKey(l) + locationKey(l); }).join("\n") : "") + "]";
   }).join("\n");
 }

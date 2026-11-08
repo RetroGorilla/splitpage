@@ -3,6 +3,7 @@ import type { LaunchFacts } from "../../application/desktop-presence.ts";
 import type { FileDelivery } from "../../application/files/file-delivery.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
+import type { MicrophoneDevices } from "../../application/microphones.ts";
 import type { PreferenceChanges, PreferenceName, Preferences } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { SettingsControls } from "../../application/settings-actions.ts";
@@ -25,7 +26,8 @@ export interface SettingsPorts {
     "rundownMin" | "setRundownMin" | "tagIcons" | "setTagIcons" | "hideShot" |
     "autosave" | "videoThumbs" | "setVideoThumbs" | "defaultWpm" | "setDefaultWpm" |
     "prompterFlag" | "setMyColor" | "commentAuthor" | "setCommentAuthor" |
-    "announceTaggingHelp" | "resetTour" | "resetDesktopNotice">;
+    "announceTaggingHelp" | "resetTour" | "resetDesktopNotice" | "microphone" | "setMicrophone">;
+  readonly microphones: MicrophoneDevices;
   readonly editor: {
     readonly writerSize: () => number | null;
     readonly setWriterSize: (size: number, persist: boolean) => void;

@@ -10,7 +10,7 @@ type UnitKind = "text" | "br" | "atom" | "end";
 
 type Visit = (kind: UnitKind, node: Node, length: number) => boolean;
 
-const ATOM_SELECTOR = ".broll-key, .video-embed-card";
+const ATOM_SELECTOR = ".broll-key, .who-anchor, .video-embed-card";
 const ZWSP = /\u200B/g;
 const ELEMENT = 1;
 const TEXT = 3;
@@ -23,7 +23,14 @@ function isElement(node: Node): node is Element {
 function isAtomEl(node: Node): boolean {
   if (!isElement(node)) return false;
   if (node.tagName === "IMG") return true;
-  return node.classList.contains("broll-key") || node.classList.contains("video-embed-card");
+  return node.classList.contains("broll-key") || node.classList.contains("who-anchor") || node.classList.contains("video-embed-card");
+}
+
+function atomKeyOf(node: Node): string {
+  if (!isElement(node)) return MEDIA_KEY;
+  if (node.classList.contains("who-anchor")) return atomKey("who:" + (node.getAttribute("data-who") || ""));
+  const id = node.getAttribute("data-broll-id");
+  return id === null ? MEDIA_KEY : atomKey(id);
 }
 
 function isBlankPara(node: Node): boolean {
@@ -156,8 +163,7 @@ export function domKeys(cellEl: Node): string[] {
       const text = (n.nodeValue || "").replace(ZWSP, "");
       for (let i = 0; i < text.length; i++) keys.push(unitKey(text[i] as string));
     } else if (kind === "atom") {
-      const id = isElement(n) ? n.getAttribute("data-broll-id") : null;
-      keys.push(id === null ? MEDIA_KEY : atomKey(id));
+      keys.push(atomKeyOf(n));
     } else {
       keys.push("\n");
     }

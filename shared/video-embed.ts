@@ -2,6 +2,8 @@
 /* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */
 
 import * as blobPolicy from "./blob-policy.ts";
+import { ATTACHABLE_FILE, VIDEO_FILE_EXT, bundleFolderName, bundledNameProblem, hasControlCharacter, videoPathProblem } from "./video-path.ts";
+import type { VideoPathStyle } from "./video-path.ts";
 
 type VideoEmbedReference = { host: "youtube" | "vimeo"; id: string; hash?: string; start?: number };
 type VideoEmbedFields = Partial<Record<keyof VideoEmbedReference, unknown>>;
@@ -249,7 +251,121 @@ function embeddableVideo(link: unknown) {
   return link && (link as Record<string, unknown>).href ? parseVideoLink((link as Record<string, unknown>).href) : null;
 }
 
+interface VideoPathFileSystem {
+  readonly realpath: (path: string) => Promise<string>;
+  readonly stat: (path: string) => Promise<{ isFile: () => boolean }>;
+}
+
+type VideoPathVerdict = { ok: true; path: string } | { ok: false; code: "REFUSED" | "GONE" };
+
+function missingFile(e: unknown): boolean {
+  const code = e && typeof e === "object" ? (e as { code?: unknown }).code : null;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
+async function openableVideoPath(p: unknown, style: VideoPathStyle, fs: VideoPathFileSystem, allow: RegExp = VIDEO_FILE_EXT): Promise<VideoPathVerdict> {
+  if (videoPathProblem(p, style, allow) !== null) return { ok: false, code: "REFUSED" };
+  let real: string;
+  try { real = await fs.realpath(p as string); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+  if (typeof real !== "string" || hasControlCharacter(real) || !allow.test(real)) return { ok: false, code: "REFUSED" };
+  let isFile: boolean;
+  try { isFile = (await fs.stat(real)).isFile(); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+  return isFile ? { ok: true, path: real } : { ok: false, code: "REFUSED" };
+}
+
+interface BundlePaths {
+  readonly join: (...parts: string[]) => string;
+  readonly dirname: (p: string) => string;
+  readonly basename: (p: string) => string;
+}
+
+interface BundleFileSystem extends VideoPathFileSystem {
+  readonly lstat: (p: string) => Promise<{ isDirectory: () => boolean; isSymbolicLink: () => boolean }>;
+}
+
+function bundleableName(name: unknown, allow: RegExp): name is string {
+  return bundledNameProblem(name) === null && allow.test(name as string);
+}
+
+function bundleFolderOf(scriptPath: string, paths: BundlePaths): string {
+  return paths.join(paths.dirname(scriptPath), bundleFolderName(paths.basename(scriptPath)));
+}
+
+function numberedName(name: string, n: number): string {
+  if (n <= 1) return name;
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) + " (" + n + ")" + name.slice(dot) : name + " (" + n + ")";
+}
+
+function samePath(a: string, b: string, foldCase: boolean): boolean {
+  return foldCase ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+async function realBundleFolder(scriptPath: string, fs: BundleFileSystem, paths: BundlePaths): Promise<VideoPathVerdict> {
+  const folder = bundleFolderOf(scriptPath, paths);
+  try {
+    const st = await fs.lstat(folder);
+    if (st.isSymbolicLink() || !st.isDirectory()) return { ok: false, code: "REFUSED" };
+    return { ok: true, path: await fs.realpath(folder) };
+  } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+}
+
+async function resolveBundledFile(scriptPath: string, name: unknown, allow: RegExp, fs: BundleFileSystem, paths: BundlePaths, foldCase: boolean): Promise<VideoPathVerdict> {
+  if (!bundleableName(name, allow)) return { ok: false, code: "REFUSED" };
+  const folder = await realBundleFolder(scriptPath, fs, paths);
+  if (!folder.ok) return folder;
+  let real: string;
+  try { real = await fs.realpath(paths.join(folder.path, name)); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+  if (typeof real !== "string" || hasControlCharacter(real) || !allow.test(real)) return { ok: false, code: "REFUSED" };
+  if (!samePath(paths.dirname(real), folder.path, foldCase)) return { ok: false, code: "REFUSED" };
+  let isFile: boolean;
+  try { isFile = (await fs.stat(real)).isFile(); } catch (e) { return { ok: false, code: missingFile(e) ? "GONE" : "REFUSED" }; }
+  return isFile ? { ok: true, path: real } : { ok: false, code: "REFUSED" };
+}
+
+function projectRecord(text: string): unknown {
+  try { return JSON.parse(text); } catch { }
+  const lines = text.replace(/\r\n|\r/g, "\n").split("\n");
+  let openAt = -1, fence = 0;
+  lines.forEach(function (line, i) {
+    const m = /^(~{3,})\s*splitpage\s*$/.exec(line);
+    if (m) { openAt = i; fence = (m[1] as string).length; }
+  });
+  if (openAt === -1) return null;
+  let closeAt = lines.length;
+  for (let i = openAt + 1; i < lines.length; i++) {
+    if (new RegExp("^~{" + fence + ",}\\s*$").test(lines[i] as string)) { closeAt = i; break; }
+  }
+  try { return JSON.parse(lines.slice(openAt + 1, closeAt).join("\n")); } catch { return null; }
+}
+
+function bundledNamesInProject(text: string): string[] {
+  const names = new Set<string>();
+  const pending: unknown[] = [projectRecord(text)];
+  while (pending.length) {
+    const value = pending.pop();
+    if (!value || typeof value !== "object") continue;
+    const at = (value as { location?: unknown }).location;
+    if (at && typeof at === "object" && (at as { kind?: unknown }).kind === "bundled" && typeof (at as { name?: unknown }).name === "string") {
+      names.add((at as { name: string }).name);
+    }
+    for (const child of Object.values(value)) if (child && typeof child === "object") pending.push(child);
+  }
+  return [...names].sort();
+}
+
+export type { BundleFileSystem, BundlePaths, VideoPathFileSystem, VideoPathVerdict };
+
 export {
+  ATTACHABLE_FILE,
+  bundleFolderOf,
+  bundledNamesInProject,
+  bundleableName,
+  missingFile,
+  numberedName,
+  realBundleFolder,
+  resolveBundledFile,
+  samePath,
   FETCH_TIMEOUT_MS,
   PLAYER_ORIGINS,
   THUMB_MAX_BYTES,
@@ -259,6 +375,7 @@ export {
   embeddableVideo,
   fetchVideoThumbnail,
   oembedThumbnailUrl,
+  openableVideoPath,
   parseStart,
   parseVideoLink,
   parseVideoRef,

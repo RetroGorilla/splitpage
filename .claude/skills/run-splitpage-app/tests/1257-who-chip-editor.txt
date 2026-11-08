@@ -1,0 +1,82 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.U=window.__undoTest; F.openFile(new File([JSON.stringify({schema:5,title:'Name chips',people:[{id:'pSam',name:'Sam'},{id:'pSandy',name:'Sandy'}],productionTags:[{id:'t1',cat:'prop',name:'Kettle',owner:'',notes:'',status:'needed'}],rows:[{id:'a',visualText:'Fill the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Kettle" contenteditable="false">kettle</span> for',audioText:'Alpha'},{id:'b',visualText:'Mail adam',audioText:'Bravo'}],comments:[]})],'chips.splitpage'))
+wait F.state().title === 'Name chips'
+eval window.cell=function(i,col){return document.querySelectorAll('#rows .row')[i].querySelector('.'+(col||'visual')+'-cell .cell-editable');}; window.st=function(i){return F.state().rows[i].visualText.replace(/&nbsp;/g,' ');}; window.opts=function(){var l=document.getElementById('who-list'); return l.hidden?'':Array.from(l.querySelectorAll('.who-option')).map(function(o){return (o.getAttribute('aria-selected')==='true'?'*':'')+o.textContent;}).join('|');}; window.owner=function(){return F.state().productionTags[0].owner;}; window.person=function(n){return F.state().people.filter(function(p){return p.name===n;}).length;}; true
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
+press  @
+wait opts() === '*Sam|Sandy'
+press sa
+wait opts() === '*Sam|Sandy|sa'
+key ArrowDown
+wait opts() === 'Sam|*Sandy|sa'
+key ArrowUp
+wait opts() === '*Sam|Sandy|sa'
+expect (function(){var l=document.getElementById('who-list').getBoundingClientRect(); var c=cell(0).getBoundingClientRect(); return l.top >= c.top && l.left >= 0 && l.right <= innerWidth;})()
+eval document.documentElement.removeAttribute('data-theme')
+shot 1257-who-list-light
+eval document.documentElement.setAttribute('data-theme','dark')
+eval new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); })
+shot 1257-who-list-dark
+eval document.documentElement.removeAttribute('data-theme')
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+key Tab
+wait cell(0).querySelectorAll('.who-anchor').length === 1
+expect opts() === ''
+expect cell(0).querySelector('.who-anchor').textContent === '@Sam'
+expect cell(0).querySelector('.who-anchor').getAttribute('contenteditable') === 'false'
+expect /for <span class="who-anchor" data-who="Sam" contenteditable="false">@Sam<\/span>$/.test(st(0))
+expect owner() === 'pSam'
+expect U.sizes().undo === window.__n + 1
+expect document.activeElement === cell(0)
+key ctrl KeyZ
+wait cell(0).querySelectorAll('.who-anchor').length === 0
+expect /for @sa$/.test(st(0))
+expect owner() === ''
+key ctrl+shift KeyZ
+wait cell(0).querySelectorAll('.who-anchor').length === 1
+expect owner() === 'pSam'
+caret #rows .row:nth-of-type(1) .visual-cell .cell-editable
+press .
+wait /@Sam<\/span>\.$/.test(st(0))
+eval document.documentElement.setAttribute('data-theme','dark')
+eval new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); })
+shot 1257-who-chip-dark
+eval document.documentElement.removeAttribute('data-theme')
+shot 1257-who-chip-light
+key ArrowLeft
+key Backspace
+key Backspace
+wait cell(0).querySelectorAll('.who-anchor').length === 0
+expect /for \.$/.test(st(0))
+expect owner() === ''
+key ctrl KeyZ
+wait cell(0).querySelectorAll('.who-anchor').length === 1
+expect owner() === 'pSam'
+caret #rows .row:nth-of-type(2) .visual-cell .cell-editable
+press @x.com
+wait /adam@x\.com$/.test(st(1))
+sleep 200
+expect opts() === ''
+expect cell(1).querySelectorAll('.who-anchor').length === 0
+press  @Robin
+wait opts() === '*Robin'
+key Enter
+wait cell(1).querySelectorAll('.who-anchor').length === 1
+expect person('Robin') === 1
+expect cell(1).querySelector('.who-anchor').getAttribute('data-who') === 'Robin'
+press  and @Sa
+wait opts() === '*Sam|Sandy|Sa'
+key Escape
+wait opts() === ''
+expect /and @Sa$/.test(st(1))
+press  went
+wait /and @Sa went$/.test(st(1))
+expect opts() === ''
+caret #rows .row:nth-of-type(1) .audio-cell .cell-editable
+press  @
+wait /Alpha @$/.test(F.state().rows[0].audioText)
+sleep 200
+expect opts() === ''
+expect /who-anchor/.test(F.buildSplitpage())
+quit

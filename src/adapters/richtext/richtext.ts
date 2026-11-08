@@ -2,7 +2,9 @@ import type { Seal } from "../../core/document/freeze.ts";
 import type { IdSource, ImageSource } from "../../core/document/ports.ts";
 import { withoutLoneSurrogates } from "../../core/document/text-policy.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
+import { toHtml } from "../../core/text/html.ts";
 import type { DecodeOptions } from "../../core/text/ports.ts";
+import { withoutWho } from "../../core/text/who.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { createCellReader, decodeBody } from "./decode.ts";
 import type { CellReader } from "./decode.ts";
@@ -74,7 +76,9 @@ export function createRichText(ports: RichTextPorts): RichText {
 
   function htmlToMarkdown(html: unknown): string {
     if (!html) return "";
-    return walkToMd(inertBody(html)).replace(/\n{3,}/g, "\n\n").trim();
+    const text = String(html);
+    const shown = text.indexOf("who-anchor") === -1 ? text : toHtml(withoutWho(decode(text, { media: true })));
+    return walkToMd(inertBody(shown)).replace(/\n{3,}/g, "\n\n").trim();
   }
 
   let cardDoc: Document | null = null;

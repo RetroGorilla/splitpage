@@ -30,7 +30,7 @@ function fixture() {
     view,
     document: fakeDocument().document,
     edits: fakeEdits().edits,
-    text: { productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0 } },
+    text: { productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) } },
     ids: { id: (prefix) => prefix + "test", docId: () => "test" },
     production: { entries: () => [] },
     shotHiding: { reveal: (id) => { calls.push("reveal:" + id); } },

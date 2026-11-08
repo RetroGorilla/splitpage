@@ -3,17 +3,17 @@ wait document.querySelectorAll('#rows .row').length > 1
 eval (function(){ for(var i=0;i<8;i++) document.querySelector('[data-action="add-row"]').click(); document.activeElement.blur(); window.F=window.__splitpageFormats; window.U=window.__undoTest; window.cell=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.st=function(i){return F.state().rows[i].visualText;}; window.modal=document.getElementById('tag-modal'); window.kw=function(){return document.querySelectorAll('#rows .plain-tag-keyword').length;}; return true; })()
 caret #rows .row:nth-of-type(3) .visual-cell .cell-editable
 click #rows .row:nth-of-type(3) .visual-cell button.tb-tag
-wait !modal.hidden
-expect modal.classList.contains('is-category-only')
-expect document.activeElement === modal.querySelector('.tag-cat-btn')
-expect modal.querySelectorAll('.tag-cat-btn').length == 6
-expect getComputedStyle(document.getElementById('tag-name')).display == none
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+expect modal.hidden && document.querySelector('#rows .tag-toolbar-picker').getAttribute('role') === 'group'
+expect document.activeElement.matches('.tag-toolbar-choice')
+expect document.querySelectorAll('#rows .tag-toolbar-choice').length == 6
+expect modal.hidden && document.querySelector('#rows .tag-toolbar-hint').textContent.indexOf('Or type') === 0
 expect document.getElementById('tag-all').getClientRects().length == 0
 expect document.getElementById('tag-apply').getClientRects().length == 0
-wait getComputedStyle(modal.querySelector('.modal-panel')).opacity === '1'
+wait getComputedStyle(document.querySelector('#rows .tag-toolbar-picker')).visibility === 'visible'
 shot 323-category-only
-click #tag-cats [data-tag-cat="prop"]
-wait modal.hidden && kw() === 1
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') === null && kw() === 1
 expect st(2) == prop:
 expect document.activeElement === cell(2)
 expect getSelection().anchorNode === cell(2).querySelector('.plain-tag-keyword').nextSibling && getSelection().anchorOffset === 1
@@ -31,9 +31,9 @@ expect st(2) === st(3)
 
 caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
 click #rows .row:nth-of-type(5) .visual-cell button.tb-tag
-wait !modal.hidden
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
 key Enter
-wait modal.hidden && kw() === 1
+wait document.querySelector('#rows [data-tags-open="true"]') === null && kw() === 1
 press Lantern
 key Tab
 wait kw() === 0 && cell(4).querySelector('.tag-anchor') !== null
@@ -48,21 +48,22 @@ caret #rows .row:nth-of-type(7) .visual-cell .cell-editable
 press Before.
 eval (function(){ U.flush(); window.before=st(6); window.steps=U.sizes().undo; window.at=getSelection().anchorOffset; return true; })()
 click #rows .row:nth-of-type(7) .visual-cell button.tb-tag
-wait !modal.hidden
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
 key Escape
 wait modal.hidden
-expect document.activeElement === cell(6) && getSelection().anchorOffset === window.at
+expect getSelection().anchorNode === cell(6).firstChild && getSelection().anchorOffset === window.at
 expect st(6) === window.before && U.sizes().undo === window.steps
 click #rows .row:nth-of-type(7) .visual-cell button.tb-tag
-wait !modal.hidden
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
 mouse down ({x:5,y:5})
 mouse up ({x:5,y:5})
 wait modal.hidden
-expect document.activeElement === cell(6) && getSelection().anchorOffset === window.at
+expect document.querySelector('#rows [data-tags-open="true"]') === null
 expect st(6) === window.before && U.sizes().undo === window.steps
+eval (function(){ var c=cell(6); c.focus(); var r=document.createRange(); r.setStart(c.firstChild,window.at); r.collapse(true); var s=getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
 click #rows .row:nth-of-type(7) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect U.sizes().undo === window.steps + 1
 key ctrl KeyZ
@@ -71,8 +72,8 @@ expect kw() === 0
 
 caret #rows .row:nth-of-type(8) .visual-cell .cell-editable
 click #rows .row:nth-of-type(8) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="sound"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="sound"]
 wait kw() === 1
 expect st(7) == sfx:
 press Wind
@@ -83,8 +84,8 @@ expect cell(7).querySelectorAll('.tag-anchor').length == 0
 
 caret #rows .row:nth-of-type(9) .visual-cell .cell-editable
 click #rows .row:nth-of-type(9) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="gear"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="gear"]
 wait kw() === 1
 press Tripod
 caret #rows .row:nth-of-type(10) .visual-cell .cell-editable
@@ -98,8 +99,8 @@ expect modal.hidden && kw() === 0
 caret #rows .row:nth-of-type(10) .visual-cell .cell-editable
 press word
 click #rows .row:nth-of-type(10) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect cell(9).textContent.replace(/\u200b/g, '') == word
 press Lamp
@@ -112,8 +113,8 @@ caret #rows .row:nth-of-type(11) .visual-cell .cell-editable
 press Prefix.
 click #rows .row:nth-of-type(11) .visual-cell [data-cmd="bold"]
 click #rows .row:nth-of-type(11) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect st(10) == Prefix.<strong>prop:</strong>
 press Camera
@@ -132,8 +133,8 @@ caret #rows .row:nth-of-type(13) .visual-cell .cell-editable
 press word
 eval (function(){ U.flush(); window.html13=cell(12).innerHTML; window.st13=st(12); window.steps13=U.sizes().undo; return true; })()
 click #rows .row:nth-of-type(13) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect cell(12).textContent.replace(/\u200b/g, '') == word
 expect st(12) === window.st13 && U.sizes().undo === window.steps13
@@ -143,8 +144,8 @@ expect cell(12).innerHTML === window.html13 && st(12) === window.st13
 expect U.sizes().undo === window.steps13
 expect document.activeElement === cell(12)
 click #rows .row:nth-of-type(13) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 press Lamp
 key Escape
@@ -156,8 +157,8 @@ caret #rows .row:nth-of-type(14) .visual-cell .cell-editable
 press Words
 eval (function(){ U.flush(); var c = cell(13); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(13), steps: U.sizes().undo }; return true; })()
 click #rows .row:nth-of-type(14) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect st(13) === window.base.st && U.sizes().undo === window.base.steps
 key Enter
@@ -168,8 +169,8 @@ caret #rows .row:nth-of-type(15) .visual-cell .cell-editable
 press Words
 eval (function(){ U.flush(); var c = cell(14); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(14), steps: U.sizes().undo }; return true; })()
 click #rows .row:nth-of-type(15) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect st(14) === window.base.st && U.sizes().undo === window.base.steps
 press Lamp
@@ -181,8 +182,8 @@ caret #rows .row:nth-of-type(16) .visual-cell .cell-editable
 press Words
 eval (function(){ U.flush(); var c = cell(15); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(15), steps: U.sizes().undo }; return true; })()
 click #rows .row:nth-of-type(16) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect st(15) === window.base.st && U.sizes().undo === window.base.steps
 key Backspace
@@ -195,8 +196,8 @@ caret #rows .row:nth-of-type(17) .visual-cell .cell-editable
 press Words
 eval (function(){ U.flush(); var c = cell(16); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(16), steps: U.sizes().undo }; return true; })()
 click #rows .row:nth-of-type(17) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect st(16) === window.base.st && U.sizes().undo === window.base.steps
 key ctrl KeyB
@@ -209,8 +210,8 @@ caret #rows .row:nth-of-type(18) .visual-cell .cell-editable
 press Words
 eval (function(){ U.flush(); var c = cell(17); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(17), steps: U.sizes().undo }; return true; })()
 click #rows .row:nth-of-type(18) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect st(17) === window.base.st && U.sizes().undo === window.base.steps
 key ctrl KeyB
@@ -225,8 +226,8 @@ caret #rows .row:nth-of-type(19) .visual-cell .cell-editable
 press Words
 eval (function(){ U.flush(); var c = cell(18); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(18), steps: U.sizes().undo }; return true; })()
 click #rows .row:nth-of-type(19) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect st(18) === window.base.st && U.sizes().undo === window.base.steps
 eval (function(){ var dt = new DataTransfer(); dt.setData('text/plain', 'PASTED'); cell(18).dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()
@@ -242,8 +243,8 @@ caret #rows .row:nth-of-type(20) .visual-cell .cell-editable
 press Words
 eval (function(){ U.flush(); var c = cell(19); c.focus(); var r = document.createRange(); r.setStart(c.firstChild, 2); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); window.base = { html: c.innerHTML, st: st(19), steps: U.sizes().undo }; return true; })()
 click #rows .row:nth-of-type(20) .visual-cell button.tb-tag
-wait !modal.hidden
-click #tag-cats [data-tag-cat="prop"]
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]
 wait kw() === 1
 expect st(19) === window.base.st && U.sizes().undo === window.base.steps
 key alt Enter

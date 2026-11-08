@@ -79,7 +79,7 @@ export function fakeWriterPorts(initial: DocumentView) {
     text: {
       ...fakeTextServices(document).text,
       htmlToPlainText: (html) => String(html ?? ""),
-      productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0 }
+      productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) }
     },
     editing: {
       selection: () => selection, paint: () => paint
@@ -139,10 +139,18 @@ export function fakePrompterPorts(initial: DocumentView | null = null) {
       browserRecognition: () => null
     },
     panels: { close: (id) => { calls.push(["close", id]); }, closeAll: () => { calls.push(["closeAll"]); } },
+    microphones: {
+      support: () => "browser",
+      list: async () => ({ options: [], named: false }),
+      onChange: () => () => {}
+    },
+    changes: { onChange: () => () => {} },
     preferences: {
       prompterFlag: (name) => flags[name],
       setPrompterFlag: (name, value) => { flags[name] = value; calls.push([name, value]); },
-      skipOnboardingForPrompter: () => { calls.push(["skipOnboarding"]); }
+      skipOnboardingForPrompter: () => { calls.push(["skipOnboarding"]); },
+      microphone: () => "",
+      setMicrophone: (id) => { calls.push(["microphone", id]); }
     },
     viewFlags: { hideShot: () => false }, notices: notices.notices, focus: { lastRow: () => null },
     state: {

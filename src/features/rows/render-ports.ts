@@ -39,7 +39,7 @@ export interface RowsRenderPorts {
   readonly text: Pick<TextServices, "sanitizeHtml" | "storedHtmlFromDom" | "fromHtml" | "productionReaders">;
   readonly video: {
     readonly card: (url: string) => HTMLElement;
-    readonly hostLabel: (link: { href?: string | undefined }) => string;
+    readonly hostLabel: (link: { href?: string | undefined; name?: string | undefined }) => string;
   };
   readonly editing: {
     readonly cells: () => Pick<CellEditing<Element>, "edit" | "sync">;

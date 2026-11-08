@@ -9,6 +9,7 @@ export interface DesktopWireFile {
 export interface DesktopWireStamp {
   lastModified?: number;
   size: number;
+  bundleRefused?: DesktopWireBundleRefusal;
 }
 
 export interface DesktopWireRecent {
@@ -34,6 +35,42 @@ export interface DesktopWireBoot {
 export interface DesktopWireFailure {
   ok: false;
   code: string;
+}
+
+export interface DesktopWireBundleProgress {
+  job: string;
+  done: number;
+  total: number;
+}
+export type DesktopWireBundleCopy = { ok: true; name: string } | DesktopWireFailure;
+export type DesktopWireBundleCarry = { ok: true; copied: number; kept: number; missing: number } | (DesktopWireFailure & { name?: string; copied?: number; left?: number });
+export interface DesktopWireBundleRefusal {
+  reason: "clash" | "failed" | "cancelled" | "unlinkable" | "missing";
+  folder: string;
+  name: string;
+  copied: number;
+  count?: number;
+}
+export interface DesktopWireBundleSavePlan {
+  from: string;
+  to: string;
+  files: number;
+  bytes: number;
+  copyBytes: number;
+  linkable: boolean;
+}
+export interface DesktopWireBundlePathLink {
+  name: string;
+  path: string;
+}
+export type DesktopWireBundlePlanAnswer = { ok: true; plan: DesktopWireBundleSavePlan | null } | DesktopWireFailure |
+  { ok: false; code: "CLASH" | "MISSING"; refused: DesktopWireBundleRefusal };
+export type DesktopWireBundleChoiceAnswer = { ok: true; links: DesktopWireBundlePathLink[] } | DesktopWireFailure |
+  { ok: false; code: "MISSING" | "UNLINKABLE"; refused: DesktopWireBundleRefusal };
+export interface DesktopWireBundleCarryNote extends DesktopWireBundleProgress {
+  from: string;
+  to: string;
+  result?: DesktopWireBundleCarry;
 }
 
 export type DesktopWireDraftWrite = { ok: true; seq: number; bytes: number; obsolete?: undefined } | DesktopWireFailure;
@@ -174,6 +211,11 @@ export type DesktopWireDownload = { ok: true; state: "ready" } | { ok: false; er
 export type DesktopWireInstall = { ok: true; testMode?: true; quitting?: true } | { ok: false; error: string; message?: string };
 export type DesktopWirePrompter = { ok: true; kind: "file"; voice: "relay" | "browser"; browser?: string } | DesktopWireFailure;
 export type DesktopWireVoiceStart = { ok: true; session: number } | DesktopWireFailure;
+export interface DesktopWireMicrophone {
+  id: string;
+  name: string;
+}
+export type DesktopWireMicrophones = { ok: true; microphones: DesktopWireMicrophone[] } | DesktopWireFailure;
 export interface DesktopWireVoiceEvent {
   type: string;
   session: number;
@@ -222,9 +264,11 @@ type DesktopChannelCall<A extends readonly unknown[], R> = { args: A; result: R 
 export interface DesktopIpcContract {
   "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;
   "splitpage:open-file-dialog": DesktopChannelCall<[], DesktopWireFile | null>;
-  "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[] }], { id: string; name: string } | null>;
+  "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[]; script?: boolean }], { id: string; name: string } | null>;
   "splitpage:read-file": DesktopChannelCall<[string], DesktopWireFile>;
   "splitpage:write-file": DesktopChannelCall<[string, string | ArrayBuffer | Uint8Array], DesktopWireStamp>;
+  "splitpage:bundle-save-plan": DesktopChannelCall<[string, string[]], DesktopWireBundlePlanAnswer>;
+  "splitpage:bundle-save-choice": DesktopChannelCall<[string, string], DesktopWireBundleChoiceAnswer>;
   "splitpage:stat-file": DesktopChannelCall<[string], { lastModified: number; size: number } | null>;
   "splitpage:recents-list": DesktopChannelCall<[], DesktopWireRecent[]>;
   "splitpage:recents-remove": DesktopChannelCall<[string], DesktopWireRecent[]>;
@@ -237,6 +281,11 @@ export interface DesktopIpcContract {
   "splitpage:set-theme": DesktopChannelCall<[string], void>;
   "splitpage:video-file-grant": DesktopChannelCall<[string], string | null>;
   "splitpage:video-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
+  "splitpage:video-path-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
+  "splitpage:bundle-file": DesktopChannelCall<[string, string], DesktopWireBundleCopy>;
+  "splitpage:bundle-carry": DesktopChannelCall<[DesktopWireBundleCarryNote], void>;
+  "splitpage:bundle-cancel": DesktopChannelCall<[string], void>;  "splitpage:bundle-progress": DesktopChannelCall<[DesktopWireBundleProgress], void>;
+  "splitpage:bundled-file-open": DesktopChannelCall<[string], { ok: true } | DesktopWireFailure>;
   "splitpage:video-thumbnail": DesktopChannelCall<[string, string], { ok: true; bytes: Uint8Array; mime: string } | DesktopWireFailure>;
   "splitpage:update-status": DesktopChannelCall<[], DesktopWireUpdateStatus> & { receive: [DesktopWireUpdateStatus] };
   "splitpage:update-check": DesktopChannelCall<[], DesktopWireUpdateStatus>;
@@ -245,8 +294,9 @@ export interface DesktopIpcContract {
   "splitpage:prompter-open-in-browser": DesktopChannelCall<[], DesktopWirePrompter>;
   "splitpage:prompter-open-in-chromium": DesktopChannelCall<[], DesktopWirePrompter>;
   "splitpage:voice-status": DesktopChannelCall<[], { available: boolean }>;
-  "splitpage:voice-start": DesktopChannelCall<[], DesktopWireVoiceStart>;
-  "splitpage:voice-stop": DesktopChannelCall<[], { ok: true }>;
+  "splitpage:voice-start": DesktopChannelCall<[microphone?: string], DesktopWireVoiceStart>;
+  "splitpage:voice-microphones": DesktopChannelCall<[], DesktopWireMicrophones>;
+  "splitpage:voice-stop": DesktopChannelCall<[session?: number], { ok: true }>;
   "splitpage:set-document-state": DesktopChannelCall<[{ title?: string; dirty?: boolean; pristine?: boolean; docId?: string | null; fileId?: string | null }], void>;
   "splitpage:renderer-ready": DesktopChannelCall<[], void>;
   "splitpage:route-open": DesktopChannelCall<[{ kind: "file"; fileId: string }], { where: DesktopRouteWhere }>;

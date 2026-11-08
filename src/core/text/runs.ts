@@ -1,6 +1,6 @@
 import { BROLL_MARKER_RE } from "../document/broll.ts";
 import { isSha256Hex, normalizeImageRef } from "../../../shared/blob-policy.ts";
-import { hasLoneSurrogate, safeHref, withoutLoneSurrogates } from "../document/text-policy.ts";
+import { cappedName, hasLoneSurrogate, safeHref, withoutLoneSurrogates } from "../document/text-policy.ts";
 import type { StoredImageRef } from "../document/text-policy.ts";
 import type { TagName } from "../document/tags.ts";
 
@@ -33,13 +33,17 @@ export type ImageRun = { atom: "image"; id?: undefined; ref: StoredImageRef; tex
 
 export type VideoRun = { atom: "video"; id?: undefined; href: string; host: string; text: ""; marks: Marks };
 
+export type WhoRun = { atom: "who"; id?: undefined; name: string; text: string; marks: Marks };
+
 type MediaRun = ImageRun | VideoRun;
 
-export type AtomRun = BrollRun | MediaRun;
+export type AtomRun = BrollRun | MediaRun | WhoRun;
 
 export type Run = TextRun | AtomRun;
 
-export type RunInput = { atom?: unknown; id?: unknown; text?: unknown; marks?: unknown; ref?: unknown; href?: unknown; host?: unknown };
+export type RunInput = { atom?: unknown; id?: unknown; text?: unknown; marks?: unknown; ref?: unknown; href?: unknown; host?: unknown; name?: unknown };
+
+export const WHO_NAME_MAX = 60;
 
 export type CellInput = readonly (RunInput | null | undefined)[] | null | undefined;
 
@@ -75,8 +79,28 @@ export function isMediaRun(r: Run | null | undefined): r is MediaRun {
   return !!r && (r.atom === "image" || r.atom === "video");
 }
 
+export function isWhoRun(r: Run | null | undefined): r is WhoRun {
+  return !!r && r.atom === "who";
+}
+
+export function whoName(name: unknown): string {
+  return cappedName(cleanText(name).replace(/\s+/g, " ").replace(/^[ @]+/, ""), WHO_NAME_MAX);
+}
+
+function whoRun(r: RunInput, opts: NormalizeOptions): WhoRun | null {
+  const name = whoName(r.name);
+  if (!name) return null;
+  const marks = cleanMarks(r.marks, true);
+  if (opts.hasComment && marks.cmt) {
+    marks.cmt = marks.cmt.filter(opts.hasComment);
+    if (!marks.cmt.length) delete marks.cmt;
+  }
+  return { atom: "who", name: name, text: "@" + name, marks: orderedMarks(marks) };
+}
+
 export function atomId(r: AtomRun): string {
   if (r.atom === "broll") return r.id;
+  if (r.atom === "who") return "who:" + r.name;
   return r.atom === "image" ? "image:" + r.ref.sha256 : "video:" + r.href;
 }
 
@@ -169,6 +193,11 @@ export function normalizeCell(cell: CellInput, opts?: NormalizeOptions | null): 
     if (r.atom === "image" || r.atom === "video") {
       const media = mediaRun(r, opts);
       if (media) runs.push(media);
+      return;
+    }
+    if (r.atom === "who") {
+      const who = whoRun(r, opts);
+      if (who) runs.push(who);
       return;
     }
     if (r.atom === "broll") {

@@ -295,7 +295,7 @@
   </div>
 </div>
 
-<input type="file" id="file-input" accept="image/*" hidden>
+<input type="file" id="file-input" hidden>
 <input type="file" id="import-file-input" accept=".txt,.md,.markdown,.docx,.csv,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
 <input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 <input type="file" id="import-app-data-input" accept="application/json,.json" hidden>
@@ -357,6 +357,7 @@
   </div>
 </section>
 <button class="tag-suggest tag-open-hint" id="tag-open-hint" type="button" tabindex="-1"></button>
+<ul class="who-list" id="who-list" role="listbox" aria-label="People" hidden></ul>
 
 <div class="modal-backdrop" id="import-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
@@ -515,6 +516,7 @@
           <button id="pp-scene-next" type="button" class="pp-step-btn" aria-label="Next beat" title="Next beat (→)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
         </div>
         <button id="pp-voice" type="button" class="pp-btn"><svg class="pp-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="pp-lamp" aria-hidden="true"></span><span class="pp-voice-label">Follow My Voice</span></button>
+        <select id="pp-mic" class="pp-select" aria-label="Microphone for Follow My Voice" title="Microphone for Follow My Voice" hidden></select>
         <button id="pp-skip-shot" type="button" class="pp-btn" aria-pressed="false" title="Leave out the beats already marked Filmed"><svg class="pp-icon" aria-hidden="true"><use href="#i-eye-off"/></svg>Skip filmed</button>
       </div>
       <div class="pp-group pp-rig">
@@ -693,6 +695,49 @@
     </div>
   </div>
 </div>
+
+<div class="modal-backdrop" id="bundle-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="bundle-title" aria-describedby="bundle-detail">
+    <div class="modal-header">
+      <h2 id="bundle-title">Copy this video into the script's folder?</h2>
+    </div>
+    <p class="modal-hint" id="bundle-detail"></p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="bundle-decline">Link to where it is</button>
+        <button type="button" class="btn btn-accent" id="bundle-accept">Copy it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="bundle-save-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="bundle-save-title" aria-describedby="bundle-save-detail">
+    <div class="modal-header">
+      <h2 id="bundle-save-title">Save the files with this script?</h2>
+    </div>
+    <p class="modal-hint" id="bundle-save-detail"></p>
+    <p class="modal-hint" id="bundle-save-warning" hidden></p>
+    <p class="modal-hint" id="bundle-save-share" hidden></p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="bundle-save-cancel">Cancel</button>
+        <button type="button" class="btn" id="bundle-save-link">Don't copy the files</button>
+        <button type="button" class="btn btn-accent" id="bundle-save-copy">Copy files</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bundle-progress" id="bundle-progress" role="status" aria-live="polite" hidden>
+  <span class="bundle-progress-text" id="bundle-progress-text"></span>
+  <progress class="bundle-progress-bar" id="bundle-progress-bar" max="1" value="0"></progress>
+  <button type="button" class="btn" id="bundle-hide">Hide</button>
+  <button type="button" class="btn" id="bundle-cancel">Cancel</button>
+</div>
+<button type="button" class="bundle-indicator" id="bundle-indicator" title="Show the copy's progress" hidden></button>
 
 <div class="modal-backdrop" id="md-rows-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="md-rows-title">

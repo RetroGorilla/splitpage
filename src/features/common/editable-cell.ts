@@ -71,7 +71,8 @@ export function editableCellHtml(o: EditableCellOptions) {
   if (!toolbar) return cell;
   return (
     '<div class="field-wrap"' + (o.wrapStyle ? ' style="' + o.wrapStyle + '"' : '') + '>' +
-      '<div class="mini-toolbar" role="toolbar" aria-label="' + toolbar.label + '">' + toolbar.buttons + '</div>' +
+      '<div class="mini-toolbar" role="toolbar" aria-label="' + toolbar.label + '">' +
+      (o.toolbar === "script" || o.toolbar === "scriptAudio" ? '<div class="mini-toolbar-controls">' + toolbar.buttons + '</div>' : toolbar.buttons) + '</div>' +
       cell +
       LINK_POPOVER_HTML +
     '</div>'

@@ -19,6 +19,27 @@ export interface DesktopFileHandle {
   readonly isSameEntry: (other: unknown) => boolean;
 }
 
+function bundleRefusalReason(refused: { readonly reason: string; readonly folder: string; readonly name: string; readonly count?: number }): string {
+  const folder = "“" + refused.folder + "”";
+  if (refused.reason === "missing") {
+    const n = typeof refused.count === "number" && refused.count > 1 ? refused.count : 1;
+    return (n === 1 ? "1 linked file is" : n + " linked files are") + " missing from " + folder + ". Restore " + (n === 1 ? "it" : "them") +
+      ", or remove " + (n === 1 ? "its link" : "their links") + ", then save again";
+  }
+  if (refused.reason === "unlinkable") return "“" + refused.name + "” in " + folder + " is on a network share, so the new script cannot link to it there. Save again and copy the files";
+  if (refused.reason === "clash") return folder + " already has a different “" + refused.name + "”. Rename or move that file, then save again";
+  if (refused.reason === "cancelled") return "copying the files to " + folder + " was stopped, so the script was not saved there";
+  return "“" + refused.name + "” could not be copied to " + folder + ", so the script was not saved there";
+}
+
+export function bundleRefusalText(refused: { readonly reason: string; readonly folder: string; readonly name: string; readonly copied: number; readonly count?: number }): string {
+  const reason = bundleRefusalReason(refused);
+  const copied = refused.copied;
+  if (!(copied > 0)) return reason;
+  return reason + ". " + (copied === 1 ? "1 file was" : copied + " files were") + " already copied to “" + refused.folder + "” and " +
+    (copied === 1 ? "is" : "are") + " still there";
+}
+
 function bridge(): DesktopPort {
   const port = desktopPort();
   if (!port) throw new Error("The desktop bridge is not available");
@@ -61,6 +82,8 @@ export function makeDesktopHandle(entry: Pick<DesktopFileEntry, "id" | "name"> |
         },
         close: function () {
           return bridge().writeFile(id, concatBytes(chunks)).then(function (written) {
+            const refused = written && written.bundleRefused;
+            if (refused) throw new Error(bundleRefusalText(refused));
             const stamp = written && written.lastModified;
             return typeof stamp === "number" && isFinite(stamp) ? { lastModified: stamp } : undefined;
           });

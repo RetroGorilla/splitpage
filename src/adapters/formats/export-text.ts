@@ -11,7 +11,7 @@ import { capturedPicture, capturedRowPicture, exportAssetsNow } from "./export-a
 import { rowImageDataUrl } from "../storage/02c-blobs.ts";
 import { rowImage, rowImageKey } from "../../core/document/media.ts";
 import { videoLinkText } from "../storage/02d-gallery.ts";
-import { morePictureRefs, rowVideoLinks, videoLinkLabel } from "../../core/document/gallery.ts";
+import { isOtherFileLink, morePictureRefs, rowVideoLinks, videoLinkLabel } from "../../core/document/gallery.ts";
 import {
   breakdownGroups,
   brollSummaryText,
@@ -296,7 +296,7 @@ export function toMarkdownDoc(doc: ExportDocument, opts?: MarkdownOptions | null
     vlinks.forEach(function (l) {
       lines.push(l.href
         ? "▶ [" + videoLinkLabel(l).replace(/([[\]()])/g, "\\$1") + "](" + l.href.replace(/[()\s]/g, encodeURIComponent) + ")"
-        : "▶ " + (l.name || "").replace(/([\\`*_[\]<>])/g, "\\$1") + " _(video file)_");
+        : "▶ " + (l.name || "").replace(/([\\`*_[\]<>])/g, "\\$1") + (isOtherFileLink(l) ? " _(file)_" : " _(video file)_"));
     });
     if (vlinks.length) lines.push("");
     const vmd = mdHardBreaks(markdownWithMarkers(row.visualText, nums, services));

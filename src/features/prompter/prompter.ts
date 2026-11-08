@@ -3,6 +3,7 @@ import { flowOf } from "../../core/flow/flow.ts";
 import { numberHtml } from "../common/number-html.ts";
 import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { withoutCues } from "../../core/text/cues.ts";
+import { withoutWho } from "../../core/text/who.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { toPlainText } from "../../core/text/projections.ts";
@@ -10,6 +11,8 @@ import { projection } from "../../core/text/runs.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { CellInput, Run } from "../../core/text/runs.ts";
 import type { PrompterRecognition } from "../../application/prompter-services.ts";
+import { microphoneChoices } from "../../application/microphones.ts";
+import type { MicrophoneChoice } from "../../application/microphones.ts";
 import type { PrompterFeaturePorts, PrompterRuntime } from "./ports.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 
@@ -23,7 +26,7 @@ type VoiceRecognition = PrompterRecognition & {
   onerror: ((event: { readonly error: string }) => void) | null;
   onend: (() => void) | null;
   onwarning: ((event: { readonly warning?: string } | null) => void) | null;
-  ondevice: ((event: { readonly name?: unknown } | null) => void) | null;
+  ondevice: ((event: { readonly name?: unknown; readonly fellBack?: unknown } | null) => void) | null;
 };
 
 type TimerHandle = ReturnType<typeof setTimeout>;
@@ -56,6 +59,9 @@ interface PrompterState {
   speakCursor: number;
   voiceRestarts: number;
   voiceStream: MediaStream | null;
+  voiceTrack: MediaStreamTrack | null;
+  voiceMicFellBack: boolean;
+  voiceWanted: string;
   finalTranscript: string;
   interimTranscript: string;
   beatSeconds: number[];
@@ -92,6 +98,9 @@ function freshState(): PrompterState {
     speakCursor: -1,
     voiceRestarts: 0,
     voiceStream: null,
+    voiceTrack: null,
+    voiceMicFellBack: false,
+    voiceWanted: "",
     finalTranscript: "",
     interimTranscript: "",
     beatSeconds: [],
@@ -168,7 +177,7 @@ export function buildPrompterContent(): void {
     ? doc.rows.filter(function (row) { return row.status !== "shot"; })
     : doc.rows;
   const beatEntries = source.map(function (row): BeatEntry {
-    const cell = trimPrompterCell(withoutCues(ports.text.cellOf(row.audioText)));
+    const cell = trimPrompterCell(withoutWho(withoutCues(ports.text.cellOf(row.audioText))));
     return { id: row.id, cell: cell, view: cell.length ? prompterBeatHtml(cell) : null };
   });
   const lines = beatEntries.filter(function (e) { return e.view; }) as BeatLine[];
@@ -505,6 +514,7 @@ export function openPrompter(): void {
   el.inert = false;
   el.hidden = false;
   ports.state.setOpen(true);
+  hearMicrophones();
   lockPageScrollWhenArrived(el);
   (document.getElementById("prompter-scroll") as HTMLElement).scrollTop = 0;
   setPrompterPlaying(false);
@@ -524,6 +534,7 @@ export function openPrompter(): void {
 export function closePrompter(): void {
   setPrompterPlaying(false);
   stopVoiceFollow();
+  stopHearingMicrophones();
   ports.state.setOpen(false);
   for (const listener of viewListeners) listener();
   releaseWakeLock();
@@ -653,7 +664,80 @@ function setVoiceLabel(btn: HTMLElement, text: string): void {
 }
 
 function listeningStatus(fallback: string): string {
-  return state.voiceMicName ? "Listening — " + state.voiceMicName : fallback;
+  if (!state.voiceMicName) return state.voiceMicFellBack ? fallback + MIC_FELL_BACK_NOTE : fallback;
+  return "Listening — " + state.voiceMicName + (state.voiceMicFellBack ? MIC_FELL_BACK_NOTE : "");
+}
+
+const MIC_FELL_BACK_NOTE = " (your chosen microphone isn't connected)";
+const MIC_ENDED_MESSAGE = "Your chosen microphone stopped working — pick it again or choose another.";
+let micListing = 0;
+
+function renderMicrophoneChoices(select: HTMLSelectElement, choices: readonly MicrophoneChoice[]): void {
+  select.replaceChildren(...choices.map(function (choice) {
+    const option = document.createElement("option");
+    option.value = choice.value;
+    option.textContent = choice.label;
+    return option;
+  }));
+  select.value = ports.preferences.microphone();
+}
+
+function refreshMicrophoneChoices(): void {
+  const select = document.getElementById("pp-mic") as HTMLSelectElement | null;
+  if (!select || select.hidden) return;
+  const owner = ports;
+  const ticket = ++micListing;
+  ports.microphones.list().then(function (list) {
+    if (ports !== owner || ticket !== micListing) return;
+    renderMicrophoneChoices(select, microphoneChoices(ports.preferences.microphone(), list));
+  });
+}
+
+function syncMicrophoneSelect(): void {
+  const select = document.getElementById("pp-mic") as HTMLSelectElement | null;
+  if (!select) return;
+  select.hidden = ports.microphones.support() !== "yes";
+  refreshMicrophoneChoices();
+}
+
+let hearingMicrophones: (() => void) | null = null;
+
+function hearMicrophones(): void {
+  if (hearingMicrophones) return;
+  const owner = ports;
+  const stopPreferences = ports.changes.onChange(function (change) {
+    if (ports !== owner || change.name !== "microphone") return;
+    refreshMicrophoneChoices();
+    const running = ports.state.voiceFollowing() || state.voiceStarting;
+    if (running && ports.microphones.support() === "yes" && ports.preferences.microphone() !== state.voiceWanted) {
+      stopVoiceFollow();
+      startVoiceFollow();
+    }
+  });
+  const stopDevices = ports.microphones.onChange(refreshMicrophoneChoices);
+  hearingMicrophones = function () { stopPreferences(); stopDevices(); };
+}
+
+function stopHearingMicrophones(): void {
+  hearingMicrophones?.();
+  hearingMicrophones = null;
+}
+
+async function openMicrophone(wanted: string, current: () => boolean): Promise<{ stream: MediaStream; fellBack: boolean }> {
+  const media = navigator.mediaDevices;
+  if (!wanted) return { stream: await media.getUserMedia({ audio: true }), fellBack: false };
+  try {
+    return { stream: await media.getUserMedia({ audio: { deviceId: { exact: wanted } } }), fellBack: false };
+  } catch (err) {
+    const name = err && (err as { name?: unknown }).name;
+    if ((name !== "OverconstrainedError" && name !== "NotFoundError") || !current()) throw err;
+    return { stream: await media.getUserMedia({ audio: true }), fellBack: true };
+  }
+}
+
+function beginRecognition(): void {
+  if (state.voiceTrack) (state.recognition as VoiceRecognition).start(state.voiceTrack);
+  else (state.recognition as VoiceRecognition).start();
 }
 
 const VOICE_IDLE_LABEL = "Follow My Voice";
@@ -672,6 +756,7 @@ function voiceIdleLabel(): string {
 export function updateVoiceAvailability(): void {
   const btn = document.getElementById("pp-voice") as HTMLButtonElement | null;
   if (!btn) return;
+  syncMicrophoneSelect();
   if (ports.desktop.running() && !ports.voice.known()) {
     btn.disabled = true;
     const owner = ports;
@@ -787,6 +872,7 @@ function releaseVoiceStream(): void {
   if (!state.voiceStream) return;
   try { state.voiceStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
   state.voiceStream = null;
+  state.voiceTrack = null;
 }
 
 const DESKTOP_VOICE_WARNINGS: Record<string, () => string> = {
@@ -849,13 +935,16 @@ export async function startVoiceFollow(): Promise<void> {
   state.wordCursor = state.speakable[state.speakCursor] ?? -1;
   state.voiceRestarts = 0;
   state.voiceMicName = "";
+  state.voiceMicFellBack = false;
   clearSpokenHighlights();
+  const wanted = ports.microphones.support() === "yes" ? ports.preferences.microphone() : "";
+  state.voiceWanted = wanted;
 
-  if (!desktop && !relayed && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+  if (!desktop && !relayed && typeof navigator.mediaDevices?.getUserMedia === "function") {
     setVoiceStatus("Asking for the microphone…", "");
-    let receivedStream: MediaStream;
+    let opened: { stream: MediaStream; fellBack: boolean };
     try {
-      receivedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      opened = await openMicrophone(wanted, function () { return ports === owner && mySession === voiceSession; });
     } catch (err) {
       if (ports !== owner || mySession !== voiceSession) return;
       state.voiceStarting = false;
@@ -868,18 +957,28 @@ export async function startVoiceFollow(): Promise<void> {
       return;
     }
     if (ports !== owner || mySession !== voiceSession) {
-      try { receivedStream.getTracks().forEach(function (track) { track.stop(); }); } catch (e) {}
+      try { opened.stream.getTracks().forEach(function (track) { track.stop(); }); } catch (e) {}
       return;
     }
-    state.voiceStream = receivedStream;
+    state.voiceStream = opened.stream;
+    state.voiceMicFellBack = opened.fellBack;
     try {
       const track = state.voiceStream.getAudioTracks()[0];
       state.voiceMicName = (track && track.label) || "";
+      if (wanted && !opened.fellBack && track) {
+        state.voiceTrack = track;
+        track.onended = function () {
+          if (ports !== owner || mySession !== voiceSession) return;
+          stopVoiceFollow();
+          setVoiceStatus(MIC_ENDED_MESSAGE, "error");
+        };
+      }
     } catch (e) {}
+    refreshMicrophoneChoices();
   }
 
   try {
-    state.recognition = (desktop ? ports.voice.createDesktop()
+    state.recognition = (desktop ? ports.voice.createDesktop(wanted)
       : relayed ? ports.voice.createRelay()
       : new (ports.voice.browserRecognition() as new () => PrompterRecognition)()) as VoiceRecognition;
   } catch (e) {
@@ -913,6 +1012,7 @@ export async function startVoiceFollow(): Promise<void> {
     };
     state.recognition.ondevice = function (e) {
       if (ports !== owner || mySession !== voiceSession) return;
+      if (e && e.fellBack) { state.voiceMicFellBack = true; return; }
       state.voiceMicName = (e && typeof e.name === "string") ? e.name : "";
     };
   }
@@ -960,6 +1060,9 @@ export async function startVoiceFollow(): Promise<void> {
     } else if (e.error === "audio-capture") {
       setVoiceStatus("No microphone was found.", "error");
       ports.state.setVoiceFollowing(false);
+    } else if (e.error === "device-lost") {
+      setVoiceStatus(MIC_ENDED_MESSAGE, "error");
+      ports.state.setVoiceFollowing(false);
     } else if (e.error === "network") {
       setVoiceStatus("Speech recognition needs an internet connection.", "error");
     } else {
@@ -984,17 +1087,19 @@ export async function startVoiceFollow(): Promise<void> {
     }
     setTimeout(function () {
       if (ports !== owner || mySession !== voiceSession || !ports.state.voiceFollowing() || !state.recognition) return;
-      try { state.recognition.start(); }
+      const chosen = !!state.voiceTrack;
+      try { beginRecognition(); }
       catch (e) {
         ports.state.setVoiceFollowing(false);
         state.recognition = null;
         releaseVoiceStream();
         updateVoiceButtonUI();
+        if (chosen) setVoiceStatus(MIC_ENDED_MESSAGE, "error");
       }
     }, Math.min(2000, 150 * state.voiceRestarts));
   };
   try {
-    state.recognition.start();
+    beginRecognition();
   } catch (e) {
     state.voiceStarting = false;
     releaseVoiceStream();
@@ -1157,6 +1262,10 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
   if (launch) startPrompterLaunch(launch);
 
   return {
+    chooseMicrophone: function (id) {
+      ports.preferences.setMicrophone(id);
+      document.getElementById("pp-play")?.focus({ preventScroll: true });
+    },
     closeFind: function () {
       if (!searching || !dismissSearch) return false;
       dismissSearch();
@@ -1212,6 +1321,7 @@ export function startPrompter(nextPorts: PrompterFeaturePorts): PrompterRuntime 
     beatMode: function () { return !!state.promptBeatMode; },
     dispose: function () {
       if (ports !== nextPorts) return;
+      stopHearingMicrophones();
       disposeRuntime();
       clearTimeout(initialReadyTimer as TimerHandle);
       initialReadyTimer = null;

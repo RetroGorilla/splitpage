@@ -7,7 +7,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 export interface VideoFilePorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "onReplaced">;
   readonly notices: Pick<NoticePort, "show">;
-  readonly desktop: Pick<DesktopVideo, "grant" | "opens" | "open">;
+  readonly desktop: Pick<DesktopVideo, "grant" | "opens" | "open" | "openPath" | "openBundled" | "bundle" | "cancelBundle">;
   readonly externalLinks: ExternalLinks;
 }
 
