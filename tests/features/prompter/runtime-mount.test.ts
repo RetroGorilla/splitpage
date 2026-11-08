@@ -1295,3 +1295,86 @@ test("a microphone chosen in another tab restarts a running Follow My Voice, and
     assert.equal(choice.saved, "dev-2", "the restart writes nothing back, so two tabs cannot echo each other");
   } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
 });
+
+function relayMicrophoneHarness(saved: string) {
+  const made = microphoneHarness(saved);
+  DesktopListener.made = [];
+  const ports: PrompterFeaturePorts = {
+    ...made.ports,
+    voice: {
+      ...made.ports.voice, available: () => true, hasRelay: () => true,
+      createRelay: (microphone: string) => {
+        const listener = new DesktopListener();
+        DesktopListener.made.push({ microphone, listener });
+        return listener;
+      }
+    },
+    microphones: { ...made.ports.microphones, list: async () => ({ options: [{ id: DESKTOP_MIC_ONE, label: "Mic One" }, { id: DESKTOP_MIC_TWO, label: "Mic Two" }], named: true }) }
+  };
+  return { ...made, ports };
+}
+
+test("in the Present in Browser window the saved desktop microphone goes to the relay, and the status names it", async () => {
+  const { ports } = relayMicrophoneHarness(DESKTOP_MIC_TWO);
+  const requests: MicRequest[] = [];
+  const restore = installMicrophones(async (request) => { requests.push(request); return microphoneStream("Browser Mic").stream; });
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.deepEqual(DesktopListener.made.map((m) => m.microphone), [DESKTOP_MIC_TWO]);
+    assert.deepEqual(requests, [], "the browser's own microphone is never opened");
+    const listener = lastDesktopListener();
+    listener.ondevice?.({ name: "Mic Two" });
+    listener.onstart?.();
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Mic Two");
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); restore(); }
+});
+
+test("in the Present in Browser window the system default asks the relay for no microphone, as before", async () => {
+  const { ports } = relayMicrophoneHarness("");
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    assert.deepEqual(DesktopListener.made.map((m) => m.microphone), [""]);
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); }
+});
+
+test("in the Present in Browser window a chosen microphone that is not connected says the default is used, and is kept", async () => {
+  const { ports, choice } = relayMicrophoneHarness(DESKTOP_MIC_ONE);
+  const runtime = startPrompter(ports);
+  try {
+    runtime.buildPrompterContent();
+    await runtime.startVoiceFollow();
+    const listener = lastDesktopListener();
+    listener.ondevice?.({ fellBack: true });
+    listener.ondevice?.({ name: "Built-in Mic" });
+    listener.onstart?.();
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, "Listening — Built-in Mic (your chosen microphone isn't connected)");
+    assert.equal(choice.saved, DESKTOP_MIC_ONE);
+  } finally { runtime.stopVoiceFollow(); runtime.dispose(); }
+});
+
+test("in the Present in Browser window the list shows the desktop app's microphones, and a pick while following restarts the relay on it", async () => {
+  const { ports, choice } = relayMicrophoneHarness(DESKTOP_MIC_ONE);
+  const runtime = startPrompter(ports);
+  const mounted = mountPrompter({ window: win as unknown as Window, ports: runtime });
+  const select = () => document.getElementById("pp-mic") as HTMLSelectElement;
+  try {
+    runtime.openPrompter();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(select().hidden, false);
+    assert.deepEqual(Array.from(select().options, o => [o.value, o.textContent]), [["", "System default"], [DESKTOP_MIC_ONE, "Mic One"], [DESKTOP_MIC_TWO, "Mic Two"]]);
+    assert.equal(select().value, DESKTOP_MIC_ONE);
+    await runtime.startVoiceFollow();
+    const first = lastDesktopListener();
+    first.onstart?.();
+    select().value = DESKTOP_MIC_TWO;
+    select().dispatchEvent(new ((select().ownerDocument.defaultView) as Window & typeof globalThis).Event("change", { bubbles: true }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(choice.saved, DESKTOP_MIC_TWO);
+    assert.equal(first.stops, 1, "the old relay stream is closed");
+    assert.deepEqual(DesktopListener.made.map((m) => m.microphone), [DESKTOP_MIC_ONE, DESKTOP_MIC_TWO]);
+  } finally { runtime.stopVoiceFollow(); mounted.dispose(); runtime.dispose(); }
+});

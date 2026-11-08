@@ -5996,10 +5996,29 @@ function openRelayStream(port, pathname) {
   });
 }
 
+function relayGet(port, pathname) {
+  return new Promise((resolve) => {
+    const req = http.request({ host: "127.0.0.1", port, path: pathname, method: "GET",
+      headers: { host: `127.0.0.1:${port}`, connection: "close" } }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (d) => { body += d; });
+      res.on("end", () => resolve({ status: res.statusCode, body }));
+    });
+    req.on("error", () => resolve(null));
+    req.end();
+  });
+}
+
 async function caseTeleprompterVoiceRelay(target, fixturesDir) {
   const tag = target.name + " teleprompter: Follow My Voice relayed to the browser";
   const fixturePath = writeFixture(fixturesDir, "prompter-relay.splitpage", "Prompter — relay",
     [["Wide shot", "The first line the reader says out loud."]]);
+  const micOne = "{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}";
+  const micTwo = "{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}";
+  const micGone = "{0.0.1.00000000}.{99999999-9999-4999-8999-999999999999}";
+  const argsLog = path.join(fixturesDir, "prompter-relay-args.log");
+  rmrf(argsLog);
   let app = null;
   try {
     app = await launchApp(target, {
@@ -6007,7 +6026,9 @@ async function caseTeleprompterVoiceRelay(target, fixturesDir) {
       fixtures: [fixturePath],
       env: {
         SPLITPAGE_TEST_VOICE_HELPER: path.join(__dirname, "fake-voice-helper.mjs"),
-        FAKE_VOICE_TEXT: "the first line the reader says"
+        FAKE_VOICE_TEXT: "the first line the reader says",
+        FAKE_VOICE_MICROPHONES: JSON.stringify([{ id: micOne, name: "Microphone (Relay One)" }, { id: micTwo, name: "Microphone (Relay Two)" }]),
+        FAKE_VOICE_ARGS_LOG: argsLog
       }
     });
     const cdp = app.cdp;
@@ -6044,6 +6065,35 @@ async function caseTeleprompterVoiceRelay(target, fixturesDir) {
     stream.close();
     const stopped = await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
     record(tag + ": the browser closing the stream stops main's listener", !!stopped, JSON.stringify(stopped));
+
+    const listedMics = await relayGet(port, "/prompter-voice/" + m[4] + "/microphones");
+    record(tag + ": the browser copy lists the desktop listener's microphones through the relay (#1162)",
+      !!listedMics && listedMics.status === 200 &&
+      listedMics.body === JSON.stringify({ microphones: [{ id: micOne, name: "Microphone (Relay One)" }, { id: micTwo, name: "Microphone (Relay Two)" }] }),
+      JSON.stringify(listedMics));
+    const forged = await relayGet(port, "/prompter-voice/" + m[4] + "?microphone=-List");
+    const stForged = await shell(cdp, "voiceStatus", {});
+    record(tag + ": a microphone id the desktop did not issue is refused and starts nothing (#1162)",
+      !!forged && forged.status === 400 && !!stForged && stForged.running === false, JSON.stringify([forged, stForged]));
+    const onTwo = await openRelayStream(port, "/prompter-voice/" + m[4] + "?microphone=" + encodeURIComponent(micTwo));
+    const namedTwo = onTwo ? await pollNode(async () => onTwo.events.some((e) => e.type === "start") ? onTwo.events : null, 15000).catch(() => null) : null;
+    record(tag + ": a chosen microphone is opened by main's listener and named down the stream (#1162)",
+      !!namedTwo && namedTwo[0].type === "device" && namedTwo[0].name === "Microphone (Relay Two)", JSON.stringify(namedTwo));
+    if (onTwo) onTwo.close();
+    await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
+    const onGone = await openRelayStream(port, "/prompter-voice/" + m[4] + "?microphone=" + encodeURIComponent(micGone));
+    const fellBack = onGone ? await pollNode(async () => onGone.events.some((e) => e.type === "start") ? onGone.events : null, 15000).catch(() => null) : null;
+    record(tag + ": a chosen microphone that is not connected starts the default and says so first (#1162)",
+      !!fellBack && fellBack[0].type === "fallback", JSON.stringify(fellBack));
+    if (onGone) onGone.close();
+    await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
+    let relayArgs = [];
+    try { relayArgs = fs.readFileSync(argsLog, "utf8").trim().split("\n").map((line) => JSON.parse(line)); } catch { }
+    record(tag + ": main lists with -List, passes only the listed id with -Device, and nothing for the rest (#1162)",
+      relayArgs.some((a) => a.length === 1 && a[0] === "-List") &&
+      relayArgs.filter((a) => a[0] === "-Device").length === 1 &&
+      relayArgs.filter((a) => a[0] === "-Device").every((a) => a.length === 2 && a[1] === micTwo) &&
+      relayArgs.every((a) => a.length === 0 || (a.length === 1 && a[0] === "-List") || a[0] === "-Device"), JSON.stringify(relayArgs));
 
     const again = await openRelayStream(port, "/prompter-voice/" + m[4]);
     await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running ? st : null; }, 10000).catch(() => null);

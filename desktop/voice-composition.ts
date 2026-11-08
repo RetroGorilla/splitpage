@@ -34,7 +34,8 @@ function createVoiceComposition({ isPackaged, appRoot, testMode, tabs, staticAll
         },
         cspHeader,
         voice: {
-          start: (ownerId) => voiceHelperInstance().start(VOICE_RELAY_PREFIX + ownerId),
+          start: (ownerId, microphone) => voiceHelperInstance().start(VOICE_RELAY_PREFIX + ownerId, microphone),
+          microphones: () => voiceHelperInstance().microphones(),
           stop: (ownerId, session) => {
             const helper = voiceHelperInstance();
             const st = helper.status();

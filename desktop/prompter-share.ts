@@ -6,9 +6,10 @@ import type * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
 import type * as NodeCrypto from "node:crypto";
 import type * as NodePath from "node:path";
-import type { createVoiceHelper } from "./voice-helper.ts";
+import type { createVoiceHelper, isMicrophoneId as IsMicrophoneId } from "./voice-helper.ts";
 
 const http: typeof NodeHttp = require("node:http");
+const { isMicrophoneId }: { isMicrophoneId: typeof IsMicrophoneId } = require("./voice-helper.ts");
 const net: typeof NodeNet = require("node:net");
 const crypto: typeof NodeCrypto = require("node:crypto");
 const path: typeof NodePath = require("node:path");
@@ -28,6 +29,7 @@ interface DesktopPrompterShareEntry {
   expiresAt: number;
   timer: NodeJS.Timeout | null;
   streams: Set<DesktopPrompterVoiceStream>;
+  microphones: string[];
 }
 interface DesktopPrompterShareOptions {
   staticAllowlist?: Record<string, { file: string; type: string }> | undefined;
@@ -36,7 +38,12 @@ interface DesktopPrompterShareOptions {
   preferredPort?: number;
   ttlMs?: number;
   now?: () => number;
-  voice?: { start: ReturnType<typeof createVoiceHelper>["start"]; stop: (ownerId: string, session: number) => void };
+  voiceStartTimeoutMs?: number;
+  voice?: {
+    start: ReturnType<typeof createVoiceHelper>["start"];
+    stop: (ownerId: string, session: number) => void;
+    microphones?: ReturnType<typeof createVoiceHelper>["microphones"];
+  };
 }
 
 const SHARE_TTL_MS = 60 * 60 * 1000;
@@ -51,8 +58,10 @@ const SHAREABLE_EXTENSIONS = [".splitpage", ".md", ".html", ".htm"];
 const TOKEN_RE = /^[0-9a-f]{64}$/;
 const SCRIPT_PATH_RE = /^\/prompter-script\/([0-9a-f]{64})$/;
 const VOICE_PATH_RE = /^\/prompter-voice\/([0-9a-f]{64})$/;
+const MICROPHONES_PATH_RE = /^\/prompter-voice\/([0-9a-f]{64})\/microphones$/;
 
 const VOICE_HEARTBEAT_MS = 15000;
+const VOICE_START_TIMEOUT_MS = 15000;
 
 const VOICE_START_ERRORS: Record<string, string> = { UNAVAILABLE: "unavailable", SPAWN_FAILED: "helper-failed" };
 
@@ -83,6 +92,7 @@ function createPrompterShare(options?: DesktopPrompterShareOptions) {
   const ttlMs = opts.ttlMs || SHARE_TTL_MS;
   const now = typeof opts.now === "function" ? opts.now : Date.now;
   const voice = opts.voice && typeof opts.voice.start === "function" ? opts.voice : null;
+  const voiceStartTimeoutMs = opts.voiceStartTimeoutMs || VOICE_START_TIMEOUT_MS;
 
   const staticTable: NonNullable<DesktopPrompterShareOptions["staticAllowlist"]> = {};
   for (const [route, entry] of Object.entries(opts.staticAllowlist || {})) {
@@ -134,7 +144,7 @@ function createPrompterShare(options?: DesktopPrompterShareOptions) {
     return null;
   }
 
-  function openVoiceStream(req: NodeHttp.IncomingMessage, res: NodeHttp.ServerResponse, found: NonNullable<ReturnType<typeof shareForToken>>) {
+  function openVoiceStream(req: NodeHttp.IncomingMessage, res: NodeHttp.ServerResponse, found: NonNullable<ReturnType<typeof shareForToken>>, microphone: string | undefined) {
     const headers = {
       "content-type": "text/event-stream; charset=utf-8",
       "x-content-type-options": "nosniff",
@@ -170,16 +180,62 @@ function createPrompterShare(options?: DesktopPrompterShareOptions) {
     }, VOICE_HEARTBEAT_MS);
     if (typeof stream.heartbeat.unref === "function") stream.heartbeat.unref();
     share.expiresAt = now() + ttlMs;
-    let answer: ReturnType<ReturnType<typeof createVoiceHelper>["start"]>;
-    try { answer = (voice as NonNullable<typeof voice>).start(ownerId); } catch { answer = { ok: false, code: "SPAWN_FAILED" }; }
-    if (stream.closed) return;
-    if (!answer || !answer.ok || typeof answer.session !== "number") {
-      writeVoice(stream, { type: "error", code: VOICE_START_ERRORS[(answer && (answer as Partial<Extract<typeof answer, { ok: false }>>).code) as string] || "helper-failed" });
+    const refuse = (code: string | undefined) => {
+      writeVoice(stream, { type: "error", code: VOICE_START_ERRORS[code as string] || "helper-failed" });
       writeVoice(stream, { type: "end", reason: "exited" });
       stream.close();
-      return;
-    }
-    stream.session = answer.session;
+    };
+    const begin = (listed: string | undefined, fellBack: boolean) => {
+      let answer: ReturnType<ReturnType<typeof createVoiceHelper>["start"]>;
+      try {
+        answer = listed === undefined ? (voice as NonNullable<typeof voice>).start(ownerId) : (voice as NonNullable<typeof voice>).start(ownerId, listed);
+      } catch { answer = { ok: false, code: "SPAWN_FAILED" }; }
+      if (stream.closed) return;
+      if (!answer || !answer.ok || typeof answer.session !== "number") {
+        refuse(answer && (answer as Partial<Extract<typeof answer, { ok: false }>>).code);
+        return;
+      }
+      stream.session = answer.session;
+      if (fellBack) writeVoice(stream, { type: "fallback", session: answer.session });
+    };
+    if (microphone === undefined) { begin(undefined, false); return; }
+    const known = listedMicrophone(share.microphones, microphone);
+    if (known) { begin(known, false); return; }
+    let timedOut = false;
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      if (!stream.closed) refuse("SPAWN_FAILED");
+    }, voiceStartTimeoutMs);
+    if (typeof deadline.unref === "function") deadline.unref();
+    void refreshMicrophones(share).then((found) => {
+      clearTimeout(deadline);
+      if (timedOut || stream.closed) return;
+      const listed = listedMicrophone(found.map((entry) => entry.id), microphone);
+      begin(listed, !listed);
+    });
+  }
+
+  function listedMicrophone(ids: readonly string[], wanted: string) {
+    return ids.find((id) => id.toLowerCase() === wanted.toLowerCase());
+  }
+
+  async function refreshMicrophones(share: DesktopPrompterShareEntry) {
+    if (!voice || typeof voice.microphones !== "function") return [];
+    let answer;
+    try { answer = await voice.microphones(); } catch { return []; }
+    if (!answer || !answer.ok || !Array.isArray(answer.microphones)) return [];
+    const found = answer.microphones.filter((entry) => entry && typeof entry.id === "string" && isMicrophoneId(entry.id) &&
+      typeof entry.name === "string").map((entry) => ({ id: entry.id, name: entry.name }));
+    share.microphones = found.map((entry) => entry.id);
+    return found;
+  }
+
+  function microphoneAsked(url: string | undefined): { ok: boolean; id?: string } {
+    let asked: string[];
+    try { asked = new URL(url as string, "http://" + host).searchParams.getAll("microphone"); } catch { return { ok: false }; }
+    if (!asked.length) return { ok: true };
+    if (asked.length !== 1 || !isMicrophoneId(asked[0] as string)) return { ok: false };
+    return { ok: true, id: asked[0] as string };
   }
 
   function pushVoice(ownerId: string, event: Parameters<Parameters<typeof createVoiceHelper>[0]["onEvent"]>[1]) {
@@ -249,7 +305,25 @@ function createPrompterShare(options?: DesktopPrompterShareOptions) {
         send(res, 404, { "content-type": "application/json" }, JSON.stringify({ error: "expired" }));
         return;
       }
-      openVoiceStream(req, res, found);
+      const asked = microphoneAsked(req.url);
+      if (!asked.ok) {
+        send(res, 400, { "content-type": "application/json" }, JSON.stringify({ error: "bad microphone" }));
+        return;
+      }
+      openVoiceStream(req, res, found, asked.id);
+      return;
+    }
+
+    const microphonesMatch = MICROPHONES_PATH_RE.exec(pathname);
+    if (microphonesMatch) {
+      const found = voice ? shareForToken(microphonesMatch[1], "voiceToken") : null;
+      if (!found || found.expired) {
+        send(res, 404, { "content-type": "application/json" }, JSON.stringify({ error: "expired" }));
+        return;
+      }
+      const microphones = await refreshMicrophones(found.share);
+      send(res, 200, { "content-type": "application/json; charset=utf-8" },
+        req.method === "HEAD" ? undefined : JSON.stringify({ microphones }));
       return;
     }
 
@@ -330,7 +404,7 @@ function createPrompterShare(options?: DesktopPrompterShareOptions) {
     const share: DesktopPrompterShareEntry = {
       token,
       voiceToken: withVoice ? crypto.randomBytes(32).toString("hex") : null,
-      name: path.basename(name), text, expiresAt: now() + ttlMs, timer: null, streams: new Set()
+      name: path.basename(name), text, expiresAt: now() + ttlMs, timer: null, streams: new Set(), microphones: []
     };
     replaceShare(ownerId, share);
     const relay = voiceParam(listening, share);
@@ -360,7 +434,7 @@ function createPrompterShare(options?: DesktopPrompterShareOptions) {
   };
 }
 
-export type { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES, PREFERRED_PORT, SHARE_TTL_MS, TOKEN_RE };
+export type { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES, PREFERRED_PORT, SHARE_TTL_MS, TOKEN_RE, VOICE_START_TIMEOUT_MS };
 
 module.exports = {
   createPrompterShare,
@@ -368,5 +442,6 @@ module.exports = {
   MAX_SCRIPT_BYTES,
   PREFERRED_PORT,
   SHARE_TTL_MS,
-  TOKEN_RE
+  TOKEN_RE,
+  VOICE_START_TIMEOUT_MS
 };

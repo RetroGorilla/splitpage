@@ -196,7 +196,7 @@ test("settings turns its note into the list once the desktop app says it can lis
 });
 
 test("settings shows a note, not a list, where recognition cannot be aimed at a microphone", () => {
-  for (const [support, note] of [["desktop", /Windows default microphone/], ["relay", /^Follow My Voice in this window listens through the Splitpage desktop app, on the Windows default microphone/], ["browser", /system's default microphone/]] as const) {
+  for (const [support, note] of [["desktop", /Windows default microphone/], ["browser", /system's default microphone/]] as const) {
     const h = setup({ support: () => support, list: async () => ({ options: [], named: false }), onChange: () => () => {} });
     try {
       h.mounted.openSettings();

@@ -1,7 +1,7 @@
 import { microphoneList, recognitionTakesTrack } from "../../application/microphones.ts";
 import type { BrowserBrand, MicrophoneDevices } from "../../application/microphones.ts";
 import { desktopVoiceAvailable, desktopVoiceKnown, listDesktopMicrophones, loadDesktopVoice } from "../desktop/desktop-voice.ts";
-import { hasVoiceRelay } from "../desktop/voice-relay.ts";
+import { hasVoiceRelay, listRelayMicrophones } from "../desktop/voice-relay.ts";
 import { SpeechRecognitionCtor } from "./speech-recognition.ts";
 
 type BrandedNavigator = Navigator & { readonly userAgentData?: { readonly brands?: readonly BrowserBrand[]; readonly platform?: string } };
@@ -19,7 +19,7 @@ export function createMicrophoneDevices(given: { readonly desktop: () => boolean
   }
   return {
     support: function () {
-      if (hasVoiceRelay()) return "relay";
+      if (hasVoiceRelay()) return "yes";
       if (given.desktop()) {
         if (!desktopVoiceKnown()) learnDesktopVoice();
         return desktopVoiceAvailable() ? "yes" : "desktop";
@@ -30,6 +30,7 @@ export function createMicrophoneDevices(given: { readonly desktop: () => boolean
       return "yes";
     },
     list: async function () {
+      if (hasVoiceRelay()) return listRelayMicrophones();
       if (given.desktop()) return listDesktopMicrophones();
       try {
         const found = await navigator.mediaDevices.enumerateDevices();
