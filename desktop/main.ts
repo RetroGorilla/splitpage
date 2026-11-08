@@ -3,7 +3,7 @@
 import type { DesktopNativePath, DesktopNativeFsPromises, DesktopNativeFs } from "./native-inputs.d.ts";
 
 import type { DesktopMainTab, DesktopMainWindow } from "./main-types.d.ts";
-import type { DesktopIpcEvent, DesktopFileIpcDependencies } from "./ipc-boundaries.d.ts";
+import type { DesktopIpcEvent, DesktopFileIpcDependencies, VideoFileGrant } from "./ipc-boundaries.d.ts";
 
 import type { DesktopWireHistoryMeta, DesktopWireUpdateStatus, DesktopIpcArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
 
@@ -149,7 +149,7 @@ const SKIP_UPDATE_CHECK = process.env.SPLITPAGE_NO_UPDATE_CHECK === "1";
 const testExternalOpens: string[] = [];
 const testChromiumLaunches: { browser: string; url: string }[] = [];
 const testVideoOpens: string[] = [];
-const videoFileGrants = new Map<string, string>();
+const videoFileGrants = new Map<string, VideoFileGrant>();
 if (TEST_MODE) {
 
   const cancelIndex = (opts: Electron.MessageBoxSyncOptions | Electron.MessageBoxOptions | undefined) => (opts && typeof opts.cancelId === "number")

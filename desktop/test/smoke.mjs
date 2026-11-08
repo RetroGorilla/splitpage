@@ -4059,7 +4059,7 @@ async function caseGalleryVideoBundle(target) {
     const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
     const title = await evalPage(cdp, "document.getElementById('bundle-title').textContent");
     const focused = await evalPage(cdp, "document.activeElement && document.activeElement.id");
-    record(tag + ": the drop asks whether to copy the video, with Copy it as the default", !!asked && title === "Copy this video into the script's folder?" && focused === "bundle-accept",
+    record(tag + ": the drop asks whether to add the video to the folder, with Copy it as the default", !!asked && title === "Add this video to the script's folder?" && focused === "bundle-accept",
       JSON.stringify({ asked, title, focused }));
     await evalPage(cdp, "document.getElementById('bundle-accept').click()");
     const bundled = await poll(cdp, "(function(){ var l = " + locationOf("take one.mp4") + "; return l && l.kind === 'bundled' ? l : null; })()", 20000).catch(() => null);
@@ -4170,8 +4170,9 @@ async function caseGalleryAttachFile(target) {
     const asked = await poll(cdp, modalOpen, 10000).catch(() => false);
     const title = await evalPage(cdp, "document.getElementById('bundle-title').textContent");
     const focused = await evalPage(cdp, "document.activeElement && document.activeElement.id");
-    record(tag + ": the drop asks whether to copy the file, with Copy it as the default", !!asked && title === "Copy this file into the script's folder?" && focused === "bundle-accept",
-      JSON.stringify({ asked, title, focused }));
+    const buttons = await evalPage(cdp, "Array.prototype.map.call(document.querySelectorAll('#bundle-modal .modal-footer-actions button'), function (b) { return b.textContent; })");
+    record(tag + ": the drop asks Copy, Move or Leave for the file, with Copy it as the default", !!asked && title === "Add this file to the script's folder?" && focused === "bundle-accept" &&
+      JSON.stringify(buttons) === JSON.stringify(["Leave it where it is", "Move it", "Copy it"]), JSON.stringify({ asked, title, focused, buttons }));
     await evalPage(cdp, "document.getElementById('bundle-accept').click()");
     const bundled = await poll(cdp, "(function(){ var l = " + linksNamed("brief.pdf") + "[0]; return l && l.location && l.location.kind === 'bundled' ? l.location : null; })()", 20000).catch(() => null);
     record(tag + ": the PDF's link names the copy, not a path", !!bundled && bundled.name === "brief.pdf" && !("path" in bundled), JSON.stringify(bundled));
@@ -4182,6 +4183,22 @@ async function caseGalleryAttachFile(target) {
       "return x.querySelector('.scene-gallery-link') && x.querySelector('.scene-gallery-link').textContent === 'brief.pdf'; })[0]; " +
       "return l ? { host: l.querySelector('.scene-gallery-host').textContent, icon: !!l.querySelector('.scene-gallery-file-icon'), tiles: document.querySelectorAll('#rows .row')[0].querySelectorAll('.scene-gallery-tile').length } : null; })()");
     record(tag + ": the beat shows the file as a line with its type and an icon, not as a picture", !!chip && chip.host === "PDF" && chip.icon && chip.tiles === 0, JSON.stringify(chip));
+
+    const notes = path.join(drops, "notes.pdf");
+    fs.writeFileSync(notes, Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(8192, 2)]));
+    const notesBytes = fs.readFileSync(notes);
+    await drop(cdp, "__a3", notes);
+    await poll(cdp, modalOpen, 10000).catch(() => false);
+    await evalPage(cdp, "document.getElementById('bundle-move').click()");
+    const movedTo = await poll(cdp, "(function(){ var l = " + linksNamed("notes.pdf") + "[0]; return l && l.location && l.location.kind === 'bundled' ? l.location.name : null; })()", 20000).catch(() => null);
+    const movedFile = path.join(folder, "notes.pdf");
+    record(tag + ": Move it moves the file into “Episode 12 files”: the link names it there, the original is gone, and the bytes are the same",
+      movedTo === "notes.pdf" && !fs.existsSync(notes) && fs.existsSync(movedFile) && fs.readFileSync(movedFile).equals(notesBytes),
+      JSON.stringify({ movedTo, original: fs.existsSync(notes), folder: fs.existsSync(folder) ? fs.readdirSync(folder) : null }));
+    const movedToast = await toastContaining(cdp, "Moved “notes.pdf” to “Episode 12 files”.", 5000).catch(() => false);
+    record(tag + ": the move says so", !!movedToast, "");
+    const forgedMove = await evalPage(cdp, "window.splitpageDesktop.moveVideoFile(" + JSON.stringify("0".repeat(32)) + ", 'bundle9')");
+    record(tag + ": main refuses to move a file it never granted", !!forgedMove && forgedMove.ok === false && forgedMove.code === "UNKNOWN", JSON.stringify(forgedMove));
 
     await drop(cdp, "__a2", tool);
     const toast = await toastContaining(cdp, "“setup.exe” wasn't attached.", 5000).catch(() => false);

@@ -70,6 +70,7 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly videoFilePath: (file: unknown) => string | null;
   readonly openVideoPath: DesktopCall<"splitpage:video-path-open">;
   readonly bundleVideoFile: (token: string, job: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-file">>;
+  readonly moveVideoFile: (token: string, job: string, onProgress?: Listener<DesktopBundleProgress>) => ReturnType<DesktopCall<"splitpage:bundle-move">>;
   readonly onBundleCarry: (cb: Listener<DesktopIpcReceiveArgs<"splitpage:bundle-carry">[0]>) => void;
   readonly cancelBundle: (...args: DesktopIpcArgs<"splitpage:bundle-cancel">) => void;
   readonly openBundledFile: DesktopCall<"splitpage:bundled-file-open">;
@@ -115,7 +116,7 @@ export const DESKTOP_PORT_MEMBERS = [
   "blobPut", "blobGet", "blobMissing", "printToPdf",
   "getSessionInfo", "openExternal", "setTheme",
   "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath",
-  "bundleVideoFile", "onBundleCarry", "cancelBundle", "openBundledFile", "planBundleSave", "chooseBundleSave",
+  "bundleVideoFile", "moveVideoFile", "onBundleCarry", "cancelBundle", "openBundledFile", "planBundleSave", "chooseBundleSave",
   "planBundleExport", "exportBundle", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",
   "openPrompterInBrowser", "openPrompterInChromium",

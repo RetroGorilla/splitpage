@@ -12,6 +12,7 @@ import type { createHistoryStore } from "../shared/history-store.ts";
 import type * as importHistoryPolicy from "../shared/history-policy.ts";
 import type { openableVideoPath } from "../shared/video-embed.ts";
 import type { createBundleJobs } from "./bundle-jobs.ts";
+import type { BundleMoveGrant } from "./bundle-copy.ts";
 import type { DesktopIpcWrappers } from "./ipc-setup.ts";
 import type { createVoiceComposition } from "./voice-composition.ts";
 import type { createPdfPrinter } from "./print-pdf.ts";
@@ -82,6 +83,12 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
   pendingDraftFlushes: Map<number, (result: object) => void>;
 }
 
+export interface VideoFileGrant {
+  readonly path: string;
+  readonly sender: number;
+  readonly move: BundleMoveGrant | null;
+}
+
 export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "draftStore" | "testMode"> {
   launchIntentFor: (tab: DesktopMainTab) => DesktopWireBoot["launchIntent"];
   draftsIsHeld: (id: string) => boolean;
@@ -89,10 +96,10 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   shell: Pick<Shell, "openExternal" | "openPath">;
   nativeTheme: Pick<NativeTheme, "themeSource">;
   themeChoice: Pick<ReturnType<typeof createThemeChoice>, "write">;
-  videoFileGrants: Map<string, string>;
+  videoFileGrants: Map<string, VideoFileGrant>;
   ATTACHABLE_FILE: RegExp;
   openableVideoPath: typeof openableVideoPath;
-  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "copy" | "cancel" | "openBundled">;
+  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "copy" | "move" | "moveGrantOf" | "cancel" | "openBeside" | "openBundled">;
   testVideoOpens: string[];
   videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopIpcResult<"splitpage:video-thumbnail">>;
   updateStatus: () => DesktopWireUpdateStatus;

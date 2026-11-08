@@ -101,7 +101,7 @@ function harness({ source, copierOptions = {}, exporterOptions = {}, onSend, res
   const tabOf = (event) => (event.tab === undefined ? (tabs.get(tab.id) || null) : event.tab);
   const { registerShellIpc } = createShellIpc({
     tabOf, shell: { openPath: async () => "", openExternal: async () => {} },
-    testMode: false, testVideoOpens: [], videoFileGrants: new Map(grants), ATTACHABLE_FILE, openableVideoPath, bundleJobs
+    testMode: false, testVideoOpens: [], videoFileGrants: new Map(grants.map(([token, p]) => [token, { path: p, sender: 7, move: null }])), ATTACHABLE_FILE, openableVideoPath, bundleJobs
   });
   const { registerFileIpc } = createFileIpc({
     dialog: dialog || { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showSaveDialog: async () => ({ canceled: true }) },
@@ -445,9 +445,10 @@ test("an export queued behind a cancelled copy waits until it settles, and never
     assert.equal(answered, false, "the export waits while the cancelled copy has not settled");
     assert.equal(fs.existsSync(zip), false);
     released.open();
-    assert.deepEqual(await copying, { ok: true, name: "take.mp4" }, "the copy committed with its rename, so it is kept");
-    assert.deepEqual(await exporting, { ok: true, files: 1, left: 0 });
-    assert.equal(readZip(zip).entries.get("Episode 12 files/take.mp4").bytes.toString(), "mine", "the export has the whole file, never the placeholder");
+    assert.deepEqual(await copying, { ok: false, code: "CANCELLED" }, "the Cancel came before the rename, so nothing was published");
+    assert.equal(fs.existsSync(path.join(s.folder, "take.mp4")), false, "and its placeholder is gone");
+    assert.deepEqual(await exporting, { ok: true, files: 0, left: 1 });
+    assert.equal(readZip(zip).entries.has("Episode 12 files/take.mp4"), false, "the export never has the placeholder");
   } finally { s.done(); }
 });
 

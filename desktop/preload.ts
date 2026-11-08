@@ -290,13 +290,19 @@ if (location.origin === "splitpage://app") {
       try { return webUtils.getPathForFile(file) || null; } catch { return null; }
     },
 
-    openVideoPath(storedPath) {
+    openVideoPath(storedPath, size) {
+      if (Number.isSafeInteger(size)) return invoke("splitpage:video-path-open", String(storedPath || ""), size);
       return invoke("splitpage:video-path-open", String(storedPath || ""));
     },
 
     bundleVideoFile(token, job, onProgress) {
       const id = String(job || "");
       return bundleJob(id, onProgress, () => invoke("splitpage:bundle-file", String(token || ""), id));
+    },
+
+    moveVideoFile(token, job, onProgress) {
+      const id = String(job || "");
+      return bundleJob(id, onProgress, () => invoke("splitpage:bundle-move", String(token || ""), id));
     },
 
     onBundleCarry(cb) {

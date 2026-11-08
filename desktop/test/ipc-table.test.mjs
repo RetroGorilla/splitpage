@@ -67,7 +67,7 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:get-session-info invoke", "splitpage:get-app-version-sync sendSync", "splitpage:tab-boot-sync sendSync",
   "splitpage:open-external send", "splitpage:set-theme send", "splitpage:video-file-grant invoke",
   "splitpage:video-file-open invoke", "splitpage:video-path-open invoke",
-  "splitpage:bundle-file invoke", "splitpage:bundle-cancel send", "splitpage:bundled-file-open invoke",
+  "splitpage:bundle-file invoke", "splitpage:bundle-move invoke", "splitpage:bundle-cancel send", "splitpage:bundled-file-open invoke",
   "splitpage:video-thumbnail invoke", "splitpage:update-status invoke",
   "splitpage:update-check invoke", "splitpage:update-download invoke", "splitpage:update-install invoke",
   "splitpage:prompter-open-in-browser invoke", "splitpage:prompter-open-in-chromium invoke",
@@ -320,7 +320,7 @@ test("in test mode, main.ts's real groups register the 67 pairs in the order the
 test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
   const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
-  assert.equal(expected.length, 62);
+  assert.equal(expected.length, 63);
   assert.deepEqual(seen, expected);
   for (const pair of seen) {
     const [name, direction] = pair.split(" ");
@@ -597,14 +597,16 @@ test("the video thumbnail channel: a typed host and video ref, app page only", (
   }
 });
 
-test("the stored-video-path channel takes one string from the app page only, and main checks the path itself", () => {
+test("the stored-video-path channel takes one string and the link's size from the app page only, and main checks the path itself", () => {
   const c = channelFor("splitpage:video-path-open", "invoke");
   assert.ok(c, "the channel exists");
-  assert.deepEqual([...c.argsSchema], ["string"]);
+  assert.deepEqual([...c.argsSchema], ["string", "integer?"]);
   assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN]);
   assert.ok(!c.testOnly);
   assert.equal(checkArgs(c.argsSchema, ["C:\\Videos\\take.mp4"]), null);
-  for (const bad of [[], [null], [{ path: "C:\\Videos\\take.mp4" }], [["C:\\a.mp4"]], ["C:\\a.mp4", "C:\\Windows\\System32\\calc.exe"]]) {
+  assert.equal(checkArgs(c.argsSchema, ["C:\\Videos\\take.mp4", 4096]), null);
+  for (const bad of [[], [null], [{ path: "C:\\Videos\\take.mp4" }], [["C:\\a.mp4"]], ["C:\\a.mp4", "C:\\Windows\\System32\\calc.exe"],
+    ["C:\\a.mp4", 1.5], ["C:\\a.mp4", 4096, "C:\\b.mp4"]]) {
     assert.ok(checkArgs(c.argsSchema, bad), "refuses " + JSON.stringify(bad));
   }
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((row) => row.name === c.name), "never the tab strip's");
@@ -613,6 +615,8 @@ test("the stored-video-path channel takes one string from the app page only, and
 test("the bundle channels take a token, a name or a job id, never a path to copy from or to, from the app page only", () => {
   const shapes = {
     "splitpage:bundle-file invoke": [["string", "string"], [["0".repeat(32), "bundle1"]],
+      [[], ["0".repeat(32)], [null, "bundle1"], [{ path: "C:\\a.mp4" }, "bundle1"], ["0".repeat(32), "bundle1", "C:\\Windows"]]],
+    "splitpage:bundle-move invoke": [["string", "string"], [["0".repeat(32), "bundle1"]],
       [[], ["0".repeat(32)], [null, "bundle1"], [{ path: "C:\\a.mp4" }, "bundle1"], ["0".repeat(32), "bundle1", "C:\\Windows"]]],
     "splitpage:bundle-cancel send": [["string"], [["bundle1"]], [[], [1], ["bundle1", "more"]]],
     "splitpage:bundled-file-open invoke": [["string"], [["take one.mp4"]], [[], [null], [{ name: "a.mp4" }], ["a.mp4", "C:\\x.exe"]]],

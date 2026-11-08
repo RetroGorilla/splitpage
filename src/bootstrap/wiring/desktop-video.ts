@@ -30,10 +30,10 @@ export const desktopVideo: DesktopVideo = {
     const found = port.videoFilePath(file);
     return typeof found === "string" && found ? found : null;
   },
-  openPath: (path) => {
+  openPath: (path, size) => {
     const port = desktopPort();
     if (!port || typeof port.openVideoPath !== "function") return Promise.resolve(null);
-    return Promise.resolve(port.openVideoPath(path));
+    return Promise.resolve(port.openVideoPath(path, size));
   },
   openBundled: (name) => {
     const port = desktopPort();
@@ -44,6 +44,11 @@ export const desktopVideo: DesktopVideo = {
     const port = desktopPort();
     if (!presence.running() || !port || typeof port.bundleVideoFile !== "function") return Promise.resolve(null);
     return Promise.resolve(port.bundleVideoFile(token, job, onProgress));
+  },
+  move: (token, job, onProgress) => {
+    const port = desktopPort();
+    if (!presence.running() || !port || typeof port.moveVideoFile !== "function") return Promise.resolve(null);
+    return Promise.resolve(port.moveVideoFile(token, job, onProgress));
   },
   onCarry: (listener) => {
     const port = desktopPort();
