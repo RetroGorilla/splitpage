@@ -86,7 +86,7 @@ function makeSender(id) {
 
 const SHARE = process.platform === "win32" ? "\\\\nas\\share\\" : "//nas/share/";
 
-function harness({ source = null, grants = [], testMode = false, holdCopy = null, holdCarry = null, copierOptions = {}, shareOf = null } = {}) {
+function harness({ source = null, grants = [], testMode = false, holdCopy = null, holdCarry = null, copierOptions = {}, shareOf = null, quitGraceMs } = {}) {
   const handlers = new Map();
   const listeners = new Map();
   const openedPaths = [];
@@ -120,7 +120,7 @@ function harness({ source = null, grants = [], testMode = false, holdCopy = null
       return t && t.source.kind === "file" ? t.source.absPath : null;
     },
     pathOf: (fileId) => fileIds.pathOf(fileId) || null,
-    namesInProject: bundleFiles.bundledNamesInProject
+    namesInProject: bundleFiles.bundledNamesInProject, quitGraceMs
   });
   const tabOf = (event) => (event.tab === undefined ? (tabs.get(tab.id) || null) : event.tab);
   const { registerShellIpc } = createShellIpc({
@@ -611,7 +611,7 @@ test("a carry starts only from a script save dialog this tab answered, and only 
     await blank.bundleJobs.idle();
     assert.deepEqual(blank.notes("splitpage:bundle-carry"), [], "a script never on disk has no folder to carry");
     const carries = ipc.notes("splitpage:bundle-carry");
-    assert.ok(carries.every((n) => Object.keys(n).every((k) => ["job", "from", "to", "done", "total", "result"].includes(k))), "carry notes name folders, never paths");
+    assert.ok(carries.every((n) => Object.keys(n).every((k) => ["job", "from", "to", "done", "total", "waiting", "result"].includes(k))), "carry notes name folders, never paths");
     assert.equal(carries[0].from, "Episode 12 files");
     assert.equal(carries[0].to, "Episode 12 v2 files");
   } finally { s.done(); }
@@ -747,6 +747,45 @@ test("quitting while copies run asks first: Wait finishes them and then quits, Q
     assert.ok(await until(() => stopping.quits.length === 1));
     assert.deepEqual(fs.readdirSync(s.folder), [], "no partial file and no temporary is left behind");
     assert.equal(ipc.bundleJobs.busy(), false);
+  } finally { s.done(); }
+});
+
+test("Quit anyway is final: a copy still stalled after the grace does not ask again, and the app quits", async () => {
+  const s = scratch();
+  try {
+    const ipc = harness({ source: s.script, grants: [["tok", s.clip]], holdCopy: new Promise(() => {}), quitGraceMs: 30 });
+    const q = quitWorld(ipc.bundleJobs, [1]);
+    void ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    assert.equal(q.quit().prevented, true, "the quit asks first");
+    assert.ok(await until(() => q.quits.length === 1), "the app quits after the grace");
+    assert.equal(ipc.bundleJobs.busy(), true, "setup: the stalled copy has still not settled");
+    assert.equal(q.asked.length, 1, "Quit anyway is not asked again");
+    assert.deepEqual(q.prevented[q.prevented.length - 1], ["before-quit", false], "the resumed quit goes through");
+  } finally { s.done(); }
+});
+
+test("a Save As carry queued behind a stalled copy is announced at once, and Cancel on it refuses the save straight away", async () => {
+  const s = scratch();
+  try {
+    fs.mkdirSync(s.folder);
+    fs.writeFileSync(path.join(s.folder, "kept.mp4"), "kkkk");
+    const held = gate();
+    const ipc = harness({ source: s.script, grants: [["tok", s.clip]], holdCopy: held.shut });
+    const stalled = ipc.call("splitpage:bundle-file", "tok", "bundle1");
+    const saving = ipc.saveAs(s.copyScript, { script: true }, project("kept.mp4"), "copy");
+    assert.ok(await until(() => ipc.notes("splitpage:bundle-carry").length > 0), "the carry is announced while it waits");
+    assert.deepEqual(ipc.notes("splitpage:bundle-carry"),
+      [{ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 0, total: 1, waiting: true }]);
+    ipc.send("splitpage:bundle-cancel", "carry1");
+    const saved = await saving;
+    assert.deepEqual(saved.written, { size: 0, bundleRefused: { reason: "cancelled", folder: "Episode 12 v2 files", name: "", copied: 0 } });
+    assert.deepEqual(ipc.notes("splitpage:bundle-carry").pop().result, { ok: false, code: "CANCELLED", name: "", copied: 0 }, "the renderer hears it ended");
+    assert.equal(ipc.bundleJobs.busy(), true, "the stalled copy still holds the queue");
+    held.open();
+    assert.deepEqual(await stalled, { ok: true, name: "take one.mp4" });
+    await ipc.bundleJobs.idle();
+    assert.equal(ipc.carriesEnded(), 0, "the cancelled carry never ran");
+    assert.equal(fs.existsSync(s.copyScript), false);
   } finally { s.done(); }
 });
 

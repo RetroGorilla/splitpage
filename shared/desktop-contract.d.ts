@@ -77,6 +77,7 @@ export type DesktopWireBundleExport = { ok: true; files: number; left: number } 
 export interface DesktopWireBundleCarryNote extends DesktopWireBundleProgress {
   from: string;
   to: string;
+  waiting?: boolean;
   result?: DesktopWireBundleCarry;
 }
 

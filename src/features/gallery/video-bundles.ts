@@ -249,7 +249,8 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
       return;
     }
     carrying = note.job;
-    showProgress("files to " + quoted(note.to), note.done, note.total);
+    if (note.waiting) showProgress("files to " + quoted(note.to), 0, 0, "Waiting to copy", "Waiting to copy files");
+    else showProgress("files to " + quoted(note.to), note.done, note.total);
   }
 
   function drained(): void {

@@ -357,6 +357,23 @@ test("a drop during a Save As is linked by path with no prompt, even when that s
   h.owner.dispose();
 });
 
+test("a carry announced while it waits in the queue shows at once with its chip, and Cancel reaches it", () => {
+  const h = setup();
+  h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 0, total: 1, waiting: true });
+  assert.equal(h.el("bundle-progress").hidden, false);
+  assert.equal(h.el("bundle-progress-text").textContent, "Waiting to copy files to “Episode 12 v2 files” — 0%");
+  h.el("bundle-hide").click();
+  assert.equal(h.el("bundle-indicator").hidden, false);
+  assert.equal(h.el("bundle-indicator").textContent, "Waiting to copy files — 0%");
+  h.el("bundle-indicator").click();
+  h.el("bundle-cancel").click();
+  assert.deepEqual(h.cancels, ["carry1"]);
+  h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 1, total: 1, result: { ok: false, code: "CANCELLED", name: "", copied: 0 } });
+  assert.equal(h.el("bundle-progress").hidden, true);
+  assert.equal(h.el("bundle-indicator").hidden, true);
+  h.owner.dispose();
+});
+
 test("main's carry during Save As shows progress, can be cancelled, and reports what it could not copy", () => {
   const h = setup();
   h.carry({ job: "carry1", from: "Episode 12 files", to: "Episode 12 v2 files", done: 4, total: 8 });

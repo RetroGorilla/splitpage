@@ -82,9 +82,11 @@ function createBundleJobs(options: {
   namesInProject: (text: string) => string[];
   exporter?: ReturnType<typeof createBundleExporter> | null;
   foldCase?: boolean;
+  quitGraceMs?: number;
 }) {
   const { copier, allow, scriptOfTab, pathOf, namesInProject } = options;
   const exporter = options.exporter || null;
+  const quitGraceMs = typeof options.quitGraceMs === "number" ? options.quitGraceMs : QUIT_GRACE_MS;
   const exportPlans = new Map<string, ExportPlan>();
   const exportTargets = new Map<string, string>();
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
@@ -103,9 +105,18 @@ function createBundleJobs(options: {
     try { if (!sender.isDestroyed()) push(sender); } catch { }
   }
 
+  function abortJob(job: BundleJob): void {
+    job.ctl.abort();
+    const at = queue.indexOf(job);
+    if (at === -1) return;
+    queue.splice(at, 1);
+    if (byKey.get(job.key) === job) byKey.delete(job.key);
+    job.stop("CANCELLED");
+  }
+
   function enqueue(job: BundleJob): void {
     const earlier = byKey.get(job.key);
-    if (earlier) earlier.ctl.abort();
+    if (earlier) abortJob(earlier);
     byKey.set(job.key, job);
     queue.push(job);
     void pump();
@@ -153,7 +164,7 @@ function createBundleJobs(options: {
 
   function cancel(sender: BundleSender, job: string): void {
     const found = byKey.get(keyOf(sender, job));
-    if (found) found.ctl.abort();
+    if (found) abortJob(found);
   }
 
   function noteSaveTarget(fileId: string, tab: { id: string; source: { kind: string; absPath?: unknown } } | null): void {
@@ -240,8 +251,8 @@ function createBundleJobs(options: {
 
   function carryForSave(fileId: string, noted: SaveTarget, from: string, to: string, names: readonly string[], sender: BundleSender): Promise<BundleWrite> {
     const job = "carry" + (++carries);
-    const note = (done: number, total: number, result?: BundleCarryResult & { left?: number }) => tell(sender, (s) => s.send("splitpage:bundle-carry", {
-      job, from: copier.folderName(from), to: copier.folderName(to), done, total, ...(result ? { result } : {})
+    const note = (done: number, total: number, result?: BundleCarryResult & { left?: number }, waiting = false) => tell(sender, (s) => s.send("splitpage:bundle-carry", {
+      job, from: copier.folderName(from), to: copier.folderName(to), done, total, ...(waiting ? { waiting } : {}), ...(result ? { result } : {})
     }));
     const refusal = (result: BundleCarryResult): BundleSaveRefusal | null => {
       if (result.ok) return null;
@@ -279,6 +290,7 @@ function createBundleJobs(options: {
         const refused = refusal({ ok: false, code: "CANCELLED", name: "", copied: committed });
         if (refused) reply({ refused });
       }, { once: true });
+      note(0, 1, undefined, true);
       enqueue({
         key: keyOf(sender, job), sender, job, ctl,
         stop: (code) => done({ ok: false, code, name: "", copied: committed }),
@@ -415,8 +427,8 @@ function createBundleJobs(options: {
     return new Promise((resolve) => { idleWaiters.push(resolve); });
   }
 
-  function abortAll(graceMs = QUIT_GRACE_MS): Promise<void> {
-    for (const job of [running, ...queue]) if (job) job.ctl.abort();
+  function abortAll(graceMs = quitGraceMs): Promise<void> {
+    for (const job of [...queue, running]) if (job) abortJob(job);
     // why: the app is quitting, so a read stalled on a lost drive must not hold the quit open; nothing runs after it
     return Promise.race([idle(), new Promise<void>((resolve) => { setTimeout(resolve, graceMs); })]);
   }
