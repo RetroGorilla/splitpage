@@ -1,0 +1,52 @@
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.old=F.state();F.openFile(new File([JSON.stringify({paragraphsDecided:true,title:'A day on location',rows:[{id:'r1',visualText:'Wide shot of the harbour at dawn.',audioText:'The harbour wakes slowly. Fishing boats leave the quay as the first light catches the water.',lengthSeconds:20},{id:'r2',visualText:'Close on hands tying a mooring line.',audioText:'For the people who work here, every day begins with the tide.',lengthSeconds:10},{id:'r3',visualText:'Follow the crew along the quay.',audioText:'We follow the morning crew to find out what keeps this place moving.',lengthSeconds:25}],sections:[{id:'s1',name:'The harbour wakes',firstSceneId:'r1'},{id:'s2',name:'Meet the crew',firstSceneId:'r3'}]})],'heading.splitpage'));return true;})()
+wait F.state() !== old && F.state().title === 'A day on location'
+eval window.H='#rows [data-section-id="s1"]';window.css=function(s){return getComputedStyle(document.querySelector(H+(s?' '+s:'')));};window.before=JSON.stringify(F.state());true
+mouse hover ({x:1,y:1})
+expect css().backgroundColor === 'rgba(0, 0, 0, 0)'
+expect css().borderTopWidth === '1px' && css().borderBottomWidth === '0px'
+expect Math.abs(parseFloat(css('[role="heading"]').fontSize) / parseFloat(getComputedStyle(document.querySelector('#rows .audio-cell .cell-editable')).fontSize) - 1.25) < 0.01
+expect css('[role="heading"]').fontWeight === '600' && css('.section-name').fontWeight === '600'
+expect css('.section-fold').color === css('.section-stats').color
+expect css('.section-fold').opacity === '1' && css('.section-stats').opacity === '1'
+expect document.querySelector(H+' .section-stats').textContent.includes('2 beats') && document.querySelector(H+' [data-section-total]').textContent === '0:30'
+expect css('.section-grip').opacity === '0' && css('.section-more summary').opacity === '0'
+shot 1168-editor-after-light
+eval document.documentElement.setAttribute('data-theme','dark');true
+wait getComputedStyle(document.body).backgroundColor === 'rgb(15, 14, 12)'
+expect css().backgroundColor === 'rgba(0, 0, 0, 0)' && css().borderTopWidth === '1px'
+expect css('.section-fold').color === css('.section-stats').color
+shot 1168-editor-after-dark
+eval document.documentElement.setAttribute('data-theme','light');true
+wait getComputedStyle(document.body).backgroundColor === 'rgb(241, 240, 237)'
+mouse hover (function(){var r=document.querySelector(H).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()
+expect css('.section-grip').opacity === '1' && css('.section-more summary').opacity === '1'
+mouse hover ({x:1,y:1})
+eval document.querySelector(H+' .section-grip').focus();true
+expect css('.section-grip').opacity === '1' && css('.section-more summary').opacity === '1'
+key none Tab
+expect document.activeElement === document.querySelector(H+' .section-fold')
+expect css('.section-grip').opacity === '1' && css('.section-more summary').opacity === '1'
+click #rows [data-section-id="s1"] .section-name
+wait !!document.querySelector(H+' .section-rename input')
+expect document.querySelector(H+' .section-rename input').value === 'The harbour wakes'
+press First light
+key none Enter
+wait F.state().sections[0].name === 'First light'
+expect document.activeElement === document.querySelector(H+' .section-name')
+click #rows [data-section-id="s1"] .section-more summary
+mouse hover ({x:1,y:1})
+expect document.querySelector(H+' .section-more').open && css('.section-more summary').opacity === '1'
+key none Escape
+expect !document.querySelector(H+' .section-more').open
+click #rows [data-section-id="s1"] .section-fold
+wait document.querySelectorAll('#rows .row').length === 1
+expect css('.section-fold').opacity === '1' && css('.section-stats').opacity === '1'
+click #rows [data-section-id="s1"] .section-fold
+wait document.querySelectorAll('#rows .row').length === 3
+eval window.named=JSON.parse(before);named.sections[0].name='First light';true
+expect JSON.stringify(F.state()) === JSON.stringify(named)
+quit

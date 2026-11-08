@@ -48,7 +48,7 @@ expect Math.abs(num('#rows .audio-cell .cell-editable') - 27) < 0.05
 expect Math.abs(num(H) - 19.5) < 0.05
 expect Math.abs(num(H + ' .section-stats') - 16.5) < 0.05
 expect Math.abs(num(H + ' .section-grip') - 25.5) < 0.05
-expect Math.abs(num(H + ' .section-name') - 19.5) < 0.05
+expect Math.abs(num(H + ' .section-name') - 33.75) < 0.05
 expect Math.abs(hh(H) / h100 - 1.5) < 0.04
 expect Math.abs(num('#rows [data-section-id="s2"]') - 19.5) < 0.05
 shot 1169-editor-150
