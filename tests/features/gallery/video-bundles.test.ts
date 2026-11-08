@@ -66,7 +66,7 @@ function setup(opts: Setup = {}) {
         exportCalls.push(["plan", job, scriptName, body, script]);
         return opts.exportPlan === undefined ? { files: 2, bytes: 2048, left: 0 } : opts.exportPlan;
       },
-      pick: async (name) => { exportCalls.push(["pick", name]); return opts.picked === undefined ? { id: "zip1", name } : opts.picked; },
+      pick: async (name, job) => { exportCalls.push(["pick", name, job]); return opts.picked === undefined ? { id: "zip1", name } : opts.picked; },
       run: (job, fileId, onProgress) => {
         exportCalls.push(["run", job, fileId]);
         return opts.exported ? opts.exported(job, fileId, onProgress) : Promise.resolve({ ok: true, files: 2, left: 0 });
@@ -606,7 +606,9 @@ test("exporting with the script's files plans in main, asks where, then shows th
   const running = h.owner.exportWithFiles("Episode 12 (with files).zip", "Episode 12.splitpage", "{\"rows\":[]}", handle);
   await settle();
   assert.deepEqual(h.exportCalls.map((c) => c[0]), ["plan", "pick", "run"]);
-  assert.deepEqual(h.exportCalls[0]?.slice(2), ["Episode 12.splitpage", "{\"rows\":[]}", handle],
+  assert.equal(h.exportCalls[1]?.[2], h.exportCalls[0]?.[1], "the dialog is asked for the planned job, so main binds a Replace to it");
+  assert.equal(h.exportCalls[2]?.[1], h.exportCalls[0]?.[1]);
+  assert.deepEqual(h.exportCalls[0]?.slice(2),["Episode 12.splitpage", "{\"rows\":[]}", handle],
     "main gets the script's name, its bytes and the script they were captured from, no path");
   assert.equal(h.exportCalls[2]?.[1], h.exportCalls[0]?.[1], "the job runs the plan main made");
   assert.equal(h.exportCalls[2]?.[2], "zip1", "and writes only to the file the dialog chose");

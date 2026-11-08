@@ -42,6 +42,11 @@ function createFileIpc({
     return documentsPath();
   }
 
+  async function regularFileAt(p: unknown): Promise<boolean> {
+    if (typeof p !== "string") return false;
+    try { return (await fsp.lstat(p)).isFile(); } catch { return false; }
+  }
+
   function registerFileIpc({ ipcHandle }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcHandle("splitpage:open-file-dialog", async (event) => {
       const defaultPath = await openDefaultPath();
@@ -68,16 +73,19 @@ function createFileIpc({
 
     ipcHandle("splitpage:save-file-dialog", async (event, options) => {
       const opts = options || {};
+      const exportPlan = opts.bundleExport === true ? bundleJobs.exportPlanToken(event.sender, tabOf(event), opts.exportJob) : null;
       const answer = consumeTestDialogAnswer();
       let chosen;
       if (answer !== undefined) {
         chosen = answer;
       } else {
         const win = dialogParentFor(event);
-        const result = await dialog.showSaveDialog(win, {
+        const asked: Parameters<typeof dialog.showSaveDialog>[1] = {
           defaultPath: opts.suggestedName,
           filters: Array.isArray(opts.filters) && opts.filters.length ? opts.filters : undefined
-        });
+        };
+        if (opts.bundleExport === true) asked.properties = ["showOverwriteConfirmation"];
+        const result = await dialog.showSaveDialog(win, asked);
         chosen = result.canceled || !result.filePath ? null : result.filePath;
       }
       if (!chosen) return null;
@@ -101,7 +109,8 @@ function createFileIpc({
       }
       const id = fileIds.register(chosen);
       if (opts.script === true) bundleJobs.noteSaveTarget(id, me);
-      if (opts.bundleExport === true && ZIP_NAME.test(path.basename(chosen))) bundleJobs.noteExportTarget(id, me);
+      // why: the dialog returns a name that exists only after its Replace prompt, so that answer is the user's consent
+      if (exportPlan && ZIP_NAME.test(path.basename(chosen))) bundleJobs.noteExportTarget(id, exportPlan, await regularFileAt(chosen));
       if (/\.splitpage$/i.test(path.basename(chosen))) pendingScriptSaves.add(id);
       return { id, name: path.basename(chosen) };
     });

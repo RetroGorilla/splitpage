@@ -272,7 +272,7 @@ type DesktopChannelCall<A extends readonly unknown[], R> = { args: A; result: R 
 export interface DesktopIpcContract {
   "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;
   "splitpage:open-file-dialog": DesktopChannelCall<[], DesktopWireFile | null>;
-  "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[]; script?: boolean; bundleExport?: boolean }], { id: string; name: string } | null>;
+  "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[]; script?: boolean; bundleExport?: boolean; exportJob?: string }], { id: string; name: string } | null>;
   "splitpage:read-file": DesktopChannelCall<[string], DesktopWireFile>;
   "splitpage:write-file": DesktopChannelCall<[string, string | ArrayBuffer | Uint8Array], DesktopWireStamp>;
   "splitpage:bundle-save-plan": DesktopChannelCall<[string, string[]], DesktopWireBundlePlanAnswer>;

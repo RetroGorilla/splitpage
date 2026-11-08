@@ -1,8 +1,11 @@
 "use strict";
 
+import type * as NodeCrypto from "node:crypto";
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
 import type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
 import type { BundleExportResult, createBundleExporter } from "./bundle-export.ts";
+
+const crypto: typeof NodeCrypto = require("node:crypto");
 
 type BundleSender = {
   readonly id: number;
@@ -61,6 +64,7 @@ interface ExportPlan {
   readonly text: string;
   readonly scriptName: string;
   readonly script: string | null;
+  readonly token: string;
 }
 
 type BundleExportPlanAnswer = { ok: true; plan: { files: number; bytes: number; left: number } } | { ok: false; code: "REFUSED" };
@@ -88,7 +92,7 @@ function createBundleJobs(options: {
   const exporter = options.exporter || null;
   const quitGraceMs = typeof options.quitGraceMs === "number" ? options.quitGraceMs : QUIT_GRACE_MS;
   const exportPlans = new Map<string, ExportPlan>();
-  const exportTargets = new Map<string, string>();
+  const exportTargets = new Map<string, { readonly tabId: string; readonly key: string; readonly token: string; readonly replace: boolean }>();
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const queue: BundleJob[] = [];
   const byKey = new Map<string, BundleJob>();
@@ -165,6 +169,12 @@ function createBundleJobs(options: {
   function cancel(sender: BundleSender, job: string): void {
     const found = byKey.get(keyOf(sender, job));
     if (found) abortJob(found);
+    dropExport(keyOf(sender, job));
+  }
+
+  function dropExport(key: string): void {
+    exportPlans.delete(key);
+    for (const [fileId, noted] of [...exportTargets]) if (noted.key === key) exportTargets.delete(fileId);
   }
 
   function noteSaveTarget(fileId: string, tab: { id: string; source: { kind: string; absPath?: unknown } } | null): void {
@@ -349,24 +359,33 @@ function createBundleJobs(options: {
     const laid = await exporter.layout(text, scriptName, script, allow);
     if (!laid) return { ok: false, code: "REFUSED" };
     const key = keyOf(sender, job);
-    exportPlans.delete(key);
+    dropExport(key);
     const mine = [...exportPlans].filter(([, p]) => p.sender === sender);
-    while (mine.length >= EXPORT_PLANS_PER_SENDER) exportPlans.delete((mine.shift() as [string, ExportPlan])[0]);
-    exportPlans.set(key, { sender, tabId, text, scriptName, script });
+    while (mine.length >= EXPORT_PLANS_PER_SENDER) dropExport((mine.shift() as [string, ExportPlan])[0]);
+    exportPlans.set(key, { sender, tabId, text, scriptName, script, token: crypto.randomBytes(16).toString("hex") });
     return { ok: true, plan: { files: laid.sources.length, bytes: laid.sources.reduce((sum, s) => sum + s.size, 0), left: laid.left } };
   }
 
-  function noteExportTarget(fileId: string, tab: { id: string } | null): void {
-    if (!tab) return;
+  function exportPlanToken(sender: BundleSender, tab: { id: string } | null, job: unknown): string | null {
+    const planned = tab && typeof job === "string" ? exportPlans.get(keyOf(sender, job)) : undefined;
+    return planned && tab && planned.tabId === tab.id ? planned.token : null;
+  }
+
+  function noteExportTarget(fileId: string, token: string | null, replace: boolean): void {
+    const current = token ? [...exportPlans].find(([, p]) => p.token === token) : undefined;
+    if (!current) return;
+    const [key, planned] = current;
     if (exportTargets.size >= EXPORT_TARGETS_MAX) exportTargets.delete(exportTargets.keys().next().value as string);
-    exportTargets.set(fileId, tab.id);
+    exportTargets.set(fileId, { tabId: planned.tabId, key, token: planned.token, replace });
   }
 
   function startExport(sender: BundleSender, tabId: string, job: string, fileId: unknown): Promise<BundleExportAnswer> {
     const key = keyOf(sender, job);
     const planned = exportPlans.get(key);
     if (!exporter || !planned || planned.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
-    if (typeof fileId !== "string" || exportTargets.get(fileId) !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    if (typeof fileId !== "string") return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    const noted = exportTargets.get(fileId);
+    if (!noted || noted.tabId !== tabId || noted.key !== key || noted.token !== planned.token) return Promise.resolve({ ok: false, code: "UNKNOWN" });
     const target = pathOf(fileId);
     if (!target || !ZIP_NAME.test(target)) return Promise.resolve({ ok: false, code: "REFUSED" });
     exportPlans.delete(key);
@@ -381,7 +400,7 @@ function createBundleJobs(options: {
         run: async (progress, signal) => {
           const laid = await writer.layout(planned.text, planned.scriptName, planned.script, allow);
           if (!laid) { done({ ok: false, code: "FAILED" }); return; }
-          done(await writer.write(laid, target, signal, progress));
+          done(await writer.write(laid, target, noted.replace, signal, progress));
         }
       });
     });
@@ -414,7 +433,7 @@ function createBundleJobs(options: {
   function forgetTab(tabId: string): void {
     for (const open of [...opens]) if (open.tabId === tabId) opens.delete(open);
     for (const [fileId, noted] of [...saveTargets]) if (noted.tabId === tabId) saveTargets.delete(fileId);
-    for (const [fileId, owner] of [...exportTargets]) if (owner === tabId) exportTargets.delete(fileId);
+    for (const [fileId, owner] of [...exportTargets]) if (owner.tabId === tabId) exportTargets.delete(fileId);
     for (const [key, planned] of [...exportPlans]) if (planned.tabId === tabId) exportPlans.delete(key);
   }
 
@@ -434,7 +453,7 @@ function createBundleJobs(options: {
   }
 
   return {
-    abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteExportTarget, noteSaveTarget, noteScript, openBundled, planExport, planSave,
+    abortAll, busy, cancel, chooseSave, copy, exportPlanToken, forgetTab, idle, noteExportTarget, noteSaveTarget, noteScript, openBundled, planExport, planSave,
     prepareWrite, startExport
   };
 }

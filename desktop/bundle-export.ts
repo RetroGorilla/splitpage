@@ -91,7 +91,7 @@ async function writeAll(handle: NodeFsPromises.FileHandle, bytes: Uint8Array, at
 function createBundleExporter(options: {
   bundleFiles: Pick<typeof VideoEmbed, "bundleableName" | "fileLinksIn" | "numberedName" | "projectRecord">;
   publisher: { readonly folderName: (script: string) => string; readonly partIn: (folder: string) => string;
-    readonly publishWhole: (part: string, target: string, signal: AbortSignal) => Promise<"copied" | "taken" | "cancelled" | "failed">;
+    readonly publishWhole: (part: string, target: string, signal: AbortSignal, replace: boolean) => Promise<"copied" | "taken" | "cancelled" | "failed">;
     readonly resolveIn: (script: string, name: unknown, allow: RegExp) => Promise<VideoEmbed.VideoPathVerdict> };
   foldCase?: boolean;
   zip64Above?: number;
@@ -295,7 +295,7 @@ function createBundleExporter(options: {
     return "done";
   }
 
-  async function write(plan: BundleExportLayout, target: string, signal: AbortSignal, onProgress: BundleProgress): Promise<BundleExportResult> {
+  async function write(plan: BundleExportLayout, target: string, replace: boolean, signal: AbortSignal, onProgress: BundleProgress): Promise<BundleExportResult> {
     if (signal.aborted) return { ok: false, code: "CANCELLED" };
     const part = partIn(path.dirname(target));
     let handle: NodeFsPromises.FileHandle;
@@ -305,7 +305,7 @@ function createBundleExporter(options: {
     try {
       try { wrote = await writeZip(handle, plan, signal, onProgress); } catch { wrote = signal.aborted ? "cancelled" : "failed"; }
       try { await handle.close(); } catch { wrote = "failed"; }
-      if (wrote === "done") published = await publishWhole(part, target, signal);
+      if (wrote === "done") published = await publishWhole(part, target, signal, replace);
     } finally {
       if (published !== "copied") { try { await fsp.unlink(part); } catch { } }
     }

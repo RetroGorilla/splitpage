@@ -301,9 +301,19 @@ function createBundleCopier(options: {
     return { ok: true, copied, kept, missing };
   }
 
-  async function publishWhole(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+  async function replaceWith(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
     if (signal.aborted) return "cancelled";
-    return underFolderLock(path.dirname(target), signal, () => publish(part, target, signal, () => {}));
+    // why: rename(2) replaces a link itself, so only a regular file, or no entry, may stand where the confirmed zip was
+    let regular = true;
+    try { regular = (await lstatTarget(target)).isFile(); } catch (e) { if (!missingFile(e)) return "failed"; }
+    if (signal.aborted) return "cancelled";
+    if (!regular) return "taken";
+    try { await renameFile(part, target); return "copied"; } catch { return "failed"; }
+  }
+
+  async function publishWhole(part: string, target: string, signal: AbortSignal, replace = false): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+    if (signal.aborted) return "cancelled";
+    return underFolderLock(path.dirname(target), signal, () => (replace ? replaceWith(part, target, signal) : publish(part, target, signal, () => {})));
   }
 
   function partIn(folder: string): string {

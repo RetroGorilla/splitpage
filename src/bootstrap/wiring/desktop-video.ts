@@ -75,10 +75,10 @@ export const desktopVideo: DesktopVideo = {
     const answer = await port.planBundleExport(job, scriptName, new TextEncoder().encode(body), desktopIdOf(script) || "");
     return answer && answer.ok ? answer.plan : null;
   },
-  pickExport: async (suggestedName) => {
+  pickExport: async (suggestedName, job) => {
     const port = desktopPort();
     if (!presence.running() || !port) return null;
-    const picked = await port.saveFileDialog({ suggestedName, filters: [{ name: "ZIP file", extensions: ["zip"] }], bundleExport: true });
+    const picked = await port.saveFileDialog({ suggestedName, filters: [{ name: "ZIP file", extensions: ["zip"] }], bundleExport: true, exportJob: job });
     return picked ? { id: picked.id, name: picked.name } : null;
   },
   exportBundle: (job, fileId, onProgress) => {

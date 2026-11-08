@@ -27,7 +27,7 @@ export interface DesktopVideo {
   readonly planSave: (handle: unknown, names: readonly string[]) => Promise<DesktopBundleSavePlan | null>;
   readonly chooseSave: (handle: unknown, choice: BundleSaveChoice) => Promise<readonly BundledPathLink[] | null>;
   readonly planExport: (job: string, scriptName: string, body: string, script: unknown) => Promise<DesktopBundleExportPlan | null>;
-  readonly pickExport: (suggestedName: string) => Promise<{ readonly id: string; readonly name: string } | null>;
+  readonly pickExport: (suggestedName: string, job: string) => Promise<{ readonly id: string; readonly name: string } | null>;
   readonly exportBundle: (job: string, fileId: string, onProgress: BundleProgressListener) => Promise<DesktopBundleExport | null>;
   readonly thumbnail: (host: string, ref: string) => Promise<DesktopVideoThumbnail | null> | null;
 }
