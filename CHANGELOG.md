@@ -36,10 +36,16 @@ appear in the app under **Help**. The format follows
   owner. The name becomes a chip; deleting the chip removes the owner. New names
   are added to People. Chips don't appear in the teleprompter or any export.
 - Follow My Voice can listen on a microphone you choose, in the teleprompter and
-  in Settings, in Chrome, Edge and the desktop app. The choice is remembered;
+  in Settings, in Chrome, Edge and the desktop app, including Present in Browser
+  from the desktop app. The choice is remembered;
   if it isn't connected, the default is used and the status says so.
 - Tags can be chosen from a compact menu above the Visual text toolbar, with the
   typing shortcut shown beside each category.
+- Export can save a Splitpage script (.splitpage). In the desktop app it can
+  also include the script's files as one .zip: the script plus its
+  "<script name> files" folder, with every link pointing into that folder.
+  Files that are missing, linked from elsewhere on the computer, or of a type
+  Splitpage doesn't attach are left out, and the export says how many.
 
 ### Changed
 - After a Save As, the new script starts with no undo history.
@@ -87,6 +93,8 @@ appear in the app under **Help**. The format follows
   its blocks and ruler instead of rebuilding them on every resize step.
 
 ### Fixed
+- A cut that finished late can no longer delete beats from a different script
+  opened, merged or saved under a new name in the meantime.
 - Copying whole beats from the writer into Split keeps their visuals, pictures,
   status, comments and scene headers.
 - Edit > Undo and Redo now work in the script whenever the keyboard shortcuts
