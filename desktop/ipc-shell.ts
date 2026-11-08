@@ -98,9 +98,9 @@ function createShellIpc({
 
     ipcHandle("splitpage:video-path-open", async (event, storedPath, size) => {
       const found = await openableVideoPath(storedPath, PATH_STYLE, fsp, ATTACHABLE_FILE);
-      const script = scriptOf(event);
+      const script = !found.ok && found.code === "GONE" ? scriptOf(event) : null;
       // why: a Move can land before the script is saved with the new link, so its folder holds the file the old path named
-      if (!found.ok && found.code === "GONE" && script) {
+      if (script) {
         const beside = await bundleJobs.openBeside(script, storedPath, size);
         if (beside.ok) return openFound(beside);
       }

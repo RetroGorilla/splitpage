@@ -20,7 +20,7 @@ export interface DesktopVideo {
   readonly opens: () => boolean;
   readonly open: (token: string) => Promise<DesktopVideoResult | null>;
   readonly pathOf: (file: unknown) => string | null;
-  readonly openPath: (path: string, size: number) => Promise<DesktopVideoResult | null>;
+  readonly openPath: (path: string, size?: number) => Promise<DesktopVideoResult | null>;
   readonly openBundled: (name: string) => Promise<DesktopVideoResult | null>;
   readonly bundle: (token: string, job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleCopy | null>;
   readonly move: (token: string, job: string, onProgress: BundleProgressListener) => Promise<DesktopBundleMove | null>;

@@ -5,7 +5,7 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 import type {
-  BundleSaveChoice, DesktopBundleCarry, DesktopBundleCopy, DesktopBundleExport, DesktopBundleExportPlan, DesktopBundleSavePlan
+  BundleSaveChoice, DesktopBundleCarry, DesktopBundleCopy, DesktopBundleExport, DesktopBundleMove, DesktopBundleExportPlan, DesktopBundleSavePlan
 } from "../../application/media/desktop-video.ts";
 import type { BundleSaveWindow } from "../../application/save/file-saving-ports.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
@@ -36,8 +36,11 @@ interface Copy {
   readonly offer: Offer;
   readonly video: DroppedVideo;
   readonly from: VideoLink;
+  readonly move: boolean;
   cancelled: boolean;
 }
+
+type BundleChoice = "copy" | "move" | "leave";
 
 interface SaveAsk {
   readonly handle: unknown;
@@ -54,16 +57,30 @@ function nounFor(names: readonly string[]): string {
 
 function videos(n: number, noun = "video"): string { return n === 1 ? "1 " + noun : n + " " + noun + "s"; }
 
-export function bundlePromptText(names: readonly string[], folder: string): { title: string; detail: string } {
+export function bundlePromptText(names: readonly string[], folder: string): { title: string; detail: string; leave: string; move: string; copy: string } {
   const one = names.length === 1;
   const noun = nounFor(names);
   return {
-    title: one ? "Copy this " + noun + " into the script's folder?" : "Copy these " + noun + "s into the script's folder?",
-    detail: (one ? "Splitpage can copy " + quoted(names[0] as string) : "Splitpage can copy these " + names.length + " " + noun + "s") +
-      " into " + quoted(folder) + ", a folder next to this script, and link to the copy. Keep that folder with the script, " +
-      "and " + (one ? "the " + noun + " opens" : "the " + noun + "s open") + " wherever the script goes. Otherwise the script links to " +
-      (one ? "the file" : "the files") + " where " + (one ? "it is" : "they are") + " now."
+    title: one ? "Add this " + noun + " to the script's folder?" : "Add these " + noun + "s to the script's folder?",
+    detail: "Splitpage can copy or move " + (one ? quoted(names[0] as string) : "these " + names.length + " files") + " into " + quoted(folder) +
+      ", a folder next to this script. Keep that folder with the script, and " + (one ? "the file opens" : "the files open") +
+      " wherever the script goes. Move takes " + (one ? "it out of where it is" : "them out of where they are") + " now, so other scripts that link " +
+      (one ? "it" : "them") + " there lose " + (one ? "it" : "them") + ".",
+    leave: one ? "Leave it where it is" : "Leave them where they are",
+    move: one ? "Move it" : "Move them",
+    copy: one ? "Copy it" : "Copy them"
   };
+}
+
+export function movedText(name: string, folder: string, res: DesktopBundleMove): { text: string; kind: "ok" | "warn" | "error" } | null {
+  if (res.ok) {
+    if (res.outcome === "kept") return { text: "Copied " + quoted(name) + " to " + quoted(folder) + ", but the original couldn't be removed, so it is still where it was.", kind: "warn" };
+    if (res.outcome === "changed") return { text: quoted(name) + " changed while it was being moved, so both are kept: the original and the copy in " + quoted(folder) + ".", kind: "warn" };
+    return { text: "Moved " + quoted(name) + " to " + quoted(folder) + ".", kind: "ok" };
+  }
+  if (res.code === "DROPPED") return null;
+  if (res.code === "CANCELLED") return { text: "Stopped moving " + quoted(name) + ". It is still where it was.", kind: "warn" };
+  return { text: "Could not move " + quoted(name) + " to " + quoted(folder) + ", so it links to where it is.", kind: "error" };
 }
 
 export const BUNDLE_WARN_BYTES = 250 * 1024 * 1024;
@@ -137,9 +154,12 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     const first = asking[0];
     if (!m || !first) return;
     const text = bundlePromptText(asking.flatMap(function (o) { return o.videos.map(function (v) { return v.name; }); }), first.folder);
-    const title = el("bundle-title"), detail = el("bundle-detail");
-    if (title) title.textContent = text.title;
-    if (detail) detail.textContent = text.detail;
+    const set = function (id: string, value: string): void { const node = el(id); if (node) node.textContent = value; };
+    set("bundle-title", text.title);
+    set("bundle-detail", text.detail);
+    set("bundle-decline", text.leave);
+    set("bundle-move", text.move);
+    set("bundle-accept", text.copy);
     m.hidden = false;
     const accept = el("bundle-accept");
     if (accept) { try { accept.focus({ preventScroll: true }); } catch (e) { } }
@@ -181,11 +201,15 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     if (moveFocus) focusOn(hide ? chip : el("bundle-hide"));
   }
 
-  function copyText(c: Copy): string { return quoted(c.video.name) + " to " + quoted(c.offer.folder); }
+  function showCopy(c: Copy, done: number, total: number): void {
+    const what = quoted(c.video.name) + " to " + quoted(c.offer.folder);
+    if (c.move) showProgress(what, done, total, "Moving", "Moving files");
+    else showProgress(what, done, total);
+  }
 
   function showNext(): void {
     const next = waitingOn()[0];
-    if (next) { showProgress(copyText(next), 0, next.video.size); return; }
+    if (next) { showCopy(next, 0, next.video.size); return; }
     if (carrying) return;
     if (exporting) { showExport(0, 1); return; }
     const box = el("bundle-progress"), chip = el("bundle-indicator");
@@ -205,12 +229,19 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     ports.viewer.refresh();
   }
 
-  function copied(c: Copy, res: DesktopBundleCopy): void {
+  function copied(c: Copy, res: DesktopBundleCopy | DesktopBundleMove): void {
     if (res.ok) {
       // why: a Save As stopped waiting for this copy, so its bytes may already be captured without the link
       if (c.cancelled && saving) return;
       if (!ports.ownership.stillOwns(c.offer.ctx)) return;
       relink(c.offer, c.from, res.name);
+    }
+    if (c.move) {
+      const said = movedText(c.video.name, c.offer.folder, res as DesktopBundleMove);
+      if (said) ports.notices.show(said.text, said.kind);
+      return;
+    }
+    if (res.ok) {
       ports.notices.show("Copied " + quoted(c.video.name) + " to " + quoted(c.offer.folder) + ".", "ok");
       return;
     }
@@ -258,7 +289,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     drainWaiters.splice(0).forEach(function (resolve) { resolve(true); });
   }
 
-  function settle(c: Copy, res: DesktopBundleCopy): void {
+  function settle(c: Copy, res: DesktopBundleCopy | DesktopBundleMove): void {
     if (!life.active()) return;
     const at = pending.indexOf(c);
     if (at !== -1) pending.splice(at, 1);
@@ -267,22 +298,26 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     drained();
   }
 
-  function submit(o: Offer, video: DroppedVideo): void {
-    const c: Copy = { job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } }, cancelled: false };
+  function submit(o: Offer, video: DroppedVideo, move: boolean): void {
+    const c: Copy = {
+      job: "bundle" + (++jobs), offer: o, video, from: { name: video.name, size: video.size, location: { kind: "path", path: video.path } }, move, cancelled: false
+    };
     pending.push(c);
-    ports.files.bundle(c.from, c.job, function (p) {
-      if (life.active() && !carrying && !c.cancelled) showProgress(copyText(c), p.done, p.total);
-    }).then(function (res) { settle(c, res); }, function () { settle(c, { ok: false, code: "FAILED" }); });
+    const onProgress = function (p: { done: number; total: number }): void {
+      if (life.active() && !carrying && !c.cancelled) showCopy(c, p.done, p.total);
+    };
+    const running: Promise<DesktopBundleCopy | DesktopBundleMove> = move ? ports.files.move(c.from, c.job, onProgress) : ports.files.bundle(c.from, c.job, onProgress);
+    running.then(function (res) { settle(c, res); }, function () { settle(c, { ok: false, code: "FAILED" }); });
   }
 
-  function answer(copy: boolean): void {
+  function answer(choice: BundleChoice): void {
     const m = modal();
     if (!m || m.hidden) return;
     m.hidden = true;
     const offers = asking;
     asking = [];
-    if (!copy) return;
-    offers.forEach(function (o) { o.videos.forEach(function (v) { submit(o, v); }); });
+    if (choice === "leave") return;
+    offers.forEach(function (o) { o.videos.forEach(function (v) { submit(o, v, choice === "move"); }); });
     showNext();
   }
 
@@ -396,7 +431,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   function beginSave(): BundleSaveWindow {
     if (!life.active()) return { drained: null, ask: function () { return Promise.resolve([]); }, end: function () { } };
     saving++;
-    answer(false);
+    answer("leave");
     let open = true;
     const end = function (): void { if (open) { open = false; saving--; } };
     if (!busy()) return { drained: null, ask, end };
@@ -406,8 +441,9 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   }
 
   ports.carries(onCarry);
-  life.listen(el("bundle-accept"), "click", function () { answer(true); });
-  life.listen(el("bundle-decline"), "click", function () { answer(false); });
+  life.listen(el("bundle-accept"), "click", function () { answer("copy"); });
+  life.listen(el("bundle-move"), "click", function () { answer("move"); });
+  life.listen(el("bundle-decline"), "click", function () { answer("leave"); });
   life.listen(el("bundle-cancel"), "click", cancel);
   life.listen(el("bundle-hide"), "click", function () { tuck(true, true); });
   life.listen(el("bundle-indicator"), "click", function () { tuck(false, true); });
@@ -418,7 +454,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     if (e.key !== "Escape") return;
     const m = modal(), s = saveModal();
     if (s && !s.hidden) { e.preventDefault(); closeSaveAsk(); return; }
-    if (m && !m.hidden) { e.preventDefault(); answer(false); }
+    if (m && !m.hidden) { e.preventDefault(); answer("leave"); }
   });
 
   return {

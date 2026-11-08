@@ -629,6 +629,14 @@ tabs**.
   `desktop/test/attach-ipc.test.mjs` holds the refusals and
   `caseGalleryAttachFile` in smoke.mjs runs a PDF through drop, copy,
   restart and open.
+- **Moving a dropped file into the folder** (#260,
+  [rows-video-files.md](architecture/rows-video-files.md#moving-into-the-folder-260)).
+  `splitpage:bundle-move(token, job)` moves only the path main's session grant
+  holds for a drop's token (`moveIn` in `desktop/bundle-copy.ts`, a queued job in
+  `bundle-jobs.ts`): a rename on the same volume, otherwise copy, check byte for
+  byte, publish, then delete the original only if it is unchanged. A missing
+  stored path falls back to the same name and size in the tab's script folder.
+  `desktop/test/bundle-move.test.mjs` holds the steps and refusals.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.ts`, #76): server
   home beats file home; birthtime is **not** consulted between two files —

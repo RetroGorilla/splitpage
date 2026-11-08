@@ -18,6 +18,7 @@ function shellIpc(testMode) {
   const openedPaths = [];
   const testVideoOpens = [];
   const { registerShellIpc } = createShellIpc({
+    tabOf: () => null,
     shell: { openPath: async (p) => { openedPaths.push(p); return ""; }, openExternal: async () => {} },
     testMode, testVideoOpens, videoFileGrants: new Map(), ATTACHABLE_FILE, openableVideoPath
   });

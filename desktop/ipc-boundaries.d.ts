@@ -92,7 +92,7 @@ export interface DesktopShellIpcDependencies extends Pick<DesktopMainCommon, "ta
   videoFileGrants: Map<string, string>;
   ATTACHABLE_FILE: RegExp;
   openableVideoPath: typeof openableVideoPath;
-  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "copy" | "cancel" | "openBundled">;
+  bundleJobs: Pick<ReturnType<typeof createBundleJobs>, "copy" | "move" | "cancel" | "openBeside" | "openBundled">;
   testVideoOpens: string[];
   videoThumbnail: (...args: DesktopIpcArgs<"splitpage:video-thumbnail">) => Promise<DesktopIpcResult<"splitpage:video-thumbnail">>;
   updateStatus: () => DesktopWireUpdateStatus;
