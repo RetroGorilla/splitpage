@@ -361,7 +361,7 @@ test("scene clipboard: a fallback cut that finishes after the document has gone 
   assert.equal(edits.ran.length, 0);
 });
 
-async function fallbackCut(replaceWith: "none" | "same-ids" | "disk-merge") {
+async function fallbackCut(replaceWith: "none" | "same-ids" | "disk-merge" | "save-as") {
   const { owner, edits, held, calls } = beatSelect();
   const clip = mountBeatClip({
     document: held.document,
@@ -384,6 +384,7 @@ async function fallbackCut(replaceWith: "none" | "same-ids" | "disk-merge") {
       held.replace(scriptDoc());
       held.lifetime.epoch = () => epoch;
     }
+    if (replaceWith === "save-as") (held.document.current() as { docId: string }).docId = "d" + "9".repeat(32);
     finish();
     await new Promise((resolve) => setTimeout(resolve, 20));
   } finally {
@@ -401,6 +402,11 @@ test("scene clipboard: a fallback cut that finishes after another script with th
 
 test("scene clipboard: a fallback cut that finishes after a disk merge replaced the document object removes nothing", async () => {
   const { edits } = await fallbackCut("disk-merge");
+  assert.equal(edits.ran.length, 0);
+});
+
+test("scene clipboard: a fallback cut that finishes after Save As gave the same document a new id removes nothing", async () => {
+  const { edits } = await fallbackCut("save-as");
   assert.equal(edits.ran.length, 0);
 });
 

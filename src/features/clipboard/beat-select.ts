@@ -365,6 +365,7 @@ function runClipboardCommand(cut: boolean) {
   const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
   const started = (ports as BeatSelectPorts).document.current();
   const out = buildBeatPayload(started, ids, { cut: nonce });
+  const startedId = started ? started.docId : null;
   const epoch = (ports as BeatSelectPorts).lifetime.epoch();
   const write = typeof ClipboardItem === "function" && navigator.clipboard.write
     ? navigator.clipboard.write([new ClipboardItem({
@@ -374,13 +375,13 @@ function runClipboardCommand(cut: boolean) {
     : navigator.clipboard.writeText(out.text);
   write.then(function () {
     if (!cut) announceLeftOut(count(ids.length) + " copied", out.leftOut);
-    else if (sameDocument(started, epoch)) afterCut({ ids: ids, nonce: nonce, out: out });
+    else if (sameDocument(started, startedId, epoch)) afterCut({ ids: ids, nonce: nonce, out: out });
   }, function () { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); });
 }
 
-function sameDocument(started: DocumentView | null, epoch: number) {
+function sameDocument(started: DocumentView | null, startedId: string | null, epoch: number) {
   const now = (ports as BeatSelectPorts).document.current();
-  return !!started && now === started && now.docId === started.docId && (ports as BeatSelectPorts).lifetime.epoch() === epoch;
+  return !!started && now === started && now.docId === startedId && (ports as BeatSelectPorts).lifetime.epoch() === epoch;
 }
 
 function afterCut(w: ReturnType<typeof writeBeats>) {
