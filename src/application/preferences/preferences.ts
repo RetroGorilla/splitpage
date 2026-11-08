@@ -258,7 +258,9 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     setAutosave: function (on: boolean): void { announce(KEYS.autosave, on ? "1" : "0"); },
     commentAuthor: function (): string { return read(KEYS.commentAuthor) ?? ""; },
     setCommentAuthor: function (name: string): void { announce(KEYS.commentAuthor, name); },
-    rememberCommentAuthor: function (name: string): void { put(KEYS.commentAuthor, name); },
+    rememberCommentAuthor: function (name: string): void {
+      if (read(KEYS.commentAuthor) !== name) announce(KEYS.commentAuthor, name);
+    },
     commentsSort: function (): "recent" | "position" { return read(KEYS.commentsSort) === "recent" ? "recent" : "position"; },
     setCommentsSort: function (mode: string): void { announce(KEYS.commentsSort, mode === "recent" ? "recent" : "position"); },
     commentFilter: function (): CommentFilter {
