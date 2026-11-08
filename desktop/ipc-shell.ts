@@ -8,7 +8,7 @@ import type * as NodeFsPromises from "node:fs/promises";
 
 import type * as NodePath from "node:path";
 
-import type { DesktopIpcEvent, DesktopShellIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopIpcEvent, DesktopShellIpcDependencies, DesktopRegisterIpcGroup, VideoFileGrant } from "./ipc-boundaries.d.ts";
 
 const path: typeof NodePath = require("node:path");
 const fsp: typeof NodeFsPromises = require("node:fs/promises");
@@ -28,6 +28,17 @@ function createShellIpc({
   function scriptOf(event: DesktopIpcEvent): string | null {
     const tab = tabOf(event);
     return tab && tab.source.kind === "file" && typeof tab.source.absPath === "string" ? tab.source.absPath : null;
+  }
+
+  function grantOf(event: DesktopIpcEvent, token: unknown): VideoFileGrant | null {
+    const granted = typeof token === "string" ? videoFileGrants.get(token) : undefined;
+    return granted && granted.sender === event.sender.id ? granted : null;
+  }
+
+  function sameMoveGrant(a: VideoFileGrant["move"], b: VideoFileGrant["move"]): boolean {
+    if (!a || !b) return a === b;
+    return a.parent === b.parent && a.stamp.size === b.stamp.size && a.stamp.mtime === b.stamp.mtime &&
+      a.stamp.ino === b.stamp.ino && a.stamp.dev === b.stamp.dev;
   }
 
   async function openFound(found: { ok: true; path: string } | { ok: false; code: string }) {
@@ -77,15 +88,19 @@ function createShellIpc({
       let st, real;
       try { real = await fsp.realpath(filePath); st = await fsp.stat(real); } catch { return null; }
       if (!st.isFile() || !ATTACHABLE_FILE.test(real)) return null;
-      for (const [token, granted] of videoFileGrants) if (granted === filePath) return token;
+      const move = await bundleJobs.moveGrantOf(filePath);
+      const sender = event.sender.id;
+      for (const [token, granted] of videoFileGrants) {
+        if (granted.path === filePath && granted.sender === sender && sameMoveGrant(granted.move, move)) return token;
+      }
       if (videoFileGrants.size >= 1000) videoFileGrants.delete(videoFileGrants.keys().next().value as string);
       const token = crypto.randomBytes(16).toString("hex");
-      videoFileGrants.set(token, filePath);
+      videoFileGrants.set(token, { path: filePath, sender, move });
       return token;
     });
 
     ipcHandle("splitpage:video-file-open", async (event, token) => {
-      const filePath = videoFileGrants.get(token);
+      const filePath = grantOf(event, token)?.path;
       if (!filePath) return { ok: false, code: "UNKNOWN" };
       let real: string;
       try { real = await fsp.realpath(filePath); } catch { return { ok: false, code: "GONE" }; }
@@ -111,21 +126,24 @@ function createShellIpc({
       const tab = tabOf(event);
       const script = scriptOf(event);
       if (!tab || !script) return { ok: false, code: "NO_FOLDER" };
-      const source = videoFileGrants.get(token);
-      if (!source) return { ok: false, code: "UNKNOWN" };
+      const granted = grantOf(event, token);
+      if (!granted) return { ok: false, code: "UNKNOWN" };
       if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
-      return bundleJobs.copy(event.sender, tab.id, job, source, script);
+      return bundleJobs.copy(event.sender, tab.id, job, granted.path, script);
     });
 
     ipcHandle("splitpage:bundle-move", async (event, token, job) => {
       const tab = tabOf(event);
       const script = scriptOf(event);
       if (!tab || !script) return { ok: false, code: "NO_FOLDER" };
-      const source = videoFileGrants.get(token);
-      if (!source) return { ok: false, code: "UNKNOWN" };
-      if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
-      // why: the original is gone once moved, so no grant may name it again or reach the moved file in the folder
-      return bundleJobs.move(event.sender, tab.id, job, source, script, () => { if (videoFileGrants.get(token) === source) videoFileGrants.delete(token); });
+      const granted = grantOf(event, token);
+      if (!granted) return { ok: false, code: "UNKNOWN" };
+      if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job) || !granted.move) return { ok: false, code: "REFUSED" };
+      const moved = () => {
+        // why: the original is gone once moved, so no grant may name it again or reach the moved file in the folder
+        for (const [t, g] of videoFileGrants) if (g.path === granted.path) videoFileGrants.delete(t);
+      };
+      return bundleJobs.move(event.sender, tab.id, job, granted.path, granted.move, script, moved);
     });
 
     ipcOn("splitpage:bundle-cancel", (event, job) => {

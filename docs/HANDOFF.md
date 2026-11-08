@@ -634,7 +634,9 @@ tabs**.
   `splitpage:bundle-move(token, job)` moves only the path main's session grant
   holds for a drop's token (`moveIn` in `desktop/bundle-copy.ts`, a queued job in
   `bundle-jobs.ts`): a rename on the same volume, otherwise copy, check byte for
-  byte, publish, then delete the original only if it is unchanged. A missing
+  byte, publish, then delete the original only if it is unchanged since the
+  grant. A grant is bound to its tab and records the file's stamp; one
+  checkpoint (`guarded`) runs before each rename, delete and publish. A missing
   stored path falls back to the same name and size in the tab's script folder.
   `desktop/test/bundle-move.test.mjs` holds the steps and refusals.
 - Duplicate document-id claims reassign in memory only (§4, #36).

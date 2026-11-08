@@ -39,13 +39,20 @@ const copierWith = (options = {}) => createBundleCopier({ bundleFiles, progressE
 const crossDrive = (options = {}) => copierWith({ moveFile: exdev, ...options });
 const ino = (p) => fs.statSync(p, { bigint: true }).ino;
 const leftovers = (folder) => (fs.existsSync(folder) ? fs.readdirSync(folder).filter((n) => /\.part$/.test(n)) : []);
+const touch = (p) => { const t = new Date(Date.now() + 60000); fs.utimesSync(p, t, t); };
+const move = async (copier, source, script, onProgress = () => {}, signal = live()) =>
+  copier.moveIn(source, script, ATTACHABLE_FILE, onProgress, signal, await copier.moveGrantOf(source));
+
+function junction(target, at) {
+  try { fs.symlinkSync(target, at, "junction"); return true; } catch { return false; }
+}
 
 test("on the same drive a move is one rename into the folder: the same file, never two copies and never none", async () => {
   const s = scratch();
   try {
     const before = ino(s.clip);
     const seen = [];
-    const got = await copierWith().moveIn(s.clip, s.script, ATTACHABLE_FILE, (done, total) => seen.push([done, total]), live());
+    const got = await move(copierWith(), s.clip, s.script, (done, total) => seen.push([done, total]));
     assert.equal(got.ok, true);
     assert.equal(got.outcome, "moved");
     assert.equal(got.name, "take one.mp4");
@@ -64,7 +71,7 @@ test("a name taken in the folder gets a numbered name, and nothing there is over
     try {
       fs.mkdirSync(s.folder);
       fs.writeFileSync(path.join(s.folder, "take one.mp4"), "someone else's");
-      const got = await copier.moveIn(s.clip, s.script, ATTACHABLE_FILE, () => {}, live());
+      const got = await move(copier, s.clip, s.script);
       assert.equal(got.ok && got.name, "take one (2).mp4", label);
       assert.equal(fs.readFileSync(path.join(s.folder, "take one.mp4"), "utf8"), "someone else's", label);
       assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one (2).mp4")), s.bytes, label);
@@ -78,7 +85,7 @@ test("a file already in the folder with the same bytes is linked, and the origin
   try {
     fs.mkdirSync(s.folder);
     fs.writeFileSync(path.join(s.folder, "take one.mp4"), s.bytes);
-    const got = await crossDrive().moveIn(s.clip, s.script, ATTACHABLE_FILE, () => {}, live());
+    const got = await move(crossDrive(), s.clip, s.script);
     assert.deepEqual([got.ok, got.name, got.outcome], [true, "take one.mp4", "moved"]);
     assert.deepEqual(fs.readdirSync(s.folder), ["take one.mp4"]);
     assert.equal(fs.existsSync(s.clip), false);
@@ -106,7 +113,7 @@ test("on another drive a move copies to a temporary, checks it byte for byte, pu
       }
     });
     const seen = [];
-    const got = await copier.moveIn(s.clip, s.script, ATTACHABLE_FILE, (done, total) => seen.push([done, total]), live());
+    const got = await move(copier, s.clip, s.script, (done, total) => seen.push([done, total]));
     assert.deepEqual([got.ok, got.outcome], [true, "moved"]);
     assert.deepEqual(order, ["publish", "delete"]);
     assert.equal(fs.existsSync(s.clip), false);
@@ -121,12 +128,12 @@ test("a copy that does not match byte for byte is never published, and the origi
   try {
     let edited = false;
     const copier = crossDrive({ removeOriginal: async () => { throw new Error("must not delete"); } });
-    const got = await copier.moveIn(s.clip, s.script, ATTACHABLE_FILE, (done) => {
+    const got = await move(copier, s.clip, s.script, (done) => {
       if (edited || done !== SIZE) return;
       edited = true;
       const fd = fs.openSync(s.clip, "r+");
       try { fs.writeSync(fd, Buffer.from([255]), 0, 1, 0); } finally { fs.closeSync(fd); }
-    }, live());
+    });
     assert.ok(edited, "the original was edited after it was copied");
     assert.deepEqual(got, { ok: false, code: "FAILED" });
     assert.equal(fs.readFileSync(s.clip)[0], 255, "the original is left as it is now");
@@ -135,17 +142,17 @@ test("a copy that does not match byte for byte is never published, and the origi
   } finally { s.done(); }
 });
 
-test("deleting needs the original unchanged since the start: a newer modified time keeps both, during the copy or after the check", async () => {
+test("deleting needs the original unchanged since the grant: a newer modified time keeps both, during the copy or after the check", async () => {
   for (const when of ["during the copy", "after the check"]) {
     const s = scratch();
     try {
       let touched = false;
-      const touch = () => { if (!touched) { touched = true; const t = new Date(Date.now() + 60000); fs.utimesSync(s.clip, t, t); } };
+      const once = () => { if (!touched) { touched = true; touch(s.clip); } };
       const copier = crossDrive({
-        link: async (part, to) => { if (when === "after the check") touch(); return fsp.link(part, to); },
+        link: async (part, to) => { if (when === "after the check") once(); return fsp.link(part, to); },
         removeOriginal: async () => { throw new Error("must not delete a changed original"); }
       });
-      const got = await copier.moveIn(s.clip, s.script, ATTACHABLE_FILE, () => { if (when === "during the copy") touch(); }, live());
+      const got = await move(copier, s.clip, s.script, () => { if (when === "during the copy") once(); });
       assert.deepEqual([got.ok, got.outcome, got.name], [true, "changed", "take one.mp4"], when);
       assert.deepEqual(fs.readFileSync(s.clip), s.bytes, when + ": the original stays");
       assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes, when + ": and the checked copy stays");
@@ -153,10 +160,58 @@ test("deleting needs the original unchanged since the start: a newer modified ti
   }
 });
 
+test("on the same drive the rename needs the original unchanged since the grant: one changed while the folder was made keeps both", async () => {
+  const s = scratch();
+  try {
+    const before = ino(s.clip);
+    const grant = await copierWith().moveGrantOf(s.clip);
+    let renamed = false;
+    const copier = copierWith({
+      openTarget: async (target) => { touch(s.clip); return fsp.open(target, "wx"); },
+      moveFile: async (from, to) => { renamed = true; return fsp.rename(from, to); }
+    });
+    const got = await copier.moveIn(s.clip, s.script, ATTACHABLE_FILE, () => {}, live(), grant);
+    assert.equal(renamed, false, "a changed original is never renamed away");
+    assert.deepEqual([got.ok, got.outcome, got.name], [true, "changed", "take one.mp4"]);
+    assert.equal(ino(s.clip), before, "the original stays where it was");
+    assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes, "and a checked copy is in the folder");
+    assert.notEqual(ino(path.join(s.folder, "take one.mp4")), before);
+    assert.deepEqual(leftovers(s.folder), []);
+  } finally { s.done(); }
+});
+
+test("deleting needs the original's folder to be the one granted: a folder link retargeted after the grant keeps both", async () => {
+  const s = scratch();
+  try {
+    const via = path.join(s.dir, "via");
+    const elsewhere = path.join(s.dir, "elsewhere");
+    fs.mkdirSync(elsewhere);
+    fs.linkSync(s.clip, path.join(elsewhere, "take one.mp4"));
+    if (!junction(s.drops, via)) { console.log("  (folder links are not available here; the retarget case runs where they are)"); return; }
+    const source = path.join(via, "take one.mp4");
+    const copier = crossDrive({
+      link: async (part, to) => {
+        await fsp.link(part, to);
+        fs.unlinkSync(via);
+        assert.ok(junction(elsewhere, via), "the folder link now leads elsewhere, to the same file id, size and time");
+      },
+      removeOriginal: async () => { throw new Error("must not delete through a retargeted folder"); }
+    });
+    const got = await move(copier, source, s.script);
+    assert.deepEqual([got.ok, got.outcome], [true, "changed"]);
+    assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
+    assert.deepEqual(fs.readFileSync(path.join(elsewhere, "take one.mp4")), s.bytes);
+    assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes);
+  } finally {
+    try { fs.unlinkSync(path.join(s.dir, "via")); } catch { }
+    s.done();
+  }
+});
+
 test("deleting needs the original not in use: a file another program holds keeps both", async () => {
   const s = scratch();
   try {
-    const got = await copierWith({ moveFile: busy, removeOriginal: busy }).moveIn(s.clip, s.script, ATTACHABLE_FILE, () => {}, live());
+    const got = await move(copierWith({ moveFile: busy, removeOriginal: busy }), s.clip, s.script);
     assert.deepEqual([got.ok, got.outcome], [true, "kept"], "a rename refused for a file in use falls back to copy, check and delete");
     assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
     assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes);
@@ -168,7 +223,7 @@ test("an original on a read-only drive stays, with the copy in the folder", asyn
   const s = scratch();
   try {
     const readOnly = async () => { const e = new Error("read-only file system"); e.code = "EROFS"; throw e; };
-    const got = await crossDrive({ removeOriginal: readOnly }).moveIn(s.clip, s.script, ATTACHABLE_FILE, () => {}, live());
+    const got = await move(crossDrive({ removeOriginal: readOnly }), s.clip, s.script);
     assert.deepEqual([got.ok, got.outcome], [true, "kept"]);
     assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
     assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes);
@@ -178,7 +233,7 @@ test("an original on a read-only drive stays, with the copy in the folder", asyn
   try {
     fs.chmodSync(p.drops, 0o555);
     if (process.getuid && process.getuid() === 0) { console.log("  (running as root: a read-only folder does not stop root; the real-folder case runs elsewhere)"); return; }
-    const got = await crossDrive().moveIn(p.clip, p.script, ATTACHABLE_FILE, () => {}, live());
+    const got = await move(crossDrive(), p.clip, p.script);
     assert.deepEqual([got.ok, got.outcome], [true, "kept"], "a real folder the original cannot leave");
     assert.deepEqual(fs.readFileSync(p.clip), p.bytes);
   } finally { fs.chmodSync(p.drops, 0o755); p.done(); }
@@ -190,7 +245,7 @@ test("Cancel before the publish leaves the original where it was and nothing in 
     try {
       const ctl = new AbortController();
       if (label === "same drive") ctl.abort();
-      const got = await copier.moveIn(s.clip, s.script, ATTACHABLE_FILE, () => ctl.abort(), ctl.signal);
+      const got = await move(copier, s.clip, s.script, () => ctl.abort(), ctl.signal);
       assert.deepEqual(got, { ok: false, code: "CANCELLED" }, label);
       assert.deepEqual(fs.readFileSync(s.clip), s.bytes, label);
       assert.deepEqual(fs.existsSync(s.folder) ? fs.readdirSync(s.folder) : [], [], label + ": no temporary, placeholder or copy");
@@ -198,25 +253,59 @@ test("Cancel before the publish leaves the original where it was and nothing in 
   }
 });
 
+test("a Cancel while the rename's placeholder is checked stops the rename, so the original stays and the placeholder goes", async () => {
+  const s = scratch();
+  try {
+    const before = ino(s.clip);
+    const ctl = new AbortController();
+    const copier = copierWith({ lstat: async (target) => { ctl.abort(); return fsp.lstat(target, { bigint: true }); } });
+    const got = await move(copier, s.clip, s.script, () => {}, ctl.signal);
+    assert.deepEqual(got, { ok: false, code: "CANCELLED" });
+    assert.equal(ino(s.clip), before);
+    assert.deepEqual(fs.readdirSync(s.folder), []);
+  } finally { s.done(); }
+});
+
+test("a Cancel while the publish's placeholder is checked publishes nothing, and the original stays", async () => {
+  const s = scratch();
+  try {
+    const ctl = new AbortController();
+    let armed = false;
+    const copier = crossDrive({
+      link: async () => { armed = true; const e = new Error("no hard links here"); e.code = "EPERM"; throw e; },
+      lstat: async (target) => { if (armed) ctl.abort(); return fsp.lstat(target, { bigint: true }); },
+      removeOriginal: async () => { throw new Error("must not delete"); }
+    });
+    const got = await move(copier, s.clip, s.script, () => {}, ctl.signal);
+    assert.ok(armed, "the publish fell back to the placeholder");
+    assert.deepEqual(got, { ok: false, code: "CANCELLED" });
+    assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
+    assert.deepEqual(fs.readdirSync(s.folder), [], "no temporary, placeholder or copy");
+  } finally { s.done(); }
+});
+
 test("a Cancel during the check removes the temporary and keeps the original", async () => {
   const s = scratch();
   try {
     const ctl = new AbortController();
-    const got = await crossDrive().moveIn(s.clip, s.script, ATTACHABLE_FILE, (done) => { if (done > SIZE) ctl.abort(); }, ctl.signal);
+    const got = await move(crossDrive(), s.clip, s.script, (done) => { if (done > SIZE) ctl.abort(); }, ctl.signal);
     assert.deepEqual(got, { ok: false, code: "CANCELLED" });
     assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
     assert.deepEqual(fs.readdirSync(s.folder), []);
   } finally { s.done(); }
 });
 
-test("the publish is the commit point: a Cancel after it still finishes the move, so the file is in one place", async () => {
+test("a Cancel after the publish stops the delete: both stay, and the link names the checked copy", async () => {
   const s = scratch();
   try {
     const ctl = new AbortController();
-    const copier = crossDrive({ link: async (part, to) => { await fsp.link(part, to); ctl.abort(); } });
-    const got = await copier.moveIn(s.clip, s.script, ATTACHABLE_FILE, () => {}, ctl.signal);
-    assert.deepEqual([got.ok, got.outcome], [true, "moved"]);
-    assert.equal(fs.existsSync(s.clip), false);
+    const copier = crossDrive({
+      link: async (part, to) => { await fsp.link(part, to); ctl.abort(); },
+      removeOriginal: async () => { throw new Error("must not delete after a Cancel"); }
+    });
+    const got = await move(copier, s.clip, s.script, () => {}, ctl.signal);
+    assert.deepEqual([got.ok, got.outcome, got.name], [true, "kept", "take one.mp4"]);
+    assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
     assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), s.bytes);
   } finally { s.done(); }
 });
@@ -231,11 +320,11 @@ test("a move that stops at any step before the delete leaves the original whole,
         link: step === "publish" ? async () => crash() : undefined,
         removeOriginal: async () => { throw new Error("must not delete"); }
       });
-      const got = await copier.moveIn(s.clip, s.script, ATTACHABLE_FILE, (done) => {
+      const got = await move(copier, s.clip, s.script, (done) => {
         reads = done;
         if (step === "copy" && done > 0 && done < SIZE) crash();
         if (step === "check" && done > SIZE) crash();
-      }, live()).catch((e) => ({ thrown: e.message }));
+      }).catch((e) => ({ thrown: e.message }));
       assert.ok(reads > 0 || step === "publish", step);
       assert.deepEqual(fs.readFileSync(s.clip), s.bytes, step + ": the original is whole");
       assert.ok(!got.ok || got.outcome !== "moved", step + ": nothing reports a move");
@@ -249,16 +338,17 @@ test("a move refuses a link, a folder, a blocked type and a file that is gone, b
     const copier = copierWith();
     const tool = path.join(s.drops, "tool.exe");
     fs.writeFileSync(tool, "MZ");
-    assert.deepEqual(await copier.moveIn(tool, s.script, ATTACHABLE_FILE, () => {}, live()), { ok: false, code: "REFUSED" });
+    assert.deepEqual(await move(copier, tool, s.script), { ok: false, code: "REFUSED" });
     const dir = path.join(s.drops, "folder.mp4");
     fs.mkdirSync(dir);
-    assert.deepEqual(await copier.moveIn(dir, s.script, ATTACHABLE_FILE, () => {}, live()), { ok: false, code: "REFUSED" });
-    assert.deepEqual(await copier.moveIn(path.join(s.drops, "gone.mp4"), s.script, ATTACHABLE_FILE, () => {}, live()), { ok: false, code: "GONE" });
+    assert.equal(await copier.moveGrantOf(dir), null, "a folder has no move grant");
+    assert.deepEqual(await move(copier, dir, s.script), { ok: false, code: "REFUSED" });
+    assert.deepEqual(await move(copier, path.join(s.drops, "gone.mp4"), s.script), { ok: false, code: "GONE" });
     const alias = path.join(s.drops, "alias.mp4");
     let linked = true;
     try { fs.symlinkSync(s.clip, alias, "file"); } catch { linked = false; }
     if (linked) {
-      assert.deepEqual(await copier.moveIn(alias, s.script, ATTACHABLE_FILE, () => {}, live()), { ok: false, code: "REFUSED" }, "a link is never moved in place of its target");
+      assert.deepEqual(await move(copier, alias, s.script), { ok: false, code: "REFUSED" }, "a link is never moved in place of its target");
       assert.deepEqual(fs.readFileSync(s.clip), s.bytes);
     } else console.log("  (file symlinks need a privilege this account lacks; the link case runs where they don't)");
     assert.ok(!fs.existsSync(s.folder) || fs.readdirSync(s.folder).length === 0, "nothing was written");
@@ -283,9 +373,16 @@ test("the missing-file fallback opens a file of the same name and size in the sc
   } finally { s.done(); }
 });
 
+const MAIN = 7;
+
 function makeSender(id) {
   const sent = [];
   return { sent, sender: { id, isDestroyed: () => false, send: (channel, payload) => { sent.push([channel, payload]); } } };
+}
+
+function grantSync(p) {
+  const st = fs.lstatSync(p, { bigint: true });
+  return { path: p, sender: MAIN, move: { stamp: { size: st.size, mtime: st.mtimeNs, ino: st.ino, dev: st.dev }, parent: fs.realpathSync.native(path.dirname(p)) } };
 }
 
 function harness({ script = null, grants = [], copierOptions = {}, holdMove = null } = {}) {
@@ -293,7 +390,7 @@ function harness({ script = null, grants = [], copierOptions = {}, holdMove = nu
   const listeners = new Map();
   const testVideoOpens = [];
   const tab = { id: "tab-a", windowId: "w1", source: script ? { kind: "file", absPath: script } : { kind: "blank" } };
-  const videoFileGrants = new Map(grants);
+  const videoFileGrants = new Map(grants.map(([token, p]) => [token, grantSync(p)]));
   const real = copierWith(copierOptions);
   const copier = { ...real, moveIn: async (...args) => { if (holdMove) await holdMove; return real.moveIn(...args); } };
   const bundleJobs = createBundleJobs({
@@ -306,11 +403,12 @@ function harness({ script = null, grants = [], copierOptions = {}, holdMove = nu
     testMode: true, testVideoOpens, videoFileGrants, ATTACHABLE_FILE, openableVideoPath, bundleJobs
   });
   registerShellIpc({ ipcHandle: (n, fn) => handlers.set(n, fn), ipcOn: (n, fn) => listeners.set(n, fn), ipcOnSync: () => {} });
-  const main = makeSender(7);
+  const main = makeSender(MAIN);
   const call = (name, ...args) => handlers.get(name)({ sender: main.sender }, ...args);
   const callAs = (other, name, ...args) => handlers.get(name)({ sender: main.sender, tab: other }, ...args);
+  const callFrom = (from, other, name, ...args) => handlers.get(name)({ sender: from.sender, tab: other }, ...args);
   const send = (name, ...args) => listeners.get(name)({ sender: main.sender }, ...args);
-  return { tab, call, callAs, send, main, bundleJobs, videoFileGrants, testVideoOpens };
+  return { tab, call, callAs, callFrom, send, main, bundleJobs, videoFileGrants, testVideoOpens };
 }
 
 test("main moves only a file it granted this session, by token, into the tab's own script folder", async () => {
@@ -320,7 +418,7 @@ test("main moves only a file it granted this session, by token, into the tab's o
     assert.deepEqual(await ipc.call("splitpage:bundle-move", "0".repeat(32), "bundle1"), { ok: false, code: "UNKNOWN" }, "a token main never gave");
     assert.deepEqual(await ipc.call("splitpage:bundle-move", s.clip, "bundle1"), { ok: false, code: "UNKNOWN" }, "a path is never a grant");
     assert.deepEqual(await ipc.call("splitpage:bundle-move", "tok", "../x"), { ok: false, code: "REFUSED" });
-    assert.deepEqual(await ipc.callAs({ id: "tab-b", source: { kind: "blank" } }, "splitpage:bundle-move", "tok", "bundle1"), { ok: false, code: "NO_FOLDER" });
+    assert.deepEqual(await ipc.callAs({ id: "tab-a", source: { kind: "blank" } }, "splitpage:bundle-move", "tok", "bundle1"), { ok: false, code: "NO_FOLDER" });
     assert.deepEqual(fs.readFileSync(s.clip), s.bytes, "nothing moved yet");
     assert.deepEqual(await ipc.call("splitpage:bundle-move", "tok", "bundle1"), { ok: true, name: "take one.mp4", outcome: "moved" });
     assert.equal(fs.existsSync(s.clip), false);
@@ -331,12 +429,55 @@ test("main moves only a file it granted this session, by token, into the tab's o
   } finally { s.done(); }
 });
 
+test("a grant belongs to the tab it was given to: another saved tab's move, copy or open with that token is refused", async () => {
+  const s = scratch();
+  try {
+    const ipc = harness({ script: s.script, grants: [["tok", s.clip]] });
+    const other = makeSender(MAIN + 1);
+    const otherScript = path.join(s.dir, "Other.splitpage");
+    fs.writeFileSync(otherScript, "{}");
+    const otherTab = { id: "tab-b", windowId: "w1", source: { kind: "file", absPath: otherScript } };
+    assert.deepEqual(await ipc.callFrom(other, otherTab, "splitpage:bundle-move", "tok", "bundle1"), { ok: false, code: "UNKNOWN" });
+    assert.deepEqual(await ipc.callFrom(other, otherTab, "splitpage:bundle-file", "tok", "bundle2"), { ok: false, code: "UNKNOWN" });
+    assert.deepEqual(await ipc.callFrom(other, otherTab, "splitpage:video-file-open", "tok"), { ok: false, code: "UNKNOWN" });
+    assert.deepEqual(fs.readFileSync(s.clip), s.bytes, "the original never moved");
+    assert.equal(fs.existsSync(path.join(s.dir, "Other files")), false, "and nothing reached the other tab's folder");
+    assert.deepEqual(ipc.testVideoOpens, []);
+    const own = await ipc.callFrom(other, otherTab, "splitpage:video-file-grant", s.clip);
+    assert.match(own, /^[0-9a-f]{32}$/);
+    assert.notEqual(own, "tok", "the same file dropped in another tab gets that tab's own grant");
+    assert.deepEqual(await ipc.call("splitpage:bundle-move", "tok", "bundle3"), { ok: true, name: "take one.mp4", outcome: "moved" });
+    assert.equal(ipc.videoFileGrants.has(own), false, "a moved original leaves no grant in any tab");
+  } finally { s.done(); }
+});
+
+test("a grant names one file: one put in its place at the same path is never moved away, and both are kept", async () => {
+  const s = scratch();
+  try {
+    const ipc = harness({ script: s.script });
+    const at = new Date(Math.floor(Date.now() / 1000) * 1000 - 3600000);
+    fs.utimesSync(s.clip, at, at);
+    const token = await ipc.call("splitpage:video-file-grant", s.clip);
+    assert.match(token, /^[0-9a-f]{32}$/);
+    const replacement = Buffer.alloc(SIZE, 7);
+    fs.unlinkSync(s.clip);
+    fs.writeFileSync(s.clip, replacement);
+    fs.utimesSync(s.clip, at, at);
+    assert.equal(fs.statSync(s.clip).size, SIZE, "the same size");
+    assert.equal(fs.statSync(s.clip).mtimeMs, at.getTime(), "and the same modified time; only the file id differs");
+    assert.deepEqual(await ipc.call("splitpage:bundle-move", token, "bundle1"), { ok: true, name: "take one.mp4", outcome: "changed" });
+    assert.deepEqual(fs.readFileSync(s.clip), replacement, "the file now at the path stays");
+    assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), replacement);
+    assert.notEqual(await ipc.call("splitpage:video-file-grant", s.clip), token, "a new grant for the new file");
+  } finally { s.done(); }
+});
+
 test("a move that kept the original keeps its grant", async () => {
   const s = scratch();
   try {
     const ipc = harness({ script: s.script, grants: [["tok", s.clip]], copierOptions: { moveFile: busy, removeOriginal: busy } });
     assert.deepEqual(await ipc.call("splitpage:bundle-move", "tok", "bundle1"), { ok: true, name: "take one.mp4", outcome: "kept" });
-    assert.equal(ipc.videoFileGrants.get("tok"), s.clip);
+    assert.equal(ipc.videoFileGrants.get("tok").path, s.clip);
   } finally { s.done(); }
 });
 
@@ -394,7 +535,7 @@ test("Cancel and Quit anyway stop a move before its publish, so the original is 
       await stopping;
       assert.deepEqual(await moving, { ok: false, code: "CANCELLED" }, how);
       assert.deepEqual(fs.readFileSync(s.clip), s.bytes, how);
-      assert.equal(ipc.videoFileGrants.get("tok"), s.clip, how + ": the grant stays with the original");
+      assert.equal(ipc.videoFileGrants.get("tok").path, s.clip, how + ": the grant stays with the original");
       assert.deepEqual(fs.existsSync(s.folder) ? fs.readdirSync(s.folder) : [], [], how);
     } finally { s.done(); }
   }

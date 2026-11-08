@@ -25,6 +25,11 @@ interface SourceStamp {
   readonly ino: bigint;
   readonly dev: bigint;
 }
+interface BundleMoveGrant {
+  readonly stamp: SourceStamp;
+  readonly parent: string;
+}
+type Blocked = "cancelled" | "changed" | "gone";
 type BundleCarryResult = { ok: true; copied: number; kept: number; missing: number } |
   { ok: false; code: "CLASH" | "FAILED" | "CANCELLED"; name: string; copied: number } |
   { ok: false; code: "MISSING"; name: string; copied: 0; missing: number };
@@ -100,6 +105,39 @@ function createBundleCopier(options: {
     }
   }
 
+  async function stampOf(p: string): Promise<SourceStamp | "gone" | null> {
+    try {
+      const st = await fsp.lstat(p, { bigint: true });
+      return st.isFile() ? { size: st.size, mtime: st.mtimeNs, ino: st.ino, dev: st.dev } : null;
+    } catch (e) { return missingFile(e) ? "gone" : null; }
+  }
+
+  async function moveGrantOf(source: string): Promise<BundleMoveGrant | null> {
+    try {
+      const parent = await fsp.realpath(path.dirname(source));
+      const stamp = await stampOf(source);
+      return stamp && stamp !== "gone" ? { stamp, parent } : null;
+    } catch { return null; }
+  }
+
+  async function sourceState(source: string, grant: BundleMoveGrant): Promise<"clear" | "changed" | "gone"> {
+    let parent: string;
+    try { parent = await fsp.realpath(path.dirname(source)); } catch { return "changed"; }
+    if (!samePath(parent, grant.parent, foldCase)) return "changed";
+    const now = await stampOf(source);
+    if (now === "gone") return "gone";
+    const was = grant.stamp;
+    return now && now.size === was.size && now.mtime === was.mtime && now.ino === was.ino && now.dev === was.dev ? "clear" : "changed";
+  }
+
+  async function guarded<T>(watched: { source: string; grant: BundleMoveGrant } | null, signal: AbortSignal,
+    irreversible: () => Promise<T>): Promise<T | Blocked> {
+    const state = watched ? await sourceState(watched.source, watched.grant) : "clear";
+    if (signal.aborted) return "cancelled";
+    if (state !== "clear") return state;
+    return irreversible();
+  }
+
   async function stillPlaceholder(target: string, made: NodeFs.BigIntStats): Promise<boolean> {
     try {
       const now = await lstatTarget(target);
@@ -116,28 +154,27 @@ function createBundleCopier(options: {
       let made: NodeFs.BigIntStats | null = null;
       try { made = await out.stat({ bigint: true }); } catch { } finally { try { await out.close(); } catch { } }
       if (!made) return "failed";
-      if (signal.aborted) {
-        if (await stillPlaceholder(target, made)) { try { await unlinkFile(target); } catch { } }
-        return "cancelled";
-      }
-      if (!(await stillPlaceholder(target, made))) return "taken";
-      try { await renameFile(part, target); } catch {
-        if (await stillPlaceholder(target, made)) { try { await unlinkFile(target); } catch { } }
+      const ours = made;
+      const clear = async () => { if (await stillPlaceholder(target, ours)) { try { await unlinkFile(target); } catch { } } };
+      if (!(await stillPlaceholder(target, ours))) return signal.aborted ? "cancelled" : "taken";
+      let renamed: "copied" | Blocked;
+      try { renamed = await guarded(null, signal, async () => { await renameFile(part, target); return "copied" as const; }); } catch {
+        await clear();
         return "failed";
       }
+      if (renamed !== "copied") { await clear(); return "cancelled"; }
       return "copied";
     } finally { placeholders.delete(key); }
   }
 
   async function publish(part: string, target: string, signal: AbortSignal, published: () => void): Promise<"copied" | "taken" | "cancelled" | "failed"> {
-    if (signal.aborted) return "cancelled";
-    let linked = false;
+    let linked: "linked" | Blocked | null = null;
     try {
-      await linkFile(part, target);
-      linked = true;
+      linked = await guarded(null, signal, async () => { await linkFile(part, target); return "linked" as const; });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "EEXIST") return "taken";
     }
+    if (linked !== null && linked !== "linked") return "cancelled";
     if (!linked) {
       if (signal.aborted) return "cancelled";
       // why: exFAT and SMB shares may lack hard links; the whole .part replaces only the empty placeholder this job created
@@ -316,22 +353,16 @@ function createBundleCopier(options: {
     return { ok: true, copied, kept, missing };
   }
 
-  async function stampOf(p: string): Promise<SourceStamp | "gone" | null> {
+  async function removeIfUnchanged(source: string, grant: BundleMoveGrant, signal: AbortSignal): Promise<BundleMoveOutcome> {
+    let removed: "removed" | Blocked;
     try {
-      const st = await fsp.lstat(p, { bigint: true });
-      return st.isFile() ? { size: st.size, mtime: st.mtimeNs, ino: st.ino, dev: st.dev } : null;
-    } catch (e) { return missingFile(e) ? "gone" : null; }
+      removed = await guarded({ source, grant }, signal, async () => { await removeOriginal(source); return "removed" as const; });
+    } catch (e) { return missingFile(e) ? "moved" : "kept"; }
+    return removed === "removed" || removed === "gone" ? "moved" : removed === "changed" ? "changed" : "kept";
   }
 
-  async function removeIfUnchanged(source: string, start: SourceStamp): Promise<BundleMoveOutcome> {
-    const now = await stampOf(source);
-    if (now === "gone") return "moved";
-    if (!now || now.size !== start.size || now.mtime !== start.mtime || now.ino !== start.ino || now.dev !== start.dev) return "changed";
-    try { await removeOriginal(source); } catch (e) { return missingFile(e) ? "moved" : "kept"; }
-    return "moved";
-  }
-
-  async function moveOntoPlaceholder(source: string, target: string, signal: AbortSignal): Promise<"moved" | "taken" | "cancelled" | "gone" | "failed"> {
+  async function moveOntoPlaceholder(source: string, target: string, signal: AbortSignal, grant: BundleMoveGrant):
+    Promise<"moved" | "taken" | "failed" | Blocked> {
     let out: NodeFsPromises.FileHandle;
     try { out = await openTarget(target); } catch (e) { return (e as NodeJS.ErrnoException).code === "EEXIST" ? "taken" : "failed"; }
     const key = placeKey(target);
@@ -342,14 +373,18 @@ function createBundleCopier(options: {
       if (!made) return "failed";
       const ours = made;
       const clear = async () => { if (await stillPlaceholder(target, ours)) { try { await unlinkFile(target); } catch { } } };
-      if (signal.aborted) { await clear(); return "cancelled"; }
-      if (!(await stillPlaceholder(target, ours))) return "taken";
-      try { await moveFile(source, target); } catch (e) { await clear(); return missingFile(e) ? "gone" : "failed"; }
-      return "moved";
+      if (!(await stillPlaceholder(target, ours))) return signal.aborted ? "cancelled" : "taken";
+      let moved: "moved" | Blocked;
+      try {
+        moved = await guarded({ source, grant }, signal, async () => { await moveFile(source, target); return "moved" as const; });
+      } catch (e) { await clear(); return missingFile(e) ? "gone" : "failed"; }
+      if (moved !== "moved") await clear();
+      return moved;
     } finally { placeholders.delete(key); }
   }
 
-  async function moveIn(source: string, scriptPath: string, allow: RegExp, onProgress: BundleProgress, signal: AbortSignal): Promise<BundleMoveResult> {
+  async function moveIn(source: string, scriptPath: string, allow: RegExp, onProgress: BundleProgress, signal: AbortSignal,
+    grant: BundleMoveGrant): Promise<BundleMoveResult> {
     const since = Date.now();
     const base = path.basename(source);
     if (!bundleableName(base, allow)) return { ok: false, code: "REFUSED" };
@@ -377,16 +412,16 @@ function createBundleCopier(options: {
       if (size === total) {
         const same = await sameBytes(source, target, signal);
         if (same === "cancelled") return { ok: false, code: "CANCELLED" };
-        if (same) return { ok: true, name, outcome: await removeIfUnchanged(source, start), at: target };
+        if (same) return { ok: true, name, outcome: await removeIfUnchanged(source, grant, signal), at: target };
       }
       if (size !== null) continue;
       if (sameDrive) {
-        const moved = await underFolderLock(folder.path, signal, () => moveOntoPlaceholder(source, target, signal));
+        const moved = await underFolderLock(folder.path, signal, () => moveOntoPlaceholder(source, target, signal, grant));
         if (moved === "moved") { onProgress(total, total); return { ok: true, name, outcome: "moved", at: target }; }
         if (moved === "taken") continue;
         if (moved === "cancelled") return { ok: false, code: "CANCELLED" };
         if (moved === "gone") return { ok: false, code: "GONE" };
-        // why: a rename refused for a file in use, or across volumes, still moves by copy, check and delete
+        // why: a changed original, a file in use or another volume is copied and checked; the delete then keeps a changed one
         sameDrive = false;
       }
       const progress = copying || (copying = reporter(total * 2, onProgress));
@@ -395,7 +430,7 @@ function createBundleCopier(options: {
       if (got === "cancelled") return { ok: false, code: "CANCELLED" };
       if (got === "failed") return { ok: false, code: "FAILED" };
       progress.finish();
-      return { ok: true, name, outcome: await removeIfUnchanged(source, start), at: target };
+      return { ok: true, name, outcome: await removeIfUnchanged(source, grant, signal), at: target };
     }
     return { ok: false, code: "FAILED" };
   }
@@ -444,9 +479,9 @@ function createBundleCopier(options: {
     return openableVideoPath(p, pathStyle, fsp, allow);
   }
 
-  return { besideScript, copyIn, carry, folderName, moveIn, openStored, partIn, publishWhole, resolveIn, sizeOfFile, storedPath };
+  return { besideScript, copyIn, carry, folderName, moveGrantOf, moveIn, openStored, partIn, publishWhole, resolveIn, sizeOfFile, storedPath };
 }
 
-export type { BundleCarryResult, BundleCopyResult, BundleMoveResult, BundleProgress, createBundleCopier };
+export type { BundleCarryResult, BundleCopyResult, BundleMoveGrant, BundleMoveResult, BundleProgress, createBundleCopier };
 
 module.exports = { createBundleCopier };

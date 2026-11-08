@@ -2,7 +2,7 @@
 
 import type * as NodeCrypto from "node:crypto";
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
-import type { BundleCarryResult, BundleCopyResult, BundleMoveResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
+import type { BundleCarryResult, BundleCopyResult, BundleMoveGrant, BundleMoveResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
 import type { BundleExportResult, createBundleExporter } from "./bundle-export.ts";
 
 const crypto: typeof NodeCrypto = require("node:crypto");
@@ -168,7 +168,12 @@ function createBundleJobs(options: {
     });
   }
 
-  function move(sender: BundleSender, tabId: string, job: string, source: string, script: string, onMoved: () => void = () => {}): Promise<BundleMoveJobResult> {
+  function moveGrantOf(source: string): Promise<BundleMoveGrant | null> {
+    return copier.moveGrantOf(source);
+  }
+
+  function move(sender: BundleSender, tabId: string, job: string, source: string, grant: BundleMoveGrant, script: string,
+    onMoved: () => void = () => {}): Promise<BundleMoveJobResult> {
     return new Promise((finish) => {
       let settled = false;
       const done = (result: BundleMoveJobResult) => { if (!settled) { settled = true; finish(result); } };
@@ -178,7 +183,7 @@ function createBundleJobs(options: {
         run: async (progress, signal) => {
           const now = scriptOfTab(tabId);
           if (!now || !same(script, now)) { done({ ok: false, code: "DROPPED" }); return; }
-          const moved = await copier.moveIn(source, script, allow, progress, signal);
+          const moved = await copier.moveIn(source, script, allow, progress, signal, grant);
           if (!moved.ok) { done(moved); return; }
           if (moved.outcome === "moved") onMoved();
           done({ ok: true, name: moved.name, outcome: moved.outcome });
@@ -478,7 +483,8 @@ function createBundleJobs(options: {
   }
 
   return {
-    abortAll, busy, cancel, chooseSave, copy, exportPlanToken, forgetTab, idle, move, noteExportTarget, noteSaveTarget, noteScript, openBeside, openBundled,
+    abortAll, busy, cancel, chooseSave, copy, exportPlanToken, forgetTab, idle, move, moveGrantOf, noteExportTarget, noteSaveTarget, noteScript, openBeside,
+    openBundled,
     planExport, planSave,
     prepareWrite, startExport
   };

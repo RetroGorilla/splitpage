@@ -94,7 +94,7 @@ function harness({ source = null, grants = [], testMode = false, holdCopy = null
   const answers = [];
   const tab = { id: "tab-a", windowId: "w1", source: source ? { kind: "file", absPath: source } : { kind: "blank" } };
   const tabs = new Map([[tab.id, tab]]);
-  const videoFileGrants = new Map(grants);
+  const videoFileGrants = new Map(grants.map(([token, p]) => [token, { path: p, sender: 7, move: null }]));
   const fileIds = createFileRegistry();
   let state = { recents: [] };
   const recents = createRecents({
