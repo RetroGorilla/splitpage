@@ -344,7 +344,7 @@ No case is slower beyond noise, and every p50 is well inside its limit. Long typ
 
 ## Batch of 2026-11-07 and 2026-11-08, 0c437ce4 to 76f4cc2c
 
-Recorded 2026-11-08 on the Windows PC by `node tools/perf-ab.mjs 0c437ce4 76f4cc2c --only short,long --rounds 5`, with smoke.lock and perf.lock held by this run. It covers #1291 (the cut path), #1292, #1294 (export with files, bundled into a zip) and #1295 (the late cut fix and the desktop microphone relay), plus everything else merged in that range. No case times cut, so #1291's cut path is not measured here, and the export cases are the three existing formats only, not the bundle export.
+Recorded 2026-11-08 on the Windows PC by `node tools/perf-ab.mjs 0c437ce4 76f4cc2c --only short,long --rounds 5`, with smoke.lock and perf.lock held by this run. It covers #1291 (a late cut no longer deletes beats in another script), #1292 (the desktop microphone relay), #1294 (export with files, bundled into a zip) and #1295 (changelog and help), plus everything else merged in that range. No case times cut, so #1291's cut path is not measured here, and the export cases are the three existing formats only, not the bundle export.
 
 ### Input latency, median of 5 rounds (ms)
 
