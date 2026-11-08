@@ -72,6 +72,7 @@ function noop() {}
 
 function isDocId(v: unknown): boolean { return typeof v === "string" && DOC_ID_RE.test(v); }
 function isBucket(v: unknown): boolean { return v === HISTORY_OLDER_KEY || isDocId(v); }
+function isRecord(v: unknown): v is SharedHistoryBucketReader { return !!v && typeof v === "object" && !Array.isArray(v); }
 
 function finiteNumber(v: unknown): number {
   try { const n = Number(v); return Number.isFinite(n) ? n : 0; } catch { return 0; }
@@ -105,7 +106,7 @@ export function projectHistoryBucket(rec: SharedHistoryBucketReader | null | und
     if (meta) { entries.push({ index, raw, meta }); references[meta.sha] = true; }
     else { damaged++; retain(raw); }
   });
-  if (rec && !Array.isArray(rec.snapshots)) { damaged++; retain(rec.snapshots); }
+  if (rec && !Array.isArray(rec.snapshots)) { damaged++; retain(isRecord(rec) ? rec.snapshots : rec); }
   if (rec && Object.prototype.hasOwnProperty.call(rec, "damagedSnapshots")) {
     damaged++;
     retain(rec.damagedSnapshots);
@@ -128,6 +129,7 @@ function entryOf(meta: unknown, sha: string) {
 }
 
 function cloneRecord(rec: SharedHistoryBucketReader | null | undefined) {
+  if (!isRecord(rec)) return { damagedSnapshots: rec ?? null, snapshots: [] } as HistoryStoreMutableBucket;
   const out = {} as HistoryStoreMutableBucket;
   Object.keys(rec as SharedHistoryBucketReader).forEach(function (k) { if (k !== "snapshots") out[k] = (rec as SharedHistoryBucketReader)[k]; });
   if (Array.isArray((rec as SharedHistoryBucketReader).snapshots)) {
