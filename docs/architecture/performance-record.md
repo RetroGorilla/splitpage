@@ -321,6 +321,27 @@ From #1118, on the same PC.
 
 Input is unchanged within noise, as expected: the renderer bundle's stripped output is the same apart from the documented exceptions. The cost is at desktop launch, about 17 ms or 3%, because Electron strips types as it loads each file.
 
+## Issue batch of 2026-11-06 and 2026-11-07, fdba5e2a to 0c437ce4
+
+Recorded 2026-11-07 on the Windows PC by `node tools/perf-ab.mjs fdba5e2a 0c437ce4 --only short,long --rounds 5`, with smoke.lock held. It covers the typing, editing and undo changes in #1249 (Visual box blocked-save), #1250 and #1267 (video locations and bundled links), #1259 (`@Name` owners, incremental per keystroke), #1277 (file links) and #1281 (Save As history reset and live link amend), plus everything else merged in that range.
+
+### Input latency, median of 5 rounds (ms)
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 | Limit |
+| --- | --- | --- | --- | --- | --- |
+| short typing | 2.6 | 2.5 | 16.1 | 14.8 | 8 |
+| long typing | 2.6 | 2.7 | 13.3 | 15.3 | 8 |
+| short new scene | 21.6 | 18.7 | 27.3 | 26.2 | 65 |
+| long new scene | 33.9 | 33.5 | 39.5 | 40.2 | 65 |
+| short undo the delete | 13.6 | 12.4 | 13.6 | 12.4 | 45 |
+| long undo the delete | 36.6 | 33.1 | 36.6 | 33.1 | 70 |
+
+The other cases (delete every scene, stamp, hide shot scenes, display preference, the three exports) moved between -16% and +22% at p50 on values of 0.6 to 17 ms, inside the spread of each build's own runs. Limits apply to the p50.
+
+### Reading it
+
+No case is slower beyond noise, and every p50 is well inside its limit. Long typing's p95 reads +15%, but the base runs alone span 9.6 to 15.1 ms and the head runs 14.8 to 16.5 ms, so five rounds can't tell that apart from noise; its p50 is unchanged. `@Name`'s per-keystroke work (#1259) doesn't show at p50.
+
 ## Comparing two commits
 
 Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs --test` (or a plain build when the old build script lacks `--test`, reported in the output), and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. A standalone `node tools/perf-record.mjs` also builds the test variant before measuring, with the same fallback for older build scripts. Use compatible installed dependencies for the two commits; no install or network access is performed.
