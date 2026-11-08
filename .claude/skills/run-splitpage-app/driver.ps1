@@ -216,6 +216,7 @@ function Connect-Cdp {
   Log 'cdp connected'
   $null = Send-Cdp 'Page.enable'
   $null = Send-Cdp 'Runtime.enable'
+  $null = Send-Cdp 'Page.bringToFront'
   $null = Send-Cdp 'Emulation.setFocusEmulationEnabled' @{ enabled = $true }
   # Every suite runs in the light theme, whatever the machine's own (#169).
   # Headless Edge takes prefers-color-scheme from Windows, so on a PC set to

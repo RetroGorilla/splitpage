@@ -1,0 +1,11 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){const b=document.createElement('button');b.id='fullscreen-probe';b.textContent='Fullscreen';b.style.cssText='position:fixed;top:0;left:0;z-index:2147483647';b.onclick=function(e){window.__fullscreenProbe={trusted:e.isTrusted,active:navigator.userActivation.isActive};document.documentElement.requestFullscreen().then(function(){window.__fullscreenProbe.result='fulfilled';},function(error){window.__fullscreenProbe.result=error.name+': '+error.message;});};document.body.appendChild(b);})()
+click #fullscreen-probe
+wait window.__fullscreenProbe && window.__fullscreenProbe.result
+expect window.__fullscreenProbe.trusted && window.__fullscreenProbe.active
+expect window.__fullscreenProbe.result === 'fulfilled'
+expect document.fullscreenElement === document.documentElement
+eval document.exitFullscreen()
+wait document.fullscreenElement === null
+quit
