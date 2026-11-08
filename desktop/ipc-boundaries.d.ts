@@ -56,7 +56,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
     showOpenDialog: (parent: BrowserWindow | undefined, options: Parameters<Dialog["showOpenDialog"]>[0]) => ReturnType<Dialog["showOpenDialog"]>;
     showMessageBoxSync: (parent: BrowserWindow | undefined, options: Parameters<Dialog["showMessageBoxSync"]>[0]) => ReturnType<Dialog["showMessageBoxSync"]>;
     showSaveDialog: (parent: BrowserWindow | undefined, options: {
-      defaultPath: string | undefined; filters: { name: string; extensions: string[] }[] | undefined; properties: "showOverwriteConfirmation"[] | undefined;
+      defaultPath: string | undefined; filters: { name: string; extensions: string[] }[] | undefined; properties?: "showOverwriteConfirmation"[];
     }) => ReturnType<Dialog["showSaveDialog"]>;
   };
   dialogParentFor: (event: DesktopIpcEvent) => BrowserWindow | undefined;

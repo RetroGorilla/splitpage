@@ -79,11 +79,12 @@ function createFileIpc({
         chosen = answer;
       } else {
         const win = dialogParentFor(event);
-        const result = await dialog.showSaveDialog(win, {
+        const asked: Parameters<typeof dialog.showSaveDialog>[1] = {
           defaultPath: opts.suggestedName,
-          filters: Array.isArray(opts.filters) && opts.filters.length ? opts.filters : undefined,
-          properties: opts.bundleExport === true ? ["showOverwriteConfirmation"] : undefined
-        });
+          filters: Array.isArray(opts.filters) && opts.filters.length ? opts.filters : undefined
+        };
+        if (opts.bundleExport === true) asked.properties = ["showOverwriteConfirmation"];
+        const result = await dialog.showSaveDialog(win, asked);
         chosen = result.canceled || !result.filePath ? null : result.filePath;
       }
       if (!chosen) return null;
