@@ -271,6 +271,15 @@ function createBundleCopier(options: {
     return { ok: true, copied, kept, missing };
   }
 
+  async function publishWhole(part: string, target: string, signal: AbortSignal): Promise<"copied" | "taken" | "cancelled" | "failed"> {
+    if (signal.aborted) return "cancelled";
+    return underFolderLock(path.dirname(target), signal, () => publish(part, target, signal, () => {}));
+  }
+
+  function partIn(folder: string): string {
+    return path.join(folder, "~splitpage-" + crypto.randomBytes(8).toString("hex") + ".part");
+  }
+
   function folderName(script: string): string {
     return path.basename(bundleFolderOf(script, path));
   }
@@ -287,7 +296,7 @@ function createBundleCopier(options: {
     return openableVideoPath(p, pathStyle, fsp, allow);
   }
 
-  return { copyIn, carry, folderName, openStored, resolveIn, sizeOfFile, storedPath };
+  return { copyIn, carry, folderName, openStored, partIn, publishWhole, resolveIn, sizeOfFile, storedPath };
 }
 
 export type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier };

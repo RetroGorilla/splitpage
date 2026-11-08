@@ -114,7 +114,7 @@ async function buildFileData(kind: string, baseName: string, opts?: Readonly<Rec
     warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
     if (made.diagnostics.unshownCharacters) showToast(unshownCharactersText(made.diagnostics.unshownCharacters), "warn");
   }
-  return { data: made.data, filename: filename };
+  return { data: made.data, filename: filename, withFiles: made.withFiles || null };
 }
 
 let pendingResumeHandle: ReturnType<LocalFileMenuControls["pendingHandle"]> = null;
@@ -192,6 +192,10 @@ async function exportAs(kind: string, more?: Readonly<Record<string, unknown>>) 
     return;
   }
   if (!active) return;
+  if (built.withFiles && typeof built.data === "string") {
+    await running().scriptFiles.export(built.filename, built.withFiles.scriptName, built.data);
+    return;
+  }
   await deliverFile(built.filename, built.data, { savedMsg: "Exported " + built.filename });
 }
 

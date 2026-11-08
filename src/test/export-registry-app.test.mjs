@@ -75,7 +75,7 @@ test("one provider and one registration put a new exporter in the menu, the pale
     const button = document.querySelector('#file-menu .menu-hidden-actions [data-file-action="export-demo-sheet"]');
     assert.ok(button, "a menu entry is drawn from the declaration");
     assert.equal(button.textContent, "Demo sheet (.demo)");
-    assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 16);
+    assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 17);
 
     assert.equal(document.querySelectorAll('#file-menu [data-file-action="export-narration-docx"]').length, 1);
     const listed = exportItems("zebra");
@@ -128,7 +128,7 @@ test("one provider and one registration put a new exporter in the menu, the pale
   assert.deepEqual(exportItems("zebra"), []);
   assert.equal(lastExportAction(), null, "an action nobody registers is not offered again");
   assert.equal(exportAgainItemState().hidden, true);
-  assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 15);
+  assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 16);
 });
 
 test("an exporter's own availability reason greys it out everywhere", async () => {
@@ -227,6 +227,53 @@ test("a second variant joins an existing card as one more choice", () => {
     drop();
   }
   assert.deepEqual(exportFormats.card("md")?.variants.map((v) => v.choice?.value), ["stacked", "table"]);
+});
+
+test("only the Splitpage script card offers the script's files, and in the browser it does not offer them at all", () => {
+  try {
+    openExportDialog({ action: "export-splitpage" });
+    assert.equal(document.querySelector('input[name="export-format"]:checked').value, "splitpage");
+    assert.equal(document.querySelector('#export-options [data-toggle="files"]'), null, "the browser cannot read the files, so the option is not drawn");
+    assert.equal(document.getElementById("export-options").hidden, true);
+    assert.equal(document.getElementById("export-filename").textContent, localFileMenuControls().exportBaseName() + ".splitpage");
+    assert.equal(document.getElementById("export-go").textContent, "Export Splitpage script");
+    assert.equal(exportFormats.card("splitpage")?.toggle?.id, "files");
+    for (const card of exportFormats.cards()) {
+      if (card.id === "splitpage") continue;
+      assert.notEqual(card.toggle?.id, "files", card.id + " keeps no links, so it has no files option");
+    }
+    const request = localFileMenuControls().exportRequest("splitpage", { files: true });
+    assert.equal(request.options.files, false, "a files option asked for where it is not offered reads as off");
+  } finally {
+    closeExportDialog();
+  }
+});
+
+test("an offered card toggle is drawn, and its detail joins the summary only while it is on", async () => {
+  let on = false;
+  let asked = 0;
+  const dropCard = exportFormats.defineCard({ ...CARD, group: "whole",
+    toggle: { id: "files", label: "Include the demo files", on: () => on, set: (v) => { on = v; }, offered: () => true,
+              detail: async () => { asked++; return "3 files (1.0 KB)"; } } });
+  const drop = exportFormats.register(demoExporter().decl);
+  try {
+    openExportDialog({ action: "export-demo-sheet" });
+    const box = document.querySelector('#export-options input[data-toggle="files"]');
+    assert.ok(box, "the toggle is drawn on a card with no choices");
+    assert.equal(document.getElementById("export-options").hidden, false);
+    assert.equal(box.checked, false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(asked, 0, "no detail is asked for while the toggle is off");
+    box.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(on, true);
+    assert.equal(asked, 1);
+    assert.match(document.getElementById("export-summary").textContent, / · 3 files \(1\.0 KB\)$/);
+  } finally {
+    closeExportDialog();
+    drop();
+    dropCard();
+  }
 });
 
 test("the byte-capture matrix lists every registered file builder, so a new format cannot skip its cases", () => {

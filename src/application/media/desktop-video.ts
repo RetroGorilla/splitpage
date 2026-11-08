@@ -1,4 +1,6 @@
-import type { DesktopIpcArgs, DesktopIpcResult, DesktopWireBundleCarryNote, DesktopWireBundleSavePlan } from "../../../shared/desktop-contract.d.ts";
+import type {
+  DesktopIpcArgs, DesktopIpcResult, DesktopWireBundleCarryNote, DesktopWireBundleExport, DesktopWireBundleExportPlan, DesktopWireBundleSavePlan
+} from "../../../shared/desktop-contract.d.ts";
 import type { BundledPathLink } from "../../core/document/gallery.ts";
 
 export type DesktopVideoResult = DesktopIpcResult<"splitpage:video-file-open">;
@@ -7,6 +9,8 @@ export type DesktopBundleCopy = DesktopIpcResult<"splitpage:bundle-file">;
 export type DesktopBundleCarry = DesktopWireBundleCarryNote;
 export type DesktopBundleSavePlan = DesktopWireBundleSavePlan;
 export type BundleSaveChoice = "copy" | "link";
+export type DesktopBundleExportPlan = DesktopWireBundleExportPlan;
+export type DesktopBundleExport = DesktopWireBundleExport;
 export type BundleProgressListener = (progress: Pick<DesktopIpcArgs<"splitpage:bundle-progress">[0], "done" | "total">) => void;
 
 export interface DesktopVideo {
@@ -22,5 +26,8 @@ export interface DesktopVideo {
   readonly cancelBundle: (job: string) => void;
   readonly planSave: (handle: unknown, names: readonly string[]) => Promise<DesktopBundleSavePlan | null>;
   readonly chooseSave: (handle: unknown, choice: BundleSaveChoice) => Promise<readonly BundledPathLink[] | null>;
+  readonly planExport: (job: string, scriptName: string, body: string) => Promise<DesktopBundleExportPlan | null>;
+  readonly pickExport: (suggestedName: string) => Promise<{ readonly id: string; readonly name: string } | null>;
+  readonly exportBundle: (job: string, fileId: string, onProgress: BundleProgressListener) => Promise<DesktopBundleExport | null>;
   readonly thumbnail: (host: string, ref: string) => Promise<DesktopVideoThumbnail | null> | null;
 }

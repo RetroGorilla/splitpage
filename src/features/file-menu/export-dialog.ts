@@ -5,7 +5,7 @@ import type { ExportDocument } from "../../core/document/export-document.ts";
 type DialogFormat = ReturnType<FileMenuExportMount["exportFormatList"]>[number];
 type PreviewGridRow = { cells: string[]; cls?: string | undefined };
 
-import { exportToggleOptions } from "../../application/export/registry.ts";
+import { exportToggleOptions, toggleOffered } from "../../application/export/registry.ts";
 import { rowImage } from "../../core/document/media.ts";
 import { tagCategory } from "../../core/production/looks.ts";
 import { escapeHtml, unitSafePrefix } from "../../core/document/text-policy.ts";
@@ -137,11 +137,23 @@ function buildCards() {
   }).join("");
 }
 
+function toggleHtml(f: DialogFormat) {
+  return f.toggle && toggleOffered(f.toggle)
+    ? '<label class="export-toggle"><input type="checkbox" name="export-toggle" data-toggle="' + escapeHtml(f.toggle.id) + '"' +
+      (f.toggle.on() ? " checked" : "") + '> ' + escapeHtml(f.toggle.label) + '</label>'
+    : "";
+}
+
 function renderOptions() {
   const host = el("export-options");
   if (!host) return;
   const f = chosenFormat;
-  if (!f || !f.choices) { host.innerHTML = ""; host.hidden = true; return; }
+  if (!f || !f.choices) {
+    const alone = f ? toggleHtml(f) : "";
+    host.innerHTML = alone;
+    host.hidden = !alone;
+    return;
+  }
   host.hidden = false;
   const current = chosenChoice[f.id] || (f.choices[0] as NonNullable<DialogFormat["choices"]>[number]).value;
   host.innerHTML = '<div class="export-option" data-for="' + f.id + '">' +
@@ -150,11 +162,7 @@ function renderOptions() {
     f.choices.map(function (c) {
       return '<label><input type="radio" name="export-choice" value="' + c.value + '" data-action="' + c.action + '"' +
         (c.value === current ? " checked" : "") + '>' + escapeHtml(c.label) + '</label>';
-    }).join("") + '</div></div>' +
-    (f.toggle
-      ? '<label class="export-toggle"><input type="checkbox" name="export-toggle" data-toggle="' + escapeHtml(f.toggle.id) + '"' +
-        (f.toggle.on() ? " checked" : "") + '> ' + escapeHtml(f.toggle.label) + '</label>'
-      : "");
+    }).join("") + '</div></div>' + toggleHtml(f);
 }
 
 function trunc(s: string, n: number) {
@@ -309,6 +317,7 @@ function previewHtml(action: string | null | undefined) {
   }
   if (action === "export-pdf") return pvScript(title, { rundown: true }, doc) + pvFooter(title);
   if (action === "export-docx") return pvScript(title, { word: true }, doc) + pvFooter(title);
+  if (action === "export-splitpage") return pvScript(title, { rundown: true }, doc);
   if (action === "export-md") return pvTextLines((ports as FileMenuExportPorts).preview.markdown(doc), 40);
   if (action === "export-md-table") return pvTextLines((ports as FileMenuExportPorts).preview.markdownTable(doc), 20);
   if (action === "export-csv" || action === "export-xlsx") {
@@ -440,6 +449,8 @@ function exportSummary(action: string | null | undefined) {
       bits.push("columns sized, header frozen, filters on");
     } else if (action === "export-html") {
       bits.push(plural(rows.length, "beat"));
+    } else if (action === "export-splitpage") {
+      bits.push(plural(rows.length, "beat") + (rows.length ? ", with everything Splitpage keeps" : ""));
     } else {
       bits.push(plural(rows.length, "beat") + (rows.length ? " with timecodes, status and read times" : ""));
     }
@@ -484,12 +495,27 @@ function exportFileNameFor(action: string | null | undefined) {
   return (ports as FileMenuExportPorts).fileName(exporter.id, { imageBundle: bundle });
 }
 
+let detailAsked = 0;
+
+function showToggleDetail(summary: string) {
+  const asked = ++detailAsked;
+  const toggle = chosenFormat ? chosenFormat.toggle : undefined;
+  if (!toggle || !toggle.detail || !toggleOffered(toggle) || !toggle.on()) return;
+  toggle.detail().then(function (text) {
+    const host = el("export-summary");
+    if (asked !== detailAsked || !text || !host || !exportDialogOpen()) return;
+    host.textContent = summary ? summary + " · " + text : text;
+  }, function () { });
+}
+
 function renderSide() {
   const action = chosenAction();
   if (!action) return;
   (el("export-preview") as HTMLElement).innerHTML = previewHtml(action);
   (el("export-preview") as HTMLElement).classList.toggle("is-landscape", action === "export-broll-pdf");
-  (el("export-summary") as HTMLElement).textContent = exportSummary(action);
+  const summary = exportSummary(action);
+  (el("export-summary") as HTMLElement).textContent = summary;
+  showToggleDetail(summary);
   const fileLabel = ((el("export-filename") as HTMLElement).parentElement as HTMLElement).querySelector(".export-field-label");
   if (fileLabel) fileLabel.textContent = (ports as FileMenuExportPorts).printWorkflow(action) ? "Next step" : "File name";
   (el("export-filename") as HTMLElement).textContent = (ports as FileMenuExportPorts).printWorkflow(action) ? "Print dialog · choose Save as PDF" : exportFileNameFor(action);

@@ -4,7 +4,9 @@ import { bundleVideoLinks } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
-import type { BundleSaveChoice, DesktopBundleCarry, DesktopBundleCopy, DesktopBundleSavePlan } from "../../application/media/desktop-video.ts";
+import type {
+  BundleSaveChoice, DesktopBundleCarry, DesktopBundleCopy, DesktopBundleExport, DesktopBundleExportPlan, DesktopBundleSavePlan
+} from "../../application/media/desktop-video.ts";
 import type { BundleSaveWindow } from "../../application/save/file-saving-ports.ts";
 import type { UndoEntry } from "../../application/editing/undo/history.ts";
 import type { BundledPathLink, VideoLink } from "../../core/document/gallery.ts";
@@ -65,6 +67,7 @@ export function bundlePromptText(names: readonly string[], folder: string): { ti
 }
 
 export const BUNDLE_WARN_BYTES = 250 * 1024 * 1024;
+const BIG_COPY = "That is a lot to copy, and it may take a while and use disk space. You can keep working while it copies.";
 
 export function sizeText(bytes: number): string {
   const kb = 1024, mb = kb * 1024, gb = mb * 1024;
@@ -82,10 +85,29 @@ export function saveCopyPromptText(plan: DesktopBundleSavePlan): { title: string
     detail: "This script links " + videos(plan.files, "file") + " in " + quoted(plan.from) + " (" + sizeText(plan.bytes) + "). Copy files adds " +
       (one ? "it" : "them") + " to " + quoted(plan.to) + ", next to the new script. Otherwise the new script links to " +
       (one ? "the file where it is" : "the files where they are") + " now.",
-    warning: plan.copyBytes > BUNDLE_WARN_BYTES ? "That is a lot to copy, and it may take a while and use disk space. You can keep working while it copies." : null,
+    warning: plan.copyBytes > BUNDLE_WARN_BYTES ? BIG_COPY : null,
     copy: "Copy files (" + sizeText(plan.copyBytes) + ")",
     share: plan.linkable ? null : "“Don't copy the files” is not available: the files are on a network share, which a script cannot link to."
   };
+}
+
+export function exportFilesText(plan: DesktopBundleExportPlan): string {
+  const parts = [plan.files ? videos(plan.files, "file") + " (" + sizeText(plan.bytes) + ") in a folder beside the script" : "no linked files to include"];
+  if (plan.left) parts.push(videos(plan.left, "file") + " can't be included: missing, or a type Splitpage doesn't attach");
+  return parts.join(" · ") + (plan.bytes > BUNDLE_WARN_BYTES ? ". " + BIG_COPY : "");
+}
+
+export function exportDoneText(name: string, res: DesktopBundleExport | null): { text: string; kind: "ok" | "warn" | "error"; left: string | null } {
+  if (res && res.ok) {
+    return {
+      text: "Exported " + quoted(name) + (res.files ? " with " + videos(res.files, "file") : "") + ".", kind: "ok",
+      left: res.left ? videos(res.left, "file") + " couldn't be included in " + quoted(name) + ". " + (res.left === 1 ? "It is" : "They are") +
+        " missing, or a type Splitpage doesn't attach, so " + (res.left === 1 ? "its link doesn't" : "their links don't") + " open from the exported script." : null
+    };
+  }
+  if (res && res.code === "CANCELLED") return { text: "Stopped exporting " + quoted(name) + ". Nothing was saved.", kind: "warn", left: null };
+  if (res && res.code === "TAKEN") return { text: "Could not export — " + quoted(name) + " already exists. Export again and choose a new name.", kind: "error", left: null };
+  return { text: "Could not export " + quoted(name) + ".", kind: "error", left: null };
 }
 
 export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
@@ -101,6 +123,8 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   let saving = 0;
   let tucked = false;
   let saveAsk: SaveAsk | null = null;
+  let exporting: { readonly job: string; readonly name: string } | null = null;
+  let exportJobs = 0;
 
   function waitingOn(): Copy[] { return pending.filter(function (c) { return !c.cancelled; }); }
 
@@ -131,17 +155,21 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     showPrompt();
   }
 
-  function showProgress(what: string, done: number, total: number): void {
+  function showProgress(what: string, done: number, total: number, verb = "Copying", chipText = "Copying files"): void {
     const box = el("bundle-progress");
     if (!box) return;
     const pct = total > 0 ? Math.min(100, Math.floor(done * 100 / total)) : 0;
     const text = el("bundle-progress-text");
-    if (text) text.textContent = "Copying " + what + " — " + pct + "%";
+    if (text) text.textContent = verb + " " + what + " — " + pct + "%";
     const bar = el("bundle-progress-bar") as HTMLProgressElement | null;
     if (bar) { bar.max = total > 0 ? total : 1; bar.value = total > 0 ? Math.min(done, total) : 0; }
     const chip = el("bundle-indicator");
-    if (chip) { chip.textContent = "Copying files — " + pct + "%"; chip.hidden = !tucked; }
+    if (chip) { chip.textContent = chipText + " — " + pct + "%"; chip.hidden = !tucked; }
     box.hidden = tucked;
+  }
+
+  function showExport(done: number, total: number): void {
+    if (exporting) showProgress(quoted(exporting.name), done, total, "Exporting", "Exporting");
   }
 
   function tuck(hide: boolean, moveFocus = false): void {
@@ -159,6 +187,7 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
     const next = waitingOn()[0];
     if (next) { showProgress(copyText(next), 0, next.video.size); return; }
     if (carrying) return;
+    if (exporting) { showExport(0, 1); return; }
     const box = el("bundle-progress"), chip = el("bundle-indicator");
     if (box) box.hidden = true;
     if (chip) chip.hidden = true;
@@ -259,8 +288,42 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   function cancel(): void {
     pending.forEach(function (c) { c.cancelled = true; ports.files.cancelBundle(c.job); });
     if (carrying) ports.files.cancelBundle(carrying);
+    if (exporting) ports.files.cancelBundle(exporting.job);
     drainWaiters.splice(0).forEach(function (resolve) { resolve(false); });
     showNext();
+  }
+
+  function exportPlan(body: string): Promise<DesktopBundleExportPlan | null> {
+    if (!life.active()) return Promise.resolve(null);
+    return ports.exports.plan("files" + (++exportJobs), "Script.splitpage", body);
+  }
+
+  async function exportWithFiles(zipName: string, scriptName: string, body: string): Promise<boolean> {
+    if (!life.active()) return false;
+    if (exporting) {
+      ports.notices.show("Splitpage is already exporting " + quoted(exporting.name) + ". Wait for it to finish, then export again.", "warn");
+      return false;
+    }
+    const job = "export" + (++exportJobs);
+    const plan = await ports.exports.plan(job, scriptName, body).catch(function () { return null; });
+    if (!life.active()) return false;
+    if (!plan) { ports.notices.show(exportDoneText(zipName, null).text, "error"); return false; }
+    const picked = await ports.exports.pick(zipName);
+    if (!picked || !life.active()) return false;
+    const mine = { job, name: picked.name };
+    exporting = mine;
+    showNext();
+    let res: DesktopBundleExport | null;
+    try {
+      res = await ports.exports.run(job, picked.id, function (p) { if (life.active() && exporting === mine && !carrying && !waitingOn().length) showExport(p.done, p.total); });
+    } catch (e) { res = null; }
+    if (exporting === mine) exporting = null;
+    if (!life.active()) return false;
+    showNext();
+    const said = exportDoneText(picked.name, res);
+    ports.notices.show(said.text, said.kind);
+    if (said.left) ports.notices.show(said.left, "error", true);
+    return !!(res && res.ok);
   }
 
   function saveModal(): HTMLElement | null { return el("bundle-save-modal"); }
@@ -360,9 +423,13 @@ export function startVideoBundles(ports: VideoBundlePorts): VideoBundleMount {
   return {
     offerAfterDrop: offer,
     beginSave,
+    exportPlan,
+    exportWithFiles,
     dispose: function (): void {
       if (!life.active()) return;
       pending.forEach(function (c) { ports.files.cancelBundle(c.job); });
+      if (exporting) ports.files.cancelBundle(exporting.job);
+      exporting = null;
       pending.length = 0;
       carrying = null;
       drained();

@@ -319,6 +319,15 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:bundle-save-choice", String(fileId || ""), String(choice || ""));
     },
 
+    planBundleExport(job, scriptName, data) {
+      return invoke("splitpage:bundle-export-plan", String(job || ""), String(scriptName || ""), data);
+    },
+
+    exportBundle(job, fileId, onProgress) {
+      const id = String(job || "");
+      return bundleJob(id, onProgress, () => invoke("splitpage:bundle-export", id, String(fileId || "")));
+    },
+
     videoThumbnail(host, ref) {
       return invoke("splitpage:video-thumbnail", host, ref).then((got): Awaited<ReturnType<DesktopPort["videoThumbnail"]>> => {
         if (got && got.ok && got.bytes && !(got.bytes instanceof Uint8Array)) got = { ...got, bytes: new Uint8Array(got.bytes) };

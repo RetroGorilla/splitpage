@@ -53,6 +53,7 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
       files: { bundle: async () => ({ ok: false, code: "UNAVAILABLE" }), cancelBundle: () => {} },
       carries: () => {},
       saves: { plan: async () => null, choose: async () => [] },
+      exports: { plan: async () => null, pick: async () => null, run: async () => null },
       notices: fakeNotices().notices,
       ownership: ownership.ownership,
       undo: { fold: () => false },

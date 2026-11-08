@@ -28,6 +28,7 @@ function harness(label: string) {
   const builds: unknown[] = [];
   const deliveries: unknown[] = [];
   const warnings: unknown[] = [];
+  const zips: unknown[] = [];
   formats.defineCard({ id: "script", name: "Script", ext: "txt", icon: "", purpose: "", group: "whole", toggle: { id: "directions", label: "Directions", on: () => true, set: () => {} } });
   formats.register({ id: "txt", action: "export-txt", name: "Text", menuLabel: "Text", card: "script", fileName: (base) => label + ":" + base + ".txt", build: async (request) => { builds.push(request); return { data: label, diagnostics: { imagesLeftOut: 1 } }; } });
   const notices = fakeNotices();
@@ -38,11 +39,12 @@ function harness(label: string) {
     imagesLeftOut: (...args) => { warnings.push(args); }, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
     notices: { ...notices.notices, busy: { withBar: async (_label, work) => work() } },
     delivery: { deliver: async (...args) => { deliveries.push(args); return true; } },
+    scriptFiles: { export: async (...args) => { zips.push(args); return true; } },
     pdfPrint: { export: () => null },
     merge: { offer: async () => {}, reset: () => {} },
     exportControls: { isExportAction: () => false, rememberExport: () => {} }, actions: createActionRegistry()
   };
-  return { ports, formats, builds, deliveries, warnings, notices };
+  return { ports, formats, builds, deliveries, warnings, notices, zips };
 }
 
 test("retired controls and repeated disposal cannot affect a replacement menu", () => {
@@ -138,5 +140,35 @@ test("export options read the registry card toggle through the formats port", ()
     assert.equal(request.options.directions, true);
     const overridden = mounted.exportRequest("txt", { directions: false }) as { options: { directions: boolean } };
     assert.equal(overridden.options.directions, false);
+  } finally { mounted.dispose(); }
+});
+
+test("an export built with the script's files goes to the files export, never to a plain download", async () => {
+  const h = harness("live");
+  const formats = createExportRegistry();
+  formats.register({ id: "splitpage", fileName: (base) => base + " (with files).zip",
+    build: async () => ({ data: "{\"rows\":[]}", withFiles: { scriptName: "script.splitpage" } }) });
+  formats.register({ id: "plain", fileName: (base) => base + ".splitpage", build: async () => ({ data: "{}" }) });
+  const mounted: LocalFileMenuControls = startLocalFileMenu({ ...h.ports, formats });
+  try {
+    await mounted.exportAs("splitpage");
+    assert.deepEqual(h.zips, [["live (with files).zip", "script.splitpage", "{\"rows\":[]}"]]);
+    assert.deepEqual(h.deliveries, []);
+    await mounted.exportAs("plain");
+    assert.equal(h.deliveries.length, 1, "without the files it is an ordinary export");
+    assert.equal(h.zips.length, 1);
+  } finally { mounted.dispose(); }
+});
+
+test("a card toggle that is not offered here reads as off, whatever it was set to", () => {
+  const h = harness("live");
+  const formats = createExportRegistry();
+  formats.defineCard({ id: "script", name: "Script", ext: "txt", icon: "", purpose: "", group: "whole",
+    toggle: { id: "files", label: "Files", on: () => true, set: () => {}, offered: () => false } });
+  formats.register({ id: "txt", action: "export-txt", name: "Text", menuLabel: "Text", card: "script", fileName: (base) => base + ".txt", build: async () => ({ data: "" }) });
+  const mounted: LocalFileMenuControls = startLocalFileMenu({ ...h.ports, formats });
+  try {
+    assert.equal((mounted.exportRequest("txt") as { options: { files: boolean } }).options.files, false);
+    assert.equal((mounted.exportRequest("txt", { files: true }) as { options: { files: boolean } }).options.files, false);
   } finally { mounted.dispose(); }
 });

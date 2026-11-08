@@ -85,6 +85,7 @@ export interface VideoBundlePorts {
   readonly files: Pick<VideoFiles, "bundle" | "cancelBundle">;
   readonly carries: DesktopVideo["onCarry"];
   readonly saves: { readonly plan: DesktopVideo["planSave"]; readonly choose: DesktopVideo["chooseSave"] };
+  readonly exports: { readonly plan: DesktopVideo["planExport"]; readonly pick: DesktopVideo["pickExport"]; readonly run: DesktopVideo["exportBundle"] };
   readonly notices: Pick<NoticePort, "show">;
   readonly ownership: Operations;
   readonly undo: UndoFold;
@@ -96,6 +97,8 @@ export interface VideoBundlePorts {
 export interface VideoBundleMount {
   readonly offerAfterDrop: (rowId: string, videos: readonly DroppedVideo[], entry: UndoEntry | null) => void;
   readonly beginSave: () => BundleSaveWindow;
+  readonly exportPlan: (body: string) => ReturnType<DesktopVideo["planExport"]>;
+  readonly exportWithFiles: (zipName: string, scriptName: string, body: string) => Promise<boolean>;
   readonly dispose: () => void;
 }
 

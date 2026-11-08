@@ -71,6 +71,12 @@ export function buildSplitpageFile(doc: ExportDocument, services: ProjectFileSer
   return JSON.stringify(fileStateFor(doc, services), null, 2);
 }
 
+export function buildSplitpageCopy(doc: ExportDocument, services: ProjectFileServices = projectFileServices()): string {
+  const copy: Partial<ValidatedDocument> = fileStateFor(doc, services);
+  delete copy.docId;
+  return JSON.stringify(copy, null, 2);
+}
+
 export function fileImagesMissing(doc: ExportDocument): string[] {
   return missingInlineImages(doc.document) as string[];
 }

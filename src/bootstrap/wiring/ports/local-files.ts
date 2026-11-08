@@ -37,6 +37,7 @@ import { actions } from "./actions.ts";
 import { pdfPrinter, printDialog } from "./printing.ts";
 import { exportBrowserPdf } from "../../../features/file-menu/browser-pdf.ts";
 import { exportDesktopPdf } from "../../../features/file-menu/desktop-pdf.ts";
+import { exportScriptWithFiles } from "../gallery.ts";
 
 export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
   const files: LocalFileAccess = localFileAccess(window);
@@ -100,6 +101,7 @@ export function localFileMenuPorts(menu: () => LocalFileMenuControls): LocalFile
     brollView,
     notices,
     delivery: fileDelivery,
+    scriptFiles: { export: exportScriptWithFiles },
     merge: { offer: offerFileMerge, reset: resetMergeOffer },
     pdfPrint: { export: (kind, options, alive) => exportBrowserPdf({
       exports: { captureExportDocument, loadExportAssets }, formats, assets: { request: exportAssetsRequest },

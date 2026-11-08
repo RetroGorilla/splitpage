@@ -2,6 +2,7 @@
 
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
 import type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
+import type { BundleExportResult, createBundleExporter } from "./bundle-export.ts";
 
 type BundleSender = {
   readonly id: number;
@@ -54,7 +55,21 @@ interface PendingOpen {
   landed: boolean;
 }
 
+interface ExportPlan {
+  readonly sender: BundleSender;
+  readonly tabId: string;
+  readonly text: string;
+  readonly scriptName: string;
+  readonly script: string | null;
+}
+
+type BundleExportPlanAnswer = { ok: true; plan: { files: number; bytes: number; left: number } } | { ok: false; code: "REFUSED" };
+type BundleExportAnswer = BundleExportResult | { ok: false; code: "UNKNOWN" | "REFUSED" };
+
 const SAVE_TARGETS_MAX = 50;
+const EXPORT_PLANS_PER_SENDER = 2;
+const EXPORT_TARGETS_MAX = 50;
+const ZIP_NAME = /\.zip$/i;
 const PLAN_NAMES_MAX = 2000;
 const REFUSALS: Record<string, BundleSaveRefusal["reason"]> = { CLASH: "clash", FAILED: "failed", CANCELLED: "cancelled" };
 
@@ -64,9 +79,13 @@ function createBundleJobs(options: {
   scriptOfTab: (tabId: string) => string | null;
   pathOf: (fileId: string) => string | null;
   namesInProject: (text: string) => string[];
+  exporter?: ReturnType<typeof createBundleExporter> | null;
   foldCase?: boolean;
 }) {
   const { copier, allow, scriptOfTab, pathOf, namesInProject } = options;
+  const exporter = options.exporter || null;
+  const exportPlans = new Map<string, ExportPlan>();
+  const exportTargets = new Map<string, string>();
   const foldCase = typeof options.foldCase === "boolean" ? options.foldCase : process.platform === "win32";
   const queue: BundleJob[] = [];
   const byKey = new Map<string, BundleJob>();
@@ -295,6 +314,50 @@ function createBundleJobs(options: {
     return carryForSave(fileId, noted, noted.from, to, names, sender);
   }
 
+  async function planExport(sender: BundleSender, tabId: string, job: string, scriptName: unknown, text: string): Promise<BundleExportPlanAnswer> {
+    if (!exporter || !exporter.scriptNameOk(scriptName)) return { ok: false, code: "REFUSED" };
+    const script = scriptOfTab(tabId);
+    const laid = await exporter.layout(text, scriptName, script, allow);
+    if (!laid) return { ok: false, code: "REFUSED" };
+    const key = keyOf(sender, job);
+    exportPlans.delete(key);
+    const mine = [...exportPlans].filter(([, p]) => p.sender === sender);
+    while (mine.length >= EXPORT_PLANS_PER_SENDER) exportPlans.delete((mine.shift() as [string, ExportPlan])[0]);
+    exportPlans.set(key, { sender, tabId, text, scriptName, script });
+    return { ok: true, plan: { files: laid.sources.length, bytes: laid.sources.reduce((sum, s) => sum + s.size, 0), left: laid.left } };
+  }
+
+  function noteExportTarget(fileId: string, tab: { id: string } | null): void {
+    if (!tab) return;
+    if (exportTargets.size >= EXPORT_TARGETS_MAX) exportTargets.delete(exportTargets.keys().next().value as string);
+    exportTargets.set(fileId, tab.id);
+  }
+
+  function startExport(sender: BundleSender, tabId: string, job: string, fileId: unknown): Promise<BundleExportAnswer> {
+    const key = keyOf(sender, job);
+    const planned = exportPlans.get(key);
+    if (!exporter || !planned || planned.tabId !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    if (typeof fileId !== "string" || exportTargets.get(fileId) !== tabId) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+    const target = pathOf(fileId);
+    if (!target || !ZIP_NAME.test(target)) return Promise.resolve({ ok: false, code: "REFUSED" });
+    exportPlans.delete(key);
+    exportTargets.delete(fileId);
+    const writer = exporter;
+    return new Promise((finish) => {
+      let settled = false;
+      const done = (result: BundleExportAnswer) => { if (!settled) { settled = true; finish(result); } };
+      enqueue({
+        key, sender, job, ctl: new AbortController(),
+        stop: (code) => done({ ok: false, code }),
+        run: async (progress, signal) => {
+          const laid = await writer.layout(planned.text, planned.scriptName, planned.script, allow);
+          if (!laid) { done({ ok: false, code: "FAILED" }); return; }
+          done(await writer.write(laid, target, signal, progress));
+        }
+      });
+    });
+  }
+
   function stillOpen(open: PendingOpen): boolean {
     const now = scriptOfTab(open.tabId);
     if (now && !(open.landed && !same(now, open.to))) return true;
@@ -322,6 +385,8 @@ function createBundleJobs(options: {
   function forgetTab(tabId: string): void {
     for (const open of [...opens]) if (open.tabId === tabId) opens.delete(open);
     for (const [fileId, noted] of [...saveTargets]) if (noted.tabId === tabId) saveTargets.delete(fileId);
+    for (const [fileId, owner] of [...exportTargets]) if (owner === tabId) exportTargets.delete(fileId);
+    for (const [key, planned] of [...exportPlans]) if (planned.tabId === tabId) exportPlans.delete(key);
   }
 
   function busy(): boolean {
@@ -338,9 +403,12 @@ function createBundleJobs(options: {
     return idle();
   }
 
-  return { abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteSaveTarget, noteScript, openBundled, planSave, prepareWrite };
+  return {
+    abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteExportTarget, noteSaveTarget, noteScript, openBundled, planExport, planSave,
+    prepareWrite, startExport
+  };
 }
 
-export type { BundleJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };
+export type { BundleExportAnswer, BundleExportPlanAnswer, BundleJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };
 
 module.exports = { createBundleJobs };

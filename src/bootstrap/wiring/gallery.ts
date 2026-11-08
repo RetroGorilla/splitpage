@@ -92,6 +92,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
         files: { bundle: videoFiles.bundle, cancelBundle: videoFiles.cancelBundle },
         carries: desktopVideo.onCarry,
         saves: { plan: desktopVideo.planSave, choose: desktopVideo.chooseSave },
+        exports: { plan: desktopVideo.planExport, pick: desktopVideo.pickExport, run: desktopVideo.exportBundle },
         notices: portNotices,
         ownership: portOwnership,
         undo: { fold: (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change) },
@@ -118,6 +119,16 @@ export function offerBundleAfterDrop(...args: Parameters<GalleryVideoMount["offe
 export function beginBundleSave(): ReturnType<GalleryVideoMount["beginSave"]> {
   const owner = video.owner();
   return owner ? owner.beginSave() : { drained: null, ask: () => Promise.resolve([]), end: () => {} };
+}
+
+export function exportFilesPlan(body: string): ReturnType<GalleryVideoMount["exportPlan"]> {
+  const owner = video.owner();
+  return owner ? owner.exportPlan(body) : Promise.resolve(null);
+}
+
+export function exportScriptWithFiles(zipName: string, scriptName: string, body: string): Promise<boolean> {
+  const owner = video.owner();
+  return owner ? owner.exportWithFiles(zipName, scriptName, body) : Promise.resolve(false);
 }
 
 export const stopGalleryVideoFeature = video.stop;

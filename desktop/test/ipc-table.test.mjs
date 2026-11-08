@@ -61,6 +61,7 @@ const testModeAt = registerTestModeAt < 0 ? -1 : (testModeBlock.exec(TEST_MODE_S
 const REGISTERED_BEFORE_SPLIT = [
   "splitpage:ipc-table-sync sendSync", "splitpage:open-file-dialog invoke", "splitpage:save-file-dialog invoke",
   "splitpage:read-file invoke", "splitpage:write-file invoke", "splitpage:bundle-save-plan invoke", "splitpage:bundle-save-choice invoke",
+  "splitpage:bundle-export-plan invoke", "splitpage:bundle-export invoke",
   "splitpage:stat-file invoke",
   "splitpage:recents-list invoke", "splitpage:recents-remove invoke", "splitpage:recents-clear invoke",
   "splitpage:get-session-info invoke", "splitpage:get-app-version-sync sendSync", "splitpage:tab-boot-sync sendSync",
@@ -312,14 +313,14 @@ test("main.ts passes registerIpc every handler group, and each group's module is
   }
 });
 
-test("in test mode, main.ts's real groups register the 65 pairs in the order they had before the split, then the print channel", () => {
+test("in test mode, main.ts's real groups register the 67 pairs in the order they had before the split, then the print channel", () => {
   assert.deepEqual(registerThroughMain({ testMode: true }), [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT]);
 });
 
 test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
   const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
-  assert.equal(expected.length, 60);
+  assert.equal(expected.length, 62);
   assert.deepEqual(seen, expected);
   for (const pair of seen) {
     const [name, direction] = pair.split(" ");
@@ -618,7 +619,12 @@ test("the bundle channels take a token, a name or a job id, never a path to copy
     "splitpage:bundle-save-plan invoke": [["string", "array"], [["fid1", ["take one.mp4"]], ["fid1", []]],
       [[], ["fid1"], [null, ["a.mp4"]], ["fid1", "a.mp4"], ["fid1", { names: ["a.mp4"] }], ["fid1", ["a.mp4"], "C:\\Videos"], [{ path: "C:\\a.splitpage" }, []]]],
     "splitpage:bundle-save-choice invoke": [["string", "string"], [["fid1", "copy"], ["fid1", "link"]],
-      [[], ["fid1"], ["fid1", null], ["fid1", { choice: "link" }], ["fid1", "link", "C:\\Videos"], [null, "copy"]]]
+      [[], ["fid1"], ["fid1", null], ["fid1", { choice: "link" }], ["fid1", "link", "C:\\Videos"], [null, "copy"]]],
+    "splitpage:bundle-export-plan invoke": [["string", "string", "bytes"], [["export1", "Episode 12.splitpage", new Uint8Array([123, 125])], ["export1", "Episode 12.splitpage", "{}"]],
+      [[], ["export1"], ["export1", "Episode 12.splitpage"], [null, "Episode 12.splitpage", "{}"], ["export1", { name: "a.splitpage" }, "{}"],
+        ["export1", "Episode 12.splitpage", { rows: [] }], ["export1", "Episode 12.splitpage", "{}", "C:\\Exports\\a.zip"]]],
+    "splitpage:bundle-export invoke": [["string", "string"], [["export1", "fid1"]],
+      [[], ["export1"], [null, "fid1"], ["export1", { path: "C:\\Exports\\a.zip" }], ["export1", "fid1", "C:\\Exports\\a.zip"]]]
   };
   for (const [pair, [schema, good, bads]] of Object.entries(shapes)) {
     const [name, direction] = pair.split(" ");
