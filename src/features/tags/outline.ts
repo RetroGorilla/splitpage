@@ -241,7 +241,7 @@ export function renderProductionOutline(
                   '</span><span class="prep-letter">' +
                   scene.letter +
                   '</span><span class="prep-scene-name">' +
-                  escapeHtml(scene.name || "Untitled scene") +
+                  escapeHtml(scene.name || "Scene " + scene.letter) +
                   '</span><span class="prep-scene-counts"><span>' +
                   completed.length +
                   "/" +
