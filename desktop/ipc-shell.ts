@@ -37,7 +37,7 @@ function createShellIpc({
 
   function sameMoveGrant(a: VideoFileGrant["move"], b: VideoFileGrant["move"]): boolean {
     if (!a || !b) return a === b;
-    return a.parent === b.parent && a.stamp.size === b.stamp.size && a.stamp.mtime === b.stamp.mtime &&
+    return a.parent === b.parent && a.stamp.size === b.stamp.size && a.stamp.mtime === b.stamp.mtime && a.stamp.ctime === b.stamp.ctime &&
       a.stamp.ino === b.stamp.ino && a.stamp.dev === b.stamp.dev;
   }
 

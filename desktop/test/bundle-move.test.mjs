@@ -382,7 +382,8 @@ function makeSender(id) {
 
 function grantSync(p) {
   const st = fs.lstatSync(p, { bigint: true });
-  return { path: p, sender: MAIN, move: { stamp: { size: st.size, mtime: st.mtimeNs, ino: st.ino, dev: st.dev }, parent: fs.realpathSync.native(path.dirname(p)) } };
+  const stamp = { size: st.size, mtime: st.mtimeNs, ctime: st.ctimeNs, ino: st.ino, dev: st.dev };
+  return { path: p, sender: MAIN, move: { stamp, parent: fs.realpathSync.native(path.dirname(p)) } };
 }
 
 function harness({ script = null, grants = [], copierOptions = {}, holdMove = null } = {}) {
@@ -464,7 +465,7 @@ test("a grant names one file: one put in its place at the same path is never mov
     fs.writeFileSync(s.clip, replacement);
     fs.utimesSync(s.clip, at, at);
     assert.equal(fs.statSync(s.clip).size, SIZE, "the same size");
-    assert.equal(fs.statSync(s.clip).mtimeMs, at.getTime(), "and the same modified time; only the file id differs");
+    assert.equal(fs.statSync(s.clip).mtimeMs, at.getTime(), "and the same modified time; Linux may even reuse the file id, so only the change time differs");
     assert.deepEqual(await ipc.call("splitpage:bundle-move", token, "bundle1"), { ok: true, name: "take one.mp4", outcome: "changed" });
     assert.deepEqual(fs.readFileSync(s.clip), replacement, "the file now at the path stays");
     assert.deepEqual(fs.readFileSync(path.join(s.folder, "take one.mp4")), replacement);

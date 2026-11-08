@@ -22,6 +22,7 @@ type BundleMoveResult = { ok: true; name: string; outcome: BundleMoveOutcome; at
 interface SourceStamp {
   readonly size: bigint;
   readonly mtime: bigint;
+  readonly ctime: bigint;
   readonly ino: bigint;
   readonly dev: bigint;
 }
@@ -108,7 +109,7 @@ function createBundleCopier(options: {
   async function stampOf(p: string): Promise<SourceStamp | "gone" | null> {
     try {
       const st = await fsp.lstat(p, { bigint: true });
-      return st.isFile() ? { size: st.size, mtime: st.mtimeNs, ino: st.ino, dev: st.dev } : null;
+      return st.isFile() ? { size: st.size, mtime: st.mtimeNs, ctime: st.ctimeNs, ino: st.ino, dev: st.dev } : null;
     } catch (e) { return missingFile(e) ? "gone" : null; }
   }
 
@@ -127,7 +128,10 @@ function createBundleCopier(options: {
     const now = await stampOf(source);
     if (now === "gone") return "gone";
     const was = grant.stamp;
-    return now && now.size === was.size && now.mtime === was.mtime && now.ino === was.ino && now.dev === was.dev ? "clear" : "changed";
+    // why: Linux gives a freed inode number to the next file, so a replacement can share id, size and mtime;
+    // its change time still differs
+    return now && now.size === was.size && now.mtime === was.mtime && now.ctime === was.ctime && now.ino === was.ino && now.dev === was.dev ?
+      "clear" : "changed";
   }
 
   async function guarded<T>(watched: { source: string; grant: BundleMoveGrant } | null, signal: AbortSignal,
