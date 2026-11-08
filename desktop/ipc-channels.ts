@@ -65,8 +65,9 @@ const CHANNELS = [
 
   { name: "splitpage:video-file-grant", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:video-file-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
-  { name: "splitpage:video-path-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  { name: "splitpage:video-path-open", direction: "invoke", argsSchema: ["string", "integer?"], allowedOrigins: APP },
   { name: "splitpage:bundle-file", direction: "invoke", argsSchema: ["string", "string"], allowedOrigins: APP },
+  { name: "splitpage:bundle-move", direction: "invoke", argsSchema: ["string", "string"], allowedOrigins: APP },
   { name: "splitpage:bundle-cancel", direction: "send", argsSchema: ["string"], allowedOrigins: APP },  { name: "splitpage:bundled-file-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:video-thumbnail", direction: "invoke", argsSchema: ["videoHost", "videoRef"], allowedOrigins: APP },
 

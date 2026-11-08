@@ -96,8 +96,15 @@ function createShellIpc({
       return openFound({ ok: true, path: real });
     });
 
-    ipcHandle("splitpage:video-path-open", async (event, storedPath) => {
-      return openFound(await openableVideoPath(storedPath, PATH_STYLE, fsp, ATTACHABLE_FILE));
+    ipcHandle("splitpage:video-path-open", async (event, storedPath, size) => {
+      const found = await openableVideoPath(storedPath, PATH_STYLE, fsp, ATTACHABLE_FILE);
+      const script = scriptOf(event);
+      // why: a Move can land before the script is saved with the new link, so its folder holds the file the old path named
+      if (!found.ok && found.code === "GONE" && script) {
+        const beside = await bundleJobs.openBeside(script, storedPath, size);
+        if (beside.ok) return openFound(beside);
+      }
+      return openFound(found);
     });
 
     ipcHandle("splitpage:bundle-file", async (event, token, job) => {
@@ -108,6 +115,17 @@ function createShellIpc({
       if (!source) return { ok: false, code: "UNKNOWN" };
       if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
       return bundleJobs.copy(event.sender, tab.id, job, source, script);
+    });
+
+    ipcHandle("splitpage:bundle-move", async (event, token, job) => {
+      const tab = tabOf(event);
+      const script = scriptOf(event);
+      if (!tab || !script) return { ok: false, code: "NO_FOLDER" };
+      const source = videoFileGrants.get(token);
+      if (!source) return { ok: false, code: "UNKNOWN" };
+      if (typeof job !== "string" || !BUNDLE_JOB_RE.test(job)) return { ok: false, code: "REFUSED" };
+      // why: the original is gone once moved, so no grant may name it again or reach the moved file in the folder
+      return bundleJobs.move(event.sender, tab.id, job, source, script, () => { if (videoFileGrants.get(token) === source) videoFileGrants.delete(token); });
     });
 
     ipcOn("splitpage:bundle-cancel", (event, job) => {

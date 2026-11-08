@@ -1,7 +1,7 @@
 "use strict";
 
 import type { VideoPathVerdict } from "../shared/video-embed.ts";
-import type { BundleCarryResult, BundleCopyResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
+import type { BundleCarryResult, BundleCopyResult, BundleMoveResult, BundleProgress, createBundleCopier } from "./bundle-copy.ts";
 import type { BundleExportResult, createBundleExporter } from "./bundle-export.ts";
 
 type BundleSender = {
@@ -11,6 +11,8 @@ type BundleSender = {
 };
 
 type BundleJobResult = BundleCopyResult | { ok: false; code: "DROPPED" | "UNKNOWN" | "NO_FOLDER" };
+type BundleMoveJobResult = { ok: true; name: string; outcome: Extract<BundleMoveResult, { ok: true }>["outcome"] } |
+  Extract<BundleMoveResult, { ok: false }> | { ok: false; code: "DROPPED" | "UNKNOWN" | "NO_FOLDER" };
 type BundleSaveRefusal = { reason: "clash" | "failed" | "cancelled" | "unlinkable" | "missing"; folder: string; name: string; copied: number; count?: number };
 type BundleSaveChoice = "copy" | "link";
 interface BundleSavePlan {
@@ -157,6 +159,25 @@ function createBundleJobs(options: {
           const now = scriptOfTab(tabId);
           if (!now || !same(script, now)) { done({ ok: false, code: "DROPPED" }); return; }
           done(await copier.copyIn(source, script, allow, progress, signal));
+        }
+      });
+    });
+  }
+
+  function move(sender: BundleSender, tabId: string, job: string, source: string, script: string, onMoved: () => void = () => {}): Promise<BundleMoveJobResult> {
+    return new Promise((finish) => {
+      let settled = false;
+      const done = (result: BundleMoveJobResult) => { if (!settled) { settled = true; finish(result); } };
+      enqueue({
+        key: keyOf(sender, job), sender, job, ctl: new AbortController(),
+        stop: (code) => done({ ok: false, code }),
+        run: async (progress, signal) => {
+          const now = scriptOfTab(tabId);
+          if (!now || !same(script, now)) { done({ ok: false, code: "DROPPED" }); return; }
+          const moved = await copier.moveIn(source, script, allow, progress, signal);
+          if (!moved.ok) { done(moved); return; }
+          if (moved.outcome === "moved") onMoved();
+          done({ ok: true, name: moved.name, outcome: moved.outcome });
         }
       });
     });
@@ -404,6 +425,10 @@ function createBundleJobs(options: {
     return found;
   }
 
+  function openBeside(script: string, stored: string, size: unknown): Promise<VideoPathVerdict> {
+    return copier.besideScript(script, stored, size, allow);
+  }
+
   function noteScript(tabId: string, script: string | null): void {
     for (const open of [...opens]) {
       const kept = !!script && (same(script, open.to) || (!open.landed && same(script, open.from)));
@@ -434,11 +459,11 @@ function createBundleJobs(options: {
   }
 
   return {
-    abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, noteExportTarget, noteSaveTarget, noteScript, openBundled, planExport, planSave,
+    abortAll, busy, cancel, chooseSave, copy, forgetTab, idle, move, noteExportTarget, noteSaveTarget, noteScript, openBeside, openBundled, planExport, planSave,
     prepareWrite, startExport
   };
 }
 
-export type { BundleExportAnswer, BundleExportPlanAnswer, BundleJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };
+export type { BundleExportAnswer, BundleExportPlanAnswer, BundleJobResult, BundleMoveJobResult, BundleSaveRefusal, BundleSender, createBundleJobs };
 
 module.exports = { createBundleJobs };
