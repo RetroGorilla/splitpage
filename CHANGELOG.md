@@ -18,8 +18,36 @@ appear in the app under **Help**. The format follows
   each beat you can mark what you already have, set its status, assign it and
   add notes. The Category, Person, Beat, Shoot, CSV and Gear views are still
   there.
+- **Attach** (was Add picture) links any file to a beat, such as a PDF, a
+  document or a sound, next to its pictures. Pictures are still kept inside the
+  script. Programs, scripts, shortcuts, macro-enabled Office files and files
+  without an extension are refused.
+- In the desktop app, a video or file dropped on a beat keeps its location, so it
+  opens again after a restart. For a saved script, Splitpage offers to copy it
+  into a "<script name> files" folder next to the script, so it still opens when
+  the script and its folder move together.
+- Save As asks whether to copy the script's linked files to the new location,
+  with a warning when they add up to more than 250 MB. **Copy files** saves the
+  script at once and copies in the background; **Hide** tucks the progress away
+  while you keep working. **Don't copy the files** links the new script to the
+  files where they are. A save that can't copy everything keeps what it copied
+  and says so.
+- Type `@` and a name in a Visual cell to give every tag in that sentence an
+  owner. The name becomes a chip; deleting the chip removes the owner. New names
+  are added to People. Chips don't appear in the teleprompter or any export.
+- Follow My Voice can listen on a microphone you choose, in the teleprompter and
+  in Settings, in Chrome, Edge and the desktop app. The choice is remembered;
+  if it isn't connected, the default is used and the status says so.
+- Tags can be chosen from a compact menu above the Visual text toolbar, with the
+  typing shortcut shown beside each category.
 
 ### Changed
+- After a Save As, the new script starts with no undo history.
+- Clicking a beat in the Rundown scrolls the script there with a short, smooth
+  scroll (or jumps, if you prefer reduced motion). The Rundown's magnifier
+  keeps the beat under the pointer steady and every beat reachable, also with
+  the keyboard and while dragging.
+- The desktop Open dialog starts in the folder where you last saved a script.
 - The writer is new and types like a word processor. Beats flow together inside
   paragraphs: Enter starts a beat, Enter again starts a paragraph, and
   Shift+Enter is a line break. You can select, type over, delete, cut and paste
@@ -59,6 +87,8 @@ appear in the app under **Help**. The format follows
   its blocks and ruler instead of rebuilding them on every resize step.
 
 ### Fixed
+- Copying whole beats from the writer into Split keeps their visuals, pictures,
+  status, comments and scene headers.
 - Edit > Undo and Redo now work in the script whenever the keyboard shortcuts
   do.
 - The merge review now says what really happens to a beat that one side edited
