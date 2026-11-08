@@ -54,6 +54,38 @@ function typedColon(): Pick<InputEvent, "inputType" | "data"> {
   return { inputType: "insertText", data: ":" };
 }
 
+test("open tag highlight starts at the first word across formatting nodes", () => {
+  const h = fixture("VFX:", "VFX:  flare");
+  const css = { highlights: new Map<string, Set<Range>>() };
+  const oldCss = win.CSS;
+  const oldHighlight = win.Highlight;
+  const oldGlobalHighlight = realm.Highlight;
+  Object.assign(win, { CSS: css, Highlight: class extends Set<Range> { constructor(range: Range) { super([range]); } } });
+  realm.CSS = css;
+  realm.Highlight = win.Highlight;
+  const control = startPlainTags(h.ports);
+  try {
+    h.cell.focus();
+    caretAt(h.cell.firstChild as Node, 4);
+    control.maybeOpen(typedColon(), h.cell);
+    const tail = h.cell.querySelector(".plain-tag-keyword")?.nextSibling as Text;
+    tail.appendData(" ");
+    const strong = win.document.createElement("strong");
+    strong.textContent = " flare";
+    tail.after(strong);
+    caretAt(strong.firstChild as Node, 6);
+    control.refresh();
+    const range = [...(css.highlights.get("splitpage-open-tag-vfx") ?? [])][0];
+    assert.ok(range);
+    assert.equal(range.toString(), "flare");
+  } finally {
+    control.dispose();
+    Object.assign(win, { CSS: oldCss, Highlight: oldHighlight });
+    realm.CSS = oldCss;
+    realm.Highlight = oldGlobalHighlight;
+  }
+});
+
 test("closed tag refresh and input do not read a selection or decode cell content", () => {
   const h = fixture("Words", "Words");
   const control = startPlainTags(h.ports);
