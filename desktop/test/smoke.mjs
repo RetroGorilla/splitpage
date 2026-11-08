@@ -4273,8 +4273,8 @@ async function caseGalleryExportWithFiles(target) {
   ] }, null, 2), "utf8");
   const scriptBefore = fs.readFileSync(scriptPath);
   const zipPath = path.join(out, "Shared.zip");
-  const takenPath = path.join(out, "Taken.zip");
-  fs.writeFileSync(takenPath, "the user's own file");
+  const replacedPath = path.join(out, "Replaced.zip");
+  fs.writeFileSync(replacedPath, "the old zip");
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   async function exportFromDialog(cdp) {
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('export')", { awaitPromise: false });
@@ -4288,7 +4288,7 @@ async function caseGalleryExportWithFiles(target) {
   }
   let app = null;
   try {
-    app = await launchApp(target, { label: "gallery-export-files", userDataDir, fixtures: [scriptPath], dialogs: [zipPath, takenPath] });
+    app = await launchApp(target, { label: "gallery-export-files", userDataDir, fixtures: [scriptPath], dialogs: [zipPath, replacedPath] });
     await waitForRows(app.cdp, 20000);
     const cdp = app.cdp;
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Export Smoke'", 20000).catch(() => false);
@@ -4317,10 +4317,12 @@ async function caseGalleryExportWithFiles(target) {
       (await evalPage(cdp, "window.__splitpageFormats.state().rows[0].imageLinks[1].location.kind")) === "path", "");
     await evalPage(cdp, "document.querySelectorAll('.toast').forEach(function (t) { t.remove(); }); true");
     await exportFromDialog(cdp);
-    const taken = await toastContaining(cdp, "Could not export — “Taken.zip” already exists. Export again and choose a new name.", 20000).catch(() => false);
-    record(tag + ": a name that is taken is never replaced, and nothing is left beside it",
-      !!taken && fs.readFileSync(takenPath, "utf8") === "the user's own file" && fs.readdirSync(out).sort().join() === "Shared.zip,Taken.zip",
-      JSON.stringify({ taken: !!taken, out: fs.readdirSync(out) }));
+    const replaced = await toastContaining(cdp, "“Replaced.zip” with 1 file.", 20000).catch(() => false);
+    const again = fs.existsSync(replacedPath) && !fs.readFileSync(replacedPath).equals(Buffer.from("the old zip")) ? zipEntries(replacedPath) : new Map();
+    record(tag + ": a name the save dialog returned after its Replace prompt is overwritten with the whole zip, and nothing is left beside it",
+      !!replaced && [...again.keys()].length === 3 && !!again.get(files + "take.mp4") && again.get(files + "take.mp4").equals(take) &&
+      fs.readdirSync(out).sort().join() === "Replaced.zip,Shared.zip",
+      JSON.stringify({ replaced: !!replaced, names: [...again.keys()], out: fs.readdirSync(out) }));
     const forged = await evalPage(cdp, "window.splitpageDesktop.exportBundle('export9', " + JSON.stringify("0".repeat(32)) + ")");
     record(tag + ": a file id no export dialog chose writes nothing", !!forged && forged.ok === false && forged.code === "UNKNOWN", JSON.stringify(forged));
   } finally {
