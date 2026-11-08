@@ -8,7 +8,7 @@ import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
 import { deleteRange, insertText, marksAt, replaceText, setMark, typingMarks } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { FORMAT_MARKS, namedTagId, projection } from "../../core/text/runs.ts";
-import { registryCompletion, registryEntryOf } from "../../core/production/records.ts";
+import { registryCompletion, registryCompletionOf, registryEntryOf } from "../../core/production/records.ts";
 import type { RegistryCompletion } from "../../core/production/records.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import type { TagCategoryId } from "../../core/document/tags.ts";
@@ -284,20 +284,6 @@ function suggestionFor(o: OpenPlainTag, typed: string): RegistryCompletion | nul
   return ports ? registryCompletion(ports.document.current(), o.cat, typed) : null;
 }
 
-function paintGhost(o: OpenPlainTag, caret: Range | null) {
-  const el = ghostEl();
-  if (!el) return;
-  const rect = o.suggestion && caret ? caret.getClientRects()[0] : undefined;
-  if (!o.suggestion || !rect) { el.classList.remove("is-visible"); return; }
-  const cs = getComputedStyle(o.cellEl);
-  el.style.font = cs.font;
-  el.style.lineHeight = cs.lineHeight;
-  el.style.left = rect.right + "px";
-  el.style.top = rect.top + "px";
-  el.textContent = o.suggestion.rest;
-  el.classList.add("is-visible");
-}
-
 function dismissSuggestion(): boolean {
   const o = open;
   const caret = caretRange();
@@ -396,20 +382,41 @@ function paint(o: OpenPlainTag) {
     } catch (e) { }
   }
   const caret = caretRange();
-  o.suggestion = caret ? suggestionFor(o, typedInOpen(o, caret)) : null;
-  paintGhost(o, caret);
+  const suggestion = caret ? suggestionFor(o, typedInOpen(o, caret)) : null;
+  o.suggestion = suggestion;
   const el = hintEl();
-  if (!el) return;
-  const cat = tagCategory(o.cat) as TagCategoryLook;
-  const name = o.suggestion ? o.suggestion.name : "";
-  if (el.getAttribute("data-cat") !== o.cat || el.getAttribute("data-name") !== name) {
-    el.setAttribute("data-cat", o.cat);
+  const ghost = ghostEl();
+  if (el) writeHint(el, o.cat, suggestion ? suggestion.name : "");
+  const caretRect = ghost && suggestion && caret ? caret.getClientRects()[0] : undefined;
+  const cs = caretRect ? getComputedStyle(o.cellEl) : null;
+  const hintAt = el ? hintPlace(o, el) : null;
+  if (el && hintAt) {
+    el.style.left = hintAt.left + "px";
+    el.style.top = hintAt.top + "px";
+  }
+  if (!ghost) return;
+  if (!suggestion || !caretRect || !cs) { ghost.classList.remove("is-visible"); return; }
+  ghost.style.font = cs.font;
+  ghost.style.lineHeight = cs.lineHeight;
+  ghost.style.left = caretRect.right + "px";
+  ghost.style.top = caretRect.top + "px";
+  ghost.textContent = suggestion.rest;
+  ghost.classList.add("is-visible");
+}
+
+function writeHint(el: HTMLElement, catId: TagCategoryId, name: string) {
+  const cat = tagCategory(catId) as TagCategoryLook;
+  if (el.getAttribute("data-cat") !== catId || el.getAttribute("data-name") !== name) {
+    el.setAttribute("data-cat", catId);
     el.setAttribute("data-name", name);
     el.innerHTML = '<span class="tag-cat-dot" data-tag-cat="' + cat.id + '" style="--dot: ' + cat.color + '"></span>' +
       (name ? '<b>' + escapeHtml(cat.label) + ':</b><span>' + escapeHtml(name) + '</span>'
         : '<b>' + escapeHtml(cat.label) + '</b><span class="tag-suggest-cat">tag</span>') + '<kbd>Tab</kbd>';
   }
   el.classList.add("is-visible");
+}
+
+function hintPlace(o: OpenPlainTag, el: HTMLElement) {
   const w = el.offsetWidth, h = el.offsetHeight;
   const at = document.createRange();
   at.setStartAfter(o.span);
@@ -418,8 +425,7 @@ function paint(o: OpenPlainTag) {
   const cellRect = o.cellEl.getBoundingClientRect();
   let top = cellRect.bottom + 6;
   if (top + h > window.innerHeight - 8) top = Math.max(8, cellRect.top - h - 6);
-  el.style.left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)) + "px";
-  el.style.top = top + "px";
+  return { left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)), top: top };
 }
 
 function dropSilent(o: OpenPlainTag, silent: SilentTag) {
@@ -571,10 +577,12 @@ export function closePlainTag() {
   }
   const phrase = at === null ? null : plainTagPhrase(typed);
   if (!phrase) { cancelPlainTag(); return true; }
+  const shown = o.suggestion;
+  const accepted = shown ? registryCompletionOf(tagPorts().document.current(), o.cat, typed, shown.name) : null;
+  // why: the shown record is gone or no longer matches; show what is there now
+  if (shown && !accepted) { paint(o); return true; }
   open = null;
   clearPaint();
-  const shown = o.suggestion;
-  const accepted = shown && registryCompletion(tagPorts().document.current(), o.cat, typed)?.name === shown.name ? shown.name : null;
   const entry = accepted ? null : registryEntryOf(tagPorts().document.current(), o.cat, phrase.name);
   const name = accepted || (entry ? entry.name : phrase.name);
   const done = tagPorts().cells.edit(o.cellEl, function (cell) {

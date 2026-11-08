@@ -11,6 +11,7 @@ import {
   personById,
   personNamed,
   registryCompletion,
+  registryCompletionOf,
   registryEntryById,
   removeBrollProp,
   removePerson,
@@ -49,6 +50,27 @@ test("registry completion offers the shortest longer name in the asked category,
   assert.equal(registryCompletion(doc, "prop", "x"), null);
   assert.equal(registryCompletion(doc, "vfx", "c"), null, "other categories are not offered");
   assert.equal(registryCompletion(null, "prop", "c"), null);
+});
+
+test("an exact name in the category wins over longer ones: no completion is offered", () => {
+  const doc = records({ productionTags: [tagged("prop", "cable tray"), tagged("prop", "Cable"), tagged("gear", "cab")] });
+  assert.equal(registryCompletion(doc, "prop", "cable"), null);
+  assert.equal(registryCompletion(doc, "prop", " CABLE "), null);
+  assert.deepEqual(registryCompletion(doc, "prop", "cab"), { name: "Cable", rest: "le" });
+  assert.deepEqual(registryCompletion(doc, "prop", "cable "), null);
+  assert.deepEqual(registryCompletion(doc, "prop", "cable t"), { name: "cable tray", rest: "ray" });
+});
+
+test("a shown completion is checked against its own record: present, same category, still a longer prefix match", () => {
+  const doc = records({ productionTags: [tagged("prop", "cable tray"), tagged("prop", "cab"), tagged("gear", "cable box")] });
+  assert.equal(registryCompletionOf(doc, "prop", "ca", "cable tray"), "cable tray", "a shorter match added since does not displace it");
+  assert.equal(registryCompletionOf(doc, "prop", "ca", "CABLE TRAY"), "cable tray");
+  assert.equal(registryCompletionOf(doc, "prop", "ca", "cable box"), null, "another category's record");
+  assert.equal(registryCompletionOf(doc, "prop", "ca", "camera"), null, "a record that is gone");
+  assert.equal(registryCompletionOf(doc, "prop", "cx", "cable tray"), null, "no longer a prefix");
+  assert.equal(registryCompletionOf(doc, "prop", "cable tray", "cable tray"), null, "not longer than the words");
+  assert.equal(registryCompletionOf(doc, "prop", " ", "cable tray"), null);
+  assert.equal(registryCompletionOf(null, "prop", "ca", "cable tray"), null);
 });
 
 test("a registry tag is added once per category and normalised name, and removed with every entry under that key", () => {

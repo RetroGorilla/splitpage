@@ -227,8 +227,11 @@ function suggesting(model: string, names: readonly string[]) {
   const h = fixture("prop:", model);
   win.document.body.insertAdjacentHTML("beforeend",
     '<button id="tag-open-hint"></button><div class="tag-ghost-hint" id="tag-open-ghost"></div>');
-  const doc = migrateRows({ schema: 2, rows: [], productionTags: names.map((name, i) => ({ id: "t_" + i, cat: "prop", name })) }, fakeMigration().ports);
-  const control = startPlainTags({ ...h.ports, document: fakeDocument(doc).document });
+  const records = (list: readonly string[]) =>
+    migrateRows({ schema: 2, rows: [], productionTags: list.map((name, i) => ({ id: "t_" + i, cat: "prop", name })) }, fakeMigration().ports);
+  const held = fakeDocument(records(names));
+  const control = startPlainTags({ ...h.ports, document: held.document });
+  const setRecords = (list: readonly string[]) => { held.replace(records(list)); };
   h.cell.focus();
   caretAt(h.cell.firstChild as Node, 5);
   control.maybeOpen(typedColon(), h.cell);
@@ -241,7 +244,7 @@ function suggesting(model: string, names: readonly string[]) {
   const ghost = win.document.getElementById("tag-open-ghost") as HTMLElement;
   const hint = win.document.getElementById("tag-open-hint") as HTMLElement;
   const shown = () => ghost.classList.contains("is-visible") ? ghost.textContent : null;
-  return { ...h, control, type, shown, hint };
+  return { ...h, control, type, shown, hint, setRecords };
 }
 
 function withCaretRects(run: () => void): void {
@@ -270,6 +273,92 @@ test("an open keyword tag suggests an existing name in its category and Tab comp
       assert.equal(result.cell.filter(run => run.marks.tag === namedTagId("prop", "cable tray")).map(run => run.text).join(""), "cable tray");
       assert.deepEqual(result.sel, { from: 10, to: 10 });
     } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("an exact existing name offers no longer one, so Tab reuses the exact record", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: cable", ["cable tray", "cable"]);
+    try {
+      h.type(" cab");
+      assert.equal(h.shown(), "le");
+      h.type("le");
+      assert.equal(h.shown(), null);
+      assert.match(h.hint.textContent, /Proptag/);
+      assert.equal(h.control.close(), true);
+      assert.deepEqual((h.changes[0] as CellEditResult).records, { tags: [{ cat: "prop", name: "cable" }] });
+      assert.equal(projection((h.changes[0] as CellEditResult).cell), "cable");
+    } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("Tab takes the record that is shown even after a shorter match is added", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: ca", ["cable tray"]);
+    try {
+      h.type(" ca");
+      assert.equal(h.shown(), "ble tray");
+      h.setRecords(["cable tray", "cab"]);
+      assert.equal(h.control.close(), true);
+      assert.equal(h.changes.length, 1);
+      assert.deepEqual((h.changes[0] as CellEditResult).records, { tags: [{ cat: "prop", name: "cable tray" }] });
+      assert.equal(projection((h.changes[0] as CellEditResult).cell), "cable tray");
+    } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("Tab on a suggestion whose record is gone shows the current state instead of creating a record", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: ca", ["cable tray"]);
+    try {
+      h.type(" ca");
+      assert.equal(h.shown(), "ble tray");
+      h.setRecords(["cab"]);
+      assert.equal(h.control.close(), true);
+      assert.equal(h.changes.length, 0);
+      assert.equal(h.control.isOpen(), true);
+      assert.equal(h.shown(), "b");
+      assert.match(h.hint.textContent, /Prop:cab/);
+      h.setRecords([]);
+      assert.equal(h.control.close(), true);
+      assert.equal(h.changes.length, 0);
+      assert.equal(h.shown(), null);
+      assert.match(h.hint.textContent, /Proptag/);
+      assert.equal(h.control.close(), true);
+      assert.deepEqual((h.changes[0] as CellEditResult).records, { tags: [{ cat: "prop", name: "ca" }] });
+    } finally {
+      h.control.dispose();
+    }
+  });
+});
+
+test("one repaint reads all layout before it writes any style", () => {
+  withCaretRects(() => {
+    const h = suggesting("prop: ca", ["cable tray"]);
+    const log: string[] = [];
+    const proto = win.HTMLElement.prototype as unknown as Record<string, unknown>;
+    const ghost = win.document.getElementById("tag-open-ghost") as HTMLElement;
+    const offsetWidth = Object.getOwnPropertyDescriptor(proto, "offsetWidth");
+    Object.defineProperty(proto, "offsetWidth", { configurable: true, get: () => { log.push("read"); return 0; } });
+    const realStyle = win.getComputedStyle.bind(win);
+    realm.getComputedStyle = (el: Element) => { log.push("read"); return realStyle(el); };
+    const textContent = Object.getOwnPropertyDescriptor(win.Node.prototype, "textContent");
+    Object.defineProperty(ghost, "textContent", { configurable: true, set: (v: string) => { log.push("write"); textContent?.set?.call(ghost, v); }, get: (): string | null => textContent?.get?.call(ghost) as string | null });
+    try {
+      h.type(" ca");
+      assert.equal(h.shown(), "ble tray");
+      const firstWrite = log.indexOf("write");
+      assert.ok(firstWrite > 0);
+      assert.equal(log.lastIndexOf("read") < firstWrite, true, log.join(","));
+    } finally {
+      if (offsetWidth) Object.defineProperty(proto, "offsetWidth", offsetWidth);
+      else delete proto.offsetWidth;
       h.control.dispose();
     }
   });

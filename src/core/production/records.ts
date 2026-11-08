@@ -37,18 +37,36 @@ export interface RegistryCompletion {
   readonly rest: string;
 }
 
+function completionNeedle(typed: string): string {
+  return typed.replace(/\s+/g, " ").replace(/^ /, "").toLowerCase();
+}
+
+function completionRest(needle: string, name: string): string | null {
+  const shown = name.replace(/\s+/g, " ");
+  return shown.length > needle.length && shown.toLowerCase().indexOf(needle) === 0 ? shown.slice(needle.length) : null;
+}
+
 export function registryCompletion(doc: RegistryHolder | null, cat: string, typed: string): RegistryCompletion | null {
-  const needle = typed.replace(/\s+/g, " ").replace(/^ /, "").toLowerCase();
+  const needle = completionNeedle(typed);
   if (!doc || !needle.trim()) return null;
+  const exact = normalizeTagName(needle);
   let best: RegistryCompletion | null = null;
   for (const t of doc.productionTags) {
     if (!t || t.cat !== cat) continue;
-    const shown = t.name.replace(/\s+/g, " ");
-    if (shown.length <= needle.length || shown.toLowerCase().indexOf(needle) !== 0) continue;
+    if (normalizeTagName(t.name) === exact) return null;
+    const rest = completionRest(needle, t.name);
+    if (rest === null) continue;
     if (best && (best.name.length < t.name.length || (best.name.length === t.name.length && best.name.localeCompare(t.name) <= 0))) continue;
-    best = { name: t.name, rest: shown.slice(needle.length) };
+    best = { name: t.name, rest: rest };
   }
   return best;
+}
+
+export function registryCompletionOf(doc: RegistryHolder | null, cat: string, typed: string, name: string): string | null {
+  const needle = completionNeedle(typed);
+  if (!doc || !needle.trim()) return null;
+  const entry = registryEntry(doc.productionTags, cat, name);
+  return entry && completionRest(needle, entry.name) !== null ? entry.name : null;
 }
 
 export function registryEntryById(doc: RegistryHolder | null, id: unknown): RegistryTag | null {
