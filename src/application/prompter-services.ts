@@ -14,7 +14,7 @@ export interface PrompterVoice {
   readonly known: () => boolean;
   readonly load: () => Promise<unknown>;
   readonly createDesktop: (microphone: string) => PrompterRecognition;
-  readonly createRelay: () => PrompterRecognition;
+  readonly createRelay: (microphone: string) => PrompterRecognition;
   readonly hasRelay: () => boolean;
   readonly setRelay: (value: string | null) => boolean;
   readonly browserRecognition: () => (new () => PrompterRecognition) | null | undefined;

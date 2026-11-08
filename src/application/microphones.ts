@@ -8,7 +8,7 @@ export interface MicrophoneList {
   readonly named: boolean;
 }
 
-export type MicrophoneSupport = "yes" | "desktop" | "relay" | "browser";
+export type MicrophoneSupport = "yes" | "desktop" | "browser";
 
 export interface MicrophoneDevices {
   readonly support: () => MicrophoneSupport;

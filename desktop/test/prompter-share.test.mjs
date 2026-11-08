@@ -199,14 +199,26 @@ test("closeAll drops every share and the listener", async () => {
   assert.deepEqual(share.status(), { listening: false, port: null, shares: [], voiceStreams: 0 });
 });
 
-function makeVoice(share, answer) {
+const MIC_ONE = "{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}";
+const MIC_TWO = "{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}";
+const MIC_GONE = "{0.0.1.00000000}.{99999999-9999-4999-8999-999999999999}";
+
+function makeVoice(share, answer, listed) {
   const log = [];
   let session = 0;
   let current = null;
   const voice = {
     log,
-    start(ownerId) {
-      log.push(["start", ownerId]);
+    listed: listed || [{ id: MIC_ONE, name: "Microphone (Desk One)" }, { id: MIC_TWO, name: "Microphone (Desk Two)" }],
+    listAnswer: null,
+    lists: 0,
+    microphones() {
+      voice.lists++;
+      if (voice.listAnswer) return voice.listAnswer;
+      return Promise.resolve({ ok: true, microphones: voice.listed.slice() });
+    },
+    start(ownerId, microphone) {
+      log.push(microphone === undefined ? ["start", ownerId] : ["start", ownerId, microphone]);
       if (answer) return answer;
       current = { ownerId, session: ++session };
       return { ok: true, session: current.session };
@@ -351,6 +363,145 @@ test("sharing again, or revoking, ends the old relay; a wrong or old token is 40
     assert.equal(s2.events[s2.events.length - 1].reason, "revoked");
     assert.deepEqual(voice.log[voice.log.length - 1], ["stop", "tab1", 2]);
   } finally { share.closeAll(); }
+});
+
+test("the relay window lists the desktop's microphones, behind the voice token only", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice });
+  try {
+    const url = await share.publish("tab1", "a.md", "x", { voice: true });
+    const v = parseVoice(url);
+    const res = await request(v.port, "/prompter-voice/" + v.token + "/microphones");
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /^application\/json/);
+    assert.equal(res.headers["cache-control"], "no-store");
+    assert.equal(res.headers["access-control-allow-origin"], undefined);
+    assert.deepEqual(JSON.parse(res.body), { microphones: [{ id: MIC_ONE, name: "Microphone (Desk One)" }, { id: MIC_TWO, name: "Microphone (Desk Two)" }] });
+    const scriptToken = parseShareUrl(url.replace(/&voice=.*$/, "")).token;
+    assert.equal((await request(v.port, "/prompter-voice/" + scriptToken + "/microphones")).status, 404, "the script token is not the voice token");
+    assert.equal((await request(v.port, "/prompter-voice/" + "0".repeat(64) + "/microphones")).status, 404);
+    assert.equal((await request(v.port, "/prompter-voice/" + v.token + "/microphones", { headers: { host: "evil.example:" + v.port } })).status, 403);
+    assert.equal((await request(v.port, "/prompter-voice/" + v.token + "/microphones", { method: "POST" })).status, 405);
+    voice.listAnswer = Promise.resolve({ ok: false, code: "LIST_FAILED" });
+    assert.deepEqual(JSON.parse((await request(v.port, "/prompter-voice/" + v.token + "/microphones")).body), { microphones: [] });
+    assert.equal(voice.log.length, 0, "listing starts no listener");
+  } finally { share.closeAll(); }
+});
+
+test("a microphone the desktop listed is started by its id; none asked for starts the default as before", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    await request(v.port, "/prompter-voice/" + v.token + "/microphones");
+    const s = await openStream(v.port, "/prompter-voice/" + v.token + "?microphone=" + encodeURIComponent(MIC_TWO));
+    assert.equal(s.status, 200);
+    assert.ok(await until(() => voice.log.length === 1));
+    assert.deepEqual(voice.log[0], ["start", "tab1", MIC_TWO]);
+    voice.emit({ type: "device", name: "Microphone (Desk Two)" });
+    assert.ok(await until(() => s.events.length === 1));
+    assert.deepEqual(s.events.map((e) => e.type), ["device"]);
+    s.close();
+    assert.ok(await until(() => voice.log.length === 2));
+    assert.deepEqual(voice.log[1], ["stop", "tab1", 1], "the stop is for that session only");
+    const plain = await openStream(v.port, "/prompter-voice/" + v.token);
+    assert.ok(await until(() => voice.log.length === 3));
+    assert.deepEqual(voice.log[2], ["start", "tab1"]);
+    plain.close();
+  } finally { share.closeAll(); }
+});
+
+test("a forged microphone id is refused before anything starts", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    const base = "/prompter-voice/" + v.token;
+    for (const query of [
+      "?microphone=",
+      "?microphone=-List",
+      "?microphone=" + encodeURIComponent("C:\\Windows\\evil.exe"),
+      "?microphone=" + encodeURIComponent(MIC_ONE + " -List"),
+      "?microphone=" + encodeURIComponent("{0.0.0.00000000}.{11111111-1111-4111-8111-111111111111}"),
+      "?microphone=" + encodeURIComponent(MIC_ONE) + "&microphone=" + encodeURIComponent(MIC_TWO)
+    ]) {
+      const res = await request(v.port, base + query);
+      assert.equal(res.status, 400, query);
+      assert.doesNotMatch(String(res.headers["content-type"]), /event-stream/, query);
+    }
+    await tick(50);
+    assert.deepEqual(voice.log, [], "no listener was started for a forged id");
+    assert.equal(share.status().voiceStreams, 0);
+  } finally { share.closeAll(); }
+});
+
+test("a saved microphone the desktop does not list now starts the default, and says so first", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    const s = await openStream(v.port, "/prompter-voice/" + v.token + "?microphone=" + encodeURIComponent(MIC_GONE));
+    assert.equal(s.status, 200);
+    assert.ok(await until(() => voice.log.length === 1));
+    assert.deepEqual(voice.log[0], ["start", "tab1"], "the unlisted id never reaches the listener");
+    assert.equal(voice.lists, 1, "the list is asked again before falling back");
+    voice.emit({ type: "device", name: "Microphone (Default)" });
+    voice.emit({ type: "start" });
+    assert.ok(await until(() => s.events.length === 3), JSON.stringify(s.events));
+    assert.deepEqual(s.events.map((e) => e.type), ["fallback", "device", "start"]);
+    assert.equal(s.events[0].session, 1);
+    s.close();
+    assert.ok(await until(() => voice.log.length === 2));
+    voice.listed.push({ id: MIC_GONE, name: "Microphone (Back Again)" });
+    const back = await openStream(v.port, "/prompter-voice/" + v.token + "?microphone=" + encodeURIComponent(MIC_GONE));
+    assert.ok(await until(() => voice.log.length === 3));
+    assert.deepEqual(voice.log[2], ["start", "tab1", MIC_GONE], "plugged in again, it is listed and used");
+    back.close();
+  } finally { share.closeAll(); }
+});
+
+test("a microphone list that never answers fails the start after 15 seconds, and a late answer starts nothing", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  let answerList;
+  voice.listAnswer = new Promise((resolve) => { answerList = resolve; });
+  const share = ref.share = makeShare({ voice, voiceStartTimeoutMs: 80 });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    const s = await openStream(v.port, "/prompter-voice/" + v.token + "?microphone=" + encodeURIComponent(MIC_ONE));
+    await s.ended;
+    assert.deepEqual(s.events, [{ type: "error", code: "helper-failed" }, { type: "end", reason: "exited" }]);
+    answerList({ ok: true, microphones: voice.listed.slice() });
+    await tick(50);
+    assert.deepEqual(voice.log, [], "the late list answer started no listener");
+  } finally { share.closeAll(); }
+});
+
+test("a relay stream closed while its microphone list is pending starts nothing", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  let answerList;
+  voice.listAnswer = new Promise((resolve) => { answerList = resolve; });
+  const share = ref.share = makeShare({ voice });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    const s = await openStream(v.port, "/prompter-voice/" + v.token + "?microphone=" + encodeURIComponent(MIC_ONE));
+    assert.ok(await until(() => voice.lists === 1));
+    s.close();
+    assert.ok(await until(() => share.status().voiceStreams === 0));
+    answerList({ ok: true, microphones: voice.listed.slice() });
+    await tick(50);
+    assert.deepEqual(voice.log, []);
+  } finally { share.closeAll(); }
+});
+
+test("VOICE_START_TIMEOUT_MS is the desktop teleprompter's 15 seconds", () => {
+  const { VOICE_START_TIMEOUT_MS } = require(path.join(here, "..", "prompter-share.ts"));
+  assert.equal(VOICE_START_TIMEOUT_MS, 15000);
 });
 
 function lanAddresses() {

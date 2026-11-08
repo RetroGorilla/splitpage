@@ -32,6 +32,10 @@ const MAX_MICROPHONES = 64;
 const KILL_AFTER_MS = 2000;
 const LIST_TIMEOUT_MS = 20000;
 
+function isMicrophoneId(value: string) {
+  return MICROPHONE_ID_RE.test(value);
+}
+
 function cleanName(value: unknown) {
   if (typeof value !== "string") return "";
   /* eslint-disable-next-line no-control-regex -- stripping control characters
@@ -250,6 +254,6 @@ function createVoiceHelper(opts: DesktopVoiceHelperOptions) {
   return { available, start, microphones, stop, forget, stopAll, status };
 }
 
-export type { createVoiceHelper, parseHelperLine, parseMicrophonesLine };
+export type { createVoiceHelper, isMicrophoneId, parseHelperLine, parseMicrophonesLine };
 
-module.exports = { createVoiceHelper, parseHelperLine, parseMicrophonesLine };
+module.exports = { createVoiceHelper, isMicrophoneId, parseHelperLine, parseMicrophonesLine };

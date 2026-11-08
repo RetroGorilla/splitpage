@@ -1175,8 +1175,8 @@ through `preferences().microphone()`. The browser recognizer has no device
 setting, so a chosen device is opened with `getUserMedia({audio: {deviceId:
 {exact}}})` and its track is passed to `recognition.start(track)`, which needs
 Chromium 135 or later on Windows, macOS or Linux (`recognitionTakesTrack`;
-133 ships it switched off); elsewhere, and under the desktop relay, the choice
-is not offered and the system's default microphone is used. In the desktop
+133 ships it switched off); elsewhere the choice is not offered and the
+system's default microphone is used. In the desktop
 app the value is instead a Windows capture endpoint id (`isDesktopMicrophoneId`,
 `{0.0.1.00000000}.{guid}`): the list comes from `desktop/voice/listen.ps1 -List`
 over `splitpage:voice-microphones`, and `splitpage:voice-start` passes the id
@@ -1185,6 +1185,13 @@ recogniser a stream. A chosen endpoint that is not active falls back to the
 default with a `fallback` line; one that goes away mid-session sends
 `device-lost` and the helper exits. An id that is not an endpoint id (one
 saved by a browser) is never sent, and the default is used and said.
+The window Present in Browser opens from the desktop app (the voice relay)
+offers the same desktop list: it reads `GET /prompter-voice/<voice token>/microphones`
+from the share server and opens the stream with `?microphone=<id>`. Main
+accepts only an endpoint id (anything else is a 400 and starts nothing), and
+passes it to the helper only if the helper's latest list, asked again if
+needed, contains it; otherwise it starts the default and sends `fallback`
+first. The choice is stored under the same key, in that window's origin.
 
 ---
 

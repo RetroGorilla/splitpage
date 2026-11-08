@@ -204,4 +204,73 @@ key Escape
 eval (function(){ D.restoreBackend(); return !window.splitpageDesktop; })()
 
 eval (function(){ localStorage.removeItem('splitpage-microphone'); var P = window.__Rec.prototype; P.start = window.__recReal.start; P.stop = window.__recReal.stop; P.abort = window.__recReal.abort; navigator.mediaDevices.getUserMedia = window.__gumReal; navigator.mediaDevices.enumerateDevices = window.__enumReal; return true; })()
+
+open /index.html?teleprompter=1#script=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff&voice=8771-abababababababababababababababababababababababababababababababab
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.T = window.__settingsTest; window.P = window.__prompterTest; localStorage.removeItem('splitpage-microphone'); window.st = function () { return document.getElementById('pp-voice-status').textContent; }; window.opts = function (id) { return Array.prototype.map.call(document.getElementById(id).options, function (o) { return o.value + '=' + o.textContent; }).join('|'); }; window.pick = function (id, v) { var el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); return true; }; return true; })()
+eval (function(){ window.M1 = '{0.0.1.00000000}.{11111111-1111-4111-8111-111111111111}'; window.M2 = '{0.0.1.00000000}.{22222222-2222-4222-8222-222222222222}'; window.__relayMics = [{ id: M1, name: 'Microphone (Desk One)' }, { id: M2, name: 'Microphone (Desk Two)' }]; window.__micFetches = []; window.__realFetch = window.fetch; window.__scriptText = JSON.stringify({ title: 'Relay Mic', rows: [{ visualText: 'Wide', audioText: 'Alpha bravo charlie delta echo foxtrot.' }] }); window.fetch = function (u) { var s = String(u); if (s.indexOf('prompter-script/') === 0) return Promise.resolve(new Response(JSON.stringify({ name: 'Relay.splitpage', text: window.__scriptText }), { status: 200, headers: { 'content-type': 'application/json' } })); if (/\/prompter-voice\/[0-9a-f]{64}\/microphones$/.test(s)) { window.__micFetches.push(s); return Promise.resolve(new Response(JSON.stringify({ microphones: window.__relayMics }), { status: 200, headers: { 'content-type': 'application/json' } })); } return window.__realFetch.apply(this, arguments); }; return true; })()
+eval (function(){ window.__sources = []; window.EventSource = function (url) { this.url = String(url); this.closed = false; this.onmessage = null; this.onerror = null; window.__sources.push(this); }; window.EventSource.prototype.close = function () { this.closed = true; }; window.__emit = function (ev) { var s = window.__sources[window.__sources.length - 1]; if (s && !s.closed && s.onmessage) s.onmessage({ data: JSON.stringify(ev) }); return !!s; }; window.__gum = 0; navigator.mediaDevices.getUserMedia = function () { window.__gum++; return Promise.reject(new Error('should not be asked')); }; navigator.mediaDevices.enumerateDevices = function () { return Promise.resolve([{ kind: 'audioinput', deviceId: 'browser-dev', label: 'Browser Only Mic' }]); }; return true; })()
+eval P.launchFromScript('cd'.repeat(32)).then(function (r) { window.__launched = r; return r; })
+expect window.__launched === true
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+wait !document.getElementById('pp-mic').hidden
+wait opts('pp-mic') === '=System default|' + M1 + '=Microphone (Desk One)|' + M2 + '=Microphone (Desk Two)'
+expect window.__micFetches[0] === 'http://127.0.0.1:8771/prompter-voice/' + 'ab'.repeat(32) + '/microphones'
+expect document.getElementById('pp-mic').value === ''
+shot 1162-relay-microphone
+jsclick #pp-voice
+wait window.__sources.length === 1
+expect window.__sources[0].url === 'http://127.0.0.1:8771/prompter-voice/' + 'ab'.repeat(32)
+eval window.__emit({ type: 'start', session: 1 })
+wait document.getElementById('pp-voice').classList.contains('is-active')
+jsclick #pp-voice
+wait window.__sources[0].closed === true
+eval pick('pp-mic', M2)
+expect localStorage.getItem('splitpage-microphone') === M2
+jsclick #pp-voice
+wait window.__sources.length === 2
+expect window.__sources[1].url === 'http://127.0.0.1:8771/prompter-voice/' + 'ab'.repeat(32) + '?microphone=' + encodeURIComponent(M2)
+eval (function(){ window.__emit({ type: 'device', session: 2, name: 'Microphone (Desk Two)' }); window.__emit({ type: 'start', session: 2 }); return true; })()
+wait st() === 'Listening — Microphone (Desk Two)'
+eval pick('pp-mic', M1)
+wait window.__sources.length === 3
+expect window.__sources[1].closed === true
+expect window.__sources[2].url === 'http://127.0.0.1:8771/prompter-voice/' + 'ab'.repeat(32) + '?microphone=' + encodeURIComponent(M1)
+eval (function(){ window.__emit({ type: 'fallback', session: 3 }); window.__emit({ type: 'device', session: 3, name: 'Microphone (Beyond)' }); window.__emit({ type: 'start', session: 3 }); return true; })()
+wait st() === 'Listening — Microphone (Beyond) (your chosen microphone isn\'t connected)'
+expect localStorage.getItem('splitpage-microphone') === M1
+expect window.__gum === 0
+jsclick #pp-voice
+wait window.__sources[2].closed === true
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval T.open()
+wait T.isOpen() && document.getElementById('settings-microphone') && document.getElementById('settings-microphone').options.length === 3
+expect document.getElementById('settings-microphone-note') === null
+expect opts('settings-microphone') === '=System default|' + M1 + '=Microphone (Desk One)|' + M2 + '=Microphone (Desk Two)'
+expect document.getElementById('settings-microphone').value === M1
+expect document.getElementById('settings-microphone-hint').textContent === 'Used by Follow My Voice. The teleprompter has the same choice.'
+shot 1162-relay-settings-microphone
+eval pick('settings-microphone', M2)
+expect localStorage.getItem('splitpage-microphone') === M2
+eval (function(){ window.__relayMics = window.__relayMics.slice(0, 1); return true; })()
+key Escape
+eval T.open()
+wait T.isOpen()
+wait opts('settings-microphone') === '=System default|' + M1 + '=Microphone (Desk One)|' + M2 + '=Saved microphone (not connected)'
+key Escape
+eval localStorage.setItem('splitpage-microphone', 'browser-dev')
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+jsclick #pp-voice
+wait window.__sources.length === 4
+expect window.__sources[3].url === 'http://127.0.0.1:8771/prompter-voice/' + 'ab'.repeat(32)
+eval window.__emit({ type: 'start', session: 4 })
+wait st() === 'Listening… (your chosen microphone isn\'t connected)'
+jsclick #pp-voice
+wait window.__sources[3].closed === true
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval (function(){ localStorage.removeItem('splitpage-microphone'); sessionStorage.removeItem('splitpage-prompter-voice'); window.fetch = window.__realFetch; return true; })()
 quit

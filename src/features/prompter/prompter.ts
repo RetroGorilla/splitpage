@@ -979,7 +979,7 @@ export async function startVoiceFollow(): Promise<void> {
 
   try {
     state.recognition = (desktop ? ports.voice.createDesktop(wanted)
-      : relayed ? ports.voice.createRelay()
+      : relayed ? ports.voice.createRelay(wanted)
       : new (ports.voice.browserRecognition() as new () => PrompterRecognition)()) as VoiceRecognition;
   } catch (e) {
     state.voiceStarting = false;

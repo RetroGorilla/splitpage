@@ -1,4 +1,6 @@
 import type { PrompterRecognition } from "../../application/prompter-services.ts";
+import { isDesktopMicrophoneId, microphoneList } from "../../application/microphones.ts";
+import type { MicrophoneList } from "../../application/microphones.ts";
 
 type RelayVoice = PrompterRecognition & {
   continuous: boolean;
@@ -9,6 +11,7 @@ type RelayVoice = PrompterRecognition & {
   onerror: ((event: unknown) => void) | null;
   onend: ((event: unknown) => void) | null;
   onwarning: ((event: unknown) => void) | null;
+  ondevice: ((event: unknown) => void) | null;
   _source: EventSource | null;
   _running: boolean;
   _fire: (name: string, arg?: unknown) => void;
@@ -54,9 +57,27 @@ function relayUrl() {
   return "http://127.0.0.1:" + (relay as NonNullable<typeof relay>).port + "/prompter-voice/" + (relay as NonNullable<typeof relay>).token;
 }
 
-export function createRelayRecognition() {
+export async function listRelayMicrophones(): Promise<MicrophoneList> {
+  if (!relay) return microphoneList([]);
+  try {
+    const res = await fetch(relayUrl() + "/microphones", { cache: "no-store" });
+    if (!res.ok) return microphoneList([]);
+    const answer = await res.json() as { microphones?: unknown };
+    if (!answer || !Array.isArray(answer.microphones)) return microphoneList([]);
+    return microphoneList((answer.microphones as unknown[]).filter((entry): entry is { id: string; name: string } =>
+      !!entry && typeof (entry as { id?: unknown }).id === "string" && isDesktopMicrophoneId((entry as { id: string }).id) &&
+      typeof (entry as { name?: unknown }).name === "string")
+      .map((entry) => ({ deviceId: entry.id, label: entry.name })));
+  } catch (e) {
+    return microphoneList([]);
+  }
+}
+
+export function createRelayRecognition(microphone: string) {
   if (!relay || typeof EventSource !== "function") throw new Error("no voice relay");
-  const url = relayUrl();
+  const wanted = isDesktopMicrophoneId(microphone) ? microphone : "";
+  const unusable = !!microphone && !wanted;
+  const url = relayUrl() + (wanted ? "?microphone=" + encodeURIComponent(wanted) : "");
   const rec: RelayVoice = {
     continuous: true,
     interimResults: true,
@@ -66,6 +87,7 @@ export function createRelayRecognition() {
     onerror: null,
     onend: null,
     onwarning: null,
+    ondevice: null,
     _source: null,
     _running: false,
     _fire: function (name: string, arg?: unknown) {
@@ -88,6 +110,8 @@ export function createRelayRecognition() {
         if (typeof (event as Record<string, unknown>).text !== "string") return;
         const result = { isFinal: (event as Record<string, unknown>).type === "final", length: 1, 0: { transcript: (event as Record<string, unknown>).text } };
         rec._fire("onresult", { resultIndex: 0, results: [result] });
+      } else if ((event as Record<string, unknown>).type === "fallback") {
+        rec._fire("ondevice", { fellBack: true });
       } else if ((event as Record<string, unknown>).type === "warning") {
         rec._fire("onwarning", { warning: (event as Record<string, unknown>).code });
       } else if ((event as Record<string, unknown>).type === "error") {
@@ -103,6 +127,7 @@ export function createRelayRecognition() {
     start: function () {
       if (rec._running) throw new Error("recognition has already started");
       rec._running = true;
+      if (unusable) rec._fire("ondevice", { fellBack: true });
       const source = new EventSource(url);
       rec._source = source;
       source.onmessage = function (e) {
