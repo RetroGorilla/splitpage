@@ -1,5 +1,11 @@
+import "../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createUndo } from "../../src/application/editing/undo/undo.ts";
+import type { Undo } from "../../src/application/editing/undo/undo.ts";
+import { cellRuns } from "../../src/test/_cell-runs.mjs";
+import { fakeClock } from "./session-fakes.ts";
+import type { FakeClock } from "./session-fakes.ts";
 import { createSaveCoordinator } from "../../src/application/save/coordinator.ts";
 import type { SaveCoordinator, SaveOutcome } from "../../src/application/save/coordinator.ts";
 import { mountFileSaving, obsoleteSaveText } from "../../src/application/save/file-saving.ts";
@@ -66,6 +72,8 @@ interface World {
   readonly ownership: Operations;
   readonly coordinator: SaveCoordinator<FileSaveRequest, unknown>;
   readonly mounted: FileSavingMount;
+  readonly undo: Undo;
+  readonly clock: FakeClock;
   readonly toasts: string[];
   readonly history: string[];
   readonly remembered: string[];
@@ -79,10 +87,11 @@ interface World {
 
 function world(): World {
   const location = createDocumentLocation();
-  const w: Omit<World, "ownership" | "coordinator" | "mounted"> = {
+  const w: Omit<World, "ownership" | "coordinator" | "mounted" | "undo"> = {
     epoch: 1,
     doc: script(OLD_ID, "One."),
     location,
+    clock: fakeClock(),
     toasts: [],
     history: [],
     remembered: [],
@@ -93,6 +102,8 @@ function world(): World {
     onRemember: null,
     onToast: null
   };
+  const undo = createUndo({ held: () => w.doc, runs: cellRuns, now: w.clock.now, cleared: () => {} });
+  undo.track();
   const shown = fakeNotices().notices;
   let coordinator: SaveCoordinator<FileSaveRequest, unknown> | null = null;
   const live = (): SaveCoordinator<FileSaveRequest, unknown> => {
@@ -109,8 +120,8 @@ function world(): World {
     edits: { edit: () => { throw new Error("unexpected title change"); } },
     history: {
       amendRows: () => { throw new Error("unexpected link change"); },
-      hold: () => () => {},
-      reset: () => {}
+      hold: undo.hold,
+      reset: undo.reset
     },
     deferred: {
       copyHistory: (fromId, toId) => {
@@ -196,13 +207,14 @@ function world(): World {
     report: { obsolete: savePorts.obsolete },
     join: joinSaves as unknown as (pending: FileSaveRequest, next: FileSaveRequest) => FileSaveRequest | null
   });
-  const built: World = Object.assign(w, { ownership, coordinator: live(), mounted });
+  const built: World = Object.assign(w, { ownership, coordinator: live(), mounted, undo });
   return built;
 }
 
 function open(w: World, target: Disk, docId: string, audio: string, readAt = target.lastModified): Home {
   w.epoch++;
   w.doc = script(docId, audio);
+  w.undo.track();
   const home = w.location.setHome("file", { handle: target, format: "splitpage", name: target.name, lastModified: readAt, diskBase: cloneState(w.doc) });
   w.location.markWrittenOut(true);
   w.coordinator.confirmBaseline(cloneState(w.doc));
@@ -349,6 +361,82 @@ test("a save queued before a reopen settles obsolete without writing", async () 
     baseline: "One.", baselineId: OLD_ID, generation: 2, changes: 2, dirty: false, unsaved: false
   });
   assert.deepEqual(w.toasts, ["Saved to a.splitpage", obsoleteSaveText("Pilot")]);
+});
+
+test("a stalled Save As holds its document's undo and redo, but not a different or reopened document", async () => {
+  for (const docId of [OTHER_ID, OLD_ID]) {
+    const w = world();
+    const a = disk("a.splitpage");
+    const b = disk("b.splitpage");
+    open(w, a, OLD_ID, "One.");
+    edit(w, "Before.");
+    w.undo.noteEdit();
+    assert.equal(w.undo.undo().ok, true);
+    w.picks.push({ kind: "handle", handle: b, picked: true });
+    const held = hold(b);
+    const saving = request(w, "saveAs");
+    await held.arrived;
+    w.clock.stall(24 * 60 * 60 * 1000);
+    assert.deepEqual(w.undo.redo(), { ok: false, empty: true }, "elapsed time cannot release the current document");
+    edit(w, "During.");
+    w.undo.noteEdit();
+    assert.deepEqual(w.undo.undo(), { ok: false, empty: true }, "retargeting keeps the same document held");
+    assert.equal(audioOf(w.doc), "During.");
+    open(w, a, docId, "Replacement.");
+    edit(w, "Replacement edit.");
+    w.undo.noteEdit();
+    try {
+      assert.equal(w.undo.undo().ok, true, "the replacement can undo before the old write answers");
+      assert.equal(audioOf(w.doc), "Replacement.");
+      assert.equal(w.undo.redo().ok, true);
+      assert.equal(audioOf(w.doc), "Replacement edit.");
+      const beforeLanding = snapshot(w);
+      held.release();
+      assert.deepEqual(await saving, { kind: "obsolete", here: false });
+      assert.deepEqual(snapshot(w), beforeLanding, "the late write changes no replacement state");
+      assert.equal(w.undo.undo().ok, true, "the late write does not reset the replacement's history");
+    } finally {
+      held.release();
+      await saving;
+    }
+  }
+});
+
+test("an obsolete Save As release cannot release the replacement document's own pending Save As", async () => {
+  const w = world();
+  open(w, disk("a.splitpage"), OLD_ID, "One.");
+  const oldCopy = disk("b.splitpage");
+  const oldWrite = hold(oldCopy);
+  w.picks.push({ kind: "handle", handle: oldCopy, picked: true });
+  const first = request(w, "saveAs");
+  await oldWrite.arrived;
+  open(w, disk("c.splitpage"), OTHER_ID, "Other.");
+  edit(w, "Other edit.");
+  w.undo.noteEdit();
+  assert.equal(w.undo.undo().ok, true);
+  const newCopy = disk("d.splitpage");
+  newCopy.fails = new Error("write failed");
+  const newWrite = hold(newCopy);
+  w.picks.push({ kind: "handle", handle: newCopy, picked: true });
+  const second = request(w, "saveAs");
+  await newWrite.arrived;
+  try {
+    oldWrite.release();
+    assert.deepEqual(await first, { kind: "obsolete", here: false });
+    w.clock.stall(24 * 60 * 60 * 1000);
+    assert.deepEqual(w.undo.redo(), { ok: false, empty: true }, "the replacement's write still holds redo");
+    edit(w, "During replacement save.");
+    w.undo.noteEdit();
+    assert.deepEqual(w.undo.undo(), { ok: false, empty: true }, "the old release leaves the new hold in place");
+    newWrite.release();
+    assert.equal((await second).kind, "failed");
+    assert.equal(w.undo.undo().ok, true, "the replacement's failed write releases its own hold");
+    assert.equal(audioOf(w.doc), "Other.");
+  } finally {
+    oldWrite.release();
+    newWrite.release();
+    await Promise.all([first, second]);
+  }
 });
 
 test("Save As of a written-out script forks the id, moves the destination and confirms the new place only", async () => {

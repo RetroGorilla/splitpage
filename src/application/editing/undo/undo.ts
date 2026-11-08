@@ -82,7 +82,7 @@ export function createUndo(ports: UndoPorts): Undo {
   let flushQueued = false;
   let queuedSelection: FlowSelectionPair | undefined;
   let applying = false;
-  let holds = 0;
+  const holds = new WeakMap<UndoState, number>();
   const hooks: { afterApply: UndoHooks["afterApply"] | null; onRefused: UndoHooks["onRefused"] | null } = { afterApply: null, onRefused: null };
   const UNROUTED: Replays = Object.freeze({ run: replayUnwired, amend: replayUnwired, stamps: null });
   let replays: Replays = UNROUTED;
@@ -333,9 +333,22 @@ export function createUndo(ports: UndoPorts): Undo {
   }
 
   function hold(): () => void {
-    holds++;
+    const doc = held();
+    if (!doc) return function () {};
+    holds.set(doc, (holds.get(doc) || 0) + 1);
     let open = true;
-    return function () { if (open) { open = false; holds--; } };
+    return function () {
+      if (!open) return;
+      open = false;
+      const count = holds.get(doc) || 0;
+      if (count > 1) holds.set(doc, count - 1);
+      else holds.delete(doc);
+    };
+  }
+
+  function isHeld(): boolean {
+    const doc = held();
+    return !!doc && holds.has(doc);
   }
 
   return {
@@ -348,8 +361,8 @@ export function createUndo(ports: UndoPorts): Undo {
     noteRemote: noteRemote,
     absorbRemote: absorbRemote,
     reset: function () { restart(held()); },
-    undo: function () { return holds ? HELD : run("undo"); },
-    redo: function () { return holds ? HELD : run("redo"); },
+    undo: function () { return isHeld() ? HELD : run("undo"); },
+    redo: function () { return isHeld() ? HELD : run("redo"); },
     settleAfterApply: settleAfterApply,
     foldIntoEdit: foldIntoEdit,
     amendRows: amendRows,
