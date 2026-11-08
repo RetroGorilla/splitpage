@@ -288,15 +288,27 @@ test("autosave is on until it is switched off, and switching announces the chang
   ]);
 });
 
-test("the comment author reads as empty when none is stored; setting announces and remembering stays silent", () => {
+test("the comment author reads as empty when none is stored; setting and remembering a new name both announce it", () => {
   const { prefs, storage, announced } = setup();
   assert.equal(prefs.commentAuthor(), "");
   prefs.rememberCommentAuthor("Ann");
   assert.equal(prefs.commentAuthor(), "Ann");
-  assert.deepEqual(announced, []);
+  assert.deepEqual(announced, [{ key: "splitpage-comment-author", value: "Ann" }]);
   prefs.setCommentAuthor("Bo");
   assert.equal(storage.items.get("splitpage-comment-author"), "Bo");
-  assert.deepEqual(announced, [{ key: "splitpage-comment-author", value: "Bo" }]);
+  assert.deepEqual(announced, [
+    { key: "splitpage-comment-author", value: "Ann" },
+    { key: "splitpage-comment-author", value: "Bo" }
+  ]);
+});
+
+test("remembering the name already stored announces nothing", () => {
+  const { prefs, announced } = setup();
+  prefs.setCommentAuthor("Ann");
+  announced.length = 0;
+  prefs.rememberCommentAuthor("Ann");
+  assert.deepEqual(announced, []);
+  assert.equal(prefs.commentAuthor(), "Ann");
 });
 
 test("hide-shot is off until set and announces each change", () => {
