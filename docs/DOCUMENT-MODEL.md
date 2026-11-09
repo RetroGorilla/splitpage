@@ -1,5 +1,7 @@
 # Structured document model — design (issue #85)
 
+Issue #85 is complete and closed. This file keeps the design and measurements at their named commits; its build order and old test gaps are historical. Splitpage 0.4.1 is released. Current work is in [ROADMAP.md](ROADMAP.md) and GitHub issues, not this build order.
+
 ## Saved terminology names
 
 The user-facing terms are defined in [the glossary](GLOSSARY.md). Existing saved names remain unchanged for compatibility:
@@ -60,9 +62,8 @@ the clipboard in `src/application/commands/clipboard.ts` and
 `src/features/clipboard/`, the tag panel, split and join), undo
 (`src/application/editing/undo/`) and the word-level merge
 (`src/core/merge/`). Adam made the
-decisions in §12; the sections below reflect them. Not yet run on Windows:
-the by-hand pass in `docs/WINDOWS-CHECKS.md` covers it with the rest.
-#85 ships in the 3.0 pre-releases (from 3.0.0-beta.1) and in 3.0.0.
+decisions in §12; the sections below reflect them. The original record did not confirm a Windows by-hand pass; [WINDOWS-CHECKS.md](WINDOWS-CHECKS.md) keeps the historical checks.
+#85 shipped in the 0.3 line, now tagged `v0.3.*`, and is included in 0.4.1.
 
 Line numbers and `NN-name.js` file names in the design text are from `main`
 at `53eb67d`, when the code lived in numbered fragments under the former `src/js` folder.

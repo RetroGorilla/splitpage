@@ -98,7 +98,7 @@ A feature imports from `src/application/` only types and pure functions, such as
   | `startup.ts` | Startup readiness, draft resume and seed checking |
   | `identity.ts` | IDs and clock |
 
-  The split preserves the existing implementations, including `text.ts`'s tag-body rewriting. Moving that logic to its final owner remains a separate audit follow-up. Port contract types remain with their application or core owners. The remaining `06-rows.js` video-file functions are now owned by the gallery feature and supplied through an explicit bootstrap port; see [rows-video-files.md](rows-video-files.md). The retired `sharedPorts()` references in the original wave schedule below describe how those PRs first landed, rather than an API for new work.
+  The split preserves the existing implementations, including `text.ts`'s tag-body rewriting. It does not schedule another move. Port contract types remain with their application or core owners. The former `06-rows.js` video-file functions are owned by the gallery feature and supplied through an explicit bootstrap port; see [rows-video-files.md](rows-video-files.md). The retired `sharedPorts()` references in the original wave schedule below describe how those PRs first landed, rather than an API for new work.
 - **Start position.** A moved file's slot in the composition root's start list (`src/bootstrap/main.ts`) is replaced, at the same position, by a call to its wiring's mount, imported from that wiring module. `tests/bootstrap/composition-root.test.ts` pins the list. (Until the composition root replaced `_entry.js`, the entry reached each mount through a named re-export in `bootstrap/wiring.ts`; those re-exports are gone.) A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
 - **Stopping.** Features mounted from the composition root's list are not stopped by `stopApp`, just as the numbered files they replace were not. The last L5 step turns that list into a wiring step, which stops them in reverse order.
 
@@ -144,7 +144,9 @@ A quick test: if feature B is about to call `a.something()`, then A does somethi
 
 ## The shared ports
 
-Each is built in its responsibility module under `src/bootstrap/wiring/ports/` from the owners and, until they retire, the bridges. Each lands with the first move that needs it, not on its own, because a port nobody uses yet moves no responsibility. A port marked Opus lands in an Opus PR: with the first Opus move that needs it, or, when Codex moves need it first, in its own Opus PR before them. A Codex move only uses an Opus port after it has landed. "Files" counts the numbered files that import the bridge names it replaces.
+Current shared ports live under `src/bootstrap/wiring/ports/` and are built from the owners. The bridges and numbered frontend files are gone (#906). Use `node tools/code-map.mjs` for the current map.
+
+The table below is the historical migration schedule. “New”, “Lands with” and “Files” describe that run, not pending work or current counts. It does not authorize new ports or feature moves.
 
 | Port | Type and where it lives | What a feature gets | Built from | Files | Lands with | Who |
 | --- | --- | --- | --- | --- | --- | --- |

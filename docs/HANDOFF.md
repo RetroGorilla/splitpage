@@ -2,6 +2,8 @@
 
 Written 2026-08-28, condensed 2026-09-15. For whoever (or whatever) picks this up next.
 
+**Current status:** Splitpage 0.4.1 was released on 2026-11-02 as [v0.4.1](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.1). `main` includes later work. Start with [ROADMAP.md](ROADMAP.md) and the issue's latest owner decisions. Historical checks below describe their named commits, not today's backlog or release readiness.
+
 `docs/help.md` is the **user-facing** doc — what the features are and how to
 use them, and the file `build.mjs` renders into the in-app Help page. Read it
 first; this file deliberately does not repeat it.
@@ -1278,7 +1280,7 @@ Other source: `src/page.html` (shell), `src/styles/` (visual),
 `src/seed-state.json` (demo document). `docs/help.md` is a build input too —
 `build.mjs`'s `mdToHtml()` renders it into the Help modal at build time. It
 was `README.md` until #80, with developer-only sections fenced off by
-`<!-- help:skip-start/end -->` markers; splitting the user guide out into its
+the old Help skip markers; splitting the user guide out into its
 own file retired the markers, and means editing the repo's README no longer
 rebuilds the app. An HTML comment left loose in `docs/help.md` now renders as
 visible text on the Help page — keep any inside a fenced code block.
@@ -1312,21 +1314,15 @@ parents) carry `data-submenu` instead, so no listener mistakes them for one.
 
 ### Merging main into a branch that has `src/`
 
-Main still edits `index.html` directly. Split main's `index.html` on the
-same boundaries `src/` was cut on; prove the splitter reproduces this
-branch's `src/` byte-for-byte from the merge base first; cut main's JS into
-the same pieces by matching each base piece's first line as a unique
-anchor; `git merge-file` each piece against its base; normalise trailing
-newlines first; rebuild and read every **removal** in the diff against
-main's `index.html` — a removal you can't name is main's work being dropped.
-
-Since #66 the bundled `index.html` is minified, so this recipe no longer
-applies to anything built from this branch: the two sides are no longer the
-same shape of text. Re-derive it if it is ever needed again.
+The old split-file merge recipe is retired. `main` uses `src/`, and
+`index.html` is generated and ignored. Merge source changes, then rebuild.
 
 ---
 
 ## 7. Where to pick up
+
+Read [ROADMAP.md](ROADMAP.md), then check the assigned issue on GitHub.
+The architecture milestones and AQ queue are finished. Do not restart them.
 
 **Bugs and features live in GitHub Issues** —
 https://github.com/RetroGorilla/splitpage/issues. That is the tracker: open
@@ -1339,8 +1335,15 @@ can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
 
 Follow My Voice on desktop (#8) runs Windows' own recogniser (System.Speech, offline) through
 `desktop/voice/listen.ps1`, driven by `desktop/voice-helper.ts`, which
-`desktop/voice-composition.ts` creates and routes (invariants #45–#47); it has never heard a real voice from an agent
-session — the by-hand check is in `docs/WINDOWS-CHECKS.md` §3.
+`desktop/voice-composition.ts` creates and routes (invariants #45–#47).
+AQ-37 merged in #1016. Microphone selection later merged in #1258 and
+#1292. These merges do not prove a manual real-microphone check passed;
+that check has no current confirmation in this record. The manual recipe
+is in `docs/WINDOWS-CHECKS.md` §3.
+
+### Historical implementation notes
+
+These notes explain earlier changes. They are not tasks to pick next.
 
 **The header after Direction B (#169).** The row no longer overlaps
 itself at any width (#174): its right column is never narrower than its
@@ -1385,8 +1388,7 @@ recovery tool, if ever wanted, finds it by `docs/`/`older/` with no
 starts a **new document** — `loadFileIntoEditor` (`src/application/transitions/local-files.ts`)
 now builds a fresh state through `migrateRows()`, so the document gets a new
 `docId` and empty `productionTags`, `people`, `brollShots` and `comments`,
-and its home becomes the imported file (`setHome("import")`,
-`src/application/location/document-location.ts`), which replaces either Save target. It used to replace only `state.rows` and the title and keep the rest, which meant an
+and, since #982, it has no save destination. It used to replace only `state.rows` and the title and keep the rest, which meant an
 unrelated Word file inherited the last script's breakdown, cast list and
 review comments, and Save still pointed at the previous project's file.
 

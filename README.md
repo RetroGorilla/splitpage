@@ -8,6 +8,9 @@ and read the narration from a teleprompter.
 
 ## Get Splitpage
 
+The latest published release is [0.4.1, released 2026-11-02](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.1).
+The source on `main` includes later changes. See the [roadmap](docs/ROADMAP.md) for current status and open work.
+
 Download the Windows installer or the portable zip from the
 [latest release](https://github.com/RetroGorilla/splitpage/releases/latest).
 The installers are unsigned, so Windows SmartScreen warns on first run: choose

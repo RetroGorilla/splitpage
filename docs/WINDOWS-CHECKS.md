@@ -1,6 +1,8 @@
-# What still needs a Windows machine
+# Windows checks and historical runs
 
-Running list for the 3.0 work on `claude/concurrent-lanes-phases-ea0b4t`.
+The runs and status table below are historical records of the named commits. They are not a current release backlog. Splitpage 0.4.1 shipped on 2026-11-02. Use [ROADMAP.md](ROADMAP.md) for current status and [RELEASING.md](RELEASING.md) for release checks. Old “3.0” and “4.0” labels refer to work now tagged with the `v0.3.*` and `v0.4.*` names.
+
+AQ-37 is done (#1016); desktop microphone selection also merged (#1258, #1292). The old “never run” notes below mean no manual evidence was recorded in those runs. They do not make the merged work pending, and they do not prove a later manual check passed.
 
 **#89 closed most of this file.** `desktop/test/smoke.mjs` — the only thing
 that executes `main.ts` and `preload.js` — now runs its `dev` target on Linux
@@ -17,7 +19,7 @@ the handful of things no automated test reaches on any platform.
 Treat a green Windows run as the thing that lets a **release** ship. It is no
 longer the only thing that can tell you the desktop shell works at all.
 
-## Windows runs so far
+## Historical Windows runs
 
 **Run 1 — Windows 11 x64, at `eb9904f`. Everything that was run passed.**
 
@@ -336,7 +338,9 @@ each release package (the `MainWindowHandle` probe runs on Windows; the release
 packages list the other groups as skips, see [Before you start](#before-you-start)).
 That is the only thing that proves #76's `shared/` staging and #77's `files` entry.
 
-## 3. Things no automated test can reach
+## 3. Manual check recipes
+
+These recipes accompany the historical runs. Confirm which checks Adam still needs before treating any as outstanding work. The voice UI and PDF implementation changed after the early runs; #1016, #1258, #1292 and the print-path notes are the later evidence.
 
 - **Offline reload** (#79). The driver has no CDP network emulation and the
   server running the suite is the one serving the page, so the network cannot
@@ -479,15 +483,14 @@ re-run on Windows with `run-tests.ps1`:
 - `run-tests.ps1` runs them in one pass with its own orphan-process sweep,
   which is a different shape of run from one invocation per suite.
 
-New suite worth a first Windows run: `53-service-worker.txt` (#79), written
-here.
+`53-service-worker.txt` (#79) was new at the time of these runs. Its Windows run 1 result is recorded below.
 
 ---
 
-## Status
+## Historical status
 
 "Windows x64, run 1" means it passed on the Windows machine at `eb9904f`.
-Anything changed since then is due again in run 2.
+“Never run” and “unverified” describe evidence available for this table, not the current backlog. Later checks are recorded with their PRs; do not infer them from a release tag.
 
 | Item | Needs | State |
 | --- | --- | --- |

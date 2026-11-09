@@ -1,18 +1,20 @@
-# Splitpage 4.0 — implementation plan
+# Splitpage implementation record and standing rules
+
+**Status:** The architecture milestones and legacy reduction are complete. Splitpage 0.4.1 shipped on 2026-11-02 as [v0.4.1](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.1). [ROADMAP.md](ROADMAP.md) links to current work. The numbered milestones and their original “4.0” and “4.1” names below are historical, not future release promises. Sections 2–4 and 6 retain the standing engineering rules; old milestone gates record the policy for that run.
 
 **Objective:** Make ordinary changes local, understandable and independently testable. Give each document operation, feature and platform resource an explicit owner. Preserve the app's current behavior and distribution model.
 
 **Scope decision:** Plugins, a plugin SDK, a plugin host and an isolated extension runtime are out of scope. Internal action and format registries remain because they simplify application development.
 
-**Authority:** This is the plan for 4.0. It supersedes the September 2026 architecture plan and the interim roadmap; their compatible product invariants are preserved, and this document controls sequencing, scope and acceptance. It lives on `main` and is amended there by PR when a decision changes.
+**Authority:** This records the completed refactor and its standing rules. Current work needs an open issue or a written owner decision. It lives on `main` and is amended there by PR when a decision changes.
 
-**Source baseline:** Version 3.1.0, `main` at `80500f6ef6b8f32b68a22c95210dcb962a989fc3`. Recheck the implementation branch before editing. This is a plan, not a claim that the refactor is implemented.
+**Historical source baseline:** `main` at `80500f6ef6b8f32b68a22c95210dcb962a989fc3`, then called 3.1.0. Published tags now use `v0.3.*` and `v0.4.*`. Check current `origin/main` before editing.
 
 ## 0. Decisions
 
 | Decision | Outcome |
 | --- | --- |
-| Release | 4.1, tagged on `main`, the only long-lived branch since 2026-11-03 |
+| Release | 0.4.1, released 2026-11-02 as `v0.4.1`. `main` is the only long-lived branch. |
 | Plugins, SDK, extension runtime | Out of scope |
 | Language for new folders | TypeScript, strict, erasable syntax only (section 3) |
 | Comments | None in authored code, tests, CSS, HTML, scripts or workflow/configuration files, except short reason comments (section 2) |
@@ -38,7 +40,7 @@ Focused tests shorten feedback time. Shared contract and critical integration te
 
 **4.0 scope:** Milestones 0–7 below: verification tools, core extraction, session/commands, saving/recovery, formats, feature ownership, and (milestone 7) the explicit wiring of migrated owners with the named legacy initializer shim. The composition root as build entry, unused `S` fields and any remaining bridges are 4.x work (section 8; Adam, 2026-10-07). Unmodified server and desktop internals may remain legacy behind narrow adapters.
 
-**4.x follow-up:** The frontend bootstrap items and server and desktop service extraction in section 8. Their existing functional, security and packaging checks remain release requirements even when their internal refactors are deferred. Describe remaining legacy debt honestly; do not declare the entire repository fully refactored at 4.0.
+**Follow-up status:** Section 8 records what landed or was removed. It is not a backlog. New work follows [ROADMAP.md](ROADMAP.md) and GitHub issues.
 
 No UI framework replacement, editor-engine replacement, persisted document schema migration, collaboration algorithm replacement or new user feature is included. Keep 3.1 file/HTTP/IPC compatibility. Distinguish intentional distribution-version changes from file-format changes.
 
@@ -49,11 +51,11 @@ No UI framework replacement, editor-engine replacement, persisted document schem
 1. Read applicable repository instructions, `docs/help.md`, `docs/HANDOFF.md` section 5, build/packaging scripts and tests for the area being changed. Resolve stale prose against executable source and fixtures.
 2. Branch from the latest `main`. Preserve unrelated working changes; use a clean worktree where necessary.
 3. Keep PRs focused on one ownership boundary. Separate a demonstrated behavioral repair from a broad extraction. Keep the application runnable after each PR.
-4. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes, and nothing is forward-merged from it. A bug that also exists on 3.1.x is fixed on `main` instead, as [review.md](architecture/review.md#2-where-bugs-get-fixed) describes. A bug in code that a pending step is moving is fixed after that move lands, in the module that now owns it, with its regression test; do not restore deleted implementations or maintain two competing paths. The closed 3.1.x fix branches (`fix/274-overlay-commands`, `fix/276-save-during-load`, `fix/278-290-ids-and-nested-links`, `fix/280-282-anchor-tags-and-cue-retitle`, `fix/281-283-md-null-href-and-person-merge`, `test/293-history-toast-race`) are the reference for those ports and their fail-first tests. Every defect that milestone 2 pinned or deferred has a disposition in [pinned-defects.md](architecture/pinned-defects.md), and each one that will be fixed has an issue.
-5. Open enhancement issues wait for 4.x. A feature that touches editor, saving, formats or feature views is built once on the new structure. The integration owner decides per issue and says so on the issue.
-6. Continue through milestones after their gates pass, with item 8 as the one planned pause. Do not pause for routine naming, file placement or reversible implementation decisions. Record substantive behavior/compatibility uncertainties before dependent changes.
+4. Bug fixes go to `main`, the only long-lived branch, as [review.md](architecture/review.md#2-where-bugs-get-fixed) describes. A bug in code that a pending step is moving is fixed after that move lands, in the module that now owns it, with its regression test. Do not restore deleted implementations or maintain two competing paths. Historical defect dispositions are in [pinned-defects.md](architecture/pinned-defects.md); check each issue's current state before starting.
+5. Enhancements follow the issue's owner decision. Build them on the current structure. Do not infer a release assignment from the old milestone names.
+6. Do not pause for routine naming, file placement or reversible implementation decisions. Record substantive behavior/compatibility uncertainties before dependent changes. The milestone run is complete.
 7. Do not deploy to the live service, overwrite user data, publish releases or merge into `main` as an incidental verification step.
-8. Before milestone 4 starts, the integration owner writes a one-page re-scope of milestones 4–7 for Adam's approval (Adam, 2026-10-07). For each milestone it answers one question: does the milestone make the next ordinary change easier to make and verify in isolation? Milestones 4 and 6 stay. Formats (milestone 5) and bootstrap/teardown (milestone 7) are candidates to stay legacy behind a narrow adapter, as section 1 already allows for server and desktop internals. The re-scope names what section 7's release checklist loses for each part that stays legacy, keeps the resource-release contract of section 6 (milestone 4's transition API depends on it), and keeps the captured export projection that milestone 4's save paths need. No milestone 4 work starts before the milestone 3 gate. Done: Adam approved the re-scope on 2026-10-07 ([milestones-4-7-rescope.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestones-4-7-rescope.md)); milestone 5 stays in full and milestone 7 is narrowed, as section 5 states.
+8. The milestone 4–7 re-scope is done. Adam approved it on 2026-10-07 ([milestones-4-7-rescope.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestones-4-7-rescope.md)). It kept milestone 5 in full and narrowed milestone 7. It is not a pending approval.
 
 ### Lane models and characterisation
 
@@ -152,7 +154,7 @@ Do not weaken assertions, rewrite golden bytes, suppress genuine failures or exp
 
 ## 5. Milestones for 4.0
 
-Milestones 0 to 7 are finished and 4.0 has shipped. Other documents that cite "milestone N" or "M*N*" mean these. The full milestone text, with each one's work list and gate, is in git history: `git show c73b1f8b:docs/IMPLEMENTATION-PLAN.md`.
+Milestones 0 to 7 are finished and included in the published 0.4.1 release. Other documents that cite "milestone N" or "M*N*" mean these. The full milestone text, with each one's work list and gate, is in git history: `git show c73b1f8b:docs/IMPLEMENTATION-PLAN.md`.
 
 ## 6. Required ownership/race invariants
 
@@ -174,13 +176,14 @@ These are architectural contracts, not optional tests or comments to add to sour
 
 ### 4.0 release checklist
 
+This is the historical milestone checklist. The server and collaboration checks no longer apply: those features were removed in #905. The current release recipe is [RELEASING.md](RELEASING.md).
+
 - Fast gates pass on the final branch: lint, types, comments, layers/dependencies, all discovered unit/application/adapter/tool tests, build and selected critical browser tests.
 - Every existing browser suite is discovered by full filename and passes on Linux and Windows where supported. Genuine platform-only checks run on their supported platform; remaining skips are named and cannot be counted as passed. An unresolved missing release check blocks the release-readiness claim.
 - Real Electron smoke runs; Windows packaged x64/ARM64 payload/install/runtime checks and native checks are reported with actual execution evidence from the x64 and ARM64 devices. Building an ARM64 artifact on x64 alone is not an ARM64 runtime check.
-- Both Docker paths and the portable distribution start with fresh data and representative existing data, without importing unshipped source. Persistent sign-ins/links, permissions, offline app behavior and worker upgrade remain correct.
-- Test 4.0 client against the unchanged 3.1 server, and supported 3.1/4.0 project exchanges. If backend code changed, add old-client/new-server coverage. Keep existing IPC shapes and native capability checks.
+- The portable distribution starts without importing unshipped source. Offline app behavior, worker upgrade, project compatibility and native capability checks remain covered.
 - No migrated frontend feature accesses global `S` or mutates live state. Forbidden edge sets shrink and contain no new violations; completed areas contain no cycles, including cycles through bridges. An increase in legitimate imports/module count is not automatically a defect.
-- The release names the legacy initializer shim, the count of numbered modules it still starts, and the bridge files that remain, with their owners, so the remaining legacy is described rather than declared gone.
+- The legacy initializer shim and numbered frontend modules are gone; see section 8.
 - The external review at the release gate covers milestones 5 and 7 together with milestone 6's own.
 - Source/format fixtures stay stable; performance/visual comparisons use documented runtime/font conditions. Any material change is explained and verified.
 - Architecture ownership map, invariant ledger, testing instructions and remaining legacy work accurately describe the delivered source.
@@ -191,47 +194,21 @@ Provide the concrete behavior preserved/fixed, ownership before/after, removed c
 
 Keep expected operational failures and missing execution environments visible. Continue unaffected work when a platform is unavailable, but do not bypass dependent milestone/release gates or claim those checks passed. Avoid repeat full test runs without new changes or unresolved concerns; use focused verification during PR work and full runs at the defined gates.
 
-## 8. Follow-up refactors for 4.x
+## 8. Completed follow-up refactors
 
-The 4.1 legacy-reduction plan (the legacy layer, the import loop, the wiring files that replaced `21-events.js`, and deleting `S`, Adam 2026-10-16, which replaced item 3 below) is finished; its text is in git history (`git show c73b1f8b:docs/architecture/legacy-reduction.md`).
+- **Frontend bootstrap and global state:** done. The build starts at `src/bootstrap/main.ts`. `src/js/`, `src/legacy/`, the bridges and global `S` are gone; the last legacy facade moved in #906. The completed legacy-reduction plan is in git history (`git show c73b1f8b:docs/architecture/legacy-reduction.md`).
+- **CSS:** the base/layout/component split and spacing tokens are done. AQ-34 regrouped styles by purpose in #986.
+- **Save completion:** AQ-38 merged in #1019. The coordinator makes the file-save completion decision and runs `application/save/save-completion.ts`. Deprecated import writeback retains its own timing; see [saving.md](architecture/saving.md).
+- **Recovery:** the owner and capture/restore helpers live in `src/application/recovery/`. Server-draft restore and the browser draft store were removed in #905.
+- **Server services:** the old API and collaboration extraction plan no longer applies. #905 removed those features. `server/` serves static files.
+- **Desktop services:** IPC composition, lifecycle and voice extraction are done (AQ-35–AQ-37: #1002, #1005–#1010, #1013, #1016). The current module map is [desktop-build.md](architecture/desktop-build.md).
+- **Electron architecture:** `desktop/electron-arch.mjs` selects the native runtime; the unconditional ARM64 installation pin is gone. See [RELEASING.md](RELEASING.md#tabs-build-2026-09-14-and-the-arm64-dev-pin).
 
-### Frontend bootstrap
-
-In this order (Adam, 2026-10-07):
-
-1. The composition root as build entry, replacing `src/js/_entry.js`, as the first 4.x milestone, with the packaged check and an external review of its own. Done: `src/bootstrap/main.ts` ([dependencies.md, The composition root](architecture/dependencies.md#the-composition-root)).
-2. Any bridge still standing after milestone 6, with the legacy modules that keep it. Done: `src/js/` is deleted, and `src/legacy/` is gone; its last file, the action registry facade `app-actions.ts`, moved into the actions port (`src/bootstrap/wiring/ports/actions.ts`) in #906. The production index and export capture owners reach their callers through ports built by the wiring.
-3. Unused `S` fields.
-4. CSS: sorting the remaining rules into base, layout and components (done: `src/styles/base.css`, `layout.css`, `components.css`, and `overrides*.css` for rules that must follow specific feature styles), then spacing tokens (done).
-
-### Save completion and recovery
-
-From the external review of milestone 5's plan (Codex, 2026-10-14). Neither is a prerequisite of milestone 5 or 6.
-
-- **One owner for save completion.** Consolidate completion decisions and projection updates behind one application owner, preserving destination-specific acknowledgment. Since AQ-38 the coordinator makes the one decision for a file save, when the writer reports the landed write, and then runs the save completion owner's steps (`application/save/save-completion.ts`); the deprecated import writeback keeps its own timing ([saving.md](architecture/saving.md) sections 4 and 8).
-- **Remaining recovery extraction.** Done: `20g-drafts.js` became `src/application/recovery/drafts.ts`, with the capture plan in `capture-schedule.ts` and the restore decisions in `draft-restore.ts` and `draft-resume.ts`. Server-draft restore and the browser draft store were removed with the server features (#905).
-
-### Server services
-
-Extract `createServer(dependencies, config)` from process startup. Separate validated configuration, HTTP decoding, authorization by operation/document scope, document/comment services, grant/secret repository, blob budgets/reference rules, presence and durable filesystem storage.
-
-Define and test memory/disk/restart consistency for mint/renew/revoke/delete under injected persistence failure. Preserve malformed-input responses, compare-and-set writes, per-document serialization, owner rotation, link revocation/restart behavior, tombstones and private permissions. Keep the documented public owner-key/capability-link deployment boundary and intentional LAN profiles explicit.
-
-Update portable/desktop staging and CI payload assertions in the same PR as module extraction. Backups include documents, blobs and link/owner-secret data. Code rollback preserves newer revocations; data restore has an explicit revocation/rotation procedure. Test configuration and deploy/rollback behavior against isolated fixtures, never the live server.
-
-### Desktop services
-
-Extract tabs/session registry and file service first, then IPC composition, hosting/process lifecycle, voice, Drive/credentials, protocol policies and updates. Started: the state store, file service, document claims, recents, tab registry, window appearance, restore notice, unsaved-changes dialog, update release choice, IPC registration (`ipc-setup.ts`) and every IPC handler group (`ipc-files.ts`, `ipc-shell.ts`, `ipc-document.ts`, `ipc-history-blob.ts`, `ipc-tabstrip.ts`, `ipc-test-mode.ts`) the close, quit and session-restore lifecycle (`close-quit.ts`, `session-restore.ts`) and the voice wiring (`voice-composition.ts`) are their own modules beside `desktop/main.ts` ([desktop-build.md](architecture/desktop-build.md)). Keep narrow injected interfaces, opaque file IDs, sender validation, sandboxing, context isolation, separate tab-strip origin and restricted native capabilities.
-
-Replace unconditional `desktop/.npmrc` ARM64 installation assumptions with runner-aware settings. Retain a single IPC contract source and verify any emitted CommonJS/preload code and runtime resources. Real Electron security/lifecycle and installed-target checks remain the gate; source-text tests alone do not establish behavior.
+Do not turn this record into a new extraction queue. Open work belongs in GitHub issues.
 
 ## 9. Starting instruction
 
-Use the following as the starting instruction for a session on `main`, with this file attached:
-
-> Implement `docs/IMPLEMENTATION-PLAN.md` on `main` in small, reviewable increments. Plugins and SDK work are out of scope. Add no authored code comments or inline suppressions, in workflow and configuration files included. Read section 0 for the decisions already made and do not reopen them. Continue milestone 0 from where the branch is: check which of its eight items have landed, then complete the rest in order: layer/exception baselines, strict TypeScript, lint and test discovery, the section 4 CI policy, the invariant ledger, the performance record. Preserve existing fixes, user data, file/wire/IPC compatibility and distribution behavior. Do not redistribute complex editor events before the command/session boundary exists. Deliver verified tooling and baseline evidence as focused PRs, then proceed in the stated milestone order. Report actual checks, skips, removed coupling and remaining blockers. Do not deploy or publish as part of this work.
-
-The first deliverable is working verification and an accurate baseline, not an empty folder scaffold or a renamed `21-events.js`.
+Read `AGENTS.md`, [ROADMAP.md](ROADMAP.md), the assigned GitHub issue and its latest owner decisions. Check current `origin/main` before editing. Work in small PRs and report the checks actually run. Do not restart the completed milestones or the finished agent queue. Do not deploy or publish as part of ordinary implementation work.
 
 ## 10. Reference constraints
 
