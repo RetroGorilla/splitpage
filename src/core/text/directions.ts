@@ -92,6 +92,7 @@ export function flattenDirections(cell: CellInput): Run[] {
     delete m.dir;
     const edge = Object.assign({}, m);
     delete edge.tag;
+    delete edge.innerTags;
     if (!isDirRun(runs[i - 1])) out.push({ text: "(", marks: edge });
     out.push({ text: r.text, marks: m });
     if (!isDirRun(runs[i + 1])) out.push({ text: ")", marks: edge });

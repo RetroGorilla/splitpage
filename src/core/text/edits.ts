@@ -1,4 +1,4 @@
-import { cellLength, cleanMarks, cleanText, isDirRun, normalizeCell, projection } from "./runs.ts";
+import { cellLength, cleanMarks, cleanText, isDirRun, normalizeCell, projection, tagStack, withTagStack } from "./runs.ts";
 import type { AtomRun, BrollRun, CellInput, MarkName, Marks, NormalizeOptions, Run } from "./runs.ts";
 
 export type AtomChar = { atom: AtomRun; ch?: undefined; marks?: undefined };
@@ -70,6 +70,7 @@ export function marksAt(cell: CellInput, pos: number): Marks {
 export function typingMarks(cell: CellInput, pos: number): Marks {
   const m = marksAt(cell, pos);
   delete m.tag;
+  delete m.innerTags;
   delete m.cmt;
   delete m.href;
   if (m.dir && !insideDirection(cell, pos)) delete m.dir;
@@ -145,11 +146,13 @@ export function setMark(cell: CellInput, from: number, to: number, name: MarkNam
   for (let i = r.from; i < r.to; i++) {
     const c = chars[i] as Char;
     const base = c.atom ? c.atom.marks : c.marks;
-    if (c.atom && (name === "tag" || name === "dir" || name === "cue")) continue;
+    if (c.atom && (name === "tag" || name === "innerTags" || name === "dir" || name === "cue")) continue;
     let next = cache.get(base);
     if (!next) {
       next = Object.assign({}, base);
-      if (value === false || value === null || value === undefined) Reflect.deleteProperty(next, name);
+      if (name === "tag" && (value === false || value === null || value === undefined)) {
+        next = withTagStack(next, next.innerTags || []);
+      } else if (value === false || value === null || value === undefined) Reflect.deleteProperty(next, name);
       else (next as Record<string, unknown>)[name] = value;
       cache.set(base, next);
     }
@@ -231,9 +234,9 @@ export function commentRange(cell: CellInput, id: string): TextSpan | null {
 
 export function retag(cell: CellInput, fromId: string, toId: string | null | undefined): Run[] {
   return normalizeCell(normalizeCell(cell).map(function (r) {
-    if (r.atom || r.marks.tag !== fromId) return r;
-    const m = Object.assign({}, r.marks);
-    if (toId) m.tag = toId; else delete m.tag;
+    if (r.atom || tagStack(r.marks).indexOf(fromId) === -1) return r;
+    const ids = tagStack(r.marks).flatMap(function (id) { return id !== fromId ? [id] : toId ? [toId] : []; });
+    const m = withTagStack(r.marks, ids);
     return { text: r.text, marks: m };
   }));
 }

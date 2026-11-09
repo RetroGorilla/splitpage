@@ -16,7 +16,7 @@ function readTags(cellOf: CellDecoder, html: string): FieldTag[] {
   const out: TagSpan[] = [];
   let last: TagSpan | null = null;
   cellOf(html).forEach(function (r) {
-    const id = r.atom ? null : r.marks.tag;
+    const id = r.atom ? null : r.marks.innerTags?.at(-1) || r.marks.tag;
     if (id && last && last.id === id) { last.text += r.text; return; }
     last = null;
     const t = id ? tagNameOf(id) : null;
