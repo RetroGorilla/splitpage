@@ -1082,6 +1082,8 @@ function onBrollInput(e: PanelEvent & Partial<Pick<InputEvent, "inputType">>) {
 
 export function openBrollPanel() {
   if (!(ports as PanelPortUse).document.current()) return;
+  const savedGroup = (ports as PanelPortUse).preferences.panelGrouping("broll");
+  if (savedGroup && savedGroup !== (ports as PanelPortUse).view.current().group) (ports as PanelPortUse).view.setGroup(savedGroup);
   (ports as PanelPortUse).panels.open("broll-panel");
   renderBroll();
 }

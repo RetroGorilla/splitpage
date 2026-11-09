@@ -265,6 +265,26 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     return changed && put(KEYS.onboarding, JSON.stringify(merged));
   }
 
+  function mergePanelGrouping(incoming: unknown, legacyComments: string | null): boolean {
+    if (typeof incoming !== "string") return false;
+    const spec = ownAppData().find(item => item.name === "panelGrouping");
+    if (!spec?.valid(incoming)) return false;
+    const added: unknown = JSON.parse(incoming);
+    if (!isPlainObject(added)) return false;
+    const raw = read(KEYS.panelGrouping);
+    const local = raw === null ? {} : readJson(KEYS.panelGrouping);
+    if (!isPlainObject(local)) return false;
+    const merged: Record<string, unknown> = { ...local };
+    let changed = false;
+    for (const key of ["broll", "comments", "production", "gear"] as const) {
+      if (typeof added[key] !== "string" || Object.hasOwn(local, key)) continue;
+      merged[key] = key === "comments" && (legacyComments === "position" || legacyComments === "recent" || legacyComments === "by-scene")
+        ? legacyComments : added[key];
+      changed = true;
+    }
+    return changed && put(KEYS.panelGrouping, JSON.stringify(merged));
+  }
+
   return Object.freeze({
     nameOf: function (key: string): PreferenceName | null { return names.get(key) ?? null; },
     panelGrouping: function (panel: GroupingPanel): string | null {
@@ -386,12 +406,15 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     appDataImport: function (incoming: unknown, extra: readonly AppDataPref[]): string[] {
       const prefs = isPlainObject(incoming) ? incoming : {};
       const written: string[] = [];
+      const legacyComments = read(KEYS.commentsSort);
       ownAppData().concat(extra).forEach(function (spec) {
+        if (spec.name === "panelGrouping") return;
         const value = prefs[spec.name];
         if (typeof value !== "string" || !spec.valid(value)) return;
         if (read(spec.key) !== null) return;
         if (put(spec.key, value)) written.push(spec.name);
       });
+      if (mergePanelGrouping(prefs["panelGrouping"], legacyComments)) written.push("panelGrouping");
       if (mergeOnboarding(prefs["onboarding"])) written.push("onboarding");
       return written;
     }

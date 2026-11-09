@@ -588,6 +588,10 @@ function findCommentIndex(id: string | null) {
 
 export function openCommentsPanel() {
   if (!(ports as CommentsRuntimePorts).document.current()) return;
+  const current = (ports as CommentsRuntimePorts).preferences.panelGrouping("comments") ?? (ports as CommentsRuntimePorts).preferences.commentsSort();
+  const mode = (ports as CommentsRuntimePorts).sort.choose(current);
+  const select = document.getElementById("comments-sort") as HTMLSelectElement | null;
+  if (select) select.value = mode;
   (ports as CommentsRuntimePorts).sidePanels.open("comments-panel");
   captureReplyDrafts();
   renderComments();

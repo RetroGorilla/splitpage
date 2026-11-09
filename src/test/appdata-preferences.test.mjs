@@ -2,7 +2,9 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { preferences } from "../bootstrap/wiring/preferences-owner.ts";
-import { commentSorting } from "../bootstrap/wiring/ports/preferences.ts";
+import { brollView, commentSorting } from "../bootstrap/wiring/ports/preferences.ts";
+import { openBrollPanel } from "../features/broll/panel.ts";
+import { openCommentsPanel } from "../features/comments/comments.ts";
 
 await bootApp();
 after(closeApp);
@@ -36,6 +38,44 @@ test("app data: panel choices survive export and import", async () => {
   assert.equal(preferences().panelGrouping("broll"), "by-scene");
   assert.equal(preferences().panelGrouping("comments"), "by-scene");
   assert.equal(commentSorting.current(), "by-scene");
+  localStorage.clear();
+  commentSorting.choose("position");
+});
+
+test("app data: imported comments grouping preserves an existing legacy sort after restart", async () => {
+  localStorage.clear();
+  preferences().setCommentsSort("recent");
+  commentSorting.choose("recent");
+  await window.__appDataTest.importText(JSON.stringify({
+    format: "splitpage-app-data", version: 1, history: { docs: [], older: [] },
+    prefs: { panelGrouping: '{"comments":"by-scene"}' }
+  }));
+  assert.equal(commentSorting.current(), "recent");
+  assert.equal(preferences().panelGrouping("comments") ?? preferences().commentsSort(), "recent");
+  localStorage.clear();
+});
+
+test("app data: imported B-roll grouping applies when the panel is opened", async () => {
+  localStorage.clear();
+  brollView.setGroup("scene");
+  await window.__appDataTest.importText(JSON.stringify({
+    format: "splitpage-app-data", version: 1, history: { docs: [], older: [] },
+    prefs: { panelGrouping: '{"broll":"by-scene"}' }
+  }));
+  openBrollPanel();
+  assert.equal(window.__brollTest.view().group, "by-scene");
+  localStorage.clear();
+});
+
+test("app data: imported Comments grouping updates the sort control on open", async () => {
+  localStorage.clear();
+  commentSorting.choose("position");
+  await window.__appDataTest.importText(JSON.stringify({
+    format: "splitpage-app-data", version: 1, history: { docs: [], older: [] },
+    prefs: { panelGrouping: '{"comments":"by-scene"}' }
+  }));
+  openCommentsPanel();
+  assert.equal(document.getElementById("comments-sort").value, "by-scene");
   localStorage.clear();
   commentSorting.choose("position");
 });

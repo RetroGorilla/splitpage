@@ -33,6 +33,14 @@ test("panel grouping preferences persist independently across preference owners"
   assert.equal(restored.panelGrouping("gear"), null);
 });
 
+test("app data adds missing panel choices while preserving each local choice", () => {
+  const { prefs } = setup();
+  prefs.setPanelGrouping("comments", "recent");
+  assert.deepEqual(prefs.appDataImport({ panelGrouping: '{"broll":"by-scene","comments":"by-scene"}' }, []), ["panelGrouping"]);
+  assert.equal(prefs.panelGrouping("broll"), "by-scene");
+  assert.equal(prefs.panelGrouping("comments"), "recent");
+});
+
 test("the stored keys keep the 3.x names, and each key maps back to its preference", () => {
   const { prefs } = setup();
   assert.equal(prefs.nameOf("splitpage-autosave"), "autosave");
