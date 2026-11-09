@@ -69,7 +69,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Owner:** `src/application` (effect scheduler) · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** an application effect scheduler coalesces autosave, draft capture, history and expensive derivations (M3). Cached derivations use precise changed inputs (M6).
 - **Acceptance:** `67-render-perf.txt` passes. Application test with a fake clock: a burst of typing change sets inside the debounce window runs each derivation once. Met in 3.12 (#427).
-- **As built (M3):** the scheduler is `createEffectScheduler` in `src/application/session/effects.ts`. A command declares `derive` and `saveNow` and never fans out by hand; the refresh jobs coalesce in one 180 ms idle window capped at 1,000 ms ([session.md](session.md#4-the-effect-scheduler)). Legacy refresh callers reach the same window through `requestRefresh`. A legacy writer that calls `markDirty` still passes a whole-document change set and no reconciliation.
+- **As built (M3):** the scheduler is `createEffectScheduler` in `src/application/session/effects.ts`. A command declares `derive` and `saveNow` and never fans out by hand; the refresh jobs coalesce in one 180 ms idle window capped at 1,000 ms ([session.md](session.md#4-the-effect-scheduler)). Legacy refresh callers reach the same window through `requestRefresh`. A legacy writer calls the session's `noteEdit` with a whole-document change set and record reconciliation, but no anchor reconciliation or rollback of the original edit.
 
 ### INV-07 — A single-row change repaints one row
 
@@ -268,15 +268,15 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 - **Behaviour:** The join PIN, session token and launch token never enter `update-status.json`, the document or any file the static handler serves. Connection details are browser state, never `state`. On desktop, a server tab persists only `{kind, serverDocId, serverUrl, tunnel}`, and a token is held only in main's memory until the new tab boots.
 - **Tests:** partial.
-  - `desktop/test/smoke.mjs`: "no token and no PIN in desktop-state.json after the quit (invariant #29)"; "draft: no PIN, token or launch URL ever reaches disk".
-  - `src/test/connection.test.mjs`: "a tunnel is host and ports, and nothing that could carry a secret".
+  - `desktop/test/smoke.mjs`: `caseRestoreStoredServerTabs` checks that rewritten desktop state holds no server source, URL or token.
+  - `src/test/connection.test.mjs` and the former desktop smoke credential check were removed; no test holds the app connection half today. The rebuild is planned in [COLLABORATION-PLAN.md](../COLLABORATION-PLAN.md).
 
   No test covers `update-status.json` or statically served files.
 - **Owner:** `src/application` (the session keeps credentials out of serialised content), `server/`, `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: credentials never enter project exports or recovery metadata).
 - **Acceptance:** application test: serialising a session with a live server connection yields no token, PIN or key. New server test: after a join, no file under the static root contains the PIN or token.
 - **App-side part (connection details as browser state, the server transport, the authority model):** Retired 2026-10-28: feature removed. The app has no server connection any more. The desktop and server part (no PIN, session or launch token in `update-status.json`, `desktop-state.json`, a draft or a served file) still holds until the desktop and server removal.
-- **Milestone 4 (4.22):** held. `captureExportDocument` carries no connection, token, link key, handle or path (E15: `src/test/export-capture-app.test.mjs`, "a capture taken with a live connection and a file home holds no token, file name or handle"). A server transport holds a frozen copy of server and token for one operation and is never serialised (`src/test/server-transport.test.mjs`). The authority model reads connection facts and stores none (`src/test/collaboration-authority.test.mjs`). Still no test for `update-status.json` or statically served files. `docs/HANDOFF.md` §5.29 points here.
+- **Milestone 4 (4.22):** held. `captureExportDocument` carries no connection, token, link key, handle or path (E15: `src/test/export-capture-app.test.mjs`, "a capture taken with a file home holds no file name or handle"). The server transport and authority model tests (`src/test/server-transport.test.mjs`, `src/test/collaboration-authority.test.mjs`) were removed with the feature; no test holds those parts today. The rebuild is planned in [COLLABORATION-PLAN.md](../COLLABORATION-PLAN.md). Still no test for `update-status.json` or statically served files. `docs/HANDOFF.md` §5.29 points here.
 
 ### INV-30 — The setup wizard appears only over a pristine copy
 
@@ -338,6 +338,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
   - Save As, publish and detached recovery fork the id; open, restore and a same-id reopen do not.
   - A failed or cancelled Save As leaves both the id and the destination unchanged.
   - No history copy happens before the write is confirmed.
+- **As built:** desktop tab sources are now only `file` and `blank` (`normalizeTabSource` in `desktop/desktop-state.ts`); open-file deduplication uses the path.
 - **Milestone 4 (4.22):** done. `createTransitions` (`src/application/transitions/`, 4.8) is the one writer of `docId` for open, new, restore, recover and publish, and every app caller uses it (saving.md §3). The file writer forks the id only when the write landed and the save still owns its document (4.11), and the history copy runs after a landed write. Tests: `tests/application/transitions.test.ts` ("INV-36: …"), matrix T1, T2*, F1 to F3, F9 and C1 in `src/test/m4-matrix-*.test.mjs`. `docs/HANDOFF.md` §5.36 now points here.
 
 ### INV-37 — `sha256Hex` and `deriveDocId` are frozen
@@ -393,7 +394,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Owner:** `src/application` (restore and adoption policy), `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: restoration does not silently save a user file).
 - **Acceptance:** application test: adopting a restored draft leaves the destination's confirmed generation and baseline unchanged and schedules no save.
-- **Milestone 4 (4.22):** held, and now an application rule. A recovery settle arms no autosave (`createSessionEffects().save` in `src/application/save/session-effects.ts`, which skips `recovery` changes; the draft merge path also sets `noAutoSave` in `src/application/recovery/drafts.ts`), and the restores go through `transitions.restore` and `transitions.recover`, which leave the destination's confirmed generation and baseline as they were. Tests: matrix T5, T5-merge, T6, B8, B11 and K1 (`src/test/m4-matrix-*.test.mjs`), `tests/application/restore-policy.test.ts`. One behaviour change to know: "Undo merge" after a server conflict no longer autosaves a couple of seconds later. `docs/HANDOFF.md` §5.41 points here.
+- **Milestone 4 (4.22):** held, and now an application rule. A recovery settle arms no autosave (`createSessionEffects().save` in `src/application/save/session-effects.ts`, which skips `recovery` changes; the draft merge path also sets `noAutoSave` in `src/application/recovery/drafts.ts`), and the restores go through `transitions.restore` and `transitions.recover`, which leave the destination's confirmed generation and baseline as they were. Tests: matrix T5, T5-merge, T6, B8, B11 and K1 (`src/test/m4-matrix-*.test.mjs`), `tests/application/session-merge-owner.test.ts` ("history restore waits for its backup and keeps replacement, effects and autosave in order", "a refused backup preserves the live document; a forced local restore does not autosave"), replacing the removed `tests/application/restore-policy.test.ts`. "Undo merge" passes `local: false`; `restoreSnapshot` calls the autosave policy's `dueNow` for that history restore ([saving section 7](saving.md#7-restore-and-adoption-417-418)). `docs/HANDOFF.md` §5.41 points here.
 
 ### INV-42 — Main is the authority on tabs
 
@@ -495,11 +496,11 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Behaviour:** An image is uploaded and made durable before any record naming its sha is written, and `refsIn()` is always the list of what a record names.
   - **Server:** it refuses a document or comment that names missing blobs (422 `missing-blobs`). `acceptMissing` lets a document name a sha known to be lost for good; comments cannot use it. A pre-#82 client cannot save over a document that names blobs (426).
   - **Client:** history, drafts and app-data import await `persist()` before they write.
-- **Tests:** `tools/test-server.mjs` (`missing-blobs`, `acceptMissing`, `client-too-old`); `src/test/blob-store.test.mjs` ("persist resolves only once the backend has stored the bytes"); `src/test/blob-policy.test.mjs` (`refsIn`); browser `65-blobs.txt`, `26-desktop-drafts.txt`, `27-app-data.txt` (case 16).
+- **Tests:** server checks were removed with the collaboration server; no test holds this today for the server half. The rebuild is planned in [COLLABORATION-PLAN.md](../COLLABORATION-PLAN.md). Client: `src/test/blob-store.test.mjs` ("persist resolves only once the backend has stored the bytes"); `src/test/blob-policy.test.mjs` (`refsIn`); browser `65-blobs.txt`, `26-desktop-drafts.txt`, `27-app-data.txt` (case 16).
 - **Owner:** `src/application` (save coordinator: blob transfer before the write), `server/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (M4: one transport instance owns both the blob transfer and the write that follows).
 - **Acceptance:** M4 race matrix: when a blob upload fails or is cancelled, no record is written. The server checks are unchanged.
-- **Milestone 4 (4.22):** held. A hosted save builds one transport from the connection it captured and sends the blobs and the write through it (4.14); a failed or cancelled upload writes no record and keeps the document dirty (matrix S8), and a save that no longer owns its document sends nothing more (S3, S4-token, S6-reopen). `sendReviewWrites` still builds a transport from the live connection per comment (saving.md §8). `docs/HANDOFF.md` §5.52 points here.
+- **As built:** the collaboration server and its 422 `missing-blobs`, `acceptMissing` and 426 checks were removed. `server/server.ts` serves static files only; `tools/test-server.mjs` checks that `api/blobs/missing` is not served. The server half above remains a requirement for the rebuild in [COLLABORATION-PLAN.md](../COLLABORATION-PLAN.md).
 
 ### INV-53 — Every edit is recorded once; nothing else is recorded
 
@@ -520,7 +521,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
   - A user command advances the generation once and adds one undo entry.
   - A merge, a reload or a recovery adoption adds none.
   - A no-op command does not dirty the document, schedule a save or add an entry.
-- **As built (M3):** met by `document-session.test.ts` and each command's "E2" and "E3" tests. Seven edits are commands (scene length, scene status, typing, split, join, cut, paste); every other writer still ends in `markDirty()`, which the session takes as an edit of unknown extent (one generation, one undo record, a whole-document change set). Recovery that enters by assignment (the draft restores, history restore, a file import) is published as `adopt`, not `recovery`, so it opens an epoch and adds no generation or undo entry; naming it `recovery` would route it through `noteRemoteChange`, which keeps the undo stack, and 12a clears it today (E4, accepted by the coordinator). Undo and redo replay still write `S.state` outside the session; milestone 6 takes that ([session.md](session.md#8-known-gaps-and-exceptions)).
+- **As built (M3):** met by `document-session.test.ts` and each command's "E2" and "E3" tests. Seven edits are commands (scene length, scene status, typing, split, join, cut, paste); legacy writers call the session's `noteEdit`, taken as an edit of unknown extent (one generation, one undo record, a whole-document change set). Recovery that enters by assignment (the draft restores, history restore, a file import) is published as `adopt`, not `recovery`, so it opens an epoch and adds no generation or undo entry; naming it `recovery` would route it through `noteRemoteChange`, which keeps the undo stack, and 12a clears it today (E4, accepted by the coordinator). `startSessionBridge` routes undo and redo replay and amendments through the session; only `replayUnwired` bypasses it ([session.md](session.md#8-known-gaps-and-exceptions)).
 - **As built (M4, 4.7):** once the generation has advanced, a command is never rolled back. A throw in undo recording, an effect or a listener is reported, the change stays, and the command returns `committed` (D13, matrix cases E2a to E2c). The editor's colour (`personColors`) is written inside the command's transaction and declared; it is not an undo field, so it never becomes a step (`session-commit-app.test.mjs`).
 
 ### INV-54 — A b-roll key's id belongs to one line
@@ -625,7 +626,7 @@ Retired 2026-10-28: feature removed.
   - **Link key:** kept in the link and the tab (`splitpage-review-key`). It is stored on the device (`splitpage-invites`) only when the server reports `linksPersist: true`, and it leaves the address bar as soon as it is read.
   - **Link token:** the tab's alone. It never enters the owner's map.
   - **Excluded:** none of them ever enters `state`, a file, an export, the app-data bundle, `desktop-state.json`, a draft header, the browser draft store, or any URL other than the link itself.
-- **Tests:** browser `260-collaborate-local.txt`, `261-collaborate-links.txt`, `263-collaborate-guest.txt`, `43-review-mode.txt` (a LAN review key never reaches `localStorage`), `265-browser-drafts.txt` (no token or key in drafts), `18-connect.txt` (no credential-named storage keys); `src/test/collaborate.test.mjs` ("the link a guest arrives on: #invite= or #review=, taken out, the rest kept"); `tools/test-server.mjs`.
+- **Tests:** `src/test/collaborate.test.mjs` and browser suites `260-collaborate-local.txt`, `261-collaborate-links.txt` and `263-collaborate-guest.txt` were removed with the feature; no test holds this today. The rebuild is planned in [COLLABORATION-PLAN.md](../COLLABORATION-PLAN.md).
 - **Owner:** `src/application` (connection and authority) over browser storage adapters in `src/adapters/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: credentials and invitation fragments never enter exports or recovery metadata).
 - **Acceptance:** the suites pass after collaboration moves behind application interfaces. Application test: serialising any session to a project, export or recovery record yields no token or key.
