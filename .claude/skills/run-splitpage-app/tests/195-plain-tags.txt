@@ -219,7 +219,6 @@ expect cell(4).querySelectorAll('.tag-anchor').length == 0
 expect st(4).indexOf('plain-tag') === -1
 expect !/Prop: hat$/.test(st(4))
 
-# --- Tab: the open tag before the ghost ------------------------------------
 caret #rows .row:nth-of-type(1) .audio-cell .cell-editable
 press  a [zebra lamp]
 wait F.state().productionTags.some(function (t) { return t.name === 'zebra lamp'; })
@@ -238,16 +237,18 @@ press  VFX: glow [zeb
 wait document.getElementById('tag-ghost').classList.contains('is-visible')
 expect kw() == 1
 key Tab
-wait kw() == 0 && cell(5).querySelectorAll('.tag-anchor').length == 1
-expect JSON.stringify(tags(cell(5))) == ["vfx:glow [zeb"]
-expect cell(5).querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 0
+wait kw() == 1 && cell(5).querySelectorAll('.tag-anchor').length == 1
+expect JSON.stringify(tags(cell(5))) == ["prop:zebra lamp"]
+key Tab
+expect kw() == 0 && cell(5).querySelector('[data-tag-cat="vfx"] [data-tag-name="zebra lamp"]').textContent === 'zebra lamp'
+expect JSON.stringify(tags(cell(5))) == ["vfx:glow zebra lamp","prop:zebra lamp"]
 # with nothing open the ghost has Tab, as before (and the same quiet wait:
 # closing the tag can nudge the caret-follow scroll)
 wait performance.now() - window.__lastScroll > 400
 press  [zeb
 wait document.getElementById('tag-ghost').classList.contains('is-visible')
 key Tab
-wait cell(5).querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 1
+wait cell(5).querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 2
 
 # --- Tab: the open tag before the untagged-mention prompt -------------------
 caret #rows .row:nth-of-type(1) .audio-cell .cell-editable

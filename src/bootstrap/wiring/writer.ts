@@ -120,9 +120,15 @@ export function mountWriterRuntimeFeature() {
               hideTagGhost();
             },
             visualKeydown: (event, cell) => {
+              if (event.isComposing || event.keyCode === 229) return true;
               if (currentWhoList()?.keydown(event, cell)) return true;
               const plain = currentPlainTags();
+              if (event.key === "Escape" && tagGhost?.cellEl === cell) {
+                event.preventDefault(); event.stopPropagation(); hideTagGhost(); return true;
+              }
+              if (acceptGhostOnTab(event, tagGhost?.cellEl === cell, acceptTagGhost)) return true;
               if (plain?.isOpen(cell) && plainTagKeydown(event, plain, () => {})) return true;
+              if (event.key === "Escape" && plain?.finishEditing()) { event.preventDefault(); event.stopPropagation(); return true; }
               if (acceptGhostOnTab(event, tagGhost?.cellEl === cell, acceptTagGhost)) return true;
               return false;
             },

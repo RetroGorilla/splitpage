@@ -111,6 +111,7 @@ const RESOURCE_ROWS = {
     "#doc-title mouseenter/B", "window resize/B", "window scroll/B"
   ],
   cellReach: ["#rows mousedown/B"],
+  tagOccurrence: ["document mousedown/C", "document click/B", "document selectionchange/B"],
   prompterFocus: ["document focusin/B"],
   prompterMicrophone: ["#pp-mic change/B"],
   sceneControls: ["document pointerdown/C", "document pointercancel/B", "window blur/B", "document click/B", "document dragstart/C", "document dragover/C", "document drop/C", "document dragend/C", "document keydown/B"],

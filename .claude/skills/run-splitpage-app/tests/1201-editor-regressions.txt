@@ -1,0 +1,47 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.W=window.__writerFlowTest;var tag=function(cat,name,words){return '<span class="tag-anchor" data-tag-cat="'+cat+'" data-tag-name="'+name+'" contenteditable="false">'+words+'</span>';};var nested=tag('sound','Weather',tag('location','Park','rain on '+tag('prop','Umbrella','umbrella')+' roof'));F.openFile(new File([JSON.stringify({schema:5,title:'Editor regressions',paragraphsDecided:true,rows:Array.from({length:6},function(_,i){return {id:'r'+i,audioText:'Scene '+i,visualText:nested};}),comments:[]})],'regressions.splitpage'));true
+wait F.state().title === 'Editor regressions'
+eval window.rowCell=function(i){return document.querySelectorAll('#rows .visual-cell .cell-editable')[i];};window.openTag=function(cell,cat){var t=cell.querySelector('[data-tag-cat="'+cat+'"]');t.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));document.getElementById('tag-edit-action').click();return t;};window.pasteTag=function(cell,replace){var t=openTag(cell,'location');cell.focus();var r=document.createRange();if(replace)r.selectNodeContents(t);else{r.setStart(t.firstChild,8);r.collapse(true);}getSelection().removeAllRanges();getSelection().addRange(r);var d=new DataTransfer();d.setData('text/plain',replace?'new shelter':'big ');if(replace)d.setData('text/html','<b>new shelter</b>');cell.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:d}));return true;};window.stackKept=function(cell,words){return cell.querySelectorAll('[data-tag-cat="sound"]').length===1&&cell.querySelectorAll('[data-tag-cat="location"]').length===1&&cell.querySelector('[data-tag-cat="sound"] > [data-tag-cat="location"]').textContent===words&&cell.querySelector('[data-tag-editing]').dataset.tagCat==='location';};true
+eval pasteTag(rowCell(0),false)
+expect stackKept(rowCell(0),'rain on big umbrella roof')
+expect rowCell(0).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+expect F.state().rows[0].visualText.includes('rain on big ')
+key Escape
+eval pasteTag(rowCell(1),true)
+expect stackKept(rowCell(1),'new shelter')
+expect rowCell(1).querySelector('[data-tag-cat="location"] strong').textContent === 'new shelter'
+key Escape
+eval openTag(rowCell(4),'sound');rowCell(4).dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',isComposing:true,bubbles:true,cancelable:true}));true
+expect rowCell(4).querySelector('[data-tag-editing]').getAttribute('contenteditable') === 'true'
+eval rowCell(4).dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:229,bubbles:true,cancelable:true}));true
+expect rowCell(4).querySelector('[data-tag-editing]').getAttribute('contenteditable') === 'true'
+eval window.beforeDone=F.state().rows[4].visualText;document.getElementById('tag-edit-action').focus();true
+expect document.activeElement === document.getElementById('tag-edit-action') && rowCell(4).querySelector('[data-tag-editing]') !== null
+key Enter
+expect document.activeElement === rowCell(4)
+expect (function(){var r=getSelection().getRangeAt(0);return r.collapsed&&r.startContainer===rowCell(4)&&r.startOffset===1&&!rowCell(4).querySelector('[data-tag-editing]');})()
+expect rowCell(4).textContent.replace(/\u200b/g,'') === 'rain on umbrella roof' && F.state().rows[4].visualText === beforeDone
+click #btn-write
+wait W.on()
+eval W.openVisual('r2');window.v=function(){return document.querySelector('.wr-flow-visual-text');};pasteTag(v(),false)
+expect stackKept(v(),'rain on big umbrella roof')
+expect v().querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
+expect F.state().rows[2].visualText.includes('rain on big ')
+key Escape
+eval W.openVisual('r3');pasteTag(v(),true)
+expect stackKept(v(),'new shelter')
+expect v().querySelector('[data-tag-cat="location"] strong').textContent === 'new shelter'
+key Escape
+eval W.openVisual('r5');openTag(v(),'sound');window.writerComposingEscape=function(options){var cell=v();cell.addEventListener('keydown',function(event){event.stopPropagation();},{once:true});return cell.dispatchEvent(new KeyboardEvent('keydown',Object.assign({key:'Escape',bubbles:true,cancelable:true},options)));};writerComposingEscape({isComposing:true});true
+expect v().querySelector('[data-tag-editing]')?.getAttribute('contenteditable') === 'true' && !document.querySelector('.wr-flow-visual-box').hidden
+eval writerComposingEscape({keyCode:229});true
+expect v().querySelector('[data-tag-editing]')?.getAttribute('contenteditable') === 'true' && !document.querySelector('.wr-flow-visual-box').hidden
+eval document.getElementById('tag-edit-action').focus();true
+expect document.activeElement === document.getElementById('tag-edit-action') && v().querySelector('[data-tag-editing]') !== null
+key Enter
+expect document.activeElement === v()
+expect (function(){var r=getSelection().getRangeAt(0);return r.collapsed&&r.startContainer===v()&&r.startOffset===1&&!v().querySelector('[data-tag-editing]');})()
+expect v().textContent.replace(/\u200b/g,'') === 'rain on umbrella roof' && !v().querySelector('br')
+expect !document.querySelector('.wr-flow-visual-box').hidden
+quit

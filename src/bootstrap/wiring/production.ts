@@ -173,6 +173,7 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
     return mountTags({ window: window, ports: ports });
   }, function (owner) {
     return [
+      function () { return currentPlainTags()?.mountEditing() ?? (() => {}); },
       function () { return routeRootClick("tags-jump", function (e) { return owner.jumpClick(e); }); },
       function () { return routeRootClick("tags", function (e) { return owner.click(e); }); },
       function () { return routeRootMouseDown("tags-anchor", function (e) { owner.anchorMouseDown(e); return false; }); }

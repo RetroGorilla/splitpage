@@ -223,7 +223,9 @@ path edits combine with independent text and formatting edits. Competing
 path changes keep the other side's complete path and report a mark conflict
 through the existing review mechanism; they never invent a nesting order
 by unioning labels. Undo uses the same model comparison and three-way merge.
-Creation remains disabled in the UI until the consumer and interaction PRs.
+Bracket shortcuts can create inner labels while an outer keyword draft stays
+open. Edit tag temporarily opens one finished occurrence; Done protects it
+again. The temporary editing state is never part of the stored HTML.
 The model's `setMark(..., "tag", id)` validates every affected occurrence
 before writing: a complete contained occurrence stays beneath the new
 label, a selection inside a tag gets an inner label, and a crossing range
@@ -237,8 +239,8 @@ Undo and redo refuse a replay with competing tag paths, just as they refuse
 a text conflict. The entire entry is left unapplied, so later edits remain
 intact. This is the existing all-or-nothing refusal policy, not a merge that
 lets the undo target win the conflict.
-Panel readers retain their existing deepest-label projection until PR 2;
-registry healing and beat clipboard read every enclosing label directly.
+Occurrence readers, registry healing and beat clipboard read every
+enclosing label.
 `tests/core/text/before-nested-merge.ts` freezes the merge algorithm at `fa88f976`
 with only its import paths adjusted, for the seeded old-format differential.
 

@@ -4,24 +4,25 @@ eval (function(){ window.F=window.__splitpageFormats; window.U=window.__undoTest
 wait F.state().title === 'Mixed tag selections' && document.querySelectorAll('#rows .row').length === 6
 eval (function(){var c=cell(0);c.focus();var r=document.createRange();r.setStart(c.firstChild,8);r.setEndAfter(c.querySelector('.tag-anchor'));var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();window.steps=U.sizes().undo;return s.toString();})()
 click #rows .row:nth-of-type(1) .visual-cell button.tb-tag
-expect document.getElementById('tag-modal').hidden
-expect refusal()
-expect snap() === window.before && U.sizes().undo === window.steps
-expect cell(0).querySelectorAll('.tag-anchor').length === 1
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="sound"]
+expect cell(0).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]').textContent === 'umbrella'
+expect cell(0).querySelectorAll('.tag-anchor').length === 2
 eval (function(){var c=cell(1);c.focus();var r=document.createRange();r.setStartBefore(c.querySelector('.tag-anchor'));r.setEnd(c.lastChild,5);var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();window.steps=U.sizes().undo;return s.toString();})()
 click #rows .row:nth-of-type(2) .visual-cell button.tb-tag
-expect document.getElementById('tag-modal').hidden
-expect refusal()
-expect snap() === window.before && U.sizes().undo === window.steps
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="sound"]
+expect cell(1).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]').textContent === 'umbrella'
 eval (function(){var c=cell(2);c.focus();var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();window.steps=U.sizes().undo;return s.toString();})()
 click #rows .row:nth-of-type(3) .visual-cell button.tb-tag
-expect document.getElementById('tag-modal').hidden
-expect refusal()
-expect snap() === window.before && U.sizes().undo === window.steps
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="sound"]
+expect cell(2).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]').textContent === 'umbrella'
 eval (function(){var c=cell(3);c.focus();var r=document.createRange();r.selectNode(c.querySelector('.tag-anchor'));var s=getSelection();s.removeAllRanges();s.addRange(r);U.flush();window.before=snap();return s.toString();})()
 click #rows .row:nth-of-type(4) .visual-cell button.tb-tag
-expect document.getElementById('tag-modal').hidden && refusal()
-expect snap() === window.before
+wait document.querySelector('#rows [data-tags-open="true"]') !== null
+click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="sound"]
+expect cell(3).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]').textContent === 'umbrella'
 key ctrl KeyF
 wait !document.getElementById('findbar').hidden
 eval (function(){var input=document.getElementById('find-input');input.value='rain on the umbrella roof';input.dispatchEvent(new Event('input',{bubbles:true}));window.before=snap();return true;})()
@@ -36,7 +37,7 @@ eval (function(){var c=cell(3);c.focus();var r=document.createRange();r.setStart
 click #rows .row:nth-of-type(4) .visual-cell button.tb-tag
 wait document.querySelector('#rows [data-tags-open="true"]') !== null
 click #rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="sound"]
-expect cell(3).querySelectorAll('.tag-anchor').length === 2
+expect cell(3).querySelectorAll('.tag-anchor').length === 3
 expect cell(3).querySelector('[data-tag-cat="sound"]').textContent === 'rain'
 expect cell(3).querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
 caret #rows .row:nth-of-type(5) .visual-cell .cell-editable
@@ -50,10 +51,12 @@ expect kw() === 1
 key Tab
 expect cell(5).querySelector('.tag-anchor[data-tag-cat="vfx"]').textContent === 'glow [zeb'
 press  SFX: rain [umbrella]
-expect kw() === 0
+expect kw() === 1
 expect cell(5).querySelector('.tag-anchor[data-tag-cat="prop"]').textContent === 'umbrella'
 expect cell(5).querySelector('.tag-anchor[data-tag-cat="sound"]') === null
 expect st(5).includes('SFX: rain ')
+key Tab
+expect kw() === 0 && cell(5).querySelector('[data-tag-cat="sound"] [data-tag-cat="prop"]').textContent === 'umbrella'
 caret #rows .row:nth-of-type(1) .visual-cell .cell-editable start
 press SFX: drizzle
 key Tab

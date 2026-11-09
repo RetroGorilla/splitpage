@@ -1,5 +1,6 @@
 import { MEDIA_KEY, atomKey, unitKey } from "../../core/text/selection.ts";
 import type { Affinity, CellPoints } from "../../core/text/selection.ts";
+import { protectedTagAt } from "./dom.ts";
 
 interface DomPoint {
   readonly node: Node;
@@ -132,9 +133,9 @@ export function posToDom(cellEl: Node, pos: number): DomPoint {
     if (kind === "text") {
       if (pos <= p + len) {
         const parent = n.parentNode;
-        const tag = parent && isElement(parent) ? parent.closest(".tag-anchor") : null;
+        const tag = parent && isElement(parent) ? protectedTagAt(parent) : null;
         if (tag && cellEl.contains(tag)) {
-          result = pos === p && tag.firstChild === n ? before(tag) : after(tag);
+          result = pos === posBefore(cellEl, tag) ? before(tag) : after(tag);
           return true;
         }
         const raw = n.nodeValue || "";

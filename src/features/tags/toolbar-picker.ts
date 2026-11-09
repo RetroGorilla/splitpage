@@ -7,7 +7,7 @@ const SYNTAX: Readonly<Record<string, string>> = {
 };
 
 export function showToolbarTagPicker(cell: HTMLElement, choose: (cat: string) => void, cancel: (restore: boolean) => void): (() => void) | null {
-  const toolbar = cell.closest(".field-wrap")?.querySelector<HTMLElement>(".mini-toolbar");
+  const toolbar = cell.closest(".field-wrap, .wr-flow-visual-box")?.querySelector<HTMLElement>(".mini-toolbar");
   const trigger = toolbar?.querySelector<HTMLButtonElement>(".tb-tag");
   if (!toolbar || !trigger) return null;
   const doc = cell.ownerDocument;
@@ -37,6 +37,15 @@ export function showToolbarTagPicker(cell: HTMLElement, choose: (cat: string) =>
   toolbar.removeAttribute("data-tags-below");
   const chromeBottom = doc.querySelector(".topbar")?.getBoundingClientRect().bottom || 0;
   if (panel.getBoundingClientRect().top < Math.max(8, chromeBottom + 4)) toolbar.setAttribute("data-tags-below", "");
+  if (cell.closest(".wr-flow-visual-box")) {
+    const rect = trigger.getBoundingClientRect();
+    panel.style.position = "fixed";
+    panel.style.bottom = "auto";
+    panel.style.right = "auto";
+    panel.style.width = Math.min(340, win.innerWidth - 16) + "px";
+    panel.style.left = Math.max(8, Math.min(rect.left, win.innerWidth - panel.offsetWidth - 8)) + "px";
+    panel.style.top = Math.max(8, Math.min(rect.bottom + 4, win.innerHeight - panel.offsetHeight - 8)) + "px";
+  }
   panel.getBoundingClientRect();
   toolbar.setAttribute("data-tags-open", "true");
   life.listen(panel, "pointerdown", event => { event.preventDefault(); });

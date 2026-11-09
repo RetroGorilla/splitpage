@@ -3,6 +3,7 @@ import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
+import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts";
 import type { ProductionSelection } from "../../application/editing/production-selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
@@ -28,6 +29,7 @@ export interface TagPanelMount extends TagPanelCommands {
 }
 
 export interface PlainTagPorts {
+  readonly panels: Pick<SidePanels, "close">;
   readonly document: Pick<DocumentReader, "current">;
   readonly cells: Pick<CellEditing<Element>, "edit" | "open">;
   readonly undo: Pick<UndoControl, "breakCoalescing">;
@@ -37,12 +39,14 @@ export interface PlainTagPorts {
 export type TagCaretRefusal = "audio" | "link" | "tag" | "tag-selection" | "open" | "elsewhere";
 
 export interface PlainTagControl {
+  readonly mountEditing: () => () => void;
   readonly openCategoryAtCaret: (cellEl: HTMLElement, marks: Marks) => TagCaretRefusal | null;
   readonly chooseCategory: (cat: string | null) => boolean;
   readonly cancelCategory: () => boolean;
   readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
   readonly refresh: () => void;
-  readonly beforeWrite: (cellEl: Element) => (() => void) | null;
+  readonly beforeWrite: (cellEl: Element) => ((selection?: CellRange | null) => void) | null;
+  readonly finishEditing: () => boolean;
   readonly noteInput: (cellEl: Element) => void;
   readonly cancel: () => void;
   readonly close: () => boolean;

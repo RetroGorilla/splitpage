@@ -3,17 +3,19 @@ import type { TagCategoryLook } from "../../core/production/looks.ts";
 import { isBlankTagName } from "../../core/production/tags.ts";
 import { domToPos, posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
-import { isInsideTagOrLink } from "../common/dom.ts";
+import { isInsideProtectedTagOrLink as isInsideTagOrLink } from "../common/dom.ts";
 import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
-import { deleteRange, insertText, marksAt, replaceText, setMark, typingMarks } from "../../core/text/edits.ts";
+import { deleteRange, insertText, marksAt, replaceText, setMark, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
-import { FORMAT_MARKS, namedTagId, projection } from "../../core/text/runs.ts";
+import { FORMAT_MARKS, namedTagId, projection, tagStack, withTagStack } from "../../core/text/runs.ts";
 import { registryCompletion, registryCompletionOf, registryEntryOf } from "../../core/production/records.ts";
 import type { RegistryCompletion } from "../../core/production/records.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import type { TagCategoryId } from "../../core/document/tags.ts";
 import type { PlainTagMount, PlainTagPorts, TagCaretRefusal } from "./ports.ts";
 import { showToolbarTagPicker } from "./toolbar-picker.ts";
+import { createTagOccurrenceEditor } from "./occurrence-editor.ts";
+import type { CellRange } from "../../application/editing/cell-editing.ts";
 
 export const PLAIN_TAG_KEYWORDS: Record<string, TagCategoryId> = {
   prop: "prop",
@@ -95,6 +97,7 @@ interface SilentTag {
 
 let ports: PlainTagPorts | null = null;
 let open: OpenPlainTag | null = null;
+let occurrence: ReturnType<typeof createTagOccurrenceEditor> | null = null;
 const HL_PREFIX = "splitpage-open-tag-";
 
 function tagPorts(): PlainTagPorts {
@@ -114,8 +117,9 @@ let categoryCaret: TagCaretSnapshot | null = null;
 let closeCategoryPicker: (() => void) | null = null;
 
 function tagCaret(cellEl: Element): Range | TagCaretRefusal {
-  if (cellEl.getAttribute("data-field") === "audioText") return "audio";
-  if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows")) return "elsewhere";
+  const field = cellEl.getAttribute("data-field");
+  if (field === "audioText" && window.getSelection()?.isCollapsed !== false) return "audio";
+  if ((field !== "visualText" && field !== "audioText") || !cellEl.closest("#rows, .wr-flow-visual-box")) return "elsewhere";
   if (plainTagOpen()) return "open";
   const sel = window.getSelection();
   if (!sel?.rangeCount) return "elsewhere";
@@ -123,10 +127,17 @@ function tagCaret(cellEl: Element): Range | TagCaretRefusal {
   const node = range.startContainer;
   if (!cellEl.contains(node) || !cellEl.contains(range.endContainer)) return "elsewhere";
   const element = node.nodeType === 1 ? node as Element : node.parentElement;
-  if (element?.closest(".tag-anchor")) return "tag";
+  if (isInsideTagOrLink(element) && !element?.closest("a")) return "tag";
   if (element?.closest("a")) return "link";
   if (!range.collapsed) {
-    if (Array.from(cellEl.querySelectorAll(".tag-anchor")).some(tag => range.intersectsNode(tag))) return "tag-selection";
+    const selection = cellSelection(cellEl);
+    if (selection) {
+      const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(cellEl.innerHTML));
+      const existing = new Set(cell.flatMap(run => tagStack(run.marks)));
+      let probe = namedTagId("prop", "selection probe");
+      while (existing.has(probe)) probe += "x";
+      if (toHtml(setMark(cell, selection.from, selection.to, "tag", probe)) === toHtml(cell)) return "tag-selection";
+    }
     if (Array.from(cellEl.querySelectorAll("a")).some(link => range.intersectsNode(link))) return "link";
   }
   return domToPos(cellEl, node, range.startOffset) === null ? "elsewhere" : range;
@@ -220,6 +231,20 @@ function openSilentTag(saved: TagCaretSnapshot, cat: TagCategoryId, keyword: str
   paint(open);
 }
 
+function labelSelection(cellEl: Element, cell: readonly Run[], from: number, to: number, id: string): Run[] {
+  const opened = cellEl.querySelector("[data-tag-editing]");
+  if (!opened || domToPos(cellEl, opened, 0) !== from || domToPos(cellEl, opened, opened.childNodes.length) !== to) {
+    return setMark(cell, from, to, "tag", id);
+  }
+  const path: string[] = [];
+  for (let tag: Element | null = opened; tag; tag = tag.parentElement?.closest(".tag-anchor") ?? null) {
+    path.unshift(namedTagId(tag.getAttribute("data-tag-cat") as string, tag.getAttribute("data-tag-name") as string));
+  }
+  // why: the temporary boundary keeps an equal-extent label inside the opened occurrence using model containment
+  const bounded = insertText(cell, from, " ", withTagStack(marksAt(cell, from + 1), path));
+  return deleteRange(setMark(bounded, from + 1, to + 1, "tag", id), from, from + 1);
+}
+
 function chooseCategory(cat: string | null): boolean {
   const saved = categoryCaret;
   if (!saved) return false;
@@ -235,7 +260,7 @@ function chooseCategory(cat: string | null): boolean {
       if (!phrase) return null;
       const name = registryEntryOf(tagPorts().document.current(), look.id, phrase.name)?.name || phrase.name;
       return {
-        cell: setMark(cell, selection.from + phrase.lead, selection.to - phrase.trail, "tag", namedTagId(look.id, name)),
+        cell: labelSelection(saved.cellEl, cell, selection.from + phrase.lead, selection.to - phrase.trail, namedTagId(look.id, name)),
         sel: { from: selection.to, to: selection.to }, records: { tags: [{ cat: look.id, name }] }
       };
     });
@@ -305,7 +330,7 @@ function stillThere(o: OpenPlainTag) {
 }
 
 function caretInOpen(o: OpenPlainTag) {
-  if (document.activeElement !== o.cellEl) return null;
+  if (document.activeElement !== o.cellEl && !o.cellEl.contains(document.activeElement)) return null;
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount || !sel.isCollapsed) return null;
   const r = sel.getRangeAt(0);
@@ -324,7 +349,7 @@ function notePlainTagInput(cellEl: Element): void {
   tagPorts().undo.breakCoalescing();
 }
 
-function beforePlainTagWrite(cellEl: Element): (() => void) | null {
+function restorePlainTag(cellEl: Element): (() => void) | null {
   const o = open;
   if (!o || o.cellEl !== cellEl || !stillThere(o) || caretInOpen(o) === null) return null;
   const from = domToPos(cellEl, o.span, 0);
@@ -335,7 +360,7 @@ function beforePlainTagWrite(cellEl: Element): (() => void) | null {
     const sel = cellSelection(cellEl);
     const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(cellEl.innerHTML));
     const start = from + width;
-    if (!sel || sel.from !== sel.to || sel.from < start || existingPlainTagEnd(cell, start) < sel.to ||
+    if (!sel || sel.from !== sel.to || sel.from < start || existingPlainTagEnd(cell, start, true) < sel.to ||
       (!o.silent && projection(cell).slice(from, start) !== o.keyword)) {
       cancelPlainTag();
       return;
@@ -351,6 +376,17 @@ function beforePlainTagWrite(cellEl: Element): (() => void) | null {
     if (o.silent) { o.silent.pending = false; o.silent.wrappers = []; }
     setCellSelection(cellEl, sel.from, sel.to);
     paint(o);
+  };
+}
+
+function beforePlainTagWrite(cellEl: Element): ((selection?: CellRange | null) => void) | null {
+  const restoreOccurrence = occurrence?.beforeWrite(cellEl);
+  const restoreDraft = restorePlainTag(cellEl);
+  if (!restoreOccurrence && !restoreDraft) return null;
+  return selection => {
+    restoreOccurrence?.();
+    if (selection) setCellSelection(cellEl, selection.from, selection.to);
+    restoreDraft?.();
   };
 }
 
@@ -389,7 +425,7 @@ function paint(o: OpenPlainTag) {
   const starter = starterEl();
   const starterRect = starter && caret && !typed.trim() ? caret.getClientRects()[0] : undefined;
   const starterFont = starterRect ? window.getComputedStyle(o.cellEl).font : "";
-  const suggestion = caret ? suggestionFor(o, typed) : null;
+  const suggestion = caret && !completedInnerTag(o, caret) ? suggestionFor(o, typed) : null;
   o.suggestion = suggestion;
   const el = hintEl();
   const ghost = ghostEl();
@@ -473,6 +509,7 @@ export function cancelPlainTag() {
 }
 
 export function refreshPlainTag() {
+  occurrence?.refresh();
   const o = open;
   if (!o) return;
   if (!stillThere(o)) { open = null; clearPaint(); return; }
@@ -550,25 +587,32 @@ function onPlainTagged(listener: () => void) {
   };
 }
 
-function plainTagBoundaryMarks(marks: Marks) {
+function plainTagBoundaryMarks(marks: Marks, nested = false) {
   const visual: readonly string[] = FORMAT_MARKS;
-  return JSON.stringify(Object.keys(marks).filter(name => !visual.includes(name)).sort()
+  return JSON.stringify(Object.keys(marks).filter(name => !visual.includes(name) && (!nested || (name !== "tag" && name !== "innerTags"))).sort()
     .map(name => [name, marks[name as keyof Marks]]));
 }
 
-function existingPlainTagEnd(cell: readonly Run[], from: number) {
-  const boundary = plainTagBoundaryMarks(marksAt(cell, from));
+function existingPlainTagEnd(cell: readonly Run[], from: number, nested = false) {
+  const boundary = plainTagBoundaryMarks(marksAt(cell, from), nested);
   let pos = 0;
   for (const run of cell) {
     const end = pos + (run.atom ? 1 : run.text.length);
     if (end <= from) { pos = end; continue; }
-    if (run.atom || run.marks.tag || run.marks.href) return Math.max(from, pos);
-    if (plainTagBoundaryMarks(run.marks) !== boundary) return Math.max(from, pos);
+    if (run.atom || (!nested && run.marks.tag) || run.marks.href) return Math.max(from, pos);
+    if (plainTagBoundaryMarks(run.marks, nested) !== boundary) return Math.max(from, pos);
     const lineEnd = run.text.indexOf("\n", Math.max(0, from - pos));
     if (lineEnd !== -1) return pos + lineEnd;
     pos = end;
   }
   return pos;
+}
+
+function completedInnerTag(o: OpenPlainTag, caret: Range): boolean {
+  const range = document.createRange();
+  range.setStartAfter(o.span);
+  range.setEnd(caret.startContainer, caret.startOffset);
+  return Array.from(o.cellEl.querySelectorAll(".tag-anchor")).some(tag => range.intersectsNode(tag) && !tag.contains(o.span));
 }
 
 export function closePlainTag() {
@@ -579,7 +623,7 @@ export function closePlainTag() {
   let to = at === null || start === null ? null : start + at - 1;
   const html = tagPorts().text.storedHtmlFromDom(o.cellEl.innerHTML.replace(ZWSP_RE, ""));
   const current = tagPorts().text.fromHtml(html, { media: true });
-  if (start !== null && to !== null && existingPlainTagEnd(current, start) < to) {
+  if (start !== null && to !== null && existingPlainTagEnd(current, start, true) < to) {
     cancelPlainTag();
     return true;
   }
@@ -591,7 +635,9 @@ export function closePlainTag() {
   }
   const phrase = at === null ? null : plainTagPhrase(typed);
   if (!phrase) { cancelPlainTag(); return true; }
-  const shown = o.suggestion;
+  const baseDepth = start === null ? 0 : tagStack(marksAt(current, start)).length;
+  const nested = start !== null && to !== null && sliceCell(current, start, to).some(run => tagStack(run.marks).length > baseDepth);
+  const shown = nested ? null : o.suggestion;
   const accepted = shown ? registryCompletionOf(tagPorts().document.current(), o.cat, typed, shown.name) : null;
   // why: the shown record is gone or no longer matches; show what is there now
   if (shown && !accepted) { paint(o); return true; }
@@ -623,12 +669,31 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
   ports = given;
   let disposed = false;
   return {
+    mountEditing: () => {
+      occurrence?.dispose();
+      const editor = createTagOccurrenceEditor(cell => {
+        const selection = cellSelection(cell);
+        const model = given.text.fromHtml(given.text.storedHtmlFromDom(cell.innerHTML));
+        openCategoryAtCaret(cell, selection ? marksAt(model, selection.from) : {});
+      }, () => { if (plainTagOpen()) closePlainTag(); given.undo.breakCoalescing(); }, () => {
+        given.undo.breakCoalescing();
+        given.panels.close("production-panel");
+      });
+      occurrence = editor;
+      return () => {
+        cancelCategory(false);
+        cancelPlainTag();
+        editor.dispose();
+        if (occurrence === editor) occurrence = null;
+      };
+    },
     openCategoryAtCaret,
     chooseCategory,
     cancelCategory,
     maybeOpen: maybeOpenPlainTag,
     refresh: refreshPlainTag,
     beforeWrite: beforePlainTagWrite,
+    finishEditing: () => occurrence?.finish() ?? false,
     noteInput: notePlainTagInput,
     cancel: cancelPlainTag,
     close: closePlainTag,
@@ -642,6 +707,8 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
       disposed = true;
       cancelCategory();
       cancelPlainTag();
+      occurrence?.dispose();
+      occurrence = null;
       ports = null;
     }
   };

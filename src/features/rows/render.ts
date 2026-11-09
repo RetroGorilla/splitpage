@@ -1232,7 +1232,8 @@ export function handleToolbarCmd(btn: Element, cellOverride?: HTMLElement, wrapO
   }
   if (cmd === "tag") {
     const tsel = window.getSelection() as Selection;
-    if (tsel.rangeCount && (tsel.isCollapsed || cellEl.getAttribute("data-field") === "visualText") && rangeInside(tsel.getRangeAt(0), cellEl)) {
+    const includesTag = tsel.rangeCount && Array.from(cellEl.querySelectorAll(".tag-anchor")).some(tag => tsel.getRangeAt(0).intersectsNode(tag));
+    if (tsel.rangeCount && (tsel.isCollapsed || cellEl.getAttribute("data-field") === "visualText" || includesTag) && rangeInside(tsel.getRangeAt(0), cellEl)) {
       const selection = cellSelection(cellEl);
       const cell = ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML));
       ports.actions.invoke("tag-selection", "button", {

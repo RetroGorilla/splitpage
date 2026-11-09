@@ -581,7 +581,7 @@ test("typing a keyword right after a word still starts no tag", () => {
 for (const [label, html, target, offset, audio, message] of [
   ["Audio", "", null, 0, true, /Visual column/],
   ["a link", '<a href="https://example.com">Link</a>', "a", 0, false, /inside a link/],
-  ["a tag", '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp">Lamp</span>', ".tag-anchor", 0, false, /inside another tag/]
+  ["a tag", '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp">Lamp</span>', ".tag-anchor", 0, false, /Select the tag and choose Edit tag first\./]
 ]) {
   test(`Tag still refuses a collapsed caret in ${label} and says why`, () => {
     const h = fixture(html, "Audio ");

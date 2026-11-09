@@ -8,6 +8,12 @@
     box-decoration-break: clone;
   }
   .tag-anchor { cursor: pointer; }
+  .tag-anchor:has(.tag-anchor) { outline: 1px solid var(--tag-color); outline-offset: 2px; }
+  .tag-anchor .tag-anchor { background: var(--tag-tint); }
+  .tag-anchor[data-tag-editing] { cursor: text; outline: 1px dashed var(--tag-color); outline-offset: 2px; }
+  .tag-suggest.tag-edit-action { z-index: 149; min-width: 80px; justify-content: center; }
+  .tag-edit-action[hidden] { display: flex; visibility: hidden; pointer-events: none; }
+  .wr-flow-visual-heading .mini-toolbar { display: flex; position: relative; opacity: 1; pointer-events: auto; transform: none; }
   .tag-anchor:hover { background: color-mix(in srgb, var(--tag-color, var(--visual)) 22%, var(--tag-tint, transparent)); }
   .tag-sample[data-tag-cat="prop"],     .tag-anchor[data-tag-cat="prop"]     { --tag-color: var(--tag-prop);     --tag-tint: var(--tag-prop-tint); }
   .tag-sample[data-tag-cat="location"], .tag-anchor[data-tag-cat="location"] { --tag-color: var(--tag-location); --tag-tint: var(--tag-location-tint); }
@@ -69,17 +75,17 @@
   }
   .tag-toolbar-hint code, .tag-toolbar-hint kbd { color: var(--text); font: 11px/16px var(--font-display); }
   .tag-toolbar-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 3px; }
-  #rows .mini-toolbar button.tag-toolbar-choice {
+  :is(#rows, .wr-flow-visual-box) .mini-toolbar button.tag-toolbar-choice {
     width: auto; height: auto; min-height: 38px; padding: 4px 6px;
     flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
     border: 0; background: transparent; color: var(--text); font: 11px/16px var(--font-body);
   }
-  #rows .mini-toolbar button.tag-toolbar-choice:hover { background: var(--surface); }
+  :is(#rows, .wr-flow-visual-box) .mini-toolbar button.tag-toolbar-choice:hover { background: var(--surface); }
   .tag-toolbar-label { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
   .tag-toolbar-label .tag-cat-dot { width: 4px; height: 4px; }
   .tag-toolbar-choice code { color: var(--text-faint); font: 11px/14px var(--font-display); }
   @media (pointer: coarse) {
-    #rows .mini-toolbar button.tag-toolbar-choice { min-height: 44px; }
+    :is(#rows, .wr-flow-visual-box) .mini-toolbar button.tag-toolbar-choice { min-height: 44px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .tag-toolbar-picker, [data-tags-open="true"] > .tag-toolbar-picker { transition: none; }

@@ -1,3 +1,6 @@
+import { protectedTagAt } from "./dom.ts";
+import { domToPos } from "./cell-dom.ts";
+
 export function caretTextOffset(el: Element): number {
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount) return 0;
@@ -20,9 +23,9 @@ export function placeCaretAtTextOffset(el: Element, offset: number): void {
   }
   const range = document.createRange();
   const parent = target ? target.parentNode as Element | null : null;
-  const atomic = parent && parent.closest ? parent.closest(".tag-anchor") : null;
+  const atomic = protectedTagAt(parent);
   if (target && atomic) {
-    if (targetOffset <= 0 && target === atomic.firstChild) {
+    if (domToPos(el, target, targetOffset) === domToPos(el, atomic, 0)) {
       range.setStartBefore(atomic);
     } else {
       range.setStartAfter(atomic);

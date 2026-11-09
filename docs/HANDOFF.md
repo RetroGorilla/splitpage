@@ -285,12 +285,14 @@ field must be added in **two** places: `migrateRows()` and `mergeStates()`'s
 merge literal — missing from the latter, it's silently destroyed on every
 merge (happened to `people` and `productionTags`).
 
-### 3.3 Tags are atomic
+### 3.3 Finished tags are protected
 
-`.tag-anchor` spans carry `contenteditable="false"` (`walkSanitize()`), so
-the caret can't enter one and typing/backspace can't corrupt its
-`data-tag-name`. Anything mutating text must skip `.tag-anchor` content
-(in the document model a tag is one atom, so no DOM walk is needed: [INV-03](architecture/invariants.md)).
+Canonical `.tag-anchor` spans carry `contenteditable="false"`. Edit tag
+temporarily opens one occurrence so its words can be selected, edited and
+given fully contained inner labels; Done protects it again. The model
+stores ordered enclosing tag marks, and the temporary editing state never
+enters saved HTML. Other text operations retain their tag protection rules:
+[INV-03](architecture/invariants.md).
 
 ### 3.4 Tags are derived; the *registry* is not
 

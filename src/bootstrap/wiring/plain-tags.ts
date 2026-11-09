@@ -4,12 +4,13 @@ import { owned } from "../../features/routing/owned.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { cells as portCells, undoControl } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
+import { panelControl } from "./ports/panels.ts";
 
 const plainTags = owned<PlainTagMount>();
 
 export function mountPlainTagsFeature(): PlainTagMount {
   return plainTags.replace(() => {
-    const ports: PlainTagPorts = { document: portDocument, cells: portCells, undo: undoControl, text: portText };
+    const ports: PlainTagPorts = { document: portDocument, cells: portCells, undo: undoControl, text: portText, panels: panelControl };
     return mountPlainTags(ports);
   });
 }

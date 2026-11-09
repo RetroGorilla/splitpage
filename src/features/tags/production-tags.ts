@@ -18,7 +18,7 @@ type TagReadonlyArgs<A extends readonly unknown[]> = { [K in keyof A]: DeepReado
 type TagProductionRead<K extends "entries" | "current" | "recordsPlan"> =
   (...args: TagReadonlyArgs<Parameters<TagProductionOwner[K]>>) => ReturnType<TagProductionOwner[K]>;
 import { plainTagOpen } from "./plain-tags.ts";
-import { isInsideTagOrLink } from "../common/dom.ts";
+import { isInsideProtectedTagOrLink, isInsideTagOrLink } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { domToPos } from "../common/cell-dom.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
@@ -33,7 +33,7 @@ import {
   tagFieldOccurrences as tagFieldOccurrencesWith,
   tagOccurrences
 } from "../../core/production/tags.ts";
-import { replaceWithTag } from "../../core/text/edits.ts";
+import { deleteRange, replaceText, replaceWithTag, setMark } from "../../core/text/edits.ts";
 import { namedTagId, projection } from "../../core/text/runs.ts";
 import { changeSet } from "../../application/session/change-set.ts";
 import { addPersonCommand, registerTagCommand, tagCellsCommand } from "../../application/commands/production-records.ts";
@@ -200,7 +200,7 @@ export function maybeAutoTagShortcut(e: { inputType?: string; data?: string | nu
   const node = range.startContainer as Text;
   const offset = range.startOffset;
   if (node.nodeType !== 3 || offset < 2 || node.data[offset - 1] !== rule.close) return;
-  if (isInsideTagOrLink(node.parentNode as Element | null)) return;
+  if (isInsideProtectedTagOrLink(node.parentNode as Element | null)) return;
 
   const openAt = node.data.lastIndexOf(rule.open, offset - 2);
   if (openAt === -1) return;
@@ -218,7 +218,13 @@ function tagTextRange(cellEl: Element, node: Text, a: number, b: number, text: s
     const from = domToPos(cellEl, node, a), to = domToPos(cellEl, node, b);
     if (from === null || to === null) return null;
     if (projection(cell).slice(from, to) !== node.data.slice(a, b).replace(/\u200B/g, "")) return null;
-    const r = replaceWithTag(cell, from, to, text, namedTagId(cat, name));
+    const id = namedTagId(cat, name);
+    const reopened = (node.parentElement as Element | null)?.closest("[data-tag-editing]");
+    const filled = reopened ? replaceText(cell, from + 1, to, text) : null;
+    const r = filled ? {
+      cell: deleteRange(setMark(filled, from + 1, from + 1 + text.length, "tag", id), from, from + 1),
+      end: from + text.length
+    } : replaceWithTag(cell, from, to, text, id);
     return { cell: r.cell, sel: { from: r.end, to: r.end }, records: { tags: [{ cat: cat, name: name }] } };
   });
 }
@@ -260,7 +266,7 @@ export function updateTagGhost(cellEl: Element) {
   const node = range.startContainer as Text;
   const offset = range.startOffset;
   if (node.nodeType !== 3 || !cellEl.contains(node)) return;
-  if (isInsideTagOrLink(node.parentNode as Element | null)) return;
+  if (isInsideProtectedTagOrLink(node.parentNode as Element | null)) return;
 
   let rule: TagShortcut | null = null, openAt = -1;
   TAG_SHORTCUTS.forEach(function (r) {
