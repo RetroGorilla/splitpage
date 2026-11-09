@@ -74,7 +74,7 @@ The expected result is fixed; what delivers it is not. Each is settled inside th
 
 | Open | Trace | In 8 |
 | --- | --- | --- |
-| A status that keeps the highest rank under concurrent changes and still allows a reset | T06, T21 | A-H12 |
+| A status that stays as it was when two people change it to different values at the same time, and stays there when one of them undoes | T21, PROJ | A-H12 |
 | Undo that stops when its step changed nothing, including a join another person rewrote | T06, T12, T21 | U-H1 |
 | An id for the later of two b-roll keys that share one | PROJ | A-H13 |
 | Where a comment with no marked words keeps its row and field | T11 | PROJ-detached |
@@ -90,33 +90,35 @@ Decided on 2026-11-09:
 - A comment whose words are all deleted goes to recovery.
 - Replies show oldest first; replies posted at the same time are ordered by their id.
 - A comment and its replies belong to their author. Only the author edits their text.
+- Status of a beat, tag or shot: two changes made at the same time to different values leave the status as it was before both. The person who wants the change makes it again. Two changes to the same value apply. The standalone file merge keeps its own rule.
+- One person resolves a comment while another reopens it: the later of the two wins.
+- Two people press Enter at the same point: both breaks show, leaving an empty beat.
+- An edit to a beat someone else removed goes to recovery, not into a neighbouring beat.
+- Each person undoes only their own changes. Someone else's work is removed by hand or brought back from recovery.
+- Cutting beats and pasting them elsewhere stays two commands; other people see the beats gone in between.
+- The collaboration code ships in every build and export (115,589 bytes minified, 33,176 gzip, about 6.2% of `index.html`).
 
 Assumed until decided. Every trace above is written to the assumption, so a different answer changes one expected result, not the design.
 
 | # | Question | Assumed | Source |
 | --- | --- | --- | --- |
-| 1 | One person sets a beat, tag or shot back to To do while another marks it Filmed | The highest status wins; stepping back is an explicit reset that wins only over changes it has seen | 2, 8 |
-| 2 | One person resolves a comment while another reopens it | The later of the two wins | 2 |
-| 3 | Two people press Enter at the same point | Both breaks show, leaving an empty beat | 8 |
-| 4 | Someone types exactly where another person splits a beat | The text lands on one side, the same side on every device | 8 |
-| 5 | An edit to a beat someone else removed | It goes to recovery, not into a neighbouring beat | 8 |
-| 6 | A beat is split by one person after another removed it | Both parts stay removed | 8 |
-| 7 | Two tags cross after merging | The tag that starts later is shown untagged and listed in recovery | 8 |
-| 8 | A reply to a comment whose creation was undone | Kept in recovery | 8 |
-| 9 | Undo when another person made the same change | Nothing visible changes, the step is used up, a short notice says so | 8 |
-| 10 | Edit stamps | A beat's "last edited" updates once per typing group; the script's revision and last editor are written only on export | 8 |
-| 11 | A scene left with no beats; a script left with none | The scene is listed in recovery; the empty script waits for the first keystroke | 8 |
-| 12 | A scene name longer than 200 characters after merging | Shown in full with a notice; it cannot grow further | 8 |
-| 13 | Two b-roll keys with one id after merging | The later key is unanchored in the shot list until reassigned | 8 |
-| 14 | An owner assigned to a person someone else removed | The assignment is kept as text; the person is listed in recovery | 8 |
-| 15 | A comment is two undo steps today (the highlight, then the text on Post) | Kept as two | 1 |
-| 16 | Cutting beats and pasting them elsewhere: other people see the beats gone in between | Kept as two commands | 1 |
-| 17 | The same author edits one comment on two devices while a draft box is open | The open box is kept and its Save replaces the text | 5 |
-| 18 | Is the local replica part of app-data export? | No; people export a Standalone copy | 6 |
-| 19 | Ship the collaboration code in every build and export (115,589 bytes minified, 33,176 gzip, about 6.2% of `index.html`), or load a second script for shared sessions only | Not decided; Stage 1 measures inside a scratch bundle | 6 |
-| 20 | Wording shown when the server refuses an update | Written with the rest of the status wording | 8 |
-| 21 | The limits a person feels: time to join a large script and time until "saved to server" | The provisional limits in 7, section 7 | 7 |
-| 22 | The server half of INV-52, if the pending-image design is chosen | No decision until Stage 1 picks an image design | 5 |
+| 1 | Someone types exactly where another person splits a beat | The text lands on one side, the same side on every device | 8 |
+| 2 | A beat is split by one person after another removed it | Both parts stay removed | 8 |
+| 3 | Two tags cross after merging | The tag that starts later is shown untagged and listed in recovery | 8 |
+| 4 | A reply to a comment whose creation was undone | Kept in recovery | 8 |
+| 5 | Undo when another person made the same change, so there is nothing of your own left to take back | Nothing visible changes, the step is used up, a short notice says so | 8 |
+| 6 | A status change that did not apply because someone changed it to something else at the same time | Both people get a short notice | 8 |
+| 7 | Edit stamps | A beat's "last edited" updates once per typing group; the script's revision and last editor are written only on export | 8 |
+| 8 | A scene left with no beats; a script left with none | The scene is listed in recovery; the empty script waits for the first keystroke | 8 |
+| 9 | A scene name longer than 200 characters after merging | Shown in full with a notice; it cannot grow further | 8 |
+| 10 | Two b-roll keys with one id after merging | The later key is unanchored in the shot list until reassigned | 8 |
+| 11 | An owner assigned to a person someone else removed | The assignment is kept as text; the person is listed in recovery | 8 |
+| 12 | A comment is two undo steps today (the highlight, then the text on Post) | Kept as two | 1 |
+| 13 | The same author edits one comment on two devices while a draft box is open | The open box is kept and its Save replaces the text | 5 |
+| 14 | Is the local replica part of app-data export? | No; people export a Standalone copy | 6 |
+| 15 | Wording shown when the server refuses an update | Written with the rest of the status wording | 8 |
+| 16 | The limits a person feels: time to join a large script and time until "saved to server" | The provisional limits in 7, section 7 | 7 |
+| 17 | The server half of INV-52, if the pending-image design is chosen | No decision until Stage 1 picks an image design | 5 |
 
 The defaults the third review added to plan section 14 stay open on the same terms.
 
