@@ -1179,7 +1179,7 @@ had homes (`splitpage-hide-shot`, `splitpage-autosave`,
 stores the value and then fires `document`'s
 `"splitpage:pref"` CustomEvent (`{detail: {key, value}}`); whatever draws a
 setting listens for its key, so a change made anywhere shows everywhere.
-File ▸ Export app data carries them (`settingsAppData()`).
+Settings ▸ Data ▸ Export app data carries them (`settingsAppData()`).
 `splitpage-microphone` (#1162: the `deviceId` Follow My Voice listens on,
 absent = the system default) is the exception: device ids belong to one
 browser on one machine, so it is neither exported nor imported. Both the

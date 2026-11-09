@@ -11,7 +11,7 @@ test("setup keeps its definition, refuses an absent mount or a dialog and opens 
   let opened = 0;
   const definitions = onboardingActions(() => current, screen);
   assert.deepEqual(definitions.map(({ id, label, group, icon, words }) => ({ id, label, group, icon, words })), [{
-    id: "setup", label: "Set up Splitpage…", group: "Help", icon: "i-sliders", words: "setup settings wizard install"
+    id: "setup", label: "Getting started…", group: "Help", icon: "i-sliders", words: "setup set up settings wizard install introduction formats"
   }]);
   const registry = createActionRegistry();
   const off = registerAll(registry, definitions);

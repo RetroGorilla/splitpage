@@ -22,7 +22,7 @@ function el(id: string) { return document.getElementById(id) as HTMLInputElement
 const OWN_ACTION = "command-menu";
 
 const LIST_BEFORE_EXPORTS = [
-  "save", "save-as", "autosave", "new", "open", "paste", "gdoc-import", "export"
+  "save", "save-as", "create-bundle", "autosave", "new", "open", "paste", "gdoc-import", "export"
 ];
 
 const LIST_AFTER_EXPORTS = [

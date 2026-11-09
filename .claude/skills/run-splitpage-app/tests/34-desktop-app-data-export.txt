@@ -32,8 +32,13 @@ eval (function(){ window.__d1 = did('e1'); window.__d2 = did('e2'); return [wind
 eval (async function(){ window.fakeE = D.makeFakeBackend({history: true}); D.setBackend(window.fakeE); await window.fakeE.historyPut(window.__d1, {id: 'sexp1', label: 'Doc1 Snap A', at: new Date(2000).toISOString(), atMs: 2000, by: 'Alice', rows: 2, title: 'Export Doc One', kind: 'snapshot'}, JSON.stringify({rows: [{id: 'r1', audioText: 'doc1-a'}], title: 'Export Doc One', docId: window.__d1})); await window.fakeE.historyPut(window.__d1, {id: 'sexp2', label: 'Doc1 Snap B', at: new Date(3000).toISOString(), atMs: 3000, by: 'Alice', rows: 2, title: 'Export Doc One', kind: 'snapshot'}, JSON.stringify({rows: [{id: 'r1', audioText: 'doc1-b'}], title: 'Export Doc One', docId: window.__d1})); await window.fakeE.historyPut(window.__d2, {id: 'sexp3', label: 'Doc2 Snap A', at: new Date(2500).toISOString(), atMs: 2500, by: 'Bob', rows: 1, title: 'Export Doc Two', kind: 'snapshot'}, JSON.stringify({rows: [{id: 'r1', audioText: 'doc2-a'}], title: 'Export Doc Two', docId: window.__d2})); await window.fakeE.historyPut(null, {id: 'sexpolder1', label: 'Older One', at: new Date(1000).toISOString(), atMs: 1000, by: '', rows: 1, title: '', kind: 'snapshot'}, JSON.stringify({rows: [{id: 'r1', audioText: 'older-one'}], title: 'Older Doc'}), {older: true}); localStorage.setItem('splitpage-comment-author', 'Export Author'); D.initDesktop(); return true; })()
 expect true
 
-wait !document.getElementById('menu-export-app-data').hidden
-expect !document.getElementById('menu-import-app-data').hidden
+wait window.__commandTest.results('app data').map(function (g) { return g.items.map(function (i) { return i.id + (i.disabled ? '!' : ''); }).join(','); }).join('|') === 'export-app-data,import-app-data'
+expect document.getElementById('menu-export-app-data') === null && document.getElementById('menu-import-app-data') === null
+jsclick #file-menu [data-file-action="settings"]
+wait document.querySelector('#settings-modal [data-settings-action="import-app-data"]') !== null
+expect document.querySelector('#settings-modal [data-settings-action="export-app-data"]') !== null
+key Escape
+wait document.getElementById('settings-modal').hidden
 
 # =============================================================================
 # 2. Build the export bundle (A.build(), same entry point exportAppData()

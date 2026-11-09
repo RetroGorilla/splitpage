@@ -76,8 +76,7 @@ function harness(start: { running?: boolean; intent?: string; doc?: boolean } = 
 }
 
 function page() {
-  win.document.body.innerHTML = '<div id="file-menu"><button data-file-action="save-as">Save as</button></div>' +
-    '<button id="menu-export-app-data" hidden></button><button id="menu-import-app-data" hidden></button>';
+  win.document.body.innerHTML = '<div id="file-menu"><button data-file-action="save-as">Save as</button></div>';
 }
 
 test("starting the desktop wires pictures, menus and every shell event in the old order, then reports the document", async () => {
@@ -87,8 +86,6 @@ test("starting the desktop wires pictures, menus and every shell event in the ol
   try {
     mounted.initDesktop();
     assert.deepEqual(h.log, ["blobs", "await:open-file", "notify"]);
-    assert.equal(win.document.getElementById("menu-export-app-data")?.hidden, false);
-    assert.equal(win.document.getElementById("menu-import-app-data")?.hidden, false);
     assert.equal(h.handlers.flush, h.flushDraft);
     await settled();
     assert.deepEqual(h.log, ["blobs", "await:open-file", "notify"], "nothing more runs once the shell answers");

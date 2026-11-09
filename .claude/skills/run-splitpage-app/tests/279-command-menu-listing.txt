@@ -17,7 +17,10 @@ expect __ids('') == Tags:tagging-help|File:save,save-as,autosave,new,open,paste,
 expect __rows() == save=CtrlS/|save-as=CtrlShiftS/|autosave=/On|open=CtrlO/|export=CtrlE/|find=CtrlF/|toggle-hide-shot=CtrlAltH/Off|toggle-rundown-min=/Off
 expect __icons() == #i-tag,#i-save,#i-copy,#i-autosave,#i-file-plus,#i-folder,#i-clipboard,#i-link,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-panel,#i-panel,#i-panel,#i-panel,#i-pen,#i-play,#i-history,#i-find,#i-eye-off,#i-rundown-min,#i-clock,#i-settings,#i-help,#i-compass,#i-file-plus,#i-sliders,#i-info,#i-box
 expect C.results('save').map(function (g) { return g.group + ':' + g.items.map(function (i) { return i.id; }).join(','); }).join('|') == File:save,save-as,autosave|Export:export
-expect C.results('help').map(function (g) { return g.group + ':' + g.items.map(function (i) { return i.id; }).join(','); }).join('|') == Help:help,settings,tour,long-demo,setup,about,export-app-data|Tags:tagging-help
+expect C.results('help').map(function (g) { return g.group + ':' + g.items.map(function (i) { return i.id; }).join(','); }).join('|') == Tags:tagging-help|Help:settings,help,tour,long-demo,setup,about,export-app-data
+expect C.results('user guide')[0].items[0].id == help
+expect C.results('getting started')[0].items[0].id == setup
+expect C.results('set up')[0].items[0].id == setup
 key Escape
 sleep 200
 
@@ -26,7 +29,7 @@ eval (function(){ window.D = window.__desktopTest; window.fakeL = D.makeFakeBack
 sleep 300
 key ctrl KeyK
 sleep 300
-expect __ids('') == Tags:tagging-help|File:save,save-as,autosave,new,open,paste,gdoc-import,create-bundle!|Export:export,export-pdf,export-docx,export-md,export-md-table,export-xlsx,export-csv,export-html,export-splitpage,export-narration-docx,export-narration-txt,export-breakdown-xlsx,export-breakdown,export-packing-gear!,export-packing-prop!,export-broll-pdf!,export-broll-xlsx!,export-broll-csv!|View:panel-production,panel-gear,panel-broll,panel-comments,write,present|This document:history,find,toggle-hide-shot,toggle-rundown-min,set-target,prompter-open-in-browser|Help:settings,help,tour,long-demo,setup,about,export-app-data,import-app-data
+expect __ids('') == Tags:tagging-help|File:save,save-as,create-bundle!,autosave,new,open,paste,gdoc-import|Export:export,export-pdf,export-docx,export-md,export-md-table,export-xlsx,export-csv,export-html,export-splitpage,export-narration-docx,export-narration-txt,export-breakdown-xlsx,export-breakdown,export-packing-gear!,export-packing-prop!,export-broll-pdf!,export-broll-xlsx!,export-broll-csv!|View:panel-production,panel-gear,panel-broll,panel-comments,write,present|This document:history,find,toggle-hide-shot,toggle-rundown-min,set-target,prompter-open-in-browser|Help:settings,help,tour,long-demo,setup,about,export-app-data,import-app-data
 expect __rows() == save=CtrlS/|save-as=CtrlShiftS/|autosave=/On|open=CtrlO/|export=CtrlE/|find=CtrlF/|toggle-hide-shot=CtrlAltH/Off|toggle-rundown-min=/Off|prompter-open-in-browser=CtrlShiftP/|help=F1/
 key Escape
 sleep 200

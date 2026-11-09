@@ -420,7 +420,7 @@ These recipes accompany the historical runs. Confirm which checks Adam still nee
   `shell.openExternal` with a recorder in test mode, so it proves the URL
   main would open and the script it would serve — not that a real default
   browser launches. By hand, in the desktop app: open a saved script, then
-  **☰ File ▸ This document ▸ Present in browser (Follow My Voice)** — the
+  **Present ▸ Present in browser…** (the menu beside Present) — the
   in-page twin of View ▸ Present in Browser, which run 2 found unreachable
   here because the hidden title bar leaves no menu bar (Alt shows nothing).
   The default browser should open straight into the teleprompter with the

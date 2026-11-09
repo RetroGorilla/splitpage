@@ -7,7 +7,7 @@ export function helpActions(current: () => HelpControls | null, ports: HelpActio
   return [
     {
       id: "help",
-      label: "Help",
+      label: "User guide",
       group: "Help",
       icon: "i-help",
       keys: () => (ports.desktop() ? ["F1"] : []),

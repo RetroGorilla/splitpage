@@ -5,10 +5,10 @@ import type { OnboardingActionPorts, OnboardingMount } from "./ports.ts";
 export function onboardingActions(current: () => OnboardingMount | null, ports: OnboardingActionPorts): ActionDefinition[] {
   return [{
     id: "setup",
-    label: "Set up Splitpage…",
+    label: "Getting started…",
     group: "Help",
     icon: "i-sliders",
-    words: "setup settings wizard install",
+    words: "setup set up settings wizard install introduction formats",
     availability: () => current() ? availableUnless(OPENS_A_DIALOG, ports.screen()) : { enabled: false },
     run: () => { current()?.openOnboarding(); }
   }];

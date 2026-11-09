@@ -12,14 +12,6 @@ function runDesktopMenuCommand(cmd: string) {
 
 let prompterBrowserBusy = false;
 
-function appDataImportShown() {
-  return !!desktopBridge();
-}
-
-function desktopBridge() {
-  return (ports as DesktopPorts).shell();
-}
-
 const PROMPTER_BROWSER_MESSAGES = {
   NOT_SAVED: "Save this script first (Ctrl+S), then try again — the browser reads the saved copy.",
   SAVE_FAILED: "The save didn't go through, so the browser would show an older version. Save, then try again.",
@@ -78,11 +70,6 @@ function initDesktop() {
   if (!(ports as DesktopPorts).running()) return;
 
   (ports as DesktopPorts).wireBlobs();
-
-  const exportAppItem = document.getElementById("menu-export-app-data");
-  if (exportAppItem) exportAppItem.hidden = false;
-  const importAppItem = document.getElementById("menu-import-app-data");
-  if (importAppItem) importAppItem.hidden = !appDataImportShown();
 
   const intent = ((ports as DesktopPorts).shell() as DesktopShell).launchIntent && (((ports as DesktopPorts).shell() as DesktopShell).launchIntent as NonNullable<DesktopShell["launchIntent"]>).type;
   (ports as DesktopPorts).documentState.awaitHanded(intent);

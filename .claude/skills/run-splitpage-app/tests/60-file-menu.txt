@@ -48,6 +48,13 @@ expect document.getElementById('menu-autosave').getAttribute('aria-checked') == 
 expect document.getElementById('menu-autosave').querySelector('.mi-switch-track') !== null
 expect document.querySelector('#file-menu [data-file-action="save-as"]').closest('.fm-card') !== null
 expect document.querySelector('#file-menu [data-file-action="save-as"] .mi-label').textContent == Save a copy…
+expect Array.prototype.map.call(document.querySelectorAll('#file-menu .fm-card > .mi'), function(b){return b.getAttribute('data-file-action');}).join(',') === 'autosave,save-as,create-bundle'
+expect document.querySelector('#file-menu [data-file-action="create-bundle"] .mi-label').textContent == Create bundle…
+expect document.querySelector('#file-menu [data-file-action="create-bundle"]').hidden
+expect Array.prototype.map.call(document.querySelectorAll('#file-menu [data-menu-group="export"] > .mi'), function(b){return b.getAttribute('data-file-action');}).join(',') === 'export,export-again,export-narration-docx'
+expect Array.prototype.map.call(document.querySelectorAll('#file-menu [data-menu-group="document"] > .mi'), function(b){return b.getAttribute('data-file-action');}).join(',') === 'history,find'
+expect document.querySelector('#file-menu [data-file-action="export-app-data"]') === null
+expect document.querySelector('#file-menu [data-file-action="import-app-data"]') === null
 # Save to file is gone: import save-back was switched off on 2026-10-30
 expect document.getElementById('menu-save-back') === null
 expect document.querySelector('#file-menu [data-file-action="save-back"]') === null
@@ -70,6 +77,28 @@ expect getComputedStyle(document.querySelector('#file-menu [data-file-action="op
 expect getComputedStyle(document.querySelector('#file-menu [data-file-action="open"]')).fontSize == 14px
 expect Math.round(document.querySelector('#file-menu [data-file-action="open"]').getBoundingClientRect().height) == 32
 expect document.querySelectorAll('#file-menu .mi-icon').length > 20
+expect getComputedStyle(document.getElementById('file-menu')).transitionDuration == 0.12s, 0.12s
+
+# --- two full-width footer rows: Settings, and Help with its submenu --------
+expect Array.prototype.map.call(document.querySelectorAll('#file-menu .menu-foot > .mi'), function(b){return b.id;}).join(',') === 'menu-settings,menu-help'
+expect Array.prototype.every.call(document.querySelectorAll('#file-menu .menu-foot > .mi'), function(b){return b.getBoundingClientRect().width >= b.parentElement.clientWidth - 10;})
+expect Array.prototype.every.call(document.querySelectorAll('#file-menu .menu-foot > .mi'), function(b){return Math.round(b.getBoundingClientRect().height) >= 32 && getComputedStyle(b).fontSize === '14px';})
+expect document.getElementById('menu-help').getAttribute('aria-haspopup') == menu
+expect document.getElementById('menu-help').getAttribute('aria-expanded') == false
+expect document.getElementById('menu-sub-help').hidden
+expect document.querySelector('#file-menu [data-file-action="tagging-help"]').getBoundingClientRect().height == 0
+jsclick #menu-help
+sleep 200
+expect document.getElementById('menu-help').getAttribute('aria-expanded') == true
+expect Array.prototype.map.call(document.querySelectorAll('#menu-sub-help > .mi'), function(b){return b.getAttribute('data-file-action');}).join(',') === 'help,tour,setup,tagging-help,about'
+expect Array.prototype.map.call(document.querySelectorAll('#menu-sub-help > .mi .mi-label'), function(l){return l.textContent;}).join('|') === 'User guide|Take the tour|Getting started…|Tagging reference|About Splitpage'
+expect Array.prototype.every.call(document.querySelectorAll('#menu-sub-help > .mi'), function(b){var r=b.getBoundingClientRect(); var l=b.querySelector('.mi-label'); return r.height >= 32 && r.bottom <= innerHeight && l.scrollWidth <= l.clientWidth;})
+expect document.querySelector('#menu-sub-help [data-file-action="help"]').getBoundingClientRect().top > document.getElementById('menu-help').getBoundingClientRect().bottom - 1
+shot 60-file-menu-help
+jsclick #menu-help
+sleep 200
+expect document.getElementById('menu-help').getAttribute('aria-expanded') == false
+expect document.querySelector('#file-menu [data-file-action="tagging-help"]').getBoundingClientRect().height == 0
 
 # --- shortcut chips: only the ones that work in this (browser) build ------
 expect Array.prototype.map.call(document.querySelectorAll('#file-menu [data-file-action="save-as"] .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+Shift+S'
@@ -119,11 +148,34 @@ expect document.activeElement.getAttribute('data-file-action') == command-menu
 key ArrowDown
 expect document.activeElement.getAttribute('data-file-action') == new
 key End
-expect document.activeElement.getAttribute('data-file-action') == export-app-data
+expect document.activeElement.id == menu-help
 key Home
 expect document.activeElement.id == menu-autosave
 key ArrowUp
-expect document.activeElement.getAttribute('data-file-action') == export-app-data
+expect document.activeElement.id == menu-help
+key ArrowRight
+sleep 100
+expect document.getElementById('menu-help').getAttribute('aria-expanded') == true
+expect document.activeElement.getAttribute('data-file-action') == help
+key ArrowDown
+expect document.activeElement.getAttribute('data-file-action') == tour
+key End
+expect document.activeElement.getAttribute('data-file-action') == about
+key ArrowLeft
+sleep 100
+expect document.getElementById('menu-help').getAttribute('aria-expanded') == false
+expect document.activeElement.id == menu-help
+key Enter
+sleep 100
+expect document.getElementById('menu-help').getAttribute('aria-expanded') == true
+expect document.activeElement.getAttribute('data-file-action') == help
+key Escape
+sleep 100
+expect document.getElementById('file-menu').hidden
+expect document.activeElement.id == btn-file
+key Enter
+sleep 200
+expect document.getElementById('menu-help').getAttribute('aria-expanded') == false
 eval document.getElementById('menu-import').focus()
 key ArrowRight
 sleep 100
@@ -173,7 +225,7 @@ expect F.docId() === window.__docId0
 # buttons wait, hidden, in the Export group for the dialog to click — and
 # Search commands… (#147) and Settings (#181). Hide filmed beats, Minimise
 # rundown and Present in browser moved beside what they act on (#1163).
-eval (function(){var ids=["settings","save-as","autosave","open","paste","gdoc-import","export-docx","export-md","export-md-table","export-csv","export-xlsx","export-breakdown","export-breakdown-xlsx","export-pdf","export-html","export-splitpage","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","export-broll-pdf","export-broll-csv","export-broll-xlsx","history","find","setup","tagging-help","help","tour","about","export-app-data","import-app-data","new","export","export-again","command-menu","create-bundle"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
+eval (function(){var ids=["settings","save-as","autosave","open","paste","gdoc-import","export-docx","export-md","export-md-table","export-csv","export-xlsx","export-breakdown","export-breakdown-xlsx","export-pdf","export-html","export-splitpage","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","export-broll-pdf","export-broll-csv","export-broll-xlsx","history","find","setup","tagging-help","help","tour","about","new","export","export-again","command-menu","create-bundle"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
 expect window.__actionCounts.every(function(n){return n===1;})
 expect window.__actionTotal === window.__actionIds.length
 
@@ -205,6 +257,9 @@ expect window.__hits.length === 3
 click #btn-file
 sleep 300
 expect document.querySelector('#file-menu [data-file-action="help"] .mi-keys').textContent == F1
+expect !document.querySelector('#file-menu [data-file-action="create-bundle"]').hidden
+expect document.querySelector('#file-menu [data-file-action="save-as"]').nextElementSibling.getAttribute('data-file-action') == create-bundle
+expect document.querySelector('#file-menu [data-file-action="import-app-data"]') === null
 expect !document.getElementById('btn-present-more').hidden
 expect Array.prototype.map.call(document.querySelectorAll('#present-menu-browser .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+Shift+P'
 

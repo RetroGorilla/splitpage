@@ -305,13 +305,14 @@ Release notes for every version are on the
 
 ## Getting started
 
-- **Setup.** The first time you open a fresh copy, a short wizard asks how
-  you'll be working and offers the tour. **File ▸ Set up** reopens it any
-  time; it never changes your script.
-- **The tour.** **File ▸ Tour** walks through five things to know, each
-  with a **Read more** link into this guide.
-- **Help.** **File ▸ Help** opens this guide (<kbd>F1</kbd> in the desktop
-  app).
+- **Getting started.** The first time you open a fresh copy, a short
+  introduction explains the file formats and installing the desktop app, then
+  offers the tour. **File ▸ Help ▸ Getting started…** reopens it any time; it
+  changes no settings and never changes your script.
+- **The tour.** **File ▸ Help ▸ Take the tour** walks through five things to
+  know, each with a **Read more** link into this guide.
+- **User guide.** **File ▸ Help ▸ User guide** opens this guide
+  (<kbd>F1</kbd> in the desktop app).
 
 ### The start screen
 
@@ -392,8 +393,9 @@ Each beat is a row: **Visual** on the left, **Audio** on the right.
 - **The rundown**: the strip under the header shows every beat as a block.
   Hover it to magnify the beats round the pointer, click a block to jump
   to that beat, or drop a
-  dragged beat on it to move the beat. **File ▸ Minimise the rundown**
-  shrinks it to a line; click the line to bring it back.
+  dragged beat on it to move the beat. **Minimise rundown**, at the strip's
+  right edge, shrinks it to a thin strip; **Show rundown**, or a click
+  anywhere on the strip, brings it back.
 - **The header's buttons**: **Production**, **Gear**, **B-roll** and
   **Comments** open their panels; **Write** and **Present** are the two other
   ways to see it. In a narrower window the panel buttons shrink to their icons
@@ -401,7 +403,7 @@ Each beat is a row: **Visual** on the left, **Audio** on the right.
   or <kbd>Tab</kbd> to it, and its name slides out over its neighbours.
 - **Beat status**: click the lamp in the beat's gutter to cycle **To do →
   Ready → Filmed**.
-- **Hide filmed beats**: File ▸ Hide filmed beats
+- **Hide filmed beats**: the switch beside the filmed count in the header
   (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>) collapses Filmed beats into a
   thin strip. Click the strip to see them.
 - **Undo and redo**: <kbd>Ctrl</kbd>+<kbd>Z</kbd> and
@@ -643,7 +645,7 @@ Tag things in the script and they appear in the **Production** panel, with
 every beat they're in. While you type a tag you've used before,
 <kbd>Tab</kbd> accepts the completion Splitpage offers.
 
-**The tagging reference**: **File ▸ Tagging reference** (or search commands
+**The tagging reference**: **File ▸ Help ▸ Tagging reference** (or search commands
 for it) opens a card at the bottom right of the script (a sheet at the
 bottom on a phone). It shows every way to type a tag, each in its tag
 colour: the brackets, and a category's name and a colon for all six
@@ -956,18 +958,18 @@ keeps. **Export again** in the File menu repeats the last format.
 
 Click the **Splitpage** mark at the top left (the file icon on a phone). At
 the top: where the script is saved and whether it's all saved (*All changes
-saved · Markdown*; hover for the time), the **Autosave** switch and **Save a
-copy…**. Below:
+saved · Markdown*; hover for the time), the **Autosave** switch, **Save a
+copy…** and, in the desktop app, **Create bundle…**. Then **Search
+commands…**, and below it:
 
 - **New & open**: New script, Open…, Open recent (desktop app), and Import
   (Paste a script, Google Doc link).
-- **Export**: Export…, and Export again.
-- **This document**: Version history, Find & replace, Hide filmed beats,
-  Minimise the rundown, and in the desktop app Present in browser and Use
-  Chromium Speech Recognition.
+- **Export**: Export…, Export again, and Export narration.
+- **This document**: Version history… and Find & replace.
 
-Settings, Help, Tour, Set up, About, Tagging reference and Export app data
-are along the bottom. An item that can't work right now says why.
+Two rows along the bottom: **Settings**, and **Help**, which opens User
+guide, Take the tour, Getting started…, Tagging reference and About
+Splitpage. An item that can't work right now says why.
 
 ### Keyboard shortcuts
 
@@ -1014,7 +1016,7 @@ change the script.
   Clicking your name in the header opens these too.
 - **Help & tips**: bring back the tagging reference, the tour and the
   desktop-app notice.
-- **Data**: Export app data.
+- **Data**: Export app data…, and in the desktop app Import app data….
 
 ## On a phone
 
@@ -1046,12 +1048,12 @@ Double-clicking a `.splitpage` file opens it here.
   - **Privacy & security ▸ Microphone**: desktop apps may use it.
   - **Time & language ▸ Speech**: a recogniser for your language is
     installed.
-- **Present in browser** (File menu, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>)
-  opens a read-only teleprompter in your default browser, any browser, with
-  the desktop app doing the listening. Save the script first. **Use Chromium
-  Speech Recognition** opens it in Edge or Chrome to use that browser's
-  recognition instead. The desktop relay's microphone selector lists the
-  desktop app's Windows inputs, not the browser's microphones.
+- **Present in browser…** (the menu beside Present,
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>) opens a read-only
+  teleprompter in your default browser, any browser, with the desktop app
+  doing the listening. Save the script first. The desktop relay's microphone
+  selector lists the desktop app's Windows inputs, not the browser's
+  microphones.
 - **Crash recovery**: unsaved changes are kept as you type and offered back,
   tab by tab, at the next launch.
 - **Closing with unsaved work** asks first. With several unsaved tabs, one
@@ -1088,13 +1090,9 @@ Your tabs come back next time you launch Splitpage.
 
 ### Moving between the browser app and the desktop app
 
-**File ▸ Export app data…** saves your version history and preferences as a
-`.json` file. In the desktop app, **File ▸ Import app data…** merges one in;
-nothing is overwritten. Scripts themselves aren't included (they're your
-files).
-**File ▸ Export app data…** saves your version history and
-preferences as a `.json` file. In the desktop app, **File ▸ Import app
-data…** merges one in; nothing is overwritten. Scripts themselves aren't
+**Settings ▸ Data ▸ Export app data…** saves your version history and
+preferences as a `.json` file. In the desktop app, **Settings ▸ Data ▸ Import
+app data…** merges one in; nothing is overwritten. Scripts themselves aren't
 included (they're your files).
 
 ## Installing and updating

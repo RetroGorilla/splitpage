@@ -148,8 +148,17 @@ expect document.getElementById('file-menu').getBoundingClientRect().top > 0
 expect document.getElementById('file-menu-close').getBoundingClientRect().height > 0
 expect document.querySelector('#file-menu [data-file-action="open"]').getBoundingClientRect().height >= 44
 expect document.querySelector('#file-menu .menu-foot').getBoundingClientRect().bottom <= innerHeight
+expect Array.prototype.every.call(document.querySelectorAll('#file-menu .menu-foot > .mi'), function(b){var r=b.getBoundingClientRect(); return r.height >= 44 && r.width >= b.parentElement.clientWidth - 10;})
 expect document.documentElement.scrollWidth <= innerWidth
 shot 05-mobile-file-menu
+jsclick #menu-help
+sleep 200
+expect document.getElementById('menu-help').getAttribute('aria-expanded') == true
+expect Array.prototype.every.call(document.querySelectorAll('#menu-sub-help > .mi'), function(b){var r=b.getBoundingClientRect(); var l=b.querySelector('.mi-label'); return r.height >= 44 && r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth && l.scrollWidth <= l.clientWidth;})
+expect document.documentElement.scrollWidth <= innerWidth
+shot 05-mobile-file-menu-help
+jsclick #menu-help
+sleep 200
 jsclick #file-menu-backdrop
 sleep 300
 expect document.getElementById('file-menu').hidden
