@@ -2,7 +2,7 @@ import { commentsPanelActions as panelDefinitions, commentsHelpActions as helpDe
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, selection as portSelection } from "./ports/editing.ts";
 import { notices as portNotices } from "./ports/effects.ts";
-import { commentSorting, preferenceValues as portPreferences } from "./ports/preferences.ts";
+import { changes, commentSorting, preferenceValues as portPreferences } from "./ports/preferences.ts";
 import { panelControl as portSidePanels, sidePanels } from "./ports/panels.ts";
 import { text as portText } from "./ports/text.ts";
 import { ids as portIds, clock as portClock } from "./ports/identity.ts";
@@ -142,6 +142,7 @@ export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState
       edits: portEdits,
       notices: portNotices,
       preferences: portPreferences,
+      changes,
       sidePanels: portSidePanels,
       text: portText,
       ids: portIds,

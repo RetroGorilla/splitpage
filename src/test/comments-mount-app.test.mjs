@@ -79,6 +79,7 @@ test("comments app: panel sort and filter changes announce to another preference
     document.removeEventListener("splitpage:pref", listen);
     globalThis.CustomEvent = nodeCustomEvent;
     localStorage.removeItem("splitpage-comments-sort");
+    localStorage.removeItem("splitpage-panel-grouping");
     localStorage.removeItem("splitpage-comments-filter");
     owner.dispose();
   }

@@ -1,4 +1,5 @@
 import { numberHtml } from "../common/number-html.ts";
+import { groupItemsByScene } from "../../core/document/scene-items.ts";
 import { brollSortedForList } from "../../core/production/broll.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../../core/document/broll.ts";
@@ -21,7 +22,7 @@ import type { NewBrollPorts } from "../../application/commands/production-action
 import type { ShotFields } from "../../application/commands/broll-records.ts";
 import type { OwnerChoice } from "../../application/commands/production-records.ts";
 
-interface PanelDocument extends Pick<NonNullable<ReturnType<BrollPanelPorts["document"]["current"]>>, "rows" | "brollShots"> {
+interface PanelDocument extends Pick<NonNullable<ReturnType<BrollPanelPorts["document"]["current"]>>, "rows" | "brollShots" | "sections"> {
   readonly people?: readonly (Person & Record<string, unknown>)[];
   readonly wordsPerMinute?: number | null | undefined;
 }
@@ -283,6 +284,15 @@ function groupMenuHtml() {
 }
 
 function brollGroups(entries: readonly PanelShot[], by: string, from?: Parameters<typeof brollGroupsFrom>[2]) {
+  if (by === "by-scene" && !from) {
+    const doc = (ports as PanelPortUse).document.current();
+    const result = groupItemsByScene(doc ?? { rows: [] }, brollSortedForList(entries), entry => entry.rowId);
+    const groups: PanelGroup[] = result.groups.map(({ scene, items }) => ({
+      key: scene.id ?? "opening", kind: "script-scene", label: "Scene " + scene.letter + (scene.name ? " · " + scene.name : ""), items
+    }));
+    if (result.unassigned.length) groups.push({ key: "unassigned", kind: "added", label: "No scene", items: result.unassigned });
+    return groups;
+  }
   return brollGroupsFrom(entries, by, from || { rows: (ports as PanelPortUse).document.current()?.rows || [], people: ((ports as PanelPortUse).document.current()?.people as readonly (Person & Record<string, unknown>)[] | undefined) || [] }) as PanelGroup[];
 }
 
@@ -909,6 +919,7 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
     }
   } else if (action === "broll-group") {
     (ports as PanelPortUse).view.setGroup(btn.getAttribute("data-group"));
+    (ports as PanelPortUse).preferences.setPanelGrouping("broll", (ports as PanelPortUse).view.current().group);
     groupMenuOpen = false;
     renderBrollViews();
     const gb = root.querySelector<HTMLInputElement>(".broll-group-btn");
@@ -1071,6 +1082,8 @@ function onBrollInput(e: PanelEvent & Partial<Pick<InputEvent, "inputType">>) {
 
 export function openBrollPanel() {
   if (!(ports as PanelPortUse).document.current()) return;
+  const savedGroup = (ports as PanelPortUse).preferences.panelGrouping("broll");
+  if (savedGroup && savedGroup !== (ports as PanelPortUse).view.current().group) (ports as PanelPortUse).view.setGroup(savedGroup);
   (ports as PanelPortUse).panels.open("broll-panel");
   renderBroll();
 }
@@ -1270,6 +1283,15 @@ function onBrollPageAction(action: string | null, btn: HTMLElement, exportAs: Br
 export function startBrollPanel(nextPorts: BrollPanelPorts): BrollPanelState {
   ports = nextPorts;
   (ports as PanelPortUse).view.load();
+  const savedGroup = (ports as PanelPortUse).preferences.panelGrouping("broll");
+  if (savedGroup) (ports as PanelPortUse).view.setGroup(savedGroup);
+  const stopPreferenceChanges = nextPorts.changes.onChange(function (change) {
+    if (change.name !== "panelGrouping") return;
+    const group = nextPorts.preferences.panelGrouping("broll");
+    if (!group || group === nextPorts.view.current().group) return;
+    nextPorts.view.setGroup(group);
+    renderBrollViews();
+  });
   let withdrawHook: (() => void) | null = null;
   exposeTestHook("__brollTest", function () { return {
     view: function () { return (ports as PanelPortUse).view.current(); },
@@ -1287,6 +1309,7 @@ export function startBrollPanel(nextPorts: BrollPanelPorts): BrollPanelState {
   }, openBrollPanel: function () { if (active) openBrollPanel(); }, dispose: function () {
     if (!active) return;
     active = false;
+    stopPreferenceChanges();
     stopBrollFeature();
     ports = null;
     if (withdrawHook) withdrawHook();
