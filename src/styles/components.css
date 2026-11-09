@@ -815,22 +815,36 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
 .section-drop-before { box-shadow: inset 0 3px var(--visual); }
 .section-drop-after { box-shadow: inset 0 -3px var(--visual); }
 .section-rename {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: calc(6 * var(--u));
+  display: inline-block;
+  vertical-align: bottom;
+  box-sizing: border-box;
+  overflow: hidden;
   min-width: 0;
+  max-width: 100%;
+  margin: 0;
 }
 #rows > .section-rename {
-  min-height: calc(32 * var(--u));
-  padding: calc(2 * var(--u)) calc(12 * var(--u));
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border-strong);
+  display: block;
+  margin-top: calc(27 * var(--u));
+  border-top: 1px solid var(--border);
+  font: 600 calc(1.25 * max(var(--script-floor), calc(var(--script-audio-size) * var(--script-scale))))/1.3 var(--font-body);
 }
-.section-header:has(> .section-rename) .section-name { display: none; }
-.section-rename input { flex: 0 1 calc(240 * var(--u)); width: calc(240 * var(--u)); min-width: 0; padding: calc(4 * var(--u)) calc(6 * var(--u)); font: calc(13 * var(--u)) var(--font-body); }
-.section-rename button { padding: calc(4 * var(--u)) calc(8 * var(--u)); font: calc(12 * var(--u)) var(--font-body); color: inherit; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
-.section-rename button:hover { background: var(--hover); }
+.section-header:has(.section-rename) .section-name { display: none; }
+.section-rename input {
+  box-sizing: border-box;
+  width: min(100%, calc(360 * var(--u)));
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: 0;
+  outline-offset: -2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.section-rename input:focus { outline: none; border-bottom-color: var(--text); }
+#rows > .section-rename input { margin: calc(10 * var(--u)) calc(12 * var(--u)); width: min(calc(100% - 24 * var(--u)), calc(360 * var(--u))); }
 .section-header, .section-rename { --u: calc(var(--script-scale, 1) * 1px); }
 #writer-doc .section-header, #writer-doc .section-rename { --u: calc(var(--wr-font) / 19); }
 #writer-doc .section-header { margin: calc(12 * var(--u)) 0; }

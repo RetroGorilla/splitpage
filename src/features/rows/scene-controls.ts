@@ -31,8 +31,15 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
 } {
   const doc = window.document, life = createViewLifetime(window);
   let dragging: string | null = null;
-  let form: HTMLFormElement | null = null;
-  let renameReturn: HTMLElement | null = null;
+  let naming: {
+    readonly sceneId: string | null;
+    readonly beatId: string;
+    readonly line: HTMLFormElement;
+    readonly returnTo: HTMLElement | null;
+    readonly settle: (focus: boolean) => void;
+  } | null = null;
+  let pointerAway = false;
+  const animations = new Map<HTMLElement, Animation>();
   function header(id: string): HTMLElement | null {
     const selector = '.section-header[data-section-id="' + cssAttr(id) + '"]';
     return doc.querySelector('#writer:not([hidden]) ' + selector) ?? doc.querySelector(selector);
@@ -41,63 +48,141 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     doc.querySelectorAll(".section-drop-before,.section-drop-after").forEach(el => el.classList.remove("section-drop-before", "section-drop-after"));
   }
   function finishDrag(): void { dragging = null; clearDrop(); ports.stopScroll(); }
-  function cancelName(): void {
-    form?.remove(); form = null;
-    if (renameReturn?.isConnected) renameReturn.focus();
-    renameReturn = null;
+  function liveName(): boolean {
+    if (!naming?.line.isConnected || !doc.getElementById("rows")?.contains(naming.line)) return false;
+    const state = ports.document.current();
+    if (!state) return false;
+    if (naming.sceneId !== null) return sceneGroups(state).some(group => group.scene.id === naming?.sceneId)
+      && !!header(naming.sceneId)?.contains(naming.line);
+    if (!state.rows.some(row => row.id === naming?.beatId)) return false;
+    const automatic = naming.line.closest(".section-header");
+    return automatic ? automatic === header("") && state.rows[0]?.id === naming.beatId
+      : naming.line.nextElementSibling?.getAttribute("data-id") === naming.beatId;
   }
-  function nameAt(parent: Element, value: string, save: (name: string) => void): void {
+  function animateName(line: HTMLElement, closing: boolean, removed: () => void = () => {}): void {
+    const height = line.getBoundingClientRect().height;
+    const margin = window.getComputedStyle(line).marginTop;
+    animations.get(line)?.cancel();
+    animations.delete(line);
+    if (!line.animate || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      if (closing) { line.remove(); removed(); }
+      return;
+    }
+    const animation = line.animate([
+      { height: closing ? height + "px" : "0px", marginTop: closing ? margin : "0px", opacity: closing ? 1 : 0 },
+      { height: closing ? "0px" : height + "px", marginTop: closing ? "0px" : margin, opacity: closing ? 0 : 1 }
+    ], { duration: 150, easing: "ease-in-out" });
+    animations.set(line, animation);
+    animation.onfinish = () => {
+      animations.delete(line);
+      if (closing) { line.remove(); removed(); }
+    };
+  }
+  function cancelName(motion = false, restoreFocus = true): void {
+    const line = naming?.line;
+    const returnTo = naming?.returnTo;
+    naming = null;
+    const restore = (): void => {
+      if (restoreFocus && !naming && returnTo?.isConnected &&
+        (doc.activeElement === doc.body || !!line?.contains(doc.activeElement))) returnTo.focus();
+    };
+    if (line) {
+      line.inert = true;
+      if (motion) animateName(line, true, restore);
+      else { animations.get(line)?.cancel(); animations.delete(line); line.remove(); }
+    }
+    if (restoreFocus && returnTo?.isConnected && !motion) returnTo.focus();
+  }
+  function nameAt(parent: Element, sceneId: string | null, beatId: string, value: string, save: (name: string, focus: boolean) => void): void {
+    if (!parent.isConnected) return;
     cancelName();
-    renameReturn = doc.activeElement as HTMLElement | null;
+    const returnTo = doc.activeElement as HTMLElement | null;
     const made = doc.createElement("form");
     made.className = "section-rename";
     const input = doc.createElement("input");
-    input.type = "text"; input.maxLength = 200; input.required = true; input.value = value;
+    input.type = "text"; input.maxLength = 200; input.value = value;
     input.setAttribute("aria-label", "Scene name");
-    const submit = doc.createElement("button"), cancel = doc.createElement("button");
-    submit.type = "submit"; submit.textContent = "Save";
-    cancel.type = "button"; cancel.textContent = "Cancel";
-    made.append(input, submit, cancel);
+    made.append(input);
+    function settle(focus: boolean): void {
+      if (naming?.line !== made) return;
+      if (!liveName()) { cancelName(false, false); return; }
+      if (!input.value.trim()) { if (!focus) cancelName(true, false); return; }
+      if (!ports.edits.allowed()) return;
+      const name = input.value;
+      cancelName(false, false);
+      save(name, focus);
+    }
     made.addEventListener("submit", event => {
       event.preventDefault();
-      if (!input.value.trim() || !ports.edits.allowed()) return;
-      const name = input.value;
-      cancelName();
-      save(name);
+      settle(true);
     });
-    cancel.addEventListener("click", cancelName);
+    // why: Removing the focused line blurs before detaching it; only a real focus transfer may save here.
+    input.addEventListener("blur", event => { if (!pointerAway && event.relatedTarget) settle(false); });
     made.addEventListener("keydown", event => {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelName(); }
+      if (naming?.line !== made || event.isComposing) return;
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelName(true); }
     });
     const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
-    if (heading) heading.after(made); else parent.before(made);
-    form = made;
+    if (heading) heading.append(made); else parent.before(made);
+    naming = { sceneId, beatId, line: made, returnTo, settle };
+    animateName(made, false);
     input.focus(); input.select();
   }
   function rename(id: string, parent: Element): void {
     const state = ports.document.current();
     const scene = state && sceneGroups(state).find(group => group.scene.id === id)?.scene;
     if (!scene) return;
-    nameAt(parent, scene.name, name => {
+    nameAt(parent, id, sceneFirstBeatId(scene), scene.name, (name, focus) => {
       ports.edits.run(renameSceneCommand(id, name));
-      header(id)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
+      if (focus) header(id)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
     });
   }
+  function reset(): void {
+    cancelName();
+    for (const [line, animation] of animations) { animation.cancel(); line.remove(); }
+    animations.clear(); finishDrag();
+    pointerAway = false;
+  }
+  const Observer = doc.defaultView?.MutationObserver;
+  const rows = doc.getElementById("rows");
+  if (Observer && rows) {
+    const observer = new Observer(() => { if (naming && !liveName()) cancelName(false, false); });
+    observer.observe(rows, { childList: true, subtree: true });
+    life.release(() => observer.disconnect());
+  }
+  life.listen(doc, "pointerdown", event => {
+    pointerAway = !!naming && !naming.line.contains(event.target);
+  }, true);
+  life.listen(doc, "pointercancel", () => { pointerAway = false; naming?.settle(false); });
+  life.listen(window, "blur", () => { pointerAway = false; naming?.settle(false); });
   life.listen(doc, "click", event => {
     const target = event.target;
+    const clickedHeader = target.closest<HTMLElement>(".section-header");
+    const clickedId = clickedHeader?.getAttribute("data-section-id");
+    const summary = target.closest<HTMLElement>(".section-more > summary");
+    const openMenu = summary ? !summary.closest<HTMLDetailsElement>("details")?.open : false;
+    pointerAway = false;
+    if (naming && !naming.line.contains(target)) naming.settle(false);
+    const liveHeader = clickedId !== undefined && clickedId !== null ? header(clickedId) : null;
+    if (summary && clickedHeader !== liveHeader) {
+      event.preventDefault();
+      const menu = liveHeader?.querySelector<HTMLDetailsElement>(".section-more");
+      if (menu) { menu.open = openMenu; menu.querySelector<HTMLElement>("summary")?.focus(); }
+      return;
+    }
     const beat = target.closest(".row[data-id]");
     if (beat) ports.focus.focusedRow(beat.getAttribute("data-id") ?? "");
     const add = target.closest('[data-action="add-section"]');
-    const button = add ?? target.closest("[data-section-action]");
+    const action = target.closest("[data-section-action]")?.getAttribute("data-section-action");
+    const button = add ?? (action && liveHeader?.querySelector<HTMLElement>('[data-section-action="' + cssAttr(action) + '"]'));
     if (!button) {
       if (!target.closest(".section-more")) doc.querySelectorAll<HTMLDetailsElement>(".section-more[open]").forEach(menu => { menu.open = false; });
       return;
     }
     const state = ports.document.current();
     if (!state) return;
-    const divider = button.closest<HTMLElement>(".section-header");
+    const divider = liveHeader;
     const id = divider?.getAttribute("data-section-id");
-    const action = button.getAttribute("data-section-action");
     if (action === "fold" && id) {
       ports.scenes.toggle(id);
       header(id)?.querySelector<HTMLButtonElement>(".section-fold")?.focus();
@@ -111,10 +196,10 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       beat?.querySelector<HTMLElement>(".row-more")?.focus();
       const existing = sceneBeforeBeat(state, row.id);
       if (existing) { const parent = header(existing.id); if (parent) rename(existing.id, parent); return; }
-      nameAt(beat ?? add.parentElement ?? add, "", name => {
+      nameAt(beat ?? add.parentElement ?? add, null, row.id, "", (name, focus) => {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(row.id, created, name));
-        header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
+        if (focus) header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
       });
       return;
     }
@@ -122,16 +207,19 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       const automatic = ports.document.numbering().scenes.find(scene => scene.id === null);
       const first = automatic && state.rows[automatic.start];
       if (!first) return;
-      nameAt(divider, "", name => {
+      nameAt(divider, null, first.id, "", (name, focus) => {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(first.id, created, name));
-        header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
+        if (focus) header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
       });
       return;
     }
     if (!id || !divider) return;
     divider.querySelector<HTMLDetailsElement>("details")?.removeAttribute("open");
-    if (action === "rename") rename(id, divider);
+    if (action === "rename") {
+      divider.querySelector<HTMLElement>(".section-name")?.focus();
+      rename(id, divider);
+    }
     else if (action === "remove") ports.edits.run(removeSceneCommand(id));
     else if (action === "up" || action === "down") {
       const groups = sceneGroups(state), index = groups.findIndex(group => group.scene.id === id);
@@ -206,7 +294,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       const live = doc.getElementById("section-hint-live");
       if (live) live.textContent = active ? text : "";
     },
-    reset() { cancelName(); finishDrag(); },
-    dispose() { life.dispose(); cancelName(); finishDrag(); }
+    reset,
+    dispose() { life.dispose(); reset(); }
   };
 }
