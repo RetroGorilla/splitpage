@@ -90,7 +90,7 @@ test("print rules use solid vector marks and preserve legible shot backgrounds w
     const rules = [...dom.styleSheets[0].cssRules];
     const style = (selector) => rules.find((rule) => rule.selectorText === selector).style;
     assert.equal(style(".writing-lines > span").getPropertyValue("border-bottom"), "0.5pt solid rgb(201, 199, 193)");
-    assert.equal(style(".writing-lines > span").getPropertyValue("height"), "12pt");
+    assert.equal(style(".writing-lines > span").getPropertyValue("height"), "8mm");
     assert.equal(style(".status-mark.sourcing::before").getPropertyValue("width"), "50%");
     const shot = style(".shot-done > td");
     assert.equal(shot.getPropertyValue("background"), "rgb(230, 230, 230)");
