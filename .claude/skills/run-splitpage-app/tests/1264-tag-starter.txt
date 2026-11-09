@@ -1,0 +1,71 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; F.openFile(new File([JSON.stringify({schema:5,title:'Starter',paragraphsDecided:true,productionTags:[{id:'t_cable',cat:'prop',name:'cable tray',owner:'',notes:'',status:'have'}],rows:[{id:'a',audioText:'Alpha',visualText:''},{id:'b',audioText:'Bravo',visualText:''}],comments:[]})],'starter.splitpage'))
+wait F.state().title === 'Starter'
+eval window.c=function(){return document.querySelector('#rows .row .visual-cell .cell-editable');}; window.s=function(){return document.getElementById('tag-open-starter');}; window.visible=function(){return s().classList.contains('is-visible');}; c().focus(); true
+press prop:
+expect visible() && s().dataset.cat === 'prop'
+eval window.x=s().getBoundingClientRect().left; true
+key Space
+expect visible() && s().getBoundingClientRect().left > x
+press c
+expect !visible() && document.getElementById('tag-open-ghost').classList.contains('is-visible')
+key Escape
+expect !visible() && c().querySelector('.plain-tag-keyword') !== null
+key Backspace
+expect visible()
+key Escape
+expect !visible() && c().querySelector('.plain-tag-keyword') === null
+key ctrl KeyA
+key ctrl KeyB
+eval c().style.width='120px'; true
+press A long formatted line that will wrap before the tag
+key Space
+press prop:
+expect visible() && Math.abs(s().getBoundingClientRect().left-getSelection().getRangeAt(0).getClientRects()[0].left) < 2
+eval c().scrollTop=30; c().dispatchEvent(new Event('scroll')); true
+expect visible() && Math.abs(s().getBoundingClientRect().left-getSelection().getRangeAt(0).getClientRects()[0].left) < 2
+key Escape
+expect !visible() && !c().querySelector('.plain-tag-keyword')
+key ctrl KeyA
+press Existing
+eval c().closest('.field-wrap').querySelector('.tb-tag').click(); document.querySelector('#rows [data-tags-open="true"] .tag-toolbar-choice[data-tag-cat="prop"]').click(); true
+expect visible() && s().dataset.cat === 'prop'
+key Escape
+expect !visible()
+eval window.W=window.__writerFlowTest; true
+click #btn-write
+wait W.on()
+eval W.openVisual('b')
+press loc:
+expect visible() && s().dataset.cat === 'location'
+press Lamp
+expect !visible()
+key Tab
+expect !visible() && document.querySelector('.wr-flow-visual-text .tag-anchor[data-tag-cat="location"]')?.textContent === 'Lamp'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('a')
+key ctrl KeyA
+press cast:
+expect visible() && s().dataset.cat === 'cast'
+key Escape
+expect !visible()
+key ctrl KeyA
+press vfx:
+expect visible() && s().dataset.cat === 'vfx'
+key Escape
+key ctrl KeyA
+press gear:
+expect visible() && s().dataset.cat === 'gear'
+key Escape
+key ctrl KeyA
+press sfx:
+expect visible() && s().dataset.cat === 'sound'
+key Escape
+key ctrl KeyA
+press music:
+expect visible() && s().dataset.cat === 'sound'
+key Escape
+key ctrl KeyA
+press location:
+expect visible() && s().dataset.cat === 'location'
+key Escape

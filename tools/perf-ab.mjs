@@ -42,7 +42,9 @@ export function measurements(text) {
     const cells = line.split("|").slice(1, -1).map((c) => c.trim());
     if (cells[0] === "Case" || cells[0] === "Fixture" || cells[0] === "---") continue;
     if (section.startsWith("## Input latency")) {
-      rows.push({ label: cells[0], p50: number(cells[2]), p95: number(cells[3]) });
+      const row = { label: cells[0], p50: number(cells[2]), p95: number(cells[3]) };
+      if (/^\d+$/.test(cells[7] ?? "")) row.rects = number(cells[7]);
+      rows.push(row);
     } else if (section.startsWith("## Export")) {
       [".splitpage", ".md project", "Standalone HTML"].forEach((format, i) => {
         rows.push({ label: `${cells[0]} export ${format}`, p50: number(cells[i + 1]), p95: null });
@@ -81,6 +83,13 @@ export function report(base, head, runs) {
     const every = (side) => ["p50", "p95"].map((key) => runs[side].map((r) => value(r[i][key])).join(", ")).join(" / ");
     lines.push(`| ${label} | ${value(b50)} | ${value(h50)} | ${change(b50, h50)} | ${value(b95)} | ${value(h95)} | ${change(b95, h95)} | ${every("base")} | ${every("head")} |`);
   });
+  if (runs.base[0].some((r) => r.rects !== undefined)) {
+    lines.push("", "Range.getClientRects calls per run (base / head):", "");
+    labels.forEach((label, i) => {
+      if (runs.base[0][i].rects === undefined) return;
+      lines.push(`- ${label}: ${runs.base.map((r) => r[i].rects).join(", ")} / ${runs.head.map((r) => r[i].rects).join(", ")}`);
+    });
+  }
   return lines.join("\n");
 }
 

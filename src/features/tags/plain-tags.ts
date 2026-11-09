@@ -264,6 +264,8 @@ function hintEl() { return document.getElementById("tag-open-hint"); }
 
 function ghostEl() { return document.getElementById("tag-open-ghost"); }
 
+function starterEl() { return document.getElementById("tag-open-starter"); }
+
 function caretRange(): Range | null {
   const sel = window.getSelection();
   return sel && sel.rangeCount ? sel.getRangeAt(0) : null;
@@ -362,9 +364,12 @@ function clearPaint() {
   if (el) el.classList.remove("is-visible");
   const ghost = ghostEl();
   if (ghost) ghost.classList.remove("is-visible");
+  starterEl()?.classList.remove("is-visible");
 }
 
 function paint(o: OpenPlainTag) {
+  const caret = caretRange();
+  const typed = caret ? typedInOpen(o, caret) : "";
   if (highlightApiOk()) {
     try {
       const range = document.createRange();
@@ -372,7 +377,7 @@ function paint(o: OpenPlainTag) {
       const end = window.getSelection()?.getRangeAt(0);
       if (!end) return;
       range.setEnd(end.startContainer, end.startOffset);
-      const leading = (range.toString().match(/^[\s\u200B]*/) || [""])[0].replace(ZWSP_RE, "").length;
+      const leading = (typed.match(/^\s*/) || [""])[0].length;
       const start = domToPos(o.cellEl, o.span, o.span.childNodes.length);
       if (leading && start !== null) {
         const point = posToDom(o.cellEl, start + leading);
@@ -381,8 +386,10 @@ function paint(o: OpenPlainTag) {
       CSS.highlights.set(HL_PREFIX + o.cat, new Highlight(range));
     } catch (e) { }
   }
-  const caret = caretRange();
-  const suggestion = caret ? suggestionFor(o, typedInOpen(o, caret)) : null;
+  const starter = starterEl();
+  const starterRect = starter && caret && !typed.trim() ? caret.getClientRects()[0] : undefined;
+  const starterFont = starterRect ? window.getComputedStyle(o.cellEl).font : "";
+  const suggestion = caret ? suggestionFor(o, typed) : null;
   o.suggestion = suggestion;
   const el = hintEl();
   const ghost = ghostEl();
@@ -390,6 +397,13 @@ function paint(o: OpenPlainTag) {
   const caretRect = ghost && suggestion && caret ? caret.getClientRects()[0] : undefined;
   const cs = caretRect ? getComputedStyle(o.cellEl) : null;
   const hintAt = el ? hintPlace(o, el) : null;
+  if (starter && starterRect) {
+    starter.style.font = starterFont;
+    starter.style.left = starterRect.left + "px";
+    starter.style.top = (starterRect.bottom + 2) + "px";
+    starter.setAttribute("data-cat", o.cat);
+    if (!starter.classList.contains("is-visible")) starter.classList.add("is-visible");
+  } else if (starter?.classList.contains("is-visible")) starter.classList.remove("is-visible");
   if (el && hintAt) {
     el.style.left = hintAt.left + "px";
     el.style.top = hintAt.top + "px";
